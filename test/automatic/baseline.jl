@@ -6,14 +6,14 @@ using EegFun
 @testset "baseline" begin
 
     # 1) Baseline over first sample for Ch1, Ch2, and Ch3
-    dat = create_test_data(n = 6)
+    dat = create_test_continuous_data(n = 6)
     EegFun.baseline!(dat, EegFun.IntervalIndex(start = 1, stop = 1))
 
     @test isapprox(mean(dat.data.Ch1[1]), 0.0; atol = 1e-9)
     @test isapprox(mean(dat.data.Ch2[1]), 0.0; atol = 1e-9)
     @test isapprox(mean(dat.data.Ch3[1]), 0.0; atol = 1e-9)
 
-    dat = create_test_data(n = 6)
+    dat = create_test_continuous_data(n = 6)
     dat = EegFun.baseline(dat, EegFun.IntervalIndex(start = 1, stop = 1))
 
     @test isapprox(mean(dat.data.Ch1[1]), 0.0; atol = 1e-9)
@@ -21,14 +21,14 @@ using EegFun
     @test isapprox(mean(dat.data.Ch3[1]), 0.0; atol = 1e-9)
 
     # 2) Baseline over entire range for all channels
-    dat = create_test_data(n = 6)
+    dat = create_test_continuous_data(n = 6)
     EegFun.baseline!(dat)
 
     @test isapprox(mean(dat.data.Ch1), 0.0; atol = 1e-9)
     @test isapprox(mean(dat.data.Ch2), 0.0; atol = 1e-9)
     @test isapprox(mean(dat.data.Ch3), 0.0; atol = 1e-9)
 
-    dat = create_test_data(n = 6)
+    dat = create_test_continuous_data(n = 6)
     dat = EegFun.baseline(dat)
 
     @test isapprox(mean(dat.data.Ch1), 0.0; atol = 1e-9)
@@ -52,7 +52,7 @@ using EegFun
     @test isapprox(mean(dat.data[3].Ch3[1:3]), 0.0; atol = 1e-9)
 
     # 4) IntervalTime converted to indices correctly
-    dat = create_test_data(n = 6)
+    dat = create_test_continuous_data(n = 6)
     EegFun.baseline!(dat, EegFun.IntervalTime(start = 0.0, stop = 0.0))
 
     @test isapprox(mean(dat.data.Ch1[1]), 0.0; atol = 1e-9)
@@ -60,7 +60,7 @@ using EegFun
     @test isapprox(mean(dat.data.Ch3[1]), 0.0; atol = 1e-9)
 
     # 4) IntervalTime converted to indices correctly
-    dat = create_test_data(n = 6)
+    dat = create_test_continuous_data(n = 6)
     dat = EegFun.baseline(dat, EegFun.IntervalTime(start = 0.0, stop = 0.0))
 
     @test isapprox(mean(dat.data.Ch1[1]), 0.0; atol = 1e-9)
@@ -69,14 +69,14 @@ using EegFun
 
 
     # 4) IntervalTime converted to indices correctly
-    dat = create_test_data(n = 6)
+    dat = create_test_continuous_data(n = 6)
     EegFun.baseline!(dat, EegFun.IntervalTime(start = 0.003, stop = 0.003))
 
     @test isapprox(mean(dat.data.Ch1[4]), 0.0; atol = 1e-9)
     @test isapprox(mean(dat.data.Ch2[4]), 0.0; atol = 1e-9)
     @test isapprox(mean(dat.data.Ch3[4]), 0.0; atol = 1e-9)
 
-    dat = create_test_data(n = 6)
+    dat = create_test_continuous_data(n = 6)
     dat = EegFun.baseline(dat, EegFun.IntervalTime(start = 0.003, stop = 0.003))
 
     @test isapprox(mean(dat.data.Ch1[4]), 0.0; atol = 1e-9)
@@ -99,7 +99,7 @@ using EegFun
     @test isapprox(mean(dat.data[3].Ch3[4]), 0.0; atol = 1e-9)
 
     # Test channel selection
-    dat = create_test_data(n = 10)
+    dat = create_test_continuous_data(n = 10)
     original_ch1 = copy(dat.data.Ch1)
     original_ch2 = copy(dat.data.Ch2)
     original_ch3 = copy(dat.data.Ch3)
@@ -119,7 +119,7 @@ using EegFun
     @test dat.data.Ch3 == original_ch3  # Ch3 unchanged
 
     # Test with non-mutating version and channel selection
-    dat2 = create_test_data(n = 10)
+    dat2 = create_test_continuous_data(n = 10)
     original_ch1_2 = copy(dat2.data.Ch1)
     baseline_mean_ch1_2 = mean(original_ch1_2[1:5])
 
@@ -130,7 +130,7 @@ using EegFun
     @test dat2_baselined !== dat2  # Should be different object
 
     # Test empty channel selection (should warn and return early)
-    dat3 = create_test_data(n = 10)
+    dat3 = create_test_continuous_data(n = 10)
     original_ch1_3 = copy(dat3.data.Ch1)
 
     EegFun.baseline!(dat3, EegFun.IntervalIndex(start = 1, stop = 5), channel_selection = EegFun.channels(Symbol[]))
@@ -171,7 +171,7 @@ using EegFun
     @test erp2.data.Ch2 == original_erp2_ch2  # Ch2 unchanged
 
     # Test baseline! without interval (uses entire range)
-    dat4 = create_test_data(n = 20)
+    dat4 = create_test_continuous_data(n = 20)
     original_ch1_4 = copy(dat4.data.Ch1)
     baseline_mean_ch1_4 = mean(original_ch1_4)
 
@@ -181,7 +181,7 @@ using EegFun
     @test isapprox(dat4.data.Ch1, original_ch1_4 .- baseline_mean_ch1_4; atol = 1e-9)
 
     # Test baseline (non-mutating) without interval
-    dat5 = create_test_data(n = 20)
+    dat5 = create_test_continuous_data(n = 20)
     original_ch1_5 = copy(dat5.data.Ch1)
     baseline_mean_ch1_5 = mean(original_ch1_5)
 
@@ -192,7 +192,7 @@ using EegFun
     @test dat5_baselined !== dat5
 
     # Test with larger baseline interval
-    dat6 = create_test_data(n = 100)
+    dat6 = create_test_continuous_data(n = 100)
     original_ch1_6 = copy(dat6.data.Ch1)
     baseline_mean_ch1_6 = mean(original_ch1_6[10:50])
 
@@ -202,7 +202,7 @@ using EegFun
     @test isapprox(dat6.data.Ch1, original_ch1_6 .- baseline_mean_ch1_6; atol = 1e-9)
 
     # Test IntervalTime with larger range
-    dat7 = create_test_data(n = 100, fs = 1000)
+    dat7 = create_test_continuous_data(n = 100, fs = 1000)
     original_ch1_7 = copy(dat7.data.Ch1)
     # Find indices for time range 0.01 to 0.05 seconds
     time_idx_start = findfirst(x -> x >= 0.01, dat7.data.time)
@@ -215,7 +215,7 @@ using EegFun
     @test isapprox(dat7.data.Ch1, original_ch1_7 .- baseline_mean_ch1_7; atol = 1e-9)
 
     # Test that baseline correction is applied to entire signal, not just baseline interval
-    dat8 = create_test_data(n = 100)
+    dat8 = create_test_continuous_data(n = 100)
     original_ch1_8 = copy(dat8.data.Ch1)
     baseline_mean_ch1_8 = mean(original_ch1_8[1:10])
     original_mean_ch1_8 = mean(original_ch1_8)
@@ -252,24 +252,24 @@ using EegFun
 
     # Test error handling - invalid interval (start > stop)
     # validate_baseline_interval throws ErrorException for invalid intervals
-    dat9 = create_test_data(n = 10)
+    dat9 = create_test_continuous_data(n = 10)
     @test_throws ErrorException EegFun.baseline!(dat9, EegFun.IntervalIndex(start = 5, stop = 1))
 
     # Test error handling - invalid interval (start out of range)
-    dat10 = create_test_data(n = 10)
+    dat10 = create_test_continuous_data(n = 10)
     @test_throws MethodError EegFun.baseline!(dat10, EegFun.IntervalIndex(start = 0, stop = 5))
 
     # Test error handling - invalid interval (stop out of range)
-    dat11 = create_test_data(n = 10)
+    dat11 = create_test_continuous_data(n = 10)
     @test_throws MethodError EegFun.baseline!(dat11, EegFun.IntervalIndex(start = 1, stop = 100))
 
     # Test error handling - invalid IntervalTime (outside time range)
     # When IntervalTime is outside range, find_idx_start_end may return nothing, causing issues
-    dat12 = create_test_data(n = 10, fs = 1000)
+    dat12 = create_test_continuous_data(n = 10, fs = 1000)
     @test_throws MethodError EegFun.baseline!(dat12, EegFun.IntervalTime(start = 100.0, stop = 200.0))
 
     # Test with single sample baseline interval
-    dat13 = create_test_data(n = 20)
+    dat13 = create_test_continuous_data(n = 20)
     original_ch1_13 = copy(dat13.data.Ch1)
     baseline_value_ch1_13 = original_ch1_13[5]  # Single sample value
 
@@ -279,7 +279,7 @@ using EegFun
     @test isapprox(dat13.data.Ch1, original_ch1_13 .- baseline_value_ch1_13; atol = 1e-9)
 
     # Test that metadata columns are not affected
-    dat14 = create_test_data(n = 20)
+    dat14 = create_test_continuous_data(n = 20)
     original_time = copy(dat14.data.time)
     original_sample = copy(dat14.data.sample)
     original_triggers = copy(dat14.data.triggers)

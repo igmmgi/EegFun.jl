@@ -6,7 +6,7 @@ using Statistics
 
 @testset "channel_average" begin
 
-    dat = create_test_data(n = 500)
+    dat = create_test_continuous_data(n = 500)
 
     # 1) Append averaged columns only (Symbols input)
     EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])])
@@ -15,7 +15,7 @@ using Statistics
     @test all(dat.data.Ch1_Ch2 .== (dat.data.Ch1 .+ dat.data.Ch2) ./ 2)
 
     # 2) Reduce to only averages and create averaged layout
-    dat = create_test_data(n = 500)
+    dat = create_test_continuous_data(n = 500)
     dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])]; reduce = true)
     @test all(propertynames(dat.data) .== [:time, :sample, :triggers, :Ch1_Ch2])
     @test size(dat.layout.data, 1) == 1
@@ -23,24 +23,24 @@ using Statistics
     @test :azi ∈ propertynames(dat.layout.data)
 
     # 3) Append averaged channels to layout
-    dat = create_test_data(n = 500)
+    dat = create_test_continuous_data(n = 500)
     dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch2, :Ch3])])
     @test :Ch2_Ch3 ∈ propertynames(dat.data)
     @test any(dat.layout.data.label .== :Ch2_Ch3)
 
     # 4) Mixed Symbol input
-    dat = create_test_data(n = 500)
+    dat = create_test_continuous_data(n = 500)
     EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch1, :Ch3])])
     @test :Ch1_Ch3 ∈ propertynames(dat.data)
     @test :Ch1_Ch2 ∉ propertynames(dat.data)
 
     # 5) Auto-label :avg for all channels
-    dat = create_test_data(n = 500)
+    dat = create_test_continuous_data(n = 500)
     dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2, :Ch3])]; reduce = true)
     @test :avg ∈ propertynames(dat.data)
 
     # 6) Custom output_labels applied and length mismatch errors
-    dat = create_test_data(n = 500)
+    dat = create_test_continuous_data(n = 500)
     EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])]; output_labels = [:output_label])
     @test :output_label ∈ propertynames(dat.data)
     @test_throws Any EegFun.channel_average!(
@@ -51,7 +51,7 @@ using Statistics
 
     # 7) Duplicate labels in layout (should accumulate)
     # First add B_C, then add again to verify rows accumulate
-    dat = create_test_data(n = 500)
+    dat = create_test_continuous_data(n = 500)
     EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch2, :Ch3])])
     n1 = sum(dat.layout.data.label .== :Ch2_Ch3)
     EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch2, :Ch3])])

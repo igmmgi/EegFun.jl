@@ -8,7 +8,7 @@ using Statistics
 
 @testset "rereference" begin
 
-    dat = create_test_data(n_channels = 2)
+    dat = create_test_continuous_data(n_channels = 2)
     # 1) Average reference (:avg) subtracts mean of all channels from each selected channel
     EegFun.rereference!(dat, :avg)
     # After average reference, the mean of all channels should be approximately zero
@@ -17,7 +17,7 @@ using Statistics
     @test EegFun.reference(dat.analysis_info) == :avg
 
     # 2) Single channel reference uses Ch1 as reference
-    dat = create_test_data(n_channels = 2)
+    dat = create_test_continuous_data(n_channels = 2)
     dat_ref = EegFun.rereference(dat, :Ch1)
     # After single channel reference, the reference channel should be zero
     @test all(dat_ref.data.Ch1 .== 0.0)

@@ -10,7 +10,7 @@ using CSV
     @testset "channel_summary" begin
 
         @testset "_channel_summary_impl core function" begin
-            dat = create_test_data()
+            dat = create_test_continuous_data()
 
             # Test basic functionality
             result = EegFun._channel_summary_impl(dat.data, collect(1:50), [:Ch1, :Ch2])
@@ -41,7 +41,7 @@ using CSV
         end
 
         @testset "_channel_summary_impl input validation" begin
-            dat = create_test_data(n_channels = 4)
+            dat = create_test_continuous_data(n_channels = 4)
 
             @test_throws Exception EegFun._channel_summary_impl(dat.data, Int[], [:Ch1, :Ch2])
             @test_throws Exception EegFun._channel_summary_impl(dat.data, [1, 2, 3], Symbol[])
@@ -52,7 +52,7 @@ using CSV
         end
 
         @testset "_channel_summary_impl edge cases" begin
-            dat = create_test_data(n_channels = 4)
+            dat = create_test_continuous_data(n_channels = 4)
 
             # Test single sample
             result = EegFun._channel_summary_impl(dat.data, [1], [:Ch1])
@@ -73,7 +73,7 @@ using CSV
         end
 
         @testset "channel_summary SingleDataFrameEeg" begin
-            dat = create_test_data(n_channels = 4)
+            dat = create_test_continuous_data(n_channels = 4)
 
             # Test basic functionality with defaults
             result = EegFun.channel_summary(dat)
@@ -154,7 +154,7 @@ using CSV
         end
 
         @testset "channel_summary statistical properties" begin
-            dat = create_test_data(n_channels = 4)
+            dat = create_test_continuous_data(n_channels = 4)
             dat.data[!, :Ch4] .= 1.0
             result = EegFun.channel_summary(dat)
 
@@ -179,7 +179,7 @@ using CSV
         end
 
         @testset "channel_summary consistency" begin
-            dat = create_test_data()
+            dat = create_test_continuous_data()
 
             # Test that results are consistent between calls
             result1 = EegFun.channel_summary(dat)
@@ -199,7 +199,7 @@ using CSV
         end
 
         @testset "channel_summary integration with selection functions" begin
-            dat = create_test_data(n_channels = 4)
+            dat = create_test_continuous_data(n_channels = 4)
 
             # Test with different selection functions
             # Note: These functions are defined in the EegFun package

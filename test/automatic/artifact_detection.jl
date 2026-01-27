@@ -4,7 +4,7 @@ using OrderedCollections
 using EegFun
 
 # Helper function for artifact detection testing
-function create_test_data_with_artifacts(; n::Int = 1000, fs::Int = 1000)
+function create_test_continuous_data_with_artifacts(; n::Int = 1000, fs::Int = 1000)
 
     t = collect(0:(n-1)) ./ fs
 
@@ -29,7 +29,7 @@ end
 @testset "artifact_detection" begin
     @testset "detect_eog_onsets!" begin
 
-        dat = create_test_data_with_artifacts()
+        dat = create_test_continuous_data_with_artifacts()
         original_size = size(dat.data, 2)
 
         # Test "EOG" detection (should be three "jumps" over the threshold)
@@ -70,7 +70,7 @@ end
     end
 
     @testset "is_extreme_value" begin
-        dat = create_test_data_with_artifacts()
+        dat = create_test_continuous_data_with_artifacts()
 
         # Test with default threshold (combined mode)
         extreme_mask = EegFun.is_extreme_value(dat, 20)
@@ -103,7 +103,7 @@ end
     end
 
     @testset "is_extreme_value!" begin
-        dat = create_test_data_with_artifacts()
+        dat = create_test_continuous_data_with_artifacts()
         original_columns = names(dat.data)
 
         # Test mutating version (default combined mode)
@@ -115,7 +115,7 @@ end
         @test new_columns[1] == "is_extreme_value_20"
 
         # Test separate mode
-        dat = create_test_data_with_artifacts()
+        dat = create_test_continuous_data_with_artifacts()
         EegFun.is_extreme_value!(dat, 20, mode = :separate)
 
         # Check that new columns were added (separate mode creates one per channel)
@@ -125,7 +125,7 @@ end
         @test "is_extreme_value_Ch2_20" in new_columns
 
         # Test with channel selection (separate mode)
-        dat = create_test_data_with_artifacts()
+        dat = create_test_continuous_data_with_artifacts()
         EegFun.is_extreme_value!(dat, 20, channel_selection = EegFun.channels([:Ch1]), mode = :separate)
 
         new_columns = setdiff(names(dat.data), original_columns)
@@ -135,7 +135,7 @@ end
     end
 
     @testset "n_extreme_value" begin
-        dat = create_test_data_with_artifacts()
+        dat = create_test_continuous_data_with_artifacts()
 
         # Test counting extreme values (default combined mode)
         total_count = EegFun.n_extreme_value(dat, 20)
@@ -153,8 +153,8 @@ end
         @test size(count_df, 1) == 2  # 2 channels
 
         # Test that channel Ch2 has more extreme values than Ch1
-        Ch1_count = count_df[count_df.channel .== :Ch1, :n_extreme][1]
-        Ch2_count = count_df[count_df.channel .== :Ch2, :n_extreme][1]
+        Ch1_count = count_df[count_df.channel.==:Ch1, :n_extreme][1]
+        Ch2_count = count_df[count_df.channel.==:Ch2, :n_extreme][1]
         @test Ch2_count > Ch1_count
 
         # Test with channel selection (separate mode)
@@ -167,7 +167,7 @@ end
     end
 
     @testset "_n_extreme_value" begin
-        dat = create_test_data_with_artifacts()
+        dat = create_test_continuous_data_with_artifacts()
 
         # Test internal function
         counts = EegFun._n_extreme_value(dat.data, [:Ch1, :Ch2], 20.0)
@@ -178,7 +178,7 @@ end
     end
 
     @testset "edge cases" begin
-        dat = create_test_data_with_artifacts()
+        dat = create_test_continuous_data_with_artifacts()
 
         # Test with very high threshold (should find no extreme values)
         extreme_mask = EegFun.is_extreme_value(dat, 1000)
@@ -198,7 +198,7 @@ end
     end
 
     @testset "error handling" begin
-        dat = create_test_data_with_artifacts()
+        dat = create_test_continuous_data_with_artifacts()
 
         # Test detect_eog_onsets! with non-existent channel (should throw error)
         @test_throws ErrorException EegFun.detect_eog_onsets!(dat, 20, :NonExistentChannel, :output)
@@ -218,7 +218,7 @@ end
 
     @testset "data type handling" begin
         # Test with different data types
-        dat = create_test_data_with_artifacts()
+        dat = create_test_continuous_data_with_artifacts()
 
         # Test with Int threshold (default combined mode)
         extreme_mask = EegFun.is_extreme_value(dat, 20)
@@ -232,7 +232,7 @@ end
     end
 
     @testset "channel overwriting" begin
-        dat = create_test_data_with_artifacts()
+        dat = create_test_continuous_data_with_artifacts()
 
         # Test that detect_eog_onsets! overwrites existing output channel
         dat.data[!, :existing_output] = fill(false, size(dat.data, 1))
@@ -251,22 +251,21 @@ end
         @test length(final_columns) == 2  # Should have 2 new columns (2 thresholds)
 
         # Test separate mode
-        dat2 = create_test_data_with_artifacts()
+        dat2 = create_test_continuous_data_with_artifacts()
         EegFun.is_extreme_value!(dat2, 20, mode = :separate)
         new_columns2 = setdiff(names(dat2.data), original_columns)
         @test length(new_columns2) == 2  # Should create 2 separate columns
     end
 
     @testset "detect_eog_signals!" begin
-        dat = create_test_data_with_artifacts()
+        dat = create_test_continuous_data_with_artifacts()
 
         # Add vEOG and hEOG channels
         dat.data[!, :vEOG] = dat.data.Ch2 .+ randn(nrow(dat.data)) * 5
         dat.data[!, :hEOG] = dat.data.Ch1 .+ randn(nrow(dat.data)) * 5
 
         # Update layout to include EOG channels
-        layout_df =
-            DataFrame(label = [:Ch1, :Ch2, :vEOG, :hEOG], inc = [0.0, 0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0, 0.0])
+        layout_df = DataFrame(label = [:Ch1, :Ch2, :vEOG, :hEOG], inc = [0.0, 0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0, 0.0])
         dat.layout = EegFun.Layout(layout_df, nothing, nothing)
 
         eog_cfg = Dict(
@@ -421,12 +420,7 @@ end
         @test rejection_info3.abs_rejections !== nothing
 
         # Test with custom z_measures
-        rejection_info4 = EegFun.detect_bad_epochs_automatic(
-            epochs3,
-            z_criterion = 2.0,
-            abs_criterion = 0,
-            z_measures = [:variance, :max],
-        )
+        rejection_info4 = EegFun.detect_bad_epochs_automatic(epochs3, z_criterion = 2.0, abs_criterion = 0, z_measures = [:variance, :max])
 
         @test rejection_info4.z_rejections.z_measures == [:variance, :max]
 
@@ -438,11 +432,7 @@ end
         @test_throws ErrorException EegFun.detect_bad_epochs_automatic(epochs, z_criterion = 3, abs_criterion = -1)
 
         # Test error handling - invalid measures
-        @test_throws ErrorException EegFun.detect_bad_epochs_automatic(
-            epochs,
-            z_criterion = 3,
-            z_measures = [:invalid_measure],
-        )
+        @test_throws ErrorException EegFun.detect_bad_epochs_automatic(epochs, z_criterion = 3, z_measures = [:invalid_measure])
 
         # Test error handling - empty channel selection
         @test_throws ErrorException EegFun.detect_bad_epochs_automatic(
@@ -668,7 +658,7 @@ end
     end
 
     @testset "detect_eog_onsets! step_size parameter" begin
-        dat = create_test_data_with_artifacts()
+        dat = create_test_continuous_data_with_artifacts()
 
         # Test with custom step_size
         EegFun.detect_eog_onsets!(dat, 75, :Ch2, :is_eog_onset_custom, step_size = 10)
@@ -676,14 +666,14 @@ end
         @test :is_eog_onset_custom in propertynames(dat.data)
 
         # Test with default step_size
-        dat2 = create_test_data_with_artifacts()
+        dat2 = create_test_continuous_data_with_artifacts()
         EegFun.detect_eog_onsets!(dat2, 75, :Ch2, :is_eog_onset_default)
 
         @test :is_eog_onset_default in propertynames(dat2.data)
     end
 
     @testset "is_extreme_value! custom channel_out" begin
-        dat = create_test_data_with_artifacts()
+        dat = create_test_continuous_data_with_artifacts()
 
         # Test with custom channel_out name
         EegFun.is_extreme_value!(dat, 20, channel_out = :custom_artifact_flag)
@@ -701,7 +691,7 @@ end
     end
 
     @testset "is_extreme_value! sample_selection" begin
-        dat = create_test_data_with_artifacts()
+        dat = create_test_continuous_data_with_artifacts()
 
         # Create sample selection mask as a function
         sample_mask = falses(nrow(dat.data))
@@ -723,18 +713,13 @@ end
         sample_mask_epoch[1:50] .= true
         sample_selection_epoch_fn = x -> sample_mask_epoch  # Function that returns the mask
 
-        EegFun.is_extreme_value!(
-            epochs,
-            100,
-            sample_selection = sample_selection_epoch_fn,
-            epoch_selection = EegFun.epochs([1]),
-        )
+        EegFun.is_extreme_value!(epochs, 100, sample_selection = sample_selection_epoch_fn, epoch_selection = EegFun.epochs([1]))
 
         @test :is_extreme_value_100 in propertynames(epochs.data[1])
     end
 
     @testset "_detect_extreme_values" begin
-        dat = create_test_data_with_artifacts()
+        dat = create_test_continuous_data_with_artifacts()
 
         # Test internal function directly
         results = EegFun._detect_extreme_values(dat, 20.0)
@@ -770,8 +755,7 @@ end
 
         # Test with single measure
         epochs2 = create_test_epoch_data(n_epochs = 10, n_channels = 2)
-        rejection_info2 =
-            EegFun.detect_bad_epochs_automatic(epochs2, z_criterion = 2.0, abs_criterion = 0, z_measures = [:variance])
+        rejection_info2 = EegFun.detect_bad_epochs_automatic(epochs2, z_criterion = 2.0, abs_criterion = 0, z_measures = [:variance])
 
         @test rejection_info2.z_rejections.z_measures == [:variance]
 
@@ -785,10 +769,8 @@ end
         layout_df = DataFrame(label = [:Ch1, :Ch2], inc = [0.0, 0.0], azi = [0.0, 0.0])
 
         # Ch1 has no neighbors (can't be repaired)
-        neighbours_dict = OrderedDict(
-            :Ch1 => EegFun.Neighbours(Symbol[], Float64[], Float64[]),
-            :Ch2 => EegFun.Neighbours([:Ch1], [1.0], [1.0]),
-        )
+        neighbours_dict =
+            OrderedDict(:Ch1 => EegFun.Neighbours(Symbol[], Float64[], Float64[]), :Ch2 => EegFun.Neighbours([:Ch1], [1.0], [1.0]))
 
         layout = EegFun.Layout(layout_df, neighbours_dict, nothing)
 

@@ -209,7 +209,7 @@ using Makie
         end
 
         @testset "empty ContinuousData" begin
-            dat = create_empty_trigger_data()
+            dat = create_test_continuous_data_empty_triggers()
 
             fig, ax = EegFun.plot_trigger_overview(dat; display_plot = false)
 
@@ -250,7 +250,7 @@ using Makie
         end
 
         @testset "empty ContinuousData" begin
-            dat = create_empty_trigger_data()
+            dat = create_test_continuous_data_empty_triggers()
 
             fig, ax = EegFun.plot_trigger_timing(dat; display_plot = false)
 
@@ -262,13 +262,8 @@ using Makie
             dat = create_test_continuous_data_with_triggers()
 
             # Test that custom parameters are passed through
-            fig, ax = EegFun.plot_trigger_timing(
-                dat;
-                window_size = 20.0,
-                initial_position = -5.0,
-                display_plot = false,
-                ignore_triggers = [1],
-            )
+            fig, ax =
+                EegFun.plot_trigger_timing(dat; window_size = 20.0, initial_position = -5.0, display_plot = false, ignore_triggers = [1])
 
             @test fig isa Figure
             @test ax isa Axis

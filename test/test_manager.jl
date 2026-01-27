@@ -79,7 +79,6 @@ function show_coverage_summary()
 
     catch e
         print_colored(RED, "Error: $e")
-        println("Make sure you've run tests with coverage first!")
     end
     println()
 end
@@ -131,7 +130,6 @@ function show_detailed_analysis()
 
     catch e
         print_colored(RED, "Error: $e")
-        println("Make sure you've run tests with coverage first!")
     end
     println()
 end
@@ -184,7 +182,6 @@ function analyze_specific_file(target_file::String)
 
     catch e
         print_colored(RED, "Error: $e")
-        println("Make sure you've run tests with coverage first!")
     end
     println()
 end
@@ -238,7 +235,6 @@ function show_missed_branches(target_file::String)
 
     catch e
         print_colored(RED, "Error: $e")
-        println("Make sure you've run tests with coverage first!")
     end
     println()
 end
@@ -268,7 +264,6 @@ function generate_html_report()
 
     catch e
         print_colored(RED, "Error: $e")
-        println("Make sure you've run tests with coverage first!")
     end
     println()
 end
@@ -441,5 +436,4 @@ function main()
     end
 end
 
-# Run the main function
 main()
