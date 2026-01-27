@@ -15,8 +15,8 @@ using CSV
         # Create test ERP files
         for participant = 1:3
             erps = [
-                create_test_erp_data(participant = participant, condition = 1),
-                create_test_erp_data(participant = participant, condition = 2),
+                EegFun.create_test_erp_data(participant = participant, condition = 1),
+                EegFun.create_test_erp_data(participant = participant, condition = 2),
             ]
 
             file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
@@ -56,8 +56,8 @@ using CSV
         # Create test ERP files
         for participant = 1:3
             erps = [
-                create_test_erp_data(participant = participant, condition = 1),
-                create_test_erp_data(participant = participant, condition = 2),
+                EegFun.create_test_erp_data(participant = participant, condition = 1),
+                EegFun.create_test_erp_data(participant = participant, condition = 2),
             ]
 
             file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
@@ -112,8 +112,8 @@ using CSV
         # Create test ERP files
         for participant = 1:2
             erps = [
-                create_test_erp_data(participant = participant, condition = 1),
-                create_test_erp_data(participant = participant, condition = 2),
+                EegFun.create_test_erp_data(participant = participant, condition = 1),
+                EegFun.create_test_erp_data(participant = participant, condition = 2),
             ]
             file_path = joinpath(test_dir, "$(participant)_erps_area.jld2")
             jldsave(file_path; data = erps)
@@ -155,8 +155,8 @@ using CSV
         # Create test ERP files
         for participant = 1:2
             erps = [
-                create_test_erp_data(participant = participant, condition = 1),
-                create_test_erp_data(participant = participant, condition = 2),
+                EegFun.create_test_erp_data(participant = participant, condition = 1),
+                EegFun.create_test_erp_data(participant = participant, condition = 2),
             ]
             file_path = joinpath(test_dir, "$(participant)_erps_fractional.jld2")
             jldsave(file_path; data = erps)
@@ -190,7 +190,7 @@ using CSV
     @testset "Measurement kwargs" begin
         # Create test ERP files
         for participant = 1:2
-            erps = [create_test_erp_data(participant = participant, condition = 1)]
+            erps = [EegFun.create_test_erp_data(participant = participant, condition = 1)]
             file_path = joinpath(test_dir, "$(participant)_erps_kwargs.jld2")
             jldsave(file_path; data = erps)
         end
@@ -235,7 +235,7 @@ using CSV
     @testset "Kwargs validation" begin
         # Create test ERP files
         for participant = 1:2
-            erps = [create_test_erp_data(participant = participant, condition = 1)]
+            erps = [EegFun.create_test_erp_data(participant = participant, condition = 1)]
             file_path = joinpath(test_dir, "$(participant)_erps_validate.jld2")
             jldsave(file_path; data = erps)
         end
@@ -286,7 +286,7 @@ using CSV
     @testset "Epoch data processing" begin
         # Create test epoch files
         for participant = 1:2
-            epochs = create_test_epoch_data_vector(conditions = 1:2, n_channels = 3)  # This returns Vector{EpochData}
+            epochs = EegFun.create_test_epoch_data_vector(conditions = 1:2, n_channels = 3)  # This returns Vector{EpochData}
 
             file_path = joinpath(test_dir, "$(participant)_epochs_cleaned.jld2")
             jldsave(file_path; data = epochs)
@@ -313,8 +313,8 @@ using CSV
         # Create test ERP files
         for participant = 1:3
             erps = [
-                create_test_erp_data(participant = participant, condition = 1),
-                create_test_erp_data(participant = participant, condition = 2),
+                EegFun.create_test_erp_data(participant = participant, condition = 1),
+                EegFun.create_test_erp_data(participant = participant, condition = 2),
             ]
 
             file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
@@ -356,8 +356,8 @@ using CSV
         # Create test ERP files
         for participant = 1:3
             erps = [
-                create_test_erp_data(participant = participant, condition = 1),
-                create_test_erp_data(participant = participant, condition = 2),
+                EegFun.create_test_erp_data(participant = participant, condition = 1),
+                EegFun.create_test_erp_data(participant = participant, condition = 2),
             ]
 
             file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
@@ -387,8 +387,8 @@ using CSV
         # Create test ERP files
         for participant = 1:3
             erps = [
-                create_test_erp_data(participant = participant, condition = 1),
-                create_test_erp_data(participant = participant, condition = 2),
+                EegFun.create_test_erp_data(participant = participant, condition = 1),
+                EegFun.create_test_erp_data(participant = participant, condition = 2),
             ]
 
             file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
@@ -526,7 +526,7 @@ using CSV
         @testset "Empty baseline window" begin
             # Create test ERP files
             for participant = 1:2
-                erps = [create_test_erp_data(participant = participant, condition = 1)]
+                erps = [EegFun.create_test_erp_data(participant = participant, condition = 1)]
                 file_path = joinpath(test_dir, "$(participant)_erps_baseline_edge.jld2")
                 jldsave(file_path; data = erps)
             end
@@ -550,7 +550,7 @@ using CSV
         @testset "Single sample analysis window" begin
             # Create test ERP files
             for participant = 1:2
-                erps = [create_test_erp_data(participant = participant, condition = 1)]
+                erps = [EegFun.create_test_erp_data(participant = participant, condition = 1)]
                 file_path = joinpath(test_dir, "$(participant)_erps_single.jld2")
                 jldsave(file_path; data = erps)
             end
@@ -575,7 +575,7 @@ using CSV
         @testset "Empty channel selection" begin
             # Create test ERP files
             for participant = 1:2
-                erps = [create_test_erp_data(participant = participant, condition = 1)]
+                erps = [EegFun.create_test_erp_data(participant = participant, condition = 1)]
                 file_path = joinpath(test_dir, "$(participant)_erps_nochannels.jld2")
                 jldsave(file_path; data = erps)
             end

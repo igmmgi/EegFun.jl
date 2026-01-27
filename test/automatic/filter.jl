@@ -39,7 +39,7 @@ using JLD2
     end
 
     @testset "filter_data! application and metadata" begin
-        dat = create_test_continuous_data()
+        dat = EegFun.create_test_continuous_data()
         dat_orig = copy(dat)
 
         # High-pass to remove DC; check mean is reduced towards ~0 for channel Ch1
@@ -58,7 +58,7 @@ using JLD2
     end
 
     @testset "non-mutating lowpass_filter" begin
-        dat = create_test_continuous_data()
+        dat = EegFun.create_test_continuous_data()
         dat_orig = copy(dat)
         dat2 = EegFun.lowpass_filter(dat, 30.0; order = 3)
         # Original unchanged
@@ -68,7 +68,7 @@ using JLD2
     end
 
     @testset "no channels selected returns early" begin
-        dat = create_test_continuous_data()
+        dat = EegFun.create_test_continuous_data()
         dat_orig = copy(dat)
         # channel_selection picks none
         result = EegFun.highpass_filter!(dat, 1.0; channel_selection = EegFun.channels(Symbol[]))
@@ -80,7 +80,7 @@ using JLD2
     end
 
     @testset "single-pass vs zero-phase" begin
-        dat1 = create_test_continuous_data()
+        dat1 = EegFun.create_test_continuous_data()
         dat2 = copy(dat1)
         # Single-pass introduces phase; zero-phase differs from single-pass
         EegFun.lowpass_filter!(dat1, 20.0; filter_func = "filt")
@@ -90,7 +90,7 @@ using JLD2
 
     @testset "EpochData filtering" begin
         # Build two epochs from the same base
-        base = create_test_continuous_data(; n = 1000, fs = 500)
+        base = EegFun.create_test_continuous_data(; n = 1000, fs = 500)
         df1 = copy(base.data, copycols = true)
         df2 = copy(base.data, copycols = true)
         # Keep originals for comparison (distinct objects)
@@ -108,7 +108,7 @@ using JLD2
 
     @testset "ErpData filtering" begin
         # Build ERP from base
-        base = create_test_continuous_data(; n = 2000, fs = 1000)
+        base = EegFun.create_test_continuous_data(; n = 2000, fs = 1000)
         erp_df = select(base.data, [:time, :Ch1, :Ch2])
         erp = EegFun.ErpData(
             base.file,
@@ -166,7 +166,7 @@ end
         # Create test data files
         @testset "Setup test files" begin
             for participant in [1, 2]
-                erps = create_batch_test_erp_data(n_conditions = 2)
+                erps = EegFun.create_batch_test_erp_data(n_conditions = 2)
                 # Use filename format consistent with codebase (numeric participant ID)
                 filename = joinpath(test_dir, "$(participant)_erps.jld2")
                 jldsave(filename; data = erps)
@@ -329,11 +329,8 @@ end
             epochs_dir = joinpath(test_dir, "epochs_test")
             mkpath(epochs_dir)
 
-            # Use generic create_test_epoch_data from test_utils.jl
-            # create_test_epoch_data(participant, condition, n_timepoints, n_channels)
-
             # Save epoch data - create a vector of EpochData for batch processing
-            epochs = [create_test_epoch_data(condition = 1), create_test_epoch_data(condition = 1)]
+            epochs = [EegFun.create_test_epoch_data(condition = 1), EegFun.create_test_epoch_data(condition = 1)]
             jldsave(joinpath(epochs_dir, "1_epochs.jld2"); data = epochs)
 
             # Filter epoch data
@@ -371,7 +368,7 @@ end
             mkpath(partial_dir)
 
             # Create one valid file
-            erps = create_batch_test_erp_data(n_conditions = 2)
+            erps = EegFun.create_batch_test_erp_data(n_conditions = 2)
             jldsave(joinpath(partial_dir, "1_erps.jld2"); data = erps)
 
             # Create one malformed file (invalid data type - String instead of Vector{ErpData})

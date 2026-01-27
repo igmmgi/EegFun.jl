@@ -14,7 +14,7 @@ using Statistics
         # Create test data files
         @testset "Setup test files" begin
             for participant in [1, 2, 3]
-                epochs = create_test_epoch_data_vector(conditions = 1:4)  # 4 conditions, 10 epochs each
+                epochs = EegFun.create_test_epoch_data_vector(conditions = 1:4)  # 4 conditions, 10 epochs each
                 filename = joinpath(test_dir, "$(participant)_epochs_cleaned.jld2")
                 jldsave(filename; data = epochs)
                 @test isfile(filename)
@@ -232,7 +232,7 @@ using Statistics
         @testset "Different epoch counts per condition" begin
             # TODO: adapr create_test_epoch_data to have different number of epochs per condition
             # Create data with different number of epochs per condition
-            dat = create_test_epoch_data_vector(conditions = 1:2, n_epochs = 2)
+            dat = EegFun.create_test_epoch_data_vector(conditions = 1:2, n_epochs = 2)
 
             # Save and process
             var_dir = joinpath(test_dir, "var_epochs")
@@ -501,7 +501,7 @@ using Statistics
             many_ch_dir = joinpath(test_dir, "many_channels")
             mkpath(many_ch_dir)
 
-            dat = create_test_epoch_data_vector(conditions = 1:2, n_epochs = 3, n_channels = 1000)
+            dat = EegFun.create_test_epoch_data_vector(conditions = 1:2, n_epochs = 3, n_channels = 1000)
 
             jldsave(joinpath(many_ch_dir, "1_epochs_many.jld2"); data = dat)
 

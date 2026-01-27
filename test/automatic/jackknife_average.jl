@@ -7,14 +7,11 @@ using JLD2
 using DataFrames
 
 
-# Use generic create_test_erp_data from test_utils.jl
-# create_test_erp_data(participant, condition, n_timepoints, n_channels)
-
 @testset "Jackknife Average" begin
     @testset "In-memory jackknife_average function" begin
         @testset "Basic jackknife averaging" begin
             # Create test ERP data for 4 participants
-            erps = [create_test_erp_data(participant = i, condition = 1) for i = 1:4]
+            erps = [EegFun.create_test_erp_data(participant = i, condition = 1) for i = 1:4]
 
             # Create jackknife averages
             jackknife_results = EegFun.jackknife_average(erps)
@@ -32,7 +29,7 @@ using DataFrames
 
         @testset "Jackknife calculation verification" begin
             # Create simple test data with known values
-            erps = [create_test_erp_data(participant = i, condition = 1, fs = 50) for i = 1:3]
+            erps = [EegFun.create_test_erp_data(participant = i, condition = 1, fs = 50) for i = 1:3]
 
             jackknife_results = EegFun.jackknife_average(erps)
 
@@ -58,7 +55,7 @@ using DataFrames
 
         @testset "Jackknife with different channels" begin
             # Test that all channels are processed correctly
-            erps = [create_test_erp_data(participant = i, condition = 1, fs = 50, n_channels = 3) for i = 1:3]
+            erps = [EegFun.create_test_erp_data(participant = i, condition = 1, fs = 50, n_channels = 3) for i = 1:3]
 
             jackknife_results = EegFun.jackknife_average(erps)
 
@@ -72,14 +69,14 @@ using DataFrames
 
         @testset "Error handling: insufficient participants" begin
             # Only 1 participant - should throw error
-            erps = [create_test_erp_data(participant = 1, condition = 1)]
+            erps = [EegFun.create_test_erp_data(participant = 1, condition = 1)]
             @test_throws Exception EegFun.jackknife_average(erps)
         end
 
         @testset "Error handling: mismatched sample rates" begin
             # Create ERPs with different sample rates
-            erp1 = create_test_erp_data(participant = 1, condition = 1)
-            erp2 = create_test_erp_data(participant = 2, condition = 1)
+            erp1 = EegFun.create_test_erp_data(participant = 1, condition = 1)
+            erp2 = EegFun.create_test_erp_data(participant = 2, condition = 1)
             erp2 = EegFun.ErpData(
                 erp2.file,
                 erp2.condition,
@@ -96,14 +93,14 @@ using DataFrames
 
         @testset "Error handling: mismatched time points" begin
             # Create ERPs with different numbers of time points
-            erp1 = create_test_erp_data(participant = 1, condition = 1, fs = 100)
-            erp2 = create_test_erp_data(participant = 2, condition = 1, fs = 50)
+            erp1 = EegFun.create_test_erp_data(participant = 1, condition = 1, fs = 100)
+            erp2 = EegFun.create_test_erp_data(participant = 2, condition = 1, fs = 50)
 
             @test_throws Exception EegFun.jackknife_average([erp1, erp2])
         end
 
         @testset "Metadata preservation" begin
-            erps = [create_test_erp_data(participant = i, condition = 1) for i = 1:3]
+            erps = [EegFun.create_test_erp_data(participant = i, condition = 1) for i = 1:3]
 
             jackknife_results = EegFun.jackknife_average(erps)
 
@@ -119,7 +116,7 @@ using DataFrames
 
         @testset "n_epochs calculation" begin
             # Create ERPs with specific n_epochs
-            erps = [create_test_erp_data(participant = i, condition = 1) for i = 1:4]
+            erps = [EegFun.create_test_erp_data(participant = i, condition = 1) for i = 1:4]
             for (i, erp) in enumerate(erps)
                 erps[i] = EegFun.ErpData(
                     erp.file,
@@ -156,7 +153,7 @@ using DataFrames
         @testset "Basic batch processing" begin
             # Create test LRP files for multiple participants
             for participant = 1:4
-                lrp_data = create_test_erp_data(participant = participant, condition = 1)
+                lrp_data = EegFun.create_test_erp_data(participant = participant, condition = 1)
                 file_path = joinpath(test_dir, "$(participant)_lrp.jld2")
                 jldsave(file_path; data = lrp_data)
             end
@@ -186,8 +183,8 @@ using DataFrames
             # Create test LRP files with multiple conditions
             for participant = 1:4
                 lrp_data = [
-                    create_test_erp_data(participant = participant, condition = 1),
-                    create_test_erp_data(participant = participant, condition = 2),
+                    EegFun.create_test_erp_data(participant = participant, condition = 1),
+                    EegFun.create_test_erp_data(participant = participant, condition = 2),
                 ]
                 file_path = joinpath(test_dir, "$(participant)_multi_lrp.jld2")
                 jldsave(file_path; data = lrp_data)
@@ -263,7 +260,7 @@ using DataFrames
         @testset "Custom data variable" begin
             # Create test ERP files (not LRP)
             for participant = 1:3
-                erp_data = [create_test_erp_data(participant = participant, condition = 1)]
+                erp_data = [EegFun.create_test_erp_data(participant = participant, condition = 1)]
                 file_path = joinpath(test_dir, "$(participant)_erps.jld2")
                 jldsave(file_path; data = erp_data)
             end
@@ -287,7 +284,7 @@ using DataFrames
 
             # Create test files with specific known values
             for participant = 1:3
-                lrp_data = create_test_erp_data(participant = participant, condition = 1)
+                lrp_data = EegFun.create_test_erp_data(participant = participant, condition = 1)
                 file_path = joinpath(verify_dir, "$(participant)_verify.jld2")
                 jldsave(file_path; data = lrp_data)
             end
@@ -318,7 +315,7 @@ using DataFrames
         @testset "Error handling: insufficient files" begin
             # Create directory with only 1 file
             single_dir = mktempdir()
-            jldsave(joinpath(single_dir, "1_lrp.jld2"); data = create_test_erp_data(participant = 1, condition = 1))
+            jldsave(joinpath(single_dir, "1_lrp.jld2"); data = EegFun.create_test_erp_data(participant = 1, condition = 1))
 
             output_dir = joinpath(single_dir, "jackknife_insufficient")
 

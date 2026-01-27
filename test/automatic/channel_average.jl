@@ -6,7 +6,7 @@ using Statistics
 
 @testset "channel_average" begin
 
-    dat = create_test_continuous_data(n = 500)
+    dat = EegFun.create_test_continuous_data(n = 500)
 
     # 1) Append averaged columns only (Symbols input)
     EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])])
@@ -15,7 +15,7 @@ using Statistics
     @test all(dat.data.Ch1_Ch2 .== (dat.data.Ch1 .+ dat.data.Ch2) ./ 2)
 
     # 2) Reduce to only averages and create averaged layout
-    dat = create_test_continuous_data(n = 500)
+    dat = EegFun.create_test_continuous_data(n = 500)
     dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])]; reduce = true)
     @test all(propertynames(dat.data) .== [:time, :sample, :triggers, :Ch1_Ch2])
     @test size(dat.layout.data, 1) == 1
@@ -23,24 +23,24 @@ using Statistics
     @test :azi ∈ propertynames(dat.layout.data)
 
     # 3) Append averaged channels to layout
-    dat = create_test_continuous_data(n = 500)
+    dat = EegFun.create_test_continuous_data(n = 500)
     dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch2, :Ch3])])
     @test :Ch2_Ch3 ∈ propertynames(dat.data)
     @test any(dat.layout.data.label .== :Ch2_Ch3)
 
     # 4) Mixed Symbol input
-    dat = create_test_continuous_data(n = 500)
+    dat = EegFun.create_test_continuous_data(n = 500)
     EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch1, :Ch3])])
     @test :Ch1_Ch3 ∈ propertynames(dat.data)
     @test :Ch1_Ch2 ∉ propertynames(dat.data)
 
     # 5) Auto-label :avg for all channels
-    dat = create_test_continuous_data(n = 500)
+    dat = EegFun.create_test_continuous_data(n = 500)
     dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2, :Ch3])]; reduce = true)
     @test :avg ∈ propertynames(dat.data)
 
     # 6) Custom output_labels applied and length mismatch errors
-    dat = create_test_continuous_data(n = 500)
+    dat = EegFun.create_test_continuous_data(n = 500)
     EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])]; output_labels = [:output_label])
     @test :output_label ∈ propertynames(dat.data)
     @test_throws Any EegFun.channel_average!(
@@ -51,7 +51,7 @@ using Statistics
 
     # 7) Duplicate labels in layout (should accumulate)
     # First add B_C, then add again to verify rows accumulate
-    dat = create_test_continuous_data(n = 500)
+    dat = EegFun.create_test_continuous_data(n = 500)
     EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch2, :Ch3])])
     n1 = sum(dat.layout.data.label .== :Ch2_Ch3)
     EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch2, :Ch3])])
@@ -60,13 +60,13 @@ using Statistics
 
     # 9) EpochData append and reduce
     # Create simple EpochData (2 epochs) from dat
-    dat = create_test_epoch_data(n = 500)
+    dat = EegFun.create_test_epoch_data(n = 500)
     dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])])
 
     @test :Ch1_Ch2 ∈ propertynames(dat.data[1]) && :Ch1_Ch2 ∈ propertynames(dat.data[2])
     @test :Ch1_Ch2 ∈ propertynames(dat.data[3]) && :Ch1_Ch2 ∈ propertynames(dat.data[4])
 
-    dat = create_test_epoch_data(n = 500)
+    dat = EegFun.create_test_epoch_data(n = 500)
     dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])]; reduce = true)
 
     # Expect meta columns (leading) + A_B only
@@ -75,7 +75,7 @@ using Statistics
     @test :Ch1 ∉ cols && :Ch2 ∉ cols && :Ch3 ∉ cols
 
     # 10) ErpData reduce path
-    dat = create_test_epoch_data(n = 500)
+    dat = EegFun.create_test_epoch_data(n = 500)
     dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])]; reduce = true)
     # condition and condition_name are now in struct, not DataFrame
     @test all(propertynames(dat.data[1]) .== [:time, :sample, :epoch, :condition, :condition_name, :Ch1_Ch2])
@@ -84,14 +84,14 @@ using Statistics
     @test hasproperty(dat, :condition_name)
 
     # 11) Test default behavior (average all channels)
-    dat = create_test_epoch_data(n = 500)
+    dat = EegFun.create_test_epoch_data(n = 500)
     EegFun.channel_average!(dat)  # Should use default channels() from second function
     @test :avg ∈ propertynames(dat.data[1])
     @test all(dat.data[1].avg .== (dat.data[1].Ch1 .+ dat.data[1].Ch2 .+ dat.data[1].Ch3) ./ 3)
     @test all(dat.data[end].avg .== (dat.data[end].Ch1 .+ dat.data[end].Ch2 .+ dat.data[end].Ch3) ./ 3)
 
     # 12) Test single channel selection with custom label
-    dat = create_test_epoch_data(n = 500)
+    dat = EegFun.create_test_epoch_data(n = 500)
     EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])], output_labels = [:custom])
     @test :custom ∈ propertynames(dat.data[1])
     @test :custom ∈ propertynames(dat.data[end])
@@ -110,7 +110,7 @@ end
 
         @testset "Setup test files" begin
             for participant in [1, 2]
-                erps = create_batch_test_erp_data(n_conditions = 2, n_channels = 7)
+                erps = EegFun.create_batch_test_erp_data(n_conditions = 2, n_channels = 7)
                 filename = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
                 jldsave(filename; data = erps)
                 @test isfile(filename)
@@ -326,7 +326,7 @@ end
             mkpath(partial_dir)
 
             # Create one valid file
-            erps = create_batch_test_erp_data(n_conditions = 2, n_channels = 7)
+            erps = EegFun.create_batch_test_erp_data(n_conditions = 2, n_channels = 7)
             jldsave(joinpath(partial_dir, "1_erps_cleaned.jld2"); data = erps)
 
             # Create one malformed file (invalid data type - String instead of Vector{ErpData})
@@ -505,7 +505,7 @@ end
             pattern_dir = joinpath(test_dir, "pattern_test")
             mkpath(pattern_dir)
 
-            erps = create_batch_test_erp_data(n_conditions = 2, n_channels = 7)
+            erps = EegFun.create_batch_test_erp_data(n_conditions = 2, n_channels = 7)
             jldsave(joinpath(pattern_dir, "1_erps_original.jld2"); data = erps)
             jldsave(joinpath(pattern_dir, "2_erps_cleaned.jld2"); data = erps)
             jldsave(joinpath(pattern_dir, "3_custom_erps.jld2"); data = erps)
@@ -566,7 +566,7 @@ end
             epochs_dir = joinpath(test_dir, "epochs_test")
             mkpath(epochs_dir)
 
-            epochs = create_test_epoch_data()
+            epochs = EegFun.create_test_epoch_data()
             jldsave(joinpath(epochs_dir, "1_epochs.jld2"); data = [epochs])
 
             # Average channels in epoch data
@@ -592,7 +592,7 @@ end
             invalid_dir = joinpath(test_dir, "invalid_channels")
             mkpath(invalid_dir)
 
-            erps = create_batch_test_erp_data(n_conditions = 1, n_channels = 7)
+            erps = EegFun.create_batch_test_erp_data(n_conditions = 1, n_channels = 7)
             jldsave(joinpath(invalid_dir, "1_erps.jld2"); data = erps)
 
             output_dir = joinpath(test_dir, "combined_invalid")
@@ -823,7 +823,7 @@ end
             mkpath(empty_dir)
 
             # Create file but select channels that result in empty selection
-            erps = create_batch_test_erp_data(n_conditions = 1, n_channels = 7)
+            erps = EegFun.create_batch_test_erp_data(n_conditions = 1, n_channels = 7)
             jldsave(joinpath(empty_dir, "1_erps.jld2"); data = erps)
 
             # Use a predicate that selects nothing

@@ -3,12 +3,6 @@ using EegFun
 using GLMakie
 using DataFrames
 
-# Test data setup
-# Use generic create_test_layout from test_utils.jl
-# create_test_layout(; n_channels::Int = 4, layout_type::Symbol = :grid)
-
-# Use generic create_test_erp_data from test_utils.jl
-# create_test_erp_data(participant, condition, n_timepoints, n_channels)
 
 @testset "Layout System Tests" begin
 
@@ -23,7 +17,7 @@ using DataFrames
 
     @testset "create_single_layout" begin
         channels = [:Ch1, :Ch2, :Ch3]
-        test_layout = create_test_layout()
+        test_layout = EegFun.create_test_layout()
         layout = EegFun.create_layout(:single, channels, test_layout)
 
         @test layout.type == :single
@@ -35,7 +29,7 @@ using DataFrames
 
     @testset "create_grid_layout" begin
         channels = [:Ch1, :Ch2, :Ch3, :Ch4]
-        test_layout = create_test_layout()
+        test_layout = EegFun.create_test_layout()
 
         # Test auto-calculated grid
         layout = EegFun.create_layout(:grid, channels, test_layout)
@@ -59,7 +53,7 @@ using DataFrames
     end
 
     @testset "create_topo_layout" begin
-        test_layout = create_test_layout()
+        test_layout = EegFun.create_test_layout()
         channels = [:Ch1, :Ch2]
 
         layout = EegFun.create_layout(:topo, channels, test_layout)
@@ -73,7 +67,7 @@ using DataFrames
 
     @testset "create_layout function" begin
         channels = [:Ch1, :Ch2, :Ch3, :Ch4]
-        test_layout = create_test_layout()
+        test_layout = EegFun.create_test_layout()
 
         # Test symbol layouts
         @test EegFun.create_layout(:single, channels, test_layout).type == :single
@@ -94,7 +88,7 @@ using DataFrames
     @testset "apply_layout! function" begin
         fig = Figure()
         channels = [:Ch1, :Ch2, :Ch3, :Ch4]
-        test_layout = create_test_layout()
+        test_layout = EegFun.create_test_layout()
 
         # Test single layout
         layout = EegFun.create_layout(:single, channels, test_layout)
@@ -169,7 +163,7 @@ using DataFrames
     @testset "Layout Axis Properties" begin
         fig = Figure()
         channels = [:Ch1, :Ch2]
-        test_layout = create_test_layout()
+        test_layout = EegFun.create_test_layout()
         layout = EegFun.create_layout(:grid, channels, test_layout; grid_dims = (1, 2))
         axes, _ = EegFun._apply_layout!(fig, layout; xgrid = true, ygrid = true, xminorgrid = false, yminorgrid = false)
 
@@ -192,7 +186,7 @@ using DataFrames
 
     @testset "Topographic Layout Properties" begin
         fig = Figure()
-        test_layout = create_test_layout()
+        test_layout = EegFun.create_test_layout()
         channels = [:Ch1, :Ch2]
         layout = EegFun.create_layout(:topo, channels, test_layout)
         axes, _ = EegFun._apply_layout!(fig, layout; xgrid = true, ygrid = true, xminorgrid = false, yminorgrid = false)
@@ -208,7 +202,7 @@ using DataFrames
     end
 
     @testset "Edge Cases" begin
-        test_layout = create_test_layout()
+        test_layout = EegFun.create_test_layout()
 
         # Test empty channel list - should throw ArgumentError for empty channels
         @test_throws ArgumentError EegFun.create_layout(:grid, Symbol[], test_layout; grid_dims = (1, 1))
@@ -225,7 +219,7 @@ using DataFrames
 
     @testset "Integration with plot_erp" begin
         # Test that the layout system works with actual plotting
-        erp_data = create_test_erp_data(participant = 1, condition = 1)
+        erp_data = EegFun.create_test_erp_data(participant = 1, condition = 1)
 
         # Test single layout
         fig, axes = EegFun.plot_erp(erp_data, layout = :single)

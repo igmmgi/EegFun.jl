@@ -8,7 +8,7 @@ using Statistics
 
 @testset "rereference" begin
 
-    dat = create_test_continuous_data(n_channels = 2)
+    dat = EegFun.create_test_continuous_data(n_channels = 2)
     # 1) Average reference (:avg) subtracts mean of all channels from each selected channel
     EegFun.rereference!(dat, :avg)
     # After average reference, the mean of all channels should be approximately zero
@@ -17,7 +17,7 @@ using Statistics
     @test EegFun.reference(dat.analysis_info) == :avg
 
     # 2) Single channel reference uses Ch1 as reference
-    dat = create_test_continuous_data(n_channels = 2)
+    dat = EegFun.create_test_continuous_data(n_channels = 2)
     dat_ref = EegFun.rereference(dat, :Ch1)
     # After single channel reference, the reference channel should be zero
     @test all(dat_ref.data.Ch1 .== 0.0)
@@ -26,7 +26,7 @@ using Statistics
     @test EegFun.reference(dat_ref.analysis_info) == :Ch1
 
     # 4) EpochData: per-epoch reference computed independently
-    dat = create_test_epoch_data(n_epochs = 2, n_channels = 2, condition = 1)
+    dat = EegFun.create_test_epoch_data(n_epochs = 2, n_channels = 2, condition = 1)
     EegFun.rereference!(dat, :avg)
     # After average reference, the mean of all channels should be approximately zero for each epoch
     for epoch in dat.data
@@ -35,19 +35,19 @@ using Statistics
     end
 
     # 5) Non-mutating version returns a new object; original unchanged
-    dat = create_test_epoch_data(n_epochs = 2, n_channels = 2, condition = 1)
+    dat = EegFun.create_test_epoch_data(n_epochs = 2, n_channels = 2, condition = 1)
     dat_ref = EegFun.rereference(dat, :Ch1)
     @test :Ch1 ∈ propertynames(dat_ref.data[1]) && :Ch1 ∈ propertynames(dat.data[1])
     @test !all(dat_ref.data[1].Ch1 .== dat.data[1].Ch1)
 
 
     # 7) Channel included in both reference and selection becomes zero
-    dat = create_test_epoch_data(n_epochs = 2, n_channels = 2, condition = 1)
+    dat = EegFun.create_test_epoch_data(n_epochs = 2, n_channels = 2, condition = 1)
     EegFun.rereference!(dat, [:Ch1], EegFun.channels([:Ch1]))
     @test all(dat.data[1].Ch1 .== 0.0)
 
     # 9) Missing reference channel should throw
-    dat = create_test_epoch_data(n_epochs = 2, n_channels = 2, condition = 1)
+    dat = EegFun.create_test_epoch_data(n_epochs = 2, n_channels = 2, condition = 1)
     @test_throws Any EegFun.rereference!(copy(dat), [:Z], EegFun.channels([:A]))
 
 end
@@ -62,8 +62,8 @@ end
         # Create test ERP files
         for participant = 1:3
             erps = [
-                create_test_erp_data(participant = participant, condition = 1),
-                create_test_erp_data(participant = participant, condition = 2),
+                EegFun.create_test_erp_data(participant = participant, condition = 1),
+                EegFun.create_test_erp_data(participant = participant, condition = 2),
             ]
 
             file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
@@ -142,7 +142,7 @@ end
     @testset "Epoch data processing" begin
         # Create test epoch files
         for participant = 1:2
-            epochs = create_test_epoch_data_vector(conditions = 1:2, n_channels = 3)  # This returns Vector{EpochData}
+            epochs = EegFun.create_test_epoch_data_vector(conditions = 1:2, n_channels = 3)  # This returns Vector{EpochData}
 
             file_path = joinpath(test_dir, "$(participant)_epochs_cleaned.jld2")
             jldsave(file_path; data = epochs)

@@ -50,6 +50,7 @@ function print_header()
 end
 
 function run_tests_with_coverage()
+    clean_coverage_files() # ensure fresh coverage data
     print_colored(YELLOW, "Step 1: Running tests with coverage...")
     try
         # Run tests with coverage=true
@@ -307,8 +308,21 @@ function clean_coverage_files()
     for file in cov_files
         rm(file, force = true)
     end
-
     print_colored(GREEN, "✓ Successfully removed $(length(cov_files)) .cov file(s)")
+
+    # Also remove secondary artifacts
+    lcov_file = "test/coverage.lcov"
+    if isfile(lcov_file)
+        println("Removing $lcov_file...")
+        rm(lcov_file, force = true)
+    end
+
+    html_dir = "test/coverage_html"
+    if isdir(html_dir)
+        println("Removing $html_dir/ directory...")
+        rm(html_dir, recursive = true, force = true)
+    end
+
     println()
 end
 

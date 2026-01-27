@@ -43,14 +43,14 @@ using Logging
     @testset "_find_batch_files" begin
         # Create test files
         for participant = 1:5
-            erps = [create_test_erp_data(participant = participant, condition = 1)]
+            erps = [EegFun.create_test_erp_data(participant = participant, condition = 1)]
             file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
             jldsave(file_path; data = erps)
         end
 
         # Create some non-matching files
         for participant = 1:3
-            erps = [create_test_erp_data(participant = participant, condition = 1)]
+            erps = [EegFun.create_test_erp_data(participant = participant, condition = 1)]
             file_path = joinpath(test_dir, "$(participant)_epochs_cleaned.jld2")
             jldsave(file_path; data = erps)
         end
@@ -84,7 +84,7 @@ using Logging
 
     @testset "load_data" begin
         # Create test files with different variable names
-        erps = [create_test_erp_data(participant = 1, condition = 1)]
+        erps = [EegFun.create_test_erp_data(participant = 1, condition = 1)]
 
         # Test with "erps" variable
         erps_file = joinpath(test_dir, "test_erps.jld2")
@@ -118,7 +118,7 @@ using Logging
 
     @testset "_condition_select" begin
         # Create test data
-        data = [create_test_erp_data(participant = 1, condition = i) for i = 1:5]
+        data = [EegFun.create_test_erp_data(participant = 1, condition = i) for i = 1:5]
 
         # Test with nothing (should return original)
         result = EegFun._condition_select(data, nothing)
@@ -229,7 +229,7 @@ using Logging
     @testset "_run_batch_operation" begin
         # Create test files
         for i = 1:3
-            erps = [create_test_erp_data(participant = i, condition = 1)]
+            erps = [EegFun.create_test_erp_data(participant = i, condition = 1)]
             file_path = joinpath(test_dir, "test_$i.jld2")
             jldsave(file_path; data = erps)
         end
@@ -378,7 +378,7 @@ using Logging
         @testset "Full batch workflow simulation" begin
             # Create test files
             for participant = 1:3
-                erps = [create_test_erp_data(participant = participant, condition = 1)]
+                erps = [EegFun.create_test_erp_data(participant = participant, condition = 1)]
                 file_path = joinpath(test_dir, "$(participant)_test_erps.jld2")
                 jldsave(file_path; data = erps)
             end

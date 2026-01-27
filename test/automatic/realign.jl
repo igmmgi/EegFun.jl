@@ -9,7 +9,8 @@ using DataFrames
 
 @testset "Realignment" begin
     @testset "Basic realignment (non-mutating)" begin
-        epoch_data = create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
+        epoch_data =
+            EegFun.create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
 
         # Store original time range
         original_time_min = minimum(epoch_data.data[1].time)
@@ -42,7 +43,8 @@ using DataFrames
     end
 
     @testset "In-place realignment" begin
-        epoch_data = create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
+        epoch_data =
+            EegFun.create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
 
         # Get original RT values for verification
         original_rts = [epoch.rt[1] for epoch in epoch_data.data]
@@ -64,7 +66,7 @@ using DataFrames
 
     @testset "Time window cropping" begin
         # Create epochs with varying RTs
-        epoch_data = create_test_epoch_data_with_rt(
+        epoch_data = EegFun.create_test_epoch_data_with_rt(
             participant = 1,
             condition = 1,
             n_epochs = 10,
@@ -100,7 +102,7 @@ using DataFrames
 
     @testset "Common time window calculation" begin
         # Create epochs with RTs that span a wide range
-        epoch_data = create_test_epoch_data_with_rt(
+        epoch_data = EegFun.create_test_epoch_data_with_rt(
             participant = 1,
             condition = 1,
             n_epochs = 10,
@@ -131,7 +133,8 @@ using DataFrames
     end
 
     @testset "Channel data preservation" begin
-        epoch_data = create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
+        epoch_data =
+            EegFun.create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
 
         # Get channel values at a specific time point before realignment
         # Find time closest to 0.5s in first epoch
@@ -149,7 +152,8 @@ using DataFrames
     end
 
     @testset "Metadata preservation" begin
-        epoch_data = create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
+        epoch_data =
+            EegFun.create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
 
         # Realign
         realigned = EegFun.realign(epoch_data, :rt)
@@ -171,14 +175,16 @@ using DataFrames
     end
 
     @testset "Error handling: missing column" begin
-        epoch_data = create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
+        epoch_data =
+            EegFun.create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
 
         # Try to realign to non-existent column
         @test_throws Exception EegFun.realign(epoch_data, :nonexistent_column)
     end
 
     @testset "Error handling: varying values within epoch" begin
-        epoch_data = create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
+        epoch_data =
+            EegFun.create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
 
         # Modify RT column to have varying values within first epoch
         epoch_data.data[1].rt .= collect(1:nrow(epoch_data.data[1]))
@@ -188,7 +194,8 @@ using DataFrames
     end
 
     @testset "Error handling: non-finite values" begin
-        epoch_data = create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
+        epoch_data =
+            EegFun.create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
 
         # Set RT to NaN in first epoch
         epoch_data.data[1].rt .= NaN
@@ -199,7 +206,7 @@ using DataFrames
 
     @testset "Error handling: insufficient epoch length" begin
         # Create epochs that are too short for the RT values
-        epoch_data = create_test_epoch_data_with_rt(
+        epoch_data = EegFun.create_test_epoch_data_with_rt(
             participant = 1,
             condition = 1,
             n_epochs = 10,
@@ -224,7 +231,8 @@ using DataFrames
 
     @testset "Multiple channels preserved" begin
         # Create data with more channels
-        epoch_data = create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 5, n_timepoints = 100, n_channels = 10)
+        epoch_data =
+            EegFun.create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 5, n_timepoints = 100, n_channels = 10)
 
         # Realign
         realigned = EegFun.realign(epoch_data, :rt)
@@ -243,7 +251,8 @@ using DataFrames
 
     @testset "Edge case: identical RTs" begin
         # Create epochs where all RTs are identical
-        epoch_data = create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
+        epoch_data =
+            EegFun.create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
 
         # Set all RTs to the same value
         for epoch in epoch_data.data
@@ -267,7 +276,7 @@ using DataFrames
         # Simulate a realistic scenario for response-locked LRP
         # Stimulus-locked epochs from -0.5 to 2.0s
         # RTs varying from 0.4 to 1.2s
-        epoch_data = create_test_epoch_data_with_rt(
+        epoch_data = EegFun.create_test_epoch_data_with_rt(
             participant = 1,
             condition = 1,
             n_epochs = 20,
@@ -312,8 +321,13 @@ end
     @testset "Basic batch processing" begin
         # Create test epoch files for multiple participants
         for participant = 1:3
-            epoch_data =
-                create_test_epoch_data_with_rt(participant = participant, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
+            epoch_data = EegFun.create_test_epoch_data_with_rt(
+                participant = participant,
+                condition = 1,
+                n_epochs = 10,
+                n_timepoints = 200,
+                n_channels = 3,
+            )
             file_path = joinpath(test_dir, "$(participant)_epochs.jld2")
             jldsave(file_path; data = epoch_data)
         end

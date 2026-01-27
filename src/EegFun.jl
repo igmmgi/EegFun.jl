@@ -54,15 +54,14 @@ include("types/decoding.jl")
 include("types/rsa.jl")
 
 # Utility functions
+include("utils/create_data.jl")
 include("utils/error.jl")
 include("utils/batch.jl")
 include("utils/data.jl")
-include("utils/read_data.jl")
 include("utils/files.jl")
 include("utils/logging.jl")
 include("utils/misc.jl")
 include("utils/print.jl")
-include("utils/signal_generation.jl")
 include("utils/extern/load_csv.jl")
 
 # Layout handling
@@ -90,6 +89,7 @@ include("analysis/processing/mirror.jl")
 include("analysis/processing/rereference.jl")
 include("analysis/processing/resample.jl")
 include("analysis/processing/triggers.jl")
+include("analysis/processing/read_data.jl")
 
 include("analysis/erps/jackknife_average.jl")
 include("analysis/erps/erp_measurements.jl")

@@ -23,8 +23,7 @@ println("="^70)
 
 function create_test_epochs(condition_id::Int, condition_name::String, n_epochs::Int, participant_id::Int = 1)
     channels = [:Fz, :Cz, :Pz]
-    layout =
-        EegFun.Layout(DataFrame(label = channels, inc = [90.0, 0.0, -90.0], azi = [0.0, 0.0, 0.0]), nothing, nothing)
+    layout = EegFun.Layout(DataFrame(label = channels, inc = [90.0, 0.0, -90.0], azi = [0.0, 0.0, 0.0]), nothing, nothing)
 
     epochs = Vector{DataFrame}()
     sample_rate = 250
@@ -62,9 +61,9 @@ end
 println("\n[1/4] Testing RDM normalization...")
 
 epochs = [
-    create_test_epochs(1, "Condition1", 30),
-    create_test_epochs(2, "Condition2", 30),
-    create_test_epochs(3, "Condition3", 30),
+    EegFun.create_test_epochs(1, "Condition1", 30),
+    EegFun.create_test_epochs(2, "Condition2", 30),
+    EegFun.create_test_epochs(3, "Condition3", 30),
 ]
 
 # Test different normalization methods
@@ -101,9 +100,9 @@ println("\n[2/4] Testing cross-validated RDM...")
 
 # Create epochs with more trials for CV
 epochs_cv = [
-    create_test_epochs(1, "Condition1", 50),
-    create_test_epochs(2, "Condition2", 50),
-    create_test_epochs(3, "Condition3", 50),
+    EegFun.create_test_epochs(1, "Condition1", 50),
+    EegFun.create_test_epochs(2, "Condition2", 50),
+    EegFun.create_test_epochs(3, "Condition3", 50),
 ]
 
 # Test split-half
@@ -149,9 +148,9 @@ all_rsa = Vector{EegFun.RsaData}()
 
 for p = 1:n_participants
     participant_epochs = [
-        create_test_epochs(1, "Condition1", 30, p),
-        create_test_epochs(2, "Condition2", 30, p),
-        create_test_epochs(3, "Condition3", 30, p),
+        EegFun.create_test_epochs(1, "Condition1", 30, p),
+        EegFun.create_test_epochs(2, "Condition2", 30, p),
+        EegFun.create_test_epochs(3, "Condition3", 30, p),
     ]
     rsa_result = EegFun.rsa(participant_epochs; dissimilarity_measure = :correlation)
     push!(all_rsa, rsa_result)
@@ -163,12 +162,8 @@ nc = EegFun.compute_noise_ceiling(all_rsa)
 println("    ✓ Noise ceiling computed")
 println("    Participants: $(nc.n_participants)")
 println("    Time points: $(length(nc.lower_bound))")
-println(
-    "    Lower bound range: $(round(minimum(nc.lower_bound), digits=3)) to $(round(maximum(nc.lower_bound), digits=3))",
-)
-println(
-    "    Upper bound range: $(round(minimum(nc.upper_bound), digits=3)) to $(round(maximum(nc.upper_bound), digits=3))",
-)
+println("    Lower bound range: $(round(minimum(nc.lower_bound), digits=3)) to $(round(maximum(nc.lower_bound), digits=3))")
+println("    Upper bound range: $(round(minimum(nc.upper_bound), digits=3)) to $(round(maximum(nc.upper_bound), digits=3))")
 
 # Verify bounds are sensible
 @assert all(nc.lower_bound .<= nc.upper_bound) "Lower bound should be <= upper bound"
@@ -203,9 +198,9 @@ all_rsa_cv = Vector{EegFun.RsaData}()
 
 for p = 1:n_participants
     participant_epochs = [
-        create_test_epochs(1, "Condition1", 40, p),
-        create_test_epochs(2, "Condition2", 40, p),
-        create_test_epochs(3, "Condition3", 40, p),
+        EegFun.create_test_epochs(1, "Condition1", 40, p),
+        EegFun.create_test_epochs(2, "Condition2", 40, p),
+        EegFun.create_test_epochs(3, "Condition3", 40, p),
     ]
     rsa_cv = EegFun.rsa_crossvalidated(
         participant_epochs;

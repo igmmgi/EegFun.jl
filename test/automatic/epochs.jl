@@ -5,10 +5,7 @@ using Statistics
 using JLD2
 using Random
 
-
-
 @testset "epochs" begin
-
 
     @testset "condition_parse_epoch" begin
         cfg = Dict(
@@ -97,7 +94,7 @@ using Random
     end
 
     @testset "extract_epochs basic and constraints" begin
-        dat = create_test_continuous_data_with_triggers()
+        dat = EegFun.create_test_continuous_data_with_triggers()
         win = (-0.01, 0.02)  # 10 ms pre, 20 ms post
 
         # Single sequence [1,2,3], reference=2
@@ -169,7 +166,7 @@ using Random
     end
 
     @testset "average_epochs" begin
-        dat = create_test_continuous_data_with_triggers()
+        dat = EegFun.create_test_continuous_data_with_triggers()
         win = (-0.01, 0.02)
         ec = EegFun.EpochCondition(name = "seq123", trigger_sequences = [[1, 2, 3]], reference_index = 2)
         eps = EegFun.extract_epochs(dat, 10, ec, win[1], win[2])
@@ -204,7 +201,7 @@ using Random
     end
 
     @testset "reject_epochs" begin
-        dat = create_test_continuous_data_with_triggers()
+        dat = EegFun.create_test_continuous_data_with_triggers()
         win = (-0.01, 0.02)
         ec = EegFun.EpochCondition(name = "seq123", trigger_sequences = [[1, 2, 3]], reference_index = 2)
         eps = EegFun.extract_epochs(dat, 20, ec, win[1], win[2])
@@ -240,7 +237,7 @@ using Random
     end
 
     @testset "mark_epoch_windows! (simple triggers)" begin
-        dat = create_test_continuous_data_with_triggers()
+        dat = EegFun.create_test_continuous_data_with_triggers()
 
         # Basic functionality - mark windows around trigger 1
         EegFun.mark_epoch_windows!(dat, [1], [-0.005, 0.005])
@@ -259,29 +256,29 @@ using Random
         end
 
         # Custom column name
-        dat2 = create_test_continuous_data_with_triggers()
+        dat2 = EegFun.create_test_continuous_data_with_triggers()
         EegFun.mark_epoch_windows!(dat2, [1], [-0.005, 0.005], channel_out = :custom_window)
         @test :custom_window in propertynames(dat2.data)
         @test any(dat2.data.custom_window)
 
         # Multiple triggers
-        dat3 = create_test_continuous_data_with_triggers()
+        dat3 = EegFun.create_test_continuous_data_with_triggers()
         EegFun.mark_epoch_windows!(dat3, [1, 2], [-0.005, 0.005])
         @test any(dat3.data.epoch_window)
 
         # Non-existent trigger should give warning but not error
-        dat4 = create_test_continuous_data_with_triggers()
+        dat4 = EegFun.create_test_continuous_data_with_triggers()
         EegFun.mark_epoch_windows!(dat4, [999], [-0.005, 0.005])
         @test !any(dat4.data.epoch_window)  # Should be all false
 
         # Test input validation
-        dat5 = create_test_continuous_data_with_triggers()
+        dat5 = EegFun.create_test_continuous_data_with_triggers()
         @test_throws AssertionError EegFun.mark_epoch_windows!(dat5, [1], [-0.005])  # Wrong window length
         @test_throws AssertionError EegFun.mark_epoch_windows!(dat5, [1], [0.005, -0.005])  # Wrong order
     end
 
     @testset "mark_epoch_windows! (epoch conditions)" begin
-        dat = create_test_continuous_data_with_triggers()
+        dat = EegFun.create_test_continuous_data_with_triggers()
 
         # Create epoch condition for sequence [1,2,3]
         ec = EegFun.EpochCondition(name = "test_condition", trigger_sequences = [[1, 2, 3]], reference_index = 2)
@@ -292,33 +289,33 @@ using Random
         @test any(dat.data.epoch_window)
 
         # Wildcard condition
-        dat2 = create_test_continuous_data_with_triggers()
+        dat2 = EegFun.create_test_continuous_data_with_triggers()
         ec_wild = EegFun.EpochCondition(name = "wildcard", trigger_sequences = [[1, :any, 3]], reference_index = 2)
         EegFun.mark_epoch_windows!(dat2, [ec_wild], [-0.005, 0.005])
         @test any(dat2.data.epoch_window)
 
         # Multiple conditions
-        dat3 = create_test_continuous_data_with_triggers()
+        dat3 = EegFun.create_test_continuous_data_with_triggers()
         ec1 = EegFun.EpochCondition(name = "c1", trigger_sequences = [[1, 2, 3]], reference_index = 2)
         ec2 = EegFun.EpochCondition(name = "c2", trigger_sequences = [[1, :any, 3]], reference_index = 1)
         EegFun.mark_epoch_windows!(dat3, [ec1, ec2], [-0.005, 0.005])
         @test any(dat3.data.epoch_window)
 
         # Condition with constraints
-        dat4 = create_test_continuous_data_with_triggers()
+        dat4 = EegFun.create_test_continuous_data_with_triggers()
         ec_constrained = EegFun.EpochCondition(name = "constrained", trigger_sequences = [[1, 2, 3]], reference_index = 2, after = 9)
         EegFun.mark_epoch_windows!(dat4, [ec_constrained], [-0.005, 0.005])
         @test any(dat4.data.epoch_window)  # Should find constrained sequences
 
         # Non-matching condition
-        dat5 = create_test_continuous_data_with_triggers()
+        dat5 = EegFun.create_test_continuous_data_with_triggers()
         ec_nomatch = EegFun.EpochCondition(name = "nomatch", trigger_sequences = [[7, 7, 7]], reference_index = 1)
         EegFun.mark_epoch_windows!(dat5, [ec_nomatch], [-0.005, 0.005])
         @test !any(dat5.data.epoch_window)  # Should be all false
     end
 
     @testset "get_selected_epochs" begin
-        dat = create_test_continuous_data_with_triggers()
+        dat = EegFun.create_test_continuous_data_with_triggers()
         win = (-0.01, 0.02)
         ec = EegFun.EpochCondition(name = "seq123", trigger_sequences = [[1, 2, 3]], reference_index = 2)
         eps = EegFun.extract_epochs(dat, 1, ec, win[1], win[2])
@@ -350,7 +347,7 @@ using Random
     end
 
     @testset "_validate_epoch_window_params" begin
-        dat = create_test_continuous_data_with_triggers()
+        dat = EegFun.create_test_continuous_data_with_triggers()
 
         # Valid parameters should not throw
         @test EegFun._validate_epoch_window_params(dat, [-0.1, 0.1]) === nothing
@@ -382,24 +379,24 @@ using Random
         @test isempty(selected_empty)
 
         # Very short time windows for mark_epoch_windows!
-        dat = create_test_continuous_data_with_triggers()
+        dat = EegFun.create_test_continuous_data_with_triggers()
         EegFun.mark_epoch_windows!(dat, [1], [-0.001, 0.001])  # 2ms window
         @test any(dat.data.epoch_window)
 
         # Zero-width window
-        dat2 = create_test_continuous_data_with_triggers()
+        dat2 = EegFun.create_test_continuous_data_with_triggers()
         EegFun.mark_epoch_windows!(dat2, [1], [0.0, 0.0])
         @test any(dat2.data.epoch_window)  # Should still mark the exact sample
 
         # Large time windows (should not cause issues if within data bounds)
-        dat3 = create_test_continuous_data_with_triggers(n = 10000)  # Longer data
+        dat3 = EegFun.create_test_continuous_data_with_triggers(n = 10000)  # Longer data
         EegFun.mark_epoch_windows!(dat3, [1], [-0.05, 0.05])  # 100ms window
         @test any(dat3.data.epoch_window)
     end
 
     @testset "additional edge cases and stress tests" begin
         # Test very large epochs (performance)
-        dat_large = create_test_continuous_data_with_triggers(n = 50000)  # 50s at 1kHz
+        dat_large = EegFun.create_test_continuous_data_with_triggers(n = 50000)  # 50s at 1kHz
         ec = EegFun.EpochCondition(name = "large", trigger_sequences = [[1, 2, 3]], reference_index = 2)
         large_epochs = EegFun.extract_epochs(dat_large, 1, ec, -0.1, 0.1)
         @test EegFun.n_epochs(large_epochs) >= 1
@@ -419,18 +416,18 @@ using Random
         @test erp_single.n_epochs == 1
 
         # Test epoch extraction with very short windows
-        dat_short = create_test_continuous_data_with_triggers()
+        dat_short = EegFun.create_test_continuous_data_with_triggers()
         short_epochs = EegFun.extract_epochs(dat_short, 1, ec, -0.001, 0.001)  # 2ms window
         @test EegFun.n_epochs(short_epochs) >= 1
         @test all(epoch -> nrow(epoch) >= 1, short_epochs.data)  # At least one sample per epoch
 
         # Test with unsorted time vector (should fail validation)
-        dat_unsorted = create_test_continuous_data_with_triggers()
+        dat_unsorted = EegFun.create_test_continuous_data_with_triggers()
         dat_unsorted.data.time = reverse(dat_unsorted.data.time)
         @test_throws AssertionError EegFun.mark_epoch_windows!(dat_unsorted, [1], [-0.01, 0.01])
 
         # Test reject_epochs with non-boolean columns (should work but warn)
-        dat_nonbool = create_test_continuous_data_with_triggers()
+        dat_nonbool = EegFun.create_test_continuous_data_with_triggers()
         eps_nonbool = EegFun.extract_epochs(dat_nonbool, 1, ec, -0.01, 0.02)
         # Add boolean columns (since any() requires boolean context)
         n_samples_1 = nrow(eps_nonbool.data[1])
@@ -443,14 +440,14 @@ using Random
         @test EegFun.n_epochs(cleaned_nonbool) == 2  # One epoch should be removed
 
         # Test overlapping epoch windows
-        dat_overlap = create_test_continuous_data_with_triggers()
+        dat_overlap = EegFun.create_test_continuous_data_with_triggers()
         EegFun.mark_epoch_windows!(dat_overlap, [1], [-0.01, 0.01], channel_out = :window1)
         EegFun.mark_epoch_windows!(dat_overlap, [2], [-0.01, 0.01], channel_out = :window2)
         @test :window1 in propertynames(dat_overlap.data)
         @test :window2 in propertynames(dat_overlap.data)
 
         # Test get_selected_epochs with edge cases
-        dat_edge = create_test_continuous_data_with_triggers()
+        dat_edge = EegFun.create_test_continuous_data_with_triggers()
         eps_edge = EegFun.extract_epochs(dat_edge, 1, ec, -0.01, 0.02)
 
         # Function that tries to access beyond the input range (should error)
@@ -1091,7 +1088,7 @@ end
 
 @testset "Artifact Detection" begin
     @testset "Basic detection and rejection" begin
-        epoch_data, bad_indices = create_test_epoch_data_with_artifacts(
+        epoch_data, bad_indices = EegFun.create_test_epoch_data_with_artifacts(
             participant = 1,
             condition = 1,
             n_epochs = 3,
@@ -1115,7 +1112,7 @@ end
     end
 
     @testset "In-place rejection" begin
-        epoch_data, bad_indices = create_test_epoch_data_with_artifacts(
+        epoch_data, bad_indices = EegFun.create_test_epoch_data_with_artifacts(
             participant = 1,
             condition = 1,
             n_epochs = 3,
@@ -1135,7 +1132,7 @@ end
     end
 
     @testset "Different z-criteria" begin
-        epoch_data, bad_indices = create_test_epoch_data_with_artifacts(
+        epoch_data, bad_indices = EegFun.create_test_epoch_data_with_artifacts(
             participant = 1,
             condition = 1,
             n_epochs = 3,
@@ -1153,7 +1150,7 @@ end
     end
 
     @testset "EpochRejectionInfo structure" begin
-        epoch_data, bad_indices = create_test_epoch_data_with_artifacts(
+        epoch_data, bad_indices = EegFun.create_test_epoch_data_with_artifacts(
             participant = 1,
             condition = 1,
             n_epochs = 20,
@@ -1187,7 +1184,7 @@ end
 
         # Test with invalid z-criterion
         epoch_data, _ =
-            create_test_epoch_data_with_artifacts(participant = 1, condition = 1, n_epochs = 5, n_timepoints = 50, n_channels = 2)
+            EegFun.create_test_epoch_data_with_artifacts(participant = 1, condition = 1, n_epochs = 5, n_timepoints = 50, n_channels = 2)
         @test_throws Exception EegFun.detect_bad_epochs_automatic(epoch_data, z_criterion = -1.0)
     end
 end
