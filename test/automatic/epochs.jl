@@ -1091,7 +1091,7 @@ end
 
 @testset "Artifact Detection" begin
     @testset "Basic detection and rejection" begin
-        epoch_data, bad_indices = create_test_epochs_with_artifacts(
+        epoch_data, bad_indices = create_test_epoch_data_with_artifacts(
             participant = 1,
             condition = 1,
             n_epochs = 3,
@@ -1115,7 +1115,7 @@ end
     end
 
     @testset "In-place rejection" begin
-        epoch_data, bad_indices = create_test_epochs_with_artifacts(
+        epoch_data, bad_indices = create_test_epoch_data_with_artifacts(
             participant = 1,
             condition = 1,
             n_epochs = 3,
@@ -1135,7 +1135,7 @@ end
     end
 
     @testset "Different z-criteria" begin
-        epoch_data, bad_indices = create_test_epochs_with_artifacts(
+        epoch_data, bad_indices = create_test_epoch_data_with_artifacts(
             participant = 1,
             condition = 1,
             n_epochs = 3,
@@ -1153,7 +1153,7 @@ end
     end
 
     @testset "EpochRejectionInfo structure" begin
-        epoch_data, bad_indices = create_test_epochs_with_artifacts(
+        epoch_data, bad_indices = create_test_epoch_data_with_artifacts(
             participant = 1,
             condition = 1,
             n_epochs = 20,
@@ -1186,7 +1186,8 @@ end
         @test_throws Exception EegFun.detect_bad_epochs_automatic(empty_epochs, z_criterion = 2.0)
 
         # Test with invalid z-criterion
-        epoch_data, _ = create_test_epochs_with_artifacts(participant = 1, condition = 1, n_epochs = 5, n_timepoints = 50, n_channels = 2)
+        epoch_data, _ =
+            create_test_epoch_data_with_artifacts(participant = 1, condition = 1, n_epochs = 5, n_timepoints = 50, n_channels = 2)
         @test_throws Exception EegFun.detect_bad_epochs_automatic(epoch_data, z_criterion = -1.0)
     end
 end
