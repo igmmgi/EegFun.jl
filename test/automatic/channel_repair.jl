@@ -7,7 +7,7 @@ using EegFun
 
     # Test 1: Neighbor interpolation on ContinuousData
     @testset "neighbor_interpolation_continuous" begin
-        dat = create_test_continuous_data(n = 100, n_channels = 4)
+        dat = EegFun.create_test_continuous_data(n = 100, n_channels = 4)
 
         # Add some layout coordinates for neighbor calculation (closer together)
         dat.layout.data.x3 = [0.0, 0.1, 0.0, -0.1]
@@ -34,7 +34,7 @@ using EegFun
 
     # Test 2: Spherical spline on ContinuousData
     @testset "spherical_spline_continuous" begin
-        dat = create_test_continuous_data(n = 100, n_channels = 4)
+        dat = EegFun.create_test_continuous_data(n = 100, n_channels = 4)
 
         # Add some layout coordinates for spherical spline
         dat.layout.data.x3 = [0.0, 1.0, 0.0, -1.0]
@@ -58,7 +58,7 @@ using EegFun
 
     # Test 3: Non-mutating version
     @testset "non_mutating_version" begin
-        dat = create_test_continuous_data(n = 100, n_channels = 4)
+        dat = EegFun.create_test_continuous_data(n = 100, n_channels = 4)
 
         # Add some layout coordinates (closer together)
         dat.layout.data.x3 = [0.0, 0.1, 0.0, -0.1]
@@ -88,7 +88,7 @@ using EegFun
 
     # Test 4: EpochData with neighbor interpolation
     @testset "neighbor_interpolation_epoch" begin
-        dat = create_test_epoch_data(n = 100, n_epochs = 3, n_channels = 4)
+        dat = EegFun.create_test_epoch_data(n = 100, n_epochs = 3, n_channels = 4)
 
         # Add some layout coordinates (closer together)
         dat.layout.data.x3 = [0.0, 0.1, 0.0, -0.1]
@@ -119,7 +119,7 @@ using EegFun
 
     # Test 5: EpochData with spherical spline
     @testset "spherical_spline_epoch" begin
-        dat = create_test_epoch_data(n = 100, n_epochs = 3, n_channels = 4)
+        dat = EegFun.create_test_epoch_data(n = 100, n_epochs = 3, n_channels = 4)
 
         # Add some layout coordinates (closer together)
         dat.layout.data.x3 = [0.0, 0.1, 0.0, -0.1]
@@ -147,7 +147,7 @@ using EegFun
 
     # Test 6: Multiple channels repair
     @testset "multiple_channels" begin
-        dat = create_test_continuous_data(n = 100, n_channels = 4)
+        dat = EegFun.create_test_continuous_data(n = 100, n_channels = 4)
 
         # Add some layout coordinates (closer together)
         dat.layout.data.x3 = [0.0, 0.1, 0.0, -0.1]
@@ -174,7 +174,7 @@ using EegFun
 
     # Test 7: Error handling for unknown method
     @testset "error_handling" begin
-        dat = create_test_continuous_data(n = 100, n_channels = 4)
+        dat = EegFun.create_test_continuous_data(n = 100, n_channels = 4)
 
         # Test unknown method
         @test_throws ArgumentError EegFun.repair_channels!(dat, [:Ch2], method = :unknown_method)
@@ -182,7 +182,7 @@ using EegFun
 
     # Test 8: Custom parameters for spherical spline
     @testset "custom_parameters" begin
-        dat = create_test_continuous_data(n = 100, n_channels = 4)
+        dat = EegFun.create_test_continuous_data(n = 100, n_channels = 4)
 
         # Add some layout coordinates (closer together)
         dat.layout.data.x3 = [0.0, 0.1, 0.0, -0.1]
@@ -201,7 +201,7 @@ using EegFun
 
     # Test 9: Epoch selection for EpochData
     @testset "epoch_selection" begin
-        dat = create_test_epoch_data(n = 100, n_epochs = 3, n_channels = 4)
+        dat = EegFun.create_test_epoch_data(n = 100, n_epochs = 3, n_channels = 4)
 
         # Add some layout coordinates (closer together)
         dat.layout.data.x3 = [0.0, 0.1, 0.0, -0.1]

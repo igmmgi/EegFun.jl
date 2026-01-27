@@ -9,7 +9,7 @@ using OrderedCollections
 
     @testset "correlation_matrix" begin
 
-        dat = create_test_continuous_data(n = 1000, n_channels = 100)
+        dat = EegFun.create_test_continuous_data(n = 1000, n_channels = 100)
 
         # Test with all channels
         cm = EegFun.correlation_matrix(dat)
@@ -39,7 +39,7 @@ using OrderedCollections
     end
 
     @testset "channel_joint_probability" begin
-        dat = create_test_continuous_data(n = 1000, n_channels = 100)
+        dat = EegFun.create_test_continuous_data(n = 1000, n_channels = 100)
 
         # Test with default parameters
         jp = EegFun.channel_joint_probability(dat)
@@ -67,7 +67,7 @@ using OrderedCollections
     end
 
     @testset "_correlation_matrix" begin
-        dat = create_test_continuous_data(n = 1000, n_channels = 100)
+        dat = EegFun.create_test_continuous_data(n = 1000, n_channels = 100)
 
         # Test internal function
         cm = EegFun._correlation_matrix(dat.data, collect(1:size(dat.data, 1)), [:Ch1, :Ch2, :Ch3])
@@ -78,7 +78,7 @@ using OrderedCollections
     end
 
     @testset "_channel_joint_probability" begin
-        dat = create_test_continuous_data(n = 1000, n_channels = 100)
+        dat = EegFun.create_test_continuous_data(n = 1000, n_channels = 100)
 
         # Test internal function
         jp = EegFun._channel_joint_probability(
@@ -140,7 +140,7 @@ using OrderedCollections
     end
 
     @testset "correlation_matrix - additional parameters" begin
-        dat = create_test_continuous_data(n = 1000, n_channels = 5)
+        dat = EegFun.create_test_continuous_data(n = 1000, n_channels = 5)
 
         # Test with sample_selection (create a predicate function)
         sample_pred = x -> [i <= 500 for i = 1:nrow(x)]
@@ -155,7 +155,7 @@ using OrderedCollections
     end
 
     @testset "channel_joint_probability - additional parameters" begin
-        dat = create_test_continuous_data(n = 1000, n_channels = 5)
+        dat = EegFun.create_test_continuous_data(n = 1000, n_channels = 5)
 
         # Test with sample_selection (create a predicate function)
         sample_pred = x -> [i <= 500 for i = 1:nrow(x)]
@@ -219,7 +219,7 @@ using OrderedCollections
     end
 
     @testset "correlation_matrix_dual_selection" begin
-        dat = create_test_continuous_data(n = 1000, n_channels = 10)
+        dat = EegFun.create_test_continuous_data(n = 1000, n_channels = 10)
 
         # Test basic functionality
         cm = EegFun.correlation_matrix_dual_selection(
@@ -276,7 +276,7 @@ using OrderedCollections
     end
 
     @testset "_correlation_matrix_dual_selection" begin
-        dat = create_test_continuous_data(n = 1000, n_channels = 5)
+        dat = EegFun.create_test_continuous_data(n = 1000, n_channels = 5)
 
         # Test internal function
         cm = EegFun._correlation_matrix_dual_selection(dat.data, collect(1:500), [:Ch1, :Ch2], [:Ch3, :Ch4])
@@ -302,7 +302,7 @@ using OrderedCollections
 
     @testset "add_zscore_columns!" begin
         # Create a test correlation matrix
-        dat = create_test_continuous_data(n = 1000, n_channels = 5)
+        dat = EegFun.create_test_continuous_data(n = 1000, n_channels = 5)
         cm = EegFun.correlation_matrix(dat, channel_selection = EegFun.channels([:Ch1, :Ch2, :Ch3]))
 
         # Test basic functionality
@@ -347,7 +347,7 @@ using OrderedCollections
     end
 
     @testset "add_zscore_columns" begin
-        dat = create_test_continuous_data(n = 1000, n_channels = 5)
+        dat = EegFun.create_test_continuous_data(n = 1000, n_channels = 5)
         cm = EegFun.correlation_matrix(dat, channel_selection = EegFun.channels([:Ch1, :Ch2]))
 
         # Test non-mutating version
@@ -359,7 +359,7 @@ using OrderedCollections
     end
 
     @testset "correlation_matrix_eog" begin
-        dat = create_test_continuous_data(n = 1000, n_channels = 10)
+        dat = EegFun.create_test_continuous_data(n = 1000, n_channels = 10)
 
         # Create EOG channels in data
         dat.data[!, :vEOG] = randn(nrow(dat.data))

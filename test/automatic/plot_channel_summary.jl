@@ -7,12 +7,8 @@ using EegFun
 
 @testset "plot_channel_summary" begin
 
-    # Use generic functions from test_utils.jl
-    # create_test_summary_data()
-    # create_test_summary_data_with_epochs()
-
     @testset "plot_channel_summary! basic functionality" begin
-        df = create_test_summary_data()
+        df = EegFun.create_test_summary_data()
 
         # Test basic plotting
         fig = Figure()
@@ -28,7 +24,7 @@ using EegFun
     end
 
     @testset "plot_channel_summary! with custom kwargs" begin
-        df = create_test_summary_data()
+        df = EegFun.create_test_summary_data()
 
         fig = Figure()
         ax = Axis(fig[1, 1])
@@ -51,7 +47,7 @@ using EegFun
     end
 
     @testset "plot_channel_summary! with averaging" begin
-        df = create_test_summary_data_with_epochs()
+        df = EegFun.create_test_summary_data_with_epochs()
 
         fig = Figure()
         ax = Axis(fig[1, 1])
@@ -72,7 +68,7 @@ using EegFun
     end
 
     @testset "plot_channel_summary! input validation" begin
-        df = create_test_summary_data()
+        df = EegFun.create_test_summary_data()
 
         fig = Figure()
         ax = Axis(fig[1, 1])
@@ -89,7 +85,7 @@ using EegFun
     end
 
     @testset "plot_channel_summary basic functionality" begin
-        df = create_test_summary_data()
+        df = EegFun.create_test_summary_data()
 
         # Test basic plotting (non-mutating version)
         fig, ax = EegFun.plot_channel_summary(df, :std, display_plot = false)
@@ -100,7 +96,7 @@ using EegFun
     end
 
     @testset "plot_channel_summary with custom kwargs" begin
-        df = create_test_summary_data()
+        df = EegFun.create_test_summary_data()
 
         # Test with custom parameters
         fig, ax = EegFun.plot_channel_summary(
@@ -119,7 +115,7 @@ using EegFun
     end
 
     @testset "plot_channel_summary with averaging" begin
-        df = create_test_summary_data_with_epochs()
+        df = EegFun.create_test_summary_data_with_epochs()
 
         # Test with averaging
         fig, ax = EegFun.plot_channel_summary(df, :var, average_over = :epoch, error_color = :red, display_plot = false)
@@ -130,7 +126,7 @@ using EegFun
     end
 
     @testset "plot_channel_summary sorting functionality" begin
-        df = create_test_summary_data()
+        df = EegFun.create_test_summary_data()
 
         # Test sorting by values
         fig, ax = EegFun.plot_channel_summary(df, :std, sort_values = true, display_plot = false)
@@ -146,7 +142,7 @@ using EegFun
     end
 
     @testset "plot_channel_summary display control" begin
-        df = create_test_summary_data()
+        df = EegFun.create_test_summary_data()
 
         # Test with display_plot = false
         fig, ax = EegFun.plot_channel_summary(df, :std, display_plot = false)
@@ -160,7 +156,7 @@ using EegFun
     end
 
     @testset "plot_channel_summary different columns" begin
-        df = create_test_summary_data()
+        df = EegFun.create_test_summary_data()
 
         # Test plotting different statistical measures
         columns_to_test = [:min, :max, :std, :var, :range, :zvar]
@@ -207,7 +203,7 @@ using EegFun
     end
 
     @testset "plot_channel_summary consistency between versions" begin
-        df = create_test_summary_data()
+        df = EegFun.create_test_summary_data()
 
         # Test that both versions produce the same visual result
         fig1, ax1 = EegFun.plot_channel_summary(df, :std, display_plot = false)

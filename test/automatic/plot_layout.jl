@@ -3,7 +3,7 @@ using Makie
 
 @testset "Plot Layout Tests" begin
 
-    layout = create_test_layout(; n_channels = 6, layout_type = :topo)
+    layout = EegFun.create_test_layout(; n_channels = 6, layout_type = :topo)
 
     @testset "plot_layout_2d! basic functionality" begin
         fig = Figure()
@@ -185,8 +185,7 @@ using Makie
 
     @testset "edge cases and boundary conditions" begin
         # Test with empty layout
-        empty_df =
-            DataFrame(label = Symbol[], x2 = Float64[], y2 = Float64[], x3 = Float64[], y3 = Float64[], z3 = Float64[])
+        empty_df = DataFrame(label = Symbol[], x2 = Float64[], y2 = Float64[], x3 = Float64[], y3 = Float64[], z3 = Float64[])
         empty_layout = EegFun.Layout(empty_df, nothing, nothing)
 
         fig, ax = EegFun.plot_layout_2d(empty_layout, display_plot = false)
@@ -269,13 +268,7 @@ using Makie
         @test ax isa Axis
 
         # Test with extreme offsets
-        fig, ax = EegFun.plot_layout_2d(
-            layout,
-            display_plot = false,
-            label_xoffset = 1000,
-            label_yoffset = -1000,
-            label_plot = true,
-        )
+        fig, ax = EegFun.plot_layout_2d(layout, display_plot = false, label_xoffset = 1000, label_yoffset = -1000, label_plot = true)
         @test fig isa Figure
         @test ax isa Axis
     end

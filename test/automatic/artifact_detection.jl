@@ -282,7 +282,7 @@ end
     end
 
     @testset "is_extreme_value! for EpochData" begin
-        epochs = create_test_epoch_data(n_epochs = 5, n_channels = 3)
+        epochs = EegFun.create_test_epoch_data(n_epochs = 5, n_channels = 3)
 
         # Add artifacts to some epochs
         epochs.data[1][!, :Ch1] .+= 200.0  # Extreme value in first epoch
@@ -303,7 +303,7 @@ end
         @test any(epochs.data[3].is_extreme_value_100)
 
         # Test separate mode
-        epochs2 = create_test_epoch_data(n_epochs = 3, n_channels = 2)
+        epochs2 = EegFun.create_test_epoch_data(n_epochs = 3, n_channels = 2)
         epochs2.data[1][!, :Ch1] .+= 200.0
 
         EegFun.is_extreme_value!(epochs2, 100, mode = :separate)
@@ -313,7 +313,7 @@ end
         @test :is_extreme_value_Ch2_100 in propertynames(epochs2.data[1])
 
         # Test with epoch selection
-        epochs3 = create_test_epoch_data(n_epochs = 5, n_channels = 2)
+        epochs3 = EegFun.create_test_epoch_data(n_epochs = 5, n_channels = 2)
         epochs3.data[1][!, :Ch1] .+= 200.0
 
         EegFun.is_extreme_value!(epochs3, 100, epoch_selection = EegFun.epochs([1, 3]))
@@ -323,7 +323,7 @@ end
         @test :is_extreme_value_100 in propertynames(epochs3.data[3])
 
         # Test with channel selection
-        epochs4 = create_test_epoch_data(n_epochs = 3, n_channels = 3)
+        epochs4 = EegFun.create_test_epoch_data(n_epochs = 3, n_channels = 3)
         epochs4.data[1][!, :Ch1] .+= 200.0
 
         EegFun.is_extreme_value!(epochs4, 100, channel_selection = EegFun.channels([:Ch1]))
@@ -338,7 +338,7 @@ end
     end
 
     @testset "is_extreme_value! for Vector{EpochData}" begin
-        epochs_list = [create_test_epoch_data(n_epochs = 3, n_channels = 2) for _ = 1:2]
+        epochs_list = [EegFun.create_test_epoch_data(n_epochs = 3, n_channels = 2) for _ = 1:2]
 
         # Add artifacts
         epochs_list[1].data[1][!, :Ch1] .+= 200.0
@@ -379,7 +379,7 @@ end
 
     @testset "detect_bad_epochs_automatic" begin
         # Create epochs with known artifacts
-        epochs = create_test_epoch_data(n_epochs = 10, n_channels = 3)
+        epochs = EegFun.create_test_epoch_data(n_epochs = 10, n_channels = 3)
 
         # Add extreme values to specific epochs to trigger rejection
         epochs.data[2][!, :Ch1] .= 200.0  # High absolute value
@@ -397,7 +397,7 @@ end
         @test length(rejection_info.rejected) > 0
 
         # Test with z-score criterion only
-        epochs2 = create_test_epoch_data(n_epochs = 20, n_channels = 3)
+        epochs2 = EegFun.create_test_epoch_data(n_epochs = 20, n_channels = 3)
         # Make one epoch have very high variance
         epochs2.data[5][!, :Ch1] .= randn(nrow(epochs2.data[5])) .* 100.0
 
@@ -409,7 +409,7 @@ end
         @test rejection_info2.z_rejections !== nothing
 
         # Test with both criteria
-        epochs3 = create_test_epoch_data(n_epochs = 15, n_channels = 3)
+        epochs3 = EegFun.create_test_epoch_data(n_epochs = 15, n_channels = 3)
         epochs3.data[3][!, :Ch1] .= 200.0
 
         rejection_info3 = EegFun.detect_bad_epochs_automatic(epochs3, z_criterion = 3.0, abs_criterion = 150.0)
@@ -442,7 +442,7 @@ end
         )
 
         # Test with Vector{EpochData}
-        epochs_list = [create_test_epoch_data(n_epochs = 5, n_channels = 2) for _ = 1:2]
+        epochs_list = [EegFun.create_test_epoch_data(n_epochs = 5, n_channels = 2) for _ = 1:2]
         epochs_list[1].data[2][!, :Ch1] .= 200.0
 
         rejection_list = EegFun.detect_bad_epochs_automatic(epochs_list, abs_criterion = 150.0, z_criterion = 0)
@@ -452,7 +452,7 @@ end
     end
 
     @testset "get_rejected" begin
-        epochs = create_test_epoch_data(n_epochs = 5, n_channels = 2)
+        epochs = EegFun.create_test_epoch_data(n_epochs = 5, n_channels = 2)
         epochs.data[2][!, :Ch1] .= 200.0
 
         rejection_info = EegFun.detect_bad_epochs_automatic(epochs, abs_criterion = 150.0, z_criterion = 0)
@@ -462,7 +462,7 @@ end
         @test length(rejected) > 0
 
         # Test with Vector{EpochRejectionInfo}
-        epochs_list = [create_test_epoch_data(n_epochs = 3, n_channels = 2) for _ = 1:2]
+        epochs_list = [EegFun.create_test_epoch_data(n_epochs = 3, n_channels = 2) for _ = 1:2]
         rejection_list = EegFun.detect_bad_epochs_automatic(epochs_list, abs_criterion = 150.0, z_criterion = 0)
 
         rejected_list = EegFun.get_rejected(rejection_list)
@@ -471,7 +471,7 @@ end
     end
 
     @testset "EpochRejectionInfo helpers" begin
-        epochs = create_test_epoch_data(n_epochs = 5, n_channels = 2)
+        epochs = EegFun.create_test_epoch_data(n_epochs = 5, n_channels = 2)
         epochs.data[2][!, :Ch1] .= 200.0
 
         rejection_info = EegFun.detect_bad_epochs_automatic(epochs, abs_criterion = 150.0, z_criterion = 0)
@@ -489,7 +489,7 @@ end
         @test unique_ep isa Vector{Int}
 
         # Test with Vector{EpochRejectionInfo}
-        epochs_list = [create_test_epoch_data(n_epochs = 3, n_channels = 2) for _ = 1:2]
+        epochs_list = [EegFun.create_test_epoch_data(n_epochs = 3, n_channels = 2) for _ = 1:2]
         rejection_list = EegFun.detect_bad_epochs_automatic(epochs_list, abs_criterion = 150.0, z_criterion = 0)
 
         unique_rej_list = EegFun.unique_rejections(rejection_list)
@@ -500,7 +500,7 @@ end
     end
 
     @testset "Base.show for EpochRejectionInfo" begin
-        epochs = create_test_epoch_data(n_epochs = 10, n_channels = 3)
+        epochs = EegFun.create_test_epoch_data(n_epochs = 10, n_channels = 3)
         epochs.data[2][!, :Ch1] .= 200.0
         epochs.data[5][!, :Ch2] .= -200.0
 
@@ -514,7 +514,7 @@ end
         @test occursin("EpochRejectionInfo", output)
 
         # Test with Vector{EpochRejectionInfo}
-        epochs_list = [create_test_epoch_data(n_epochs = 5, n_channels = 2) for _ = 1:2]
+        epochs_list = [EegFun.create_test_epoch_data(n_epochs = 5, n_channels = 2) for _ = 1:2]
         rejection_list = EegFun.detect_bad_epochs_automatic(epochs_list, abs_criterion = 150.0, z_criterion = 0)
 
         io2 = IOBuffer()
@@ -538,7 +538,7 @@ end
         layout = EegFun.Layout(layout_df, neighbours_dict, nothing)
 
         # Create epochs with layout
-        epochs = create_test_epoch_data(n_epochs = 5, n_channels = 4)
+        epochs = EegFun.create_test_epoch_data(n_epochs = 5, n_channels = 4)
         epochs.layout = layout
 
         # Create rejection info
@@ -555,7 +555,7 @@ end
         @test rejection_info.skipped !== nothing
 
         # Test with Vector{EpochRejectionInfo}
-        epochs_list = [create_test_epoch_data(n_epochs = 3, n_channels = 4) for _ = 1:2]
+        epochs_list = [EegFun.create_test_epoch_data(n_epochs = 3, n_channels = 4) for _ = 1:2]
         for ep in epochs_list
             ep.layout = layout
         end
@@ -580,7 +580,7 @@ end
         layout = EegFun.Layout(layout_df, neighbours_dict, nothing)
 
         # Create epochs with artifacts
-        epochs = create_test_epoch_data(n_epochs = 5, n_channels = 3)
+        epochs = EegFun.create_test_epoch_data(n_epochs = 5, n_channels = 3)
         epochs.layout = layout
 
         # Store original values
@@ -600,7 +600,7 @@ end
         @test repaired_epochs.data[2][1, :Ch1] != 200.0  # Should be repaired
 
         # Test mutating version
-        epochs2 = create_test_epoch_data(n_epochs = 5, n_channels = 3)
+        epochs2 = EegFun.create_test_epoch_data(n_epochs = 5, n_channels = 3)
         epochs2.layout = layout
         epochs2.data[2][!, :Ch1] .= 200.0
 
@@ -613,7 +613,7 @@ end
         @test epochs2.data[2][1, :Ch1] != original_value2  # Should be repaired
 
         # Test with Vector{EpochData}
-        epochs_list = [create_test_epoch_data(n_epochs = 3, n_channels = 3) for _ = 1:2]
+        epochs_list = [EegFun.create_test_epoch_data(n_epochs = 3, n_channels = 3) for _ = 1:2]
         for ep in epochs_list
             ep.layout = layout
             ep.data[2][!, :Ch1] .= 200.0
@@ -626,7 +626,7 @@ end
         @test length(repaired_list) == 2
 
         # Test error handling - repair_artifacts_neighbor! without channel_repairable! (repaired is nothing)
-        epochs3 = create_test_epoch_data(n_epochs = 3, n_channels = 3)
+        epochs3 = EegFun.create_test_epoch_data(n_epochs = 3, n_channels = 3)
         epochs3.layout = layout
         epochs3.data[1][!, :Ch1] .= 200.0  # Add artifact so there's something to reject
         rejection_info3 = EegFun.detect_bad_epochs_automatic(epochs3, abs_criterion = 150.0, z_criterion = 0)
@@ -639,7 +639,7 @@ end
 
         # Note: repair_artifacts! automatically calls channel_repairable! if needed, so it won't throw
         # But we can test that it works correctly
-        epochs4 = create_test_epoch_data(n_epochs = 3, n_channels = 3)
+        epochs4 = EegFun.create_test_epoch_data(n_epochs = 3, n_channels = 3)
         epochs4.layout = layout
         epochs4.data[1][!, :Ch1] .= 200.0
         rejection_info4 = EegFun.detect_bad_epochs_automatic(epochs4, abs_criterion = 150.0, z_criterion = 0)
@@ -649,7 +649,7 @@ end
         @test rejection_info4.repaired !== nothing  # Should be populated now
 
         # Test error handling - unknown method
-        epochs5 = create_test_epoch_data(n_epochs = 3, n_channels = 3)
+        epochs5 = EegFun.create_test_epoch_data(n_epochs = 3, n_channels = 3)
         epochs5.layout = layout
         epochs5.data[1][!, :Ch1] .= 200.0
         rejection_info5 = EegFun.detect_bad_epochs_automatic(epochs5, abs_criterion = 150.0, z_criterion = 0)
@@ -682,7 +682,7 @@ end
         @test any(dat.data.custom_artifact_flag)
 
         # Test with EpochData
-        epochs = create_test_epoch_data(n_epochs = 3, n_channels = 2)
+        epochs = EegFun.create_test_epoch_data(n_epochs = 3, n_channels = 2)
         epochs.data[1][!, :Ch1] .= 200.0
 
         EegFun.is_extreme_value!(epochs, 100, channel_out = :custom_flag)
@@ -706,7 +706,7 @@ end
         @test !any(dat.data.is_extreme_value_20[500:505])  # Artifact at 500-505
 
         # Test with EpochData
-        epochs = create_test_epoch_data(n_epochs = 3, n_channels = 2, n = 200)
+        epochs = EegFun.create_test_epoch_data(n_epochs = 3, n_channels = 2, n = 200)
         epochs.data[1][!, :Ch1] .= 200.0
 
         sample_mask_epoch = falses(nrow(epochs.data[1]))
@@ -746,7 +746,7 @@ end
 
     @testset "detect_bad_epochs_automatic edge cases" begin
         # Test with very few epochs (should warn)
-        epochs = create_test_epoch_data(n_epochs = 2, n_channels = 2)
+        epochs = EegFun.create_test_epoch_data(n_epochs = 2, n_channels = 2)
         epochs.data[1][!, :Ch1] .= 200.0
 
         # Should work but might warn
@@ -754,7 +754,7 @@ end
         @test rejection_info isa EegFun.EpochRejectionInfo
 
         # Test with single measure
-        epochs2 = create_test_epoch_data(n_epochs = 10, n_channels = 2)
+        epochs2 = EegFun.create_test_epoch_data(n_epochs = 10, n_channels = 2)
         rejection_info2 = EegFun.detect_bad_epochs_automatic(epochs2, z_criterion = 2.0, abs_criterion = 0, z_measures = [:variance])
 
         @test rejection_info2.z_rejections.z_measures == [:variance]
@@ -774,7 +774,7 @@ end
 
         layout = EegFun.Layout(layout_df, neighbours_dict, nothing)
 
-        epochs = create_test_epoch_data(n_epochs = 3, n_channels = 2)
+        epochs = EegFun.create_test_epoch_data(n_epochs = 3, n_channels = 2)
         epochs.layout = layout
         epochs.data[1][!, :Ch1] .= 200.0
 
