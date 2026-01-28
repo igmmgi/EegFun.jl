@@ -9,22 +9,17 @@ const ERP_MEASUREMENTS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Robust peak detection
     :local_window => (
         3,
-        "Number of samples on each side of peak for robust peak detection (total window = 2*local_window + 1). Peak must be larger than neighbors and local averages within this window.",
+        "Number of samples on each side of peak (total window = 2*local_window + 1). Peak must be larger than neighbors and local averages within this window.",
     ),
 
     # Fractional area latency
-    :fractional_area_fraction => (
-        0.5,
-        "Fraction for fractional area latency (0.0-1.0). Finds latency where this fraction of area is to the left.",
-    ),
+    :fractional_area_fraction =>
+        (0.5, "Fraction for fractional area latency (0.0-1.0). Finds latency where this fraction of area is to the left."),
 
     # Fractional peak latency
-    :fractional_peak_fraction => (
-        0.5,
-        "Fraction for fractional peak latency (0.0-1.0). Finds latency where amplitude is this fraction of peak.",
-    ),
-    :fractional_peak_direction =>
-        (:onset, "Direction for fractional peak latency: :onset (before peak) or :offset (after peak)"),
+    :fractional_peak_fraction =>
+        (0.5, "Fraction for fractional peak latency (0.0-1.0). Finds latency where amplitude is this fraction of peak."),
+    :fractional_peak_direction => (:onset, "Direction for fractional peak latency: :onset (before peak) or :offset (after peak)"),
 )
 
 #=============================================================================
@@ -120,50 +115,56 @@ Compute fractional area latency - finds the point that divides area into specifi
 Returns latency at which fraction of area is to the left.
 """
 function _fractional_area_latency(data::AbstractVector, time_col::AbstractVector, fraction::Float64)
-  
+
     # Edge cases
     (isempty(data) || isempty(time_col)) && return NaN
     length(data) == 1 && return time_col[1]
 
-    # Compute total area using rectangular integration (fine for uniform sampling)
+    # Compute total area using cumulative sum for O(N) efficiency
+    # Rectangular integration: area = sum(data) * dt
     dt = mean(diff(time_col))
-    total_area = sum(data) * dt
+    cum_area = cumsum(data) .* dt
+    total_area = cum_area[end]
 
     # Handle zero or very small area
-    if abs(total_area) < 1e-10
+    if abs(total_area) < 1e-12
         return time_col[1]  # Return start if no area
     end
 
     target_area = total_area * fraction
 
-    # Handle fraction = 0.0 or 1.0
+    # Handle fraction boundaries
     if fraction <= 0.0
         return time_col[1]
     elseif fraction >= 1.0
         return time_col[end]
     end
 
-    # Use binary search (like ERPLAB) for more accurate fractional area latency
-    n = length(time_col)
-    plow = 1
-    phigh = n
-
-    while plow <= phigh
-        pmid = round(Int, (plow + phigh) / 2)
-        # Compute cumulative area up to pmid
-        cumulative_area = sum(data[1:pmid]) * dt
-
-        if cumulative_area > target_area
-            phigh = pmid - 1
-        elseif cumulative_area < target_area
-            plow = pmid + 1
-        else
-            break  # Exact match found
-        end
+    # Find crossing point (handle both positive and negative total area)
+    idx = if total_area > 0
+        findfirst(a -> a >= target_area, cum_area)
+    else
+        findfirst(a -> a <= target_area, cum_area)
     end
 
-    # Return the latency at the found index
-    return time_col[min(plow, n)]
+    if isnothing(idx)
+        return time_col[end]
+    elseif idx == 1
+        return time_col[1]
+    end
+
+    # Linear interpolation for sub-sample precision
+    # Latency (x) such that area(x) = target_area
+    y0 = cum_area[idx-1]
+    y1 = cum_area[idx]
+    x0 = time_col[idx-1]
+    x1 = time_col[idx]
+
+    if abs(y1 - y0) < 1e-14
+        return x0
+    end
+
+    return x0 + (target_area - y0) * (x1 - x0) / (y1 - y0)
 end
 
 """
@@ -185,7 +186,7 @@ function _fractional_peak_latency(
     peak_val = data[peak_idx]
 
     # Handle zero peak
-    if abs(peak_val) < 1e-10
+    if abs(peak_val) < 1e-12
         return time_col[peak_idx]
     end
 
@@ -194,16 +195,32 @@ function _fractional_peak_latency(
     if direction == :onset
         # Work backward from peak
         for i = (peak_idx-1):-1:1
-            if data[i] <= target_val
-                return time_col[i]
+            # Check for crossing (handle both positive and negative peaks)
+            if (peak_val > 0 && data[i] <= target_val) || (peak_val < 0 && data[i] >= target_val)
+                # Linear interpolation between i and i+1
+                y0, y1 = data[i], data[i+1]
+                x0, x1 = time_col[i], time_col[i+1]
+
+                if abs(y1 - y0) < 1e-14
+                    return x0
+                end
+                return x0 + (target_val - y0) * (x1 - x0) / (y1 - y0)
             end
         end
         return time_col[1]
     else  # :offset
         # Work forward from peak
         for i = (peak_idx+1):length(data)
-            if data[i] <= target_val
-                return time_col[i]
+            # Check for crossing
+            if (peak_val > 0 && data[i] <= target_val) || (peak_val < 0 && data[i] >= target_val)
+                # Linear interpolation between i-1 and i
+                y0, y1 = data[i-1], data[i]
+                x0, x1 = time_col[i-1], time_col[i]
+
+                if abs(y1 - y0) < 1e-14
+                    return x1
+                end
+                return x0 + (target_val - y0) * (x1 - x0) / (y1 - y0)
             end
         end
         return time_col[end]
@@ -258,11 +275,9 @@ function _compute_measurement(
         local_window = measurement_kwargs[:local_window]
         measurement_name =
             analysis_type == "max_peak_amplitude" ? "maximum" :
-            analysis_type == "min_peak_amplitude" ? "minimum" :
-            analysis_type == "max_peak_latency" ? "maximum latency" : "minimum latency"
+            analysis_type == "min_peak_amplitude" ? "minimum" : analysis_type == "max_peak_latency" ? "maximum latency" : "minimum latency"
 
-        peak_val, peak_idx =
-            _compute_peak_measurement(chan_data, peak_type, local_window, channel_name, measurement_name)
+        peak_val, peak_idx = _compute_peak_measurement(chan_data, peak_type, local_window, channel_name, measurement_name)
 
         if analysis_type in ["max_peak_amplitude", "min_peak_amplitude"]
             return peak_val
@@ -380,46 +395,40 @@ function _process_dataframe_measurements(
 
     # Pre-compute selected times once (used by area/fractional measurements)
     selected_times = nothing
-    if analysis_type in [
-        "rectified_area",
-        "integral",
-        "positive_area",
-        "negative_area",
-        "fractional_area_latency",
-        "fractional_peak_latency",
-    ]
+    if analysis_type in
+       ["rectified_area", "integral", "positive_area", "negative_area", "fractional_area_latency", "fractional_peak_latency"]
         selected_times = @view time_col[time_idx]
     end
 
-    metadata_pairs = Pair{Symbol,Any}[:participant=>participant]
+    # Build metadata pairs in fixed order to ensure column order in DataFrame
+    metadata_vals = Any[participant]
+    metadata_keys = Symbol[:participant]
+
     if hasproperty(df, :condition)
-        push!(metadata_pairs, :condition => df[1, :condition])
+        push!(metadata_vals, df[1, :condition])
+        push!(metadata_keys, :condition)
     end
     if hasproperty(df, :condition_name)
-        push!(metadata_pairs, :condition_name => df[1, :condition_name])
+        push!(metadata_vals, df[1, :condition_name])
+        push!(metadata_keys, :condition_name)
     end
     if hasproperty(df, :epoch)
-        push!(metadata_pairs, :epoch => df[1, :epoch])
+        push!(metadata_vals, df[1, :epoch])
+        push!(metadata_keys, :epoch)
     end
+
+    metadata_final = NamedTuple{Tuple(metadata_keys)}(Tuple(metadata_vals))
 
     # Compute measurements for all channels
     channel_pairs = Vector{Pair{Symbol,Float64}}(undef, length(selected_channels))
     for (i, chan_symbol) in enumerate(selected_channels)
         chan_data = @view df[time_idx, chan_symbol]
-        value = _compute_measurement(
-            chan_data,
-            time_col,
-            time_idx,
-            selected_times,
-            analysis_type,
-            measurement_kwargs,
-            chan_symbol,
-        )
+        value = _compute_measurement(chan_data, time_col, time_idx, selected_times, analysis_type, measurement_kwargs, chan_symbol)
         channel_pairs[i] = chan_symbol => value
     end
 
     # Combine into single NamedTuple
-    return merge(NamedTuple(metadata_pairs), NamedTuple(channel_pairs))
+    return merge(metadata_final, NamedTuple(channel_pairs))
 end
 
 #=============================================================================
@@ -505,6 +514,11 @@ function _process_measurements_file(
 
         # Skip baseline if window matches all samples (default) or no samples
         if length(baseline_indices) < nrow(first_df) && !isempty(baseline_indices)
+            # Validate contiguous baseline window
+            if length(baseline_indices) > 1 && any(diff(baseline_indices) .!= 1)
+                @minimal_error_throw "Baseline window must be a contiguous range of samples (detected non-contiguous indices in file $filename)"
+            end
+
             # Get channel columns (exclude metadata)
             all_channels = setdiff(propertynames(first_df), metadata_cols)
             # channels() returns a predicate that operates on a vector, not individual elements
@@ -538,14 +552,8 @@ function _process_measurements_file(
 
         # Process each dataframe (epoch or single ERP)
         for df in dfs_to_process
-            row_data = _process_dataframe_measurements(
-                df,
-                selected_channels,
-                analysis_window,
-                analysis_type,
-                participant,
-                measurement_kwargs,
-            )
+            row_data =
+                _process_dataframe_measurements(df, selected_channels, analysis_window, analysis_type, participant, measurement_kwargs)
 
             if !isnothing(row_data)
                 push!(results, row_data)
@@ -692,6 +700,7 @@ function erp_measurements(
         processed_count = 0
         error_count = 0
 
+        p = Progress(length(files); desc = "Measuring ERPs...")
         for (file_idx, file) in enumerate(files)
             input_path = joinpath(input_dir, file)
             @info "Processing: $file ($file_idx/$(length(files)))"
@@ -725,9 +734,10 @@ function erp_measurements(
                         rethrow(e)
                     end
                 end
-                @error "Error processing $file" exception=(e, catch_backtrace())
+                @error "Error processing $file" exception = (e, catch_backtrace())
                 error_count += 1
             end
+            next!(p)
         end
 
         # Check if we have results
