@@ -10,6 +10,7 @@ using EegFun
     Random.seed!(1234)
 
     @testset "apply_analysis_settings! - ContinuousData" begin
+
         # Create test data
         dat = EegFun.create_test_continuous_data(n = 1000, fs = 1000, n_channels = 3)
         original_data = copy(dat.data)
@@ -262,5 +263,6 @@ using EegFun
         settings = EegFun.AnalysisSettings(0.0, 0.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], Int[])
         EegFun.apply_analysis_settings!(dat, ica_result, settings)
         # Should complete without error
+
     end
 end
