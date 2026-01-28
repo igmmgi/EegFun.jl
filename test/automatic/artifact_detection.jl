@@ -3,13 +3,11 @@ using DataFrames
 using OrderedCollections
 using EegFun
 
-# Helper function for artifact detection testing
-
-
 @testset "artifact_detection" begin
+
     @testset "detect_eog_onsets!" begin
 
-        dat = create_test_continuous_data_with_artifacts()
+        dat = EegFun.create_test_continuous_data_with_artifacts()
         original_size = size(dat.data, 2)
 
         # Test "EOG" detection (should be three "jumps" over the threshold)
@@ -50,7 +48,7 @@ using EegFun
     end
 
     @testset "is_extreme_value" begin
-        dat = create_test_continuous_data_with_artifacts()
+        dat = EegFun.create_test_continuous_data_with_artifacts()
 
         # Test with default threshold (combined mode)
         extreme_mask = EegFun.is_extreme_value(dat, 20)
@@ -83,7 +81,7 @@ using EegFun
     end
 
     @testset "is_extreme_value!" begin
-        dat = create_test_continuous_data_with_artifacts()
+        dat = EegFun.create_test_continuous_data_with_artifacts()
         original_columns = names(dat.data)
 
         # Test mutating version (default combined mode)
@@ -95,7 +93,7 @@ using EegFun
         @test new_columns[1] == "is_extreme_value_20"
 
         # Test separate mode
-        dat = create_test_continuous_data_with_artifacts()
+        dat = EegFun.create_test_continuous_data_with_artifacts()
         EegFun.is_extreme_value!(dat, 20, mode = :separate)
 
         # Check that new columns were added (separate mode creates one per channel)
@@ -105,7 +103,7 @@ using EegFun
         @test "is_extreme_value_Ch2_20" in new_columns
 
         # Test with channel selection (separate mode)
-        dat = create_test_continuous_data_with_artifacts()
+        dat = EegFun.create_test_continuous_data_with_artifacts()
         EegFun.is_extreme_value!(dat, 20, channel_selection = EegFun.channels([:Ch1]), mode = :separate)
 
         new_columns = setdiff(names(dat.data), original_columns)
@@ -115,7 +113,7 @@ using EegFun
     end
 
     @testset "n_extreme_value" begin
-        dat = create_test_continuous_data_with_artifacts()
+        dat = EegFun.create_test_continuous_data_with_artifacts()
 
         # Test counting extreme values (default combined mode)
         total_count = EegFun.n_extreme_value(dat, 20)
@@ -147,7 +145,7 @@ using EegFun
     end
 
     @testset "_n_extreme_value" begin
-        dat = create_test_continuous_data_with_artifacts()
+        dat = EegFun.create_test_continuous_data_with_artifacts()
 
         # Test internal function
         counts = EegFun._n_extreme_value(dat.data, [:Ch1, :Ch2], 20.0)
@@ -158,7 +156,7 @@ using EegFun
     end
 
     @testset "edge cases" begin
-        dat = create_test_continuous_data_with_artifacts()
+        dat = EegFun.create_test_continuous_data_with_artifacts()
 
         # Test with very high threshold (should find no extreme values)
         extreme_mask = EegFun.is_extreme_value(dat, 1000)
@@ -178,7 +176,7 @@ using EegFun
     end
 
     @testset "error handling" begin
-        dat = create_test_continuous_data_with_artifacts()
+        dat = EegFun.create_test_continuous_data_with_artifacts()
 
         # Test detect_eog_onsets! with non-existent channel (should throw error)
         @test_throws ErrorException EegFun.detect_eog_onsets!(dat, 20, :NonExistentChannel, :output)
@@ -198,7 +196,7 @@ using EegFun
 
     @testset "data type handling" begin
         # Test with different data types
-        dat = create_test_continuous_data_with_artifacts()
+        dat = EegFun.create_test_continuous_data_with_artifacts()
 
         # Test with Int threshold (default combined mode)
         extreme_mask = EegFun.is_extreme_value(dat, 20)
@@ -212,7 +210,7 @@ using EegFun
     end
 
     @testset "channel overwriting" begin
-        dat = create_test_continuous_data_with_artifacts()
+        dat = EegFun.create_test_continuous_data_with_artifacts()
 
         # Test that detect_eog_onsets! overwrites existing output channel
         dat.data[!, :existing_output] = fill(false, size(dat.data, 1))
@@ -231,14 +229,14 @@ using EegFun
         @test length(final_columns) == 2  # Should have 2 new columns (2 thresholds)
 
         # Test separate mode
-        dat2 = create_test_continuous_data_with_artifacts()
+        dat2 = EegFun.create_test_continuous_data_with_artifacts()
         EegFun.is_extreme_value!(dat2, 20, mode = :separate)
         new_columns2 = setdiff(names(dat2.data), original_columns)
         @test length(new_columns2) == 2  # Should create 2 separate columns
     end
 
     @testset "detect_eog_signals!" begin
-        dat = create_test_continuous_data_with_artifacts()
+        dat = EegFun.create_test_continuous_data_with_artifacts()
 
         # Add vEOG and hEOG channels
         dat.data[!, :vEOG] = dat.data.Ch2 .+ randn(nrow(dat.data)) * 5
@@ -638,7 +636,7 @@ using EegFun
     end
 
     @testset "detect_eog_onsets! step_size parameter" begin
-        dat = create_test_continuous_data_with_artifacts()
+        dat = EegFun.create_test_continuous_data_with_artifacts()
 
         # Test with custom step_size
         EegFun.detect_eog_onsets!(dat, 75, :Ch2, :is_eog_onset_custom, step_size = 10)
@@ -646,14 +644,14 @@ using EegFun
         @test :is_eog_onset_custom in propertynames(dat.data)
 
         # Test with default step_size
-        dat2 = create_test_continuous_data_with_artifacts()
+        dat2 = EegFun.create_test_continuous_data_with_artifacts()
         EegFun.detect_eog_onsets!(dat2, 75, :Ch2, :is_eog_onset_default)
 
         @test :is_eog_onset_default in propertynames(dat2.data)
     end
 
     @testset "is_extreme_value! custom channel_out" begin
-        dat = create_test_continuous_data_with_artifacts()
+        dat = EegFun.create_test_continuous_data_with_artifacts()
 
         # Test with custom channel_out name
         EegFun.is_extreme_value!(dat, 20, channel_out = :custom_artifact_flag)
@@ -671,7 +669,7 @@ using EegFun
     end
 
     @testset "is_extreme_value! sample_selection" begin
-        dat = create_test_continuous_data_with_artifacts()
+        dat = EegFun.create_test_continuous_data_with_artifacts()
 
         # Create sample selection mask as a function
         sample_mask = falses(nrow(dat.data))
@@ -699,7 +697,7 @@ using EegFun
     end
 
     @testset "_detect_extreme_values" begin
-        dat = create_test_continuous_data_with_artifacts()
+        dat = EegFun.create_test_continuous_data_with_artifacts()
 
         # Test internal function directly
         results = EegFun._detect_extreme_values(dat, 20.0)
