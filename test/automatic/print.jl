@@ -1,7 +1,6 @@
 using Test
 using Dates
 using OrderedCollections
-using EegFun
 
 @testset "Print Utilities" begin
     @testset "Vector Printing" begin
@@ -136,11 +135,7 @@ using EegFun
                 "array_val" => [1, 2, 3, 4, 5],
                 "nested" => Dict("deep_key" => "deep_value", "numbers" => [10, 20, 30]),
             ),
-            "section2" => Dict(
-                "empty_array" => Int[],
-                "empty_dict" => Dict{String,Any}(),
-                "mixed_array" => [1, "string", 3.14, true],
-            ),
+            "section2" => Dict("empty_array" => Int[], "empty_dict" => Dict{String,Any}(), "mixed_array" => [1, "string", 3.14, true]),
         )
 
         io = IOBuffer()
@@ -223,12 +218,6 @@ using EegFun
         @test contains(output, "large_float = ")
         @test contains(output, "small_float = ")
 
-        # Test that TOML-incompatible values are handled
-        # Note: nothing and missing are not supported by TOML, so we skip testing them
-
-        # Test with circular references (should not cause infinite loops)
-        # This is a complex test that would require creating circular references
-        # in the config dictionary, which TOML might not support anyway
     end
 
     @testset "Performance and Memory" begin

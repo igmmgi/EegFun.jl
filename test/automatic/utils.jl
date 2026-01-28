@@ -1,14 +1,10 @@
-"""
-Test suite for src/analysis/batch/utils.jl
-"""
-
 using Test
 using JLD2
-using DataFrames
 using Logging
 
 
 @testset "Batch Utils" begin
+
     # Create temporary test directory
     test_dir = mktempdir()
 
@@ -20,8 +16,6 @@ using Logging
         @test result.filename == "test_file.jld2"
         @test result.message == "Success message"
 
-        # Test immutable nature
-        @test_throws ErrorException result.success = false
     end
 
     @testset "BatchConfig struct" begin

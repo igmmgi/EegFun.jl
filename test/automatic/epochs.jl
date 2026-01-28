@@ -1,6 +1,5 @@
 using Test
 using DataFrames
-using EegFun
 using Statistics
 using JLD2
 using Random

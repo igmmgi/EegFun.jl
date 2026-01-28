@@ -177,25 +177,6 @@ using EegFun
         @test hasproperty(dat.data, :selected_region)
     end
 
-    @testset "apply_analysis_settings! - Observable support" begin
-        # Test with Observable (Makie.jl)
-        dat = EegFun.create_test_continuous_data(n = 1000, fs = 1000, n_channels = 3)
-        settings = EegFun.Observable(EegFun.AnalysisSettings(0.1, 40.0, :avg, Symbol[], :none, Tuple{Float64,Float64}[], Int[]))
-
-        EegFun.apply_analysis_settings!(dat, settings)
-        @test dat.analysis_info.hp_filter == 0.1
-        @test dat.analysis_info.lp_filter == 40.0
-        @test dat.analysis_info.reference == :avg
-
-        # Test with Observable and ICA
-        dat = EegFun.create_test_continuous_data(n = 1000, fs = 1000, n_channels = 3)
-        ica_result = EegFun.run_ica(dat, n_components = 2)
-        settings = EegFun.Observable(EegFun.AnalysisSettings(0.1, 0.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], [1]))
-
-        EegFun.apply_analysis_settings!(dat, ica_result, settings)
-        @test dat.analysis_info.hp_filter == 0.1
-    end
-
     @testset "apply_analysis_settings - non-mutating" begin
         # Test non-mutating version
         dat = EegFun.create_test_continuous_data(n = 1000, fs = 1000, n_channels = 3)

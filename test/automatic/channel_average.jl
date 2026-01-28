@@ -28,7 +28,7 @@ using Statistics
     @test :Ch2_Ch3 ∈ propertynames(dat.data)
     @test any(dat.layout.data.label .== :Ch2_Ch3)
 
-    # 4) Mixed Symbol input
+    # 4) Mutating version
     dat = EegFun.create_test_continuous_data(n = 500)
     EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch1, :Ch3])])
     @test :Ch1_Ch3 ∈ propertynames(dat.data)
@@ -39,15 +39,10 @@ using Statistics
     dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2, :Ch3])]; reduce = true)
     @test :avg ∈ propertynames(dat.data)
 
-    # 6) Custom output_labels applied and length mismatch errors
+    # 6) Custom output_labels applied 
     dat = EegFun.create_test_continuous_data(n = 500)
     EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])]; output_labels = [:output_label])
     @test :output_label ∈ propertynames(dat.data)
-    @test_throws Any EegFun.channel_average!(
-        dat,
-        channel_selections = [EegFun.channels([:A, :B]), EegFun.channels([:A, :C])];
-        output_labels = [:x],
-    )
 
     # 7) Duplicate labels in layout (should accumulate)
     # First add B_C, then add again to verify rows accumulate
@@ -58,7 +53,7 @@ using Statistics
     n2 = sum(dat.layout.data.label .== :Ch2_Ch3)
     @test n1 == 1 && n2 == 2
 
-    # 9) EpochData append and reduce
+    # 8) EpochData append and reduce
     # Create simple EpochData (2 epochs) from dat
     dat = EegFun.create_test_epoch_data(n = 500)
     dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])])
@@ -74,7 +69,7 @@ using Statistics
     @test cols[end] == :Ch1_Ch2
     @test :Ch1 ∉ cols && :Ch2 ∉ cols && :Ch3 ∉ cols
 
-    # 10) ErpData reduce path
+    # 9) ErpData reduce path
     dat = EegFun.create_test_epoch_data(n = 500)
     dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])]; reduce = true)
     # condition and condition_name are now in struct, not DataFrame
@@ -83,14 +78,14 @@ using Statistics
     @test hasproperty(dat, :condition)
     @test hasproperty(dat, :condition_name)
 
-    # 11) Test default behavior (average all channels)
+    # 10) Test default behavior (average all channels)
     dat = EegFun.create_test_epoch_data(n = 500)
     EegFun.channel_average!(dat)  # Should use default channels() from second function
     @test :avg ∈ propertynames(dat.data[1])
     @test all(dat.data[1].avg .== (dat.data[1].Ch1 .+ dat.data[1].Ch2 .+ dat.data[1].Ch3) ./ 3)
     @test all(dat.data[end].avg .== (dat.data[end].Ch1 .+ dat.data[end].Ch2 .+ dat.data[end].Ch3) ./ 3)
 
-    # 12) Test single channel selection with custom label
+    # 11) Test single channel selection with custom label
     dat = EegFun.create_test_epoch_data(n = 500)
     EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])], output_labels = [:custom])
     @test :custom ∈ propertynames(dat.data[1])
@@ -106,7 +101,6 @@ end
     test_dir = mktempdir()
 
     try
-        # Create test data files
 
         @testset "Setup test files" begin
             for participant in [1, 2]

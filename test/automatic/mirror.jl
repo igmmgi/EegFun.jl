@@ -1,14 +1,9 @@
-"""
-Tests for data mirroring functions.
-
-Tests mirror() and unmirror() for both EpochData and ErpData.
-"""
-
 using DataFrames
 
 @testset "Data Mirroring" begin
 
     @testset "Mirror EpochData - :pre" begin
+
         # Create simple test epoch
         time = -0.2:0.1:0.2
         n_samples = length(time)
@@ -346,32 +341,6 @@ using DataFrames
         @test all(epochs.data[1].condition .== 2)
         @test all(epochs.data[1].response .== "left")
     end
-
-
-    @testset "Integration with filter" begin
-        # This test would require the filter function
-        # Commented out for now, but shows intended usage
-
-        # time = -0.5:0.001:0.5
-        # n_samples = length(time)
-        # 
-        # # Create epoch with known frequency
-        # epoch1 = DataFrame(
-        #     time = collect(time),
-        #     Cz = sin.(2π * 10 .* time)  # 10 Hz sine wave
-        # )
-        # 
-        # epochs = EpochData([epoch1], Layout(), 1000.0, AnalysisInfo())
-        # 
-        # # Mirror, filter, unmirror
-        # mirror!(epochs, :both)
-        # filter!(epochs, 5.0, 15.0)  # Bandpass around 10 Hz
-        # unmirror!(epochs, :both)
-        # 
-        # # Check epoch restored to original length
-        # @test nrow(epochs.data[1]) == n_samples
-    end
-
 
     @testset "Mirroring pattern validation" begin
         # Test specific mirroring patterns with known data

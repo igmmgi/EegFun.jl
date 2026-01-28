@@ -111,11 +111,7 @@ This is done iteratively until no more points are removed.
 - `spatial_connectivity::SparseMatrixCSC{Bool}`: Spatial connectivity matrix [electrodes × electrodes]
 - `min_num_neighbors::Int`: Minimum number of neighboring significant channels required
 """
-function _prefilter_mask_by_neighbors!(
-    mask::BitArray{2},
-    spatial_connectivity::SparseMatrixCSC{Bool},
-    min_num_neighbors::Int,
-)
+function _prefilter_mask_by_neighbors!(mask::BitArray{2}, spatial_connectivity::SparseMatrixCSC{Bool}, min_num_neighbors::Int)
     if min_num_neighbors <= 0
         return  # No filtering if min_num_neighbors is 0 or negative
     end
@@ -139,7 +135,6 @@ function _prefilter_mask_by_neighbors!(
                 end
 
                 # Count how many neighboring significant channels this point has
-                # FieldTrip's minNumChannels includes the channel itself in the count
                 # Note: spatial_conn_sym does NOT include self-connections (removed for clustering)
                 # So we need to explicitly count self
                 neighbor_count = mask[e_idx, t_idx] ? 1 : 0  # Count self if significant
@@ -179,11 +174,7 @@ Creates a copy of the mask and calls the in-place version.
 filtered_mask = _prefilter_mask_by_neighbors(mask, spatial_connectivity, 3)
 ```
 """
-function _prefilter_mask_by_neighbors(
-    mask::BitArray{2},
-    spatial_connectivity::SparseMatrixCSC{Bool},
-    min_num_neighbors::Int,
-)
+function _prefilter_mask_by_neighbors(mask::BitArray{2}, spatial_connectivity::SparseMatrixCSC{Bool}, min_num_neighbors::Int)
     if min_num_neighbors <= 0
         return mask  # No filtering if min_num_neighbors is 0 or negative
     end
@@ -212,16 +203,7 @@ Create new Cluster objects with the specified polarity, copying all other fields
 function _set_cluster_polarity(clusters::Vector{Cluster}, polarity::Symbol)
     @assert polarity in (:positive, :negative) "polarity must be :positive or :negative"
     return [
-        Cluster(
-            c.id,
-            c.electrodes,
-            c.time_indices,
-            c.time_range,
-            c.cluster_stat,
-            c.p_value,
-            c.is_significant,
-            polarity,
-        ) for c in clusters
+        Cluster(c.id, c.electrodes, c.time_indices, c.time_range, c.cluster_stat, c.p_value, c.is_significant, polarity) for c in clusters
     ]
 end
 
@@ -385,24 +367,14 @@ function _find_clusters(
     negative_clusters = Cluster[]
 
     if !isempty(mask_positive)
-        positive_clusters_raw = _find_clusters_connected_components(
-            mask_positive,
-            electrodes,
-            time_points,
-            spatial_connectivity,
-            cluster_type,
-        )
+        positive_clusters_raw =
+            _find_clusters_connected_components(mask_positive, electrodes, time_points, spatial_connectivity, cluster_type)
         positive_clusters = _set_cluster_polarity(positive_clusters_raw, :positive)
     end
 
     if !isempty(mask_negative)
-        negative_clusters_raw = _find_clusters_connected_components(
-            mask_negative,
-            electrodes,
-            time_points,
-            spatial_connectivity,
-            cluster_type,
-        )
+        negative_clusters_raw =
+            _find_clusters_connected_components(mask_negative, electrodes, time_points, spatial_connectivity, cluster_type)
         negative_clusters = _set_cluster_polarity(negative_clusters_raw, :negative)
     end
     return positive_clusters, negative_clusters

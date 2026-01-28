@@ -1,9 +1,9 @@
 using Test
 using DataFrames
 using OrderedCollections
-using EegFun
 
 @testset "Type Definitions and Display Functions" begin
+
     @testset "Abstract Types" begin
         # Test that abstract types are properly defined
         @test EegFun.EegData isa Type
@@ -202,7 +202,7 @@ using EegFun
             1000.0, # max_weight
             0.9,    # restart_factor
             0.0,    # degconst
-            1e-6,    # default_stop
+            1e-6,   # default_stop
         )
 
         @test ica_params.l_rate == 0.001
@@ -279,10 +279,6 @@ using EegFun
         # Test AnalysisInfo display
         info = EegFun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
         @test_nowarn show(stdout, info)
-
-        # Test EegData display (skip due to dependency issues)
-        # continuous_data = EegFun.ContinuousData(df, layout, 250, info)
-        # @test_nowarn show(stdout, continuous_data)
 
         # Test InfoIca display
         unmixing = [1.0 0.0; 0.0 1.0]

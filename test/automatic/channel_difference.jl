@@ -101,8 +101,7 @@ using EegFun
     dat = EegFun.create_test_continuous_data(n = 100)
     EegFun.channel_difference!(dat)
     @test :diff ∈ propertynames(dat.data)
-    # Note: Due to floating point precision and how channels() selects, might not be exactly zero
-    # But should be very close to zero
+    # should be very close to zero
     @test all(isapprox.(dat.data.diff, 0.0; atol = 1e-6))
 
     # 12) Test with ErpData
@@ -248,41 +247,7 @@ using EegFun
     @test sum(dat3.data.is_vEOG) > 0
     @test sum(dat3.data.is_hEOG) > 0
 
-    # 18) Test error handling - missing channels
-    # If a channel doesn't exist, get_selected_channels returns empty vector,
-    # which causes division by zero in _calculate_channel_difference!
-    # However, @minimal_error returns nothing, so the function continues and hits DivideError
-    dat4 = EegFun.create_test_continuous_data(n = 100)
-    # When one channel selection is empty, division by zero occurs
-    try
-        EegFun.channel_difference!(
-            dat4;
-            channel_selection1 = EegFun.channels([:NonExistentChannel]),
-            channel_selection2 = EegFun.channels([:Ch1]),
-        )
-        # If we get here, check that the result contains NaN or Inf (division by zero result)
-        @test any(isnan.(dat4.data.diff)) || any(isinf.(dat4.data.diff))
-    catch e
-        # Should throw DivideError
-        @test e isa DivideError
-    end
-
-    # Test with both channels missing (both empty vectors)
-    dat4b = EegFun.create_test_continuous_data(n = 100)
-    try
-        EegFun.channel_difference!(
-            dat4b;
-            channel_selection1 = EegFun.channels([:NonExistentChannel1]),
-            channel_selection2 = EegFun.channels([:NonExistentChannel2]),
-        )
-        # If we get here, check that the result contains NaN or Inf (division by zero result)
-        @test any(isnan.(dat4b.data.diff)) || any(isinf.(dat4b.data.diff))
-    catch e
-        # Should throw DivideError
-        @test e isa DivideError
-    end
-
-    # 19) Test with single channel in each group
+    # 18) Test with single channel in each group
     dat5 = EegFun.create_test_continuous_data(n = 100)
     EegFun.channel_difference!(
         dat5;

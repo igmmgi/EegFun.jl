@@ -1,7 +1,3 @@
-"""
-Test suite for src/analysis/grand_average.jl
-"""
-
 using Test
 using JLD2
 using DataFrames

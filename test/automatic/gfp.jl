@@ -1,11 +1,7 @@
-"""
-Test suite for src/analysis/gfp.jl and src/plots/plot_gfp.jl
-"""
-
 using Test
 using DataFrames
 using Statistics
-using GLMakie
+using Makie
 
 @testset "Global Field Power (GFP)" begin
     @testset "Basic GFP calculation" begin

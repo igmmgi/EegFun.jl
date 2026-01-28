@@ -1,7 +1,3 @@
-"""
-Test suite for src/analysis/erp_measurements.jl
-"""
-
 using Test
 using JLD2
 using DataFrames
@@ -811,10 +807,6 @@ using CSV
 
         @testset "Peak-to-peak measurements" begin
             # Signal with known max and min peaks
-            # y = -(t - 0.5)^2 + 1 for t < 0.5, y = (t - 0.5)^2 - 1 for t >= 0.5
-            # Max peak at t=0.5 with value 1.0
-            # Min peak at t=0.0 and t=1.0 with value 0.0 (but let's make it clearer)
-            # Actually, let's use: y = sin(2πt) from 0 to 1, which has max at 0.25 and min at 0.75
             max_peak_time = 0.25
             min_peak_time = 0.75
             max_peak_value = 1.0

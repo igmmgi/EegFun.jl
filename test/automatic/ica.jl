@@ -3,7 +3,6 @@ using DataFrames
 using Random
 using Statistics
 using LinearAlgebra
-using EegFun
 
 @testset "ica" begin
 
@@ -37,11 +36,7 @@ using EegFun
         df[!, :hEOG] = hEOG
         # Keep mask: first half only
         df[!, :keepmask] = [i <= n ÷ 2 for i = 1:n]
-        layout = EegFun.Layout(
-            DataFrame(label = Symbol.(collect(keys(cols))), inc = zeros(nch), azi = zeros(nch)),
-            nothing,
-            nothing,
-        )
+        layout = EegFun.Layout(DataFrame(label = Symbol.(collect(keys(cols))), inc = zeros(nch), azi = zeros(nch)), nothing, nothing)
         dat = EegFun.ContinuousData("test_data", copy(df, copycols = true), layout, fs, EegFun.AnalysisInfo())
         return dat
     end
@@ -100,17 +95,15 @@ using EegFun
         dat = create_synthetic_continuous()
         ica_res = EegFun.run_ica(dat; n_components = 3)
         # Non-mutating removal
-        cleaned_df, ica_updated =
-            EegFun.remove_ica_components(dat.data, ica_res; component_selection = EegFun.components([1]))
+        cleaned_df, ica_updated = EegFun.remove_ica_components(dat.data, ica_res; component_selection = EegFun.components([1]))
         @test !isempty(ica_updated.removed_activations)
         @test cleaned_df isa DataFrame
         # Restore non-mutating
-        restored_df, ica_restored =
-            EegFun.restore_ica_components(cleaned_df, ica_updated; component_selection = EegFun.components([1]))
+        restored_df, ica_restored = EegFun.restore_ica_components(cleaned_df, ica_updated; component_selection = EegFun.components([1]))
         @test isempty(ica_restored.removed_activations)
 
         # Mutating on ContinuousData
-        dat2 = copy(dat);
+        dat2 = copy(dat)
         ica2 = copy(ica_res)
         EegFun.remove_ica_components!(dat2, ica2; component_selection = EegFun.components([1, 2]))
         @test length(keys(ica2.removed_activations)) == 2
@@ -125,13 +118,9 @@ using EegFun
         @test length(keys(ica2.removed_activations)) == before
 
         # Restoring a valid component that was not removed should throw
-        dat3 = create_synthetic_continuous();
+        dat3 = create_synthetic_continuous()
         ica3 = EegFun.run_ica(dat3; n_components = 3)
-        @test_throws ArgumentError EegFun.restore_ica_components!(
-            dat3.data,
-            ica3;
-            component_selection = EegFun.components([1]),
-        )
+        @test_throws ArgumentError EegFun.restore_ica_components!(dat3.data, ica3; component_selection = EegFun.components([1]))
 
         # Roundtrip (mutating): remove then restore yields original data
         dat4 = create_synthetic_continuous()
@@ -144,7 +133,6 @@ using EegFun
         roundtrip_ch = select(dat4.data, dat4.layout.data.label)
         @test all(isapprox.(Matrix(roundtrip_ch), Matrix(orig_ch); rtol = 1e-6, atol = 1e-8))
 
-        # Note: Non-mutating roundtrip is sensitive to numeric conditioning; covered by mutating check above.
     end
 
     @testset "artifact identification helpers" begin

@@ -324,9 +324,6 @@ using OrderedCollections
         @test !(:z_Ch1 in propertynames(cm2_exclude))
         @test !(:z_Ch2 in propertynames(cm2_exclude))
         # Add z-scores excluding row (which should work)
-        # Note: The implementation uses names(df) which returns Vector{String}
-        # but exclude_columns is Vector{Symbol}, so String columns won't match Symbol excludes
-        # However, :row is a Symbol column, so it should be excluded
         EegFun.add_zscore_columns!(cm2_exclude, [:row])
         @test :z_Ch1 in propertynames(cm2_exclude)  # Ch1 should get z-score (String column)
         @test :z_Ch2 in propertynames(cm2_exclude)  # Ch2 should get z-score (String column)

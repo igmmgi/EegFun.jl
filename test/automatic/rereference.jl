@@ -1,10 +1,7 @@
 using Test
 using DataFrames
-using EegFun
 using JLD2
 using Statistics
-
-
 
 @testset "rereference" begin
 

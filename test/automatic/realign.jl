@@ -1,11 +1,6 @@
-"""
-Test suite for src/analysis/realign.jl
-"""
-
 using Test
 using JLD2
 using DataFrames
-
 
 @testset "Realignment" begin
     @testset "Basic realignment (non-mutating)" begin
@@ -24,11 +19,7 @@ using DataFrames
         @test maximum(epoch_data.data[1].time) ≈ original_time_max
 
         # Check that realigned data has time 0 near RT
-        # After realignment, the RT column should now be approximately 0
-        # (actually, it should be exactly the negative of the original RT, but after cropping it should be near 0)
         for epoch in realigned.data
-            # The rt column value should be 0 after realignment
-            # (since we subtracted it from the time column)
             @test all(epoch.rt .≈ 0.0)
         end
 
@@ -90,7 +81,6 @@ using DataFrames
         @test all(realigned_lengths .== realigned_lengths[1])
 
         # Realigned length should be less than or equal to original
-        # (equality happens if all RTs are identical)
         @test realigned_lengths[1] <= original_lengths[1]
 
         # Check that time windows are identical across epochs
@@ -145,8 +135,6 @@ using DataFrames
         realigned = EegFun.realign(epoch_data, :rt)
 
         # Channel data should be preserved (just shifted in time)
-        # We can't easily verify the exact values without knowing the RT,
-        # but we can verify that the data range is similar
         @test minimum(realigned.data[1].Ch1) ≈ minimum(epoch_data.data[1].Ch1) atol = 1.0
         @test maximum(realigned.data[1].Ch1) ≈ maximum(epoch_data.data[1].Ch1) atol = 1.0
     end
@@ -263,7 +251,6 @@ using DataFrames
         realigned = EegFun.realign(epoch_data, :rt)
 
         # With identical RTs, all epochs should have the same length as before
-        # (no cropping needed)
         @test nrow(realigned.data[1]) == nrow(epoch_data.data[1])
 
         # All epochs should have identical time vectors

@@ -1,7 +1,6 @@
 using Test
 using DataFrames
 using OrderedCollections
-using EegFun
 
 @testset "Data Utilities" begin
     @testset "Column identification" begin
@@ -15,11 +14,7 @@ using EegFun
             vEOG = [0.1, 0.2, 0.3],
             hEOG = [0.4, 0.5, 0.6],
         )
-        layout = EegFun.Layout(
-            DataFrame(label = [:Fz, :Cz, :Pz], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]),
-            nothing,
-            nothing,
-        )
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz, :Pz], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]), nothing, nothing)
         analysis_info = EegFun.AnalysisInfo()
         continuous_data = EegFun.ContinuousData("test_data", df, layout, 250, analysis_info)
 
@@ -301,13 +296,7 @@ using EegFun
 
     @testset "Helper functions" begin
         # Create test data
-        df = DataFrame(
-            time = [0.1, 0.2, 0.3],
-            sample = [1, 2, 3],
-            Fz = [1.0, 2.0, 3.0],
-            Cz = [4.0, 5.0, 6.0],
-            vEOG = [0.1, 0.2, 0.3],
-        )
+        df = DataFrame(time = [0.1, 0.2, 0.3], sample = [1, 2, 3], Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0], vEOG = [0.1, 0.2, 0.3])
         layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
         analysis_info = EegFun.AnalysisInfo()
         continuous_data = EegFun.ContinuousData("test_data", df, layout, 250, analysis_info)
@@ -319,31 +308,26 @@ using EegFun
         selected_no_meta = EegFun.get_selected_channels(continuous_data, EegFun.channels([:Fz]); include_meta = false)
         @test selected_no_meta == [:Fz]
 
-        selected_with_extra =
-            EegFun.get_selected_channels(continuous_data, EegFun.channels([:vEOG]); include_extra = true)
+        selected_with_extra = EegFun.get_selected_channels(continuous_data, EegFun.channels([:vEOG]); include_extra = true)
         @test selected_with_extra == [:time, :sample, :vEOG]
 
         # Test get_selected_channels - comprehensive edge cases
         @testset "get_selected_channels edge cases" begin
             # Test channels([Symbol...]) - order preservation
-            selected_ordered =
-                EegFun.get_selected_channels(continuous_data, EegFun.channels([:Cz, :Fz]); include_meta = false)
+            selected_ordered = EegFun.get_selected_channels(continuous_data, EegFun.channels([:Cz, :Fz]); include_meta = false)
             @test selected_ordered == [:Cz, :Fz]  # Order preserved
 
             # Test channels_not([Symbol...]) - exclusion and default order
-            selected_excluded =
-                EegFun.get_selected_channels(continuous_data, EegFun.channels_not([:Cz]); include_meta = false)
+            selected_excluded = EegFun.get_selected_channels(continuous_data, EegFun.channels_not([:Cz]); include_meta = false)
             @test :Cz ∉ selected_excluded
             @test :Fz ∈ selected_excluded
 
             # Test channels([Int...]) - order preservation
-            selected_by_num =
-                EegFun.get_selected_channels(continuous_data, EegFun.channels([2, 1]); include_meta = false)
+            selected_by_num = EegFun.get_selected_channels(continuous_data, EegFun.channels([2, 1]); include_meta = false)
             @test selected_by_num == [:Cz, :Fz]  # Order preserved (channel 2, then 1)
 
             # Test channels_not([Int...]) - exclusion
-            selected_excluded_num =
-                EegFun.get_selected_channels(continuous_data, EegFun.channels_not([2]); include_meta = false)
+            selected_excluded_num = EegFun.get_selected_channels(continuous_data, EegFun.channels_not([2]); include_meta = false)
             @test :Cz ∉ selected_excluded_num
             @test :Fz ∈ selected_excluded_num
 
@@ -352,8 +336,7 @@ using EegFun
             @test selected_range == [:Fz, :Cz]  # Order preserved
 
             # Test channels_not(UnitRange) - exclusion
-            selected_excluded_range =
-                EegFun.get_selected_channels(continuous_data, EegFun.channels_not(1:1); include_meta = false)
+            selected_excluded_range = EegFun.get_selected_channels(continuous_data, EegFun.channels_not(1:1); include_meta = false)
             @test :Fz ∉ selected_excluded_range
             @test :Cz ∈ selected_excluded_range
 
@@ -362,36 +345,24 @@ using EegFun
             @test selected_single == [:Fz]
 
             # Test channels(:Symbol) - single channel name
-            selected_single_sym =
-                EegFun.get_selected_channels(continuous_data, EegFun.channels(:Fz); include_meta = false)
+            selected_single_sym = EegFun.get_selected_channels(continuous_data, EegFun.channels(:Fz); include_meta = false)
             @test selected_single_sym == [:Fz]
 
             # Test channels() - all channels
-            selected_all = EegFun.get_selected_channels(
-                continuous_data,
-                EegFun.channels();
-                include_meta = false,
-                include_extra = false,
-            )
+            selected_all = EegFun.get_selected_channels(continuous_data, EegFun.channels(); include_meta = false, include_extra = false)
             @test length(selected_all) == 2
             @test :Fz ∈ selected_all && :Cz ∈ selected_all
 
             # Test missing channel - should warn but continue
-            selected_missing = EegFun.get_selected_channels(
-                continuous_data,
-                EegFun.channels([:Fz, :NonExistent]);
-                include_meta = false,
-            )
+            selected_missing = EegFun.get_selected_channels(continuous_data, EegFun.channels([:Fz, :NonExistent]); include_meta = false)
             @test selected_missing == [:Fz]  # Only existing channel
 
             # Test duplicate channels - should warn but keep first occurrence
-            selected_dup =
-                EegFun.get_selected_channels(continuous_data, EegFun.channels([:Fz, :Cz, :Fz]); include_meta = false)
+            selected_dup = EegFun.get_selected_channels(continuous_data, EegFun.channels([:Fz, :Cz, :Fz]); include_meta = false)
             @test selected_dup == [:Fz, :Cz]  # Duplicates removed, order preserved
 
             # Test invalid index - should warn but continue
-            selected_invalid =
-                EegFun.get_selected_channels(continuous_data, EegFun.channels([1, 100]); include_meta = false)
+            selected_invalid = EegFun.get_selected_channels(continuous_data, EegFun.channels([1, 100]); include_meta = false)
             @test selected_invalid == [:Fz]  # Only valid index
 
             # Test channels_not with missing channel - should warn but continue
@@ -404,25 +375,19 @@ using EegFun
             @test length(selected_excluded_missing) == 2  # All channels selected (exclusion didn't match)
 
             # Test channels_not with duplicates - should warn
-            selected_excluded_dup =
-                EegFun.get_selected_channels(continuous_data, EegFun.channels_not([:Fz, :Fz]); include_meta = false)
+            selected_excluded_dup = EegFun.get_selected_channels(continuous_data, EegFun.channels_not([:Fz, :Fz]); include_meta = false)
             @test :Fz ∉ selected_excluded_dup
             @test :Cz ∈ selected_excluded_dup
 
             # Test mixed types in channels_not - tests the mixed Vector handler
-            selected_mixed = EegFun.get_selected_channels(
-                continuous_data,
-                EegFun.channels_not([1, 2:2]);
-                include_meta = false,
-                include_extra = false,
-            )
+            selected_mixed =
+                EegFun.get_selected_channels(continuous_data, EegFun.channels_not([1, 2:2]); include_meta = false, include_extra = false)
             @test isempty(selected_mixed)  # Both channels excluded
 
         end
 
         # Test get_selected_samples with a boolean column
-        df_bool =
-            DataFrame(time = [0.1, 0.2, 0.3], sample = [1, 2, 3], Fz = [1.0, 2.0, 3.0], flag = [true, false, true])
+        df_bool = DataFrame(time = [0.1, 0.2, 0.3], sample = [1, 2, 3], Fz = [1.0, 2.0, 3.0], flag = [true, false, true])
         selected_samples = EegFun.get_selected_samples(df_bool, EegFun.samples(:flag))
         @test selected_samples == [1, 3]  # samples where flag is true
 
@@ -487,11 +452,7 @@ using EegFun
     end
 
     @testset "Logging functions" begin
-        # Test log_pretty_table - this function logs to @info, so we can't easily test it
-        # without capturing the output, but we can test it doesn't throw
         df = DataFrame(A = [1, 2, 3], B = [4, 5, 6])
-        # The function logs to @info which goes to stderr, so @test_nowarn will fail
-        # Let's just test that it returns nothing
         result = EegFun.log_pretty_table(df)
         @test result === nothing
     end
@@ -523,13 +484,7 @@ using EegFun
         df = DataFrame(time = [0.1, 0.2, 0.3], flag1 = [true, false, true], flag2 = [false, true, false])
         @test EegFun.samples()(df) == [true, true, true]
         @test EegFun.samples(:flag1)(df) == [true, false, true]
-        # Note: samples_or and samples_and expect the columns to contain boolean values
-        # but our test data has boolean columns, so we need to test differently
         df_bool = DataFrame(time = [0.1, 0.2, 0.3], flag1 = [true, false, true], flag2 = [false, true, false])
-        # The samples_or and samples_and functions have issues with the current implementation
-        # Let's skip these tests for now as they seem to have bugs in the source code
-        # @test EegFun.samples_or([:flag1, :flag2])(df_bool) == [true, true, true]
-        # @test EegFun.samples_and([:flag1, :flag2])(df_bool) == [false, false, false]
         @test EegFun.samples_not(:flag1)(df_bool) == [false, true, false]
 
         # Test epoch predicates
@@ -566,8 +521,6 @@ using EegFun
         @test subset_data isa EegFun.ContinuousData
         @test nrow(subset_data.data) == 5  # all samples selected
         @test :Fz in propertynames(subset_data.data)
-        # Note: vEOG is not included because it's not in the channel selection
-        # The subset function only includes channels that match the selection criteria
 
         # Test subset for ErpData
         erp_data = EegFun.ErpData("test_data", 1, "condition_1", df, layout, 250, analysis_info, 5)
@@ -580,8 +533,7 @@ using EegFun
         epoch2 = DataFrame(time = [0.1, 0.2], sample = [1, 2], Fz = [5.0, 6.0], Cz = [7.0, 8.0])
         epoch_data = EegFun.EpochData("test_data", 1, "condition_1", [epoch1, epoch2], layout, 250, analysis_info)
 
-        subset_epoch =
-            EegFun.subset(epoch_data; channel_selection = EegFun.channels([:Fz]), epoch_selection = EegFun.epochs([1]))
+        subset_epoch = EegFun.subset(epoch_data; channel_selection = EegFun.channels([:Fz]), epoch_selection = EegFun.epochs([1]))
         @test subset_epoch isa EegFun.EpochData
         @test length(subset_epoch.data) == 1
     end
