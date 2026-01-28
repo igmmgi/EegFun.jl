@@ -72,14 +72,12 @@ EegFun.is_extreme_value!(dat, 200);
 # ICA on continuous data
 ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_200)) 
 
-EegFun.plot_topography(ica_result_infomax, component_selection = EegFun.components(1:4)); # not shown
-EegFun.plot_ica_component_spectrum(dat, ica_result_infomax, component_selection = EegFun.components(1)) # not shown
 EegFun.plot_ica_component_activation(dat, ica_result)
 ```
 
 <img src="images/data_browser_ica.png" alt="Data Browser ICA" width="800"/>
 
-## Example Interactive Plots
+## Plot Example
 
 ### Artifact Detection
 
@@ -87,7 +85,7 @@ EegFun.plot_ica_component_activation(dat, ica_result)
 
 ### Epoch Plots (Grid Layout)
 
-<img src="images/epochs_grid_layout.png" alt="Epochs Grid Layout" width="600"/>
+<img src="images/epochs_grid_layout.png" alt="Epochs Grid Layout" width="800"/>
 
 ### ERP (Topo Layout)
 
@@ -95,7 +93,7 @@ EegFun.plot_ica_component_activation(dat, ica_result)
 
 ### ERP Image (Topo Layout)
 
-<img src="images/erp_image_topo_layout.png" alt="ERP Image Topo Layout" width="600" height="600"/>
+<img src="images/erp_image_topo_layout.png" alt="ERP Image Topo Layout" width="600"/>
 
 ## TODO
 
