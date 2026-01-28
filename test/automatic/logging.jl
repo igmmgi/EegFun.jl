@@ -1,6 +1,5 @@
 using Test
 using Dates
-using EegFun
 
 @testset "Logging Utilities" begin
     # Create temporary directory for log files

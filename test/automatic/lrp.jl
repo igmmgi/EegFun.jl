@@ -1,7 +1,3 @@
-"""
-Test suite for src/analysis/lrp.jl
-"""
-
 using Test
 using DataFrames
 
@@ -254,7 +250,6 @@ using DataFrames
 
         # For symmetric data where left and right are mirror images,
         # LRP should show specific relationships
-
         df_left = DataFrame(
             time = time,
             sample = 1:n_timepoints,

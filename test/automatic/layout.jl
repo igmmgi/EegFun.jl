@@ -1,7 +1,6 @@
 using Test
 using DataFrames
 using OrderedCollections
-using EegFun
 
 @testset "Layout Tests" begin
     # Read the BioSemi 64-channel layout

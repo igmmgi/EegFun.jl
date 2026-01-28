@@ -2,9 +2,6 @@ using Test
 using TOML
 using Dates
 
-# Import the package (which includes the config module)
-using EegFun
-
 @testset "Configuration System Tests" begin
 
     # Create temporary directory for test files
@@ -108,16 +105,15 @@ using EegFun
         @test haskey(EegFun.PARAMETERS, "preprocess.ica.apply")
     end
 
-    # # =============================================================================
-    # # CONFIG LOADING AND MERGING
-    # # =============================================================================
+    # =============================================================================
+    # CONFIG LOADING AND MERGING
+    # =============================================================================
 
     @testset "load_config Tests" begin
 
         @testset "Valid Configuration Loading" begin
             # Test 1: Load default config only - should work without errors
-            default_config =
-                EegFun.load_config(joinpath(dirname(@__FILE__), "..", "..", "src", "config", "default.toml"))
+            default_config = EegFun.load_config(joinpath(dirname(@__FILE__), "..", "..", "src", "config", "default.toml"))
             @test default_config isa Dict
             @test haskey(default_config, "preprocess")
             @test haskey(default_config["preprocess"], "filter")
@@ -780,8 +776,7 @@ using EegFun
 
     @testset "_group_params_by_subsection Tests" begin
         # Test parameter grouping by subsection
-        matching_params =
-            ["preprocess.filter.highpass.freq", "preprocess.filter.highpass.apply", "preprocess.filter.lowpass.freq"]
+        matching_params = ["preprocess.filter.highpass.freq", "preprocess.filter.highpass.apply", "preprocess.filter.lowpass.freq"]
         grouped = EegFun._group_params_by_subsection("preprocess.filter", matching_params)
 
         @test haskey(grouped, "highpass")
@@ -905,13 +900,7 @@ using EegFun
 
     @testset "_show_parameter_details Tests" begin
         # Test with parameter that has all fields
-        param = EegFun.ConfigParameter{Real}(
-            description = "Test param",
-            default = 5.0,
-            min = 0.0,
-            max = 10.0,
-            allowed = ["a", "b"],
-        )
+        param = EegFun.ConfigParameter{Real}(description = "Test param", default = 5.0, min = 0.0, max = 10.0, allowed = ["a", "b"])
 
         # Capture output (this is tricky with @info, so we'll test the function exists)
         @test typeof(EegFun._show_parameter_details) <: Function
@@ -948,8 +937,7 @@ using EegFun
 
     @testset "_show_section_overview Tests" begin
         # Test section overview
-        matching_params =
-            ["preprocess.filter.highpass.freq", "preprocess.filter.highpass.apply", "preprocess.filter.lowpass.freq"]
+        matching_params = ["preprocess.filter.highpass.freq", "preprocess.filter.highpass.apply", "preprocess.filter.lowpass.freq"]
 
         # Test function exists and can be called
         @test typeof(EegFun._show_section_overview) <: Function
@@ -1111,13 +1099,7 @@ using EegFun
 
     @testset "_write_parameter_docs Tests" begin
         # Test parameter with all fields
-        param = EegFun.ConfigParameter{Real}(
-            description = "Test param",
-            default = 5.0,
-            min = 0.0,
-            max = 10.0,
-            allowed = ["a", "b"],
-        )
+        param = EegFun.ConfigParameter{Real}(description = "Test param", default = 5.0, min = 0.0, max = 10.0, allowed = ["a", "b"])
         io = IOBuffer()
         EegFun._write_parameter_docs(io, param)
         output = String(take!(io))

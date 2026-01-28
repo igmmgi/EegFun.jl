@@ -1,9 +1,7 @@
 using Test
 using DataFrames
 using Statistics
-using GLMakie
-using EegFun
-
+using Makie
 
 @testset "plot_channel_summary" begin
 
@@ -53,15 +51,7 @@ using EegFun
         ax = Axis(fig[1, 1])
 
         # Test with averaging over epochs
-        @test EegFun.plot_channel_summary!(
-            fig,
-            ax,
-            df,
-            :std,
-            average_over = :epoch,
-            error_color = :blue,
-            error_linewidth = 3,
-        ) === nothing
+        @test EegFun.plot_channel_summary!(fig, ax, df, :std, average_over = :epoch, error_color = :blue, error_linewidth = 3) === nothing
 
         # Should have error bars when averaging
         @test ax.ylabel[] == "std (± 95% CI n=3)"
@@ -171,15 +161,7 @@ using EegFun
 
     @testset "plot_channel_summary edge cases" begin
         # Test with single channel
-        df_single = DataFrame(
-            channel = [:Fp1],
-            min = [-1.0],
-            max = [1.0],
-            std = [0.5],
-            var = [0.25],
-            range = [2.0],
-            zvar = [0.0],
-        )
+        df_single = DataFrame(channel = [:Fp1], min = [-1.0], max = [1.0], std = [0.5], var = [0.25], range = [2.0], zvar = [0.0])
 
         fig, ax = EegFun.plot_channel_summary(df_single, :std, display_plot = false)
         @test fig isa Figure

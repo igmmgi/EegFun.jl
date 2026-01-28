@@ -1,13 +1,10 @@
 using Test
 using DataFrames
-using EegFun
 using Makie
 using Statistics
 using JLD2
 
-
 @testset "filter" begin
-
 
     @testset "create_filter" begin
         fs = 1000.0
@@ -155,7 +152,6 @@ using JLD2
     end
 
 end
-
 
 @testset "Batch Filter" begin
 

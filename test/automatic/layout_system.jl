@@ -1,6 +1,5 @@
 using Test
-using EegFun
-using GLMakie
+using Makie
 using DataFrames
 
 

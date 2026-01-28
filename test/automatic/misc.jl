@@ -1,6 +1,5 @@
 using Test
 using DataFrames
-using EegFun
 
 @testset "Miscellaneous Utilities" begin
     # Create test data for various functions
@@ -17,8 +16,7 @@ using EegFun
         @test EegFun.make_output_filename("/output", "data/file.bdf", "_ica") == joinpath("/output", "file_ica.jld2")
         @test EegFun.make_output_filename("/output", "path/to/another_file.csv", "_continuous") ==
               joinpath("/output", "another_file_continuous.jld2")
-        @test EegFun.make_output_filename("/output", "no_extension", "_processed") ==
-              joinpath("/output", "no_extension_processed.jld2")
+        @test EegFun.make_output_filename("/output", "no_extension", "_processed") == joinpath("/output", "no_extension_processed.jld2")
     end
 
     @testset "Vector operations" begin
@@ -34,8 +32,6 @@ using EegFun
         # Test with custom function
         result = EegFun.consecutive((x, y) -> x + y, v)
         @test result == [3, 5, 7, 9]  # sums of consecutive elements
-
-        # Note: Error handling tests removed due to type conversion issues with @minimal_error
 
         # Test splitgroups
         v = [1, 2, 3, 5, 6, 8, 9, 10]
@@ -94,8 +90,6 @@ using EegFun
         @test length(y_detrended) == length(y)
         @test isa(y_detrended, Vector{Float64})
 
-        # Note: Error handling tests removed due to type conversion issues with @minimal_error
-
         # Test extract_int
         @test EegFun.extract_int("channel_123_data") == 123
         @test EegFun.extract_int("test_456") == 456
@@ -127,13 +121,7 @@ using EegFun
 
     @testset "DataFrame utilities" begin
         # Create test DataFrame
-        df = DataFrame(
-            time = [0.1, 0.2, 0.3],
-            Fz = [1.0, 2.0, 3.0],
-            Cz = [4.0, 5.0, 6.0],
-            Pz = [7.0, 8.0, 9.0],
-            vEOG = [0.1, 0.2, 0.3],
-        )
+        df = DataFrame(time = [0.1, 0.2, 0.3], Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0], Pz = [7.0, 8.0, 9.0], vEOG = [0.1, 0.2, 0.3])
 
         # Test get_channel_indices
         indices = EegFun.get_channel_indices(df, ["Fz", "Cz"])
@@ -142,7 +130,6 @@ using EegFun
         indices = EegFun.get_channel_indices(df, ["Fz", "Pz", "vEOG"])
         @test indices == [2, 4, 5]
 
-        # Note: Error handling tests removed due to type conversion issues with @minimal_error
     end
 
     @testset "Baseline interval validation" begin
@@ -160,7 +147,6 @@ using EegFun
         validated = EegFun._validate_baseline_interval(time, interval_idx)
         @test validated == interval_idx
 
-        # Note: Error handling tests removed due to type conversion issues with @minimal_error
     end
 
     @testset "Copy functions" begin
@@ -282,8 +268,7 @@ using EegFun
 
     @testset "Documentation generation" begin
         # Test generate_kwargs_doc
-        kwargs_dict =
-            Dict{Symbol,Tuple{Any,String}}(:param1 => (1, "First parameter"), :param2 => (2.0, "Second parameter"))
+        kwargs_dict = Dict{Symbol,Tuple{Any,String}}(:param1 => (1, "First parameter"), :param2 => (2.0, "Second parameter"))
         doc = EegFun.generate_kwargs_doc(kwargs_dict)
 
         @test contains(doc, "# Keyword Arguments")

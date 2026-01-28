@@ -1,6 +1,5 @@
 using Test
 using DataFrames
-using EegFun
 using JLD2
 using Statistics
 using CSV
@@ -202,7 +201,6 @@ using CSV
             dat = EegFun.create_test_continuous_data(n_channels = 4)
 
             # Test with different selection functions
-            # Note: These functions are defined in the EegFun package
             result_all = EegFun.channel_summary(dat, channel_selection = EegFun.channels())
             @test nrow(result_all) == 4
 

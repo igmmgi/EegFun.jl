@@ -1,5 +1,4 @@
 using Test
-using EegFun
 
 @testset "File Utilities" begin
     # Create temporary test directory
@@ -35,7 +34,6 @@ using EegFun
     touch(joinpath(subdir1, "config.toml"))
     touch(joinpath(subdir2, "biosemi32.csv"))
     touch(joinpath(subdir2, "layout.csv"))
-
 
     @testset "check_files_exist with Vector{String}" begin
         # Test with existing files
@@ -123,12 +121,10 @@ using EegFun
         @test result == joinpath(test_dir, "test_file.csv")
     end
 
-
     @testset "Edge cases and error handling" begin
         # Test with empty vectors
         result = EegFun.check_files_exist(String[])
         @test result == true  # Empty list should return true
-
 
         # Test find_file with empty filename
         result = EegFun.find_file("", test_dir)

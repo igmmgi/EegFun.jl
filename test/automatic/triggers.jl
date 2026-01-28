@@ -1,6 +1,5 @@
 using Test
 using DataFrames
-using EegFun
 using OrderedCollections
 
 @testset "triggers" begin
@@ -101,8 +100,7 @@ using OrderedCollections
             triggers = [0, 1, 1, 0, 2, 2, 2, 0, 1, 0]
             triggers_info = ["", "S 1", "", "", "S 2", "", "", "", "S 1", ""]
             time = collect(0:9) ./ 100.0
-            df =
-                DataFrame(time = time, triggers = triggers, triggers_info = triggers_info, A = zeros(10), B = zeros(10))
+            df = DataFrame(time = time, triggers = triggers, triggers_info = triggers_info, A = zeros(10), B = zeros(10))
             layout = EegFun.Layout(DataFrame(label = [:A, :B], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
             dat = EegFun.ContinuousData("test_data", df, layout, 100, EegFun.AnalysisInfo())
 
@@ -134,11 +132,7 @@ using OrderedCollections
             triggers = [0, 1, 0, 2, 0, 1, 0]
             time = collect(0:6) ./ 100.0
             df = DataFrame(time = time, triggers = triggers, channel1 = randn(7), channel2 = randn(7))
-            layout = EegFun.Layout(
-                DataFrame(label = [:channel1, :channel2], inc = [0.0, 90.0], azi = [0.0, 0.0]),
-                nothing,
-                nothing,
-            )
+            layout = EegFun.Layout(DataFrame(label = [:channel1, :channel2], inc = [0.0, 90.0], azi = [0.0, 0.0]), nothing, nothing)
             dat = EegFun.ContinuousData("test_data", df, layout, 100, EegFun.AnalysisInfo())
 
             # Test trigger counting
@@ -199,9 +193,6 @@ using OrderedCollections
             @test size(result.data, 1) == 2
         end
     end
-
-
-
 
     @testset "search_sequence" begin
         @testset "basic functionality" begin
@@ -410,18 +401,12 @@ using OrderedCollections
             triggers = [0, 1, 2, 3, 0, 1, 4, 3, 0, 1, 5, 1, 0]
 
             # Multiple exact sequences
-            sequences = [
-                Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 2, 3]),
-                Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 4, 3]),
-            ]
+            sequences = [Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 2, 3]), Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 4, 3])]
             indices = EegFun.search_sequence(triggers, sequences)
             @test sort(indices) == [2, 6]  # Both sequences found at positions 2 and 6
 
             # Mix of wildcards and exact
-            sequences = [
-                Vector{Union{Int,Symbol,UnitRange{Int}}}([1, :any, 3]),
-                Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 5, 1]),
-            ]
+            sequences = [Vector{Union{Int,Symbol,UnitRange{Int}}}([1, :any, 3]), Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 5, 1])]
             indices = EegFun.search_sequence(triggers, sequences)
             @test sort(indices) == [2, 6, 10]  # Three matches at positions 2, 6, 10
         end
@@ -441,10 +426,7 @@ using OrderedCollections
 
         @testset "no matches" begin
             triggers = [1, 2, 3, 4, 5]
-            sequences = [
-                Vector{Union{Int,Symbol,UnitRange{Int}}}([6, 7, 8]),
-                Vector{Union{Int,Symbol,UnitRange{Int}}}([9, 10, 11]),
-            ]
+            sequences = [Vector{Union{Int,Symbol,UnitRange{Int}}}([6, 7, 8]), Vector{Union{Int,Symbol,UnitRange{Int}}}([9, 10, 11])]
             indices = EegFun.search_sequence(triggers, sequences)
             @test indices == Int[]
         end
@@ -486,10 +468,7 @@ using OrderedCollections
             @test sort(seq_1_range_3) == [2, 7]  # Both sequences match
 
             # Test multiple sequences
-            sequences = [
-                Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 2, 3]),
-                Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 2, 4]),
-            ]
+            sequences = [Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 2, 3]), Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 2, 4])]
             multiple_seqs = EegFun.search_sequence(triggers, sequences)
             @test sort(multiple_seqs) == [2, 11]  # Both sequences found
         end
@@ -512,10 +491,7 @@ using OrderedCollections
             seq_indices = EegFun.search_sequence(large_triggers, Vector{Union{Int,Symbol,UnitRange{Int}}}([1, :any, 3]))
             @test length(seq_indices) >= 2  # At least [1,2,3] and [1,5,3]
 
-            large_sequences = [
-                Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 2, 3]),
-                Vector{Union{Int,Symbol,UnitRange{Int}}}([2, 3, 4]),
-            ]
+            large_sequences = [Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 2, 3]), Vector{Union{Int,Symbol,UnitRange{Int}}}([2, 3, 4])]
             multi_seq_indices = EegFun.search_sequence(large_triggers, large_sequences)
             @test length(multi_seq_indices) >= 2  # At least two different sequences
         end

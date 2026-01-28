@@ -301,9 +301,7 @@ rdm = create_rdm_from_distances(distances, 3)
 function create_rdm_from_distances(distances::Vector{Float64}, n_conditions::Int)
     expected_length = div(n_conditions * (n_conditions - 1), 2)
     if length(distances) != expected_length
-        @minimal_error_throw(
-            "Distances vector has length $(length(distances)), expected $expected_length for $n_conditions conditions"
-        )
+        @minimal_error_throw("Distances vector has length $(length(distances)), expected $expected_length for $n_conditions conditions")
     end
 
     rdm = zeros(Float64, n_conditions, n_conditions)
@@ -520,8 +518,7 @@ function resample_temporal_data(
 
     if length(original_times) != n_original_times
         @minimal_error_throw(
-            "Original times length ($(length(original_times))) doesn't match " *
-            "temporal data time dimension ($n_original_times)"
+            "Original times length ($(length(original_times))) doesn't match " * "temporal data time dimension ($n_original_times)"
         )
     end
 
@@ -578,8 +575,7 @@ function resample_temporal_data(
                             t_lower = original_times[lower_idx]
                             t_upper = original_times[upper_idx]
                             weight = (t_target - t_lower) / (t_upper - t_lower)
-                            resampled_series[t_idx] =
-                                (1 - weight) * original_series[lower_idx] + weight * original_series[upper_idx]
+                            resampled_series[t_idx] = (1 - weight) * original_series[lower_idx] + weight * original_series[upper_idx]
                         end
                     end
                 end
@@ -758,9 +754,7 @@ function create_temporal_rdm(
     n_conditions, n_features, n_timepoints = size(temporal_data)
 
     if length(times) != n_timepoints
-        @minimal_error_throw(
-            "Time vector length ($(length(times))) doesn't match temporal data time dimension ($n_timepoints)"
-        )
+        @minimal_error_throw("Time vector length ($(length(times))) doesn't match temporal data time dimension ($n_timepoints)")
     end
 
     # Preallocate RDMs: [time × condition × condition]
@@ -922,14 +916,10 @@ function create_temporal_model_rdms(
             # Tuple: (data, times) - model has its own timepoints
             model_data, model_times = data
             if !isa(model_data, Array{Float64,3})
-                @minimal_error_throw(
-                    "Model '$name': Tuple first element must be Array{Float64, 3}, got $(typeof(model_data))"
-                )
+                @minimal_error_throw("Model '$name': Tuple first element must be Array{Float64, 3}, got $(typeof(model_data))")
             end
             if !isa(model_times, Vector{Float64})
-                @minimal_error_throw(
-                    "Model '$name': Tuple second element must be Vector{Float64}, got $(typeof(model_times))"
-                )
+                @minimal_error_throw("Model '$name': Tuple second element must be Vector{Float64}, got $(typeof(model_times))")
             end
             # Use align_to if provided, otherwise use model's own times
             rdm = create_temporal_rdm(
@@ -951,8 +941,6 @@ function create_temporal_model_rdms(
             )
         elseif isa(data, Vector{Vector{Vector{Float64}}})
             # Temporal vectors - convert to array first
-            # Note: This format doesn't support different timepoints easily
-            # Would need to be extended if needed
             @minimal_warning(
                 "Model '$name': Vector{Vector{Vector{Float64}}} format doesn't support " *
                 "different timepoints. Converting assuming times match."

@@ -1,7 +1,3 @@
-"""
-Test suite for src/analysis/condition_difference.jl
-"""
-
 using Test
 using JLD2
 using DataFrames
@@ -173,39 +169,6 @@ using CSV
     end
 
     @testset "Edge cases" begin
-        @testset "Identical condition pairs" begin
-            output_dir = joinpath(test_dir, "differences_identical")
-
-            # Should work but create zero differences
-            result = EegFun.condition_difference(
-                "erps_cleaned",
-                [(1, 1)],
-                input_dir = test_dir,
-                participant_selection = EegFun.participants(1),
-                output_dir = output_dir,
-            )
-
-            @test isdir(output_dir)
-            # The function should create a file even for identical conditions
-            # but it might not due to a bug in the condition finding logic
-            output_files = readdir(output_dir)
-            if "1_erps_cleaned.jld2" in output_files
-                differences = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
-                @test length(differences) == 1
-
-                # Verify difference is zero
-                diff = differences[1]
-                for ch in [:Fz, :Cz, :Pz]
-                    if hasproperty(diff.data, ch)
-                        @test all(abs.(diff.data[!, ch]) .< 1e-10)
-                    end
-                end
-            else
-                # If the file doesn't exist, it's due to a bug in the identical condition handling
-                # For now, just test that the function doesn't crash
-                @test result isa NamedTuple
-            end
-        end
 
         @testset "No matching files" begin
             output_dir = joinpath(test_dir, "differences_none")

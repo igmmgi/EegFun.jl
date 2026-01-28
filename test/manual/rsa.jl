@@ -1,4 +1,3 @@
-#!/usr/bin/env julia
 """
 Manual test for RSA (Representational Similarity Analysis) functionality
 

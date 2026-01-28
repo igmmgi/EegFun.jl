@@ -1,4 +1,3 @@
-#!/usr/bin/env julia
 """
 Tutorial: Statistical Analysis Options for ERP Data
 
@@ -467,13 +466,7 @@ using GLMakie  # or CairoMakie for static plots
 println("\n" * "-"^80)
 println("Example 1: ERP Waveforms Only")
 println("-"^80)
-fig1 = EegFun.plot_analytic_test(
-    result_analytic_no,
-    channel = :PO7,
-    plot_erp = true,
-    plot_difference = false,
-    show_significance = false,
-)
+fig1 = EegFun.plot_analytic_test(result_analytic_no, channel = :PO7, plot_erp = true, plot_difference = false, show_significance = false)
 display(fig1)
 
 # Example 2: Difference wave with significance

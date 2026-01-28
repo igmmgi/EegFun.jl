@@ -1,6 +1,5 @@
 using Test
 using DataFrames
-using EegFun
 using JLD2
 using Statistics
 
@@ -230,8 +229,6 @@ using Statistics
         end
 
         @testset "Different epoch counts per condition" begin
-            # TODO: adapr create_test_epoch_data to have different number of epochs per condition
-            # Create data with different number of epochs per condition
             dat = EegFun.create_test_epoch_data_vector(conditions = 1:2, n_epochs = 2)
 
             # Save and process
@@ -513,7 +510,6 @@ using Statistics
 
             combined_epochs = load(joinpath(output_dir, "1_epochs_many.jld2"), "data")
 
-            # Verify all channels are present
             # Verify epoch count
             @test length(combined_epochs[1].data) == 6  # 3 from each condition
         end

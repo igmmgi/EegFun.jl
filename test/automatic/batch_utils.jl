@@ -1,7 +1,3 @@
-"""
-Test suite for src/analysis/batch_utils.jl
-"""
-
 using Test
 using JLD2
 using DataFrames
@@ -260,8 +256,6 @@ using Logging
         result = EegFun._validate_condition_pairs(pairs_multi_identical)
         @test result === nothing
 
-        # Test mixed tuples and vectors (should error at type level, but test what we can)
-        # Note: This would be a type error, so we can't easily test it
     end
 
     @testset "_run_batch_operation" begin
@@ -544,25 +538,13 @@ using Logging
         end
     end
 
-    # Cleanup: Restore global logger state and remove any leftover log files
-    # Helper to safely execute cleanup operations
-    safe_cleanup(f) =
-        try
-
-            f()
-        catch
-
-        end
-
-    # Close any open global logging and restore initial logger
-    safe_cleanup(() -> EegFun.close_global_logging())
+    # Cleanup: restore state and remove temporary files
+    try
+        EegFun.close_global_logging()
+    catch
+    end
     global_logger(initial_logger)
 
-    # Clean up log files created in current directory
-    for log_file in created_log_files
-        safe_cleanup(() -> isfile(log_file) && rm(log_file, force = true))
-    end
-
-    # Remove test directory
-    safe_cleanup(() -> rm(test_dir, recursive = true))
+    rm.(created_log_files, force = true)
+    rm(test_dir, recursive = true, force = true)
 end
