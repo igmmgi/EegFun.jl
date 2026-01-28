@@ -10,8 +10,7 @@ struct UIStyle
     input_width::Int
     input_height::Int
 
-    UIStyle() =
-        new(BASE_FONTS.label, BASE_FONTS.button, BASE_FONTS.textbox, BASE_SIZES.input_width, BASE_SIZES.input_height)
+    UIStyle() = new(BASE_FONTS.label, BASE_FONTS.button, BASE_FONTS.textbox, BASE_SIZES.input_width, BASE_SIZES.input_height)
 end
 
 # Helper functions to reduce code repetition
@@ -62,7 +61,7 @@ function truncate_path(path::String, max_length::Int = 30)
         return path
     end
     # Show last (max_length - 3) characters with "..." prefix (3 chars for "...")
-    return "..." * path[(end - (max_length - 4)):end]
+    return "..." * path[(end-(max_length-4)):end]
 end
 
 """
@@ -75,12 +74,7 @@ function plot_gui()
 
     # main figure window, layout, and UI style
     set_window_title("PLOT GUI")
-    gui_fig = Figure(
-        size = (650, 550),
-        title = "Plot GUI",
-        backgroundcolor = :lightgrey,
-        figure_padding = (20, 20, 20, 20),
-    )
+    gui_fig = Figure(size = (650, 550), title = "Plot GUI", backgroundcolor = :lightgrey, figure_padding = (20, 20, 20, 20))
     main_layout = GridLayout(gui_fig[1, 1:3], rowgap = 2, colgap = 4)
     ui_style = UIStyle()
 
@@ -114,13 +108,9 @@ function plot_gui()
         "ERP (single)",
         "ERP (grid)",
         "ERP (topo)",
-        "Topography"
+        "Topography",
     ]
-    plottype_dropdown = create_menu(
-        main_layout[10, 1],
-        ui_style,
-        options = plottype_options,
-    )
+    plottype_dropdown = create_menu(main_layout[10, 1], ui_style, options = plottype_options)
 
     # Column 2: Participant, Condition, Epoch, Channels, Average Channels
     # Participant Section
@@ -175,11 +165,7 @@ function plot_gui()
 
     # Baseline Type
     create_label(main_layout[9, 3], "Baseline Type TF", ui_style, fontsize = ui_style.textbox_font)
-    baseline_type = create_menu(
-        main_layout[10, 3],
-        ui_style,
-        options = ["Select", "absolute", "relative", "relchange", "perchange", "db"],
-    )
+    baseline_type = create_menu(main_layout[10, 3], ui_style, options = ["Select", "absolute", "relative", "relchange", "perchange", "db"])
 
     # Invert Y axis option
     invert_y_layout = GridLayout(main_layout[11, 3], tellwidth = false, colgap = 8)
@@ -254,8 +240,7 @@ function plot_gui()
     # Connect callbacks
     # Open file picker when Select File button is clicked
     on(file_select_button.clicks) do _
-        default_path =
-            gui_state.directory[] !== nothing && gui_state.directory[] != "" ? gui_state.directory[] : ""
+        default_path = gui_state.directory[] !== nothing && gui_state.directory[] != "" ? gui_state.directory[] : ""
         filename = fetch(Threads.@spawn pick_file(default_path))
         if filename !== nothing && filename != ""
             basename_only = basename(filename)
@@ -284,8 +269,7 @@ function plot_gui()
 
     # Open layout file picker when Select button is clicked
     on(layout_select_button.clicks) do _
-        default_path =
-            gui_state.directory[] !== nothing && gui_state.directory[] != "" ? gui_state.directory[] : ""
+        default_path = gui_state.directory[] !== nothing && gui_state.directory[] != "" ? gui_state.directory[] : ""
         filename = fetch(Threads.@spawn pick_file(default_path))
         if filename !== nothing && filename != ""
             basename_only = basename(filename)
@@ -392,8 +376,8 @@ function _plot_databrowser(gui_state, channel_menu)
         # Load layout file
         layout = read_layout(gui_state.layout_file[])
         polar_to_cartesian_xy!(layout)
-        
-        dat = read_bdf(gui_state.filename[])
+
+        dat = read_raw_data(gui_state.filename[])
         dat = create_eeg_dataframe(dat, layout)
 
         # Update electrode menu with actual channel labels from the loaded data
@@ -510,10 +494,7 @@ function _plot_topography(gui_state, channel_menu)
         @async begin
             # For topography, we need to use the layout from the loaded data or from the layout file
             if data isa Vector{<:ErpData} || data isa ErpData
-                plot_topography(
-                    data;
-                    channel_selection = selected_channels,
-                )
+                plot_topography(data; channel_selection = selected_channels)
             elseif data isa Vector{<:EpochData} || data isa EpochData
                 # For EpochData, we need to specify an epoch number
                 # Parse epoch from GUI input, default to 1 if empty or invalid
@@ -523,11 +504,7 @@ function _plot_topography(gui_state, channel_menu)
                 catch
                     1  # Default to epoch 1 if parsing fails
                 end
-                plot_topography(
-                    data,
-                    epoch_num;
-                    channel_selection = selected_channels,
-                )
+                plot_topography(data, epoch_num; channel_selection = selected_channels)
             else
                 @minimal_error "Error: Topography plot requires ErpData or EpochData"
             end

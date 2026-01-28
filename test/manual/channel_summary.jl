@@ -7,7 +7,7 @@ layout_file = EegFun.read_layout("./data/layouts/biosemi/biosemi72.csv")
 EegFun.polar_to_cartesian_xy!(layout_file)
 EegFun.polar_to_cartesian_xyz!(layout_file)
 
-dat = EegFun.read_bdf(data_file)
+dat = EegFun.read_raw_data(data_file)
 dat = EegFun.create_eeg_dataframe(dat, layout_file)
 EegFun.rereference!(dat, :avg)
 EegFun.highpass_filter!(dat, 0.1)
