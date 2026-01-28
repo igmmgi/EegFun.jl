@@ -55,12 +55,10 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :colorbar_plot => (true, "Whether to display the colorbar"),
     :colorbar_position => ((1, 2), "Colorbar position as (row, col) tuple, or :right, :below"),
     :colorbar_label => ("μV", "Label for the colorbar"),
-    :colorbar_plot_numbers =>
-        ([], "Plot indices for which to show colorbars. Empty list shows colorbars for all plots."),
+    :colorbar_plot_numbers => ([], "Plot indices for which to show colorbars. Empty list shows colorbars for all plots."),
 
     # ICA-specific parameters (ignored for standard topography plots)
-    :use_global_scale =>
-        (false, "Do multiple ICA topoplots share the same color scale based on min/max across all components?"),
+    :use_global_scale => (false, "Do multiple ICA topoplots share the same color scale based on min/max across all components?"),
     :component_selection => (components(), "Function that returns boolean vector for component filtering"),
 )
 
@@ -116,8 +114,7 @@ function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; 
     # If colorbar_plot_numbers is empty, show colorbar for all components
     # Otherwise, only show for components in the list
     colorbar_plot_numbers = plot_kwargs[:colorbar_plot_numbers]
-    should_show_colorbar =
-        plot_kwargs[:colorbar_plot] && (isempty(colorbar_plot_numbers) || component in colorbar_plot_numbers)
+    should_show_colorbar = plot_kwargs[:colorbar_plot] && (isempty(colorbar_plot_numbers) || component in colorbar_plot_numbers)
     if should_show_colorbar
         colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
         colorbar_position = pop!(plot_kwargs, :colorbar_position, (1, 2))
@@ -224,21 +221,13 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
             elseif colorbar_position == :same
                 colorbar_offset = (1, 1)
             else
-                throw(
-                    ArgumentError(
-                        "colorbar_position must be :right, :below, :same, or a tuple (row, col), got: $colorbar_position",
-                    ),
-                )
+                throw(ArgumentError("colorbar_position must be :right, :below, :same, or a tuple (row, col), got: $colorbar_position"))
             end
         elseif colorbar_position isa Tuple
             # User provided tuple directly (row_offset, col_offset)
             colorbar_offset = colorbar_position
         else
-            throw(
-                ArgumentError(
-                    "colorbar_position must be :right, :below, :same, or a tuple (row, col), got: $colorbar_position",
-                ),
-            )
+            throw(ArgumentError("colorbar_position must be :right, :below, :same, or a tuple (row, col), got: $colorbar_position"))
         end
 
         # Calculate plot and colorbar positions
@@ -264,15 +253,9 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
 
         # Create axis with title
         if colorbar_plot
-            ax = Axis(
-                fig[plot_row, plot_col],
-                title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100)
-            )
+            ax = Axis(fig[plot_row, plot_col], title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100))
         else
-            ax = Axis(
-                fig[base_row, base_col],
-                title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100)
-            )
+            ax = Axis(fig[base_row, base_col], title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100))
         end
 
         # Use the internal plotting function with colorbar position
@@ -848,14 +831,7 @@ function _create_component_activation_plots!(fig, state)
 
         # Create the topo plot using the dedicated viewer function
         if comp_idx <= size(state.component_data, 1)
-            _plot_ica_topo_in_viewer!(
-                fig,
-                topo_ax,
-                state.ica,
-                comp_idx;
-                use_global_scale = state.use_global_scale[],
-                state.plot_kwargs...,
-            )
+            _plot_ica_topo_in_viewer!(fig, topo_ax, state.ica, comp_idx; use_global_scale = state.use_global_scale[], state.plot_kwargs...)
             topo_ax.title = @sprintf("IC %d (%.1f%%)", comp_idx, state.ica.variance[comp_idx] * 100)
         else
             empty!(topo_ax) # Clear axis if comp_idx is invalid
@@ -880,7 +856,7 @@ function _create_component_activation_plots!(fig, state)
                     # Dynamically get the current component index for this plot position
                     # This ensures correct component is selected even after page navigation
                     current_comp_idx = _get_component_index(state, plot_index)
-                    plot_component_spectrum(state.ica, state.dat, component_selection = components(current_comp_idx))
+                    plot_ica_component_spectrum(state.dat, state.ica, component_selection = components(current_comp_idx))
                 end
             end
         end
@@ -939,10 +915,7 @@ function _add_navigation_controls!(fig, state)
     end
 
     on(next_topo.clicks) do _
-        new_start = min(
-            size(state.component_data, 1) - state.n_visible_components + 1,
-            state.comp_start[] + state.n_visible_components,
-        )
+        new_start = min(size(state.component_data, 1) - state.n_visible_components + 1, state.comp_start[] + state.n_visible_components)
         state.comp_start[] = new_start
         _update_components!(state)
     end
@@ -1051,8 +1024,7 @@ function _add_channel_menu!(fig, state)
 
     # Create a simple label and menu
     Label(menu_layout[1, 1], "Additional Channel:", fontsize = 18, tellheight = false, width = 150)  # Fixed width for label
-    channel_menu =
-        Menu(menu_layout[1, 2], options = ["None"; names(state.dat.data)], default = "None", tellheight = false)
+    channel_menu = Menu(menu_layout[1, 2], options = ["None"; names(state.dat.data)], default = "None", tellheight = false)
 
     on(channel_menu.selection) do selected
         _update_channel_selection!(state, selected)
@@ -1065,9 +1037,7 @@ end
 function _update_channel_selection!(state, selected)
     # Clear previous channel visualizations from all axes
     for i = 1:state.n_visible_components
-        if i <= length(state.channel_axs) &&
-           haskey(state.channel_bool_indicators, i) &&
-           !isnothing(state.channel_bool_indicators[i])
+        if i <= length(state.channel_axs) && haskey(state.channel_bool_indicators, i) && !isnothing(state.channel_bool_indicators[i])
             delete!(state.channel_axs[i], state.channel_bool_indicators[i])
             state.channel_bool_indicators[i] = nothing
         end
@@ -1154,9 +1124,7 @@ function _setup_keyboard_interactions!(fig, state)
                 xlims!.(state.axs, Ref(new_xlims))
 
             elseif event.key == Keyboard.up || event.key == Keyboard.down
-                shift_pressed =
-                    (Keyboard.left_shift in events(fig).keyboardstate) ||
-                    (Keyboard.right_shift in events(fig).keyboardstate)
+                shift_pressed = (Keyboard.left_shift in events(fig).keyboardstate) || (Keyboard.right_shift in events(fig).keyboardstate)
 
                 if !shift_pressed
                     if event.key == Keyboard.up
@@ -1201,10 +1169,8 @@ function _setup_keyboard_interactions!(fig, state)
                     if event.key == Keyboard.page_up
                         new_start = max(1, current_start - state.n_visible_components)
                     else  # page_down
-                        new_start = min(
-                            size(state.component_data, 1) - state.n_visible_components + 1,
-                            current_start + state.n_visible_components,
-                        )
+                        new_start =
+                            min(size(state.component_data, 1) - state.n_visible_components + 1, current_start + state.n_visible_components)
                     end
 
                     if new_start != current_start
@@ -1233,8 +1199,7 @@ function _update_components!(state)
         comp_idx = _get_component_index(state, i)
         if comp_idx <= size(state.component_data, 1)
             data_count += 1
-            all_data[data_count] =
-                _prepare_ica_topo_data(state.ica, comp_idx, state.plot_kwargs[:method], state.plot_kwargs[:gridscale])
+            all_data[data_count] = _prepare_ica_topo_data(state.ica, comp_idx, state.plot_kwargs[:method], state.plot_kwargs[:gridscale])
         end
     end
 
@@ -1310,16 +1275,8 @@ end
 
 # Internal function to prepare ICA topoplot data (interpolation only)
 function _prepare_ica_topo_data(ica::InfoIca, comp_idx::Int, method::Symbol, gridscale::Int)
-    supported_methods = [
-        :multiquadratic,
-        :inverse_multiquadratic,
-        :gaussian,
-        :inverse_quadratic,
-        :thin_plate,
-        :polyharmonic,
-        :shepard,
-        :nearest,
-    ]
+    supported_methods =
+        [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
     if method ∈ supported_methods
         return _data_interpolation_topo(ica.mixing[:, comp_idx], ica.layout, gridscale, method = method)
     elseif method == :spherical_spline
@@ -1577,12 +1534,7 @@ function plot_spatial_kurtosis_components(kurtosis_comps::Vector{Int}, metrics_d
     fig = Figure()
 
     # Plot spatial kurtosis z-scores
-    ax = Axis(
-        fig[1, 1],
-        xlabel = "Component",
-        ylabel = "Spatial Kurtosis Z-Score",
-        title = "Component Spatial Kurtosis Z-Scores",
-    )
+    ax = Axis(fig[1, 1], xlabel = "Component", ylabel = "Spatial Kurtosis Z-Score", title = "Component Spatial Kurtosis Z-Scores")
 
     # Plot all components
     scatter!(ax, metrics_df.Component, metrics_df.SpatialKurtosisZScore, color = :gray)
@@ -1594,15 +1546,7 @@ function plot_spatial_kurtosis_components(kurtosis_comps::Vector{Int}, metrics_d
 
         # Add labels for high kurtosis components
         for (i, comp) in enumerate(kurtosis_comps)
-            text!(
-                ax,
-                comp,
-                kurtosis_values[i],
-                text = string(comp),
-                color = :red,
-                align = (:center, :bottom),
-                fontsize = 10,
-            )
+            text!(ax, comp, kurtosis_values[i], text = string(comp), color = :red, align = (:center, :bottom), fontsize = 10)
         end
     end
 
@@ -1666,25 +1610,13 @@ function plot_ecg_component_features_(
     # Filter out NaNs for plotting
     valid_non_ecg = findall(.!isnan.(non_ecg_df.heart_rate_bpm) .& .!isnan.(non_ecg_df.peak_ratio))
     if !isempty(valid_non_ecg)
-        scatter!(
-            ax1,
-            non_ecg_df.heart_rate_bpm[valid_non_ecg],
-            non_ecg_df.peak_ratio[valid_non_ecg],
-            color = :gray,
-            markersize = 10,
-        )
+        scatter!(ax1, non_ecg_df.heart_rate_bpm[valid_non_ecg], non_ecg_df.peak_ratio[valid_non_ecg], color = :gray, markersize = 10)
     end
 
     # Filter valid points for second plot
     valid_non_ecg2 = findall(.!isnan.(non_ecg_df.heart_rate_bpm) .& .!isnan.(non_ecg_df.std_ibi_s))
     if !isempty(valid_non_ecg2)
-        scatter!(
-            ax2,
-            non_ecg_df.heart_rate_bpm[valid_non_ecg2],
-            non_ecg_df.std_ibi_s[valid_non_ecg2],
-            color = :gray,
-            markersize = 10,
-        )
+        scatter!(ax2, non_ecg_df.heart_rate_bpm[valid_non_ecg2], non_ecg_df.std_ibi_s[valid_non_ecg2], color = :gray, markersize = 10)
     end
 
     # Plot ECG components
@@ -1786,12 +1718,7 @@ function plot_line_noise_components(
     fig = Figure(size = (1000, 400))
 
     # Plot 1: Power Ratio Z-Scores
-    ax1 = Axis(
-        fig[1, 1],
-        xlabel = "Component",
-        ylabel = "Power Ratio Z-Score",
-        title = "Line Frequency Power Ratio Z-Scores",
-    )
+    ax1 = Axis(fig[1, 1], xlabel = "Component", ylabel = "Power Ratio Z-Score", title = "Line Frequency Power Ratio Z-Scores")
 
     # Plot all components with label
     scatter!(ax1, metrics_df.Component, metrics_df.PowerRatioZScore, color = :gray, label = "All Components")
@@ -1811,15 +1738,7 @@ function plot_line_noise_components(
         # Add component numbers as labels
         for (i, comp) in enumerate(line_noise_comps)
             row = metrics_df[metrics_df.Component.==comp, :]
-            text!(
-                ax1,
-                comp,
-                row.PowerRatioZScore[1],
-                text = string(comp),
-                color = :red,
-                align = (:center, :bottom),
-                fontsize = 10,
-            )
+            text!(ax1, comp, row.PowerRatioZScore[1], text = string(comp), color = :red, align = (:center, :bottom), fontsize = 10)
         end
     end
 
@@ -1890,12 +1809,7 @@ function plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df
     metrics_df[!, :heart_rate_bpm] = heart_rates
 
     # Left panel: Heart Rate vs Peak Ratio
-    ax1 = Axis(
-        fig[1, 1],
-        xlabel = "Heart Rate (BPM)",
-        ylabel = "Peak Ratio (valid/total)",
-        title = "ECG Detection Metrics",
-    )
+    ax1 = Axis(fig[1, 1], xlabel = "Heart Rate (BPM)", ylabel = "Peak Ratio (valid/total)", title = "ECG Detection Metrics")
 
     # Right panel: Heart Rate vs IBI Regularity (std)
     ax2 = Axis(fig[1, 2], xlabel = "BPM", ylabel = "IBI Std Dev (seconds)", title = "Heart Rate Regularity")

@@ -73,28 +73,28 @@ EegFun.is_extreme_value!(dat, 200);
 # ICA on continuous data
 ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_200)) 
 
-EegFun.plot_ica_component_activation(dat, ica_result) # not shown
-EegFun.plot_component_spectrum(ica_result_infomax, dat, component_selection = EegFun.components(1)) # not shown
-
+EegFun.plot_topography( ica_result_infomax, component_selection = EegFun.components(1:4)); # not shown
+EegFun.plot_ica_component_spectrum(dat, ica_result_infomax, component_selection = EegFun.components(1)) # not shown
 EegFun.plot_ica_component_activation(dat, ica_result)
 ```
 <img src="images/data_browser_ica.png" alt="Data Browser ICA" width="800"/>
 
 ## Example Interactive Plots
 ### Artifact Detection
-<img src="images/artifact_detection.png" alt="Artifact Detection" width="400"/>
+<img src="images/artifact_detection.png" alt="Artifact Detection" width="600"/>
 
 ### Epoch Plots (Grid Layout)
-<img src="images/epochs_grid_layout.png" alt="Epochs Grid Layout" width="400"/>
+<img src="images/epochs_grid_layout.png" alt="Epochs Grid Layout" width="600"/>
 
 ### ERP (Topo Layout)
-<img src="images/erp_topo_layout.png" alt="ERP Topo Layout" width="400"/>
+<img src="images/erp_topo_layout.png" alt="ERP Topo Layout" width="600"/>
 
 ### ERP Image (Topo Layout)
-<img src="images/erp_image_topo_layout.png" alt="ERP Image Topo Layout" width="400"/>
+<img src="images/erp_image_topo_layout.png" alt="ERP Image Topo Layout" width="600"/>
+
 
 
 ## TODO
 
-- Add additional file formats to read_raw_data (currently only Biosemi BDF and BrainVision) [ ]
+- Add additional file formats to read_raw_data (currently only Biosemi BDF and BrainVision) 
 - Lots more ....
