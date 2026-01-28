@@ -172,7 +172,7 @@ for (file_idx, data_file) in enumerate(bdf_files)
 
     try
         # Preprocessing (same for all files)
-        dat = EegFun.read_bdf(data_file)
+        dat = EegFun.read_raw_data(data_file)
         dat = EegFun.create_eeg_dataframe(dat, layout_file)
         EegFun.rereference!(dat, :avg)
         EegFun.highpass_filter!(dat, 1)

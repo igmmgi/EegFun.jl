@@ -1,7 +1,7 @@
 using EegFun
 # using BenchmarkTools
 
-dat = EegFun.read_bdf("../Flank_C_3.bdf");
+dat = EegFun.read_raw_data("../Flank_C_3.bdf");
 layout = EegFun.read_layout("./data/layouts/biosemi/biosemi72.csv");
 dat = EegFun.create_eeg_dataframe(dat, layout);
 dat.sample_rate
@@ -24,7 +24,7 @@ EegFun.trigger_count(dat);  # triggers should be preserved
 #################################
 # Epoched DataFrameEeg
 #################################
-dat = EegFun.read_bdf("../Flank_C_3.bdf");
+dat = EegFun.read_raw_data("../Flank_C_3.bdf");
 layout = EegFun.read_layout("./data/layouts/biosemi/biosemi72.csv");
 dat = EegFun.create_eeg_dataframe(dat, layout);
 

@@ -8,7 +8,7 @@ data_file = joinpath(@__DIR__, "..", "..", "..", "AttentionExp", "recoded", "Fla
 # data_file = joinpath(@__DIR__, "..", "..", "..", "AttentionExp", "Flank_C_12.bdf")
 layout_file = EegFun.read_layout("./data/layouts/biosemi/biosemi72.csv");
 EegFun.polar_to_cartesian_xy!(layout_file)
-dat = EegFun.read_bdf(data_file);
+dat = EegFun.read_raw_data(data_file);
 count = EegFun.trigger_count(dat)
 
 # Get some basic data with initial preprocessing steps (high-pass filter, epoch)
@@ -16,7 +16,7 @@ data_file = joinpath(@__DIR__, "exp2_1002")
 layout_file = EegFun.read_layout("./data/layouts/biosemi/biosemi72.csv");
 EegFun.polar_to_cartesian_xy!(layout_file)
 
-dat = EegFun.read_bdf(data_file);
+dat = EegFun.read_raw_data(data_file);
 count = EegFun.trigger_count(dat)
 
 dat = EegFun.create_eeg_dataframe(dat, layout_file);
