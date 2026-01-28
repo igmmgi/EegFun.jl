@@ -96,7 +96,9 @@ using Makie
         gfp_result = EegFun.gfp(erp_data, normalize = false)
 
         # Verify GFP values (std of [1,2,3], [2,3,4], [3,4,5])
-        expected_gfp = [std([1.0, 2.0, 3.0]), std([2.0, 3.0, 4.0]), std([3.0, 4.0, 5.0])]
+        # Note: GFP uses population std (corrected=false) as per Lehmann & Skrandies
+        expected_gfp =
+            [std([1.0, 2.0, 3.0], corrected = false), std([2.0, 3.0, 4.0], corrected = false), std([3.0, 4.0, 5.0], corrected = false)]
         @test all(abs.(gfp_result.gfp .- expected_gfp) .< 1e-10)
     end
 end

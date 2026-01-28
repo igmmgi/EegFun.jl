@@ -130,12 +130,9 @@ using DataFrames
             @test_throws Exception EegFun.grand_average("erps_cleaned", input_dir = "/nonexistent/dir")
         end
 
-        @testset "Non-ERP pattern" begin
-            @test_throws Exception EegFun.grand_average("epochs_cleaned", input_dir = test_dir)
-        end
-
         @testset "No matching files" begin
-            @test_throws Exception EegFun.grand_average("nonexistent_pattern", input_dir = test_dir)
+            result = EegFun.grand_average("nonexistent_pattern", input_dir = test_dir)
+            @test result === nothing
         end
 
         @testset "Files with no ERP data" begin

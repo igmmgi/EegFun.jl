@@ -3,15 +3,8 @@ Batch grand averaging of ERP data across participants.
 """
 
 #=============================================================================
-    GRANDAVERAGE-SPECIFIC VALIDATION
+    GRANDAVERAGE-SPECIFIC HELPERS
 =============================================================================#
-
-"""Validate that file pattern is for ERP data."""
-function _validate_erps_pattern_grand_average(pattern::String)
-    !contains(pattern, "erps") &&
-        return "grand_average only works with ERP data. File pattern must contain 'erps', got: '$pattern'"
-    return nothing
-end
 
 """Generate default output directory name for grand averaging."""
 function _default_grand_average_output_dir(input_dir::String, pattern::String)
@@ -37,11 +30,11 @@ function _create_grand_average(erps::Vector{ErpData}, cond_num::Int)
 
     # Get metadata columns and find common EEG channels across all ERPs
     metadata_cols = meta_labels(first_erp)
-    
+
     # Find intersection of channels across all ERPs (only average channels that exist in all)
     all_channel_sets = [setdiff(propertynames(erp.data), metadata_cols) for erp in erps]
     eeg_channels = collect(intersect(all_channel_sets...))
-    
+
     # Create a copy of the first ERP's data as the base
     grand_avg_data = copy(first_erp.data)
 
@@ -73,14 +66,13 @@ function _create_grand_average(erps::Vector{ErpData}, cond_num::Int)
         cond_num,
         grand_avg_cond_name,
         grand_avg_data,
-        first_erp.layout,
+        copy(first_erp.layout),
         first_erp.sample_rate,
-        first_erp.analysis_info,
+        copy(first_erp.analysis_info),
         total_epochs,
     )
 end
 
-grand_average(erps::Vector{ErpData}, cond_num::Int) = _create_grand_average(erps, cond_num)
 
 """
 Load and group ERP data by condition from multiple files.
@@ -144,7 +136,7 @@ This function loads JLD2 files containing ERP data from multiple participants, g
 and creates grand averages by averaging the EEG channel data across participants for each condition.
 
 # Arguments
-- `file_pattern::String`: Pattern to match JLD2 files (e.g., "erps_cleaned", "erps_original")
+- `file_pattern::String`: Pattern to match JLD2 files (e.g., "erps_cleaned", "my_data", "study1_averages")
 - `input_dir::String`: Input directory containing JLD2 files (default: current directory)
 - `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
 - `condition_selection::Function`: Condition selection predicate (default: `conditions()` for all)
@@ -162,7 +154,10 @@ grand_average("erps_cleaned",
             condition_selection = conditions([1, 2]))
 
 # Custom predicate (participants > 5)
-grand_average("erps_cleaned", participant_selection = x -> x .> 5)
+grand_average("erps_cleaned", participant_selection = participants(x -> x .> 5))
+
+# Load the results
+grand_avgs = load_data("grand_average_erps_cleaned.jld2")
 ```
 """
 function grand_average(
@@ -183,10 +178,6 @@ function grand_average(
 
         # Validation (early return on error)
         if (error_msg = _validate_input_dir(input_dir)) !== nothing
-            @minimal_error_throw(error_msg)
-        end
-
-        if (error_msg = _validate_erps_pattern_grand_average(file_pattern)) !== nothing
             @minimal_error_throw(error_msg)
         end
 

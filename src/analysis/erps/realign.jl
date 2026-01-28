@@ -35,13 +35,10 @@ window determined by the latest start time and earliest end time across all epoc
 using EegFun
 
 # Load stimulus-locked epoched data
-epochs = load("participant_1_epochs.jld2", "epochs")
+epochs = load_data("participant_1_epochs.jld2")
 
 # Realign to response times (stored in :rt column)
 realign!(epochs, :rt)
-
-# Now time=0 corresponds to the response for each trial
-# and all epochs have the same time window
 ```
 
 # Notes
@@ -304,7 +301,7 @@ data to a different time point specified by a column in the epoch DataFrames.
 realign("epochs_cleaned", :rt)
 
 # Specific participants only
-realign("epochs_cleaned", :rt, participants = [1, 2, 3])
+realign("epochs_cleaned", :rt, participant_selection = participants([1, 2, 3]))
 
 # Custom output directory
 realign("epochs_cleaned", :rt, output_dir = "/path/to/output")
@@ -312,12 +309,12 @@ realign("epochs_cleaned", :rt, output_dir = "/path/to/output")
 # Full example workflow
 realign("epochs_cleaned", :rt,
         input_dir = "/data/study1",
-        participants = 1:20)
+        participant_selection = participants(1:20))
 ```
 
 # Output
 - Creates new directory with realigned epoch data files
-- Each output file contains "epochs" variable with realigned EpochData
+- Each output file contains "data" variable with realigned EpochData
 - Log file saved to output directory
 
 # Notes

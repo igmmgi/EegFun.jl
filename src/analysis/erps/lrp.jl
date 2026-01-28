@@ -45,12 +45,8 @@ non-lateralized activity.
 lrp_data = lrp(erps[1], erps[2])
 
 # Select specific left hemisphere channels (automatically pairs with right)
-lrp_data = lrp(erps[1], erps[2], channel_selection = channels([:C3, :CP3]))
 # This calculates LRP for C3/C4 and CP3/CP4
-
-# Use channel predicates for pattern matching
-lrp_data = lrp(erps[1], erps[2], channel_selection = channels(x -> startswith.(string.(x), "C")))
-# Selects all C-channels: C1/C2, C3/C4, C5/C6, etc.
+lrp_data = lrp(erps[1], erps[2], channel_selection = channels([:C3, :CP3]))
 ```
 """
 function lrp(erp_left::ErpData, erp_right::ErpData; channel_selection::Function = channels())::ErpData
@@ -103,11 +99,7 @@ Get channel pairs from a channel selection predicate.
 Takes a channel selection predicate, applies it to get left/odd channels,
 validates they are odd-numbered, and pairs them with their right/even counterparts.
 """
-function _get_channel_pairs_from_selection(
-    erp_left::ErpData,
-    erp_right::ErpData,
-    channel_selection::Function,
-)::Vector{Tuple{Symbol,Symbol}}
+function _get_channel_pairs_from_selection(erp_left::ErpData, erp_right::ErpData, channel_selection::Function)::Vector{Tuple{Symbol,Symbol}}
 
     # Get all available channels
     left_labels = channel_labels(erp_left)
@@ -163,10 +155,7 @@ end
 Detect all lateral channel pairs based on odd/even numbering (e.g., C3/C4, C1/C2).
 Used when channel_selection = channels() (default).
 """
-function _detect_all_lateral_pairs(
-    left_labels::Vector{Symbol},
-    right_labels::Vector{Symbol},
-)::Vector{Tuple{Symbol,Symbol}}
+function _detect_all_lateral_pairs(left_labels::Vector{Symbol}, right_labels::Vector{Symbol})::Vector{Tuple{Symbol,Symbol}}
 
     # Use intersection to ensure channels exist in both datasets
     common_labels = intersect(left_labels, right_labels)
@@ -191,10 +180,6 @@ function _detect_all_lateral_pairs(
     return pairs
 end
 
-
-"""
-Batch LRP calculation for multiple participants from JLD2 files.
-"""
 
 #=============================================================================
     LRP-SPECIFIC VALIDATION
@@ -226,12 +211,7 @@ end
 Process a single ERP file through LRP calculation pipeline.
 Returns BatchResult with success/failure info.
 """
-function _process_lrp_file(
-    filepath::String,
-    output_path::String,
-    condition_pairs::Vector{Tuple{Int,Int}},
-    channel_selection::Function,
-)
+function _process_lrp_file(filepath::String, output_path::String, condition_pairs::Vector{Tuple{Int,Int}}, channel_selection::Function)
     filename = basename(filepath)
 
     # Load data (using load_data which finds by type)
@@ -294,7 +274,7 @@ pairs = [(i, i+1) for i in 1:2:15]
 lrp("erps_cleaned", pairs)
 
 # Specific participants only
-lrp("erps_cleaned", [(1,2), (3,4)], participants=[1, 2, 3])
+lrp("erps_cleaned", [(1,2), (3,4)], participant_selection=participants([1, 2, 3]))
 
 # Only C3/C4 pair
 lrp("erps_cleaned", [(1,2), (3,4)], channel_selection=channels([:C3]))
@@ -312,7 +292,7 @@ lrp("erps_cleaned", pairs,
 
 # Output
 - Creates new directory with LRP data files
-- Each output file contains "lrp" variable with Vector{ErpData}
+- Each output file contains "data" variable with Vector{ErpData}
 - Log file saved to output directory
 """
 function lrp(
@@ -358,8 +338,7 @@ function lrp(
         @info "Channel selection: $(channel_selection == channels() ? "all lateral pairs" : "custom")"
 
         # Create processing function with captured parameters
-        process_fn =
-            (input_path, output_path) -> _process_lrp_file(input_path, output_path, condition_pairs, channel_selection)
+        process_fn = (input_path, output_path) -> _process_lrp_file(input_path, output_path, condition_pairs, channel_selection)
 
         # Execute batch operation
         results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Calculating LRP")
@@ -474,31 +453,21 @@ function _calculate_lrp(erp_left::ErpData, erp_right::ErpData, pairs::Vector{Tup
         ch_left_in_right = erp_right.data[!, ch_left]
         ch_right_in_right = erp_right.data[!, ch_right]
 
+        # Calculate column indices for interleaved storage (C3, C4, CP3, CP4, ...)
+        left_col = 2 * idx - 1
+        right_col = 2 * idx
+
         # Calculate LRP using the double-subtraction formula
         # LRP for left channel (e.g., C3)
-        lrp_matrix[:, idx] = 0.5 .* ((ch_left_in_right .- ch_right_in_right) .+ (ch_right_in_left .- ch_left_in_left))
+        lrp_matrix[:, left_col] = 0.5 .* ((ch_left_in_right .- ch_right_in_right) .+ (ch_right_in_left .- ch_left_in_left))
 
         # LRP for right channel (e.g., C4) 
-        lrp_matrix[:, idx+n_pairs] =
-            0.5 .* ((ch_right_in_right .- ch_left_in_right) .+ (ch_left_in_left .- ch_right_in_left))
+        lrp_matrix[:, right_col] = 0.5 .* ((ch_right_in_right .- ch_left_in_right) .+ (ch_left_in_left .- ch_right_in_left))
 
-        # Build channel labels
+        # Build channel labels (interleaved to match matrix structure)
         push!(lrp_labels, ch_left)
         push!(lrp_labels, ch_right)
     end
-
-    # Remove duplicate labels (keep unique in order)
-    unique_labels = Symbol[]
-    unique_indices = Int[]
-    for (idx, label) in enumerate(lrp_labels)
-        if label ∉ unique_labels
-            push!(unique_labels, label)
-            push!(unique_indices, idx)
-        end
-    end
-
-    # Select only unique columns
-    lrp_matrix = lrp_matrix[:, unique_indices]
 
     # Create output DataFrame with metadata from left dataset
     meta_cols = meta_labels(erp_left)
@@ -510,7 +479,7 @@ function _calculate_lrp(erp_left::ErpData, erp_right::ErpData, pairs::Vector{Tup
     end
 
     # Add LRP channel data
-    for (idx, label) in enumerate(unique_labels)
+    for (idx, label) in enumerate(lrp_labels)
         lrp_df[!, label] = lrp_matrix[:, idx]
     end
 
@@ -523,15 +492,15 @@ function _calculate_lrp(erp_left::ErpData, erp_right::ErpData, pairs::Vector{Tup
     end
 
     # Create layout with only the LRP channels
-    lrp_layout = _create_lrp_layout(erp_left.layout, unique_labels)
+    lrp_layout = _create_lrp_layout(erp_left.layout, lrp_labels)
 
     # Create and return LRP ErpData
     # Use minimum n_epochs as conservative estimate
     min_epochs = min(erp_left.n_epochs, erp_right.n_epochs)
-    # LRP doesn't have a condition number, use 0 as placeholder
+    # Use condition number from left ERP
     return ErpData(
         erp_left.file,
-        0,
+        erp_left.condition,
         "lrp",
         lrp_df,
         lrp_layout,
