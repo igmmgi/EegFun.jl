@@ -21,7 +21,7 @@ EegFun.plot_erp_image(epochs[1], layout = :grid, colorbar_plot = false)
 EegFun.plot_erp_image(epochs[1], layout = :grid, colorbar_plot = true)
 
 EegFun.plot_erp_image(epochs[1], layout = :topo)
-EegFun.plot_erp_image(epochs[1], channel_selection = EegFun.channels([:Fp1]))
+EegFun.plot_erp_image(epochs[1], channel_selection = EegFun.channels([:PO7]))
 EegFun.plot_erp_image(epochs[1], channel_selection = EegFun.channels([:Fp1]), plot_erp = false)
 
 
@@ -29,10 +29,11 @@ EegFun.plot_erp_image(epochs[1], layout = :single)
 
 fig, axes = EegFun.plot_erp_image(
     epochs[1],
-    channel_selection = EegFun.channels([:Fp1, :Fp2]),
-    layout = :single,
+    # channel_selection = EegFun.channels([:Fp1, :Fp2]),
+    # channel_selection = EegFun.channels([:Fp1, :Fp2]),
+    layout = :topo,
     boxcar_average = 20,
-    colorrange = (-20, 20),
+    colorrange = (-50, 50),
 )
 
 

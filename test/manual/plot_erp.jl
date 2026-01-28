@@ -22,7 +22,7 @@ erps = EegFun.average_epochs(epochs)
 
 fig, ax = EegFun.plot_erp(erps, layout = :single)
 fig, ax = EegFun.plot_erp(erps, layout = :grid)
-fig, ax = EegFun.plot_erp(erps, layout = :topo)
+fig, ax = EegFun.plot_erp(erps[1], layout = :topo)
 
 
 fig, ax = EegFun.plot_erp(erps, layout = :grid, legend_channel = [:Fp1, :M2], yreversed = true)
