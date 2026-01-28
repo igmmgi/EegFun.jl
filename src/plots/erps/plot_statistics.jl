@@ -1,7 +1,5 @@
 """
-Simple plotting functions for statistical test results.
-
-This module provides visualization functions for permutation test and analytic t-test results.
+Plotting functions for statistical test results.
 """
 
 """
@@ -10,8 +8,8 @@ This module provides visualization functions for permutation test and analytic t
 Find continuous regions where mask is true, returning start and end times.
 """
 function find_continuous_regions(mask::BitVector, time_points::Vector{Float64})
-    regions = Vector{Tuple{Float64,Float64}}()
 
+    regions = Vector{Tuple{Float64,Float64}}()
     if isempty(mask) || !any(mask)
         return regions
     end
@@ -20,12 +18,10 @@ function find_continuous_regions(mask::BitVector, time_points::Vector{Float64})
     start_idx = 0
 
     for (i, is_sig) in enumerate(mask)
-        if is_sig && !in_region
-            # Start of a new region
+        if is_sig && !in_region # Start of a new region
             in_region = true
             start_idx = i
-        elseif !is_sig && in_region
-            # End of a region
+        elseif !is_sig && in_region # End of a region
             in_region = false
             push!(regions, (time_points[start_idx], time_points[i-1]))
         end
@@ -207,15 +203,7 @@ function plot_analytic_test(
             hlines!(ax, [diff_offset], color = (:gray, 0.7), linewidth = 1, linestyle = :dot)
 
             # Add text annotation to clarify: this line represents zero difference
-            text!(
-                ax,
-                erp_time_points[end] * 0.98,
-                diff_offset,
-                text = "0 μV (A=B)",
-                align = (:right, :center),
-                color = :gray,
-                fontsize = 9,
-            )
+            text!(ax, erp_time_points[end] * 0.98, diff_offset, text = "0 μV (A=B)", align = (:right, :center), color = :gray, fontsize = 9)
         else
             # Plot difference wave at actual zero (not shifted)
             diff_wave_plot = diff_wave
@@ -223,15 +211,7 @@ function plot_analytic_test(
             diff_label = "Difference (A-B)"
         end
 
-        lines!(
-            ax,
-            erp_time_points,
-            diff_wave_plot,
-            color = :black,
-            linewidth = 2,
-            linestyle = :dash,
-            label = diff_label,
-        )
+        lines!(ax, erp_time_points, diff_wave_plot, color = :black, linewidth = 2, linestyle = :dash, label = diff_label)
 
         # Add zero lines
         vlines!(ax, [0.0], color = :gray, linewidth = 1, linestyle = :dash)
@@ -277,8 +257,7 @@ function plot_analytic_test(
                 elseif plot_difference || plot_erp
                     if plot_erp
                         amp_range =
-                            maximum([maximum(cond_A_avg), maximum(cond_B_avg)]) -
-                            minimum([minimum(cond_A_avg), minimum(cond_B_avg)])
+                            maximum([maximum(cond_A_avg), maximum(cond_B_avg)]) - minimum([minimum(cond_A_avg), minimum(cond_B_avg)])
                     else
                         amp_range = maximum(diff_wave_plot) - minimum(diff_wave_plot)
                     end
@@ -295,8 +274,7 @@ function plot_analytic_test(
                 elseif plot_difference || plot_erp
                     if plot_erp
                         amp_range =
-                            maximum([maximum(cond_A_avg), maximum(cond_B_avg)]) -
-                            minimum([minimum(cond_A_avg), minimum(cond_B_avg)])
+                            maximum([maximum(cond_A_avg), maximum(cond_B_avg)]) - minimum([minimum(cond_A_avg), minimum(cond_B_avg)])
                     else
                         amp_range = maximum(diff_wave_plot) - minimum(diff_wave_plot)
                     end
@@ -380,24 +358,8 @@ function plot_analytic_test(
     if show_critical_t && plot_tvalues && critical_t_pos !== nothing
         # Plot critical t boundaries on same axis (symmetric around zero)
         # These are the actual critical t-values, not scaled to amplitude
-        lines!(
-            ax,
-            time_points,
-            critical_t_pos,
-            color = :grey,
-            linewidth = 2,
-            linestyle = :dashdot,
-            label = "Critical t+",
-        )
-        lines!(
-            ax,
-            time_points,
-            critical_t_neg,
-            color = :grey,
-            linewidth = 2,
-            linestyle = :dashdot,
-            label = "Critical t-",
-        )
+        lines!(ax, time_points, critical_t_pos, color = :grey, linewidth = 2, linestyle = :dashdot, label = "Critical t+")
+        lines!(ax, time_points, critical_t_neg, color = :grey, linewidth = 2, linestyle = :dashdot, label = "Critical t-")
     end
 
     # Add legend
