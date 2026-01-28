@@ -587,9 +587,9 @@ real_data_processed = false
 try
     if isdir(data_dir)
         try
-            real_data_processed = !isempty(glob("*.bdf", data_dir))
+            global real_data_processed = !isempty(glob("*.bdf", data_dir))
         catch
-            real_data_processed = !isempty(filter(f -> endswith(f, ".bdf"), readdir(data_dir)))
+            global real_data_processed = !isempty(filter(f -> endswith(f, ".bdf"), readdir(data_dir)))
         end
     end
 catch
