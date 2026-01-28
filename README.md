@@ -1,44 +1,100 @@
 # EegFun.jl
 
-![EegFun Logo](images/EegFunLogo.png)
-
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://igmmgi.github.io/EegFun.jl/stable)
 [![Build Status](https://github.com/igmmgi/EegFun.jl/workflows/Documentation/badge.svg)](https://github.com/igmmgi/EegFun.jl/actions)
 [![CI](https://github.com/igmmgi/EegFun.jl/workflows/Tests/badge.svg)](https://github.com/igmmgi/EegFun.jl/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+
+<img src="images/EegFunLogo.png" alt="EegFun Logo" width="150"/>
+
+
 A Julia package for EEG/ERP data analysis and visualization. Currently under active development (Alpha 0.1).
 
-## Quick Start
+## Features
 
+*   **EEG/ERP Analysis**
+*   **EEG/ERP Interactive Plots**
+*   **Time-Frequency Analysis**
+*   **Raw data to full ERP batch preprocessing pipelines**
+
+
+## Example Data Browser
 ```julia
 using EegFun
 
-data_file = "my_raw_file.bdf"
+# raw data file and channel coordinates
+dat = EegFun.read_raw_data("my_raw_file.bdf");
+
 layout_file = EegFun.read_layout("my_layout.csv");
 EegFun.polar_to_cartesian_xy!(layout_file)
-dat = EegFun.read_raw_data(data_file);
+
 dat = EegFun.create_eeg_dataframe(dat, layout_file);
 
 EegFun.plot_databrowser(dat);
 ```
+<img src="images/data_browser.png" alt="Data Browser" width="800"/>
 
-## Features & Visualizations
 
-### Interactive Data Browser
 
-Inspect raw EEG data, mark artifacts, and apply filters interactively.
+## Example ICA Data Browser
+```julia
+using EegFun
 
-![Data Browser](images/data_browser.png)
+# raw data file and channel coordinates
+dat = EegFun.read_raw_data("my_raw_file.bdf");
 
-### Automated Artifact Detection
+layout_file = EegFun.read_layout("my_layout.csv");
+EegFun.polar_to_cartesian_xy!(layout_file)
 
-Detect various types of artifacts using customizable criteria.
+dat = EegFun.create_eeg_dataframe(dat, layout_file);
 
-![Artifact Detection](images/artifact_detection.png)
+# rereference data and apply 1Hz high-pass filter for ICA
+EegFun.rereference!(dat, :avg)
+EegFun.highpass_filter!(dat, 1)
 
-### Topographical Plots
+# calculate EOG channels
+EegFun.channel_difference!(
+    dat,
+    channel_selection1 = EegFun.channels([:Fp1, :Fp2]),
+    channel_selection2 = EegFun.channels([:IO1, :IO2]),
+    channel_out = :vEOG,
+); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+EegFun.channel_difference!(
+    dat,
+    channel_selection1 = EegFun.channels([:F9]),
+    channel_selection2 = EegFun.channels([:F10]),
+    channel_out = :hEOG,
+); # horizontal EOG = F9 - F10
 
-Visualize ERP distribution across the scalp.
+# detect some extreme values
+EegFun.is_extreme_value!(dat, 200);
 
-![ERP Topography](images/erp_topo_layout.png)
+# ICA on continuous data
+ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_200)) 
+
+EegFun.plot_ica_component_activation(dat, ica_result) # not shown
+EegFun.plot_component_spectrum(ica_result_infomax, dat, component_selection = EegFun.components(1)) # not shown
+
+EegFun.plot_ica_component_activation(dat, ica_result)
+```
+<img src="images/data_browser_ica.png" alt="Data Browser ICA" width="800"/>
+
+## Example Interactive Plots
+### Artifact Detection
+<img src="images/artifact_detection.png" alt="Artifact Detection" width="400"/>
+
+### Epoch Plots (Grid Layout)
+<img src="images/epochs_grid_layout.png" alt="Epochs Grid Layout" width="400"/>
+
+### ERP (Topo Layout)
+<img src="images/erp_topo_layout.png" alt="ERP Topo Layout" width="400"/>
+
+### ERP Image (Topo Layout)
+<img src="images/erp_image_topo_layout.png" alt="ERP Image Topo Layout" width="400"/>
+
+
+## TODO
+
+- Add additional file formats to read_raw_data (currently only Biosemi BDF and BrainVision) [ ]
+- Lots more ....
