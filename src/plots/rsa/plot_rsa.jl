@@ -94,7 +94,7 @@ function plot_rdm(rsa_data::RsaData; time_point::Union{Float64,Int,Nothing} = no
     end
 
     # Create figure
-    fig = Figure(title = figure_title, resolution = (600, 600))
+    fig = Figure(title = figure_title)
 
     if isempty(title_text)
         title_str = "RDM at $time_label"
@@ -181,7 +181,7 @@ function plot_model_correlations(rsa_data::RsaData; kwargs...)
     end
 
     # Create figure
-    fig = Figure(title = figure_title, resolution = (800, 600))
+    fig = Figure(title = figure_title)
 
     if isempty(title_text)
         title_str = "Model Correlations"
