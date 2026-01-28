@@ -26,12 +26,6 @@ const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Filter parameters
     :default_hp_freq => (0.1, "Default high-pass filter frequency in Hz"),
     :default_lp_freq => (40.0, "Default low-pass filter frequency in Hz"),
-    :default_crit_val => (100.0, "Default extreme value threshold in μV"),
-
-    # View parameters
-    :default_window_size => (5000, "Default window size in samples"),
-    :default_amplitude_scale => (1.0, "Default amplitude scaling factor"),
-    :default_butterfly => (false, "Default butterfly plot mode"),
 
     # Scale indicator
     :show_scale_indicator => (true, "Show scale indicator bar"),
@@ -1809,7 +1803,6 @@ function _add_scale_indicator!(ax, state, plot_kwargs)
     tick_right = @lift($x_pos + $tick_length)
 
     bottom_tick = lines!(ax, @lift([$tick_left, $tick_right]), @lift([$y_bottom, $y_bottom]), color = color, linewidth = linewidth)
-
     top_tick = lines!(ax, @lift([$tick_left, $tick_right]), @lift([$y_top, $y_top]), color = color, linewidth = linewidth)
 
     # Add label
