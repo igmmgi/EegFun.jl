@@ -21,7 +21,7 @@ const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :channel_offset_margin => (0.9, "Margin factor for channel offset range"),
 
     # Selection styling
-    :selection_color => ((:blue, 0.3), "Color and transparency for selection rectangle"),
+    :selection_color => ((:blue, 0.1), "Color and transparency for selection rectangle"),
 
     # Filter parameters
     :default_hp_freq => (0.1, "Default high-pass filter frequency in Hz"),
@@ -31,8 +31,6 @@ const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :show_scale_indicator => (true, "Show scale indicator bar"),
     :scale_indicator_value => (100.0, "Scale indicator value in μV"),
     :scale_indicator_position => ((0.92, 0.96), "Scale indicator position as (x, y) in axis coordinates (0-1)"),
-    :scale_indicator_color => (:black, "Color for scale indicator"),
-    :scale_indicator_linewidth => (1, "Line width for scale indicator"),
 )
 
 # Base type for data states
@@ -1774,14 +1772,9 @@ end
 Add a scale indicator bar to the plot showing the amplitude scale.
 """
 function _add_scale_indicator!(ax, state, plot_kwargs)
-    if !plot_kwargs[:show_scale_indicator]
-        return nothing
-    end
 
     scale_value = plot_kwargs[:scale_indicator_value]
     pos = plot_kwargs[:scale_indicator_position]
-    color = plot_kwargs[:scale_indicator_color]
-    linewidth = plot_kwargs[:scale_indicator_linewidth]
 
     # Get axis limits observables (they're already observables)
     xlims_obs = ax.xaxis.attributes.limits
@@ -1795,29 +1788,27 @@ function _add_scale_indicator!(ax, state, plot_kwargs)
     y_bottom = @lift($y_top - scale_value * $(state.view.amplitude_scale))
 
     # Draw vertical line
-    scale_line = lines!(ax, @lift([$x_pos, $x_pos]), @lift([$y_bottom, $y_top]), color = color, linewidth = linewidth)
+    lines!(ax, @lift([$x_pos, $x_pos]), @lift([$y_bottom, $y_top]), color = :black, linewidth = 1)
 
     # Draw horizontal tick marks
     tick_length = @lift(($xlims_obs[2] - $xlims_obs[1]) * 0.005)
     tick_left = @lift($x_pos - $tick_length)
     tick_right = @lift($x_pos + $tick_length)
-
-    bottom_tick = lines!(ax, @lift([$tick_left, $tick_right]), @lift([$y_bottom, $y_bottom]), color = color, linewidth = linewidth)
-    top_tick = lines!(ax, @lift([$tick_left, $tick_right]), @lift([$y_top, $y_top]), color = color, linewidth = linewidth)
+    lines!(ax, @lift([$tick_left, $tick_right]), @lift([$y_bottom, $y_bottom]), color = :black, linewidth = 1)
+    lines!(ax, @lift([$tick_left, $tick_right]), @lift([$y_top, $y_top]), color = :black, linewidth = 1)
 
     # Add label
     label_x = @lift($x_pos + ($xlims_obs[2] - $xlims_obs[1]) * 0.01)
-    scale_label = text!(
+    text!(
         ax,
         @lift(Point2f($label_x, $y_top)),
         text = "$(round(scale_value, digits=0)) μV",
         align = (:left, :center),
         fontsize = 14,
-        color = color,
+        color = :black,
         space = :data,
     )
 
-    return (line = scale_line, bottom_tick = bottom_tick, top_tick = top_tick, label = scale_label)
 end
 
 
@@ -1846,7 +1837,9 @@ function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs.
     draw_extra_channel!(ax, state)
 
     # Add scale indicator
-    _add_scale_indicator!(ax, state, plot_kwargs)
+    if plot_kwargs[:show_scale_indicator]
+        _add_scale_indicator!(ax, state, plot_kwargs)
+    end
 
     # Display on the provided screen if given, otherwise use default display
     if screen !== nothing
