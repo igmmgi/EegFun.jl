@@ -221,14 +221,7 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
         psd_obs = Observable(psd)
 
         # Plot this channel's spectrum with observable
-        line_plot = lines!(
-            ax,
-            freqs,
-            psd_obs,
-            label = string(ch),
-            linewidth = plot_kwargs[:linewidth],
-            alpha = plot_kwargs[:line_alpha],
-        )
+        line_plot = lines!(ax, freqs, psd_obs, label = string(ch), linewidth = plot_kwargs[:linewidth], alpha = plot_kwargs[:line_alpha])
         push!(line_plots, (line_plot, psd_obs))
     end
 
@@ -295,23 +288,8 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
                 # Add colored bar and label
                 bar_x = [fmin, fmax]
                 bar_y = [0.5, 0.5]
-                lines!(
-                    band_ax,
-                    bar_x,
-                    bar_y,
-                    color = band_colors[i],
-                    linewidth = 8,
-                    alpha = plot_kwargs[:freq_band_alpha],
-                )
-                text!(
-                    band_ax,
-                    (fmin + fmax) / 2,
-                    0.5,
-                    text = band_name,
-                    align = (:center, :center),
-                    fontsize = 26,
-                    color = :black,
-                )
+                lines!(band_ax, bar_x, bar_y, color = band_colors[i], linewidth = 8, alpha = plot_kwargs[:freq_band_alpha])
+                text!(band_ax, (fmin + fmax) / 2, 0.5, text = band_name, align = (:center, :center), fontsize = 26, color = :black)
             end
         end
     end
@@ -521,13 +499,13 @@ end
 
 
 """
-    plot_component_spectrum(ica_result::InfoIca, dat::ContinuousData; component_selection::Function = components(), kwargs...)
+    plot_ica_component_spectrum(dat::ContinuousData, ica_result::InfoIca; component_selection::Function = components(), kwargs...)
 
 Plot power spectrum of ICA component(s) with interactive controls for axis scaling.
 
 # Arguments
-- `ica_result::InfoIca`: The ICA result object.
 - `dat::ContinuousData`: The continuous data.
+- `ica_result::InfoIca`: The ICA result object.
 - `component_selection::Function`: Function that returns boolean vector for component filtering (default: all components).
 
 # Keyword Arguments
@@ -556,31 +534,31 @@ Plot power spectrum of ICA component(s) with interactive controls for axis scali
 # Examples
 ```julia
 # Plot all components (default)
-plot_component_spectrum(ica_result, dat)
+plot_ica_component_spectrum(dat, ica_result)
 
 # Plot specific components
-plot_component_spectrum(ica_result, dat, component_selection = components([1, 3, 5]))
+plot_ica_component_spectrum(dat, ica_result, component_selection = components([1, 3, 5]))
 
 # Plot components 1-10
-plot_component_spectrum(ica_result, dat, component_selection = components(1:10))
+plot_ica_component_spectrum(dat, ica_result, component_selection = components(1:10))
 
 # Plot all components except 1 and 2
-plot_component_spectrum(ica_result, dat, component_selection = components_not([1, 2]))
+plot_ica_component_spectrum(dat, ica_result, component_selection = components_not([1, 2]))
 
 # Plot component 1 only
-plot_component_spectrum(ica_result, dat, component_selection = components(1))
+plot_ica_component_spectrum(dat, ica_result, component_selection = components(1))
 
 # With sample selection
-plot_component_spectrum(ica_result, dat, component_selection = components(1), sample_selection = samples_not(:is_extreme_value_100))
+plot_ica_component_spectrum(dat, ica_result, component_selection = components(1), sample_selection = samples_not(:is_extreme_value_100))
 
 # With dB units (EEGLAB-style)
-plot_component_spectrum(ica_result, dat, component_selection = components(1), unit = :dB)
+plot_ica_component_spectrum(dat, ica_result, component_selection = components(1), unit = :dB)
 ```
 """
 
-function plot_component_spectrum(
-    ica_result::InfoIca,
-    dat::ContinuousData;
+function plot_ica_component_spectrum(
+    dat::ContinuousData,
+    ica_result::InfoIca;
     sample_selection::Function = samples(),
     component_selection::Function = components(),
     kwargs...,
@@ -596,7 +574,7 @@ function plot_component_spectrum(
     end
 
     # Debug: verify selected components
-    @debug "plot_component_spectrum: selected_components = $selected_components"
+    @debug "plot_ica_component_spectrum: selected_components = $selected_components"
     # Apply sample selection
     selected_samples = get_selected_samples(dat, sample_selection)
 
