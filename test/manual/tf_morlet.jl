@@ -1,9 +1,4 @@
 using EegFun
-using GLMakie
-using JLD2
-using DataFrames
-using BenchmarkTools
-
 
 #######################################################################
 @info EegFun.section("TEST 1: Synthetic Signal with Known Frequencies")
@@ -43,14 +38,15 @@ EegFun.plot_time_frequency(tf_data, ylogscale = true)
 tf_data = EegFun.tf_morlet(epochs_synthetic, frequencies = logrange(1, 40, length = 30), cycles = 10)
 EegFun.plot_time_frequency(tf_data, ylogscale = true)
 
+
 #######################################################################
 @info EegFun.section("TEST 2: Cohen Data Chapter 13")
 #######################################################################
-
-data_cohen = EegFun.load_data("/home/ian/Desktop/tf_test_epochs.jld2")
+# This is some data that was presented in Cohen: Analyzin Neural Time Series Data
+data_cohen = EegFun.load_data("./data/raw_files/tf_test_epochs.jld2");
 
 # Figure 13.11 A)
-tf_data = EegFun.tf_morlet(data_cohen, frequencies = range(2, 80, length = 80), cycles = 3, filter_edges = true)
+tf_data = EegFun.tf_morlet(reconstructed_data, frequencies = range(2, 80, length = 80), cycles = 3, filter_edges = true)
 EegFun.plot_time_frequency(
     tf_data;
     baseline_window = (-0.5, -0.2),
@@ -103,33 +99,3 @@ EegFun.plot_time_frequency(
     ylogscale = true,
     colormap = :jet,
 )
-
-#######################################################################
-@info EegFun.section("TEST 3: Exported data from MATLAB FieldTrip")
-#######################################################################
-
-data = EegFun.load_csv("/home/ian/Documents/MATLAB/BioPsyLab/Data/TestData/data1/", file = "epoch_data.csv")
-
-# tf_data = EegFun.tf_morlet(data, channel_selection = EegFun.channels([:Cz]), frequencies = 1:1:40, cycles = 7, filter_edges = false, time_steps = (-1, 2, 0.01)) 
-tf_data = EegFun.tf_morlet(
-    data,
-    channel_selection = EegFun.channels([:Cz]),
-    frequencies = 1:1:40,
-    cycles = 7,
-    filter_edges = true,
-)
-
-tf_data = EegFun.tf_morlet(data, frequencies = 1:1:40, cycles = 7, filter_edges = false)
-EegFun.plot_time_frequency(
-    tf_data;
-    baseline_window = (-0.5, -0.1),
-    baseline_method = :relchange,
-    colorrange = (-0.2, 0.2),
-    ylogscale = false,
-    #colormap = :jet,
-)
-
-
-
-
-
