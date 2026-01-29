@@ -19,11 +19,7 @@ end
 
 Internal function that applies rereferencing to specified channels in a vector of DataFrames.
 """
-function _apply_rereference!(
-    dat::Vector{DataFrame},
-    channel_selection::Vector{Symbol},
-    reference_selection::Vector{Symbol},
-)
+function _apply_rereference!(dat::Vector{DataFrame}, channel_selection::Vector{Symbol}, reference_selection::Vector{Symbol})
     _apply_rereference!.(dat, Ref(channel_selection), Ref(reference_selection))
     return nothing
 end
@@ -90,11 +86,7 @@ function _get_reference_channels(dat::EegData, reference_channel::Symbol)
 end
 
 # Single method for all EEG data types
-function rereference!(
-    dat::EegData,
-    reference_selection::Union{Symbol,Vector{Symbol}},
-    channel_selection::Function = channels(),
-)
+function rereference!(dat::EegData, reference_selection::Union{Symbol,Vector{Symbol}}, channel_selection::Function = channels())
 
     reference_channels = _get_reference_channels(dat, reference_selection)
 
@@ -117,11 +109,49 @@ function rereference!(
     _apply_rereference!(dat.data, selected_channels, reference_channels)
 
     # Store reference info
-    dat.analysis_info.reference =
-        reference_selection isa Symbol ? reference_selection : Symbol(join(reference_selection, '_'))
+    dat.analysis_info.reference = reference_selection isa Symbol ? reference_selection : Symbol(join(reference_selection, '_'))
 
     return nothing
 
+end
+
+"""
+    rereference!(dat::Vector{EpochData}, reference_selection; channel_selection=channels())
+
+Apply rereferencing in-place to a vector of EpochData objects.
+
+# Arguments
+- `dat::Vector{EpochData}`: Vector of epoch data to rereference
+- `reference_selection::Union{Symbol, Vector{Symbol}}`: Reference channels (`:avg`, `:mastoid`, or specific channels)
+- `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
+
+# Notes
+- Modifies each EpochData in the vector in-place by applying rereferencing
+- Reference channels can be special symbols (`:avg`, `:mastoid`) or specific channel names
+- Reference signal is calculated per epoch to maintain proper signal processing
+"""
+function rereference!(dat::Vector{EpochData}, reference_selection::Union{Symbol,Vector{Symbol}}, channel_selection::Function = channels())
+    rereference!.(dat, Ref(reference_selection), channel_selection)
+    return nothing
+end
+
+"""
+    rereference!(dat::Vector{ErpData}, reference_selection; channel_selection=channels())
+
+Apply rereferencing in-place to a vector of ErpData objects.
+
+# Arguments
+- `dat::Vector{ErpData}`: Vector of ERP data to rereference
+- `reference_selection::Union{Symbol, Vector{Symbol}}`: Reference channels (`:avg`, `:mastoid`, or specific channels)
+- `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
+
+# Notes
+- Modifies each ErpData in the vector in-place by applying rereferencing
+- Reference channels can be special symbols (`:avg`, `:mastoid`) or specific channel names
+"""
+function rereference!(dat::Vector{ErpData}, reference_selection::Union{Symbol,Vector{Symbol}}, channel_selection::Function = channels())
+    rereference!.(dat, Ref(reference_selection), channel_selection)
+    return nothing
 end
 
 # generates all non-mutating versions
@@ -150,12 +180,7 @@ end
 Process a single file through rereferencing pipeline.
 Returns BatchResult with success/failure info.
 """
-function _process_rereference_file(
-    filepath::String,
-    output_path::String,
-    reference_selection,
-    condition_selection::Function,
-)
+function _process_rereference_file(filepath::String, output_path::String, reference_selection, condition_selection::Function)
     filename = basename(filepath)
 
     # Load data
@@ -249,8 +274,7 @@ function rereference(
         end
 
         # Setup directories
-        output_dir =
-            something(output_dir, _default_rereference_output_dir(input_dir, file_pattern, reference_selection))
+        output_dir = something(output_dir, _default_rereference_output_dir(input_dir, file_pattern, reference_selection))
         mkpath(output_dir)
 
         # Find files
@@ -266,8 +290,7 @@ function rereference(
 
             # Create processing function with captured parameters
             process_fn =
-                (input_path, output_path) ->
-                    _process_rereference_file(input_path, output_path, reference_selection, condition_selection)
+                (input_path, output_path) -> _process_rereference_file(input_path, output_path, reference_selection, condition_selection)
 
             # Execute batch operation
             results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Rereferencing")

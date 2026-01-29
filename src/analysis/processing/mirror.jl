@@ -173,6 +173,55 @@ function mirror(data_vec::Vector{EpochData}, side::Symbol = :both)::Vector{Epoch
 end
 
 
+"""
+    mirror!(data_vec::Vector{ErpData}, side::Symbol = :both)::Nothing
+
+Mutating version of mirror for vector of ErpData objects.
+
+# Arguments
+- `data_vec::Vector{ErpData}`: Vector of ErpData objects to mirror (modified in-place)
+- `side::Symbol`: Which side to mirror (`:left`, `:right`, or `:both`, default: `:both`)
+
+# Returns
+- `Nothing`: All objects in the vector are modified in-place
+
+# Examples
+```julia
+# Mirror multiple ErpData objects
+mirror!(erps_vector, :both)  # Mirror both sides
+```
+"""
+function mirror!(data_vec::Vector{ErpData}, side::Symbol = :both)::Nothing
+    for dat in data_vec
+        mirror!(dat, side)
+    end
+    return nothing
+end
+
+
+"""
+    mirror(data_vec::Vector{ErpData}, side::Symbol = :both)::Vector{ErpData}
+
+Non-mutating version of mirror for vector of ErpData objects.
+
+# Arguments
+- `data_vec::Vector{ErpData}`: Vector of ErpData objects to mirror (NOT modified)
+- `side::Symbol`: Which side to mirror (`:left`, `:right`, or `:both`, default: `:both`)
+
+# Returns
+- `Vector{ErpData}`: New vector with mirrored ErpData objects
+
+# Examples
+```julia
+# Mirror multiple ErpData objects (creates new objects)
+mirrored_erps = mirror(erps_vector, :both)
+```
+"""
+function mirror(data_vec::Vector{ErpData}, side::Symbol = :both)::Vector{ErpData}
+    return [mirror(dat, side) for dat in data_vec]
+end
+
+
 #=============================================================================
     UNMIRRORING FUNCTIONS
 =============================================================================#
@@ -301,6 +350,55 @@ unmirrored_epochs = unmirror(epochs_vector, :both)
 ```
 """
 function unmirror(data_vec::Vector{EpochData}, side::Symbol = :both)::Vector{EpochData}
+    return [unmirror(dat, side) for dat in data_vec]
+end
+
+
+"""
+    unmirror!(data_vec::Vector{ErpData}, side::Symbol = :both)::Nothing
+
+Mutating version of unmirror for vector of ErpData objects.
+
+# Arguments
+- `data_vec::Vector{ErpData}`: Vector of ErpData objects to unmirror (modified in-place)
+- `side::Symbol`: Which side to unmirror (`:left`, `:right`, or `:both`, default: `:both`)
+
+# Returns
+- `Nothing`: All objects in the vector are modified in-place
+
+# Examples
+```julia
+# Unmirror multiple ErpData objects
+unmirror!(erps_vector, :both)  # Unmirror both sides
+```
+"""
+function unmirror!(data_vec::Vector{ErpData}, side::Symbol = :both)::Nothing
+    for dat in data_vec
+        unmirror!(dat, side)
+    end
+    return nothing
+end
+
+
+"""
+    unmirror(data_vec::Vector{ErpData}, side::Symbol = :both)::Vector{ErpData}
+
+Non-mutating version of unmirror for vector of ErpData objects.
+
+# Arguments
+- `data_vec::Vector{ErpData}`: Vector of ErpData objects to unmirror (NOT modified)
+- `side::Symbol`: Which side to unmirror (`:left`, `:right`, or `:both`, default: `:both`)
+
+# Returns
+- `Vector{ErpData}`: New vector with unmirrored ErpData objects
+
+# Examples
+```julia
+# Unmirror multiple ErpData objects (creates new objects)
+unmirrored_erps = unmirror(erps_vector, :both)
+```
+"""
+function unmirror(data_vec::Vector{ErpData}, side::Symbol = :both)::Vector{ErpData}
     return [unmirror(dat, side) for dat in data_vec]
 end
 

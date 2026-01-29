@@ -1537,11 +1537,11 @@ function plot_spatial_kurtosis_components(kurtosis_comps::Vector{Int}, metrics_d
     ax = Axis(fig[1, 1], xlabel = "Component", ylabel = "Spatial Kurtosis Z-Score", title = "Component Spatial Kurtosis Z-Scores")
 
     # Plot all components
-    scatter!(ax, metrics_df.Component, metrics_df.SpatialKurtosisZScore, color = :gray)
+    scatter!(ax, metrics_df.Component, metrics_df.z_spatial_kurtosis, color = :gray)
 
     # Highlight high kurtosis components
     if !isempty(kurtosis_comps)
-        kurtosis_values = metrics_df[in.(metrics_df.Component, Ref(kurtosis_comps)), :SpatialKurtosisZScore]
+        kurtosis_values = metrics_df[in.(metrics_df.Component, Ref(kurtosis_comps)), :z_spatial_kurtosis]
         scatter!(ax, kurtosis_comps, kurtosis_values, color = :red, markersize = 8)
 
         # Add labels for high kurtosis components
@@ -1721,7 +1721,7 @@ function plot_line_noise_components(
     ax1 = Axis(fig[1, 1], xlabel = "Component", ylabel = "Power Ratio Z-Score", title = "Line Frequency Power Ratio Z-Scores")
 
     # Plot all components with label
-    scatter!(ax1, metrics_df.Component, metrics_df.PowerRatioZScore, color = :gray, label = "All Components")
+    scatter!(ax1, metrics_df.Component, metrics_df.power_ratio_zscore, color = :gray, label = "All Components")
 
     # Highlight identified components with label
     if !isempty(line_noise_comps)
@@ -1729,7 +1729,7 @@ function plot_line_noise_components(
         scatter!(
             ax1,
             identified_metrics.Component,
-            identified_metrics.PowerRatioZScore,
+            identified_metrics.power_ratio_zscore,
             color = :red,
             markersize = 8,
             label = "Line Noise Components",
@@ -1738,7 +1738,7 @@ function plot_line_noise_components(
         # Add component numbers as labels
         for (i, comp) in enumerate(line_noise_comps)
             row = metrics_df[metrics_df.Component.==comp, :]
-            text!(ax1, comp, row.PowerRatioZScore[1], text = string(comp), color = :red, align = (:center, :bottom), fontsize = 10)
+            text!(ax1, comp, row.power_ratio_zscore[1], text = string(comp), color = :red, align = (:center, :bottom), fontsize = 10)
         end
     end
 
@@ -1752,8 +1752,7 @@ function plot_line_noise_components(
     ax2 = Axis(fig[1, 2], xlabel = "Component", ylabel = "Power Ratio", title = "Harmonic Power Ratios")
 
     # Plot harmonic ratios with labels
-    scatter!(ax2, metrics_df.Component, metrics_df.Harmonic2Ratio, color = :blue, label = "2nd Harmonic")
-    scatter!(ax2, metrics_df.Component, metrics_df.Harmonic3Ratio, color = :green, label = "3rd Harmonic")
+    scatter!(ax2, metrics_df.Component, metrics_df.harmonic_ratio, color = :blue, label = "2nd Harmonic")
 
     # Add reference line for minimum harmonic power with label
     hlines!(ax2, [min_harmonic_power], color = :gray, linestyle = :dash, label = "Min Harmonic Power")
@@ -1764,12 +1763,12 @@ function plot_line_noise_components(
         scatter!(
             ax2,
             identified_metrics.Component,
-            identified_metrics.Harmonic2Ratio,
+            identified_metrics.harmonic2_ratio,
             color = :red,
             markersize = 8,
             label = "Line Noise Components",
         )
-        scatter!(ax2, identified_metrics.Component, identified_metrics.Harmonic3Ratio, color = :red, markersize = 8)
+        scatter!(ax2, identified_metrics.Component, identified_metrics.harmonic3_ratio, color = :red, markersize = 8)
     end
 
     # Add legend

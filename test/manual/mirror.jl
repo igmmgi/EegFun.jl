@@ -1,17 +1,46 @@
 using EegFun
-# using BenchmarkTools
 
-dat = EegFun.read_raw_data("../Flank_C_3.bdf");
-layout = EegFun.read_layout("./data/layouts/biosemi/biosemi72.csv");
-dat = EegFun.create_eeg_dataframe(dat, layout);
+# read raw data
+dat = EegFun.read_raw_data("./data/raw_files/example1.bdf");
 
+# read and preprate layout file
+layout_file = EegFun.read_layout("./data/layouts/biosemi/biosemi72.csv");
+EegFun.polar_to_cartesian_xy!(layout_file)
+
+# create EegFun data structure (EegFun.ContinuousData)
+dat = EegFun.create_eeg_dataframe(dat, layout_file);
+
+# Some minimal preprocessing (average reference and highpass filter)
+EegFun.rereference!(dat, :avg)
+EegFun.highpass_filter!(dat, 0.1)
+
+# Create some epoched data
 epoch_cfg = [EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
-epochs = EegFun.extract_epochs(dat, epoch_cfg, -2, 4)
+epochs = EegFun.extract_epochs(dat, epoch_cfg, -0.2, 1.0)  # -200 to 1000 ms
 
-epochs_new = EegFun.mirror(epochs[1], :both)
-epochs[1].data
-epochs_new.data
+EegFun.plot_epochs(epochs, channel_selection = EegFun.channels([:Fp1]))
+
+epochs_new = EegFun.mirror(epochs, :pre)
+EegFun.plot_epochs(epochs_new, channel_selection = EegFun.channels([:Fp1]))
+
+epochs_new = EegFun.mirror(epochs, :post)
+EegFun.plot_epochs(epochs_new, channel_selection = EegFun.channels([:Fp1]))
 
 epochs_new = EegFun.mirror(epochs, :both)
-epochs[1].data
-epochs_new[1].data
+EegFun.plot_epochs(epochs_new, channel_selection = EegFun.channels([:Fp1]))
+
+# ERPs
+erps = EegFun.average_epochs(epochs)
+
+EegFun.plot_erp(erps, channel_selection = EegFun.channels([:Fp1]))
+
+erps_new = EegFun.mirror(erps, :pre)
+EegFun.plot_erp(erps_new, channel_selection = EegFun.channels([:Fp1]))
+
+erps_new = EegFun.mirror(erps, :post)
+EegFun.plot_erp(erps_new, channel_selection = EegFun.channels([:Fp1]))
+
+erps_new = EegFun.mirror(erps, :both)
+EegFun.plot_erp(erps_new, channel_selection = EegFun.channels([:Fp1]))
+
+
