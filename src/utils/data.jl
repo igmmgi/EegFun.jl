@@ -58,6 +58,25 @@ function get_cols_by_group(dat::EegData, group::Symbol)
 end
 
 
+"""
+    get_cols_by_group(dat::Vector{<:EegData}, group::Symbol) -> Vector{Symbol}
+
+Get columns by group type for a vector of EegData objects.
+Delegates to the first element (assumes all have the same structure).
+
+# Arguments
+- `dat::Vector{<:EegData}`: Vector of EEG data objects
+- `group::Symbol`: The group type (:metadata, :channels, :extra)
+
+# Returns
+- `Vector{Symbol}`: Column names of the specified group
+"""
+function get_cols_by_group(dat::Vector{<:EegData}, group::Symbol)
+    isempty(dat) && return Symbol[]
+    return get_cols_by_group(first(dat), group)
+end
+
+
 # === EEG DATA ACCESS FUNCTIONS ===
 """
     all_data(dat::EegData) -> DataFrame

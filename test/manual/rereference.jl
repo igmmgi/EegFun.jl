@@ -1,14 +1,18 @@
 using EegFun
-using GLMakie
 
-# Get some basic data with initial preprocessing steps (high-pass filter, epoch)
-data_file = joinpath(@__DIR__, "..", "..", "..", "Flank_C_3.bdf")
+# read raw data
+dat = EegFun.read_raw_data("./data/raw_files/example1.bdf");
+
+# read and preprate layout file
 layout_file = EegFun.read_layout("./data/layouts/biosemi/biosemi72.csv");
+EegFun.polar_to_cartesian_xy!(layout_file)
 
-dat = EegFun.read_raw_data(data_file);
+# create EegFun data structure (EegFun.ContinuousData)
 dat = EegFun.create_eeg_dataframe(dat, layout_file);
 
-dat.data
+# Some minimal preprocessing (average reference and highpass filter)
+EegFun.highpass_filter!(dat, 1)
+
 
 EegFun.rereference!(dat, :Fp1)
 dat.data
@@ -18,3 +22,33 @@ dat.data
 
 EegFun.rereference!(dat, :Fp1)
 dat.data
+
+EegFun.plot_databrowser(dat)
+
+
+# Create some epoched data
+epoch_cfg = [
+    EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]]),
+    EegFun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[2]]),
+]
+epochs = EegFun.extract_epochs(dat, epoch_cfg, -0.2, 1.0)  # -200 to 1000 ms
+
+EegFun.rereference!(epochs, :Fp1)
+EegFun.all_data(epochs[1])
+EegFun.all_data(epochs[2])
+
+EegFun.rereference!(epochs, :F1)
+EegFun.all_data(epochs[1])
+EegFun.all_data(epochs[2])
+
+
+# ERPs
+erps = EegFun.average_epochs(epochs)
+
+EegFun.rereference!(erps, :Fp1)
+EegFun.all_data(erps[1])
+EegFun.all_data(erps[2])
+
+EegFun.rereference!(erps, :F1)
+EegFun.all_data(erps[1])
+EegFun.all_data(erps[2])
