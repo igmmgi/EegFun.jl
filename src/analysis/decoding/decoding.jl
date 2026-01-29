@@ -408,6 +408,7 @@ end
         equalize_trials::Bool = true,
         cost::Float64 = 1.0,
         rng::AbstractRNG = Random.GLOBAL_RNG,
+        show_progress::Bool = true,
     )
 
 Perform multivariate pattern classification (decoding) analysis using LIBSVM 
@@ -432,6 +433,7 @@ using cross-validation to estimate classification accuracy at each time point.
 - `equalize_trials::Bool`: Whether to equalize number of trials across conditions (default: true, matches erplab)
 - `cost::Float64`: SVM regularization parameter (default: 1.0). Larger values = less regularization.
 - `rng::AbstractRNG`: Random number generator for reproducibility
+- `show_progress::Bool`: Show progress bar (default: true)
 
 # Returns
 - `DecodedData`: Object containing decoding results for this participant
@@ -450,6 +452,7 @@ function decode_libsvm(
     equalize_trials::Bool = true,
     cost::Float64 = 1.0,
     rng::AbstractRNG = Random.GLOBAL_RNG,
+    show_progress::Bool = true,
 )
 
     # Input validations
@@ -504,6 +507,11 @@ function decode_libsvm(
     X_all = Matrix{Float64}(undef, total_trials, n_channels)
     labels = Vector{Int}(undef, total_trials)
 
+    # Initialize progress bar if requested
+    if show_progress
+        progress = Progress(n_iterations, desc = "Decoding iterations: ", showspeed = true)
+    end
+
     # Main decoding loop
     for iter = 1:n_iterations
         shuffled_indices = _shuffle_trials(data_arrays, rng)
@@ -546,6 +554,11 @@ function decode_libsvm(
                 end
             end
         end
+
+        # Update progress bar
+        if show_progress
+            next!(progress)
+        end
     end
 
     # Average across iterations and folds
@@ -576,6 +589,43 @@ function decode_libsvm(
         raw_predictions = all_predictions,
     )
 
+end
+
+"""
+    decode_libsvm(
+        participant_epochs::Vector{Vector{EpochData}};
+        kwargs...
+    )
+
+Decode all participants at once (batch processing).
+
+This convenience method accepts the output from `prepare_decoding` and decodes
+all participants, returning a vector of DecodedData objects.
+
+# Arguments
+- `participant_epochs::Vector{Vector{EpochData}}`: Vector of participant data (from `prepare_decoding`)
+- `kwargs...`: All other arguments are passed to the single-participant `decode_libsvm` method
+
+# Returns
+- `Vector{DecodedData}`: Decoded results for all participants
+
+# Examples
+```julia
+# Prepare data
+participant_epochs = prepare_decoding("epochs_good", input_dir="/path/to/data", 
+                                     condition_selection=conditions([1, 2]))
+
+# Decode all participants at once
+all_decoded = decode_libsvm(participant_epochs; n_iterations=100, n_folds=5)
+
+# Statistics and visualization
+grand_avg = grand_average(all_decoded)
+stats = test_against_chance_cluster(all_decoded, alpha=0.05)
+plot_decoding(grand_avg, stats)
+```
+"""
+function decode_libsvm(participant_epochs::Vector{Vector{EpochData}}; kwargs...)
+    return [decode_libsvm(epochs; kwargs...) for epochs in participant_epochs]
 end
 
 # ====================================

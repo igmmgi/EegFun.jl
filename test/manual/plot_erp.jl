@@ -2,7 +2,7 @@ using EegFun
 using JLD2
 
 # read raw data
-dat = EegFun.read_raw_data("./data/raw_files/example1.bdf");
+dat = EegFun.read_raw_data("./data/files/example1.bdf");
 
 # read and preprate layout file
 layout_file = EegFun.read_layout("./data/layouts/biosemi/biosemi72.csv");
@@ -38,12 +38,7 @@ EegFun.plot_erp(
     layout_grid_skip_positions = [(2, 1)],
 )
 
-EegFun.plot_erp(
-    erps,
-    channel_selection = EegFun.channels([:Cz, :PO7, :PO8, :Fp1, :Fp2, :F3]),
-    layout = :grid,
-    layout_grid_dims = (2, 3),
-)
+EegFun.plot_erp(erps, channel_selection = EegFun.channels([:Cz, :PO7, :PO8, :Fp1, :Fp2, :F3]), layout = :grid, layout_grid_dims = (2, 3))
 
 EegFun.plot_erp(
     erps,

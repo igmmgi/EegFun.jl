@@ -36,6 +36,10 @@ const PLOT_DECODING_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :error_color => (:blue, "Color for error bars"),
     :error_alpha => (0.3, "Transparency for error shading"),
 
+    # Significance markers
+    :sig_color => (:black, "Color for significance markers"),
+    :sig_alpha => (0.5, "Transparency for significance markers"),
+
     # Grid
     :xgrid => (true, "Show x-axis grid (true/false)"),
     :ygrid => (true, "Show y-axis grid (true/false)"),
@@ -58,7 +62,7 @@ Add origin lines for decoding plots: x=0 and y=chance_level.
 """
 function _add_decoding_origin_lines!(ax::Axis, chance_level::Float64, plot_kwargs::Dict)
     # Add x=0 line and y=chance_level line
-    vlines!(ax, 0, color = :black, linewidth = 1, linestyle = :dash)
+    vlines!(ax, 0, color = :black, linewidth = 1, linestyle = :solid)
     hlines!(
         ax,
         chance_level,
@@ -83,14 +87,7 @@ function _plot_error_band!(
     stderror::Union{Vector{Float64},Nothing},
     plot_kwargs::Dict,
 )
-    band!(
-        ax,
-        times,
-        accuracy .- stderror,
-        accuracy .+ stderror,
-        color = (plot_kwargs[:error_color], plot_kwargs[:error_alpha]),
-        label = "±1 SE",
-    )
+    band!(ax, times, accuracy .- stderror, accuracy .+ stderror, color = (plot_kwargs[:error_color], plot_kwargs[:error_alpha]))
 end
 
 
@@ -154,7 +151,7 @@ end
 """
     _plot_decoding_to_axis!(ax::Axis, times::Vector{Float64}, accuracy::Vector{Float64},
                             stderror::Union{Vector{Float64}, Nothing}, chance_level::Float64,
-                            plot_kwargs::Dict; show_legend::Bool = true, curve_label::String = "Accuracy")
+                            plot_kwargs::Dict)
 
 Base function that plots decoding data to an existing axis.
 
@@ -172,8 +169,6 @@ This function handles the core plotting logic:
 - `stderror::Union{Vector{Float64}, Nothing}`: Standard error values (optional)
 - `chance_level::Float64`: Chance level for reference line
 - `plot_kwargs::Dict`: Plotting keyword arguments
-- `show_legend::Bool`: Whether to show legend (default: true)
-- `curve_label::String`: Label for accuracy curve (default: "Accuracy")
 """
 function _plot_decoding_to_axis!(
     ax::Axis,
@@ -182,8 +177,6 @@ function _plot_decoding_to_axis!(
     stderror::Union{Vector{Float64},Nothing},
     chance_level::Float64,
     plot_kwargs::Dict;
-    show_legend::Bool = true,
-    curve_label::String = "Accuracy",
 )
 
     _setup_axis_limits!(ax, times, accuracy, stderror, plot_kwargs)
@@ -199,12 +192,8 @@ function _plot_decoding_to_axis!(
     end
 
     # Plot main accuracy curve
-    _plot_accuracy_curve!(ax, times, accuracy, plot_kwargs; label = curve_label)
+    _plot_accuracy_curve!(ax, times, accuracy, plot_kwargs)
 
-    # Show legend if requested
-    if show_legend
-        axislegend(ax, position = :rt)
-    end
 end
 
 # ==============================================================================
@@ -376,7 +365,7 @@ function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
         stderror = decoded.stderror
 
         # Plot decoding data to axis (no legend for individual subplots)
-        _plot_decoding_to_axis!(ax, times, accuracy, stderror, chance_level, plot_kwargs; show_legend = false, curve_label = "")
+        _plot_decoding_to_axis!(ax, times, accuracy, stderror, chance_level, plot_kwargs)
     end
 
     # Display if requested
@@ -414,8 +403,8 @@ function plot_decoding(decoded::DecodedData, stats::DecodingStatisticsResult; kw
 
     # Extract parameters
     show_significance = get(kwargs, :show_significance, true)
-    sig_color = get(kwargs, :sig_color, :yellow)
-    sig_alpha = get(kwargs, :sig_alpha, 0.3)
+    sig_color = plot_kwargs[:sig_color]
+    sig_alpha = plot_kwargs[:sig_alpha]
     sig_bar_position = get(kwargs, :sig_bar_position, :bottom)
 
     # Validate that times match
@@ -443,6 +432,7 @@ function plot_decoding(decoded::DecodedData, stats::DecodingStatisticsResult; kw
 
     # Add significance markers if requested
     if show_significance && any(stats.significant_mask)
+
         # Find continuous significant regions
         sig_regions = _find_continuous_regions(stats.significant_mask, stats.times)
 

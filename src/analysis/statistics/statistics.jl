@@ -1,9 +1,5 @@
-# ====================================================================================
-# MAIN TEST FUNCTIONS
-# ====================================================================================
-# This module contains the main statistical test functions that users call:
+# This file contains the main statistical test functions that users call:
 # cluster_permutation_test() and analytic_ttest().
-
 """
     permutation_test(prepared::StatisticalData; kwargs...)
 
@@ -42,10 +38,7 @@ function permutation_test(
 
     # Validate threshold method
     if !(threshold_method in [:parametric, :nonparametric_common, :nonparametric_individual])
-        error(
-            "threshold_method must be :parametric, :nonparametric_common, or :nonparametric_individual. " *
-            "Got :$threshold_method",
-        )
+        error("threshold_method must be :parametric, :nonparametric_common, or :nonparametric_individual. " * "Got :$threshold_method")
     end
 
     # Compute observed t-matrix and df
@@ -90,8 +83,7 @@ function permutation_test(
 
         # Compute individual thresholds from permutation distribution
         @info "Computing non-parametric individual thresholds..."
-        thresh_pos_mat, thresh_neg_mat =
-            _compute_nonparametric_threshold_individual(permutation_t_matrices, threshold, tail)
+        thresh_pos_mat, thresh_neg_mat = _compute_nonparametric_threshold_individual(permutation_t_matrices, threshold, tail)
         critical_t_values = (thresh_pos_mat, thresh_neg_mat)
 
         # Threshold observed data
@@ -109,7 +101,7 @@ function permutation_test(
 
     # Build connectivity matrix
     @info "Building connectivity matrix..."
-    spatial_connectivity, _, _ = _build_connectivity_matrix(electrodes, layout, cluster_type)
+    spatial_connectivity = _build_connectivity_matrix(electrodes, layout, cluster_type)
 
     # Pre-filter masks to remove isolated points (FieldTrip's minNumChannels approach)
     if min_num_neighbors > 0
@@ -160,24 +152,14 @@ function permutation_test(
     # Compute p-values
     @info "Computing p-values..."
     if !isempty(positive_clusters)
-        positive_clusters = _compute_cluster_pvalues(
-            positive_clusters,
-            cluster_stats_positive,
-            permutation_max_positive,
-            n_permutations,
-            threshold,
-        )
+        positive_clusters =
+            _compute_cluster_pvalues(positive_clusters, cluster_stats_positive, permutation_max_positive, n_permutations, threshold)
         sort!(positive_clusters, by = c -> (!c.is_significant, -abs(c.cluster_stat)))
     end
 
     if !isempty(negative_clusters)
-        negative_clusters = _compute_cluster_pvalues(
-            negative_clusters,
-            cluster_stats_negative,
-            permutation_max_negative,
-            n_permutations,
-            threshold,
-        )
+        negative_clusters =
+            _compute_cluster_pvalues(negative_clusters, cluster_stats_negative, permutation_max_negative, n_permutations, threshold)
         sort!(negative_clusters, by = c -> (!c.is_significant, -abs(c.cluster_stat)))
     end
 
@@ -268,15 +250,9 @@ result = analytic_test(prepared, alpha=0.05, correction_method=:no)
 result = analytic_test(prepared, alpha=0.05, correction_method=:bonferroni)
 ```
 """
-function analytic_test(
-    prepared::StatisticalData;
-    alpha::Float64 = 0.05,
-    tail::Symbol = :both,
-    correction_method::Symbol = :no,
-)
+function analytic_test(prepared::StatisticalData; alpha::Float64 = 0.05, tail::Symbol = :both, correction_method::Symbol = :no)
 
-    correction_method ∉ (:no, :bonferroni) &&
-        @minimal_error "correction_method must be :no or :bonferroni. Got :$correction_method"
+    correction_method ∉ (:no, :bonferroni) && @minimal_error "correction_method must be :no or :bonferroni. Got :$correction_method"
     tail ∉ (:both, :left, :right) && @minimal_error "tail must be :both, :left, or :right. Got :$tail"
 
     # Compute t-statistics, degrees of freedom, and p-values in one pass

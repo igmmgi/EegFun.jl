@@ -1,7 +1,7 @@
 using EegFun
 
 # read raw data
-dat = EegFun.read_raw_data("./data/raw_files/example1.bdf");
+dat = EegFun.read_raw_data("./data/files/example1.bdf");
 
 # count from raw file
 count = EegFun.trigger_count(dat)

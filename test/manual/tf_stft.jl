@@ -38,7 +38,7 @@ EegFun.plot_time_frequency(tf_data, ylogscale = true)
 @info EegFun.section("TEST 2: Cohen Data Chapter 13")
 #######################################################################
 # This is some data that was presented in Cohen: Analyzin Neural Time Series Data
-data_cohen = EegFun.load_data("./data/raw_files/tf_test_epochs.jld2");
+data_cohen = EegFun.load_data("./data/files/tf_test_epochs.jld2");
 
 # Figure 13.11 A)
 tf_data =

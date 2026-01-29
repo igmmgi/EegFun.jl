@@ -41,7 +41,6 @@ using TOML
 
 # Machine learning (for decoding/MVPA)
 using LIBSVM
-using Base: SubArray
 
 # TODO: consider using Threads.@threads for parallel processing?
 # using Base.Threads
@@ -115,6 +114,7 @@ include("analysis/time_frequency/utils/utils.jl")
 
 # decoding analysis via libsvm
 include("analysis/decoding/decoding.jl")
+include("analysis/decoding/preparation.jl")
 include("analysis/decoding/decoding_statistics.jl")
 
 # RSA (Representational Similarity Analysis)

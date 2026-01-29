@@ -1,7 +1,7 @@
 using EegFun
 
 # read raw data
-dat = EegFun.read_raw_data("./data/raw_files/example1.bdf");
+dat = EegFun.read_raw_data("./data/files/example1.bdf");
 
 # read and preprate layout file
 layout_file = EegFun.read_layout("./data/layouts/biosemi/biosemi72.csv");

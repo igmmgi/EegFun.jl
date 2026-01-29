@@ -5,22 +5,18 @@ This module provides utilities to convert different types of "other" data
 (behavioral, computational, theoretical) into Representational Dissimilarity
 Matrices (RDMs) for comparison with neural RDMs.
 
-# Core Principle
-
-**You write code to convert your data to our format, then we handle the RSA operations.**
-
-The package defines clear input formats. You adapt your data to match these formats
-using helper functions (for common cases) or custom conversion code (for your specific data).
-
 # Input Format Specifications
+
+**Important**: Model RDMs expect **summarized/averaged values per condition**, not trial-by-trial data.
+You should average or summarize your behavioral/model data across trials BEFORE creating model RDMs.
 
 ## Static Models (Single Timepoint)
 
-For data with **one value per condition** (e.g., reaction times):
+For data with **one summary value per condition** (e.g., mean reaction times):
 
 **Expected Format**: `Vector{Float64}` [n_conditions]
-- One value per condition
-- Example: `[0.3, 0.5, 0.4]` for 3 conditions
+- One **averaged/representative** value per condition
+- Example: `[0.302, 0.501, 0.403]` = mean RTs for 3 conditions (already averaged across trials)
 
 **Helper Function**: `create_rdm_from_reaction_times(rts)`
 
@@ -48,83 +44,38 @@ For data with **many values per condition over time** (e.g., eye tracking, EDA):
 - Dimension 3: Time points
 - **Plus**: `Vector{Float64}` [n_timepoints] - time vector in seconds
 
-**Helper Function**: `create_temporal_rdm(data, times; align_to=neural_times)`
+**Helper Function**: `create_rdm_from_timeseries(data, times; align_to=neural_times)`
 
 **Key Feature**: Automatic temporal alignment! If your model data has different
 sampling rate than neural data, use `align_to` parameter to automatically resample.
 
 ---
-
-## Pre-computed RDMs
-
-If you already have RDMs computed:
-
-**Static RDM**: `Matrix{Float64}` [n_conditions × n_conditions]
-**Temporal RDM**: `Array{Float64, 3}` [n_timepoints × n_conditions × n_conditions]
-
-Pass directly to `compare_models()` - no conversion needed!
-
-# Workflow Example
-
-```julia
-# Step 1: Compute neural RDM from EEG data
-neural_rsa = rsa(epochs; channel_selection=channels([:Fz, :Cz, :Pz]))
-
-# Step 2: Convert your model data to our format
-
-# Example A: Reaction times (1 value per condition)
-rts = [0.3, 0.5, 0.4]  # Your data: 3 conditions
-rt_rdm = create_rdm_from_reaction_times(rts)  # Convert to RDM
-
-# Example B: Eye tracking (many values per condition over time)
-# Your data might be in any format - you convert it:
-function convert_my_eye_data(my_eye_data, condition_names)
-    n_conds = length(condition_names)
-    n_features = 3  # x, y, pupil
-    n_times = length(my_eye_data.times)
-    
-    data = zeros(Float64, n_conds, n_features, n_times)
-    for (i, cond) in enumerate(condition_names)
-        cond_data = my_eye_data[cond]  # Your data structure
-        data[i, 1, :] = cond_data.x_positions
-        data[i, 2, :] = cond_data.y_positions
-        data[i, 3, :] = cond_data.pupil_size
-    end
-    return data, my_eye_data.times
-end
-
-eye_data_array, eye_times = convert_my_eye_data(my_eye_data, condition_names)
-# Package handles temporal alignment automatically!
-eye_rdms = create_temporal_rdm(eye_data_array, eye_times; align_to=neural_rsa.times)
-
-# Step 3: Compare models
-rsa_with_models = compare_models(neural_rsa, [rt_rdm, eye_rdms], 
-                                  model_names=["RTs", "Eye Tracking"])
-
-# Step 4: Visualize
-plot_model_correlations(rsa_with_models)
-```
-
-# Handling Different Sampling Rates
-
-The package automatically handles temporal alignment when you provide `align_to`:
-
-```julia
-# Neural data: 500 Hz, -0.2 to 0.8s
-neural_rsa = rsa(epochs)
-
-# Eye tracking: 100 Hz, -0.2 to 0.5s (different sampling rate!)
-eye_data = Array{Float64, 3}  # [conditions × features × time] at 100 Hz
-eye_times = collect(-0.2:(1/100):0.5)  # 100 Hz timepoints
-
-# Automatic resampling to match neural data
-eye_rdms = create_temporal_rdm(eye_data, eye_times; align_to=neural_rsa.times)
-# Result: eye_rdms now has same timepoints as neural_rsa (500 Hz, -0.2 to 0.8s)
-```
 """
 
 # ==============================================================================
-#   CONVERT DATA TO RDMs
+#   HELPER FUNCTIONS
+# ==============================================================================
+
+"""
+    _fill_rdm_from_dissimilarities!(rdm::Matrix{Float64}, compute_dissim::Function)
+
+Fill an RDM matrix with dissimilarity values.
+
+# Arguments
+- `rdm::Matrix{Float64}`: Pre-allocated zero matrix
+- `compute_dissim::Function`: Function (i, j) -> dissimilarity value
+"""
+function _fill_rdm_from_dissimilarities!(rdm::Matrix{Float64}, compute_dissim::Function)
+    n = size(rdm, 1)
+    for i = 1:n, j = (i+1):n
+        dissim = compute_dissim(i, j)
+        rdm[i, j] = rdm[j, i] = dissim
+    end
+    return rdm
+end
+
+# ==============================================================================
+#   STATIC MODEL RDMs (ONE VALUE PER CONDITION)
 # ==============================================================================
 
 """
@@ -160,41 +111,11 @@ word_embeddings = [
 ]
 rdm = create_rdm_from_vectors(word_embeddings, dissimilarity_measure=:euclidean)
 ```
-
-# Custom Data Conversion
-
-If your data is in a different format, convert it first:
-
-```julia
-# Your data might be in a DataFrame or custom structure
-# Convert to Vector{Vector{Float64}} format
-function convert_my_embeddings(my_data, condition_names)
-    vectors = Vector{Vector{Float64}}()
-    for cond_name in condition_names
-        embedding = my_data[cond_name]  # Your data structure
-        push!(vectors, embedding)  # Must be Vector{Float64}
-    end
-    return vectors
-end
-
-embeddings = convert_my_embeddings(my_data, ["Face", "Object", "Scene"])
-rdm = create_rdm_from_vectors(embeddings)
-```
 """
 function create_rdm_from_vectors(vectors::Vector{Vector{Float64}}; dissimilarity_measure::Symbol = :correlation)
     n_conditions = length(vectors)
     rdm = zeros(Float64, n_conditions, n_conditions)
-
-    # Only compute upper triangle for efficiency
-    for i = 1:n_conditions
-        rdm[i, i] = 0.0
-        for j = (i+1):n_conditions
-            dissim = _compute_dissimilarity(vectors[i], vectors[j], dissimilarity_measure)
-            rdm[i, j] = dissim
-            rdm[j, i] = dissim  # Symmetric
-        end
-    end
-
+    _fill_rdm_from_dissimilarities!(rdm, (i, j) -> _compute_dissimilarity(vectors[i], vectors[j], dissimilarity_measure))
     return rdm
 end
 
@@ -231,47 +152,11 @@ image_features = [
 ]
 rdm = create_rdm_from_matrix(image_features, dissimilarity_measure=:correlation)
 ```
-
-# Custom Data Conversion
-
-If your data is in a different format, convert it first:
-
-```julia
-# Your data might be in a DataFrame
-# Convert to Matrix{Float64} format
-function convert_my_features(my_df::DataFrame, condition_col::Symbol, feature_cols::Vector{Symbol})
-    conditions = unique(my_df[!, condition_col])
-    n_conds = length(conditions)
-    n_features = length(feature_cols)
-    
-    matrix = zeros(Float64, n_conds, n_features)
-    for (i, cond) in enumerate(conditions)
-        cond_data = my_df[my_df[!, condition_col] .== cond, :]
-        matrix[i, :] = vec(cond_data[1, feature_cols])  # First row for this condition
-    end
-    return matrix
-end
-
-feature_matrix = convert_my_features(my_data, :condition, [:feat1, :feat2, :feat3])
-rdm = create_rdm_from_matrix(feature_matrix)
-```
 """
 function create_rdm_from_matrix(data_matrix::Matrix{Float64}; dissimilarity_measure::Symbol = :correlation)
     n_conditions = size(data_matrix, 1)
     rdm = zeros(Float64, n_conditions, n_conditions)
-
-    # Only compute upper triangle for efficiency
-    for i = 1:n_conditions
-        rdm[i, i] = 0.0
-        for j = (i+1):n_conditions
-            pattern_i = vec(data_matrix[i, :])
-            pattern_j = vec(data_matrix[j, :])
-            dissim = _compute_dissimilarity(pattern_i, pattern_j, dissimilarity_measure)
-            rdm[i, j] = dissim
-            rdm[j, i] = dissim  # Symmetric
-        end
-    end
-
+    _fill_rdm_from_dissimilarities!(rdm, (i, j) -> _compute_dissimilarity(data_matrix[i, :], data_matrix[j, :], dissimilarity_measure))
     return rdm
 end
 
@@ -400,17 +285,6 @@ rdm = create_rdm_from_reaction_times(rts)
 # Object     0.2   0.0    0.1
 # Scene      0.1   0.1    0.0
 ```
-
-# Custom Data Conversion
-
-If your data is in a different format, convert it first:
-
-```julia
-# Your data might be in a DataFrame
-my_data = DataFrame(condition=["Face", "Object", "Scene"], rt=[0.3, 0.5, 0.4])
-rts = my_data.rt  # Extract to Vector{Float64}
-rdm = create_rdm_from_reaction_times(rts)
-```
 """
 function create_rdm_from_reaction_times(rts::Vector{Float64})
     n_conditions = length(rts)
@@ -428,6 +302,7 @@ function create_rdm_from_reaction_times(rts::Vector{Float64})
 
     return rdm
 end
+
 
 """
     create_rdm_from_categorical(categories::Vector{Int})
@@ -469,7 +344,6 @@ end
 # ==============================================================================
 #   TEMPORAL ALIGNMENT AND RESAMPLING
 # ==============================================================================
-
 """
     resample_temporal_data(
         temporal_data::Array{Float64, 3},
@@ -607,7 +481,7 @@ function resample_temporal_data(
 end
 
 """
-    create_temporal_rdm(
+    create_rdm_from_timeseries(
         temporal_data::Array{Float64, 3},
         times::Vector{Float64};
         dissimilarity_measure::Symbol = :correlation,
@@ -645,88 +519,8 @@ use `align_to` to automatically resample to match neural timepoints.
   - If `align_to` provided: matches length of `align_to` timepoints
   - If `align_to` is `nothing`: matches length of input `times`
 
-# Examples
-
-## Eye Tracking Data
-
-```julia
-# Your eye tracking data: 3 conditions, 3 features (x, y, pupil), 100 timepoints at 100 Hz
-n_conditions = 3
-n_features = 3
-n_times = 100
-eye_data = zeros(Float64, n_conditions, n_features, n_times)
-eye_times = collect(-0.2:(1/100):0.79)  # 100 Hz, -0.2 to 0.79s
-
-# Fill with your data (you write this conversion code)
-eye_data[1, 1, :] = face_x_positions  # Condition 1, feature 1 (x), all timepoints
-eye_data[1, 2, :] = face_y_positions  # Condition 1, feature 2 (y), all timepoints
-eye_data[1, 3, :] = face_pupil_size   # Condition 1, feature 3 (pupil), all timepoints
-# ... repeat for other conditions
-
-# Neural data: 500 Hz, -0.2 to 0.8s
-neural_rsa = rsa(epochs)
-
-# Automatic alignment to neural data timepoints
-eye_rdms = create_temporal_rdm(eye_data, eye_times; align_to=neural_rsa)
-# Result: eye_rdms has shape [500 × 3 × 3] matching neural_rsa timepoints
-```
-
-## EDA Data
-
-```julia
-# Your EDA data: 3 conditions, 1 feature (amplitude), 50 timepoints at 50 Hz
-eda_data = zeros(Float64, 3, 1, 50)
-eda_times = collect(-0.2:(1/50):0.78)  # 50 Hz
-
-# Fill with your data
-eda_data[1, 1, :] = face_eda_signal
-eda_data[2, 1, :] = object_eda_signal
-eda_data[3, 1, :] = scene_eda_signal
-
-# Align to neural data
-eda_rdms = create_temporal_rdm(eda_data, eda_times; align_to=neural_rsa.times)
-```
-
-## Custom Data Conversion
-
-If your data is in a different format, convert it first:
-
-```julia
-# Your data might be in a custom structure
-struct MyEyeData
-    conditions::Dict{String, DataFrame}
-    times::Vector{Float64}
-end
-
-function convert_my_eye_data(my_data::MyEyeData, condition_names::Vector{String})
-    n_conds = length(condition_names)
-    n_features = 3  # x, y, pupil
-    n_times = length(my_data.times)
-    
-    data = zeros(Float64, n_conds, n_features, n_times)
-    for (i, cond_name) in enumerate(condition_names)
-        cond_df = my_data.conditions[cond_name]  # Your DataFrame structure
-        data[i, 1, :] = cond_df.x_position
-        data[i, 2, :] = cond_df.y_position
-        data[i, 3, :] = cond_df.pupil_size
-    end
-    return data, my_data.times
-end
-
-# Use your converter
-eye_array, eye_times = convert_my_eye_data(my_eye_data, ["Face", "Object", "Scene"])
-eye_rdms = create_temporal_rdm(eye_array, eye_times; align_to=neural_rsa)
-```
-
-## Without Alignment (Use Model's Own Timepoints)
-
-```julia
-# If you want to keep model's original timepoints
-rdms = create_temporal_rdm(model_data, model_times)  # No align_to parameter
-# Result: rdms has shape [length(model_times) × n_conditions × n_conditions]
-```
 """
-function create_temporal_rdm(
+function create_rdm_from_timeseries(
     temporal_data::Array{Float64,3},
     times::Vector{Float64};
     dissimilarity_measure::Symbol = :correlation,
@@ -781,7 +575,7 @@ end
 
 
 """
-    create_temporal_rdm_from_vectors(
+    create_rdm_from_timeseries(
         temporal_vectors::Vector{Vector{Vector{Float64}}},
         times::Vector{Float64};
         dissimilarity_measure::Symbol = :correlation,
@@ -800,19 +594,8 @@ Create temporal RDMs from a vector of temporal feature vectors.
 # Returns
 - `rdms::Array{Float64, 3}`: Temporal RDMs [time × condition × condition]
 
-# Examples
-```julia
-# Eye tracking: 3 conditions, each with 100 timepoints, 2 features (x, y) per timepoint
-eye_tracking = [
-    [[x1, y1], [x2, y2], ...],  # Condition 1: 100 timepoints
-    [[x1, y1], [x2, y2], ...],  # Condition 2: 100 timepoints
-    [[x1, y1], [x2, y2], ...],  # Condition 3: 100 timepoints
-]
-times = collect(-0.2:(1/250):0.2)
-rdms = create_temporal_rdm_from_vectors(eye_tracking, times)
-```
 """
-function create_temporal_rdm_from_vectors(
+function create_rdm_from_timeseries(
     temporal_vectors::Vector{Vector{Vector{Float64}}},
     times::Vector{Float64};
     dissimilarity_measure::Symbol = :correlation,
@@ -838,7 +621,7 @@ function create_temporal_rdm_from_vectors(
         end
     end
 
-    return create_temporal_rdm(temporal_data, times; dissimilarity_measure = dissimilarity_measure)
+    return create_rdm_from_timeseries(temporal_data, times; dissimilarity_measure = dissimilarity_measure)
 end
 
 """
@@ -859,7 +642,7 @@ model data will be resampled to match those timepoints (handles different sampli
 - `temporal_model_data::Dict{String, Any}`: Dictionary mapping model names to temporal data
   - `Tuple{Array{Float64, 3}, Vector{Float64}}`: (data, times) - data with its own timepoints
   - `Array{Float64, 3}`: Direct temporal data (uses `times` parameter)
-  - `Vector{Vector{Vector{Float64}}}`: Temporal vectors (see `create_temporal_rdm_from_vectors`)
+  - `Vector{Vector{Vector{Float64}}}`: Temporal vectors (see `create_rdm_from_timeseries`)
 - `times::Vector{Float64}`: Time points in seconds (used if model data doesn't provide its own)
 - `dissimilarity_measure::Symbol`: Measure to use
 - `align_to::Union{Vector{Float64}, RsaData, Nothing}`: Target timepoints to align to
@@ -871,32 +654,6 @@ model data will be resampled to match those timepoints (handles different sampli
 # Returns
 - `model_rdms::Vector{Array{Float64, 3}}`: Vector of temporal RDMs [time × condition × condition]
 - `model_names::Vector{String}`: Vector of model names
-
-# Examples
-```julia
-# Option 1: Model data with same timepoints as neural data
-temporal_models = Dict(
-    "Eye Tracking" => eye_data,  # Array{Float64, 3} [conditions × features × time]
-    "EDA" => eda_data,           # Array{Float64, 3} [conditions × features × time]
-)
-rdms, names = create_temporal_model_rdms(temporal_models, neural_rsa.times)
-
-# Option 2: Model data with different sampling rates
-# Eye tracking at 100 Hz, EDA at 50 Hz, neural data at 500 Hz
-eye_times = collect(-0.2:(1/100):0.3)  # 100 Hz
-eda_times = collect(-0.2:(1/50):0.3)   # 50 Hz
-neural_rsa = rsa(epochs)  # 500 Hz
-
-temporal_models = Dict(
-    "Eye Tracking" => (eye_data, eye_times),  # Tuple with data and its times
-    "EDA" => (eda_data, eda_times),
-)
-rdms, names = create_temporal_model_rdms(
-    temporal_models, 
-    neural_rsa.times,  # Will be used if model doesn't provide times
-    align_to=neural_rsa  # Resample all models to neural timepoints (can pass RsaData directly!)
-)
-```
 """
 function create_temporal_model_rdms(
     temporal_model_data::Dict{String,Any},
@@ -922,7 +679,7 @@ function create_temporal_model_rdms(
                 @minimal_error_throw("Model '$name': Tuple second element must be Vector{Float64}, got $(typeof(model_times))")
             end
             # Use align_to if provided, otherwise use model's own times
-            rdm = create_temporal_rdm(
+            rdm = create_rdm_from_timeseries(
                 model_data,
                 model_times;
                 dissimilarity_measure = dissimilarity_measure,
@@ -932,7 +689,7 @@ function create_temporal_model_rdms(
         elseif isa(data, Array{Float64,3})
             # Direct temporal data [conditions × features × time]
             # Use align_to if provided
-            rdm = create_temporal_rdm(
+            rdm = create_rdm_from_timeseries(
                 data,
                 times;
                 dissimilarity_measure = dissimilarity_measure,
@@ -955,7 +712,7 @@ function create_temporal_model_rdms(
                     model_data[cond_idx, :, t] = data[cond_idx][t]
                 end
             end
-            rdm = create_temporal_rdm(
+            rdm = create_rdm_from_timeseries(
                 model_data,
                 times;
                 dissimilarity_measure = dissimilarity_measure,
@@ -982,11 +739,29 @@ end
 #   CONVENIENCE FUNCTION FOR MULTIPLE MODEL TYPES
 # ==============================================================================
 
+# Helper functions using multiple dispatch for type detection
+_create_single_rdm(data::Vector{Vector{Float64}}) = create_rdm_from_vectors(data)
+_create_single_rdm(data::Vector{Float64}) = create_rdm_from_reaction_times(data)
+_create_single_rdm(data::Vector{Int}) = create_rdm_from_categorical(data)
+
+function _create_single_rdm(data::Matrix{Float64})
+    # Check if it's already an RDM or similarity matrix
+    if size(data, 1) == size(data, 2) && issymmetric(data)
+        if all(diag(data) .== 0.0) && all(data .>= 0.0)
+            # Looks like an RDM already
+            return copy(data)
+        else
+            # Treat as similarity matrix
+            return create_rdm_from_similarity_ratings(data)
+        end
+    else
+        # Data matrix (conditions × features)
+        return create_rdm_from_matrix(data)
+    end
+end
+
 """
-    create_model_rdms(
-        model_data::Dict{String, Any};
-        condition_order::Union{Vector{String}, Nothing} = nothing,
-    )
+    create_model_rdms(model_data::Dict{String, Any})
 
 Create multiple model RDMs from a dictionary of different model types.
 
@@ -996,79 +771,29 @@ This function automatically detects the type of each model and converts it to an
 - `model_data::Dict{String, Any}`: Dictionary mapping model names to their data
   - `Vector{Vector{Float64}}`: Feature vectors → RDM via `create_rdm_from_vectors`
   - `Matrix{Float64}`: Data matrix → RDM via `create_rdm_from_matrix`
-  - `Vector{Float64}`: If length matches n_conditions, treated as reaction times
-  - `Matrix{Float64}` with symmetric structure: Treated as similarity matrix
-- `condition_order::Union{Vector{String}, Nothing}`: Order of conditions (for validation)
+  - `Vector{Float64}`: Reaction times (one value per condition)
+  - `Vector{Int}`: Categorical labels
+  - Symmetric `Matrix{Float64}`: Treated as similarity matrix or pre-computed RDM
 
 # Returns
 - `model_rdms::Vector{Matrix{Float64}}`: Vector of model RDMs
 - `model_names::Vector{String}`: Vector of model names
-
-# Examples
-```julia
-# Create RDMs from different model types
-models = Dict(
-    "Semantic Model" => [
-        [0.1, 0.2, 0.3],  # word embeddings
-        [0.2, 0.3, 0.4],
-        [0.5, 0.6, 0.7],
-    ],
-    "Reaction Times" => [0.3, 0.5, 0.4],
-    "Similarity Ratings" => [
-        1.0 2.0 5.0;
-        2.0 1.0 4.0;
-        5.0 4.0 1.0
-    ],
-)
-rdms, names = create_model_rdms(models)
-rsa_with_models = compare_models(rsa_result, rdms, model_names=names)
-```
 """
-function create_model_rdms(model_data::Dict{String,Any}; condition_order::Union{Vector{String},Nothing} = nothing)
+function create_model_rdms(model_data::Dict{String,Any})
     model_rdms = Matrix{Float64}[]
     model_names = String[]
 
     for (name, data) in model_data
-        rdm = nothing
-
-        if isa(data, Vector{Vector{Float64}})
-            # Feature vectors
-            rdm = create_rdm_from_vectors(data)
-        elseif isa(data, Matrix{Float64})
-            if size(data, 1) == size(data, 2) && issymmetric(data)
-                # Already an RDM or similarity matrix
-                if all(diag(data) .== 0.0) && all(data .>= 0.0)
-                    # Looks like an RDM already
-                    rdm = copy(data)
-                else
-                    # Treat as similarity matrix
-                    rdm = create_rdm_from_similarity_ratings(data)
-                end
-            else
-                # Data matrix (conditions × features)
-                rdm = create_rdm_from_matrix(data)
-            end
-        elseif isa(data, Vector{Float64})
-            if !isnothing(condition_order) && length(data) == length(condition_order)
-                # Reaction times
-                rdm = create_rdm_from_reaction_times(data)
-            else
-                # Try as feature vectors (single vector per condition)
-                @minimal_warning "Treating Vector{Float64} as reaction times. If this is wrong, use create_rdm_from_vectors()"
-                rdm = create_rdm_from_reaction_times(data)
-            end
-        elseif isa(data, Vector{Int})
-            # Categorical labels
-            rdm = create_rdm_from_categorical(data)
-        else
+        try
+            rdm = _create_single_rdm(data)
+            push!(model_rdms, rdm)
+            push!(model_names, name)
+        catch e
             @minimal_error_throw(
-                "Unknown model data type for '$name': $(typeof(data)). " *
+                "Failed to create RDM for model '$name' with data type $(typeof(data)). " *
                 "Supported types: Vector{Vector{Float64}}, Matrix{Float64}, Vector{Float64}, Vector{Int}"
             )
         end
-
-        push!(model_rdms, rdm)
-        push!(model_names, name)
     end
 
     return model_rdms, model_names

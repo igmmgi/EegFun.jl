@@ -231,22 +231,17 @@ end
 Helper function for peak measurements with robust detection and fallback.
 Returns (peak_value, peak_index) or (nothing, nothing) if no robust peak found.
 """
-function _compute_peak_measurement(
-    chan_data::AbstractVector,
-    peak_type::Symbol,
-    local_window::Int,
-    channel_name::Symbol,
-    measurement_name::String,
-)
-    n_samples = length(chan_data)
+function _compute_peak_measurement(chan_data::AbstractVector, peak_type::Symbol, local_window::Int, channel_name::Symbol)
     total_window = 2 * local_window + 1
-    if total_window > n_samples
-        @minimal_warning "Channel $channel_name: local_window ($local_window, total window $total_window) > analysis window length ($n_samples samples). Cannot detect robust peak, using simple $measurement_name."
+    if total_window > length(chan_data)
+        peak_name = peak_type == :max ? "maximum" : "minimum"
+        @minimal_warning "Channel $channel_name: local_window ($local_window, total window $total_window) > analysis window length ($(length(chan_data)) samples). Cannot detect robust peak, using simple $peak_name."
     end
 
     peak_val, peak_idx = _find_robust_peak(chan_data, peak_type; local_window = local_window)
     if isnothing(peak_val)
-        @minimal_warning "Channel $channel_name: No robust $(peak_type == :max ? "maximum" : "minimum") peak found, using simple $measurement_name"
+        peak_name = peak_type == :max ? "maximum" : "minimum"
+        @minimal_warning "Channel $channel_name: No robust $peak_name peak found, using simple $peak_name"
         peak_idx = peak_type == :max ? argmax(chan_data) : argmin(chan_data)
         peak_val = peak_type == :max ? maximum(chan_data) : minimum(chan_data)
     end
@@ -273,11 +268,8 @@ function _compute_measurement(
     elseif analysis_type in ["max_peak_amplitude", "min_peak_amplitude", "max_peak_latency", "min_peak_latency"]
         peak_type = startswith(analysis_type, "max") ? :max : :min
         local_window = measurement_kwargs[:local_window]
-        measurement_name =
-            analysis_type == "max_peak_amplitude" ? "maximum" :
-            analysis_type == "min_peak_amplitude" ? "minimum" : analysis_type == "max_peak_latency" ? "maximum latency" : "minimum latency"
 
-        peak_val, peak_idx = _compute_peak_measurement(chan_data, peak_type, local_window, channel_name, measurement_name)
+        peak_val, peak_idx = _compute_peak_measurement(chan_data, peak_type, local_window, channel_name)
 
         if analysis_type in ["max_peak_amplitude", "min_peak_amplitude"]
             return peak_val
@@ -290,8 +282,8 @@ function _compute_measurement(
         local_window = measurement_kwargs[:local_window]
 
         # Find both max and min peaks
-        max_val, max_idx = _compute_peak_measurement(chan_data, :max, local_window, channel_name, "maximum")
-        min_val, min_idx = _compute_peak_measurement(chan_data, :min, local_window, channel_name, "minimum")
+        max_val, max_idx = _compute_peak_measurement(chan_data, :max, local_window, channel_name)
+        min_val, min_idx = _compute_peak_measurement(chan_data, :min, local_window, channel_name)
 
         # Handle cases where peaks weren't found
         if isnothing(max_val) || isnothing(min_val)
@@ -343,8 +335,8 @@ function _compute_measurement(
         isnothing(selected_times) && error("selected_times should not be nothing for fractional_peak_latency")
         # Find the peak with maximum absolute value using robust detection
         local_window = measurement_kwargs[:local_window]
-        max_val, max_idx = _compute_peak_measurement(chan_data, :max, local_window, channel_name, "maximum")
-        min_val, min_idx = _compute_peak_measurement(chan_data, :min, local_window, channel_name, "minimum")
+        max_val, max_idx = _compute_peak_measurement(chan_data, :max, local_window, channel_name)
+        min_val, min_idx = _compute_peak_measurement(chan_data, :min, local_window, channel_name)
 
         # Use the peak with larger absolute value
         peak_idx = abs(max_val) >= abs(min_val) ? max_idx : min_idx
@@ -501,10 +493,10 @@ function _process_measurements_file(
         # Get DataFrame(s) - ErpData has single df, EpochData has vector
         dfs_to_process = if data isa DataFrame
             [data]
-        elseif hasproperty(data, :data)
+        elseif data isa Union{ErpData,EpochData}
             data.data isa Vector{DataFrame} ? data.data : [data.data]
         else
-            [data.data]
+            @minimal_error_throw "Unexpected data type: $(typeof(data))"
         end
 
         # Apply baseline correction if baseline window is specified (not default all samples)
@@ -519,9 +511,7 @@ function _process_measurements_file(
                 @minimal_error_throw "Baseline window must be a contiguous range of samples (detected non-contiguous indices in file $filename)"
             end
 
-            # Get channel columns (exclude metadata)
-            all_channels = setdiff(propertynames(first_df), metadata_cols)
-            # channels() returns a predicate that operates on a vector, not individual elements
+            # Reuse already-computed all_channels from earlier
             eeg_channels = all_channels[channels()(all_channels)]
 
             if !isempty(eeg_channels)
@@ -536,16 +526,14 @@ function _process_measurements_file(
             @minimal_warning "Baseline window matched no samples. Skipping baseline correction."
         end
 
-        # Use pre-determined selected_channels (already computed for type stability)
-
         # Add condition and condition_name to DataFrames if not present and available from data object
-        if (data isa ErpData || data isa EpochData)
+        if data isa Union{ErpData,EpochData}
             for df in dfs_to_process
                 if !hasproperty(df, :condition)
                     insertcols!(df, 1, :condition => data.condition)
                 end
                 if !hasproperty(df, :condition_name)
-                    insertcols!(df, hasproperty(df, :condition) ? 2 : 1, :condition_name => data.condition_name)
+                    insertcols!(df, 2, :condition_name => data.condition_name)
                 end
             end
         end
@@ -764,37 +752,29 @@ function erp_measurements(
         @info "Saved $(nrow(results_df)) measurement(s) to: $output_csv"
         @info "Analysis complete! Processed $processed_count files successfully, $error_count errors"
 
-        # Evaluate predicates on actual data to get readable descriptions
-        # Load the first file to get actual time range
+        # Generate window descriptions for result metadata
         analysis_window_desc = "custom"
         baseline_window_desc = baseline_window === nothing ? "none" : "custom"
 
         if !isempty(files)
             try
-                println("Loading data from $(files[1])")
                 first_file = joinpath(input_dir, files[1])
                 data = load_data(first_file)
 
                 mask = analysis_window(data[1].data)
-
-
-
                 selected_times = time(data)[mask]
                 time_min = round(minimum(selected_times), digits = 3)
                 time_max = round(maximum(selected_times), digits = 3)
                 analysis_window_desc = "$time_min:$time_max S"
+
                 mask = baseline_window(data[1].data)
                 selected_times = time(data)[mask]
                 time_min = round(minimum(selected_times), digits = 3)
                 time_max = round(maximum(selected_times), digits = 3)
                 baseline_window_desc = "$time_min:$time_max S"
-
             catch
-                println("Error loading data: ")
-                # If loading fails, use "custom" descriptions
+                # If loading fails, use "custom" descriptions (already set above)
             end
-        else
-            @minimal_warning "No files found"
         end
 
         # Return as ErpMeasurementsResult with metadata

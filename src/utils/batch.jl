@@ -220,6 +220,27 @@ function group_by_condition(erps::Vector{<:ErpData})
     return OrderedDict(sort(collect(grouped), by = first))
 end
 
+"""
+    group_by_condition(epochs::Vector{<:EpochData})
+
+Group Epochs by their condition number.
+
+# Arguments
+- `epochs::Vector{<:EpochData}`: Epochs to group
+
+# Returns
+- `OrderedDict{Int, Vector{EpochData}}`: Epochs grouped by condition number (sorted)
+"""
+function group_by_condition(epochs::Vector{<:EpochData})
+    grouped = OrderedDict{Int,Vector{EpochData}}()
+    for epoch in epochs
+        cond_num = epoch.condition
+        push!(get!(grouped, cond_num, EpochData[]), epoch)
+    end
+    # Sort by condition number
+    return OrderedDict(sort(collect(grouped), by = first))
+end
+
 
 """
     validate_input_dir(dir::String)

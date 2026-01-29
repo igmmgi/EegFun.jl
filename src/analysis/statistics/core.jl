@@ -1,7 +1,4 @@
-# ====================================================================================
-# CORE STATISTICAL FUNCTIONS
-# ====================================================================================
-# This module contains the core data preparation and t-test computation functions
+# This file contains the core data preparation and t-test computation functions
 # for statistical testing of EEG/ERP data.
 
 """
@@ -78,8 +75,8 @@ function prepare_stats(
     baseline!.(condition2, Ref(baseline_window))
 
     # create grand averages for ease of use in plotting results
-    condition1_avg = grand_average(condition1, selected_cond_nums[1])
-    condition2_avg = grand_average(condition2, selected_cond_nums[2])
+    condition1_avg = _create_grand_average(condition1, selected_cond_nums[1])
+    condition2_avg = _create_grand_average(condition2, selected_cond_nums[2])
 
     # create second subset with analysis_window for statistical tests
     condition1 = subset(condition1; channel_selection = channel_selection, sample_selection = analysis_window)
@@ -90,6 +87,7 @@ function prepare_stats(
 
     # Get dimensions and metadata from analysis subset
     electrodes = channel_labels(condition1[1])
+    n_electrodes = length(electrodes)
     time_points = condition1[1].data[!, :time]
     n_time = length(time_points)
 
@@ -134,7 +132,7 @@ function prepare_stats(
     analysis_window::Function = samples(),
 )
     # just load all appropriate data and call the main preparation function
-    all_erps = load_all_data(ErpData, file_pattern; input_dir = input_dir, participant_selection = participant_selection)
+    all_erps = load_all_data(ErpData, file_pattern, input_dir, participant_selection)
     isempty(all_erps) && @minimal_error_throw "No valid ERP data found matching pattern '$file_pattern' in $input_dir"
 
     return prepare_stats(
