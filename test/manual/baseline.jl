@@ -1,13 +1,20 @@
 using EegFun
-using GLMakie
 
-# Get some basic data with initial preprocessing steps (high-pass filter, epoch)
-data_file = joinpath(@__DIR__, "..", "..", "..", "Flank_C_3.bdf")
+# read raw data
+dat = EegFun.read_raw_data("./data/raw_files/example1.bdf");
+
+# read and preprate layout file
 layout_file = EegFun.read_layout("./data/layouts/biosemi/biosemi72.csv");
+EegFun.polar_to_cartesian_xy!(layout_file)
 
-dat = EegFun.read_raw_data(data_file)
-dat = EegFun.create_eeg_dataframe(dat, layout_file)
+# create EegFun data structure (EegFun.ContinuousData)
+dat = EegFun.create_eeg_dataframe(dat, layout_file);
 
+# Some minimal preprocessing (average reference and highpass filter)
+EegFun.rereference!(dat, :avg)
+EegFun.highpass_filter!(dat, 1)
+
+# Baseline stuff
 EegFun.baseline!(dat)
 
 EegFun.baseline!(dat, EegFun.IntervalIndex(start = 1, stop = 1));

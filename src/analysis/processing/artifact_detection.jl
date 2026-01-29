@@ -450,6 +450,40 @@ function n_extreme_value(
 end
 
 """
+    n_values(df::DataFrame, column::Symbol)
+
+Count the number of `true` values in a boolean column of a DataFrame.
+If the column is not found, returns 0.
+"""
+function n_values(df::DataFrame, column::Symbol)
+    column ∉ propertynames(df) && return 0
+    return sum(df[!, column])
+end
+
+"""
+    n_values(dat::SingleDataFrameEeg, column::Symbol)
+
+Count the number of `true` values in a boolean column of the data.
+"""
+n_values(dat::SingleDataFrameEeg, column::Symbol) = n_values(dat.data, column)
+
+"""
+    n_values(dat::MultiDataFrameEeg, column::Symbol)
+
+Count the total number of `true` values in a boolean column across all epochs.
+"""
+function n_values(dat::MultiDataFrameEeg, column::Symbol)
+    return sum(n_values(epoch, column) for epoch in dat.data)
+end
+
+"""
+    n_values(dat::Vector{<:EegData}, column::Symbol)
+
+Count the total number of `true` values in a boolean column across multiple data objects.
+"""
+n_values(dat::Vector{<:EegData}, column::Symbol) = sum(n_values(d, column) for d in dat)
+
+"""
     _n_extreme_value(df::DataFrame, channels::Vector{Symbol}, threshold::Float64)
 
 Internal function to count extreme values for specified channels.
