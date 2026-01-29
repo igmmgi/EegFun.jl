@@ -12,11 +12,7 @@ Internal function that applies baseline correction to specified channels in a Da
 - Subtracts the mean of the baseline interval from each specified channel
 - Modifies the input DataFrame in-place
 """
-function _apply_baseline!(
-    dat::DataFrame,
-    channels::Vector{Symbol},
-    baseline_interval::Union{IntervalIndex,IntervalTime},
-)
+function _apply_baseline!(dat::DataFrame, channels::Vector{Symbol}, baseline_interval::Union{IntervalIndex,IntervalTime})
     # Compute mean baseline interval and apply to each channel
     baseline_means = mean.(eachcol(dat[baseline_interval.start:baseline_interval.stop, channels]))
     for (channel, mean_val) in zip(channels, baseline_means)
@@ -29,11 +25,7 @@ end
 
 Internal function that applies baseline correction to each DataFrame in a vector using broadcasting.
 """
-function _apply_baseline!(
-    dat::Vector{DataFrame},
-    channels::Vector{Symbol},
-    baseline_interval::Union{IntervalIndex,IntervalTime},
-)
+function _apply_baseline!(dat::Vector{DataFrame}, channels::Vector{Symbol}, baseline_interval::Union{IntervalIndex,IntervalTime})
     _apply_baseline!.(dat, Ref(channels), Ref(baseline_interval))
 end
 
@@ -137,6 +129,50 @@ function baseline!(dat::Vector{EpochData}; channel_selection::Function = channel
     return nothing
 end
 
+"""
+    baseline!(dat::Vector{ErpData}, baseline_interval; channel_selection=channels())
+
+Apply baseline correction in-place to a vector of ErpData objects.
+
+# Arguments
+- `dat::Vector{ErpData}`: Vector of ERP data to baseline correct
+- `baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Function}`: Time/index interval for baseline calculation, or a predicate function
+- `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
+
+# Notes
+- Modifies each ErpData in the vector in-place by subtracting the baseline mean
+- Uses the specified time/index interval for baseline calculation
+- If a predicate function is provided, it's applied to each ERP's data to determine the baseline window
+"""
+function baseline!(
+    dat::Vector{ErpData},
+    baseline_interval::Union{AbstractInterval,Tuple{Real,Real},Function};
+    channel_selection::Function = channels(),
+)
+    baseline!.(dat, Ref(baseline_interval); channel_selection = channel_selection)
+    return nothing
+end
+
+
+
+"""
+    baseline!(dat::Vector{ErpData}; channel_selection=channels())
+
+Apply baseline correction in-place to a vector of ErpData objects using the entire time range.
+
+# Arguments
+- `dat::Vector{ErpData}`: Vector of ERP data to baseline correct
+- `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
+
+# Notes
+- Modifies each ErpData in the vector in-place by subtracting the baseline mean
+- Uses the entire time range for baseline calculation
+"""
+function baseline!(dat::Vector{ErpData}; channel_selection::Function = channels())
+    baseline!.(dat; channel_selection = channel_selection)
+    return nothing
+end
+
 # TODO: actually, these are probably not needed as baseline can just be applied inplace whenever it is needed
 # For now, just keep for a little bit of consistency with other functions?
 @add_nonmutating baseline!
@@ -146,11 +182,7 @@ end
     BASELINE-SPECIFIC HELPERS
 =============================================================================#
 """Generate default output directory name for baseline operation."""
-function _default_baseline_output_dir(
-    input_dir::String,
-    pattern::String,
-    baseline_interval::Union{IntervalIndex,IntervalTime},
-)
+function _default_baseline_output_dir(input_dir::String, pattern::String, baseline_interval::Union{IntervalIndex,IntervalTime})
     interval_str = "$(baseline_interval.start)_to_$(baseline_interval.stop)"
     joinpath(input_dir, "baseline_$(pattern)_$(interval_str)")
 end
@@ -183,11 +215,9 @@ function _validate_baseline_interval(
 
     # Validate structure
     if baseline_interval isa IntervalTime
-        baseline_interval.start > baseline_interval.stop &&
-            @minimal_error_throw "Baseline start must be <= stop, got: $baseline_interval"
+        baseline_interval.start > baseline_interval.stop && @minimal_error_throw "Baseline start must be <= stop, got: $baseline_interval"
     elseif baseline_interval isa IntervalIndex
-        baseline_interval.start > baseline_interval.stop &&
-            @minimal_error_throw "Baseline start must be <= stop, got: $baseline_interval"
+        baseline_interval.start > baseline_interval.stop && @minimal_error_throw "Baseline start must be <= stop, got: $baseline_interval"
     end
 
     return baseline_interval
@@ -380,9 +410,7 @@ function baseline(
 
         # Create processing function with captured parameters
         @info "Baseline interval: $baseline_interval"
-        process_fn =
-            (input_path, output_path) ->
-                _process_baseline_file(input_path, output_path, baseline_interval, condition_selection)
+        process_fn = (input_path, output_path) -> _process_baseline_file(input_path, output_path, baseline_interval, condition_selection)
 
         # Execute batch operation
         results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Baseline correction")
