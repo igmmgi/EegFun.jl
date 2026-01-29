@@ -613,13 +613,14 @@ end
 function show_additional_menu(state, clicked_region_idx = nothing)
 
     # Create the menu figure
+    # TODO: why does new window not always take this size?
     menu_fig = Figure(size = (300, 300))
     plot_types = ["Topoplot", "Spectrum", "Get Selected Regions"]
 
     menu_buttons = [Button(menu_fig[idx, 1], label = plot_type) for (idx, plot_type) in enumerate(plot_types)]
 
     for btn in menu_buttons
-        on(btn.clicks) do n
+        on(btn.clicks) do _
             if btn.label[] == "Get Selected Regions"
                 # Get the boolean vector of selected regions
                 selected_regions_bool = get_selected_regions_bool(state)
@@ -629,9 +630,7 @@ function show_additional_menu(state, clicked_region_idx = nothing)
                 @info "Selected regions: $(state.selection.selected_regions[])"
             else
                 selected_data = subset_selected_data(state, clicked_region_idx)
-                if selected_data === nothing
-                    return  # No data available, just return
-                end
+                isnothing(selected_data) && return # No data available, just return
                 if btn.label[] == "Topoplot"
                     plot_topography(selected_data)
                 elseif btn.label[] == "Spectrum"
