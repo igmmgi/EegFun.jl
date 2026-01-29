@@ -1,14 +1,6 @@
-# ====================================================================================
-# THRESHOLDING FUNCTIONS
-# ====================================================================================
-# This module contains all thresholding logic for statistical testing,
+# This file contains all thresholding logic for statistical testing,
 # including both parametric (t-distribution) and non-parametric (permutation-based)
 # thresholding methods.
-
-# ===================
-# PARAMETRIC THRESHOLDING
-# ===================
-
 """
     threshold_t_matrix_parametric!(mask_positive, mask_negative, t_matrix, critical_t_values, tail)
 
@@ -93,11 +85,7 @@ Creates new mask arrays and calls the in-place version.
 mask_pos, mask_neg = threshold_t_matrix_parametric(t_matrix, critical_t, :both)
 ```
 """
-function _threshold_t_matrix_parametric(
-    t_matrix::Array{Float64,2},
-    critical_t_values::Array{Float64,2},
-    tail::Symbol = :both,
-)
+function _threshold_t_matrix_parametric(t_matrix::Array{Float64,2}, critical_t_values::Array{Float64,2}, tail::Symbol = :both)
     n_electrodes, n_time = size(t_matrix)
     mask_positive = BitArray{2}(undef, n_electrodes, n_time)
     mask_negative = BitArray{2}(undef, n_electrodes, n_time)
@@ -164,11 +152,7 @@ Compute a single non-parametric threshold from pooled permutation distribution (
 thresh_pos, thresh_neg = compute_nonparametric_threshold_common(perm_t_matrices, 0.05, :both)
 ```
 """
-function _compute_nonparametric_threshold_common(
-    permutation_t_matrices::Array{Float64,3},
-    alpha::Float64 = 0.05,
-    tail::Symbol = :both,
-)
+function _compute_nonparametric_threshold_common(permutation_t_matrices::Array{Float64,3}, alpha::Float64 = 0.05, tail::Symbol = :both)
     if tail == :both
         # Two-tailed: collect all absolute t-values
         all_t_values = _collect_valid_t_values(permutation_t_matrices, t -> true, abs)
@@ -233,11 +217,7 @@ Compute point-specific non-parametric thresholds from permutation distribution (
 thresh_pos, thresh_neg = compute_nonparametric_threshold_individual(perm_t_matrices, 0.05, :both)
 ```
 """
-function _compute_nonparametric_threshold_individual(
-    permutation_t_matrices::Array{Float64,3},
-    alpha::Float64 = 0.05,
-    tail::Symbol = :both,
-)
+function _compute_nonparametric_threshold_individual(permutation_t_matrices::Array{Float64,3}, alpha::Float64 = 0.05, tail::Symbol = :both)
     n_electrodes, n_time, n_permutations = size(permutation_t_matrices)
 
     thresholds_positive = Array{Float64,2}(undef, n_electrodes, n_time)
@@ -450,14 +430,7 @@ function _threshold_t_matrix_nonparametric(
     mask_positive = BitArray{2}(undef, n_electrodes, n_time)
     mask_negative = BitArray{2}(undef, n_electrodes, n_time)
 
-    _threshold_t_matrix_nonparametric!(
-        mask_positive,
-        mask_negative,
-        t_matrix,
-        thresholds_positive,
-        thresholds_negative,
-        tail,
-    )
+    _threshold_t_matrix_nonparametric!(mask_positive, mask_negative, t_matrix, thresholds_positive, thresholds_negative, tail)
 
     return mask_positive, mask_negative
 end

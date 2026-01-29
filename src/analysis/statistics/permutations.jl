@@ -1,9 +1,5 @@
-# ====================================================================================
-# PERMUTATION FUNCTIONS
-# ====================================================================================
-# This module contains permutation logic for Monte Carlo statistical testing,
+# This file contains permutation logic for Monte Carlo statistical testing,
 # including label shuffling, t-matrix collection, and permutation loop execution.
-
 """
     _generate_swap_mask(n_participants, rng)
 

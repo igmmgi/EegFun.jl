@@ -1,14 +1,4 @@
-# ====================================================================================
-# CLUSTERING FUNCTIONS
-# ====================================================================================
-# This module contains clustering algorithms for finding connected components
-# in thresholded statistical data, including connectivity matrix building,
-# pre-filtering, BFS clustering, and cluster statistics computation.
-
-# ===================
-# CONNECTIVITY MATRIX
-# ===================
-
+# This file contains clustering functions for finding connected components
 """
     _build_connectivity_matrix(electrodes, layout, cluster_type)
 
@@ -20,18 +10,15 @@ Build connectivity matrix for clustering.
 - `cluster_type::Symbol`: `:spatial`, `:temporal`, or `:spatiotemporal`
 
 # Returns
-- `connectivity::SparseMatrixCSC{Bool}`: Connectivity matrix
-- `n_electrodes::Int`: Number of electrodes
-- `n_time::Int`: Number of time points (1 for spatial, actual for temporal/spatiotemporal)
+- `connectivity::SparseMatrixCSC{Bool}`: Spatial connectivity matrix [electrodes × electrodes]
 
 # Notes
-For spatiotemporal clustering, the connectivity matrix is for [electrodes × time] space.
-For spatial only, it's just [electrodes × electrodes].
-For temporal only, it's just consecutive time points.
+For all cluster types, returns the spatial connectivity matrix.
+Temporal connectivity is handled directly in the clustering algorithm.
 
 # Examples
 ```julia
-conn, n_elec, n_time = _build_connectivity_matrix(electrodes, layout, :spatiotemporal)
+conn = _build_connectivity_matrix(electrodes, layout, :spatiotemporal)
 ```
 """
 function _build_connectivity_matrix(electrodes::Vector{Symbol}, layout::Layout, cluster_type::Symbol)
@@ -68,25 +55,13 @@ function _build_connectivity_matrix(electrodes::Vector{Symbol}, layout::Layout, 
             end
         end
 
-        # Create sparse matrix
-        spatial_connectivity = sparse(I, J, true, n_electrodes, n_electrodes)
-
-        if cluster_type == :spatial
-            return spatial_connectivity, n_electrodes, 1
-        else # :spatiotemporal
-            # Matrix size: [electrodes × time] × [electrodes × time]
-            # This is complex - we'll build it as needed in cluster finding
-            # For now, return spatial connectivity and note that temporal is handled separately
-            return spatial_connectivity, n_electrodes, 1  # Time dimension handled separately
-        end
+        # Create sparse matrix and return
+        return sparse(I, J, true, n_electrodes, n_electrodes)
 
     elseif cluster_type == :temporal
-        # Temporal only: consecutive time points
-        # This will be handled differently - we'll build it per time dimension
-        # For now, return identity (will be handled in cluster finding)
-        n_time = 1  # Placeholder, actual time dimension handled separately
-        connectivity = sparse(Int[1], Int[1], Bool[true], 1, 1)
-        return connectivity, n_electrodes, n_time
+        # Temporal clustering doesn't use spatial connectivity
+        # Return empty sparse matrix (temporal connections handled in BFS)
+        return sparse(Int[], Int[], Bool[], n_electrodes, n_electrodes)
 
     else
         error("cluster_type must be :spatial, :temporal, or :spatiotemporal, got :$cluster_type")

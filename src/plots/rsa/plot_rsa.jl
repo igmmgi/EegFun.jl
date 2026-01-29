@@ -39,9 +39,12 @@ const PLOT_RSA_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 )
 
 """
-    plot_rdm(rsa_data::RsaData; time_point::Union{Float64, Int, Nothing} = nothing, kwargs...)
+    plot_rdm_heatmap(rsa_data::RsaData; time_point::Union{Float64, Int, Nothing} = nothing, kwargs...)
 
 Plot Representational Dissimilarity Matrix (RDM) as a heatmap.
+
+Shows a matrix visualization of pairwise dissimilarities between conditions
+at a specific time point or averaged across time.
 
 # Arguments
 - `rsa_data::RsaData`: RSA results
@@ -51,16 +54,16 @@ Plot Representational Dissimilarity Matrix (RDM) as a heatmap.
 # Examples
 ```julia
 # Plot RDM at a specific time point
-plot_rdm(rsa_result, time_point=0.3)
+plot_rdm_heatmap(rsa_result, time_point=0.3)
 
 # Plot average RDM across all time points
-plot_rdm(rsa_result)
+plot_rdm_heatmap(rsa_result)
 
 # Plot RDM at time index 50
-plot_rdm(rsa_result, time_point=50)
+plot_rdm_heatmap(rsa_result, time_point=50)
 ```
 """
-function plot_rdm(rsa_data::RsaData; time_point::Union{Float64,Int,Nothing} = nothing, kwargs...)
+function plot_rdm_heatmap(rsa_data::RsaData; time_point::Union{Float64,Int,Nothing} = nothing, kwargs...)
     # Merge defaults with user kwargs
     plot_kwargs = merge(PLOT_RSA_KWARGS, Dict(kwargs))
 
@@ -124,6 +127,142 @@ function plot_rdm(rsa_data::RsaData; time_point::Union{Float64,Int,Nothing} = no
     if _get_val(:show_colorbar)
         Colorbar(fig[1, 2], hm, label = "Dissimilarity")
     end
+
+    # Display if requested
+    if display_plot
+        display(fig)
+    end
+
+    return fig
+end
+
+"""
+    plot_rdm_timecourse(
+        rsa_data::RsaData;
+        condition_pairs::Union{Vector{Tuple{Int,Int}}, Symbol, Nothing} = :all,
+        kwargs...
+    )
+
+Plot dissimilarity timecourse for condition pairs.
+
+Shows how dissimilarity between conditions evolves over time as lines.
+This helps visualize when conditions become distinguishable.
+
+# Arguments
+- `rsa_data::RsaData`: RSA results
+- `condition_pairs`: Which condition pairs to plot
+  - `:all` - All pairwise comparisons (default)
+  - `:upper` - Upper triangle only (same as :all, no duplicates)
+  - `Vector{Tuple{Int,Int}}` - Specific pairs, e.g., `[(1,2), (1,3)]`
+- `kwargs`: Additional keyword arguments
+
+# Examples
+```julia
+# Plot all condition pairs
+plot_rdm_timecourse(rsa_result)
+
+# Plot only specific pairs
+plot_rdm_timecourse(rsa_result, condition_pairs=[(1,2), (1,3)])
+
+# Custom styling
+plot_rdm_timecourse(rsa_result, title="Dissimilarity Over Time")
+```
+"""
+function plot_rdm_timecourse(rsa_data::RsaData; condition_pairs::Union{Vector{Tuple{Int,Int}},Symbol,Nothing} = :all, kwargs...)
+    # Merge defaults with user kwargs
+    plot_kwargs = merge(PLOT_RSA_KWARGS, Dict(kwargs))
+
+    # Extract parameters (unwrap tuples if needed)
+    _get_val(k) = isa(plot_kwargs[k], Tuple) ? plot_kwargs[k][1] : plot_kwargs[k]
+    display_plot = _get_val(:display_plot)
+    figure_title = _get_val(:figure_title)
+    title_text = _get_val(:title)
+    show_title = _get_val(:show_title)
+
+    n_conditions = length(rsa_data.condition_names)
+    times = rsa_data.times
+
+    # Determine which pairs to plot
+    if isnothing(condition_pairs) || condition_pairs == :all || condition_pairs == :upper
+        pairs = [(i, j) for i = 1:n_conditions for j = (i+1):n_conditions]
+    else
+        pairs = condition_pairs
+        # Validate pairs
+        for (i, j) in pairs
+            if i < 1 || i > n_conditions || j < 1 || j > n_conditions
+                @minimal_error_throw("Invalid condition pair ($i, $j). Conditions range from 1 to $n_conditions")
+            end
+        end
+    end
+
+    # Auto-generate colors for pairs
+    colors = get(kwargs, :colors, nothing)
+    n_pairs = length(pairs)
+    if isnothing(colors)
+        colors = [:blue, :red, :green, :orange, :purple, :brown, :pink, :gray, :cyan, :magenta]
+        colors = [colors[mod1(i, length(colors))] for i = 1:n_pairs]
+    elseif colors isa Symbol
+        colors = fill(colors, n_pairs)
+    end
+
+    # Create figure
+    fig = Figure(title = figure_title)
+
+    if isempty(title_text)
+        title_str = "RDM Timecourse"
+    else
+        title_str = title_text
+    end
+
+    ax = Axis(
+        fig[1, 1],
+        title = show_title ? title_str : "",
+        xlabel = _get_val(:xlabel),
+        ylabel = "Dissimilarity",
+        xgridvisible = _get_val(:xgrid),
+        ygridvisible = _get_val(:ygrid),
+    )
+
+    # Set axis limits
+    xlim_val = _get_val(:xlim)
+    if !isnothing(xlim_val)
+        xlims!(ax, xlim_val)
+    else
+        xlims!(ax, (times[1], times[end]))
+    end
+
+    ylim_val = _get_val(:ylim)
+    if !isnothing(ylim_val)
+        ylims!(ax, ylim_val)
+    end
+
+    # Plot each condition pair
+    for (pair_idx, (i, j)) in enumerate(pairs)
+        # Extract dissimilarity timecourse for this pair
+        dissim_time = [rsa_data.rdm[t, i, j] for t = 1:length(times)]
+
+        # Create label
+        cond1_name = rsa_data.condition_names[i]
+        cond2_name = rsa_data.condition_names[j]
+        label = "$cond1_name vs $cond2_name"
+
+        # Plot line
+        lines!(
+            ax,
+            times,
+            dissim_time,
+            color = colors[pair_idx],
+            linewidth = _get_val(:linewidth),
+            linestyle = _get_val(:linestyle),
+            label = label,
+        )
+    end
+
+    # Add zero line
+    hlines!(ax, 0, color = :black, linewidth = 1, linestyle = :dash)
+
+    # Add legend
+    axislegend(ax, position = :rt)
 
     # Display if requested
     if display_plot
@@ -273,18 +412,18 @@ end
 
 Main plotting function for RSA results.
 
-If model correlations are available, plots them. Otherwise, plots RDM at average time.
+If model correlations are available, plots them. Otherwise, plots RDM heatmap at average time.
 
 # Arguments
 - `rsa_data::RsaData`: RSA results
-- `kwargs`: Additional keyword arguments (passed to plot_model_correlations or plot_rdm)
+- `kwargs`: Additional keyword arguments (passed to plot_model_correlations or plot_rdm_heatmap)
 
 # Examples
 ```julia
 # Plot RSA results (automatically chooses best visualization)
 plot_rsa(rsa_result)
 
-# Force RDM plot
+# Force RDM heatmap plot
 plot_rsa(rsa_result, plot_type=:rdm, time_point=0.3)
 ```
 """
@@ -296,10 +435,10 @@ function plot_rsa(rsa_data::RsaData; kwargs...)
         if !isnothing(rsa_data.model_correlations)
             return plot_model_correlations(rsa_data; kwargs...)
         else
-            return plot_rdm(rsa_data; kwargs...)
+            return plot_rdm_heatmap(rsa_data; kwargs...)
         end
     elseif plot_type == :rdm
-        return plot_rdm(rsa_data; kwargs...)
+        return plot_rdm_heatmap(rsa_data; kwargs...)
     elseif plot_type == :correlations
         return plot_model_correlations(rsa_data; kwargs...)
     else

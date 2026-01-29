@@ -120,7 +120,7 @@ function test_against_chance(decoded_list::Vector{DecodedData}; alpha::Float64 =
     end
 
     # Apply multiple comparison correction
-    significant_mask = _apply_correction(p_values, alpha, correction_method)
+    significant_mask = _apply_correction(p_values, alpha, correction_method, t_statistics)
 
     return DecodingStatisticsResult(
         first_times,
@@ -135,23 +135,31 @@ function test_against_chance(decoded_list::Vector{DecodedData}; alpha::Float64 =
 end
 
 """
-    _apply_correction(p_values::Vector{Float64}, alpha::Float64, method::Symbol)
+    _apply_correction(p_values::Vector{Float64}, alpha::Float64, method::Symbol, t_statistics::Vector{Float64})
 
 Apply multiple comparison correction to p-values.
+
+Handles NaN p-values that can occur when there is zero variance (e.g., when all participants
+have identical accuracies). NaN p-values with positive t-statistics indicate a perfect effect
+with zero variance and are treated as significant.
 
 # Arguments
 - `p_values::Vector{Float64}`: Uncorrected p-values
 - `alpha::Float64`: Significance threshold
 - `method::Symbol`: Correction method - `:none` or `:bonferroni`
+- `t_statistics::Vector{Float64}`: T-statistics corresponding to p-values
 
 # Returns
 - `BitVector`: Boolean mask indicating significant time points after correction
 """
-function _apply_correction(p_values::Vector{Float64}, alpha::Float64, method::Symbol)
+function _apply_correction(p_values::Vector{Float64}, alpha::Float64, method::Symbol, t_statistics::Vector{Float64})
     if method == :none
-        return p_values .<= alpha
+        # Handle NaN p-values: if p is NaN but t > 0, treat as significant
+        # (occurs when SE = 0, meaning perfect effect with no variance)
+        # This is probably just an extreme edge case from the simulated data
+        return (p_values .<= alpha) .| (isnan.(p_values) .& (t_statistics .> 0))
     elseif method == :bonferroni
-        return _apply_bonferroni_correction(p_values, alpha)
+        return _apply_bonferroni_correction(p_values, alpha, t_statistics)
     else
         @minimal_error_throw("Unknown correction method: $method. Must be :none or :bonferroni.")
     end
@@ -402,9 +410,10 @@ function test_against_chance_cluster(
         clusters_perm = _find_temporal_clusters(mask_perm, first_times)
 
         # Compute max cluster statistic
+        # For one-tailed test (right tail), only consider positive cluster stats
         if !isempty(clusters_perm)
             cluster_stats_perm = _compute_cluster_statistics(clusters_perm, t_statistics_perm, cluster_statistic)
-            max_stat = maximum(abs.(cluster_stats_perm))
+            max_stat = maximum(cluster_stats_perm)  # Don't use abs() for one-tailed test
         else
             max_stat = 0.0
         end
@@ -420,7 +429,7 @@ function test_against_chance_cluster(
     if !isempty(observed_clusters)
         updated_clusters = TemporalCluster[]
         for (i, cluster) in enumerate(observed_clusters)
-            cluster_stat = abs(cluster_stats_observed[i])
+            cluster_stat = cluster_stats_observed[i]  # Don't use abs() for one-tailed test
             # Count permutations with max >= observed
             count_exceed = sum(permutation_max .>= cluster_stat) + 1
             p_value = count_exceed / (n_permutations + 1)

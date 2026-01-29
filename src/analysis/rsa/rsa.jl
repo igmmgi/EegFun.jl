@@ -385,24 +385,34 @@ function rsa(
     n_conditions = length(condition_names)
     n_timepoints = length(times)
 
+    # Validate input requirements for RSA
+    if n_conditions < 2
+        @minimal_error_throw("RSA requires at least 2 conditions, got $n_conditions")
+    end
+    if any(n_trials_per_condition .== 0)
+        empty_conditions = condition_names[n_trials_per_condition.==0]
+        @minimal_error_throw("One or more conditions have zero trials: $(join(empty_conditions, ", "))")
+    end
+
     # Preallocate RDM array: [time × condition × condition]
     rdms = zeros(Float64, n_timepoints, n_conditions, n_conditions)
 
-    # Compute RDM at each time point
-    for t = 1:n_timepoints
-        if average_trials
-            # Use shared helper to compute RDMs from data
-            rdms = _compute_rdms_from_data(data_arrays, n_timepoints, n_conditions, selected_channels, dissimilarity_measure)
-            break # _compute_rdms_from_data handles the loop
-        else
+    # Compute RDMs: different approaches based on whether to average trials
+    if average_trials
+        # Average trials first, then compute RDM at each time point
+        # This is the standard RSA approach
+        rdms = _compute_rdms_from_data(data_arrays, n_timepoints, n_conditions, selected_channels, dissimilarity_measure)
+    else
+        # Compute RDM for each trial separately, then average RDMs
+        # This approach is more robust to noise and outliers
+        for t = 1:n_timepoints
             # Compute pooled covariance if using Mahalanobis distance
             pooled_cov = nothing
             if dissimilarity_measure == :mahalanobis
                 pooled_cov = _compute_pooled_covariance(data_arrays, t)
             end
 
-            # Compute RDM for each trial, then average RDMs
-            # This approach is more robust to noise and outliers
+            # Compute RDM for each trial
             n_trials = minimum(n_trials_per_condition)
             trial_rdms = Vector{Matrix{Float64}}()
 
@@ -455,6 +465,46 @@ function rsa(
     return rsa_result
 end
 
+"""
+    rsa(
+        all_participant_epochs::Vector{Vector{EpochData}};
+        kwargs...
+    )
+
+Convenience method for batch RSA processing across multiple participants.
+
+Applies RSA analysis to each participant's data and returns a vector of results.
+This eliminates the need to write manual loops when processing data organized
+by participant.
+
+# Arguments
+- `all_participant_epochs::Vector{Vector{EpochData}}`: Vector of participant data,
+  where each element is a vector of EpochData (one per condition) for that participant
+- `kwargs...`: Additional keyword arguments passed to `rsa()` for each participant
+
+# Returns
+- `Vector{RsaData}`: Vector of RSA results, one per participant
+
+# Examples
+```julia
+# Create data for multiple participants
+all_data = [
+    [participant1_cond1, participant1_cond2, participant1_cond3],
+    [participant2_cond1, participant2_cond2, participant2_cond3],
+    [participant3_cond1, participant3_cond2, participant3_cond3]
+]
+
+# Batch process all participants at once
+all_rsa_results = rsa(all_data, dissimilarity_measure=:correlation)
+
+# Then compute grand average
+grand_avg = grand_average(all_rsa_results)
+```
+"""
+function rsa(all_participant_epochs::Vector{Vector{EpochData}}; kwargs...)
+    return [rsa(participant_epochs; kwargs...) for participant_epochs in all_participant_epochs]
+end
+
 # ==============================================================================
 #   MODEL COMPARISON
 # ==============================================================================
@@ -489,7 +539,7 @@ with optional permutation-based significance testing.
 
 **Note**: Convert your raw data to RDMs first using helper functions:
 - Static: `create_rdm_from_reaction_times()`, `create_rdm_from_vectors()`, etc.
-- Temporal: `create_temporal_rdm()` (handles temporal alignment automatically)
+- Temporal: `create_rdm_from_timeseries()` (handles temporal alignment automatically)
 
 # Arguments
 - `rsa_data::RsaData`: RSA results from neural data (temporal)
@@ -525,7 +575,7 @@ rsa_with_model = compare_models(neural_rsa, [rt_rdm], model_names=["RTs"])
 # Step 1: Convert your data to temporal RDM (with automatic alignment)
 eye_data = Array{Float64, 3}  # [conditions × features × time] - your format
 eye_times = Vector{Float64}     # Your time vector
-eye_rdms = create_temporal_rdm(eye_data, eye_times; align_to=neural_rsa)
+eye_rdms = create_rdm_from_timeseries(eye_data, eye_times; align_to=neural_rsa)
 
 # Step 2: Compare
 neural_rsa = rsa(epochs)
@@ -537,8 +587,8 @@ rsa_with_model = compare_models(neural_rsa, [eye_rdms], model_names=["Eye Tracki
 ```julia
 # Convert all your model data to RDMs
 rt_rdm = create_rdm_from_reaction_times(rts)
-eye_rdms = create_temporal_rdm(eye_data, eye_times; align_to=neural_rsa)
-eda_rdms = create_temporal_rdm(eda_data, eda_times; align_to=neural_rsa)
+eye_rdms = create_rdm_from_timeseries(eye_data, eye_times; align_to=neural_rsa)
+eda_rdms = create_rdm_from_timeseries(eda_data, eda_times; align_to=neural_rsa)
 
 # Compare all at once
 rsa_with_models = compare_models(
