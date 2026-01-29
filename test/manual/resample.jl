@@ -1,38 +1,22 @@
 using EegFun
-# using BenchmarkTools
 
-dat = EegFun.read_raw_data("../Flank_C_3.bdf");
-layout = EegFun.read_layout("./data/layouts/biosemi/biosemi72.csv");
-dat = EegFun.create_eeg_dataframe(dat, layout);
-dat.sample_rate
-EegFun.trigger_count(dat);
+# read raw data
+dat = EegFun.read_raw_data("./data/raw_files/example1.bdf");
 
-dat_new = EegFun.resample(dat, 2)
-dat_new.sample_rate
-EegFun.trigger_count(dat_new);  # triggers should be preserved
+# read and preprate layout file
+layout_file = EegFun.read_layout("./data/layouts/biosemi/biosemi72.csv");
+EegFun.polar_to_cartesian_xy!(layout_file)
 
-dat_new = EegFun.resample(dat, 4)
-dat_new.sample_rate
-EegFun.trigger_count(dat_new);  # triggers should be preserved
+# create EegFun data structure (EegFun.ContinuousData)
+dat = EegFun.create_eeg_dataframe(dat, layout_file);
 
-# mutating version
-EegFun.resample!(dat, 2)
-dat.sample_rate
-EegFun.trigger_count(dat);  # triggers should be preserved
+EegFun.sample_rate(dat)   # current sample rate
+EegFun.trigger_count(dat) # current triggers in file
 
+dat_new = EegFun.resample(dat, 2) # downsample by a factor of 2
+EegFun.sample_rate(dat_new)       # should = original ÷ 2
+EegFun.trigger_count(dat_new)     # triggers should be preserved
 
-#################################
-# Epoched DataFrameEeg
-#################################
-dat = EegFun.read_raw_data("../Flank_C_3.bdf");
-layout = EegFun.read_layout("./data/layouts/biosemi/biosemi72.csv");
-dat = EegFun.create_eeg_dataframe(dat, layout);
-
-epoch_cfg = [EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
-epochs = EegFun.extract_epochs(dat, epoch_cfg, -2, 4)
-
-epochs_new = EegFun.resample(epochs, 2)
-epochs_new[1].sample_rate
-
-EegFun.resample!(epochs, 2)
-epochs[1].sample_rate
+dat_new = EegFun.resample(dat, 4) # downsample by a factor of 4
+EegFun.sample_rate(dat_new)       # should = original ÷ 4
+EegFun.trigger_count(dat_new)     # triggers should be preserved
