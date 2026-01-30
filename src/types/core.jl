@@ -448,7 +448,7 @@ extraction.
     stop::Int
 end
 
-const BaselineInterval = Union{AbstractInterval,Nothing}
+const TimeInterval = Union{Tuple{Real,Real},AbstractInterval,Nothing}
 
 """
     EpochCondition
@@ -560,30 +560,30 @@ end
 Stores ERP measurement results with metadata about the analysis.
 
 This type contains the measurement results DataFrame along with metadata
-about the analysis type and window used, allowing the plotting function to
+about the analysis type and interval used, allowing the plotting function to
 automatically use the correct parameters.
 
 # Fields
 - `data::DataFrame`: DataFrame containing measurement results
 - `analysis_type::String`: Type of measurement (e.g., "mean_amplitude", "max_peak_latency")
-- `analysis_window::Function`: Analysis window predicate function used
-- `baseline_window::Function`: Baseline window predicate function used (if any)
+- `analysis_interval::Union{TimeInterval,Nothing}`: Analysis interval used
+- `baseline_interval::Union{TimeInterval,Nothing}`: Baseline interval used (if any)
 """
 struct ErpMeasurementsResult
     data::DataFrame
     analysis_type::String
-    analysis_window::Function
-    analysis_window_desc::String
-    baseline_window::Union{Function,Nothing}
-    baseline_window_desc::String
+    analysis_interval::Union{TimeInterval,Nothing}
+    analysis_interval_desc::String
+    baseline_interval::Union{TimeInterval,Nothing}
+    baseline_interval_desc::String
 end
 
 # Make it show as a DataFrame for convenience
 function Base.show(io::IO, result::ErpMeasurementsResult)
     println(io, "ErpMeasurementsResult")
     println(io, "  Analysis type: $(getfield(result, :analysis_type))")
-    println(io, "  Analysis window: $(getfield(result, :analysis_window_desc))")
-    println(io, "  Baseline window: $(getfield(result, :baseline_window_desc))")
+    println(io, "  Analysis interval: $(getfield(result, :analysis_interval_desc))")
+    println(io, "  Baseline interval: $(getfield(result, :baseline_interval_desc))")
     println(io, "\nResults:")
     show(io, getfield(result, :data))
 end

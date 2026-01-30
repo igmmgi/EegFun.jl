@@ -355,7 +355,7 @@ Returns DataFrame row with metadata and channel measurements.
 function _process_dataframe_measurements(
     df::DataFrame,
     selected_channels::Vector{Symbol},
-    analysis_window::Function,
+    analysis_interval::TimeInterval,
     analysis_type::String,
     participant::Int,
     measurement_kwargs::Dict{Symbol,Any},
@@ -375,13 +375,28 @@ function _process_dataframe_measurements(
         return nothing
     end
 
-    # Find time column and apply analysis window predicate
+    # Find time indices within analysis interval
     time_col = df[!, :time]
-    sample_mask = analysis_window(df)
-    time_idx = findall(sample_mask)
+
+    if isnothing(analysis_interval)
+        # Use all samples
+        time_idx = 1:nrow(df)
+    else
+        # Convert tuple to IntervalTime if needed
+        interval = analysis_interval isa Tuple ? IntervalTime(analysis_interval) : analysis_interval
+
+        # Validate interval
+        if interval.start > interval.stop
+            @minimal_error_throw "Analysis interval start must be <= stop. Got: ($(interval.start), $(interval.stop))"
+        end
+
+        # Find time range
+        start_idx, stop_idx = find_idx_start_end(time_col, interval.start, interval.stop)
+        time_idx = start_idx:stop_idx
+    end
 
     if isempty(time_idx)
-        @minimal_warning "No time points found matching analysis window"
+        @minimal_warning "No time points found matching analysis interval"
         return nothing
     end
 
@@ -433,9 +448,9 @@ Returns Vector of NamedTuples (one per condition/epoch).
 """
 function _process_measurements_file(
     filepath::String,
-    analysis_window::Function,
+    analysis_interval::TimeInterval,
     analysis_type::String,
-    baseline_window::Function,
+    baseline_interval::TimeInterval,
     condition_selection::Function,
     channel_selection::Function,
     measurement_kwargs::Dict{Symbol,Any},
@@ -463,94 +478,219 @@ function _process_measurements_file(
     isempty(selected_indices) && @minimal_error "No conditions left following condition selection in $filename"
     data_var = data_var[selected_indices]
 
+    # Dispatch to the Vector method which will handle each data object appropriately
+    return erp_measurements!(
+        data_var,
+        analysis_type;
+        analysis_interval = analysis_interval,
+        baseline_interval = baseline_interval,
+        channel_selection = channel_selection,
+        participant = participant,
+        measurement_kwargs...,
+    )
+end
 
-    # Get selected channels from first data
-    first_data = data_var[1]
-    metadata_cols = meta_labels(first_data)
-    first_df = if first_data isa DataFrame
-        first_data
-    elseif hasproperty(first_data, :data)
-        first_data.data isa Vector{DataFrame} ? first_data.data[1] : first_data.data
-    else
-        first_data.data
+
+#=============================================================================
+    TYPE-SPECIFIC ERP MEASUREMENT METHODS
+=============================================================================#
+
+"""
+Helper function to apply baseline correction to data.
+Returns the DataFrames vector (modified in place if baseline applied).
+"""
+function _apply_baseline_correction!(
+    dfs::Vector{DataFrame},
+    baseline_interval::TimeInterval,
+    all_channels::Vector{Symbol},
+    filename::String = "",
+)
+    # Skip if no baseline specified
+    if isnothing(baseline_interval)
+        return dfs
     end
+
+    # Get EEG channels for baseline
+    eeg_channels = all_channels[channels()(all_channels)]
+
+    if !isempty(eeg_channels)
+        # Convert tuple to IntervalTime if needed
+        baseline_int = baseline_interval isa Tuple ? IntervalTime(baseline_interval) : baseline_interval
+
+        # Convert IntervalTime to IntervalIndex using first dataframe's time column
+        # (assume all dataframes have the same time points for epochs/ERPs)
+        time_col = dfs isa Vector ? dfs[1].time : dfs.time
+        start_idx, stop_idx = find_idx_start_end(time_col, baseline_int.start, baseline_int.stop)
+        baseline_idx = IntervalIndex(start_idx, stop_idx)
+
+        # Try to apply baseline - don't fail measurements if baseline fails
+        try
+            @info "Applying baseline correction to $(length(eeg_channels)) channels using interval: $baseline_int"
+            _apply_baseline!(dfs, eeg_channels, baseline_idx)
+        catch e
+            @minimal_warning "Baseline correction failed: $(sprint(showerror, e)). Continuing without baseline."
+        end
+    else
+        @minimal_warning "No EEG channels found for baseline correction"
+    end
+
+    return dfs
+end
+
+"""
+    erp_measurements!(dat::ErpData, analysis_type::String; kwargs...)
+
+Extract ERP measurements from a single ErpData object.
+
+# Arguments
+- `dat::ErpData`: ErpData object containing a single ERP
+- `analysis_type::String`: Type of measurement to extract
+- `analysis_interval::TimeInterval`: Analysis time window as tuple (e.g., (0.3, 0.5)) or interval object (default: nothing - all samples)
+- `baseline_interval::TimeInterval`: Baseline time window as tuple (e.g., (-0.2, 0.0)) or interval object (default: nothing - no baseline)
+- `channel_selection::Function`: Channel selection (default: channels() - all)
+- `participant::Int`: Participant ID for metadata (default: 0)
+- `kwargs...`: Additional measurement-specific parameters
+
+# Returns
+- `NamedTuple`: Single measurement result with participant, condition, and channel measurements
+"""
+function erp_measurements!(
+    dat::ErpData,
+    analysis_type::String;
+    analysis_interval::TimeInterval = times(),
+    baseline_interval::TimeInterval = times(),
+    channel_selection::Function = channels(),
+    participant::Int = 0,
+    kwargs...,
+)
+    # Merge measurement kwargs with defaults
+    measurement_kwargs = _merge_plot_kwargs(ERP_MEASUREMENTS_KWARGS, kwargs)
+
+    # Get selected channels
+    metadata_cols = meta_labels(dat)
+    all_channels = setdiff(propertynames(dat.data), metadata_cols)
+    channel_mask = channel_selection(all_channels)
+    selected_channels = all_channels[channel_mask]
+
+    if isempty(selected_channels)
+        @minimal_warning "No channels selected"
+        return nothing
+    end
+
+    # Apply baseline correction
+    dfs = [dat.data]  # Wrap in vector for baseline function
+    _apply_baseline_correction!(dfs, baseline_interval, all_channels)
+
+    # Add condition metadata if not present
+    df = dfs[1]
+    if !hasproperty(df, :condition)
+        insertcols!(df, 1, :condition => dat.condition)
+    end
+    if !hasproperty(df, :condition_name)
+        insertcols!(df, 2, :condition_name => dat.condition_name)
+    end
+
+    # Process the single ERP DataFrame
+    return _process_dataframe_measurements(df, selected_channels, analysis_interval, analysis_type, participant, measurement_kwargs)
+end
+
+"""
+    erp_measurements!(dat::EpochData, analysis_type::String; kwargs...)
+
+Extract ERP measurements from a single EpochData object (multiple epochs).
+
+# Arguments
+- `dat::EpochData`: EpochData object containing multiple epochs
+- `analysis_type::String`: Type of measurement to extract
+- `analysis_interval::TimeInterval`: Analysis time window as tuple (e.g., (0.3, 0.5)) or interval object (default: nothing - all samples)
+- `baseline_interval::TimeInterval`: Baseline time window as tuple (e.g., (-0.2, 0.0)) or interval object (default: nothing - no baseline)
+- `channel_selection::Function`: Channel selection (default: channels() - all)
+- `participant::Int`: Participant ID for metadata (default: 0)
+- `kwargs...`: Additional measurement-specific parameters
+
+# Returns
+- `Vector{NamedTuple}`: Measurement results, one per epoch
+"""
+function erp_measurements!(
+    dat::EpochData,
+    analysis_type::String;
+    analysis_interval::TimeInterval = times(),
+    baseline_interval::TimeInterval = times(),
+    channel_selection::Function = channels(),
+    participant::Int = 0,
+    kwargs...,
+)
+    # Merge measurement kwargs with defaults
+    measurement_kwargs = _merge_plot_kwargs(ERP_MEASUREMENTS_KWARGS, kwargs)
+
+    # Get selected channels
+    metadata_cols = meta_labels(dat)
+    first_df = dat.data[1]
     all_channels = setdiff(propertynames(first_df), metadata_cols)
     channel_mask = channel_selection(all_channels)
     selected_channels = all_channels[channel_mask]
 
     if isempty(selected_channels)
-        @minimal_warning "No channels selected in $filename"
+        @minimal_warning "No channels selected"
         return nothing
     end
 
-    # Collect results as NamedTuples
+    # Apply baseline correction to all epochs
+    _apply_baseline_correction!(dat.data, baseline_interval, all_channels)
+
+    # Add condition metadata if not present
+    for df in dat.data
+        if !hasproperty(df, :condition)
+            insertcols!(df, 1, :condition => dat.condition)
+        end
+        if !hasproperty(df, :condition_name)
+            insertcols!(df, 2, :condition_name => dat.condition_name)
+        end
+    end
+
+    # Process each epoch DataFrame
     results = Vector{Any}()
+    for df in dat.data
+        row_data = _process_dataframe_measurements(df, selected_channels, analysis_interval, analysis_type, participant, measurement_kwargs)
 
-    for data in data_var
-        # Get metadata columns from the original data object
-        metadata_cols = meta_labels(data)
-
-        # Get DataFrame(s) - ErpData has single df, EpochData has vector
-        dfs_to_process = if data isa DataFrame
-            [data]
-        elseif data isa Union{ErpData,EpochData}
-            data.data isa Vector{DataFrame} ? data.data : [data.data]
-        else
-            @minimal_error_throw "Unexpected data type: $(typeof(data))"
+        if !isnothing(row_data)
+            push!(results, row_data)
         end
+    end
 
-        # Apply baseline correction if baseline window is specified (not default all samples)
-        first_df = dfs_to_process[1]
-        baseline_mask = baseline_window(first_df)
-        baseline_indices = findall(baseline_mask)
+    return isempty(results) ? nothing : results
+end
 
-        # Skip baseline if window matches all samples (default) or no samples
-        if length(baseline_indices) < nrow(first_df) && !isempty(baseline_indices)
-            # Validate contiguous baseline window
-            if length(baseline_indices) > 1 && any(diff(baseline_indices) .!= 1)
-                @minimal_error_throw "Baseline window must be a contiguous range of samples (detected non-contiguous indices in file $filename)"
-            end
+"""
+    erp_measurements!(data::Vector{<:Union{ErpData,EpochData}}, analysis_type::String; kwargs...)
 
-            # Reuse already-computed all_channels from earlier
-            eeg_channels = all_channels[channels()(all_channels)]
+Extract ERP measurements from a vector of ErpData/EpochData objects.
 
-            if !isempty(eeg_channels)
-                # Use existing baseline infrastructure from baseline.jl
-                interval = IntervalIndex(start = first(baseline_indices), stop = last(baseline_indices))
-                @info "Applying baseline correction to $(length(eeg_channels)) channels over interval: $(first(baseline_indices)) to $(last(baseline_indices))"
-                _apply_baseline!(dfs_to_process, eeg_channels, interval)
+# Arguments
+- `data::Vector{<:Union{ErpData,EpochData}}`: Vector of data objects
+- `analysis_type::String`: Type of measurement to extract
+- `kwargs...`: Passed to individual methods
+
+# Returns
+- `Vector{NamedTuple}`: Flattened measurement results from all data objects
+"""
+function erp_measurements!(data::Vector{<:Union{ErpData,EpochData}}, analysis_type::String; kwargs...)
+    all_results = Vector{Any}()
+
+    for dat in data
+        result = erp_measurements!(dat, analysis_type; kwargs...)
+
+        if !isnothing(result)
+            # ErpData returns single NamedTuple, EpochData returns Vector{NamedTuple}
+            if result isa Vector
+                append!(all_results, result)
             else
-                @minimal_warning "No EEG channels found for baseline correction"
-            end
-        elseif isempty(baseline_indices)
-            @minimal_warning "Baseline window matched no samples. Skipping baseline correction."
-        end
-
-        # Add condition and condition_name to DataFrames if not present and available from data object
-        if data isa Union{ErpData,EpochData}
-            for df in dfs_to_process
-                if !hasproperty(df, :condition)
-                    insertcols!(df, 1, :condition => data.condition)
-                end
-                if !hasproperty(df, :condition_name)
-                    insertcols!(df, 2, :condition_name => data.condition_name)
-                end
-            end
-        end
-
-        # Process each dataframe (epoch or single ERP)
-        for df in dfs_to_process
-            row_data =
-                _process_dataframe_measurements(df, selected_channels, analysis_window, analysis_type, participant, measurement_kwargs)
-
-            if !isnothing(row_data)
-                push!(results, row_data)
+                push!(all_results, result)
             end
         end
     end
 
-    # Return vector of NamedTuples (will be converted to DataFrame at top level)
-    return isempty(results) ? nothing : results
+    return isempty(all_results) ? nothing : all_results
 end
 
 #=============================================================================
@@ -559,8 +699,8 @@ end
 
 """
     erp_measurements(file_pattern::String, analysis_type::String;
-                    analysis_window::Function = samples(),
-                    baseline_window::Function = samples(),
+                    analysis_interval::Function = samples(),
+                    baseline_interval::Function = samples(),
                     participant_selection::Function = participants(),
                     condition_selection::Function = conditions(),
                     channel_selection::Function = channels(),
@@ -585,8 +725,8 @@ across specified time windows and saves results to CSV files.
     - "negative_area": Area of negative values only (as absolute value)
   
   Note: Peak measurements use robust detection (local peak with neighbor/average checks) and fall back to simple peak if no robust peak is found.
-- `analysis_window::Function`: Analysis window sample selection predicate (default: samples() - all samples)
-- `baseline_window::Function`: Baseline window sample selection predicate (default: samples() - all samples, baseline skipped)
+- `analysis_interval::TimeInterval`: Analysis time window as tuple (e.g., (0.3, 0.5) for 300-500ms) or IntervalTime/IntervalIndex object (default: nothing - all samples)
+- `baseline_interval::TimeInterval`: Baseline time window as tuple (e.g., (-0.2, 0.0)) or IntervalTime/IntervalIndex object (default: nothing - no baseline correction)
 - `participant_selection::Function`: Participant selection predicate (default: participants() - all)
 - `condition_selection::Function`: Condition selection predicate (default: conditions() - all)
 - `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
@@ -601,23 +741,23 @@ across specified time windows and saves results to CSV files.
 # Examples
 ```julia
 # Mean amplitude between 100-200 ms with baseline
-erp_measurements("erps", "mean_amplitude", analysis_window=samples((0.1, 0.2)), baseline_window=samples((-0.2, 0.0)))
+erp_measurements("erps", "mean_amplitude", analysis_interval=(0.1, 0.2), baseline_interval=(-0.2, 0.0))
 
 # Maximum peak between 300-500 ms for specific participants
-erp_measurements("erps", "max_peak_amplitude", analysis_window=samples((0.3, 0.5)), participant_selection=participants([1, 2, 3]), condition_selection=conditions([1, 2]))
+erp_measurements("erps", "max_peak_amplitude", analysis_interval=(0.3, 0.5), participant_selection=participants([1, 2, 3]), condition_selection=conditions([1, 2]))
 
 # Exclude specific participants
-erp_measurements("erps", "max_peak_amplitude", analysis_window=samples((0.3, 0.5)), participant_selection=participants_not([10, 11]))
+erp_measurements("erps", "max_peak_amplitude", analysis_interval=(0.3, 0.5), participant_selection=participants_not([10, 11]))
 
 # Minimum peak for specific channels
-erp_measurements("erps", "min_peak_amplitude", analysis_window=samples((0.0, 0.6)), channel_selection=channels([:Fz, :Cz, :Pz]))
+erp_measurements("erps", "min_peak_amplitude", analysis_interval=(0.0, 0.6), channel_selection=channels([:Fz, :Cz, :Pz]))
 ```
 """
 function erp_measurements(
     file_pattern::String,
     analysis_type::String;
-    analysis_window::Function = samples(),
-    baseline_window::Function = samples(),
+    analysis_interval::TimeInterval = times(),
+    baseline_interval::TimeInterval = times(),
     participant_selection::Function = participants(),
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
@@ -642,6 +782,14 @@ function erp_measurements(
         end
         if (error_msg = _validate_analysis_type(analysis_type)) !== nothing
             @minimal_error_throw error_msg
+        end
+
+        # Validate analysis_interval
+        if !isnothing(analysis_interval)
+            interval = analysis_interval isa Tuple ? IntervalTime(analysis_interval) : analysis_interval
+            if interval.start > interval.stop
+                @minimal_error_throw "Analysis interval start must be <= stop. Got: ($(interval.start), $(interval.stop))"
+            end
         end
 
         # Merge measurement kwargs with defaults
@@ -696,9 +844,9 @@ function erp_measurements(
             try
                 file_results = _process_measurements_file(
                     input_path,
-                    analysis_window,
+                    analysis_interval,
                     analysis_type,
-                    baseline_window,
+                    baseline_interval,
                     condition_selection,
                     channel_selection,
                     measurement_kwargs,
@@ -752,39 +900,31 @@ function erp_measurements(
         @info "Saved $(nrow(results_df)) measurement(s) to: $output_csv"
         @info "Analysis complete! Processed $processed_count files successfully, $error_count errors"
 
-        # Generate window descriptions for result metadata
-        analysis_window_desc = "custom"
-        baseline_window_desc = baseline_window === nothing ? "none" : "custom"
+        # Generate interval descriptions for result metadata
+        if isnothing(analysis_interval)
+            analysis_interval_desc = "all samples"
+        elseif analysis_interval isa Tuple
+            analysis_interval_desc = "$(analysis_interval[1]):$(analysis_interval[2]) S"
+        else  # AbstractInterval
+            analysis_interval_desc = "$(analysis_interval.start):$(analysis_interval.stop)"
+        end
 
-        if !isempty(files)
-            try
-                first_file = joinpath(input_dir, files[1])
-                data = load_data(first_file)
-
-                mask = analysis_window(data[1].data)
-                selected_times = time(data)[mask]
-                time_min = round(minimum(selected_times), digits = 3)
-                time_max = round(maximum(selected_times), digits = 3)
-                analysis_window_desc = "$time_min:$time_max S"
-
-                mask = baseline_window(data[1].data)
-                selected_times = time(data)[mask]
-                time_min = round(minimum(selected_times), digits = 3)
-                time_max = round(maximum(selected_times), digits = 3)
-                baseline_window_desc = "$time_min:$time_max S"
-            catch
-                # If loading fails, use "custom" descriptions (already set above)
-            end
+        if isnothing(baseline_interval)
+            baseline_interval_desc = "none"
+        elseif baseline_interval isa Tuple
+            baseline_interval_desc = "$(baseline_interval[1]):$(baseline_interval[2]) S"
+        else  # AbstractInterval
+            baseline_interval_desc = "$(baseline_interval.start):$(baseline_interval.stop)"
         end
 
         # Return as ErpMeasurementsResult with metadata
         return ErpMeasurementsResult(
             results_df,
             analysis_type,
-            analysis_window,
-            analysis_window_desc,
-            baseline_window,
-            baseline_window_desc,
+            analysis_interval,
+            analysis_interval_desc,
+            baseline_interval,
+            baseline_interval_desc,
         )
 
     finally

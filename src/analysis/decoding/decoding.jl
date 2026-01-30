@@ -402,7 +402,7 @@ end
     decode_libsvm(
         epochs::Vector{EpochData};
         channel_selection::Function = channels(),
-        sample_selection::Function = samples(),
+        interval_selection::TimeInterval = times(),
         n_iterations::Int = 100,
         n_folds::Int = 3,
         equalize_trials::Bool = true,
@@ -425,7 +425,7 @@ using cross-validation to estimate classification accuracy at each time point.
   - Example: `channel_selection=channels([:Fz, :Cz, :Pz])` for specific channels
   - Example: `channel_selection=channels(:Cz)` for single channel
   - Default: all channels
-- `sample_selection::Function=samples()`: Sample selection predicate. See `samples()` for options.
+- `interval_selection::TimeInterval=samples()`: Sample selection predicate. See `samples()` for options.
   - Example: `sample_selection=samples((-0.2, 0.8))` for time window from -0.2 to 0.8 seconds
   - Example: `sample_selection=samples()` for all time points (default)
 - `n_iterations::Int`: Number of iterations with random shuffling (default: 100, matches erplab default)
@@ -446,7 +446,7 @@ decoded = decode_libsvm(epochs; channel_selection=channels(:Cz))
 function decode_libsvm(
     epochs::Vector{EpochData};
     channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    interval_selection::TimeInterval = times(),
     n_iterations::Int = 100,
     n_folds::Int = 3,
     equalize_trials::Bool = true,
@@ -461,7 +461,7 @@ function decode_libsvm(
     n_folds < 2 && @minimal_error_throw("Need at least 2 folds for cross-validation, got $n_folds")
 
     # Subset epochs by channel and sample selection
-    epochs = subset(epochs; channel_selection = channel_selection, sample_selection = sample_selection, include_extra = false)
+    epochs = subset(epochs; channel_selection = channel_selection, sample_selection = interval_selection, include_extra = false)
     isempty(channel_labels(epochs[1])) && @minimal_error_throw("Channel selection produced no channels")
     isempty(epochs[1].data[1][!, :time]) && @minimal_error_throw("Sample selection produced no time points")
 

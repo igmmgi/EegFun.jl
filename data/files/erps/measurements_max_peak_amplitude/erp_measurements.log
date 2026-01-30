@@ -1,9 +1,9 @@
 julia version: 1.12.4
 EegFun version: 0.1.0
-Start time: 30-01-2026 08:54:08
-ERP measurement analysis started at 2026-01-30T08:54:08.701
+Start time: 30-01-2026 09:01:00
+ERP measurement analysis started at 2026-01-30T09:01:00.451
 Function call: test
-Analysis type: mean_amplitude
+Analysis type: max_peak_amplitude
 Found 16 JLD2 files
 Processing: example10_erps_good.jld2 (1/16)
 Applying baseline correction to 74 channels over interval: 129 to 129
@@ -53,7 +53,7 @@ Applying baseline correction to 74 channels over interval: 129 to 129
 Processing: example9_erps_good.jld2 (16/16)
 Applying baseline correction to 74 channels over interval: 129 to 129
   ✓ Extracted 1 measurement(s)
-Saved 16 measurement(s) to: ./data/files/erps/measurements_mean_amplitude/erp_measurements.csv
+Saved 16 measurement(s) to: ./data/files/erps/measurements_max_peak_amplitude/erp_measurements.csv
 Analysis complete! Processed 16 files successfully, 0 errors
 
 Global session duration: 0 seconds

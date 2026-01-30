@@ -462,6 +462,7 @@ fig, ax = plot_channel_spectrum(dat, unit = :dB)
 function plot_channel_spectrum(
     dat::SingleDataFrameEeg;
     sample_selection::Function = samples(),
+    interval_selection::TimeInterval = times(),
     channel_selection::Function = channels(),
     kwargs...,
 )
@@ -473,7 +474,7 @@ function plot_channel_spectrum(
     plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
 
     # data selection
-    dat_subset = subset(dat, sample_selection = sample_selection, channel_selection = channel_selection)
+    dat_subset = subset(dat, sample_selection = sample_selection, interval_selection = interval_selection, channel_selection = channel_selection)
 
     # Create figure and main axis
     fig = Figure()
@@ -560,6 +561,7 @@ function plot_ica_component_spectrum(
     dat::ContinuousData,
     ica_result::InfoIca;
     sample_selection::Function = samples(),
+    interval_selection::TimeInterval = times(),
     component_selection::Function = components(),
     kwargs...,
 )

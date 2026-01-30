@@ -1,7 +1,7 @@
 """
     tf_multitaper(dat::EpochData; 
                   channel_selection::Function=channels(),
-                  sample_selection::Function=samples(),
+                  interval_selection::TimeInterval=samples(),
                   frequencies::Union{AbstractRange,AbstractVector{<:Real}}=range(1, 40, length=40),
                   cycles::Real,
                   frequency_smoothing::Union{Nothing,Real}=nothing,
@@ -21,7 +21,7 @@ Uses multiple orthogonal tapers (Slepian sequences) to reduce variance in spectr
 - `channel_selection::Function=channels()`: Channel selection predicate. See `channels()` for options.
   - Example: `channel_selection=channels(:Cz)` for single channel
   - Example: `channel_selection=channels([:Cz, :Pz])` for multiple channels
-- `sample_selection::Function=samples()`: Sample selection predicate. See `samples()` for options.
+- `interval_selection::TimeInterval=samples()`: Sample selection predicate. See `samples()` for options.
   - Example: `sample_selection=samples((-0.5, 2.0))` for time window from -0.5 to 2.0 seconds
   - Example: `sample_selection=samples()` for all time points (default)
   - Default: all samples
@@ -73,8 +73,8 @@ tf_data = tf_multitaper(epochs; frequencies=1:2:30, cycles=5, frequency_smoothin
 function tf_multitaper(
     dat::EpochData;
     channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
-    frequencies::Union{AbstractRange,AbstractVector{<:Real}} = range(1, 40, length=40),
+    interval_selection::TimeInterval = times(),
+    frequencies::Union{AbstractRange,AbstractVector{<:Real}} = range(1, 40, length = 40),
     time_steps::Real = 0.05,
     cycles::Real,
     frequency_smoothing::Union{Nothing,Real} = nothing,
@@ -87,8 +87,8 @@ function tf_multitaper(
         error("`pad` must be `nothing`, `:pre`, `:post`, or `:both`, got :$pad")
     end
 
-    # Subset data with channel and sample selection
-    dat = subset(dat; channel_selection = channel_selection, sample_selection = sample_selection)
+    # Subset data with channel and interval selection
+    dat = subset(dat; channel_selection = channel_selection, interval_selection = interval_selection)
     isempty(dat.data) && error("No data remaining after subsetting")
 
     # Get selected channels (after subsetting)
@@ -96,7 +96,7 @@ function tf_multitaper(
 
     # Use frequency input directly (ranges and vectors both work)
     num_frex = length(frequencies)
-    
+
     # Validate frequencies
     if num_frex == 0
         error("`frequencies` must contain at least one frequency")
@@ -137,8 +137,8 @@ function tf_multitaper(
     time_min = minimum(times_original)
     time_max = maximum(times_original)
     time_steps_range = time_min:time_steps:time_max
-        time_indices, times_out = find_times(times_processed, time_steps_range)
-        if isempty(time_indices)
+    time_indices, times_out = find_times(times_processed, time_steps_range)
+    if isempty(time_indices)
         error("No valid time points found with step size $time_steps in range ($time_min to $time_max seconds)")
     end
 
@@ -169,52 +169,54 @@ function tf_multitaper(
     tapers_per_freq = Vector{Matrix{Float64}}(undef, num_frex)  # Each element is (n_window_samples × n_tapers)
     n_tapers_per_freq = zeros(Int, num_frex)
     inv_n_tapers_per_freq = Vector{Float64}(undef, num_frex)
-    
+
     # Determine padding length: pad to at least the data length and largest window
     max_window_samples = maximum(n_window_samples_per_freq)
     n_samples_padded = max(n_samples_per_epoch, max_window_samples)
-    
+
     # Pre-compute tapered wavelets and their FFTs for each frequency-taper combination
     # For multitaper: tapered_wavelet = taper * (cos + i*sin) at target frequency
     tapered_wavelet_ffts = Vector{Vector{Vector{ComplexF64}}}(undef, num_frex)  # [frequency][taper] = FFT of tapered wavelet
-    
+
     # Pre-compute FFT plans for padded data (batch process all trials)
     template_padded_batch = zeros(ComplexF64, n_samples_padded, n_trials)
     fft_plan_padded_batch = plan_fft(template_padded_batch, 1, flags = FFTW.MEASURE)
-    
+
     # Pre-compute IFFT plan (per trial)
     template_complex = zeros(ComplexF64, n_samples_padded)
     ifft_plan_padded = plan_ifft(template_complex, flags = FFTW.MEASURE)
-    
+
     for (fi, freq) in enumerate(freqs)
         n_window_samples = n_window_samples_per_freq[fi]
         window_length_sec = window_lengths_sec[fi]
-        
+
         # Calculate frequency smoothing (FieldTrip: cfg.tapsmofrq = frequency_smoothing * cfg.foi)
         tapsmofrq = frequency_smoothing * freq  # Frequency smoothing in Hz
-        
+
         # Time-bandwidth product: NW = tapsmofrq * window_length / 2
         NW = tapsmofrq * window_length_sec / 2
-        
+
         # Ensure NW is valid (must be > 0 and < n_window_samples/2)
         if NW <= 0 || NW >= n_window_samples / 2
-            error("Invalid time-bandwidth product NW=$NW for frequency $freq Hz. NW must be > 0 and < $(n_window_samples/2). Window length: $window_length_sec s, tapsmofrq: $tapsmofrq Hz")
+            error(
+                "Invalid time-bandwidth product NW=$NW for frequency $freq Hz. NW must be > 0 and < $(n_window_samples/2). Window length: $window_length_sec s, tapsmofrq: $tapsmofrq Hz",
+            )
         end
-        
+
         # Number of tapers: K = 2*NW - 1 (Shannon number)
         K = max(1, Int(floor(2 * NW - 1)))
         K = min(K, n_window_samples ÷ 2)  # Cap at half window length
-        
+
         # Generate DPSS tapers
         dpss_result = DSP.dpss(n_window_samples, NW, K)
-        
+
         # Handle different return types from dpss
         if dpss_result isa Tuple
             tapers = dpss_result[1]
         else
             tapers = dpss_result
         end
-        
+
         # Convert to matrix format (n_window_samples × K)
         if tapers isa AbstractMatrix
             tapers_per_freq[fi] = Matrix{Float64}(tapers)
@@ -226,22 +228,23 @@ function tf_multitaper(
         end
         n_tapers_per_freq[fi] = K
         inv_n_tapers_per_freq[fi] = 1.0 / K
-        
+
         # Pre-compute tapered wavelets and their FFTs for this frequency
         # Tapered wavelet = taper * (cos + i*sin) at target frequency
         tapered_wavelet_ffts[fi] = Vector{Vector{ComplexF64}}(undef, K)
-        
+
         # Create complex exponential at target frequency
-        angle_in = range(-(n_window_samples-1)/2, (n_window_samples-1)/2, length = n_window_samples) .* (2π * freq / dat.sample_rate)
+        angle_in =
+            range(-(n_window_samples - 1) / 2, (n_window_samples - 1) / 2, length = n_window_samples) .* (2π * freq / dat.sample_rate)
         cos_wav = cos.(angle_in)
         sin_wav = sin.(angle_in)
-        
+
         # For each taper, create tapered wavelet and compute FFT
         for taper_idx = 1:K
             taper_col = @view tapers_per_freq[fi][:, taper_idx]
             # Tapered wavelet: taper * (cos + i*sin)
             tapered_wavelet = taper_col .* (cos_wav .+ im .* sin_wav)
-            
+
             # Pad to n_samples_padded and compute FFT
             tapered_wavelet_padded = zeros(ComplexF64, n_samples_padded)
             tapered_wavelet_padded[1:n_window_samples] = tapered_wavelet
@@ -260,7 +263,7 @@ function tf_multitaper(
     # Pre-compute shared time and freq columns (same for power and phase)
     time_col = repeat(times_out, inner = num_frex)
     freq_col = repeat(freqs, outer = n_times)
-    
+
     if return_trials
         power_df = [DataFrame(time = time_col, freq = freq_col, copycols = false) for _ = 1:n_trials]
         phase_df = [DataFrame(time = time_col, freq = freq_col, copycols = false) for _ = 1:n_trials]
@@ -289,7 +292,7 @@ function tf_multitaper(
                 trial_signals_matrix[i, trial_idx] = Float64(col[i])
             end
         end
-        
+
         # Clear/initialize output buffers for this channel
         if return_trials
             fill!(eegpower, 0.0)
@@ -301,22 +304,22 @@ function tf_multitaper(
 
         # FieldTrip frequency-domain convolution approach for multitaper
         # FFT entire data once, then multiply by tapered wavelet FFTs and IFFT
-        
+
         # Pad data to n_samples_padded (zero-padding at the end)
         fill!(data_padded, 0.0)
         data_padded[1:n_samples_per_epoch, :] = trial_signals_matrix
-        
+
         # FFT entire padded data (batch process all trials at once)
         # Convert real to complex and perform batch FFT (out-of-place)
         data_fft .= complex.(data_padded)
         data_fft .= fft_plan_padded_batch * data_fft
-        
+
         # Process each frequency
         for fi = 1:num_frex
             n_window_samples = n_window_samples_per_freq[fi]
             n_tapers = n_tapers_per_freq[fi]
             inv_n_tapers = inv_n_tapers_per_freq[fi]
-            
+
             # Initialize accumulation buffers for this frequency (accumulate across tapers)
             if return_trials
                 power_accum = zeros(Float64, n_times, n_trials)
@@ -325,14 +328,14 @@ function tf_multitaper(
                 power_accum = zeros(Float64, n_times)
                 complex_accum = zeros(ComplexF64, n_times)
             end
-            
+
             # Process each taper and accumulate results
             for taper_idx = 1:n_tapers
                 tapered_wavelet_fft = tapered_wavelet_ffts[fi][taper_idx]
-                
+
                 # Frequency-domain convolution: multiply data FFT by tapered wavelet FFT (broadcast across all trials)
                 conv_result .= data_fft .* tapered_wavelet_fft
-                
+
                 # IFFT to get time-domain result (FFTW's IFFT doesn't normalize)
                 @inbounds for trial = 1:n_trials
                     mul!(ifft_temp, ifft_plan_padded, view(conv_result, :, trial))
@@ -340,13 +343,13 @@ function tf_multitaper(
                         conv_result[i, trial] = ifft_temp[i]
                     end
                 end
-                
+
                 # Apply FieldTrip normalization: sqrt(2 ./ timwinsample)
                 norm_factor = sqrt(2.0 / n_window_samples)  # FieldTrip: sqrt(2 ./ timwinsample)
                 @inbounds @simd for i in eachindex(conv_result)
                     conv_result[i] *= norm_factor
                 end
-                
+
                 # Extract requested time points and accumulate across tapers
                 # Shift by half window length to account for FieldTrip's fftshift centering
                 half_window = n_window_samples ÷ 2
@@ -370,7 +373,7 @@ function tf_multitaper(
                     end
                 end
             end
-            
+
             # Average across tapers and store results
             if return_trials
                 @inbounds for ti_idx = 1:n_times
@@ -393,7 +396,7 @@ function tf_multitaper(
             # For multitaper: timwin = cycles / foi (adaptive window)
             window_lengths_samples_exact = [(cycles / freqs[fi]) * dat.sample_rate for fi = 1:num_frex]
             # Use unpadded data length for edge filtering (FieldTrip uses ndatsample = size(dat, 2), unpadded)
-            _filter_edges!(eegpower, eegconv, num_frex, time_indices, window_lengths_samples_exact, n_samples_per_epoch) 
+            _filter_edges!(eegpower, eegconv, num_frex, time_indices, window_lengths_samples_exact, n_samples_per_epoch)
         end
 
         if return_trials # Store each trial separately
@@ -401,7 +404,7 @@ function tf_multitaper(
                 power_df[trial_idx][!, channel] = vec(eegpower[:, :, trial_idx])
                 phase_df[trial_idx][!, channel] = vec(angle.(eegconv[:, :, trial_idx]))
             end
-        else 
+        else
             eegpower ./= n_trials
             eegconv ./= n_trials
             power_df[!, channel] = vec(eegpower)
@@ -512,15 +515,6 @@ function freq_spectrum(
 
     # Return SpectrumData type (dispatch handles condition info)
     condition_num, condition_name = condition_info(dat)
-    return SpectrumData(
-        dat.file,
-        condition_num,
-        condition_name,
-        spectrum_df,
-        dat.layout,
-        dat.sample_rate,
-        :welch,
-        dat.analysis_info,
-    )
+    return SpectrumData(dat.file, condition_num, condition_name, spectrum_df, dat.layout, dat.sample_rate, :welch, dat.analysis_info)
 end
 

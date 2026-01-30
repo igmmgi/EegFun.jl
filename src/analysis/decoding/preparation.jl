@@ -1,7 +1,7 @@
 # This file contains data preparation functions for decoding/MVPA analysis
 
 """
-    prepare_decoding(epochs::Vector{EpochData}; condition_selection::Function = conditions(), channel_selection::Function = channels(), sample_selection::Function = samples())
+    prepare_decoding(epochs::Vector{EpochData}; condition_selection::Function = conditions(), channel_selection::Function = channels(), interval_selection::TimeInterval = times())
 
 Prepare EpochData for multivariate pattern analysis (MVPA/decoding).
 
@@ -12,7 +12,7 @@ epochs by participant and selecting specified conditions for classification.
 - `epochs::Vector{EpochData}`: Epoch data containing multiple conditions/participants
 - `condition_selection::Function`: Predicate to select conditions for classification (default: `conditions()` - all conditions)
 - `channel_selection::Function`: Predicate to filter channels (default: `channels()` - all channels)
-- `sample_selection::Function`: Predicate to select time points (default: `samples()` - all samples). Use `samples((start, end))` for time windows.
+- `interval_selection::TimeInterval`: Time window as tuple (e.g., (0.0, 1.0)) or interval object (default: nothing - all samples)
 
 # Returns
 - `Vector{Vector{EpochData}}`: Vector of participant data, where each element is a vector of EpochData for that participant's conditions
@@ -27,8 +27,7 @@ participant_epochs = prepare_decoding(
     all_epochs,
     condition_selection = conditions([1, 2]),
     channel_selection = channels(),
-    sample_selection = samples((0.0, 1.0))
-)
+    interval_selection = (0.0, 1.0))  # Simple tuple for time window
 
 # Decode each participant
 all_decoded = [decode_libsvm(epochs; n_iterations=100, n_folds=5) for epochs in participant_epochs]
@@ -42,7 +41,7 @@ function prepare_decoding(
     epochs::Vector{EpochData};
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    interval_selection::TimeInterval = times(),
 )
     isempty(epochs) && @minimal_error_throw("Cannot prepare decoding with empty epochs vector")
 
@@ -90,9 +89,9 @@ function prepare_decoding(
             @minimal_error("Condition $(selected_cond_nums[1]) vs $(selected_cond_nums[cond_idx]): Epochs have inconsistent structure")
     end
 
-    # Apply channel and sample selection to all epochs
+    # Apply channel and interval selection to all epochs
     selected_conditions = [
-        subset(condition_epochs; channel_selection = channel_selection, sample_selection = sample_selection) for
+        subset(condition_epochs; channel_selection = channel_selection, interval_selection = interval_selection) for
         condition_epochs in selected_conditions
     ]
 
@@ -133,7 +132,7 @@ function prepare_decoding(
 end
 
 """
-    prepare_decoding(file_pattern::String; input_dir::String = pwd(), participant_selection::Function = participants(), condition_selection::Function = conditions(), channel_selection::Function = channels(), sample_selection::Function = samples())
+    prepare_decoding(file_pattern::String; input_dir::String = pwd(), participant_selection::Function = participants(), condition_selection::Function = conditions(), channel_selection::Function = channels(), interval_selection::TimeInterval = times())
 
 Prepare EpochData for decoding from JLD2 files (convenience wrapper).
 
@@ -145,7 +144,7 @@ Loads EpochData from JLD2 files matching the pattern and prepares them for decod
 - `participant_selection::Function`: Predicate to filter participants (default: `participants()` - all participants)
 - `condition_selection::Function`: Predicate to select conditions for classification (default: `conditions()` - all conditions)
 - `channel_selection::Function`: Predicate to filter channels (default: `channels()` - all channels)
-- `sample_selection::Function`: Predicate to select time points (default: `samples()` - all samples)
+- `interval_selection::TimeInterval`: Time window as tuple (e.g., (0.0, 1.0)) or interval object (default: nothing - all samples)
 
 # Returns
 - `Vector{Vector{EpochData}}`: Vector of participant data, where each element is a vector of EpochData for that participant's conditions
@@ -159,8 +158,7 @@ participant_epochs = prepare_decoding(
     participant_selection = participants(),
     condition_selection = conditions([1, 2]),
     channel_selection = channels([:Fz, :Cz, :Pz]),
-    sample_selection = samples((0.0, 1.0))
-)
+    interval_selection = (0.0, 1.0))  # Simple tuple for time window
 
 # Decode all participants
 all_decoded = [decode_libsvm(epochs; n_iterations=100, n_folds=5) for epochs in participant_epochs]
@@ -172,7 +170,7 @@ function prepare_decoding(
     participant_selection::Function = participants(),
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    interval_selection::TimeInterval = times(),
 )
     # Load all appropriate data and call the main preparation function
     all_epochs = load_all_data(EpochData, file_pattern, input_dir, participant_selection)
@@ -182,6 +180,6 @@ function prepare_decoding(
         all_epochs;
         condition_selection = condition_selection,
         channel_selection = channel_selection,
-        sample_selection = sample_selection,
+        interval_selection = interval_selection,
     )
 end

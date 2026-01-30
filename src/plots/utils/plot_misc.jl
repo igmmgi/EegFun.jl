@@ -588,12 +588,12 @@ end
 # =============================================================================
 
 """
-    _extract_baseline_values(interval::BaselineInterval)
+    _extract_baseline_values(interval::TimeInterval)
 
 Extract numeric baseline values from interval.
 Returns (start, stop) tuple or (nothing, nothing) if interval is nothing.
 """
-function _extract_baseline_values(interval::BaselineInterval)
+function _extract_baseline_values(interval::TimeInterval)
     if interval === nothing
         return nothing, nothing
     else
