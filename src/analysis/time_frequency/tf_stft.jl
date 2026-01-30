@@ -1,7 +1,7 @@
 """
     tf_stft(dat::EpochData; 
             channel_selection::Function=channels(),
-            sample_selection::Function=samples(),
+            interval_selection::TimeInterval=samples(),
             frequencies::Union{AbstractRange,AbstractVector{<:Real}}=range(1, 40, length=40),
             window_length::Union{Nothing,Real}=nothing,
             cycles::Union{Nothing,Real}=nothing,
@@ -21,7 +21,7 @@ Supports both fixed-length windows (consistent time resolution) and adaptive win
 - `channel_selection::Function=channels()`: Channel selection predicate. See `channels()` for options.
   - Example: `channel_selection=channels(:Cz)` for single channel
   - Example: `channel_selection=channels([:Cz, :Pz])` for multiple channels
-- `sample_selection::Function=samples()`: Sample selection predicate. See `samples()` for options.
+- `interval_selection::TimeInterval=samples()`: Sample selection predicate. See `samples()` for options.
   - Example: `sample_selection=samples((-0.5, 2.0))` for time window from -0.5 to 2.0 seconds
   - Example: `sample_selection=samples()` for all time points (default)
   - Default: all samples
@@ -69,8 +69,8 @@ tf_data = tf_stft(epochs; frequencies=2:1:30, cycles=7, sample_selection=samples
 function tf_stft(
     dat::EpochData;
     channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
-    frequencies::Union{AbstractRange,AbstractVector{<:Real}} = range(1, 40, length=40),
+    interval_selection::TimeInterval = times(),
+    frequencies::Union{AbstractRange,AbstractVector{<:Real}} = range(1, 40, length = 40),
     time_steps::Real = 0.05,
     window_length::Union{Nothing,Real} = nothing,
     cycles::Union{Nothing,Real} = nothing,
@@ -84,8 +84,8 @@ function tf_stft(
         error("`pad` must be `nothing`, `:pre`, `:post`, or `:both`, got :$pad")
     end
 
-    # Subset data with channel and sample selection
-    dat = subset(dat; channel_selection = channel_selection, sample_selection = sample_selection)
+    # Subset data with channel and interval selection
+    dat = subset(dat; channel_selection = channel_selection, interval_selection = interval_selection)
     isempty(dat.data) && error("No data remaining after subsetting")
 
     # Get selected channels (after subsetting)
@@ -93,7 +93,7 @@ function tf_stft(
 
     # Use frequency input directly (ranges and vectors both work)
     num_frex = length(frequencies)
-    
+
     # Validate frequencies
     if num_frex == 0
         error("`frequencies` must contain at least one frequency")
@@ -134,8 +134,8 @@ function tf_stft(
     time_min = minimum(times_original)
     time_max = maximum(times_original)
     time_steps_range = time_min:time_steps:time_max
-        time_indices, times_out = find_times(times_processed, time_steps_range)
-        if isempty(time_indices)
+    time_indices, times_out = find_times(times_processed, time_steps_range)
+    if isempty(time_indices)
         error("No valid time points found with step size $time_steps in range ($time_min to $time_max seconds)")
     end
 
@@ -184,13 +184,13 @@ function tf_stft(
             hanning_windows[fi] = DSP.hanning(n_win) ./ norm(DSP.hanning(n_win), 2)  # L2 norm for vector = Frobenius norm
         end
     end
-    
+
     # Use frequency-domain convolution (FieldTrip approach)
     # Determine padding length: pad to at least the data length and largest window
     # (FFTW is efficient for many sizes, not just powers of 2)
     max_window_samples = maximum(n_window_samples_per_freq)
     n_samples_padded = max(n_samples_per_epoch, max_window_samples)
-    
+
     # Pre-compute complex wavelets and their FFTs for each frequency
     # Wavelet = Hanning window * complex exponential (cos + i*sin)
     wavelet_ffts = Vector{Vector{ComplexF64}}(undef, num_frex)
@@ -198,26 +198,27 @@ function tf_stft(
         n_window_samples = n_window_samples_per_freq[fi]
         freq = freqs[fi]
         hanning_window = hanning_windows[fi]
-        
+
         # Create complex wavelet: Hanning * (cos + i*sin) at frequency
         # Phase: center of wavelet has angle = 0 (FieldTrip convention)
-        angle_in = range(-(n_window_samples-1)/2, (n_window_samples-1)/2, length = n_window_samples) .* (2π * freq / dat.sample_rate)
+        angle_in =
+            range(-(n_window_samples - 1) / 2, (n_window_samples - 1) / 2, length = n_window_samples) .* (2π * freq / dat.sample_rate)
         cos_wav = hanning_window .* cos.(angle_in)
         sin_wav = hanning_window .* sin.(angle_in)
         wavelet = cos_wav .+ im .* sin_wav
-        
+
         # Pad wavelet to match data FFT length and compute FFT
         # Place wavelet at the beginning (not centered) - centering happens through convolution
         wavelet_padded = zeros(ComplexF64, n_samples_padded)
         wavelet_padded[1:n_window_samples] = wavelet
         wavelet_ffts[fi] = fft(wavelet_padded)
     end
-    
+
     # Plan for batch FFT of entire padded data (all trials at once)
     # Convert real to complex for batch FFT
     template_padded_batch = zeros(ComplexF64, n_samples_padded, n_trials)
     fft_plan_padded_batch = plan_fft(template_padded_batch, 1, flags = FFTW.MEASURE)  # FFT along first dimension
-    
+
     # Plan for IFFT (same size, per trial)
     template_complex = zeros(ComplexF64, n_samples_padded)
     ifft_plan_padded = plan_ifft(template_complex, flags = FFTW.MEASURE)
@@ -227,7 +228,7 @@ function tf_stft(
     # Pre-compute shared time and freq columns (same for power and phase)
     time_col = repeat(times_out, inner = num_frex)
     freq_col = repeat(freqs, outer = n_times)
-    
+
     if return_trials
         power_df = [DataFrame(time = time_col, freq = freq_col, copycols = false) for _ = 1:n_trials]
         phase_df = [DataFrame(time = time_col, freq = freq_col, copycols = false) for _ = 1:n_trials]
@@ -264,29 +265,29 @@ function tf_stft(
         end
 
         # Clear/initialize output buffers for this channel
-            fill!(eegpower, 0.0)
-            fill!(eegconv, 0.0im)
+        fill!(eegpower, 0.0)
+        fill!(eegconv, 0.0im)
 
         # FieldTrip frequency-domain convolution approach (works for both fixed and adaptive windows)
         # FFT entire data once, then multiply by wavelet FFTs and IFFT
-        
+
         # Pad data to n_samples_padded (zero-padding at the end)
         fill!(data_padded, 0.0)
         data_padded[1:n_samples_per_epoch, :] = trial_signals_matrix
-        
+
         # FFT entire padded data (batch process all trials at once)
         # Convert real to complex and perform batch FFT (out-of-place)
         data_fft .= complex.(data_padded)
         data_fft .= fft_plan_padded_batch * data_fft
-        
+
         # Process each frequency
         inv_n_samples_padded = 1.0 / n_samples_padded
         for fi = 1:num_frex
             n_window_samples = n_window_samples_per_freq[fi]
-            
+
             # Frequency-domain convolution: multiply data FFT by wavelet FFT (broadcast across all trials)
             conv_result .= data_fft .* wavelet_ffts[fi]
-            
+
             # IFFT to get time-domain result (FFTW's IFFT doesn't normalize)
             @inbounds for trial = 1:n_trials
                 # Direct column access - Julia optimizes this and FFTW is fast with contiguous arrays
@@ -295,13 +296,13 @@ function tf_stft(
                     conv_result[i, trial] = ifft_temp[i]  # No IFFT normalization (matching fixed window)
                 end
             end
-            
+
             # Apply FieldTrip normalization: sqrt(2 ./ timwinsample)
             norm_factor = sqrt(2.0 / n_window_samples)  # FieldTrip: sqrt(2 ./ timwinsample)
             @inbounds @simd for i in eachindex(conv_result)
                 conv_result[i] *= norm_factor
             end
-            
+
             # Extract requested time points (time_indices are sample indices in processed data)
             # Shift by half window length to account for FieldTrip's fftshift centering
             half_window = n_window_samples ÷ 2
@@ -340,7 +341,7 @@ function tf_stft(
             end
             # Use unpadded data length for edge filtering (FieldTrip uses ndatsample = size(dat, 2), unpadded)
             # Padding is only for FFT efficiency, but edge filtering should be based on actual data length
-            _filter_edges!(eegpower, eegconv, num_frex, time_indices, window_lengths_samples_exact, n_samples_per_epoch) 
+            _filter_edges!(eegpower, eegconv, num_frex, time_indices, window_lengths_samples_exact, n_samples_per_epoch)
         end
 
         if return_trials # Store each trial separately
@@ -348,7 +349,7 @@ function tf_stft(
                 power_df[trial_idx][!, channel] = vec(eegpower[:, :, trial_idx])
                 phase_df[trial_idx][!, channel] = vec(angle.(eegconv[:, :, trial_idx]))
             end
-        else 
+        else
             eegpower ./= n_trials
             eegconv ./= n_trials
             power_df[!, channel] = vec(eegpower)

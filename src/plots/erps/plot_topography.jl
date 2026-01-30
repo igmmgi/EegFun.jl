@@ -31,16 +31,8 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
 
     # Compute interpolated data
     channel_data = mean.(eachcol(dat[!, layout.data.label]))
-    supported_methods = [
-        :multiquadratic,
-        :inverse_multiquadratic,
-        :gaussian,
-        :inverse_quadratic,
-        :thin_plate,
-        :polyharmonic,
-        :shepard,
-        :nearest,
-    ]
+    supported_methods =
+        [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
     if method ∈ supported_methods
         data = _data_interpolation_topo(channel_data, layout, gridscale; method = method)
     elseif method == :spherical_spline
@@ -99,6 +91,7 @@ function plot_topography(
     dat::SingleDataFrameEeg;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
+    interval_selection::TimeInterval = times(),
     display_plot = true,
     interactive = true,
     kwargs...,
@@ -114,6 +107,7 @@ function plot_topography(
         dat;
         channel_selection = channel_selection,
         sample_selection = sample_selection,
+        interval_selection = interval_selection,
         kwargs...,
     )
 
@@ -133,12 +127,14 @@ function plot_topography!(
     dat::SingleDataFrameEeg;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
+    interval_selection::TimeInterval = times(),
     kwargs...,
 )
     # Merge user kwargs with defaults to get all parameters
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
 
-    dat_subset = subset(dat, channel_selection = channel_selection, sample_selection = sample_selection)
+    dat_subset =
+        subset(dat, channel_selection = channel_selection, sample_selection = sample_selection, interval_selection = interval_selection)
     _plot_topography!(fig, ax, dat_subset.data, dat_subset.layout; plot_kwargs...)
 
 end
@@ -156,6 +152,7 @@ function plot_topography(
     dat::Vector{<:SingleDataFrameEeg};
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
+    interval_selection::TimeInterval = times(),
     display_plot = true,
     interactive = true,
     kwargs...,
@@ -276,6 +273,7 @@ function plot_topography(
             dataset;
             channel_selection = channel_selection,
             sample_selection = sample_selection,
+            interval_selection = interval_selection,
             subplot_kwargs...,
         )
     end
@@ -318,6 +316,7 @@ function plot_topography!(
     epoch::Int;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
+    interval_selection::TimeInterval = times(),
     kwargs...,
 )
     plot_topography!(
@@ -326,6 +325,7 @@ function plot_topography!(
         convert(dat, epoch);
         channel_selection = channel_selection,
         sample_selection = sample_selection,
+        interval_selection = interval_selection,
         kwargs...,
     )
 end
@@ -335,6 +335,7 @@ function plot_topography(
     epoch::Int;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
+    interval_selection::TimeInterval = times(),
     display_plot = true,
     kwargs...,
 )
@@ -349,6 +350,7 @@ function plot_topography(
         convert(dat, epoch);
         channel_selection = channel_selection,
         sample_selection = sample_selection,
+        interval_selection = interval_selection,
         kwargs...,
     )
 
@@ -425,12 +427,7 @@ https://eljungsk.github.io/ScatteredInterpolation.jl/dev/methods/
 # Returns
 - `Matrix{Float64}`: Interpolated data on a regular grid
 """
-function _data_interpolation_topo(
-    dat::Vector{<:AbstractFloat},
-    layout::Layout,
-    grid_scale::Int;
-    method::Symbol = :thin_plate,
-)
+function _data_interpolation_topo(dat::Vector{<:AbstractFloat}, layout::Layout, grid_scale::Int; method::Symbol = :thin_plate)
 
     if any(isnan, dat) || any(isinf, dat)
         throw(ArgumentError("Input data contains NaN or Inf values"))
@@ -453,16 +450,8 @@ function _data_interpolation_topo(
     end
 
     # Select radial basis function type or interpolation method
-    supported_methods = [
-        :multiquadratic,
-        :inverse_multiquadratic,
-        :gaussian,
-        :inverse_quadratic,
-        :thin_plate,
-        :polyharmonic,
-        :shepard,
-        :nearest,
-    ]
+    supported_methods =
+        [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
     method = if method == :multiquadratic
         ScatteredInterpolation.Multiquadratic()
     elseif method == :inverse_multiquadratic
@@ -802,12 +791,7 @@ end
 
 Set up shared interactivity for multiple topographic plots.
 """
-function _setup_shared_topo_interactivity!(
-    fig::Figure,
-    axes::Vector{Axis},
-    datasets::Vector,
-    shared_selection_state::TopoSelectionState,
-)
+function _setup_shared_topo_interactivity!(fig::Figure, axes::Vector{Axis}, datasets::Vector, shared_selection_state::TopoSelectionState)
     deregister_interaction!.(axes, :rectanglezoom)
     _setup_topo_keyboard_handlers!(fig, axes)
     _setup_shared_topo_selection!(fig, datasets, shared_selection_state)
@@ -869,21 +853,9 @@ Create rectangles on all axes with the given points.
 - If `is_temporary`, stores in `temp_rectangles`
 - Otherwise, creates permanent rectangles and stores in `rectangles`
 """
-function _create_rectangles_on_all_axes!(
-    selection_state::TopoSelectionState,
-    rect_points::Vector{Point2f},
-    is_temporary::Bool,
-)
+function _create_rectangles_on_all_axes!(selection_state::TopoSelectionState, rect_points::Vector{Point2f}, is_temporary::Bool)
     for (idx, other_ax) in enumerate(selection_state.axes)
-        rect = poly!(
-            other_ax,
-            rect_points,
-            color = (:blue, 0.3),
-            strokecolor = :black,
-            strokewidth = 1,
-            visible = true,
-            overdraw = true,
-        )
+        rect = poly!(other_ax, rect_points, color = (:blue, 0.3), strokecolor = :black, strokewidth = 1, visible = true, overdraw = true)
 
         if is_temporary
             selection_state.temp_rectangles[idx] = rect
@@ -1121,8 +1093,7 @@ This approach uses the real layout data from the topographic plot.
 """
 function _find_electrodes_in_region(x_min::Float64, y_min::Float64, x_max::Float64, y_max::Float64, original_data)
     # Filter electrodes that are inside the selection rectangle
-    selected_rows =
-        filter(row -> x_min <= row.x2 <= x_max && y_min <= row.y2 <= y_max, eachrow(original_data.layout.data))
+    selected_rows = filter(row -> x_min <= row.x2 <= x_max && y_min <= row.y2 <= y_max, eachrow(original_data.layout.data))
     return [Symbol(row.label) for row in selected_rows]
 end
 

@@ -1,7 +1,7 @@
 function tf_morlet(
     dat::EpochData;
     channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    interval_selection::TimeInterval = times(),
     frequencies::Union{AbstractRange,AbstractVector{<:Real}} = range(1, 40, length = 40),
     cycles::Union{Real,Tuple{Real,Real}} = 7,
     pad::Union{Nothing,Symbol} = nothing,
@@ -14,8 +14,8 @@ function tf_morlet(
         error("`pad` must be `nothing`, `:pre`, `:post`, or `:both`, got :$pad")
     end
 
-    # Subset data with channel and sample selection
-    dat = subset(dat; channel_selection = channel_selection, sample_selection = sample_selection)
+    # Subset data with channel and interval selection
+    dat = subset(dat; channel_selection = channel_selection, interval_selection = interval_selection)
     isempty(dat.data) && error("No data remaining after subsetting")
 
     # Get original data time range (before padding) - these are the time points we want in output

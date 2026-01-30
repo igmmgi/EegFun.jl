@@ -692,9 +692,16 @@ function ylimits(
     dat::ErpData;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
+    interval_selection::TimeInterval = times(),
     include_extra::Bool = false,
 )::Tuple{Float64,Float64}
-    dat_sub = subset(dat; channel_selection = channel_selection, sample_selection = sample_selection, include_extra = include_extra)
+    dat_sub = subset(
+        dat;
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        interval_selection = interval_selection,
+        include_extra = include_extra,
+    )
     chs = channel_labels(dat_sub)
     lims = data_limits_y(dat_sub.data, chs)
     return (lims[1], lims[2])
@@ -710,11 +717,18 @@ function ylimits(
     dat::EpochData;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
+    interval_selection::TimeInterval = times(),
     include_extra::Bool = false,
 )::Tuple{Float64,Float64}
 
     # Apply predicates via subset first
-    dat_sub = subset(dat; channel_selection = channel_selection, sample_selection = sample_selection, include_extra = include_extra)
+    dat_sub = subset(
+        dat;
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        interval_selection = interval_selection,
+        include_extra = include_extra,
+    )
     # Determine which value columns to use
     chs = channel_labels(dat_sub)
     # Compute limits per epoch and combine
@@ -804,6 +818,28 @@ function _subset_common(dat::MultiDataFrameEeg, epoch_selection, channel_selecti
     return selected_epochs, selected_channels, selected_samples, layout_subset
 end
 
+"""
+    _interval_to_samples(interval::TimeInterval)
+
+Internal helper to convert a TimeInterval (nothing, tuple, or AbstractInterval)
+into a samples() predicate function for use in subset().
+
+# Arguments
+- `interval::TimeInterval`: Time interval specification
+
+# Returns
+- `Function`: samples() predicate that selects the specified time range
+"""
+function _interval_to_samples(interval::TimeInterval)
+    if isnothing(interval)
+        return samples()
+    elseif interval isa Tuple
+        return samples(IntervalTime(interval))
+    else  # AbstractInterval
+        return samples(interval)
+    end
+end
+
 # Helper constructors for subsetting
 _create_subset(dat::ContinuousData, ds, ls) = ContinuousData(dat.file, ds, ls, dat.sample_rate, dat.analysis_info)
 _create_subset(dat::ErpData, ds, ls) =
@@ -828,9 +864,13 @@ function subset(
     dat::T;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
+    interval_selection::TimeInterval = times(),
     include_extra::Bool = false,
 )::T where {T<:SingleDataFrameEeg}
-    selected_channels, selected_samples, layout_subset = _subset_common(dat, channel_selection, sample_selection, include_extra)
+    # Combine interval and sample selection: first filter by time interval, then by sample predicate
+    interval_sel = _interval_to_samples(interval_selection)
+    combined_sel = x -> interval_sel(x) .& sample_selection(x)
+    selected_channels, selected_samples, layout_subset = _subset_common(dat, channel_selection, combined_sel, include_extra)
     dat_subset = subset_dataframe(dat.data, selected_channels, selected_samples)
     return _create_subset(dat, dat_subset, layout_subset)
 end
@@ -839,11 +879,15 @@ function subset(
     dat::T;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
+    interval_selection::TimeInterval = times(),
     epoch_selection::Function = epochs(),
     include_extra::Bool = false,
 )::T where {T<:MultiDataFrameEeg}
+    # Combine interval and sample selection
+    interval_sel = _interval_to_samples(interval_selection)
+    combined_sel = x -> interval_sel(x) .& sample_selection(x)
     selected_epochs, selected_channels, selected_samples, layout_subset =
-        _subset_common(dat, epoch_selection, channel_selection, sample_selection, include_extra)
+        _subset_common(dat, epoch_selection, channel_selection, combined_sel, include_extra)
     dat_subset = subset_dataframes(dat.data, selected_epochs, selected_channels, selected_samples)
     return _create_subset(dat, dat_subset, layout_subset)
 end
@@ -853,17 +897,19 @@ function subset(
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
+    interval_selection::TimeInterval = times(),
     include_extra::Bool = false,
 )::Vector{ErpData}
     # First filter by condition_selection
     selected_conditions = get_selected_conditions(datasets, condition_selection)
     datasets_filtered = datasets[selected_conditions]
 
-    # Then apply channel and sample selection to each dataset
+    # Then apply channel, sample, and interval selection to each dataset
     return subset.(
         datasets_filtered;
         channel_selection = channel_selection,
         sample_selection = sample_selection,
+        interval_selection = interval_selection,
         include_extra = include_extra,
     )
 end
@@ -873,6 +919,7 @@ function subset(
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
+    interval_selection::TimeInterval = times(),
     epoch_selection::Function = epochs(),
     include_extra::Bool = false,
 )::Vector{EpochData}
@@ -880,11 +927,12 @@ function subset(
     selected_conditions = get_selected_conditions(datasets, condition_selection)
     datasets_filtered = datasets[selected_conditions]
 
-    # Then apply channel, sample, and epoch selection to each dataset
+    # Then apply channel, sample, interval, and epoch selection to each dataset
     return subset.(
         datasets_filtered;
         channel_selection = channel_selection,
         sample_selection = sample_selection,
+        interval_selection = interval_selection,
         epoch_selection = epoch_selection,
         include_extra = include_extra,
     )
@@ -994,6 +1042,39 @@ samples_and(columns::Vector{Symbol}) = x -> all(x[!, col] for col in columns)
 samples_not(column::Symbol) = x -> .!(x[!, column])
 samples_or_not(columns::Vector{Symbol}) = x -> .!(any(x[!, col] for col in columns))
 samples_and_not(columns::Vector{Symbol}) = x -> .!(all(x[!, col] for col in columns))
+
+# Helper functions for time interval selection (TimeInterval type)
+# These return TimeInterval values (tuples, AbstractInterval, or nothing), not predicates
+"""
+    times()
+
+Select all time points (default for interval parameters).
+Returns `nothing` which means no time filtering.
+"""
+times() = nothing
+
+"""
+    times(start::Real, stop::Real)
+    times((start, stop))
+
+Select a specific time window from start to stop seconds.
+Returns a tuple representing the time interval.
+
+# Examples
+```julia
+times(0.3, 0.5)    # 300-500ms window
+times(-0.2, 0.0)   # -200-0ms baseline window
+```
+"""
+times(start::Real, stop::Real) = (start, stop)
+times(interval::Tuple{Real,Real}) = interval
+
+"""
+    times(interval::AbstractInterval)
+
+Pass through an existing IntervalTime or IntervalIndex object.
+"""
+times(interval::AbstractInterval) = interval
 
 # Helper function predicates for easier epoch filtering
 epochs() = x -> fill(true, length(x))  # Default: select all epochs given
