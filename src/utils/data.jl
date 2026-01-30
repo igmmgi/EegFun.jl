@@ -832,11 +832,12 @@ into a samples() predicate function for use in subset().
 """
 function _interval_to_samples(interval::TimeInterval)
     if isnothing(interval)
-        return samples()
-    elseif interval isa Tuple
-        return samples(IntervalTime(interval))
-    else  # AbstractInterval
-        return samples(interval)
+        return samples()  # All samples
+    else
+        # Extract start/stop from tuple or AbstractInterval
+        start_time, stop_time = interval isa AbstractInterval ? (interval.start, interval.stop) : interval
+        # Create time predicate directly (don't use samples() for time filtering)
+        return x -> (x[!, :time] .>= start_time) .& (x[!, :time] .<= stop_time)
     end
 end
 
@@ -1028,13 +1029,6 @@ components_not(component_number::Int) = x -> .!(x .== component_number)
 # Helper function predicates for easier sample filtering
 samples() = x -> fill(true, nrow(x))
 samples(column::Symbol) = x -> x[!, column]
-function samples(time_window::Tuple{Real,Real})
-    # Validate that start <= end
-    if time_window[1] > time_window[2]
-        @minimal_error_throw "Invalid time window: start ($(time_window[1])) must be <= end ($(time_window[2]))"
-    end
-    return x -> (x[!, :time] .>= time_window[1]) .& (x[!, :time] .<= time_window[2])
-end
 # Allow custom function predicates
 samples(predicate::Function) = predicate
 samples_or(columns::Vector{Symbol}) = x -> any(x[!, col] for col in columns)
@@ -1068,6 +1062,20 @@ times(-0.2, 0.0)   # -200-0ms baseline window
 """
 times(start::Real, stop::Real) = (start, stop)
 times(interval::Tuple{Real,Real}) = interval
+
+"""
+    times(range::AbstractRange)
+
+Select a time window from a range (e.g., 0:1, 0.1:0.1:2.0).
+Returns a tuple (first(range), last(range)).
+
+# Example
+```julia
+times(0:1)        # Returns (0, 1)
+times(0.1:0.5)    # Returns (0.1, 0.5)
+```
+"""
+times(range::AbstractRange) = (first(range), last(range))
 
 """
     times(interval::AbstractInterval)

@@ -14,13 +14,12 @@ dat = EegFun.create_eeg_dataframe(dat, layout_file);
 EegFun.rereference!(dat, :avg)
 EegFun.highpass_filter!(dat, 1)
 
-EegFun.plot_databrowser(dat)
-
-
 EegFun.plot_topography(dat)
 EegFun.plot_topography(dat, method = :nearest)
 
 EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 5.973 .&& x.time .<= 6.02, gridscale = 100)
+EegFun.plot_topography(dat, interval_selection = (5.973, 6.02), gridscale = 100)
+EegFun.plot_topography(dat, interval_selection = (5, 6), gridscale = 100)
 EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 5.973 .&& x.time .<= 6.02, gridscale = 100, ylim = (-100, 100))
 
 # Various combinations
