@@ -462,7 +462,7 @@ fig, ax = plot_channel_spectrum(dat, unit = :dB)
 function plot_channel_spectrum(
     dat::SingleDataFrameEeg;
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     channel_selection::Function = channels(),
     kwargs...,
 )
@@ -561,7 +561,7 @@ function plot_ica_component_spectrum(
     dat::ContinuousData,
     ica_result::InfoIca;
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     component_selection::Function = components(),
     kwargs...,
 )

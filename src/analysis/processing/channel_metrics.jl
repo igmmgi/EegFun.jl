@@ -26,7 +26,7 @@ cm = correlation_matrix(dat, channel_selection = channels([:Fp1, :Fp2, :F3, :F4]
 function correlation_matrix(
     dat::SingleDataFrameEeg;
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     channel_selection::Function = channels(),
     include_extra::Bool = false,
 )::DataFrame
@@ -58,7 +58,7 @@ end
 """
     correlation_matrix_dual_selection(dat::SingleDataFrameEeg; 
                                      sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
                                      channel_selection1::Function = channels(),
                                      channel_selection2::Function = channels(),
                                      include_extra_selection1::Bool = false,
@@ -109,7 +109,7 @@ cm = correlation_matrix_dual_selection(dat,
 function correlation_matrix_dual_selection(
     dat::SingleDataFrameEeg;
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     channel_selection1::Function = channels(),
     channel_selection2::Function = channels(),
     include_extra_selection1::Bool = false,
@@ -194,7 +194,7 @@ jp = channel_joint_probability(dat, threshold = 0.3)
 function channel_joint_probability(
     dat::SingleDataFrameEeg;
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     channel_selection::Function = channels(),
     include_extra::Bool = false,
     threshold::Real = 5.0,
@@ -477,7 +477,7 @@ end
 """
     correlation_matrix_eog(dat::SingleDataFrameEeg, eog_cfg::EogConfig; 
                           sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
                           channel_selection::Function = channels(),
                           include_extra::Bool = false)
 
@@ -516,7 +516,7 @@ function correlation_matrix_eog(
     dat::SingleDataFrameEeg,
     eog_cfg::EogConfig;
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     channel_selection::Function = channels(),
     include_extra::Bool = false,
 )::DataFrame

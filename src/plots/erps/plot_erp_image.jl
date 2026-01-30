@@ -67,7 +67,7 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
                    layout::Union{Symbol, PlotLayout} = :single,
                    channel_selection::Function = channels(),
                    sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
                    kwargs...)
 
 Plot ERP image for specified channels and samples with flexible layout options.
@@ -115,7 +115,7 @@ function plot_erp_image(
     layout::Union{Symbol,PlotLayout} = :single,
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     kwargs...,
 )
     # Merge default kwargs with provided kwargs

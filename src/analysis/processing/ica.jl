@@ -2,7 +2,7 @@
     run_ica(dat::ContinuousData;
             n_components::Union{Nothing,Int} = nothing,
             sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
             channel_selection::Function = channels(),
             include_extra::Bool = false,
             percentage_of_data::Real = 100.0,
@@ -40,7 +40,7 @@ function run_ica(
     dat::ContinuousData;
     n_components::Union{Nothing,Int} = nothing,
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     channel_selection::Function = channels(),
     include_extra::Bool = false,
     percentage_of_data::Real = 100.0,
@@ -93,7 +93,7 @@ end
     run_ica(epoched_data::Vector{EpochData};
             n_components::Union{Nothing,Int} = nothing,
             sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
             channel_selection::Function = channels(),
             include_extra::Bool = false,
             remove_duplicates::Bool = true,
@@ -141,7 +141,7 @@ function run_ica(
     epoched_data::Vector{EpochData};
     n_components::Union{Nothing,Int} = nothing,
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     channel_selection::Function = channels(),
     include_extra::Bool = false,
     remove_duplicates::Bool = true,
@@ -1181,7 +1181,7 @@ function identify_eog_components(
     vEOG_channel::Symbol = :vEOG,
     hEOG_channel::Symbol = :hEOG,
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     z_threshold::Float64 = 3.0,
     min_correlation::Float64 = 0.5,
     two_step::Bool = true,
@@ -1430,7 +1430,7 @@ end
                               max_ibi_std_s::Real=0.2,
                               min_peak_ratio::Real=0.5,
                               sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
 )
 
 Identify ICA components potentially related to ECG artifacts based on peak detection
@@ -1474,7 +1474,7 @@ function identify_ecg_components(
     max_ibi_std_s::Real = 0.2,
     min_peak_ratio::Real = 0.5,
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
 )
 
     # Data Preparation 
@@ -1689,7 +1689,7 @@ function identify_line_noise_components(
     dat::ContinuousData,
     ica::InfoIca;
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     line_freq::Real = 50.0,
     freq_bandwidth::Real = 1.0,
     z_threshold::Float64 = 3.0,
@@ -1836,7 +1836,7 @@ end
 
 """
     identify_components(dat::ContinuousData, ica::InfoIca; sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(), kwargs...)
+    interval_selection::Interval = times(), kwargs...)
 
 Identify all types of artifact components in one unified call.
 
@@ -1869,7 +1869,7 @@ ecg_metrics = metrics[:ecg_metrics]
 ```
 """
 function identify_components(dat::ContinuousData, ica::InfoIca; sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(), kwargs...)
+    interval_selection::Interval = times(), kwargs...)
     # Identify EOG components (pass through use_robust_zscore if provided)
     eog_comps, eog_metrics_df = identify_eog_components(dat, ica; sample_selection = sample_selection, kwargs...)
 

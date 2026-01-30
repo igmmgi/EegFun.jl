@@ -1,7 +1,7 @@
 # This file contains data preparation functions for decoding/MVPA analysis
 
 """
-    prepare_decoding(epochs::Vector{EpochData}; condition_selection::Function = conditions(), channel_selection::Function = channels(), interval_selection::TimeInterval = times())
+    prepare_decoding(epochs::Vector{EpochData}; condition_selection::Function = conditions(), channel_selection::Function = channels(), interval_selection::Interval = times())
 
 Prepare EpochData for multivariate pattern analysis (MVPA/decoding).
 
@@ -12,7 +12,7 @@ epochs by participant and selecting specified conditions for classification.
 - `epochs::Vector{EpochData}`: Epoch data containing multiple conditions/participants
 - `condition_selection::Function`: Predicate to select conditions for classification (default: `conditions()` - all conditions)
 - `channel_selection::Function`: Predicate to filter channels (default: `channels()` - all channels)
-- `interval_selection::TimeInterval`: Time window as tuple (e.g., (0.0, 1.0)) or interval object (default: nothing - all samples)
+- `interval_selection::Interval`: Time window as tuple (e.g., (0.0, 1.0)) or interval object (default: nothing - all samples)
 
 # Returns
 - `Vector{Vector{EpochData}}`: Vector of participant data, where each element is a vector of EpochData for that participant's conditions
@@ -41,7 +41,7 @@ function prepare_decoding(
     epochs::Vector{EpochData};
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
 )
     isempty(epochs) && @minimal_error_throw("Cannot prepare decoding with empty epochs vector")
 
@@ -132,7 +132,7 @@ function prepare_decoding(
 end
 
 """
-    prepare_decoding(file_pattern::String; input_dir::String = pwd(), participant_selection::Function = participants(), condition_selection::Function = conditions(), channel_selection::Function = channels(), interval_selection::TimeInterval = times())
+    prepare_decoding(file_pattern::String; input_dir::String = pwd(), participant_selection::Function = participants(), condition_selection::Function = conditions(), channel_selection::Function = channels(), interval_selection::Interval = times())
 
 Prepare EpochData for decoding from JLD2 files (convenience wrapper).
 
@@ -144,7 +144,7 @@ Loads EpochData from JLD2 files matching the pattern and prepares them for decod
 - `participant_selection::Function`: Predicate to filter participants (default: `participants()` - all participants)
 - `condition_selection::Function`: Predicate to select conditions for classification (default: `conditions()` - all conditions)
 - `channel_selection::Function`: Predicate to filter channels (default: `channels()` - all channels)
-- `interval_selection::TimeInterval`: Time window as tuple (e.g., (0.0, 1.0)) or interval object (default: nothing - all samples)
+- `interval_selection::Interval`: Time window as tuple (e.g., (0.0, 1.0)) or interval object (default: nothing - all samples)
 
 # Returns
 - `Vector{Vector{EpochData}}`: Vector of participant data, where each element is a vector of EpochData for that participant's conditions
@@ -170,7 +170,7 @@ function prepare_decoding(
     participant_selection::Function = participants(),
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
 )
     # Load all appropriate data and call the main preparation function
     all_epochs = load_all_data(EpochData, file_pattern, input_dir, participant_selection)

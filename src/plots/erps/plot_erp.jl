@@ -78,8 +78,8 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
              condition_selection::Function = conditions(),
              channel_selection::Function = channels(),
              sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
-             baseline_interval::TimeInterval = times(),
+    interval_selection::Interval = times(),
+             baseline_interval::Interval = times(),
              kwargs...)
 
 Load ERP data from a JLD2 file and create plots.
@@ -106,8 +106,8 @@ function plot_erp(
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
-    baseline_interval::TimeInterval = times(),
+    interval_selection::Interval = times(),
+    baseline_interval::Interval = times(),
     kwargs...,
 )
     # Load data from file
@@ -133,8 +133,8 @@ end
              layout::Union{Symbol, PlotLayout} = :single,
              channel_selection::Function = channels(),
              sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
-             baseline_interval::TimeInterval = times(),
+    interval_selection::Interval = times(),
+             baseline_interval::Interval = times(),
              kwargs...)
 
 Create ERP plots with flexible layout options.
@@ -150,7 +150,7 @@ Create ERP plots with flexible layout options.
   
 - `channel_selection::Function`: Function that returns boolean vector for channel filtering
 - `sample_selection::Function`: Function that returns boolean vector for sample filtering
-- `baseline_interval::TimeInterval`: Baseline correction interval. Can be `nothing` (no baseline), tuple like `(-0.2, 0.0)`, `IntervalTime`, or `IntervalIndex`. Default `nothing` means no baseline correction.
+- `baseline_interval::Interval`: Baseline correction interval. Can be `nothing` (no baseline), tuple like `(-0.2, 0.0)`, `nothing` means no baseline correction.
 - `kwargs`: Additional keyword arguments
 
 $(generate_kwargs_doc(PLOT_ERP_KWARGS))
@@ -190,8 +190,8 @@ function plot_erp(
     layout::Union{Symbol,PlotLayout} = :single,
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
-    baseline_interval::TimeInterval = times(),
+    interval_selection::Interval = times(),
+    baseline_interval::Interval = times(),
     kwargs...,
 )
     # For single ErpData, condition_selection doesn't apply (there's only one condition)
@@ -212,8 +212,8 @@ end
              condition_selection::Function = conditions(),
              channel_selection::Function = channels(), 
              sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
-             baseline_interval::TimeInterval = times(),
+    interval_selection::Interval = times(),
+             baseline_interval::Interval = times(),
              kwargs...)
 
 Plot multiple ERP datasets on the same axis (e.g., conditions).
@@ -224,8 +224,8 @@ function plot_erp(
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
-    baseline_interval::TimeInterval = times(),
+    interval_selection::Interval = times(),
+    baseline_interval::Interval = times(),
     return_line_refs::Bool = false,  # Internal parameter, not in PLOT_ERP_KWARGS
     kwargs...,
 )
@@ -524,7 +524,7 @@ function _prepare_erp_data(
     condition_selection = conditions(),
     channel_selection = channels(),
     sample_selection = samples(),
-    baseline_interval::TimeInterval = times(),
+    baseline_interval::Interval = times(),
 )
     # Data subsetting - ONLY by condition and sample, NOT by channel
     # This keeps all channels available for right-click topoplots
@@ -829,7 +829,7 @@ end
 
 """
     _setup_erp_control_panel!(fig::Figure, dat_subset::Vector{ErpData}, axes::Vector{Axis}, 
-                               baseline_interval::TimeInterval,
+                               baseline_interval::Interval,
                                line_refs::Union{Vector{<:Dict},Nothing} = nothing)
 
 Set up a control panel that opens when 'c' key is pressed.
@@ -839,7 +839,7 @@ function _setup_erp_control_panel!(
     fig::Figure,
     dat_subset::Vector{ErpData},
     axes::Vector{Axis},
-    baseline_interval::TimeInterval,
+    baseline_interval::Interval,
     line_refs::Union{Vector{<:Dict},Nothing} = nothing,
     condition_checked_ref::Ref{Union{Vector{Observable{Bool}},Nothing}} = Ref{Union{Vector{Observable{Bool}},Nothing}}(
         nothing,

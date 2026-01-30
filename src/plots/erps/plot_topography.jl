@@ -91,7 +91,7 @@ function plot_topography(
     dat::SingleDataFrameEeg;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     display_plot = true,
     interactive = true,
     kwargs...,
@@ -127,7 +127,7 @@ function plot_topography!(
     dat::SingleDataFrameEeg;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     kwargs...,
 )
     # Merge user kwargs with defaults to get all parameters
@@ -152,7 +152,7 @@ function plot_topography(
     dat::Vector{<:SingleDataFrameEeg};
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     display_plot = true,
     interactive = true,
     kwargs...,
@@ -316,7 +316,7 @@ function plot_topography!(
     epoch::Int;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     kwargs...,
 )
     plot_topography!(
@@ -335,7 +335,7 @@ function plot_topography(
     epoch::Int;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     display_plot = true,
     kwargs...,
 )

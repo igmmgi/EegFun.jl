@@ -1,7 +1,7 @@
 """
     tf_stft(dat::EpochData; 
             channel_selection::Function=channels(),
-            interval_selection::TimeInterval=samples(),
+            interval_selection::Interval=samples(),
             frequencies::Union{AbstractRange,AbstractVector{<:Real}}=range(1, 40, length=40),
             window_length::Union{Nothing,Real}=nothing,
             cycles::Union{Nothing,Real}=nothing,
@@ -21,7 +21,7 @@ Supports both fixed-length windows (consistent time resolution) and adaptive win
 - `channel_selection::Function=channels()`: Channel selection predicate. See `channels()` for options.
   - Example: `channel_selection=channels(:Cz)` for single channel
   - Example: `channel_selection=channels([:Cz, :Pz])` for multiple channels
-- `interval_selection::TimeInterval=samples()`: Sample selection predicate. See `samples()` for options.
+- `interval_selection::Interval=samples()`: Sample selection predicate. See `samples()` for options.
   - Example: `sample_selection=samples((-0.5, 2.0))` for time window from -0.5 to 2.0 seconds
   - Example: `sample_selection=samples()` for all time points (default)
   - Default: all samples
@@ -69,7 +69,7 @@ tf_data = tf_stft(epochs; frequencies=2:1:30, cycles=7, sample_selection=samples
 function tf_stft(
     dat::EpochData;
     channel_selection::Function = channels(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     frequencies::Union{AbstractRange,AbstractVector{<:Real}} = range(1, 40, length = 40),
     time_steps::Real = 0.05,
     window_length::Union{Nothing,Real} = nothing,

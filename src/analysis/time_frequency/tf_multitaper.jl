@@ -1,7 +1,7 @@
 """
     tf_multitaper(dat::EpochData; 
                   channel_selection::Function=channels(),
-                  interval_selection::TimeInterval=samples(),
+                  interval_selection::Interval=samples(),
                   frequencies::Union{AbstractRange,AbstractVector{<:Real}}=range(1, 40, length=40),
                   cycles::Real,
                   frequency_smoothing::Union{Nothing,Real}=nothing,
@@ -21,7 +21,7 @@ Uses multiple orthogonal tapers (Slepian sequences) to reduce variance in spectr
 - `channel_selection::Function=channels()`: Channel selection predicate. See `channels()` for options.
   - Example: `channel_selection=channels(:Cz)` for single channel
   - Example: `channel_selection=channels([:Cz, :Pz])` for multiple channels
-- `interval_selection::TimeInterval=samples()`: Sample selection predicate. See `samples()` for options.
+- `interval_selection::Interval=samples()`: Sample selection predicate. See `samples()` for options.
   - Example: `sample_selection=samples((-0.5, 2.0))` for time window from -0.5 to 2.0 seconds
   - Example: `sample_selection=samples()` for all time points (default)
   - Default: all samples
@@ -73,7 +73,7 @@ tf_data = tf_multitaper(epochs; frequencies=1:2:30, cycles=5, frequency_smoothin
 function tf_multitaper(
     dat::EpochData;
     channel_selection::Function = channels(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     frequencies::Union{AbstractRange,AbstractVector{<:Real}} = range(1, 40, length = 40),
     time_steps::Real = 0.05,
     cycles::Real,

@@ -65,7 +65,7 @@ end
 
 """
     channel_summary(dat::ContinuousData; sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(), channel_selection::Function = channels(), include_extra::Bool = false)::DataFrame
+    interval_selection::Interval = times(), channel_selection::Function = channels(), include_extra::Bool = false)::DataFrame
 
 Computes summary statistics for EEG channels.
 
@@ -168,7 +168,7 @@ summary = channel_summary(dat, channel_selection = channels([:Fp1, :Fp2, :vEOG, 
 function channel_summary(
     dat::SingleDataFrameEeg;
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     channel_selection::Function = channels(),
     include_meta::Bool = false,
     include_extra::Bool = false,
@@ -188,7 +188,7 @@ end
 
 """
     channel_summary(dat::MultiDataFrameEeg; sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(), channel_selection::Function = channels(), include_meta::Bool = false, include_extra::Bool = false)::DataFrame
+    interval_selection::Interval = times(), channel_selection::Function = channels(), include_meta::Bool = false, include_extra::Bool = false)::DataFrame
 
 Computes summary statistics for EEG channels across multiple epochs.
 
@@ -217,7 +217,7 @@ summary = channel_summary(epoch_data, sample_selection = samples_not(:is_bad))
 function channel_summary(
     dat::MultiDataFrameEeg;
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     channel_selection::Function = channels(),
     include_meta::Bool = false,
     include_extra::Bool = false,
@@ -340,7 +340,7 @@ end
                     participant_selection::Function = participants(),
                     condition_selection::Function = conditions(),
                     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
                     channel_selection::Function = channels(),
                     include_extra::Bool = false,
                     output_dir::Union{String, Nothing} = nothing,
@@ -383,7 +383,7 @@ function channel_summary(
     participant_selection::Function = participants(),
     condition_selection::Function = conditions(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     channel_selection::Function = channels(),
     include_extra::Bool = false,
     output_dir::Union{String,Nothing} = nothing,
