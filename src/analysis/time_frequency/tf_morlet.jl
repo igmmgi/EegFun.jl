@@ -1,7 +1,7 @@
 function tf_morlet(
     dat::EpochData;
     channel_selection::Function = channels(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     frequencies::Union{AbstractRange,AbstractVector{<:Real}} = range(1, 40, length = 40),
     cycles::Union{Real,Tuple{Real,Real}} = 7,
     pad::Union{Nothing,Symbol} = nothing,

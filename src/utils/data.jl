@@ -692,7 +692,7 @@ function ylimits(
     dat::ErpData;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     include_extra::Bool = false,
 )::Tuple{Float64,Float64}
     dat_sub = subset(
@@ -717,7 +717,7 @@ function ylimits(
     dat::EpochData;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     include_extra::Bool = false,
 )::Tuple{Float64,Float64}
 
@@ -819,23 +819,27 @@ function _subset_common(dat::MultiDataFrameEeg, epoch_selection, channel_selecti
 end
 
 """
-    _interval_to_samples(interval::TimeInterval)
+    _interval_to_samples(interval::Interval)
 
-Internal helper to convert a TimeInterval (nothing, tuple, or AbstractInterval)
+Internal helper to convert a Interval (nothing, tuple, or range)
 into a samples() predicate function for use in subset().
 
 # Arguments
-- `interval::TimeInterval`: Time interval specification
+- `interval::Interval`: Time interval specification
 
 # Returns
 - `Function`: samples() predicate that selects the specified time range
 """
-function _interval_to_samples(interval::TimeInterval)
+function _interval_to_samples(interval::Interval)
     if isnothing(interval)
         return samples()  # All samples
     else
-        # Extract start/stop from tuple or AbstractInterval
-        start_time, stop_time = interval isa AbstractInterval ? (interval.start, interval.stop) : interval
+        # Extract start/stop from tuple or range
+        if interval isa AbstractRange
+            start_time, stop_time = first(interval), last(interval)
+        else
+            start_time, stop_time = interval
+        end
         # Create time predicate directly (don't use samples() for time filtering)
         return x -> (x[!, :time] .>= start_time) .& (x[!, :time] .<= stop_time)
     end
@@ -865,7 +869,7 @@ function subset(
     dat::T;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     include_extra::Bool = false,
 )::T where {T<:SingleDataFrameEeg}
     # Combine interval and sample selection: first filter by time interval, then by sample predicate
@@ -880,7 +884,7 @@ function subset(
     dat::T;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     epoch_selection::Function = epochs(),
     include_extra::Bool = false,
 )::T where {T<:MultiDataFrameEeg}
@@ -898,7 +902,7 @@ function subset(
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     include_extra::Bool = false,
 )::Vector{ErpData}
     # First filter by condition_selection
@@ -920,7 +924,7 @@ function subset(
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     epoch_selection::Function = epochs(),
     include_extra::Bool = false,
 )::Vector{EpochData}
@@ -1037,8 +1041,8 @@ samples_not(column::Symbol) = x -> .!(x[!, column])
 samples_or_not(columns::Vector{Symbol}) = x -> .!(any(x[!, col] for col in columns))
 samples_and_not(columns::Vector{Symbol}) = x -> .!(all(x[!, col] for col in columns))
 
-# Helper functions for time interval selection (TimeInterval type)
-# These return TimeInterval values (tuples, AbstractInterval, or nothing), not predicates
+# Helper functions for time interval selection (Interval type)
+# These return Interval values (tuples, ranges, or nothing), not predicates
 """
     times()
 
@@ -1063,26 +1067,9 @@ times(-0.2, 0.0)   # -200-0ms baseline window
 times(start::Real, stop::Real) = (start, stop)
 times(interval::Tuple{Real,Real}) = interval
 
-"""
-    times(range::AbstractRange)
 
-Select a time window from a range (e.g., 0:1, 0.1:0.1:2.0).
-Returns a tuple (first(range), last(range)).
 
-# Example
-```julia
-times(0:1)        # Returns (0, 1)
-times(0.1:0.5)    # Returns (0.1, 0.5)
-```
-"""
-times(range::AbstractRange) = (first(range), last(range))
 
-"""
-    times(interval::AbstractInterval)
-
-Pass through an existing IntervalTime or IntervalIndex object.
-"""
-times(interval::AbstractInterval) = interval
 
 # Helper function predicates for easier epoch filtering
 epochs() = x -> fill(true, length(x))  # Default: select all epochs given

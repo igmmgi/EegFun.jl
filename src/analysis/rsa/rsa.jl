@@ -314,7 +314,7 @@ end
         epochs::Vector{EpochData};
         channel_selection::Function = channels(),
         sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
         dissimilarity_measure::Symbol = :correlation,
         average_trials::Bool = true,
         normalize_method::Symbol = :none,
@@ -375,7 +375,7 @@ function rsa(
     epochs::Vector{EpochData};
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     dissimilarity_measure::Symbol = :correlation,
     average_trials::Bool = true,
     normalize_method::Symbol = :none,

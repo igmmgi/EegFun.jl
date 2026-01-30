@@ -21,9 +21,9 @@ using DataFrames
             @test nrow(result.data) == nrow(erp.data)
         end
 
-        # Test interval_selection with AbstractInterval
-        @testset "AbstractInterval" begin
-            interval = EegFun.IntervalTime(0.2, 0.4)
+        # Test interval_selection with Tuple
+        @testset "Tuple" begin
+            interval = (0.2, 0.4)
             result = EegFun.subset(erp, interval_selection = interval)
             @test nrow(result.data) < nrow(erp.data)
             @test all(0.2 .<= result.data.time .<= 0.4)
@@ -201,14 +201,10 @@ using DataFrames
             @test EegFun.times((0.2, 0.6)) == (0.2, 0.6)
         end
 
-        @testset "times(range) converts to tuple" begin
-            @test EegFun.times(0:1) == (0, 1)
-            @test EegFun.times(0.1:0.5) == (0.1, 0.5)
-            @test EegFun.times(-0.2:0.2) == (-0.2, 0.2)
-        end
 
-        @testset "times(AbstractInterval) passes through" begin
-            interval = EegFun.IntervalTime(0.3, 0.7)
+
+        @testset "times(Tuple) passes through" begin
+            interval = (0.3, 0.7)
             @test EegFun.times(interval) === interval
         end
     end

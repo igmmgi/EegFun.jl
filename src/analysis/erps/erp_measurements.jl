@@ -355,7 +355,7 @@ Returns DataFrame row with metadata and channel measurements.
 function _process_dataframe_measurements(
     df::DataFrame,
     selected_channels::Vector{Symbol},
-    analysis_interval::TimeInterval,
+    analysis_interval::Interval,
     analysis_type::String,
     participant::Int,
     measurement_kwargs::Dict{Symbol,Any},
@@ -382,16 +382,19 @@ function _process_dataframe_measurements(
         # Use all samples
         time_idx = 1:nrow(df)
     else
-        # Convert tuple to IntervalTime if needed
-        interval = analysis_interval isa Tuple ? IntervalTime(analysis_interval) : analysis_interval
+        # Ensure we have a tuple
+        interval = analysis_interval
+        if interval isa AbstractRange
+            interval = (first(interval), last(interval))
+        end
 
         # Validate interval
-        if interval.start > interval.stop
-            @minimal_error_throw "Analysis interval start must be <= stop. Got: ($(interval.start), $(interval.stop))"
+        if interval[1] > interval[2]
+            @minimal_error_throw "Analysis interval start must be <= stop. Got: ($(interval[1]), $(interval[2]))"
         end
 
         # Find time range
-        start_idx, stop_idx = find_idx_start_end(time_col, interval.start, interval.stop)
+        start_idx, stop_idx = find_idx_start_end(time_col, interval[1], interval[2])
         time_idx = start_idx:stop_idx
     end
 
@@ -448,9 +451,9 @@ Returns Vector of NamedTuples (one per condition/epoch).
 """
 function _process_measurements_file(
     filepath::String,
-    analysis_interval::TimeInterval,
+    analysis_interval::Interval,
     analysis_type::String,
-    baseline_interval::TimeInterval,
+    baseline_interval::Interval,
     condition_selection::Function,
     channel_selection::Function,
     measurement_kwargs::Dict{Symbol,Any},
@@ -501,7 +504,7 @@ Returns the DataFrames vector (modified in place if baseline applied).
 """
 function _apply_baseline_correction!(
     dfs::Vector{DataFrame},
-    baseline_interval::TimeInterval,
+    baseline_interval::Interval,
     all_channels::Vector{Symbol},
     filename::String = "",
 )
@@ -514,14 +517,17 @@ function _apply_baseline_correction!(
     eeg_channels = all_channels[channels()(all_channels)]
 
     if !isempty(eeg_channels)
-        # Convert tuple to IntervalTime if needed
-        baseline_int = baseline_interval isa Tuple ? IntervalTime(baseline_interval) : baseline_interval
+        # Ensure we have a tuple
+        baseline_int = baseline_interval
+        if baseline_int isa AbstractRange
+            baseline_int = (first(baseline_int), last(baseline_int))
+        end
 
-        # Convert IntervalTime to IntervalIndex using first dataframe's time column
+        # Convert time tuple to index tuple using first dataframe's time column
         # (assume all dataframes have the same time points for epochs/ERPs)
         time_col = dfs isa Vector ? dfs[1].time : dfs.time
-        start_idx, stop_idx = find_idx_start_end(time_col, baseline_int.start, baseline_int.stop)
-        baseline_idx = IntervalIndex(start_idx, stop_idx)
+        start_idx, stop_idx = find_idx_start_end(time_col, baseline_int[1], baseline_int[2])
+        baseline_idx = (start_idx, stop_idx)
 
         # Try to apply baseline - don't fail measurements if baseline fails
         try
@@ -545,8 +551,8 @@ Extract ERP measurements from a single ErpData object.
 # Arguments
 - `dat::ErpData`: ErpData object containing a single ERP
 - `analysis_type::String`: Type of measurement to extract
-- `analysis_interval::TimeInterval`: Analysis time window as tuple (e.g., (0.3, 0.5)) or interval object (default: nothing - all samples)
-- `baseline_interval::TimeInterval`: Baseline time window as tuple (e.g., (-0.2, 0.0)) or interval object (default: nothing - no baseline)
+- `analysis_interval::Interval`: Analysis time window as tuple (e.g., (0.3, 0.5)) or interval object (default: nothing - all samples)
+- `baseline_interval::Interval`: Baseline time window as tuple (e.g., (-0.2, 0.0)) or interval object (default: nothing - no baseline)
 - `channel_selection::Function`: Channel selection (default: channels() - all)
 - `participant::Int`: Participant ID for metadata (default: 0)
 - `kwargs...`: Additional measurement-specific parameters
@@ -557,8 +563,8 @@ Extract ERP measurements from a single ErpData object.
 function erp_measurements!(
     dat::ErpData,
     analysis_type::String;
-    analysis_interval::TimeInterval = times(),
-    baseline_interval::TimeInterval = times(),
+    analysis_interval::Interval = times(),
+    baseline_interval::Interval = times(),
     channel_selection::Function = channels(),
     participant::Int = 0,
     kwargs...,
@@ -602,8 +608,8 @@ Extract ERP measurements from a single EpochData object (multiple epochs).
 # Arguments
 - `dat::EpochData`: EpochData object containing multiple epochs
 - `analysis_type::String`: Type of measurement to extract
-- `analysis_interval::TimeInterval`: Analysis time window as tuple (e.g., (0.3, 0.5)) or interval object (default: nothing - all samples)
-- `baseline_interval::TimeInterval`: Baseline time window as tuple (e.g., (-0.2, 0.0)) or interval object (default: nothing - no baseline)
+- `analysis_interval::Interval`: Analysis time window as tuple (e.g., (0.3, 0.5)) or interval object (default: nothing - all samples)
+- `baseline_interval::Interval`: Baseline time window as tuple (e.g., (-0.2, 0.0)) or interval object (default: nothing - no baseline)
 - `channel_selection::Function`: Channel selection (default: channels() - all)
 - `participant::Int`: Participant ID for metadata (default: 0)
 - `kwargs...`: Additional measurement-specific parameters
@@ -614,8 +620,8 @@ Extract ERP measurements from a single EpochData object (multiple epochs).
 function erp_measurements!(
     dat::EpochData,
     analysis_type::String;
-    analysis_interval::TimeInterval = times(),
-    baseline_interval::TimeInterval = times(),
+    analysis_interval::Interval = times(),
+    baseline_interval::Interval = times(),
     channel_selection::Function = channels(),
     participant::Int = 0,
     kwargs...,
@@ -725,8 +731,8 @@ across specified time windows and saves results to CSV files.
     - "negative_area": Area of negative values only (as absolute value)
   
   Note: Peak measurements use robust detection (local peak with neighbor/average checks) and fall back to simple peak if no robust peak is found.
-- `analysis_interval::TimeInterval`: Analysis time window as tuple (e.g., (0.3, 0.5) for 300-500ms) or IntervalTime/IntervalIndex object (default: nothing - all samples)
-- `baseline_interval::TimeInterval`: Baseline time window as tuple (e.g., (-0.2, 0.0)) or IntervalTime/IntervalIndex object (default: nothing - no baseline correction)
+- `analysis_interval::Interval`: Analysis time window as tuple (e.g., (0.3, 0.5) for 300-500ms) (default: nothing - all samples)
+- `baseline_interval::Interval`: Baseline time window as tuple (e.g., (-0.2, 0.0)) (default: nothing - no baseline correction)
 - `participant_selection::Function`: Participant selection predicate (default: participants() - all)
 - `condition_selection::Function`: Condition selection predicate (default: conditions() - all)
 - `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
@@ -756,8 +762,8 @@ erp_measurements("erps", "min_peak_amplitude", analysis_interval=(0.0, 0.6), cha
 function erp_measurements(
     file_pattern::String,
     analysis_type::String;
-    analysis_interval::TimeInterval = times(),
-    baseline_interval::TimeInterval = times(),
+    analysis_interval::Interval = times(),
+    baseline_interval::Interval = times(),
     participant_selection::Function = participants(),
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
@@ -786,9 +792,12 @@ function erp_measurements(
 
         # Validate analysis_interval
         if !isnothing(analysis_interval)
-            interval = analysis_interval isa Tuple ? IntervalTime(analysis_interval) : analysis_interval
-            if interval.start > interval.stop
-                @minimal_error_throw "Analysis interval start must be <= stop. Got: ($(interval.start), $(interval.stop))"
+            interval = analysis_interval
+            if interval isa AbstractRange
+                interval = (first(interval), last(interval))
+            end
+            if interval[1] > interval[2]
+                @minimal_error_throw "Analysis interval start must be <= stop. Got: ($(interval[1]), $(interval[2]))"
             end
         end
 
@@ -905,16 +914,16 @@ function erp_measurements(
             analysis_interval_desc = "all samples"
         elseif analysis_interval isa Tuple
             analysis_interval_desc = "$(analysis_interval[1]):$(analysis_interval[2]) S"
-        else  # AbstractInterval
-            analysis_interval_desc = "$(analysis_interval.start):$(analysis_interval.stop)"
+        else  # Tuple or range
+            analysis_interval_desc = "$(analysis_interval[1]):$(analysis_interval[2])"
         end
 
         if isnothing(baseline_interval)
             baseline_interval_desc = "none"
         elseif baseline_interval isa Tuple
             baseline_interval_desc = "$(baseline_interval[1]):$(baseline_interval[2]) S"
-        else  # AbstractInterval
-            baseline_interval_desc = "$(baseline_interval.start):$(baseline_interval.stop)"
+        else  # Tuple or range
+            baseline_interval_desc = "$(baseline_interval[1]):$(baseline_interval[2])"
         end
 
         # Return as ErpMeasurementsResult with metadata

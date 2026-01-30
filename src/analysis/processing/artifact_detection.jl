@@ -151,7 +151,7 @@ function is_extreme_value!(
     threshold::Real;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     mode::Symbol = :combined,
     channel_out::Union{Symbol,Nothing} = nothing,
 )
@@ -181,7 +181,7 @@ end
     is_extreme_value!(dat::MultiDataFrameEeg, threshold::Real; 
                      channel_selection::Function = channels(), 
                      sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
                      epoch_selection::Function = epochs(),
                      mode::Symbol = :combined,
                      channel_out::Union{Symbol, Nothing} = nothing)
@@ -221,7 +221,7 @@ function is_extreme_value!(
     threshold::Real;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     epoch_selection::Function = epochs(),
     mode::Symbol = :combined,
     channel_out::Union{Symbol,Nothing} = nothing,
@@ -302,7 +302,7 @@ function _detect_extreme_values(
     threshold::Real;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
 )
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
     isempty(selected_channels) && @minimal_error_throw("No channels selected for extreme value detection")
@@ -330,7 +330,7 @@ end
     is_extreme_value(dat::SingleDataFrameEeg, threshold::Real; 
                     channel_selection::Function = channels(), 
                     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
                     mode::Symbol = :combined)
 
 Detect extreme values across selected channels and return results.
@@ -365,7 +365,7 @@ function is_extreme_value(
     threshold::Real;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     mode::Symbol = :combined,
 )
 
@@ -400,7 +400,7 @@ end
     n_extreme_value(dat::SingleDataFrameEeg, threshold::Real; 
                    channel_selection::Function = channels(), 
                    sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
                    mode::Symbol = :combined)
 
 Count the number of extreme values across selected channels.
@@ -435,7 +435,7 @@ function n_extreme_value(
     threshold::Real;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     mode::Symbol = :combined,
 )
 

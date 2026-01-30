@@ -25,8 +25,9 @@ EegFun.plot_erp(
     dat,
     condition_selection = EegFun.conditions([1]),
     channel_selection = EegFun.channels([:Pz]),
-    baseline_interval = nothing,  # No baseline
-)  # Use tuple instead of vector
+    # baseline_interval = (0, 0),  
+    baseline_interval = -0.2:0,
+)
 
 
 # Mean amplitude in a time window

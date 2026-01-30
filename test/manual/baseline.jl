@@ -18,7 +18,7 @@ EegFun.baseline!(dat)
 EegFun.plot_databrowser(dat) # now zero mean over all samples
 
 # baseline to first sample 
-EegFun.baseline!(dat, EegFun.IntervalIndex(start = 1, stop = 1));
+EegFun.baseline!(dat, (1, 1));
 EegFun.plot_databrowser(dat)
 
 # EpochData

@@ -14,7 +14,7 @@ reliability and robustness of representational dissimilarity estimates.
         epochs::Vector{EpochData};
         channel_selection::Function = channels(),
         sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
         dissimilarity_measure::Symbol = :correlation,
         cv_method::Symbol = :splithalf,
         n_folds::Int = 5,
@@ -89,7 +89,7 @@ function rsa_crossvalidated(
     epochs::Vector{EpochData};
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     dissimilarity_measure::Symbol = :correlation,
     cv_method::Symbol = :splithalf,
     n_folds::Int = 5,

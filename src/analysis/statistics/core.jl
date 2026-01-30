@@ -2,7 +2,7 @@
 # for statistical testing of EEG/ERP data.
 
 """
-    prepare_stats(erps::Vector{ErpData}; design::Symbol = :paired, condition_selection::Function = conditions([1, 2]), channel_selection::Function = channels(), interval_selection::TimeInterval = times(), baseline_interval::TimeInterval = times(), analysis_interval::TimeInterval = times())
+    prepare_stats(erps::Vector{ErpData}; design::Symbol = :paired, condition_selection::Function = conditions([1, 2]), channel_selection::Function = channels(), interval_selection::Interval = times(), baseline_interval::Interval = times(), analysis_interval::Interval = times())
 
 Prepare ErpData for comparing two conditions in statistical tests (permutation and analytic tests).
 
@@ -14,9 +14,9 @@ Validates the design and ensures data consistency across conditions.
 - `design::Symbol`: Design type - `:paired` (same participants in both conditions) or `:independent` (different participants)
 - `condition_selection::Function`: Predicate to select exactly 2 conditions for comparison (default: `conditions([1, 2])`)
 - `channel_selection::Function`: Predicate to filter channels (default: `channels()` - all channels)
-- `interval_selection::TimeInterval`: Time window as tuple (e.g., (0.0, 1.0)) or interval object for initial data selection (default: nothing - all samples)
-- `baseline_interval::TimeInterval`: Baseline window as tuple (e.g., (-0.2, 0.0)) or interval object (default: nothing - no baseline)
-- `analysis_interval::TimeInterval`: Analysis window as tuple (e.g., (0.3, 0.5)) or interval object for statistical testing (default: nothing - use interval_selection)
+- `interval_selection::Interval`: Time window as tuple (e.g., (0.0, 1.0)) or interval object for initial data selection (default: nothing - all samples)
+- `baseline_interval::Interval`: Baseline window as tuple (e.g., (-0.2, 0.0)) or interval object (default: nothing - no baseline)
+- `analysis_interval::Interval`: Analysis window as tuple (e.g., (0.3, 0.5)) or interval object for statistical testing (default: nothing - use interval_selection)
 
 # Returns
 - `StatisticalData`: Prepared data structure ready for statistical testing
@@ -26,9 +26,9 @@ function prepare_stats(
     design::Symbol = :paired,
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
-    interval_selection::TimeInterval = times(),
-    baseline_interval::TimeInterval = times(),
-    analysis_interval::TimeInterval = times(),
+    interval_selection::Interval = times(),
+    baseline_interval::Interval = times(),
+    analysis_interval::Interval = times(),
 )
     # Group all ERPs by condition first
     erps_by_condition = group_by_condition(erps)
@@ -65,11 +65,11 @@ function prepare_stats(
     have_same_structure(condition1[1], condition2[1]) || @minimal_error("Condition 1 vs. 2: ERPs have inconsistent structure")
 
     # Convert intervals to samples() predicates for subset()
-    # Explicitly convert tuples to IntervalTime for clarity
+    # Build sample selection predicate
     sample_sel = if isnothing(interval_selection)
         samples()
     elseif interval_selection isa Tuple
-        samples(IntervalTime(interval_selection))
+        samples(interval_selection)
     else
         samples(interval_selection)
     end
@@ -92,7 +92,7 @@ function prepare_stats(
     # Use analysis_interval if provided, otherwise use interval_selection
     analysis_sel = if !isnothing(analysis_interval)
         if analysis_interval isa Tuple
-            samples(IntervalTime(analysis_interval))
+            samples(analysis_interval)
         else
             samples(analysis_interval)
         end
@@ -121,7 +121,7 @@ function prepare_stats(
 end
 
 """
-    prepare_stats(file_pattern::String, design::Symbol; input_dir::String = pwd(), participant_selection::Function = participants(), condition_selection::Function = conditions([1, 2]), channel_selection::Function = channels(), interval_selection::TimeInterval = times(), baseline_interval::TimeInterval = times(), analysis_interval::TimeInterval = times())
+    prepare_stats(file_pattern::String, design::Symbol; input_dir::String = pwd(), participant_selection::Function = participants(), condition_selection::Function = conditions([1, 2]), channel_selection::Function = channels(), interval_selection::Interval = times(), baseline_interval::Interval = times(), analysis_interval::Interval = times())
 
 Prepare ErpData for statistical tests from JLD2 files (convenience wrapper).
 
@@ -134,9 +134,9 @@ Loads ErpData from JLD2 files matching the pattern and prepares them for statist
 - `participant_selection::Function`: Predicate to filter participants (default: `participants()` - all participants)
 - `condition_selection::Function`: Predicate to select exactly 2 conditions for comparison (default: `conditions([1, 2])`)
 - `channel_selection::Function`: Predicate to filter channels (default: `channels()` - all channels)
-- `interval_selection::TimeInterval`: Time window as tuple (e.g., (0.0, 1.0)) or interval object for initial data selection (default: nothing - all samples)
-- `baseline_interval::TimeInterval`: Baseline window as tuple (e.g., (-0.2, 0.0)) or interval object (default: nothing - no baseline)
-- `analysis_interval::TimeInterval`: Analysis window as tuple (e.g., (0.3, 0.5)) or interval object for statistical testing (default: nothing - use interval_selection)
+- `interval_selection::Interval`: Time window as tuple (e.g., (0.0, 1.0)) or interval object for initial data selection (default: nothing - all samples)
+- `baseline_interval::Interval`: Baseline window as tuple (e.g., (-0.2, 0.0)) or interval object (default: nothing - no baseline)
+- `analysis_interval::Interval`: Analysis window as tuple (e.g., (0.3, 0.5)) or interval object for statistical testing (default: nothing - use interval_selection)
 
 # Returns
 - `StatisticalData`: Prepared data structure ready for statistical testing
@@ -148,9 +148,9 @@ function prepare_stats(
     participant_selection::Function = participants(),
     condition_selection::Function = conditions([1, 2]),
     channel_selection::Function = channels(),
-    interval_selection::TimeInterval = times(),
-    baseline_interval::TimeInterval = times(),
-    analysis_interval::TimeInterval = times(),
+    interval_selection::Interval = times(),
+    baseline_interval::Interval = times(),
+    analysis_interval::Interval = times(),
 )
     # just load all appropriate data and call the main preparation function
     all_erps = load_all_data(ErpData, file_pattern, input_dir, participant_selection)

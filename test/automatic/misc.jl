@@ -135,17 +135,16 @@ using DataFrames
     @testset "Baseline interval validation" begin
         time = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 
-        # Test with IntervalTime
-        interval_time = EegFun.IntervalTime(start = 0.1, stop = 0.4)
+        # Test with tuple (time values)
+        interval_time = (0.1, 0.4)
         interval_idx = EegFun._validate_baseline_interval(time, interval_time)
-        @test interval_idx isa EegFun.IntervalIndex
-        @test interval_idx.start == 2  # 0.1 corresponds to index 2
-        @test interval_idx.stop == 5    # 0.4 corresponds to index 5
+        @test interval_idx isa Tuple
+        @test interval_idx[1] == 2  # 0.1 corresponds to index 2
+        @test interval_idx[2] == 5  # 0.4 corresponds to index 5
 
-        # Test with IntervalIndex
-        interval_idx = EegFun.IntervalIndex(start = 2, stop = 5)
-        validated = EegFun._validate_baseline_interval(time, interval_idx)
-        @test validated == interval_idx
+        # Test with another time tuple
+        validated = EegFun._validate_baseline_interval(time, (0.2, 0.5))
+        @test validated == (3, 6)  # 0.2 is index 3, 0.5 is index 6
 
     end
 

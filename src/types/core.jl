@@ -401,54 +401,20 @@ end
 
 
 
-"""
-    AbstractInterval
-
-Abstract type for interval specifications used in baseline correction and other time-based operations.
-"""
-abstract type AbstractInterval end
+# === TIME INTERVAL TYPE ALIAS ===
+# Intervals are represented as tuples (start, stop), functions, or nothing
 
 """
-    IntervalTime
+Type alias for interval specifications used throughout EegFun.
 
-Defines a time interval with start and end times.
+Accepts:
+- Tuples: `(start, stop)` - time range in seconds (enforces exactly 2 elements)
+- Functions: `samples(...)` - custom predicates for advanced selection
+- `nothing` - no filtering (select all data)
 
-This type represents a time window or interval, typically used for
-defining analysis windows, artifact rejection periods, or other
-time-based operations.
-
-# Fields
-- `start::Float64`: Start time of the interval in seconds
-- `stop::Float64`: End time of the interval in seconds
+Used for both time intervals (plotting, subsetting) and baseline intervals (baseline correction).
 """
-@kwdef struct IntervalTime <: AbstractInterval
-    start::Float64
-    stop::Float64
-end
-
-# Convert tuples to IntervalTime for convenience
-IntervalTime(t::Tuple{Real,Real}) = IntervalTime(start = Float64(t[1]), stop = Float64(t[2]))
-
-"""
-    IntervalIndex
-
-Defines a time interval using sample indices.
-
-This type represents a time window or interval using sample indices rather
-than time values. This is useful for operations that work directly with
-sample positions, such as data slicing, artifact detection, or epoch
-extraction.
-
-# Fields
-- `start::Int`: Start sample index (1-based)
-- `stop::Int`: End sample index (inclusive)
-"""
-@kwdef struct IntervalIndex <: AbstractInterval
-    start::Int
-    stop::Int
-end
-
-const TimeInterval = Union{Tuple{Real,Real},AbstractInterval,Nothing}
+const Interval = Union{Tuple{Real,Real},Function,Nothing}
 
 """
     EpochCondition
@@ -566,15 +532,15 @@ automatically use the correct parameters.
 # Fields
 - `data::DataFrame`: DataFrame containing measurement results
 - `analysis_type::String`: Type of measurement (e.g., "mean_amplitude", "max_peak_latency")
-- `analysis_interval::Union{TimeInterval,Nothing}`: Analysis interval used
-- `baseline_interval::Union{TimeInterval,Nothing}`: Baseline interval used (if any)
+- `analysis_interval::Union{Interval,Nothing}`: Analysis interval used
+- `baseline_interval::Union{Interval,Nothing}`: Baseline interval used (if any)
 """
 struct ErpMeasurementsResult
     data::DataFrame
     analysis_type::String
-    analysis_interval::Union{TimeInterval,Nothing}
+    analysis_interval::Union{Interval,Nothing}
     analysis_interval_desc::String
-    baseline_interval::Union{TimeInterval,Nothing}
+    baseline_interval::Union{Interval,Nothing}
     baseline_interval_desc::String
 end
 

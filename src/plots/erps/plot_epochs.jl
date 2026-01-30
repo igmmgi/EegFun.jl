@@ -85,7 +85,7 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     plot_epochs(filename::String; 
                channel_selection::Function = channels(),
                sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(), 
+    interval_selection::Interval = times(), 
                epoch_selection::Function = epochs(),
                include_extra::Bool = false,
                layout = :single,
@@ -115,7 +115,7 @@ function plot_epochs(
     filename::String;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     epoch_selection::Function = epochs(),
     include_extra::Bool = false,
     layout = :single,
@@ -141,7 +141,7 @@ end
                 condition_selection::Function = conditions(),
                 channel_selection::Function = channels(),
                 sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(), 
+    interval_selection::Interval = times(), 
                 epoch_selection::Function = epochs(),
                 include_extra::Bool = false,
                 layout = :single,
@@ -174,7 +174,7 @@ function plot_epochs(
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     epoch_selection::Function = epochs(),
     include_extra::Bool = false,
     layout = :single,
@@ -468,7 +468,7 @@ end
     plot_epochs(dat::EpochData; 
                 channel_selection::Function = channels(),
                 sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(), 
+    interval_selection::Interval = times(), 
                 epoch_selection::Function = epochs(),
                 include_extra::Bool = false,
                 layout = :single,
@@ -520,7 +520,7 @@ function plot_epochs(
     dat::EpochData;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::TimeInterval = times(),
+    interval_selection::Interval = times(),
     epoch_selection::Function = epochs(),
     include_extra::Bool = false,
     layout = :single,
@@ -1066,7 +1066,7 @@ end
 
 """
     _setup_epochs_control_panel!(fig::Figure, dat_subset::Vector{EpochData}, dat_subset_avg::Vector{ErpData}, axes::Vector{Axis}, 
-                                 baseline_interval::TimeInterval,
+                                 baseline_interval::Interval,
                                  line_refs::Vector{<:Dict})
 
 Set up a control panel that opens when 'c' key is pressed.
@@ -1077,7 +1077,7 @@ function _setup_epochs_control_panel!(
     dat_subset::Vector{EpochData},
     dat_subset_avg::Vector{ErpData},
     axes::Vector{Axis},
-    baseline_interval::TimeInterval,
+    baseline_interval::Interval,
     line_refs::Vector{<:Dict},
     condition_checked_ref::Ref{Union{Vector{Observable{Bool}},Nothing}} = Ref{Union{Vector{Observable{Bool}},Nothing}}(
         nothing,

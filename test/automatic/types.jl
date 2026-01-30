@@ -136,14 +136,14 @@ using OrderedCollections
         @test epoch_data isa EegFun.EegData
     end
 
-    @testset "IntervalTime" begin
+    @testset "Tuple intervals" begin
         # Test constructor
-        interval = EegFun.IntervalTime(start = 0.1, stop = 0.5)
-        @test interval.start == 0.1
-        @test interval.stop == 0.5
+        interval = (0.1, 0.5)
+        @test interval[1] == 0.1
+        @test interval[2] == 0.5
 
         # Test immutability
-        @test_throws ErrorException interval.start = 0.2
+        @test_throws MethodError interval[1] = 0.2
     end
 
     @testset "EpochCondition" begin
@@ -179,14 +179,14 @@ using OrderedCollections
         @test condition.before == 20
     end
 
-    @testset "IntervalIndex" begin
+    @testset "Index tuples" begin
         # Test constructor
-        interval = EegFun.IntervalIndex(start = 10, stop = 50)
-        @test interval.start == 10
-        @test interval.stop == 50
+        interval = (10, 50)
+        @test interval[1] == 10
+        @test interval[2] == 50
 
         # Test immutability
-        @test_throws ErrorException interval.start = 20
+        @test_throws MethodError interval[1] = 20
     end
 
     @testset "IcaPrms" begin

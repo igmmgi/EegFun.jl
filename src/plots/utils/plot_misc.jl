@@ -370,11 +370,7 @@ function _generate_window_title(datasets::Vector{<:EegData}; max_total_length::I
         return "$first_file: $condition_str"
     else
         file_condition_pairs = ["$(data.file):$(data.condition_name)" for data in datasets]
-        return _shorten_condition_names(
-            file_condition_pairs;
-            max_total_length = max_total_length,
-            max_name_length = max_name_length,
-        )
+        return _shorten_condition_names(file_condition_pairs; max_total_length = max_total_length, max_name_length = max_name_length)
     end
 end
 
@@ -588,18 +584,14 @@ end
 # =============================================================================
 
 """
-    _extract_baseline_values(interval::TimeInterval)
+    _extract_baseline_values(interval::Interval)
 
-Extract numeric baseline values from interval.
+Extract numeric baseline values from interval using multiple dispatch.
 Returns (start, stop) tuple or (nothing, nothing) if interval is nothing.
 """
-function _extract_baseline_values(interval::TimeInterval)
-    if interval === nothing
-        return nothing, nothing
-    else
-        return interval.start, interval.stop
-    end
-end
+_extract_baseline_values(::Nothing) = (nothing, nothing)
+_extract_baseline_values(interval::AbstractRange) = (first(interval), last(interval))
+_extract_baseline_values(interval::Tuple) = (interval[1], interval[2])
 
 """
     _parse_baseline_values(start_str::String, stop_str::String)
