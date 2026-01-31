@@ -2,7 +2,7 @@ using Documenter
 using DocumenterVitepress
 
 # Add the parent directory to the load path so we can load the local package
-# push!(LOAD_PATH, dirname(@__DIR__))
+push!(LOAD_PATH, dirname(@__DIR__))
 
 using EegFun
 
@@ -47,6 +47,9 @@ using EegFun
 #     source = "src",
 # )
 
+# Pre-create versioned build directory (workaround for DocumenterVitepress siteinfo.js bug)
+# mkpath(joinpath(@__DIR__, "build", "1"))
+
 makedocs(;
     modules = [EegFun],
     authors = "igmmgi",
@@ -81,10 +84,10 @@ makedocs(;
     ],
 )
 
-
-DocumenterVitepress.deploydocs(
+# Deploy built VitePress site (use Documenter.deploydocs to avoid DocumenterVitepress versioning bugs)
+Documenter.deploydocs(
     repo = "github.com/igmmgi/EegFun.jl",
-    target = joinpath(@__DIR__, "build"),
+    # target = joinpath(@__DIR__, "build", ".documenter", ".vitepress", "dist"),
     branch = "gh-pages",
     devbranch = "main",
     push_preview = true,
