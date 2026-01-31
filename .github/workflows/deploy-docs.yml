@@ -44,7 +44,7 @@ jobs:
       - name: Build documentation with Documenter
         run: |
           cd docs
-          DISPLAY=:0 xvfb-run -s '-screen 0 1024x768x24' julia --project=. build.jl
+          DISPLAY=:0 xvfb-run -s '-screen 0 1024x768x24' julia --project=. make.jl
       
       - name: Fix VitePress theme imports
         run: bash docs/fix_theme.sh
