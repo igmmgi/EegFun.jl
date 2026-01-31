@@ -3,6 +3,12 @@ using DocumenterVitepress
 
 # Add the parent directory to the load path so we can load the local package
 push!(LOAD_PATH, dirname(@__DIR__))
+
+# Use CairoMakie for headless documentation builds (no OpenGL required)
+# This prevents GLMakie from trying to initialize GLFW/OpenGL on GitHub Actions
+using CairoMakie
+CairoMakie.activate!()
+
 using EegFun
 
 # Define page structure following Diátaxis framework
@@ -66,7 +72,8 @@ println("✓ Theme fixed successfully")
 println("\n✅ Documentation build complete!")
 println("📝 Markdown files generated in: docs/build/")
 println("\n💡 To preview locally:")
-println("   cd docs/build && npx vitepress dev .")
+println("   using LiveServer")
+println("   LiveServer.serve(dir=\"docs/build\")")
 println("\n🚀 For deployment: GitHub Actions will build VitePress automatically")
 
 # Deploy configuration
