@@ -45,4 +45,5 @@ makedocs(
     build = "build",
 )
 
-DocumenterVitepress.deploydocs(repo = "github.com/igmmgi/EegFun.jl.git", devbranch = "main")
+
+DocumenterVitepress.deploydocs(repo = "github.com/igmmgi/EegFun.jl.git", devbranch = "main", devurl = "dev")
