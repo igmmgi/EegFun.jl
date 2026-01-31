@@ -28,6 +28,9 @@ pages = [
     ],
 ]
 
+# Create version directory structure for DocumenterVitepress (workaround for siteinfo.js bug)
+mkpath(joinpath(@__DIR__, "build", "1"))
+
 # Build and deploy documentation (SIMPLE - like Makie!)
 makedocs(
     sitename = "EegFun.jl",
