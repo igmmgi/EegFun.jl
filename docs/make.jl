@@ -4,13 +4,6 @@ using DocumenterVitepress
 # Add the parent directory to the load path so we can load the local package
 push!(LOAD_PATH, dirname(@__DIR__))
 
-# TODO: why is this needed 
-# GitHub Actions error if not included
-# Use CairoMakie for headless documentation builds (no OpenGL required)
-# This prevents GLMakie from trying to initialize GLFW/OpenGL on GitHub Actions
-# using CairoMakie
-# CairoMakie.activate!()
-
 using EegFun
 
 # Define page structure following Diátaxis framework
@@ -35,7 +28,7 @@ pages = [
     ],
 ]
 
-# Set up the documentation with DocumenterVitepress
+# Build and deploy documentation
 makedocs(
     sitename = "EegFun.jl",
     modules = [EegFun],
@@ -44,28 +37,12 @@ makedocs(
         repo = "github.com/igmmgi/EegFun.jl",
         devbranch = "main",
         devurl = "dev",
-        deploy_url = "igmmgi.github.io/EegFun.jl",
-        md_output_path = ".",
-        build_vitepress = false,  # We fix imports before building VitePress manually
+        deploy_url = "https://igmmgi.github.io/EegFun.jl",
     ),
-    warnonly = [:linkcheck, :cross_references, :missing_docs],  # Don't fail on warnings during development
+    warnonly = [:linkcheck, :cross_references, :missing_docs],
     draft = false,
     source = "src",
     build = "build",
-    checkdocs = :all,
 )
 
-# Post-Documenter: Fix theme imports (replace @/ alias with relative ./ imports)
-theme_file = "docs/build/.vitepress/theme/index.ts"
-if isfile(theme_file)
-    content = read(theme_file, String)
-    # Replace "@/..." with "./" while preserving quote type
-    content = replace(content, r"\"@/" => "\"./")
-    content = replace(content, r"'@/" => "'./")
-    write(theme_file, content)
-    println(" ✓ Fixed theme imports to use relative paths")
-end
-
-println("\n✓ Documentation build complete!")
-println("  Markdown files: docs/build/")
-println("  Next: VitePress will build in CI or run 'npm run docs:build' locally")
+DocumenterVitepress.deploydocs(repo = "github.com/igmmgi/EegFun.jl.git", push_preview = true, devbranch = "main", devurl = "dev")
