@@ -34,7 +34,6 @@ pages = [
     ],
     "Reference" => [
         "Overview" => "reference/index.md",
-        "Preprocessing" => "reference/preprocessing.md",
         "Types" => "reference/types.md",
         # TODO: Add more reference pages as needed
     ],
