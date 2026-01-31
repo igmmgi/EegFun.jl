@@ -87,8 +87,8 @@ makedocs(;
 # Deploy built VitePress site (use Documenter.deploydocs to avoid DocumenterVitepress versioning bugs)
 Documenter.deploydocs(
     repo = "github.com/igmmgi/EegFun.jl",
-    target = joinpath(@__DIR__, "build", ".documenter", ".vitepress", "dist"),
-    branch = "gh-pages",
-    devbranch = "main",
+    # target = joinpath(@__DIR__, "build", ".documenter", ".vitepress", "dist"),
+    # branch = "gh-pages",
+    # devbranch = "main",
     push_preview = true,
 )
