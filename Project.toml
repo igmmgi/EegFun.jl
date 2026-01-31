@@ -14,7 +14,6 @@ CategoricalArrays = "324d7699-5711-5eae-9e2f-1d82baa6b597"
 Colors = "5ae59095-9a9b-59fe-a467-6f913c188581"
 DSP = "717857b8-e6f2-59f4-9121-6e50c889abd2"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
-
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 DocStringExtensions = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
 FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
@@ -24,8 +23,6 @@ HypothesisTests = "09f84164-cd44-5f33-b23f-e6b0d136a0d5"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 LIBSVM = "b1bec4e5-fd48-53fe-b0cb-9723c09d164b"
 LanguageServer = "2b0e0bc5-e4fd-59b4-8912-456d1b03d8d7"
-
-
 LoggingExtras = "e6f89c97-d47a-5376-807f-9c37f3926c36"
 MLJ = "add582a8-e3ab-11e8-2d5e-e98b27df1bc7"
 MLJLIBSVMInterface = "61c7150f-6c77-4bb1-949c-13197eac2a52"
@@ -35,19 +32,10 @@ Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 NativeFileDialog = "e1fe445b-aa65-4df4-81c1-2041507f0fd4"
 OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 PrettyTables = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
-
 ProfileView = "c46f51b8-102a-5cf2-8d2c-8597cb0e0da7"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
-
 ScatteredInterpolation = "3f865c0f-6dca-5f4d-999b-29fe1e7e3c92"
-
-
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
-
-
-[sources]
-BiosemiDataFormat = {rev = "master", url = "https://github.com/igmmgi/BiosemiDataFormat.jl.git"}
-BrainVisionDataFormat = {rev = "main", url = "https://github.com/igmmgi/BrainVisionDataFormat.jl.git"}
 
 [compat]
 julia = "1.10"
