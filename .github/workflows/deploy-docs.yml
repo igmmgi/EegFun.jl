@@ -26,18 +26,16 @@ jobs:
         with:
           version: '1.10'
       
-      - name: Install Julia dependencies
+      - name: Install OpenGL/X11 dependencies and setup Julia packages
         run: |
-          julia --project=docs -e '
+          sudo apt-get update && sudo apt-get install -y xorg-dev mesa-utils xvfb libgl1 freeglut3-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev xsettingsd x11-xserver-utils
+          DISPLAY=:0 xvfb-run -s '-screen 0 1024x768x24' julia --project=docs/ -e '
             using Pkg
-            Pkg.add(PackageSpec(path=pwd()))
+            Pkg.develop(PackageSpec(path=pwd()))
             Pkg.instantiate()
           '
         env:
           JULIA_PKG_PRECOMPILE_AUTO: 0
-      
-      - name: Install OpenGL and X11 dependencies for GLMakie
-        run: sudo apt-get update && sudo apt-get install -y xorg-dev mesa-utils xvfb libgl1 freeglut3-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev
       
       - name: Build documentation with Documenter
         run: |
@@ -49,16 +47,6 @@ jobs:
           DISPLAY: :99
           GKSwstype: nul
       
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      
-      - name: Install npm dependencies
-        run: cd docs && npm install
-      
-      - name: Build VitePress site
-        run: cd docs/build && npx vitepress build .
       
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

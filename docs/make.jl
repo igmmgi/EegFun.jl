@@ -46,7 +46,7 @@ makedocs(
         devurl = "dev",
         deploy_url = "igmmgi.github.io/EegFun.jl",
         md_output_path = ".",
-        build_vitepress = false,  # TODO: ???
+        build_vitepress = true,  # Let DocumenterVitepress handle VitePress build
     ),
     warnonly = [:linkcheck, :cross_references, :missing_docs],  # Don't fail on warnings during development
     draft = false,
