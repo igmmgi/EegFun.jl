@@ -28,7 +28,7 @@ pages = [
     ],
 ]
 
-# Build and deploy documentation (matching Makie's pattern)
+# Build and deploy documentation (SIMPLE - like Makie!)
 makedocs(
     sitename = "EegFun.jl",
     modules = [EegFun],
@@ -38,43 +38,11 @@ makedocs(
         devbranch = "main",
         devurl = "dev",
         deploy_url = "https://igmmgi.github.io/EegFun.jl",
-        build_vitepress = false,  # Patch theme imports before building
     ),
     warnonly = [:linkcheck, :cross_references, :missing_docs],
     draft = false,
     source = "src",
     build = "build",
 )
-
-# Fix @/ imports in generated theme (DocumenterVitepress limitation)
-theme_file = joinpath(@__DIR__, "build", ".documenter", ".vitepress", "theme", "index.ts")
-if isfile(theme_file)
-    content = read(theme_file, String)
-    content = replace(content, r"\"@/" => "\"./")
-    content = replace(content, r"'@/" => "'./")
-    write(theme_file, content)
-
-    # Copy Vue components to build directory
-    src_theme = joinpath(@__DIR__, "src", ".vitepress", "theme")
-    dest_theme = dirname(theme_file)
-    for vue_file in ["VersionPicker.vue", "AuthorBadge.vue", "Authors.vue"]
-        src = joinpath(src_theme, vue_file)
-        dest = joinpath(dest_theme, vue_file)
-        if isfile(src)
-            cp(src, dest, force = true)
-        end
-    end
-
-    @info "Fixed theme imports and copied Vue components"
-
-    # Build VitePress site
-    @info "Building VitePress site..."
-    cd(@__DIR__) do
-        run(`npm install`)
-        run(`npx vitepress build build/.documenter`)
-    end
-    @info "VitePress build complete"
-end
-
 
 DocumenterVitepress.deploydocs(repo = "github.com/igmmgi/EegFun.jl.git", devbranch = "main")
