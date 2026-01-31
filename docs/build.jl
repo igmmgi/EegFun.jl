@@ -29,7 +29,6 @@ pages = [
     ],
     "Explanations" => [
         "Data Structures" => "explanations/data-structures.md",
-        "ICA Concepts" => "explanations/ica.md",
         "Statistical Methods" => "explanations/statistics.md",
     ],
     "Reference" => [
