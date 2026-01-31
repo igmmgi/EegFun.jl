@@ -28,7 +28,7 @@ pages = [
     ],
 ]
 
-# Build and deploy documentation
+# Build and deploy documentation (matching Makie's pattern)
 makedocs(
     sitename = "EegFun.jl",
     modules = [EegFun],
@@ -38,11 +38,22 @@ makedocs(
         devbranch = "main",
         devurl = "dev",
         deploy_url = "https://igmmgi.github.io/EegFun.jl",
+        build_vitepress = false,  # Patch theme imports before building
     ),
     warnonly = [:linkcheck, :cross_references, :missing_docs],
     draft = false,
     source = "src",
     build = "build",
 )
+
+# Fix @/ imports in generated theme (DocumenterVitepress limitation)
+theme_file = joinpath(@__DIR__, "build", ".documenter", ".vitepress", "theme", "index.ts")
+if isfile(theme_file)
+    content = read(theme_file, String)
+    content = replace(content, r"\"@/" => "\"./")
+    content = replace(content, r"'@/" => "'./")
+    write(theme_file, content)
+    @info "Fixed theme imports"
+end
 
 DocumenterVitepress.deploydocs(repo = "github.com/igmmgi/EegFun.jl.git", push_preview = true, devbranch = "main", devurl = "dev")

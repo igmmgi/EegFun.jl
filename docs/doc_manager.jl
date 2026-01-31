@@ -371,7 +371,7 @@ function view_documentation(project_root::String)
         println()
 
         # Run VitePress dev server
-        cd(joinpath(project_root, "docs", "build")) do
+        cd(joinpath(project_root, "docs", "build", ".documenter")) do
             run(`npx vitepress dev .`)
         end
     catch e
