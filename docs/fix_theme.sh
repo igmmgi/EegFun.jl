@@ -1,6 +1,6 @@
 #!/bin/bash
 # Post-build fix for VitePress theme imports
-# This script must run AFTER julia docs/build.jl completes
+# This script must run AFTER julia docs/make.jl completes
 
 THEME_FILE="docs/build/.vitepress/theme/index.ts"
 
