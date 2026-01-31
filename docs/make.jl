@@ -27,10 +27,7 @@ pages = [
         "Create Epochs" => "how-to/create-epochs.md",
         "Topographic Plots" => "how-to/topographic-plots.md",
     ],
-    "Explanations" => [
-        "Data Structures" => "explanations/data-structures.md",
-        "Statistical Methods" => "explanations/statistics.md",
-    ],
+    "Explanations" => ["Data Structures" => "explanations/data-structures.md", "Statistical Methods" => "explanations/statistics.md"],
     "Reference" => [
         "Overview" => "reference/index.md",
         "Types" => "reference/types.md",
@@ -58,8 +55,16 @@ makedocs(
     checkdocs = :all,
 )
 
-# Post-Documenter: Fix theme imports for GitHub Actions build
-run(`bash docs/fix_theme.sh`) # TODO: what is going on here?
+# Post-Documenter: Fix theme imports (replace @/ alias with relative ./ imports)
+theme_file = "docs/build/.vitepress/theme/index.ts"
+if isfile(theme_file)
+    content = read(theme_file, String)
+    # Replace "@/..." with "./" while preserving quote type
+    content = replace(content, r"\"@/" => "\"./")
+    content = replace(content, r"'@/" => "'./")
+    write(theme_file, content)
+    println(" ✓ Fixed theme imports to use relative paths")
+end
 
 println("\n Documentation build complete!")
 println(" Markdown files generated in: docs/build/")
