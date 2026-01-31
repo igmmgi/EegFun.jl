@@ -1,9 +1,21 @@
 import { defineConfig } from 'vitepress'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
     ignoreDeadLinks: true,  // Allow building with TODO/placeholder links
     title: 'EegFun.jl',
     description: 'High-performance EEG data analysis in Julia',
+
+    vite: {
+        resolve: {
+            alias: {
+                '@': path.resolve(__dirname, 'theme')
+            }
+        }
+    },
 
     themeConfig: {
         logo: '/logo.png',  // Logo appears in navbar
