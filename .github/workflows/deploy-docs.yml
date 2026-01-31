@@ -36,11 +36,15 @@ jobs:
         env:
           JULIA_PKG_PRECOMPILE_AUTO: 0
       
+      - name: Install xvfb (virtual display for GLMakie)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+      
       - name: Build documentation with Documenter
-        run: julia --project=docs docs/build.jl
-        env:
-          GKSwstype: nul  # Prevent GR from trying to open display
-          JULIA_DEBUG: ""  # Suppress debug warnings
+        run: |
+          cd docs
+          DISPLAY=:0 xvfb-run -s '-screen 0 1024x768x24' julia --project=. build.jl
       
       - name: Fix VitePress theme imports
         run: bash docs/fix_theme.sh
