@@ -8,4 +8,4 @@
 
 ## See Also
 
-- [Data structures](data-structures.md)
+- [Data structures](../explanations/data-structures.md)
