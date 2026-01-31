@@ -42,7 +42,6 @@ makedocs(
     warnonly = [:linkcheck, :cross_references, :missing_docs],
     draft = false,
     source = "src",
-    build = "build",
 )
 
 
