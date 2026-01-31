@@ -4,6 +4,8 @@ using DocumenterVitepress
 # Add the parent directory to the load path so we can load the local package
 push!(LOAD_PATH, dirname(@__DIR__))
 
+# TODO: why is this needed 
+# GitHub Actions error if not included
 # Use CairoMakie for headless documentation builds (no OpenGL required)
 # This prevents GLMakie from trying to initialize GLFW/OpenGL on GitHub Actions
 using CairoMakie
@@ -35,12 +37,6 @@ pages = [
         "Preprocessing" => "reference/preprocessing.md",
         "Types" => "reference/types.md",
         # TODO: Add more reference pages as needed
-        # "Data Loading" => "reference/data-loading.md",
-        # "Epochs" => "reference/epochs.md",
-        # "ERPs" => "reference/erp.md",
-        # "ICA" => "reference/ica.md",
-        # "Statistics" => "reference/statistics.md",
-        # "Plotting" => "reference/plotting.md",
     ],
 ]
 
@@ -55,7 +51,7 @@ makedocs(
         devurl = "dev",
         deploy_url = "igmmgi.github.io/EegFun.jl",
         md_output_path = ".",
-        build_vitepress = false,  # We'll build manually after theme fix
+        build_vitepress = false,  # TODO: ???
     ),
     warnonly = [:linkcheck, :cross_references, :missing_docs],  # Don't fail on warnings during development
     draft = false,
@@ -65,16 +61,10 @@ makedocs(
 )
 
 # Post-Documenter: Fix theme imports for GitHub Actions build
-println("\n📦 Fixing theme imports for VitePress...")
-run(`bash docs/fix_theme.sh`)
-println("✓ Theme fixed successfully")
+run(`bash docs/fix_theme.sh`) # TODO: what is going on here?
 
-println("\n✅ Documentation build complete!")
-println("📝 Markdown files generated in: docs/build/")
-println("\n💡 To preview locally:")
-println("   using LiveServer")
-println("   LiveServer.serve(dir=\"docs/build\")")
-println("\n🚀 For deployment: GitHub Actions will build VitePress automatically")
+println("\n Documentation build complete!")
+println(" Markdown files generated in: docs/build/")
 
 # Deploy configuration
 deploydocs(repo = "github.com/igmmgi/EegFun.jl.git", devbranch = "main", push_preview = true)
