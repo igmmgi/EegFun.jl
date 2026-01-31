@@ -48,8 +48,12 @@ pages = [
 # )
 
 makedocs(;
+    modules = [EegFun],
+    authors = "igmmgi",
+    repo = "https://github.com/igmmgi/EegFun.jl",
+    sitename = "EegFun.jl",
     format = DocumenterVitepress.MarkdownVitepress(
-        repo = "github.com/igmmgi/EegFun.jl",
+        repo = "https://github.com/igmmgi/EegFun.jl",
         devbranch = "main", # or master, trunk, ...
         devurl = "dev",
         deploy_url = "https://igmmgi.github.io/EegFun.jl",
