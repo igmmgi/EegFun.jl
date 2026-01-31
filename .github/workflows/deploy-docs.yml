@@ -38,6 +38,9 @@ jobs:
       
       - name: Build documentation with Documenter
         run: julia --project=docs docs/build.jl
+        env:
+          GKSwstype: nul  # Prevent GR from trying to open display
+          JULIA_DEBUG: ""  # Suppress debug warnings
       
       - name: Fix VitePress theme imports
         run: bash docs/fix_theme.sh
