@@ -69,9 +69,9 @@ if isfile(theme_file)
 
     # Build VitePress site
     @info "Building VitePress site..."
-    cd(joinpath(@__DIR__, "build", ".documenter")) do
+    cd(@__DIR__) do
         run(`npm install`)
-        run(`npx vitepress build .`)
+        run(`npx vitepress build build/.documenter`)
     end
     @info "VitePress build complete"
 end
