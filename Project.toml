@@ -35,7 +35,7 @@ Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 NativeFileDialog = "e1fe445b-aa65-4df4-81c1-2041507f0fd4"
 OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 PrettyTables = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
-Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+
 ProfileView = "c46f51b8-102a-5cf2-8d2c-8597cb0e0da7"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
