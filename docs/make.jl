@@ -46,7 +46,7 @@ makedocs(
         devurl = "dev",
         deploy_url = "igmmgi.github.io/EegFun.jl",
         md_output_path = ".",
-        build_vitepress = true,  # Let DocumenterVitepress handle VitePress build
+        build_vitepress = false,  # We fix imports before building VitePress manually
     ),
     warnonly = [:linkcheck, :cross_references, :missing_docs],  # Don't fail on warnings during development
     draft = false,
@@ -66,8 +66,5 @@ if isfile(theme_file)
     println(" Fixed theme imports to use relative paths")
 end
 
-println("\n Documentation build complete!")
-println(" Markdown files generated in: docs/build/")
-
-# Deploy configuration
-deploydocs(repo = "github.com/igmmgi/EegFun.jl.git", devbranch = "main", push_preview = true)
+# Deploy configuration - DocumenterVitepress.deploydocs handles VitePress build
+DocumenterVitepress.deploydocs(repo = "github.com/igmmgi/EegFun.jl.git", devbranch = "main", push_preview = true)
