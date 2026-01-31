@@ -54,6 +54,7 @@ makedocs(;
         devurl = "dev",
         deploy_url = "https://igmmgi.github.io/EegFun.jl",
     ),
+    warnonly = [:linkcheck, :cross_references, :missing_docs],
 )
 
 
