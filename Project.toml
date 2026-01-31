@@ -50,6 +50,7 @@ BiosemiDataFormat = {rev = "master", url = "https://github.com/igmmgi/BiosemiDat
 BrainVisionDataFormat = {rev = "main", url = "https://github.com/igmmgi/BrainVisionDataFormat.jl.git"}
 
 [compat]
+julia = "1.10"
 AnovaFun = "0.1.0"
 BenchmarkTools = "1.6.3"
 BiosemiDataFormat = "0.1.0"
