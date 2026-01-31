@@ -14,7 +14,7 @@ makedocs(;
         repo = "https://github.com/igmmgi/EegFun.jl",
         devbranch = "main", # or master, trunk, ...
         devurl = "dev",
-        #deploy_url = "https://igmmgi.github.io/EegFun.jl",
+        deploy_url = "https://igmmgi.github.io/EegFun.jl/dev/1",
     ),
     warnonly = [:linkcheck, :cross_references, :missing_docs],
     pages = [
