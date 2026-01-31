@@ -49,7 +49,7 @@ makedocs(
         devurl = "dev",
         deploy_url = "igmmgi.github.io/EegFun.jl",
         md_output_path = ".",
-        build_vitepress = true,  # Full VitePress build for GitHub Pages
+        build_vitepress = false,  # We'll build manually after theme fix
     ),
     warnonly = [:linkcheck, :cross_references, :missing_docs],  # Don't fail on warnings during development
     draft = false,
@@ -58,10 +58,16 @@ makedocs(
     checkdocs = :all,
 )
 
-# Post-build: Fix theme imports for VitePress
-println("\n📦 Running post-build theme fix...")
+# Post-Documenter: Fix theme imports for GitHub Actions build
+println("\n📦 Fixing theme imports for VitePress...")
 run(`bash docs/fix_theme.sh`)
 println("✓ Theme fixed successfully")
+
+println("\n✅ Documentation build complete!")
+println("📝 Markdown files generated in: docs/build/")
+println("\n💡 To preview locally:")
+println("   cd docs/build && npx vitepress dev .")
+println("\n🚀 For deployment: GitHub Actions will build VitePress automatically")
 
 # Deploy configuration
 deploydocs(repo = "github.com/igmmgi/EegFun.jl.git", devbranch = "main", push_preview = true)
