@@ -40,11 +40,8 @@ jobs:
       - name: Build documentation with Documenter
         run: |
           cd docs
-          Xvfb :99 -screen 0 1024x768x24 &
-          sleep 1
-          DISPLAY=:99 GKSwstype=nul julia --project=. make.jl
+          DISPLAY=:0 xvfb-run -s '-screen 0 1024x768x24' julia --project=. make.jl
         env:
-          DISPLAY: :99
           GKSwstype: nul
       
       
