@@ -539,17 +539,15 @@ struct ErpMeasurementsResult
     data::DataFrame
     analysis_type::String
     analysis_interval::Union{Interval,Nothing}
-    analysis_interval_desc::String
     baseline_interval::Union{Interval,Nothing}
-    baseline_interval_desc::String
 end
 
 # Make it show as a DataFrame for convenience
 function Base.show(io::IO, result::ErpMeasurementsResult)
     println(io, "ErpMeasurementsResult")
     println(io, "  Analysis type: $(getfield(result, :analysis_type))")
-    println(io, "  Analysis interval: $(getfield(result, :analysis_interval_desc))")
-    println(io, "  Baseline interval: $(getfield(result, :baseline_interval_desc))")
+    println(io, "  Analysis interval: $(getfield(result, :analysis_interval))")
+    println(io, "  Baseline interval: $(getfield(result, :baseline_interval))")
     println(io, "\nResults:")
     show(io, getfield(result, :data))
 end

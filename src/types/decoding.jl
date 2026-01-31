@@ -53,10 +53,10 @@ mutable struct DecodedData <: SingleDataFrameEeg
     average_score::Vector{Float64}
     channels::Vector{Symbol}
     parameters::DecodingParameters
-    stderror::Union{Vector{Float64}, Nothing}
-    confusion_matrix::Union{Array{Float64, 3}, Nothing}
-    raw_predictions::Union{Array{Float64, 4}, Nothing}
-    
+    stderror::Union{Vector{Float64},Nothing}
+    confusion_matrix::Union{Array{Float64,3},Nothing}
+    raw_predictions::Union{Array{Float64,4},Nothing}
+
     """
         DecodedData constructor
 
@@ -69,21 +69,11 @@ mutable struct DecodedData <: SingleDataFrameEeg
         average_score::Vector{Float64},
         channels::Vector{Symbol},
         parameters::DecodingParameters;
-        stderror::Union{Vector{Float64}, Nothing} = nothing,
-        confusion_matrix::Union{Array{Float64, 3}, Nothing} = nothing,
-        raw_predictions::Union{Array{Float64, 4}, Nothing} = nothing,
+        stderror::Union{Vector{Float64},Nothing} = nothing,
+        confusion_matrix::Union{Array{Float64,3},Nothing} = nothing,
+        raw_predictions::Union{Array{Float64,4},Nothing} = nothing,
     )
-        return new(
-            file,
-            condition_names,
-            times,
-            average_score,
-            channels,
-            parameters,
-            stderror,
-            confusion_matrix,
-            raw_predictions,
-        )
+        return new(file, condition_names, times, average_score, channels, parameters, stderror, confusion_matrix, raw_predictions)
     end
 end
 

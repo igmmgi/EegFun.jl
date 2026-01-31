@@ -99,10 +99,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
                 @info "File: $data_file"
 
                 # Set up per-file logging (temporarily replaces global logger)
-                setup_logging(
-                    joinpath(output_directory, "$(basename_without_ext(data_file))_log.txt"),
-                    log_level = log_level,
-                )
+                setup_logging(joinpath(output_directory, "$(basename_without_ext(data_file))_log.txt"), log_level = log_level)
 
                 ################### LOAD RAW DATA FILE ###################
                 @info section("Raw Data")
@@ -131,8 +128,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
 
                 # Calculate correlations between all channels and EOG channels (epoch window)
                 @info subsection("Channel x vEOG/hEOG Correlation Matrix (epoch window)")
-                hEOG_vEOG_cm_epoch =
-                    correlation_matrix_eog(dat, preprocess_cfg.eog; sample_selection = samples(:epoch_window))
+                hEOG_vEOG_cm_epoch = correlation_matrix_eog(dat, preprocess_cfg.eog; sample_selection = samples(:epoch_window))
                 add_zscore_columns!(hEOG_vEOG_cm_epoch)
                 log_pretty_table(hEOG_vEOG_cm_epoch; title = "Channel x vEOG/hEOG Correlation Matrix (epoch window)")
 
@@ -146,10 +142,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
 
                 if cfg["files"]["output"]["save_epoch_data_original"]
                     @info "Saving epoch data (original)"
-                    jldsave(
-                        make_output_filename(output_directory, data_file, "_epochs_original");
-                        data = epochs_original,
-                    )
+                    jldsave(make_output_filename(output_directory, data_file, "_epochs_original"); data = epochs_original)
                 end
 
                 if cfg["files"]["output"]["save_erp_data_original"]
@@ -219,8 +212,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
                 # Analyze which channels can be repaired (needed for ICA and repair steps)
                 continuous_repair_info = nothing
                 if !isempty(bad_channels_non_eog_related)
-                    continuous_repair_info =
-                        create_continuous_repair_info(:neighbor_interpolation; name = "continuous_repair")
+                    continuous_repair_info = create_continuous_repair_info(:neighbor_interpolation; name = "continuous_repair")
                     channel_repairable!(continuous_repair_info, bad_channels_non_eog_related, dat.layout)
                 end
 
@@ -236,11 +228,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
 
                     if !isnothing(continuous_repair_info) && !isempty(continuous_repair_info.repaired)
                         @info subsection("Removing repairable bad channels for ICA")
-                        dat_ica = subset(
-                            dat_ica,
-                            channel_selection = channels_not(continuous_repair_info.repaired),
-                            include_extra = true,
-                        )
+                        dat_ica = subset(dat_ica, channel_selection = channels_not(continuous_repair_info.repaired), include_extra = true)
                         @info "Removed $(length(continuous_repair_info.repaired)) repairable channels for ICA: $(continuous_repair_info.repaired)"
                     end
 
@@ -252,9 +240,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
                     @info subsection("Running ICA")
                     ica = run_ica(
                         dat_ica;
-                        sample_selection = samples_not(
-                            _flag_symbol("is_extreme_value", preprocess_cfg.eeg.extreme_value_abs_criterion),
-                        ),
+                        sample_selection = samples_not(_flag_symbol("is_extreme_value", preprocess_cfg.eeg.extreme_value_abs_criterion)),
                         percentage_of_data = preprocess_cfg.ica.percentage_of_data,
                     )
 
@@ -263,19 +249,14 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
                     component_artifacts, component_metrics = identify_components(
                         dat, # dat_ica vs. dat makes a difference here! TODO: what is going on?
                         ica,
-                        sample_selection = samples_not(
-                            _flag_symbol("is_extreme_value", preprocess_cfg.eeg.extreme_value_abs_criterion),
-                        ),
+                        sample_selection = samples_not(_flag_symbol("is_extreme_value", preprocess_cfg.eeg.extreme_value_abs_criterion)),
                     )
 
                     # Print component metrics to log files
                     log_pretty_table(component_metrics[:eog_metrics]; title = "EOG Component Metrics")
                     log_pretty_table(component_metrics[:ecg_metrics]; title = "ECG Component Metrics")
                     log_pretty_table(component_metrics[:line_noise_metrics]; title = "Line Noise Component Metrics")
-                    log_pretty_table(
-                        component_metrics[:channel_noise_metrics];
-                        title = "Channel Noise Component Metrics",
-                    )
+                    log_pretty_table(component_metrics[:channel_noise_metrics]; title = "Channel Noise Component Metrics")
 
                     @info subsection("Removing ICA components")
                     all_removed_components = get_all_ica_components(component_artifacts)
@@ -309,9 +290,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
                 is_extreme_value!(
                     dat,
                     preprocess_cfg.eeg.artifact_value_abs_criterion,
-                    channel_out = Symbol(
-                        "is_artifact_value" * "_" * string(preprocess_cfg.eeg.artifact_value_abs_criterion),
-                    ),
+                    channel_out = Symbol("is_artifact_value" * "_" * string(preprocess_cfg.eeg.artifact_value_abs_criterion)),
                 )
 
                 #################### EPOCH EXTRACTION ###################
@@ -368,10 +347,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
                 #################### COMPARE REJECTION STEPS ###################
                 @info subsection("Rejection Step Comparison (before vs after repair)")
                 rejection_comparison = compare_rejections(rejection_info_step1, rejection_info_step2)
-                log_pretty_table(
-                    rejection_comparison;
-                    title = "Rejection Step Comparison: Effectiveness of Channel Repair",
-                )
+                log_pretty_table(rejection_comparison; title = "Rejection Step Comparison: Effectiveness of Channel Repair")
 
                 #################### SAVE EPOCH DATA ###################
                 if cfg["files"]["output"]["save_epoch_data_cleaned"]
@@ -402,11 +378,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
                 @info "Saved artifact info: $(artifact_info)"
 
                 #################### LOG EPOCH COUNTS AND STORE FOR SUMMARY ###################
-                df = log_epochs_table(
-                    epochs_original,
-                    epochs,
-                    title = "Epoch counts per condition (after repair and rejection):",
-                )
+                df = log_epochs_table(epochs_original, epochs, title = "Epoch counts per condition (after repair and rejection):")
                 push!(all_epoch_counts, df)
 
                 #################### SAVE EPOCH DATA ###################
@@ -443,10 +415,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
         @info subsection("Electrode Repair Summary Across All Participants (Continuous Level Only)")
         electrode_repair_summary = summarize_electrode_repairs("_artifact_info", input_dir = output_directory)
         if !isempty(electrode_repair_summary)
-            log_pretty_table(
-                electrode_repair_summary;
-                title = "Electrode Repairs at Continuous Level: Number of Participants Affected",
-            )
+            log_pretty_table(electrode_repair_summary; title = "Electrode Repairs at Continuous Level: Number of Participants Affected")
         end
 
         # Print ICA component summary (load from saved artifact info files)
@@ -470,11 +439,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
             epoch_summary, file_summary = _epoch_and_file_summary(all_epoch_counts)
             # Merge with existing summaries (replaces data for files that already exist)
             merged_epoch_summary, merged_file_summary = _merge_summaries(epoch_summary, file_summary, output_directory)
-            log_pretty_table(
-                merged_epoch_summary,
-                title = "Combined epoch counts across all files:",
-                alignment = [:l, :r, :l, :r, :r, :r],
-            )
+            log_pretty_table(merged_epoch_summary, title = "Combined epoch counts across all files:", alignment = [:l, :r, :l, :r, :r, :r])
             log_pretty_table(
                 merged_file_summary,
                 title = "Average percentage per condition (averaged across conditions):",

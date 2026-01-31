@@ -75,7 +75,7 @@ function prepare_decoding(
     end
 
     # Validate structure is consistent across conditions
-    for cond_idx = 2:length(selected_conditions)
+    for cond_idx = (firstindex(selected_conditions)+1):lastindex(selected_conditions)
         have_same_structure(selected_conditions[1][1], selected_conditions[cond_idx][1]) || @minimal_error_throw(
             "Condition $(selected_cond_nums[1]) vs $(selected_cond_nums[cond_idx]): " *
             "Epochs have inconsistent structure (different channels, sample rates, or time vectors)"

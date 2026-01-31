@@ -124,9 +124,7 @@ function compute_noise_ceiling(rsa_data_list::Vector{RsaData}; correlation_metho
 
     for (idx, rsa_data) in enumerate(rsa_data_list)
         if length(rsa_data.condition_names) != n_conditions
-            @minimal_error_throw(
-                "Participant $idx has $(length(rsa_data.condition_names)) conditions, expected $n_conditions"
-            )
+            @minimal_error_throw("Participant $idx has $(length(rsa_data.condition_names)) conditions, expected $n_conditions")
         end
         if length(rsa_data.times) != n_times
             @minimal_error_throw("Participant $idx has $(length(rsa_data.times)) time points, expected $n_times")

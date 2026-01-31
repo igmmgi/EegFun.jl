@@ -32,8 +32,7 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :colorbar_position => ((1, 2), "Position of the colorbar as (row, col) tuple"),
     :colorbar_width => (30, "Width of the colorbar in pixels"),
     :colorbar_label => ("μV", "Label for the colorbar"),
-    :colorbar_plot_numbers =>
-        ([], "Plot indices for which to show colorbars. Empty list shows colorbars for all plots."),
+    :colorbar_plot_numbers => ([], "Plot indices for which to show colorbars. Empty list shows colorbars for all plots."),
 
     # Grid
     :xgrid => (false, "Show x-axis grid (true/false)"),
@@ -52,14 +51,11 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Grid layout parameters
     :layout_grid_rowgap => (10, "Gap between rows (in pixels)"),
     :layout_grid_colgap => (10, "Gap between columns (in pixels)"),
-    :layout_grid_dims =>
-        (nothing, "Grid dimensions as (rows, cols) tuple for grid layouts. If nothing, automatically determined"),
-    :layout_grid_skip_positions =>
-        (nothing, "Positions to skip in grid layout as vector of (row, col) tuples, e.g., [(2,1), (2,3)]"),
+    :layout_grid_dims => (nothing, "Grid dimensions as (rows, cols) tuple for grid layouts. If nothing, automatically determined"),
+    :layout_grid_skip_positions => (nothing, "Positions to skip in grid layout as vector of (row, col) tuples, e.g., [(2,1), (2,3)]"),
 
     # General layout parameters
-    :figure_padding =>
-        ((10, 10, 10, 10), "Padding around entire figure as (left, right, top, bottom) tuple (in pixels)"),
+    :figure_padding => ((10, 10, 10, 10), "Padding around entire figure as (left, right, top, bottom) tuple (in pixels)"),
 )
 
 """
@@ -141,8 +137,7 @@ function plot_erp_image(
     # Set default plot title only for single layouts (same as plot_erp)
     # For grid/topo layouts, we want individual channel names, not a global title
     if plot_kwargs[:show_title] && plot_kwargs[:title] == "" && layout == :single
-        plot_kwargs[:title] =
-            length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(print_vector(all_plot_channels))"
+        plot_kwargs[:title] = length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(print_vector(all_plot_channels))"
     end
 
     # Handle colorbar positioning for grid layouts
@@ -307,12 +302,7 @@ function plot_erp_image(
                 if plot_layout.type == :single
                     # Single layout: use provided position
                     colorbar_position = plot_kwargs[:colorbar_position]
-                    Colorbar(
-                        fig[colorbar_position...],
-                        hm,
-                        width = plot_kwargs[:colorbar_width],
-                        label = plot_kwargs[:colorbar_label],
-                    )
+                    Colorbar(fig[colorbar_position...], hm, width = plot_kwargs[:colorbar_width], label = plot_kwargs[:colorbar_label])
                 elseif plot_layout.type == :grid
                     # Grid layout: calculate position based on plot position
                     rows, cols = plot_layout.dims
@@ -393,13 +383,8 @@ function plot_erp_image(
 
         # Create scale axis positioned at the specified location (axis only, no data)
         # This is positioned absolutely in fig[1, 1] using halign/valign, just like topo plots
-        scale_ax = Axis(
-            fig[1, 1],
-            width = Relative(scale_width),
-            height = Relative(scale_height),
-            halign = scale_pos[1],
-            valign = scale_pos[2],
-        )
+        scale_ax =
+            Axis(fig[1, 1], width = Relative(scale_width), height = Relative(scale_height), halign = scale_pos[1], valign = scale_pos[2])
         push!(axes, scale_ax)
 
         # Make sure the scale axis is visible - don't hide decorations like other topo axes
@@ -584,8 +569,7 @@ function _setup_erp_image_interactivity!(fig::Figure, axes::Vector{Axis}, heatma
     end
 
     # Define keyboard actions for ERP images
-    keyboard_actions =
-        Dict(Keyboard.up => :y_more, Keyboard.down => :y_less, Keyboard.left => :x_less, Keyboard.right => :x_more)
+    keyboard_actions = Dict(Keyboard.up => :y_more, Keyboard.down => :y_less, Keyboard.left => :x_less, Keyboard.right => :x_more)
 
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press && event.key == Keyboard.i

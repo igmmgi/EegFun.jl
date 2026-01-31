@@ -317,8 +317,8 @@ function _compute_t_matrix(
         # Fill pre-allocated t_matrix in-place
         t_matrix .= mean_diff ./ (std_diff ./ sqrt(n_participants))
         # Where std is zero: NaN if mean is also zero, Inf otherwise
-        t_matrix[zero_std_mask.&zero_mean_mask] .= NaN
-        t_matrix[zero_std_mask.&.!zero_mean_mask] .= Inf
+        t_matrix[zero_std_mask .& zero_mean_mask] .= NaN
+        t_matrix[zero_std_mask .& .!zero_mean_mask] .= Inf
 
         # Degrees of freedom (same for all points in paired design)
         df = Float64(n_participants - 1)
@@ -430,4 +430,3 @@ function _compute_p_matrix(
     end
     return p_matrix
 end
-

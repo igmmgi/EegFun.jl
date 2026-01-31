@@ -29,13 +29,7 @@ repair_channels!(dat, [:Fp1, :Fp2], method=:spherical_spline)
 repair_channels!(dat, [:Fp1], method=:spherical_spline, m=6, lambda=1e-6)
 ```
 """
-function repair_channels!(
-    data,
-    channels_to_repair;
-    method::Symbol = :neighbor_interpolation,
-    repair_info = nothing,
-    kwargs...,
-)
+function repair_channels!(data, channels_to_repair; method::Symbol = :neighbor_interpolation, repair_info = nothing, kwargs...)
     # repair_info is only used for ContinuousData, not for EpochData (tracking is in EpochRejectionInfo)
     if method == :neighbor_interpolation
         _repair_channels_neighbor!(data, channels_to_repair; repair_info = repair_info, kwargs...)
@@ -53,13 +47,7 @@ end
 @add_nonmutating repair_channels!
 
 # Helper function for neighbor interpolation
-function _repair_channels_neighbor!(
-    data,
-    channels_to_repair;
-    neighbours_dict = nothing,
-    repair_info = nothing,
-    kwargs...,
-)
+function _repair_channels_neighbor!(data, channels_to_repair; neighbours_dict = nothing, repair_info = nothing, kwargs...)
     if isnothing(neighbours_dict)
         # For data objects, get neighbors from layout
         if hasfield(typeof(data), :layout)

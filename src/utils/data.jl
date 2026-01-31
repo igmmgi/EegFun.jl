@@ -538,7 +538,7 @@ function tail(dat::EegData; n = nothing)
     data = all_data(dat)
     nrows = nrow(data)
     n = min(n, nrows)  # Don't exceed available rows
-    result = n > 0 ? data[max(1, nrows - n + 1):nrows, :] : DataFrame()
+    result = n > 0 ? data[max(1, nrows-n+1):nrows, :] : DataFrame()
     viewer(result)
     return result
 end

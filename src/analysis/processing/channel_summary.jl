@@ -34,7 +34,7 @@ function _channel_summary_impl(data::DataFrame, sample_selection::Vector{Int}, c
     !isempty(missing_channels) && @minimal_error_throw("Channels not found in data: $(missing_channels)")
 
     # Check that all sample indices are valid
-    invalid_samples = sample_selection[(sample_selection.<1).|(sample_selection.>nrow(data))]
+    invalid_samples = sample_selection[(sample_selection .< 1) .| (sample_selection .> nrow(data))]
     !isempty(invalid_samples) && @minimal_error_throw("Invalid sample indices: $(invalid_samples)")
 
     selected_data = @view data[sample_selection, channel_selection]

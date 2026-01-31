@@ -112,12 +112,7 @@ end
 Load ERP/LRP data from multiple files and organize by condition.
 Returns Dict{Int, Vector{ErpData}} mapping condition number to ERPs from all participants.
 """
-function _load_and_group_for_jackknife(
-    files::Vector{String},
-    input_dir::String,
-    condition_selection::Function,
-    data_var::String,
-)
+function _load_and_group_for_jackknife(files::Vector{String}, input_dir::String, condition_selection::Function, data_var::String)
     # data_var parameter kept for backwards compatibility but not used - load_data() finds by type
     all_erps_by_condition = Dict{Int,Vector{ErpData}}()
     participant_ids = Int[]
@@ -187,40 +182,6 @@ for statistical testing.
 - `Vector{ErpData}`: Vector of jackknifed averages, where element i is the average
   of all participants except participant i
 
-# Examples
-```julia
-using JLD2
-
-# Load LRP data from multiple participants
-lrp_data = ErpData[]
-for participant in 1:20
-    data = load("participant_\$(participant)_lrp.jld2", "lrp")
-    # If data is a vector, take the first condition, or specify which one
-    lrp_result = data isa Vector ? data[1] : data
-    push!(lrp_data, lrp_result)
-end
-
-# Create jackknife averages
-jackknife_results = jackknife_average(lrp_data)
-
-# Now jackknife_results[1] is the average of participants 2-20 (excluding 1)
-# jackknife_results[2] is the average of participants 1,3-20 (excluding 2)
-# etc.
-
-# Save results
-jldsave("jackknife_lrp.jld2"; data = jackknife_results)
-```
-
-# Multiple Conditions
-```julia
-# If you have multiple condition pairs, process each separately
-lrp_data_cond1 = [load("participant_\$(i)_lrp.jld2", "lrp")[1] for i in 1:20]
-lrp_data_cond2 = [load("participant_\$(i)_lrp.jld2", "lrp")[2] for i in 1:20]
-
-jackknife_cond1 = jackknife_average(lrp_data_cond1)
-jackknife_cond2 = jackknife_average(lrp_data_cond2)
-```
-
 # Notes
 - Requires at least 2 participants
 - All ERP/LRP data must have matching structure (same channels, time points, sample rate)
@@ -279,12 +240,10 @@ jackknife_average("lrp",
                   conditions = [1, 2])
 
 # Process ERP data (data is automatically detected by type)
-jackknife_average("erps_cleaned",
-                  input_dir = "/path/to/data")
+jackknife_average("erps_cleaned", input_dir = "/path/to/data")
 
 # Specify custom output directory
-jackknife_average("lrp",
-                  output_dir = "/path/to/output")
+jackknife_average("lrp", output_dir = "/path/to/output")
 ```
 
 # Output
@@ -350,8 +309,7 @@ function jackknife_average(
         @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
 
         # Load and group data by condition (data_var parameter kept for backwards compatibility but not used)
-        erps_by_condition, participant_ids =
-            _load_and_group_for_jackknife(files, input_dir, condition_selection, data_var)
+        erps_by_condition, participant_ids = _load_and_group_for_jackknife(files, input_dir, condition_selection, data_var)
 
         if isempty(erps_by_condition)
             @minimal_warning "No valid data found in any files"

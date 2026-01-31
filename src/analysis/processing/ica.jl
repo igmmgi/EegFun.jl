@@ -50,8 +50,7 @@ function run_ica(
     # Create a copy of the data to avoid modifying the original
     dat_ica = copy(dat)
 
-    selected_channels =
-        get_selected_channels(dat_ica, channel_selection; include_meta = false, include_extra = include_extra)
+    selected_channels = get_selected_channels(dat_ica, channel_selection; include_meta = false, include_extra = include_extra)
     isempty(selected_channels) && error("No channels available after applying channel filter")
 
     # Get samples to use using predicate
@@ -162,12 +161,7 @@ function run_ica(
     end
 
     # Get channel information from reference
-    selected_channels = get_selected_channels(
-        reference_epoch_data,
-        channel_selection;
-        include_meta = false,
-        include_extra = include_extra,
-    )
+    selected_channels = get_selected_channels(reference_epoch_data, channel_selection; include_meta = false, include_extra = include_extra)
     isempty(selected_channels) && error("No channels available after applying channel filter")
 
     # Concatenate all epoched data and check for duplicates
@@ -282,19 +276,7 @@ function IcaPrms(;
     degconst = 180.0 / π,
     default_stop = 1e-6,
 )
-    IcaPrms(
-        l_rate,
-        max_iter,
-        w_change,
-        anneal_deg,
-        anneal_step,
-        blowup,
-        blowup_fac,
-        max_weight,
-        restart_factor,
-        degconst,
-        default_stop,
-    )
+    IcaPrms(l_rate, max_iter, w_change, anneal_deg, anneal_step, blowup, blowup_fac, max_weight, restart_factor, degconst, default_stop)
 end
 
 function create_ica_data_matrix(dat::DataFrame, channels, samples)
@@ -721,8 +703,7 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout, filename
 
                     kurtosis_threshold = 0.05  # Small threshold to reduce oscillation
                     old_is_sub = is_sub_gaussian[i]
-                    is_sub_gaussian[i] =
-                        kurtosis < -kurtosis_threshold ? true : (kurtosis > kurtosis_threshold ? false : old_is_sub)
+                    is_sub_gaussian[i] = kurtosis < -kurtosis_threshold ? true : (kurtosis > kurtosis_threshold ? false : old_is_sub)
 
                     # Track switches for logging
                     if old_is_sub != is_sub_gaussian[i]
@@ -840,9 +821,7 @@ function remove_ica_components!(dat::DataFrame, ica::InfoIca; component_selectio
     end
 
     # Pre-compute the transformation matrix
-    tra =
-        Matrix(I, n_channels, n_channels) -
-        view(ica.mixing, :, components_to_remove) * view(ica.unmixing, components_to_remove, :)
+    tra = Matrix(I, n_channels, n_channels) - view(ica.mixing, :, components_to_remove) * view(ica.unmixing, components_to_remove, :)
 
     # Apply transformation and restore scaling
     cleaned_data = tra * data
@@ -1258,8 +1237,7 @@ function identify_eog_components(
         # Pre-filter all primary EOG components (they don't depend on remaining components)
         eog_components_filtered = Dict{Int,Vector{Float64}}()
         for eog_comp_idx in primary_components
-            eog_components_filtered[eog_comp_idx] =
-                abs.(filtfilt(lp_filter.filter_object, components_matrix[eog_comp_idx, :]))
+            eog_components_filtered[eog_comp_idx] = abs.(filtfilt(lp_filter.filter_object, components_matrix[eog_comp_idx, :]))
         end
 
         for comp_idx in remaining_components
@@ -1319,10 +1297,8 @@ function identify_eog_components(
     lag_step = max(1, round(Int, 5.0 * dat.sample_rate / 1000.0)) # 5 ms step
 
     # Calculate lagged correlations for vEOG and hEOG
-    vEOG_temporal_corr =
-        calculate_lagged_correlations(remaining_vEOG, primary_vEOG, components, lp_filter, max_lag_samples, lag_step)
-    hEOG_temporal_corr =
-        calculate_lagged_correlations(remaining_hEOG, primary_hEOG, components, lp_filter, max_lag_samples, lag_step)
+    vEOG_temporal_corr = calculate_lagged_correlations(remaining_vEOG, primary_vEOG, components, lp_filter, max_lag_samples, lag_step)
+    hEOG_temporal_corr = calculate_lagged_correlations(remaining_hEOG, primary_hEOG, components, lp_filter, max_lag_samples, lag_step)
 
     # Helper function to compute z-scores only for remaining components
     function zscore_for_remaining(corr_vector, remaining_indices)
@@ -1343,13 +1319,7 @@ function identify_eog_components(
     hEOG_temporal_corr_z = zscore_for_remaining(hEOG_temporal_corr, remaining_hEOG)
 
     # Identify secondary components: require BOTH correlation > min_correlation AND z-score > z_threshold
-    function identify_secondary_components(
-        remaining_components,
-        corr_vector,
-        corr_z_vector,
-        min_corr_threshold,
-        z_threshold,
-    )
+    function identify_secondary_components(remaining_components, corr_vector, corr_z_vector, min_corr_threshold, z_threshold)
         isempty(remaining_components) && return Int[]
         corr_mask = corr_vector[remaining_components] .> min_corr_threshold
         z_mask = abs.(corr_z_vector[remaining_components]) .> z_threshold
@@ -1358,36 +1328,16 @@ function identify_eog_components(
     end
 
     # Identify secondary components for vEOG: spatial OR temporal (each requires both corr and z-score)
-    secondary_vEOG_spatial = identify_secondary_components(
-        remaining_vEOG,
-        vEOG_spatial_corr,
-        vEOG_spatial_corr_z,
-        min_correlation,
-        z_threshold,
-    )
-    secondary_vEOG_temporal = identify_secondary_components(
-        remaining_vEOG,
-        vEOG_temporal_corr,
-        vEOG_temporal_corr_z,
-        min_correlation,
-        z_threshold,
-    )
+    secondary_vEOG_spatial =
+        identify_secondary_components(remaining_vEOG, vEOG_spatial_corr, vEOG_spatial_corr_z, min_correlation, z_threshold)
+    secondary_vEOG_temporal =
+        identify_secondary_components(remaining_vEOG, vEOG_temporal_corr, vEOG_temporal_corr_z, min_correlation, z_threshold)
 
     # Identify secondary components for hEOG: spatial OR temporal (each requires both corr and z-score)
-    secondary_hEOG_spatial = identify_secondary_components(
-        remaining_hEOG,
-        hEOG_spatial_corr,
-        hEOG_spatial_corr_z,
-        min_correlation,
-        z_threshold,
-    )
-    secondary_hEOG_temporal = identify_secondary_components(
-        remaining_hEOG,
-        hEOG_temporal_corr,
-        hEOG_temporal_corr_z,
-        min_correlation,
-        z_threshold,
-    )
+    secondary_hEOG_spatial =
+        identify_secondary_components(remaining_hEOG, hEOG_spatial_corr, hEOG_spatial_corr_z, min_correlation, z_threshold)
+    secondary_hEOG_temporal =
+        identify_secondary_components(remaining_hEOG, hEOG_temporal_corr, hEOG_temporal_corr_z, min_correlation, z_threshold)
 
     # Combine spatial and temporal secondary components
     secondary_vEOG = union(secondary_vEOG_spatial, secondary_vEOG_temporal)
@@ -1519,8 +1469,7 @@ function identify_ecg_components(
         num_peaks = length(peak_indices)
 
         # Calculate IBI metrics
-        num_valid_ibis, mean_ibi, std_ibi, peak_ratio =
-            _calculate_ibi_metrics(peak_indices, dat.sample_rate, min_ibi_s, max_ibi_s)
+        num_valid_ibis, mean_ibi, std_ibi, peak_ratio = _calculate_ibi_metrics(peak_indices, dat.sample_rate, min_ibi_s, max_ibi_s)
 
         # Check if component meets ECG criteria
         has_sufficient_ibis = num_valid_ibis >= (min_peaks - 1)
@@ -1650,11 +1599,7 @@ function identify_spatial_kurtosis_components(ica::InfoIca; z_threshold::Float64
     sort!(high_kurtosis_comps)
 
     # Create metrics DataFrame
-    metrics_df = DataFrame(
-        :Component => 1:n_components,
-        :spatial_kurtosis => spatial_kurtosis,
-        :z_spatial_kurtosis => z_spatial_kurtosis,
-    )
+    metrics_df = DataFrame(:Component => 1:n_components, :spatial_kurtosis => spatial_kurtosis, :z_spatial_kurtosis => z_spatial_kurtosis)
 
     return high_kurtosis_comps, metrics_df
 end
@@ -1868,8 +1813,13 @@ eog_metrics = metrics[:eog_metrics]
 ecg_metrics = metrics[:ecg_metrics]
 ```
 """
-function identify_components(dat::ContinuousData, ica::InfoIca; sample_selection::Function = samples(),
-    interval_selection::Interval = times(), kwargs...)
+function identify_components(
+    dat::ContinuousData,
+    ica::InfoIca;
+    sample_selection::Function = samples(),
+    interval_selection::Interval = times(),
+    kwargs...,
+)
     # Identify EOG components (pass through use_robust_zscore if provided)
     eog_comps, eog_metrics_df = identify_eog_components(dat, ica; sample_selection = sample_selection, kwargs...)
 

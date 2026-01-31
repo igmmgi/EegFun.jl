@@ -269,15 +269,7 @@ function _create_rejection_interface!(
             ax = Axis(cell_gl[1, 1])
             push!(state.epoch_axes, ax)
             # Place a small toggle inside the plot area, top-left
-            t = Toggle(
-                cell_gl[1, 1];
-                halign = :left,
-                valign = :top,
-                tellwidth = false,
-                tellheight = false,
-                length = 60,
-                markersize = 30,
-            )
+            t = Toggle(cell_gl[1, 1]; halign = :left, valign = :top, tellwidth = false, tellheight = false, length = 60, markersize = 30)
 
             ax.spinewidth = plot_kwargs[:spine_width]
 
@@ -368,11 +360,7 @@ end
 """
 Update the display when page changes.
 """
-function _update_epoch_display!(
-    state::EpochRejectionState,
-    artifact_info::Union{Nothing,EpochRejectionInfo},
-    plot_kwargs::Dict{Symbol,Any},
-)
+function _update_epoch_display!(state::EpochRejectionState, artifact_info::Union{Nothing,EpochRejectionInfo}, plot_kwargs::Dict{Symbol,Any})
     page = state.current_page[]
     start_idx = (page - 1) * state.epochs_per_page + 1
 

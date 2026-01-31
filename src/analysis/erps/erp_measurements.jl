@@ -141,10 +141,10 @@ function _fractional_area_latency(data::AbstractVector, time_col::AbstractVector
     end
 
     # Find crossing point (handle both positive and negative total area)
-    idx = if total_area > 0
-        findfirst(a -> a >= target_area, cum_area)
+    if total_area > 0
+        idx = findfirst(a -> a >= target_area, cum_area)
     else
-        findfirst(a -> a <= target_area, cum_area)
+        idx = findfirst(a -> a <= target_area, cum_area)
     end
 
     if isnothing(idx)
@@ -356,7 +356,9 @@ function _process_dataframe_measurements(
     df::DataFrame,
     selected_channels::Vector{Symbol},
     analysis_interval::Interval,
+    baseline_interval::Interval,
     analysis_type::String,
+    file::String,
     participant::Int,
     measurement_kwargs::Dict{Symbol,Any},
 )
@@ -411,8 +413,8 @@ function _process_dataframe_measurements(
     end
 
     # Build metadata pairs in fixed order to ensure column order in DataFrame
-    metadata_vals = Any[participant]
-    metadata_keys = Symbol[:participant]
+    metadata_vals = Any[file, participant]
+    metadata_keys = Symbol[:file, :participant]
 
     if hasproperty(df, :condition)
         push!(metadata_vals, df[1, :condition])
@@ -426,6 +428,40 @@ function _process_dataframe_measurements(
         push!(metadata_vals, df[1, :epoch])
         push!(metadata_keys, :epoch)
     end
+
+    # Add analysis type
+    push!(metadata_vals, analysis_type)
+    push!(metadata_keys, :analysis_type)
+
+    # Add baseline interval columns
+    if !isnothing(baseline_interval)
+        baseline = baseline_interval isa AbstractRange ? (first(baseline_interval), last(baseline_interval)) : baseline_interval
+        push!(metadata_vals, baseline[1])
+        push!(metadata_keys, :baseline_interval_start)
+        push!(metadata_vals, baseline[2])
+        push!(metadata_keys, :baseline_interval_end)
+    else
+        push!(metadata_vals, missing)
+        push!(metadata_keys, :baseline_interval_start)
+        push!(metadata_vals, missing)
+        push!(metadata_keys, :baseline_interval_end)
+    end
+
+    # Add analysis interval columns
+    if !isnothing(analysis_interval)
+        ai = analysis_interval isa AbstractRange ? (first(analysis_interval), last(analysis_interval)) : analysis_interval
+        push!(metadata_vals, ai[1])
+        push!(metadata_keys, :analysis_interval_start)
+        push!(metadata_vals, ai[2])
+        push!(metadata_keys, :analysis_interval_end)
+    else
+        # Use actual time range from data
+        push!(metadata_vals, time_col[time_idx[1]])
+        push!(metadata_keys, :analysis_interval_start)
+        push!(metadata_vals, time_col[time_idx[end]])
+        push!(metadata_keys, :analysis_interval_end)
+    end
+
 
     metadata_final = NamedTuple{Tuple(metadata_keys)}(Tuple(metadata_vals))
 
@@ -597,7 +633,16 @@ function erp_measurements!(
     end
 
     # Process the single ERP DataFrame
-    return _process_dataframe_measurements(df, selected_channels, analysis_interval, analysis_type, participant, measurement_kwargs)
+    return _process_dataframe_measurements(
+        df,
+        selected_channels,
+        analysis_interval,
+        baseline_interval,
+        analysis_type,
+        dat.file,
+        participant,
+        measurement_kwargs,
+    )
 end
 
 """
@@ -657,7 +702,16 @@ function erp_measurements!(
     # Process each epoch DataFrame
     results = Vector{Any}()
     for df in dat.data
-        row_data = _process_dataframe_measurements(df, selected_channels, analysis_interval, analysis_type, participant, measurement_kwargs)
+        row_data = _process_dataframe_measurements(
+            df,
+            selected_channels,
+            analysis_interval,
+            baseline_interval,
+            analysis_type,
+            dat.file,
+            participant,
+            measurement_kwargs,
+        )
 
         if !isnothing(row_data)
             push!(results, row_data)
@@ -927,14 +981,7 @@ function erp_measurements(
         end
 
         # Return as ErpMeasurementsResult with metadata
-        return ErpMeasurementsResult(
-            results_df,
-            analysis_type,
-            analysis_interval,
-            analysis_interval_desc,
-            baseline_interval,
-            baseline_interval_desc,
-        )
+        return ErpMeasurementsResult(results_df, analysis_type, analysis_interval, baseline_interval)
 
     finally
         _cleanup_logging(log_file, output_dir)

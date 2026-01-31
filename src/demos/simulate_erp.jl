@@ -20,7 +20,7 @@ function _peak_vec(
     # Apply cosine and mask
     signal = cos.(phase)
     # Mask values outside [-pi/2, pi/2] phase range
-    signal[abs.(phase).>π/2] .= 0
+    signal[abs.(phase) .> π/2] .= 0
 
     # Apply amplitude with jitter
     rand_amp = randn(trials) .* jitter_amp

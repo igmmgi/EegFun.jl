@@ -122,10 +122,7 @@ function plot_gfp(
 
     if show_dissimilarity
         # Calculate both GFP and dissimilarity
-        results = [
-            gfp_and_dissimilarity(dat; channel_selection = channel_selection, normalize = normalize) for
-            dat in datasets_filtered
-        ]
+        results = [gfp_and_dissimilarity(dat; channel_selection = channel_selection, normalize = normalize) for dat in datasets_filtered]
     else
         # Calculate only GFP
         results = [gfp(dat; channel_selection = channel_selection, normalize = normalize) for dat in datasets_filtered]
@@ -146,8 +143,7 @@ function plot_gfp(
         # Plot all channel traces for each dataset
         for (dataset_idx, dat) in enumerate(datasets_filtered)
             # Get selected channels
-            selected_channels =
-                get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
+            selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
 
             # Plot each channel
             for ch in selected_channels
@@ -157,8 +153,7 @@ function plot_gfp(
 
         ax_erp.xlabel = ""
         ax_erp.ylabel = "Amplitude (μV)"
-        ax_erp.title =
-            plot_kwargs[:show_title] ? (isempty(plot_kwargs[:title]) ? "EEG Channels" : plot_kwargs[:title]) : ""
+        ax_erp.title = plot_kwargs[:show_title] ? (isempty(plot_kwargs[:title]) ? "EEG Channels" : plot_kwargs[:title]) : ""
 
         if plot_kwargs[:add_x_origin]
             vlines!(ax_erp, [0.0], color = :black, linewidth = 1, linestyle = :dash)
@@ -196,8 +191,7 @@ function plot_gfp(
     ax_gfp.xlabel = show_dissimilarity ? "" : plot_kwargs[:xlabel]
     ax_gfp.ylabel = ylabel_gfp
     if !show_erp_traces
-        ax_gfp.title =
-            plot_kwargs[:show_title] ? (isempty(plot_kwargs[:title]) ? "Global Field Power" : plot_kwargs[:title]) : ""
+        ax_gfp.title = plot_kwargs[:show_title] ? (isempty(plot_kwargs[:title]) ? "Global Field Power" : plot_kwargs[:title]) : ""
     else
         ax_gfp.title = "Global Field Power"
     end
@@ -346,8 +340,7 @@ function plot_gfp(gfp_data::DataFrame; kwargs...)
 
     ax_gfp.xlabel = show_dissimilarity ? "" : plot_kwargs[:xlabel]
     ax_gfp.ylabel = ylabel_gfp
-    ax_gfp.title =
-        plot_kwargs[:show_title] ? (isempty(plot_kwargs[:title]) ? "Global Field Power" : plot_kwargs[:title]) : ""
+    ax_gfp.title = plot_kwargs[:show_title] ? (isempty(plot_kwargs[:title]) ? "Global Field Power" : plot_kwargs[:title]) : ""
 
     # Set axis limits using the shared function
     _set_axis_properties!(ax_gfp; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
@@ -483,8 +476,7 @@ function plot_gfp(gfp_data::Vector{DataFrame}; kwargs...)
 
     ax_gfp.xlabel = show_dissimilarity ? "" : plot_kwargs[:xlabel]
     ax_gfp.ylabel = ylabel_gfp
-    ax_gfp.title =
-        plot_kwargs[:show_title] ? (isempty(plot_kwargs[:title]) ? "Global Field Power" : plot_kwargs[:title]) : ""
+    ax_gfp.title = plot_kwargs[:show_title] ? (isempty(plot_kwargs[:title]) ? "Global Field Power" : plot_kwargs[:title]) : ""
 
     # Set axis limits using the shared function
     _set_axis_properties!(ax_gfp; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])

@@ -76,7 +76,7 @@ function plot_layout_2d!(
 
     # Handle each component's kwargs directly using prefixes (no cross-component validation)
     head_kwargs = _merge_plot_kwargs(PLOT_LAYOUT_HEAD_KWARGS, kwargs; validate = false)
-    
+
     # Ensure coordinates are 2d
     _ensure_coordinates_2d!(layout)
     point_kwargs = _merge_plot_kwargs(PLOT_LAYOUT_POINT_KWARGS, kwargs; validate = false)
@@ -240,8 +240,8 @@ Create a convex hull around a set of 2D points with a specified border size usin
 function _create_convex_hull_graham(xpos::Vector{<:Real}, ypos::Vector{<:Real}, border_size::Real)
     # Generate points around each electrode with the border
     circle_points = 0:(2π/361):2π
-    xs = (border_size.*sin.(circle_points).+transpose(xpos))[:]
-    ys = (border_size.*cos.(circle_points).+transpose(ypos))[:]
+    xs = (border_size .* sin.(circle_points) .+ transpose(xpos))[:]
+    ys = (border_size .* cos.(circle_points) .+ transpose(ypos))[:]
 
     # Convert to array of points
     points = [[xs[i], ys[i]] for i in eachindex(xs)]
@@ -331,11 +331,7 @@ function add_topo_rois!(ax::Axis, layout::Layout, rois::Vector{<:Vector{Symbol}}
         end
 
         # Create convex hull
-        hull_points = _create_convex_hull_graham(
-            layout.data.x2[roi_idx],
-            layout.data.y2[roi_idx],
-            merged_kwargs[:roi_border_size][i],
-        )
+        hull_points = _create_convex_hull_graham(layout.data.x2[roi_idx], layout.data.y2[roi_idx], merged_kwargs[:roi_border_size][i])
         xs = [p[1] for p in hull_points]
         ys = [p[2] for p in hull_points]
 
@@ -653,9 +649,9 @@ function _add_interactive_correlation_points!(
         color = corr_values,
         markersize = sizes,
         marker = point_kwargs[:point_marker],
-        inspectable = true,  
+        inspectable = true,
         markerspace = :pixel,
-        colormap = :RdYlGn,  
+        colormap = :RdYlGn,
         colorrange = (-1.0, 1.0),
         visible = false,
     )
@@ -689,13 +685,7 @@ function _add_interactive_correlation_points!(
 
                 # Add text label with correlation value at electrode position
                 pos = positions[j]
-                text_obj = text!(
-                    ax,
-                    position = (pos[1], pos[2]),
-                    string(round(corr_val, digits = 2));
-                    fontsize = 16,
-                    color = :black,
-                )
+                text_obj = text!(ax, position = (pos[1], pos[2]), string(round(corr_val, digits = 2)); fontsize = 16, color = :black)
                 push!(current_text_labels[], text_obj)
             end
 

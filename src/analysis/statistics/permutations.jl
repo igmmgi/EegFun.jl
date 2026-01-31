@@ -69,9 +69,9 @@ function _shuffle_labels!(
         # We use views to avoid copying during indexing
         function get_trial(idx)
             if idx <= n_A
-                return view(data1, idx, :, :)
+                return view(data1,idx,:,:)
             else
-                return view(data2, idx - n_A, :, :)
+                return view(data2,(idx-n_A),:,:)
             end
         end
 

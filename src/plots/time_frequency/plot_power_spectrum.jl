@@ -474,7 +474,8 @@ function plot_channel_spectrum(
     plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
 
     # data selection
-    dat_subset = subset(dat, sample_selection = sample_selection, interval_selection = interval_selection, channel_selection = channel_selection)
+    dat_subset =
+        subset(dat, sample_selection = sample_selection, interval_selection = interval_selection, channel_selection = channel_selection)
 
     # Create figure and main axis
     fig = Figure()
