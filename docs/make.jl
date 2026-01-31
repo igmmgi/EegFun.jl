@@ -66,6 +66,14 @@ if isfile(theme_file)
     end
 
     @info "Fixed theme imports and copied Vue components"
+
+    # Build VitePress site
+    @info "Building VitePress site..."
+    cd(joinpath(@__DIR__, "build", ".documenter")) do
+        run(`npm install`)
+        run(`npx vitepress build .`)
+    end
+    @info "VitePress build complete"
 end
 
 
