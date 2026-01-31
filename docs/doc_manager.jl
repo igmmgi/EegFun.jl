@@ -65,7 +65,7 @@ function build_documentation(project_root::String)
 
     try
         # Build documentation
-        build_jl_path = joinpath(project_root, "docs", "build.jl")
+        build_jl_path = joinpath(project_root, "docs", "make.jl")
         print_colored(GREEN, " Building documentation with Documenter.jl...")
 
         # Suppress warnings during build
@@ -101,7 +101,7 @@ function check_doc_coverage(project_root::String; skip_build_check::Bool = false
         doc_files = [
             joinpath(project_root, "docs", "src", "index.md"),
             joinpath(project_root, "docs", "src", "api.md"),
-            joinpath(project_root, "docs", "build.jl"),
+            joinpath(project_root, "docs", "make.jl"),
         ]
         missing_files = []
 

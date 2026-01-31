@@ -6,6 +6,8 @@ export default defineConfig({
     description: 'High-performance EEG data analysis in Julia',
 
     themeConfig: {
+        logo: '/logo.png',  // Logo appears in navbar
+        
         nav: [
             { text: 'Home', link: '/' },
             { text: 'Tutorials', link: '/tutorials/getting-started' },
