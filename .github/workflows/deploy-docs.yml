@@ -44,6 +44,17 @@ jobs:
         env:
           GKSwstype: nul
       
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Build VitePress site
+        run: |
+          cd docs/build
+          npm install
+          npx vitepress build .
+      
       
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
