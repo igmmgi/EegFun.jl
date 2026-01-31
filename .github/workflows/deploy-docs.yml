@@ -36,10 +36,8 @@ jobs:
         env:
           JULIA_PKG_PRECOMPILE_AUTO: 0
       
-      - name: Install xvfb (virtual display for GLMakie)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb
+      - name: Install OpenGL and X11 dependencies for GLMakie
+        run: sudo apt-get update && sudo apt-get install -y xorg-dev mesa-utils xvfb libgl1 freeglut3-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev
       
       - name: Build documentation with Documenter
         run: |
