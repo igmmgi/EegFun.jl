@@ -134,6 +134,7 @@ export default defineConfig({
                     { text: 'Statistics', link: '/reference/statistics' },
                     { text: 'Plotting', link: '/reference/plotting' },
                     { text: 'Layouts', link: '/reference/layouts' },
+                    { text: 'Available Layouts', link: '/reference/available-layouts' },
                     { text: 'Patterns', link: '/reference/patterns' }
                 ]
             }
