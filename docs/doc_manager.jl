@@ -5,7 +5,7 @@ using Pkg
 
 # Load documentation packages from extras in temporary environment
 Pkg.activate(; temp = true)
-Pkg.add(["Documenter", "DocumenterVitepress", "DocumenterTools", "JuliaFormatter" )
+Pkg.add(["Documenter", "DocumenterVitepress", "DocumenterTools", "JuliaFormatter"])
 
 # Now load the packages
 using Documenter
