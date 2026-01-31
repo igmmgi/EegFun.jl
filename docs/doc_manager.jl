@@ -356,6 +356,37 @@ function format_and_check(project_root::String)
     return true
 end
 
+function view_documentation(project_root::String)
+    print_colored(YELLOW, "Starting VitePress dev server...")
+
+    build_dir = joinpath(project_root, "docs", "build")
+    if !isdir(build_dir)
+        print_colored(RED, " Documentation not built yet. Run 'Build documentation' first.")
+        return false
+    end
+
+    try
+        print_colored(GREEN, " Starting VitePress dev server on http://localhost:5173")
+        print_colored(CYAN, " Press Ctrl+C to stop the server")
+        println()
+
+        # Run VitePress dev server
+        cd(joinpath(project_root, "docs", "build")) do
+            run(`npx vitepress dev .`)
+        end
+    catch e
+        if isa(e, InterruptException)
+            print_colored(YELLOW, "\n Server stopped")
+        else
+            print_colored(RED, " Error starting server: $e")
+            return false
+        end
+    end
+
+    println()
+    return true
+end
+
 
 
 
@@ -401,9 +432,10 @@ function show_interactive_menu(project_root::String)
         println("4. Format and check syntax")
         println("5. Clean build artifacts")
         println("6. Run complete workflow")
-        println("7. Exit")
+        println("7. View documentation (VitePress dev server)")
+        println("8. Exit")
 
-        print("\nEnter your choice (1-7): ")
+        print("\nEnter your choice (1-8): ")
         choice = readline()
 
         if choice == "1"
@@ -423,9 +455,11 @@ function show_interactive_menu(project_root::String)
         elseif choice == "6"
             run_all_docs(project_root)
         elseif choice == "7"
+            view_documentation(project_root)
+        elseif choice == "8"
             break
         else
-            print_colored(RED, "Invalid choice. Please enter 1-7.")
+            print_colored(RED, "Invalid choice. Please enter 1-8.")
         end
     end
 end
