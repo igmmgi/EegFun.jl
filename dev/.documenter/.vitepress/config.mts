@@ -11,7 +11,7 @@ function getBaseRepository(base: string): string {
 }
 
 const baseTemp = {
-  base: '/igmmgi.github.io/EegFun.jl/dev/',// TODO: replace this in makedocs!
+  base: '/EegFun.jl/dev/',// TODO: replace this in makedocs!
 }
 
 const navTemp = {
@@ -49,8 +49,8 @@ const nav = [
 
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
-  base: '/igmmgi.github.io/EegFun.jl/dev/',// TODO: replace this in makedocs!
-  title: 'EegFun.jl',
+  base: '/EegFun.jl/dev/',// TODO: replace this in makedocs!
+  title: 'EegFun',
   description: 'Documentation for EegFun.jl',
   lastUpdated: true,
   cleanUrls: true,
@@ -64,7 +64,7 @@ export default defineConfig({
   
   vite: {
     define: {
-      __DEPLOY_ABSPATH__: JSON.stringify('/igmmgi.github.io/EegFun.jl'),
+      __DEPLOY_ABSPATH__: JSON.stringify('/EegFun.jl'),
     },
     resolve: {
       alias: {
