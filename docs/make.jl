@@ -29,22 +29,31 @@ pages = [
 ]
 
 # Create version directory structure for DocumenterVitepress (workaround for siteinfo.js bug)
-mkpath(joinpath(@__DIR__, "build", "1"))
+# mkpath(joinpath(@__DIR__, "build", "1"))
 
-# Build and deploy documentation (SIMPLE - like Makie!)
-makedocs(
-    sitename = "EegFun.jl",
-    modules = [EegFun],
-    pages = pages,
+# # Build and deploy documentation (SIMPLE - like Makie!)
+# makedocs(
+#     sitename = "EegFun.jl",
+#     modules = [EegFun],
+#     pages = pages,
+#     format = DocumenterVitepress.MarkdownVitepress(
+#         repo = "github.com/igmmgi/EegFun.jl",
+#         devbranch = "main",
+#         devurl = "dev",
+#         deploy_url = "https://igmmgi.github.io/EegFun.jl",
+#     ),
+#     warnonly = [:linkcheck, :cross_references, :missing_docs],
+#     draft = false,
+#     source = "src",
+# )
+
+makedocs(;
     format = DocumenterVitepress.MarkdownVitepress(
         repo = "github.com/igmmgi/EegFun.jl",
-        devbranch = "main",
+        devbranch = "main", # or master, trunk, ...
         devurl = "dev",
         deploy_url = "https://igmmgi.github.io/EegFun.jl",
     ),
-    warnonly = [:linkcheck, :cross_references, :missing_docs],
-    draft = false,
-    source = "src",
 )
 
 
