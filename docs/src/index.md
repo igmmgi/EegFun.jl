@@ -1,25 +1,43 @@
-# EegFun.jl
+---
+layout: home
 
-Welcome to EegFun.jl, a Julia package for EEG data analysis and processing.
+hero:
+  name: EegFun.jl
+  text: High-performance EEG data analysis in Julia
+  tagline: Comprehensive toolkit for EEG analysis, from raw data to publication
+  actions:
+    - theme: brand
+      text: Get Started
+      link: /tutorials/getting-started
+    - theme: alt
+      text: View on GitHub
+      link: https://github.com/igmmgi/EegFun.jl
 
-## Overview
+features:
+  - icon: 📊
+    title: Data Processing
+    details: Filtering, referencing, artifact detection and removal with high-performance implementations
+  - icon: 🧠
+    title: Advanced Analysis
+    details: ICA decomposition, time-frequency analysis, and ERP measurements
+  - icon: 📈
+    title: Statistical Testing
+    details: Permutation tests, cluster-based statistics, and MVPA decoding
+  - icon: 🎨
+    title: Visualization
+    details: Interactive plots, topographic maps, and publication-quality figures with Makie.jl
+---
 
-EegFun.jl provides a toolkit for analyzing electroencephalogram (EEG) data, including:
+## Quick Start
 
-- **Data Loading**: Support for Biosemi BDF files and other EEG formats
-- **Preprocessing**: Filtering, referencing, artifact detection and removal
-- **Analysis**: Time-frequency analysis, ICA, channel statistics
-- **Visualization**: Interactive plots, topographic maps, and ERP visualizations
-- **Event-Related Potentials**: ERP analysis and visualization
-
-## Installation
+Install EegFun.jl from the Julia REPL:
 
 ```julia
 using Pkg
 Pkg.add("EegFun")
 ```
 
-## Quick Start
+Load and preprocess EEG data:
 
 ```julia
 using EegFun
@@ -32,23 +50,31 @@ dat = EegFun.create_eeg_dataframe(dat, layout)
 
 # Basic preprocessing
 EegFun.highpass_filter!(dat, 1)      # High-pass filter at 1 Hz
-EegFun.rereference!(dat, :avg)         # Average reference
-EegFun.is_extreme_value!(dat, 100)     # Mark extreme values
+EegFun.rereference!(dat, :avg)       # Average reference
+EegFun.is_extreme_value!(dat, 100)   # Mark extreme values
 
-# Create epochs around events
+# Create epochs and compute ERPs
 epoch_cfg = [EegFun.EpochCondition(name = "Target", trigger_sequences = [[1]])]
 epochs = EegFun.extract_epochs(dat, 1, epoch_cfg[1], -0.2, 0.8)
-
-# Compute and plot ERPs
 erps = EegFun.average_epochs(epochs)
 fig, ax = EegFun.plot_erp(erps)
 ```
 
-## Documentation Structure
+## Documentation
 
-- **[API Reference](api.md)**: Complete function and type documentation
+:::tip Learn EegFun.jl
+Start with our [Getting Started Tutorial](tutorials/getting-started.md) to learn the basics
+:::
 
-## Index
+| Section | Description |
+|---------|-------------|
+| [Tutorials](tutorials/getting-started.md) | Step-by-step guides to learn EegFun.jl from scratch |
+| [How-To Guides](how-to/filter-data.md) | Task-focused solutions to specific problems |
+| [Explanations](explanations/data-structures.md) | Conceptual deep-dives into EEG analysis |
+| [API Reference](reference/index.md) | Complete function and type documentation |
 
-```@index
-```
+## Getting Help
+
+- 📖 Check the [tutorials](tutorials/getting-started.md) for step-by-step guides
+- 💬 Ask questions on [Julia Discourse](https://discourse.julialang.org/)
+- 🐛 Report bugs on [GitHub Issues](https://github.com/igmmgi/EegFun.jl/issues)
