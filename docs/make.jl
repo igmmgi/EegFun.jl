@@ -8,8 +8,8 @@ push!(LOAD_PATH, dirname(@__DIR__))
 # GitHub Actions error if not included
 # Use CairoMakie for headless documentation builds (no OpenGL required)
 # This prevents GLMakie from trying to initialize GLFW/OpenGL on GitHub Actions
-using CairoMakie
-CairoMakie.activate!()
+# using CairoMakie
+# CairoMakie.activate!()
 
 using EegFun
 
@@ -63,7 +63,7 @@ if isfile(theme_file)
     content = replace(content, r"\"@/" => "\"./")
     content = replace(content, r"'@/" => "'./")
     write(theme_file, content)
-    println(" ✓ Fixed theme imports to use relative paths")
+    println(" Fixed theme imports to use relative paths")
 end
 
 println("\n Documentation build complete!")

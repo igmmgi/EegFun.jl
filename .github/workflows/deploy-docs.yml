@@ -44,7 +44,12 @@ jobs:
       - name: Build documentation with Documenter
         run: |
           cd docs
-          DISPLAY=:0 xvfb-run -s '-screen 0 1024x768x24' julia --project=. make.jl
+          Xvfb :99 -screen 0 1024x768x24 &
+          sleep 1
+          DISPLAY=:99 GKSwstype=nul julia --project=. make.jl
+        env:
+          DISPLAY: :99
+          GKSwstype: nul
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -52,7 +57,7 @@ jobs:
           node-version: '20'
       
       - name: Install npm dependencies
-        run: cd docs && npm ci
+        run: cd docs && npm install
       
       - name: Build VitePress site
         run: cd docs/build && npx vitepress build .
