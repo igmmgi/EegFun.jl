@@ -48,4 +48,12 @@ makedocs(
 )
 
 
-DocumenterVitepress.deploydocs(repo = "github.com/igmmgi/EegFun.jl.git", devbranch = "main", devurl = "dev")
+
+
+DocumenterVitepress.deploydocs(
+    repo = "github.com/igmmgi/EegFun.jl",
+    target = joinpath(@__DIR__, "build"),
+    branch = "gh-pages",
+    devbranch = "main",
+    push_preview = true,
+)
