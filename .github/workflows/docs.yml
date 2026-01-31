@@ -1,73 +1,48 @@
-name: Deploy Documentation
+name: Docs build and deploy
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
-    branches: [main]
+    tags:
+      - '*'
+    branches:
+      - main
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       
       - name: Setup Julia
         uses: julia-actions/setup-julia@v2
         with:
           version: '1.10'
       
-      - name: Install OpenGL/X11 dependencies and setup Julia packages
-        run: |
-          sudo apt-get update && sudo apt-get install -y xorg-dev mesa-utils xvfb libgl1 freeglut3-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev xsettingsd x11-xserver-utils
-          DISPLAY=:0 xvfb-run -s '-screen 0 1024x768x24' julia --project=docs/ -e '
-            using Pkg
-            Pkg.develop(PackageSpec(path=pwd()))
-            Pkg.instantiate()
-          '
-        env:
-          JULIA_PKG_PRECOMPILE_AUTO: 0
+      - uses: julia-actions/cache@v2
       
-      - name: Build documentation with Documenter
-        run: |
-          cd docs
-          DISPLAY=:0 xvfb-run -s '-screen 0 1024x768x24' julia --project=. make.jl
+      - name: Install binary dependencies
+        run: sudo apt-get update && sudo apt-get install -y xorg-dev mesa-utils xvfb libgl1 freeglut3-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev
+      
+      - name: Build and deploy docs
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GKSwstype: nul
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      
-      - name: Build VitePress site
-        run: |
-          cd docs/build
-          npm install
-          npx vitepress build .
-      
-      
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: docs/build/.vitepress/dist
-
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+        run: >
+          cd docs;
+          DISPLAY=:0 xvfb-run -s '-screen 0 1024x768x24'
+          julia --color=yes --project=. -e '
+            using Pkg;
+            Pkg.develop(PackageSpec(path=pwd() |> dirname));
+            Pkg.instantiate();
+            include("make.jl")'
