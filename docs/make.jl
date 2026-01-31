@@ -63,8 +63,9 @@ if isfile(theme_file)
     content = replace(content, r"\"@/" => "\"./")
     content = replace(content, r"'@/" => "'./")
     write(theme_file, content)
-    println(" Fixed theme imports to use relative paths")
+    println(" ✓ Fixed theme imports to use relative paths")
 end
 
-# Deploy configuration - DocumenterVitepress.deploydocs handles VitePress build
-DocumenterVitepress.deploydocs(repo = "github.com/igmmgi/EegFun.jl.git", devbranch = "main", push_preview = true)
+println("\n✓ Documentation build complete!")
+println("  Markdown files: docs/build/")
+println("  Next: VitePress will build in CI or run 'npm run docs:build' locally")
