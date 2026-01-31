@@ -30,10 +30,7 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Legend parameters - get all Legend attributes with their actual defaults
     # This allows users to control any Legend parameter
-    [
-        Symbol("legend_$(attr)") => (get(LEGEND_DEFAULTS, attr, nothing), "Legend $(attr) parameter") for
-        attr in propertynames(Legend)
-    ]...,
+    [Symbol("legend_$(attr)") => (get(LEGEND_DEFAULTS, attr, nothing), "Legend $(attr) parameter") for attr in propertynames(Legend)]...,
 
     # Override specific legend parameters with custom defaults
     :legend => (true, "Show the legend (true/false)"),
@@ -62,14 +59,11 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Grid layout parameters
     :layout_grid_rowgap => (10, "Gap between rows (in pixels)"),
     :layout_grid_colgap => (10, "Gap between columns (in pixels)"),
-    :layout_grid_dims =>
-        (nothing, "Grid dimensions as (rows, cols) tuple for grid layouts. If nothing, automatically determined"),
-    :layout_grid_skip_positions =>
-        (nothing, "Positions to skip in grid layout as vector of (row, col) tuples, e.g., [(2,1), (2,3)]"),
+    :layout_grid_dims => (nothing, "Grid dimensions as (rows, cols) tuple for grid layouts. If nothing, automatically determined"),
+    :layout_grid_skip_positions => (nothing, "Positions to skip in grid layout as vector of (row, col) tuples, e.g., [(2,1), (2,3)]"),
 
     # General layout parameters
-    :figure_padding =>
-        ((10, 10, 10, 10), "Padding around entire figure as (left, right, top, bottom) tuple (in pixels)"),
+    :figure_padding => ((10, 10, 10, 10), "Padding around entire figure as (left, right, top, bottom) tuple (in pixels)"),
 )
 
 """
@@ -243,8 +237,7 @@ function plot_erp(
 
     # Apply channel_selection to determine which channels to plot
     # dat_subset has all channels, but we only plot the selected ones
-    selected_channels =
-        get_selected_channels(first(dat_subset), channel_selection_func; include_meta = false, include_extra = true)
+    selected_channels = get_selected_channels(first(dat_subset), channel_selection_func; include_meta = false, include_extra = true)
     # Preserve order from selected_channels (user's channel_selection order)
     all_plot_channels = [ch for ch in selected_channels if ch in all_channels]
 
@@ -256,8 +249,7 @@ function plot_erp(
     # set default plot title only for single layouts
     # For grid/topo layouts, we want individual channel names, not a global title
     if plot_kwargs[:show_title] && plot_kwargs[:title] == "" && layout == :single
-        plot_kwargs[:title] =
-            length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(print_vector(all_plot_channels))"
+        plot_kwargs[:title] = length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(print_vector(all_plot_channels))"
         if plot_kwargs[:average_channels]
             plot_kwargs[:title] = "Avg: $(print_vector(original_channels))"
         end
@@ -332,8 +324,7 @@ function plot_erp(
 
         # Create right-click handler that has access to condition visibility
         right_click_handler =
-            (selection_state, mouse_x, data) ->
-                _handle_erp_right_click!(selection_state, mouse_x, data, condition_checked_ref)
+            (selection_state, mouse_x, data) -> _handle_erp_right_click!(selection_state, mouse_x, data, condition_checked_ref)
 
         # Set up selection system that works for all layouts
         _setup_unified_selection!(fig, axes, selection_state, dat_subset, plot_layout, right_click_handler)
@@ -403,8 +394,7 @@ function plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
         baseline_interval = baseline_interval,
     )
     # Apply channel_selection to determine which channels to plot
-    selected_channels =
-        get_selected_channels(first(dat_subset), channel_selection_func; include_meta = false, include_extra = true)
+    selected_channels = get_selected_channels(first(dat_subset), channel_selection_func; include_meta = false, include_extra = true)
     # Preserve order from selected_channels (user's channel_selection order)
     all_plot_channels = [ch for ch in selected_channels if ch in all_channels]
     _plot_erp!(ax, dat_subset, all_plot_channels; user_provided_color = user_provided_color, plot_kwargs...)
@@ -444,13 +434,8 @@ function _plot_erp!(
     end
 
     # Compute colors and linestyles for each dataset
-    all_colors = _compute_dataset_colors(
-        plot_kwargs[:color],
-        length(datasets),
-        length(channels),
-        plot_kwargs[:colormap],
-        user_provided_color,
-    )
+    all_colors =
+        _compute_dataset_colors(plot_kwargs[:color], length(datasets), length(channels), plot_kwargs[:colormap], user_provided_color)
     all_linestyles = _compute_dataset_linestyles(plot_kwargs[:linestyle], length(datasets))
 
     # Plot each dataset for ALL channels in this subplot
@@ -559,8 +544,7 @@ function _prepare_erp_data(
     all_channels = vcat(all_channels, extra_channels)
 
     # Apply channel_selection to determine which channels to plot/average
-    selected_channels =
-        get_selected_channels(first(dat_subset), channel_selection; include_meta = false, include_extra = true)
+    selected_channels = get_selected_channels(first(dat_subset), channel_selection; include_meta = false, include_extra = true)
     all_plot_channels = [ch for ch in selected_channels if ch in all_channels]
 
     # Channel averaging if requested - average only the selected channels
@@ -570,12 +554,7 @@ function _prepare_erp_data(
         original_channels = all_plot_channels
         # Average only the selected channels, similar to plot_epochs
         for dat in dat_subset
-            channel_average!(
-                dat;
-                channel_selections = [channels(all_plot_channels)],
-                output_labels = [:avg],
-                reduce = false,
-            )
+            channel_average!(dat; channel_selections = [channels(all_plot_channels)], output_labels = [:avg], reduce = false)
         end
         # After averaging, update all_channels to include the averaged channel
         all_channels = [:avg]
@@ -841,9 +820,7 @@ function _setup_erp_control_panel!(
     axes::Vector{Axis},
     baseline_interval::Interval,
     line_refs::Union{Vector{<:Dict},Nothing} = nothing,
-    condition_checked_ref::Ref{Union{Vector{Observable{Bool}},Nothing}} = Ref{Union{Vector{Observable{Bool}},Nothing}}(
-        nothing,
-    ),
+    condition_checked_ref::Ref{Union{Vector{Observable{Bool}},Nothing}} = Ref{Union{Vector{Observable{Bool}},Nothing}}(nothing),
 )
 
     control_fig = Ref{Union{Figure,Nothing}}(nothing)

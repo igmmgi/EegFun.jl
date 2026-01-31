@@ -42,8 +42,7 @@ function _param(::Type{T}, desc, default = nothing; allowed = nothing, min = not
     ConfigParameter{T}(description = desc, default = default, allowed = allowed, min = min, max = max)
 end
 
-string_param(desc, default = ""; allowed = nothing) =
-    _param(Union{Vector{String},String}, desc, default, allowed = allowed)
+string_param(desc, default = ""; allowed = nothing) = _param(Union{Vector{String},String}, desc, default, allowed = allowed)
 simple_string_param(desc, default = ""; allowed = nothing) = _param(String, desc, default, allowed = allowed)
 bool_param(desc, default = false) = _param(Bool, desc, default)
 number_param(desc, default, min = nothing, max = nothing) = _param(Real, desc, default, min = min, max = max)
@@ -332,8 +331,7 @@ function _validate_parameter(value, parameter_spec::ConfigParameter, parameter_n
         value isa Number || return validation_error("$parameter_name must be a number, got $(typeof(value))")
     else
         # Check type compatibility (fixed for Julia 1.12 TOML parsing)
-        value isa param_type ||
-            return validation_error("$parameter_name must be of type $param_type, got $(typeof(value))")
+        value isa param_type || return validation_error("$parameter_name must be of type $param_type, got $(typeof(value))")
     end
 
     # Check min/max constraints

@@ -14,8 +14,7 @@ const LAYOUT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :grid_dims => (nothing, "Grid dimensions as (rows, cols) tuple. If nothing, automatically calculated"),
     :grid_rowgap => (10, "Gap between rows in grid layout (in pixels)"),
     :grid_colgap => (10, "Gap between columns in grid layout (in pixels)"),
-    :grid_skip_positions =>
-        (nothing, "Positions to skip in grid layout as vector of (row, col) tuples, e.g., [(2,1), (2,3)]"),
+    :grid_skip_positions => (nothing, "Positions to skip in grid layout as vector of (row, col) tuples, e.g., [(2,1), (2,3)]"),
 )
 
 
@@ -186,11 +185,7 @@ function _create_grid_layout(channels::Vector{Symbol}; kwargs...)
         if skip_positions !== nothing
             for (row, col) in skip_positions
                 if row < 1 || row > rows || col < 1 || col > cols
-                    throw(
-                        ArgumentError(
-                            "Skip position ($row, $col) is outside auto-calculated grid bounds ($rows×$cols)",
-                        ),
-                    )
+                    throw(ArgumentError("Skip position ($row, $col) is outside auto-calculated grid bounds ($rows×$cols)"))
                 end
             end
         end
@@ -266,12 +261,7 @@ This is a generic function that can be used by any plot type.
 - `kwargs...`: Additional keyword arguments passed to the specific layout creation function
   (e.g., `plot_width`, `plot_height` for topo layouts)
 """
-function create_layout(
-    layout_spec::Union{Symbol,PlotLayout},
-    channels::Vector{Symbol},
-    eeg_layout::Union{Layout,Nothing};
-    kwargs...,
-)
+function create_layout(layout_spec::Union{Symbol,PlotLayout}, channels::Vector{Symbol}, eeg_layout::Union{Layout,Nothing}; kwargs...)
 
     if layout_spec === :single
         return _create_single_layout(channels; kwargs...)
@@ -282,11 +272,7 @@ function create_layout(
     elseif layout_spec isa PlotLayout
         return layout_spec
     else
-        throw(
-            ArgumentError(
-                "Invalid layout specification: $layout_spec. Must be :single, :grid, :topo, or a PlotLayout object.",
-            ),
-        )
+        throw(ArgumentError("Invalid layout specification: $layout_spec. Must be :single, :grid, :topo, or a PlotLayout object."))
     end
 end
 
@@ -429,8 +415,7 @@ function _apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
 
         # Compute bounds for normalization
         positions = plot_layout.positions
-        isempty(positions) &&
-            throw(ArgumentError("Cannot create topo layout with empty positions. Problem with layout creation!"))
+        isempty(positions) && throw(ArgumentError("Cannot create topo layout with empty positions. Problem with layout creation!"))
 
         minx, maxx = extrema(pos[1] for pos in positions)
         miny, maxy = extrema(pos[2] for pos in positions)
@@ -465,15 +450,7 @@ end
 
 Set properties for axes in a grid layout.
 """
-function _set_grid_axis_properties!(
-    ax::Axis,
-    channel::Symbol,
-    row::Int,
-    col::Int,
-    total_rows::Int,
-    total_cols::Int;
-    kwargs...,
-)
+function _set_grid_axis_properties!(ax::Axis, channel::Symbol, row::Int, col::Int, total_rows::Int, total_cols::Int; kwargs...)
 
     if haskey(kwargs, :title) && kwargs[:title] != ""
         ax.title = kwargs[:title]

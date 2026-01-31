@@ -111,12 +111,7 @@ Count trigger occurrences with trigger info support.
 - `trigger_values`: Vector of trigger values
 - `trigger_count`: OrderedDict mapping trigger codes to counts
 """
-function _trigger_time_count(
-    times::Vector{Float64},
-    trigger_codes::Vector{Int16},
-    trigger_info::Vector{String},
-    ignore_triggers = Int[],
-)
+function _trigger_time_count(times::Vector{Float64}, trigger_codes::Vector{Int16}, trigger_info::Vector{String}, ignore_triggers = Int[])
     # Filter out ignored triggers if any are specified
     if !isempty(ignore_triggers)
         times, trigger_codes, trigger_info = _filter_triggers(times, trigger_codes, trigger_info, ignore_triggers)
@@ -217,9 +212,7 @@ function _extract_trigger_data(dat::ContinuousData, ignore_triggers = Int[])
     trigger_times = dat.data[trigger_positions, :time]
 
     # Extract trigger info if available
-    trigger_info =
-        hasproperty(dat.data, :triggers_info) ? dat.data[trigger_positions, :triggers_info] :
-        fill("", length(trigger_positions))
+    trigger_info = hasproperty(dat.data, :triggers_info) ? dat.data[trigger_positions, :triggers_info] : fill("", length(trigger_positions))
 
     # Filter out ignored triggers if any are specified
     if !isempty(ignore_triggers)
@@ -298,11 +291,7 @@ end
 
 Add invisible scatter points with labels for legend creation using trigger info.
 """
-function _add_trigger_legend_entries!(
-    ax::Axis,
-    trigger_count::OrderedDict{Int,Int},
-    trigger_labels::OrderedDict{Int,String},
-)
+function _add_trigger_legend_entries!(ax::Axis, trigger_count::OrderedDict{Int,Int}, trigger_labels::OrderedDict{Int,String})
     isempty(trigger_count) && return
     for (key, value) in trigger_count
         label = haskey(trigger_labels, key) ? "$(trigger_labels[key]): $value" : "$key: $value"
@@ -516,12 +505,7 @@ function _plot_trigger_events!(ax::Axis, trigger_times::Vector{Float64}, trigger
     _plot_trigger_events!(ax, trigger_times, trigger_codes, fill("", length(trigger_codes)))
 end
 
-function _plot_trigger_events!(
-    ax::Axis,
-    trigger_times::Vector{Float64},
-    trigger_codes::Vector{Int16},
-    trigger_info::Vector{String},
-)
+function _plot_trigger_events!(ax::Axis, trigger_times::Vector{Float64}, trigger_codes::Vector{Int16}, trigger_info::Vector{String})
     # Early return if no triggers to plot
     if isempty(trigger_times)
         @minimal_error "No triggers to plot"

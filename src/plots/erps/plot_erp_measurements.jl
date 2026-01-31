@@ -221,15 +221,7 @@ function _plot_erp_with_measurements_impl(
                 if plot_line === nothing
                     @debug "No plot line found for dataset $(dataset.condition_name), channel $channel on axis 1"
                 end
-                _overlay_measurements!(
-                    axes[1],
-                    measurements_df,
-                    dataset,
-                    channel,
-                    analysis_type,
-                    analysis_window,
-                    plot_line,
-                )
+                _overlay_measurements!(axes[1], measurements_df, dataset, channel, analysis_type, analysis_window, plot_line)
             end
         end
     else
@@ -243,15 +235,7 @@ function _plot_erp_with_measurements_impl(
                     if plot_line === nothing
                         @debug "No plot line found for dataset $(dataset.condition_name), channel $channel on axis $ax_idx"
                     end
-                    _overlay_measurements!(
-                        axes[ax_idx],
-                        measurements_df,
-                        dataset,
-                        channel,
-                        analysis_type,
-                        analysis_window,
-                        plot_line,
-                    )
+                    _overlay_measurements!(axes[ax_idx], measurements_df, dataset, channel, analysis_type, analysis_window, plot_line)
                 end
             end
         end
@@ -442,8 +426,7 @@ function _overlay_measurements!(
 
         # Shade the full data range in the analysis window using a rectangle
         # Create rectangle vertices: bottom-left, bottom-right, top-right, top-left
-        rect_vertices =
-            [Point2f(time_min, y_min), Point2f(time_max, y_min), Point2f(time_max, y_max), Point2f(time_min, y_max)]
+        rect_vertices = [Point2f(time_min, y_min), Point2f(time_max, y_min), Point2f(time_max, y_max), Point2f(time_min, y_max)]
 
         # Use poly! to create a filled rectangle
         # Pass Observable directly for visibility (same as vlines! and text!)
@@ -483,8 +466,7 @@ function _overlay_measurements!(
         concrete_color = marker_color isa Observable ? marker_color[] : marker_color
 
         # Create rectangle vertices: bottom-left, bottom-right, top-right, top-left
-        rect_vertices =
-            [Point2f(time_min, y_min), Point2f(time_max, y_min), Point2f(time_max, y_max), Point2f(time_min, y_max)]
+        rect_vertices = [Point2f(time_min, y_min), Point2f(time_max, y_min), Point2f(time_max, y_max), Point2f(time_min, y_max)]
 
         # Use poly! to create a filled rectangle (same approach as mean_amplitude)
         poly!(ax, rect_vertices, color = concrete_color, alpha = 0.15, strokewidth = 0, visible = marker_visible)
@@ -566,15 +548,7 @@ function _overlay_measurements!(
 
             # Draw vertical line at peak location (for context) - use solid line with same color
             # Make sure it's visible and distinct from fractional latency line
-            vlines!(
-                ax,
-                peak_time,
-                color = concrete_color,
-                linewidth = 1.5,
-                linestyle = :solid,
-                alpha = 0.7,
-                visible = marker_visible,
-            )
+            vlines!(ax, peak_time, color = concrete_color, linewidth = 1.5, linestyle = :solid, alpha = 0.7, visible = marker_visible)
 
             # Draw vertical line at fractional latency - use dashed line to distinguish
             vlines!(ax, latency, color = marker_color, linewidth = 2, linestyle = :solid, visible = marker_visible)

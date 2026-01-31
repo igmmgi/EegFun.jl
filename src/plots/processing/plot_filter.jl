@@ -116,13 +116,7 @@ function plot_filter_response(
 
     # Create three axes in a row
     ax1 = Axis(fig[1, 1]; base_props..., xscale_props..., ylabel = "Magnitude (linear)", limits = (xlim, (0, 1.1)))
-    ax2 = Axis(
-        fig[1, 2];
-        base_props...,
-        xscale_props...,
-        ylabel = plot_kwargs[:ylabel],
-        limits = (xlim, plot_kwargs[:ylim]),
-    )
+    ax2 = Axis(fig[1, 2]; base_props..., xscale_props..., ylabel = plot_kwargs[:ylabel], limits = (xlim, plot_kwargs[:ylim]))
     ax3 = Axis(
         fig[1, 3];
         xlabel = "Time (samples)",
@@ -178,35 +172,15 @@ function plot_filter_response(
     mag_db = 20 * log10.(mag_linear)
 
     # Plot actual responses
-    lines!(
-        ax1,
-        freqs,
-        mag_linear,
-        label = "Actual",
-        color = plot_kwargs[:actual_color],
-        linewidth = plot_kwargs[:actual_linewidth],
-    )
-    lines!(
-        ax2,
-        freqs,
-        mag_db,
-        label = "Actual",
-        color = plot_kwargs[:actual_color],
-        linewidth = plot_kwargs[:actual_linewidth],
-    )
+    lines!(ax1, freqs, mag_linear, label = "Actual", color = plot_kwargs[:actual_color], linewidth = plot_kwargs[:actual_linewidth])
+    lines!(ax2, freqs, mag_db, label = "Actual", color = plot_kwargs[:actual_color], linewidth = plot_kwargs[:actual_linewidth])
 
     # Add vertical line at cutoff frequency to both subplots
     vlines!(ax1, [filter_info.cutoff_freq], color = :red, linestyle = :dash, linewidth = 2)
     vlines!(ax2, [filter_info.cutoff_freq], color = :red, linestyle = :dash, linewidth = 2)
 
     # Add reference lines
-    hlines!(
-        ax1,
-        [0.707],
-        color = plot_kwargs[:reference_color],
-        linestyle = plot_kwargs[:reference_linestyle],
-        alpha = 0.5,
-    )  # -3 dB point
+    hlines!(ax1, [0.707], color = plot_kwargs[:reference_color], linestyle = plot_kwargs[:reference_linestyle], alpha = 0.5)  # -3 dB point
     hlines!(
         ax2,
         plot_kwargs[:reference_lines],
@@ -233,13 +207,7 @@ function plot_filter_response(
     end
 
     # Plot impulse response
-    lines!(
-        ax3,
-        time_samples,
-        impulse_response,
-        color = plot_kwargs[:actual_color],
-        linewidth = plot_kwargs[:actual_linewidth],
-    )
+    lines!(ax3, time_samples, impulse_response, color = plot_kwargs[:actual_color], linewidth = plot_kwargs[:actual_linewidth])
 
     # Add zero line for reference
     hlines!(ax3, [0], color = plot_kwargs[:reference_color], linestyle = plot_kwargs[:reference_linestyle], alpha = 0.5)

@@ -121,15 +121,7 @@ function plot_time_frequency(
     # So data should be (n_freqs, n_times)
     # After transpose, power_mat is (n_times, n_freqs), which is what Makie expects
     # Set NaN color to transparent so edge-filtered regions are not displayed
-    hm = heatmap!(
-        ax,
-        times,
-        freqs_vec,
-        power_mat,
-        colormap = colormap,
-        colorrange = colorrange,
-        nan_color = :transparent,
-    )
+    hm = heatmap!(ax, times, freqs_vec, power_mat, colormap = colormap, colorrange = colorrange, nan_color = :transparent)
 
     if colorbar
         # Determine colorbar label based on baseline information
@@ -148,8 +140,7 @@ function plot_time_frequency(
             # Baseline was just applied via parameter
             label =
                 baseline_method == :db ? "Power (dB)" :
-                baseline_method == :percent ? "Power (% change)" :
-                baseline_method == :relchange ? "Power (relative)" : "Power"
+                baseline_method == :percent ? "Power (% change)" : baseline_method == :relchange ? "Power (relative)" : "Power"
         else
             label = "Power"
         end

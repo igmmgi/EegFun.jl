@@ -53,20 +53,16 @@ function channel_average!(
 
     # Resolve actual channel groups (exclude metadata; optionally include extra)
     # For the default case (channels()), we want to select only original channel columns, not derived averaged columns
-    selected_channel_groups::Vector{Vector{Symbol}} =
-        if length(channel_selections) == 1 && channel_selections[1] == channels()
-            # Default case: select only original channel columns
-            all_cols = all_labels(dat)
-            meta_cols = meta_labels(dat)
-            original_channels = [col for col in all_cols if col ∉ meta_cols && !contains(string(col), "_")]
-            [original_channels]
-        else
-            # Custom selections: use the provided functions
-            [
-                get_selected_channels(dat, sel; include_meta = false, include_extra = include_extra) for
-                sel in channel_selections
-            ]
-        end
+    selected_channel_groups::Vector{Vector{Symbol}} = if length(channel_selections) == 1 && channel_selections[1] == channels()
+        # Default case: select only original channel columns
+        all_cols = all_labels(dat)
+        meta_cols = meta_labels(dat)
+        original_channels = [col for col in all_cols if col ∉ meta_cols && !contains(string(col), "_")]
+        [original_channels]
+    else
+        # Custom selections: use the provided functions
+        [get_selected_channels(dat, sel; include_meta = false, include_extra = include_extra) for sel in channel_selections]
+    end
 
     # Validate channel groups
     if any(isempty, selected_channel_groups)
@@ -302,14 +298,8 @@ function channel_average(
 
         # Create processing function with captured parameters
         process_fn =
-            (input_path, output_path) -> _process_channel_average_file(
-                input_path,
-                output_path,
-                channel_selections,
-                output_labels,
-                condition_selection,
-                reduce,
-            )
+            (input_path, output_path) ->
+                _process_channel_average_file(input_path, output_path, channel_selections, output_labels, condition_selection, reduce)
 
         # Execute batch operation
         results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Averaging channels")

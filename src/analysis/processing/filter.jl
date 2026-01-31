@@ -67,14 +67,7 @@ function create_lowpass_filter(
     order::Integer = 2,
     transition_width::Real = 0.1,
 )
-    return _create_filter(
-        "lp",
-        cutoff_freq,
-        sample_rate,
-        filter_method = filter_method,
-        order = order,
-        transition_width = transition_width,
-    )
+    return _create_filter("lp", cutoff_freq, sample_rate, filter_method = filter_method, order = order, transition_width = transition_width)
 end
 
 
@@ -114,14 +107,7 @@ function create_highpass_filter(
     order::Integer = 2,
     transition_width::Real = 0.1,
 )
-    return _create_filter(
-        "hp",
-        cutoff_freq,
-        sample_rate,
-        filter_method = filter_method,
-        order = order,
-        transition_width = transition_width,
-    )
+    return _create_filter("hp", cutoff_freq, sample_rate, filter_method = filter_method, order = order, transition_width = transition_width)
 end
 
 
@@ -194,8 +180,7 @@ function _create_filter(
     end
 
     # Create FilterInfo struct
-    filter_info =
-        FilterInfo(filter_type, filter_object, filter_method, cutoff_freq, sample_rate, order, n_taps, transition_band)
+    filter_info = FilterInfo(filter_type, filter_object, filter_method, cutoff_freq, sample_rate, order, n_taps, transition_band)
 
     return filter_info
 end
@@ -217,12 +202,7 @@ Modifies the data in place.
 - `filter`: Digital filter object to apply (can be DSP.jl filter or FilterInfo)
 - `filter_func::String`: Filtering function to use (default: "filtfilt" for two-pass filtering, or "filt" for one-pass filtering)
 """
-function _apply_filter!(
-    dat::DataFrame,
-    channels::Vector{Symbol},
-    filter::FilterInfo;
-    filter_func::String = "filtfilt",
-)::Nothing
+function _apply_filter!(dat::DataFrame, channels::Vector{Symbol}, filter::FilterInfo; filter_func::String = "filtfilt")::Nothing
     filter_func = filter_func == "filtfilt" ? filtfilt : filt
     @inbounds for channel in channels
         @views dat[:, channel] .= filter_func(filter.filter_object, dat[:, channel])
@@ -230,12 +210,7 @@ function _apply_filter!(
     return nothing
 end
 
-function _apply_filter!(
-    dat::Vector{DataFrame},
-    channels::Vector{Symbol},
-    filter::FilterInfo;
-    filter_func::String = "filtfilt",
-)::Nothing
+function _apply_filter!(dat::Vector{DataFrame}, channels::Vector{Symbol}, filter::FilterInfo; filter_func::String = "filtfilt")::Nothing
     _apply_filter!.(dat, Ref(channels), Ref(filter); filter_func = filter_func)
     return nothing
 end
@@ -502,13 +477,7 @@ function _default_filter_output_dir(input_dir::String, pattern::String, filter_t
 end
 
 """Process a single file through filtering pipeline."""
-function _process_filter_file(
-    filepath::String,
-    output_path::String,
-    filter_type::String,
-    cutoff_freq::Real,
-    condition_selection::Function,
-)
+function _process_filter_file(filepath::String, output_path::String, filter_type::String, cutoff_freq::Real, condition_selection::Function)
     filename = basename(filepath)
 
     # Load data
@@ -622,8 +591,7 @@ function _run_filter_batch(
         end
 
         # Setup directories
-        output_dir =
-            something(output_dir, _default_filter_output_dir(input_dir, file_pattern, filter_type, cutoff_freq))
+        output_dir = something(output_dir, _default_filter_output_dir(input_dir, file_pattern, filter_type, cutoff_freq))
         mkpath(output_dir)
 
         # Find files
@@ -635,8 +603,7 @@ function _run_filter_batch(
 
         # Execute
         process_fn =
-            (input_path, output_path) ->
-                _process_filter_file(input_path, output_path, filter_type, cutoff_freq, condition_selection)
+            (input_path, output_path) -> _process_filter_file(input_path, output_path, filter_type, cutoff_freq, condition_selection)
         results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Filtering")
 
         return _log_batch_summary(results, output_dir)

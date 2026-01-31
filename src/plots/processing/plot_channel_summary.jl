@@ -277,13 +277,7 @@ based on the provided plotting parameters.
 - **Grid**: Sets grid visibility, width, and transparency
 - **Rotation**: Applies x-axis tick label rotation
 """
-function _configure_axis!(
-    ax::Axis,
-    channel_names::Vector{String},
-    col::Symbol,
-    plot_kwargs::Dict,
-    n_epochs::Union{Int,Nothing},
-)
+function _configure_axis!(ax::Axis, channel_names::Vector{String}, col::Symbol, plot_kwargs::Dict, n_epochs::Union{Int,Nothing})
     # Set ylabel - use custom if provided, otherwise use dynamic default
     if plot_kwargs[:ylabel] != ""
         ax.ylabel = plot_kwargs[:ylabel]

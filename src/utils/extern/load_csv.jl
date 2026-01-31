@@ -69,11 +69,7 @@ function load_csv(
     end
 
     # Create layout
-    layout_df = DataFrame(
-        :label => channel_labels,
-        :inc => zeros(length(channel_labels)),
-        :azi => zeros(length(channel_labels)),
-    )
+    layout_df = DataFrame(:label => channel_labels, :inc => zeros(length(channel_labels)), :azi => zeros(length(channel_labels)))
     layout = EegFun.Layout(layout_df, nothing, nothing)
 
     # Create AnalysisInfo

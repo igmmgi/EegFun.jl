@@ -94,7 +94,6 @@ function rsa_crossvalidated(
     n_folds::Int = 5,
     n_iterations::Int = 100,
     normalize_method::Symbol = :none,
-    
 )
     # Prepare and validate data using shared helper
     data_arrays, times, n_trials_per_condition, condition_names, selected_channels, first_epoch =
@@ -163,7 +162,6 @@ function _cv_splithalf(
     selected_channels::Vector{Symbol},
     dissimilarity_measure::Symbol,
     n_iterations::Int,
-    
 )
     rdms_sum = zeros(Float64, n_timepoints, n_conditions, n_conditions)
 
@@ -249,7 +247,6 @@ function _cv_kfold(
     selected_channels::Vector{Symbol},
     dissimilarity_measure::Symbol,
     n_folds::Int,
-    
 )
     rdms_sum = zeros(Float64, n_timepoints, n_conditions, n_conditions)
 

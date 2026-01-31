@@ -4,10 +4,7 @@ function _applied_filters(filter_cfg::FilterConfig; filter_sections::Vector{Symb
     for name in filter_sections
         section = getproperty(filter_cfg, name)
         if section.apply
-            push!(
-                applied_filters,
-                "$(section.freq) Hz $(section.type), $(section.method), $(section.func), order $(section.order)",
-            )
+            push!(applied_filters, "$(section.freq) Hz $(section.type), $(section.method), $(section.func), order $(section.order)")
         end
     end
     return join(applied_filters, "; ")
@@ -178,10 +175,7 @@ function Base.show(io::IO, info::ArtifactInfo)
     end
     println(io, "  Epoch rejections: $(length(info.epoch_rejections))")
     for rejection_info in info.epoch_rejections
-        println(
-            io,
-            "    - $(rejection_info.name) (condition $(rejection_info.info.number): $(rejection_info.info.name))",
-        )
+        println(io, "    - $(rejection_info.name) (condition $(rejection_info.info.number): $(rejection_info.info.name))")
     end
     if !isnothing(info.ica_components)
         all_comps = get_all_ica_components(info.ica_components)
@@ -312,12 +306,7 @@ Updates `repair_info` during repair to track actual repairs vs skips.
 # See also
 - `channel_repairable!`: Analyze which channels can be repaired before calling this function
 """
-function repair_channels_spherical!(
-    data::ContinuousData,
-    repair_info::ContinuousRepairInfo;
-    m::Int = 4,
-    lambda::Float64 = 1e-5,
-)
+function repair_channels_spherical!(data::ContinuousData, repair_info::ContinuousRepairInfo; m::Int = 4, lambda::Float64 = 1e-5)
     if isempty(repair_info.repaired)
         @info "No channels to repair (all bad channels were skipped)"
         return nothing
@@ -325,14 +314,7 @@ function repair_channels_spherical!(
 
     @info "Repairing $(length(repair_info.repaired)) channels: $(repair_info.repaired) using spherical spline interpolation"
 
-    repair_channels!(
-        data,
-        repair_info.repaired;
-        method = :spherical_spline,
-        repair_info = repair_info,
-        m = m,
-        lambda = lambda,
-    )
+    repair_channels!(data, repair_info.repaired; method = :spherical_spline, repair_info = repair_info, m = m, lambda = lambda)
 
     return nothing
 end
@@ -354,12 +336,7 @@ Orchestrator function similar to `repair_artifacts!` for epoch data.
 # Notes
 - `repair_info.repaired` should be populated by `channel_repairable!` before calling this function
 """
-function repair_channels!(
-    data::ContinuousData,
-    repair_info::ContinuousRepairInfo;
-    method::Symbol = :neighbor_interpolation,
-    kwargs...,
-)
+function repair_channels!(data::ContinuousData, repair_info::ContinuousRepairInfo; method::Symbol = :neighbor_interpolation, kwargs...)
     if method == :neighbor_interpolation
         repair_channels_neighbor!(data, repair_info; kwargs...)
     elseif method == :spherical_spline

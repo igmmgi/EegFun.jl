@@ -260,12 +260,7 @@ idx = search_sequence([1, 2, 3, 4, 5], [[1:3], [5:5]])
 idx = search_sequence([1, 2, 3, 4, 5], [[1, 2:4, 5]])
 ```
 """
-function search_sequence(
-    array,
-    sequences::Vector{<:Vector};
-    ignore_values::Vector{Int} = [0],
-    sort_indices::Bool = true,
-)
+function search_sequence(array, sequences::Vector{<:Vector}; ignore_values::Vector{Int} = [0], sort_indices::Bool = true)
     isempty(array) && return Int[]
     isempty(sequences) && return Int[]
 
@@ -437,8 +432,7 @@ function _search_single_trigger(array, trigger::Integer, ignore_values::Vector{I
     return indices
 end
 _search_single_trigger(array, trigger::UnitRange, ignore_values::Vector{Int} = [0]) = search_sequence(array, [trigger])
-_search_single_trigger(array, trigger::Symbol, ignore_values::Vector{Int} = [0]) =
-    error("Single wildcard sequences not supported")
+_search_single_trigger(array, trigger::Symbol, ignore_values::Vector{Int} = [0]) = error("Single wildcard sequences not supported")
 
 # Helper function to check if a sequence matches at a given position
 function _matches_sequence(array, sequence, start_idx, ignore_values)

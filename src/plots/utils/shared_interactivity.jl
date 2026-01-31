@@ -1,8 +1,7 @@
 # =============================================================================
 # SHARED CONSTANTS
 # =============================================================================
-const SHARED_KEYBOARD_ACTIONS =
-    Dict(Keyboard.up => :up, Keyboard.down => :down, Keyboard.left => :left, Keyboard.right => :right)
+const SHARED_KEYBOARD_ACTIONS = Dict(Keyboard.up => :up, Keyboard.down => :down, Keyboard.left => :left, Keyboard.right => :right)
 
 # =============================================================================
 # SHARED SELECTION STATE
@@ -72,12 +71,7 @@ end
 
 Set up keyboard interactivity for plots with help system.
 """
-function _setup_shared_interactivity!(
-    fig::Figure,
-    axes::Vector{Axis},
-    plot_type::Symbol,
-    keyboard_actions::Dict = SHARED_KEYBOARD_ACTIONS,
-)
+function _setup_shared_interactivity!(fig::Figure, axes::Vector{Axis}, plot_type::Symbol, keyboard_actions::Dict = SHARED_KEYBOARD_ACTIONS)
     # Set up basic navigation
     _setup_shared_interactivity!(fig, axes, keyboard_actions)
 
@@ -251,13 +245,7 @@ end
 
 Start channel selection with Ctrl + drag.
 """
-function _start_figure_channel_selection!(
-    fig::Figure,
-    selection_state::SharedSelectionState,
-    plot_layout,
-    data,
-    channel_selection_active,
-)
+function _start_figure_channel_selection!(fig::Figure, selection_state::SharedSelectionState, plot_layout, data, channel_selection_active)
     if plot_layout.type != :topo && plot_layout.type != :grid
         return
     end
@@ -286,15 +274,7 @@ function _update_figure_channel_selection!(fig::Figure, selection_state::SharedS
     current_idx = selection_state.current_selection_idx
     if isnothing(current_idx) || current_idx > length(selection_state.selection_rectangles)
         rect_points = [Point2f(x1, y1), Point2f(x2, y1), Point2f(x2, y2), Point2f(x1, y2)]
-        rect = poly!(
-            fig.scene,
-            rect_points,
-            color = (:blue, 0.3),
-            strokecolor = :red,
-            strokewidth = 2,
-            overdraw = true,
-            space = :relative,
-        )
+        rect = poly!(fig.scene, rect_points, color = (:blue, 0.3), strokecolor = :red, strokewidth = 2, overdraw = true, space = :relative)
         push!(selection_state.selection_rectangles, rect)
         push!(selection_state.selection_bounds, (x1, y1, x2, y2))
     else
@@ -614,14 +594,7 @@ function _setup_channel_selection_events!(
             if event.action == Mouse.press
                 _start_figure_channel_selection!(fig, selection_state, plot_layout, data, channel_selection_active)
             elseif event.action == Mouse.release && channel_selection_active[]
-                _finish_figure_channel_selection!(
-                    fig,
-                    selection_state,
-                    plot_layout,
-                    data,
-                    channel_selection_active,
-                    axes,
-                )
+                _finish_figure_channel_selection!(fig, selection_state, plot_layout, data, channel_selection_active, axes)
             end
         end
 

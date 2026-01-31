@@ -63,9 +63,7 @@ function condition_parse_epoch(config::Dict)
 
         # Validation
         if reference_index < 1 || reference_index > length(trigger_sequences[1])
-            @minimal_error_throw(
-                "reference_index must be between 1 and $(length(trigger_sequences[1])) for condition '$name'"
-            )
+            @minimal_error_throw("reference_index must be between 1 and $(length(trigger_sequences[1])) for condition '$name'")
         end
 
         # Only validate timing constraints if they're specified
@@ -76,10 +74,7 @@ function condition_parse_epoch(config::Dict)
 
             # Validate timing pairs
             for (start_idx, end_idx) in timing_pairs
-                if start_idx < 1 ||
-                   start_idx > length(trigger_sequences[1]) ||
-                   end_idx < 1 ||
-                   end_idx > length(trigger_sequences[1])
+                if start_idx < 1 || start_idx > length(trigger_sequences[1]) || end_idx < 1 || end_idx > length(trigger_sequences[1])
                     @minimal_error_throw(
                         "timing_pairs contains invalid indices for sequence of length $(length(trigger_sequences[1])) in condition '$name'",
                     )
@@ -95,19 +90,7 @@ function condition_parse_epoch(config::Dict)
             @minimal_error_throw("Cannot specify both 'after' and 'before' constraints for condition '$name'")
         end
 
-        push!(
-            conditions,
-            EpochCondition(
-                name,
-                trigger_sequences,
-                reference_index,
-                timing_pairs,
-                min_interval,
-                max_interval,
-                after,
-                before,
-            ),
-        )
+        push!(conditions, EpochCondition(name, trigger_sequences, reference_index, timing_pairs, min_interval, max_interval, after, before))
     end
 
     return conditions
@@ -378,9 +361,7 @@ function mark_epoch_windows!(
         end
 
         # Apply timing constraints if specified
-        if condition.timing_pairs !== nothing &&
-           condition.min_interval !== nothing &&
-           condition.max_interval !== nothing
+        if condition.timing_pairs !== nothing && condition.min_interval !== nothing && condition.max_interval !== nothing
 
             sequence_indices = filter(sequence_indices) do seq_start_idx
                 for (start_idx, end_idx) in condition.timing_pairs
@@ -478,8 +459,7 @@ condition = EpochCondition(
 """
 function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::EpochCondition, start_time, end_time)
     # Find t==0 positions based on trigger_sequences (unified approach)
-    zero_idx =
-        search_sequence(dat.data.triggers, epoch_condition.trigger_sequences) .+ (epoch_condition.reference_index - 1)
+    zero_idx = search_sequence(dat.data.triggers, epoch_condition.trigger_sequences) .+ (epoch_condition.reference_index - 1)
     isempty(zero_idx) && error("None of the trigger sequences $(epoch_condition.trigger_sequences) found!")
 
     # Apply after/before filtering if specified
@@ -543,9 +523,7 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
     end
 
     # Apply timing constraints if specified
-    if epoch_condition.timing_pairs !== nothing &&
-       epoch_condition.min_interval !== nothing &&
-       epoch_condition.max_interval !== nothing
+    if epoch_condition.timing_pairs !== nothing && epoch_condition.min_interval !== nothing && epoch_condition.max_interval !== nothing
 
         valid_indices = Int[]
 
@@ -583,8 +561,7 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
         end
 
         zero_idx = valid_indices
-        isempty(zero_idx) &&
-            error("No trigger sequences found that meet timing constraints for condition '$(epoch_condition.name)'")
+        isempty(zero_idx) && error("No trigger sequences found that meet timing constraints for condition '$(epoch_condition.name)'")
     end
 
     # find number of samples pre/post epoch t = 0 position
@@ -692,8 +669,8 @@ function average_epochs(dat::EpochData)
         # Create result DataFrame with metadata columns from first epoch
         erp = DataFrame()
 
-        # Copy metadata columns (time, sample, epoch, etc.) from first epoch
-        metadata_cols = meta_labels(dat)
+        # Copy metadata columns (only :time should be kept for an average)
+        metadata_cols = filter(c -> c == :time, meta_labels(dat))
         for col in metadata_cols
             if hasproperty(first_epoch, col)
                 erp[!, col] = first_epoch[!, col]
@@ -711,16 +688,7 @@ function average_epochs(dat::EpochData)
         # Count epochs
         n_epochs = length(dat.data)
 
-        return ErpData(
-            dat.file,
-            dat.condition,
-            dat.condition_name,
-            erp,
-            dat.layout,
-            dat.sample_rate,
-            dat.analysis_info,
-            n_epochs,
-        )
+        return ErpData(dat.file, dat.condition, dat.condition_name, erp, dat.layout, dat.sample_rate, dat.analysis_info, n_epochs)
     catch e
         @minimal_error_throw("Failed to average epochs: $(e)")
     end
@@ -895,15 +863,7 @@ function reject_epochs(dat::EpochData, bad_columns::Vector{Symbol})
     end
 
     # Return new EpochData with only good epochs (preserve struct fields)
-    return EpochData(
-        dat.file,
-        dat.condition,
-        dat.condition_name,
-        good_epochs,
-        dat.layout,
-        dat.sample_rate,
-        dat.analysis_info,
-    )
+    return EpochData(dat.file, dat.condition, dat.condition_name, good_epochs, dat.layout, dat.sample_rate, dat.analysis_info)
 end
 
 """
@@ -1000,14 +960,8 @@ end
 
 Display comparison table between original and cleaned epochs to console and return DataFrame.
 """
-function epochs_table(
-    epochs_original::Vector{EpochData},
-    epochs_cleaned::Vector{EpochData};
-    print_table::Bool = true,
-    kwargs...,
-)
-    length(epochs_original) != length(epochs_cleaned) &&
-        throw(ArgumentError("epochs_original and epochs_cleaned must have same length"))
+function epochs_table(epochs_original::Vector{EpochData}, epochs_cleaned::Vector{EpochData}; print_table::Bool = true, kwargs...)
+    length(epochs_original) != length(epochs_cleaned) && throw(ArgumentError("epochs_original and epochs_cleaned must have same length"))
 
     df = _build_base_epochs_df(epochs_original)
     df.n_epochs_original = [n_epochs(epoch) for epoch in epochs_original]
@@ -1057,8 +1011,7 @@ Batch averaging of epoch data to create ERPs.
 
 """Validate that file pattern is for epochs data."""
 function _validate_epochs_pattern(pattern::String)
-    !contains(pattern, "epochs") &&
-        return "average_epochs only works with epoch data. File pattern must contain 'epochs', got: '$pattern'"
+    !contains(pattern, "epochs") && return "average_epochs only works with epoch data. File pattern must contain 'epochs', got: '$pattern'"
     return nothing
 end
 
@@ -1183,14 +1136,13 @@ function average_epochs(
 
         # Create processing function with captured parameters
         # Transform output filenames: replace "epochs" with "erps"
-        process_fn =
-            (input_path, output_path) -> begin
-                # Transform filename: replace "epochs" with "erps" in the output filename
-                output_file = basename(output_path)
-                transformed_file = replace(output_file, "epochs" => "erps")
-                transformed_output_path = joinpath(dirname(output_path), transformed_file)
-                _process_average_file(input_path, transformed_output_path, condition_selection)
-            end
+        process_fn = (input_path, output_path) -> begin
+            # Transform filename: replace "epochs" with "erps" in the output filename
+            output_file = basename(output_path)
+            transformed_file = replace(output_file, "epochs" => "erps")
+            transformed_output_path = joinpath(dirname(output_path), transformed_file)
+            _process_average_file(input_path, transformed_output_path, condition_selection)
+        end
 
         # Execute batch operation
         results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Averaging")

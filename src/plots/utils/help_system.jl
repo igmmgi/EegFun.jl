@@ -93,18 +93,11 @@ function get_plot_help_info(plot_type::Symbol)::PlotHelpInfo
         ),
         :power_spectrum => PlotHelpInfo(
             "Power Spectrum",
-            [
-                ("Checkbox Toggle", "Switch between linear and log scales"),
-                ("Left Click + Drag", "Zoom into frequency range"),
-            ],
+            [("Checkbox Toggle", "Switch between linear and log scales"), ("Left Click + Drag", "Zoom into frequency range")],
         ),
         :triggers => PlotHelpInfo(
             "Trigger Plot",
-            [
-                ("Slider Drag", "Adjust time window position"),
-                ("Slider Drag", "Adjust window size"),
-                ("Left Click + Drag", "Pan the view"),
-            ],
+            [("Slider Drag", "Adjust time window position"), ("Slider Drag", "Adjust window size"), ("Left Click + Drag", "Pan the view")],
         ),
     )
 

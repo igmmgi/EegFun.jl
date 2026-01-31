@@ -392,7 +392,7 @@ function rsa(
         @minimal_error_throw("RSA requires at least 2 conditions, got $n_conditions")
     end
     if any(n_trials_per_condition .== 0)
-        empty_conditions = condition_names[n_trials_per_condition.==0]
+        empty_conditions = condition_names[n_trials_per_condition .== 0]
         @minimal_error_throw("One or more conditions have zero trials: $(join(empty_conditions, ", "))")
     end
 

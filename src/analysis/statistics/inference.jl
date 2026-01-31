@@ -113,4 +113,3 @@ function _apply_bonferroni_correction(p_values::Vector{Float64}, alpha::Float64,
     # Handle NaN p-values: if p is NaN but t > 0, treat as significant
     return (p_values .<= corrected_alpha) .| (isnan.(p_values) .& (t_statistics .> 0))
 end
-

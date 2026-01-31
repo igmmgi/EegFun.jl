@@ -49,11 +49,7 @@ function _condition_combine_process_file(filepath::String, output_path::String, 
         # Validate that all requested conditions exist
         missing_conditions = filter(c -> c > max_condition || c < 1, original_conditions)
         if !isempty(missing_conditions)
-            return BatchResult(
-                false,
-                filename,
-                "Condition(s) $missing_conditions not found (only has 1-$max_condition)",
-            )
+            return BatchResult(false, filename, "Condition(s) $missing_conditions not found (only has 1-$max_condition)")
         end
 
         # Get data for the specified conditions
@@ -156,8 +152,7 @@ function condition_combine(
         end
 
         # Setup directories
-        output_dir =
-            something(output_dir, _condition_combine_default_output_dir(input_dir, file_pattern, condition_groups))
+        output_dir = something(output_dir, _condition_combine_default_output_dir(input_dir, file_pattern, condition_groups))
         mkpath(output_dir)
 
         # Find files
@@ -173,12 +168,10 @@ function condition_combine(
         @info "Condition groups: $condition_groups\n"
 
         # Create processing function with captured parameters
-        process_fn =
-            (input_path, output_path) -> _condition_combine_process_file(input_path, output_path, condition_groups)
+        process_fn = (input_path, output_path) -> _condition_combine_process_file(input_path, output_path, condition_groups)
 
         # Execute batch operation
-        results =
-            _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Combining conditions")
+        results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Combining conditions")
 
         _log_batch_summary(results, output_dir)
 

@@ -137,13 +137,7 @@ function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kw
     )
 
     # Create the heatmap
-    heatmap!(
-        ax,
-        corr_matrix,
-        colormap = plot_kwargs[:colormap],
-        colorrange = colorrange,
-        nan_color = plot_kwargs[:nan_color],
-    )
+    heatmap!(ax, corr_matrix, colormap = plot_kwargs[:colormap], colorrange = colorrange, nan_color = plot_kwargs[:nan_color])
 
     # Add a colorbar if requested
     if plot_kwargs[:colorbar_plot]

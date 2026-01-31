@@ -66,8 +66,7 @@ function plot_freq_spectrum(
     line_alpha::Real = 0.8,
 )
     # Get selected channels
-    selected_channels =
-        get_selected_channels(spectrum_data, channel_selection; include_meta = false, include_extra = false)
+    selected_channels = get_selected_channels(spectrum_data, channel_selection; include_meta = false, include_extra = false)
     isempty(selected_channels) && error("No channels selected. Available channels: $(channel_labels(spectrum_data))")
 
     # Filter to only channels that actually exist in the spectrum data

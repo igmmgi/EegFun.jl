@@ -69,7 +69,7 @@ function preprocess_v1(config::String; base_dir::Union{String,Nothing} = nothing
         layout_file_path = resolve_path(cfg["files"]["input"]["layout_file"])
         if !isfile(layout_file_path)
             # Fall back to searching in package layouts directory
-            layout_file = find_file(cfg["files"]["input"]["layout_file"], joinpath(@__DIR__, "..", "..", "data", "layouts"))
+            layout_file = find_file(cfg["files"]["input"]["layout_file"], joinpath(@__DIR__, "..", "..", "resources", "layouts"))
             if layout_file !== nothing
                 layout_file_path = layout_file
             end
