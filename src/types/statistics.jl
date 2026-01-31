@@ -118,13 +118,11 @@ Stores cluster-specific parameters for cluster permutation tests.
 - `threshold_method::Symbol`: `:parametric`, `:nonparametric_individual`, or `:nonparametric_common`
 - `cluster_type::Symbol`: `:spatial`, `:temporal`, or `:spatiotemporal`
 - `n_permutations::Int`: Number of permutations performed
-- `random_seed::Union{Int, Nothing}`: Random seed used (if any)
 """
 struct ClusterInfo
     threshold_method::Symbol
     cluster_type::Symbol
     n_permutations::Int
-    random_seed::Union{Int,Nothing}
 end
 
 # ==============
@@ -328,14 +326,6 @@ function Base.show(io::IO, result::PermutationResult)
                 n_elec = length(cluster.electrodes)
                 println(io, "     [$sig_marker] Cluster $(cluster.id): stat=$stat_str, p=$p_str, $n_elec electrodes, $time_str")
             end
-        end
-
-        if cluster_info.random_seed !== nothing
-            println(io, "   Random seed: $(cluster_info.random_seed)")
-        end
-    else
-        if cluster_info.random_seed !== nothing
-            println(io, "└─ Random seed: $(cluster_info.random_seed)")
         end
     end
 end

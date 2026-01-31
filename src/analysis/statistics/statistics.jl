@@ -13,14 +13,14 @@ Perform cluster-based permutation test on prepared ERP data.
 - `cluster_type::Symbol`: Type of clustering - `:spatial`, `:temporal`, or `:spatiotemporal` (default)
 - `min_num_neighbors::Int`: Minimum number of neighboring significant channels required (FieldTrip's minNumChannels, default: 0). Points with fewer neighbors are removed before clustering.
 - `tail::Symbol`: Test tail - `:both` (default), `:left`, or `:right`
-- `random_seed::Union{Int, Nothing}`: Random seed for reproducibility (default: nothing)
 - `show_progress::Bool`: Whether to show progress bar (default: true)
 
 # Returns
 - `PermutationResult`: Complete results structure
 
 # Notes
-Cluster statistics are computed using the **maxsum** method (sum of t-values within cluster), which is the most sensitive and standard approach in EEG research.
+- Cluster statistics are computed using the **maxsum** method (sum of t-values within cluster), which is the most sensitive and standard approach in EEG research.
+- For reproducible results, call `Random.seed!(xxx)` in your Julia session before running the test.
 """
 function permutation_test(
     prepared::StatisticalData;
@@ -30,7 +30,6 @@ function permutation_test(
     cluster_type::Symbol = :spatiotemporal,
     min_num_neighbors::Int = 0,
     tail::Symbol = :both,
-    random_seed::Union{Int,Nothing} = nothing,
     show_progress::Bool = true,
 )
     # Validate inputs
@@ -62,7 +61,7 @@ function permutation_test(
     elseif threshold_method == :nonparametric_common
         # Non-parametric common: run all permutations first to get threshold
         @info "Collecting permutation t-matrices for non-parametric common thresholding..."
-        permutation_t_matrices = _collect_permutation_t_matrices(prepared, n_permutations, random_seed, show_progress)
+        permutation_t_matrices = _collect_permutation_t_matrices(prepared, n_permutations, show_progress)
 
         # Compute common threshold from permutation distribution
         @info "Computing non-parametric common threshold..."
@@ -79,7 +78,7 @@ function permutation_test(
     elseif threshold_method == :nonparametric_individual
         # Non-parametric individual: run all permutations first to get thresholds
         @info "Collecting permutation t-matrices for non-parametric individual thresholding..."
-        permutation_t_matrices = _collect_permutation_t_matrices(prepared, n_permutations, random_seed, show_progress)
+        permutation_t_matrices = _collect_permutation_t_matrices(prepared, n_permutations, show_progress)
 
         # Compute individual thresholds from permutation distribution
         @info "Computing non-parametric individual thresholds..."
@@ -144,7 +143,6 @@ function permutation_test(
         cluster_type,
         tail,
         min_num_neighbors,
-        random_seed,
         show_progress;
         permutation_t_matrices = permutation_t_matrices,
     )
@@ -198,7 +196,7 @@ function permutation_test(
     end
 
     # Assemble nested structs
-    cluster_info = ClusterInfo(threshold_method, cluster_type, n_permutations, random_seed)
+    cluster_info = ClusterInfo(threshold_method, cluster_type, n_permutations)
 
     test_info = TestInfo(prepared.analysis.design, df, threshold, :both, :cluster_permutation, cluster_info)
 

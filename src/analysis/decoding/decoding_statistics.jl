@@ -73,19 +73,20 @@ stats = test_against_chance(decoded_list, alpha=0.05, correction_method=:bonferr
 ```
 """
 function test_against_chance(decoded_list::Vector{DecodedData}; alpha::Float64 = 0.05, correction_method::Symbol = :none)
+
+    # validate some inputs
+    isempty(decoded_list) && @minimal_error_throw("Cannot test empty decoded data list")
     correction_method ∈ (:none, :bonferroni) ||
         @minimal_error_throw("correction_method must be :none or :bonferroni, got :$correction_method")
 
-    isempty(decoded_list) && @minimal_error_throw("Cannot test empty decoded data list")
-
-    # Validate all have same structure
+    # Validate all inputs have same structure
     first_decoded = decoded_list[1]
     first_times = first_decoded.times
     first_params = first_decoded.parameters
     chance_level = first_params.chance_level
 
     for decoded in decoded_list[2:end]
-        decoded.times != first_times && @minimal_error_throw("DecodedData objects have inconsistent time vectors")
+        decoded.times != first_times && @minimal_error_throw("DecodedData inputs have inconsistent time vectors")
         decoded.parameters.chance_level != chance_level && @minimal_warning "DecodedData objects have different chance_level"
     end
 
@@ -114,7 +115,6 @@ function test_against_chance(decoded_list::Vector{DecodedData}; alpha::Float64 =
         # This is equivalent to a one-sample t-test: H0: mean(accuracies) = chance_level
         # One-tailed test (right tail): tests if accuracy > chance
         result = paired_ttest(accuracies_at_t, chance_vector, tail = :right)
-
         t_statistics[t_idx] = result.t
         p_values[t_idx] = result.p
     end
@@ -186,6 +186,7 @@ TemporalCluster format.
 - `clusters::Vector{TemporalCluster}`: Found temporal clusters
 """
 function _find_temporal_clusters(mask::BitVector, times::Vector{Float64})
+
     if !any(mask)
         return TemporalCluster[]
     end
@@ -235,6 +236,7 @@ For temporal-only clustering (1D), we use the :sum statistic (maxsum).
 - `cluster_stats::Vector{Float64}`: Cluster statistics
 """
 function _compute_cluster_statistics(clusters::Vector{TemporalCluster}, t_statistics::Vector{Float64}, statistic_type::Symbol = :sum)
+
     if isempty(clusters)
         return Float64[]
     end
@@ -279,7 +281,6 @@ end
                                alpha::Float64 = 0.05,
                                n_permutations::Int = 1000,
                                cluster_statistic::Symbol = :sum,
-                               random_seed::Union{Int, Nothing} = nothing,
                                show_progress::Bool = true)
 
 Perform cluster-based permutation test against chance level for decoding results.
@@ -296,8 +297,10 @@ This is a one-tailed test (right tail) testing if accuracy > chance level.
 - `alpha::Float64`: Significance threshold (default: 0.05)
 - `n_permutations::Int`: Number of permutations (default: 1000)
 - `cluster_statistic::Symbol`: Cluster statistic - `:sum` (default) or `:max`
-- `random_seed::Union{Int, Nothing}`: Random seed for reproducibility (default: nothing)
 - `show_progress::Bool`: Show progress bar (default: true)
+
+# Notes
+For reproducible results, call `Random.seed!(xxx)` in your Julia session before running the test.
 
 # Returns
 - `DecodingStatisticsResult`: Results with t-statistics, p-values, significance masks, and clusters
@@ -314,7 +317,6 @@ function test_against_chance_cluster(
     alpha::Float64 = 0.05,
     n_permutations::Int = 1000,
     cluster_statistic::Symbol = :sum,
-    random_seed::Union{Int,Nothing} = nothing,
     show_progress::Bool = true,
 )
     cluster_statistic ∈ (:sum, :max) || @minimal_error_throw("cluster_statistic must be :sum or :max, got :$cluster_statistic")
@@ -340,9 +342,6 @@ function test_against_chance_cluster(
     for (p_idx, decoded) in enumerate(decoded_list)
         accuracies[p_idx, :] = decoded.average_score
     end
-
-    # Set random seed if provided
-    rng = random_seed !== nothing ? MersenneTwister(random_seed) : Random.GLOBAL_RNG
 
     # Compute observed t-statistics
     t_statistics = Vector{Float64}(undef, n_timepoints)
@@ -388,7 +387,7 @@ function test_against_chance_cluster(
         # For one-sample t-test, we randomly flip signs of accuracies
         shuffled_accuracies = copy(accuracies)
         for p_idx = 1:n_participants
-            if rand(rng, Bool)
+            if rand(Bool)
                 # Flip sign: subtract from chance and negate
                 shuffled_accuracies[p_idx, :] = 2 * chance_level .- shuffled_accuracies[p_idx, :]
             end

@@ -1,23 +1,22 @@
 # This file contains permutation logic for Monte Carlo statistical testing,
 # including label shuffling, t-matrix collection, and permutation loop execution.
 """
-    _generate_swap_mask(n_participants, rng)
+    _generate_swap_mask(n_participants)
 
 Generate a random swap mask for paired design.
 
 # Arguments
 - `n_participants::Int`: Number of participants
-- `rng::AbstractRNG`: Random number generator
 
 # Returns
 - `BitVector`: Swap mask (true = swap, false = don't swap)
 """
-function _generate_swap_mask(n_participants::Int, rng::AbstractRNG = Random.GLOBAL_RNG)
-    return BitVector([rand(rng, Bool) for _ = 1:n_participants])
+function _generate_swap_mask(n_participants::Int)
+    return BitVector([rand(Bool) for _ = 1:n_participants])
 end
 
 """
-    _shuffle_labels!(shuffled_A, shuffled_B, data1, data2, design, rng)
+    _shuffle_labels!(shuffled_A, shuffled_B, data1, data2, design)
 
 In-place version: Shuffle condition/group labels for permutation test.
 
@@ -27,7 +26,6 @@ In-place version: Shuffle condition/group labels for permutation test.
 - `data1::Array{Float64, 3}`: Original data for condition 1
 - `data2::Array{Float64, 3}`: Original data for condition 2
 - `design::Symbol`: Design type (`:paired` or `:independent`)
-- `rng::AbstractRNG`: Random number generator
 
 # Returns
 - `(shuffled_A, shuffled_B)`: Shuffled data arrays
@@ -42,7 +40,6 @@ function _shuffle_labels!(
     data1::Array{Float64,3},
     data2::Array{Float64,3},
     design::Symbol,
-    rng::AbstractRNG = Random.GLOBAL_RNG,
 )
     if design == :paired
         # Paired: copy data first (copyto! is optimized), then swap slices in-place
@@ -51,7 +48,7 @@ function _shuffle_labels!(
 
         n_participants = size(data1, 1)
         for p_idx = 1:n_participants
-            if rand(rng, Bool)
+            if rand(Bool)
                 # Swap conditions for this participant in-place
                 shuffled_A[p_idx, :, :], shuffled_B[p_idx, :, :] = shuffled_B[p_idx, :, :], shuffled_A[p_idx, :, :]
             end
@@ -66,7 +63,7 @@ function _shuffle_labels!(
 
         # Shuffle indices
         shuffled_indices = collect(1:n_total)
-        shuffle!(rng, shuffled_indices)
+        shuffle!(shuffled_indices)
 
         # Helper to get data from either data1 or data2 based on index
         # We use views to avoid copying during indexing
@@ -95,48 +92,38 @@ function _shuffle_labels!(
 end
 
 """
-    _shuffle_labels(prepared, rng)
+    _shuffle_labels(prepared)
 
 Shuffle condition/group labels for permutation test.
 """
-function _shuffle_labels(prepared::StatisticalData, rng::AbstractRNG = Random.GLOBAL_RNG)
+function _shuffle_labels(prepared::StatisticalData)
     shuffled_A = similar(prepared.analysis.data[1])
     shuffled_B = similar(prepared.analysis.data[2])
-    return _shuffle_labels!(shuffled_A, shuffled_B, prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design, rng)
+    return _shuffle_labels!(shuffled_A, shuffled_B, prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design)
 end
 
 """
-    _collect_permutation_t_matrices(prepared, n_permutations, random_seed, show_progress)
+    _collect_permutation_t_matrices(prepared, n_permutations, show_progress)
 
 Run permutations and collect t-matrices for non-parametric thresholding.
 
 # Arguments
 - `prepared::StatisticalData`: Prepared data
 - `n_permutations::Int`: Number of permutations
-- `random_seed::Union{Int, Nothing}`: Random seed (default: nothing)
 - `show_progress::Bool`: Show progress bar (default: true)
 
 # Returns
 - `permutation_t_matrices::Array{Float64, 3}`: T-statistics from all permutations [electrodes × time × permutations]
+
+# Notes
+For reproducible results, call `Random.seed!(xxx)` in your Julia session before running this function.
 
 # Examples
 ```julia
 perm_t_matrices = _collect_permutation_t_matrices(prepared, 1000, nothing, true)
 ```
 """
-function _collect_permutation_t_matrices(
-    prepared::StatisticalData,
-    n_permutations::Int,
-    random_seed::Union{Int,Nothing} = nothing,
-    show_progress::Bool = true,
-)
-    # Set random seed if provided
-    if random_seed !== nothing
-        rng = MersenneTwister(random_seed)
-    else
-        rng = Random.GLOBAL_RNG
-    end
-
+function _collect_permutation_t_matrices(prepared::StatisticalData, n_permutations::Int, show_progress::Bool = true)
     # Get dimensions directly from data
     n_electrodes = size(prepared.analysis.data[1], 2)
     n_time = size(prepared.analysis.data[1], 3)
@@ -161,7 +148,6 @@ function _collect_permutation_t_matrices(
             prepared.analysis.data[1],
             prepared.analysis.data[2],
             prepared.analysis.design,
-            rng,
         )
 
         # Compute t-matrix directly from arrays (no StatisticalData needed)
@@ -178,7 +164,7 @@ end
 
 
 """
-    _run_permutations(prepared, n_permutations, threshold, critical_t_values, spatial_connectivity, cluster_type, tail, min_num_neighbors, random_seed, show_progress; permutation_t_matrices)
+    _run_permutations(prepared, n_permutations, threshold, critical_t_values, spatial_connectivity, cluster_type, tail, min_num_neighbors, show_progress; permutation_t_matrices)
 
 Run permutation loop to generate distribution of maximum cluster statistics (maxsum).
 
@@ -194,13 +180,15 @@ Run permutation loop to generate distribution of maximum cluster statistics (max
 - `cluster_type::Symbol`: Type of clustering
 - `tail::Symbol`: Test tail
 - `min_num_neighbors::Int`: Minimum number of neighbors for pre-filtering
-- `random_seed::Union{Int, Nothing}`: Random seed (default: nothing)
 - `show_progress::Bool`: Show progress bar (default: true)
 - `permutation_t_matrices::Union{Nothing, Array{Float64, 3}}`: Pre-computed t-matrices from permutations (optional, for non-parametric)
 
 # Returns
 - `permutation_max_positive::Vector{Float64}`: Max cluster stats from permutations (positive)
 - `permutation_max_negative::Vector{Float64}`: Max cluster stats from permutations (negative)
+
+# Notes
+For reproducible results, call `Random.seed!(xxx)` in your Julia session before running this function.
 
 # Examples
 ```julia
@@ -217,7 +205,6 @@ function _run_permutations(
     cluster_type::Symbol,
     tail::Symbol,
     min_num_neighbors::Int,
-    random_seed::Union{Int,Nothing} = nothing,
     show_progress::Bool = true;
     permutation_t_matrices::Union{Nothing,Array{Float64,3}} = nothing,
 )
@@ -226,13 +213,6 @@ function _run_permutations(
     is_nonparametric_common = isa(critical_t_values, Tuple) && length(critical_t_values) == 2 && isa(critical_t_values[1], Float64)
     is_nonparametric_individual =
         isa(critical_t_values, Tuple) && length(critical_t_values) == 2 && isa(critical_t_values[1], Array{Float64,2})
-
-    # Set random seed if provided (only if not using pre-computed t-matrices)
-    if random_seed !== nothing && permutation_t_matrices === nothing
-        rng = MersenneTwister(random_seed)
-    else
-        rng = Random.GLOBAL_RNG
-    end
 
     permutation_max_positive = Float64[]
     permutation_max_negative = Float64[]
@@ -279,7 +259,6 @@ function _run_permutations(
                 prepared.analysis.data[1],
                 prepared.analysis.data[2],
                 prepared.analysis.design,
-                rng,
             )
             t_matrix_perm, _, _ = _compute_t_matrix(
                 shuffled_A_buffer,
