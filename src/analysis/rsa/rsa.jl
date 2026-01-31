@@ -518,7 +518,7 @@ end
         model_names::Union{Vector{String}, Nothing} = nothing,
         correlation_type::Symbol = :spearman,
         n_permutations::Int = 1000,
-        rng::AbstractRNG = Random.GLOBAL_RNG,
+        
     )
 
 Compare neural RDMs to model RDMs (static or temporal).
@@ -552,7 +552,6 @@ with optional permutation-based significance testing.
 - `model_names::Union{Vector{String}, Nothing}`: Names for models (default: Model1, Model2, ...)
 - `correlation_type::Symbol`: Type of correlation (:spearman, :pearson)
 - `n_permutations::Int`: Number of permutations for significance testing (0 = no testing)
-- `rng::AbstractRNG`: Random number generator
 
 # Returns
 - `RsaData`: Updated RsaData with model correlations and p-values
@@ -618,7 +617,6 @@ function compare_models(
     model_names::Union{Vector{String},Nothing} = nothing,
     correlation_type::Symbol = :spearman,
     n_permutations::Int = 1000,
-    rng::AbstractRNG = Random.GLOBAL_RNG,
 )
     n_models = length(model_rdms)
     n_conditions = length(rsa_data.condition_names)
@@ -635,7 +633,7 @@ function compare_models(
     end
 
     # Compute correlations at each time point
-    correlations, p_values = _compute_model_correlations(rsa_data, model_rdms, is_temporal, correlation_type, n_permutations, rng)
+    correlations, p_values = _compute_model_correlations(rsa_data, model_rdms, is_temporal, correlation_type, n_permutations)
 
     # Update RsaData
     rsa_data.model_correlations = correlations
@@ -781,7 +779,7 @@ function _validate_model_rdms(model_rdms, n_conditions, n_times)
 end
 
 """
-    _compute_model_correlations(rsa_data, model_rdms, is_temporal, correlation_type, n_permutations, rng)
+    _compute_model_correlations(rsa_data, model_rdms, is_temporal, correlation_type, n_permutations)
 
 Compute correlations between neural RDMs and model RDMs across time.
 """
@@ -791,7 +789,6 @@ function _compute_model_correlations(
     is_temporal::Vector{Bool},
     correlation_type::Symbol,
     n_permutations::Int,
-    rng::AbstractRNG,
 )
     n_times = length(rsa_data.times)
     n_models = length(model_rdms)
@@ -822,7 +819,7 @@ function _compute_model_correlations(
 
             # Permutation test if requested
             if n_permutations > 0
-                p_values[t, model_idx] = _run_model_permutations(neural_vec, model_vec, corr, correlation_type, n_permutations, rng)
+                p_values[t, model_idx] = _run_model_permutations(neural_vec, model_vec, corr, correlation_type, n_permutations)
             end
         end
     end
@@ -831,14 +828,14 @@ function _compute_model_correlations(
 end
 
 """
-    _run_model_permutations(neural_vec, model_vec, observed_corr, correlation_type, n_permutations, rng)
+    _run_model_permutations(neural_vec, model_vec, observed_corr, correlation_type, n_permutations)
 
 Perform permutation testing for model correlations.
 """
-function _run_model_permutations(neural_vec, model_vec, observed_corr, correlation_type, n_permutations, rng)
+function _run_model_permutations(neural_vec, model_vec, observed_corr, correlation_type, n_permutations)
     permuted_corrs = zeros(Float64, n_permutations)
     for perm_idx = 1:n_permutations
-        shuffled_model = shuffle(rng, model_vec)
+        shuffled_model = shuffle(model_vec)
         permuted_corrs[perm_idx] = _correlate_vectors(neural_vec, shuffled_model, correlation_type)
     end
     # Two-tailed p-value

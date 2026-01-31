@@ -48,7 +48,7 @@ end
 # ==============================================================================
 
 """
-    _equalize_trials(data_arrays::Vector{Array{Float64, 3}}, n_trials_per_condition::Vector{Int}, n_classes::Int, rng::AbstractRNG)
+    _equalize_trials(data_arrays::Vector{Array{Float64, 3}}, n_trials_per_condition::Vector{Int}, n_classes::Int)
 
 Equalize the number of trials across conditions by randomly downsampling to the minimum.
 
@@ -58,17 +58,16 @@ This ensures balanced classification by preventing bias toward conditions with m
 - `data_arrays::Vector{Array{Float64, 3}}`: Data arrays for each condition [channels × time × trials]
 - `n_trials_per_condition::Vector{Int}`: Number of trials per condition
 - `n_classes::Int`: Number of classes/conditions
-- `rng::AbstractRNG`: Random number generator for reproducibility
 
 # Returns
 - `data_arrays::Vector{Array{Float64, 3}}`: Equalized data arrays
 - `n_trials_per_condition::Vector{Int}`: Updated trial counts (all equal to minimum)
 """
-function _equalize_trials(data_arrays::Vector{Array{Float64,3}}, n_trials_per_condition::Vector{Int}, n_classes::Int, rng::AbstractRNG)
+function _equalize_trials(data_arrays::Vector{Array{Float64,3}}, n_trials_per_condition::Vector{Int}, n_classes::Int)
     min_trials = minimum(n_trials_per_condition)
     for (cond_idx, data_array) in enumerate(data_arrays)
         if size(data_array, 3) > min_trials
-            selected_trials = sort(shuffle(rng, 1:size(data_array, 3))[1:min_trials])
+            selected_trials = sort(shuffle(1:size(data_array, 3))[1:min_trials])
             data_arrays[cond_idx] = data_array[:, :, selected_trials]
         end
     end
@@ -81,22 +80,21 @@ end
 # ==============================================================================
 
 """
-    _shuffle_trials(data_arrays::Vector{Array{Float64, 3}}, rng::AbstractRNG)
+    _shuffle_trials(data_arrays::Vector{Array{Float64, 3}})
 
 Shuffle trials within each condition.
 
 # Arguments
 - `data_arrays::Vector{Array{Float64, 3}}`: Data arrays for each condition [channels × time × trials]
-- `rng::AbstractRNG`: Random number generator for reproducibility
 
 # Returns
 - `shuffled_indices::Vector{Vector{Int}}`: Shuffled trial indices per condition (avoids copying data)
 """
-function _shuffle_trials(data_arrays::Vector{Array{Float64,3}}, rng::AbstractRNG)
+function _shuffle_trials(data_arrays::Vector{Array{Float64,3}})
     shuffled_indices = Vector{Vector{Int}}(undef, length(data_arrays))
     for (cond_idx, data_array) in enumerate(data_arrays)
         n_trials = size(data_array, 3)
-        shuffled_indices[cond_idx] = shuffle(rng, 1:n_trials)
+        shuffled_indices[cond_idx] = shuffle(1:n_trials)
     end
     return shuffled_indices
 end
@@ -407,7 +405,6 @@ end
         n_folds::Int = 3,
         equalize_trials::Bool = true,
         cost::Float64 = 1.0,
-        rng::AbstractRNG = Random.GLOBAL_RNG,
         show_progress::Bool = true,
     )
 
@@ -432,11 +429,13 @@ using cross-validation to estimate classification accuracy at each time point.
 - `n_folds::Int`: Number of cross-validation folds (default: 3, matches erplab default)
 - `equalize_trials::Bool`: Whether to equalize number of trials across conditions (default: true, matches erplab)
 - `cost::Float64`: SVM regularization parameter (default: 1.0). Larger values = less regularization.
-- `rng::AbstractRNG`: Random number generator for reproducibility
 - `show_progress::Bool`: Show progress bar (default: true)
 
 # Returns
 - `DecodedData`: Object containing decoding results for this participant
+
+# Notes
+For reproducible results, call `Random.seed!(xxx)` in your Julia session before running decoding.
 
 # Examples
 ```julia
@@ -451,7 +450,6 @@ function decode_libsvm(
     n_folds::Int = 3,
     equalize_trials::Bool = true,
     cost::Float64 = 1.0,
-    rng::AbstractRNG = Random.GLOBAL_RNG,
     show_progress::Bool = true,
 )
 
@@ -474,7 +472,7 @@ function decode_libsvm(
 
     # Equalize trials if requested
     if equalize_trials
-        data_arrays, n_trials_per_condition = _equalize_trials(data_arrays, n_trials_per_condition, n_classes, rng)
+        data_arrays, n_trials_per_condition = _equalize_trials(data_arrays, n_trials_per_condition, n_classes)
     end
 
     # Validate that we have enough trials for cross-validation
@@ -514,7 +512,7 @@ function decode_libsvm(
 
     # Main decoding loop
     for iter = 1:n_iterations
-        shuffled_indices = _shuffle_trials(data_arrays, rng)
+        shuffled_indices = _shuffle_trials(data_arrays)
 
         # For each time point
         for t = 1:n_timepoints

@@ -20,7 +20,7 @@ reliability and robustness of representational dissimilarity estimates.
         n_folds::Int = 5,
         n_iterations::Int = 100,
         normalize_method::Symbol = :none,
-        rng::AbstractRNG = Random.GLOBAL_RNG,
+        
     )
 
 Compute cross-validated RDMs to assess reliability of representational structure.
@@ -59,7 +59,6 @@ noise and outliers compared to computing a single RDM on all trials.
 - `n_folds::Int`: Number of folds for k-fold CV (default: 5)
 - `n_iterations::Int`: Number of iterations for split-half (default: 100)
 - `normalize_method::Symbol`: RDM normalization method (default: :none)
-- `rng::AbstractRNG`: Random number generator for reproducibility
 
 # Returns
 - `RsaData`: Cross-validated RSA results
@@ -95,7 +94,7 @@ function rsa_crossvalidated(
     n_folds::Int = 5,
     n_iterations::Int = 100,
     normalize_method::Symbol = :none,
-    rng::AbstractRNG = Random.GLOBAL_RNG,
+    
 )
     # Prepare and validate data using shared helper
     data_arrays, times, n_trials_per_condition, condition_names, selected_channels, first_epoch =
@@ -119,11 +118,11 @@ function rsa_crossvalidated(
 
     # Compute cross-validated RDMs based on method
     if cv_method == :splithalf
-        rdms = _cv_splithalf(data_arrays, n_timepoints, n_conditions, selected_channels, dissimilarity_measure, n_iterations, rng)
+        rdms = _cv_splithalf(data_arrays, n_timepoints, n_conditions, selected_channels, dissimilarity_measure, n_iterations)
     elseif cv_method == :leaveoneout
         rdms = _cv_leaveoneout(data_arrays, n_timepoints, n_conditions, selected_channels, dissimilarity_measure)
     elseif cv_method == :kfold
-        rdms = _cv_kfold(data_arrays, n_timepoints, n_conditions, selected_channels, dissimilarity_measure, n_folds, rng)
+        rdms = _cv_kfold(data_arrays, n_timepoints, n_conditions, selected_channels, dissimilarity_measure, n_folds)
     else
         @minimal_error_throw("Unknown CV method: $cv_method. Use :splithalf, :leaveoneout, or :kfold")
     end
@@ -153,7 +152,7 @@ end
 # ==============================================================================
 
 """
-    _cv_splithalf(data_arrays, n_timepoints, n_conditions, selected_channels, dissimilarity_measure, n_iterations, rng)
+    _cv_splithalf(data_arrays, n_timepoints, n_conditions, selected_channels, dissimilarity_measure, n_iterations)
 
 Compute split-half cross-validated RDMs.
 """
@@ -164,7 +163,7 @@ function _cv_splithalf(
     selected_channels::Vector{Symbol},
     dissimilarity_measure::Symbol,
     n_iterations::Int,
-    rng::AbstractRNG,
+    
 )
     rdms_sum = zeros(Float64, n_timepoints, n_conditions, n_conditions)
 
@@ -178,7 +177,7 @@ function _cv_splithalf(
             n_half = div(n_trials, 2)
 
             # Random permutation
-            perm = randperm(rng, n_trials)
+            perm = randperm(n_trials)
             half1_indices = perm[1:n_half]
             half2_indices = perm[(n_half+1):end]
 
@@ -239,7 +238,7 @@ function _cv_leaveoneout(
 end
 
 """
-    _cv_kfold(data_arrays, n_timepoints, n_conditions, selected_channels, dissimilarity_measure, n_folds, rng)
+    _cv_kfold(data_arrays, n_timepoints, n_conditions, selected_channels, dissimilarity_measure, n_folds)
 
 Compute k-fold cross-validated RDMs.
 """
@@ -250,7 +249,7 @@ function _cv_kfold(
     selected_channels::Vector{Symbol},
     dissimilarity_measure::Symbol,
     n_folds::Int,
-    rng::AbstractRNG,
+    
 )
     rdms_sum = zeros(Float64, n_timepoints, n_conditions, n_conditions)
 
@@ -262,7 +261,7 @@ function _cv_kfold(
             n_trials = size(cond_data, 3)
 
             # Random permutation
-            perm = randperm(rng, n_trials)
+            perm = randperm(n_trials)
 
             # Select trials NOT in this fold
             fold_size = div(n_trials, n_folds)

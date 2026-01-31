@@ -1,5 +1,3 @@
-# This file contains data preparation functions for decoding/MVPA analysis
-
 """
     prepare_decoding(epochs::Vector{EpochData}; condition_selection::Function = conditions(), channel_selection::Function = channels(), interval_selection::Interval = times())
 
@@ -28,13 +26,6 @@ participant_epochs = prepare_decoding(
     condition_selection = conditions([1, 2]),
     channel_selection = channels(),
     interval_selection = (0.0, 1.0))  # Simple tuple for time window
-
-# Decode each participant
-all_decoded = [decode_libsvm(epochs; n_iterations=100, n_folds=5) for epochs in participant_epochs]
-
-# Grand average and statistics
-grand_avg = grand_average(all_decoded)
-stats = test_against_chance_cluster(all_decoded, alpha=0.05)
 ```
 """
 function prepare_decoding(
@@ -85,8 +76,10 @@ function prepare_decoding(
 
     # Validate structure is consistent across conditions
     for cond_idx = 2:length(selected_conditions)
-        have_same_structure(selected_conditions[1][1], selected_conditions[cond_idx][1]) ||
-            @minimal_error("Condition $(selected_cond_nums[1]) vs $(selected_cond_nums[cond_idx]): Epochs have inconsistent structure")
+        have_same_structure(selected_conditions[1][1], selected_conditions[cond_idx][1]) || @minimal_error_throw(
+            "Condition $(selected_cond_nums[1]) vs $(selected_cond_nums[cond_idx]): " *
+            "Epochs have inconsistent structure (different channels, sample rates, or time vectors)"
+        )
     end
 
     # Apply channel and interval selection to all epochs
@@ -159,9 +152,6 @@ participant_epochs = prepare_decoding(
     condition_selection = conditions([1, 2]),
     channel_selection = channels([:Fz, :Cz, :Pz]),
     interval_selection = (0.0, 1.0))  # Simple tuple for time window
-
-# Decode all participants
-all_decoded = [decode_libsvm(epochs; n_iterations=100, n_folds=5) for epochs in participant_epochs]
 ```
 """
 function prepare_decoding(

@@ -10,12 +10,12 @@ Helper to generate a vector of symbols for channel labels.
 _generate_channel_labels(n_channels::Int) = [Symbol("Ch$i") for i = 1:n_channels]
 
 """
-    _synthetic_signal(t; freq = 10.0, amp = 1.0, noise = 0.1, rng = Random.GLOBAL_RNG)
+    _synthetic_signal(t; freq = 10.0, amp = 1.0, noise = 0.1)
 
 Internal helper for generating test signals.
 """
-function _synthetic_signal(t; freq = 10.0, amp = 1.0, noise = 0.1, rng = Random.GLOBAL_RNG)
-    return amp .* sin.(2π .* freq .* t) .+ noise .* randn(rng, length(t))
+function _synthetic_signal(t; freq = 10.0, amp = 1.0, noise = 0.1)
+    return amp .* sin.(2π .* freq .* t) .+ noise .* randn(length(t))
 end
 
 

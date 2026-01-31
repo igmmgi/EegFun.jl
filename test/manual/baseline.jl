@@ -17,8 +17,8 @@ EegFun.plot_databrowser(dat) # DC shift visible
 EegFun.baseline!(dat)
 EegFun.plot_databrowser(dat) # now zero mean over all samples
 
-# baseline to first sample 
-EegFun.baseline!(dat, (1, 1));
+# baseline to timepoint 
+EegFun.baseline!(dat, (0, 0));
 EegFun.plot_databrowser(dat)
 
 # EpochData
