@@ -2,35 +2,12 @@
 
 This directory contains the source files and build system for the EegFun.jl documentation.
 
-## Building Documentation Locally
-
-From a fresh clone of the repository:
-
-```bash
-# 1. Navigate to repository root
-cd EegFun.jl
-
-# 2. Install Julia dependencies for docs
-julia --project=docs -e 'using Pkg; Pkg.instantiate()'
-
-# 3. Build documentation
-cd docs
-julia --project=. make.jl
-
-# 4. Install Node.js dependencies
-npm install
-
-```
-
-The documentation will be available at `http://localhost:XXXX/`
-
 ## Quick Build
 
 Using the interactive documentation manager:
 
 ```bash
-cd docs
-julia --project=. doc_manager.jl
+julia --project=docs/. doc_manager.jl
 ```
 
 Then select option 1 to build, or option 7 to preview.
