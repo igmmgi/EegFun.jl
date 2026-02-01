@@ -1,17 +1,23 @@
 #!/usr/bin/env julia
 
-using Logging
-using Pkg
-
-# Load documentation packages from extras in temporary environment
-Pkg.activate(; temp = true)
-Pkg.add(["Documenter", "DocumenterVitepress", "DocumenterTools", "JuliaFormatter"])
+# using Pkg
+# 
+# # Load documentation packages from extras in temporary environment
+# Pkg.activate(; temp = true)
+# Pkg.add(["Documenter", "DocumenterVitepress", "DocumenterTools", "JuliaFormatter"])
 
 # Now load the packages
+using Logging
 using Documenter
 using DocumenterVitepress
 using DocumenterTools
 using JuliaFormatter
+using LiveServer
+
+# Add the parent directory to the load path so we can load the local package
+push!(LOAD_PATH, dirname(@__DIR__))
+using EegFun
+
 
 """
 Documentation Manager for EegFun.jl
@@ -366,14 +372,8 @@ function view_documentation(project_root::String)
     end
 
     try
-        print_colored(GREEN, " Starting VitePress dev server on http://localhost:5173")
-        print_colored(CYAN, " Press Ctrl+C to stop the server")
-        println()
-
-        # Run VitePress dev server
-        cd(joinpath(project_root, "docs", "build", ".documenter")) do
-            run(`npx vitepress dev .`)
-        end
+        LiveServer.serve(dir = "docs/build/1")
+        return true
     catch e
         if isa(e, InterruptException)
             print_colored(YELLOW, "\n Server stopped")
