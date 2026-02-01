@@ -23,9 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          persist-credentials: false
+        uses: actions/checkout@v4
       
       - name: Setup Julia
         uses: julia-actions/setup-julia@v2
@@ -41,6 +39,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GKSwstype: nul
+          CI: true
         run: >
           cd docs;
           DISPLAY=:0 xvfb-run -s '-screen 0 1024x768x24'
