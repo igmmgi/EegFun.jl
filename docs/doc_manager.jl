@@ -1,23 +1,15 @@
-#!/usr/bin/env julia
-
-# using Pkg
-# 
-# # Load documentation packages from extras in temporary environment
-# Pkg.activate(; temp = true)
-# Pkg.add(["Documenter", "DocumenterVitepress", "DocumenterTools", "JuliaFormatter"])
-
 # Now load the packages
-using Logging
 using Documenter
-using DocumenterVitepress
 using DocumenterTools
+using DocumenterVitepress
 using JuliaFormatter
 using LiveServer
+using Logging
+using Printf
 
 # Add the parent directory to the load path so we can load the local package
 push!(LOAD_PATH, dirname(@__DIR__))
 using EegFun
-
 
 """
 Documentation Manager for EegFun.jl
@@ -42,7 +34,6 @@ Commands:
 If no command is provided, shows interactive menu.
 """
 
-using Printf
 
 # Colors for output
 const RED = "\033[0;31m"
