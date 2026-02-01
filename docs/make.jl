@@ -10,12 +10,7 @@ makedocs(;
     authors = "igmmgi",
     sitename = "EegFun",
     repo = "https://github.com/igmmgi/EegFun.jl",
-    format = DocumenterVitepress.MarkdownVitepress(
-        repo = "https://github.com/igmmgi/EegFun.jl",
-        devbranch = "main", # or master, trunk, ...
-        devurl = "dev",
-        deploy_url = "https://igmmgi.github.io/EegFun.jl",
-    ),
+    format = DocumenterVitepress.MarkdownVitepress(repo = "https://github.com/igmmgi/EegFun.jl", devbranch = "main", devurl = "dev"),
     warnonly = [:linkcheck, :cross_references, :missing_docs],
     draft = false,
     source = "src",
