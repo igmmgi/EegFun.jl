@@ -1,10 +1,10 @@
-# Rereferencing Demo
+# Rereference
 
-Demonstrates different rereferencing schemes for EEG data.
+Re-reference EEG data to different reference schemes.
 
 ## Overview
 
-Rereferencing changes the voltage reference for all channels. Common schemes include average reference, single channel reference, and mastoid reference.
+Demonstrates Re-reference EEG data to different reference schemes.
 
 ## Source Code
 
@@ -62,9 +62,8 @@ EegFun.all_data(erps[2])
 
 EegFun.rereference!(erps, :F1)
 EegFun.all_data(erps[1])
-EegFun.all_data(erps[2])
-```
+EegFun.all_data(erps[2])```
 
 ## See Also
 
-- [Preprocessing Reference](../reference/preprocessing.md)
+- [API Reference](../reference/index.md)

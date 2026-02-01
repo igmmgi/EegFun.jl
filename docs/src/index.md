@@ -1,12 +1,13 @@
+````@raw html
 ---
 layout: home
-
 hero:
   name: EegFun.jl
-  text: High-performance EEG data analysis in Julia
-  tagline: Comprehensive toolkit for EEG analysis, from raw data to publication
+  text: EEG/ERP analysis in Julia
+  image:
+    src: /EegFunLogo.png
   actions:
-    - theme: brand
+    - theme: alt
       text: Get Started
       link: /tutorials/getting-started
     - theme: alt
@@ -14,20 +15,24 @@ hero:
       link: https://github.com/igmmgi/EegFun.jl
 
 features:
-  - icon: 📊
+  - icon: 
+      src: /eeg-cap.svg
+    title: Raw data readers
+    details: Biosemi, BrainVision Analyser, ...
+  - icon: 
+      src: /epochs.svg
     title: Data Processing
-    details: Filtering, referencing, artifact detection and removal with high-performance implementations
-  - icon: 🧠
-    title: Advanced Analysis
-    details: ICA decomposition, time-frequency analysis, and ERP measurements
-  - icon: 📈
-    title: Statistical Testing
-    details: Permutation tests, cluster-based statistics, and MVPA decoding
-  - icon: 🎨
+    details: filtering, referencing, artifact detection/correction, ICA, epoching ...
+  - icon: 
+      src: /eeg-wave.svg
+    title: Analysis
+    details: epochs, time-frequency analysis, ERP measurements, statistical testing
+  - icon:
+      src: /plots-grid.svg
     title: Visualization
     details: Interactive plots, topographic maps, and publication-quality figures with Makie.jl
 ---
-
+````
 ## Quick Start
 
 Install EegFun.jl from the Julia REPL:
@@ -74,7 +79,4 @@ Start with our [Getting Started Tutorial](tutorials/getting-started.md) to learn
 | [API Reference](reference/index.md) | Complete function and type documentation |
 
 ## Getting Help
-
-- 📖 Check the [tutorials](tutorials/getting-started.md) for step-by-step guides
-- 💬 Ask questions on [Julia Discourse](https://discourse.julialang.org/)
-- 🐛 Report bugs on [GitHub Issues](https://github.com/igmmgi/EegFun.jl/issues)
+- Report bugs on [GitHub Issues](https://github.com/igmmgi/EegFun.jl/issues)

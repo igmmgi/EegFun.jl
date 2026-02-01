@@ -1,4 +1,4 @@
-# ICA Analysis
+# ICA
 
 Complete ICA workflow including component identification, artifact removal, and visualization for continuous and epoched data.
 

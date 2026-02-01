@@ -1,4 +1,4 @@
-# Artifact Detection
+# Artifacts
 
 Comprehensive artifact detection workflow including EOG detection, extreme value detection, bad epoch detection, artifact repair, and rejection.
 

@@ -1,4 +1,4 @@
-# Statistical Analysis
+# Statistics
 
 Statistical analysis options for ERP data including analytic t-tests and cluster-based permutation tests.
 

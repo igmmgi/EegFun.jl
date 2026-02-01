@@ -1,4 +1,4 @@
-# Representational Similarity Analysis
+# RSA
 
 RSA workflow for analyzing representational geometries across conditions and time.
 

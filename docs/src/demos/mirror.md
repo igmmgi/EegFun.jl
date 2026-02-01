@@ -1,10 +1,10 @@
-# Mirror Padding Demo
+# Mirror
 
-Demonstrates mirror padding to reduce edge effects in filtering.
+Mirror electrode positions for lateralized analyses.
 
 ## Overview
 
-Mirror padding replicates data at epoch boundaries in reverse order to mitigate filter edge artifacts. Supports `:pre`, `:post`, or `:both` padding modes.
+Demonstrates Mirror electrode positions for lateralized analyses.
 
 ## Source Code
 
@@ -27,7 +27,7 @@ EegFun.highpass_filter!(dat, 0.1)
 
 # Create some epoched data
 epoch_cfg = [EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
-epochs = EegFun.extract_epochs(dat, epoch_cfg, -0.2,1.0)  # -200 to 1000 ms
+epochs = EegFun.extract_epochs(dat, epoch_cfg, -0.2, 1.0)  # -200 to 1000 ms
 
 EegFun.plot_epochs(epochs, channel_selection = EegFun.channels([:Fp1]))
 
@@ -53,8 +53,10 @@ EegFun.plot_erp(erps_new, channel_selection = EegFun.channels([:Fp1]))
 
 erps_new = EegFun.mirror(erps, :both)
 EegFun.plot_erp(erps_new, channel_selection = EegFun.channels([:Fp1]))
+
+
 ```
 
 ## See Also
 
-- [Preprocessing Reference](../reference/preprocessing.md)
+- [API Reference](../reference/index.md)

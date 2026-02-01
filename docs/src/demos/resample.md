@@ -1,10 +1,10 @@
-# Resampling Demo
+# Resample
 
-Demonstrates downsampling EEG data to reduce file size and computation time.
+Resample data to different sampling rates.
 
 ## Overview
 
-Resampling changes the sampling rate using anti-aliasing filters to prevent artifacts. Trigger markers are automatically preserved.
+Demonstrates Resample data to different sampling rates.
 
 ## Source Code
 
@@ -35,4 +35,4 @@ EegFun.trigger_count(dat_new)     # triggers should be preserved
 
 ## See Also
 
-- [Preprocessing Reference](../reference/preprocessing.md)
+- [API Reference](../reference/index.md)

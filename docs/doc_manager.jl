@@ -61,6 +61,13 @@ end
 function build_documentation(project_root::String)
 
     try
+        # First generate demo documentation
+        print_colored(YELLOW, " Generating demo documentation...")
+        generate_demos_path = joinpath(project_root, "docs", "generate_demos.jl")
+        if isfile(generate_demos_path)
+            include(generate_demos_path)
+        end
+
         # Build documentation
         build_jl_path = joinpath(project_root, "docs", "make.jl")
         print_colored(GREEN, " Building documentation with Documenter.jl...")
@@ -354,27 +361,21 @@ function format_and_check(project_root::String)
 end
 
 function view_documentation(project_root::String)
-    print_colored(YELLOW, "Starting VitePress dev server...")
+    print_colored(YELLOW, "Starting documentation server in background...")
 
-    build_dir = joinpath(project_root, "docs", "build")
+    build_dir = joinpath(project_root, "docs", "build", "1")
     if !isdir(build_dir)
         print_colored(RED, " Documentation not built yet. Run 'Build documentation' first.")
         return false
     end
 
-    try
-        LiveServer.serve(dir = "docs/build/1")
-        return true
-    catch e
-        if isa(e, InterruptException)
-            print_colored(YELLOW, "\n Server stopped")
-        else
-            print_colored(RED, " Error starting server: $e")
-            return false
-        end
-    end
+    # Launch server in separate process
+    cmd = `julia --project=docs -e "using LiveServer; serve(dir=\"docs/build/1\", launch_browser=true)"`
+    run(cmd, wait = false)
 
-    println()
+    print_colored(GREEN, " Server started at http://localhost:8000")
+    print_colored(CYAN, " (Server running in background - close browser tab when done)")
+
     return true
 end
 
@@ -410,6 +411,25 @@ function run_all_docs(project_root::String)
     println("3. Deploy to GitHub Pages when ready")
 
     return true
+end
+
+function generate_demos(project_root::String)
+    print_colored(YELLOW, "Generating demo documentation...")
+
+    try
+        generate_demos_path = joinpath(project_root, "docs", "generate_demos.jl")
+        if !isfile(generate_demos_path)
+            print_colored(RED, " generate_demos.jl not found at $generate_demos_path")
+            return false
+        end
+
+        include(generate_demos_path)
+        print_colored(GREEN, " Demo documentation generated successfully")
+        return true
+    catch e
+        print_colored(RED, " Error generating demos: $e")
+        return false
+    end
 end
 
 function show_interactive_menu(project_root::String)
