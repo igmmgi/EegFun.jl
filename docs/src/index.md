@@ -59,23 +59,24 @@ EegFun.rereference!(dat, :avg)       # Average reference
 EegFun.is_extreme_value!(dat, 100)   # Mark extreme values
 
 # Create epochs and compute ERPs
-epoch_cfg = [EegFun.EpochCondition(name = "Target", trigger_sequences = [[1]])]
-epochs = EegFun.extract_epochs(dat, 1, epoch_cfg[1], -0.2, 0.8)
+epoch_cfg = [
+  EegFun.EpochCondition(name = "Cond1", trigger_sequences = [[1]]),
+  EegFun.EpochCondition(name = "Cond2", trigger_sequences = [[2]])
+  ]
+epochs = EegFun.extract_epochs(dat, epoch_cfg, -0.2, 0.8)
 erps = EegFun.average_epochs(epochs)
-fig, ax = EegFun.plot_erp(erps)
+EegFun.plot_erp(erps)
 ```
 
 ## Documentation
 
 :::tip Learn EegFun.jl
-Start with our [Getting Started Tutorial](tutorials/getting-started.md) to learn the basics
+[Getting Started Tutorial](tutorials/getting-started.md) 
 :::
 
 | Section | Description |
 |---------|-------------|
-| [Tutorials](tutorials/getting-started.md) | Step-by-step guides to learn EegFun.jl from scratch |
-| [How-To Guides](how-to/filter-data.md) | Task-focused solutions to specific problems |
-| [Explanations](explanations/data-structures.md) | Conceptual deep-dives into EEG analysis |
+| [Tutorials](tutorials/getting-started.md) | Step-by-step guides |
 | [API Reference](reference/index.md) | Complete function and type documentation |
 
 ## Getting Help
