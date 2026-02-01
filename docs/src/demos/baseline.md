@@ -1,10 +1,10 @@
-# Baseline Correction Demo
+# Baseline
 
-Demonstrates baseline correction for continuous, epoched, and ERP data.
+Baseline correction methods for ERP data.
 
 ## Overview
 
-Baseline correction removes DC offsets and standardizes data to a reference period. This demo shows entire dataset baseline, single timepoint baseline, time interval baseline, and baseline correction for epochs and ERPs.
+Demonstrates Baseline correction methods for ERP data.
 
 ## Source Code
 
@@ -65,8 +65,9 @@ EegFun.plot_erp(eprs, channel_selection = EegFun.channels([:Fp1]))
 
 EegFun.baseline!(eprs, (-0.2, 0)) # baseline to t=-0.2 to 0.0
 EegFun.plot_erp(eprs, channel_selection = EegFun.channels([:Fp1]))
+
 ```
 
 ## See Also
 
-- [Preprocessing Reference](../reference/preprocessing.md)
+- [API Reference](../reference/index.md)

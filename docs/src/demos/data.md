@@ -1,10 +1,10 @@
-# Data Loading and Access Demo
+# Data
 
-Demonstrates basic EEG data loading, structure creation, and data access functions.
+Data loading and basic data structures.
 
 ## Overview
 
-Shows how to load raw EEG data from BDF files, create EegFun data structures with electrode layouts, and use data access and subsetting functions.
+Demonstrates Data loading and basic data structures.
 
 ## Source Code
 
@@ -46,5 +46,4 @@ dat_subset = EegFun.subset(dat, sample_selection = x -> x.time .<= 10) # first 1
 
 ## See Also
 
-- [Data Loading Reference](../reference/data-loading.md)
-- [Data Structures](../explanations/data-structures.md)
+- [API Reference](../reference/index.md)

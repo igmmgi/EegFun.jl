@@ -1,4 +1,4 @@
-# MVPA Decoding
+# Decoding
 
 Multivariate pattern analysis (MVPA) decoding workflow with SVM classification and statistical testing.
 
