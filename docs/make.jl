@@ -42,5 +42,5 @@ makedocs(;
     ],
 )
 
-# Deploy built VitePress site (use Documenter.deploydocs to avoid DocumenterVitepress versioning bugs)
-Documenter.deploydocs(repo = "github.com/igmmgi/EegFun.jl", target = "build", branch = "gh-pages", devbranch = "main", push_preview = true)
+# Deploy built VitePress site (DocumenterVitepress.deploydocs required since v0.2 for correct base paths)
+DocumenterVitepress.deploydocs(repo = "github.com/igmmgi/EegFun.jl", devbranch = "main", push_preview = true)
