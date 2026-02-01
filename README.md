@@ -1,5 +1,5 @@
 
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://igmmgi.github.io/EegFun.jl/dev/1/)
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://igmmgi.github.io/EegFun.jl/dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 

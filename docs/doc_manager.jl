@@ -423,7 +423,7 @@ function show_interactive_menu(project_root::String)
         println("4. Format and check syntax")
         println("5. Clean build artifacts")
         println("6. Run complete workflow")
-        println("7. View documentation (VitePress dev server)")
+        println("7. View documentation (via LiveServer)")
         println("8. Exit")
 
         print("\nEnter your choice (1-8): ")
