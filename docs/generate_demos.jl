@@ -1,6 +1,4 @@
-#!/usr/bin/env julia
 # Script to automatically generate demo documentation from demo scripts
-
 using Printf
 
 # Demo metadata: (filename_without_ext, title, description)
