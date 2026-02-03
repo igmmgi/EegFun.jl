@@ -81,7 +81,7 @@ epoch_cfg = [
     EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]]),
     EegFun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[2]]),
 ]
-epochs = EegFun.extract_epochs(dat, epoch_cfg, -0.2, 1.0)  # -200 to 1000 ms
+epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.2, 1.0))  # -200 to 1000 ms
 
 # Detect bad epochs
 # Default is combination of absolute and z-score criteria with z-score based on all epochs using the 

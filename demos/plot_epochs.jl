@@ -17,7 +17,7 @@ EegFun.highpass_filter!(dat, 1)
 
 # EPOCHS
 epoch_cfg = [EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
-epochs = EegFun.extract_epochs(dat, epoch_cfg, -0.5, 1.0)
+epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.5, 1.0))
 
 # Basic plots for Epochs
 EegFun.plot_epochs(epochs[1])

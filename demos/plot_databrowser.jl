@@ -40,7 +40,7 @@ EegFun.plot_databrowser(dat, ica_result)
 
 # EPOCHS
 epoch_cfg = [EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
-epochs = EegFun.extract_epochs(dat, epoch_cfg, -0.5, 1.0)
+epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.5, 1.0))
 
 # databrowser for epochs
 EegFun.plot_databrowser(epochs[1])  # can now browse epochs

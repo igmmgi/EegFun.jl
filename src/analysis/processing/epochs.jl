@@ -1,36 +1,44 @@
 """
     condition_parse_epoch(config::Dict) -> Vector{EpochCondition}
 
-Parse epoch conditions from configuration dictionary.
+Parse epoch condition configurations from a TOML-based configuration dictionary.
+
+This function is primarily used by the built-in preprocessing pipelines to parse epoch 
+conditions from TOML files. If you're creating a custom pipeline and want to use the 
+same TOML configuration format, you can use this function. Otherwise, you can create 
+`EpochCondition` objects directly.
+
+# TOML Format
+See the pipeline documentation for the expected TOML structure.
+
+# Example
+```julia
+config = TOML.parsefile("epoch_conditions.toml")
+conditions = condition_parse_epoch(config)
+```
 """
 function condition_parse_epoch(config::Dict)
-    defaults = get(config, "epochs", Dict())
+    epochs_section = get(config, "epochs", Dict())
 
     conditions = EpochCondition[]
-    condition_configs = get(defaults, "conditions", [])
+    condition_configs = get(epochs_section, "conditions", [])
 
     for condition_config in condition_configs
         name = condition_config["name"]
 
         # Parse trigger sequences (unified approach)
         trigger_sequences_raw = get(condition_config, "trigger_sequences", nothing)
-        if trigger_sequences_raw === nothing
+        if isnothing(trigger_sequences_raw)
             @minimal_error_throw("trigger_sequences must be specified for condition '$name'")
         end
 
-        # Parse the unified format
+
+        # Parse trigger sequences - convert from TOML arrays to proper types
         trigger_sequences = Vector{Vector{Union{Int,Symbol,UnitRange{Int}}}}()
         for sequence in trigger_sequences_raw
-            if sequence isa Vector
-                # Regular sequence - force type conversion
-                converted_sequence = Vector{Union{Int,Symbol,UnitRange{Int}}}(sequence)
-                push!(trigger_sequences, converted_sequence)
-            elseif sequence isa UnitRange
-                # Range - convert to single-element sequence
-                push!(trigger_sequences, [sequence])
-            else
-                @minimal_error_throw("Invalid trigger sequence format: $sequence")
-            end
+            # Normalize: wrap non-vectors (e.g., UnitRange) in a vector
+            seq_vec = sequence isa Vector ? sequence : [sequence]
+            push!(trigger_sequences, collect(Union{Int,Symbol,UnitRange{Int}}, seq_vec))
         end
 
         # Parse reference index (single index) - default to 1
@@ -38,7 +46,7 @@ function condition_parse_epoch(config::Dict)
 
         # Parse timing pairs (optional - if not specified, no timing constraints)
         timing_pairs_raw = get(condition_config, "timing_pairs", nothing)
-        if timing_pairs_raw === nothing
+        if isnothing(timing_pairs_raw)
             # No timing constraints
             timing_pairs = nothing
             min_interval = nothing
@@ -50,7 +58,7 @@ function condition_parse_epoch(config::Dict)
             max_interval = get(condition_config, "max_interval", nothing)
 
             # Validate that both min and max intervals are specified if timing_pairs is specified
-            if min_interval === nothing || max_interval === nothing
+            if isnothing(min_interval) || isnothing(max_interval)
                 @minimal_error_throw(
                     "Both min_interval and max_interval must be specified when timing_pairs is specified for condition '$name'",
                 )
@@ -61,23 +69,22 @@ function condition_parse_epoch(config::Dict)
         after = get(condition_config, "after", nothing)
         before = get(condition_config, "before", nothing)
 
-        # Validation
-        if reference_index < 1 || reference_index > length(trigger_sequences[1])
-            @minimal_error_throw("reference_index must be between 1 and $(length(trigger_sequences[1])) for condition '$name'")
+        # Validation - cache sequence length for efficiency
+        seq_length = length(trigger_sequences[1])
+        if reference_index < 1 || reference_index > seq_length
+            @minimal_error_throw("reference_index must be between 1 and $seq_length for condition '$name'")
         end
 
         # Only validate timing constraints if they're specified
-        if timing_pairs !== nothing
+        if !isnothing(timing_pairs)
             if min_interval >= max_interval
-                error("min_interval must be < max_interval for condition '$name'")
+                @minimal_error_throw("min_interval must be < max_interval for condition '$name'")
             end
 
             # Validate timing pairs
             for (start_idx, end_idx) in timing_pairs
-                if start_idx < 1 || start_idx > length(trigger_sequences[1]) || end_idx < 1 || end_idx > length(trigger_sequences[1])
-                    @minimal_error_throw(
-                        "timing_pairs contains invalid indices for sequence of length $(length(trigger_sequences[1])) in condition '$name'",
-                    )
+                if start_idx < 1 || start_idx > seq_length || end_idx < 1 || end_idx > seq_length
+                    @minimal_error_throw("timing_pairs contains invalid indices for sequence of length $seq_length in condition '$name'",)
                 end
                 if start_idx >= end_idx
                     @minimal_error_throw("timing_pairs must have start_idx < end_idx for condition '$name'")
@@ -86,7 +93,7 @@ function condition_parse_epoch(config::Dict)
         end
 
         # Validate after/before constraints
-        if after !== nothing && before !== nothing
+        if !isnothing(after) && !isnothing(before)
             @minimal_error_throw("Cannot specify both 'after' and 'before' constraints for condition '$name'")
         end
 
@@ -97,9 +104,9 @@ function condition_parse_epoch(config::Dict)
 end
 
 # Helper function to validate epoch window parameters
-function _validate_epoch_window_params(dat::ContinuousData, time_window::Vector{<:Real})
-    @assert length(time_window) == 2 "Time window must have exactly 2 elements"
-    @assert time_window[1] <= time_window[2] "Time window start must be less than or equal to end"
+function _validate_epoch_window_params(dat::ContinuousData, epoch_window::Vector{<:Real})
+    @assert length(epoch_window) == 2 "Epoch window must have exactly 2 elements"
+    @assert epoch_window[1] <= epoch_window[2] "Epoch window start must be less than or equal to end"
     @assert hasproperty(dat.data, :triggers) "Data must have a triggers column"
     @assert hasproperty(dat.data, :time) "Data must have a time column"
     @assert !isempty(dat.data.time) "Time column cannot be empty"
@@ -158,8 +165,8 @@ function _mark_windows_at_indices!(
     time_window::Vector{<:Real},
     channel_out::Symbol,
 )::Int
-    n_marked = 0
 
+    n_marked = 0
     for idx in reference_indices
         # Bounds check
         if idx < 1 || idx > length(dat.data.time)
@@ -270,6 +277,7 @@ function mark_epoch_windows!(
 
     # Mark windows around all collected indices
     n_marked = _mark_windows_at_indices!(dat, all_reference_indices, time_window, channel_out)
+    @info "Marked $n_marked samples across $(length(all_reference_indices)) trigger locations"
 
     return dat
 end
@@ -323,7 +331,8 @@ function mark_epoch_windows!(
 
     # For each epoch condition
     for condition in epoch_conditions
-        # Find all occurrences of the trigger sequences (unified approach)
+
+        # Find all occurrences of the trigger sequences 
         sequence_indices = search_sequence(dat.data.triggers, condition.trigger_sequences)
         if isempty(sequence_indices)
             @minimal_warning "No triggers found for condition '$(condition.name)'"
@@ -405,6 +414,7 @@ function mark_epoch_windows!(
 
     # Mark windows around all collected reference indices
     n_marked = _mark_windows_at_indices!(dat, all_reference_indices, time_window, channel_out)
+    @info "Marked $n_marked samples across $(length(all_reference_indices)) reference points"
 
     return dat
 end
@@ -415,7 +425,7 @@ end
 
 
 """
-    extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::EpochCondition, start_time, end_time)
+    extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::EpochCondition, epoch_window::Tuple{Real,Real})
 
 Extract epochs based on a single EpochCondition object, including timing validation, after/before filtering, 
 trigger ranges, wildcard sequences, and multiple sequences.
@@ -424,8 +434,7 @@ trigger ranges, wildcard sequences, and multiple sequences.
 - `dat::ContinuousData`: The continuous EEG data
 - `condition::Int`: Condition number to assign to epochs
 - `epoch_condition::EpochCondition`: EpochCondition object defining trigger sequence and timing constraints
-- `start_time`: Start time relative to reference point (seconds)
-- `end_time`: End time relative to reference point (seconds)
+- `epoch_window::Tuple{Real,Real}`: Time window relative to reference point (start_time, end_time) in seconds
 
 # Returns
 - `EpochData`: The extracted epochs
@@ -434,6 +443,7 @@ trigger ranges, wildcard sequences, and multiple sequences.
 ```julia
 # Single sequence
 condition = EpochCondition(name="single", trigger_sequence=[1, 2, 3], reference_index=2)
+epochs = extract_epochs(dat, 1, condition, (-0.2, 1.0))  # -200ms to 1000ms
 
 # Multiple sequences (OR logic)
 condition = EpochCondition(
@@ -441,6 +451,7 @@ condition = EpochCondition(
     trigger_sequences=[[1, 2, 1], [1, 3, 1]],  # Match either [1,2,1] OR [1,3,1]
     reference_index=2
 )
+epochs = extract_epochs(dat, 1, condition, (-0.5, 2.0))
 
 # Wildcard sequence
 condition = EpochCondition(
@@ -448,6 +459,7 @@ condition = EpochCondition(
     trigger_sequence=[1, :any, 3],  # :any matches any trigger value
     reference_index=2
 )
+epochs = extract_epochs(dat, 1, condition, (-0.2, 1.0))
 
 # Trigger ranges
 condition = EpochCondition(
@@ -455,20 +467,25 @@ condition = EpochCondition(
     trigger_ranges=[1:5, 10:15],  # Match triggers 1-5 or 10-15
     reference_index=1
 )
+epochs = extract_epochs(dat, 1, condition, (-0.2, 1.0))
 ```
 """
-function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::EpochCondition, start_time, end_time)
+function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::EpochCondition, epoch_window::Tuple{Real,Real})
+    # Extract start and end times from tuple
+    start_time, end_time = epoch_window
+
     # Find t==0 positions based on trigger_sequences (unified approach)
-    zero_idx = search_sequence(dat.data.triggers, epoch_condition.trigger_sequences) .+ (epoch_condition.reference_index - 1)
-    isempty(zero_idx) && error("None of the trigger sequences $(epoch_condition.trigger_sequences) found!")
+    offset_to_reference = epoch_condition.reference_index - 1
+    zero_idx = search_sequence(dat.data.triggers, epoch_condition.trigger_sequences) .+ offset_to_reference
+    isempty(zero_idx) && @minimal_error_throw("None of the trigger sequences $(epoch_condition.trigger_sequences) found!")
 
     # Apply after/before filtering if specified
-    if epoch_condition.after !== nothing || epoch_condition.before !== nothing
+    if !isnothing(epoch_condition.after) || !isnothing(epoch_condition.before)
         filtered_indices = Int[]
 
         for zero_pos in zero_idx
             # Find the position of the sequence start
-            sequence_start = zero_pos - (epoch_condition.reference_index - 1)
+            sequence_start = zero_pos - offset_to_reference
 
             # Determine sequence length based on the first sequence (all should have same length for timing validation)
             sequence_length = length(epoch_condition.trigger_sequences[1])
@@ -516,20 +533,20 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
         if isempty(zero_idx)
             after_msg = epoch_condition.after !== nothing ? " after trigger $(epoch_condition.after)" : ""
             before_msg = epoch_condition.before !== nothing ? " before trigger $(epoch_condition.before)" : ""
-            error(
+            @minimal_error_throw(
                 "No trigger sequences found that meet position constraints$(after_msg)$(before_msg) for condition '$(epoch_condition.name)'",
             )
         end
     end
 
     # Apply timing constraints if specified
-    if epoch_condition.timing_pairs !== nothing && epoch_condition.min_interval !== nothing && epoch_condition.max_interval !== nothing
+    if !isnothing(epoch_condition.timing_pairs)
 
         valid_indices = Int[]
 
         for zero_pos in zero_idx
             # Check if this sequence meets all timing constraints
-            sequence_start = zero_pos - (epoch_condition.reference_index - 1)
+            sequence_start = zero_pos - offset_to_reference
             valid_sequence = true
 
             for (start_idx, end_idx) in epoch_condition.timing_pairs
@@ -561,7 +578,8 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
         end
 
         zero_idx = valid_indices
-        isempty(zero_idx) && error("No trigger sequences found that meet timing constraints for condition '$(epoch_condition.name)'")
+        isempty(zero_idx) &&
+            @minimal_error_throw("No trigger sequences found that meet timing constraints for condition '$(epoch_condition.name)'")
     end
 
     # find number of samples pre/post epoch t = 0 position
@@ -594,16 +612,13 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
         push!(epochs, epoch_df)
     end
 
-    # Get file name from ContinuousData struct field
-    file_name = dat.file
-
-    return EpochData(file_name, condition, epoch_condition.name, epochs, dat.layout, dat.sample_rate, dat.analysis_info)
+    return EpochData(dat.file, condition, epoch_condition.name, epochs, dat.layout, dat.sample_rate, dat.analysis_info)
 end
 
-function extract_epochs(dat::ContinuousData, epoch_conditions::Vector{EpochCondition}, start_time, end_time)
+function extract_epochs(dat::ContinuousData, epoch_conditions::Vector{EpochCondition}, epoch_window::Tuple{Real,Real})
     epochs = EpochData[]
     for (idx, epoch_condition) in enumerate(epoch_conditions)
-        push!(epochs, extract_epochs(dat, idx, epoch_condition, start_time, end_time))
+        push!(epochs, extract_epochs(dat, idx, epoch_condition, epoch_window))
     end
     return epochs
 end
@@ -658,10 +673,10 @@ function average_epochs(dat::EpochData)
         n_timepoints = nrow(first_epoch)
 
         # Verify all epochs have the same length
-        for (i, epoch) in enumerate(dat.data)
+        for (idx, epoch) in enumerate(dat.data)
             if nrow(epoch) != n_timepoints
                 @minimal_error_throw(
-                    "Epoch $i has $(nrow(epoch)) timepoints, expected $n_timepoints. All epochs must have the same length."
+                    "Epoch $idx has $(nrow(epoch)) timepoints, expected $n_timepoints. All epochs must have the same length."
                 )
             end
         end
@@ -695,9 +710,7 @@ function average_epochs(dat::EpochData)
 end
 
 
-function average_epochs(dat::Vector{EpochData})
-    return average_epochs.(dat)
-end
+average_epochs(dat::Vector{EpochData}) = average_epochs.(dat)
 
 
 

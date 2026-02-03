@@ -87,7 +87,7 @@ epoch_cfg = [
     EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]]),
     EegFun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[2]]),
 ]
-epochs = EegFun.extract_epochs(dat, epoch_cfg, -0.2, 1.0)  # -200 to 1000 ms
+epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.2, 1.0))  # -200 to 1000 ms
 
 # ICA on epoched data
 ica_result_infomax = EegFun.run_ica(epochs[1]; sample_selection = EegFun.samples_not(:is_extreme_value_200))
