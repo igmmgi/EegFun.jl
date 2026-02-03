@@ -63,7 +63,7 @@ epoch_cfg = [
   EegFun.EpochCondition(name = "Cond1", trigger_sequences = [[1]]),
   EegFun.EpochCondition(name = "Cond2", trigger_sequences = [[2]])
   ]
-epochs = EegFun.extract_epochs(dat, epoch_cfg, -0.2, 0.8)
+epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.2, 0.8))
 erps = EegFun.average_epochs(epochs)
 EegFun.plot_erp(erps)
 ```

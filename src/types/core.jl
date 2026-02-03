@@ -552,6 +552,58 @@ function Base.show(io::IO, result::ErpMeasurementsResult)
     show(io, getfield(result, :data))
 end
 
+# Custom show method for EpochCondition
+function Base.show(io::IO, cond::EpochCondition)
+    println(io, "EpochCondition: \"$(cond.name)\"")
+
+    # Show trigger sequences
+    println(io, "├─ Trigger sequences: ($(length(cond.trigger_sequences)) sequence(s))")
+    for (i, seq) in enumerate(cond.trigger_sequences)
+        is_last_seq = (i == length(cond.trigger_sequences))
+        seq_prefix = is_last_seq ? "└─" : "├─"
+
+        # Format sequence elements
+        seq_str = join([string(elem) for elem in seq], " → ")
+        println(io, "│  $seq_prefix $seq_str")
+    end
+
+    # Show reference index only if any sequence has more than one trigger
+    max_seq_length = maximum(length(seq) for seq in cond.trigger_sequences)
+    if max_seq_length > 1
+        println(io, "├─ Reference index: $(cond.reference_index) (t=0)")
+    end
+
+    # Show timing constraints if present
+    has_timing = !isnothing(cond.timing_pairs) || !isnothing(cond.min_interval) || !isnothing(cond.max_interval)
+    if has_timing
+        println(io, "├─ Timing constraints:")
+        if !isnothing(cond.timing_pairs)
+            pairs_str = join(["($p1 → $p2)" for (p1, p2) in cond.timing_pairs], ", ")
+            println(io, "│  ├─ Timing pairs: $pairs_str")
+        end
+        if !isnothing(cond.min_interval)
+            println(io, "│  ├─ Min interval: $(cond.min_interval) s")
+        end
+        if !isnothing(cond.max_interval)
+            println(io, "│  └─ Max interval: $(cond.max_interval) s")
+        end
+    end
+
+    # Show search boundaries if present
+    has_boundaries = !isnothing(cond.after) || !isnothing(cond.before)
+    if has_boundaries
+        boundary_symbol = has_timing ? "└─" : "├─"
+        println(io, "$boundary_symbol Search boundaries:")
+        if !isnothing(cond.after)
+            after_symbol = isnothing(cond.before) ? "└─" : "├─"
+            println(io, "   $after_symbol After trigger: $(cond.after)")
+        end
+        if !isnothing(cond.before)
+            println(io, "   └─ Before trigger: $(cond.before)")
+        end
+    end
+end
+
 """
     TriggerInfo
 

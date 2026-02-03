@@ -29,7 +29,7 @@ EegFun.extra_data(dat)
 
 # some epoched data
 epoch_cfg = [EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
-epochs = EegFun.extract_epochs(dat, epoch_cfg, -2, 4)
+epochs = EegFun.extract_epochs(dat, epoch_cfg, (-2, 4))
 
 EegFun.all_data(epochs)
 EegFun.all_data(epochs, epoch_selection = EegFun.epochs(1:2))

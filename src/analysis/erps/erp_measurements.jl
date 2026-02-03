@@ -53,6 +53,12 @@ function _default_measurements_output_dir(input_dir::String, analysis_type::Stri
     joinpath(input_dir, "measurements_$(analysis_type)")
 end
 
+"""Normalize interval to tuple format (handles AbstractRange and Tuple)."""
+function _normalize_interval(interval::Interval)
+    isnothing(interval) && return nothing
+    interval isa AbstractRange ? (first(interval), last(interval)) : interval
+end
+
 #=============================================================================
     ERP-MEASUREMENTS-SPECIFIC HELPERS
 =============================================================================#
@@ -254,9 +260,7 @@ Compute measurement for a single channel in a time window.
 """
 function _compute_measurement(
     chan_data::AbstractVector,
-    time_col::AbstractVector,
-    time_idx::AbstractVector,
-    selected_times::Union{AbstractVector,Nothing},
+    selected_times::AbstractVector,
     analysis_type::String,
     measurement_kwargs::Dict{Symbol,Any},
     channel_name::Symbol,
@@ -274,7 +278,7 @@ function _compute_measurement(
         if analysis_type in ["max_peak_amplitude", "min_peak_amplitude"]
             return peak_val
         else  # latency measurements
-            return time_col[time_idx[peak_idx]]
+            return selected_times[peak_idx]
         end
 
         # Peak-to-peak measurements
@@ -294,8 +298,8 @@ function _compute_measurement(
         if analysis_type == "peak_to_peak_amplitude"
             return max_val - min_val
         else  # peak_to_peak_latency
-            max_time = time_col[time_idx[max_idx]]
-            min_time = time_col[time_idx[min_idx]]
+            max_time = selected_times[max_idx]
+            min_time = selected_times[min_idx]
             return abs(max_time - min_time)
         end
 
@@ -328,11 +332,9 @@ function _compute_measurement(
 
         # Fractional latency measurements
     elseif analysis_type == "fractional_area_latency"
-        isnothing(selected_times) && error("selected_times should not be nothing for fractional_area_latency")
         fraction = measurement_kwargs[:fractional_area_fraction]
         return _fractional_area_latency(chan_data, selected_times, fraction)
     elseif analysis_type == "fractional_peak_latency"
-        isnothing(selected_times) && error("selected_times should not be nothing for fractional_peak_latency")
         # Find the peak with maximum absolute value using robust detection
         local_window = measurement_kwargs[:local_window]
         max_val, max_idx = _compute_peak_measurement(chan_data, :max, local_window, channel_name)
@@ -384,11 +386,8 @@ function _process_dataframe_measurements(
         # Use all samples
         time_idx = 1:nrow(df)
     else
-        # Ensure we have a tuple
-        interval = analysis_interval
-        if interval isa AbstractRange
-            interval = (first(interval), last(interval))
-        end
+        # Normalize to tuple
+        interval = _normalize_interval(analysis_interval)
 
         # Validate interval
         if interval[1] > interval[2]
@@ -405,12 +404,9 @@ function _process_dataframe_measurements(
         return nothing
     end
 
-    # Pre-compute selected times once (used by area/fractional measurements)
-    selected_times = nothing
-    if analysis_type in
-       ["rectified_area", "integral", "positive_area", "negative_area", "fractional_area_latency", "fractional_peak_latency"]
-        selected_times = @view time_col[time_idx]
-    end
+    # Pre-compute selected times once (used by latency, area, and fractional measurements)
+    # This allows us to avoid passing time_idx to _compute_measurement
+    selected_times = @view time_col[time_idx]
 
     # Build metadata pairs in fixed order to ensure column order in DataFrame
     metadata_vals = Any[file, participant]
@@ -435,7 +431,7 @@ function _process_dataframe_measurements(
 
     # Add baseline interval columns
     if !isnothing(baseline_interval)
-        baseline = baseline_interval isa AbstractRange ? (first(baseline_interval), last(baseline_interval)) : baseline_interval
+        baseline = _normalize_interval(baseline_interval)
         push!(metadata_vals, baseline[1])
         push!(metadata_keys, :baseline_interval_start)
         push!(metadata_vals, baseline[2])
@@ -449,7 +445,7 @@ function _process_dataframe_measurements(
 
     # Add analysis interval columns
     if !isnothing(analysis_interval)
-        ai = analysis_interval isa AbstractRange ? (first(analysis_interval), last(analysis_interval)) : analysis_interval
+        ai = _normalize_interval(analysis_interval)
         push!(metadata_vals, ai[1])
         push!(metadata_keys, :analysis_interval_start)
         push!(metadata_vals, ai[2])
@@ -469,7 +465,7 @@ function _process_dataframe_measurements(
     channel_pairs = Vector{Pair{Symbol,Float64}}(undef, length(selected_channels))
     for (i, chan_symbol) in enumerate(selected_channels)
         chan_data = @view df[time_idx, chan_symbol]
-        value = _compute_measurement(chan_data, time_col, time_idx, selected_times, analysis_type, measurement_kwargs, chan_symbol)
+        value = _compute_measurement(chan_data, selected_times, analysis_type, measurement_kwargs, chan_symbol)
         channel_pairs[i] = chan_symbol => value
     end
 
@@ -538,12 +534,7 @@ end
 Helper function to apply baseline correction to data.
 Returns the DataFrames vector (modified in place if baseline applied).
 """
-function _apply_baseline_correction!(
-    dfs::Vector{DataFrame},
-    baseline_interval::Interval,
-    all_channels::Vector{Symbol},
-    filename::String = "",
-)
+function _apply_baseline_correction!(dfs::Vector{DataFrame}, baseline_interval::Interval, all_channels::Vector{Symbol})
     # Skip if no baseline specified
     if isnothing(baseline_interval)
         return dfs
@@ -553,11 +544,8 @@ function _apply_baseline_correction!(
     eeg_channels = all_channels[channels()(all_channels)]
 
     if !isempty(eeg_channels)
-        # Ensure we have a tuple
-        baseline_int = baseline_interval
-        if baseline_int isa AbstractRange
-            baseline_int = (first(baseline_int), last(baseline_int))
-        end
+        # Normalize to tuple
+        baseline_int = _normalize_interval(baseline_interval)
 
         # Convert time tuple to index tuple using first dataframe's time column
         # (assume all dataframes have the same time points for epochs/ERPs)
@@ -700,7 +688,7 @@ function erp_measurements!(
     end
 
     # Process each epoch DataFrame
-    results = Vector{Any}()
+    results = Vector{NamedTuple}()
     for df in dat.data
         row_data = _process_dataframe_measurements(
             df,
@@ -775,16 +763,48 @@ across specified time windows and saves results to CSV files.
 
 # Arguments
 - `file_pattern::String`: Pattern to match JLD2 files (e.g., "erps", "epochs_cleaned")
-- `analysis_type::String`: Type of measurement:
-  - **Amplitude**: "mean_amplitude", "max_peak_amplitude", "min_peak_amplitude", "peak_to_peak_amplitude"
-  - **Latency**: "max_peak_latency", "min_peak_latency", "peak_to_peak_latency", "fractional_area_latency", "fractional_peak_latency"
-  - **Area/Integral** (in µVs): 
-    - "rectified_area": Sum of absolute values (always positive)
-    - "integral": Signed integral (net area, can be positive or negative)
-    - "positive_area": Area of positive values only
-    - "negative_area": Area of negative values only (as absolute value)
+- `analysis_type::String`: Type of measurement to extract:
   
-  Note: Peak measurements use robust detection (local peak with neighbor/average checks) and fall back to simple peak if no robust peak is found.
+  **Essential Measurements** (recommended for most ERP analyses):
+  - `"mean_amplitude"`: Average amplitude in the analysis window
+    - Most common ERP measure; suitable for all components (N400, P300, etc.)
+    - For fixed time windows, equivalent to integral scaled by window duration
+  - `"max_peak_amplitude"`: Maximum peak amplitude (for positive components like P1, P3, P300)
+    - Uses robust detection: peak must exceed neighbors and local averages
+    - Falls back to simple maximum if no robust peak found
+  - `"min_peak_amplitude"`: Minimum peak amplitude (for negative components like N1, N2, N400, MMN)
+    - Uses robust detection: peak must be below neighbors and local averages
+    - Falls back to simple minimum if no robust peak found
+  - `"max_peak_latency"`: Timing of maximum peak (in seconds)
+    - Returns time point of maximum peak within analysis window
+  - `"min_peak_latency"`: Timing of minimum peak (in seconds)
+    - Returns time point of minimum peak within analysis window
+  
+  **Specialized Measurements** (for specific research questions):
+  - `"peak_to_peak_amplitude"`: Difference between max and min peaks
+    - Occasionally used in MMN research or when measuring component-to-component differences
+  - `"peak_to_peak_latency"`: Time difference between max and min peaks
+    - Rarely used; can be computed post-hoc from individual peak latencies
+  - `"integral"`: Signed area under curve (in µV·s)
+    - Net electrical activity accounting for polarity (positive - negative)
+    - For fixed windows: integral = mean × duration
+    - Useful when comparing variable-length windows or for historical compatibility
+  - `"rectified_area"`: Sum of absolute values (in µV·s)
+    - Total magnitude of activity regardless of polarity
+    - Always non-negative
+  - `"positive_area"`: Area of positive deflections only (in µV·s)
+    - Negative values treated as zero; always non-negative
+  - `"negative_area"`: Area of negative deflections only (in µV·s, reported as absolute value)
+    - Positive values treated as zero; always non-negative
+  - `"fractional_area_latency"`: Time point where specified fraction of area is reached
+    - Default: 50% area point (median latency by area)
+    - Configurable via `fractional_area_fraction` parameter
+  - `"fractional_peak_latency"`: Time point where amplitude reaches fraction of peak
+    - Default: 50% peak amplitude (onset/offset detection)
+    - Configurable via `fractional_peak_fraction` and `fractional_peak_direction` parameters
+  
+  Note: All peak measurements use robust detection with `local_window` parameter (default: 3 samples)
+  
 - `analysis_interval::Interval`: Analysis time window as tuple (e.g., (0.3, 0.5) for 300-500ms) (default: nothing - all samples)
 - `baseline_interval::Interval`: Baseline time window as tuple (e.g., (-0.2, 0.0)) (default: nothing - no baseline correction)
 - `participant_selection::Function`: Participant selection predicate (default: participants() - all)

@@ -32,7 +32,7 @@ EegFun.plot_channel_summary(cs, [:min, :max, :std, :range, :var, :zvar])
 #################################
 # some epoched data
 epoch_cfg = [EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
-epochs = EegFun.extract_epochs(dat, epoch_cfg, -2, 4)
+epochs = EegFun.extract_epochs(dat, epoch_cfg, (-2, 4))
 
 cs = EegFun.channel_summary(epochs[1])a
 

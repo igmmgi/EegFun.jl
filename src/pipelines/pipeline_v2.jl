@@ -137,7 +137,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
                 # Here, only the most basic of "preprocessing" is applied (i.e., no ICA artifact correction or 
                 # subsequent channel repair)
                 @info section("Initial Epoch Extraction")
-                epochs_original = extract_epochs(dat, epoch_cfgs, preprocess_cfg.epoch_start, preprocess_cfg.epoch_end)
+                epochs_original = extract_epochs(dat, epoch_cfgs, (preprocess_cfg.epoch_start, preprocess_cfg.epoch_end))
                 erps_original = average_epochs(epochs_original)
 
                 if cfg["files"]["output"]["save_epoch_data_original"]
@@ -295,7 +295,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
 
                 #################### EPOCH EXTRACTION ###################
                 @info section("Extracting cleaned epoched data")
-                epochs = extract_epochs(dat, epoch_cfgs, preprocess_cfg.epoch_start, preprocess_cfg.epoch_end)
+                epochs = extract_epochs(dat, epoch_cfgs, (preprocess_cfg.epoch_start, preprocess_cfg.epoch_end))
 
                 # Check if any epochs have empty data
                 empty_epochs = [i for (i, ep) in enumerate(epochs) if isempty(ep.data)]

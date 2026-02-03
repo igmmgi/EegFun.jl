@@ -62,7 +62,7 @@ epoch_cfg = [
     EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]]),
     EegFun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[2]]),
 ]
-epochs = EegFun.extract_epochs(dat, epoch_cfg, -2, 4)
+epochs = EegFun.extract_epochs(dat, epoch_cfg, (-2, 4))
 
 EegFun.plot_topography(epochs, 1) # epoch 1
 EegFun.plot_topography(epochs, 2) # epoch 2

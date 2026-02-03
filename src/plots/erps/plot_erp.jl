@@ -382,9 +382,15 @@ Plot multiple ERP datasets on an existing axis, mutating the figure and axis.
 - `ax::Axis`: The axis that was plotted on
 """
 function plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
-    plot_kwargs, user_provided_color = _prepare_plot_kwargs(kwargs)
+    # Extract special parameters before validation (like plot_erp does)
     baseline_interval = get(kwargs, :baseline_interval, nothing)
-    channel_selection_func = get(plot_kwargs, :channel_selection, channels())
+    channel_selection_func = get(kwargs, :channel_selection, channels())
+
+    # Remove them from kwargs before validation
+    filtered_kwargs = pairs(NamedTuple(filter(p -> p[1] ∉ [:baseline_interval, :channel_selection], pairs(kwargs))))
+
+    plot_kwargs, user_provided_color = _prepare_plot_kwargs(filtered_kwargs)
+
     dat_subset, all_channels, _, _ = _prepare_erp_data(
         datasets,
         plot_kwargs;
