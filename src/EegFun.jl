@@ -43,9 +43,6 @@ using TOML
 # Machine learning (for decoding/MVPA)
 using LIBSVM
 
-# File I/O
-export load_eeglab
-
 # TODO: consider using Threads.@threads for parallel processing?
 # using Base.Threads
 
