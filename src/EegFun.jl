@@ -10,6 +10,7 @@ using CategoricalArrays
 using CSV
 using DataFrames
 using JLD2
+using MAT
 
 # Signal processing
 using DSP
@@ -42,6 +43,9 @@ using TOML
 # Machine learning (for decoding/MVPA)
 using LIBSVM
 
+# File I/O
+export load_eeglab
+
 # TODO: consider using Threads.@threads for parallel processing?
 # using Base.Threads
 
@@ -65,6 +69,9 @@ include("utils/extern/load_csv.jl")
 
 # Layout handling
 include("layouts/layout.jl")
+
+# Data import/export
+include("io/eeglab.jl")
 
 # Configuration system
 include("config/config.jl")
