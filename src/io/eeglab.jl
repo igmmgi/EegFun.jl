@@ -35,7 +35,7 @@ plot_erp(erp)
 # Notes
 - Requires MAT.jl for reading MATLAB files
 - Channel locations are extracted if available
-- Currently does not import: ICA data, event structures, rejection info
+- Currently does not import: event structures, rejection info
 """
 function load_eeglab(filepath::String)
 
@@ -57,6 +57,59 @@ end
 
 
 """
+    load_eeglab_ica(filepath::String) → Union{InfoIca, Nothing}
+
+Extract ICA decomposition from EEGLAB .set file.
+
+Returns an `InfoIca` object if ICA data is present, or `nothing` if no ICA decomposition
+is found in the file.
+
+# Arguments
+- `filepath::String`: Path to .set file
+
+# Returns
+- `Union{InfoIca, Nothing}`: ICA information or nothing if not available
+
+# Examples
+```julia
+using EegFun
+
+# Load ICA from EEGLAB
+ica_info = load_eeglab_ica("participant1.set")
+
+if !isnothing(ica_info)
+    # Use ICA info
+    println("Found ", length(ica_info.ica_label), " components")
+end
+```
+
+# Notes
+- Requires ICA to have been computed in EEGLAB
+- Checks for presence of icaweights, icasphere, and icawinv
+- Variance set to placeholder (requires activations for proper computation)
+"""
+function load_eeglab_ica(filepath::String)
+    @info "Loading EEGLAB ICA from: $filepath"
+
+    # Read .set file
+    eeg = matread(filepath)
+
+    # Check if ICA data exists
+    if !haskey(eeg, "icaweights") || !haskey(eeg, "icasphere") || !haskey(eeg, "icawinv")
+        @warn "No ICA decomposition found in $filepath"
+        return nothing
+    end
+
+    # Extract channel names for layout
+    ch_names = _extract_channel_names(eeg["chanlocs"])
+    layout = _parse_channel_locations(eeg["chanlocs"], ch_names)
+
+    # Extract ICA info
+    return _extract_ica_info(eeg, filepath, ch_names, layout)
+end
+
+
+"""
     _eeglab_to_epochdata(eeg::Dict, filepath::String) → EpochData
 
 Convert EEGLAB structure to EegFun EpochData.
@@ -69,25 +122,25 @@ function _eeglab_to_epochdata(eeg::Dict, filepath::String)
     n_channels = Int(eeg["nbchan"])
     n_timepoints = Int(eeg["pnts"])
     n_trials = Int(eeg["trials"])
-    sample_rate = Int(round(eeg["srate"]))
+    sample_rate = Int(eeg["srate"])
 
     @info "Data: $n_channels channels × $n_timepoints timepoints × $n_trials trials"
     @info "Sample rate: $sample_rate Hz"
 
-    # Extract data array [channels × timepoints × trials]
-    data_array = eeg["data"]
-
     # Extract channel names
     ch_names = _extract_channel_names(eeg["chanlocs"])
 
-    # Create time vector
-    if haskey(eeg, "times") && !isempty(eeg["times"])
-        times = vec(eeg["times"]) ./ 1000.0  # Convert ms to seconds
+    # Extract data array [channels × timepoints × trials]
+    data_array = eeg["data"]
+
+    # Create time vector (convert from ms to seconds)
+    xmin = get(eeg, "xmin", 0)
+    times = if haskey(eeg, "times")
+        vec(eeg["times"]) ./ 1000.0  # ms to s
     else
-        # Calculate from xmin and sample rate
-        xmin = Float64(eeg["xmin"])
+        # Calculate times from xmin and sample rate
         dt = 1.0 / sample_rate
-        times = xmin .+ (0:(n_timepoints-1)) .* dt
+        xmin .+ (0:(n_timepoints-1)) .* dt
     end
 
     # Extract triggers from epochs (returns both integer codes and string info)
@@ -129,6 +182,9 @@ function _eeglab_to_epochdata(eeg::Dict, filepath::String)
     # Extract condition name if available
     condition_name = get(eeg, "setname", basename(filepath))
 
+    # Create AnalysisInfo (EEGLAB doesn't have reliable filter/reference metadata)
+    analysis_info = AnalysisInfo()
+
     # Create EpochData
     epoch_data = EpochData(
         filepath,          # file
@@ -137,7 +193,7 @@ function _eeglab_to_epochdata(eeg::Dict, filepath::String)
         epoch_dataframes,  # data
         layout,            # layout
         sample_rate,       # sample_rate
-        AnalysisInfo(),    # I guess the user would want to add their own analysis_info
+        analysis_info,     # analysis_info
     )
 
     @info "Successfully converted to EpochData with $n_trials epochs"
@@ -177,7 +233,7 @@ end
 Extract trigger codes from EEGLAB epoch structure.
 
 Maps unique trigger strings to sequential integers (1, 2, 3, ...) and returns both
-the integer codes and original strings for storage in :trigger and :trigger_info columns.
+the integer codes and original strings for storage in :triggers and :trigger_info columns.
 """
 function _extract_triggers(epochs, n_trials::Int)
     # First pass: collect all unique trigger strings
@@ -240,7 +296,7 @@ function _parse_channel_locations(chanlocs, ch_names::Vector{Symbol})
         Y = vec(chanlocs["Y"])
         Z = vec(chanlocs["Z"])
 
-        # Check for any missing coordinates (NaN or empty)
+        # Check for valid coordinates
         valid_coords = .!isnan.(X) .& .!isnan.(Y) .& .!isnan.(Z)
 
         if all(valid_coords)
@@ -261,12 +317,15 @@ end
 
 
 """
-    _cartesian_to_spherical(X, Y, Z) → (inc, azi)
+    _cartesian_to_spherical(X::Vector, Y::Vector, Z::Vector) → (Vector{Float64}, Vector{Float64})
 
 Convert 3D Cartesian coordinates to spherical coordinates (inclination, azimuth).
 
-EEGLAB uses: X (front-back), Y (left-right), Z (inferior-superior)
-Converts to: inc (0-90°), azi (0-360°)
+EEGLAB uses: +X (anterior/front), +Y (left), +Z (superior/top)
+Returns: (inclination, azimuth) in degrees
+
+Inclination: angle from +Z axis (0° = top, 90° = equator)
+Azimuth: angle in XY plane (0° = +X/front, 90° = +Y/left)
 """
 function _cartesian_to_spherical(X::Vector, Y::Vector, Z::Vector)
     n = length(X)
@@ -276,22 +335,19 @@ function _cartesian_to_spherical(X::Vector, Y::Vector, Z::Vector)
     for i = 1:n
         x, y, z = X[i], Y[i], Z[i]
 
-        # Calculate radius
+        # Calculate radius (distance from origin)
         r = sqrt(x^2 + y^2 + z^2)
 
         if r == 0
-            # Handle origin case
+            # Origin point - assign default
             inc[i] = 0.0
             azi[i] = 0.0
         else
-            # Inclination (angle from vertical/zenith, in degrees)
-            # 0° = top (Cz), 90° = horizontal
+            # Inclination: angle from +Z axis
             inc[i] = acosd(z / r)
 
-            # Azimuth (angle in horizontal plane, in degrees)
-            # 0° = front (Fpz), 90° = right, 180° = back, 270° = left
-            # atan2(y, x) gives angle in radians, convert to degrees
-            azi_rad = atan(y, x)
+            # Azimuth: angle in XY plane
+            azi_rad = atan(y, x)  # atan(y, x) gives angle from +X axis
             azi[i] = rad2deg(azi_rad)
 
             # Rotate by 90 degrees to align EEGLAB with EegFun coordinate system
@@ -319,4 +375,45 @@ Places all electrodes at the center.
 function _create_default_layout(ch_names::Vector{Symbol})
     n = length(ch_names)
     return DataFrame(label = ch_names, inc = zeros(Float64, n), azi = zeros(Float64, n))
+end
+
+
+"""
+    _extract_ica_info(eeg::Dict, filepath::String, ch_names::Vector{Symbol}, layout::Layout) → InfoIca
+
+Extract ICA information from EEGLAB structure.
+
+Converts EEGLAB ICA matrices to EegFun InfoIca format.
+"""
+function _extract_ica_info(eeg::Dict, filepath::String, ch_names::Vector{Symbol}, layout::Layout)
+    # Extract ICA matrices
+    unmixing = Matrix{Float64}(eeg["icaweights"])  # Unmixing matrix
+    sphere = Matrix{Float64}(eeg["icasphere"])     # Sphering matrix
+    mixing = Matrix{Float64}(eeg["icawinv"])       # Mixing matrix (inverse)
+
+    # Get number of components
+    n_components = size(unmixing, 1)
+
+    @info "Extracting $n_components ICA components"
+
+    # Generate component labels
+    ica_label = [Symbol("IC$i") for i = 1:n_components]
+
+    # Create variance vector (placeholder - would need activations to compute properly)
+    variance = ones(Float64, n_components)
+
+    # Create InfoIca object
+    return InfoIca(
+        filepath,                                    # filename
+        unmixing,                                    # unmixing
+        mixing,                                      # mixing
+        sphere,                                      # sphere
+        variance,                                    # variance (placeholder)
+        1.0,                                         # scale
+        zeros(Float64, n_components),                # mean
+        ica_label,                                    # ica_label
+        OrderedDict{Int,Matrix{Float64}}(),          # removed_activations (empty)
+        layout,                                      # layout
+        fill(false, n_components),                   # is_sub_gaussian (all super-Gaussian by default)
+    )
 end
