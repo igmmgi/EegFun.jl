@@ -11,7 +11,7 @@ in EegFun for extracting quantitative features from ERP data.
 """
 
 using EegFun
-dat = EegFun.load_data("./resources/data/erps/example1_erps_good.jld2")
+dat = EegFun.read_data("./resources/data/erps/example1_erps_good.jld2")
 
 
 EegFun.plot_erp_filter_gui(dat)
@@ -23,7 +23,7 @@ EegFun.plot_erp_measurement_gui(dat[1])
 # Amplitude Measurements
 # ----------------------------------------------------------------------------
 
-# dat = EegFun.load_data("./data/files/erps/example1_erps_good.jld2")
+# dat = EegFun.read_data("./data/files/erps/example1_erps_good.jld2")
 # EegFun.plot_erp(dat, condition_selection = EegFun.conditions([1]), channel_selection = EegFun.channels([:Pz]), baseline_interval = (0, 0))
 
 input_dir = "./resources/data/erps"
@@ -42,7 +42,7 @@ mean_amp = EegFun.erp_measurements(
 )
 
 
-dat = EegFun.load_data("./resources/data/erps/example1_erps_good.jld2")
+dat = EegFun.read_data("./resources/data/erps/example1_erps_good.jld2")
 EegFun.plot_erp(dat, condition_selection = EegFun.conditions([1]), channel_selection = EegFun.channels([:Pz]), baseline_interval = (0, 0))
 
 

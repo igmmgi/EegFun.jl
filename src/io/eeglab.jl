@@ -11,7 +11,7 @@ But it does seem to work with the two example datasets I found in eeglab/sample_
 
 
 """
-    load_eeglab(filepath::String; preserve_radial_distance::Bool = true)
+    read_eeglab(filepath::String; preserve_radial_distance::Bool = true)
 
 Load EEGLAB .set file and return EEG data. If ICA decomposition is present,
 also returns ICA data as a tuple (eeg_data, ica_data).
@@ -28,13 +28,13 @@ also returns ICA data as a tuple (eeg_data, ica_data).
 # Examples
 ```julia
 # Without ICA
-eeg = load_eeglab("data.set")
+eeg = read_eeglab("data.set")
 
 # With ICA (automatically detected)
-eeg, ica = load_eeglab("data_with_ica.set")
+eeg, ica = read_eeglab("data_with_ica.set")
 ```
 """
-function load_eeglab(filepath::String; preserve_radial_distance::Bool = true)
+function read_eeglab(filepath::String; preserve_radial_distance::Bool = true)
 
     @info "Loading EEGLAB .set file: $filepath"
 
@@ -92,7 +92,7 @@ function _load_common_eeglab_components(eeg::Dict, filepath::String, preserve_ra
     @info "Sample rate: $sample_rate Hz"
 
     ch_names = _extract_channel_names(eeg["chanlocs"])
-    data = _load_eeglab_data(eeg, filepath)
+    data = _read_eeglab_data(eeg, filepath)
 
     xmin = get(eeg, "xmin", 0.0)
     times = if haskey(eeg, "times")
@@ -271,7 +271,7 @@ end
 
 
 """
-    _load_eeglab_data(eeg_dict::Dict, filepath::String) → Array
+    _read_eeglab_data(eeg_dict::Dict, filepath::String) → Array
 
 Load EEG data from EEGLAB structure. Handles both embedded data arrays
 and external .fdt (floating-point data) files.
@@ -283,7 +283,7 @@ and external .fdt (floating-point data) files.
 # Returns
 - Data array (channels × timepoints) or (channels × timepoints × trials)
 """
-function _load_eeglab_data(eeg_dict::Dict, filepath::String)
+function _read_eeglab_data(eeg_dict::Dict, filepath::String)
     data_field = eeg_dict["data"]
 
     # Check if data is embedded (array) or external (filename string)

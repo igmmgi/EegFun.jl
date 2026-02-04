@@ -31,7 +31,7 @@ function _condition_combine_process_file(filepath::String, output_path::String, 
     filename = basename(filepath)
 
     # Load data
-    data = load_data(filepath)
+    data = read_data(filepath)
     if isnothing(data)
         return BatchResult(false, filename, "No data variables found")
     end

@@ -18,7 +18,7 @@ using DataFrames
 
     @testset "Basic Loading" begin
         # Load data
-        epochs = load_eeglab(test_file, verbose = false)
+        epochs = read_eeglab(test_file, verbose = false)
 
         # Test data type
         @test epochs isa EpochData
@@ -40,7 +40,7 @@ using DataFrames
     end
 
     @testset "Channel Information" begin
-        epochs = load_eeglab(test_file, verbose = false)
+        epochs = read_eeglab(test_file, verbose = false)
 
         # Get channel names (excluding time)
         ch_names = filter(x -> x != :time, names(epochs.data[1]))
@@ -58,7 +58,7 @@ using DataFrames
     end
 
     @testset "Time Vector" begin
-        epochs = load_eeglab(test_file, verbose = false)
+        epochs = read_eeglab(test_file, verbose = false)
 
         # Get time vector from first epoch
         times = epochs.data[1].time
@@ -72,7 +72,7 @@ using DataFrames
     end
 
     @testset "Data Integrity" begin
-        epochs = load_eeglab(test_file, verbose = false)
+        epochs = read_eeglab(test_file, verbose = false)
 
         # All epochs should have same dimensions
         n_rows = nrow(epochs.data[1])
@@ -94,7 +94,7 @@ using DataFrames
     end
 
     @testset "Integration with EegFun Functions" begin
-        epochs = load_eeglab(test_file, verbose = false)
+        epochs = read_eeglab(test_file, verbose = false)
 
         # Test averaging works
         erp = average_epochs(epochs)

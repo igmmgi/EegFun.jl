@@ -113,7 +113,7 @@ function plot_epochs(
     layout = :single,
     kwargs...,
 )
-    data = load_data(filename)
+    data = read_data(filename)
     isnothing(data) && @minimal_error_throw "No data found in file: $filename"
 
     # Dispatch to main plot_epochs function (handles both EpochData and Vector{EpochData})

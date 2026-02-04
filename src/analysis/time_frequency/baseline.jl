@@ -220,7 +220,7 @@ function tf_baseline(
 
         process_fn = (input_path, output_path) -> begin
             filename = basename(input_path)
-            data = load_data(input_path)
+            data = read_data(input_path)
             if isnothing(data) || !(data isa Vector{TimeFreqData})
                 return BatchResult(false, filename, "Invalid data type")
             end

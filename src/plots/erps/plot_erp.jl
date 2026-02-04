@@ -105,7 +105,7 @@ function plot_erp(
     kwargs...,
 )
     # Load data from file
-    data = load_data(filepath)
+    data = read_data(filepath)
     if isnothing(data)
         @minimal_error_throw "No data found in file: $filepath"
     end

@@ -153,7 +153,7 @@ function prepare_stats(
     analysis_interval::Interval = times(),
 )
     # just load all appropriate data and call the main preparation function
-    all_erps = load_all_data(ErpData, file_pattern, input_dir, participant_selection)
+    all_erps = read_all_data(ErpData, file_pattern, input_dir, participant_selection)
     isempty(all_erps) && @minimal_error_throw "No valid ERP data found matching pattern '$file_pattern' in $input_dir"
 
     return prepare_stats(

@@ -92,11 +92,11 @@ function _generate_setup_section()
     try
         @info section("Setup")
         !isfile(config) && @minimal_error "Config file does not exist: \$config"
-        cfg = load_config(config)
+        cfg = read_config(config)
         cfg == nothing && @minimal_error "Failed to load configuration from: \$config"
         
         # Try and merge user config above with default config
-        default_config = load_config(joinpath(@__DIR__, "..", "..", "src", "config", "default.toml"))
+        default_config = read_config(joinpath(@__DIR__, "..", "..", "src", "config", "default.toml"))
         default_config == nothing && @minimal_error "Failed to load default configuration"
         cfg = _merge_configs(default_config, cfg)
         

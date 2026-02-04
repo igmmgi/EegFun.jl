@@ -215,7 +215,7 @@ function _process_lrp_file(filepath::String, output_path::String, condition_pair
     filename = basename(filepath)
 
     # Load data (using load_data which finds by type)
-    erps_data = load_data(filepath)
+    erps_data = read_data(filepath)
 
     if isnothing(erps_data)
         return BatchResult(false, filename, "No data variables found")

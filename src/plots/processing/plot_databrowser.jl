@@ -1854,9 +1854,9 @@ end
 
 # can plot saved file
 function plot_databrowser(filename::String, ica = nothing; screen = nothing, kwargs...)
-    dat_eeg = load_data(filename)
+    dat_eeg = read_data(filename)
     if !isnothing(ica)
-        ica = load_data(ica)
+        ica = read_data(ica)
     end
     plot_databrowser(dat_eeg, ica; screen = screen, kwargs...)
 end

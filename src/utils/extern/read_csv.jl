@@ -1,6 +1,6 @@
 
 """
-    load_csv(data_dir::String; 
+    read_csv(data_dir::String; 
                       file::String="fieldtrip_data",
                       condition::Int=1,
                       condition_name::String="fieldtrip",
@@ -24,10 +24,10 @@ The CSV file should be created using the MATLAB function `fieldtrip_epochs_to_cs
 
 # Example
 ```julia
-epochs = load_csv("/path/to/csv/files", fsample=256)
+epochs = read_csv("/path/to/csv/files", fsample=256)
 ```
 """
-function load_csv(
+function read_csv(
     data_dir::String;
     file::String = "csv_data",
     condition::Int = 1,

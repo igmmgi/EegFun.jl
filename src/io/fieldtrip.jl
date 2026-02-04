@@ -6,7 +6,7 @@ Loads FieldTrip .mat files and converts to EegFun data structures.
 
 
 """
-    load_fieldtrip(filepath::String, layout::Layout) → ContinuousData/EpochData/ErpData
+    read_fieldtrip(filepath::String, layout::Layout) → ContinuousData/EpochData/ErpData
 
 Load FieldTrip .mat file and convert to EegFun data structure.
 
@@ -24,10 +24,10 @@ Load FieldTrip .mat file and convert to EegFun data structure.
 using EegFun
 # We need to specify a layout to pass to our EegFun data types
 layout = EegFun.read_layout("./resources/layouts/biosemi/biosemi64.csv")
-data = EegFun.load_fieldtrip("./resources/data/fieldtrip/continuous.mat", layout)
+data = EegFun.read_fieldtrip("./resources/data/fieldtrip/continuous.mat", layout)
 ```
 """
-function load_fieldtrip(filepath::String, layout::Layout)
+function read_fieldtrip(filepath::String, layout::Layout)
     @info "Loading FieldTrip .mat file: $filepath"
 
     mat_data = matread(filepath)

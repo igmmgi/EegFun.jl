@@ -40,11 +40,11 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
         @info section("Setup")
         @info "Configuration Files:"
         !isfile(config) && @minimal_error "Config file does not exist: $config"
-        cfg = load_config(config)
+        cfg = read_config(config)
         cfg === nothing && @minimal_error "Failed to load configuration from: $config"
 
         # try and merge user config above with default config
-        default_config = load_config(joinpath(@__DIR__, "..", "..", "src", "config", "default.toml"))
+        default_config = read_config(joinpath(@__DIR__, "..", "..", "src", "config", "default.toml"))
         default_config === nothing && @minimal_error "Failed to load default configuration"
         cfg = _merge_configs(default_config, cfg)
 
@@ -103,7 +103,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
 
                 ################### LOAD RAW DATA FILE ###################
                 @info section("Raw Data")
-                dat = load_data(data_file)
+                dat = read_data(data_file)
 
                 # Mark epoch windows
                 # This is useful for x (time/sample) subsetting within the preprocessing pipeline

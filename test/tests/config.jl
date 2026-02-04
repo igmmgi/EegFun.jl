@@ -109,11 +109,11 @@ using Dates
     # CONFIG LOADING AND MERGING
     # =============================================================================
 
-    @testset "load_config Tests" begin
+    @testset "read_config Tests" begin
 
         @testset "Valid Configuration Loading" begin
             # Test 1: Load default config only - should work without errors
-            default_config = EegFun.load_config(joinpath(dirname(@__FILE__), "..", "..", "src", "config", "default.toml"))
+            default_config = EegFun.read_config(joinpath(dirname(@__FILE__), "..", "..", "src", "config", "default.toml"))
             @test default_config isa Dict
             @test haskey(default_config, "preprocess")
             @test haskey(default_config["preprocess"], "filter")
@@ -130,7 +130,7 @@ using Dates
                 println(io, "epoch_end = 3.0")
             end
 
-            config = EegFun.load_config(user_config_path)
+            config = EegFun.read_config(user_config_path)
             @test config isa Dict
             @test config["preprocess"]["filter"]["highpass"]["freq"] == 1.0
             @test config["preprocess"]["filter"]["highpass"]["apply"] == true
@@ -159,7 +159,7 @@ using Dates
                 println(io, "apply = true")  # Add the "on" key that the test expects
             end
 
-            config = EegFun.load_config(nested_config_path)
+            config = EegFun.read_config(nested_config_path)
             @test config["files"]["output"]["directory"] == "/custom/output"
             @test config["files"]["output"]["save_erp_data_original"] == false
             @test config["files"]["output"]["save_ica_data"] == true  # default preserved
@@ -169,7 +169,7 @@ using Dates
 
         @testset "Error Handling" begin
             # Test 6: Non-existent file - expect nothing to be returned
-            result = EegFun.load_config("nonexistent_file.toml")
+            result = EegFun.read_config("nonexistent_file.toml")
             @test result === nothing
 
             # Test 7: Invalid TOML syntax - expect nothing to be returned
@@ -178,7 +178,7 @@ using Dates
                 println(io, "[section")  # Missing closing bracket
                 println(io, "key = value")
             end
-            result = EegFun.load_config(invalid_toml_path)
+            result = EegFun.read_config(invalid_toml_path)
             @test result === nothing
 
             # Test 8: Invalid parameter values - expect nothing to be returned
@@ -187,7 +187,7 @@ using Dates
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "freq = -5.0")  # Below minimum
             end
-            result = EegFun.load_config(invalid_values_path)
+            result = EegFun.read_config(invalid_values_path)
             @test result === nothing
 
             # Test 9: Invalid parameter type - expect nothing to be returned
@@ -196,7 +196,7 @@ using Dates
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "freq = \"not_a_number\"")  # Wrong type
             end
-            result = EegFun.load_config(invalid_type_path)
+            result = EegFun.read_config(invalid_type_path)
             @test result === nothing
 
             # Test 10: Invalid allowed values - expect nothing to be returned
@@ -205,7 +205,7 @@ using Dates
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "type = \"invalid_type\"")  # Not in allowed values
             end
-            result = EegFun.load_config(invalid_allowed_path)
+            result = EegFun.read_config(invalid_allowed_path)
             @test result === nothing
         end
 
@@ -218,7 +218,7 @@ using Dates
                 println(io, "order = 1")      # Minimum allowed
             end
 
-            config = EegFun.load_config(min_boundary_path)
+            config = EegFun.read_config(min_boundary_path)
             @test config["preprocess"]["filter"]["highpass"]["freq"] == 0.01
             @test config["preprocess"]["filter"]["highpass"]["order"] == 1
 
@@ -230,7 +230,7 @@ using Dates
                 println(io, "order = 4")      # Maximum allowed
             end
 
-            config = EegFun.load_config(max_boundary_path)
+            config = EegFun.read_config(max_boundary_path)
             @test config["preprocess"]["filter"]["highpass"]["freq"] == 20.0
             @test config["preprocess"]["filter"]["highpass"]["order"] == 4
         end
@@ -244,7 +244,7 @@ using Dates
                 println(io, "order = 2.0")    # Float should convert to Int
             end
 
-            config = EegFun.load_config(conversion_path)
+            config = EegFun.read_config(conversion_path)
             @test config["preprocess"]["filter"]["highpass"]["freq"] == 1.0  # Converted to Float
             @test config["preprocess"]["filter"]["highpass"]["order"] == 2     # Converted to Int
         end
@@ -257,7 +257,7 @@ using Dates
                 println(io, "# Empty config file")
             end
 
-            config = EegFun.load_config(complete_config_path)
+            config = EegFun.read_config(complete_config_path)
 
             # Verify main sections exist
             @test haskey(config, "files")
@@ -289,7 +289,7 @@ using Dates
                 println(io, "[preprocess.filter.highpass]")
             end
 
-            config = EegFun.load_config(empty_sections_path)
+            config = EegFun.read_config(empty_sections_path)
             @test haskey(config, "files")
             @test haskey(config["files"], "input")
 
@@ -300,7 +300,7 @@ using Dates
                 println(io, "directory = \"/path/with spaces/and/special@chars\"")
             end
 
-            config = EegFun.load_config(special_chars_path)
+            config = EegFun.read_config(special_chars_path)
             @test config["files"]["input"]["directory"] == "/path/with spaces/and/special@chars"
         end
 
@@ -312,7 +312,7 @@ using Dates
                 println(io, "raw_data_files = [\"file1.bdf\", \"file2.bdf\"]")
             end
 
-            config = EegFun.load_config(array_config_path)
+            config = EegFun.read_config(array_config_path)
             @test config["files"]["input"]["raw_data_files"] == ["file1.bdf", "file2.bdf"]
 
             # Test boolean values
@@ -324,7 +324,7 @@ using Dates
                 println(io, "save_ica_data = false")
             end
 
-            config = EegFun.load_config(bool_config_path)
+            config = EegFun.read_config(bool_config_path)
             @test config["files"]["output"]["save_continuous_data_original"] == true
             @test config["files"]["output"]["save_continuous_data_cleaned"] == true
             @test config["files"]["output"]["save_ica_data"] == false
@@ -336,7 +336,7 @@ using Dates
                 println(io, "directory = \"/path/with spaces/and/special@chars\"")
             end
 
-            config = EegFun.load_config(special_config_path)
+            config = EegFun.read_config(special_config_path)
             @test config["files"]["input"]["directory"] == "/path/with spaces/and/special@chars"
         end
 
@@ -347,7 +347,7 @@ using Dates
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "freq = 0.005")  # Below minimum
             end
-            result = EegFun.load_config(range_config_path)
+            result = EegFun.read_config(range_config_path)
             @test result === nothing
 
             # Test allowed values validation
@@ -356,7 +356,7 @@ using Dates
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "method = \"invalid\"")  # Not in allowed values
             end
-            result = EegFun.load_config(allowed_config_path)
+            result = EegFun.read_config(allowed_config_path)
             @test result === nothing
 
             # Test type conversion validation
@@ -365,7 +365,7 @@ using Dates
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "order = \"not_a_number\"")  # Invalid type
             end
-            result = EegFun.load_config(type_config_path)
+            result = EegFun.read_config(type_config_path)
             @test result === nothing
         end
 
@@ -378,7 +378,7 @@ using Dates
                 println(io, "method = \"fir\"")
                 println(io, "order = 2")
             end
-            config = EegFun.load_config(valid_config_path)
+            config = EegFun.read_config(valid_config_path)
             @test config !== nothing
             @test config["preprocess"]["filter"]["highpass"]["freq"] == 0.5
 
@@ -388,7 +388,7 @@ using Dates
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "freq = -1.0")  # Below minimum
             end
-            result = EegFun.load_config(invalid_value_path)
+            result = EegFun.read_config(invalid_value_path)
             @test result === nothing
 
             # Test invalid parameter type
@@ -397,7 +397,7 @@ using Dates
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "order = \"not_a_number\"")
             end
-            result = EegFun.load_config(invalid_type_path)
+            result = EegFun.read_config(invalid_type_path)
             @test result === nothing
         end
 
@@ -408,7 +408,7 @@ using Dates
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "freq = 0.5")
             end
-            config = EegFun.load_config(custom_config_path)
+            config = EegFun.read_config(custom_config_path)
             @test config !== nothing
             @test config["preprocess"]["filter"]["highpass"]["freq"] == 0.5
             @test config["preprocess"]["filter"]["highpass"]["method"] == "iir"  # Default value
@@ -421,7 +421,7 @@ using Dates
                 println(io, "directory = \"/custom/path\"")
                 println(io, "raw_data_files = [\"file1.bdf\", \"file2.bdf\"]")
             end
-            config = EegFun.load_config(nested_config_path)
+            config = EegFun.read_config(nested_config_path)
             @test config !== nothing
             @test config["files"]["input"]["directory"] == "/custom/path"
             @test config["files"]["input"]["raw_data_files"] == ["file1.bdf", "file2.bdf"]
@@ -434,7 +434,7 @@ using Dates
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "freq = 0.005")  # Below minimum
             end
-            result = EegFun.load_config(range_config_path)
+            result = EegFun.read_config(range_config_path)
             @test result === nothing
 
             # Test allowed values validation
@@ -443,7 +443,7 @@ using Dates
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "method = \"invalid\"")  # Not in allowed values
             end
-            result = EegFun.load_config(allowed_config_path)
+            result = EegFun.read_config(allowed_config_path)
             @test result === nothing
 
             # Test type conversion validation
@@ -452,7 +452,7 @@ using Dates
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "order = \"not_a_number\"")  # Invalid type
             end
-            result = EegFun.load_config(type_config_path)
+            result = EegFun.read_config(type_config_path)
             @test result === nothing
 
             # Test optional parameters
@@ -461,7 +461,7 @@ using Dates
                 println(io, "[files.input]")
                 println(io, "epoch_condition_file = \"\"")  # Empty string for optional parameter
             end
-            config = EegFun.load_config(optional_config_path)
+            config = EegFun.read_config(optional_config_path)
             @test config !== nothing
             @test config["files"]["input"]["epoch_condition_file"] == ""
         end
