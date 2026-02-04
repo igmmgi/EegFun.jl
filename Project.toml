@@ -78,7 +78,7 @@ PrettyTables = "3.0.0"
 ProfileView = "1.10.2"
 ProgressMeter = "1.11.0"
 ScatteredInterpolation = "0.3.0"
-Statistics = "1.11.1"
+Statistics = "1"
 StatsBase = "0.34.6"
 julia = "1.10"
 
