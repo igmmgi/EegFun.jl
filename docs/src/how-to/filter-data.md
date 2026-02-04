@@ -66,5 +66,4 @@ Remove line noise (50 or 60 Hz):
 
 ## See Also
 
-- [Filtering concepts](../explanations/filtering.md) - Understand filter theory
-- [Basic preprocessing tutorial](../tutorials/basic-preprocessing.md) - Complete workflow
+- [API Reference](../reference/index.md) - Complete function documentation

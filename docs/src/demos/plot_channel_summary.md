@@ -8,6 +8,7 @@ Demonstrates Plot summary statistics for all channels.
 
 ## Source Code
 
+::: details Show Code
 ```julia
 using EegFun
 
@@ -50,6 +51,7 @@ cs = EegFun.channel_summary(epochs[1])a
 EegFun.plot_channel_summary(cs, :range, average_over = :epoch)
 EegFun.plot_channel_summary(cs, [:min, :max, :std, :range, :var, :zvar], average_over = :epoch)
 ```
+:::
 
 ## See Also
 

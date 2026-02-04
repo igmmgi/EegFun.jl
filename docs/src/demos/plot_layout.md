@@ -8,13 +8,14 @@ Demonstrates Displays electrode layout configurations.
 
 ## Source Code
 
+::: details Show Code
 ```julia
 using EegFun
 
-layout = EegFun.read_layout("./files/layouts/biosemi/biosemi72.csv");
-EegFun.polar_to_cartesian_xy!(layout);
-
+layout = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
+EegFun.polar_to_cartesian_xy!(layout, preserve_radial_distance = true);
 EegFun.plot_layout_2d(layout)
+
 EegFun.plot_layout_2d(layout; head_color = :blue)
 EegFun.plot_layout_2d(layout; head_linewidth = 5)
 EegFun.plot_layout_2d(layout; head_radius = 1.8)
@@ -31,7 +32,7 @@ EegFun.plot_layout_2d(layout; label_xoffset = 0.1)
 EegFun.plot_layout_2d(layout; label_yoffset = 0.1)
 EegFun.plot_layout_2d(layout; label_zoffset = 2)
 
-fig, ax = EegFun.plot_layout_2d(layout)
+(; fig, ax) = EegFun.plot_layout_2d(layout)
 EegFun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], roi_border_size = 0.05)
 EegFun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], roi_border_size = 0.1)
 EegFun.add_topo_rois!(
@@ -71,6 +72,7 @@ EegFun.print_layout_neighbours(layout.neighbours, "electrode_neighbours_2.toml")
 # NB. for vector graphics, use CairoMakie
 # save("topo_roi.png", fig)
 ```
+:::
 
 ## See Also
 

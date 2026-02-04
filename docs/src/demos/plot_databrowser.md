@@ -8,6 +8,7 @@ Demonstrates Interactive data browser for continuous, epoch, and ICA data.
 
 ## Source Code
 
+::: details Show Code
 ```julia
 using EegFun
 using JLD2
@@ -30,7 +31,7 @@ EegFun.highpass_filter!(dat, 1)
 EegFun.plot_databrowser(dat);
 
 # return some analysis settings
-fig, ax, analysis_settings = EegFun.plot_databrowser(dat)
+(; fig, ax, analysis_settings) = EegFun.plot_databrowser(dat)
 dat_new = EegFun.apply_analysis_settings(dat, analysis_settings)
 
 EegFun.plot_databrowser(dat_new)
@@ -68,6 +69,7 @@ EegFun.plot_databrowser("epochs.jld2")
 EegFun.plot_databrowser("dat.jld2", "ica.jld2")
 EegFun.plot_databrowser("epochs.jld2", "ica.jld2")
 ```
+:::
 
 ## See Also
 

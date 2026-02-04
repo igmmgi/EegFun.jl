@@ -265,7 +265,7 @@ function _overlay_measurements!(
     # Check for valid channel data
     channel_mask = hasproperty(measurements_df, channel) .& .!isnan.(measurements_df[!, channel])
 
-    matching_rows = measurements_df[condition_mask.&channel_mask, :]
+    matching_rows = measurements_df[condition_mask .& channel_mask, :]
 
     if isempty(matching_rows)
         @debug "No matching measurements for condition $(dataset.condition), channel $channel"

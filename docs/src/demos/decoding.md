@@ -8,6 +8,7 @@ Demonstrates Multivariate pattern analysis (MVPA) decoding workflow with SVM cla
 
 ## Source Code
 
+::: details Show Code
 ```julia
 using EegFun
 using DataFrames
@@ -124,6 +125,7 @@ EegFun.plot_decoding(grand_avg_decoded, stats_bonf, title = "Real Data: Bonferro
 stats_cluster = EegFun.test_against_chance_cluster(all_decoded, alpha = 0.05)
 EegFun.plot_decoding(grand_avg_decoded, stats_cluster, title = "Real Data: Cluster-based")
 ```
+:::
 
 ## See Also
 

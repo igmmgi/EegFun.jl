@@ -8,6 +8,7 @@ Demonstrates Time-frequency analysis using multitaper method.
 
 ## Source Code
 
+::: details Show Code
 ```julia
 using EegFun
 
@@ -30,7 +31,7 @@ epochs_synthetic = EegFun.signal_to_data(times, signal, :Channel1, sample_rate)
 EegFun.plot_epochs(epochs_synthetic, channel_selection = EegFun.channels([:Channel1]))
 
 spectrum = EegFun.freq_spectrum(epochs_synthetic, max_freq = 80.0)
-EegFun.plot_freq_spectrum(spectrum, channel_selection = EegFun.channels([:Channel1]))
+EegFun.plot_frequency_spectrum(spectrum, channel_selection = EegFun.channels([:Channel1]))
 
 # tf_stft_fixed
 tf_data = EegFun.tf_multitaper(epochs_synthetic, frequencies = 1:1:40, cycles = 5)
@@ -49,7 +50,7 @@ EegFun.plot_time_frequency(tf_data, ylogscale = true)
 @info EegFun.section("TEST 2: Cohen Data Chapter 13")
 #######################################################################
 # This is some data that was presented in Cohen: Analyzin Neural Time Series Data
-data_cohen = EegFun.load_data("./data/files/tf_test_epochs.jld2");
+data_cohen = EegFun.read_data("./data/files/tf_test_epochs.jld2");
 
 # Figure 13.11 A)
 tf_data = EegFun.tf_multitaper(data_cohen, frequencies = logrange(2, 80, length = 30), cycles = 5, time_steps = 0.05, filter_edges = true)
@@ -62,6 +63,7 @@ EegFun.plot_time_frequency(
     colormap = :jet,
 )
 ```
+:::
 
 ## See Also
 

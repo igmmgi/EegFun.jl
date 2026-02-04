@@ -2,98 +2,120 @@
 
 Understanding EegFun.jl's core data structures.
 
-## Overview
+## Type Hierarchy
 
-EegFun.jl uses several key types to organize EEG data:
-
-- `EegDataFrame` - Continuous EEG data
-- `EpochData` - Time-locked trial data
-- `ErpData` - Averaged event-related potentials
-- `Layout` - Electrode spatial information
-
-## EegDataFrame
-
-The primary structure for continuous EEG data:
-
-```julia
-struct EegDataFrame
-    data::DataFrame           # Time × channels matrix with metadata
-    layout::Layout           # Electrode positions
-    sampling_rate::Float64   # Sampling frequency in Hz
-    # ... other fields
-end
+```
+EegFunData (abstract)
+├── EegData (abstract) - All EEG data types
+│   ├── SingleDataFrameEeg (abstract) - Data in a single DataFrame
+│   │   ├── ContinuousData - Raw continuous recordings
+│   │   ├── ErpData - Averaged event-related potentials
+│   │   ├── TimeFreqData - Time-frequency decomposition
+│   │   └── SpectrumData - Power spectrum
+│   └── MultiDataFrameEeg (abstract) - Data across multiple DataFrames
+│       ├── EpochData - Trial-segmented data
+│       └── TimeFreqEpochData - TF with individual trials
+└── StatsResult (abstract) - Statistical analysis results
 ```
 
-### Key Features
+## ContinuousData
 
-- **DataFrame backbone**: Time points as rows, channels as columns
-- **Metadata columns**: `:time`, `:sample`, trigger information
-- **Artifact tracking**: Boolean columns for quality control
+Raw, unsegmented EEG recordings.
 
-> **TODO**: Add detailed field descriptions
+| Field | Type | Description |
+|-------|------|-------------|
+| `file` | `String` | Source filename |
+| `data` | `DataFrame` | Continuous data (time × channels) |
+| `layout` | `Layout` | Electrode positions and neighbors |
+| `sample_rate` | `Int64` | Sampling frequency in Hz |
+| `analysis_info` | `AnalysisInfo` | Preprocessing metadata |
 
-## EpochData vs ErpData
+## EpochData
 
-### EpochData
+Trial-segmented data for event-related analysis.
 
-Individual trials extracted from continuous data:
+| Field | Type | Description |
+|-------|------|-------------|
+| `file` | `String` | Source filename |
+| `condition` | `Int64` | Condition number |
+| `condition_name` | `String` | Human-readable condition name |
+| `data` | `Vector{DataFrame}` | One DataFrame per epoch |
+| `layout` | `Layout` | Electrode positions |
+| `sample_rate` | `Int64` | Sampling frequency in Hz |
+| `analysis_info` | `AnalysisInfo` | Preprocessing metadata |
 
-```julia
-# TODO: Add EpochData structure definition
-```
+## ErpData
 
-**Use when**: You need trial-level data for statistical analysis or quality control
+Averaged event-related potentials.
 
-### ErpData
+| Field | Type | Description |
+|-------|------|-------------|
+| `file` | `String` | Source filename |
+| `condition` | `Int64` | Condition number |
+| `condition_name` | `String` | Human-readable condition name |
+| `data` | `DataFrame` | Averaged ERP (time × channels) |
+| `layout` | `Layout` | Electrode positions |
+| `sample_rate` | `Int64` | Sampling frequency in Hz |
+| `analysis_info` | `AnalysisInfo` | Preprocessing metadata |
+| `n_epochs` | `Int64` | Number of epochs averaged |
 
-Averaged responses across trials:
+## TimeFreqData
 
-```julia
-# TODO: Add ErpData structure definition
-```
+Time-frequency decomposition results.
 
-**Use when**: Computing grand averages or group-level ERPs
+| Field | Type | Description |
+|-------|------|-------------|
+| `file` | `String` | Source filename |
+| `condition` | `Int64` | Condition number |
+| `condition_name` | `String` | Human-readable condition name |
+| `data_power` | `DataFrame` | Power values (time × freq × channels) |
+| `data_phase` | `DataFrame` | Phase values in radians |
+| `layout` | `Layout` | Electrode positions |
+| `sample_rate` | `Int64` | Original sampling frequency |
+| `method` | `Symbol` | Analysis method (`:wavelet`, `:multitaper`, etc.) |
+| `baseline` | `BaselineInfo` | Baseline correction info (if applied) |
+| `analysis_info` | `AnalysisInfo` | Preprocessing metadata |
+
+## SpectrumData
+
+Power spectral density (frequency domain only).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `file` | `String` | Source filename |
+| `condition` | `Int64` | Condition number |
+| `condition_name` | `String` | Human-readable condition name |
+| `data` | `DataFrame` | PSD values (freq × channels) |
+| `layout` | `Layout` | Electrode positions |
+| `sample_rate` | `Int64` | Original sampling frequency |
+| `method` | `Symbol` | Analysis method (`:welch`, etc.) |
+| `analysis_info` | `AnalysisInfo` | Preprocessing metadata |
 
 ## Layout
 
-Electrode spatial information:
+Electrode spatial information and neighbor relationships.
 
-```julia
-struct Layout
-    labels::Vector{String}    # Electrode names
-    x::Vector{Float64}        # X coordinates
-    y::Vector{Float64}        # Y coordinates
-    # ... other fields
-end
-```
-
-> **TODO**: Add coordinate system explanation
-
-## Metadata Handling
-
-EegFun.jl uses a structured approach to metadata:
-
-### Time-Only Preservation
-
-> **TODO**: Explain the "time-only metadata preservation" rule used in averaging
-
-### Result Traceability
-
-> **TODO**: Explain the `:file`-first schema for analysis results
+| Field | Type | Description |
+|-------|------|-------------|
+| `data` | `DataFrame` | Positions with columns: `label`, `x`, `y`, `z` |
+| `neighbours` | `OrderedDict{Symbol,Neighbours}` | Neighbor info per electrode |
+| `criterion` | `Float64` | Distance criterion for neighbors (mm) |
 
 ## Data Flow
 
 ```
-Raw BDF File
-    ↓ read_raw_data()
-EegDataFrame (continuous)
-    ↓ extract_epochs()
-EpochData (trials)
-    ↓ average_epochs()
-ErpData (averaged)
+Raw BDF/BrainVision File
+    ↓ read_bdf() / read_brainvision()
+ContinuousData
+    ↓ epochs()
+EpochData
+    ↓ average()
+ErpData
+    ↓ tf_morlet() / tf_multitaper()
+TimeFreqData
 ```
 
 ## See Also
 
-- [API design patterns](../reference/patterns.md)
+- [Types Reference](../reference/types.md)
 - [Getting started tutorial](../tutorials/getting-started.md)

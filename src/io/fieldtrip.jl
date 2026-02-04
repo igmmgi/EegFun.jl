@@ -92,7 +92,7 @@ Returns updated channel labels and data matrix.
 function _remove_status_channel(ch_labels::Vector, data_matrix::AbstractMatrix)
     if !isempty(ch_labels) && lowercase(string(ch_labels[end])) == "status"
         @info "Detected BDF Status channel, removing it"
-        return ch_labels[1:end-1], data_matrix[1:end-1, :]
+        return ch_labels[1:(end-1)], data_matrix[1:(end-1), :]
     end
     return ch_labels, data_matrix
 end

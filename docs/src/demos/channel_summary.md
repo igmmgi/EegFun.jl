@@ -8,6 +8,7 @@ Demonstrates Generate summary statistics for channels.
 
 ## Source Code
 
+::: details Show Code
 ```julia
 using EegFun
 using GLMakie
@@ -30,6 +31,7 @@ EegFun.log_pretty_table(summary; title = "Initial Channel Summary")
 EegFun.is_extreme_value!(dat, 100);
 summary = EegFun.channel_summary(dat, sample_selection = EegFun.samples_not(:is_extreme_value_100))
 ```
+:::
 
 ## See Also
 

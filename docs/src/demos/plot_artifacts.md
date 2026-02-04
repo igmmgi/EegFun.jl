@@ -8,6 +8,7 @@ Demonstrates Visualization of detected artifacts in epoched data.
 
 ## Source Code
 
+::: details Show Code
 ```julia
 using EegFun
 using GLMakie
@@ -33,6 +34,7 @@ artifacts = EegFun.detect_bad_epochs_automatic(epochs)
 # Plot artifacts
 EegFun.plot_artifact_detection(epochs[1], artifacts[1])
 ```
+:::
 
 ## See Also
 

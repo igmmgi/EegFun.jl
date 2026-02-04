@@ -8,12 +8,13 @@ Demonstrates Plots event-related potentials with customizable options.
 
 ## Source Code
 
+::: details Show Code
 ```julia
 using EegFun
 using JLD2
 
 # read raw data
-dat = EegFun.read_raw_data("./resources/data/example1.bdf");
+dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf");
 
 # read and preprate layout file
 layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
@@ -34,7 +35,7 @@ epoch_cfg = [
 epochs = EegFun.extract_epochs(dat, epoch_cfg, (-2, 4))
 erps = EegFun.average_epochs(epochs)
 
-EegFun.plot_erp(erps, layout = :single)
+out = EegFun.plot_erp(erps, layout = :single)
 EegFun.plot_erp(erps, layout = :grid)
 EegFun.plot_erp(erps[1], layout = :topo)
 
@@ -115,6 +116,7 @@ fig
 
 GLMakie.closeall()
 ```
+:::
 
 ## See Also
 

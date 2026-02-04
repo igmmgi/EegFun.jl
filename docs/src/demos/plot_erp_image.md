@@ -8,6 +8,7 @@ Demonstrates Creates ERP image plots showing trial-by-trial variations.
 
 ## Source Code
 
+::: details Show Code
 ```julia
 using EegFun
 using GLMakie
@@ -41,7 +42,7 @@ EegFun.plot_erp_image(epochs[1], channel_selection = EegFun.channels([:Fp1]), pl
 
 EegFun.plot_erp_image(epochs[1], layout = :single)
 
-fig, axes = EegFun.plot_erp_image(
+(; fig, axes) = EegFun.plot_erp_image(
     epochs[1],
     # channel_selection = EegFun.channels([:Fp1, :Fp2]),
     # channel_selection = EegFun.channels([:Fp1, :Fp2]),
@@ -55,6 +56,7 @@ fig, axes = EegFun.plot_erp_image(
 EegFun.plot_erp_image(epochs[1], layout = :topo)
 EegFun.plot_erp_image(epochs[1], layout = :grid)
 ```
+:::
 
 ## See Also
 

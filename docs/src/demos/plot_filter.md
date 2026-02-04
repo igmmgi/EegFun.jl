@@ -8,6 +8,7 @@ Demonstrates Visualizes filter frequency and phase responses.
 
 ## Source Code
 
+::: details Show Code
 ```julia
 using EegFun
 
@@ -45,6 +46,7 @@ EegFun.plot_filter_response(filter_info, title = "High-pass Filter with Plot")
 
 
 ```
+:::
 
 ## See Also
 

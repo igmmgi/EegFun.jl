@@ -8,6 +8,7 @@ Demonstrates Visualizes channel joint probability for quality assessment.
 
 ## Source Code
 
+::: details Show Code
 ```julia
 using EegFun
 
@@ -29,6 +30,7 @@ EegFun.highpass_filter!(dat, 1)
 jp = EegFun.channel_joint_probability(dat)
 EegFun.plot_joint_probability(jp)
 ```
+:::
 
 ## See Also
 

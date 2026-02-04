@@ -8,6 +8,7 @@ Demonstrates Visualize frequency spectra for channels.
 
 ## Source Code
 
+::: details Show Code
 ```julia
 using EegFun
 
@@ -26,6 +27,7 @@ EegFun.plot_channel_spectrum(dat)
 EegFun.plot_channel_spectrum(dat, channel_selection = EegFun.channels([:Fp1]), title = "Fp1 Power Spectrum")
 EegFun.plot_channel_spectrum(dat, channel_selection = EegFun.channels([:Fp1, :Fp2, :F3, :F4]), title = "Frontal Channels Power Spectrum")
 ```
+:::
 
 ## See Also
 
