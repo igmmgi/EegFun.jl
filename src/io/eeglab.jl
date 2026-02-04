@@ -3,145 +3,124 @@ EEGLAB .set file import functionality.
 
 Provides functions to read EEGLAB .set files (MATLAB format) and convert them
 to EegFun datatypes.
+
+TODO: This can be considered work in progress. I am not familiar with eeglab *.set/*.fdt files, so 
+the code here is a bit of a guesswork. Please report any issues or missing features.
+But it does seem to work with the two example datasets I found in eeglab/sample_data.
 """
 
 
 """
-    load_eeglab(filepath::String)  → EpochData
+    load_eeglab(filepath::String; preserve_radial_distance::Bool = true)
 
-Load EEGLAB .set file and convert to EegFun EpochData.
-
-Currently supports epoched data only. Returns an `EpochData` object containing
-all epochs from the .set file.
+Load EEGLAB .set file and return EEG data. If ICA decomposition is present,
+also returns ICA data as a tuple (eeg_data, ica_data).
 
 # Arguments
 - `filepath::String`: Path to .set file
+- `preserve_radial_distance::Bool`: If true, preserves anatomical distances for electrodes 
+  with incidence > 90° (default: true)
 
 # Returns
-- `EpochData`: Converted epoched data
+- If ICA present: `(eeg_data, ica_data::InfoIca)`
+- If no ICA: `eeg_data` (EpochData, ContinuousData, or ErpData)
 
 # Examples
 ```julia
-using EegFun
+# Without ICA
+eeg = load_eeglab("data.set")
 
-# Load epochs from EEGLAB
-epochs = load_eeglab("participant1.set")
-
-# Use with EegFun functions
-erp = average_epochs(epochs)
-plot_erp(erp)
+# With ICA (automatically detected)
+eeg, ica = load_eeglab("data_with_ica.set")
 ```
-
-# Notes
-- Requires MAT.jl for reading MATLAB files
-- Channel locations are extracted if available
-- Currently does not import: event structures, rejection info
 """
-function load_eeglab(filepath::String)
+function load_eeglab(filepath::String; preserve_radial_distance::Bool = true)
 
     @info "Loading EEGLAB .set file: $filepath"
 
-    # Read .set file using MAT.jl
-    eeg = matread(filepath)
+    mat_data = matread(filepath)
 
-    # Detect data type
+    # Handle nested EEGLAB format (data inside ["EEG"]) or direct format
+    eeg = haskey(mat_data, "EEG") ? mat_data["EEG"] : mat_data
+
+    # Detect data type and load EEG data
     n_trials = Int(eeg["trials"])
+    xmin = get(eeg, "xmin", 0.0)
 
-    if n_trials == 1
-        error("Continuous data not yet supported. Only epoched data can be imported.")
+    eeg_data = if n_trials == 1
+        # Single trial: could be continuous or averaged ERP
+        # Use xmin heuristic: xmin < 0 suggests ERP (has pre-stimulus baseline)
+        if xmin < 0
+            @info "Detected averaged ERP data (xmin=$xmin < 0)"
+            _eeglab_to_erpdata(eeg, filepath, preserve_radial_distance)
+        else
+            @info "Detected continuous data (xmin=$xmin >= 0)"
+            _eeglab_to_continuousdata(eeg, filepath, preserve_radial_distance)
+        end
+    else
+        # Multiple trials: epoched data
+        _eeglab_to_epochdata(eeg, filepath, preserve_radial_distance)
     end
 
-    # Convert to EpochData
-    return _eeglab_to_epochdata(eeg, filepath)
+    # Check for ICA decomposition - keys always exist but matrices may be empty (0,0)
+    has_ica = haskey(eeg, "icaweights") && !isempty(eeg["icaweights"])
+
+    if has_ica
+        @info "ICA decomposition detected, loading ICA data"
+        ch_names = _extract_channel_names(eeg["chanlocs"])
+        layout = _parse_channel_locations(eeg["chanlocs"], ch_names)
+        polar_to_cartesian_xy!(layout, preserve_radial_distance = preserve_radial_distance)
+        ica_data = _extract_ica_info(eeg, filepath, ch_names, layout)
+        return eeg_data, ica_data
+    else
+        return eeg_data
+    end
 end
 
 
 """
-    load_eeglab_ica(filepath::String) → Union{InfoIca, Nothing}
-
-Extract ICA decomposition from EEGLAB .set file.
-
-Returns an `InfoIca` object if ICA data is present, or `nothing` if no ICA decomposition
-is found in the file.
-
-# Arguments
-- `filepath::String`: Path to .set file
-
-# Returns
-- `Union{InfoIca, Nothing}`: ICA information or nothing if not available
-
-# Examples
-```julia
-using EegFun
-
-# Load ICA from EEGLAB
-ica_info = load_eeglab_ica("participant1.set")
-
-if !isnothing(ica_info)
-    # Use ICA info
-    println("Found ", length(ica_info.ica_label), " components")
-end
-```
-
-# Notes
-- Requires ICA to have been computed in EEGLAB
-- Checks for presence of icaweights, icasphere, and icawinv
-- Variance set to placeholder (requires activations for proper computation)
+Helper to extract common components used by all EEGLAB converters.
+Returns: (n_channels, n_timepoints, sample_rate, ch_names, data, times, layout)
 """
-function load_eeglab_ica(filepath::String)
-    @info "Loading EEGLAB ICA from: $filepath"
+function _load_common_eeglab_components(eeg::Dict, filepath::String, preserve_radial_distance::Bool)
+    n_channels = Int(eeg["nbchan"])
+    n_timepoints = Int(eeg["pnts"])
+    sample_rate = Int(eeg["srate"])
 
-    # Read .set file
-    eeg = matread(filepath)
+    @info "Data: $n_channels channels × $n_timepoints timepoints" *
+          (haskey(eeg, "trials") && eeg["trials"] > 1 ? " × $(Int(eeg["trials"])) trials" : "")
+    @info "Sample rate: $sample_rate Hz"
 
-    # Check if ICA data exists
-    if !haskey(eeg, "icaweights") || !haskey(eeg, "icasphere") || !haskey(eeg, "icawinv")
-        @warn "No ICA decomposition found in $filepath"
-        return nothing
-    end
-
-    # Extract channel names for layout
     ch_names = _extract_channel_names(eeg["chanlocs"])
-    layout = _parse_channel_locations(eeg["chanlocs"], ch_names)
+    data = _load_eeglab_data(eeg, filepath)
 
-    # Extract ICA info
-    return _extract_ica_info(eeg, filepath, ch_names, layout)
+    xmin = get(eeg, "xmin", 0.0)
+    times = if haskey(eeg, "times")
+        vec(eeg["times"]) ./ 1000.0
+    else
+        dt = 1.0 / sample_rate
+        xmin .+ (0:(n_timepoints-1)) .* dt
+    end
+
+    layout = _parse_channel_locations(eeg["chanlocs"], ch_names)
+    polar_to_cartesian_xy!(layout, preserve_radial_distance = preserve_radial_distance)
+
+    return n_timepoints, sample_rate, ch_names, data, times, layout
 end
 
 
 """
-    _eeglab_to_epochdata(eeg::Dict, filepath::String) → EpochData
+    _eeglab_to_epochdata(eeg::Dict, filepath::String, preserve_radial_distance::Bool) → EpochData
 
 Convert EEGLAB structure to EegFun EpochData.
 
 Internal function called by `load_eeglab`.
 """
-function _eeglab_to_epochdata(eeg::Dict, filepath::String)
+function _eeglab_to_epochdata(eeg::Dict, filepath::String, preserve_radial_distance::Bool)
+    # Load common components
+    n_timepoints, sample_rate, ch_names, data_array, times, layout = _load_common_eeglab_components(eeg, filepath, preserve_radial_distance)
 
-    # Extract basic dimensions
-    n_channels = Int(eeg["nbchan"])
-    n_timepoints = Int(eeg["pnts"])
     n_trials = Int(eeg["trials"])
-    sample_rate = Int(eeg["srate"])
-
-    @info "Data: $n_channels channels × $n_timepoints timepoints × $n_trials trials"
-    @info "Sample rate: $sample_rate Hz"
-
-    # Extract channel names
-    ch_names = _extract_channel_names(eeg["chanlocs"])
-
-    # Extract data array [channels × timepoints × trials]
-    data_array = eeg["data"]
-
-    # Create time vector (convert from ms to seconds)
-    xmin = get(eeg, "xmin", 0)
-    times = if haskey(eeg, "times")
-        vec(eeg["times"]) ./ 1000.0  # ms to s
-    else
-        # Calculate times from xmin and sample rate
-        dt = 1.0 / sample_rate
-        xmin .+ (0:(n_timepoints-1)) .* dt
-    end
 
     # Extract triggers from epochs (returns both integer codes and string info)
     trigger_codes, trigger_info = _extract_triggers(eeg["epoch"], n_trials)
@@ -176,9 +155,6 @@ function _eeglab_to_epochdata(eeg::Dict, filepath::String)
         epoch_dataframes[trial_idx] = df
     end
 
-    # Parse layout (channel locations)
-    layout = _parse_channel_locations(eeg["chanlocs"], ch_names)
-
     # Extract condition name if available
     condition_name = get(eeg, "setname", basename(filepath))
 
@@ -202,8 +178,161 @@ function _eeglab_to_epochdata(eeg::Dict, filepath::String)
 end
 
 
+function _eeglab_to_continuousdata(eeg::Dict, filepath::String, preserve_radial_distance::Bool)
+    # Load common components
+    n_timepoints, sample_rate, ch_names, data_array, times, layout = _load_common_eeglab_components(eeg, filepath, preserve_radial_distance)
+
+    # Transpose to [timepoints × channels]
+    data_matrix = data_array'
+
+    # Extract triggers/events if present
+    trigger_vec = zeros(Int, n_timepoints)
+    trigger_info_vec = fill("", n_timepoints)
+
+    if haskey(eeg, "event") && !isempty(eeg["event"])
+        events = eeg["event"]
+
+        # EEGLAB stores events as struct-of-arrays: .names and .values
+        type_idx = findfirst(==("type"), events.names)
+        lat_idx = findfirst(==("latency"), events.names)
+        pos_idx = findfirst(==("position"), events.names)
+
+        if lat_idx !== nothing && type_idx !== nothing
+            latencies = events.values[lat_idx]
+            types = events.values[type_idx]
+            positions = pos_idx !== nothing ? events.values[pos_idx] : nothing
+
+            @info "Extracted $(length(latencies)) events"
+
+            for i in eachindex(latencies)
+                latency = Int(round(latencies[i]))
+                (latency < 1 || latency > n_timepoints) && continue
+
+                # Extract trigger code from position field (use 0 for events without position)
+                trigger_code = if positions !== nothing && i <= length(positions)
+                    val = positions[i]
+                    # Position is either a number or an empty array
+                    (val isa Number) ? Int(val) : 0
+                else
+                    0
+                end
+
+                trigger_vec[latency] = trigger_code
+                trigger_info_vec[latency] = string(types[i])
+            end
+        end
+    end
+
+    # Create DataFrame
+    df = DataFrame(data_matrix, ch_names)
+    insertcols!(df, 1, :time => times)
+    insertcols!(df, 2, :triggers => trigger_vec)
+    insertcols!(df, 3, :trigger_info => trigger_info_vec)
+
+    # Parse layout
+    layout = _parse_channel_locations(eeg["chanlocs"], ch_names)
+    polar_to_cartesian_xy!(layout, preserve_radial_distance = preserve_radial_distance)
+
+    # Create AnalysisInfo
+    analysis_info = AnalysisInfo()
+
+    # Create ContinuousData
+    continuous_data = ContinuousData(filepath, df, layout, sample_rate, analysis_info)
+
+    @info "Successfully converted to ContinuousData"
+    return continuous_data
+end
+
+
+function _eeglab_to_erpdata(eeg::Dict, filepath::String, preserve_radial_distance::Bool)
+
+    _, sample_rate, ch_names, data_array, times, layout = _load_common_eeglab_components(eeg, filepath, preserve_radial_distance)
+
+    # Transpose to [timepoints × channels]
+    data_matrix = data_array'
+
+    # Create DataFrame
+    df = DataFrame(data_matrix, ch_names)
+    insertcols!(df, 1, :time => times)
+
+    # Create AnalysisInfo (we don't really know much about the data)
+    analysis_info = AnalysisInfo()
+
+    # Get condition name (is this correct?)
+    condition_name = get(eeg, "setname", basename(filepath))
+
+    # Create ErpData
+    # TODO: We should probably think about the condition number
+    erp_data = ErpData(filepath, 1, condition_name, df, layout, sample_rate, analysis_info)
+
+    @info "Successfully converted to ErpData"
+    return erp_data
+end
+
+
+"""
+    _load_eeglab_data(eeg_dict::Dict, filepath::String) → Array
+
+Load EEG data from EEGLAB structure. Handles both embedded data arrays
+and external .fdt (floating-point data) files.
+
+# Arguments
+- `eeg_dict::Dict`: EEGLAB data dictionary
+- `filepath::String`: Path to the .set file (for resolving .fdt path)
+
+# Returns
+- Data array (channels × timepoints) or (channels × timepoints × trials)
+"""
+function _load_eeglab_data(eeg_dict::Dict, filepath::String)
+    data_field = eeg_dict["data"]
+
+    # Check if data is embedded (array) or external (filename string)
+    if data_field isa AbstractArray
+        # Data is embedded in .set file
+        return data_field
+    elseif data_field isa AbstractString && (endswith(lowercase(data_field), ".fdt") || endswith(lowercase(data_field), ".dat"))
+
+        # Data is in external binary file (.fdt or .dat)
+        fdt_filename = data_field
+
+        # Construct full path to .fdt file (same directory as .set file)
+        set_dir = dirname(filepath)
+        fdt_path = joinpath(set_dir, fdt_filename)
+
+        if !isfile(fdt_path)
+            error("External data file not found: $fdt_path")
+        end
+
+        @info "Loading external data from: $fdt_filename"
+
+        # Read binary .fdt file
+        n_channels = Int(eeg_dict["nbchan"])
+        n_timepoints = Int(eeg_dict["pnts"])
+        n_trials = Int(eeg_dict["trials"])
+
+        # Total expected elements
+        n_elements = n_channels * n_timepoints * n_trials
+
+        # Read binary file as Float32 array
+        data_vec = open(fdt_path, "r") do io
+            read!(io, Vector{Float32}(undef, n_elements))
+        end
+
+        # Reshape to [channels × timepoints × trials] or [channels × timepoints]
+        if n_trials > 1
+            return reshape(data_vec, n_channels, n_timepoints, n_trials)
+        else
+            return reshape(data_vec, n_channels, n_timepoints)
+        end
+    else
+        error("Unexpected data field type: $(typeof(data_field))")
+    end
+end
+
+
 """
     _extract_channel_names(chanlocs) → Vector{Symbol}
+
 
 Extract channel names from EEGLAB chanlocs structure.
 """
@@ -284,99 +413,58 @@ end
 
 Parse EEGLAB channel locations into EegFun Layout.
 
-Converts 3D Cartesian coordinates (X, Y, Z) to spherical (inc, azi) if available,
-otherwise creates a default layout.
+Uses EEGLAB's native polar coordinates (theta, radius) which are what topoplot uses internally.
+Falls back to 3D spherical or Cartesian conversion if polar coordinates are missing.
 """
 function _parse_channel_locations(chanlocs, ch_names::Vector{Symbol})
-    # Try to extract 3D coordinates
-    has_coords = haskey(chanlocs, "X") && haskey(chanlocs, "Y") && haskey(chanlocs, "Z")
 
-    if has_coords && !isempty(chanlocs["X"])
-        X = vec(chanlocs["X"])
-        Y = vec(chanlocs["Y"])
-        Z = vec(chanlocs["Z"])
+    # EEGLAB set files have values for various coordinate systems
+    # Let's try theta/radius first
+    has_polar = haskey(chanlocs, "theta") && haskey(chanlocs, "radius")
+    if has_polar && !isempty(chanlocs["theta"])
 
-        # Check for valid coordinates
-        valid_coords = .!isnan.(X) .& .!isnan.(Y) .& .!isnan.(Z)
+        theta = vec(chanlocs["theta"])
+        radius = vec(chanlocs["radius"])
 
-        if all(valid_coords)
-            # All coordinates valid - convert Cartesian to spherical
-            inc, azi = _cartesian_to_spherical(X, Y, Z)
+        # Check for valid polar coordinates
+        valid_polar = .!isnan.(theta) .& .!isnan.(radius)
+
+        if all(valid_polar) # convert to EegFun spherical coordinates
+            azi = 90.0 .- theta
+            inc = radius .* 180.0
+            azi = mod.(azi, 360.0)
+            @info "Loaded $(length(ch_names)) channels using native polar coordinates (theta, radius)"
             return Layout(DataFrame(label = ch_names, inc = inc, azi = azi), nothing, nothing)
-        else
-            # Some missing - create default layout
-            @warn "Some channels missing 3D coordinates, creating default layout"
-            return Layout(_create_default_layout(ch_names), nothing, nothing)
         end
-    else
-        # No coordinates - create default layout
-        @warn "No 3D coordinates found in .set file, creating default layout"
-        return Layout(_create_default_layout(ch_names), nothing, nothing)
-    end
-end
 
-
-"""
-    _cartesian_to_spherical(X::Vector, Y::Vector, Z::Vector) → (Vector{Float64}, Vector{Float64})
-
-Convert 3D Cartesian coordinates to spherical coordinates (inclination, azimuth).
-
-EEGLAB uses: +X (anterior/front), +Y (left), +Z (superior/top)
-Returns: (inclination, azimuth) in degrees
-
-Inclination: angle from +Z axis (0° = top, 90° = equator)
-Azimuth: angle in XY plane (0° = +X/front, 90° = +Y/left)
-"""
-function _cartesian_to_spherical(X::Vector, Y::Vector, Z::Vector)
-    n = length(X)
-    inc = zeros(Float64, n)
-    azi = zeros(Float64, n)
-
-    for i = 1:n
-        x, y, z = X[i], Y[i], Z[i]
-
-        # Calculate radius (distance from origin)
-        r = sqrt(x^2 + y^2 + z^2)
-
-        if r == 0
-            # Origin point - assign default
-            inc[i] = 0.0
-            azi[i] = 0.0
-        else
-            # Inclination: angle from +Z axis
-            inc[i] = acosd(z / r)
-
-            # Azimuth: angle in XY plane
-            azi_rad = atan(y, x)  # atan(y, x) gives angle from +X axis
-            azi[i] = rad2deg(azi_rad)
-
-            # Rotate by 90 degrees to align EEGLAB with EegFun coordinate system
-            azi[i] += 90.0
-
-            # Ensure azimuth is in [0, 360)
-            if azi[i] < 0
-                azi[i] += 360.0
-            elseif azi[i] >= 360.0
-                azi[i] -= 360.0
-            end
-        end
     end
 
-    return inc, azi
+    # Do we also need this if no theta/radius?
+    has_spherical = haskey(chanlocs, "sph_theta") && haskey(chanlocs, "sph_phi") && haskey(chanlocs, "sph_radius")
+    if has_spherical && !isempty(chanlocs["sph_theta"])
+        sph_theta = vec(chanlocs["sph_theta"])
+        sph_phi = vec(chanlocs["sph_phi"])
+        sph_radius = vec(chanlocs["sph_radius"])
+
+        # Check for valid spherical coordinates (all three components)
+        valid_spherical = .!isnan.(sph_theta) .& .!isnan.(sph_phi) .& .!isnan.(sph_radius) .& (sph_radius .> 0)
+
+        if all(valid_spherical) # Convert to EegFun spherical coordinates
+            inc = 90.0 .- sph_phi
+            azi = 90.0 .+ sph_theta
+            azi = mod.(azi, 360.0)
+            @info "Loaded $(length(ch_names)) channels using 3D spherical coordinates (sph_theta, sph_phi, sph_radius)"
+            return Layout(DataFrame(label = ch_names, inc = inc, azi = azi), nothing, nothing)
+        end
+
+    end
+
+    # TODO?: plotting eeglab x,y,z does not look correct for my test file. 
+    # Actually, it also looks incorrect in eeglab itself.
+
+    # TODO?: would a Coordinate conversion package e.g. CoordionateTransforations.jl be useful here?
+
 end
-
-
-"""
-    _create_default_layout(ch_names::Vector{Symbol}) → DataFrame
-
-Create a default layout when no electrode coordinates are available.
-Places all electrodes at the center.
-"""
-function _create_default_layout(ch_names::Vector{Symbol})
-    n = length(ch_names)
-    return DataFrame(label = ch_names, inc = zeros(Float64, n), azi = zeros(Float64, n))
-end
-
 
 """
     _extract_ica_info(eeg::Dict, filepath::String, ch_names::Vector{Symbol}, layout::Layout) → InfoIca
@@ -402,18 +490,20 @@ function _extract_ica_info(eeg::Dict, filepath::String, ch_names::Vector{Symbol}
     # Create variance vector (placeholder - would need activations to compute properly)
     variance = ones(Float64, n_components)
 
+    # TODO: can we actually get all the same info from *.set files here?
+
     # Create InfoIca object
     return InfoIca(
-        filepath,                                    # filename
-        unmixing,                                    # unmixing
-        mixing,                                      # mixing
-        sphere,                                      # sphere
-        variance,                                    # variance (placeholder)
-        1.0,                                         # scale
-        zeros(Float64, n_components),                # mean
-        ica_label,                                    # ica_label
-        OrderedDict{Int,Matrix{Float64}}(),          # removed_activations (empty)
-        layout,                                      # layout
-        fill(false, n_components),                   # is_sub_gaussian (all super-Gaussian by default)
+        filepath,                           # filename
+        unmixing,                           # unmixing
+        mixing,                             # mixing
+        sphere,                             # sphere
+        variance,                           # variance (placeholder)
+        1.0,                                # scale
+        zeros(Float64, n_components),       # mean
+        ica_label,                          # ica_label
+        OrderedDict{Int,Matrix{Float64}}(), # removed_activations (empty)
+        layout,                             # layout
+        fill(false, n_components),          # is_sub_gaussian (all super-Gaussian by default)
     )
 end

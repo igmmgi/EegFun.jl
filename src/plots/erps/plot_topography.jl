@@ -33,10 +33,20 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
     channel_data = mean.(eachcol(dat[!, layout.data.label]))
     supported_methods =
         [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
+
+    # Interpolation now returns (data, x_bounds, y_bounds)
     if method ∈ supported_methods
-        data = _data_interpolation_topo(channel_data, layout, gridscale; method = method)
+        data, x_bounds, y_bounds = _data_interpolation_topo(channel_data, layout, gridscale; method = method)
     elseif method == :spherical_spline
         data = _data_interpolation_topo_spherical_spline(channel_data, layout, gridscale)
+        # Spherical spline: calculate circular bounds matching electrode extent
+        x_coords = layout.data.x2
+        y_coords = layout.data.y2
+        max_radius = maximum(sqrt.(x_coords .^ 2 .+ y_coords .^ 2))
+        margin = max_radius * 0.05
+        plot_radius = max_radius + margin
+        x_bounds = (-plot_radius, plot_radius)
+        y_bounds = (-plot_radius, plot_radius)
     else
         throw(ArgumentError("Unknown interpolation method: $method. Supported: $supported_methods"))
     end
@@ -51,8 +61,8 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
 
     co = contourf!(
         ax,
-        range(-1.0, 1.0, length = gridscale),
-        range(-1.0, 1.0, length = gridscale),
+        range(x_bounds[1], x_bounds[2], length = gridscale),
+        range(y_bounds[1], y_bounds[2], length = gridscale),
         data,
         levels = range(ylim[1], ylim[2], div(gridscale, 2));
         extendlow = :auto,
@@ -67,6 +77,9 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
     if pop!(plot_kwargs, :colorbar_plot)
         Colorbar(fig[colorbar_position...], co; colorbar_kwargs...)
     end
+
+    # Draw smooth circle to hide jagged interpolation edge
+    _draw_smooth_circle_mask!(ax, x_bounds, y_bounds)
 
     # head shape
     plot_layout_2d!(fig, ax, layout; plot_kwargs...)
@@ -400,6 +413,33 @@ function _circle_mask!(dat::Matrix{<:AbstractFloat}, grid_scale::Int)
     return dat
 end
 
+"""
+    _draw_smooth_circle_mask!(ax::Axis, x_bounds::Tuple, y_bounds::Tuple)
+
+Draw a smooth white circle border to hide jagged interpolation edges at low gridscales.
+This creates a perfect vector circle that masks the pixelated NaN boundary.
+
+# Arguments
+- `ax::Axis`: The axis to draw on
+- `x_bounds::Tuple`: X-axis bounds (min, max)
+- `y_bounds::Tuple`: Y-axis bounds (min, max)
+"""
+function _draw_smooth_circle_mask!(ax::Axis, x_bounds::Tuple, y_bounds::Tuple)
+    # Calculate plot radius from bounds
+    plot_radius = max(abs(x_bounds[1]), abs(x_bounds[2]), abs(y_bounds[1]), abs(y_bounds[2]))
+
+    # Create smooth circle border (200 points for smooth curve)
+    circle_angles = range(0, 2π, length = 200)
+    circle_x = plot_radius .* cos.(circle_angles)
+    circle_y = plot_radius .* sin.(circle_angles)
+
+    # Draw thick white line to hide jagged edge
+    lines!(ax, circle_x, circle_y, color = :white, linewidth = 50)
+
+    return nothing
+end
+
+
 
 
 """
@@ -434,9 +474,20 @@ function _data_interpolation_topo(dat::Vector{<:AbstractFloat}, layout::Layout, 
     end
 
     points = permutedims(Matrix(layout.data[!, [:x2, :y2]]))
-    # Use normalized coordinate ranges since layout coordinates are normalized to [-1, 1]
-    x_range = range(-1.0, 1.0, length = grid_scale)
-    y_range = range(-1.0, 1.0, length = grid_scale)
+
+    # Calculate circular bounds that enclose all electrodes
+    # Find maximum radial distance from origin to any electrode
+    x_coords = @view points[1, :]
+    y_coords = @view points[2, :]
+    max_radius = maximum(sqrt.(x_coords .^ 2 .+ y_coords .^ 2))
+
+    # Add small margin (5%) beyond furthest electrode
+    margin = max_radius * 0.05
+    plot_radius = max_radius + margin
+
+    # Create square grid centered at origin with radius = plot_radius
+    x_range = range(-plot_radius, plot_radius, length = grid_scale)
+    y_range = range(-plot_radius, plot_radius, length = grid_scale)
 
     # Create regular grid more efficiently
     grid_points = zeros(2, grid_scale^2)
@@ -475,7 +526,9 @@ function _data_interpolation_topo(dat::Vector{<:AbstractFloat}, layout::Layout, 
     itp = ScatteredInterpolation.interpolate(method, points, dat)
     result = reshape(ScatteredInterpolation.evaluate(itp, grid_points), grid_scale, grid_scale)
     _circle_mask!(result, grid_scale)
-    return result
+
+    # Return data and circular bounds for contourf display
+    return result, (-plot_radius, plot_radius), (-plot_radius, plot_radius)
 
 end
 

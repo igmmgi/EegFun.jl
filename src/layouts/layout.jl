@@ -195,13 +195,14 @@ function _ensure_coordinates_3d!(layout::Layout)
 end
 
 """
-    polar_to_cartesian_xy!(layout::Layout; normalization_radius::Float64=1.0)
+    polar_to_cartesian_xy!(layout::Layout; normalization_radius::Float64=1.0, preserve_radial_distance::Bool=true)
 
 Converts polar coordinates (incidence and azimuth angles) from a layout into Cartesian coordinates (x, y).
 
 # Arguments
 - `layout::Layout`: A Layout containing the layout information with columns for incidence angles (`:inc`) and azimuth angles (`:azi`).
-- `normalization_radius::Float64`: Maximum radius for electrode positions (default: 1.0). The head circle is drawn at radius 1.0, so this controls how close electrodes can be to the head boundary.
+- `normalization_radius::Float64`: Maximum radius for electrode positions (default: 1.0). Only used when `preserve_radial_distance=false`.
+- `preserve_radial_distance::Bool`: If true, preserves true radial distances from polar coordinates, allowing electrodes with inc>90° to appear outside the unit circle (default: true). When false, normalizes all electrodes to fit within normalization_radius.
 
 # Modifies
 - The input `layout` is modified in place to include new columns `x2` and `y2`, which represent the Cartesian coordinates calculated from the polar coordinates.
@@ -209,8 +210,11 @@ Converts polar coordinates (incidence and azimuth angles) from a layout into Car
 
 # Returns
 - Nothing. The function modifies the `layout` directly.
+
+# Notes
+- When `preserve_radial_distance=true`, electrodes imported from EEGLAB with inc>90° (e.g., eye electrodes beyond the scalp) will appear outside the standard head circle, matching EEGLAB's topoplot rendering.
 """
-function polar_to_cartesian_xy!(layout::Layout; normalization_radius::Float64 = 1.0)
+function polar_to_cartesian_xy!(layout::Layout; normalization_radius::Float64 = 1.0, preserve_radial_distance::Bool = true)
     df = layout.data
 
     # Check for required columns and numeric types
@@ -229,26 +233,28 @@ function polar_to_cartesian_xy!(layout::Layout; normalization_radius::Float64 = 
     x2 = inc .* cos.(azi)
     y2 = inc .* sin.(azi)
 
-    # Center and normalize in fewer passes
-    min_x, max_x = extrema(x2)
-    min_y, max_y = extrema(y2)
+    # Note: We do NOT center the coordinates here!
+    # Polar coordinates are naturally centered at the vertex (inc=0°).
+    # Centering would shift vertices like CZ away from (0,0), especially when 
+    # eye electrodes or other non-scalp sensors are present.
 
-    center_x = (max_x + min_x) / 2
-    center_y = (max_y + min_y) / 2
-
-    x2 .-= center_x
-    y2 .-= center_y
-
-    # Calculate max radius using vectorized operations
-    max_r = maximum(sqrt.(x2 .^ 2 .+ y2 .^ 2))
-
-    if max_r > 0
-        scale = normalization_radius / max_r
-        df[!, :x2] = x2 .* scale
-        df[!, :y2] = y2 .* scale
+    if !preserve_radial_distance
+        # Normalize to fit all electrodes within normalization_radius (traditional behavior)
+        max_r = maximum(sqrt.(x2 .^ 2 .+ y2 .^ 2))
+        if max_r > 0
+            scale = normalization_radius / max_r
+            df[!, :x2] = x2 .* scale
+            df[!, :y2] = y2 .* scale
+        else
+            df[!, :x2] = x2
+            df[!, :y2] = y2
+        end
     else
-        df[!, :x2] = x2
-        df[!, :y2] = y2
+        # Preserve true radial distances - electrodes with inc>90° will be outside unit circle
+        # Map inc in degrees to radius: 90° = 1.0 (equator/unit circle)
+        scale_factor = 1.0 / (π / 2)  # Scale so that inc=90° (π/2 radians) → radius=1.0
+        df[!, :x2] = x2 .* scale_factor
+        df[!, :y2] = y2 .* scale_factor
     end
 
     clear_neighbours!(layout)
