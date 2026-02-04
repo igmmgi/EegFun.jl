@@ -13,9 +13,6 @@ Usage:
     julia plot_layouts.jl
 """
 
-using Pkg
-Pkg.activate("../../")
-
 using EegFun
 using CairoMakie
 
