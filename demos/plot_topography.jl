@@ -5,7 +5,9 @@ dat = EegFun.read_raw_data("./resources/data/example1.bdf");
 
 # read and preprate layout file
 layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
-EegFun.polar_to_cartesian_xy!(layout_file)
+# EegFun.polar_to_cartesian_xy!(layout_file, preserve_radial_distance = true)
+EegFun.polar_to_cartesian_xy!(layout_file, preserve_radial_distance = true)
+
 
 # create EegFun data structure (EegFun.ContinuousData)
 dat = EegFun.create_eeg_dataframe(dat, layout_file);
@@ -17,7 +19,15 @@ EegFun.highpass_filter!(dat, 1)
 EegFun.plot_topography(dat)
 EegFun.plot_topography(dat, method = :nearest)
 
-EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 5.973 .&& x.time .<= 6.02, gridscale = 100)
+EegFun.plot_topography(
+    dat,
+    sample_selection = x -> x.time .>= 5.973 .&& x.time .<= 6.02,
+    gridscale = 75,
+    ylim = (-200, 200),
+    head_radius = 1.0,
+    method = :thin_plate,
+)
+
 EegFun.plot_topography(dat, interval_selection = (5.973, 6.02), gridscale = 100)
 EegFun.plot_topography(dat, interval_selection = (5, 6), gridscale = 100)
 EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 5.973 .&& x.time .<= 6.02, gridscale = 100, ylim = (-100, 100))

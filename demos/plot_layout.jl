@@ -1,9 +1,9 @@
 using EegFun
 
-layout = EegFun.read_layout("./files/layouts/biosemi/biosemi72.csv");
-EegFun.polar_to_cartesian_xy!(layout);
-
+layout = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
+EegFun.polar_to_cartesian_xy!(layout, preserve_radial_distance = true);
 EegFun.plot_layout_2d(layout)
+
 EegFun.plot_layout_2d(layout; head_color = :blue)
 EegFun.plot_layout_2d(layout; head_linewidth = 5)
 EegFun.plot_layout_2d(layout; head_radius = 1.8)

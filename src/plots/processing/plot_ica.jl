@@ -93,17 +93,17 @@ function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; 
     _ensure_coordinates_2d!(ica.layout)
     _ensure_coordinates_3d!(ica.layout)
 
-    # Prepare data for this component
-    data = _prepare_ica_topo_data(ica, component, method, gridscale)
+    # Prepare data for this component (now returns bounds too)
+    data, x_bounds, y_bounds = _prepare_ica_topo_data(ica, component, method, gridscale)
 
     # Calculate levels
     levels = _calculate_topo_levels(data; num_levels = pop!(plot_kwargs, :num_levels))
 
-    # Create contour plot
+    # Create contour plot with adaptive bounds
     co = contourf!(
         ax,
-        range(-1.0, 1.0, length = size(data, 1)),
-        range(-1.0, 1.0, length = size(data, 2)),
+        range(x_bounds[1], x_bounds[2], length = size(data, 1)),
+        range(y_bounds[1], y_bounds[2], length = size(data, 2)),
         data,
         levels = levels;
         colormap = pop!(plot_kwargs, :colormap),
@@ -120,6 +120,9 @@ function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; 
         colorbar_position = pop!(plot_kwargs, :colorbar_position, (1, 2))
         Colorbar(fig[colorbar_position...], co; colorbar_kwargs..., tellwidth = true, tellheight = false)
     end
+
+    # Draw smooth circle to hide jagged interpolation edge
+    EegFun._draw_smooth_circle_mask!(ax, x_bounds, y_bounds)
 
     # Add head shape and electrode markers
     plot_layout_2d!(fig, ax, ica.layout; plot_kwargs...)
@@ -1078,9 +1081,9 @@ function _add_boolean_indicators!(state, channel_sym)
                 # Create vertical lines at each true position
                 # Only create lines within the current view range
                 current_range = state.xrange[]
-                visible_times = true_times[true_times .>= state.dat.data.time[first(
+                visible_times = true_times[true_times.>=state.dat.data.time[first(
                     current_range,
-                )].&&true_times .<= state.dat.data.time[last(current_range)]]
+                )].&&true_times.<=state.dat.data.time[last(current_range)]]
 
                 if !isempty(visible_times)
                     lines = vlines!(ax_channel, visible_times, color = :red, linewidth = 1)
@@ -1199,7 +1202,8 @@ function _update_components!(state)
         comp_idx = _get_component_index(state, i)
         if comp_idx <= size(state.component_data, 1)
             data_count += 1
-            all_data[data_count] = _prepare_ica_topo_data(state.ica, comp_idx, state.plot_kwargs[:method], state.plot_kwargs[:gridscale])
+            all_data[data_count], _, _ =
+                _prepare_ica_topo_data(state.ica, comp_idx, state.plot_kwargs[:method], state.plot_kwargs[:gridscale])
         end
     end
 
@@ -1278,9 +1282,17 @@ function _prepare_ica_topo_data(ica::InfoIca, comp_idx::Int, method::Symbol, gri
     supported_methods =
         [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
     if method ∈ supported_methods
-        return _data_interpolation_topo(ica.mixing[:, comp_idx], ica.layout, gridscale, method = method)
+        data, x_bounds, y_bounds = _data_interpolation_topo(ica.mixing[:, comp_idx], ica.layout, gridscale, method = method)
+        return data, x_bounds, y_bounds
     elseif method == :spherical_spline
-        return _data_interpolation_topo_spherical_spline(ica.mixing[:, comp_idx], ica.layout, gridscale)
+        data = _data_interpolation_topo_spherical_spline(ica.mixing[:, comp_idx], ica.layout, gridscale)
+        # Calculate circular bounds for spherical spline
+        x_coords = ica.layout.data.x2
+        y_coords = ica.layout.data.y2
+        max_radius = maximum(sqrt.(x_coords .^ 2 .+ y_coords .^ 2))
+        margin = max_radius * 0.05
+        plot_radius = max_radius + margin
+        return data, (-plot_radius, plot_radius), (-plot_radius, plot_radius)
     else
         throw(ArgumentError("Unknown interpolation method: $method. Supported: $supported_methods"))
     end
@@ -1737,7 +1749,7 @@ function plot_line_noise_components(
 
         # Add component numbers as labels
         for (i, comp) in enumerate(line_noise_comps)
-            row = metrics_df[metrics_df.Component .== comp, :]
+            row = metrics_df[metrics_df.Component.==comp, :]
             text!(ax1, comp, row.power_ratio_zscore[1], text = string(comp), color = :red, align = (:center, :bottom), fontsize = 10)
         end
     end

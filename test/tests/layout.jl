@@ -27,15 +27,16 @@ using OrderedCollections
         @test nrow(layout_2d.data) == 64
 
         # Test specific coordinate calculations for known positions
-        # Fp1 (inc=-92, azi=-72) - normalized coordinates
+        # With preserve_radial_distance=true (default)
+        # Fp1 (inc=-92, azi=-72)
         fp1_idx = findfirst(test_layout.data.label .== :Fp1)
-        @test isapprox(layout_2d.data[fp1_idx, :x2], -0.266, atol = 0.01)  # Fp1 x
-        @test isapprox(layout_2d.data[fp1_idx, :y2], 0.926, atol = 0.01)   # Fp1 y
+        @test isapprox(layout_2d.data[fp1_idx, :x2], -0.316, atol = 0.01)  # Fp1 x
+        @test isapprox(layout_2d.data[fp1_idx, :y2], 0.972, atol = 0.01)   # Fp1 y
 
-        # Cz (inc=0, azi=0) - normalized coordinates
+        # Cz (inc=0, azi=0) - at vertex, preserves radial distance means stays at origin
         cz_idx = findfirst(test_layout.data.label .== :Cz)
         @test isapprox(layout_2d.data[cz_idx, :x2], 0.0, atol = 0.01)     # Cz x
-        @test isapprox(layout_2d.data[cz_idx, :y2], 0.108, atol = 0.01)   # Cz y
+        @test isapprox(layout_2d.data[cz_idx, :y2], 0.0, atol = 0.01)   # Cz y
 
         # Test 3D conversion
         layout_3d = copy(test_layout)
