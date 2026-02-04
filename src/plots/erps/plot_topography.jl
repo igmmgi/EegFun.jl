@@ -124,10 +124,17 @@ function plot_topography(
         kwargs...,
     )
 
-    # only enable interactivity for ErpData (context menu requires ErpData)
-    if interactive && dat isa ErpData
-        _setup_topo_interactivity!(fig, ax, dat)
+    # Keyboard interactivity (scaling, help) works for all data types
+    if interactive
+        deregister_interaction!(ax, :rectanglezoom)
+        _setup_topo_keyboard_handlers!(fig, ax)
     end
+
+    # Channel selection and context menu only for ErpData and EpochData
+    if interactive && (dat isa ErpData || dat isa EpochData)
+        _setup_topo_selection!(fig, ax, dat, interval_selection)
+    end
+
     display_plot && display_figure(fig)
 
     set_window_title("Makie")
@@ -304,10 +311,16 @@ function plot_topography(
         end
     end
 
-    # Only enable interactivity if all datasets are ErpData (context menu requires ErpData)
-    if interactive && all(d isa ErpData for d in dat)
-        shared_selection_state = TopoSelectionState(axes)
-        _setup_shared_topo_interactivity!(fig, axes, dat, shared_selection_state)
+    # Keyboard interactivity (scaling, help) works for all data types
+    if interactive
+        deregister_interaction!.(axes, :rectanglezoom)
+        _setup_topo_keyboard_handlers!(fig, axes)
+    end
+
+    # Channel selection and context menu only for ErpData and EpochData
+    if interactive && all(d -> d isa ErpData || d isa EpochData, dat)
+        shared_selection_state = TopoSelectionState(axes, interval_selection)
+        _setup_shared_topo_selection!(fig, dat, shared_selection_state)
     end
 
     display_plot && display_figure(fig)
@@ -798,10 +811,10 @@ end
 
 Set up keyboard interactivity for topographic plots.
 """
-function _setup_topo_interactivity!(fig::Figure, ax::Axis, original_data = nothing)
+function _setup_topo_interactivity!(fig::Figure, ax::Axis, original_data = nothing, time_interval::Interval = times())
     deregister_interaction!(ax, :rectanglezoom)
     _setup_topo_keyboard_handlers!(fig, ax)
-    _setup_topo_selection!(fig, ax, original_data)
+    _setup_topo_selection!(fig, ax, original_data, time_interval)
 end
 
 # =============================================================================
@@ -822,8 +835,9 @@ mutable struct TopoSelectionState
     temp_rectangles::Vector{Union{Makie.Poly,Nothing}}  # Temporary rectangles for each axis
     selected_channels::Vector{Symbol}  # Store selected channel names
     axes::Vector{Axis}  # All axes that share this selection state
+    time_interval::Interval  # Time interval/window that the topography represents
 
-    function TopoSelectionState(axes::Vector{Axis})
+    function TopoSelectionState(axes::Vector{Axis}, time_interval::Interval = times())
         n_axes = length(axes)
         # Initialize with empty lists for multiple selections
         new(
@@ -835,6 +849,7 @@ mutable struct TopoSelectionState
             [nothing for _ = 1:n_axes],  # No temporary rectangles initially
             Symbol[],  # Empty vector for selected channels
             axes,  # Store all axes
+            time_interval,  # Store time interval
         )
     end
 end
@@ -924,8 +939,8 @@ end
 Set up simple region selection for topographic plots.
 This is a convenience wrapper for single-axis plots that calls the shared version.
 """
-function _setup_topo_selection!(fig::Figure, ax::Axis, original_data)
-    selection_state = TopoSelectionState([ax])
+function _setup_topo_selection!(fig::Figure, ax::Axis, original_data, time_interval::Interval = times())
+    selection_state = TopoSelectionState([ax], time_interval)
     _setup_shared_topo_selection!(fig, [original_data], selection_state)
 end
 
@@ -975,8 +990,10 @@ function _setup_shared_topo_selection!(fig::Figure, datasets::Vector, shared_sel
         if event.button == Mouse.right && event.action == Mouse.press
             selected_channels = shared_selection_state.selected_channels
             if !isempty(selected_channels)
-                # Interactivity is only enabled for ErpData, so we can safely call the context menu
-                _show_topo_context_menu!(datasets, selected_channels)
+                # Convert any data type to ErpData for plotting
+                datasets_erp = _convert_to_erp_for_plotting(datasets, shared_selection_state.time_interval)
+                # Pass the time interval to highlight in ERP plot
+                _show_topo_context_menu!(datasets_erp, selected_channels, shared_selection_state.time_interval)
             else
                 @minimal_warning "No channels selected. Select channels with Shift+Left Click+Drag, then right-click to plot ERP"
             end
@@ -1151,12 +1168,112 @@ function _find_electrodes_in_region(x_min::Float64, y_min::Float64, x_max::Float
 end
 
 """
-    _show_topo_context_menu!(datasets::Union{ErpData, Vector{ErpData}}, selected_channels::Vector{Symbol})
+    _convert_to_erp_for_plotting(datasets, time_interval::Interval)
+
+Convert any data type to ErpData for plotting context menu.
+For ContinuousData, subsets to the specified time_interval before converting.
+"""
+function _convert_to_erp_for_plotting(datasets, time_interval::Interval = times())
+    datasets_vec = datasets isa Vector ? datasets : [datasets]
+
+    erp_datasets = map(datasets_vec) do dat
+        if dat isa ErpData
+            dat
+        elseif dat isa ContinuousData
+            # Subset to time interval before converting
+            subset_data = subset(dat, interval_selection = time_interval)
+            ErpData(
+                subset_data.file,
+                1,
+                splitext(basename(subset_data.file))[1],
+                subset_data.data,
+                subset_data.layout,
+                subset_data.sample_rate,
+                subset_data.analysis_info,
+                1,
+            )
+        else  # EpochData
+            averaged_df = average_trials(dat)
+            ErpData(
+                dat.file,
+                dat.condition,
+                dat.condition_name,
+                averaged_df,
+                dat.layout,
+                dat.sample_rate,
+                dat.analysis_info,
+                length(dat.data),
+            )
+        end
+    end
+
+    return erp_datasets
+end
+
+"""
+    _show_topo_context_menu!(datasets::Union{ContinuousData, Vector{ContinuousData}}, selected_channels::Vector{Symbol})
+
+Convert ContinuousData to ErpData temporarily for plotting context menu.
+"""
+function _show_topo_context_menu!(datasets::Union{ContinuousData,Vector{ContinuousData}}, selected_channels::Vector{Symbol})
+    # Convert to ErpData for plotting
+    datasets_vec = datasets isa Vector ? datasets : [datasets]
+    erp_datasets = map(datasets_vec) do dat
+        ErpData(
+            dat.file,
+            1,  # condition number (placeholder)
+            splitext(basename(dat.file))[1],  # condition name from filename
+            dat.data,  # use continuous data as-is
+            dat.layout,
+            dat.sample_rate,
+            dat.analysis_info,
+            1,  # n_epochs (placeholder for continuous)
+        )
+    end
+
+    # Call ErpData version
+    _show_topo_context_menu!(length(erp_datasets) == 1 ? erp_datasets[1] : erp_datasets, selected_channels)
+end
+
+"""
+    _show_topo_context_menu!(datasets::Union{EpochData, Vector{EpochData}}, selected_channels::Vector{Symbol})
+
+Convert EpochData to ErpData (by averaging) temporarily for plotting context menu.
+"""
+function _show_topo_context_menu!(datasets::Union{EpochData,Vector{EpochData}}, selected_channels::Vector{Symbol})
+    # Convert to ErpData by averaging epochs
+    datasets_vec = datasets isa Vector ? datasets : [datasets]
+    erp_datasets = map(datasets_vec) do dat
+        # Average all epochs to create ERP
+        averaged_df = average_trials(dat)
+        ErpData(
+            dat.file,
+            dat.condition,
+            dat.condition_name,
+            averaged_df,
+            dat.layout,
+            dat.sample_rate,
+            dat.analysis_info,
+            length(dat.data),  # n_epochs from original epoch count
+        )
+    end
+
+    # Call ErpData version
+    _show_topo_context_menu!(length(erp_datasets) == 1 ? erp_datasets[1] : erp_datasets, selected_channels)
+end
+
+"""
+    _show_topo_context_menu!(datasets::Union{ErpData, Vector{ErpData}}, selected_channels::Vector{Symbol}, time_interval::Interval)
 
 Show a context menu for plotting selected channels from topography plot.
 Supports both single dataset and multiple datasets (conditions).
+The time_interval is passed to the ERP plot to highlight the topography time window.
 """
-function _show_topo_context_menu!(datasets::Union{ErpData,Vector{ErpData}}, selected_channels::Vector{Symbol})
+function _show_topo_context_menu!(
+    datasets::Union{ErpData,Vector{ErpData}},
+    selected_channels::Vector{Symbol},
+    time_interval::Interval = times(),
+)
 
     datasets_vec = datasets isa Vector ? datasets : [datasets]
     has_multiple_conditions = length(datasets_vec) > 1
@@ -1207,7 +1324,7 @@ function _show_topo_context_menu!(datasets::Union{ErpData,Vector{ErpData}}, sele
         end
     end
 
-    new_screen = GLMakie.Screen()
+    new_screen = GLMakie.Screen(size = (400, 200))
     display(new_screen, menu_fig)
 end
 
