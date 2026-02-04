@@ -69,6 +69,7 @@ include("layouts/layout.jl")
 
 # Data import/export
 include("io/eeglab.jl")
+include("io/fieldtrip.jl")
 
 # Configuration system
 include("config/config.jl")
