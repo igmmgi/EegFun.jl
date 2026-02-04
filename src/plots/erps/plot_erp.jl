@@ -220,7 +220,6 @@ function plot_erp(
     sample_selection::Function = samples(),
     interval_selection::Interval = times(),
     baseline_interval::Interval = times(),
-    return_line_refs::Bool = false,  # Internal parameter, not in PLOT_ERP_KWARGS
     kwargs...,
 )
 
@@ -342,7 +341,8 @@ function plot_erp(
 
     # reset default title
     set_window_title("Makie")
-    # Always return named tuple with fig, axes, and line_refs (may be nothing)
+    # Return named tuple - line_refs available for advanced use (e.g., plot_erp_measurements)
+    # Most users can ignore it via: (; fig, axes) = plot_erp(...)
     return (fig = fig, axes = axes, line_refs = line_refs)
 end
 

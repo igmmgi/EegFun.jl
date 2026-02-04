@@ -11,7 +11,7 @@ in EegFun for extracting quantitative features from ERP data.
 """
 
 using EegFun
-dat = EegFun.read_data("./resources/data/erps/example1_erps_good.jld2")
+dat = EegFun.read_data("./resources/data/julia/erps/example1_erps_good.jld2")
 
 
 EegFun.plot_erp_filter_gui(dat)

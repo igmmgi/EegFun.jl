@@ -171,7 +171,7 @@ function plot_epochs(
     include_extra::Bool = false,
     layout = :single,
     kwargs...,
-)::Tuple{Figure,Union{Axis,Vector{Axis}}}
+)::NamedTuple{(:fig, :axes),Tuple{Figure,Vector{Axis}}}
 
     user_provided_color = haskey(kwargs, :color)
     plot_kwargs = _merge_plot_kwargs(PLOT_EPOCHS_KWARGS, kwargs)
