@@ -289,7 +289,7 @@ Returns BatchResult with success/failure info.
 function _process_baseline_file(filepath::String, output_path::String, baseline_interval::Interval, condition_selection::Function)
     filename = basename(filepath)
 
-    # Load data
+    # Read data
     data = read_data(filepath)
     if isnothing(data)
         return BatchResult(false, filename, "No data variables found")
@@ -306,7 +306,7 @@ function _process_baseline_file(filepath::String, output_path::String, baseline_
     # Apply baseline correction (mutates data in-place)
     baseline!.(data, Ref(baseline_interval))
 
-    # Save (always use "data" as variable name since load_data finds by type)
+    # Save (always use "data" as variable name since read_data finds by type)
     jldsave(output_path; data = data)
 
     return BatchResult(true, filename, "Baseline corrected successfully")

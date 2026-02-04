@@ -447,7 +447,7 @@ function _merge_summaries(new_epoch_summary::DataFrame, new_file_summary::DataFr
     end
 
     # Load and merge file summary
-    if isfile(file_path)
+    if isfile(filepath)
         existing_file = JLD2.load(file_path, "data")
         # Remove rows for files that are being updated
         existing_file = existing_file[.!in.(existing_file.file, Ref(new_files)), :]
@@ -616,9 +616,9 @@ function summarize_electrode_repairs(file_pattern::String; input_dir::String = p
     for file in files
         file_path = joinpath(input_dir, file)
         try
-            if isfile(file_path)
-                artifact_info = read_data(file_path)
-                # If load_data returned a Dict, extract "data" key
+            if isfile(filepath)
+                artifact_info = read_data(filepath)
+                # If read_data returned a Dict, extract "data" key
                 if isa(artifact_info, Dict) && haskey(artifact_info, "data")
                     artifact_info = artifact_info["data"]
                 end
@@ -774,9 +774,9 @@ function summarize_ica_components(file_pattern::String; input_dir::String = pwd(
     for file in files
         file_path = joinpath(input_dir, file)
         try
-            if isfile(file_path)
-                artifact_info = read_data(file_path)
-                # If load_data returned a Dict, extract "data" key
+            if isfile(filepath)
+                artifact_info = read_data(filepath)
+                # If read_data returned a Dict, extract "data" key
                 if isa(artifact_info, Dict) && haskey(artifact_info, "data")
                     artifact_info = artifact_info["data"]
                 end

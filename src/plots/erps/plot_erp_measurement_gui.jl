@@ -414,7 +414,7 @@ function plot_erp_measurement_gui(
     end
 
     display(fig)
-    return fig
+    return (fig=fig)
 end
 
 

@@ -76,7 +76,7 @@ using Logging
         @test isempty(files_none)
     end
 
-    @testset "load_data" begin
+    @testset "read_data" begin
         # Create test files with different variable names
         erps = [EegFun.create_test_erp_data(participant = 1, condition = 1)]
 
@@ -103,7 +103,7 @@ using Logging
         jldsave(other_file; data = "test")
 
         result = EegFun.read_data(other_file)
-        # load_data only returns EegData, InfoIca, or Nothing - other types return nothing
+        # read_data only returns EegData, InfoIca, or Nothing - other types return nothing
         @test result === nothing
 
         # Test with non-existent file (jldopen throws SystemError, not ArgumentError)

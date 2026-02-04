@@ -30,7 +30,7 @@ Returns BatchResult with success/failure info.
 function _condition_combine_process_file(filepath::String, output_path::String, condition_groups::Vector{Vector{Int}})
     filename = basename(filepath)
 
-    # Load data
+    # Read data
     data = read_data(filepath)
     if isnothing(data)
         return BatchResult(false, filename, "No data variables found")
@@ -75,7 +75,7 @@ function _condition_combine_process_file(filepath::String, output_path::String, 
         push!(combined_data, combined_epochs)
     end
 
-    # Save (always use "data" as variable name since load_data finds by type)
+    # Save (always use "data" as variable name since read_data finds by type)
     jldsave(output_path; data = combined_data)
 
     n_groups = length(condition_groups)

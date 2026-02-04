@@ -183,7 +183,7 @@ Returns BatchResult with success/failure info.
 function _process_rereference_file(filepath::String, output_path::String, reference_selection, condition_selection::Function)
     filename = basename(filepath)
 
-    # Load data
+    # Read data
     data = read_data(filepath)
     if isnothing(data)
         return BatchResult(false, filename, "No data variables found")
@@ -207,7 +207,7 @@ function _process_rereference_file(filepath::String, output_path::String, refere
     # Apply rereferencing (mutates data in-place)
     rereference!.(data, reference_selection)
 
-    # Save (always use "data" as variable name since load_data finds by type)
+    # Save (always use "data" as variable name since read_data finds by type)
     jldsave(output_path; data = data)
 
     ref_str = reference_selection isa Symbol ? string(reference_selection) : join(reference_selection, ", ")

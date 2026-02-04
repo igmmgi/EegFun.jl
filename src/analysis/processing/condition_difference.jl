@@ -76,7 +76,7 @@ function _condition_difference_process_file(
 )
     filename = basename(filepath)
 
-    # Load data (using load_data which finds by type)
+    # Read data (using read_data which finds by type)
     erps_data = read_data(filepath)
 
     if isnothing(erps_data)

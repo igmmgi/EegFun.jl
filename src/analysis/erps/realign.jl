@@ -250,7 +250,7 @@ Returns BatchResult with success/failure info.
 function _process_realign_file(filepath::String, output_path::String, realignment_column::Symbol)
     filename = basename(filepath)
 
-    # Load data using load_data (handles single variable files automatically)
+    # Read data using read_data (handles single variable files automatically)
     epochs_data = read_data(filepath)
 
     if isnothing(epochs_data)

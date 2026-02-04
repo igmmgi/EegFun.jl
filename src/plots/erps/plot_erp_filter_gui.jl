@@ -334,5 +334,5 @@ function plot_erp_filter_gui(erp_vec::Vector{ErpData}; channel::Union{Symbol,Not
     end
 
     display(fig)
-    return fig
+    return (fig=fig)
 end

@@ -214,7 +214,7 @@ Returns BatchResult with success/failure info.
 function _process_lrp_file(filepath::String, output_path::String, condition_pairs::Vector{Tuple{Int,Int}}, channel_selection::Function)
     filename = basename(filepath)
 
-    # Load data (using load_data which finds by type)
+    # Read data (using read_data which finds by type)
     erps_data = read_data(filepath)
 
     if isnothing(erps_data)
