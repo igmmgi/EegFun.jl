@@ -158,7 +158,7 @@ Stores t-statistics and p-values matrices.
 
 # Fields
 - `t::Array{Float64, 2}`: T-statistics [electrodes × time]
-- `p::Union{Array{Float64, 2}, Nothing}`: P-values [electrodes × time] (nothing for cluster permutation)
+- `p::Union{Array{Float64, 2}, Nothing}`: P-values [electrodes × time], or `nothing` for cluster permutation
 """
 struct StatMatrix
     t::Array{Float64,2}
@@ -233,7 +233,7 @@ Stores complete results from a cluster-based permutation test.
 # Fields
 - `test_info::TestInfo`: Test configuration and parameters (includes ClusterInfo)
 - `data::Vector{ErpData}`: Grand average ERPs for conditions 1 and 2 (for visualization)
-- `stat_matrix::StatMatrix`: T-statistics matrix (p is nothing for cluster permutation)
+- `stat_matrix::StatMatrix`: T-statistics matrix. Note: p is `nothing` for cluster permutation
 - `masks::Masks`: Significance masks for positive and negative effects
 - `clusters::Clusters`: Positive and negative clusters
 - `permutation_distribution::PermutationDistribution`: Null distribution of max cluster stats

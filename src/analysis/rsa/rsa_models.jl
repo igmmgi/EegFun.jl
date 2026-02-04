@@ -212,7 +212,7 @@ end
 Create an RDM from a similarity matrix (e.g., from behavioral ratings).
 
 # Arguments
-- `similarity_matrix::Matrix{Float64}`: Similarity matrix [condition × condition] (higher = more similar)
+- `similarity_matrix::Matrix{Float64}`: Similarity matrix [condition × condition]. Higher values mean more similar.
 - `convert_to_dissimilarity::Bool`: Whether to convert similarity to dissimilarity (default: true)
 
 # Returns
