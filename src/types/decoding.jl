@@ -42,9 +42,9 @@ and metadata about the analysis parameters.
 - `average_score::Vector{Float64}`: Average classification accuracy at each time point
 - `channels::Vector{Symbol}`: Channel names used in the analysis
 - `parameters::DecodingParameters`: Decoding analysis parameters (chance_level, n_iterations, n_folds, class_coding, n_classes)
-- `stderror::Union{Vector{Float64}, Nothing}`: Standard error of accuracy (if computed)
-- `confusion_matrix::Union{Array{Float64, 3}, Nothing}`: Confusion matrices [time × true_class × predicted_class] (if computed)
-- `raw_predictions::Union{Array{Float64, 4}, Nothing}`: Raw predictions [iteration × fold × time × class] (if saved)
+- `stderror::Union{Vector{Float64}, Nothing}`: Standard error of accuracy, or `nothing`
+- `confusion_matrix::Union{Array{Float64, 3}, Nothing}`: Confusion matrices [time × true_class × predicted_class], or `nothing`
+- `raw_predictions::Union{Array{Float64, 4}, Nothing}`: Raw predictions [iteration × fold × time × class], or `nothing`
 """
 mutable struct DecodedData <: SingleDataFrameEeg
     file::String

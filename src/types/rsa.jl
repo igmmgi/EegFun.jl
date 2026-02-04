@@ -68,7 +68,7 @@ time point, correlations with model RDMs, and metadata about the analysis.
 - `model_correlations::Union{Array{Float64, 2}, Nothing}`: Correlations with model RDMs [time × model]
 - `model_names::Union{Vector{String}, Nothing}`: Names of models compared (if any)
 - `p_values::Union{Array{Float64, 2}, Nothing}`: P-values for model correlations [time × model]
-- `noise_ceiling::Union{NoiseCeiling, Nothing}`: Noise ceiling estimates (if computed)
+- `noise_ceiling::Union{NoiseCeiling, Nothing}`: Noise ceiling estimates, or `nothing`
 - `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
 """
 mutable struct RsaData <: SingleDataFrameEeg
