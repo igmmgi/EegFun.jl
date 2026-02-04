@@ -23,7 +23,7 @@ epoch_cfg = [
 epochs = EegFun.extract_epochs(dat, epoch_cfg, (-2, 4))
 erps = EegFun.average_epochs(epochs)
 
-EegFun.plot_erp(erps, layout = :single)
+out = EegFun.plot_erp(erps, layout = :single)
 EegFun.plot_erp(erps, layout = :grid)
 EegFun.plot_erp(erps[1], layout = :topo)
 

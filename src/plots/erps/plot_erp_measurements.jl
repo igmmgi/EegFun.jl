@@ -116,12 +116,11 @@ function _plot_erp_with_measurements_impl(
     participant_selection::Function,
     kwargs...,
 )
-    # Extract return_line_refs from kwargs if user passed it (unlikely, but handle it)
-    kwargs_dict = Dict{Symbol,Any}(kwargs)
-    return_line_refs = pop!(kwargs_dict, :return_line_refs, true)  # Default to true for measurements
     # Force interactive=true since we need line_refs for marker visibility linking
+    kwargs_dict = Dict{Symbol,Any}(kwargs)
     kwargs_dict[:interactive] = true
     kwargs_filtered = (; kwargs_dict...)
+
     # Load ERP data if filepath provided
     if erp_data isa String
         data = read_data(erp_data)
@@ -156,28 +155,24 @@ function _plot_erp_with_measurements_impl(
     selected_indices = get_selected_conditions(erp_datasets, condition_selection)
     erp_datasets = erp_datasets[selected_indices]
 
-    # Create the base plot with line references
-    # interactive is already set to true in kwargs_filtered above
-    # plot_erp for Vector{ErpData} returns (fig, axes) or (fig, axes, line_refs) if return_line_refs=true
-    plot_result = plot_erp(
+    # Create the base plot
+    # interactive=true ensures line_refs is populated for marker linking
+    # plot_erp returns (fig=fig, axes=axes, line_refs=line_refs)
+    result = plot_erp(
         erp_datasets;
         layout = layout,
         channel_selection = channel_selection,
         condition_selection = conditions(),  # Already filtered above
-        return_line_refs = return_line_refs,  # Pass directly as a parameter, not through kwargs
         kwargs_filtered...,  # Contains interactive=true
     )
 
-    if length(plot_result) == 3
-        fig, axes, line_refs = plot_result
-    else
-        fig, axes = plot_result
-        line_refs = nothing
-    end
+    fig = result.fig
+    axes = result.axes
+    line_refs = result.line_refs
 
-    # Debug: check if line_refs was returned
+    # Check if line_refs is available
     if line_refs === nothing
-        @minimal_warning "line_refs is nothing after plot_erp call. This means interactive=false or return_line_refs=false. Check plot_erp implementation."
+        @minimal_warning "line_refs is nothing - markers won't link to plot line visibility. Ensure interactive=true."
     end
 
     # Get selected channels from first dataset
@@ -270,7 +265,7 @@ function _overlay_measurements!(
     # Check for valid channel data
     channel_mask = hasproperty(measurements_df, channel) .& .!isnan.(measurements_df[!, channel])
 
-    matching_rows = measurements_df[condition_mask .& channel_mask, :]
+    matching_rows = measurements_df[condition_mask.&channel_mask, :]
 
     if isempty(matching_rows)
         @debug "No matching measurements for condition $(dataset.condition), channel $channel"
