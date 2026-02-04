@@ -73,7 +73,7 @@ _find_batch_files(pattern::String, dir::String, ids::Nothing) = _find_batch_file
 
 
 """
-    load_data(filepath::String)
+    read_data(filepath::String)
 
 Load data from JLD2 file, returning the data directly, a Dict of all variables, or `nothing`.
 
@@ -81,18 +81,18 @@ Load data from JLD2 file, returning the data directly, a Dict of all variables, 
 - If file has multiple variables: returns a Dict with all key-value pairs
 - If file is empty: returns `nothing`
 """
-function load_data(filepath::String)::Union{EegFunData,Vector{<:EegFunData},Nothing}
+function read_data(filepath::String)::Union{EegFunData,Vector{<:EegFunData},Nothing}
     jldopen(filepath, "r") do file
         keys_list = collect(keys(file))
         isempty(keys_list) && return nothing
 
         data = length(keys_list) == 1 ? file[keys_list[1]] : Dict(k => file[k] for k in keys_list)
-        return _load_data(data)
+        return _read_data(data)
     end
 end
 
 # Convert Vector{Any} to typed vector if all elements are EegFun data
-function _load_data(data::Vector{Any})::Union{Vector{<:EegFunData},Nothing}
+function _read_data(data::Vector{Any})::Union{Vector{<:EegFunData},Nothing}
     isempty(data) && return nothing
     # Ensure every element is some kind of EegFun data
     !all(x -> x isa EegFunData, data) && return nothing
@@ -103,10 +103,10 @@ function _load_data(data::Vector{Any})::Union{Vector{<:EegFunData},Nothing}
 end
 
 # Extract EegFunData from Dict
-function _load_data(data::Dict)::Union{EegFunData,Vector{<:EegFunData},Nothing}
+function _read_data(data::Dict)::Union{EegFunData,Vector{<:EegFunData},Nothing}
     values_found = EegFunData[]
     for value in values(data)
-        result = _load_data(value)
+        result = _read_data(value)
         isnothing(result) && continue
         if result isa Vector{<:EegFunData}
             append!(values_found, result)
@@ -118,8 +118,8 @@ function _load_data(data::Dict)::Union{EegFunData,Vector{<:EegFunData},Nothing}
 end
 
 # NB. load_data is not a generic function for everything; we just use it for data that is saved from EegFun
-_load_data(data::Union{EegFunData,Vector{<:EegFunData}}) = data
-_load_data(::Any)::Nothing = nothing
+_read_data(data::Union{EegFunData,Vector{<:EegFunData}}) = data
+_read_data(::Any)::Nothing = nothing
 
 # helper to load and combine results
 _add_to_collection!(data::EegFunData, values, _) = push!(values, data)
@@ -154,12 +154,12 @@ _condition_select(data, condition_selection::Nothing) = _condition_select(data, 
 
 
 # Core internal loading logic
-function _load_all_data_core(::Type{T}, files::Vector{String}, input_dir::String) where {T}
+function _read_all_data_core(::Type{T}, files::Vector{String}, input_dir::String) where {T}
     all_data = T[]
     for (i, file) in enumerate(sort(files, by = natural_sort_key))
         input_path = joinpath(input_dir, file)
         @info "Loading: $file ($i/$(length(files)))"
-        file_data = load_data(input_path)
+        file_data = read_data(input_path)
         isnothing(file_data) && continue
 
         if file_data isa Vector{<:T}
@@ -174,28 +174,28 @@ function _load_all_data_core(::Type{T}, files::Vector{String}, input_dir::String
 end
 
 """
-    load_all_data(files::Vector{String}, input_dir::String)
-    load_all_data(::Type{T}, files::Vector{String}, input_dir::String)
+    read_all_data(files::Vector{String}, input_dir::String)
+    read_all_data(::Type{T}, files::Vector{String}, input_dir::String)
 
 Load EEG data from a list of files into a flat vector.
 """
-load_all_data(files::Vector{String}, input_dir::String) = _load_all_data_core(EegData, files, input_dir)
-load_all_data(::Type{T}, files::Vector{String}, input_dir::String) where {T} = _load_all_data_core(T, files, input_dir)
+read_all_data(files::Vector{String}, input_dir::String) = _read_all_data_core(EegData, files, input_dir)
+read_all_data(::Type{T}, files::Vector{String}, input_dir::String) where {T} = _read_all_data_core(T, files, input_dir)
 
 """
-    load_all_data(pattern::String, input_dir::String, participant_selection = participants())
-    load_all_data(::Type{T}, pattern::String, input_dir::String, participant_selection = participants())
+    read_all_data(pattern::String, input_dir::String, participant_selection = participants())
+    read_all_data(::Type{T}, pattern::String, input_dir::String, participant_selection = participants())
 
 Find and load EEG data matching a pattern and participant selection.
 """
-function load_all_data(pattern::String, input_dir::String = pwd(), participant_selection::Function = participants())
+function read_all_data(pattern::String, input_dir::String = pwd(), participant_selection::Function = participants())
     files = _find_batch_files(pattern, input_dir, participant_selection)
-    return load_all_data(files, input_dir)
+    return read_all_data(files, input_dir)
 end
 
-function load_all_data(::Type{T}, pattern::String, input_dir::String = pwd(), participant_selection::Function = participants()) where {T}
+function read_all_data(::Type{T}, pattern::String, input_dir::String = pwd(), participant_selection::Function = participants()) where {T}
     files = _find_batch_files(pattern, input_dir, participant_selection)
-    return load_all_data(T, files, input_dir)
+    return read_all_data(T, files, input_dir)
 end
 
 

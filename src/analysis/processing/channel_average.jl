@@ -172,7 +172,7 @@ function _process_channel_average_file(
     filename = basename(filepath)
 
     # Load data
-    data = load_data(filepath)
+    data = read_data(filepath)
     if isnothing(data)
         return BatchResult(false, filename, "No data variables found")
     end

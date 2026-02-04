@@ -38,7 +38,7 @@ time point, providing a reference-independent measure of global response strengt
 using EegFun
 
 # Load ERP data
-erp_data = EegFun.load_data("participant_1_erps.jld2")
+erp_data = EegFun.read_data("participant_1_erps.jld2")
 
 # Calculate GFP using all channels
 gfp_result = gfp(erp_data)
@@ -129,7 +129,7 @@ Calculate Global Field Power for multiple ERP datasets (e.g., multiple condition
 # Examples
 ```julia
 # Load ERP data for multiple conditions
-erps = EegFun.load_data("participant_1_erps.jld2")
+erps = EegFun.read_data("participant_1_erps.jld2")
 
 # Calculate GFP for all conditions
 gfp_results = gfp(erps)

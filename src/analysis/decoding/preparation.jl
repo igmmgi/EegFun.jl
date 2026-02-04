@@ -18,7 +18,7 @@ epochs by participant and selecting specified conditions for classification.
 # Examples
 ```julia
 # Load all epoch data
-all_epochs = load_all_data(EpochData, "epochs_good", input_dir, participants())
+all_epochs = read_all_data(EpochData, "epochs_good", input_dir, participants())
 
 # Prepare for decoding: select conditions 1 and 2, all channels, time window 0-1s
 participant_epochs = prepare_decoding(
@@ -163,7 +163,7 @@ function prepare_decoding(
     interval_selection::Interval = times(),
 )
     # Load all appropriate data and call the main preparation function
-    all_epochs = load_all_data(EpochData, file_pattern, input_dir, participant_selection)
+    all_epochs = read_all_data(EpochData, file_pattern, input_dir, participant_selection)
     isempty(all_epochs) && @minimal_error_throw("No valid epoch data found matching pattern '$file_pattern' in $input_dir")
 
     return prepare_decoding(

@@ -35,7 +35,7 @@ window determined by the latest start time and earliest end time across all epoc
 using EegFun
 
 # Load stimulus-locked epoched data
-epochs = load_data("participant_1_epochs.jld2")
+epochs = read_data("participant_1_epochs.jld2")
 
 # Realign to response times (stored in :rt column)
 realign!(epochs, :rt)
@@ -251,7 +251,7 @@ function _process_realign_file(filepath::String, output_path::String, realignmen
     filename = basename(filepath)
 
     # Load data using load_data (handles single variable files automatically)
-    epochs_data = load_data(filepath)
+    epochs_data = read_data(filepath)
 
     if isnothing(epochs_data)
         return BatchResult(false, filename, "No data found in file")

@@ -84,7 +84,7 @@ using Logging
         erps_file = joinpath(test_dir, "test_erps.jld2")
         jldsave(erps_file; data = erps)
 
-        result = EegFun.load_data(erps_file)
+        result = EegFun.read_data(erps_file)
         @test result !== nothing
         @test length(result) == length(erps)
         @test result[1].data == erps[1].data
@@ -93,7 +93,7 @@ using Logging
         epochs_file = joinpath(test_dir, "test_epochs.jld2")
         jldsave(epochs_file; data = erps)
 
-        result = EegFun.load_data(epochs_file)
+        result = EegFun.read_data(epochs_file)
         @test result !== nothing
         @test length(result) == length(erps)
         @test result[1].data == erps[1].data
@@ -102,12 +102,12 @@ using Logging
         other_file = joinpath(test_dir, "test_other.jld2")
         jldsave(other_file; data = "test")
 
-        result = EegFun.load_data(other_file)
+        result = EegFun.read_data(other_file)
         # load_data only returns EegData, InfoIca, or Nothing - other types return nothing
         @test result === nothing
 
         # Test with non-existent file (jldopen throws SystemError, not ArgumentError)
-        @test_throws SystemError EegFun.load_data("/nonexistent/file.jld2")
+        @test_throws SystemError EegFun.read_data("/nonexistent/file.jld2")
     end
 
     @testset "_condition_select" begin
@@ -390,7 +390,7 @@ using Logging
 
             # Process files
             process_fn = (input_path, output_path) -> begin
-                data_result = EegFun.load_data(input_path)
+                data_result = EegFun.read_data(input_path)
                 if isnothing(data_result)
                     return EegFun.BatchResult(false, basename(input_path), "No data")
                 end

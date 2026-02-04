@@ -512,7 +512,7 @@ using Logging
 
             # Process files
             process_fn = (input_path, output_path) -> begin
-                data_result = EegFun.load_data(input_path)
+                data_result = EegFun.read_data(input_path)
                 if isnothing(data_result)
                     return EegFun.BatchResult(false, basename(input_path), "No data")
                 end

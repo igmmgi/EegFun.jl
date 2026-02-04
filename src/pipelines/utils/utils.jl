@@ -617,7 +617,7 @@ function summarize_electrode_repairs(file_pattern::String; input_dir::String = p
         file_path = joinpath(input_dir, file)
         try
             if isfile(file_path)
-                artifact_info = load_data(file_path)
+                artifact_info = read_data(file_path)
                 # If load_data returned a Dict, extract "data" key
                 if isa(artifact_info, Dict) && haskey(artifact_info, "data")
                     artifact_info = artifact_info["data"]
@@ -775,7 +775,7 @@ function summarize_ica_components(file_pattern::String; input_dir::String = pwd(
         file_path = joinpath(input_dir, file)
         try
             if isfile(file_path)
-                artifact_info = load_data(file_path)
+                artifact_info = read_data(file_path)
                 # If load_data returned a Dict, extract "data" key
                 if isa(artifact_info, Dict) && haskey(artifact_info, "data")
                     artifact_info = artifact_info["data"]

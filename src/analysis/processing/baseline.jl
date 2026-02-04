@@ -290,7 +290,7 @@ function _process_baseline_file(filepath::String, output_path::String, baseline_
     filename = basename(filepath)
 
     # Load data
-    data = load_data(filepath)
+    data = read_data(filepath)
     if isnothing(data)
         return BatchResult(false, filename, "No data variables found")
     end

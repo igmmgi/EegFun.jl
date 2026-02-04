@@ -496,7 +496,7 @@ function _process_measurements_file(
     participant = _extract_participant_id(filename)
 
     # Load data (using load_data which finds by type)
-    data_var = load_data(filepath)
+    data_var = read_data(filepath)
     if isnothing(data_var)
         @minimal_warning "No data variables found in $filename"
         return nothing

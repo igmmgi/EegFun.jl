@@ -137,7 +137,7 @@ end
 # =============================================================================
 
 """
-    load_config(config_file::String)
+    read_config(config_file::String)
 
 Load and merge configuration from a TOML file with defaults.
 
@@ -147,7 +147,7 @@ Load and merge configuration from a TOML file with defaults.
 # Returns
 - `Union{Dict,Nothing}`: The loaded configuration or nothing if loading failed
 """
-function load_config(config_file::String)
+function read_config(config_file::String)
 
     # Load default config
     default_config = TOML.parsefile(joinpath(@__DIR__, "default.toml"))

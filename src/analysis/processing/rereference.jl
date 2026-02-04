@@ -184,7 +184,7 @@ function _process_rereference_file(filepath::String, output_path::String, refere
     filename = basename(filepath)
 
     # Load data
-    data = load_data(filepath)
+    data = read_data(filepath)
     if isnothing(data)
         return BatchResult(false, filename, "No data variables found")
     end

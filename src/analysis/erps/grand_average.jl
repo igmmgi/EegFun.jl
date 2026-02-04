@@ -80,7 +80,7 @@ Returns OrderedDict{Int, Vector{ErpData}} mapping condition number to ERPs.
 """
 function _load_and_group_erps(files::Vector{String}, input_dir::String, condition_selection::Function)
     # Load all ERPs and group by condition
-    all_erps = load_all_data(ErpData, files, input_dir)
+    all_erps = read_all_data(ErpData, files, input_dir)
     erps_by_condition = group_by_condition(all_erps)
 
     # Apply condition selection to the sorted condition numbers
@@ -157,7 +157,7 @@ grand_average("erps_cleaned",
 grand_average("erps_cleaned", participant_selection = participants(x -> x .> 5))
 
 # Load the results
-grand_avgs = load_data("grand_average_erps_cleaned.jld2")
+grand_avgs = read_data("grand_average_erps_cleaned.jld2")
 ```
 """
 function grand_average(

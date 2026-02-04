@@ -124,7 +124,7 @@ function _plot_erp_with_measurements_impl(
     kwargs_filtered = (; kwargs_dict...)
     # Load ERP data if filepath provided
     if erp_data isa String
-        data = load_data(erp_data)
+        data = read_data(erp_data)
         if isnothing(data)
             @minimal_error_throw "No data found in file: $erp_data"
         end

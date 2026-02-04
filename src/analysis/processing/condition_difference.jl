@@ -77,7 +77,7 @@ function _condition_difference_process_file(
     filename = basename(filepath)
 
     # Load data (using load_data which finds by type)
-    erps_data = load_data(filepath)
+    erps_data = read_data(filepath)
 
     if isnothing(erps_data)
         return BatchResult(false, filename, "No data variables found")

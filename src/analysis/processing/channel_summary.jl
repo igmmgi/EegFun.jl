@@ -295,7 +295,7 @@ function _process_channel_summary_file(
     filename = basename(filepath)
 
     # Load data
-    data_var = load_data(filepath)
+    data_var = read_data(filepath)
     if isnothing(data_var)
         return (BatchResult(false, filename, "No recognized data variable"), DataFrame[])
     end

@@ -407,7 +407,7 @@ function _plot_epochs(gui_state, channel_menu)
 
     try
         # Load data from JLD2 file
-        data = load_data(gui_state.filename[])
+        data = read_data(gui_state.filename[])
         isnothing(data) && @minimal_error "Error: No data found in file"
 
         # Build channel selection from GUI
@@ -484,7 +484,7 @@ function _plot_topography(gui_state, channel_menu)
 
     try
         # Load data from JLD2 file
-        data = load_data(gui_state.filename[])
+        data = read_data(gui_state.filename[])
         isnothing(data) && @minimal_error "Error: No data found in file"
 
         # Build channel selection from GUI

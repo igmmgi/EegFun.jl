@@ -1045,7 +1045,7 @@ function _process_average_file(filepath::String, output_path::String, condition_
     filename = basename(filepath)
 
     # Load data
-    epochs_data = load_data(filepath)
+    epochs_data = read_data(filepath)
     if isnothing(epochs_data)
         return BatchResult(false, filename, "No data variables found")
     end

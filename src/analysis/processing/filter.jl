@@ -481,7 +481,7 @@ function _process_filter_file(filepath::String, output_path::String, filter_type
     filename = basename(filepath)
 
     # Load data
-    data = load_data(filepath)
+    data = read_data(filepath)
     if isnothing(data)
         return BatchResult(false, filename, "No data variables found")
     end

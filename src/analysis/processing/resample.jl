@@ -273,7 +273,7 @@ function _process_resample_file(filepath::String, output_path::String, factor::I
     filename = basename(filepath)
 
     # Load data using load_data (handles single variable files automatically)
-    loaded_data = load_data(filepath)
+    loaded_data = read_data(filepath)
 
     if isnothing(loaded_data)
         return BatchResult(false, filename, "No data found in file")

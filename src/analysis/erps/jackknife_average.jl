@@ -113,7 +113,7 @@ Load ERP/LRP data from multiple files and organize by condition.
 Returns Dict{Int, Vector{ErpData}} mapping condition number to ERPs from all participants.
 """
 function _load_and_group_for_jackknife(files::Vector{String}, input_dir::String, condition_selection::Function, data_var::String)
-    # data_var parameter kept for backwards compatibility but not used - load_data() finds by type
+    # data_var parameter kept for backwards compatibility but not used - read_data() finds by type
     all_erps_by_condition = Dict{Int,Vector{ErpData}}()
     participant_ids = Int[]
 
@@ -127,7 +127,7 @@ function _load_and_group_for_jackknife(files::Vector{String}, input_dir::String,
         push!(participant_ids, participant_id)
 
         # Load data (using load_data which finds by type)
-        data = load_data(input_path)
+        data = read_data(input_path)
 
         if isnothing(data)
             @minimal_warning "No data variables found in $file. Skipping."
@@ -226,7 +226,7 @@ and creates jackknife (leave-one-out) averages for each participant and conditio
 - `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
 - `condition_selection::Function`: Condition selection predicate (default: `conditions()` for all)
 - `output_dir::Union{String, Nothing}`: Output directory (default: auto-generated)
-- `data_var::String`: Deprecated parameter kept for backwards compatibility. Data is now loaded using `load_data()` which finds data by type.
+- `data_var::String`: Deprecated parameter kept for backwards compatibility. Data is now loaded using `read_data()` which finds data by type.
 
 # Examples
 ```julia
