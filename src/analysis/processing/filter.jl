@@ -480,7 +480,7 @@ end
 function _process_filter_file(filepath::String, output_path::String, filter_type::String, cutoff_freq::Real, condition_selection::Function)
     filename = basename(filepath)
 
-    # Load data
+    # Read data
     data = read_data(filepath)
     if isnothing(data)
         return BatchResult(false, filename, "No data variables found")

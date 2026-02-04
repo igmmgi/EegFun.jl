@@ -272,7 +272,7 @@ Returns BatchResult with success/failure info.
 function _process_resample_file(filepath::String, output_path::String, factor::Int)
     filename = basename(filepath)
 
-    # Load data using load_data (handles single variable files automatically)
+    # Read data using read_data (handles single variable files automatically)
     loaded_data = read_data(filepath)
 
     if isnothing(loaded_data)
@@ -289,7 +289,7 @@ function _process_resample_file(filepath::String, output_path::String, factor::I
         resampled_data = resample(loaded_data, factor)
         new_rate = resampled_data.sample_rate
 
-        # Save results (always use "data" as variable name since load_data finds by type)
+        # Save results (always use "data" as variable name since read_data finds by type)
         jldsave(output_path; data = resampled_data)
 
         message = "Resampled from $old_rate Hz to $new_rate Hz (factor: $factor)"

@@ -366,7 +366,7 @@ function _plot_databrowser(gui_state, channel_menu)
     gui_state.filename[] == "" && @minimal_error "Error: No file specified!"
     gui_state.layout_file[] == "" && @minimal_error "Error: No layout file selected!"
 
-    # Load data file (could be BDF or other format)
+    # Read data file (could be BDF or other format)
     file_ext = lowercase(splitext(gui_state.filename[])[2])  # [2] is the extension (with dot)
     if file_ext ∉ [".bdf"]
         @minimal_error "Error: Unsupported file format"
@@ -399,14 +399,14 @@ function _plot_epochs(gui_state, channel_menu)
     gui_state.filename[] == "" && @minimal_error "Error: No file specified!"
     gui_state.layout_file[] == "" && @minimal_error "Error: No layout file selected!"
 
-    # Load data file (should be JLD2 with EpochData)
+    # Read data file (should be JLD2 with EpochData)
     file_ext = lowercase(splitext(gui_state.filename[])[2])
     if file_ext != ".jld2"
         @minimal_error "Error: Epochs plot requires JLD2 file format"
     end
 
     try
-        # Load data from JLD2 file
+        # Read data from JLD2 file
         data = read_data(gui_state.filename[])
         isnothing(data) && @minimal_error "Error: No data found in file"
 
@@ -436,7 +436,7 @@ function _plot_erp(gui_state, channel_menu)
     gui_state.filename[] == "" && @minimal_error "Error: No file specified!"
     gui_state.layout_file[] == "" && @minimal_error "Error: No layout file selected!"
 
-    # Load data file (should be JLD2 with ErpData)
+    # Read data file (should be JLD2 with ErpData)
     file_ext = lowercase(splitext(gui_state.filename[])[2])
     if file_ext != ".jld2"
         @minimal_error "Error: ERP plot requires JLD2 file format"
@@ -476,14 +476,14 @@ function _plot_topography(gui_state, channel_menu)
     gui_state.filename[] == "" && @minimal_error "Error: No file specified!"
     gui_state.layout_file[] == "" && @minimal_error "Error: No layout file selected!"
 
-    # Load data file (should be JLD2 with ErpData or EpochData)
+    # Read data file (should be JLD2 with ErpData or EpochData)
     file_ext = lowercase(splitext(gui_state.filename[])[2])
     if file_ext != ".jld2"
         @minimal_error "Error: Topography plot requires JLD2 file format"
     end
 
     try
-        # Load data from JLD2 file
+        # Read data from JLD2 file
         data = read_data(gui_state.filename[])
         isnothing(data) && @minimal_error "Error: No data found in file"
 

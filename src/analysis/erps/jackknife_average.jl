@@ -126,7 +126,7 @@ function _load_and_group_for_jackknife(files::Vector{String}, input_dir::String,
         participant_id = m !== nothing ? parse(Int, m.captures[1]) : i
         push!(participant_ids, participant_id)
 
-        # Load data (using load_data which finds by type)
+        # Read data (using read_data which finds by type)
         data = read_data(input_path)
 
         if isnothing(data)

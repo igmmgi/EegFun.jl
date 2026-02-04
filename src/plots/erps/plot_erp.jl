@@ -104,7 +104,7 @@ function plot_erp(
     baseline_interval::Interval = times(),
     kwargs...,
 )
-    # Load data from file
+    # Read data from file
     data = read_data(filepath)
     if isnothing(data)
         @minimal_error_throw "No data found in file: $filepath"
@@ -342,12 +342,8 @@ function plot_erp(
 
     # reset default title
     set_window_title("Makie")
-    # Optionally return line references if requested
-    if return_line_refs
-        return fig, axes, line_refs
-    else
-        return fig, axes
-    end
+    # Always return named tuple with fig, axes, and line_refs (may be nothing)
+    return (fig = fig, axes = axes, line_refs = line_refs)
 end
 
 

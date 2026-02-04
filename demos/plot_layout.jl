@@ -20,7 +20,7 @@ EegFun.plot_layout_2d(layout; label_xoffset = 0.1)
 EegFun.plot_layout_2d(layout; label_yoffset = 0.1)
 EegFun.plot_layout_2d(layout; label_zoffset = 2)
 
-fig, ax = EegFun.plot_layout_2d(layout)
+(; fig, ax) = EegFun.plot_layout_2d(layout)
 EegFun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], roi_border_size = 0.05)
 EegFun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], roi_border_size = 0.1)
 EegFun.add_topo_rois!(

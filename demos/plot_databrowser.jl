@@ -19,7 +19,7 @@ EegFun.highpass_filter!(dat, 1)
 EegFun.plot_databrowser(dat);
 
 # return some analysis settings
-fig, ax, analysis_settings = EegFun.plot_databrowser(dat)
+(; fig, ax, analysis_settings) = EegFun.plot_databrowser(dat)
 dat_new = EegFun.apply_analysis_settings(dat, analysis_settings)
 
 EegFun.plot_databrowser(dat_new)

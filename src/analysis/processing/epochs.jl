@@ -1044,7 +1044,7 @@ Returns BatchResult with success/failure info.
 function _process_average_file(filepath::String, output_path::String, condition_selection::Function)
     filename = basename(filepath)
 
-    # Load data
+    # Read data
     epochs_data = read_data(filepath)
     if isnothing(epochs_data)
         return BatchResult(false, filename, "No data variables found")
@@ -1061,7 +1061,7 @@ function _process_average_file(filepath::String, output_path::String, condition_
     # Average epochs for each condition
     erps_data = average_epochs.(epochs_data)
 
-    # Save (always use "data" as variable name since load_data finds by type)
+    # Save (always use "data" as variable name since read_data finds by type)
     jldsave(output_path; data = erps_data)
 
     return BatchResult(true, filename, "Averaged $(length(erps_data)) condition(s)")

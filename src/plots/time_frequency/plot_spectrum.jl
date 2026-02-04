@@ -3,7 +3,7 @@ Power spectrum plotting functions for visualizing SpectrumData.
 """
 
 """
-    plot_freq_spectrum(spectrum_data::SpectrumData;
+    plot_frequency_spectrum(spectrum_data::SpectrumData;
                        channel_selection::Function=channels(),
                        x_scale::Symbol=:linear,
                        y_scale::Symbol=:linear,
@@ -40,19 +40,19 @@ Plot power spectrum data for selected channels.
 # Example
 ```julia
 # Plot all channels
-fig, ax = plot_freq_spectrum(spectrum_data)
+fig, ax = plot_frequency_spectrum(spectrum_data)
 
 # Single channel with log scales
-fig, ax = plot_freq_spectrum(spectrum_data; 
+fig, ax = plot_frequency_spectrum(spectrum_data; 
     channel_selection=channels(:Cz), 
     x_scale=:log10, 
     y_scale=:log10)
 
 # With dB units
-fig, ax = plot_freq_spectrum(spectrum_data; unit=:dB, max_freq=100.0)
+fig, ax = plot_frequency_spectrum(spectrum_data; unit=:dB, max_freq=100.0)
 ```
 """
-function plot_freq_spectrum(
+function plot_frequency_spectrum(
     spectrum_data::SpectrumData;
     channel_selection::Function = channels(),
     x_scale::Symbol = :linear,

@@ -171,7 +171,7 @@ function _process_channel_average_file(
 )
     filename = basename(filepath)
 
-    # Load data
+    # Read data
     data = read_data(filepath)
     if isnothing(data)
         return BatchResult(false, filename, "No data variables found")
@@ -190,7 +190,7 @@ function _process_channel_average_file(
         channel_average!(item, channel_selections = channel_selections, output_labels = output_labels, reduce = reduce)
     end
 
-    # Save (always use "data" as variable name since load_data finds by type)
+    # Save (always use "data" as variable name since read_data finds by type)
     jldsave(output_path; data = data)
 
     n_groups = length(channel_selections)

@@ -19,7 +19,7 @@ epochs_synthetic = EegFun.signal_to_data(times, signal, :Channel1, sample_rate)
 EegFun.plot_epochs(epochs_synthetic, channel_selection = EegFun.channels([:Channel1]))
 
 spectrum = EegFun.freq_spectrum(epochs_synthetic, max_freq = 80.0)
-EegFun.plot_freq_spectrum(spectrum, channel_selection = EegFun.channels([:Channel1]))
+EegFun.plot_frequency_spectrum(spectrum, channel_selection = EegFun.channels([:Channel1]))
 
 # tf_stft_fixed
 tf_data = EegFun.tf_multitaper(epochs_synthetic, frequencies = 1:1:40, cycles = 5)

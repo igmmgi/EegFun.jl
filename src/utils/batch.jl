@@ -75,7 +75,7 @@ _find_batch_files(pattern::String, dir::String, ids::Nothing) = _find_batch_file
 """
     read_data(filepath::String)
 
-Load data from JLD2 file, returning the data directly, a Dict of all variables, or `nothing`.
+Read data from JLD2 file, returning the data directly, a Dict of all variables, or `nothing`.
 
 - If file has 1 variable: returns the value directly
 - If file has multiple variables: returns a Dict with all key-value pairs
@@ -117,7 +117,7 @@ function _read_data(data::Dict)::Union{EegFunData,Vector{<:EegFunData},Nothing}
     return isempty(values_found) ? nothing : _single_or_vector(values_found)
 end
 
-# NB. load_data is not a generic function for everything; we just use it for data that is saved from EegFun
+# NB. read_data is not a generic function for everything; we just use it for data that is saved from EegFun
 _read_data(data::Union{EegFunData,Vector{<:EegFunData}}) = data
 _read_data(::Any)::Nothing = nothing
 

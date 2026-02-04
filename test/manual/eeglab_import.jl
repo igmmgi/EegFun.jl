@@ -17,7 +17,7 @@ using DataFrames
     end
 
     @testset "Basic Loading" begin
-        # Load data
+        # Read data
         epochs = read_eeglab(test_file, verbose = false)
 
         # Test data type
