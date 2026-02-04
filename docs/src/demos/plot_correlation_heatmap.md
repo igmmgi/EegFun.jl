@@ -8,6 +8,7 @@ Demonstrates Visualize channel correlation matrices.
 
 ## Source Code
 
+::: details Show Code
 ```julia
 using EegFun
 
@@ -61,6 +62,7 @@ EegFun.plot_correlation_heatmap(cm, title = "Full Correlation Matrix")
 cm = EegFun.correlation_matrix(dat)
 EegFun.plot_layout_2d(layout_file, correlation_matrix = cm)
 ```
+:::
 
 ## See Also
 

@@ -8,11 +8,12 @@ Demonstrates Comprehensive artifact detection workflow including EOG detection, 
 
 ## Source Code
 
+::: details Show Code
 ```julia
 using EegFun
 
 # read raw data
-dat = EegFun.read_raw_data("./resources/data/example1.bdf");
+dat = EegFun.read_raw_data("./resources/data/julia/example1.bdf");
 
 # read and preprate layout file
 layout_file = EegFun.read_layout("./resources/layouts/biosemi72.csv");
@@ -126,6 +127,7 @@ EegFun.plot_artifact_repair(epochs[1], epochs_repaired[1], bad_epochs[1], ylim =
 epochs_rejected = EegFun.reject_epochs(epochs, bad_epochs)
 EegFun.plot_artifact_rejection(epochs[1], epochs_rejected[1], bad_epochs[1])
 ```
+:::
 
 ## See Also
 

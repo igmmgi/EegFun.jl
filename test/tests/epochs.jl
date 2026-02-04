@@ -281,7 +281,7 @@ using Random
         # Check that some samples near each trigger are marked
         for idx in trigger_1_indices
             # Look for marked samples in a small neighborhood 
-            neighborhood = max(1, idx - 5):min(length(dat.data.epoch_window), idx + 5)
+            neighborhood = max(1, idx-5):min(length(dat.data.epoch_window), idx+5)
             @test any(dat.data.epoch_window[neighborhood])
         end
 

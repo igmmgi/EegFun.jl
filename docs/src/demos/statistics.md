@@ -8,6 +8,7 @@ Demonstrates Statistical analysis options for ERP data including analytic t-test
 
 ## Source Code
 
+::: details Show Code
 ```julia
 """
 Tutorial: Statistical Analysis Options for ERP Data
@@ -133,6 +134,7 @@ result_permutation_nonparametric_common = EegFun.permutation_test(
 
 
 ```
+:::
 
 ## See Also
 

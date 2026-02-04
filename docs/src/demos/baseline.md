@@ -8,6 +8,7 @@ Demonstrates Baseline correction methods for ERP data.
 
 ## Source Code
 
+::: details Show Code
 ```julia
 using EegFun
 
@@ -67,6 +68,7 @@ EegFun.baseline!(eprs, (-0.2, 0)) # baseline to t=-0.2 to 0.0
 EegFun.plot_erp(eprs, channel_selection = EegFun.channels([:Fp1]))
 
 ```
+:::
 
 ## See Also
 

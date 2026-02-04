@@ -8,6 +8,7 @@ Demonstrates Visualizes individual epochs with channel selection.
 
 ## Source Code
 
+::: details Show Code
 ```julia
 using EegFun
 using JLD2
@@ -45,6 +46,7 @@ EegFun.plot_epochs(epochs[1], channel_selection = EegFun.channels([:Fp1, :Fp2, :
 EegFun.plot_epochs(epochs[1], channel_selection = EegFun.channels([:Fp1, :Fp2, :Cz]); layout = :topo)
 
 ```
+:::
 
 ## See Also
 

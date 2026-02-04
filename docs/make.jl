@@ -7,18 +7,8 @@ using EegFun
 
 pages = [
     "Home" => "index.md",
-    "Tutorials" => [
-        "Getting Started" => "tutorials/getting-started.md",
-        "Basic Preprocessing" => "tutorials/basic-preprocessing.md",
-        "ERP Analysis" => "tutorials/erp-analysis.md",
-        "ICA Workflow" => "tutorials/ica-workflow.md",
-    ],
-    "How-To Guides" => [
-        "Filter Data" => "how-to/filter-data.md",
-        "Create Epochs" => "how-to/create-epochs.md",
-        "Topographic Plots" => "how-to/topographic-plots.md",
-    ],
-    "Explanations" => ["Data Structures" => "explanations/data-structures.md", "Statistical Methods" => "explanations/statistics.md"],
+    "Tutorials" => ["Getting Started" => "tutorials/getting-started.md"],
+    "Explanations" => ["Data Structures" => "explanations/data-structures.md"],
     "Demos" => [
         "Artifacts" => "demos/artifacts.md",
         "Baseline" => "demos/baseline.md",
@@ -51,11 +41,7 @@ pages = [
         "TF Multitaper" => "demos/tf_multitaper.md",
         "TF STFT" => "demos/tf_stft.md",
     ],
-    "Reference" => [
-        "Overview" => "reference/index.md",
-        "Types" => "reference/types.md",
-        # TODO: Add more reference pages as needed
-    ],
+    "Reference" => ["Overview" => "reference/index.md", "Types" => "reference/types.md"],
 ]
 
 makedocs(;
@@ -63,7 +49,7 @@ makedocs(;
     authors = "igmmgi",
     sitename = "EegFun",
     repo = "https://github.com/igmmgi/EegFun.jl",
-    format = DocumenterVitepress.MarkdownVitepress(repo = "https://github.com/igmmgi/EegFun.jl", devbranch = "main", devurl = "dev"),
+    format = DocumenterVitepress.MarkdownVitepress(repo = "https://github.com/igmmgi/EegFun.jl", devbranch = "main"),
     warnonly = [:linkcheck, :cross_references, :missing_docs],
     draft = false,
     source = "src",

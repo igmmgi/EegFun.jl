@@ -8,6 +8,7 @@ Demonstrates Re-reference EEG data to different reference schemes.
 
 ## Source Code
 
+::: details Show Code
 ```julia
 using EegFun
 
@@ -63,6 +64,7 @@ EegFun.all_data(erps[2])
 EegFun.rereference!(erps, :F1)
 EegFun.all_data(erps[1])
 EegFun.all_data(erps[2])```
+:::
 
 ## See Also
 

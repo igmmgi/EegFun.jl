@@ -8,6 +8,7 @@ Demonstrates RSA workflow for analyzing representational geometries across condi
 
 ## Source Code
 
+::: details Show Code
 ```julia
 using EegFun
 
@@ -43,6 +44,7 @@ EegFun.plot_rdm_timecourse(grand_avg_rsa, title = "Dissimilarity Over Time")
 
 
 ```
+:::
 
 ## See Also
 

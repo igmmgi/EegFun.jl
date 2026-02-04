@@ -76,8 +76,10 @@ for (filename, title, description) in demos
 
     ## Source Code
 
+    ::: details Show Code
     ```julia
     $source_code```
+    :::
 
     ## See Also
 

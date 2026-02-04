@@ -8,6 +8,7 @@ Demonstrates Repair bad channels using interpolation methods.
 
 ## Source Code
 
+::: details Show Code
 ```julia
 using EegFun
 using GLMakie
@@ -44,6 +45,7 @@ EegFun.repair_channels!(dat, channels_to_repair, method = :spherical_spline)
 # Check if data changed (using isapprox to handle floating point precision)
 data_changed = any(any(.!isapprox.(dat.data[!, ch], original_data[!, ch], rtol = 1e-10)) for ch in channels_to_repair)
 ```
+:::
 
 ## See Also
 

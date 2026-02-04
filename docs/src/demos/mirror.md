@@ -8,6 +8,7 @@ Demonstrates Mirror electrode positions for lateralized analyses.
 
 ## Source Code
 
+::: details Show Code
 ```julia
 using EegFun
 
@@ -56,6 +57,7 @@ EegFun.plot_erp(erps_new, channel_selection = EegFun.channels([:Fp1]))
 
 
 ```
+:::
 
 ## See Also
 

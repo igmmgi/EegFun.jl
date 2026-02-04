@@ -8,6 +8,7 @@ Demonstrates Data loading and basic data structures.
 
 ## Source Code
 
+::: details Show Code
 ```julia
 using EegFun
 
@@ -43,6 +44,7 @@ dat_subset = EegFun.subset(dat, channel_selection = EegFun.channels([:Fp1, :Fp2]
 dat_subset = EegFun.subset(dat, sample_selection = x -> x.sample .<= 10_000) # first 10000 samples
 dat_subset = EegFun.subset(dat, sample_selection = x -> x.time .<= 10) # first 10 seconds
 ```
+:::
 
 ## See Also
 

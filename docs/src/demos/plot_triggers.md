@@ -8,6 +8,7 @@ Demonstrates Visualizes event markers and triggers in continuous data.
 
 ## Source Code
 
+::: details Show Code
 ```julia
 using EegFun
 
@@ -32,6 +33,7 @@ EegFun.plot_trigger_overview(dat; ignore_triggers = [3])
 EegFun.plot_trigger_timing(dat)
 EegFun.plot_trigger_timing(dat; ignore_triggers = [3])
 ```
+:::
 
 ## See Also
 

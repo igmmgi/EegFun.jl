@@ -8,6 +8,7 @@ Demonstrates Calculate and visualize channel quality metrics.
 
 ## Source Code
 
+::: details Show Code
 ```julia
 using EegFun
 using GLMakie
@@ -61,6 +62,7 @@ EegFun.add_zscore_columns!(cm)
 bad_channels = [:Fp1, :AF3]
 non_eog_related, eog_related = EegFun.partition_channels_by_eog_correlation(bad_channels, cm)
 ```
+:::
 
 ## See Also
 

@@ -8,6 +8,7 @@ Demonstrates Extract quantitative features from ERP data including amplitude, la
 
 ## Source Code
 
+::: details Show Code
 ```julia
 """
 Tutorial: ERP Measurement Options
@@ -22,21 +23,28 @@ in EegFun for extracting quantitative features from ERP data.
 """
 
 using EegFun
+dat = EegFun.read_data("./resources/data/julia/erps/example1_erps_good.jld2")
+
+
+EegFun.plot_erp_filter_gui(dat)
+
+EegFun.plot_erp_measurement_gui(dat)
+EegFun.plot_erp_measurement_gui(dat[1])
 
 # ----------------------------------------------------------------------------
 # Amplitude Measurements
 # ----------------------------------------------------------------------------
 
-# dat = EegFun.load_data("./data/files/erps/example1_erps_good.jld2")
+# dat = EegFun.read_data("./data/files/erps/example1_erps_good.jld2")
 # EegFun.plot_erp(dat, condition_selection = EegFun.conditions([1]), channel_selection = EegFun.channels([:Pz]), baseline_interval = (0, 0))
 
-input_dir = "./resources/data"
+input_dir = "./resources/data/erps"
 file_pattern = "erps_good"
 
 # Mean amplitude in a time window
 mean_amp = EegFun.erp_measurements(
     file_pattern,
-    "max_peak_amplitude",
+    "max_peak_latency",
     input_dir = input_dir,
     condition_selection = EegFun.conditions([1, 2]),
     channel_selection = EegFun.channels(),
@@ -44,7 +52,15 @@ mean_amp = EegFun.erp_measurements(
     analysis_interval = (0.6, 0.8),
     baseline_interval = (0.0, 0.0),
 )
-```
+
+
+dat = EegFun.read_data("./resources/data/erps/example1_erps_good.jld2")
+EegFun.plot_erp(dat, condition_selection = EegFun.conditions([1]), channel_selection = EegFun.channels([:Pz]), baseline_interval = (0, 0))
+
+
+EegFun.plot_erp_measurement_gui(dat[1])
+EegFun.plot_erp_measurement_gui(dat)```
+:::
 
 ## See Also
 

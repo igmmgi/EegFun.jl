@@ -8,6 +8,7 @@ Demonstrates Resample data to different sampling rates.
 
 ## Source Code
 
+::: details Show Code
 ```julia
 using EegFun
 
@@ -32,6 +33,7 @@ dat_new = EegFun.resample(dat, 4) # downsample by a factor of 4
 EegFun.sample_rate(dat_new)       # should = original ÷ 4
 EegFun.trigger_count(dat_new)     # triggers should be preserved
 ```
+:::
 
 ## See Also
 
