@@ -2,7 +2,7 @@ using EegFun
 using JLD2
 
 # read raw data
-dat = EegFun.read_raw_data("./resources/data/example1.bdf");
+dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf");
 
 # read and preprate layout file
 layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
