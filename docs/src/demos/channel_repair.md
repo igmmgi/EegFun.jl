@@ -12,17 +12,16 @@ Channel repair (interpolation) estimates the signal at bad electrodes using data
 
 Channel repair is appropriate when:
 
-- Individual electrodes have poor contact or high impedance
+- Individual electrodes have poor contact/noisy signal
 - Isolated channels show excessive noise or artifacts
 - A small number of channels are affected while most data is clean
 - You need to maintain electrode count for spatial analyses (e.g., source localization)
 
 **Do not repair** when:
 
-- Too many channels are bad (>10-15% of total)
+- Too many channels are bad
 - The entire dataset is noisy
 - Bad channels cluster together spatially
-- Channel shows intermittent problems (repair won't fix instability)
 
 ### Interpolation Methods
 
@@ -36,9 +35,6 @@ Channel repair is appropriate when:
 **Spherical Spline**:
 
 - Uses spherical spline functions to model scalp potential distribution
-- More accurate spatial interpolation
-- Preserves topographic patterns better
-- Recommended for publication-quality analyses
 
 ### Best Practices
 
@@ -50,15 +46,13 @@ Channel repair is appropriate when:
 
 **Limits**:
 
-- Avoid interpolating too many channels (>10% is problematic)
-- Document exact number and labels of repaired channels in methods
-- Consider rejecting datasets with excessive bad channels
+- Avoid interpolating too many channels
+- Consider rejecting datasets with an excessive number of bad channels
 
 **Validation**:
 
 - Visually verify repair quality (before/after comparison)
 - Check that interpolated channels match neighbors
-- Review repair plots to confirm successful interpolation
 
 ## Workflow Summary
 
@@ -95,10 +89,9 @@ This demo shows channel repair workflows:
 
 ```julia
 using EegFun
-using GLMakie
 
 # read raw data
-dat = EegFun.read_raw_data("./resources/data/example1.bdf");
+dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf");
 
 # read and preprate layout file
 layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
@@ -106,28 +99,33 @@ EegFun.polar_to_cartesian_xy!(layout_file)
 
 dat = EegFun.create_eeg_dataframe(dat, layout_file)
 
+# minimal preprocessing
 EegFun.rereference!(dat, :avg)
 EegFun.highpass_filter!(dat, 1)
 
-# Select a few channels to repair
-test_channels = [:Fp1]
-available_channels = dat.layout.data.label
-channels_to_repair = filter(ch -> ch in available_channels, test_channels)
+EegFun.plot_databrowser(dat)
 
-# Calculate neighbors first
-EegFun.get_neighbours_xyz!(dat.layout, 0.5)
+# Select a channel to repair and make this channel noisy!
+channel_to_repair = :Cz
+dat.data[!, channel_to_repair] .+= randn(size(dat.data[:, channel_to_repair])) * 200 # v. noisy!
 
-# Store original data for comparison
-original_data = copy(dat.data)
+# We can now see this noisy channel in the databrowser
+# NB. we can actually press "R" and select Cz and apply the repair in the browser
+EegFun.plot_databrowser(dat)
 
 # Try neighbor interpolation
-EegFun.repair_channels!(dat, channels_to_repair, method = :neighbor_interpolation)
+EegFun.repair_channels!(dat, [channel_to_repair], method = :neighbor_interpolation)
 
-# Try spherical spline
-EegFun.repair_channels!(dat, channels_to_repair, method = :spherical_spline)
+# Cz is now repaired
+EegFun.plot_databrowser(dat)
 
-# Check if data changed (using isapprox to handle floating point precision)
-data_changed = any(any(.!isapprox.(dat.data[!, ch], original_data[!, ch], rtol = 1e-10)) for ch in channels_to_repair)
+# Try neighbor interpolation
+EegFun.repair_channels!(dat, [channel_to_repair], method = :spherical_spline)
+
+# Cz is now repaired
+EegFun.plot_databrowser(dat)
+
+
 ```
 
 :::

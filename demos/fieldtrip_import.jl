@@ -23,8 +23,6 @@ EegFun.plot_databrowser(epoch_data)
 println("\nLoading ERP data...")
 erp_data = EegFun.read_fieldtrip("./resources/data/fieldtrip/erp.mat", layout)
 
-EegFun.plot_erp(erp_data)
-
 # Biologische Psychologie Labor Tübingen Custom mat files
 # Essentially slightly strippeepd down FieldTrip structures
 println("\nLoading ERP data...")
