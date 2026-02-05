@@ -157,8 +157,8 @@ function _correlation_matrix_dual_selection(
     matrix1 = Matrix(data1)  # channels1 × samples
     matrix2 = Matrix(data2)  # channels2 × samples
 
-    # Calculate correlation matrix: channels1 × channels2
-    corr_matrix = cor(matrix1, matrix2)
+    # Calculate correlation matrix: cor(X,Y) returns Y×X, so we transpose to get channels1 × channels2
+    corr_matrix = cor(matrix2, matrix1)'  # Transpose to get correct orientation
 
     # Create DataFrame with proper column and row names
     df = DataFrame(corr_matrix, selected_channels2)

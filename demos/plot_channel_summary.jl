@@ -1,11 +1,10 @@
 using EegFun
 
 # read raw data
-dat = EegFun.read_raw_data("./resources/data/example1.bdf");
+dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf");
 
 # read and preprate layout file
 layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
-EegFun.polar_to_cartesian_xy!(layout_file)
 
 # create EegFun data structure (EegFun.ContinuousData)
 dat = EegFun.create_eeg_dataframe(dat, layout_file);
@@ -34,7 +33,7 @@ EegFun.plot_channel_summary(cs, [:min, :max, :std, :range, :var, :zvar])
 epoch_cfg = [EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
 epochs = EegFun.extract_epochs(dat, epoch_cfg, (-2, 4))
 
-cs = EegFun.channel_summary(epochs[1])a
+cs = EegFun.channel_summary(epochs[1])
 
 EegFun.plot_channel_summary(cs, :range, average_over = :epoch)
 EegFun.plot_channel_summary(cs, [:min, :max, :std, :range, :var, :zvar], average_over = :epoch)

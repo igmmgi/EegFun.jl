@@ -110,11 +110,10 @@ This demo shows joint probability analysis:
 using EegFun
 
 # read raw data
-dat = EegFun.read_raw_data("./resources/data/example1.bdf");
+dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf");
 
 # read and preprate layout file
 layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
-EegFun.polar_to_cartesian_xy!(layout_file)
 
 # create EegFun data structure (EegFun.ContinuousData)
 dat = EegFun.create_eeg_dataframe(dat, layout_file);

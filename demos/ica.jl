@@ -1,7 +1,7 @@
 using EegFun
 
 # read raw data
-dat = EegFun.read_raw_data("./resources/data/example1.bdf");
+dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf");
 
 # read and preprate layout file
 layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
@@ -31,8 +31,25 @@ EegFun.channel_difference!(
 EegFun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 EegFun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
-# ICA on continuous data
-ica_result_infomax = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_200), percentage_of_data = 100)
+# ICA on continuous data excluding extreme samples
+ica_result_infomax = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_200))
+
+
+# ICA type plots
+# Basic Topoplots
+EegFun.plot_topography(ica_result_infomax, component_selection = EegFun.components(1:20));
+
+# Component spectra
+EegFun.plot_ica_component_spectrum(dat, ica_result_infomax, component_selection = EegFun.components(1:70))
+
+# Component data/activation
+EegFun.plot_ica_component_activation(dat, ica_result_infomax)
+
+# Databrowser (here we can turn on/off component removal's)
+EegFun.plot_databrowser(dat, ica_result_infomax)
+
+
+# Extended ICA
 ica_result_infomax_extended = EegFun.run_ica(
     dat;
     sample_selection = EegFun.samples_not(:is_extreme_value_200),
@@ -41,11 +58,18 @@ ica_result_infomax_extended = EegFun.run_ica(
 )
 
 # ICA type plots
-EegFun.plot_topography(ica_result_infomax, component_selection = EegFun.components(1:4));
-EegFun.plot_topography(ica_result_infomax_extended, component_selection = EegFun.components(1:4));
-EegFun.plot_ica_component_activation(dat, ica_result_infomax)
-EegFun.plot_ica_component_spectrum(dat, ica_result_infomax, component_selection = EegFun.components(1:70))
-EegFun.plot_databrowser(dat, ica_result_infomax)
+# Basic Topoplots
+EegFun.plot_topography(ica_result_infomax_extended, component_selection = EegFun.components(1:20));
+
+# Component spectra
+EegFun.plot_ica_component_spectrum(dat, ica_result_infomax_extended, component_selection = EegFun.components(1:70))
+
+# Component data/activation
+EegFun.plot_ica_component_activation(dat, ica_result_infomax_extended)
+
+# Databrowser (here we can turn on/off component removal's)
+EegFun.plot_databrowser(dat, ica_result_infomax_extended)
+
 
 # identify components
 component_artifacts, component_metrics =
@@ -54,9 +78,12 @@ component_artifacts, component_metrics =
 # or individually
 eog_comps, eog_comps_metrics_df =
     EegFun.identify_eog_components(dat, ica_result_infomax_extended, sample_selection = EegFun.samples_not(:is_extreme_value_200))
+
 ecg_comps, ecg_comps_metrics_df =
     EegFun.identify_ecg_components(dat, ica_result_infomax_extended, sample_selection = EegFun.samples_not(:is_extreme_value_200))
+
 line_noise_comps, line_noise_comps_metrics_df = EegFun.identify_line_noise_components(dat, ica_result_infomax_extended)
+
 channel_noise_comps, channel_noise_comps_metrics_df = EegFun.identify_spatial_kurtosis_components(ica_result_infomax_extended)
 
 
@@ -65,7 +92,7 @@ all_comps = EegFun.get_all_ica_components(component_artifacts)
 dat_ica_removed, ica_result_updated =
     EegFun.remove_ica_components(dat, ica_result_infomax_extended, component_selection = EegFun.components(all_comps))
 
-# Reconstruct for sanity check
+# Reconstruct for sanity check (ie., add components back to data)
 dat_ica_reconstructed, ica_result_restored =
     EegFun.restore_ica_components(dat_ica_removed, ica_result_updated, component_selection = EegFun.components(all_comps))
 
@@ -73,10 +100,10 @@ dat_ica_reconstructed, ica_result_restored =
 EegFun.channel_data(dat) ≈ EegFun.channel_data(dat_ica_reconstructed)
 
 # Plot component features
-(; fig, ax) = EegFun.plot_eog_component_features(eog_comps, eog_comps_metrics_df) # TODO: points sizes
-(; fig, ax) = EegFun.plot_ecg_component_features_(ecg_comps, ecg_comps_metrics_df)
-(; fig, ax) = EegFun.plot_line_noise_components(line_noise_comps, line_noise_comps_metrics_df)
-(; fig, ax) = EegFun.plot_spatial_kurtosis_components(channel_noise_comps, channel_noise_comps_metrics_df)
+fig, ax = EegFun.plot_eog_component_features(eog_comps, eog_comps_metrics_df)
+fig, ax = EegFun.plot_ecg_component_features_(ecg_comps, ecg_comps_metrics_df)
+fig, ax = EegFun.plot_line_noise_components(line_noise_comps, line_noise_comps_metrics_df)
+fig, ax = EegFun.plot_spatial_kurtosis_components(channel_noise_comps, channel_noise_comps_metrics_df)
 
 
 #################################
@@ -90,41 +117,10 @@ epoch_cfg = [
 epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.2, 1.0))  # -200 to 1000 ms
 
 # ICA on epoched data
-ica_result_infomax = EegFun.run_ica(epochs[1]; sample_selection = EegFun.samples_not(:is_extreme_value_200))
-ica_result_infomax_extended = EegFun.run_ica(epochs; sample_selection = EegFun.samples_not(:is_extreme_value_200))
-
+ica_result_infomax = EegFun.run_ica(epochs; sample_selection = EegFun.samples_not(:is_extreme_value_200))
 
 # ICA type plots
 EegFun.plot_topography(ica_result_infomax, component_selection = EegFun.components(1:4));
-EegFun.plot_topography(ica_result_infomax_extended, component_selection = EegFun.components(1:4));
 EegFun.plot_ica_component_activation(dat, ica_result_infomax_extended)
 EegFun.plot_ica_component_spectrum(dat, ica_result_infomax, component_selection = EegFun.components(1:70))
 EegFun.plot_databrowser(dat, ica_result_infomax)
-
-# identify components
-component_artifacts, component_metrics =
-    EegFun.identify_components(dat, ica_result_infomax_extended, sample_selection = EegFun.samples_not(:is_extreme_value_200))
-
-# Get all identified component artifacts
-all_comps = EegFun.get_all_ica_components(component_artifacts)
-dat_ica_removed, ica_result_updated = EegFun.remove_ica_components(dat, ica_result, component_selection = EegFun.components(all_comps))
-
-
-
-
-
-# Reconstruct for sanity check
-dat_ica_reconstructed, ica_result_restored =
-    EegFun.restore_ica_components(dat_ica_removed, ica_result_updated, component_selection = EegFun.components(all_comps))
-
-# Original should = reconstructed
-EegFun.channel_data(dat) ≈ EegFun.channel_data(dat_ica_reconstructed)
-
-# Plot component features
-(; fig, ax) = EegFun.plot_eog_component_features(eog_comps, eog_comps_metrics_df)
-(; fig, ax) = EegFun.plot_ecg_component_features_(ecg_comps, ecg_comps_metrics_df)
-(; fig, ax) = EegFun.plot_line_noise_components(line_noise_comps, line_noise_comps_metrics_df)
-(; fig, ax) = EegFun.plot_spatial_kurtosis_components(channel_noise_comps, channel_noise_comps_metrics_df)
-
-
-GLMakie.closeall()

@@ -22,7 +22,7 @@ const PLOT_CORRELATION_HEATMAP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :xlabel => ("", "Label for x-axis"),
     :ylabel => ("", "Label for y-axis"),
     :label_fontsize => (14, "Font size for axis labels"),
-    :xtick_rotation => (π/4, "Rotation angle for x-axis tick labels"),
+    :xtick_rotation => (π / 4, "Rotation angle for x-axis tick labels"),
     :ytick_rotation => (0, "Rotation angle for y-axis tick labels"),
     :tick_fontsize => (12, "Font size for tick labels"),
 
@@ -92,7 +92,7 @@ function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kw
     # Mask values within the specified range
     if !isnothing(plot_kwargs[:mask_range])
         min_val, max_val = plot_kwargs[:mask_range]
-        corr_matrix[(corr_matrix .>= min_val) .& (corr_matrix .<= max_val)] .= NaN
+        corr_matrix[(corr_matrix.>=min_val).&(corr_matrix.<=max_val)] .= NaN
     end
 
     # Use the specified colorrange
@@ -137,7 +137,9 @@ function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kw
     )
 
     # Create the heatmap
-    heatmap!(ax, corr_matrix, colormap = plot_kwargs[:colormap], colorrange = colorrange, nan_color = plot_kwargs[:nan_color])
+    # Makie's heatmap! displays matrices transposed (rows become columns), so we transpose
+    # to ensure DataFrame rows appear as plot rows and DataFrame columns as plot columns
+    heatmap!(ax, corr_matrix', colormap = plot_kwargs[:colormap], colorrange = colorrange, nan_color = plot_kwargs[:nan_color])
 
     # Add a colorbar if requested
     if plot_kwargs[:colorbar_plot]
