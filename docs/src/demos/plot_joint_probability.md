@@ -1,30 +1,105 @@
 # Plot Joint Probability
 
-## Overview
+This demo demonstrates using joint probability analysis to detect bad channels based on multi-dimensional statistical outliers.
 
-## Overview
+This demo demonstrates using joint probability analysis to detect bad channels based on multi-dimensional statistical outliers.
 
-This demo shows how to visualize channel joint probability distributions for quality assessment.
+### What is Joint Probability?
 
-### Joint Probability Analysis
+Joint probability analysis detects outlier channels by examining how each channel's distribution relates to all other channels simultaneously:
 
-Joint probability detects outlier channels based on multi-dimensional distributions:
-- Compares each channel to all others simultaneously
-- More sensitive than univariate metrics
-- Identifies channels with unusual data characteristics
+- **Multi-dimensional comparison**: Unlike single metrics (variance, kurtosis), joint probability considers the full distribution
+- **Statistical outlier detection**: Channels that don't fit the overall pattern are flagged
+- **More sensitive**: Catches unusual channels that may pass single-metric tests
 
-### Visualization
+### How It Works
 
-Plot shows how each channel relates to the overall distribution:
-- **Low probability**: Potential bad channels
-- **Consistent probabilities**: Clean data
-- **Spatial patterns**: Systematic issues with recording
+1. **Calculate channel statistics**: Extract features from each channel (amplitude, variance, etc.)
+2. **Build joint distribution**: Model the typical pattern across all channels
+3. **Compute probabilities**: For each channel, calculate how likely its pattern is
+4. **Identify outliers**: Channels with very low probability are suspicious
+
+### Interpreting Results
+
+**Low probability values** (close to 0):
+
+- Channel doesn't fit typical pattern
+- Potential bad channel
+- May have unusual artifacts or noise
+
+**Consistent probability values** (similar across channels):
+
+- Data quality is uniform
+- No obvious outliers
+
+**Spatial clusters** of low probability:
+
+- Systematic recording issues
+- Poor contact in a region
+- Regional artifacts
 
 ### Use Cases
 
+**Pre-processing quality control**:
+
 - Automated bad channel detection
-- Complement other quality metrics
-- Pre-processing quality control
+- Objective identification criteria
+- Reduces manual inspection time
+
+**Complement other metrics**:
+
+- Use with variance and kurtosis
+- Catches different types of artifacts
+- More comprehensive quality assessment
+
+**Research validation**:
+
+- Document channel exclusion decisions
+- Consistent criteria across datasets
+- Reproducible preprocessing
+
+### Threshold Selection
+
+The default threshold identifies statistical outliers, but you may need to adjust based on:
+
+- **Data quality**: Noisy data may need more lenient thresholds
+- **Channel count**: More channels → more statistical power
+- **Analysis goals**: Conservative vs aggressive cleaning
+
+### Advantages Over Single Metrics
+
+**Variance alone**: Misses channels with unusual distributions but normal variance
+
+**Kurtosis alone**: Misses channels with shifted means or different scales
+
+**Joint probability**: Combines multiple dimensions to catch subtle issues
+
+## Workflow Summary
+
+This demo shows joint probability analysis:
+
+### 1. Load and Preprocess
+
+- Read continuous data
+- Apply basic preprocessing (reference, filter)
+
+### 2. Compute Joint Probability
+
+- Calculate multi-dimensional statistics
+- Build probability distribution
+- Returns metrics for each channel
+
+### 3. Visualize Results
+
+- Plot probability values per channel
+- Identify low-probability outliers
+- Assess spatial patterns
+
+### 4. Use Results for QC
+
+- Flag suspicious channels
+- Combine with other metrics
+- Make informed exclusion decisions
 
 
 ## Code Examples

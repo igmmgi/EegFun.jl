@@ -329,10 +329,37 @@ function plot_topography(
     return fig, axes
 end
 
+"""
+    plot_topography(dat::Vector{EpochData}; kwargs...)
+
+Create topographic subplots from a vector of Epoch datasets by averaging trials within each condition.
+Each subplot shows the averaged topography for one condition.
+
+# Arguments
+- `dat`: Vector of EpochData objects (e.g., different conditions)
+- `kwargs...`: Additional keyword arguments passed to plot_topography
+
+# Examples
+```julia
+# Extract epochs for two conditions
+epochs = extract_epochs(dat, epoch_cfg, (-0.2, 1.0))
+
+# Plot subplots - one per condition (trials averaged)
+plot_topography(epochs)
+```
+"""
+function plot_topography(dat::Vector{EpochData}; kwargs...)
+    # Average trials within each condition to create ERPs
+    erps = average_epochs.(dat)
+    # Delegate to the Vector{ErpData} method which creates subplots
+    return plot_topography(erps; kwargs...)
+end
+
 function plot_topography(dat::Vector{EpochData}, epoch::Int; kwargs...)
     @info "Plotting epoch $(epoch) for each dataset in the vector"
     plot_topography.(dat, Ref(epoch))
 end
+
 
 
 function plot_topography!(

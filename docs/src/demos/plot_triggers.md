@@ -1,31 +1,95 @@
 # Plot Triggers
 
-## Overview
+This demo demonstrates visualizing event markers and triggers in continuous EEG data to verify timing and event sequences.
 
-## Overview
+This demo demonstrates visualizing event markers and triggers in continuous EEG data to verify timing and event sequences.
 
-This demo demonstrates visualization of event markers and triggers in continuous data.
+### What are Triggers?
 
-### Trigger Visualization
+Triggers (also called event markers or stimulus codes) are time-stamped codes that mark when experimental events occurred during recording:
 
-Display when experimental events occurred:
-- **Trigger markers**: Vertical lines at event times
-- **Trigger codes**: Different colors/styles for different event types
-- **Timing validation**: Verify event sequences and ISIs
+- Stimulus presentations
+- Participant responses
+- Experimental conditions
+- Trial boundaries
+- Hardware events
+- etc.
+
+### Trigger Cleaning
+
+EegFun automatically cleans triggers by default removing consecutive duplicates. For example, the raw sequence `0 0 1 1 0 0 2 2 2 0` becomes `0 0 1 0 0 0 2 0 0 0`. This ensures each trigger represents a single event rather than a sustained hardware signal.
+
+### Trigger Visualization Functions
+
+**trigger_count**:
+
+- Summary statistics of all trigger codes
+- Counts of each trigger type
+- Identifies missing or unexpected triggers
+
+**plot_trigger_overview**:
+
+- Visual representation of trigger occurrences
+- Color-coded by trigger type
+- Shows distribution across recording
+
+**plot_trigger_timing**:
+
+- Inter-trigger intervals (ITIs)
+- Timing precision verification
 
 ### Use Cases
 
-- **Quality control**: Verify triggers were recorded correctly
-- **Timing analysis**: Check inter-stimulus intervals
-- **Event sequence**: Confirm experimental protocol
-- **Troubleshooting**: Identify missing or spurious triggers
+**Quality control**:
 
-### Features
+- Verify triggers were recorded correctly
+- Confirm expected trigger counts
+- Identify missing or duplicate triggers
 
-- Overlay on continuous data
-- Color-coded by trigger type
-- Zoom to inspect timing precision
-- Summary statistics of trigger counts
+**Timing analysis**:
+
+- Check inter-stimulus intervals
+- Verify experimental timing
+
+**Troubleshooting**:
+
+- Identify spurious triggers
+- Find timing drift or jitter
+
+### Filtering Triggers
+
+Use `ignore_triggers` to exclude specific codes:
+
+- Filter out hardware markers
+- Remove boundary codes
+- Focus on experimental events only
+
+## Workflow Summary
+
+This demo shows trigger visualization workflows:
+
+### 1. Count Triggers
+
+- Load raw data
+- Count triggers before processing
+- Verify expected trigger codes exist
+
+### 2. Create Data Structure
+
+- Load layout and create EegFun structure
+- Count triggers again to verify preservation
+
+### 3. Visualize Overview
+
+- Plot trigger distribution
+- Optionally ignore certain trigger codes
+- Assess trigger patterns
+
+### 4. Analyze Timing
+
+- Plot inter-trigger intervals
+- Verify timing consistency
+- Identify timing issues
 
 
 ## Code Examples
@@ -36,24 +100,30 @@ Display when experimental events occurred:
 using EegFun
 
 # read raw data
-dat = EegFun.read_raw_data("./resources/data/example1.bdf");
+dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf");
 
-# count from raw file
+# basic trigger count from raw file
 count = EegFun.trigger_count(dat)
 
 # read and preprate layout file
 layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
-EegFun.polar_to_cartesian_xy!(layout_file)
 
 # create EegFun data structure (EegFun.ContinuousData)
 dat = EegFun.create_eeg_dataframe(dat, layout_file);
 
+# basic trigger count from EegFun data structure
 count = EegFun.trigger_count(dat)
 
+# trigger overview
 EegFun.plot_trigger_overview(dat)
-EegFun.plot_trigger_overview(dat; ignore_triggers = [3])
 
+# trigger overview with ignored triggers
+EegFun.plot_trigger_overview(dat; ignore_triggers = [3, 253])
+
+# trigger timing i.e, when did each trigger occur and interval between triggers
 EegFun.plot_trigger_timing(dat)
+
+# trigger timing with ignored triggers (timing interval is updated)
 EegFun.plot_trigger_timing(dat; ignore_triggers = [3])
 ```
 

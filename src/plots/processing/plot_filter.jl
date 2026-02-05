@@ -154,7 +154,7 @@ function plot_filter_response(
 
     # Simple logarithmic frequency spacing
     n_points = plot_kwargs[:n_points]
-    freqs = exp10.(range(log10(0.01), log10(filter_info.sample_rate/2), length = n_points))
+    freqs = exp10.(range(log10(0.01), log10(filter_info.sample_rate / 2), length = n_points))
     freqs = [0.0; freqs]  # Add DC point
 
     w = 2π * freqs / filter_info.sample_rate
@@ -169,6 +169,13 @@ function plot_filter_response(
 
     # Calculate magnitude responses
     mag_linear = abs.(resp)
+
+    # If using filtfilt, the filter is applied twice (forward + backward)
+    # This squares the magnitude response (doubles the dB attenuation)
+    if filter_func == filtfilt
+        mag_linear = mag_linear .^ 2
+    end
+
     mag_db = 20 * log10.(mag_linear)
 
     # Plot actual responses
@@ -180,7 +187,9 @@ function plot_filter_response(
     vlines!(ax2, [filter_info.cutoff_freq], color = :red, linestyle = :dash, linewidth = 2)
 
     # Add reference lines
-    hlines!(ax1, [0.707], color = plot_kwargs[:reference_color], linestyle = plot_kwargs[:reference_linestyle], alpha = 0.5)  # -3 dB point
+    # Calculate -3dB magnitude in linear scale, accounting for filtfilt if used
+    ref_mag_3db = filter_func == filtfilt ? 0.5 : 0.707  # -6dB for filtfilt, -3dB for single-pass
+    hlines!(ax1, [ref_mag_3db], color = plot_kwargs[:reference_color], linestyle = plot_kwargs[:reference_linestyle], alpha = 0.5)
     hlines!(
         ax2,
         plot_kwargs[:reference_lines],
@@ -199,8 +208,16 @@ function plot_filter_response(
 
     # Apply the specified filter function to get impulse response
     if filter_info.filter_method == "fir"
-        impulse_response = filter_info.filter_object
-        time_samples = (-(length(impulse_response)÷2)):((length(impulse_response)-1)÷2)
+        # For FIR, also need to account for filtfilt
+        if filter_func == filtfilt
+            # Apply filtfilt to get the actual impulse response
+            impulse_response = filtfilt(filter_info.filter_object, impulse)
+            time_samples = (-n_samples_before):n_samples_after
+        else
+            # Single-pass: just show the coefficients
+            impulse_response = filter_info.filter_object
+            time_samples = (-(length(impulse_response) ÷ 2)):((length(impulse_response)-1)÷2)
+        end
     else  # IIR filter
         impulse_response = filter_func(filter_info.filter_object, impulse)
         time_samples = (-n_samples_before):n_samples_after

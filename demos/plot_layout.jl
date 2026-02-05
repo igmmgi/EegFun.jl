@@ -2,25 +2,20 @@ using EegFun
 
 layout = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
 EegFun.polar_to_cartesian_xy!(layout, preserve_radial_distance = true);
+
+# basic plot
 EegFun.plot_layout_2d(layout)
 
-EegFun.plot_layout_2d(layout; head_color = :blue)
-EegFun.plot_layout_2d(layout; head_linewidth = 5)
-EegFun.plot_layout_2d(layout; head_radius = 1.8)
-
-EegFun.plot_layout_2d(layout; point_plot = false)
-EegFun.plot_layout_2d(layout; point_marker = :x)
-EegFun.plot_layout_2d(layout; point_markersize = 15)
+# some customisations
+EegFun.plot_layout_2d(layout; head_color = :grey, head_linewidth = 5, head_radius = 1.5)
+EegFun.plot_layout_2d(layout; point_plot = false, label_plot = false)
+EegFun.plot_layout_2d(layout; point_marker = :x, point_markersize = 20)
 EegFun.plot_layout_2d(layout; point_color = :red)
 
-EegFun.plot_layout_2d(layout; label_plot = false)
-EegFun.plot_layout_2d(layout; label_fontsize = 30)
-EegFun.plot_layout_2d(layout; label_color = :green)
-EegFun.plot_layout_2d(layout; label_xoffset = 0.1)
-EegFun.plot_layout_2d(layout; label_yoffset = 0.1)
-EegFun.plot_layout_2d(layout; label_zoffset = 2)
+EegFun.plot_layout_2d(layout; label_fontsize = 20, label_color = :grey)
 
-(; fig, ax) = EegFun.plot_layout_2d(layout)
+# Annotating plots with ROIs
+fig, ax = EegFun.plot_layout_2d(layout)
 EegFun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], roi_border_size = 0.05)
 EegFun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], roi_border_size = 0.1)
 EegFun.add_topo_rois!(

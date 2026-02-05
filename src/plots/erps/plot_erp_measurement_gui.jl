@@ -414,7 +414,7 @@ function plot_erp_measurement_gui(
     end
 
     display(fig)
-    return (fig=fig)
+    return (fig = fig)
 end
 
 
@@ -454,7 +454,12 @@ function _compute_gui_measurement(
 
     # Compute measurement using existing internal function logic
     local_window = 3  # Fixed neighborhood size for peak detection
-    measurement_kwargs = Dict{Symbol,Any}(:local_window => local_window)
+    measurement_kwargs = Dict{Symbol,Any}(
+        :local_window => local_window,
+        :fractional_area_fraction => 0.5,  # Default for fractional area latency
+        :fractional_peak_fraction => 0.5,  # Default for fractional peak latency  
+        :fractional_peak_direction => :onset,  # Default direction (before peak)
+    )
 
     try
         value = _compute_measurement(selected_data, selected_times, measurement_type, measurement_kwargs, channel)

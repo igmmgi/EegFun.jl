@@ -1,27 +1,131 @@
-## Overview
+This demo demonstrates extracting quantitative measurements from ERP waveforms for statistical analysis and reporting.
 
-This demo shows how to extract quantitative measurements from ERP waveforms.
+### What are ERP Measurements?
 
-### ERP Measurements
+ERP measurements quantify specific features of averaged event-related potentials:
 
-Extract meaningful features from averaged waveforms:
+- **Amplitude**: Voltage magnitude at specific times or peaks
+- **Latency**: Timing of component peaks or onsets
+- **Area/Integral**: Total activity over a time window
+- **Peak-to-peak**: Voltage range between positive and negative deflections
 
-**Amplitude Measures:**
-- **Mean amplitude**: Average voltage in a time window
-- **Peak amplitude**: Maximum/minimum voltage
-- **Peak-to-peak**: Voltage difference between peaks
+### Measurement Types
 
-**Latency Measures:**
-- **Peak latency**: Time of maximum deflection
-- **Onset latency**: When component begins
-- **Fractional area latency**: Time point dividing area
+**Mean Amplitude**:
 
-**Area Measures:**
-- **Integral**: Total area under the curve
-- **Rectified area**: Absolute area (ignores polarity)
+- Average voltage in a time window
+- Most robust amplitude measure
+- Less sensitive to noise than peak measures
+- Standard for most ERP components
 
-### Use Cases
+**Peak Amplitude**:
 
-- Quantify component amplitudes (N1, P3, N400, etc.)
-- Compare experimental conditions statistically
-- Report ERP characteristics in publications
+- Maximum (or minimum) voltage in window
+- Captures strongest response
+- Can be affected by noise
+- Useful for P300, N400, etc.
+
+**Peak Latency**:
+
+- Time of maximum deflection
+- Identifies when component peaks
+- Sensitive to individual differences
+- Important for timing analyses
+
+**Fractional Area Latency**:
+
+- Time point dividing area (e.g., 50% of total area)
+- More robust than peak latency
+- Less affected by noise and waveform shape
+- Better reflects central tendency
+
+**Area/Integral**:
+
+- Total voltage × time in window
+- Captures sustained activity
+- Less sensitive to brief noise
+- Good for slow components
+
+**Peak-to-Peak**:
+
+- Voltage difference between positive and negative peaks
+- Useful for biphasic components
+- Captures full deflection range
+
+### Interactive GUI
+
+**`plot_erp_measurement_gui`**:
+
+- Visual interface for exploring measurements
+- Adjust time windows interactively
+- Select measurement types
+- Preview results before batch processing
+
+### Batch Processing
+
+**`erp_measurements`**:
+
+- Process multiple files at once
+- Apply consistent measurement parameters
+- Export to CSV for statistical analysis
+- Includes metadata (file, condition, channel)
+
+### Best Practices
+
+**Choose appropriate measures**:
+
+- **Mean amplitude**: Default for most components
+- **Peak measures**: When timing precision matters
+- **Fractional latency**: For robust timing analysis
+- **Area**: For sustained or variable waveforms
+
+**Define time windows carefully**:
+
+- Based on grand averages or literature
+- Should capture component of interest
+- Avoid overlapping components when possible
+
+**Baseline correction**:
+
+- Apply before measurements
+- Use pre-stimulus interval
+- Ensures consistent zero reference
+
+**Multiple measurements**:
+
+- Combine amplitude and latency
+- Use area for validation
+- Report multiple metrics when appropriate
+
+### Typical Workflow
+
+1. **Visualize ERPs** to identify components
+2. **Use GUI** to explore measurement parameters
+3. **Define time windows** based on grand average
+4. **Batch process** all files with `erp_measurements`
+5. **Export to CSV** for statistical analysis
+
+## Workflow Summary
+
+This demo shows ERP measurement extraction:
+
+### 1. Interactive Exploration
+
+- Launch `plot_erp_measurement_gui`
+- Visualize ERPs
+- Explore different measurement types
+- Adjust time windows interactively
+
+### 2. Batch Processing
+
+- Define measurement parameters
+- Process multiple files with `erp_measurements`
+- Select conditions and channels
+- Specify analysis and baseline intervals
+
+### 3. Export Results
+
+- Measurements saved to CSV
+- Includes metadata (file, condition, channel)
+- Ready for statistical analysis
+- Reproducible parameters documented
