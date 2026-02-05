@@ -1,14 +1,30 @@
 # Plot Epochs
 
-Visualizes individual epochs with channel selection.
+## Overview
 
 ## Overview
 
-Demonstrates Visualizes individual epochs with channel selection.
+This demo shows how to visualize individual epochs with channel selection.
 
-## Source Code
+### Epoch Visualization
+
+Display single-trial waveforms across channels:
+- **Multi-channel view**: See all electrodes simultaneously
+- **Time-locked to events**: Aligned to stimulus/response
+- **Channel selection**: Focus on regions of interest
+
+### Use Cases
+
+- Inspect trial-level variability
+- Verify epoching parameters
+- Identify trial-specific artifacts
+- Explore condition differences at single-trial level
+
+
+## Code Examples
 
 ::: details Show Code
+
 ```julia
 using EegFun
 using JLD2
@@ -46,6 +62,7 @@ EegFun.plot_epochs(epochs[1], channel_selection = EegFun.channels([:Fp1, :Fp2, :
 EegFun.plot_epochs(epochs[1], channel_selection = EegFun.channels([:Fp1, :Fp2, :Cz]); layout = :topo)
 
 ```
+
 :::
 
 ## See Also

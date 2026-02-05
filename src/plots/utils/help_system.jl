@@ -49,12 +49,15 @@ function get_plot_help_info(plot_type::Symbol)::PlotHelpInfo
                 ("Down", "Zoom out on Y-axis (amplitude scale)"),
                 ("Left", "Scroll backward in time"),
                 ("Right", "Scroll forward in time"),
+                ("Mouse Wheel", "Zoom in/out"),
+                ("Right Mouse + Drag", "Pan view (when outside region)"),
                 ("Shift + Left Click + Drag", "Select x-region (multiple selections allowed)"),
                 ("Left Click on region", "Deselect that region"),
                 ("Shift + Left Click", "Clear current selection"),
                 ("C", "Clear all selected regions"),
                 ("Right Click within highlighted region", "Context menu (includes 'Get Selected Regions')"),
                 ("Strg/Crtl + Left click", "Select closest channel"),
+                ("R", "Open channel repair menu (continuous data only)"),
             ],
         ),
         :erp_image => PlotHelpInfo(
@@ -118,7 +121,7 @@ function print_plot_help(plot_type::Symbol)
     end
 
     println("\n" * "="^40)
-    println("📊 $(help_info.title)")
+    println(" $(help_info.title)")
     println("="^40)
 
     for (action, description) in help_info.interactions

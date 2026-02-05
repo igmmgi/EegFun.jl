@@ -41,7 +41,7 @@ pages = [
         "TF Multitaper" => "demos/tf_multitaper.md",
         "TF STFT" => "demos/tf_stft.md",
     ],
-    "Reference" => ["Overview" => "reference/index.md", "Types" => "reference/types.md"],
+    "Reference" => ["Overview" => "reference/index.md", "Types" => "reference/types.md", "Layouts" => "reference/layouts.md"],
 ]
 
 makedocs(;

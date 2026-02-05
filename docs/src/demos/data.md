@@ -1,14 +1,37 @@
 # Data
 
-Data loading and basic data structures.
+## Overview
 
 ## Overview
 
-Demonstrates Data loading and basic data structures.
+This demo demonstrates loading EEG data and understanding the basic data structures.
 
-## Source Code
+### Supported File Formats
+
+- **BioSemi (.bdf)**: High-resolution EEG recordings
+- **BrainVision (.vhdr)**: BrainProducts format
+- **EEGLAB (.set)**: Matlab-based EEG format
+- **FieldTrip (.mat)**: Matlab-based format
+
+### Core Data Structures
+
+**ContinuousData:**
+- Raw EEG time series
+- Contains electrode data, triggers, sampling rate, metadata
+
+**EpochData:**
+- Segmented trials around events
+- Organized by experimental conditions
+
+**ErpData:**
+- Averaged event-related potentials
+- One waveform per condition
+
+
+## Code Examples
 
 ::: details Show Code
+
 ```julia
 using EegFun
 
@@ -44,6 +67,7 @@ dat_subset = EegFun.subset(dat, channel_selection = EegFun.channels([:Fp1, :Fp2]
 dat_subset = EegFun.subset(dat, sample_selection = x -> x.sample .<= 10_000) # first 10000 samples
 dat_subset = EegFun.subset(dat, sample_selection = x -> x.time .<= 10) # first 10 seconds
 ```
+
 :::
 
 ## See Also

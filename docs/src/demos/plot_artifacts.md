@@ -1,14 +1,29 @@
 # Plot Artifacts
 
-Visualization of detected artifacts in epoched data.
+## Overview
 
 ## Overview
 
-Demonstrates Visualization of detected artifacts in epoched data.
+This demo shows how to visualize detected artifacts in epoched data.
 
-## Source Code
+### Artifact Visualization
+
+Visualize which channels and epochs contain artifacts:
+- **Channel-wise**: See which electrodes are most affected
+- **Epoch-wise**: Identify problematic trials
+- **Temporal patterns**: When artifacts occur within epochs
+
+### Plot Components
+
+- Individual epoch waveforms with artifact markers
+- Bad channel/epoch summaries
+- Rejection statistics across conditions
+
+
+## Code Examples
 
 ::: details Show Code
+
 ```julia
 using EegFun
 using GLMakie
@@ -34,6 +49,7 @@ artifacts = EegFun.detect_bad_epochs_automatic(epochs)
 # Plot artifacts
 EegFun.plot_artifact_detection(epochs[1], artifacts[1])
 ```
+
 :::
 
 ## See Also

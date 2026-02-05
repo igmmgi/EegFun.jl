@@ -68,7 +68,7 @@ EegFun.channel_difference!(
 # detect some extreme values
 EegFun.is_extreme_value!(dat, 200);
 
-# ICA on continuous data
+# ICA on continuous data without extreme values
 ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_200)) 
 
 EegFun.plot_ica_component_activation(dat, ica_result)
