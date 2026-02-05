@@ -669,12 +669,12 @@ function _plot_ica_topo_in_viewer!(
     pre_calculated_levels = nothing,
     kwargs...,
 )
-    # Prepare data using the new internal function
-    data = _prepare_ica_topo_data(ica, comp_idx, method, gridscale)
+    # Prepare data using the new internal function (returns tuple: data, x_bounds, y_bounds)
+    topo_data, x_bounds, y_bounds = _prepare_ica_topo_data(ica, comp_idx, method, gridscale)
 
     # Use pre-calculated levels if provided, otherwise calculate levels
     if isnothing(pre_calculated_levels)
-        levels = _calculate_topo_levels(data; use_global_scale = use_global_scale, num_levels = num_levels)
+        levels = _calculate_topo_levels(topo_data; use_global_scale = use_global_scale, num_levels = num_levels)
     else
         levels = pre_calculated_levels
     end
@@ -699,7 +699,7 @@ function _plot_ica_topo_in_viewer!(
     co = _plot_topo_on_axis!(
         topo_ax,
         fig,
-        data,
+        topo_data,
         ica.layout,
         levels;
         gridscale = gridscale,
@@ -1081,9 +1081,9 @@ function _add_boolean_indicators!(state, channel_sym)
                 # Create vertical lines at each true position
                 # Only create lines within the current view range
                 current_range = state.xrange[]
-                visible_times = true_times[true_times .>= state.dat.data.time[first(
+                visible_times = true_times[true_times.>=state.dat.data.time[first(
                     current_range,
-                )].&&true_times .<= state.dat.data.time[last(current_range)]]
+                )].&&true_times.<=state.dat.data.time[last(current_range)]]
 
                 if !isempty(visible_times)
                     lines = vlines!(ax_channel, visible_times, color = :red, linewidth = 1)
@@ -1424,44 +1424,46 @@ function plot_eog_component_features(identified_comps::Dict, metrics_df::DataFra
     fig = Figure()
     ax_v = Axis(fig[1, 1], xlabel = "Component Number", ylabel = "Z-Score", title = "vEOG Correlation Z-Scores")
     # Use component indices from DataFrame for x-axis
-    scatter!(ax_v, metrics_df.Component, vEOG_corr_z, color = :gray, markersize = 5)
+    scatter!(ax_v, metrics_df.Component, vEOG_corr_z, color = :gray, markersize = 12)
     hlines!(ax_v, [z_threshold, -z_threshold], color = :gray, linestyle = :dash)
     # Highlight all identified components
     if !isempty(final_vEOG)
         # Get z-scores only for the identified components
         vEOG_z_scores_highlight = metrics_df[in.(metrics_df.Component, Ref(final_vEOG)), :vEOG_zscore]
-        scatter!(ax_v, final_vEOG, vEOG_z_scores_highlight, color = :blue, markersize = 8)
+        scatter!(ax_v, final_vEOG, vEOG_z_scores_highlight, color = :red, markersize = 15)
         for comp_idx in final_vEOG # Annotate each identified component
             text!(
                 ax_v,
                 comp_idx,
                 metrics_df[comp_idx, :vEOG_zscore],
                 text = string(comp_idx),
-                color = :blue,
+                color = :red,
                 align = (:center, :bottom),
-                fontsize = 10,
+                fontsize = 18,
+                offset = (0, 5),
             )
         end
     end
 
     ax_h = Axis(fig[1, 2], xlabel = "Component Number", ylabel = "Z-Score", title = "hEOG Correlation Z-Scores")
     # Use component indices from DataFrame for x-axis
-    scatter!(ax_h, metrics_df.Component, hEOG_corr_z, color = :gray, markersize = 5)
+    scatter!(ax_h, metrics_df.Component, hEOG_corr_z, color = :gray, markersize = 12)
     hlines!(ax_h, [z_threshold, -z_threshold], color = :gray, linestyle = :dash)
     # Highlight all identified components
     if !isempty(final_hEOG)
         # Get z-scores only for the identified components
         hEOG_z_scores_highlight = metrics_df[in.(metrics_df.Component, Ref(final_hEOG)), :hEOG_zscore]
-        scatter!(ax_h, final_hEOG, hEOG_z_scores_highlight, color = :blue, markersize = 8)
+        scatter!(ax_h, final_hEOG, hEOG_z_scores_highlight, color = :red, markersize = 15)
         for comp_idx in final_hEOG # Annotate each identified component
             text!(
                 ax_h,
                 comp_idx,
                 metrics_df[comp_idx, :hEOG_zscore],
                 text = string(comp_idx),
-                color = :blue,
+                color = :red,
                 align = (:center, :bottom),
-                fontsize = 10,
+                fontsize = 18,
+                offset = (0, 5),
             )
         end
     end
@@ -1549,16 +1551,25 @@ function plot_spatial_kurtosis_components(kurtosis_comps::Vector{Int}, metrics_d
     ax = Axis(fig[1, 1], xlabel = "Component", ylabel = "Spatial Kurtosis Z-Score", title = "Component Spatial Kurtosis Z-Scores")
 
     # Plot all components
-    scatter!(ax, metrics_df.Component, metrics_df.z_spatial_kurtosis, color = :gray)
+    scatter!(ax, metrics_df.Component, metrics_df.z_spatial_kurtosis, color = :gray, markersize = 12)
 
     # Highlight high kurtosis components
     if !isempty(kurtosis_comps)
         kurtosis_values = metrics_df[in.(metrics_df.Component, Ref(kurtosis_comps)), :z_spatial_kurtosis]
-        scatter!(ax, kurtosis_comps, kurtosis_values, color = :red, markersize = 8)
+        scatter!(ax, kurtosis_comps, kurtosis_values, color = :red, markersize = 15)
 
         # Add labels for high kurtosis components
         for (i, comp) in enumerate(kurtosis_comps)
-            text!(ax, comp, kurtosis_values[i], text = string(comp), color = :red, align = (:center, :bottom), fontsize = 10)
+            text!(
+                ax,
+                comp,
+                kurtosis_values[i],
+                text = string(comp),
+                color = :red,
+                align = (:center, :bottom),
+                fontsize = 14,
+                offset = (0, 5),
+            )
         end
     end
 
@@ -1733,7 +1744,7 @@ function plot_line_noise_components(
     ax1 = Axis(fig[1, 1], xlabel = "Component", ylabel = "Power Ratio Z-Score", title = "Line Frequency Power Ratio Z-Scores")
 
     # Plot all components with label
-    scatter!(ax1, metrics_df.Component, metrics_df.power_ratio_zscore, color = :gray, label = "All Components")
+    scatter!(ax1, metrics_df.Component, metrics_df.power_ratio_zscore, color = :gray, markersize = 12, label = "All Components")
 
     # Highlight identified components with label
     if !isempty(line_noise_comps)
@@ -1743,14 +1754,23 @@ function plot_line_noise_components(
             identified_metrics.Component,
             identified_metrics.power_ratio_zscore,
             color = :red,
-            markersize = 8,
+            markersize = 15,
             label = "Line Noise Components",
         )
 
         # Add component numbers as labels
         for (i, comp) in enumerate(line_noise_comps)
-            row = metrics_df[metrics_df.Component .== comp, :]
-            text!(ax1, comp, row.power_ratio_zscore[1], text = string(comp), color = :red, align = (:center, :bottom), fontsize = 10)
+            row = metrics_df[metrics_df.Component.==comp, :]
+            text!(
+                ax1,
+                comp,
+                row.power_ratio_zscore[1],
+                text = string(comp),
+                color = :red,
+                align = (:center, :bottom),
+                fontsize = 14,
+                offset = (0, 5),
+            )
         end
     end
 
@@ -1764,7 +1784,7 @@ function plot_line_noise_components(
     ax2 = Axis(fig[1, 2], xlabel = "Component", ylabel = "Power Ratio", title = "Harmonic Power Ratios")
 
     # Plot harmonic ratios with labels
-    scatter!(ax2, metrics_df.Component, metrics_df.harmonic_ratio, color = :blue, label = "2nd Harmonic")
+    scatter!(ax2, metrics_df.Component, metrics_df.harmonic_ratio, color = :gray, markersize = 12, label = "All Components")
 
     # Add reference line for minimum harmonic power with label
     hlines!(ax2, [min_harmonic_power], color = :gray, linestyle = :dash, label = "Min Harmonic Power")
@@ -1775,12 +1795,12 @@ function plot_line_noise_components(
         scatter!(
             ax2,
             identified_metrics.Component,
-            identified_metrics.harmonic2_ratio,
+            identified_metrics.harmonic_ratio,
             color = :red,
-            markersize = 8,
+            markersize = 15,
             label = "Line Noise Components",
         )
-        scatter!(ax2, identified_metrics.Component, identified_metrics.harmonic3_ratio, color = :red, markersize = 8)
+
     end
 
     # Add legend

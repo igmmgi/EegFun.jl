@@ -1,16 +1,116 @@
-## Overview
+This demo demonstrates how to compute and visualize channel correlation matrices for quality control and artifact detection.
 
-This demo demonstrates visualization of channel correlation matrices.
+### What is a Correlation Matrix?
 
-### Channel Correlation
+A correlation matrix shows the Pearson correlation coefficient between all channel pairs:
 
-Correlation heatmaps show relationships between all channel pairs:
-- **Good data**: Nearby channels show high correlation
-- **Bad channels**: Low correlation with neighbors (bridged or poor contact)
-- **Global patterns**: Identify systematic artifacts
+- **Values range from -1 to +1**
+- **High positive correlation** (near +1): Channels move together
+- **Low correlation** (near 0): Channels are independent
+- **Negative correlation** (near -1): Channels move in opposite directions
 
-### Interpretation
+### Why Use Correlation Matrices?
 
-- High correlation with neighbors: Expected for clean data
-- Isolated low correlation: Potential bad channel
-- Unexpected high correlation: Possible electrode bridging
+**Quality Control**:
+
+- **Identify bad channels**: Low correlation with all neighbors
+- **Detect bridging**: Unexpectedly high correlation between channels
+- **Assess reference choice**: Impact on spatial correlation structure
+
+### Visualization Types
+
+**Full Correlation Heatmap**:
+
+Shows all channel-to-channel correlations as a matrix where:
+
+- **Diagonal**: Always 1.0 (channel correlated with itself)
+- **Off-diagonal**: Correlation between channel pairs
+- **Color scale**: Red (high correlation) to blue (low correlation)
+
+**Dual Selection Heatmap**:
+
+Correlates two different channel sets:
+
+- **Rows**: One set of channels (e.g., all EEG channels)
+- **Columns**: Another set (e.g., EOG channels)
+
+**Layout Overlay**:
+
+Displays channel-to-channel correlations directly on the 2D sensor layout:
+
+- Select a reference channel
+- See its correlation with all other channels as colored dots
+- **Use case**: Quick visual inspection of spatial correlation patterns
+
+### Expected Patterns
+
+**Healthy Data**:
+
+- **High correlation with neighbors** (~0.7-0.9): Nearby channels capture similar signals
+- **Decreasing correlation with distance**: Far channels less correlated
+- **Symmetric matrix**: Correlation(A,B) = Correlation(B,A)
+
+**Problematic Patterns**:
+
+**Single bad channel**:
+
+- Low correlation (<0.3) with all neighbors
+- Stands out as a blue row/column in heatmap
+- **Solution**: Interpolate or exclude
+
+**Bridged channels**:
+
+- Abnormally v. high correlation (>0.99) between adjacent channels
+- Indicates electrical connection between electrodes
+- **Solution**: Usually, more careful setup is required to avoid this
+
+**EOG contamination**:
+
+- High correlation between frontal channels and EOG
+- Expected for Fp1/Fp2 (near eyes)
+- **Solution**: Use ICA for removal if excessive
+
+### Common Use Cases
+
+**1. Post-Acquisition Quality Check**:
+
+```julia
+cm = correlation_matrix(dat)
+plot_correlation_heatmap(cm)
+```
+
+Quick overview to identify problematic channels
+
+**2. Targeted Channel Inspection**:
+
+```julia
+cm = correlation_matrix(dat, channel_selection = channels([:Fp1, :Fp2, :C3, :C4]))
+```
+
+Focus on specific regions or suspected bad channels
+
+**3. EOG Artifact Assessment**:
+
+```julia
+cm = correlation_matrix_dual_selection(
+    dat,
+    channel_selection1 = channels(),  # All EEG
+    channel_selection2 = channels([:vEOG, :hEOG])  # EOG
+)
+```
+
+Identify which channels are affected by eye movements
+
+
+### Workflow Summary
+
+This demo shows:
+
+1. **Compute full correlation matrix** for all channels
+2. **Visualize as heatmap** for overview
+3. **Compute subset** targeting specific channels
+4. **Create EOG channels** for artifact assessment
+5. **Dual selection correlation** to identify EOG-contaminated channels
+6. **Layout overlay** for spatial visualization
+
+The correlation matrix is a powerful diagnostic tool for both quality control and understanding spatial relationships in your data!

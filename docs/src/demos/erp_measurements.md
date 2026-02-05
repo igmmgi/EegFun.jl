@@ -155,20 +155,16 @@ in EegFun for extracting quantitative features from ERP data.
 using EegFun
 dat = EegFun.read_data("./resources/data/julia/erps/example1_erps_good.jld2")
 
-
-EegFun.plot_erp_filter_gui(dat)
-
-EegFun.plot_erp_measurement_gui(dat)
-EegFun.plot_erp_measurement_gui(dat[1])
+# We can use the plot_erp_measurements_gui to explore the data and select the measurement parameters
+EegFun.plot_erp_measurement_gui(dat)    # all conditions
+EegFun.plot_erp_measurement_gui(dat[1]) # first condition
 
 # ----------------------------------------------------------------------------
 # Amplitude Measurements
 # ----------------------------------------------------------------------------
 
-# dat = EegFun.read_data("./data/files/erps/example1_erps_good.jld2")
-# EegFun.plot_erp(dat, condition_selection = EegFun.conditions([1]), channel_selection = EegFun.channels([:Pz]), baseline_interval = (0, 0))
-
-input_dir = "./resources/data/erps"
+# batch type analyses
+input_dir = "./resources/data/julia/erps"
 file_pattern = "erps_good"
 
 # Mean amplitude in a time window
@@ -177,19 +173,14 @@ mean_amp = EegFun.erp_measurements(
     "max_peak_latency",
     input_dir = input_dir,
     condition_selection = EegFun.conditions([1, 2]),
-    channel_selection = EegFun.channels(),
+    channel_selection = EegFun.channels(),  # all channels
     # channel_selection = EegFun.channels([:Pz, :Cz, :Fz]),
     analysis_interval = (0.6, 0.8),
-    baseline_interval = (0.0, 0.0),
+    baseline_interval = (-0.2, 0.0),  # 200 ms pre-stimulus baseline
 )
 
-
-dat = EegFun.read_data("./resources/data/erps/example1_erps_good.jld2")
-EegFun.plot_erp(dat, condition_selection = EegFun.conditions([1]), channel_selection = EegFun.channels([:Pz]), baseline_interval = (0, 0))
-
-
-EegFun.plot_erp_measurement_gui(dat[1])
-EegFun.plot_erp_measurement_gui(dat)```
+# the above results data AND saves the results to a csv file
+```
 
 :::
 

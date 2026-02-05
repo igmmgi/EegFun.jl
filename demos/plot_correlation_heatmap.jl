@@ -1,7 +1,7 @@
 using EegFun
 
 # read raw data
-dat = EegFun.read_raw_data("./resources/data/example1.bdf");
+dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf");
 
 # read and preprate layout file
 layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
@@ -36,15 +36,15 @@ EegFun.channel_difference!(
 ); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
 
 # Calculate correlations between all channels and EOG channels
-cm = EegFun.correlation_matrix_dual_selection(
+cm_eog = EegFun.correlation_matrix_dual_selection(
     dat,
     sample_selection = EegFun.samples(),  # All samples
     channel_selection1 = EegFun.channels(),  # All EEG channels
     channel_selection2 = EegFun.channels([:vEOG, :hEOG]),  # EOG channels
 )
 
-# TODO: this plots does not make sense for correlation_matrix_dual_selection
-EegFun.plot_correlation_heatmap(cm, title = "Full Correlation Matrix")
+# Visualize which EEG channels are correlated with EOG
+EegFun.plot_correlation_heatmap(cm_eog, title = "EEG-EOG Correlations", xlabel = "EOG Channels", ylabel = "EEG Channels")
 
 # Display channel correlations in layout
 cm = EegFun.correlation_matrix(dat)
