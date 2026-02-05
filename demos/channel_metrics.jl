@@ -1,8 +1,7 @@
 using EegFun
-using GLMakie
 
 # read raw data
-dat = EegFun.read_raw_data("./resources/data/example1.bdf");
+dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf");
 
 # read and preprate layout file
 layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
@@ -10,6 +9,7 @@ EegFun.polar_to_cartesian_xy!(layout_file)
 
 dat = EegFun.create_eeg_dataframe(dat, layout_file)
 
+# minimal preprocessing
 EegFun.rereference!(dat, :avg)
 EegFun.highpass_filter!(dat, 0.1)
 
@@ -19,7 +19,6 @@ EegFun.is_extreme_value!(dat, 100)
 # channel joint probability
 channel_joint_probability = EegFun.channel_joint_probability(dat)
 channel_joint_probability = EegFun.channel_joint_probability(dat, sample_selection = EegFun.samples_not(:is_extreme_value_100))
-
 
 # Calculate EOG signals
 EegFun.channel_difference!(
@@ -34,6 +33,7 @@ EegFun.channel_difference!(
     channel_selection2 = EegFun.channels([:F10]),
     channel_out = :hEOG,
 ); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+
 EegFun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 EegFun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 

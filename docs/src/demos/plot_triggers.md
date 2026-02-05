@@ -1,14 +1,37 @@
 # Plot Triggers
 
-Visualizes event markers and triggers in continuous data.
+## Overview
 
 ## Overview
 
-Demonstrates Visualizes event markers and triggers in continuous data.
+This demo demonstrates visualization of event markers and triggers in continuous data.
 
-## Source Code
+### Trigger Visualization
+
+Display when experimental events occurred:
+- **Trigger markers**: Vertical lines at event times
+- **Trigger codes**: Different colors/styles for different event types
+- **Timing validation**: Verify event sequences and ISIs
+
+### Use Cases
+
+- **Quality control**: Verify triggers were recorded correctly
+- **Timing analysis**: Check inter-stimulus intervals
+- **Event sequence**: Confirm experimental protocol
+- **Troubleshooting**: Identify missing or spurious triggers
+
+### Features
+
+- Overlay on continuous data
+- Color-coded by trigger type
+- Zoom to inspect timing precision
+- Summary statistics of trigger counts
+
+
+## Code Examples
 
 ::: details Show Code
+
 ```julia
 using EegFun
 
@@ -33,6 +56,7 @@ EegFun.plot_trigger_overview(dat; ignore_triggers = [3])
 EegFun.plot_trigger_timing(dat)
 EegFun.plot_trigger_timing(dat; ignore_triggers = [3])
 ```
+
 :::
 
 ## See Also

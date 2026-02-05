@@ -1,14 +1,37 @@
 # Plot Filter
 
-Visualizes filter frequency and phase responses.
+## Overview
 
 ## Overview
 
-Demonstrates Visualizes filter frequency and phase responses.
+This demo demonstrates visualization of filter frequency and phase responses.
 
-## Source Code
+### Filter Response Plots
+
+Inspect filter characteristics before applying:
+- **Magnitude response**: How much each frequency is attenuated
+- **Phase response**: Time delays introduced at different frequencies
+- **Impulse response**: Filter behavior in time domain
+
+### Why Visualize Filters?
+
+- Verify cutoff frequencies are correct
+- Check transition band steepness
+- Identify potential artifacts (ringing, phase distortion)
+- Document filter parameters for methods sections
+
+### Filter Types
+
+- **High-pass**: Remove slow drifts
+- **Low-pass**: Remove high-frequency noise
+- **Band-pass**: Isolate specific frequencies
+- **Notch**: Remove line noise (50/60 Hz)
+
+
+## Code Examples
 
 ::: details Show Code
+
 ```julia
 using EegFun
 
@@ -46,6 +69,7 @@ EegFun.plot_filter_response(filter_info, title = "High-pass Filter with Plot")
 
 
 ```
+
 :::
 
 ## See Also

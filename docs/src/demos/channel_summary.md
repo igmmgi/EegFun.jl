@@ -1,14 +1,29 @@
 # Channel Summary
 
-Generate summary statistics for channels.
+## Overview
 
 ## Overview
 
-Demonstrates Generate summary statistics for channels.
+This demo shows how to generate summary statistics across all channels.
 
-## Source Code
+### Channel Summary Statistics
+
+Summarize data characteristics across channels:
+- **Amplitude statistics**: Mean, variance, min, max per channel
+- **Temporal statistics**: Time-domain characteristics
+- **Quality metrics**: Identify outlier channels
+
+### Use Cases
+
+- **Data quality overview**: Quick assessment of recording quality
+- **Channel comparison**: Identify systematic differences across the montage
+- **Documentation**: Generate summary statistics for methods sections
+
+
+## Code Examples
 
 ::: details Show Code
+
 ```julia
 using EegFun
 using GLMakie
@@ -31,6 +46,7 @@ EegFun.log_pretty_table(summary; title = "Initial Channel Summary")
 EegFun.is_extreme_value!(dat, 100);
 summary = EegFun.channel_summary(dat, sample_selection = EegFun.samples_not(:is_extreme_value_100))
 ```
+
 :::
 
 ## See Also

@@ -1,14 +1,37 @@
 # Plot ERP Image
 
-Creates ERP image plots showing trial-by-trial variations.
+## Overview
 
 ## Overview
 
-Demonstrates Creates ERP image plots showing trial-by-trial variations.
+This demo shows how to create ERP image plots for visualizing trial-by-trial variations.
 
-## Source Code
+### ERP Images
+
+ERP images display single-trial data as 2D color-coded images:
+- **Rows**: Individual trials
+- **Columns**: Time points
+- **Color**: Amplitude
+- **Sorting**: Trials can be sorted by RT, amplitude, or other variables
+
+### Why Use ERP Images?
+
+- **Visualize variability**: See trial-to-trial differences beyond the average
+- **Identify artifacts**: Spot trials with transient noise
+- **Phase consistency**: Observe whether components are time-locked vs. phase-locked
+- **Sorting effects**: Reveal dynamics related to behavior or stimulus properties
+
+### Applications
+
+- Supplement traditional ERPs with single-trial information
+- Identify outlier trials
+- Explore relationships between neural activity and behavior
+
+
+## Code Examples
 
 ::: details Show Code
+
 ```julia
 using EegFun
 using GLMakie
@@ -56,6 +79,7 @@ EegFun.plot_erp_image(epochs[1], layout = :single)
 EegFun.plot_erp_image(epochs[1], layout = :topo)
 EegFun.plot_erp_image(epochs[1], layout = :grid)
 ```
+
 :::
 
 ## See Also

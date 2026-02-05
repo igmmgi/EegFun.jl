@@ -1,14 +1,29 @@
 # Plot Channel Summary
 
-Plot summary statistics for all channels.
+## Overview
 
 ## Overview
 
-Demonstrates Plot summary statistics for all channels.
+This demo shows how to visualize channel summary statistics across the montage.
 
-## Source Code
+### Summary Visualizations
+
+Plot aggregate statistics for all channels:
+- **Topographic maps**: Spatial distribution of variance, kurtosis, etc.
+- **Bar plots**: Channel-by-channel comparison
+- **Outlier detection**: Highlight problematic electrodes
+
+### Applications
+
+- Quality control visualization
+- Identify spatial patterns in noise
+- Document data characteristics
+
+
+## Code Examples
 
 ::: details Show Code
+
 ```julia
 using EegFun
 
@@ -51,6 +66,7 @@ cs = EegFun.channel_summary(epochs[1])a
 EegFun.plot_channel_summary(cs, :range, average_over = :epoch)
 EegFun.plot_channel_summary(cs, [:min, :max, :std, :range, :var, :zvar], average_over = :epoch)
 ```
+
 :::
 
 ## See Also

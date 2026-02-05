@@ -1,14 +1,36 @@
 # Plot Joint Probability
 
-Visualizes channel joint probability for quality assessment.
+## Overview
 
 ## Overview
 
-Demonstrates Visualizes channel joint probability for quality assessment.
+This demo shows how to visualize channel joint probability distributions for quality assessment.
 
-## Source Code
+### Joint Probability Analysis
+
+Joint probability detects outlier channels based on multi-dimensional distributions:
+- Compares each channel to all others simultaneously
+- More sensitive than univariate metrics
+- Identifies channels with unusual data characteristics
+
+### Visualization
+
+Plot shows how each channel relates to the overall distribution:
+- **Low probability**: Potential bad channels
+- **Consistent probabilities**: Clean data
+- **Spatial patterns**: Systematic issues with recording
+
+### Use Cases
+
+- Automated bad channel detection
+- Complement other quality metrics
+- Pre-processing quality control
+
+
+## Code Examples
 
 ::: details Show Code
+
 ```julia
 using EegFun
 
@@ -30,6 +52,7 @@ EegFun.highpass_filter!(dat, 1)
 jp = EegFun.channel_joint_probability(dat)
 EegFun.plot_joint_probability(jp)
 ```
+
 :::
 
 ## See Also

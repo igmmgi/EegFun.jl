@@ -224,6 +224,7 @@ function _repair_channels_spherical!(
     layout::DataFrame;
     m::Int = 4,
     lambda::Float64 = 1e-5,
+    n_legendre_terms::Int = 50,
     repair_info = nothing,
 )
     # Check that channels match data dimensions
@@ -238,7 +239,7 @@ function _repair_channels_spherical!(
         repair_info.skipped = Symbol[]
     end
 
-    # Extract and normalize coordinates
+    # Extract coordinates for all channels
     coords = zeros(Float64, length(channels), 3)
     for (i, ch) in enumerate(channels)
         idx = findfirst(x -> x == ch, layout.label)
@@ -249,47 +250,44 @@ function _repair_channels_spherical!(
         coords[i, :] = [layout.x3[idx], layout.y3[idx], layout.z3[idx]]
     end
 
-    # Normalize coordinates to unit sphere
-    norms = sqrt.(sum(coords .^ 2, dims = 2))
-    coords = coords ./ norms
-
-    # Process each bad channel
+    # Find indices of bad and good channels
+    bad_indices = Int[]
     for bad_ch in channels_to_repair
-        # Get bad channel index
         bad_idx = findfirst(x -> x == bad_ch, channels)
         if isnothing(bad_idx)
             @minimal_warning "Channel $bad_ch not found in channel list, skipping"
             !isnothing(repair_info) && push!(repair_info.skipped, bad_ch)
             continue
         end
+        push!(bad_indices, bad_idx)
+    end
 
-        # Get coordinates of bad channel
-        bad_coords = coords[bad_idx, :]
+    if isempty(bad_indices)
+        return nothing
+    end
 
-        # Find all other channels (not the bad one)
-        other_indices = setdiff(1:length(channels), bad_idx)
-        other_coords = coords[other_indices, :]
-        other_channels = channels[other_indices]
+    # Good channels are all channels except the bad ones
+    good_indices = setdiff(1:length(channels), bad_indices)
 
-        # Calculate spherical spline interpolation
-        n_timepoints = size(data, 2)
-        for t = 1:n_timepoints
-            # Get data from other channels at this time point
-            other_data = data[other_indices, t]
+    # Extract positions
+    pos_good = coords[good_indices, :]
+    pos_bad = coords[bad_indices, :]
 
-            # Calculate spherical spline weights
-            weights = _spherical_spline_weights(bad_coords, other_coords, m, lambda)
+    # Calculate interpolation matrix once for all bad channels
+    interpolation_matrix = _make_interpolation_matrix(pos_good, pos_bad; m = m, lambda = lambda, n_legendre_terms = n_legendre_terms)
 
-            # Interpolate the value
-            interpolated_value = sum(weights .* other_data)
+    # Apply interpolation: bad_data = interpolation_matrix * good_data
+    # interpolation_matrix is (n_bad × n_good)
+    # good_data is (n_good × n_timepoints)
+    # result is (n_bad × n_timepoints)
+    data[bad_indices, :] = interpolation_matrix * data[good_indices, :]
 
-            # Update bad channel data
-            data[bad_idx, t] = interpolated_value
+    # Log and track repairs
+    for bad_ch in channels_to_repair
+        if bad_ch ∉ [ch for (i, ch) in enumerate(channels) if i ∈ bad_indices]
+            continue  # Already logged as skipped
         end
-
         @info "Repaired channel $bad_ch using spherical spline interpolation"
-
-        # Track successful repair
         !isnothing(repair_info) && push!(repair_info.repaired, bad_ch)
     end
 
@@ -378,71 +376,162 @@ end
 # === SPHERICAL SPLINE UTILITIES ===
 
 """
-    _spherical_spline_weights(bad_coords, other_coords, m, lambda)
+    _calc_g(cosang::AbstractArray, m::Int=4, n_legendre_terms::Int=50)
 
-Calculate spherical spline interpolation weights.
+Calculate spherical spline G function between points on a sphere using Legendre polynomials.
+
+Based on Perrin et al. (1989). Spherical splines for scalp potential and current density mapping.
+Electroencephalography and Clinical Neurophysiology, 72(2):184-187.
+
+# Arguments
+- `cosang`: Cosine of angles between pairs of points (equivalent to dot product of unit vectors)
+- `m`: Stiffness parameter (default: 4)
+- `n_legendre_terms`: Number of Legendre polynomial terms to evaluate (default: 50)
+
+# Returns
+- G matrix values for spherical spline interpolation
 """
-function _spherical_spline_weights(bad_coords, other_coords, m, lambda)
-    n_others = size(other_coords, 1)
+function _calc_g(cosang::AbstractArray, m::Int = 4, n_legendre_terms::Int = 50)
+    # Calculate Legendre polynomial coefficients according to Perrin et al. 1989
+    # G(cos θ) = (1 / 4π) * Σ[(2n+1) / (n^m * (n+1)^m) * P_n(cos θ)]
+    # where P_n are Legendre polynomials of order n
 
-    # Calculate distances between bad channel and other channels
-    distances = zeros(n_others)
-    for i = 1:n_others
-        distances[i] = acos(clamp(dot(bad_coords, other_coords[i, :]), -1.0, 1.0))
+    factors = zeros(n_legendre_terms + 1)
+    factors[1] = 0.0  # P_0 term is zero
+
+    for n = 1:n_legendre_terms
+        factors[n+1] = (2 * n + 1) / (n^m * (n + 1)^m * 4 * π)
     end
 
-    # Calculate spherical spline basis functions
-    basis = zeros(n_others)
-    for i = 1:n_others
-        if distances[i] < 1e-10  # Very close channels
-            basis[i] = 1.0
-        else
-            # Legendre polynomial basis
-            cos_theta = cos(distances[i])
-            basis[i] = _legendre_polynomial(cos_theta, m)
-        end
-    end
-
-    # Add regularization
-    if lambda > 0
-        # Simple regularization: add small amount to diagonal
-        weights = basis ./ (sum(basis) + lambda)
-    else
-        weights = basis ./ sum(basis)
-    end
-
-    return weights
+    # Evaluate Legendre polynomial series at cosang using Clenshaw's algorithm
+    # This is equivalent to numpy.polynomial.legendre.legval
+    return _eval_legendre(cosang, factors)
 end
 
 """
-    _legendre_polynomial(cos_theta, m)
+    _eval_legendre(x, coeffs)
 
-Calculate Legendre polynomial of order m at cos_theta.
+Evaluate Legendre polynomial series using Clenshaw's recurrence algorithm.
 """
-function _legendre_polynomial(cos_theta, m)
-    if m == 0
-        return 1.0
-    elseif m == 1
-        return cos_theta
-    elseif m == 2
-        return 0.5 * (3 * cos_theta^2 - 1)
-    elseif m == 3
-        return 0.5 * (5 * cos_theta^3 - 3 * cos_theta)
-    elseif m == 4
-        return 0.125 * (35 * cos_theta^4 - 30 * cos_theta^2 + 3)
+function _eval_legendre(x::T, coeffs::Vector{Float64}) where {T<:Real}
+    n = length(coeffs)
+    if n == 0
+        return zero(T)
+    elseif n == 1
+        return coeffs[1] * one(T)
     else
-        # For higher orders, use recurrence relation
-        p_prev2 = 1.0
-        p_prev1 = cos_theta
+        # Clenshaw recurrence for Legendre polynomials
+        c0 = coeffs[end-1]
+        c1 = coeffs[end]
 
-        for n = 2:m
-            p_current = ((2 * n - 1) * cos_theta * p_prev1 - (n - 1) * p_prev2) / n
-            p_prev2 = p_prev1
-            p_prev1 = p_current
+        for i = (n-2):-1:1
+            c0, c1 = coeffs[i] - c1 * (i + 1) / (i + 2), c0 + c1 * x * (2 * i + 3) / (i + 2)
         end
 
-        return p_prev1
+        return c0 + c1 * x
     end
+end
+
+function _eval_legendre(x::AbstractArray, coeffs::Vector{Float64})
+    return [_eval_legendre(xi, coeffs) for xi in x]
+end
+
+"""
+    _make_interpolation_matrix(pos_from, pos_to, m=4, lambda=1e-5, n_legendre_terms=50)
+
+Create spherical spline interpolation matrix using Perrin et al. 1989 algorithm.
+
+# Arguments
+- `pos_from`: Positions of good channels (n_good × 3)
+- `pos_to`: Positions of bad channels to interpolate (n_bad × 3)
+- `m`: Stiffness parameter
+- `lambda`: Regularization parameter
+- `n_legendre_terms`: Number of Legendre terms
+
+# Returns
+- Interpolation matrix (n_bad × n_good)
+"""
+function _make_interpolation_matrix(
+    pos_from::Matrix{Float64},
+    pos_to::Matrix{Float64};
+    m::Int = 4,
+    lambda::Float64 = 1e-5,
+    n_legendre_terms::Int = 50,
+)
+    n_from = size(pos_from, 1)
+    n_to = size(pos_to, 1)
+
+    # Normalize positions to unit sphere
+    pos_from_norm = copy(pos_from)
+    pos_to_norm = copy(pos_to)
+
+    for i = 1:n_from
+        norm = sqrt(sum(pos_from_norm[i, :] .^ 2))
+        pos_from_norm[i, :] ./= norm
+    end
+
+    for i = 1:n_to
+        norm = sqrt(sum(pos_to_norm[i, :] .^ 2))
+        pos_to_norm[i, :] ./= norm
+    end
+
+    # Calculate cosine angles (dot products) between positions
+    # cosang_from[i,j] = dot(pos_from[i], pos_from[j])
+    cosang_from = pos_from_norm * pos_from_norm'
+
+    # cosang_to_from[i,j] = dot(pos_to[i], pos_from[j])
+    cosang_to_from = pos_to_norm * pos_from_norm'
+
+    # Calculate G matrices using spherical spline basis functions
+    G_from = _calc_g(cosang_from, m, n_legendre_terms)
+    G_to_from = _calc_g(cosang_to_from, m, n_legendre_terms)
+
+    # Add regularization to diagonal
+    if lambda > 0
+        for i = 1:n_from
+            G_from[i, i] += lambda
+        end
+    end
+
+    # Construct system matrix C with constraint
+    # C = [G_from  ones(n_from)]
+    #     [ones'        0      ]
+    C = zeros(n_from + 1, n_from + 1)
+    C[1:n_from, 1:n_from] = G_from
+    C[1:n_from, n_from+1] .= 1.0
+    C[n_from+1, 1:n_from] .= 1.0
+    C[n_from+1, n_from+1] = 0.0
+
+    # Compute pseudoinverse using SVD for numerical stability
+    C_inv = pinv(C)
+
+    # Compute interpolation matrix
+    # interpolation = [G_to_from  ones(n_to)] * C_inv[:, 1:n_from]
+    G_to_extended = zeros(n_to, n_from + 1)
+    G_to_extended[:, 1:n_from] = G_to_from
+    G_to_extended[:, n_from+1] .= 1.0
+
+    interpolation = G_to_extended * C_inv[:, 1:n_from]
+
+    return interpolation
+end
+
+"""
+    _spherical_spline_weights(bad_coords, other_coords, m, lambda)
+
+Calculate spherical spline interpolation weights (DEPRECATED - use _make_interpolation_matrix).
+
+This function is kept for backward compatibility but should not be used directly.
+"""
+function _spherical_spline_weights(bad_coords, other_coords, m, lambda)
+    # Convert to matrix format
+    pos_from = reshape(other_coords, :, 3)
+    pos_to = reshape(bad_coords, 1, 3)
+
+    # Use proper interpolation matrix calculation
+    interp_matrix = _make_interpolation_matrix(pos_from, pos_to; m = m, lambda = lambda)
+
+    return vec(interp_matrix)
 end
 
 # =============================================================================

@@ -877,14 +877,14 @@ function create_sliders(fig, state::ContinuousDataBrowserState, dat)
     slider_x = Slider(fig[2, 1], range = 1:50:nrow(state.data.current[].data), startvalue = 1, snap = true)
 
     on(slider_range.value) do x
-        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x+slider_x.value.val)
+        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x + slider_x.value.val)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
     end
 
     on(slider_x.value) do x
-        new_range = x:min(nrow(state.data.current[].data), (x+slider_range.value.val)-1)
+        new_range = x:min(nrow(state.data.current[].data), (x + slider_range.value.val) - 1)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
@@ -1146,9 +1146,8 @@ function handle_right_click!(ax, state, mouse_x)
     clicked_region_idx = find_clicked_region(state, mouse_x)
     if clicked_region_idx !== nothing
         show_additional_menu(state, clicked_region_idx)
-    else
-        _show_channel_repair_menu(state, ax)
     end
+    # Right-click outside regions does nothing (use 'r' key for channel repair)
 end
 
 function _show_channel_repair_menu(state::DataBrowserState{<:ContinuousDataState}, ax)
@@ -1216,6 +1215,9 @@ function handle_keyboard_events!(fig, ax, state)
         if event.action == Keyboard.press && event.key == Keyboard.i
             # Show help for databrowser
             show_plot_help(:databrowser)
+        elseif event.action == Keyboard.press && event.key == Keyboard.r
+            # Open channel repair menu
+            _show_channel_repair_menu(state, ax)
         elseif event.action == Keyboard.press && event.key == Keyboard.c
             # Clear all selected regions
             clear_all_selected_regions!(ax, state)

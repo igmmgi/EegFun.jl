@@ -1,8 +1,7 @@
 using EegFun
-using GLMakie
 
 # read raw data
-dat = EegFun.read_raw_data("./resources/data/example1.bdf");
+dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf");
 
 # read and preprate layout file
 layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
@@ -10,25 +9,30 @@ EegFun.polar_to_cartesian_xy!(layout_file)
 
 dat = EegFun.create_eeg_dataframe(dat, layout_file)
 
+# minimal preprocessing
 EegFun.rereference!(dat, :avg)
 EegFun.highpass_filter!(dat, 1)
 
-# Select a few channels to repair
-test_channels = [:Fp1]
-available_channels = dat.layout.data.label
-channels_to_repair = filter(ch -> ch in available_channels, test_channels)
+EegFun.plot_databrowser(dat)
 
-# Calculate neighbors first
-EegFun.get_neighbours_xyz!(dat.layout, 0.5)
+# Select a channel to repair and make this channel noisy!
+channel_to_repair = :Cz
+dat.data[!, channel_to_repair] .+= randn(size(dat.data[:, channel_to_repair])) * 200 # v. noisy!
 
-# Store original data for comparison
-original_data = copy(dat.data)
+# We can now see this noisy channel in the databrowser
+# NB. we can actually press "R" and select Cz and apply the repair in the browser
+EegFun.plot_databrowser(dat)
 
 # Try neighbor interpolation
-EegFun.repair_channels!(dat, channels_to_repair, method = :neighbor_interpolation)
+EegFun.repair_channels!(dat, [channel_to_repair], method = :neighbor_interpolation)
 
-# Try spherical spline
-EegFun.repair_channels!(dat, channels_to_repair, method = :spherical_spline)
+# Cz is now repaired
+EegFun.plot_databrowser(dat)
 
-# Check if data changed (using isapprox to handle floating point precision)
-data_changed = any(any(.!isapprox.(dat.data[!, ch], original_data[!, ch], rtol = 1e-10)) for ch in channels_to_repair)
+# Try neighbor interpolation
+EegFun.repair_channels!(dat, [channel_to_repair], method = :spherical_spline)
+
+# Cz is now repaired
+EegFun.plot_databrowser(dat)
+
+
