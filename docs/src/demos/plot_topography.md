@@ -1,37 +1,128 @@
 # Plot Topography
 
-## Overview
+This demo demonstrates creating topographic scalp maps to visualize the spatial distribution of EEG activity at specific time points.
 
-## Overview
+This demo demonstrates creating topographic scalp maps to visualize the spatial distribution of EEG activity at specific time points.
 
-This demo shows how to create topographic scalp maps at specific time points.
+### What are Topographic Maps?
 
-### Topographic Maps
+Topographic maps (topoplots) show the spatial distribution of electrical activity across the scalp:
 
-Visualize spatial distribution of activity across the scalp:
-- **Color-coded**: Amplitude represented by color
-- **Interpolated**: Smooth maps between electrode positions
-- **Time-specific**: Snapshot at particular latency
+- **Color-coded amplitudes**: Activity levels represented by color
+- **Interpolated surfaces**: Smooth maps between discrete electrode positions
+- **Time-specific snapshots**: Activity at particular latencies or time windows
+
+### Interpolation Methods
+
+**`:thin_plate`**: Thin-plate spline (default; smooth, natural-looking)
+
+**`:nearest`**: Nearest neighbor (no interpolation, fastest)
+
+**`:shepard`**: Inverse distance weighting
+
+**`:multiquadratic`**: Radial basis function
+
+**`:spherical_spline`**: Spherical spline (accounts for head curvature)
+
+> **Note**: All interpolation methods except `:spherical_spline` are implemented using the [ScatteredInterpolation.jl](https://github.com/eljungsk/ScatteredInterpolation.jl) package. The spherical spline method uses a custom implementation based on Perrin et al. (1989).
 
 ### Interpretation
 
-- **Focal activity**: Localized color patches suggest specific sources
-- **Widespread**: Diffuse patterns suggest distributed processing
-- **Polarity**: Red (positive) vs. blue (negative) conventions
+**Focal activity**:
+
+- Localized color patches suggest specific neural sources
+- Sharp gradients indicate nearby sources
+
+**Widespread activity**:
+
+- Diffuse patterns suggest distributed processing
+- Gradual transitions indicate distant or multiple sources
+
+**Polarity conventions**:
+
+- Warm colors (red/yellow): Positive voltage
+- Cool colors (blue): Negative voltage
+- Convention may vary by field
 
 ### Use Cases
 
-- Visualize ERP component topographies
-- Compare spatial distributions across conditions
-- Identify sources (with caution - inverse problem)
-- Publication figures
+**Visualize ERP components**:
 
-### Advanced Options
+- Show spatial distribution of P1, N170, P300, etc.
+- Identify component topographies
 
-- Multiple time points in sequence
+**Compare conditions**:
+
+- Side-by-side condition comparisons
 - Difference topographies (condition A - B)
-- Statistical masking
-- Contour lines
+
+**Publication figures**:
+
+- High-quality scalp maps
+- Customizable appearance
+- Multiple time points or conditions
+
+### Customization Options
+
+**Interpolation**:
+
+
+- Method selection
+- Grid resolution (gridscale)
+
+**Appearance**:
+
+- Colormap selection
+- Color limits (ylim)
+- Head outline radius
+
+**Labels and markers**:
+
+- Electrode positions
+- Channel labels
+- Font sizes and colors
+
+**Colorbar**:
+
+- Position and orientation
+- Size and tick labels
+- Show/hide per plot
+
+### Working with Different Data Types
+
+**Continuous data**: Average over time window
+
+**Epoched data**: Specify epoch number and time window
+
+**ERP data**: Average directly (already averaged)
+
+## Workflow Summary
+
+This demo shows topographic visualization workflows:
+
+### 1. Basic Continuous Data
+
+- Load and preprocess data
+- Create topographic maps with different methods
+- Customize time windows and appearance
+
+### 2. Epoched Data
+
+- Extract epochs from continuous data
+- Plot topographies for specific epochs
+- Customize interpolation and display
+
+### 3. ERP Data
+
+- Average epochs into ERPs
+- Create condition-specific topographies
+- Control colorbar placement
+
+### 4. Multi-Panel Figures
+
+- Create custom figure layouts
+- Combine multiple topographies
+- Control colorbar positions for each plot
 
 
 ## Code Examples
@@ -46,8 +137,7 @@ dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf");
 
 # read and preprate layout file
 layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
-# EegFun.polar_to_cartesian_xy!(layout_file, preserve_radial_distance = true)
-EegFun.polar_to_cartesian_xy!(layout_file, preserve_radial_distance = true)
+EegFun.polar_to_cartesian_xy!(layout_file)
 
 # create EegFun data structure (EegFun.ContinuousData)
 dat = EegFun.create_eeg_dataframe(dat, layout_file);
@@ -56,41 +146,33 @@ dat = EegFun.create_eeg_dataframe(dat, layout_file);
 EegFun.rereference!(dat, :avg)
 EegFun.highpass_filter!(dat, 1)
 
-EegFun.plot_topography(dat)
-EegFun.plot_topography(dat, method = :nearest)
-
+# visually selected blink like artifact
 EegFun.plot_topography(
     dat,
     sample_selection = x -> x.time .>= 5.973 .&& x.time .<= 6.02,
     gridscale = 75,
     ylim = (-200, 200),
     head_radius = 1.0,
-    method = :thin_plate,
 )
 
-EegFun.plot_topography(dat, interval_selection = (5.973, 6.02), gridscale = 100)
-EegFun.plot_topography(dat, interval_selection = (5, 6), gridscale = 100)
-EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 5.973 .&& x.time .<= 6.02, gridscale = 100, ylim = (-100, 100))
+# different methods
+EegFun.plot_topography(
+    dat,
+    sample_selection = x -> x.time .>= 5.973 .&& x.time .<= 6.02,
+    gridscale = 75,
+    ylim = (-200, 200),
+    head_radius = 1.0,
+    method = :multiquadratic, # :nearest, :shepard, :spherical_spline, :thin_plate, :multiquadratic
+)
 
 # Various combinations
-EegFun.plot_topography(dat, colorbar_plot = false)
-EegFun.plot_topography(dat, method = :nearest)
-EegFun.plot_topography(dat, method = :shepard)
-EegFun.plot_topography(dat, method = :spherical_spline)
-EegFun.plot_topography(dat, method = :thin_plate)
-EegFun.plot_topography(dat, method = :multiquadratic, head_radius = 0.9)
-EegFun.plot_topography(dat, gridscale = 50)
-EegFun.plot_topography(dat, gridscale = 1000)
+EegFun.plot_topography(dat, colorbar_plot = false, head_radius = 1.25)
+EegFun.plot_topography(dat, gridscale = 250)
 EegFun.plot_topography(dat, colormap = :inferno)
 EegFun.plot_topography(dat, title = "Custom Title", title_fontsize = 30)
 EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6)
 EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6, method = :spherical_spline)
 EegFun.plot_topography(dat, channel_selection = EegFun.channels([:Fp1, :Fp2, :Cz]))
-EegFun.plot_topography(dat, label_fontsize = 130)
-EegFun.plot_topography(dat, point_markersize = 30, point_marker = :x)
-EegFun.plot_topography(dat, colorbar_ticksize = 130)
-EegFun.plot_topography(dat, colorbar_labelcolor = :red)
-EegFun.plot_topography(dat, colorbar_size = 50)
 EegFun.plot_topography(dat, colorbar_size = 20, colorbar_position = (2, 1), colorbar_vertical = false)
 
 #################################
@@ -103,23 +185,13 @@ epoch_cfg = [
 ]
 epochs = EegFun.extract_epochs(dat, epoch_cfg, (-2, 4))
 
-EegFun.plot_topography(epochs, 1) # epoch 1
-EegFun.plot_topography(epochs, 2) # epoch 2
+# Separate plots
+EegFun.plot_topography(epochs[1], 1) # epoch 1
+EegFun.plot_topography(epochs[2], 1) # epoch 2
+EegFun.plot_topography(epochs) # TODO: aspect ration?; global scale?
+EegFun.plot_topography(epochs, ylim = (-0.1, 0.1)) # TODO: aspect ration?; global scale?
+EegFun.plot_topography(epochs, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6)
 
-# EegFun.plot_topography(epochs) # TODO: would this be useful?
-
-EegFun.plot_topography(epochs, 1)
-EegFun.plot_topography(epochs[2], 1)
-EegFun.plot_topography(epochs[1], 1, gridscale = 50)
-EegFun.plot_topography(epochs[2], 1, gridscale = 1000)
-EegFun.plot_topography(epochs[1], 1, colormap = :inferno)
-EegFun.plot_topography(epochs[2], 1, title = "Custom Title", title_fontsize = 30)
-EegFun.plot_topography(epochs[1], 1, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6)
-EegFun.plot_topography(epochs[2], 1, channel_selection = EegFun.channels([:Fp1, :Fp2, :Cz]))
-EegFun.plot_topography(epochs[1], 1, label_fontsize = 30)
-EegFun.plot_topography(epochs[2], 1, point_markersize = 30, point_marker = :x)
-EegFun.plot_topography(epochs[1], 1, ylim = (-10, 10))
-EegFun.plot_topography(epochs[2], 1, ylim = (-1, 1))
 
 
 #################################
@@ -128,20 +200,13 @@ EegFun.plot_topography(epochs[2], 1, ylim = (-1, 1))
 erps = EegFun.average_epochs(epochs)
 
 EegFun.plot_topography(erps, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6, ylim = (-2, 2))
+EegFun.plot_topography(erps, interval_selection = (0.4, 0.6), ylim = (-2, 2))
+
+EegFun.plot_topography(erps, interval_selection = (0.4, 0.6), ylim = (-2, 2), colorbar_plot_numbers = [2], dims = (1, 2))
 
 EegFun.plot_topography(
     erps,
-    sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6,
-    ylim = (-2, 2),
-    colorbar_plot_numbers = [2],
-    dims = (1, 2),
-)
-
-EegFun.plot_topography(erps, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6, ylim = (-2, 2), colorbar_plot = false)
-
-EegFun.plot_topography(
-    erps,
-    sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6,
+    interval_selection = (0.4, 0.6),
     ylim = (-2, 2),
     colorbar_plot = true,
     colorbar_position = (2, 1),
@@ -156,41 +221,6 @@ EegFun.plot_topography(erps[2], gridscale = 1000)
 EegFun.plot_topography(erps[1], colormap = :inferno)
 EegFun.plot_topography(erps[2], title = "Custom Title", title_fontsize = 30)
 
-
-
-##################################################################
-# Combine Plot Examples
-fig = Figure(size = (700, 800))
-ax1 = Axis(fig[1, 1])
-ax2 = Axis(fig[2, 1])
-EegFun.plot_topography!(fig, ax1, epochs[1], 1, display_plot = false, colorbar_position = (1, 2))
-EegFun.plot_topography!(fig, ax2, epochs[2], 1, display_plot = false, colorbar_position = (2, 2))
-fig
-
-fig = Figure(size = (1400, 400))
-ax1 = Axis(fig[1, 1])
-ax2 = Axis(fig[1, 2])
-EegFun.plot_topography!(fig, ax1, epochs[1], 1, display_plot = false, colorbar_position = (1, 3))
-EegFun.plot_topography!(fig, ax2, epochs[2], 1, display_plot = false, colorbar_plot = false)
-fig
-
-fig = Figure(size = (1400, 400))
-ax1 = Axis(fig[1, 1])
-ax2 = Axis(fig[1, 3])
-EegFun.plot_topography!(fig, ax1, epochs[1], 1, display_plot = false, colorbar_position = (1, 2))
-EegFun.plot_topography!(fig, ax2, epochs[2], 1, display_plot = false, colorbar_position = (1, 4))
-fig
-
-fig = Figure(size = (1000, 1000))
-ax1 = Axis(fig[1, 1])
-ax2 = Axis(fig[1, 3])
-ax3 = Axis(fig[2, 1:4])
-EegFun.plot_topography!(fig, ax1, epochs[1], 1, display_plot = false, colorbar_position = (1, 2))
-EegFun.plot_topography!(fig, ax2, epochs[2], 1, display_plot = false, colorbar_position = (1, 4))
-EegFun.plot_topography!(fig, ax3, epochs[2], 1, display_plot = false, colorbar_plot = false)
-fig
-
-GLMakie.closeall()
 ```
 
 :::

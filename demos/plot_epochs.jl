@@ -1,8 +1,7 @@
 using EegFun
-using JLD2
 
 # read raw data
-dat = EegFun.read_raw_data("./resources/data/example1.bdf");
+dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf");
 
 # read and preprate layout file
 layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
@@ -20,12 +19,11 @@ epoch_cfg = [EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [
 epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.5, 1.0))
 
 # Basic plots for Epochs
-EegFun.plot_epochs(epochs[1])
-EegFun.plot_epochs(epochs[1], layout = :single, channel_selection = EegFun.channels([:Fp1, :Fp2]))
-EegFun.plot_epochs(epochs, layout = :single, channel_selection = EegFun.channels([:Fp1]))
+EegFun.plot_epochs(epochs[1]) # not that useful as crowded!
+EegFun.plot_epochs(epochs[1], channel_selection = EegFun.channels([:PO7, :PO8]))
 
 EegFun.plot_epochs(epochs[1], layout = :grid)
-EegFun.plot_epochs(epochs[1], layout = :grid, channel_selection = EegFun.channels([:Fp1, :Fp2]))
+EegFun.plot_epochs(epochs[1], layout = :grid, channel_selection = EegFun.channels([:Fp1, :Fp2, :PO7, :PO8]))
 
 EegFun.plot_epochs(epochs[1], layout = :topo)
 EegFun.plot_epochs(epochs[1], layout = :topo, add_xy_origin = false, theme_fontsize = 10, layout_topo_show_scale = true)
