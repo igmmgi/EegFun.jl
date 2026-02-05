@@ -1,24 +1,172 @@
-## Overview
+This demo demonstrates plotting event-related potentials (ERPs) with comprehensive customization options.
 
-This demo demonstrates plotting event-related potentials with various customization options.
+### What is an ERP Plot?
 
-### ERP Plotting
+ERP plots visualize averaged brain responses time-locked to events:
 
-Visualize averaged waveforms across conditions:
-- **Multiple conditions**: Overlay for comparison
-- **Channel selection**: Plot specific electrodes or regions
-- **Customization**: Colors, line styles, confidence intervals
+- **Time course**: Amplitude changes over time
+- **Waveforms**: Characteristic positive and negative deflections
+- **Condition comparison**: Overlay multiple experimental conditions
+- **Channel-specific**: View individual electrodes or averages
 
-### Plot Features
+### Layout Options
 
-- Time on x-axis, amplitude on y-axis
-- Condition overlays with labels
-- Shaded confidence intervals (optional)
-- Time markers for stimulus onset, analysis windows
-- Topographic insets at specific time points
+The demo shows three layout modes:
 
-### Applications
+| Layout | Description |
+|--------|-------------|
+| **:single** | One plot with overlaid conditions |
+| **:grid** | Multiple subplots (one per channel) |
+| **:topo** | Channels arranged by scalp location |
 
-- Publication-quality figures
-- Compare experimental conditions
-- Identify and measure ERP components
+### Single Layout
+
+**Average across channels**:
+```julia
+plot_erp(erps, average_channels = true)
+```
+Shows grand average waveform across all selected channels.
+
+**Individual channels**:
+```julia
+plot_erp(erps, average_channels = false, colormap = :viridis)
+```
+Overlays all channels with color-coding.
+
+**Selected channels**:
+```julia
+plot_erp(erps, 
+    channel_selection = channels([:Cz, :PO7, :PO8]),
+    average_channels = false
+)
+```
+Shows only specified channels.
+
+### Grid Layout
+
+Displays multiple channels as subplots:
+
+```julia
+plot_erp(erps, layout = :grid)
+```
+
+**Custom grid dimensions**:
+```julia
+plot_erp(erps,
+    channel_selection = channels([:F3, :Cz, :PO7, :PO8, :Fp1, :Fp2]),
+    layout = :grid,
+    layout_grid_dims = (3, 2)  # 3 rows × 2 columns
+)
+```
+
+**Skip positions**:
+```julia
+plot_erp(erps,
+    layout_grid_dims = (3, 4),
+    layout_grid_skip_positions = [(2, 1), (2, 3)]  # Leave empty
+)
+```
+Creates custom layouts with empty spaces.
+
+**Adjust spacing**:
+```julia
+plot_erp(erps,
+    layout = :grid,
+    layout_grid_rowgap = 0,  # No vertical gap
+    layout_grid_colgap = 0   # No horizontal gap
+)
+```
+
+### Topographic Layout
+
+Arranges channels by scalp position:
+
+```julia
+plot_erp(erps, layout = :topo)
+```
+
+Each channel plotted at its actual spatial location for intuitive interpretation.
+
+### Customization Options
+
+**Y-axis orientation**:
+```julia
+plot_erp(erps, yreversed = true)  # Negative up (common convention)
+```
+
+**Legend placement**:
+```julia
+plot_erp(erps,
+    legend_channel = [:Fp1, :M2],  # Channels for legend
+    legend_nbanks = 3              # Number of legend columns
+)
+```
+
+**Figure padding**:
+```julia
+plot_erp(erps,
+    figure_padding = (150, 150, 150, 150)  # left, right, bottom, top
+)
+```
+
+### Combining with Topography
+
+Create publication-quality figures with embedded topographies:
+
+```julia
+using GLMakie
+fig = Figure(size = (800, 800))
+ax1 = Axis(fig[1, 1])
+ax2 = Axis(fig[1, 1], width = Relative(0.2), height = Relative(0.2))
+
+plot_erp!(fig, ax1, erps, average_channels = true)
+plot_topography!(fig, ax2, erps[1],
+    point_plot = false,
+    label_plot = false,
+    colorbar_plot = true
+)
+```
+
+Shows ERP waveform with scalp distribution at a specific time point.
+
+### Common Use Cases
+
+**Condition comparison**:
+- Overlay multiple experimental conditions
+- Identify differences in amplitude or latency
+- Statistical windows highlighted
+
+**Component identification**:
+- Classic ERP components (N1, P1, N170, P3, etc.)
+- Measure peak amplitudes and latencies
+- Compare across channels
+
+**Publication figures**:
+- High-quality vector graphics
+- Customizable colors and styles
+- Grid layouts for multiple channels
+
+### Interpretation
+
+**Positive/negative deflections**:
+- **P1, P2, P3**: Positive peaks (often plotted downward with yreversed = true)
+- **N1, N2, N4**: Negative peaks (plotted upward)
+
+**Typical components**:
+- **P1/N1** (~100-200 ms): Early sensory processing
+- **N170** (~170 ms): Face perception (occipito-temporal)
+- **P3** (~300-600 ms): Attention, memory updating
+- **N400** (~400 ms): Semantic processing
+
+### Workflow Summary
+
+This demo shows:
+
+1. **Basic plotting**: All three layouts
+2. **Channel averaging**: Grand average vs individual channels
+3. **Custom grids**: Flexible subplot arrangements
+4. **Grid customization**: Gaps, skip positions, padding
+5. **Legend control**: Placement and formatting
+6. **Combined plots**: ERP + topography insets
+
+ERP plots are the foundation of event-related brain potential analysis!

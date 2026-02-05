@@ -72,13 +72,13 @@ dat_new = resample(dat, 4)  # Divide rate by 4 (e.g., 2048 → 512 Hz)
 
 **Common downsampling targets**:
 
-| Original Rate | Factor | Target Rate | Use Case |
-|---------------|--------|-------------|----------|
-| 2048 Hz | 4 | 512 Hz | General EEG/ERP |
-| 2048 Hz | 8 | 256 Hz | Standard ERP rate |
-| 1024 Hz | 4 | 256 Hz | Standard ERP rate |
-| 1024 Hz | 2 | 512 Hz | General EEG |
-| 512 Hz | 2 | 256 Hz | Standard ERP rate |
+| Original Rate | Factor | Target Rate |
+|---------------|--------|-------------|
+| 2048 Hz | 4 | 512 Hz |
+| 2048 Hz | 8 | 256 Hz |
+| 1024 Hz | 4 | 256 Hz |
+| 1024 Hz | 2 | 512 Hz |
+| 512 Hz | 2 | 256 Hz |
 
 ### Trigger Preservation
 
@@ -94,6 +94,7 @@ Trigger timing is automatically adjusted to match the new sampling rate.
 ### When to Resample
 
 **Resample early** in your pipeline:
+
 1. Load raw data
 2. **Resample** (if needed)
 3. Filter
@@ -117,15 +118,18 @@ This demo demonstrates:
 ### Best Practices
 
 **Choose appropriate target rate**:
+
 - **250 Hz**: Minimum for standard ERP work
 - **500 Hz**: Good balance for most EEG applications
 - **1000+ Hz**: Needed for high-frequency analyses
 
 **Filter before downsampling**:
+
 - Prevents aliasing artifacts
 - Use lowpass filter at ~80% of new Nyquist frequency
 
 **Document the change**:
+
 - Always note original and resampled rates in your analysis notes
 - Important for interpretation and reproducibility
 
