@@ -406,7 +406,7 @@ function plot_epochs(
     end
 
     set_window_title("Makie")
-    return fig, axes
+    return (fig = fig, axes = axes)
 end
 
 """
@@ -470,8 +470,8 @@ function plot_epochs(
     include_extra::Bool = false,
     layout = :single,
     kwargs...,
-)::Tuple{Figure,Union{Axis,Vector{Axis}}}
-    return plot_epochs(
+)::NamedTuple{(:fig, :axes),Tuple{Figure,Union{Axis,Vector{Axis}}}}
+    result = plot_epochs(
         [dat];
         condition_selection = conditions(),  # Always select all (just the one condition)
         channel_selection = channel_selection,
@@ -481,6 +481,8 @@ function plot_epochs(
         layout = layout,
         kwargs...,
     )
+    # Return NamedTuple to match signature
+    return (fig = result.fig, axes = result.axes)
 end
 
 function _plot_epochs!(ax, dat, channels, plot_kwargs; label::Union{String,Nothing} = nothing, line_refs = nothing)::Tuple{Lines,Observable}
