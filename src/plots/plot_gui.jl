@@ -21,7 +21,7 @@ function create_select_button(parent, label, style::UIStyle)
         fontsize = style.button_font,
         width = style.input_width,
         height = style.input_height,
-        buttoncolor = :darkgrey,
+        buttoncolor = :lightgrey,
         buttoncolor_hover = :grey,
         buttoncolor_active = :green,
     )
@@ -67,8 +67,42 @@ end
 """
     plot_gui()
 
-Interactive GUI for quick data plotting 
+Interactive GUI for quick data plotting and visualization.
 
+# GUI Structure
+
+**Column 1: File & Plot Selection**
+- Directory and file browser
+- Plot type dropdown with hierarchical submenus:
+  - Common plots: Data Browser, Epochs, ERP, ERP Image, Topography, GFP
+  - Time-Frequency >: Time-Frequency Analysis, Power Spectrum
+  - ICA >: ICA Components  
+  - Diagnostic Plots >: Artifact Detection, Triggers, Correlation, Layout View, Filter Response
+
+**Column 2: Data Selection & Layout**
+- Participant, Condition, Epoch filters
+- Layout type: Single, Single Avg, Grid, Topo
+- Channel selection with multi-select support
+
+**Column 3: Axis Settings**
+- X, Y, Z axis limits
+- Baseline correction settings
+- Display options (invert Y-axis)
+
+# Supported Plot Types
+
+See EegFun.jl documentation for complete plot type details and data requirements.
+
+# Examples
+
+```julia
+# Launch GUI
+EegFun.plot_gui()
+
+# Navigate to data directory, select file and plot type
+# Configure channels and axis limits as needed
+# Click "Plot" to generate visualization
+```
 """
 function plot_gui()
 
@@ -82,6 +116,7 @@ function plot_gui()
     directory_select_button = create_select_button(main_layout[1, 1], "Select Directory", ui_style)
     directory_label_text = Observable("Dir: ")
     create_label(main_layout[2, 1], directory_label_text, ui_style, fontsize = ui_style.textbox_font, color = :gray)
+
 
     # Select File Section
     file_select_button = create_select_button(main_layout[3, 1], "Select File", ui_style)
@@ -97,22 +132,27 @@ function plot_gui()
     create_label(main_layout[7, 1], "File Filter", ui_style)
     create_textbox(main_layout[8, 1], ui_style)
 
-    # Plot Type Section (includes layout options)
+    # Plot Type Section
     create_label(main_layout[9, 1], "Plot Type", ui_style)
     plottype_options = [
         "Select",
         "Data Browser",
-        "Epochs (single)",
-        "Epochs (grid)",
-        "Epochs (topo)",
-        "ERP (single)",
-        "ERP (grid)",
-        "ERP (topo)",
+        "Epochs",
+        "ERP",
+        "ERP Image",
         "Topography",
+        "Global Field Power",
+        "─────────────────",  # Visual separator
+        "Time-Frequency >",
+        "ICA >",
+        "Diagnostic Plots >",
     ]
     plottype_dropdown = create_menu(main_layout[10, 1], ui_style, options = plottype_options)
 
-    # Column 2: Participant, Condition, Epoch, Channels, Average Channels
+    # Submenu dropdown (starts with placeholder to appear inactive)
+    submenu_dropdown = create_menu(main_layout[11, 1], ui_style, options = ["---"])
+
+    # Column 2: Participant, Condition, Epoch, Channels
     # Participant Section
     create_label(main_layout[1, 2], "Participant", ui_style)
     participant_input = create_textbox(main_layout[2, 2], ui_style)
@@ -125,18 +165,17 @@ function plot_gui()
     create_label(main_layout[5, 2], "Epoch", ui_style)
     epoch_input = create_textbox(main_layout[6, 2], ui_style)
 
-    # Channel(s) Section
-    create_label(main_layout[7, 2], "Channel(s)", ui_style)
-    channel_menu = create_menu(main_layout[8, 2], ui_style, options = ["Select"])
+    # Layout Section (replaces Channel(s) and Average Channels)
+    create_label(main_layout[7, 2], "Layout", ui_style)
+    layout_dropdown = create_menu(main_layout[8, 2], ui_style, options = ["Single", "Single Avg", "Grid", "Topo"])
+
+    # Channel(s) Section (moved down)
+    create_label(main_layout[9, 2], "Channel(s)", ui_style)
+    channel_menu = create_menu(main_layout[10, 2], ui_style, options = ["Select"])
 
     # Selected channels display
     selected_channels_text = Observable("Channels: ")
-    create_label(main_layout[9, 2], selected_channels_text, ui_style, fontsize = ui_style.textbox_font, color = :gray)
-
-    # Average channels toggle
-    avg_channels_layout = GridLayout(main_layout[10, 2], tellwidth = false, colgap = 8)
-    create_label(avg_channels_layout[1, 1], "Average Channels", ui_style, fontsize = BASE_FONTS.textbox)
-    avg_channels_checkbox = Checkbox(avg_channels_layout[1, 2], checked = false)
+    create_label(main_layout[11, 2], selected_channels_text, ui_style, fontsize = ui_style.textbox_font, color = :gray)
 
     # Column 3: Axis Settings
     # X Limits Section
@@ -210,18 +249,40 @@ function plot_gui()
         layout_type = Observable("single"),
         average_channels = Observable(false),
         invert_y = Observable(false),
+        submenu_active = Observable(false),
+        submenu_type = Observable(""),
     )
 
     function plot()
         plot_type = gui_state.plottype[]
         if plot_type == "Data Browser"
-            _plot_databrowser(gui_state, channel_menu)
+            _plot_databrowser(gui_state)
         elseif startswith(plot_type, "Epochs")
-            _plot_epochs(gui_state, channel_menu)
+            _plot_epochs(gui_state)
+        elseif startswith(plot_type, "ERP Image")
+            _plot_erp_image(gui_state)
         elseif startswith(plot_type, "ERP")
-            _plot_erp(gui_state, channel_menu)
+            _plot_erp(gui_state)
         elseif plot_type == "Topography"
-            _plot_topography(gui_state, channel_menu)
+            _plot_topography(gui_state)
+        elseif plot_type == "Global Field Power"
+            _plot_gfp(gui_state)
+        elseif plot_type == "Time-Frequency"
+            _plot_time_frequency(gui_state)
+        elseif plot_type == "Power Spectrum"
+            _plot_power_spectrum(gui_state)
+        elseif plot_type == "ICA Components"
+            _plot_ica(gui_state)
+        elseif plot_type == "Filter Response"
+            _plot_filter(gui_state)
+        elseif plot_type == "Artifact Detection"
+            _plot_artifacts(gui_state)
+        elseif plot_type == "Triggers"
+            _plot_triggers(gui_state)
+        elseif plot_type == "Correlation Heatmap"
+            _plot_correlation(gui_state)
+        elseif plot_type == "Layout View"
+            _plot_layout(gui_state)
         else
             println("Error: Unsupported plot type: $plot_type")
         end
@@ -250,19 +311,47 @@ function plot_gui()
     end
 
     on(plottype_dropdown.selection) do selection
-        if selection == "Select"
+        if selection == "Select" || selection == "─────────────────"
             return
-        elseif selection == "Data Browser" || selection == "Topography"
+        elseif selection == "Time-Frequency >"
+            # Show submenu with time-frequency plot options
+            submenu_dropdown.options = ["Select", "Time-Frequency", "Power Spectrum"]
+            gui_state.submenu_active[] = true
+            gui_state.submenu_type[] = "timefreq"
+        elseif selection == "Diagnostic Plots >"
+        elseif selection == "ICA >"
+            # Show submenu with ICA plot options
+            submenu_dropdown.options = ["Select", "ICA Components"]
+            gui_state.submenu_active[] = true
+            gui_state.submenu_type[] = "ica"
+            # Show submenu with diagnostic plot options
+            submenu_dropdown.options = ["Select", "Artifact Detection", "Triggers", "Correlation Heatmap", "Layout View", "Filter Response"]
+            gui_state.submenu_active[] = true
+            gui_state.submenu_type[] = "diagnostic"
+        elseif selection == "Data Browser" || selection == "Topography" || selection == "Global Field Power"
+            # Direct plot types without layout variants
+        elseif selection == "Epochs" || selection == "ERP" || selection == "ERP Image"
+            # Plot types that support layout variants
             gui_state.plottype[] = selection
+            gui_state.submenu_active[] = false
+            # Keep submenu showing previous selection
         else
-            # Parse format like "Epochs (single)" or "ERP (grid)"
-            if occursin("(", selection) && occursin(")", selection)
-                plot_type = strip(split(selection, "(")[1])
-                layout_str = strip(split(split(selection, "(")[2], ")")[1])
-                gui_state.plottype[] = plot_type
-                gui_state.layout_type[] = layout_str
+            # Fallback for any other selections
+            gui_state.plottype[] = selection
+            gui_state.submenu_active[] = false
+            # Keep submenu showing previous selection
+        end
+    end
+
+    # Layout dropdown callback
+    on(layout_dropdown.selection) do selection
+        if !isnothing(selection)
+            if selection == "Single Avg"
+                gui_state.layout_type[] = "single"
+                gui_state.average_channels[] = true
             else
-                gui_state.plottype[] = selection
+                gui_state.layout_type[] = lowercase(selection)
+                gui_state.average_channels[] = false
             end
         end
     end
@@ -324,9 +413,6 @@ function plot_gui()
     end
 
     # Plot option callbacks
-    on(avg_channels_checkbox.checked) do is_checked
-        gui_state.average_channels[] = is_checked
-    end
 
     on(invert_y_checkbox.checked) do is_checked
         gui_state.invert_y[] = is_checked
@@ -360,7 +446,7 @@ end
 
 
 
-function _plot_databrowser(gui_state, channel_menu)
+function _plot_databrowser(gui_state)
 
     # Check if we have the required files
     gui_state.filename[] == "" && @minimal_error "Error: No file specified!"
@@ -394,7 +480,7 @@ function _plot_databrowser(gui_state, channel_menu)
     end
 end
 
-function _plot_epochs(gui_state, channel_menu)
+function _plot_epochs(gui_state)
     # Check if we have the required files
     gui_state.filename[] == "" && @minimal_error "Error: No file specified!"
     gui_state.layout_file[] == "" && @minimal_error "Error: No layout file selected!"
@@ -431,7 +517,7 @@ function _plot_epochs(gui_state, channel_menu)
     end
 end
 
-function _plot_erp(gui_state, channel_menu)
+function _plot_erp(gui_state)
     # Check if we have the required files
     gui_state.filename[] == "" && @minimal_error "Error: No file specified!"
     gui_state.layout_file[] == "" && @minimal_error "Error: No layout file selected!"
@@ -471,7 +557,7 @@ function _plot_erp(gui_state, channel_menu)
     end
 end
 
-function _plot_topography(gui_state, channel_menu)
+function _plot_topography(gui_state)
     # Check if we have the required files
     gui_state.filename[] == "" && @minimal_error "Error: No file specified!"
     gui_state.layout_file[] == "" && @minimal_error "Error: No layout file selected!"

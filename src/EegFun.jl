@@ -172,6 +172,7 @@ include("plots/decoding/plot_decoding.jl")
 include("plots/rsa/plot_rsa.jl")
 
 include("plots/plot_gui.jl")
+include("plots/plot_gui_helpers.jl")
 include("plots/utils/help_system.jl")
 
 # Demos
