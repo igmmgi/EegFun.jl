@@ -52,18 +52,22 @@ Electrode layout defines the spatial positions of EEG sensors on the scalp using
 ### Customization Options
 
 **Head outline**:
+
 - Color, line width, radius
 
 **Electrode markers**:
+
 - Marker style, size, color
 - Show/hide markers
 
 **Labels**:
+
 - Font size, color
 - Position offsets
 - Show/hide labels
 
 **Regions of interest (ROIs)**:
+
 - Highlight electrode groups
 - Customizable borders and fills
 - Multiple ROIs with different styles

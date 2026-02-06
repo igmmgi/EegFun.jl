@@ -14,6 +14,7 @@ STFT applies the Fast Fourier Transform (FFT) to windowed segments of the signal
 **Window length** (`window_length`):
 
 Controls time-frequency resolution:
+
 ```julia
 tf_stft(epochs, window_length = 0.5)  # 500 ms windows
 ```
@@ -24,46 +25,32 @@ tf_stft(epochs, window_length = 0.5)  # 500 ms windows
 **Cycles** (alternative):
 
 Instead of specifying window length, specify cycles at each frequency:
+
 ```julia
 tf_stft(epochs, cycles = 7)
 ```
+
 Creates frequency-adaptive windows similar to Morlet wavelets.
 
 **Time steps**:
 
 Controls temporal resolution of output:
+
 ```julia
 tf_stft(epochs, time_steps = 0.005)  # 5 ms steps
 ```
+
 Smaller = smoother time course, larger = faster computation.
-
-### Window Types
-
-The STFT uses **Tukey windows** by default:
-- Smooth edges reduce spectral leakage
-- Similar to Hann windows
-- Good compromise between resolution and leakage
-
-### Fixed vs Adaptive Resolution
-
-**Window length mode** (fixed resolution):
-- Same time-frequency resolution at all frequencies
-- Simple and predictable
-- Good for narrow frequency ranges
-
-**Cycles mode** (adaptive resolution):
-- Resolution adapts with frequency  
-- Longer windows at low frequencies
-- Shorter windows at high frequencies
-- Better for wide frequency ranges
 
 ### Frequency Spacing
 
 **Linear** (`frequencies = 2:1:80`):
+
 - Equal Hz spacing
 - Natural for narrow bands
 
 **Logarithmic** (`frequencies = logrange(2, 80, length = 100)`):
+
 - Proportional spacing
 - Better for wide ranges
 - Use `ylogscale = true` in plots
@@ -84,20 +71,9 @@ Shows relative power changes from pre-stimulus baseline.
 ### Edge Effects
 
 **Filter edges** (`filter_edges = true`):
+
 - Removes edge samples where windowing causes artifacts
 - Recommended for cleaner results
-
-### When to Use STFT
-
-**Best for**:
-- Quick exploratory analyses
-- When constant resolution is acceptable
-- Broad-band power changes
-- Familiar, widely understood method
-
-**Consider alternatives**:
-- **Morlet wavelets**: Need adaptive resolution across frequencies
-- **Multitaper**: Need best spectral quality and variance reduction
 
 ### Workflow Summary
 
@@ -110,30 +86,6 @@ This demo shows:
 5. **Baseline correction**: Event-related power changes
 6. **Edge filtering**: Removing edge artifacts
 
-### Advantages
+### Further Reading
 
-- **Simple and fast**: Straightforward implementation
-- **Widely understood**: Classic method with extensive literature  
-- **Flexible**: Can use fixed or adaptive windows
-- **Predictable**: Fixed resolution makes interpretation easier
-
-### Trade-offs
-
-**Fixed resolution**:
-- Unlike wavelets which adapt, STFT in window_length mode has same resolution everywhere
-- May be suboptimal for wide frequency ranges
-
-**Less flexible than wavelets**:
-- Morlet wavelets offer more precise control over time-frequency trade-off
-- But STFT is simpler and faster
-
-### Practical Tips
-
-**Window length**:
-- **200-300 ms**: Good time precision
-- **300-500 ms**: Balanced resolution
-- **500-1000 ms**: Good frequency precision
-
-**Use cycles mode for wide ranges**:
-- Bridges gap between STFT and Morlet wavelets
-- Gets adaptive resolution without additional complexity
+Cohen, M. X. (2014). *Analyzing Neural Time Series Data: Theory and Practice*. Chapter 15: Short-Time FFT

@@ -1283,7 +1283,7 @@ function add_region_to_selection!(ax, state, x1, x2)
         Point2f(Float64(x2), Float64(ylims[2])),
         Point2f(Float64(x1), Float64(ylims[2])),
     ]
-    region_plot = poly!(ax, region_points, color = (:blue, 0.3), strokecolor = :transparent)
+    region_plot = poly!(ax, region_points, color = state.plot_kwargs[:selection_color], strokecolor = :transparent)
     push!(state.selection.region_plots, region_plot)
 
     # Update analysis settings
