@@ -104,6 +104,9 @@ EegFun.plot_ica_component_activation(dat, ica_result)
 
 <img src="images/artifact_detection.png" alt="Artifact Detection" width="600"/>
 
+<details>
+<summary>More Plot Examples</summary>
+
 #### Epoch Plots (Grid Layout)
 
 <img src="images/epochs_grid_layout.png" alt="Epochs Grid Layout" width="800"/>
@@ -115,6 +118,8 @@ EegFun.plot_ica_component_activation(dat, ica_result)
 #### ERP Image (Topo Layout)
 
 <img src="images/erp_image_topo_layout.png" alt="ERP Image Topo Layout" width="600"/>
+
+</details>
 
 ## TODO
 
