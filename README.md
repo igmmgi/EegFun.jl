@@ -1,5 +1,5 @@
 
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://igmmgi.github.io/EegFun.jl/dev/)
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://igmmgi.github.io/EegFun.jl/dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 
@@ -9,6 +9,16 @@
 
 A Julia package for EEG/ERP data analysis and visualization. Currently under active development (Alpha 0.1).
 
+## Documentation
+
+**[View the full documentation →](https://igmmgi.github.io/EegFun.jl/dev/)**
+
+The documentation includes:
+
+* Getting started guide and installation instructions
+* Interactive demos and tutorials
+* Complete API reference
+
 ## Features
 
 * **EEG/ERP Analysis**
@@ -16,7 +26,12 @@ A Julia package for EEG/ERP data analysis and visualization. Currently under act
 * **Time-Frequency Analysis**
 * **Raw data to full ERP batch preprocessing pipelines**
 
-## Example Data Browser
+## Some Features
+
+### Data Browser
+
+<details>
+<summary>Show Code</summary>
 
 ```julia
 using EegFun
@@ -32,9 +47,14 @@ dat = EegFun.create_eeg_dataframe(dat, layout_file);
 EegFun.plot_databrowser(dat);
 ```
 
+</details>
+
 <img src="images/data_browser.png" alt="Data Browser" width="800"/>
 
-## Example ICA Data Browser
+### ICA Data Browser
+
+<details>
+<summary>Show Code</summary>
 
 ```julia
 using EegFun
@@ -74,23 +94,25 @@ ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extre
 EegFun.plot_ica_component_activation(dat, ica_result)
 ```
 
+</details>
+
 <img src="images/data_browser_ica.png" alt="Data Browser ICA" width="800"/>
 
-## Plot Example
+### Plot Examples
 
-### Artifact Detection
+#### Artifact Detection
 
 <img src="images/artifact_detection.png" alt="Artifact Detection" width="600"/>
 
-### Epoch Plots (Grid Layout)
+#### Epoch Plots (Grid Layout)
 
 <img src="images/epochs_grid_layout.png" alt="Epochs Grid Layout" width="800"/>
 
-### ERP (Topo Layout)
+#### ERP (Topo Layout)
 
 <img src="images/erp_topo_layout.png" alt="ERP Topo Layout" width="600"/>
 
-### ERP Image (Topo Layout)
+#### ERP Image (Topo Layout)
 
 <img src="images/erp_image_topo_layout.png" alt="ERP Image Topo Layout" width="600"/>
 

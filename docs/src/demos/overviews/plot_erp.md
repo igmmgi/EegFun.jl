@@ -22,24 +22,30 @@ The demo shows three layout modes:
 ### Single Layout
 
 **Average across channels**:
+
 ```julia
 plot_erp(erps, average_channels = true)
 ```
+
 Shows grand average waveform across all selected channels.
 
 **Individual channels**:
+
 ```julia
 plot_erp(erps, average_channels = false, colormap = :viridis)
 ```
+
 Overlays all channels with color-coding.
 
 **Selected channels**:
+
 ```julia
 plot_erp(erps, 
     channel_selection = channels([:Cz, :PO7, :PO8]),
     average_channels = false
 )
 ```
+
 Shows only specified channels.
 
 ### Grid Layout
@@ -51,6 +57,7 @@ plot_erp(erps, layout = :grid)
 ```
 
 **Custom grid dimensions**:
+
 ```julia
 plot_erp(erps,
     channel_selection = channels([:F3, :Cz, :PO7, :PO8, :Fp1, :Fp2]),
@@ -60,15 +67,18 @@ plot_erp(erps,
 ```
 
 **Skip positions**:
+
 ```julia
 plot_erp(erps,
     layout_grid_dims = (3, 4),
     layout_grid_skip_positions = [(2, 1), (2, 3)]  # Leave empty
 )
 ```
+
 Creates custom layouts with empty spaces.
 
 **Adjust spacing**:
+
 ```julia
 plot_erp(erps,
     layout = :grid,
@@ -90,11 +100,13 @@ Each channel plotted at its actual spatial location for intuitive interpretation
 ### Customization Options
 
 **Y-axis orientation**:
+
 ```julia
 plot_erp(erps, yreversed = true)  # Negative up (common convention)
 ```
 
 **Legend placement**:
+
 ```julia
 plot_erp(erps,
     legend_channel = [:Fp1, :M2],  # Channels for legend
@@ -103,6 +115,7 @@ plot_erp(erps,
 ```
 
 **Figure padding**:
+
 ```julia
 plot_erp(erps,
     figure_padding = (150, 150, 150, 150)  # left, right, bottom, top
@@ -132,16 +145,19 @@ Shows ERP waveform with scalp distribution at a specific time point.
 ### Common Use Cases
 
 **Condition comparison**:
+
 - Overlay multiple experimental conditions
 - Identify differences in amplitude or latency
 - Statistical windows highlighted
 
 **Component identification**:
+
 - Classic ERP components (N1, P1, N170, P3, etc.)
 - Measure peak amplitudes and latencies
 - Compare across channels
 
 **Publication figures**:
+
 - High-quality vector graphics
 - Customizable colors and styles
 - Grid layouts for multiple channels
@@ -149,10 +165,12 @@ Shows ERP waveform with scalp distribution at a specific time point.
 ### Interpretation
 
 **Positive/negative deflections**:
-- **P1, P2, P3**: Positive peaks (often plotted downward with yreversed = true)
+
+- **P1, P2, P3**: Positive peaks (sometimes plotted downward with yreversed = true)
 - **N1, N2, N4**: Negative peaks (plotted upward)
 
 **Typical components**:
+
 - **P1/N1** (~100-200 ms): Early sensory processing
 - **N170** (~170 ms): Face perception (occipito-temporal)
 - **P3** (~300-600 ms): Attention, memory updating

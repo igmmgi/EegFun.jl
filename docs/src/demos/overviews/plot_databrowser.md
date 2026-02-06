@@ -6,7 +6,6 @@ The databrowser is an interactive visualization tool for navigating through EEG 
 
 - **Continuous data**: Scroll through raw recordings dynamically
 - **Epoch data**: Navigate individual trials interactively
-- **ICA components**: Inspect component time courses and topographies
 - **Analysis settings**: Select regions, channels, and configurations visually
 
 ### Key Features
@@ -32,11 +31,9 @@ The databrowser is an interactive visualization tool for navigating through EEG 
 plot_databrowser(dat, ica_result)
 ```
 
-View ICA components alongside raw data with linked topographies.
-
 ### Analysis Settings
 
-The databrowser returns analysis settings for further processing:
+The databrowser can also be used to return analysis settings for further processing:
 
 ```julia
 fig, ax, analysis_settings = plot_databrowser(dat)
@@ -48,15 +45,14 @@ Extract user-selected:
 - Time regions
 - Channel subsets  
 - Sample masks
-- Trigger configurations
 
 ### Keyboard Shortcuts
 
 | Key | Action |
 |-----|--------|
-| **i** | Show help/info |
-| **r** | Open channel repair menu |
-| **c** | Clear current selections |
+| **I** | Show help/info |
+| **R** | Open channel repair menu |
+| **C** | Clear current selections |
 | **Arrow keys** | Navigate time windows |
 
 ### Custom Styling
@@ -75,11 +71,9 @@ plot_databrowser(dat,
 Load data directly from saved files:
 
 ```julia
-plot_databrowser("dat.jld2")
-plot_databrowser("epochs.jld2", "ica.jld2")
+plot_databrowser("dat.jld2")                   # saved continuous data
+plot_databrowser("epochs.jld2", "ica.jld2")    # saved epochs and ica result
 ```
-
-Useful for quick inspection without loading into memory.
 
 ### Common Workflows
 
@@ -102,14 +96,6 @@ Useful for quick inspection without loading into memory.
 - Mark epoch windows with `mark_epoch_windows!()`
 - Verify trigger timing
 - Check epoch boundaries
-- Inspect single trials
-
-**4. ICA Component Review**:
-
-- Run ICA on clean data
-- Browse components interactively
-- Check topographies
-- Identify artifact components
 
 ### Use Cases
 

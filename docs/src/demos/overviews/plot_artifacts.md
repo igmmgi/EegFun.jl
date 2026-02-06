@@ -1,16 +1,92 @@
-## Overview
+This demo demonstrates methods for detecting and visualizing artifacts in EEG data.
 
-This demo shows how to visualize detected artifacts in epoched data.
+### What are EEG Artifacts?
 
-### Artifact Visualization
+Artifacts are unwanted signals from non-neural sources:
 
-Visualize which channels and epochs contain artifacts:
-- **Channel-wise**: See which electrodes are most affected
-- **Epoch-wise**: Identify problematic trials
-- **Temporal patterns**: When artifacts occur within epochs
+**Physiological:**
 
-### Plot Components
+- **Eye movements/blinks**: Large amplitude deflections in frontal channels
+- **Muscle activity (EMG)**: High-frequency noise from jaw, face, or neck
+- **Cardiac signals (ECG)**: Heart electrical activity contamination
 
-- Individual epoch waveforms with artifact markers
-- Bad channel/epoch summaries
-- Rejection statistics across conditions
+**External:**
+
+- **Electrode issues**: Poor contact, bridging, movement
+- **Line noise**: 50/60 Hz environmental interference
+- **Movement**: Low-frequency drifts and transients
+
+### Detection Methods
+
+**Threshold-based:**
+
+- Absolute amplitude criteria (e.g., ±100 μV)
+- Simple and interpretable
+- Quick identification of extreme values
+
+**Statistical:**
+
+- Z-score outlier detection
+- Variance, range, and kurtosis metrics
+- Flags unusual distributions
+
+**Visual inspection:**
+
+- Grid-based epoch review
+- Manual validation of automatic detection
+- Refinement of rejection criteria
+
+### Visualization Approaches
+
+This demo shows multiple complementary views:
+
+**Channel-wise:**
+
+- Which electrodes are most affected
+- Spatial patterns of artifact contamination
+- EOG correlation for eye artifact identification
+
+**Epoch-wise:**
+
+- Trial-by-trial rejection statistics
+- Temporal distribution of artifacts
+- Condition-specific artifact rates
+
+**Rejection summaries:**
+
+- Percentage of data flagged per condition
+- Channel quality metrics
+- Decision support for repair vs. rejection
+
+### Artifact Management Strategy
+
+**Repair (Interpolation):**
+
+- Use for isolated bad channels in good epochs
+- Maintains trial count
+- Cannot fix widespread contamination
+
+**Rejection:**
+
+- Use for severely contaminated epochs
+- Removes entire trials
+- Reduces but cleans the dataset
+
+**Hybrid approach (recommended):**
+
+1. Repair isolated channel issues
+2. Reject epochs with widespread artifacts
+
+### Workflow Summary
+
+This demo shows:
+
+1. **Loading data**: Continuous or epoched EEG
+2. **Detection**: Applying threshold and statistical criteria
+3. **Visualization**: Plotting detected artifacts across channels and epochs
+4. **Assessment**: Evaluating artifact patterns to guide cleaning strategy
+5. **Reporting**: Quantifying data attrition for methods documentation
+
+### Critical Principle
+
+> **Garbage in, garbage out**: No computational method can rescue poor quality data. The most effective strategy is careful data collection with proper electrode preparation and participant instruction. Artifact management is a secondary cleaning strategy, not a substitute for quality acquisition.

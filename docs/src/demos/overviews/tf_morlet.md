@@ -13,11 +13,13 @@ Morlet wavelets are oscillating waves with Gaussian envelopes that provide local
 The `cycles` parameter controls the time-frequency resolution trade-off:
 
 **Fixed cycles** (e.g., `cycles = 5`):
+
 - Same spectral bandwidth at all frequencies
 - **Low frequencies**: Broad temporal windows (poor time resolution)
 - **High frequencies**: Narrow temporal windows (good time resolution)
 
 **Variable cycles** (e.g., `cycles = (3, 10)`):
+
 - Adaptive resolution across frequencies
 - **Low frequencies**: Fewer cycles = better temporal precision
 - **High frequencies**: More cycles = better spectral precision
@@ -26,11 +28,13 @@ The `cycles` parameter controls the time-frequency resolution trade-off:
 ### Frequency Spacing
 
 **Linear spacing** (`frequencies = 1:1:40`):
+
 - Equal Hz steps
 - Good for narrow frequency ranges
 - Easier interpretation
 
 **Logarithmic spacing** (`frequencies = logrange(1, 40, length = 30)`):
+
 - Proportional frequency steps
 - Better for wide ranges (e.g., 2-80 Hz)
 - Use with `ylogscale = true` in plots
@@ -45,6 +49,7 @@ baseline_method = :db           # Decibel conversion (10*log10(activity/baseline
 ```
 
 **Baseline methods**:
+
 - **:db**: Decibel scale (relative power change)
 - **:percent**: Percent change from baseline
 - **:zscore**: Z-score normalization
@@ -54,7 +59,7 @@ baseline_method = :db           # Decibel conversion (10*log10(activity/baseline
 The `filter_edges` and `pad` parameters control edge artifacts:
 
 ```julia
-tf_morlet(epochs, pad = :both)        # Mirror padding
+tf_morlet(epochs, pad = :both)         # Mirror padding
 tf_morlet(epochs, filter_edges = true) # Remove edge samples
 ```
 
@@ -68,15 +73,7 @@ This demo shows:
 4. **Linear vs log spacing**: Different frequency sampling strategies
 5. **Baseline correction**: Isolating event-related power changes
 
-### Advantages
 
-- **Flexible resolution**: Adapt time-frequency trade-off via cycles
-- **Standard method**: Widely used in EEG research
-- **Interpretable**: Direct relationship between cycles and resolution
+### Further Reading
 
-### Common Applications
-
-- Event-related synchronization/desynchronization (ERS/ERD)
-- Oscillatory dynamics (alpha, theta, gamma)
-- Phase-amplitude coupling
-- Induced vs evoked responses
+Cohen, M. X. (2014). *Analyzing Neural Time Series Data: Theory and Practice*. Chapter 12: Morlet Wavelets and Wavelet Convolution
