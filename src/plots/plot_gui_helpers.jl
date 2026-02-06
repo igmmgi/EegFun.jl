@@ -18,11 +18,11 @@ function validate_file(gui_state, required_ext::String)
 end
 
 """
-    get_selected_channels(gui_state)
+    gui_selected_channels(gui_state)
 
 Returns the selected channels from GUI state, or all channels if none selected.
 """
-function get_selected_channels(gui_state)
+function gui_selected_channels(gui_state)
     isempty(gui_state.electrodes[]) ? channels() : channels(gui_state.electrodes[])
 end
 
@@ -42,7 +42,7 @@ function _plot_erp_image(gui_state)
     validate_file(gui_state, ".jld2")
 
     try
-        selected_channels = get_selected_channels(gui_state)
+        selected_channels = gui_selected_channels(gui_state)
 
         @async begin
             layout_sym = Symbol(gui_state.layout_type[])
@@ -63,7 +63,7 @@ function _plot_gfp(gui_state)
     validate_file(gui_state, ".jld2")
 
     try
-        selected_channels = get_selected_channels(gui_state)
+        selected_channels = gui_selected_channels(gui_state)
 
         @async begin
             plot_gfp(gui_state.filename[]; channel_selection = selected_channels, xlim = gui_state.xlim[], ylim = gui_state.ylim[])
@@ -80,7 +80,7 @@ function _plot_time_frequency(gui_state)
         data = read_data(gui_state.filename[])
         isnothing(data) && @minimal_error "Error: No data found in file"
 
-        selected_channels = get_selected_channels(gui_state)
+        selected_channels = gui_selected_channels(gui_state)
 
         @async begin
             plot_time_frequency(data; channel_selection = selected_channels, xlim = gui_state.xlim[], colorbar_limits = gui_state.zlim[])
@@ -97,7 +97,7 @@ function _plot_power_spectrum(gui_state)
         data = read_data(gui_state.filename[])
         isnothing(data) && @minimal_error "Error: No data found in file"
 
-        selected_channels = get_selected_channels(gui_state)
+        selected_channels = gui_selected_channels(gui_state)
 
         @async begin
             plot_frequency_spectrum(data; channel_selection = selected_channels, xlim = gui_state.xlim[], ylim = gui_state.ylim[])
@@ -133,7 +133,7 @@ function _plot_triggers(gui_state)
         polar_to_cartesian_xy!(layout)
 
         dat = read_raw_data(gui_state.filename[])
-        dat = create_eeg_dataframe(dat, layout)
+        dat = create_eegfun_data(dat, layout)
 
         @async begin
             plot_trigger_overview(dat)

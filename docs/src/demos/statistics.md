@@ -1,45 +1,43 @@
 # Statistics
 
-## Overview
+This demo demonstrates statistical approaches for comparing ERP conditions and controlling for multiple comparisons.
 
-## Overview
+This demo demonstrates statistical approaches for comparing ERP conditions and controlling for multiple comparisons.
 
-This demo demonstrates statistical analysis methods for ERP data.
-
-### Statistical Testing
-
-Compare experimental conditions using appropriate statistics:
+### Statistical Testing Approaches
 
 **Parametric Tests:**
-- **T-tests**: Compare two conditions
-- **ANOVA**: Multiple conditions or factors
-- **Assumptions**: Normality, equal variance
+
+- **T-tests**: Two-condition comparisons
+- **ANOVA**: Multiple conditions or factorial designs
 
 **Non-parametric Tests:**
-- **Cluster-based permutation**: Control for multiple comparisons
-- **No distribution assumptions**: More robust
-- **Spatial-temporal clustering**: Accounts for dependencies
 
-### Cluster-Based Permutation Tests
+- **Cluster-based permutation**: Controls for multiple comparisons across space and time
+- **Distribution-free**: No normality assumptions
+- **Spatiotemporal sensitivity**: Leverages natural clustering in EEG data
 
-Powerful method for ERP analysis:
+### Cluster-Based Permutation Testing
+
+This method addresses the multiple comparisons problem inherent in ERP analysis:
+
 1. Compute test statistic at each time point/channel
-2. Find clusters of contiguous significance
-3. Permute condition labels and repeat
-4. Compare observed clusters to permutation distribution
+2. Identify clusters of contiguous (spatial/temporal) significant effects
+3. Permute condition labels and repeat many times
+4. Compare observed cluster mass to permutation distribution
 
-### Advantages
+**Key advantages:**
 
-- Controls family-wise error rate
-- Sensitive to spatiotemporal effects
-- No stringent parametric assumptions
-- Accounts for multiple comparisons elegantly
+- Controls family-wise error rate without being overly conservative (e.g., Bonferroni)
+- Sensitive to spatially and temporally distributed effects
 
-### Applications
+### Workflow Summary
 
-- Condition comparisons in ERP studies
-- Group differences
-- Time-frequency power comparisons
+This demo shows:
+
+1. **Loading group data**: Multiple participants with condition labels
+2. **Statistical comparison**: T-tests and cluster permutation
+3. **Visualization**: Plotting significant time windows and topographies
 
 
 ## Code Examples

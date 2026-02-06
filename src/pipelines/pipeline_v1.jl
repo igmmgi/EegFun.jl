@@ -128,7 +128,7 @@ function preprocess_v1(config::String; base_dir::Union{String,Nothing} = nothing
                 ################### LOAD RAW DATA FILE ###################
                 # TODO: update for different file types!
                 @info section("Raw Data")
-                dat = create_eeg_dataframe(read_raw_data(data_file), layout)
+                dat = create_eegfun_data(read_raw_data(data_file), layout)
 
                 # Save the original data in Julia format
                 if cfg["files"]["output"]["save_continuous_data_original"]

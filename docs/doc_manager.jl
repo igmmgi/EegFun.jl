@@ -5,6 +5,7 @@ using DocumenterVitepress
 using JuliaFormatter
 using LiveServer
 using Logging
+using Pkg
 using Printf
 
 # Add the parent directory to the load path so we can load the local package
@@ -102,11 +103,7 @@ function check_doc_coverage(project_root::String; skip_build_check::Bool = false
 
     try
         # Check for basic documentation files
-        doc_files = [
-            joinpath(project_root, "docs", "src", "index.md"),
-            joinpath(project_root, "docs", "src", "api.md"),
-            joinpath(project_root, "docs", "make.jl"),
-        ]
+        doc_files = [joinpath(project_root, "docs", "src", "index.md"), joinpath(project_root, "docs", "make.jl")]
         missing_files = []
 
         for file in doc_files
@@ -254,13 +251,34 @@ function clean_docs(project_root::String)
     end
 
     # Clean other common build artifacts
-    artifacts = ["site", ".documenter", "Manifest.toml"]
+    artifacts = ["site", ".documenter"]
     for artifact in artifacts
         artifact_path = joinpath(project_root, "docs", artifact)
         if isdir(artifact_path) || isfile(artifact_path)
             rm(artifact_path, recursive = true)
             print_colored(GREEN, "✓ Removed docs/$artifact")
         end
+    end
+
+    # Clean coverage files (.cov)
+    println("\nCleaning coverage files...")
+    cov_count = 0
+    for dir in ["src", "test"]
+        dir_path = joinpath(project_root, dir)
+        if isdir(dir_path)
+            for (root, dirs, files) in walkdir(dir_path)
+                for file in files
+                    if endswith(file, ".cov")
+                        file_path = joinpath(root, file)
+                        rm(file_path)
+                        cov_count += 1
+                    end
+                end
+            end
+        end
+    end
+    if cov_count > 0
+        print_colored(GREEN, "✓ Removed $cov_count coverage file(s)")
     end
 
     print_colored(GREEN, "✓ Documentation cleanup completed")

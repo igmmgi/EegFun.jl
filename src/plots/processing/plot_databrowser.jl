@@ -877,14 +877,14 @@ function create_sliders(fig, state::ContinuousDataBrowserState, dat)
     slider_x = Slider(fig[2, 1], range = 1:50:nrow(state.data.current[].data), startvalue = 1, snap = true)
 
     on(slider_range.value) do x
-        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x + slider_x.value.val)
+        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x+slider_x.value.val)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
     end
 
     on(slider_x.value) do x
-        new_range = x:min(nrow(state.data.current[].data), (x + slider_range.value.val) - 1)
+        new_range = x:min(nrow(state.data.current[].data), (x+slider_range.value.val)-1)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
