@@ -1,13 +1,15 @@
 
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://igmmgi.github.io/EegFun.jl/dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+![Julia 1.10+](https://img.shields.io/badge/julia-v1.10+-blue.svg)
+![Status: Alpha](https://img.shields.io/badge/Status-Alpha-orange.svg)
 
 
 # EegFun.jl
 
 <img src="images/EegFunLogo.png" alt="EegFun Logo" width="150"/>
 
-A Julia package for EEG/ERP data analysis and visualization. Currently under active development (Alpha 0.1).
+A Julia package for EEG/ERP data analysis and visualization. Currently under active development.
 
 ## Documentation
 
@@ -19,6 +21,15 @@ The documentation includes:
 * Tutorials and Demos
 * Complete API reference
 
+## Installation
+
+EegFun.jl is currently unregistered. Install directly from GitHub:
+
+```julia
+using Pkg
+Pkg.add(url="https://github.com/igmmgi/EegFun.jl")
+```
+
 ## Features
 
 * **EEG/ERP Analysis**
@@ -26,7 +37,7 @@ The documentation includes:
 * **Time-Frequency Analysis**
 * **Raw data to full ERP batch preprocessing pipelines**
 
-## Some Features
+## Showcase
 
 ### Data Browser
 
@@ -131,8 +142,10 @@ EegFun.plot_ica_component_activation(dat, ica_result)
 
 </details>
 
-## TODO
+<details>
+<summary><i>TODO</i></summary>
 
-* Add additional file formats to read_raw_data (currently only Biosemi BDF and BrainVision) []
-* Tutorial examples []
+* Add additional file formats to read_raw_data (currently only Biosemi BDF and BrainVision)
 * Lots more ....
+
+</details>
