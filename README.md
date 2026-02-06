@@ -15,8 +15,8 @@ A Julia package for EEG/ERP data analysis and visualization. Currently under act
 
 The documentation includes:
 
-* Getting started guide and installation instructions
-* Interactive demos and tutorials
+* Installation instructions and getting started guide
+* Tutorials and Demos
 * Complete API reference
 
 ## Features
@@ -98,26 +98,36 @@ EegFun.plot_ica_component_activation(dat, ica_result)
 
 <img src="images/data_browser_ica.png" alt="Data Browser ICA" width="800"/>
 
-### Plot Examples
+<details>
+<summary><b>Plot Examples</b></summary>
 
-#### Artifact Detection
+<details>
+<summary>Artifact Detection</summary>
 
 <img src="images/artifact_detection.png" alt="Artifact Detection" width="600"/>
 
-<details>
-<summary>More Plot Examples</summary>
+</details>
 
-#### Epoch Plots (Grid Layout)
+<details>
+<summary>Epoch Plots (Grid Layout)</summary>
 
 <img src="images/epochs_grid_layout.png" alt="Epochs Grid Layout" width="800"/>
 
-#### ERP (Topo Layout)
+</details>
+
+<details>
+<summary>ERP (Topo Layout)</summary>
 
 <img src="images/erp_topo_layout.png" alt="ERP Topo Layout" width="600"/>
 
-#### ERP Image (Topo Layout)
+</details>
+
+<details>
+<summary>ERP Image (Topo Layout)</summary>
 
 <img src="images/erp_image_topo_layout.png" alt="ERP Image Topo Layout" width="600"/>
+
+</details>
 
 </details>
 
