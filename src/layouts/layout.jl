@@ -118,6 +118,33 @@ Check if the layout has 3D Cartesian coordinates.
 - `Bool`: True if x3, y3, and z3 columns exist
 """
 has_3d_coords(layout::Layout) = all(col -> col in propertynames(layout.data), [:x3, :y3, :z3])
+"""
+    has_valid_coordinates(layout::Layout) -> Bool
+
+Check if the layout has non-zero coordinates suitable for topographic plotting.
+Auto-generated layouts have all zeros which cannot be used for spatial visualization.
+
+# Arguments
+- `layout::Layout`: The layout object
+
+# Returns
+- `Bool`: True if layout has non-zero inc/azi coordinates
+
+# Examples
+```julia
+if !has_valid_coordinates(layout)
+    error("Cannot create topographic plot without a proper electrode layout")
+end
+```
+"""
+function has_valid_coordinates(layout::Layout)::Bool
+    # Check if layout has inc and azi columns
+    if !all(col -> col in propertynames(layout.data), [:inc, :azi])
+        return false
+    end
+    # Check if any coordinates are non-zero
+    return any(layout.data.inc .!= 0) || any(layout.data.azi .!= 0)
+end
 
 # === LAYOUT I/O FUNCTIONS ===
 """
@@ -144,7 +171,6 @@ function read_layout(file)
 
     return Layout(df, nothing, nothing)
 end
-
 # === COORDINATE CONVERSIONS ===
 """
     _ensure_coordinates_2d!(layout::Layout)

@@ -52,7 +52,7 @@ dat = EegFun.read_raw_data("your_data.bdf")
 layout = EegFun.read_layout("biosemi64.csv")
 
 # Create Eegfun datatype
-dat = EegFun.create_eeg_dataframe(dat, layout)
+dat = EegFun.create_eegfun_data(dat, layout)
 
 # Basic preprocessing
 EegFun.highpass_filter!(dat, 1)      # High-pass filter at 1 Hz

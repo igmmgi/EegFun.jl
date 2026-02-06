@@ -128,6 +128,9 @@ mutable struct Layout
     criterion::Union{Nothing,Float64}
 end
 
+
+# Empty constructor for quick visualization without layout information
+Layout() = Layout(DataFrame(), nothing, nothing)
 """
     Base.copy(layout::Layout) -> Layout
 

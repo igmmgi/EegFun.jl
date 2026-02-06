@@ -109,7 +109,7 @@ count = EegFun.trigger_count(dat)
 layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
 
 # create EegFun data structure (EegFun.ContinuousData)
-dat = EegFun.create_eeg_dataframe(dat, layout_file);
+dat = EegFun.create_eegfun_data(dat, layout_file);
 
 # basic trigger count from EegFun data structure
 count = EegFun.trigger_count(dat)

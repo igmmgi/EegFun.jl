@@ -124,7 +124,7 @@ dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf");
 layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
 
 # create EegFun data structure (EegFun.ContinuousData)
-dat = EegFun.create_eeg_dataframe(dat, layout_file);
+dat = EegFun.create_eegfun_data(dat, layout_file);
 
 # Plots
 EegFun.plot_channel_spectrum(dat)

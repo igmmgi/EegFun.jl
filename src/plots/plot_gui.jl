@@ -251,10 +251,15 @@ function plot_gui()
         invert_y = Observable(false),
         submenu_active = Observable(false),
         submenu_type = Observable(""),
+        channel_menu = channel_menu,
     )
 
     function plot()
         plot_type = gui_state.plottype[]
+        # Skip placeholder and separator options
+        if plot_type == "Select" || startswith(plot_type, "─")
+            return
+        end
         if plot_type == "Data Browser"
             _plot_databrowser(gui_state)
         elseif startswith(plot_type, "Epochs")
@@ -330,6 +335,8 @@ function plot_gui()
             gui_state.submenu_type[] = "diagnostic"
         elseif selection == "Data Browser" || selection == "Topography" || selection == "Global Field Power"
             # Direct plot types without layout variants
+            gui_state.plottype[] = selection
+            gui_state.submenu_active[] = false
         elseif selection == "Epochs" || selection == "ERP" || selection == "ERP Image"
             # Plot types that support layout variants
             gui_state.plottype[] = selection
@@ -450,7 +457,6 @@ function _plot_databrowser(gui_state)
 
     # Check if we have the required files
     gui_state.filename[] == "" && @minimal_error "Error: No file specified!"
-    gui_state.layout_file[] == "" && @minimal_error "Error: No layout file selected!"
 
     # Read data file (could be BDF or other format)
     file_ext = lowercase(splitext(gui_state.filename[])[2])  # [2] is the extension (with dot)
@@ -459,15 +465,22 @@ function _plot_databrowser(gui_state)
     end
 
     try
-        # Load layout file
-        layout = read_layout(gui_state.layout_file[])
-        polar_to_cartesian_xy!(layout)
+
+        layout = nothing
+        if gui_state.layout_file[] != ""
+            layout = read_layout(gui_state.layout_file[])
+            polar_to_cartesian_xy!(layout)
+        end
 
         dat = read_raw_data(gui_state.filename[])
-        dat = create_eeg_dataframe(dat, layout)
+        if isnothing(layout)
+            dat = create_eegfun_data(dat)
+        else
+            dat = create_eegfun_data(dat, layout)
+        end
 
         # Update electrode menu with actual channel labels from the loaded data
-        channel_menu.options = vcat(["Select"], string.(channel_labels(dat)))
+        gui_state.channel_menu.options = vcat(["Select"], string.(channel_labels(dat)))
 
         # Create a new screen/window for the plot
         @async begin

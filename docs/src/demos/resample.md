@@ -149,7 +149,7 @@ layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
 EegFun.polar_to_cartesian_xy!(layout_file)
 
 # create EegFun data structure (EegFun.ContinuousData)
-dat = EegFun.create_eeg_dataframe(dat, layout_file);
+dat = EegFun.create_eegfun_data(dat, layout_file);
 
 EegFun.sample_rate(dat)   # current sample rate
 EegFun.trigger_count(dat) # current triggers in file

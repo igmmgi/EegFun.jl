@@ -36,6 +36,7 @@ function get_cols_by_group(dat::EegData, group::Symbol)
         @minimal_error "Unknown group type: $group"
     end
 
+
     labels = all_labels(dat)
     layout_channels = dat.layout.data.label
 
@@ -1437,24 +1438,20 @@ end
 # =============================================================================
 
 """
-    create_eeg_dataframe(dat::BiosemiDataFormat.BiosemiData)::DataFrame
+    _create_layout_from_labels(labels::Vector{Symbol})::Layout
 
-Creates a DataFrame from a BiosemiDataFormat data structure.
-
-# Arguments
-- `dat::BiosemiDataFormat.BiosemiData`: The BiosemiDataFormat data structure containing EEG data.
-
-# Returns
-- `DataFrame`: DataFrame containing the EEG data with time, sample, triggers, and channel columns.
-
-# Examples
-```julia
-# Create DataFrame from BiosemiDataFormat data
-df = create_eeg_dataframe(biosemi_data)
-```
+Creates a fake layout with channel labels and zero positions for quick visualization.
+Useful when no proper electrode layout is available.
 """
-function create_eeg_dataframe(dat::BiosemiDataFormat.BiosemiData)::DataFrame
-    @info "create_eeg_dataframe: Creating EEG DataFrame"
+function _create_layout_from_labels(labels::Vector{Symbol})::Layout
+    n_channels = length(labels)
+    df = DataFrame(label = labels, inc = zeros(n_channels), azi = zeros(n_channels))
+    return Layout(df, nothing, nothing)
+end
+
+# Internal helper: Creates a DataFrame from BiosemiData (used by public create_eegfun_data)
+function _create_eegfun_dataframe(dat::BiosemiDataFormat.BiosemiData)::DataFrame
+    @info "Creating EEG DataFrame"
     df = hcat(
         DataFrame(time = dat.time, sample = 1:length(dat.time), triggers = _clean_triggers(dat.triggers.raw)),
         DataFrame(Float64.(dat.data), Symbol.(dat.header.channel_labels[1:(end-1)])),  # assumes last channel is trigger
@@ -1462,49 +1459,27 @@ function create_eeg_dataframe(dat::BiosemiDataFormat.BiosemiData)::DataFrame
     return df
 end
 
-"""
-    create_eeg_dataframe(dat::BiosemiDataFormat.BiosemiData, layout::Layout)::ContinuousData
 
-Creates a ContinuousData object from a BiosemiDataFormat data structure and a layout.
-
-# Arguments
-- `dat::BiosemiDataFormat.BiosemiData`: The BiosemiDataFormat data structure containing EEG data.
-- `layout::Layout`: The layout object containing electrode information.
-
-# Returns
-- `ContinuousData`: ContinuousData object containing the EEG data and layout information.
-
-# Examples
-```julia
-# Create ContinuousData from BiosemiDataFormat data and layout
-eeg_data = create_eeg_dataframe(biosemi_data, layout)
-```
-"""
-function create_eeg_dataframe(dat::BiosemiDataFormat.BiosemiData, layout::Layout)::ContinuousData
+function create_eegfun_data(dat::BiosemiDataFormat.BiosemiData, layout::Layout)::ContinuousData
     file_name = filename(dat)
-    df = create_eeg_dataframe(dat)
+    df = _create_eegfun_dataframe(dat)
     return ContinuousData(file_name, df, layout, dat.header.sample_rate[1], AnalysisInfo())
 end
 
-"""
-    create_eeg_dataframe(dat::BrainVisionDataFormat.BrainVisionData)::DataFrame
+# Optional Layout variant for quick databrowser visualization
+function create_eegfun_data(dat::BiosemiDataFormat.BiosemiData)
+    df = _create_eegfun_dataframe(dat)
+    # Extract channel labels from DataFrame (exclude metadata columns)
+    all_cols = Symbol.(names(df))
+    metadata_cols = [:time, :sample, :triggers, :triggers_info]
+    channel_labels = [col for col in all_cols if !(col in metadata_cols)]
+    layout = _create_layout_from_labels(channel_labels)
+    return create_eegfun_data(dat, layout)
+end
 
-Creates a DataFrame from a BrainVisionDataFormat data structure.
-
-# Arguments
-- `dat::BrainVisionDataFormat.BrainVisionData`: The BrainVisionDataFormat data structure containing EEG data.
-
-# Returns
-- `DataFrame`: DataFrame containing the EEG data with time, sample, triggers, and channel columns.
-
-# Examples
-```julia
-# Create DataFrame from BrainVisionDataFormat data
-df = create_eeg_dataframe(brainvision_data)
-```
-"""
-function create_eeg_dataframe(dat::BrainVisionDataFormat.BrainVisionData)::DataFrame
-    @info "create_eeg_dataframe: Creating EEG DataFrame from BrainVision data"
+# Internal helper: Creates a DataFrame from BrainVisionData (used by public create_eegfun_data)
+function _create_eegfun_dataframe(dat::BrainVisionDataFormat.BrainVisionData)::DataFrame
+    @info " Creating EEG DataFrame from BrainVision data"
 
     # Check if data is available
     if isnothing(dat.data)
@@ -1537,11 +1512,11 @@ function create_eeg_dataframe(dat::BrainVisionDataFormat.BrainVisionData)::DataF
 
     # Create triggers and marker strings columns from markers
     if isnothing(dat.markers) || isempty(dat.markers)
-        @info "create_eeg_dataframe: No markers found, creating empty trigger columns"
+        @info "_create_eegfun_dataframe: No markers found, creating empty trigger columns"
         triggers = zeros(Int, n_samples)
         triggers_info = fill("", n_samples)
     else
-        @info "create_eeg_dataframe: Found $(length(dat.markers)) markers"
+        @info "_create_eegfun_dataframe: Found $(length(dat.markers)) markers"
         triggers, triggers_info = _extract_triggers_from_markers(dat.markers, n_samples)
     end
 
@@ -1555,7 +1530,7 @@ function create_eeg_dataframe(dat::BrainVisionDataFormat.BrainVisionData)::DataF
 end
 
 """
-    create_eeg_dataframe(dat::BrainVisionDataFormat.BrainVisionData, layout::Layout)::ContinuousData
+    create_eegfun_data(dat::BrainVisionDataFormat.BrainVisionData, layout::Layout)::ContinuousData
 
 Creates a ContinuousData object from a BrainVisionDataFormat data structure and a layout.
 
@@ -1569,13 +1544,27 @@ Creates a ContinuousData object from a BrainVisionDataFormat data structure and 
 # Examples
 ```julia
 # Create ContinuousData from BrainVisionDataFormat data and layout
-eeg_data = create_eeg_dataframe(brainvision_data, layout)
+eeg_data = create_eegfun_data(brainvision_data, layout)
+
+# Quick visualization without layout (for databrowser only)
+eeg_data = create_eegfun_data(brainvision_data)
 ```
 """
-function create_eeg_dataframe(dat::BrainVisionDataFormat.BrainVisionData, layout::Layout)::ContinuousData
+function create_eegfun_data(dat::BrainVisionDataFormat.BrainVisionData, layout::Layout)::ContinuousData
     file_name = basename_without_ext(dat.filename)
-    df = create_eeg_dataframe(dat)
+    df = _create_eegfun_dataframe(dat)
     return ContinuousData(file_name, df, layout, dat.header.Fs, AnalysisInfo())
+end
+
+# Optional Layout variant for quick databrowser visualization
+function create_eegfun_data(dat::BrainVisionDataFormat.BrainVisionData)
+    df = _create_eegfun_dataframe(dat)
+    # Extract channel labels from DataFrame (exclude metadata columns)
+    all_cols = Symbol.(names(df))
+    metadata_cols = [:time, :sample, :triggers, :triggers_info]
+    channel_labels = [col for col in all_cols if !(col in metadata_cols)]
+    layout = _create_layout_from_labels(channel_labels)
+    return create_eegfun_data(dat, layout)
 end
 
 """

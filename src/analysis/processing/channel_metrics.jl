@@ -565,7 +565,7 @@ bad_channels = identify_bad_channels(summary_df, joint_prob_df, zvar_criterion =
 function identify_bad_channels(summary_df::DataFrame, joint_prob_df::DataFrame; zvar_criterion::Real = 3.0)::Vector{Symbol}
 
     # Identify bad channels based on z-variance criterion
-    bad_by_zvar = summary_df[abs.(summary_df.zvar).>zvar_criterion, :channel]
+    bad_by_zvar = summary_df[abs.(summary_df.zvar) .> zvar_criterion, :channel]
 
     # Identify bad channels based on joint probability criterion
     bad_by_jp = joint_prob_df[joint_prob_df.rejection, :channel]
@@ -614,7 +614,7 @@ function partition_channels_by_eog_correlation(
 
     eog_related = Symbol[]
     for ch in bad_channels
-        rows = eog_correlation_df[eog_correlation_df.row.==ch, :]
+        rows = eog_correlation_df[eog_correlation_df.row .== ch, :]
         if nrow(rows) > 0
             if any(hasproperty(rows, c) && abs(rows[1, c]) > threshold for c in cols_to_use)
                 push!(eog_related, ch)

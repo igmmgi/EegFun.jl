@@ -53,7 +53,7 @@ layout_file = EegFun.read_layout("my_layout.csv");
 EegFun.polar_to_cartesian_xy!(layout_file)
 
 # Julia EegFun type
-dat = EegFun.create_eeg_dataframe(dat, layout_file);
+dat = EegFun.create_eegfun_data(dat, layout_file);
 
 EegFun.plot_databrowser(dat);
 ```
@@ -76,7 +76,7 @@ dat = EegFun.read_raw_data("my_raw_file.bdf");
 layout_file = EegFun.read_layout("my_layout.csv");
 EegFun.polar_to_cartesian_xy!(layout_file)
 
-dat = EegFun.create_eeg_dataframe(dat, layout_file);
+dat = EegFun.create_eegfun_data(dat, layout_file);
 
 # rereference data and apply 1Hz high-pass filter for ICA
 EegFun.rereference!(dat, :avg)

@@ -180,4 +180,7 @@ include("demos/signal_example_1.jl")
 include("demos/signal_example_2.jl")
 include("demos/simulate_erp.jl")
 
+# Precompilation
+include("precompile.jl")
+
 end # module EegFun 
