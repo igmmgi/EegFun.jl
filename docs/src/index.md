@@ -33,6 +33,7 @@ features:
     details: Interactive plots, topographic maps, and publication-quality figures with Makie.jl
 ---
 ````
+
 ## Quick Start
 
 Install EegFun.jl from the Julia REPL:
@@ -95,7 +96,10 @@ EegFun.plot_topoplot(erps, interval_selection = (0.1, 0.2)) # between 100 and 20
 | Section | Description |
 |---------|-------------|
 | [Tutorials](tutorials/getting-started.md) | Step-by-step guides |
+| [Demos](demos/index.md) | Example scripts |
+| [Types](explanations/data-structures.md) | Data types and their relationships |
 | [API Reference](reference/index.md) | Complete function and type documentation |
 
 ## Getting Help
+
 - Report bugs on [GitHub Issues](https://github.com/igmmgi/EegFun.jl/issues)
