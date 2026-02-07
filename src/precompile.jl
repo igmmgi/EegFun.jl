@@ -12,6 +12,7 @@ PrecompileTools.@compile_workload begin
 
         # TODO: how much does it really help? Initial tests seem to show it helps a bit
         # TODO: what should we put in here? Most common use cases? Everything?
+        # TODO: GitHub actions does not see to like the plot_xxx calls?
 
         # Reading *.bdf files and opening databrowser
         dat = EegFun.read_raw_data(data_file)
@@ -31,11 +32,11 @@ PrecompileTools.@compile_workload begin
         local epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.5, 1.0))
         local erp = EegFun.average_epochs(epochs)
 
-        # Key plot types
-        EegFun.plot_databrowser(dat)
-        EegFun.plot_epochs(epochs[1])
-        EegFun.plot_erp(erp)
-        EegFun.plot_topography(erp)
+        # # Key plot types
+        # EegFun.plot_databrowser(dat)
+        # EegFun.plot_epochs(epochs[1])
+        # EegFun.plot_erp(erp)
+        # EegFun.plot_topography(erp)
 
         println("Precompilation complete!")
     else
