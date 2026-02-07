@@ -539,7 +539,7 @@ function tail(dat::EegData; n = nothing)
     data = all_data(dat)
     nrows = nrow(data)
     n = min(n, nrows)  # Don't exceed available rows
-    result = n > 0 ? data[max(1, nrows-n+1):nrows, :] : DataFrame()
+    result = n > 0 ? data[max(1, nrows - n + 1):nrows, :] : DataFrame()
     viewer(result)
     return result
 end
@@ -1502,8 +1502,8 @@ function _create_eegfun_dataframe(dat::BrainVisionDataFormat.BrainVisionData)::D
     # Create sample vector
     sample = 1:n_samples
 
-    # Extract channel labels from header
-    channel_labels = dat.header.label
+    # Extract channel labels from header 
+    channel_labels = dat.header.label[1:n_channels]
 
     # Verify channel count matches
     if length(channel_labels) != n_channels

@@ -5,6 +5,8 @@ using Printf
 demos = [
     ("artifacts", "Artifacts"),
     ("baseline", "Baseline"),
+    ("biosemi_import", "BioSemi Import"),
+    ("brainvision_import", "BrainVision Import"),
     ("channel_metrics", "Channel Metrics"),
     ("channel_repair", "Channel Repair"),
     ("channel_summary", "Channel Summary"),

@@ -111,8 +111,6 @@ ContinuousData
 EpochData
     ↓ average()
 ErpData
-    ↓ tf_morlet() / tf_multitaper()
-TimeFreqData
 ```
 
 ## See Also
