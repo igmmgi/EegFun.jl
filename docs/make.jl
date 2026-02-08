@@ -7,7 +7,14 @@ using EegFun
 
 pages = [
     "Home" => "index.md",
-    "Tutorials" => ["Getting Started" => "tutorials/getting-started.md"],
+    "Tutorials" => [
+        "Getting Started" => "tutorials/getting-started.md",
+        "Epoch Selection" => "tutorials/epoch-selection.md",
+        "Artifact Handling" => "tutorials/artifact-handling.md",
+        "Layouts and Neighbors" => "tutorials/layouts-neighbors.md",
+        "Batch Processing" => "tutorials/batch-processing.md",
+        "File Selection Patterns" => "tutorials/file-selection.md",
+    ],
     "Explanations" => ["Data Structures" => "explanations/data-structures.md"],
     "Demos" => [
         "Artifacts" => "demos/artifacts.md",
@@ -46,6 +53,7 @@ pages = [
         "FieldTrip Import" => "demos/fieldtrip_import.md",
         "Epoch Extraction" => "demos/epochs.md",
         "Artifact Detection" => "demos/artifact_detection.md",
+        "Grand Average" => "demos/grand_average.md",
     ],
     "Reference" => ["Overview" => "reference/index.md", "Types" => "reference/types.md", "Layouts" => "reference/layouts.md"],
 ]
