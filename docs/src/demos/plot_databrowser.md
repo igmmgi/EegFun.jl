@@ -2,8 +2,6 @@
 
 This demo demonstrates the interactive databrowser for exploring and analyzing EEG data in real-time.
 
-This demo demonstrates the interactive databrowser for exploring and analyzing EEG data in real-time.
-
 ### What is the Databrowser?
 
 The databrowser is an interactive visualization tool for navigating through EEG data:

@@ -2,8 +2,6 @@
 
 This demo demonstrates using joint probability analysis to detect bad channels based on multi-dimensional statistical outliers.
 
-This demo demonstrates using joint probability analysis to detect bad channels based on multi-dimensional statistical outliers.
-
 ### What is Joint Probability?
 
 Joint probability analysis detects outlier channels by examining how each channel's distribution relates to all other channels simultaneously:

@@ -2,8 +2,6 @@
 
 This demo demonstrates visualizing individual epoch waveforms with flexible layout options.
 
-This demo demonstrates visualizing individual epoch waveforms with flexible layout options.
-
 ### What is Epoch Plotting?
 
 Epoch plots display individual trial timecourses, showing:

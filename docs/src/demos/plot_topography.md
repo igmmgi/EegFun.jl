@@ -2,8 +2,6 @@
 
 This demo demonstrates creating topographic scalp maps to visualize the spatial distribution of EEG activity at specific time points.
 
-This demo demonstrates creating topographic scalp maps to visualize the spatial distribution of EEG activity at specific time points.
-
 ### What are Topographic Maps?
 
 Topographic maps (topoplots) show the spatial distribution of electrical activity across the scalp:

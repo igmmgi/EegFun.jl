@@ -2,8 +2,6 @@
 
 This demo demonstrates statistical approaches for comparing ERP conditions and controlling for multiple comparisons.
 
-This demo demonstrates statistical approaches for comparing ERP conditions and controlling for multiple comparisons.
-
 ### Statistical Testing Approaches
 
 **Parametric Tests:**

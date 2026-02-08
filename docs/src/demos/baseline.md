@@ -2,8 +2,6 @@
 
 This demo demonstrates baseline correction methods for ERP data, including different baseline windows and correction approaches for continuous, epoch, and ERP data.
 
-This demo demonstrates baseline correction methods for ERP data, including different baseline windows and correction approaches for continuous, epoch, and ERP data.
-
 ### What is Baseline Correction?
 
 Baseline correction removes the pre-stimulus mean from each trial, ensuring that activity is measured relative to a neutral reference period. This is essential for ERP analysis because:

@@ -2,8 +2,6 @@
 
 This demo demonstrates methods for detecting and visualizing artifacts in EEG data.
 
-This demo demonstrates methods for detecting and visualizing artifacts in EEG data.
-
 ### What are EEG Artifacts?
 
 Artifacts are unwanted signals from non-neural sources:

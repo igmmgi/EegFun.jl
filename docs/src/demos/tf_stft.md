@@ -2,8 +2,6 @@
 
 This demo demonstrates time-frequency analysis using the Short-Time Fourier Transform (STFT), a classic approach to spectrograms.
 
-This demo demonstrates time-frequency analysis using the Short-Time Fourier Transform (STFT), a classic approach to spectrograms.
-
 ### What is STFT?
 
 STFT applies the Fast Fourier Transform (FFT) to windowed segments of the signal:

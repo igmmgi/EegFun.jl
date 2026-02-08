@@ -35,6 +35,10 @@ demos = [
     ("tf_morlet", "TF Morlet"),
     ("tf_multitaper", "TF Multitaper"),
     ("tf_stft", "TF STFT"),
+    ("eeglab_import", "EEGLAB Import"),
+    ("epochs", "Epoch Extraction"),
+    ("fieldtrip_import", "FieldTrip Import"),
+    ("artifact_detection", "Artifact Detection"),
 ]
 
 # Create demo markdown files
@@ -85,8 +89,6 @@ for demo_info in demos
     # Create markdown content
     markdown_content = """
     # $title
-
-    $description
 
     $overview_section
 

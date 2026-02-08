@@ -2,8 +2,6 @@
 
 This demo demonstrates time-frequency analysis using the multitaper method for high-quality spectral estimation.
 
-This demo demonstrates time-frequency analysis using the multitaper method for high-quality spectral estimation.
-
 ### What is the Multitaper Method?
 
 The multitaper method improves spectral estimates by averaging across multiple orthogonal tapers (windows):

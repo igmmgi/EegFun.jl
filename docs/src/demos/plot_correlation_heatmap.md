@@ -2,8 +2,6 @@
 
 This demo demonstrates how to compute and visualize channel correlation matrices for quality control and artifact detection.
 
-This demo demonstrates how to compute and visualize channel correlation matrices for quality control and artifact detection.
-
 ### What is a Correlation Matrix?
 
 A correlation matrix shows the Pearson correlation coefficient between all channel pairs:

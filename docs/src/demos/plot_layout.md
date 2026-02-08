@@ -2,8 +2,6 @@
 
 This demo demonstrates visualizing electrode layout configurations in 2D and 3D space.
 
-This demo demonstrates visualizing electrode layout configurations in 2D and 3D space.
-
 ### What is Electrode Layout?
 
 Electrode layout defines the spatial positions of EEG sensors on the scalp using:

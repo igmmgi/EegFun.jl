@@ -2,8 +2,6 @@
 
 This demo demonstrates channel interpolation methods for repairing bad electrodes using spatial interpolation techniques.
 
-This demo demonstrates channel interpolation methods for repairing bad electrodes using spatial interpolation techniques.
-
 ### What is Channel Repair?
 
 Channel repair (interpolation) estimates the signal at bad electrodes using data from neighboring good channels. This preserves data quality while maintaining electrode count for spatial analyses.

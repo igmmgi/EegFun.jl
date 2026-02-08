@@ -2,8 +2,6 @@
 
 This demo demonstrates mirror padding, a technique for extending time-series data by reflecting it at the edges.
 
-This demo demonstrates mirror padding, a technique for extending time-series data by reflecting it at the edges.
-
 ### What is Mirror Padding?
 
 Mirror padding extends your data at the beginning and/or end by creating a reflected copy:

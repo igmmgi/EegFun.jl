@@ -2,8 +2,6 @@
 
 This demo demonstrates extracting quantitative measurements from ERP waveforms for statistical analysis and reporting.
 
-This demo demonstrates extracting quantitative measurements from ERP waveforms for statistical analysis and reporting.
-
 ### What are ERP Measurements?
 
 ERP measurements quantify specific features of averaged event-related potentials:
