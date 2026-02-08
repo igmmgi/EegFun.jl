@@ -2,8 +2,6 @@
 
 This demo shows how to change the sampling rate of EEG data through resampling.
 
-This demo shows how to change the sampling rate of EEG data through resampling.
-
 ### What is Resampling?
 
 Resampling changes the number of samples per second in your data:

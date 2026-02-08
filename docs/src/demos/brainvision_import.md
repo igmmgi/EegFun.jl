@@ -1,12 +1,9 @@
 # BrainVision Import
 
-# BrainVision Import
-
-# BrainVision Import
-
-This demo demonstrates importing BrainVision format files into EegFun.jl, covering the complete workflow from raw data loading through preprocessing and visualization.
+This demo demonstrates importing BrainVision format files into EegFun.jl.
 
 ### What is BrainVision Format?
+
 
 BrainVision is the data format used by Brain Products GmbH EEG systems (e.g., BrainAmp, actiCHamp, LiveAmp). It's a flexible, text-header based format widely used in research.
 
@@ -30,8 +27,6 @@ BrainVision is the data format used by Brain Products GmbH EEG systems (e.g., Br
 - Raw continuous EEG time series
 - Sampling rate and channel metadata
 - Trigger/event markers with descriptions
-- Channel information and units
-- Reference channel configuration
 
 **What you need**:
 
@@ -41,13 +36,12 @@ BrainVision is the data format used by Brain Products GmbH EEG systems (e.g., Br
 
 ### Data Mapping
 
-**EegFun.read_raw_data** (or **EegFun.read_brainvision**) loads BrainVision data, then **create_eegfun_data** converts to native EegFun types:
+**EegFun.read_raw_data** loads BrainVision data, then **create_eegfun_data** converts to native EegFun types:
 
 - BrainVision → `BrainVisionData` (intermediate) → `ContinuousData` (EegFun)
 - Markers extracted from `.vmrk` file
 - Layout coordinates added separately
 
-All EegFun functions work seamlessly with imported BrainVision data.
 
 ## Important Notes
 
@@ -69,7 +63,6 @@ BrainVision doesn't embed 3D electrode positions, so you must provide a matching
 
 **Brain Products actiCap**: Check `resources/layouts/brainproducts_acticap/`  
 **EasyCap**: Check `resources/layouts/easycap/`  
-**BioSemi**: Use if you have a custom setup with BioSemi caps
 
 Choose the layout matching your recording configuration.
 
@@ -104,18 +97,6 @@ This demo shows the complete BrainVision import workflow:
 - Combine raw data with layout using `create_eegfun_data()`
 - Results in `ContinuousData` ready for analysis
 
-### 4. Basic Preprocessing
-
-- Apply common average reference
-- High-pass filter to remove slow drifts
-- Additional preprocessing as needed
-
-### 5. Visualization and Analysis
-
-- Browse data with `plot_databrowser()`
-- Extract epochs around triggers
-- Create ERPs and compare conditions
-
 
 ## Code Examples
 
@@ -127,70 +108,51 @@ Demo: Loading and Processing BrainVision Files
 
 This demo shows how to:
 - Load BrainVision format files (.vhdr, .eeg, .vmrk)
-- Create EegFun data structures with layouts
+- Create EegFun data structures 
 - Apply basic preprocessing
-- Visualize the data
-- Work with triggers/events
+- Get the triggers/events
 
-BrainVision is the data format used by Brain Products GmbH EEG systems.
 The format consists of three files:
 - .vhdr (header file with metadata)
 - .eeg (binary data file)
 - .vmrk (marker/trigger file)
-
-Once loaded, all EegFun functions work seamlessly with BrainVision data.
 """
 
 using EegFun
 
-# Step 1: Load raw BrainVision data
+# Load raw BrainVision data
 # read_raw_data automatically detects BrainVision files (.vhdr, .eeg, or .vmrk)
-# You can specify any of the three files; it will find the others
-println("Loading BrainVision files...")
+# You can specify any of the three files; it will find the others, assuming 
+# they are in the same directory
 raw_data = EegFun.read_raw_data("./resources/data/brainvision/example1.vhdr")
 
-# Alternative: You can also use .eeg or .vmrk extension
-# raw_data = EegFun.read_raw_data("./resources/data/brainvision/example1.eeg")
+# EegFun uses the Julia package: BrainVisionDataFormat.jl
+# https://github.com/igmmgi/BrainVisionDataFormat.jl
+raw_data.data
+raw_data.header
+raw_data.markers
+raw_data.markers[1]
+raw_data.markers[2]
+raw_data.markers[3]
+# and so on
 
-# Step 2: Load and prepare electrode layout
-# Brain Products systems often use actiCap or EasyCap configurations
-# Choose the layout that matches your recording setup
-layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv")  # Adjust as needed
-EegFun.polar_to_cartesian_xy!(layout_file)
+# Create EegFun data structure
+dat = EegFun.create_eegfun_data(raw_data)
 
-# Step 3: Create EegFun data structure
-println("Creating EegFun data structure...")
-dat = EegFun.create_eegfun_data(raw_data, layout_file)
+EegFun.all_data(dat)
+EegFun.meta_data(dat)
+EegFun.all_labels(dat)
+EegFun.channel_labels(dat)
+EegFun.meta_labels(dat)
+EegFun.extra_labels(dat)
 
-# Step 4: Check trigger information
+# Check trigger information
+# EegFun creates a hash of the marker names for the numeric trigger column
+# triggers_info contains the mapping of trigger names to numeric values
 println("\nTrigger summary:")
 EegFun.trigger_count(dat)
 
-# Step 5: Basic preprocessing
-println("\nApplying preprocessing...")
-EegFun.rereference!(dat, :avg)  # Common average reference
-EegFun.highpass_filter!(dat, 0.1)  # Remove slow drifts
 
-# Step 6: Visualize the data
-println("\nOpening data browser...")
-EegFun.plot_databrowser(dat)
-
-# Optional: Extract and visualize epochs
-println("\nExtracting epochs...")
-epoch_cfg = [
-    EegFun.EpochCondition(name = "Trigger1", trigger_sequences = [[1]]),
-    EegFun.EpochCondition(name = "Trigger2", trigger_sequences = [[2]]),
-]
-
-epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.2, 1.0))
-EegFun.baseline!(epochs, (-0.2, 0.0))
-
-# Visualize epochs
-EegFun.plot_epochs(epochs[1], channel_selection = EegFun.channels([:Cz]))
-
-# Compare conditions
-erps = EegFun.average_epochs(epochs)
-EegFun.plot_erp(erps, channel_selection = EegFun.channels([:Cz]))
 ```
 
 :::

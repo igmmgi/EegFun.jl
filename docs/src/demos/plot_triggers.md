@@ -2,8 +2,6 @@
 
 This demo demonstrates visualizing event markers and triggers in continuous EEG data to verify timing and event sequences.
 
-This demo demonstrates visualizing event markers and triggers in continuous EEG data to verify timing and event sequences.
-
 ### What are Triggers?
 
 Triggers (also called event markers or stimulus codes) are time-stamped codes that mark when experimental events occurred during recording:

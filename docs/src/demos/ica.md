@@ -2,8 +2,6 @@
 
 This demo demonstrates the complete ICA workflow for decomposing EEG into independent components, identifying artifacts, and removing them.
 
-This demo demonstrates the complete ICA workflow for decomposing EEG into independent components, identifying artifacts, and removing them.
-
 ### What is ICA?
 
 Independent Component Analysis (ICA) is a blind source separation technique that decomposes multi-channel EEG into maximally independent sources:

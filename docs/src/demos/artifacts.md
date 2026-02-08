@@ -2,8 +2,6 @@
 
 This demo demonstrates artifact detection functionality, including identification, repair, and rejection strategies.
 
-This demo demonstrates artifact detection functionality, including identification, repair, and rejection strategies.
-
 ### What are EEG Artifacts?
 
 EEG artifacts are unwanted signals in the recording that originate from sources other than brain activity. They can severely compromise data quality. Common artifact sources include:

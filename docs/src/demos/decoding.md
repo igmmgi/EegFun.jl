@@ -2,8 +2,6 @@
 
 This demo demonstrates time-resolved multivariate pattern analysis (MVPA) for decoding experimental conditions from EEG data.
 
-This demo demonstrates time-resolved multivariate pattern analysis (MVPA) for decoding experimental conditions from EEG data.
-
 ### What is MVPA Decoding?
 
 MVPA uses machine learning classifiers to decode experimental conditions from spatial patterns of brain activity:

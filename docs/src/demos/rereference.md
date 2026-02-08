@@ -2,8 +2,6 @@
 
 This demo demonstrates applying different re-referencing schemes to EEG data.
 
-This demo demonstrates applying different re-referencing schemes to EEG data.
-
 ### What is Re-referencing?
 
 Re-referencing changes the voltage baseline by subtracting a reference signal from all electrodes. Since EEG measures potential differences, the choice of reference affects:

@@ -1,64 +1,32 @@
-This demo demonstrates importing EEGLAB `.set` files into EegFun.jl, including both continuous and epoched data with ICA decompositions.
+This demo demonstrates importing EEGLAB `.set` files into EegFun.jl. EEGLAB is a widely used open-source toolboxes for EEG processing (in MATLAB). 
 
-### What is EEGLAB Format?
+### About EEGLAB .set Format
 
-EEGLAB is a widely-used MATLAB toolbox for EEG analysis. The `.set` format stores:
+The `.set` format is a MATLAB-based file that contains a header structure with all recording parameters, trigger information, and often precomputed info like ICA weights or epoch definitions. The actual EEG data may be stored within the `.set` file or in a separate `.fdt` file.
 
-- EEG data (continuous or epoched)
-- Channel locations and metadata
-- Event markers and triggers
-- ICA decompositions (if computed)
-- Preprocessing history
-- Lots more ???
+**Key features**:
+- Supports both continuous and epoched data
+- Often includes ICA components and weights
+- Comprehensive metadata storage
 
 ### Import Capabilities
 
-**Continuous data**:
-
-- Raw EEG time series
-- Triggers and event markers
-- Channel locations
-- Sampling rate and metadata
-
-**Epoched data**:
-
-- Segmented trials
-- Trial-specific event information
-- Baseline windows
-- Rejection markers
-
-**ICA information**:
-
-- Independent component activations
-- Unmixing and mixing matrices
-- Component labels and classifications
+**Data loading**:
+- Automatic detection of continuous vs. epoched data
+- Import of ICA weights and sphere matrices, if available
+- Mapping of event/trigger labels (hashed to triggers)
+- Support for external data files (.fdt)
 
 ### Data Mapping
 
-**EegFun.read_eeglab** converts EEGLAB structures to native EegFun types:
-
-- EEGLAB continuous → `ContinuousData`
-- EEGLAB epoched → `EpochData`
-- EEGLAB ICA → `InfoIca`
-
-All EegFun functions should work with imported EEGLAB data.
-
-## Important Notes
-
-EEGLAB import is functional but considered work-in-progress. The implementation has only been tested with sample datasets from `eeglab/sample_data`, but should handle common use cases.
+**EegFun.read_eeglab** handles the mapping EEGLAB structures to native EegFun types:
+- EEGLAB Dataset → `ContinuousData` or `EpochedData`
+- ICA info → `ICA` structure
+- Event labels → Available in `:trigger_info` column
 
 ## Workflow Summary
 
-This demo shows EEGLAB import workflows:
-
-### 1. Import Continuous Data
-
-- Load raw continuous EEGLAB file
-- Visualize in databrowser
-- Check trigger counts
-
-### 2. Import Epoched Data with ICA
-
-- Load epoched EEGLAB file
-- Extract both epoch data and ICA decomposition
-- Visualize epochs and ICA components
+1. **Load Data**: Depending on the file content, `read_eeglab()` can return just data or data plus ICA information.
+2. **Check Triggers**: EEGLAB often uses string labels for events. EegFun hashes these for its trigger system while preserving the original labels.
+3. **Verification**: Use `plot_databrowser()` to verify the imported time series or epochs.
+4. **ICA Visualization**: If ICA information was imported, you can immediately plot components and activations.

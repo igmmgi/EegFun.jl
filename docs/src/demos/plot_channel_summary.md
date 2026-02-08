@@ -2,8 +2,6 @@
 
 This demo shows how to compute and visualize channel summary statistics for quality control and data characterization.
 
-This demo shows how to compute and visualize channel summary statistics for quality control and data characterization.
-
 ### What is Channel Summary?
 
 Channel summary computes aggregate statistics across time for each channel:

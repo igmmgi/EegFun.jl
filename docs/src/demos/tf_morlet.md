@@ -2,8 +2,6 @@
 
 This demo demonstrates time-frequency analysis using Morlet wavelets to decompose EEG signals into time-varying frequency content.
 
-This demo demonstrates time-frequency analysis using Morlet wavelets to decompose EEG signals into time-varying frequency content.
-
 ### What are Morlet Wavelets?
 
 Morlet wavelets are oscillating waves with Gaussian envelopes that provide localized time-frequency analysis:

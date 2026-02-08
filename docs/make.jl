@@ -40,6 +40,12 @@ pages = [
         "TF Morlet" => "demos/tf_morlet.md",
         "TF Multitaper" => "demos/tf_multitaper.md",
         "TF STFT" => "demos/tf_stft.md",
+        "BioSemi Import" => "demos/biosemi_import.md",
+        "BrainVision Import" => "demos/brainvision_import.md",
+        "EEGLAB Import" => "demos/eeglab_import.md",
+        "FieldTrip Import" => "demos/fieldtrip_import.md",
+        "Epoch Extraction" => "demos/epochs.md",
+        "Artifact Detection" => "demos/artifact_detection.md",
     ],
     "Reference" => ["Overview" => "reference/index.md", "Types" => "reference/types.md", "Layouts" => "reference/layouts.md"],
 ]

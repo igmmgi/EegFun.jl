@@ -1,5 +1,3 @@
-# BrainVision Import
-
 This demo demonstrates importing BrainVision format files into EegFun.jl.
 
 ### What is BrainVision Format?
@@ -27,8 +25,6 @@ BrainVision is the data format used by Brain Products GmbH EEG systems (e.g., Br
 - Raw continuous EEG time series
 - Sampling rate and channel metadata
 - Trigger/event markers with descriptions
-- Channel information and units
-- Reference channel configuration
 
 **What you need**:
 
@@ -38,13 +34,12 @@ BrainVision is the data format used by Brain Products GmbH EEG systems (e.g., Br
 
 ### Data Mapping
 
-**EegFun.read_raw_data** (or **EegFun.read_brainvision**) loads BrainVision data, then **create_eegfun_data** converts to native EegFun types:
+**EegFun.read_raw_data** loads BrainVision data, then **create_eegfun_data** converts to native EegFun types:
 
 - BrainVision → `BrainVisionData` (intermediate) → `ContinuousData` (EegFun)
 - Markers extracted from `.vmrk` file
 - Layout coordinates added separately
 
-All EegFun functions work seamlessly with imported BrainVision data.
 
 ## Important Notes
 
@@ -66,7 +61,6 @@ BrainVision doesn't embed 3D electrode positions, so you must provide a matching
 
 **Brain Products actiCap**: Check `resources/layouts/brainproducts_acticap/`  
 **EasyCap**: Check `resources/layouts/easycap/`  
-**BioSemi**: Use if you have a custom setup with BioSemi caps
 
 Choose the layout matching your recording configuration.
 

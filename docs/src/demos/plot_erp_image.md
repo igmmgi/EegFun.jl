@@ -2,8 +2,6 @@
 
 This demo shows how to create ERP image plots for visualizing single-trial EEG activity.
 
-This demo shows how to create ERP image plots for visualizing single-trial EEG activity.
-
 ### What is an ERP Image?
 
 An ERP image displays single-trial data as a 2D heatmap:

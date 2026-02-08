@@ -2,8 +2,6 @@
 
 ## Overview
 
-## Overview
-
 This demo demonstrates Representational Similarity Analysis (RSA) for analyzing neural representational geometries.
 
 ### What is RSA?

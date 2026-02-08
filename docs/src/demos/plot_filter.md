@@ -2,8 +2,6 @@
 
 This demo demonstrates visualizing filter frequency and phase responses to verify filter characteristics before applying them to data.
 
-This demo demonstrates visualizing filter frequency and phase responses to verify filter characteristics before applying them to data.
-
 ### What is Filter Visualization?
 
 Filter response plots show how a filter affects different frequencies:

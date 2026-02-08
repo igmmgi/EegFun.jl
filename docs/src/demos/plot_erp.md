@@ -2,8 +2,6 @@
 
 This demo demonstrates plotting event-related potentials (ERPs) with comprehensive customization options.
 
-This demo demonstrates plotting event-related potentials (ERPs) with comprehensive customization options.
-
 ### What is an ERP Plot?
 
 ERP plots visualize averaged brain responses time-locked to events:

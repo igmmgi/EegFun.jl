@@ -1,10 +1,6 @@
 # BioSemi Import
 
-# BioSemi Import
-
-# BioSemi Import
-
-This demo demonstrates importing BioSemi BDF files into EegFun.jl, covering the complete workflow from raw data loading through preprocessing and visualization.
+This demo demonstrates importing BioSemi BDF files into EegFun.jl.
 
 ### What is BioSemi BDF Format?
 
@@ -24,7 +20,6 @@ BioSemi is a popular manufacturer of active electrode EEG systems. The BDF (BioS
 - Raw continuous EEG time series (24-bit precision)
 - Sampling rate and channel metadata
 - Trigger/event markers (encoded in Status channel)
-- Automatic channel configuration
 
 **What you need**:
 
@@ -34,13 +29,11 @@ BioSemi is a popular manufacturer of active electrode EEG systems. The BDF (BioS
 
 ### Data Mapping
 
-**EegFun.read_raw_data** (or **EegFun.read_bdf**) loads BioSemi data, then **create_eegfun_data** converts to native EegFun types:
+**EegFun.read_raw_data** loads BioSemi data, then **create_eegfun_data** converts to native EegFun types:
 
 - BioSemi BDF → `BiosemiData` (intermediate) → `ContinuousData` (EegFun)
 - Triggers extracted from Status channel
 - Layout coordinates added separately
-
-All EegFun functions work seamlessly with imported BioSemi data.
 
 ## Important Notes
 
@@ -79,18 +72,6 @@ This demo shows the complete BioSemi import workflow:
 - Combine raw data with layout using `create_eegfun_data()`
 - Results in `ContinuousData` ready for analysis
 
-### 4. Basic Preprocessing
-
-- Apply common average reference
-- High-pass filter to remove slow drifts
-- Additional preprocessing as needed
-
-### 5. Visualization and Analysis
-
-- Browse data with `plot_databrowser()`
-- Extract epochs around triggers
-- Create ERPs and compare conditions
-
 
 ## Code Examples
 
@@ -103,61 +84,41 @@ Demo: Loading and Processing BioSemi BDF Files
 This demo shows how to:
 - Load BioSemi .bdf files (raw continuous data format)
 - Create EegFun data structures with layouts
-- Apply basic preprocessing
-- Visualize the data
-- Work with triggers/events
-
-BioSemi is a popular EEG system manufacturer. The .bdf format is the 
-BioSemi Data Format, a 24-bit variant of the European Data Format (EDF).
-
-Once loaded, all EegFun functions work seamlessly with BioSemi data.
+- Get the triggers/events
 """
 
 using EegFun
 
-# Step 1: Load raw BDF data
+# Load raw BDF data
 # read_raw_data automatically detects the .bdf extension
-println("Loading BioSemi .bdf file...")
 raw_data = EegFun.read_raw_data("./resources/data/bdf/example1.bdf")
 
-# Step 2: Load and prepare electrode layout
+# EegFun uses the Julia package: BiosemiDataFormat.jl
+# https://github.com/igmmgi/BiosemiDataFormat.jl
+
+raw_data.header.xxx # tab-autocomplete in REPPL
+raw_data.data
+raw_data.triggers
+
+# Load and prepare electrode layout
 # BioSemi systems typically use their standard cap configurations
-layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv")
-EegFun.polar_to_cartesian_xy!(layout_file)
+layout = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv")
+EegFun.polar_to_cartesian_xy!(layout)
 
-# Step 3: Create EegFun data structure
-println("Creating EegFun data structure...")
-dat = EegFun.create_eegfun_data(raw_data, layout_file)
+layout.data # DataFrame with labels and positions
 
-# Step 4: Check trigger information
-println("\nTrigger summary:")
-EegFun.trigger_count(dat)
+# Create EegFun data structure
+dat = EegFun.create_eegfun_data(raw_data, layout)
 
-# Step 5: Basic preprocessing
-println("\nApplying preprocessing...")
-EegFun.rereference!(dat, :avg)  # Common average reference
-EegFun.highpass_filter!(dat, 0.1)  # Remove slow drifts
+EegFun.all_data(dat)
+EegFun.meta_data(dat)
+EegFun.all_labels(dat)
+EegFun.channel_labels(dat)
+EegFun.meta_labels(dat)
+EegFun.extra_labels(dat) # empty
 
-# Step 6: Visualize the data
-println("\nOpening data browser...")
-EegFun.plot_databrowser(dat)
-
-# Optional: Extract and visualize epochs
-println("\nExtracting epochs...")
-epoch_cfg = [
-    EegFun.EpochCondition(name = "Trigger1", trigger_sequences = [[1]]),
-    EegFun.EpochCondition(name = "Trigger2", trigger_sequences = [[2]]),
-]
-
-epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.2, 1.0))
-EegFun.baseline!(epochs, (-0.2, 0.0))
-
-# Visualize epochs
-EegFun.plot_epochs(epochs[1], channel_selection = EegFun.channels([:Cz]))
-
-# Compare conditions
-erps = EegFun.average_epochs(epochs)
-EegFun.plot_erp(erps, channel_selection = EegFun.channels([:Cz]))
+# Check trigger information
+EegFun.trigger_count(dat) # BioSemi data uses 8 bit trigger lines
 ```
 
 :::

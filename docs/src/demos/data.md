@@ -2,8 +2,6 @@
 
 This demo demonstrates understanding the core data structures in EegFun.jl and how to access and subset data.
 
-This demo demonstrates understanding the core data structures in EegFun.jl and how to access and subset data.
-
 ### Core Data Structures
 
 **ContinuousData**:

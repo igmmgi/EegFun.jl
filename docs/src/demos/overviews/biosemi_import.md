@@ -1,5 +1,3 @@
-# BioSemi Import
-
 This demo demonstrates importing BioSemi BDF files into EegFun.jl.
 
 ### What is BioSemi BDF Format?
@@ -20,7 +18,6 @@ BioSemi is a popular manufacturer of active electrode EEG systems. The BDF (BioS
 - Raw continuous EEG time series (24-bit precision)
 - Sampling rate and channel metadata
 - Trigger/event markers (encoded in Status channel)
-- Automatic channel configuration
 
 **What you need**:
 
@@ -30,13 +27,11 @@ BioSemi is a popular manufacturer of active electrode EEG systems. The BDF (BioS
 
 ### Data Mapping
 
-**EegFun.read_raw_data** (or **EegFun.read_bdf**) loads BioSemi data, then **create_eegfun_data** converts to native EegFun types:
+**EegFun.read_raw_data** loads BioSemi data, then **create_eegfun_data** converts to native EegFun types:
 
 - BioSemi BDF → `BiosemiData` (intermediate) → `ContinuousData` (EegFun)
 - Triggers extracted from Status channel
 - Layout coordinates added separately
-
-All EegFun functions work seamlessly with imported BioSemi data.
 
 ## Important Notes
 

@@ -2,8 +2,6 @@
 
 This demo demonstrates how to generate summary statistics across all channels for data quality assessment.
 
-This demo demonstrates how to generate summary statistics across all channels for data quality assessment.
-
 ### What is Channel Summary?
 
 Channel summary provides aggregate statistics across all EEG channels, offering a quick overview of data characteristics. This complements channel-specific metrics by revealing patterns across the entire montage.

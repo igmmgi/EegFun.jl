@@ -2,8 +2,6 @@
 
 This demo demonstrates how to calculate and visualize channel quality metrics for identifying bad channels and detecting artifacts.
 
-This demo demonstrates how to calculate and visualize channel quality metrics for identifying bad channels and detecting artifacts.
-
 ### What are Channel Metrics?
 
 Channel quality metrics quantify various characteristics of the EEG signal at each electrode. These metrics help identify problematic channels that may need repair or rejection before analysis.

@@ -2,8 +2,6 @@
 
 This demo demonstrates frequency domain analysis of EEG channels using power spectral density (PSD) visualization.
 
-This demo demonstrates frequency domain analysis of EEG channels using power spectral density (PSD) visualization.
-
 ### What is Power Spectral Density?
 
 Power Spectral Density (PSD) shows the distribution of signal power across different frequencies:
