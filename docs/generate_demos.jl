@@ -39,6 +39,7 @@ demos = [
     ("epochs", "Epoch Extraction"),
     ("fieldtrip_import", "FieldTrip Import"),
     ("artifact_detection", "Artifact Detection"),
+    ("grand_average", "Grand Average"),
 ]
 
 # Create demo markdown files

@@ -119,6 +119,53 @@ function _create_all_grand_averages(erps_by_condition::AbstractDict{Int,Vector{E
     return grand_averages
 end
 
+
+"""
+    grand_average(erps::Vector{ErpData}; condition_selection = conditions())
+
+Create grand averages from a vector of ERP data already in memory.
+
+This function groups the input ERPs by condition and calculates the average across 
+all participants for each condition.
+
+# Arguments
+- `erps::Vector{ErpData}`: List of ERP data from different participants/conditions.
+- `condition_selection::Function`: Predicate to select specific conditions (default: all).
+
+# Returns
+- `Vector{ErpData}`: Vector containing one grand-averaged ERP per condition.
+
+# Examples
+```julia
+# Average a list of loaded ERP objects
+group_results = [erp1, erp2, erp3]
+grand_avgs = grand_average(group_results)
+
+# Average only specific conditions (e.g., indices 1 and 3)
+grand_avgs = grand_average(group_results, condition_selection = conditions([1, 3]))
+```
+"""
+function grand_average(erps::Vector{ErpData}; condition_selection::Function = conditions())
+
+    # Group ERPs by condition
+    erps_by_condition = group_by_condition(erps)
+
+    # Apply condition selection
+    all_cond_nums = collect(keys(erps_by_condition))
+    selected_mask = condition_selection(1:length(all_cond_nums))
+    selected_cond_nums = all_cond_nums[selected_mask]
+
+    filtered_groups = OrderedDict(num => erps_by_condition[num] for num in selected_cond_nums)
+
+    if isempty(filtered_groups)
+        @minimal_warning "No conditions selected or found for grand averaging"
+        return ErpData[]
+    end
+
+    # Create grand averages
+    return _create_all_grand_averages(filtered_groups)
+end
+
 #=============================================================================
     MAIN API FUNCTION
 =============================================================================#
