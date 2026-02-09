@@ -94,7 +94,7 @@ participant_epochs = EegFun.prepare_decoding(
     participant_selection = EegFun.participants(),
     condition_selection = EegFun.conditions([1, 2]),  # Compare conditions 1 and 2
     channel_selection = EegFun.channels(),            # All channels
-    sample_selection = EegFun.samples((-0.2, 1.5)),   # Time window
+    interval_selection = EegFun.times((-0.2, 1.5)),   # Time window
 )
 
 # Decode all participants (batch method)
