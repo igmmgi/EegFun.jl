@@ -30,11 +30,11 @@ function _center_title(title::String, width::Int)
     total_dashes = width - length(title) - 2  # 2 spaces around title
     left_dashes = div(total_dashes, 2)
     right_dashes = total_dashes - left_dashes
-    return "-" ^ left_dashes * " $title " * "-" ^ right_dashes
+    return "-"^left_dashes * " $title " * "-"^right_dashes
 end
 
 function section(title::String; width::Int = 80)
-    dash_line = "-" ^ width
+    dash_line = "-"^width
     middle_line = _center_title(title, width)
     return "\n$dash_line\n$middle_line\n$dash_line"
 end
@@ -447,7 +447,7 @@ function _merge_summaries(new_epoch_summary::DataFrame, new_file_summary::DataFr
     end
 
     # Load and merge file summary
-    if isfile(filepath)
+    if isfile(file_path)
         existing_file = JLD2.load(file_path, "data")
         # Remove rows for files that are being updated
         existing_file = existing_file[.!in.(existing_file.file, Ref(new_files)), :]
@@ -616,15 +616,18 @@ function summarize_electrode_repairs(file_pattern::String; input_dir::String = p
     for file in files
         file_path = joinpath(input_dir, file)
         try
-            if isfile(filepath)
-                artifact_info = read_data(filepath)
+            if isfile(file_path)
+                artifact_info = read_data(file_path)
                 # If read_data returned a Dict, extract "data" key
                 if isa(artifact_info, Dict) && haskey(artifact_info, "data")
                     artifact_info = artifact_info["data"]
                 end
-                for repair_info in artifact_info.continuous_repairs
-                    if !isempty(repair_info.repaired)
-                        push!(continuous_repairs, repair_info)
+                # Check if artifact_info is valid
+                if !isnothing(artifact_info)
+                    for repair_info in artifact_info.continuous_repairs
+                        if !isempty(repair_info.repaired)
+                            push!(continuous_repairs, repair_info)
+                        end
                     end
                 end
             end
@@ -774,13 +777,14 @@ function summarize_ica_components(file_pattern::String; input_dir::String = pwd(
     for file in files
         file_path = joinpath(input_dir, file)
         try
-            if isfile(filepath)
-                artifact_info = read_data(filepath)
+            if isfile(file_path)
+                artifact_info = read_data(file_path)
                 # If read_data returned a Dict, extract "data" key
                 if isa(artifact_info, Dict) && haskey(artifact_info, "data")
                     artifact_info = artifact_info["data"]
                 end
-                if !isnothing(artifact_info.ica_components)
+                # Check if artifact_info is valid
+                if !isnothing(artifact_info) && !isnothing(artifact_info.ica_components)
                     push!(ica_components, artifact_info.ica_components)
                     push!(filenames, file)  # _find_batch_files returns filenames, not full paths
                 end
