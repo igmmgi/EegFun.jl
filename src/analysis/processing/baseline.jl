@@ -78,7 +78,7 @@ Apply baseline correction in-place to EEG data using the entire time range.
 """
 function baseline!(dat::EegData; channel_selection::Function = channels())
     # Use entire time range for baseline
-    time_vec = dat.data.time
+    time_vec = time_vector(dat)
     baseline!(dat, (first(time_vec), last(time_vec)); channel_selection = channel_selection)
     return nothing
 end

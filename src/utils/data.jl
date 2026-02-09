@@ -130,6 +130,24 @@ all_labels(dat::MultiDataFrameEeg)::Vector{Symbol} = propertynames(dat.data[1])
 all_labels(dat::MultiDataFrameEeg, epoch::Int)::Vector{Symbol} = propertynames(dat.data[epoch])
 
 """
+    time_vector(dat::EegData) -> Vector{Float64}
+
+Get the time vector from EEG data.
+
+# Arguments
+- `dat::EegData`: The EEG data object
+
+# Returns
+- `Vector{Float64}`: Time vector in seconds
+
+# Notes
+- For MultiDataFrameEeg types (EpochData, etc.), returns time from first epoch
+- All epochs are assumed to have identical time vectors
+"""
+time_vector(dat::SingleDataFrameEeg)::Vector{Float64} = dat.data.time
+time_vector(dat::MultiDataFrameEeg)::Vector{Float64} = dat.data[1].time
+
+"""
     all_labels(dat::DataFrame) -> Vector{Symbol}
 
 Get all column names from a DataFrame.

@@ -459,7 +459,7 @@ function decode_libsvm(
     n_folds < 2 && @minimal_error_throw("Need at least 2 folds for cross-validation, got $n_folds")
 
     # Subset epochs by channel and sample selection
-    epochs = subset(epochs; channel_selection = channel_selection, sample_selection = interval_selection, include_extra = false)
+    epochs = subset(epochs; channel_selection = channel_selection, interval_selection = interval_selection, include_extra = false)
     isempty(channel_labels(epochs[1])) && @minimal_error_throw("Channel selection produced no channels")
     isempty(epochs[1].data[1][!, :time]) && @minimal_error_throw("Sample selection produced no time points")
 

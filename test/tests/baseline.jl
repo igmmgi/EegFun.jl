@@ -290,4 +290,31 @@ using EegFun
     @test dat14.data.sample == original_sample
     @test dat14.data.triggers == original_triggers
 
+    # Test baseline! without interval on EpochData (uses entire time range)
+    # This test catches the bug where dat.data.time was accessed directly on Vector{DataFrame}
+    epochs_no_interval = EegFun.create_test_epoch_data(n = 20, n_epochs = 3)
+    original_epoch1_ch1_no_int = copy(epochs_no_interval.data[1].Ch1)
+    original_epoch2_ch1_no_int = copy(epochs_no_interval.data[2].Ch1)
+    baseline_mean_epoch1_no_int = mean(original_epoch1_ch1_no_int)
+    baseline_mean_epoch2_no_int = mean(original_epoch2_ch1_no_int)
+
+    EegFun.baseline!(epochs_no_interval)
+
+    # Each epoch should be baselined to its own mean
+    @test isapprox(mean(epochs_no_interval.data[1].Ch1), 0.0; atol = 1e-9)
+    @test isapprox(mean(epochs_no_interval.data[2].Ch1), 0.0; atol = 1e-9)
+    @test isapprox(epochs_no_interval.data[1].Ch1, original_epoch1_ch1_no_int .- baseline_mean_epoch1_no_int; atol = 1e-9)
+    @test isapprox(epochs_no_interval.data[2].Ch1, original_epoch2_ch1_no_int .- baseline_mean_epoch2_no_int; atol = 1e-9)
+
+    # Test non-mutating version without interval on EpochData
+    epochs_no_interval2 = EegFun.create_test_epoch_data(n = 20, n_epochs = 2)
+    original_epoch1_ch1_no_int2 = copy(epochs_no_interval2.data[1].Ch1)
+    baseline_mean_epoch1_no_int2 = mean(original_epoch1_ch1_no_int2)
+
+    epochs_baselined = EegFun.baseline(epochs_no_interval2)
+
+    @test isapprox(mean(epochs_baselined.data[1].Ch1), 0.0; atol = 1e-9)
+    @test isapprox(epochs_baselined.data[1].Ch1, original_epoch1_ch1_no_int2 .- baseline_mean_epoch1_no_int2; atol = 1e-9)
+    @test epochs_baselined !== epochs_no_interval2  # Should be different object
+
 end
