@@ -850,8 +850,9 @@ end
 """
 Calculate statistical metrics for all epochs.
 
-Returns a Dict with keys: :z_variance, :z_max, :z_min, :z_abs, :z_range, :z_kurtosis, :absolute_threshold
-Each value is a Dict mapping channel symbols to vectors of epoch indices that exceeded the criteria.
+Returns a Dict with keys: `:z_variance`, `:z_max`, `:z_min`, `:z_abs`, `:z_range`, 
+`:z_kurtosis`, `:absolute_threshold`. Each value is a Dict mapping channel symbols 
+to vectors of epoch indices that exceeded the criteria.
 """
 function _calculate_epoch_metrics(
     dat::EpochData,
@@ -1235,7 +1236,7 @@ function subset_bad_data(data_path::String, threshold::Float64; subset_directory
     !isdir(subset_dir_path) && mkpath(subset_dir_path)
 
     # Find participants with any condition below threshold
-    bad_participants = unique(epoch_summary.file[epoch_summary.percentage .< threshold])
+    bad_participants = unique(epoch_summary.file[epoch_summary.percentage.<threshold])
     println("Subsetting data: $(length(bad_participants))")
     println("   N remaining: $(length(unique(epoch_summary.file)) - length(bad_participants))")
     println("   N removed: $(length(bad_participants))")
