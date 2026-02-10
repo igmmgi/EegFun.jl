@@ -1,3 +1,6 @@
+# Demo: Rereferencing
+# Shows different rereferencing methods (average, linked mastoids, specific channel reference).
+
 using EegFun
 
 # read raw data

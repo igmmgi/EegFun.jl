@@ -1,3 +1,6 @@
+# Demo: Joint Probability Plot
+# Shows joint probability distributions for artifact detection.
+
 using EegFun
 
 # read raw data

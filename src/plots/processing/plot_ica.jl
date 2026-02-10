@@ -17,7 +17,7 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
         "Interpolation method: :multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest, :spherical_spline. See https://eljungsk.github.io/ScatteredInterpolation.jl/dev/methods/ for details on methods.",
     ),
     :colormap => (:jet, "Colormap for the topography"),
-    :gridscale => (200, "Grid resolution for interpolation"),
+    :gridscale => (75, "Grid resolution for interpolation"),
     :dims => (nothing, "Grid dimensions (rows, cols). If nothing, calculates best square-ish grid"),
     :ylim => (nothing, "Y-axis limits (nothing for auto). For ICA plots, use num_levels instead."),
     :num_levels => (20, "Number of contour levels (for ICA plots). For standard plots, use ylim instead."),
@@ -122,7 +122,7 @@ function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; 
     end
 
     # Draw smooth circle to hide jagged interpolation edge
-    EegFun._draw_smooth_circle_mask!(ax, x_bounds, y_bounds)
+    _draw_smooth_circle_mask!(ax, x_bounds, y_bounds)
 
     # Add head shape and electrode markers
     plot_layout_2d!(fig, ax, ica.layout; plot_kwargs...)
@@ -605,7 +605,7 @@ function _plot_topo_on_axis!(
     data::AbstractMatrix{<:Real},
     layout::Layout,
     levels;
-    gridscale = 200,
+    gridscale = 75,
     colormap = :jet,
     head_color = :black,
     head_linewidth = 2,
@@ -621,12 +621,20 @@ function _plot_topo_on_axis!(
     label_yoffset = 0,
     kwargs...,
 )
+
     # Validate gridscale
     gridscale <= 0 && throw(ArgumentError("gridscale must be positive, got $gridscale"))
 
-    # Ensure coordinate ranges match data dimensions
-    coord_range = range(-1.0, 1.0, length = size(data, 1))
-    co = contourf!(ax, coord_range, coord_range, data; levels = levels, colormap = colormap, nan_color = :transparent)
+    # Use adaptive bounds from prepare_ica_topo_data
+    x_bounds = kwargs[:x_bounds]
+    y_bounds = kwargs[:y_bounds]
+    x_range = range(x_bounds[1], x_bounds[2], length = size(data, 1))
+    y_range = range(y_bounds[1], y_bounds[2], length = size(data, 2))
+    co = contourf!(ax, x_range, y_range, data; levels = levels, colormap = colormap, nan_color = :transparent)
+
+    # Draw smooth circle to hide jagged interpolation edge
+    _draw_smooth_circle_mask!(ax, x_bounds, y_bounds)
+
     plot_layout_2d!(
         fig,
         ax,
@@ -702,6 +710,8 @@ function _plot_ica_topo_in_viewer!(
         topo_data,
         ica.layout,
         levels;
+        x_bounds = x_bounds,
+        y_bounds = y_bounds,
         gridscale = gridscale,
         colormap = colormap,
         head_color = head_color,
@@ -734,7 +744,7 @@ function _create_component_activation_plots!(fig, state)
 
     for i = 1:num_plots
 
-        topo_ax = Axis(fig[i, 1])
+        topo_ax = Axis(fig[i, 1], aspect = DataAspect())
         push!(state.topo_axs, topo_ax)
 
         # Get the actual component number
@@ -1081,9 +1091,9 @@ function _add_boolean_indicators!(state, channel_sym)
                 # Create vertical lines at each true position
                 # Only create lines within the current view range
                 current_range = state.xrange[]
-                visible_times = true_times[true_times .>= state.dat.data.time[first(
+                visible_times = true_times[true_times.>=state.dat.data.time[first(
                     current_range,
-                )].&&true_times .<= state.dat.data.time[last(current_range)]]
+                )].&&true_times.<=state.dat.data.time[last(current_range)]]
 
                 if !isempty(visible_times)
                     lines = vlines!(ax_channel, visible_times, color = :red, linewidth = 1)
@@ -1760,7 +1770,7 @@ function plot_line_noise_components(
 
         # Add component numbers as labels
         for (i, comp) in enumerate(line_noise_comps)
-            row = metrics_df[metrics_df.Component .== comp, :]
+            row = metrics_df[metrics_df.Component.==comp, :]
             text!(
                 ax1,
                 comp,

@@ -1,3 +1,6 @@
+# Demo: Epoch Extraction
+# Shows how to extract epochs from continuous data using trigger sequences.
+
 using EegFun
 
 # Read raw data

@@ -1,3 +1,6 @@
+# Demo: Time-Frequency Analysis - Multitaper
+# Shows multitaper method for time-frequency analysis with reduced variance.
+
 using EegFun
 
 #######################################################################

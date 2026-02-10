@@ -1,3 +1,6 @@
+# Demo: Artifact Detection Visualization
+# Shows plots for visualizing artifact detection and rejection.
+
 using EegFun
 
 # read raw data

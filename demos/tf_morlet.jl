@@ -1,3 +1,7 @@
+# Demo: Time-Frequency Analysis - Morlet Wavelets
+# Shows wavelet-based time-frequency decomposition with synthetic signals
+# and real data, demonstrating different cycle counts and frequency resolution.
+
 using EegFun
 
 #######################################################################

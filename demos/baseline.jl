@@ -1,3 +1,7 @@
+# Demo: Baseline Correction
+# Shows baseline correction on continuous, epoched, and ERP data using
+# different baseline windows and visualizes the effects.
+
 using EegFun
 
 # read raw data

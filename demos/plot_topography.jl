@@ -1,3 +1,6 @@
+# Demo: Topographic Maps
+# Shows scalp topography visualization for ERP data and components.
+
 using EegFun
 
 # read raw data

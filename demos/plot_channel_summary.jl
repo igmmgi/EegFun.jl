@@ -1,3 +1,6 @@
+# Demo: Channel Summary Plots
+# Shows visualization of channel-wise summary statistics.
+
 using EegFun
 
 # read raw data

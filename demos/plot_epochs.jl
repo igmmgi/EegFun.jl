@@ -1,3 +1,6 @@
+# Demo: Epoch Plotting
+# Shows epoch visualization with channel selection and overlay options.
+
 using EegFun
 
 # read raw data

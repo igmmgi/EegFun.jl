@@ -1,3 +1,7 @@
+# Demo: Multivariate Pattern Analysis (MVPA) / Decoding
+# Shows time-resolved classification using LIBSVM, with synthetic data creation,
+# grand averaging, and statistical testing (uncorrected, Bonferroni, cluster-based).
+
 using EegFun
 using DataFrames
 using Random

@@ -296,6 +296,254 @@ is_extreme_value!(epochs_cleaned, 100, channel_out = :is_artifact_value_100)
 """
 is_extreme_value!(dat::Vector{EpochData}, threshold::Real; kwargs...) = is_extreme_value!.(dat, threshold; kwargs...)
 
+# ==============================================================================
+# STEP/JUMP ARTIFACT DETECTION
+# ==============================================================================
+
+"""
+    _is_step_artifact(signal::AbstractVector{Float64}, threshold::Real)
+
+Detect step artifacts (sudden jumps) in a signal by computing differences between consecutive samples.
+
+A step artifact is detected when the absolute difference between consecutive samples exceeds the threshold.
+This is useful for detecting cable disconnections, amplifier saturation, or sudden movement artifacts.
+
+# Arguments
+- `signal::AbstractVector{Float64}`: Input signal vector
+- `threshold::Float64`: Threshold for step detection (in same units as signal, typically μV)
+
+# Returns
+- `Vector{Bool}`: Boolean vector indicating samples where a step occurred (second sample of the pair)
+
+# Examples
+```julia
+step_mask = _is_step_artifact(signal, 50.0) # Detect jumps > 50 μV between samples
+```
+
+# Notes
+- The first sample is always false (no previous sample to compare)
+- A step at index i means the jump from i-1 to i exceeded threshold
+"""
+function _is_step_artifact(signal::AbstractVector{Float64}, threshold::Real)
+    n = length(signal)
+    mask = Vector{Bool}(undef, n)
+    mask[1] = false  # First sample has no previous sample
+
+    @inbounds for i = 2:n
+        mask[i] = abs(signal[i] - signal[i-1]) > threshold
+    end
+
+    return mask
+end
+
+"""
+    is_step_artifact!(dat::SingleDataFrameEeg, threshold::Real; 
+                     channel_selection::Function = channels(), 
+                     sample_selection::Function = samples(),
+                     interval_selection::Interval = times(),
+                     mode::Symbol = :combined,
+                     channel_out::Union{Symbol, Nothing} = nothing)
+
+Detect step artifacts (sudden voltage jumps) across selected channels and add results to the data.
+
+A step artifact is detected when the absolute difference between consecutive samples exceeds the threshold.
+This detects sudden transitions that extreme value detection might miss (e.g., [1, 2, 3, 50, 2] with a 
+jump from 3→50).
+
+# Arguments
+- `dat::SingleDataFrameEeg`: The EEG data object
+- `threshold::Real`: Threshold for step detection (in μV)
+- `channel_selection::Function`: Channel predicate for selecting channels (default: all layout channels)
+- `sample_selection::Function`: Sample predicate for selecting samples (default: all samples)
+- `interval_selection::Interval`: Time interval for selection (default: all times)
+- `mode::Symbol`: Mode of operation - `:combined` (single combined column, default) or `:separate` (separate columns per channel)
+- `channel_out::Union{Symbol, Nothing}`: Output channel name for combined mode (default: auto-generated as `is_step_artifact_<threshold>`)
+
+# Modifies
+- `dat`: Adds step artifact detection columns to the data
+
+# Examples
+```julia
+# Detect steps > 50 μV between consecutive samples (combined, auto-named)
+is_step_artifact!(dat, 50.0)  # Creates column :is_step_artifact_50.0
+
+# Detect with custom output channel name
+is_step_artifact!(dat, 50.0, channel_out = :is_jump)
+
+# Detect separately for each channel
+is_step_artifact!(dat, 50.0, mode = :separate)
+
+# Detect only for specific channels
+is_step_artifact!(dat, 50.0, channel_selection = channels([:Fp1, :Fp2]))
+```
+"""
+function is_step_artifact!(
+    dat::SingleDataFrameEeg,
+    threshold::Real;
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    interval_selection::Interval = times(),
+    mode::Symbol = :combined,
+    channel_out::Union{Symbol,Nothing} = nothing,
+)
+
+    mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined")
+    threshold <= 0 && @minimal_error_throw("threshold must be greater than 0")
+
+    # Get selected channels
+    selected_channels = get_selected_channels(dat, channel_selection)
+    isempty(selected_channels) && @minimal_error_throw("No channels selected")
+
+    # Get selected samples
+    selected_samples = get_selected_samples(dat.data, sample_selection)
+
+    # Use provided channel_out or generate default name
+    channel_out = something(channel_out, Symbol("is_step_artifact_$(threshold)"))
+
+    if mode == :combined
+        # Initialize combined output column
+        dat.data[!, channel_out] = falses(nrow(dat.data))
+
+        # Check each channel and combine results
+        for ch in selected_channels
+            step_mask = _is_step_artifact(dat.data[!, ch], threshold)
+            # Only flag steps that occur within selected samples
+            step_mask[.!selected_samples] .= false
+            dat.data[!, channel_out] .|= step_mask
+        end
+    elseif mode == :separate
+        # Create separate column for each channel
+        for ch in selected_channels
+            step_mask = _is_step_artifact(dat.data[!, ch], threshold)
+            # Only flag steps that occur within selected samples
+            step_mask[.!selected_samples] .= false
+            column_name = Symbol("is_step_artifact_$(ch)_$(threshold)")
+            dat.data[!, column_name] = step_mask
+        end
+    end
+
+    return nothing
+end
+
+"""
+    is_step_artifact!(dat::MultiDataFrameEeg, threshold::Real; 
+                     channel_selection::Function = channels(), 
+                     sample_selection::Function = samples(),
+                     interval_selection::Interval = times(),
+                     epoch_selection::Function = epochs(),
+                     mode::Symbol = :combined,
+                     channel_out::Union{Symbol, Nothing} = nothing)
+
+Detect step artifacts across selected channels in multi-DataFrame EEG data (e.g., EpochData).
+
+For each epoch DataFrame in the data, detects step artifacts across selected channels and
+adds results to that epoch's DataFrame. Works similarly to the SingleDataFrameEeg version
+but processes each epoch separately.
+
+# Arguments
+- `dat::MultiDataFrameEeg`: The EEG data object (e.g., EpochData)
+- `threshold::Real`: Threshold for step detection (in μV)
+- `channel_selection::Function`: Channel predicate for selecting channels (default: all layout channels)
+- `sample_selection::Function`: Sample predicate for selecting samples (default: all samples)
+- `interval_selection::Interval`: Time interval for selection (default: all times)
+- `epoch_selection::Function`: Epoch predicate for selecting epochs (default: all epochs)
+- `mode::Symbol`: Mode of operation - `:combined` or `:separate`
+- `channel_out::Union{Symbol, Nothing}`: Output channel name for combined mode
+
+# Modifies
+- `dat`: Adds step artifact detection columns to each epoch DataFrame
+
+# Examples
+```julia
+# Detect step artifacts in all epochs
+is_step_artifact!(epoch_data, 50.0)
+
+# Detect only in specific epochs
+is_step_artifact!(epoch_data, 50.0, epoch_selection = epochs([1, 3, 5]))
+
+# Detect with custom output name
+is_step_artifact!(epoch_data, 50.0, channel_out = :is_jump)
+```
+"""
+function is_step_artifact!(
+    dat::MultiDataFrameEeg,
+    threshold::Real;
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    interval_selection::Interval = times(),
+    epoch_selection::Function = epochs(),
+    mode::Symbol = :combined,
+    channel_out::Union{Symbol,Nothing} = nothing,
+)
+
+    mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined")
+    threshold <= 0 && @minimal_error_throw("threshold must be greater than 0")
+
+    # Get selected channels and epochs
+    selected_channels = get_selected_channels(dat, channel_selection)
+    isempty(selected_channels) && @minimal_error_throw("No channels selected")
+
+    selected_epochs = get_selected_epochs(dat, epoch_selection)
+    isempty(selected_epochs) && @minimal_error_throw("No epochs selected")
+
+    # Use provided channel_out or generate default name
+    channel_out = something(channel_out, Symbol("is_step_artifact_$(threshold)"))
+
+    # Process each selected epoch
+    for epoch_idx in selected_epochs
+        epoch_df = dat.data[epoch_idx]
+
+        # Get selected samples for this epoch
+        selected_samples = get_selected_samples(epoch_df, sample_selection)
+
+        # Initialize artifact flag column for this epoch
+        epoch_df[!, channel_out] = falses(nrow(epoch_df))
+
+        # Create sample mask once (same for all channels)
+        sample_mask = falses(nrow(epoch_df))
+        sample_mask[selected_samples] .= true
+
+        if mode == :combined
+            for ch in selected_channels
+                step_mask = _is_step_artifact(epoch_df[!, ch], threshold) .& sample_mask
+                epoch_df[!, channel_out] .|= step_mask
+            end
+        else
+            for ch in selected_channels
+                step_mask = _is_step_artifact(epoch_df[!, ch], threshold) .& sample_mask
+                column_name = Symbol("is_step_artifact_$(ch)_$(threshold)")
+                epoch_df[!, column_name] = step_mask
+            end
+        end
+    end
+
+    return nothing
+end
+
+"""
+    is_step_artifact!(epochs_list::Vector{EpochData}, threshold::Real; kwargs...)
+
+Detect step artifacts across multiple EpochData objects (conditions).
+
+Applies step artifact detection to each EpochData object in the vector.
+
+# Arguments
+- `epochs_list::Vector{EpochData}`: Vector of EpochData objects
+- `threshold::Real`: Threshold for step detection
+- `kwargs...`: Additional keyword arguments passed to the MultiDataFrameEeg method
+
+# Modifies
+- Each EpochData object in the vector
+
+# Examples
+```julia
+# Detect step artifacts across all conditions
+is_step_artifact!(all_epochs, 50.0)
+```
+"""
+is_step_artifact!(dat::Vector{EpochData}, threshold::Real; kwargs...) = is_step_artifact!.(dat, threshold; kwargs...)
+
+
 # Helper function to detect extreme values for selected channels
 function _detect_extreme_values(
     dat::SingleDataFrameEeg,

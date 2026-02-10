@@ -1,3 +1,6 @@
+# Demo: Filter Visualization
+# Shows filter frequency response and impulse response visualization.
+
 using EegFun
 
 # Create lowpass IIR filter using create_filter

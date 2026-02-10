@@ -1,3 +1,6 @@
+# Demo: Data Manipulation
+# Shows basic data access, subsetting, and manipulation functions.
+
 using EegFun
 
 # read raw data

@@ -1,3 +1,6 @@
+# Demo: ERP Image Plots
+# Shows trial-by-trial ERP activity as image/heatmap plots.
+
 using EegFun
 
 # read raw data

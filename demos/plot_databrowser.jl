@@ -1,3 +1,7 @@
+# Demo: Interactive Databrowser
+# Shows the interactive databrowser for continuous and epoched data with ICA,
+# analysis settings, custom channels, and file-based loading.
+
 using EegFun
 using JLD2
 

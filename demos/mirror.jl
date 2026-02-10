@@ -1,3 +1,7 @@
+# Demo: Mirror Padding
+# Shows how to pad epoch and ERP data with mirrored edges (:pre, :post, :both)
+# to reduce edge artifacts when filtering.
+
 using EegFun
 
 # read raw data

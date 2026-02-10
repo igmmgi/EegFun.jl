@@ -1,3 +1,6 @@
+# Demo: Layout Visualization
+# Shows electrode layout plotting and manipulation.
+
 using EegFun
 
 layout = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
