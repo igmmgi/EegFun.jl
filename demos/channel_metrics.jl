@@ -1,3 +1,6 @@
+# Demo: Channel Metrics
+# Shows how to compute and visualize channel-wise metrics (variance, kurtosis, etc.).
+
 using EegFun
 
 # read raw data

@@ -471,16 +471,39 @@ This creates a perfect vector circle that masks the pixelated NaN boundary.
 - `y_bounds::Tuple`: Y-axis bounds (min, max)
 """
 function _draw_smooth_circle_mask!(ax::Axis, x_bounds::Tuple, y_bounds::Tuple)
-    # Calculate plot radius from bounds
-    plot_radius = max(abs(x_bounds[1]), abs(x_bounds[2]), abs(y_bounds[1]), abs(y_bounds[2]))
+    # Calculate separate x and y radii to handle asymmetric bounds
+    x_radius = max(abs(x_bounds[1]), abs(x_bounds[2]))
+    y_radius = max(abs(y_bounds[1]), abs(y_bounds[2]))
 
-    # Create smooth circle border (200 points for smooth curve)
-    circle_angles = range(0, 2π, length = 200)
-    circle_x = plot_radius .* cos.(circle_angles)
-    circle_y = plot_radius .* sin.(circle_angles)
+    # Calculate annulus width - scales with plot size but has reasonable min/max
+    avg_radius = (x_radius + y_radius) / 2
+    annulus_width = clamp(avg_radius * 0.05, 0.05, 0.05)
 
-    # Draw thick white line to hide jagged edge
-    lines!(ax, circle_x, circle_y, color = :white, linewidth = 50)
+    # Inner circle at data boundary, outer circle extends outward to cover artifacts
+    inner_x = x_radius * 0.97
+    inner_y = y_radius * 0.97
+    outer_x = x_radius + annulus_width
+    outer_y = y_radius + annulus_width
+
+    # Create smooth circles (200 points for smooth curves)
+    n_points = 200
+    angles = range(0, 2π, length = n_points)
+
+    # Inner circle (data boundary)
+    inner_circle_x = inner_x .* cos.(angles)
+    inner_circle_y = inner_y .* sin.(angles)
+
+    # Outer circle (extends outward)
+    outer_circle_x = outer_x .* cos.(angles)
+    outer_circle_y = outer_y .* sin.(angles)
+
+    # Create annulus polygon by combining outer circle with reversed inner circle
+    # This creates a ring shape when filled
+    annulus_x = vcat(outer_circle_x, reverse(inner_circle_x))
+    annulus_y = vcat(outer_circle_y, reverse(inner_circle_y))
+
+    # Draw filled white annulus
+    poly!(ax, Point2f.(annulus_x, annulus_y), color = :white, strokecolor = :white, strokewidth = 0)
 
     return nothing
 end

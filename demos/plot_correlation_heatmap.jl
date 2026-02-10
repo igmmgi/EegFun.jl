@@ -1,3 +1,6 @@
+# Demo: Correlation Heatmap
+# Shows correlation matrices between channels or trials.
+
 using EegFun
 
 # read raw data

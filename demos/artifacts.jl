@@ -1,3 +1,7 @@
+# Demo: Comprehensive Artifact Detection and Repair
+# Shows EOG detection, extreme value detection, step artifact detection,
+# automatic and interactive epoch rejection, artifact repair, and visualization.
+
 using EegFun
 
 # read raw data
@@ -68,6 +72,16 @@ EegFun.is_extreme_value!(dat, 100; channel_selection = EegFun.channels_not([:Fp1
 EegFun.is_extreme_value!(dat, 100; channel_selection = x -> endswith.(string.(x), "z"));
 EegFun.is_extreme_value!(dat, 100; channel_selection = x -> .!(endswith.(string.(x), "z")));
 EegFun.is_extreme_value!(dat, 100; channel_selection = x -> .!(endswith.(string.(x), "z")), sample_selection = x -> x.sample .> 1000);
+
+# Step artifact detection - detect sudden voltage jumps between consecutive samples
+# This complements extreme value detection by catching artifacts like cable disconnections 
+# or sharp movements (e.g., [1, 2, 3, 50, 2, ...] where extreme value < 100 wouldn't catch it)
+EegFun.is_step_artifact!(dat, 50.0); # 50 μV jump criterion
+EegFun.n_values(dat, :is_step_artifact_50.0)  # how many step artifacts detected
+
+# Step artifact detection with channel selection
+EegFun.is_step_artifact!(dat, 50.0; channel_selection = EegFun.channels([:Fp1, :Fp2]), channel_out = :is_step_frontal);
+
 
 
 # Artifact Detection in Epoched Data

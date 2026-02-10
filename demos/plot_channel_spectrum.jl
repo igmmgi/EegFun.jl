@@ -1,3 +1,6 @@
+# Demo: Channel Spectrum Plotting
+# Shows power spectrum visualization for selected channels.
+
 using EegFun
 
 # read raw data

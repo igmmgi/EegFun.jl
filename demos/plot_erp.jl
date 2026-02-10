@@ -1,3 +1,6 @@
+# Demo: ERP Plotting
+# Shows ERP waveform visualization with various customization options.
+
 using EegFun
 using JLD2
 

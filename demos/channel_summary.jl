@@ -1,3 +1,6 @@
+# Demo: Channel Summary
+# Shows how to create summary statistics for channels across epochs.
+
 using EegFun
 
 # read raw data

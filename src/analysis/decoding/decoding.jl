@@ -505,9 +505,14 @@ function decode_libsvm(
     X_all = Matrix{Float64}(undef, total_trials, n_channels)
     labels = Vector{Int}(undef, total_trials)
 
-    # Initialize progress bar if requested
+    # Log decoding parameters
+    @info "Starting decoding analysis" file = epochs[1].file n_conditions = n_classes n_channels = n_channels n_timepoints = n_timepoints time_range =
+        (first(times), last(times)) n_iterations = n_iterations n_folds = n_folds trials_per_condition = n_trials_per_condition
+
+    # Initialize progress bar if requested (track timepoint × iteration for finer granularity)
+    total_steps = n_iterations * n_timepoints
     if show_progress
-        progress = Progress(n_iterations, desc = "Decoding iterations: ", showspeed = true)
+        progress = Progress(total_steps, desc = "Decoding (iter × time): ", showspeed = true)
     end
 
     # Main decoding loop
@@ -551,11 +556,11 @@ function decode_libsvm(
                     end
                 end
             end
-        end
 
-        # Update progress bar
-        if show_progress
-            next!(progress)
+            # Update progress bar after each timepoint (more granular feedback)
+            if show_progress
+                next!(progress)
+            end
         end
     end
 

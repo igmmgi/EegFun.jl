@@ -1,3 +1,6 @@
+# Demo: Grand Average
+# Shows how to create grand averages across multiple participants from disk.
+
 using EegFun
 
 # Suppose we have ERPs from three participants

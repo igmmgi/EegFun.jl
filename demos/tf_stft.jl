@@ -1,3 +1,6 @@
+# Demo: Time-Frequency Analysis - STFT
+# Shows Short-Time Fourier Transform for time-frequency analysis.
+
 using EegFun
 
 #######################################################################

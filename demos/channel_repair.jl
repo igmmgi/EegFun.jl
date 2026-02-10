@@ -1,3 +1,6 @@
+# Demo: Channel Repair
+# Shows neighbor interpolation and spherical spline for repairing bad channels.
+
 using EegFun
 
 # read raw data
