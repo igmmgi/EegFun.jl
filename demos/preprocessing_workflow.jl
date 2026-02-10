@@ -255,7 +255,7 @@ ica_result = EegFun.run_ica(
 component_artifacts, component_metrics = EegFun.identify_components(
     dat,  # Use original data for identification (important!)
     ica_result,
-    sample_selection = EegFun.samples_not(:is_extreme_value_100),
+    sample_selection = EegFun.samples_not(:is_extreme_value_250),
 )
 
 EegFun.plot_topography(ica_result, component_selection = EegFun.components(component_artifacts.eog[:vEOG]))
@@ -269,6 +269,9 @@ EegFun.plot_topography(ica_result, component_selection = EegFun.components(compo
 EegFun.plot_ica_component_spectrum(dat_ica, ica_result, component_selection = EegFun.components(component_artifacts.channel_noise))
 
 EegFun.plot_ica_component_activation(dat_ica, ica_result, component_selection = EegFun.components([1, 2, 3, 4]))
+
+EegFun.plot_ica_component_activation(dat_ica, ica_result)
+EegFun.plot_ica_component_activation(dat, ica_result, artifacts = component_artifacts)
 
 
 

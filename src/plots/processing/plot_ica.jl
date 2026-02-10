@@ -331,6 +331,13 @@ mutable struct IcaComponentState
     # New field for boolean indicators
     channel_bool_indicators::Dict{Int,Any}
 
+    # Artifact categorization (optional)
+    artifacts::Union{Nothing,ArtifactComponents}
+    artifact_toggles::Union{Nothing,Dict{Symbol,Observable{Bool}}}
+
+    # UI elements
+    component_textbox::Union{Nothing,Textbox}
+
     # Constructor updated to accept and store topo_kwargs
     function IcaComponentState(
         dat,
@@ -418,6 +425,9 @@ mutable struct IcaComponentState
             topo_axs,
             lines_obs,
             channel_bool_indicators,
+            nothing,  # artifacts
+            nothing,  # artifact_toggles
+            nothing,  # component_textbox
         )
     end
 end
@@ -426,17 +436,16 @@ end
 """
     plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; ...)
 
-Create an interactive visualization of ICA components with topographic maps and time series plots.
-
-Allows scrolling through components and time, adjusting scales, and overlaying raw channel data.
+# Interactive Viewer for ICA Component Activation
 
 # Arguments
-- `dat::ContinuousData`: Continuous EEG data (must contain a `layout`).
-- `ica::InfoIca`: ICA result object (must match `dat`).
+- `dat::ContinuousData`: Continuous EEG data object.
+- `ica::InfoIca`: ICA results object.
 
 # Keyword Arguments
-- `component_selection=components()`: Component selection predicate (see `components()`). Defaults to all available components.
-- `n_visible_components::Int=10`: Number of components visible vertically at once (controls the "window" size for scrolling).
+- `artifacts::Union{Nothing,ArtifactComponents}=nothing`: Optional artifact detection results. When provided, adds category checkboxes for filtering components.
+- `component_selection::Function=components(:all)`: Predicate to select which components to display.
+- `n_visible_components::Int=10`: Number of components visible at once (auto-adjusted for selected components).
 - `window_size::Int=2000`: Initial time window size in samples.
 - `topo_kwargs::Dict=Dict()`: Keyword arguments passed down for topography plots (see `_plot_topo_on_axis!`).
 - `head_kwargs::Dict=Dict()`: Keyword arguments passed down for head outlines.
@@ -446,7 +455,7 @@ Allows scrolling through components and time, adjusting scales, and overlaying r
 # Returns
 - `fig::Figure`: The Makie Figure object containing the interactive plot.
 """
-function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; kwargs...)
+function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; artifacts::Union{Nothing,ArtifactComponents} = nothing, kwargs...)
     # Generate window title from dataset
     title_str = _generate_window_title(dat)
     set_window_title(title_str)
@@ -490,25 +499,33 @@ function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; kwargs
         plot_kwargs...,
     )
 
-    # Create figure with padding on the right for margin
+    # Create figure and UI
     fig = Figure()
-
-    # Setup GUI interface
     _create_component_activation_plots!(fig, state)
     _add_navigation_controls!(fig, state)
     _add_navigation_sliders!(fig, state)
     _add_channel_menu!(fig, state)
+
+    # Add artifact category checkboxes if artifacts provided
+    if !isnothing(artifacts)
+        _setup_artifact_ui!(state, artifacts)
+        _add_artifact_category_checkboxes!(fig, state)
+    end
+
     _setup_keyboard_interactions!(fig, state)
 
     colsize!(fig.layout, 1, Relative(0.15))
     colsize!(fig.layout, 2, Relative(0.85))
-    rowgap!(fig.layout, state.n_visible_components, 30)
+    rowgap!(fig.layout, state.n_visible_components, 80)  # Increased gap to prevent overlap
 
     if display_plot
         display_figure(fig)
     end
+    set_window_title("Makie")
     return fig
 end
+
+
 
 """
     prepare_ica_data_matrix(dat::ContinuousData, ica::InfoIca)
@@ -902,6 +919,9 @@ function _add_navigation_controls!(fig, state)
     text_input = Textbox(topo_nav[2, 3], placeholder = "e.g. 1,3-5,8", tellheight = false)
     apply_button = Button(topo_nav[2, 4], label = "Apply", tellheight = false)
 
+    # Store textbox in state for access by other UI elements
+    state.component_textbox = text_input
+
     # Global scale checkbox now in row 3, columns 2 & 3
     global_scale_check = Checkbox(topo_nav[3, 2], checked = state.use_global_scale[], tellheight = false)
     Label(topo_nav[3, 3], "Use Global Scale", tellwidth = false, tellheight = false)
@@ -944,7 +964,8 @@ function _add_navigation_controls!(fig, state)
     # Connect apply button
     on(apply_button.clicks) do _
         text_value = text_input.displayed_string[]
-        if !isempty(text_value)
+        # Skip if empty or if it's the placeholder text
+        if !isempty(text_value) && !startswith(text_value, "e.g.")
             comps = parse_string_to_ints(text_value, size(state.component_data, 1))
             if !isempty(comps)
                 @info "Creating new plot with components: $comps"
@@ -1113,6 +1134,111 @@ function _add_boolean_indicators!(state, channel_sym)
         end
     end
 end
+
+
+"""
+    _setup_artifact_ui!(state, artifacts)
+
+Initialize artifact UI state - sets up artifact data and toggle observables.
+"""
+function _setup_artifact_ui!(state, artifacts)
+    state.artifacts = artifacts
+    # Default all checkboxes to unchecked
+    state.artifact_toggles = Dict{Symbol,Observable{Bool}}(
+        :vEOG => Observable(false),
+        :hEOG => Observable(false),
+        :ecg => Observable(false),
+        :line_noise => Observable(false),
+        :channel_noise => Observable(false),
+    )
+    return nothing
+end
+
+
+"""
+    _add_artifact_category_checkboxes!(fig, state)
+
+Add checkboxes to filter components by artifact category.
+"""
+function _add_artifact_category_checkboxes!(fig, state)
+    isnothing(state.artifacts) && return  # No artifacts, skip
+
+    artifacts = state.artifacts
+    toggles = state.artifact_toggles
+
+    # Access the topo_nav grid layout at fig[n_visible_components+1, 1]
+    # This is the same location where it was created in _add_navigation_controls!
+    # Get the content of the grid position to access the actual GridLayout
+    topo_nav = content(fig[state.n_visible_components+1, 1])
+
+    start_row = 5  # Start after row 4 (Invert Scale)
+
+    # Add checkboxes for each category
+    for (idx, (key, label, comps)) in enumerate([
+        (:vEOG, "vEOG", artifacts.eog[:vEOG]),
+        (:hEOG, "hEOG", artifacts.eog[:hEOG]),
+        (:ecg, "ECG", artifacts.ecg),
+        (:line_noise, "Line Noise", artifacts.line_noise),
+        (:channel_noise, "Channel Noise", artifacts.channel_noise),
+    ])
+        row = start_row + idx - 1
+
+        # Format component numbers as comma-separated list
+        comp_str = isempty(comps) ? "none" : join(string.(comps), ", ")
+
+        # Create checkbox and label (same pattern as Global Scale)
+        checkbox = Checkbox(topo_nav[row, 2], checked = toggles[key][], tellheight = false)
+        Label(topo_nav[row, 3], "$label ($comp_str)", tellwidth = false, tellheight = false)
+
+        # Connect checkbox to toggle observable bidirectionally
+        on(checkbox.checked) do checked
+            toggles[key][] = checked
+        end
+
+        # Update components when toggle changes
+        on(toggles[key]) do _
+            _update_visible_components!(state)
+        end
+    end
+
+    # Add extra space between Invert Scale (row 4) and artifact checkboxes (row 5+)
+    rowgap!(topo_nav, 4, 45)
+
+    return nothing
+end
+
+
+"""
+    _update_visible_components!(state)
+
+Update component textbox based on artifact toggle states.
+Populates the textbox with component numbers - user clicks Apply to update view.
+"""
+function _update_visible_components!(state)
+    isnothing(state.artifacts) && return
+    isnothing(state.component_textbox) && return
+
+    artifacts = state.artifacts
+    toggles = state.artifact_toggles
+
+    # Collect enabled components
+    comps = Int[]
+    toggles[:vEOG][] && append!(comps, artifacts.eog[:vEOG])
+    toggles[:hEOG][] && append!(comps, artifacts.eog[:hEOG])
+    toggles[:ecg][] && append!(comps, artifacts.ecg)
+    toggles[:line_noise][] && append!(comps, artifacts.line_noise)
+    toggles[:channel_noise][] && append!(comps, artifacts.channel_noise)
+
+    # Sort and format as comma-separated string
+    sorted_comps = sort(unique(comps))
+    comp_string = join(string.(sorted_comps), ",")
+
+    # Update textbox
+    state.component_textbox.displayed_string[] = comp_string
+
+    return nothing
+end
+
 
 # Setup keyboard interactions
 function _setup_keyboard_interactions!(fig, state)
