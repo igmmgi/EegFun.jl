@@ -52,7 +52,7 @@ This is the mutating version that plots directly on the provided `fig` and `ax` 
 - `ax::Axis`: The Makie Axis object to plot on
 - `corr_df::DataFrame`: DataFrame containing the correlation matrix. First column for row labels, rest for correlation values.
 
-$(generate_kwargs_doc(PLOT_CORRELATION_HEATMAP_KWARGS))
+$(_generate_kwargs_doc(PLOT_CORRELATION_HEATMAP_KWARGS))
 
 # Returns
 - **Mutating version**: `nothing` (modifies the provided figure and axis in-place)

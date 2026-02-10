@@ -238,7 +238,7 @@ function _channel_joint_probability(
     normval::Int = 2,
     discret::Int = 1000,
 )::DataFrame
-    @info "channel_joint_probability: Computing probability for channels $(print_vector(selected_channels))"
+    @info "channel_joint_probability: Computing probability for channels $(_print_vector(selected_channels))"
 
     # Select the specified channels and filter by samples
     data = select(dat[selected_samples, :], selected_channels)

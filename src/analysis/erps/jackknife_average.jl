@@ -15,7 +15,7 @@ function _validate_jackknife_params(erps::Vector{ErpData})
     length(erps) < 2 && return "Need at least 2 participants for jackknife averaging"
 
     # Validate that all ERPs have the same structure
-    if !have_same_structure(erps)
+    if !_have_same_structure(erps)
         return "ERPs have inconsistent structure (sample rate, number of samples, or channel labels)"
     end
 

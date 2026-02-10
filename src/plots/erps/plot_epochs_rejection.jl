@@ -96,7 +96,7 @@ allow scrolling through pages of epochs.
 - `artifact_info::Union{Nothing,EpochRejectionInfo}`: Optional artifact detection info for bad channel filtering
 - `kwargs`: Additional keyword arguments
 
-$(generate_kwargs_doc(PLOT_EPOCHS_REJECTION_KWARGS))
+$(_generate_kwargs_doc(PLOT_EPOCHS_REJECTION_KWARGS))
 
 # Returns
 - `EpochRejectionState`: State object containing rejection decisions
@@ -378,7 +378,7 @@ function _update_epoch_display!(state::EpochRejectionState, artifact_info::Union
                 state.selected_channels
             end
 
-            ax.title = "Epoch $epoch_idx: $(print_vector(channels_to_show, n_ends = 3))"
+            ax.title = "Epoch $epoch_idx: $(_print_vector(channels_to_show, n_ends = 3))"
 
             # Apply Y limits: explicit ylim takes precedence, then global_ylim, then automatic
             if !isnothing(plot_kwargs[:ylim])

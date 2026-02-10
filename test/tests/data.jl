@@ -18,23 +18,23 @@ using OrderedCollections
         analysis_info = EegFun.AnalysisInfo()
         continuous_data = EegFun.ContinuousData("test_data", df, layout, 250, analysis_info)
 
-        # Test get_cols_by_group
-        @test EegFun.get_cols_by_group(continuous_data, :channels) == [:Fz, :Cz, :Pz]
-        @test EegFun.get_cols_by_group(continuous_data, :metadata) == [:time, :sample]
-        @test EegFun.get_cols_by_group(continuous_data, :extra) == [:vEOG, :hEOG]
+        # Test _get_cols_by_group
+        @test EegFun._get_cols_by_group(continuous_data, :channels) == [:Fz, :Cz, :Pz]
+        @test EegFun._get_cols_by_group(continuous_data, :metadata) == [:time, :sample]
+        @test EegFun._get_cols_by_group(continuous_data, :extra) == [:vEOG, :hEOG]
 
         # Test error handling - the function uses @minimal_error which doesn't throw ErrorException
         # Instead, it returns nothing and logs an error
-        result = EegFun.get_cols_by_group(continuous_data, :invalid)
+        result = EegFun._get_cols_by_group(continuous_data, :invalid)
         @test result === nothing
 
         # Test empty layout case - need a layout with a label column
         empty_layout = EegFun.Layout(DataFrame(label = Symbol[]), nothing, nothing)
         empty_df = DataFrame(time = [0.1], sample = [1])
         empty_data = EegFun.ContinuousData("test_data", empty_df, empty_layout, 250, analysis_info)
-        @test EegFun.get_cols_by_group(empty_data, :channels) == Symbol[]
-        @test EegFun.get_cols_by_group(empty_data, :metadata) == Symbol[]
-        @test EegFun.get_cols_by_group(empty_data, :extra) == Symbol[]
+        @test EegFun._get_cols_by_group(empty_data, :channels) == Symbol[]
+        @test EegFun._get_cols_by_group(empty_data, :metadata) == Symbol[]
+        @test EegFun._get_cols_by_group(empty_data, :extra) == Symbol[]
     end
 
     @testset "Data access functions" begin
@@ -254,21 +254,21 @@ using OrderedCollections
         @test EegFun.colmeans(mat) == [1.5, 3.5, 5.5]  # row means (mean of each row)
         @test EegFun.colmeans(mat, [1, 2]) == [1.5, 3.5, 5.5]  # all columns
 
-        # Test data_limits_x
+        # Test _data_limits_x
         df = DataFrame(time = [0.1, 0.2, 0.3, 0.4, 0.5])
-        @test EegFun.data_limits_x(df) == (0.1, 0.5)
-        @test EegFun.data_limits_x(df; col = :time) == (0.1, 0.5)
-        @test EegFun.data_limits_x(DataFrame()) === nothing
+        @test EegFun._data_limits_x(df) == (0.1, 0.5)
+        @test EegFun._data_limits_x(df; col = :time) == (0.1, 0.5)
+        @test EegFun._data_limits_x(DataFrame()) === nothing
 
-        # Test data_limits_y
+        # Test _data_limits_y
         df = DataFrame(Fz = [1.0, 2.0, 3.0, 4.0, 5.0])
-        @test EegFun.data_limits_y(df, :Fz) == [1.0, 5.0]
-        @test EegFun.data_limits_y(DataFrame(), :Fz) === nothing
+        @test EegFun._data_limits_y(df, :Fz) == [1.0, 5.0]
+        @test EegFun._data_limits_y(DataFrame(), :Fz) === nothing
 
-        # Test data_limits_y with multiple columns
+        # Test _data_limits_y with multiple columns
         df = DataFrame(Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0], Pz = [7.0, 8.0, 9.0])
-        @test EegFun.data_limits_y(df, [:Fz, :Cz, :Pz]) == [1.0, 9.0]
-        @test EegFun.data_limits_y(DataFrame(), [:Fz, :Cz]) === nothing
+        @test EegFun._data_limits_y(df, [:Fz, :Cz, :Pz]) == [1.0, 9.0]
+        @test EegFun._data_limits_y(DataFrame(), [:Fz, :Cz]) === nothing
     end
 
     @testset "DataFrame subsetting utilities" begin
@@ -279,16 +279,16 @@ using OrderedCollections
             Cz = [6.0, 7.0, 8.0, 9.0, 10.0],
         )
 
-        # Test subset_dataframe
+        # Test _subset_dataframe
         selected_channels = [:time, :Fz]
         selected_samples = [1, 3, 5]
-        subset_df = EegFun.subset_dataframe(df, selected_channels, selected_samples)
+        subset_df = EegFun._subset_dataframe(df, selected_channels, selected_samples)
         @test subset_df == df[selected_samples, selected_channels]
 
-        # Test subset_dataframes
+        # Test _subset_dataframes
         dataframes = [df, df]
         selected_epochs = [1, 2]
-        subset_dfs = EegFun.subset_dataframes(dataframes, selected_epochs, selected_channels, selected_samples)
+        subset_dfs = EegFun._subset_dataframes(dataframes, selected_epochs, selected_channels, selected_samples)
         @test length(subset_dfs) == 2
         @test subset_dfs[1] == df[selected_samples, selected_channels]
         @test subset_dfs[2] == df[selected_samples, selected_channels]
@@ -453,7 +453,7 @@ using OrderedCollections
 
     @testset "Logging functions" begin
         df = DataFrame(A = [1, 2, 3], B = [4, 5, 6])
-        result = EegFun.log_pretty_table(df)
+        result = EegFun._log_pretty_table(df)
         @test result === nothing
     end
 
@@ -545,17 +545,17 @@ using OrderedCollections
         analysis_info = EegFun.AnalysisInfo()
         erp_data = EegFun.ErpData("test_data", 1, "condition_1", df, layout, 250, analysis_info, 5)
 
-        # Test ylimits for ErpData
-        ylims = EegFun.ylimits(erp_data)
+        # Test _ylimits for ErpData
+        ylims = EegFun._ylimits(erp_data)
         @test ylims isa Tuple{Float64,Float64}
         @test ylims[1] < ylims[2]
 
-        # Test ylimits for EpochData
+        # Test _ylimits for EpochData
         epoch1 = DataFrame(time = [0.1, 0.2], sample = [1, 2], Fz = [1.0, 2.0], Cz = [3.0, 4.0])
         epoch2 = DataFrame(time = [0.1, 0.2], sample = [1, 2], Fz = [5.0, 6.0], Cz = [7.0, 8.0])
         epoch_data = EegFun.EpochData("test_data", 1, "condition_1", [epoch1, epoch2], layout, 250, analysis_info)
 
-        ylims_epoch = EegFun.ylimits(epoch_data)
+        ylims_epoch = EegFun._ylimits(epoch_data)
         @test ylims_epoch isa Tuple{Float64,Float64}
         @test ylims_epoch[1] < ylims_epoch[2]
     end

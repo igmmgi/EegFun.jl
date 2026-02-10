@@ -60,9 +60,9 @@ function prepare_stats(
     end
 
     # Validate all ERPs have same structure within each condition
-    have_same_structure(condition1) || @minimal_error("Condition 1: ERPs have inconsistent structure")
-    have_same_structure(condition2) || @minimal_error("Condition 2: ERPs have inconsistent structure")
-    have_same_structure(condition1[1], condition2[1]) || @minimal_error("Condition 1 vs. 2: ERPs have inconsistent structure")
+    _have_same_structure(condition1) || @minimal_error("Condition 1: ERPs have inconsistent structure")
+    _have_same_structure(condition2) || @minimal_error("Condition 2: ERPs have inconsistent structure")
+    _have_same_structure(condition1[1], condition2[1]) || @minimal_error("Condition 1 vs. 2: ERPs have inconsistent structure")
 
     # Convert intervals to samples() predicates for subset()
     # Build sample selection predicate

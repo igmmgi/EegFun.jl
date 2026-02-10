@@ -57,7 +57,7 @@ Internal function to plot power spectra on an existing axis with interactive con
 - `channels_to_plot`: Vector of channel symbols to plot
 - `fs`: Sampling frequency in Hz
 
-$(generate_kwargs_doc(PLOT_POWER_SPECTRUM_KWARGS))
+$(_generate_kwargs_doc(PLOT_POWER_SPECTRUM_KWARGS))
 
 # Features
 - Creates interactive checkboxes for toggling between linear and log scales

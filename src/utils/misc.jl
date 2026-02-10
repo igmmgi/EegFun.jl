@@ -1,5 +1,5 @@
 """
-    make_output_filename(output_dir::String, input_file::String, suffix::String)
+    _make_output_filename(output_dir::String, input_file::String, suffix::String)
 
 Create an output filename from input file path with given suffix.
 
@@ -13,11 +13,11 @@ Create an output filename from input file path with given suffix.
 
 # Example
 ```julia
-filename = make_output_filename("/output", "data/file.bdf", "_ica")
+filename = _make_output_filename("/output", "data/file.bdf", "_ica")
 # Returns: "/output/file_ica.jld2"
 ```
 """
-function make_output_filename(output_dir::String, input_file::String, suffix::String)
+function _make_output_filename(output_dir::String, input_file::String, suffix::String)
     base_name = basename_without_ext(input_file)
     return joinpath(output_dir, "$(base_name)$(suffix).jld2")
 end
@@ -63,7 +63,7 @@ function consecutive(f::Function, A::AbstractVector; step::Int = 1)
 end
 
 """
-    splitgroups(v::AbstractVector) -> Tuple{Vector{Int64},Vector{Int64}}
+    _splitgroups(v::AbstractVector) -> Tuple{Vector{Int64},Vector{Int64}}
 
 Split vector into groups based on consecutive numbers.
 Refined to a single pass to avoid intermediate allocations.
@@ -71,7 +71,7 @@ Refined to a single pass to avoid intermediate allocations.
 # Returns
 - `Tuple{Vector{Int64},Vector{Int64}}`: Start and end indices of groups
 """
-function splitgroups(v::AbstractVector{<:Integer})
+function _splitgroups(v::AbstractVector{<:Integer})
     isempty(v) && return Int64[], Int64[]
 
     n = length(v)
@@ -93,7 +93,7 @@ end
 
 
 """
-    get_channel_indices(dat::DataFrame, channel_labels::AbstractVector{<:AbstractString}) -> Vector{Int}
+    _get_channel_indices(dat::DataFrame, channel_labels::AbstractVector{<:AbstractString}) -> Vector{Int}
 
 Get column indices for specified channel labels.
 
@@ -107,7 +107,7 @@ Get column indices for specified channel labels.
 # Throws
 - `ArgumentError`: If no matching channels found
 """
-function get_channel_indices(dat::DataFrame, channel_labels::AbstractVector{<:AbstractString})::Vector{Int}
+function _get_channel_indices(dat::DataFrame, channel_labels::AbstractVector{<:AbstractString})::Vector{Int}
     isempty(channel_labels) && @minimal_error_throw "channel_labels cannot be empty"
 
     # Use Set for O(1) membership check during search
@@ -254,7 +254,7 @@ end
 
 
 """
-    extract_int(s::String) -> Union{Int, Nothing}
+    _extract_int(s::String) -> Union{Int, Nothing}
 
 Extract the first integer found in a string.
 
@@ -266,11 +266,11 @@ Extract the first integer found in a string.
 
 # Example
 ```julia
-extract_int("channel_123_data")  # Returns: 123
-extract_int("no_numbers_here")   # Returns: nothing
+_extract_int("channel_123_data")  # Returns: 123
+_extract_int("no_numbers_here")   # Returns: nothing
 ```
 """
-function extract_int(s::String)::Union{Int,Nothing}
+function _extract_int(s::String)::Union{Int,Nothing}
     digits_only = filter(isdigit, s)
     return isempty(digits_only) ? nothing : parse(Int, digits_only)
 end
@@ -436,7 +436,7 @@ end
 
 # Function to parse component input text into a list of component indices
 """
-    parse_string_to_ints(text::String, total_components::Int)
+    _parse_string_to_ints(text::String, total_components::Int)
 
 Parses a comma-separated string potentially containing ranges (e.g., "1,3-5,8")
 into a sorted, unique vector of valid component indices.
@@ -449,7 +449,7 @@ into a sorted, unique vector of valid component indices.
 - `Vector{Int}`: Sorted, unique vector of valid component indices found in the text.
                  Returns an empty vector if input is empty or invalid.
 """
-function parse_string_to_ints(text::String)
+function _parse_string_to_ints(text::String)
     isempty(text) && return Int[]
 
     # Check for decimal points and error (EEG channel/component indices are always integers)
@@ -481,8 +481,8 @@ function parse_string_to_ints(text::String)
     return unique!(sort!(components))
 end
 
-function parse_string_to_ints(text::String, max_count::Int)
-    all_indices = parse_string_to_ints(text)
+function _parse_string_to_ints(text::String, max_count::Int)
+    all_indices = _parse_string_to_ints(text)
     if length(all_indices) > max_count
         return all_indices[1:max_count]
     end
@@ -570,7 +570,7 @@ function _orientation(p1::Vector{Float64}, p2::Vector{Float64}, p3::Vector{Float
 end
 
 # Helper function to generate documentation
-function generate_kwargs_doc(kwargs_dict::Dict{Symbol,Tuple{Any,String}})::String
+function _generate_kwargs_doc(kwargs_dict::Dict{Symbol,Tuple{Any,String}})::String
     doc_lines = ["# Keyword Arguments"]
     push!(doc_lines, "All keyword arguments below have sensible defaults defined in `DEFAULT_CHANNEL_SUMMARY_KWARGS`.")
     push!(doc_lines, "You can override any of these defaults by passing the corresponding keyword argument.")

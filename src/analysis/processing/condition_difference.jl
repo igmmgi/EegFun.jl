@@ -32,7 +32,7 @@ Create a difference wave by subtracting ERP2 from ERP1.
 """
 function _create_difference_wave(erp1::ErpData, erp2::ErpData, cond1::Int, cond2::Int, diff_cond::Int)
     # Validate that both ERPs have the same structure
-    have_same_structure(erp1, erp2) || @minimal_error_throw("ERPs have inconsistent structure")
+    _have_same_structure(erp1, erp2) || @minimal_error_throw("ERPs have inconsistent structure")
 
     # Get EEG channels (exclude metadata columns)
     metadata_cols = meta_labels(erp1)

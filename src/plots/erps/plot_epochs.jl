@@ -278,7 +278,7 @@ function plot_epochs(
         if length(all_plot_channels) == 1
             ax.title = string(all_plot_channels[1])
         else
-            ax.title = "Avg: $(print_vector(all_plot_channels, max_length = 8, n_ends = 3))"
+            ax.title = "Avg: $(_print_vector(all_plot_channels, max_length = 8, n_ends = 3))"
         end
 
         _set_axis_properties!(
@@ -433,7 +433,7 @@ Plot epoch data with flexible layout options.
   - `:topo`: Topographic layout based on channel positions
   - `Vector{Int}`: Custom grid dimensions [rows, cols]
 
-$(generate_kwargs_doc(PLOT_EPOCHS_KWARGS))
+$(_generate_kwargs_doc(PLOT_EPOCHS_KWARGS))
 
 # Returns
 - `Figure`: The Makie Figure object
@@ -487,7 +487,7 @@ end
 
 function _plot_epochs!(ax, dat, channels, plot_kwargs; label::Union{String,Nothing} = nothing, line_refs = nothing)::Tuple{Lines,Observable}
 
-    @info "plot_epochs: $(print_vector(channels))"
+    @info "plot_epochs: $(_print_vector(channels))"
     @assert length(channels) == 1 "_plot_epochs! expects a single channel"
 
     # Cache time vector and styles
@@ -571,7 +571,7 @@ function _plot_epochs_grid_multi!(
     # Calculate y-range if not provided (use first dataset as reference)
     ylim = plot_kwargs[:ylim]
     if isnothing(ylim)
-        yr = ylimits(datasets[1]; channel_selection = channels(all_plot_channels))
+        yr = _ylimits(datasets[1]; channel_selection = channels(all_plot_channels))
         ylim = (yr[1], yr[2])
     end
 
@@ -670,7 +670,7 @@ function _plot_epochs_topo_multi!(
     # Determine global y-lims for consistency across small axes
     ylim = plot_kwargs[:ylim]
     if isnothing(ylim)
-        yr = ylimits(dat; channel_selection = channels(all_plot_channels))
+        yr = _ylimits(dat; channel_selection = channels(all_plot_channels))
         ylim = (yr[1], yr[2])
     end
 

@@ -52,7 +52,7 @@ Plot Global Field Power (GFP) for ERP data.
 - `normalize::Bool`: If true, normalize GFP to 0-100% (default: true)
 - `kwargs`: Additional keyword arguments
 
-$(generate_kwargs_doc(PLOT_GFP_KWARGS))
+$(_generate_kwargs_doc(PLOT_GFP_KWARGS))
 
 # Examples
 ```julia

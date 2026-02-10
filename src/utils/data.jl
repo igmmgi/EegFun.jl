@@ -14,7 +14,7 @@
 
 # === COLUMN IDENTIFICATION SYSTEM ===
 """
-    get_cols_by_group(dat::EegData, group::Symbol) -> Vector{Symbol}
+    _get_cols_by_group(dat::EegData, group::Symbol) -> Vector{Symbol}
 
 Get columns by group type for EegData objects using layout-based identification.
 
@@ -30,7 +30,7 @@ Get columns by group type for EegData objects using layout-based identification.
 - `:metadata`: System columns (all columns before first layout label)
 - `:extra`: Derived columns (all columns after last layout label)
 """
-function get_cols_by_group(dat::EegData, group::Symbol)
+function _get_cols_by_group(dat::EegData, group::Symbol)
 
     if !(group in [:channels, :metadata, :extra])
         @minimal_error "Unknown group type: $group"
@@ -60,7 +60,7 @@ end
 
 
 """
-    get_cols_by_group(dat::Vector{<:EegData}, group::Symbol) -> Vector{Symbol}
+    _get_cols_by_group(dat::Vector{<:EegData}, group::Symbol) -> Vector{Symbol}
 
 Get columns by group type for a vector of EegData objects.
 Delegates to the first element (assumes all have the same structure).
@@ -72,9 +72,9 @@ Delegates to the first element (assumes all have the same structure).
 # Returns
 - `Vector{Symbol}`: Column names of the specified group
 """
-function get_cols_by_group(dat::Vector{<:EegData}, group::Symbol)
+function _get_cols_by_group(dat::Vector{<:EegData}, group::Symbol)
     isempty(dat) && return Symbol[]
-    return get_cols_by_group(first(dat), group)
+    return _get_cols_by_group(first(dat), group)
 end
 
 
@@ -100,17 +100,17 @@ function all_data(dat::Union{MultiDataFrameEeg,Vector{<:MultiDataFrameEeg}}; epo
 end
 
 function meta_data(dat::Union{MultiDataFrameEeg,Vector{<:MultiDataFrameEeg}}; epoch_selection::Function = epochs())
-    meta_cols = get_cols_by_group(dat, :metadata)
+    meta_cols = _get_cols_by_group(dat, :metadata)
     return isempty(meta_cols) ? DataFrame() : all_data(dat, epoch_selection = epoch_selection)[:, meta_cols]
 end
 
 function channel_data(dat::Union{MultiDataFrameEeg,Vector{<:MultiDataFrameEeg}}; epoch_selection::Function = epochs())
-    channel_cols = get_cols_by_group(dat, :channels)
+    channel_cols = _get_cols_by_group(dat, :channels)
     return isempty(channel_cols) ? DataFrame() : all_data(dat, epoch_selection = epoch_selection)[:, channel_cols]
 end
 
 function extra_data(dat::Union{MultiDataFrameEeg,Vector{<:MultiDataFrameEeg}}; epoch_selection::Function = epochs())
-    extra_cols = get_cols_by_group(dat, :extra)
+    extra_cols = _get_cols_by_group(dat, :extra)
     return isempty(extra_cols) ? DataFrame() : all_data(dat, epoch_selection = epoch_selection)[:, extra_cols]
 end
 
@@ -172,21 +172,21 @@ Get metadata column names from the EEG data.
 # Returns
 - `Vector{Symbol}`: Vector of metadata column names
 """
-meta_labels(dat::EegData) = get_cols_by_group(dat, :metadata)
+meta_labels(dat::EegData) = _get_cols_by_group(dat, :metadata)
 
 # Internal helper for grouped column access
 function _get_cols_data(dat::SingleDataFrameEeg, group::Symbol)
-    cols = get_cols_by_group(dat, group)
+    cols = _get_cols_by_group(dat, group)
     return isempty(cols) ? DataFrame() : dat.data[:, cols]
 end
 
 function _get_cols_data(dat::MultiDataFrameEeg, group::Symbol, epoch::Int)
-    cols = get_cols_by_group(dat, group)
+    cols = _get_cols_by_group(dat, group)
     return isempty(cols) ? DataFrame() : dat.data[epoch][:, cols]
 end
 
 function _get_cols_data(dat::MultiDataFrameEeg, group::Symbol)
-    cols = get_cols_by_group(dat, group)
+    cols = _get_cols_by_group(dat, group)
     return isempty(cols) ? DataFrame() : to_data_frame(dat)[:, cols]
 end
 
@@ -205,7 +205,7 @@ meta_data(dat::MultiDataFrameEeg) = _get_cols_data(dat, :metadata)
 
 Get EEG channel column names from the EEG data.
 """
-channel_labels(dat::EegData)::Vector{Symbol} = get_cols_by_group(dat, :channels)
+channel_labels(dat::EegData)::Vector{Symbol} = _get_cols_by_group(dat, :channels)
 channel_labels(dat::EegData, channel_numbers::Vector{<:UnitRange})::Vector{Symbol} = channel_labels(dat)[channel_numbers...]
 channel_labels(dat::EegData, channel_numbers)::Vector{Symbol} = channel_labels(dat)[channel_numbers]
 channel_labels(dat::EegData, channel_numbers::Int)::Vector{Symbol} = channel_labels(dat)[[channel_numbers]]
@@ -240,7 +240,7 @@ Get extra/derived columns (EOG, flags, etc.) from the EEG data.
 # Returns
 - `DataFrame`: DataFrame containing extra/derived columns
 """
-extra_labels(dat::EegData) = get_cols_by_group(dat, :extra)
+extra_labels(dat::EegData) = _get_cols_by_group(dat, :extra)
 
 # Handle collections of EEG data
 # TODO: is it possible that all do not have the same channel labels?
@@ -404,8 +404,8 @@ duration(dat::Vector{T}) where {T<:EegData} = isempty(dat) ? 0.0 : duration(dat[
 
 
 """
-    have_same_structure(dat1::EegData, dat2::EegData) -> Bool
-    have_same_structure(dats::Vector{<:EegData}) -> Bool
+    _have_same_structure(dat1::EegData, dat2::EegData) -> Bool
+    _have_same_structure(dats::Vector{<:EegData}) -> Bool
 
 Check if EegData objects have the same structure (sample rate, number of samples, channel labels, and time vectors).
 
@@ -419,13 +419,13 @@ Check if EegData objects have the same structure (sample rate, number of samples
 # Examples
 ```julia
 # Check if two ERPs have the same structure
-have_same_structure(erp1, erp2)
+_have_same_structure(erp1, erp2)
 
 # Check if all ERPs in a vector have the same structure
-have_same_structure(erps)
+_have_same_structure(erps)
 ```
 """
-function have_same_structure(dat1::EegData, dat2::EegData)::Bool
+function _have_same_structure(dat1::EegData, dat2::EegData)::Bool
     if sample_rate(dat1) != sample_rate(dat2)
         @minimal_error_throw("Sample rates do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
         return false
@@ -448,14 +448,14 @@ function have_same_structure(dat1::EegData, dat2::EegData)::Bool
     return true
 end
 
-function have_same_structure(dats::Vector{<:EegData})::Bool
+function _have_same_structure(dats::Vector{<:EegData})::Bool
     isempty(dats) && return true
     length(dats) == 1 && return true
 
     # Check all against the first one
     template = first(dats)
     for i = 2:length(dats)
-        !have_same_structure(template, dats[i]) && return false
+        !_have_same_structure(template, dats[i]) && return false
     end
     return true
 end
@@ -622,7 +622,7 @@ colmeans(df::Matrix, cols)::Vector{Float64} = reduce(+, eachcol(df[:, cols])) ./
 
 
 """
-    data_limits_x(dat::DataFrame) -> Union{Tuple{Float64,Float64}, Nothing}
+    _data_limits_x(dat::DataFrame) -> Union{Tuple{Float64,Float64}, Nothing}
 
 Get the time range of the data.
 
@@ -630,13 +630,13 @@ Get the time range of the data.
 - `Tuple{Float64,Float64}`: Minimum and maximum time values
 - `Nothing`: If the DataFrame is empty
 """
-function data_limits_x(dat::DataFrame; col::Symbol = :time)
+function _data_limits_x(dat::DataFrame; col::Symbol = :time)
     isempty(dat) && return nothing
     return extrema(dat[!, col])
 end
 
 """
-    data_limits_y(dat::DataFrame, col) -> Union{Vector{Float64}, Nothing}
+    _data_limits_y(dat::DataFrame, col) -> Union{Vector{Float64}, Nothing}
 
 Get the value range for specified columns.
 
@@ -648,14 +648,14 @@ Get the value range for specified columns.
 - `Vector{Float64}`: [minimum, maximum] across specified column
 - `Nothing`: If the DataFrame is empty
 """
-function data_limits_y(dat::DataFrame, col::Symbol)
+function _data_limits_y(dat::DataFrame, col::Symbol)
     isempty(dat) && return nothing
     mn, mx = extrema(dat[!, col])
     return [mn, mx]
 end
 
 """
-    data_limits_y(dat::DataFrame, cols::Vector{Symbol}) -> Union{Vector{Float64}, Nothing}
+    _data_limits_y(dat::DataFrame, cols::Vector{Symbol}) -> Union{Vector{Float64}, Nothing}
 
 Get the value range across multiple specified columns.
 
@@ -667,7 +667,7 @@ Get the value range across multiple specified columns.
 - `Vector{Float64}`: [minimum, maximum] across all specified columns
 - `Nothing`: If the DataFrame is empty
 """
-function data_limits_y(dat::DataFrame, cols::Vector{Symbol})
+function _data_limits_y(dat::DataFrame, cols::Vector{Symbol})
     isempty(dat) && return nothing
     global_min, global_max = Inf, -Inf
     @inbounds for col in cols
@@ -683,7 +683,7 @@ end
 # === DATAFRAME SUBSETTING UTILITIES ===
 
 """
-    subset_dataframe(df::DataFrame, selected_channels::Vector{Symbol}, selected_samples::Vector{Int}) -> DataFrame
+    _subset_dataframe(df::DataFrame, selected_channels::Vector{Symbol}, selected_samples::Vector{Int}) -> DataFrame
 
 Create a subset of a DataFrame by selecting specific channels and samples.
 
@@ -695,7 +695,7 @@ Create a subset of a DataFrame by selecting specific channels and samples.
 # Returns
 - `DataFrame`: Subset DataFrame with selected channels and samples
 """
-function subset_dataframe(df::DataFrame, selected_channels::Vector{Symbol}, selected_samples::Vector{Int})::DataFrame
+function _subset_dataframe(df::DataFrame, selected_channels::Vector{Symbol}, selected_samples::Vector{Int})::DataFrame
     return df[selected_samples, selected_channels]
 end
 
@@ -707,7 +707,7 @@ end
 Compute a padded y-range for ERP data using channel selection predicate.
 Returns (min, max) padded by `buffer` proportion.
 """
-function ylimits(
+function _ylimits(
     dat::ErpData;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
@@ -722,7 +722,7 @@ function ylimits(
         include_extra = include_extra,
     )
     chs = channel_labels(dat_sub)
-    lims = data_limits_y(dat_sub.data, chs)
+    lims = _data_limits_y(dat_sub.data, chs)
     return (lims[1], lims[2])
 end
 
@@ -732,7 +732,7 @@ end
 Compute a padded y-range for epoch data using channel selection predicate.
 If `average_only=true`, uses the averaged waveform across epochs.
 """
-function ylimits(
+function _ylimits(
     dat::EpochData;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
@@ -751,7 +751,7 @@ function ylimits(
     # Determine which value columns to use
     chs = channel_labels(dat_sub)
     # Compute limits per epoch and combine
-    limits = map(df -> data_limits_y(df, chs), dat_sub.data)
+    limits = map(df -> _data_limits_y(df, chs), dat_sub.data)
     limits = filter(!isnothing, limits)
     isempty(limits) && return (0.0, 1.0)
     min_val = minimum(lim[1] for lim in limits)
@@ -763,7 +763,7 @@ end
 
 
 """
-    subset_dataframes(dataframes::Vector{DataFrame}, selected_epochs::Vector{Int}, selected_channels::Vector{Symbol}, selected_samples::Vector{Int}) -> Vector{DataFrame}
+    _subset_dataframes(dataframes::Vector{DataFrame}, selected_epochs::Vector{Int}, selected_channels::Vector{Symbol}, selected_samples::Vector{Int}) -> Vector{DataFrame}
 
 Create subsets of multiple DataFrames by selecting specific epochs, channels, and samples.
 
@@ -776,13 +776,13 @@ Create subsets of multiple DataFrames by selecting specific epochs, channels, an
 # Returns
 - `Vector{DataFrame}`: Vector of subset DataFrames
 """
-function subset_dataframes(
+function _subset_dataframes(
     dataframes::Vector{DataFrame},
     selected_epochs::Vector{Int},
     selected_channels::Vector{Symbol},
     selected_samples::Vector{Int},
 )::Vector{DataFrame}
-    return subset_dataframe.(dataframes[selected_epochs], Ref(selected_channels), Ref(selected_samples))
+    return _subset_dataframe.(dataframes[selected_epochs], Ref(selected_channels), Ref(selected_samples))
 end
 
 
@@ -895,7 +895,7 @@ function subset(
     interval_sel = _interval_to_samples(interval_selection)
     combined_sel = x -> interval_sel(x) .& sample_selection(x)
     selected_channels, selected_samples, layout_subset = _subset_common(dat, channel_selection, combined_sel, include_extra)
-    dat_subset = subset_dataframe(dat.data, selected_channels, selected_samples)
+    dat_subset = _subset_dataframe(dat.data, selected_channels, selected_samples)
     return _create_subset(dat, dat_subset, layout_subset)
 end
 
@@ -912,7 +912,7 @@ function subset(
     combined_sel = x -> interval_sel(x) .& sample_selection(x)
     selected_epochs, selected_channels, selected_samples, layout_subset =
         _subset_common(dat, epoch_selection, channel_selection, combined_sel, include_extra)
-    dat_subset = subset_dataframes(dat.data, selected_epochs, selected_channels, selected_samples)
+    dat_subset = _subset_dataframes(dat.data, selected_epochs, selected_channels, selected_samples)
     return _create_subset(dat, dat_subset, layout_subset)
 end
 
@@ -965,7 +965,7 @@ end
 
 
 """
-    log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
+    _log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
 
 Log a pretty table with specified log level. For general DataFrame logging.
 Sets show_row_number=false and show_subheader=false by default for cleaner logs.
@@ -978,16 +978,16 @@ Sets show_row_number=false and show_subheader=false by default for cleaner logs.
 # Examples
 ```julia
 # Log with default info level
-log_pretty_table(df; title = "My Table")
+_log_pretty_table(df; title = "My Table")
 
 # Log with debug level
-log_pretty_table(df; log_level = :debug, title = "Debug Table")
+_log_pretty_table(df; log_level = :debug, title = "Debug Table")
 
 # Log with warn level
-log_pretty_table(df; log_level = :warn, title = "Warning Table")
+_log_pretty_table(df; log_level = :warn, title = "Warning Table")
 ```
 """
-function log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
+function _log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
 
     table_output = sprint() do output_io
         # TODO: better way of doing this?

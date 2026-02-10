@@ -982,7 +982,7 @@ function detect_bad_epochs_automatic(
 
     # Get selected channels
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
-    @info "Selected channels: $(print_vector(selected_channels))"
+    @info "Selected channels: $(_print_vector(selected_channels))"
     isempty(selected_channels) && @minimal_error_throw("No channels selected for epoch rejection")
 
     # Calculate metrics and identify rejected epochs
@@ -1165,7 +1165,7 @@ function Base.show(io::IO, info::EpochRejectionInfo)
     println(io, "  Z-criterion: $(info.z_criterion > 0 ? string(info.z_criterion) : "disabled")")
     println(io, "  Epochs total: $(info.info.n), Epochs rejected: $(length(unique_epochs(info.rejected)))")
     println(io, "  Artifacts total: $(info.n_artifacts)")
-    println(io, "  Rejected epochs: $(print_vector(unique_epochs(info.rejected)))")
+    println(io, "  Rejected epochs: $(_print_vector(unique_epochs(info.rejected)))")
 
     if info.abs_rejections !== nothing
         println(io, "  Rejection breakdown (absolute):")

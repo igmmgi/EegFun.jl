@@ -200,7 +200,7 @@ end
 Create a topographic layout based on channel positions.
 
 # Keyword Arguments
-$(generate_kwargs_doc(LAYOUT_KWARGS))
+$(_generate_kwargs_doc(LAYOUT_KWARGS))
 """
 function _create_topo_layout(layout::Layout, channels::Vector{Symbol}; kwargs...)
     # Create metadata from kwargs

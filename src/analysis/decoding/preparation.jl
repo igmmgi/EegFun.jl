@@ -70,13 +70,13 @@ function prepare_decoding(
 
     # Validate all epochs have same structure within each condition
     for (cond_idx, condition_epochs) in enumerate(selected_conditions)
-        have_same_structure(condition_epochs) ||
+        _have_same_structure(condition_epochs) ||
             @minimal_error("Condition $(selected_cond_nums[cond_idx]): Epochs have inconsistent structure")
     end
 
     # Validate structure is consistent across conditions
     for cond_idx = (firstindex(selected_conditions)+1):lastindex(selected_conditions)
-        have_same_structure(selected_conditions[1][1], selected_conditions[cond_idx][1]) || @minimal_error_throw(
+        _have_same_structure(selected_conditions[1][1], selected_conditions[cond_idx][1]) || @minimal_error_throw(
             "Condition $(selected_cond_nums[1]) vs $(selected_cond_nums[cond_idx]): " *
             "Epochs have inconsistent structure (different channels, sample rates, or time vectors)"
         )

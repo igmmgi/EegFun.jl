@@ -47,9 +47,9 @@ Plot a 2D EEG electrode layout with customizable head shape, electrode points, a
 - `neighbours`: Boolean to show interactive neighbour connections (default: false). Ignored if `correlation_matrix` is provided.
 - `correlation_matrix`: Optional DataFrame from `correlation_matrix()` to show correlation values on hover (default: nothing). When provided, `neighbours` is ignored.
 
-$(generate_kwargs_doc(PLOT_LAYOUT_HEAD_KWARGS))
-$(generate_kwargs_doc(PLOT_LAYOUT_POINT_KWARGS))
-$(generate_kwargs_doc(PLOT_LAYOUT_LABEL_KWARGS))
+$(_generate_kwargs_doc(PLOT_LAYOUT_HEAD_KWARGS))
+$(_generate_kwargs_doc(PLOT_LAYOUT_POINT_KWARGS))
+$(_generate_kwargs_doc(PLOT_LAYOUT_LABEL_KWARGS))
 
 # Returns
 - `nothing` (modifies the provided figure and axis in-place)
@@ -187,9 +187,9 @@ Create a new figure and plot a 2D EEG electrode layout.
 - `correlation_matrix`: Optional DataFrame from `correlation_matrix()` to show correlation values on hover (default: nothing). When provided, `neighbours` is ignored.
 - `display_plot`: Boolean to display the plot (default: true)
 
-$(generate_kwargs_doc(PLOT_LAYOUT_HEAD_KWARGS))
-$(generate_kwargs_doc(PLOT_LAYOUT_POINT_KWARGS))
-$(generate_kwargs_doc(PLOT_LAYOUT_LABEL_KWARGS))
+$(_generate_kwargs_doc(PLOT_LAYOUT_HEAD_KWARGS))
+$(_generate_kwargs_doc(PLOT_LAYOUT_POINT_KWARGS))
+$(_generate_kwargs_doc(PLOT_LAYOUT_LABEL_KWARGS))
 
 # Returns
 - The figure and axis objects
@@ -290,7 +290,7 @@ Uses Graham's Scan algorithm to create convex hulls around electrode groups.
 - `layout`: DataFrame containing electrode positions (needs x2, y2)
 - `rois`: Array of arrays, where each inner array contains electrode labels for a ROI
 
-$(generate_kwargs_doc(PLOT_LAYOUT_ROI_KWARGS))
+$(_generate_kwargs_doc(PLOT_LAYOUT_ROI_KWARGS))
 
 # Example
     layout = read_layout("./layouts/biosemi64.csv")
@@ -364,9 +364,9 @@ Plot a 3D EEG electrode layout with customizable head shape, electrode points, a
 - `layout`: Layout containing electrode positions with columns x3, y3, z3, and label
 - `neighbours`: Boolean to show interactive neighbour connections (default: false)
 
-$(generate_kwargs_doc(PLOT_LAYOUT_HEAD_KWARGS))
-$(generate_kwargs_doc(PLOT_LAYOUT_POINT_KWARGS))
-$(generate_kwargs_doc(PLOT_LAYOUT_LABEL_KWARGS))
+$(_generate_kwargs_doc(PLOT_LAYOUT_HEAD_KWARGS))
+$(_generate_kwargs_doc(PLOT_LAYOUT_POINT_KWARGS))
+$(_generate_kwargs_doc(PLOT_LAYOUT_LABEL_KWARGS))
 
 # Returns
 - `nothing` (modifies the provided figure and axis in-place)
@@ -449,9 +449,9 @@ Create a new figure and plot a 3D EEG electrode layout.
 - `neighbours`: Boolean to show interactive neighbour connections (default: false)
 - `display_plot`: Boolean to display the plot (default: true)
 
-$(generate_kwargs_doc(PLOT_LAYOUT_HEAD_KWARGS))
-$(generate_kwargs_doc(PLOT_LAYOUT_POINT_KWARGS))
-$(generate_kwargs_doc(PLOT_LAYOUT_LABEL_KWARGS))
+$(_generate_kwargs_doc(PLOT_LAYOUT_HEAD_KWARGS))
+$(_generate_kwargs_doc(PLOT_LAYOUT_POINT_KWARGS))
+$(_generate_kwargs_doc(PLOT_LAYOUT_LABEL_KWARGS))
 
 # Returns
 - The figure and axis objects

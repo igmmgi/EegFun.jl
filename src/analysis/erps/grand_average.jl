@@ -24,7 +24,7 @@ function _create_grand_average(erps::Vector{ErpData}, cond_num::Int)
     end
 
     # Validate that all ERPs have the same structure
-    have_same_structure(erps) || @minimal_error_throw("ERPs have inconsistent structure")
+    _have_same_structure(erps) || @minimal_error_throw("ERPs have inconsistent structure")
 
     first_erp = erps[1]
 

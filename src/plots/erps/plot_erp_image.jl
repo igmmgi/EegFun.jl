@@ -79,7 +79,7 @@ Plot ERP image for specified channels and samples with flexible layout options.
 - `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: channels() - all channels)
 - `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: samples() - all samples)
 
-$(generate_kwargs_doc(PLOT_ERP_IMAGE_KWARGS))
+$(_generate_kwargs_doc(PLOT_ERP_IMAGE_KWARGS))
 
 # Returns
 - `Figure`: The Makie Figure object
@@ -137,7 +137,7 @@ function plot_erp_image(
     # Set default plot title only for single layouts (same as plot_erp)
     # For grid/topo layouts, we want individual channel names, not a global title
     if plot_kwargs[:show_title] && plot_kwargs[:title] == "" && layout == :single
-        plot_kwargs[:title] = length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(print_vector(all_plot_channels))"
+        plot_kwargs[:title] = length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(_print_vector(all_plot_channels))"
     end
 
     # Handle colorbar positioning for grid layouts

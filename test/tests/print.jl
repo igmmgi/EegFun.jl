@@ -6,59 +6,59 @@ using OrderedCollections
     @testset "Vector Printing" begin
         # Test short vector
         v = [1, 2, 3]
-        @test EegFun.print_vector(v) == "1, 2, 3"
+        @test EegFun._print_vector(v) == "1, 2, 3"
 
         # Test long vector
         v = collect(1:20)
-        result = EegFun.print_vector(v)
+        result = EegFun._print_vector(v)
         @test startswith(result, "1, 2, 3, 4, 5, ...")
         @test endswith(result, "16, 17, 18, 19, 20")
 
         # Test UnitRange
         v = 1:20
-        result = EegFun.print_vector(v)
+        result = EegFun._print_vector(v)
         @test startswith(result, "1, 2, 3, 4, 5, ...")
         @test endswith(result, "16, 17, 18, 19, 20")
 
         # Test custom max_length and n_ends
         v = collect(1:20)
-        result = EegFun.print_vector(v, max_length = 15, n_ends = 3)
+        result = EegFun._print_vector(v, max_length = 15, n_ends = 3)
         @test startswith(result, "1, 2, 3, ...")
         @test endswith(result, "18, 19, 20")
 
         # Test edge cases
-        @test EegFun.print_vector(Int[]) == "[]"  # Empty vector
-        @test EegFun.print_vector([1]) == "1"  # Single element
-        @test EegFun.print_vector([1, 2]) == "1, 2"  # Two elements
-        @test EegFun.print_vector([1, 2, 3, 4, 5]) == "1, 2, 3, 4, 5"  # Exactly max_length
+        @test EegFun._print_vector(Int[]) == "[]"  # Empty vector
+        @test EegFun._print_vector([1]) == "1"  # Single element
+        @test EegFun._print_vector([1, 2]) == "1, 2"  # Two elements
+        @test EegFun._print_vector([1, 2, 3, 4, 5]) == "1, 2, 3, 4, 5"  # Exactly max_length
 
         # Test with different data types
-        @test EegFun.print_vector([:a, :b, :c]) == "a, b, c"  # Symbols
-        @test EegFun.print_vector(["a", "b", "c"]) == "a, b, c"  # Strings (no quotes added)
-        @test EegFun.print_vector([1.5, 2.5, 3.5]) == "1.5, 2.5, 3.5"  # Floats
-        @test EegFun.print_vector([true, false, true]) == "true, false, true"  # Booleans
+        @test EegFun._print_vector([:a, :b, :c]) == "a, b, c"  # Symbols
+        @test EegFun._print_vector(["a", "b", "c"]) == "a, b, c"  # Strings (no quotes added)
+        @test EegFun._print_vector([1.5, 2.5, 3.5]) == "1.5, 2.5, 3.5"  # Floats
+        @test EegFun._print_vector([true, false, true]) == "true, false, true"  # Booleans
 
         # Test with very long vectors
         v = collect(1:100)
-        result = EegFun.print_vector(v, max_length = 5, n_ends = 2)
+        result = EegFun._print_vector(v, max_length = 5, n_ends = 2)
         @test startswith(result, "1, 2, ...")
         @test endswith(result, "99, 100")
         @test count(==("..."), split(result, ", ")) == 1  # Only one ellipsis
 
         # Test with max_length smaller than n_ends
         v = collect(1:10)
-        result = EegFun.print_vector(v, max_length = 5, n_ends = 10)
+        result = EegFun._print_vector(v, max_length = 5, n_ends = 10)
         # When n_ends > max_length, it shows all elements since vector is shorter than n_ends
         @test result == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, ..., 1, 2, 3, 4, 5, 6, 7, 8, 9, 10"
 
         # Test with zero n_ends (should show only first part)
         v = collect(1:10)
-        result = EegFun.print_vector(v, max_length = 5, n_ends = 0)
+        result = EegFun._print_vector(v, max_length = 5, n_ends = 0)
         @test result == "..."  # When n_ends is 0, only ellipsis is shown
 
         # Test with negative n_ends (should throw error)
         v = collect(1:10)
-        @test_throws ArgumentError EegFun.print_vector(v, max_length = 5, n_ends = -2)
+        @test_throws ArgumentError EegFun._print_vector(v, max_length = 5, n_ends = -2)
     end
 
     @testset "Version" begin
@@ -179,18 +179,18 @@ using OrderedCollections
     end
 
     @testset "Edge Cases and Error Handling" begin
-        # Test print_vector with various edge cases
-        @test EegFun.print_vector([NaN]) == "NaN"
-        @test EegFun.print_vector([Inf]) == "Inf"
-        @test EegFun.print_vector([-Inf]) == "-Inf"
-        @test EegFun.print_vector([missing]) == "missing"
-        @test EegFun.print_vector([nothing]) == "nothing"
+        # Test _print_vector with various edge cases
+        @test EegFun._print_vector([NaN]) == "NaN"
+        @test EegFun._print_vector([Inf]) == "Inf"
+        @test EegFun._print_vector([-Inf]) == "-Inf"
+        @test EegFun._print_vector([missing]) == "missing"
+        @test EegFun._print_vector([nothing]) == "nothing"
 
         # Test with very large numbers
-        @test EegFun.print_vector([1e10, 1e-10]) == "1.0e10, 1.0e-10"
+        @test EegFun._print_vector([1e10, 1e-10]) == "1.0e10, 1.0e-10"
 
         # Test with special characters in strings
-        @test EegFun.print_vector(["a\nb", "c\td"]) == "a\nb, c\td"  # No escaping in print_vector
+        @test EegFun._print_vector(["a\nb", "c\td"]) == "a\nb, c\td"  # No escaping in _print_vector
 
         # Test config printing with TOML-compatible data types
         edge_config = Dict(
@@ -221,9 +221,9 @@ using OrderedCollections
     end
 
     @testset "Performance and Memory" begin
-        # Test print_vector with very large vectors
+        # Test _print_vector with very large vectors
         large_vector = collect(1:10000)
-        result = EegFun.print_vector(large_vector, max_length = 10, n_ends = 5)
+        result = EegFun._print_vector(large_vector, max_length = 10, n_ends = 5)
         @test length(result) < 100  # Should be truncated
         @test startswith(result, "1, 2, 3, 4, 5, ...")
         @test endswith(result, "9996, 9997, 9998, 9999, 10000")

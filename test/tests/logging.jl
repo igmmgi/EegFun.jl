@@ -6,12 +6,12 @@ using Dates
     test_dir = mktempdir()
 
     @testset "Duration formatting" begin
-        # Test format_duration with different durations
-        @test EegFun.format_duration(Millisecond(5000)) == "5 seconds"
-        @test EegFun.format_duration(Millisecond(30000)) == "30 seconds"
-        @test EegFun.format_duration(Millisecond(90000)) == "1 minute, 30 seconds"
-        @test EegFun.format_duration(Millisecond(3661000)) == "1 hour, 1 minute, 1 second"
-        @test EegFun.format_duration(Millisecond(7200000)) == "2 hours"
+        # Test _format_duration with different durations
+        @test EegFun._format_duration(Millisecond(5000)) == "5 seconds"
+        @test EegFun._format_duration(Millisecond(30000)) == "30 seconds"
+        @test EegFun._format_duration(Millisecond(90000)) == "1 minute, 30 seconds"
+        @test EegFun._format_duration(Millisecond(3661000)) == "1 hour, 1 minute, 1 second"
+        @test EegFun._format_duration(Millisecond(7200000)) == "2 hours"
     end
 
     @testset "Global logging setup and teardown" begin
@@ -163,17 +163,17 @@ using Dates
 
     @testset "Duration formatting edge cases" begin
         # Test very short durations
-        @test EegFun.format_duration(Millisecond(0)) == "0 seconds"
-        @test EegFun.format_duration(Millisecond(1)) == "0 seconds"  # 1ms rounds to 0 seconds
+        @test EegFun._format_duration(Millisecond(0)) == "0 seconds"
+        @test EegFun._format_duration(Millisecond(1)) == "0 seconds"  # 1ms rounds to 0 seconds
 
         # Test exactly 1 minute
-        @test EegFun.format_duration(Millisecond(60000)) == "1 minute"
+        @test EegFun._format_duration(Millisecond(60000)) == "1 minute"
 
         # Test exactly 1 hour
-        @test EegFun.format_duration(Millisecond(3600000)) == "1 hour"
+        @test EegFun._format_duration(Millisecond(3600000)) == "1 hour"
 
         # Test very long duration
-        @test EegFun.format_duration(Millisecond(3661000)) == "1 hour, 1 minute, 1 second"
+        @test EegFun._format_duration(Millisecond(3661000)) == "1 hour, 1 minute, 1 second"
     end
 
     # Clean up
