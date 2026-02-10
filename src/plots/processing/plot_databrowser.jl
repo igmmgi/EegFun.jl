@@ -523,7 +523,7 @@ function _create_ica_menu(fig, ax, state, ica)
             _reset_to_original!(state.data)
         else
             # Extract component number from selection string
-            component_to_toggle_int = extract_int(String(s))
+            component_to_toggle_int = _extract_int(String(s))
 
             if !isnothing(component_to_toggle_int)
                 # Toggle component: if already removed, restore it; if not removed, remove it
@@ -1706,7 +1706,7 @@ function _draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
         get_data, get_time, get_label_y = _get_data_accessors(state.data)
 
         if eltype(get_data(state.data.current[], 1:1, channel)) == Bool # Boolean data - create highlights
-            highlight_data = @views splitgroups(findall(get_data(state.data.current[], :, channel)))
+            highlight_data = @views _splitgroups(findall(get_data(state.data.current[], :, channel)))
             region_offset = all(iszero, highlight_data[2] .- highlight_data[1]) ? 5 : 0
             state.extra_channel.data_lines[channel] = vspan!(
                 ax,

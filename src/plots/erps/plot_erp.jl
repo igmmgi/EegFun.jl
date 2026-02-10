@@ -147,7 +147,7 @@ Create ERP plots with flexible layout options.
 - `baseline_interval::Interval`: Baseline correction interval. Can be `nothing` (no baseline), tuple like `(-0.2, 0.0)`, `nothing` means no baseline correction.
 - `kwargs`: Additional keyword arguments
 
-$(generate_kwargs_doc(PLOT_ERP_KWARGS))
+$(_generate_kwargs_doc(PLOT_ERP_KWARGS))
 
 # Examples
 ```julia
@@ -248,9 +248,9 @@ function plot_erp(
     # set default plot title only for single layouts
     # For grid/topo layouts, we want individual channel names, not a global title
     if plot_kwargs[:show_title] && plot_kwargs[:title] == "" && layout == :single
-        plot_kwargs[:title] = length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(print_vector(all_plot_channels))"
+        plot_kwargs[:title] = length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(_print_vector(all_plot_channels))"
         if plot_kwargs[:average_channels]
-            plot_kwargs[:title] = "Avg: $(print_vector(original_channels))"
+            plot_kwargs[:title] = "Avg: $(_print_vector(original_channels))"
         end
     end
 
@@ -283,7 +283,7 @@ function plot_erp(
     # Now do the actual plotting for each axis
     for (ax_idx, (ax, channel)) in enumerate(zip(axes, channels))
         channels_to_plot = plot_layout.type == :single ? all_plot_channels : [channel]
-        @info "plot_erp ($layout): $(print_vector(channels_to_plot))"
+        @info "plot_erp ($layout): $(_print_vector(channels_to_plot))"
         ax_line_refs = plot_kwargs[:interactive] ? line_refs[ax_idx] : nothing
         leg = _plot_erp!(
             ax,

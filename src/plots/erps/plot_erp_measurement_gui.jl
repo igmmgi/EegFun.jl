@@ -299,7 +299,7 @@ function plot_erp_measurement_gui(
     on(channel_menu.selection) do ch
         selected_channel[] = ch
         update_erp_plot!()
-        ax.title = "$(print_vector([ch])): $(selected_type[])"
+        ax.title = "$(_print_vector([ch])): $(selected_type[])"
         # Redraw markers after plot update
         sleep(0.01)
         update_result_markers!(measurement_results[], show_markers_obs[])
@@ -309,7 +309,7 @@ function plot_erp_measurement_gui(
         # Menu returns a Pair (display_name => measurement_type), extract the VALUE
         type_str = type_pair isa Pair ? type_pair[2] : type_pair
         selected_type[] = type_str
-        ax.title = "$(print_vector([selected_channel[]])): $(type_str)"
+        ax.title = "$(_print_vector([selected_channel[]])): $(type_str)"
     end
 
     on(meas_window_slider.interval) do interval

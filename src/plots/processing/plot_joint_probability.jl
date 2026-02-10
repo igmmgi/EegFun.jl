@@ -47,7 +47,7 @@ Assumes the DataFrame `dat` contains at least two columns:
 - `ax::Axis`: The Makie Axis object to plot on
 - `dat::DataFrame`: DataFrame with channel and joint probability data.
 
-$(generate_kwargs_doc(PLOT_JOINT_PROBABILITY_KWARGS))
+$(_generate_kwargs_doc(PLOT_JOINT_PROBABILITY_KWARGS))
 
 # Returns
 - `nothing` (modifies the provided figure and axis in-place)
@@ -126,7 +126,7 @@ Assumes the DataFrame `dat` contains at least two columns:
 # Arguments
 - `dat::DataFrame`: DataFrame with channel and joint probability data.
 
-$(generate_kwargs_doc(PLOT_JOINT_PROBABILITY_KWARGS))
+$(_generate_kwargs_doc(PLOT_JOINT_PROBABILITY_KWARGS))
 
 # Returns
 - `Figure`: The Makie Figure object.

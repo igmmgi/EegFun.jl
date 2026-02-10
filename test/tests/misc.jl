@@ -12,11 +12,11 @@ using DataFrames
         @test EegFun.basename_without_ext("no_extension") == "no_extension"
         @test EegFun.basename_without_ext("multiple.dots.in.name.txt") == "multiple.dots.in.name"
 
-        # Test make_output_filename
-        @test EegFun.make_output_filename("/output", "data/file.bdf", "_ica") == joinpath("/output", "file_ica.jld2")
-        @test EegFun.make_output_filename("/output", "path/to/another_file.csv", "_continuous") ==
+        # Test _make_output_filename
+        @test EegFun._make_output_filename("/output", "data/file.bdf", "_ica") == joinpath("/output", "file_ica.jld2")
+        @test EegFun._make_output_filename("/output", "path/to/another_file.csv", "_continuous") ==
               joinpath("/output", "another_file_continuous.jld2")
-        @test EegFun.make_output_filename("/output", "no_extension", "_processed") == joinpath("/output", "no_extension_processed.jld2")
+        @test EegFun._make_output_filename("/output", "no_extension", "_processed") == joinpath("/output", "no_extension_processed.jld2")
     end
 
     @testset "Vector operations" begin
@@ -33,24 +33,24 @@ using DataFrames
         result = EegFun.consecutive((x, y) -> x + y, v)
         @test result == [3, 5, 7, 9]  # sums of consecutive elements
 
-        # Test splitgroups
+        # Test _splitgroups
         v = [1, 2, 3, 5, 6, 8, 9, 10]
-        start_idx, end_idx = EegFun.splitgroups(v)
+        start_idx, end_idx = EegFun._splitgroups(v)
         @test start_idx == [1, 5, 8]
         @test end_idx == [3, 6, 10]
 
         # Test with empty vector
-        start_idx, end_idx = EegFun.splitgroups(Int[])
+        start_idx, end_idx = EegFun._splitgroups(Int[])
         @test isempty(start_idx)
         @test isempty(end_idx)
 
         # Test with single element
-        start_idx, end_idx = EegFun.splitgroups([5])
+        start_idx, end_idx = EegFun._splitgroups([5])
         @test start_idx == [5]
         @test end_idx == [5]
 
         # Test with consecutive numbers
-        start_idx, end_idx = EegFun.splitgroups([1, 2, 3, 4, 5])
+        start_idx, end_idx = EegFun._splitgroups([1, 2, 3, 4, 5])
         @test start_idx == [1]
         @test end_idx == [5]
     end
@@ -90,32 +90,32 @@ using DataFrames
         @test length(y_detrended) == length(y)
         @test isa(y_detrended, Vector{Float64})
 
-        # Test extract_int
-        @test EegFun.extract_int("channel_123_data") == 123
-        @test EegFun.extract_int("test_456") == 456
-        @test EegFun.extract_int("no_numbers_here") === nothing
-        @test EegFun.extract_int("") === nothing
-        @test EegFun.extract_int("123abc456") == 123456  # Concatenates all digits
+        # Test _extract_int
+        @test EegFun._extract_int("channel_123_data") == 123
+        @test EegFun._extract_int("test_456") == 456
+        @test EegFun._extract_int("no_numbers_here") === nothing
+        @test EegFun._extract_int("") === nothing
+        @test EegFun._extract_int("123abc456") == 123456  # Concatenates all digits
     end
 
     @testset "String parsing" begin
-        # Test parse_string_to_ints
-        @test EegFun.parse_string_to_ints("1,2,3") == [1, 2, 3]
-        @test EegFun.parse_string_to_ints("1:5") == [1, 2, 3, 4, 5]  # Use colon for ranges
-        @test EegFun.parse_string_to_ints("1,3:5,8") == [1, 3, 4, 5, 8]  # Use colon for ranges
-        @test EegFun.parse_string_to_ints("1:3,5:7") == [1, 2, 3, 5, 6, 7]
-        @test EegFun.parse_string_to_ints("") == Int[]
-        @test EegFun.parse_string_to_ints("1;2;3") == [1, 2, 3]  # Semicolon separator
+        # Test _parse_string_to_ints
+        @test EegFun._parse_string_to_ints("1,2,3") == [1, 2, 3]
+        @test EegFun._parse_string_to_ints("1:5") == [1, 2, 3, 4, 5]  # Use colon for ranges
+        @test EegFun._parse_string_to_ints("1,3:5,8") == [1, 3, 4, 5, 8]  # Use colon for ranges
+        @test EegFun._parse_string_to_ints("1:3,5:7") == [1, 2, 3, 5, 6, 7]
+        @test EegFun._parse_string_to_ints("") == Int[]
+        @test EegFun._parse_string_to_ints("1;2;3") == [1, 2, 3]  # Semicolon separator
 
         # Test with max_count
-        @test EegFun.parse_string_to_ints("1:10", 5) == [1, 2, 3, 4, 5]  # Use colon for ranges
-        @test EegFun.parse_string_to_ints("1,2,3", 2) == [1, 2]
+        @test EegFun._parse_string_to_ints("1:10", 5) == [1, 2, 3, 4, 5]  # Use colon for ranges
+        @test EegFun._parse_string_to_ints("1,2,3", 2) == [1, 2]
 
         # Test error handling
-        @test_throws ArgumentError EegFun.parse_string_to_ints("1.5,2.3")  # Decimal points not allowed
+        @test_throws ArgumentError EegFun._parse_string_to_ints("1.5,2.3")  # Decimal points not allowed
 
         # Test with non-numeric parts (should warn but continue)
-        result = EegFun.parse_string_to_ints("1,abc,3")
+        result = EegFun._parse_string_to_ints("1,abc,3")
         @test result == [1, 3]
     end
 
@@ -123,11 +123,11 @@ using DataFrames
         # Create test DataFrame
         df = DataFrame(time = [0.1, 0.2, 0.3], Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0], Pz = [7.0, 8.0, 9.0], vEOG = [0.1, 0.2, 0.3])
 
-        # Test get_channel_indices
-        indices = EegFun.get_channel_indices(df, ["Fz", "Cz"])
+        # Test _get_channel_indices
+        indices = EegFun._get_channel_indices(df, ["Fz", "Cz"])
         @test indices == [2, 3]  # Fz is column 2, Cz is column 3
 
-        indices = EegFun.get_channel_indices(df, ["Fz", "Pz", "vEOG"])
+        indices = EegFun._get_channel_indices(df, ["Fz", "Pz", "vEOG"])
         @test indices == [2, 4, 5]
 
     end
@@ -266,9 +266,9 @@ using DataFrames
     end
 
     @testset "Documentation generation" begin
-        # Test generate_kwargs_doc
+        # Test _generate_kwargs_doc
         kwargs_dict = Dict{Symbol,Tuple{Any,String}}(:param1 => (1, "First parameter"), :param2 => (2.0, "Second parameter"))
-        doc = EegFun.generate_kwargs_doc(kwargs_dict)
+        doc = EegFun._generate_kwargs_doc(kwargs_dict)
 
         @test contains(doc, "# Keyword Arguments")
         @test contains(doc, "param1::Int64=1")

@@ -45,7 +45,7 @@ $(SIGNATURES)
 - `dat::DataFrame`: DataFrame containing channel summary data.
 - `col::Symbol`: The symbol representing the column in `dat` to plot on the y-axis.
 
-$(generate_kwargs_doc(PLOT_CHANNEL_SUMMARY_KWARGS))
+$(_generate_kwargs_doc(PLOT_CHANNEL_SUMMARY_KWARGS))
 
 # Returns
 - **Mutating version**: `nothing` (modifies the provided figure and axis in-place)
@@ -174,7 +174,7 @@ a bar chart for that specific metric across all channels.
 - `col::Vector{Symbol}`: Vector of column symbols to plot, each will get its own subplot
 
 # Keyword Arguments
-$(generate_kwargs_doc(PLOT_CHANNEL_SUMMARY_KWARGS))
+$(_generate_kwargs_doc(PLOT_CHANNEL_SUMMARY_KWARGS))
 
 # Returns
 - **Mutating version**: `nothing` (modifies the provided figure in-place)

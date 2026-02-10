@@ -62,7 +62,7 @@ Plot the frequency response of a digital filter with ideal response overlay.
 - `filter_info::FilterInfo`: Filter information struct
 - `kwargs...`: Additional keyword arguments
 
-$(generate_kwargs_doc(PLOT_FILTER_KWARGS))
+$(_generate_kwargs_doc(PLOT_FILTER_KWARGS))
 
 # Returns
 - `fig`: Makie Figure object

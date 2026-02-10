@@ -198,7 +198,7 @@ Interactive plot of artifact detection results with Previous/Next buttons for ep
 - `channel_selection::Function`: Channel predicate for selecting channels to plot (default: all layout channels)
 
 # Keyword Arguments
-$(generate_kwargs_doc(PLOT_ARTIFACT_KWARGS))
+$(_generate_kwargs_doc(PLOT_ARTIFACT_KWARGS))
 
 # Returns
 - `Figure`: Interactive Makie figure with navigation buttons
@@ -339,7 +339,7 @@ Interactive plot comparison between original and repaired epochs with navigation
 - `channel_selection::Function`: Channel predicate for selecting channels to plot (default: all layout channels)
 
 # Keyword Arguments
-$(generate_kwargs_doc(PLOT_ARTIFACT_KWARGS))
+$(_generate_kwargs_doc(PLOT_ARTIFACT_KWARGS))
 
 # Returns
 - `Figure`: Interactive Makie figure with navigation buttons showing before/after comparison
@@ -538,7 +538,7 @@ both plots show a blank plot with red spines.
 - `channel_selection::Function`: Channel predicate for selecting channels to plot (default: all layout channels)
 
 # Keyword Arguments
-$(generate_kwargs_doc(PLOT_ARTIFACT_KWARGS))
+$(_generate_kwargs_doc(PLOT_ARTIFACT_KWARGS))
 
 # Returns
 - `Figure`: Interactive Makie figure with navigation buttons showing before/after comparison

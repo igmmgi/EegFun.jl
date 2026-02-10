@@ -54,7 +54,7 @@ function lrp(erp_left::ErpData, erp_right::ErpData; channel_selection::Function 
     @info "Calculating lateralized readiness potential (LRP)"
 
     # Validate inputs
-    have_same_structure(erp_left, erp_right) || @minimal_error_throw("Left and right ERPs have inconsistent structure")
+    _have_same_structure(erp_left, erp_right) || @minimal_error_throw("Left and right ERPs have inconsistent structure")
 
     # Get selected left/odd channels and find their right/even pairs
     pairs = _get_channel_pairs_from_selection(erp_left, erp_right, channel_selection)

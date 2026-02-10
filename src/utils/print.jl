@@ -1,5 +1,5 @@
 """
-    print_vector(v::AbstractVector; max_length::Int = 10, n_ends::Int = 5)
+    _print_vector(v::AbstractVector; max_length::Int = 10, n_ends::Int = 5)
 
 Print a vector with a maximum length and number of ends.
 
@@ -8,7 +8,7 @@ Print a vector with a maximum length and number of ends.
 - `max_length::Int`: The maximum length of the vector to print
 - `n_ends::Int`: The number of ends to print
 """
-function print_vector(v::AbstractVector; max_length::Int = 10, n_ends::Int = 5)
+function _print_vector(v::AbstractVector; max_length::Int = 10, n_ends::Int = 5)
     isempty(v) && return "[]"
     if length(v) > max_length
         v = vcat(first(v, n_ends), "...", last(v, n_ends))

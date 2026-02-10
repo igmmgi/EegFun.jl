@@ -19,11 +19,11 @@ const LOG_STATE = LoggingState(
 )
 
 """
-    format_duration(duration::Millisecond)
+    _format_duration(duration::Millisecond)
 
 Format a duration in a human-readable way, choosing appropriate units.
 """
-function format_duration(duration::Millisecond)
+function _format_duration(duration::Millisecond)
     s = round(Int, duration.value / 1000) # nearest S
     s == 0 && return "0 seconds"
     return string(Dates.canonicalize(Second(s)))
@@ -85,7 +85,7 @@ Close a log file, write duration, and return nothing for cleanup.
 function _close_log_file(handle::Union{Nothing,IO}, start_time::Union{Nothing,DateTime}, label::String)
     if !isnothing(handle)
         duration = now() - start_time
-        println(handle, "\n$(label): ", format_duration(duration))
+        println(handle, "\n$(label): ", _format_duration(duration))
         close(handle)
     end
 end

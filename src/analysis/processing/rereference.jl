@@ -105,7 +105,7 @@ function rereference!(dat::EegData, reference_selection::Union{Symbol,Vector{Sym
     end
 
     # Calculate reference signal and apply rereferencing
-    @info "Rereference channels: $(reference_selection) ($(print_vector(reference_channels; n_ends=3)))"
+    @info "Rereference channels: $(reference_selection) ($(_print_vector(reference_channels; n_ends=3)))"
     _apply_rereference!(dat.data, selected_channels, reference_channels)
 
     # Store reference info

@@ -77,7 +77,7 @@ Internal function to plot a single ICA component topography on existing figure/a
 - `component::Int`: The component index to plot (1-based).
 
 # Keyword Arguments
-$(generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
+$(_generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
 
 # Returns
 - `co`: The contour plot object returned by `contourf!`.
@@ -138,7 +138,7 @@ Plot multiple ICA component topographies in a grid layout within a new Figure.
 # Arguments
 - `ica::InfoIca`: The ICA result object (contains layout information).
 
-$(generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
+$(_generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
 
 # Returns
 - `fig::Figure`: The generated Makie Figure containing the grid of topoplots.
@@ -964,7 +964,7 @@ function _add_navigation_controls!(fig, state)
         text_value = text_input.displayed_string[]
         # Skip if empty or if it's the placeholder text
         if !isempty(text_value) && !startswith(text_value, "e.g.")
-            comps = parse_string_to_ints(text_value, size(state.component_data, 1))
+            comps = _parse_string_to_ints(text_value, size(state.component_data, 1))
             if !isempty(comps)
                 @info "Creating new plot with components: $comps"
                 current_channel = state.channel_data[]
