@@ -9,7 +9,7 @@
 # - Data Access: Functions to extract different types of data (all_data, meta_data, etc.)
 # - Convenience Functions: Basic information and size functions
 # - Data Viewing: head, tail, viewer functions
-# - Mathematical Utilities: datarange, colmeans, data_limits
+# - Mathematical Utilities: _datarange, _colmeans, data_limits
 # - Subsetting: Functions to subset EEG data objects
 
 # === COLUMN IDENTIFICATION SYSTEM ===
@@ -592,20 +592,20 @@ end
 # === MATHEMATICAL UTILITIES ===
 
 """
-    datarange(x::AbstractVector) -> Float64
+    _datarange(x::AbstractVector) -> Float64
 
 Calculate the range of data (maximum - minimum).
 
 # Returns
 - `Float64`: Difference between maximum and minimum values
 """
-datarange(x::AbstractVector)::Float64 = -(-(extrema(x)...))
+_datarange(x::AbstractVector)::Float64 = -(-(extrema(x)...))
 
 
 """
-    colmeans(df::DataFrame, cols) -> Vector{Float64}
-    colmeans(df::Matrix) -> Vector{Float64}
-    colmeans(df::Matrix, cols) -> Vector{Float64}
+    _colmeans(df::DataFrame, cols) -> Vector{Float64}
+    _colmeans(df::Matrix) -> Vector{Float64}
+    _colmeans(df::Matrix, cols) -> Vector{Float64}
 
 Calculate the mean of specified columns in a DataFrame.
 
@@ -616,9 +616,9 @@ Calculate the mean of specified columns in a DataFrame.
 # Returns
 - `Vector{Float64}`: A vector containing the mean of each specified column.
 """
-colmeans(df::DataFrame, cols)::Vector{Float64} = reduce(+, eachcol(df[!, cols])) ./ length(cols)
-colmeans(df::Matrix)::Vector{Float64} = reduce(+, eachcol(df)) ./ size(df)[2]
-colmeans(df::Matrix, cols)::Vector{Float64} = reduce(+, eachcol(df[:, cols])) ./ length(cols)
+_colmeans(df::DataFrame, cols)::Vector{Float64} = reduce(+, eachcol(df[!, cols])) ./ length(cols)
+_colmeans(df::Matrix)::Vector{Float64} = reduce(+, eachcol(df)) ./ size(df)[2]
+_colmeans(df::Matrix, cols)::Vector{Float64} = reduce(+, eachcol(df[:, cols])) ./ length(cols)
 
 
 """

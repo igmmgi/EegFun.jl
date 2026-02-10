@@ -227,7 +227,7 @@ function plot_erp_image(
             # For single layout: average across all selected channels
             data = zeros(length(dat_subset.data), nrow(dat_subset.data[1]))
             for epoch in eachindex(dat_subset.data)
-                data[epoch, :] = colmeans(dat_subset.data[epoch], all_plot_channels)
+                data[epoch, :] = _colmeans(dat_subset.data[epoch], all_plot_channels)
             end
         else
             # For grid/topo layouts: show individual channel
@@ -491,7 +491,7 @@ function plot_erp_image(
         push!(axes, ax_erp)
 
         # For single layout, show averaged ERP trace across all selected channels
-        avg_data = colmeans(erp_data.data, all_plot_channels)
+        avg_data = _colmeans(erp_data.data, all_plot_channels)
         lines!(ax_erp, erp_data.data.time, avg_data, color = :black, linewidth = 1)
 
         # Set axis properties consistent with plot_erp

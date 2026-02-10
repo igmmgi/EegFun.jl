@@ -79,15 +79,15 @@ using LinearAlgebra
 
     end
 
-    @testset "create_ica_data_matrix" begin
+    @testset "_create_ica_data_matrix" begin
         dat = create_synthetic_continuous(; n = 200, fs = 200, nch = 4)
         # Duplicate samples to test unique by :sample
         df = vcat(dat.data, dat.data)
-        mat = EegFun.create_ica_data_matrix(df, [:ch1, :ch2, :ch3, :ch4], 1:nrow(df))
+        mat = EegFun._create_ica_data_matrix(df, [:ch1, :ch2, :ch3, :ch4], 1:nrow(df))
         @test size(mat, 1) == 4
         @test size(mat, 2) == nrow(df)
         # Non-existent channels get dropped by intersect
-        mat2 = EegFun.create_ica_data_matrix(df, [:ch1, :chX], 1:nrow(df))
+        mat2 = EegFun._create_ica_data_matrix(df, [:ch1, :chX], 1:nrow(df))
         @test size(mat2, 1) == 1
     end
 

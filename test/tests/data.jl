@@ -239,20 +239,20 @@ using OrderedCollections
     end
 
     @testset "Mathematical utilities" begin
-        # Test datarange
-        @test EegFun.datarange([1, 2, 3, 4, 5]) == 4.0
-        @test EegFun.datarange([5, 1, 3, 2, 4]) == 4.0
-        @test EegFun.datarange([1.0]) == 0.0
+        # Test _datarange
+        @test EegFun._datarange([1, 2, 3, 4, 5]) == 4.0
+        @test EegFun._datarange([5, 1, 3, 2, 4]) == 4.0
+        @test EegFun._datarange([1.0]) == 0.0
 
-        # Test colmeans
+        # Test _colmeans
         df = DataFrame(A = [1.0, 2.0, 3.0], B = [4.0, 5.0, 6.0], C = [7.0, 8.0, 9.0])
-        @test EegFun.colmeans(df, [:A, :B]) == [2.5, 3.5, 4.5]  # mean of A and B for each row
-        @test EegFun.colmeans(df, [1, 2]) == [2.5, 3.5, 4.5]  # using indices
+        @test EegFun._colmeans(df, [:A, :B]) == [2.5, 3.5, 4.5]  # mean of A and B for each row
+        @test EegFun._colmeans(df, [1, 2]) == [2.5, 3.5, 4.5]  # using indices
 
-        # Test colmeans with Matrix
+        # Test _colmeans with Matrix
         mat = [1.0 2.0; 3.0 4.0; 5.0 6.0]
-        @test EegFun.colmeans(mat) == [1.5, 3.5, 5.5]  # row means (mean of each row)
-        @test EegFun.colmeans(mat, [1, 2]) == [1.5, 3.5, 5.5]  # all columns
+        @test EegFun._colmeans(mat) == [1.5, 3.5, 5.5]  # row means (mean of each row)
+        @test EegFun._colmeans(mat, [1, 2]) == [1.5, 3.5, 5.5]  # all columns
 
         # Test _data_limits_x
         df = DataFrame(time = [0.1, 0.2, 0.3, 0.4, 0.5])

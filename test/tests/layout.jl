@@ -59,20 +59,20 @@ using OrderedCollections
 
     @testset "Distance Calculations" begin
         # Test 2D distance
-        @test isapprox(EegFun.distance_xy(0, 0, 3, 4), 5.0)
-        @test isapprox(EegFun.squared_distance_xy(0, 0, 3, 4), 25.0)
+        @test isapprox(EegFun._distance_xy(0, 0, 3, 4), 5.0)
+        @test isapprox(EegFun._squared_distance_xy(0, 0, 3, 4), 25.0)
 
         # Test 3D distance
-        @test isapprox(EegFun.distance_xyz(0, 0, 0, 1, 2, 2), 3.0)
-        @test isapprox(EegFun.squared_distance_xyz(0, 0, 0, 1, 2, 2), 9.0)
+        @test isapprox(EegFun._distance_xyz(0, 0, 0, 1, 2, 2), 3.0)
+        @test isapprox(EegFun._squared_distance_xyz(0, 0, 0, 1, 2, 2), 9.0)
 
         # Test additional cases
-        @test isapprox(EegFun.distance_xy(-1, -1, 1, 1), 2.8284271247461903)
-        @test isapprox(EegFun.distance_xyz(-1, -1, -1, 1, 1, 1), 3.4641016151377544)
+        @test isapprox(EegFun._distance_xy(-1, -1, 1, 1), 2.8284271247461903)
+        @test isapprox(EegFun._distance_xyz(-1, -1, -1, 1, 1, 1), 3.4641016151377544)
 
         # Test zero distance
-        @test isapprox(EegFun.distance_xy(1, 1, 1, 1), 0.0)
-        @test isapprox(EegFun.distance_xyz(1, 1, 1, 1, 1, 1), 0.0)
+        @test isapprox(EegFun._distance_xy(1, 1, 1, 1), 0.0)
+        @test isapprox(EegFun._distance_xyz(1, 1, 1, 1, 1, 1), 0.0)
     end
 
     @testset "Electrode Neighbours" begin
@@ -178,18 +178,18 @@ using OrderedCollections
         # Test distance calculations
         @testset "distance_calculations" begin
             # Test 2D distance
-            @test EegFun.distance_xy(0, 0, 3, 4) ≈ 5.0
-            @test EegFun.squared_distance_xy(0, 0, 3, 4) ≈ 25.0
+            @test EegFun._distance_xy(0, 0, 3, 4) ≈ 5.0
+            @test EegFun._squared_distance_xy(0, 0, 3, 4) ≈ 25.0
 
             # Test 3D distance
-            @test EegFun.distance_xyz(0, 0, 0, 1, 2, 2) ≈ 3.0
-            @test EegFun.squared_distance_xyz(0, 0, 0, 1, 2, 2) ≈ 9.0
+            @test EegFun._distance_xyz(0, 0, 0, 1, 2, 2) ≈ 3.0
+            @test EegFun._squared_distance_xyz(0, 0, 0, 1, 2, 2) ≈ 9.0
 
             # Test edge cases
-            @test EegFun.distance_xy(0, 0, 0, 0) ≈ 0.0
-            @test EegFun.distance_xyz(0, 0, 0, 0, 0, 0) ≈ 0.0
-            @test EegFun.squared_distance_xy(0, 0, 0, 0) ≈ 0.0
-            @test EegFun.squared_distance_xyz(0, 0, 0, 0, 0, 0) ≈ 0.0
+            @test EegFun._distance_xy(0, 0, 0, 0) ≈ 0.0
+            @test EegFun._distance_xyz(0, 0, 0, 0, 0, 0) ≈ 0.0
+            @test EegFun._squared_distance_xy(0, 0, 0, 0) ≈ 0.0
+            @test EegFun._squared_distance_xyz(0, 0, 0, 0, 0, 0) ≈ 0.0
         end
 
         # Test electrode neighbours

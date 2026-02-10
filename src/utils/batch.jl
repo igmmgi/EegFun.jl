@@ -156,7 +156,7 @@ _condition_select(data, condition_selection::Nothing) = _condition_select(data, 
 # Core internal loading logic
 function _read_all_data_core(::Type{T}, files::Vector{String}, input_dir::String) where {T}
     all_data = T[]
-    for (i, file) in enumerate(sort(files, by = natural_sort_key))
+    for (i, file) in enumerate(sort(files, by = _natural_sort_key))
         input_path = joinpath(input_dir, file)
         @info "Loading: $file ($i/$(length(files)))"
         file_data = read_data(input_path)

@@ -583,7 +583,7 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
     end
 
     # find number of samples pre/post epoch t = 0 position
-    n_pre, n_post = find_idx_start_end(dat.data.time, abs(start_time), abs(end_time))
+    n_pre, n_post = _find_idx_start_end(dat.data.time, abs(start_time), abs(end_time))
     pre_idx = zero_idx .- n_pre .+ 1
     post_idx = zero_idx .+ n_post .- 1
 
