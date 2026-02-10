@@ -1607,28 +1607,38 @@ end
 
 """
     identify_line_noise_components(dat::ContinuousData, ica::InfoIca;
-                                 exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
                                  line_freq::Real=50.0,
                                  freq_bandwidth::Real=1.0,
                                  z_threshold::Float64=3.0,
                                  min_harmonic_power::Real=0.5)
 
-Identify ICA components with strong line noise characteristics.
+Identify ICA components with strong line noise characteristics using spectral peakiness.
+
+Spectral peakiness compares power at the line frequency to nearby flanking frequencies
+(±5 Hz excluding the line band), rather than to the entire broadband spectrum. This avoids
+false positives from components with generally elevated power that happens to include the
+line frequency range.
 
 # Arguments
 - `dat::ContinuousData`: The continuous data.
 - `ica::InfoIca`: The ICA result object.
 
 # Keyword Arguments
-- `exclude_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to exclude. Defaults to `[:is_extreme_value]`.
+- `sample_selection::Function`: Function to select samples (default: `samples()`).
 - `line_freq::Real`: Line frequency in Hz (default: 50.0 for European power).
 - `freq_bandwidth::Real`: Bandwidth around line frequency to consider (default: 1.0 Hz).
 - `z_threshold::Float64`: Z-score threshold for identifying line noise components (default: 3.0).
-- `min_harmonic_power::Real`: Minimum power ratio of 2nd harmonic relative to fundamental (default: 0.5).
+- `min_harmonic_power::Real`: Minimum peakiness ratio of 2nd harmonic (100 Hz vs. its flanking frequencies) (default: 1.5).
 
 # Returns
 - `Vector{Int}`: Indices of components with strong line noise characteristics.
-- `DataFrame`: DataFrame containing spectral metrics for all components.
+- `DataFrame`: DataFrame containing spectral metrics for all components:
+  - `:Component`: Component index
+  - `:line_power`: Mean power at the line frequency band
+  - `:flanking_power`: Mean power at flanking frequencies (used as baseline for peakiness)
+  - `:power_ratio`: Spectral peakiness ratio (line_power / flanking_power)
+  - `:harmonic_ratio`: Spectral peakiness ratio at the 2nd harmonic
+  - `:power_ratio_zscore`: Z-score of power_ratio across components
 """
 function identify_line_noise_components(
     dat::ContinuousData,
@@ -1638,7 +1648,7 @@ function identify_line_noise_components(
     line_freq::Real = 50.0,
     freq_bandwidth::Real = 1.0,
     z_threshold::Float64 = 3.0,
-    min_harmonic_power::Real = 0.5,
+    min_harmonic_power::Real = 1.5,
 )
 
     # Get samples to use
@@ -1676,10 +1686,23 @@ function identify_line_noise_components(
         psd[:, i] = abs2.(FFTW.rfft(signal_fft))
     end
 
-    # Find frequency bands for line frequency and 2nd harmonic
+    # Define frequency bands
+    # Flanking bandwidth for spectral peakiness (Hz on each side of line freq, excluding the line band itself)
+    flank_bandwidth = 5.0
+
+    # Line frequency band (narrow band around 50 Hz)
     line_band = findall(abs.(freqs .- line_freq) .<= freq_bandwidth)
+
+    # Flanking bands: frequencies near the line frequency but excluding the line band
+    # e.g., for 50 Hz with freq_bandwidth=1 and flank_bandwidth=5: uses 45-49 Hz and 51-55 Hz
+    line_flank_band =
+        findall((abs.(freqs .- line_freq) .> freq_bandwidth) .& (abs.(freqs .- line_freq) .<= freq_bandwidth + flank_bandwidth))
+
+    # 2nd harmonic bands
     harmonic2_freq = line_freq * 2
     harmonic2_band = findall(abs.(freqs .- harmonic2_freq) .<= freq_bandwidth)
+    harmonic2_flank_band =
+        findall((abs.(freqs .- harmonic2_freq) .> freq_bandwidth) .& (abs.(freqs .- harmonic2_freq) .<= freq_bandwidth + flank_bandwidth))
 
     # Calculate metrics for each component
     metrics = []
@@ -1687,17 +1710,17 @@ function identify_line_noise_components(
         # Get power at line frequency band
         line_power = mean(psd[line_band, i])
 
-        # Calculate power in surrounding frequencies (excluding line frequency band)
-        surrounding_bands = setdiff(1:n_freqs, line_band)
-        surrounding_power = mean(psd[surrounding_bands, i])
+        # Spectral peakiness: compare line frequency power to nearby flanking frequencies
+        flanking_power = !isempty(line_flank_band) ? mean(psd[line_flank_band, i]) : mean(psd[:, i])
 
-        # Calculate power ratio (line power relative to surrounding frequencies)
-        power_ratio = line_power / (surrounding_power + eps())
+        # Power ratio: how much does 50 Hz stand out above its immediate neighbours
+        power_ratio = line_power / (flanking_power + eps())
 
-        # Calculate 2nd harmonic power ratio (relative to fundamental)
+        # Harmonic peakiness: does 100 Hz also stand out above its flanking frequencies
         harmonic_ratio = if !isempty(harmonic2_band)
             harmonic2_power = mean(psd[harmonic2_band, i])
-            harmonic2_power / (line_power + eps())
+            harmonic2_flanking = !isempty(harmonic2_flank_band) ? mean(psd[harmonic2_flank_band, i]) : flanking_power
+            harmonic2_power / (harmonic2_flanking + eps())
         else
             NaN  # 2nd harmonic frequency above Nyquist
         end
@@ -1708,7 +1731,7 @@ function identify_line_noise_components(
             (
                 Component = i,
                 line_power = line_power,
-                surrounding_power = surrounding_power,
+                flanking_power = flanking_power,
                 power_ratio = power_ratio,
                 harmonic_ratio = harmonic_ratio,
             ),

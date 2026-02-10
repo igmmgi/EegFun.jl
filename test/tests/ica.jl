@@ -179,7 +179,7 @@ using LinearAlgebra
         @test ln_df isa DataFrame
         @test all(
             c in propertynames(ln_df) for
-            c in [:Component, :line_power, :surrounding_power, :power_ratio, :harmonic_ratio, :power_ratio_zscore]
+            c in [:Component, :line_power, :flanking_power, :power_ratio, :harmonic_ratio, :power_ratio_zscore]
         )
         # No samples selected -> empty results
         ln_vec0, ln_df0 = EegFun.identify_line_noise_components(dat, ica_res; sample_selection = x -> falses(nrow(x)))

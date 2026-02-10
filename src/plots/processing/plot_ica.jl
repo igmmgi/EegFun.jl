@@ -1465,7 +1465,7 @@ const PLOT_ICA_QUALITY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Statistical thresholds
     :z_threshold => (3.0, "Z-score threshold for identifying components"),
-    :min_harmonic_power => (0.5, "Minimum harmonic power threshold for line noise detection"),
+    :min_harmonic_power => (1.5, "Minimum harmonic power threshold for line noise detection"),
     :max_ibi_std_s => (0.2, "Maximum inter-beat interval standard deviation for ECG detection"),
     :min_peak_ratio => (0.7, "Minimum peak ratio for ECG detection"),
 

@@ -15,7 +15,7 @@ using JLD2
 #######################################################################
 
 #######################################################################
-# STEP 1: LOAD RAW DATA
+# LOAD RAW DATA
 #######################################################################
 
 @info EegFun.section("Raw Data")
@@ -40,7 +40,7 @@ dat = EegFun.create_eegfun_data(raw_data, layout)
 
 
 #######################################################################
-# STEP 2: MARK EPOCH WINDOWS
+# MARK EPOCH WINDOWS
 #######################################################################
 
 @info EegFun.section("Marking epoch windows")
@@ -59,7 +59,7 @@ EegFun.mark_epoch_windows!(dat, epoch_cfg, [-0.2, 1.5]) # -200 to 1.5 seconds
 
 
 #######################################################################
-# STEP 3: REREFERENCE
+# REREFERENCE
 #######################################################################
 
 @info EegFun.section("Rereference")
@@ -69,7 +69,7 @@ EegFun.rereference!(dat, :avg)
 
 
 #######################################################################
-# STEP 4: INITIAL FILTERS
+# INITIAL FILTERS
 #######################################################################
 
 @info EegFun.section("Initial Filters")
@@ -78,7 +78,7 @@ EegFun.rereference!(dat, :avg)
 EegFun.highpass_filter!(dat, 0.1) # NB a 1Hz filter is applied to the data for ICA later
 
 #######################################################################
-# STEP 5: EOG CALCULATION AND DETECTION
+# EOG CALCULATION AND DETECTION
 #######################################################################
 
 @info EegFun.section("EOG")
@@ -127,7 +127,7 @@ hEOG_vEOG_cm_epoch = EegFun.correlation_matrix_eog(dat, eog_cfg, sample_selectio
 # This is used later to identify channels with high EOG correlation
 
 #######################################################################
-# STEP 6: INITIAL EPOCH EXTRACTION (FOR COMPARISON)
+# INITIAL EPOCH EXTRACTION (FOR COMPARISON)
 #######################################################################
 
 @info EegFun.section("Initial Epoch Extraction")
@@ -152,7 +152,7 @@ erps_original = EegFun.average_epochs(epochs_original)
 #######################################################################
 
 #######################################################################
-# STEP 7: CHANNEL SUMMARY AND BAD CHANNEL DETECTION
+# CHANNEL SUMMARY AND BAD CHANNEL DETECTION
 #######################################################################
 
 @info EegFun.section("Artifact Detection: Continuous Data")
@@ -166,7 +166,7 @@ summary_epoch_window = EegFun.channel_summary(dat, sample_selection = EegFun.sam
 
 
 #######################################################################
-# STEP 8: EXTREME VALUE DETECTION
+# EXTREME VALUE DETECTION
 #######################################################################
 
 @info EegFun.subsection("Artifact Detection (extreme values)")
@@ -182,7 +182,7 @@ EegFun.is_extreme_value!(dat, 75.0, channel_out = :is_artifact_value_75)
 
 
 #######################################################################
-# STEP 9: CHANNEL JOINT PROBABILITY
+# CHANNEL JOINT PROBABILITY
 #######################################################################
 
 @info EegFun.subsection("Bad Channel Detection using Channel Joint Probability + Z-Score Variance")
@@ -222,7 +222,7 @@ end
 
 
 #######################################################################
-# STEP 10: ICA (OPTIONAL)
+# ICA
 #######################################################################
 
 @info EegFun.section("ICA")
@@ -258,26 +258,26 @@ component_artifacts, component_metrics = EegFun.identify_components(
     sample_selection = EegFun.samples_not(:is_extreme_value_250),
 )
 
+# plot examples to visually inspect automatic component selections
 EegFun.plot_topography(ica_result, component_selection = EegFun.components(component_artifacts.eog[:vEOG]))
 EegFun.plot_topography(ica_result, component_selection = EegFun.components(component_artifacts.eog[:hEOG]))
 EegFun.plot_topography(ica_result, component_selection = EegFun.components([1, 2, 3, 4]))
-
 EegFun.plot_topography(ica_result, component_selection = EegFun.components(component_artifacts.line_noise))
-EegFun.plot_ica_component_spectrum(dat_ica, ica_result, component_selection = EegFun.components(component_artifacts.line_noise))
-
+EegFun.plot_ica_component_spectrum(
+    dat,
+    ica_result,
+    component_selection = EegFun.components(component_artifacts.line_noise),
+    sample_selection = EegFun.samples_not(:is_extreme_value_250),
+)
 EegFun.plot_topography(ica_result, component_selection = EegFun.components(component_artifacts.channel_noise))
 EegFun.plot_ica_component_spectrum(dat_ica, ica_result, component_selection = EegFun.components(component_artifacts.channel_noise))
-
 EegFun.plot_ica_component_activation(dat_ica, ica_result, component_selection = EegFun.components([1, 2, 3, 4]))
-
-EegFun.plot_ica_component_activation(dat_ica, ica_result)
+EegFun.plot_ica_component_activation(dat, ica_result)
 EegFun.plot_ica_component_activation(dat, ica_result, artifacts = component_artifacts)
 
-
-
 # Optional: view component metrics
-# println(component_metrics[:eog_metrics])
-# println(component_metrics[:line_noise_metrics])
+component_metrics[:eog_metrics]
+component_metrics[:line_noise_metrics]
 
 # Remove artifact components
 @info EegFun.subsection("Removing ICA components")
@@ -290,23 +290,23 @@ EegFun.remove_ica_components!(dat, ica_result, component_selection = EegFun.comp
 
 
 #######################################################################
-# STEP 11: REPAIR BAD CHANNELS (CONTINUOUS LEVEL)
+# REPAIR BAD CHANNELS (CONTINUOUS LEVEL)
 #######################################################################
 
 if !isnothing(continuous_repair_info)
     @info EegFun.section("Channel Repair")
     EegFun.repair_channels!(dat, continuous_repair_info; method = :neighbor_interpolation)
+    # EegFun.repair_channels!(dat, continuous_repair_info; method = :spline_interpolation)
     @info continuous_repair_info
 end
 
 
 #######################################################################
-# STEP 12: RECALCULATE EOG AFTER ICA AND REPAIR
+# RECALCULATE EOG AFTER ICA AND REPAIR
 #######################################################################
 
 @info EegFun.section("EOG Recalculation")
 @info EegFun.subsection("Recalculating EOG (vEOG/hEOG) channels after ICA and repair")
-
 # EOG channels must be recalculated because underlying data changed
 EegFun.channel_difference!(
     dat,
@@ -323,7 +323,7 @@ EegFun.channel_difference!(
 
 
 #######################################################################
-# STEP 13: FINAL ARTIFACT DETECTION FOR EPOCHING
+# FINAL ARTIFACT DETECTION FOR EPOCHING
 #######################################################################
 
 @info EegFun.section("Detecting artifact values in continuous data")
@@ -345,31 +345,28 @@ EegFun.is_extreme_value!(dat, 75.0, channel_out = :is_artifact_value_75_final)
 #######################################################################
 
 #######################################################################
-# STEP 14: EXTRACT EPOCHS (CLEANED)
+# EXTRACT EPOCHS (CLEANED)
 #######################################################################
 
 @info EegFun.section("Extracting cleaned epoched data")
-
 # Extract epochs from fully cleaned continuous data
 epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.2, 1.0))
 
 
 #######################################################################
-# STEP 15: BASELINE WHOLE EPOCHS
+# BASELINE WHOLE EPOCHS
 #######################################################################
 
 @info EegFun.section("Baseline whole epochs")
-
 # Apply baseline correction (using entire epoch by default)
 EegFun.baseline!(epochs)
 
 
 #######################################################################
-# STEP 16: DETECT BAD EPOCHS (STEP 1)
+# DETECT BAD EPOCHS (ROUND 1)
 #######################################################################
 
 @info EegFun.section("Automatic epoch detection")
-
 # First round of bad epoch detection
 rejection_info_step1 = EegFun.detect_bad_epochs_automatic(
     epochs;
@@ -377,18 +374,16 @@ rejection_info_step1 = EegFun.detect_bad_epochs_automatic(
     abs_criterion = 75.0, # Absolute voltage threshold
     name = "rejection_step1",
 )
-
 # Identify which channels in bad epochs are repairable
 EegFun.channel_repairable!(rejection_info_step1, epochs[1].layout)
 @info rejection_info_step1
 
 
 #######################################################################
-# STEP 17: CHANNEL REPAIR PER EPOCH
+# CHANNEL REPAIR PER EPOCH
 #######################################################################
 
 @info EegFun.section("Channel Repair per Epoch")
-
 # Repair bad channels within individual epochs
 # This rescues trials with isolated bad channels
 EegFun.repair_artifacts!(epochs, rejection_info_step1)
@@ -398,11 +393,10 @@ EegFun.repair_artifacts!(epochs, rejection_info_step1)
 
 
 #######################################################################
-# STEP 18: RE-DETECT ARTIFACTS AFTER REPAIR (STEP 2)
+# RE-DETECT ARTIFACTS AFTER REPAIR (ROUND 2)
 #######################################################################
 
 @info EegFun.subsection("Re-detecting artifacts after repair")
-
 # Second round of detection to check repair effectiveness
 rejection_info_step2 = EegFun.detect_bad_epochs_automatic(epochs; z_criterion = 0.0, abs_criterion = 75.0, name = "rejection_step2")
 EegFun.channel_repairable!(rejection_info_step2, epochs[1].layout)
@@ -413,7 +407,7 @@ EegFun.channel_repairable!(rejection_info_step2, epochs[1].layout)
 
 
 #######################################################################
-# STEP 19: OPTIONAL - SAVE ARTIFACT INFO
+# SAVE ARTIFACT INFO
 #######################################################################
 
 # Collect all artifact information
@@ -426,39 +420,32 @@ artifact_info = EegFun.ArtifactInfo(
 
 
 #######################################################################
-# STEP 20: LOG EPOCH COUNTS
+# LOG EPOCH COUNTS
 #######################################################################
 
 # Compare original vs. final epoch counts
 epoch_count_comparison =
     EegFun.log_epochs_table(epochs_original, epochs, title = "Epoch counts per condition (after repair and rejection):")
-println(epoch_count_comparison)
 
 
 #######################################################################
-# STEP 21: REJECT BAD EPOCHS
+# REJECT BAD EPOCHS
 #######################################################################
 
 @info EegFun.subsection("Rejecting bad epochs")
-
 # Remove remaining bad epochs
 epochs_good = EegFun.reject_epochs(epochs, rejection_info_step2)
 
-# Check final counts
-for condition in epochs_good
-    @info "Condition: $(condition.condition_name), Good epochs: $(length(condition.epoch_data))"
-end
-
 
 #######################################################################
-# STEP 22: SAVE GOOD EPOCH DATA
+# SAVE GOOD EPOCH DATA
 #######################################################################
 
 jldsave("epochs_good.jld2"; data = epochs_good)
 
 
 #######################################################################
-# STEP 23: AVERAGE TO ERPs
+# AVERAGE TO ERPs
 #######################################################################
 
 erps_good = EegFun.average_epochs(epochs_good)
@@ -466,7 +453,7 @@ jldsave("erps_good.jld2"; data = erps_good)
 
 
 #######################################################################
-# STEP 24: VISUALIZE COMPARISON
+# VISUALIZE COMPARISON
 #######################################################################
 
 @info EegFun.section("End of Processing")
@@ -480,37 +467,37 @@ EegFun.plot_erp(erps_good, channel_selection = EegFun.channels([:Cz, :Pz]))
 # SUMMARY
 #######################################################################
 
-# This workflow demonstrated the exact processing steps from pipeline_v1:
+# This workflow demonstrates the processing steps from pipeline_v1:
 #
 # PHASE 1: BASIC SETUP AND INITIAL PREPROCESSING
-#   1. Load raw data and configure layout
-#   2. Mark epoch windows
-#   3. Rereference (before filtering!)
-#   4. Apply initial filters (0.1 Hz high, 30 Hz low)
-#   5. Calculate EOG and detect onsets
-#   6. Extract "original" epochs for comparison
+#   - Load raw data and configure layout
+#   - Mark epoch windows
+#   - Rereference (before filtering!)
+#   - Apply initial filters (0.1 Hz high, 30 Hz low)
+#   - Calculate EOG and detect onsets
+#   - Extract "original" epochs for comparison
 #
 # PHASE 2: ARTIFACT DETECTION AND CLEANING (CONTINUOUS LEVEL)
-#   7. Channel summary statistics
-#   8. Extreme value detection (two thresholds: 100 μV and 75 μV)
-#   9. Channel joint probability and bad channel identification
-#  10. Run ICA (1 Hz high-pass, exclude bad channels and extreme values)
-#  11. Repair bad channels (continuous level)
-#  12. Recalculate EOG after ICA and repair
-#  13. Final artifact detection
+#   - Channel summary statistics
+#   - Extreme value detection (two thresholds: 250 μV and 75 μV)
+#   - Channel joint probability and bad channel identification
+#   - Run ICA (1 Hz high-pass, exclude bad channels and extreme values)
+#   - Repair bad channels (continuous level)
+#   - Recalculate EOG after ICA and repair
+#   - Final artifact detection
 #
 # PHASE 3: EPOCH EXTRACTION AND EPOCH-LEVEL PROCESSING
-#  14. Extract epochs from cleaned continuous data
-#  15. Baseline correction
-#  16. Detect bad epochs (step 1)
-#  17. Repair channels per epoch
-#  18. Re-detect bad epochs (step 2)
-#  19. Save artifact info
-#  20. Log epoch count comparison
-#  21. Reject remaining bad epochs
-#  22. Save good epochs
-#  23. Average to ERPs
-#  24. Visualize comparison
+#   - Extract epochs from cleaned continuous data
+#   - Baseline correction
+#   - Detect bad epochs (round 1)
+#   - Repair channels per epoch
+#   - Re-detect bad epochs (round 2)
+#   - Save artifact info
+#   - Log epoch count comparison
+#   - Reject remaining bad epochs
+#   - Save good epochs
+#   - Average to ERPs
+#   - Visualize comparison
 #
 # For automated batch processing of multiple participants,
 # see the preprocess_v1() function and the batch-processing tutorial.
