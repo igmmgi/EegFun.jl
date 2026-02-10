@@ -56,27 +56,27 @@ using DataFrames
     end
 
     @testset "Time and index utilities" begin
-        # Test find_idx_range
+        # Test _find_idx_range
         time = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
 
         # Test with start and end times
-        range1 = EegFun.find_idx_range(time, 0.2, 0.8)
+        range1 = EegFun._find_idx_range(time, 0.2, 0.8)
         @test range1 == 3:9  # searchsortedlast includes the last matching element
 
         # Test with vector limits
-        range2 = EegFun.find_idx_range(time, [0.1, 0.9])
+        range2 = EegFun._find_idx_range(time, [0.1, 0.9])
         @test range2 == 2:10
 
         # Test edge cases
-        range3 = EegFun.find_idx_range(time, 0.0, 1.0)
+        range3 = EegFun._find_idx_range(time, 0.0, 1.0)
         @test range3 == 1:11
 
-        # Test find_idx_start_end
-        start_idx, end_idx = EegFun.find_idx_start_end(time, 0.2, 0.8)
+        # Test _find_idx_start_end
+        start_idx, end_idx = EegFun._find_idx_start_end(time, 0.2, 0.8)
         @test start_idx == 3
         @test end_idx == 9  # searchsortedlast includes the last matching element
 
-        start_idx, end_idx = EegFun.find_idx_start_end(time, [0.1, 0.9])
+        start_idx, end_idx = EegFun._find_idx_start_end(time, [0.1, 0.9])
         @test start_idx == 2
         @test end_idx == 10
     end

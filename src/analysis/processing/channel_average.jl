@@ -96,7 +96,7 @@ function channel_average!(
 
     # Internal helpers (single DataFrame vs vector of DataFrames)
     function _add_avg!(df::DataFrame, cols::Vector{Symbol}, outlbl::Symbol)
-        df[!, outlbl] = colmeans(df, cols)
+        df[!, outlbl] = _colmeans(df, cols)
         return nothing
     end
 
@@ -317,7 +317,7 @@ function _build_reduced_df(dat::SingleDataFrameEeg, channel_groups::Vector{Vecto
     meta_cols = meta_labels(dat)
     new_df = isempty(meta_cols) ? DataFrame() : dat.data[:, meta_cols]
     for (grp, lbl) in zip(channel_groups, labels)
-        new_df[!, lbl] = colmeans(dat.data, grp)
+        new_df[!, lbl] = _colmeans(dat.data, grp)
     end
     return new_df
 end
@@ -328,7 +328,7 @@ function _build_reduced_df(dat::MultiDataFrameEeg, channel_groups::Vector{Vector
     for (i, df) in pairs(dat.data)
         new_df = isempty(meta_cols) ? DataFrame() : df[:, meta_cols]
         for (grp, lbl) in zip(channel_groups, labels)
-            new_df[!, lbl] = colmeans(df, grp)
+            new_df[!, lbl] = _colmeans(df, grp)
         end
         new_epochs[i] = new_df
     end

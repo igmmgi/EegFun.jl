@@ -264,7 +264,7 @@ using EegFun
     @test_throws ErrorException EegFun.baseline!(dat11, (0.0, 100.0))
 
     # Test error handling - invalid tuple (completely outside time range)
-    # When tuple is outside range, find_idx_start_end returns nothing
+    # When tuple is outside range, _find_idx_start_end returns nothing
     dat12 = EegFun.create_test_continuous_data(n = 10, fs = 1000)
     @test_throws ErrorException EegFun.baseline!(dat12, (100.0, 200.0))
 

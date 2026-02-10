@@ -1709,7 +1709,7 @@ Plot metrics used for ECG component identification.
 # Returns
 - `fig::Figure`: The Makie Figure containing the ECG metrics plots.
 """
-function plot_ecg_component_features_(
+function plot_ecg_component_features(
     identified_comps::Vector{Int},
     metrics_df::DataFrame;
     min_bpm::Real = 40,

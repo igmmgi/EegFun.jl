@@ -124,8 +124,8 @@ end
 
 
 """
-    find_idx_range(time::AbstractVector, start_time::Real, end_time::Real) -> UnitRange{Int}
-    find_idx_range(time::AbstractVector, limits::AbstractVector) -> UnitRange{Int}
+    _find_idx_range(time::AbstractVector, start_time::Real, end_time::Real) -> UnitRange{Int}
+    _find_idx_range(time::AbstractVector, limits::AbstractVector) -> UnitRange{Int}
 
 Find index range corresponding to time interval.
 Assumes time vector is sorted in ascending order.
@@ -133,14 +133,14 @@ Assumes time vector is sorted in ascending order.
 # Returns
 - `UnitRange{Int}`: Range of indices
 """
-find_idx_range(time::AbstractVector, start_time::Real, end_time::Real) =
+_find_idx_range(time::AbstractVector, start_time::Real, end_time::Real) =
     searchsortedfirst(time, start_time):searchsortedlast(time, end_time)
-find_idx_range(time::AbstractVector, limits::AbstractVector) = find_idx_range(time, limits[1], limits[end])
+_find_idx_range(time::AbstractVector, limits::AbstractVector) = _find_idx_range(time, limits[1], limits[end])
 
 
 """
-    find_idx_start_end(time::AbstractVector, start_time::Real, end_time::Real) -> Tuple{Int,Int}
-    find_idx_start_end(time::AbstractVector, limits::AbstractVector) -> Tuple{Int,Int}
+    _find_idx_start_end(time::AbstractVector, start_time::Real, end_time::Real) -> Tuple{Int,Int}
+    _find_idx_start_end(time::AbstractVector, limits::AbstractVector) -> Tuple{Int,Int}
 
 Find start and end indices corresponding to time interval.
 Assumes time vector is sorted in ascending order.
@@ -148,9 +148,9 @@ Assumes time vector is sorted in ascending order.
 # Returns
 - `Tuple{Int,Int}`: Start and end indices
 """
-find_idx_start_end(time::AbstractVector, start_time::Real, end_time::Real) =
+_find_idx_start_end(time::AbstractVector, start_time::Real, end_time::Real) =
     searchsortedfirst(time, start_time), searchsortedlast(time, end_time)
-find_idx_start_end(time::AbstractVector, limits::AbstractVector) = searchsortedfirst(time, limits[1]), searchsortedlast(time, limits[end])
+_find_idx_start_end(time::AbstractVector, limits::AbstractVector) = searchsortedfirst(time, limits[1]), searchsortedlast(time, limits[end])
 
 
 """
@@ -277,7 +277,7 @@ end
 
 
 """
-    natural_sort_key(s::String) -> String
+    _natural_sort_key(s::String) -> String
 
 Generate a sort key for natural/numeric sorting of strings.
 Pads numeric parts with zeros so that "file_3" sorts before "file_12".
@@ -292,13 +292,13 @@ Pads numeric parts with zeros so that "file_3" sorts before "file_12".
 ```julia
 # Use with sort
 files = ["file_10.jld2", "file_2.jld2", "file_1.jld2"]
-sort(files, by=natural_sort_key)  # Returns: ["file_1.jld2", "file_2.jld2", "file_10.jld2"]
+sort(files, by=_natural_sort_key)  # Returns: ["file_1.jld2", "file_2.jld2", "file_10.jld2"]
 
 # Use with DataFrame sort
-sort(df, :file, by=natural_sort_key)
+sort(df, :file, by=_natural_sort_key)
 ```
 """
-natural_sort_key(s::String)::String = replace(s, r"\d+" => m -> lpad(String(m), 10, '0'))
+_natural_sort_key(s::String)::String = replace(s, r"\d+" => m -> lpad(String(m), 10, '0'))
 
 
 

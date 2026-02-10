@@ -236,7 +236,7 @@ function _validate_baseline_interval(time::AbstractVector, baseline_interval::In
     end
 
     # Convert time tuple to index tuple
-    result = find_idx_start_end(time, start_time, stop_time)
+    result = _find_idx_start_end(time, start_time, stop_time)
 
     # Check if interval was found
     if isnothing(result)

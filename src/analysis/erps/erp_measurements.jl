@@ -395,7 +395,7 @@ function _process_dataframe_measurements(
         end
 
         # Find time range
-        start_idx, stop_idx = find_idx_start_end(time_col, interval[1], interval[2])
+        start_idx, stop_idx = _find_idx_start_end(time_col, interval[1], interval[2])
         time_idx = start_idx:stop_idx
     end
 
@@ -550,7 +550,7 @@ function _apply_baseline_correction!(dfs::Vector{DataFrame}, baseline_interval::
         # Convert time tuple to index tuple using first dataframe's time column
         # (assume all dataframes have the same time points for epochs/ERPs)
         time_col = dfs isa Vector ? dfs[1].time : dfs.time
-        start_idx, stop_idx = find_idx_start_end(time_col, baseline_int[1], baseline_int[2])
+        start_idx, stop_idx = _find_idx_start_end(time_col, baseline_int[1], baseline_int[2])
         baseline_idx = (start_idx, stop_idx)
 
         # Try to apply baseline - don't fail measurements if baseline fails

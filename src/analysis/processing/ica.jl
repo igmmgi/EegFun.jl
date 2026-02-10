@@ -71,7 +71,7 @@ function run_ica(
     ica_layout = subset_layout(dat_ica.layout, channel_selection = channels(selected_channels))
 
     # Create data matrix and run ICA
-    dat_for_ica = create_ica_data_matrix(dat_ica.data, selected_channels, sample_indices)
+    dat_for_ica = _create_ica_data_matrix(dat_ica.data, selected_channels, sample_indices)
 
     # Suubset data if requested
     if percentage_of_data !== 100
@@ -172,7 +172,7 @@ function run_ica(
     isempty(sample_indices) && error("No samples available after applying sample filter to epoched data")
 
     # Create data matrix for ICA
-    concatenated_matrix = create_ica_data_matrix(concatenated_df, selected_channels, sample_indices)
+    concatenated_matrix = _create_ica_data_matrix(concatenated_df, selected_channels, sample_indices)
     if percentage_of_data !== 100
         concatenated_matrix = _select_subsample!(concatenated_matrix, percentage_of_data)
     end
@@ -279,7 +279,7 @@ function IcaPrms(;
     IcaPrms(l_rate, max_iter, w_change, anneal_deg, anneal_step, blowup, blowup_fac, max_weight, restart_factor, degconst, default_stop)
 end
 
-function create_ica_data_matrix(dat::DataFrame, channels, samples)
+function _create_ica_data_matrix(dat::DataFrame, channels, samples)
     # Filter to only existing channels (matching original behavior)
     existing_channels = intersect(propertynames(dat), channels)
     n_channels = length(existing_channels)

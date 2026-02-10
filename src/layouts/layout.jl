@@ -354,12 +354,12 @@ Calculates the Euclidean distance between two points in 2D space.
 # Returns
 - `Float64`: The distance between the two points.
 """
-@inline function distance_xy(x1::Real, y1::Real, x2::Real, y2::Real)::Float64
+@inline function _distance_xy(x1::Real, y1::Real, x2::Real, y2::Real)::Float64
     return sqrt((x1 - x2)^2 + (y1 - y2)^2)
 end
 
 """
-    squared_distance_xy(x1, y1, x2, y2)
+    _squared_distance_xy(x1, y1, x2, y2)
 
 Calculates the squared distance between two points in 2D space.
 
@@ -369,7 +369,7 @@ Calculates the squared distance between two points in 2D space.
 # Returns
 - `Float64`: The squared distance between the two points.
 """
-@inline function squared_distance_xy(x1, y1, x2, y2)
+@inline function _squared_distance_xy(x1, y1, x2, y2)
     return (x1 - x2)^2 + (y1 - y2)^2
 end
 
@@ -384,12 +384,12 @@ Calculates the Euclidean distance between two points in 3D space.
 # Returns
 - `Float64`: The distance between the two points.
 """
-@inline function distance_xyz(x1::Real, y1::Real, z1::Real, x2::Real, y2::Real, z2::Real)::Float64
+@inline function _distance_xyz(x1::Real, y1::Real, z1::Real, x2::Real, y2::Real, z2::Real)::Float64
     return sqrt((x1 - x2)^2 + (y1 - y2)^2 + (z1 - z2)^2)
 end
 
 """
-    squared_distance_xyz(x1, y1, z1, x2, y2, z2)
+    _squared_distance_xyz(x1, y1, z1, x2, y2, z2)
 
 Calculates the squared distance between two points in 3D space.
 
@@ -399,7 +399,7 @@ Calculates the squared distance between two points in 3D space.
 # Returns
 - `Float64`: The squared distance between the two points.
 """
-@inline function squared_distance_xyz(x1, y1, z1, x2, y2, z2)
+@inline function _squared_distance_xyz(x1, y1, z1, x2, y2, z2)
     return (x1 - x2)^2 + (y1 - y2)^2 + (z1 - z2)^2
 end
 

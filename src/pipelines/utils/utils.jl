@@ -457,8 +457,8 @@ function _merge_summaries(new_epoch_summary::DataFrame, new_file_summary::DataFr
     end
 
     # Sort by filename using natural sorting (file_1, file_2, ..., file_10)
-    merged_epoch = sort(merged_epoch, :file, by = natural_sort_key)
-    merged_file = sort(merged_file, :file, by = natural_sort_key)
+    merged_epoch = sort(merged_epoch, :file, by = _natural_sort_key)
+    merged_file = sort(merged_file, :file, by = _natural_sort_key)
 
     return merged_epoch, merged_file
 end
@@ -805,7 +805,7 @@ function summarize_ica_components(file_pattern::String; input_dir::String = pwd(
     end
 
     # Sort by filename using natural sorting (handles numeric parts correctly: Flank_C_3 before Flank_C_12)
-    sort!(per_file_df, :file, by = natural_sort_key)
+    sort!(per_file_df, :file, by = _natural_sort_key)
 
     return per_file_df, avg_df
 end
