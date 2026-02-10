@@ -194,7 +194,7 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
     fig = Figure()
 
     # Deal with plot dimensions
-    isnothing(dims) && (dims = best_rect(length(comps)))
+    isnothing(dims) && (dims = _best_rect(length(comps)))
 
     # Validate dimensions
     if length(dims) != 2 || any(dims .<= 0)
@@ -286,10 +286,10 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
     end
 
     if display_plot
-        display_figure(fig)
+        _display_figure(fig)
     end
 
-    set_window_title("Makie")
+    _set_window_title("Makie")
     return fig
 
 end
@@ -350,7 +350,7 @@ mutable struct IcaComponentState
         kwargs...,
     )
         # Prepare data matrix
-        dat_matrix = prepare_ica_data_matrix(dat, ica)
+        dat_matrix = _prepare_ica_data_matrix(dat, ica)
         component_data = ica.unmixing * dat_matrix
         total_components = size(component_data, 1)
 
@@ -458,7 +458,7 @@ end
 function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; artifacts::Union{Nothing,ArtifactComponents} = nothing, kwargs...)
     # Generate window title from dataset
     title_str = _generate_window_title(dat)
-    set_window_title(title_str)
+    _set_window_title(title_str)
 
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
@@ -473,10 +473,9 @@ function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; artifa
     # Get selected components to determine layout
     component_mask = component_selection(1:length(ica.ica_label))
     selected_components = findall(component_mask)
-    n_components = length(selected_components)
 
     # Adapt n_visible_components to number of selected components (max 10 for scrollable view)
-    n_visible_components = min(n_components, 10)
+    n_visible_components = min(length(selected_components), 10)
 
     window_size = min(2000, n_samples(dat))
     method = pop!(plot_kwargs, :method)
@@ -508,8 +507,7 @@ function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; artifa
 
     # Add artifact category checkboxes if artifacts provided
     if !isnothing(artifacts)
-        _setup_artifact_ui!(state, artifacts)
-        _add_artifact_category_checkboxes!(fig, state)
+        _add_artifact_category_checkboxes!(fig, state, artifacts)
     end
 
     _setup_keyboard_interactions!(fig, state)
@@ -519,16 +517,16 @@ function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; artifa
     rowgap!(fig.layout, state.n_visible_components, 80)  # Increased gap to prevent overlap
 
     if display_plot
-        display_figure(fig)
+        _display_figure(fig)
     end
-    set_window_title("Makie")
+    _set_window_title("Makie")
     return fig
 end
 
 
 
 """
-    prepare_ica_data_matrix(dat::ContinuousData, ica::InfoIca)
+    _prepare_ica_data_matrix(dat::ContinuousData, ica::InfoIca)
 
 Selects, centers, scales, and transposes data for ICA unmixing.
 
@@ -539,7 +537,7 @@ Selects, centers, scales, and transposes data for ICA unmixing.
 # Returns
 - `Matrix{Float64}`: Data matrix ready for `ica.unmixing * dat_matrix`. (channels x samples)
 """
-function prepare_ica_data_matrix(dat::ContinuousData, ica::InfoIca)
+function _prepare_ica_data_matrix(dat::ContinuousData, ica::InfoIca)
     dat_matrix = permutedims(Matrix(dat.data[!, ica.layout.data.label]))
     dat_matrix .-= mean(dat_matrix, dims = 2)
     dat_matrix ./= ica.scale
@@ -1137,67 +1135,42 @@ end
 
 
 """
-    _setup_artifact_ui!(state, artifacts)
-
-Initialize artifact UI state - sets up artifact data and toggle observables.
-"""
-function _setup_artifact_ui!(state, artifacts)
-    state.artifacts = artifacts
-    # Default all checkboxes to unchecked
-    state.artifact_toggles = Dict{Symbol,Observable{Bool}}(
-        :vEOG => Observable(false),
-        :hEOG => Observable(false),
-        :ecg => Observable(false),
-        :line_noise => Observable(false),
-        :channel_noise => Observable(false),
-    )
-    return nothing
-end
-
-
-"""
-    _add_artifact_category_checkboxes!(fig, state)
+    _add_artifact_category_checkboxes!(fig, state, artifacts)
 
 Add checkboxes to filter components by artifact category.
+Sets up artifact state and creates UI checkboxes in the navigation panel.
 """
-function _add_artifact_category_checkboxes!(fig, state)
-    isnothing(state.artifacts) && return  # No artifacts, skip
+function _add_artifact_category_checkboxes!(fig, state, artifacts)
+    # Store artifacts in state
+    state.artifacts = artifacts
+    state.artifact_toggles = Dict{Symbol,Observable{Bool}}()
 
-    artifacts = state.artifacts
-    toggles = state.artifact_toggles
-
-    # Access the topo_nav grid layout at fig[n_visible_components+1, 1]
-    # This is the same location where it was created in _add_navigation_controls!
-    # Get the content of the grid position to access the actual GridLayout
+    # Access the topo_nav GridLayout
     topo_nav = content(fig[state.n_visible_components+1, 1])
 
-    start_row = 5  # Start after row 4 (Invert Scale)
-
-    # Add checkboxes for each category
-    for (idx, (key, label, comps)) in enumerate([
+    categories = [
         (:vEOG, "vEOG", artifacts.eog[:vEOG]),
         (:hEOG, "hEOG", artifacts.eog[:hEOG]),
         (:ecg, "ECG", artifacts.ecg),
         (:line_noise, "Line Noise", artifacts.line_noise),
         (:channel_noise, "Channel Noise", artifacts.channel_noise),
-    ])
-        row = start_row + idx - 1
+    ]
 
-        # Format component numbers as comma-separated list
+    start_row = 5  # Start after row 4 (Invert Scale)
+
+    for (idx, (key, label, comps)) in enumerate(categories)
+        row = start_row + idx - 1
         comp_str = isempty(comps) ? "none" : join(string.(comps), ", ")
 
-        # Create checkbox and label (same pattern as Global Scale)
-        checkbox = Checkbox(topo_nav[row, 2], checked = toggles[key][], tellheight = false)
+        # Create toggle observable and checkbox
+        state.artifact_toggles[key] = Observable(false)
+        checkbox = Checkbox(topo_nav[row, 2], checked = false, tellheight = false)
         Label(topo_nav[row, 3], "$label ($comp_str)", tellwidth = false, tellheight = false)
 
-        # Connect checkbox to toggle observable bidirectionally
+        # Wire checkbox -> toggle -> textbox update
         on(checkbox.checked) do checked
-            toggles[key][] = checked
-        end
-
-        # Update components when toggle changes
-        on(toggles[key]) do _
-            _update_visible_components!(state)
+            state.artifact_toggles[key][] = checked
+            _update_artifact_textbox!(state)
         end
     end
 
@@ -1209,33 +1182,25 @@ end
 
 
 """
-    _update_visible_components!(state)
+    _update_artifact_textbox!(state)
 
-Update component textbox based on artifact toggle states.
-Populates the textbox with component numbers - user clicks Apply to update view.
+Populate component textbox with component numbers from active artifact toggles.
 """
-function _update_visible_components!(state)
-    isnothing(state.artifacts) && return
+function _update_artifact_textbox!(state)
     isnothing(state.component_textbox) && return
 
-    artifacts = state.artifacts
-    toggles = state.artifact_toggles
-
-    # Collect enabled components
     comps = Int[]
-    toggles[:vEOG][] && append!(comps, artifacts.eog[:vEOG])
-    toggles[:hEOG][] && append!(comps, artifacts.eog[:hEOG])
-    toggles[:ecg][] && append!(comps, artifacts.ecg)
-    toggles[:line_noise][] && append!(comps, artifacts.line_noise)
-    toggles[:channel_noise][] && append!(comps, artifacts.channel_noise)
+    for (key, source) in [
+        (:vEOG, state.artifacts.eog[:vEOG]),
+        (:hEOG, state.artifacts.eog[:hEOG]),
+        (:ecg, state.artifacts.ecg),
+        (:line_noise, state.artifacts.line_noise),
+        (:channel_noise, state.artifacts.channel_noise),
+    ]
+        state.artifact_toggles[key][] && append!(comps, source)
+    end
 
-    # Sort and format as comma-separated string
-    sorted_comps = sort(unique(comps))
-    comp_string = join(string.(sorted_comps), ",")
-
-    # Update textbox
-    state.component_textbox.displayed_string[] = comp_string
-
+    state.component_textbox.displayed_string[] = join(string.(sort(unique(comps))), ",")
     return nothing
 end
 
@@ -1613,7 +1578,7 @@ function plot_eog_component_features(identified_comps::Dict, metrics_df::DataFra
     end
 
     if display_plot
-        display_figure(fig)
+        _display_figure(fig)
     end
 
     return fig, (ax_v, ax_h)
@@ -1722,7 +1687,7 @@ function plot_spatial_kurtosis_components(kurtosis_comps::Vector{Int}, metrics_d
     hlines!(ax, [0.0], color = :gray, linestyle = :dot)
 
     if display_plot
-        display_figure(fig)
+        _display_figure(fig)
     end
 
     return fig, ax
@@ -1834,7 +1799,7 @@ function plot_ecg_component_features_(
     hlines!(ax2, [max_ibi_std_s], color = (:black, 0.5), linestyle = :dash)
 
     if display_plot
-        display_figure(fig)
+        _display_figure(fig)
     end
 
     return fig, (ax1, ax2)
@@ -1951,7 +1916,7 @@ function plot_line_noise_components(
     axislegend(ax2, position = (1.0, 1.0))
 
     if display_plot
-        display_figure(fig)
+        _display_figure(fig)
     end
 
     return fig, (ax1, ax2)
@@ -2121,7 +2086,7 @@ function plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df
     )
 
     if display_plot
-        display_figure(fig)
+        _display_figure(fig)
     end
 
     return fig
@@ -2255,7 +2220,7 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
 
     # Display plot if requested
     if display_plot
-        display_figure(fig)
+        _display_figure(fig)
     end
 
     return fig

@@ -155,7 +155,7 @@ function plot_joint_probability(dat::DataFrame; kwargs...)
     plot_joint_probability!(fig, ax, dat; kwargs...)
 
     if plot_kwargs[:display_plot]
-        display_figure(fig)
+        _display_figure(fig)
     end
 
     return fig, ax

@@ -122,7 +122,7 @@ function plot_erp_image(
 
     # Generate window title from dataset
     title_str = _generate_window_title(dat_subset)
-    set_window_title(title_str)
+    _set_window_title(title_str)
 
     # Get all available channels
     selected_channels = channel_labels(dat_subset)  # Gets EEG channels from layout
@@ -536,10 +536,10 @@ function plot_erp_image(
 
     # Display plot if requested
     if plot_kwargs[:display_plot]
-        display_figure(fig)
+        _display_figure(fig)
     end
 
-    set_window_title("Makie")
+    _set_window_title("Makie")
     return fig, axes
 end
 

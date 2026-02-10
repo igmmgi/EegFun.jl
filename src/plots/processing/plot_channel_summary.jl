@@ -5,7 +5,7 @@ const PLOT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :display_plot => (true, "Display plot."),
     :sort_values => (false, "Sort the bars by the values in the `col` column in descending order."),
     :average_over => (nothing, "Column to average over (e.g., :epoch). If specified, will compute mean ± 95% CI."),
-    :dims => (nothing, "Tuple (rows, cols) for grid layout. default = best_rect(n_columns)."),
+    :dims => (nothing, "Tuple (rows, cols) for grid layout. default = _best_rect(n_columns)."),
     :bar_color => (:steelblue, "Bar color."),
     :bar_width => (0.8, "Bar width."),
     :bar_alpha => (0.7, "Bar alpha."),
@@ -153,7 +153,7 @@ function plot_channel_summary(dat::DataFrame, col::Symbol; kwargs...)
     ax = Axis(fig[1, 1])
     plot_channel_summary!(fig, ax, dat, col; plot_kwargs...)
 
-    plot_kwargs[:display_plot] && display_figure(fig)
+    plot_kwargs[:display_plot] && _display_figure(fig)
     return fig, ax
 end
 
@@ -203,7 +203,7 @@ function plot_channel_summary(dat::DataFrame, col::Vector{Symbol}; kwargs...)
     plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
     fig = Figure()
     _plot_multiple_columns!(fig, dat, col, plot_kwargs)
-    plot_kwargs[:display_plot] && display_figure(fig)
+    plot_kwargs[:display_plot] && _display_figure(fig)
     return fig
 end
 
@@ -223,7 +223,7 @@ a bar chart of that metric across all channels.
 - `plot_kwargs::Dict`: Dictionary containing plotting parameters
 
 # Grid Layout
-- If `plot_kwargs[:dims]` is `nothing`, uses `best_rect()` to determine optimal grid dimensions
+- If `plot_kwargs[:dims]` is `nothing`, uses `_best_rect()` to determine optimal grid dimensions
 - If `plot_kwargs[:dims]` is provided, uses the specified (rows, cols) tuple
 - Plots are arranged in row-major order (left to right, top to bottom)
 - Stops plotting when all columns are processed, even if grid has empty spaces
@@ -232,7 +232,7 @@ function _plot_multiple_columns!(fig::Figure, dat::DataFrame, col::Vector{Symbol
     n_cols = length(col)
 
     if plot_kwargs[:dims] === nothing
-        rs, cs = best_rect(n_cols)
+        rs, cs = _best_rect(n_cols)
     else
         dims = plot_kwargs[:dims]
         if !isa(dims, Tuple) || length(dims) != 2 || !all(isa.(dims, Int)) || any(dims .<= 0)

@@ -14,7 +14,7 @@ struct UIStyle
 end
 
 # Helper functions to reduce code repetition
-function create_select_button(parent, label, style::UIStyle)
+function _create_select_button(parent, label, style::UIStyle)
     Button(
         parent,
         label = label,
@@ -27,7 +27,7 @@ function create_select_button(parent, label, style::UIStyle)
     )
 end
 
-function create_textbox(parent, style::UIStyle; width = nothing, placeholder = "")
+function _create_textbox(parent, style::UIStyle; width = nothing, placeholder = "")
     Textbox(
         parent,
         placeholder = placeholder,
@@ -40,7 +40,7 @@ function create_textbox(parent, style::UIStyle; width = nothing, placeholder = "
     )
 end
 
-function create_menu(parent, style::UIStyle; options = ["Select"], width = nothing, height = nothing)
+function _create_menu(parent, style::UIStyle; options = ["Select"], width = nothing, height = nothing)
     Menu(
         parent,
         options = options,
@@ -50,13 +50,13 @@ function create_menu(parent, style::UIStyle; options = ["Select"], width = nothi
     )
 end
 
-function create_label(parent, text, style::UIStyle; fontsize = nothing, color = :black)
+function _create_label(parent, text, style::UIStyle; fontsize = nothing, color = :black)
     fontsize_val = isnothing(fontsize) ? style.label_font : fontsize
     Label(parent, text, fontsize = fontsize_val, color = color)
 end
 
 """Truncate a path string to a maximum length, showing the end with '...' prefix."""
-function truncate_path(path::String, max_length::Int = 30)
+function _truncate_path(path::String, max_length::Int = 30)
     if length(path) <= max_length
         return path
     end
@@ -107,33 +107,33 @@ EegFun.plot_gui()
 function plot_gui()
 
     # main figure window, layout, and UI style
-    set_window_title("PLOT GUI")
+    _set_window_title("PLOT GUI")
     gui_fig = Figure(size = (650, 550), title = "Plot GUI", backgroundcolor = :lightgrey, figure_padding = (20, 20, 20, 20))
     main_layout = GridLayout(gui_fig[1, 1:3], rowgap = 2, colgap = 4)
     ui_style = UIStyle()
 
     # Select Directory Section
-    directory_select_button = create_select_button(main_layout[1, 1], "Select Directory", ui_style)
+    directory_select_button = _create_select_button(main_layout[1, 1], "Select Directory", ui_style)
     directory_label_text = Observable("Dir: ")
-    create_label(main_layout[2, 1], directory_label_text, ui_style, fontsize = ui_style.textbox_font, color = :gray)
+    _create_label(main_layout[2, 1], directory_label_text, ui_style, fontsize = ui_style.textbox_font, color = :gray)
 
 
     # Select File Section
-    file_select_button = create_select_button(main_layout[3, 1], "Select File", ui_style)
+    file_select_button = _create_select_button(main_layout[3, 1], "Select File", ui_style)
     file_label_text = Observable("File:")
-    create_label(main_layout[4, 1], file_label_text, ui_style, fontsize = ui_style.textbox_font, color = :gray)
+    _create_label(main_layout[4, 1], file_label_text, ui_style, fontsize = ui_style.textbox_font, color = :gray)
 
     # Layout Section
-    layout_select_button = create_select_button(main_layout[5, 1], "Select Layout", ui_style)
+    layout_select_button = _create_select_button(main_layout[5, 1], "Select Layout", ui_style)
     layout_label_text = Observable("File: ")
-    create_label(main_layout[6, 1], layout_label_text, ui_style, fontsize = ui_style.textbox_font, color = :gray)
+    _create_label(main_layout[6, 1], layout_label_text, ui_style, fontsize = ui_style.textbox_font, color = :gray)
 
     # File Filter Section
-    create_label(main_layout[7, 1], "File Filter", ui_style)
-    create_textbox(main_layout[8, 1], ui_style)
+    _create_label(main_layout[7, 1], "File Filter", ui_style)
+    _create_textbox(main_layout[8, 1], ui_style)
 
     # Plot Type Section
-    create_label(main_layout[9, 1], "Plot Type", ui_style)
+    _create_label(main_layout[9, 1], "Plot Type", ui_style)
     plottype_options = [
         "Select",
         "Data Browser",
@@ -147,68 +147,68 @@ function plot_gui()
         "ICA >",
         "Diagnostic Plots >",
     ]
-    plottype_dropdown = create_menu(main_layout[10, 1], ui_style, options = plottype_options)
+    plottype_dropdown = _create_menu(main_layout[10, 1], ui_style, options = plottype_options)
 
     # Submenu dropdown (starts with placeholder to appear inactive)
-    submenu_dropdown = create_menu(main_layout[11, 1], ui_style, options = ["---"])
+    submenu_dropdown = _create_menu(main_layout[11, 1], ui_style, options = ["---"])
 
     # Column 2: Participant, Condition, Epoch, Channels
     # Participant Section
-    create_label(main_layout[1, 2], "Participant", ui_style)
-    participant_input = create_textbox(main_layout[2, 2], ui_style)
+    _create_label(main_layout[1, 2], "Participant", ui_style)
+    participant_input = _create_textbox(main_layout[2, 2], ui_style)
 
     # Condition Section
-    create_label(main_layout[3, 2], "Condition", ui_style)
-    condition_input = create_textbox(main_layout[4, 2], ui_style)
+    _create_label(main_layout[3, 2], "Condition", ui_style)
+    condition_input = _create_textbox(main_layout[4, 2], ui_style)
 
     # Epoch Section
-    create_label(main_layout[5, 2], "Epoch", ui_style)
-    epoch_input = create_textbox(main_layout[6, 2], ui_style)
+    _create_label(main_layout[5, 2], "Epoch", ui_style)
+    epoch_input = _create_textbox(main_layout[6, 2], ui_style)
 
     # Layout Section (replaces Channel(s) and Average Channels)
-    create_label(main_layout[7, 2], "Layout", ui_style)
-    layout_dropdown = create_menu(main_layout[8, 2], ui_style, options = ["Single", "Single Avg", "Grid", "Topo"])
+    _create_label(main_layout[7, 2], "Layout", ui_style)
+    layout_dropdown = _create_menu(main_layout[8, 2], ui_style, options = ["Single", "Single Avg", "Grid", "Topo"])
 
     # Channel(s) Section (moved down)
-    create_label(main_layout[9, 2], "Channel(s)", ui_style)
-    channel_menu = create_menu(main_layout[10, 2], ui_style, options = ["Select"])
+    _create_label(main_layout[9, 2], "Channel(s)", ui_style)
+    channel_menu = _create_menu(main_layout[10, 2], ui_style, options = ["Select"])
 
     # Selected channels display
     selected_channels_text = Observable("Channels: ")
-    create_label(main_layout[11, 2], selected_channels_text, ui_style, fontsize = ui_style.textbox_font, color = :gray)
+    _create_label(main_layout[11, 2], selected_channels_text, ui_style, fontsize = ui_style.textbox_font, color = :gray)
 
     # Column 3: Axis Settings
     # X Limits Section
-    create_label(main_layout[1, 3], "X Limits", ui_style, fontsize = ui_style.textbox_font)
+    _create_label(main_layout[1, 3], "X Limits", ui_style, fontsize = ui_style.textbox_font)
     x_limits_layout = GridLayout(main_layout[2, 3], tellwidth = false, colgap = 8)
-    xmin_input = create_textbox(x_limits_layout[1, 1], ui_style, width = 80)
-    xmax_input = create_textbox(x_limits_layout[1, 2], ui_style, width = 80)
+    xmin_input = _create_textbox(x_limits_layout[1, 1], ui_style, width = 80)
+    xmax_input = _create_textbox(x_limits_layout[1, 2], ui_style, width = 80)
 
     # Y Limits Section
-    create_label(main_layout[3, 3], "Y Limits", ui_style, fontsize = ui_style.textbox_font)
+    _create_label(main_layout[3, 3], "Y Limits", ui_style, fontsize = ui_style.textbox_font)
     y_limits_layout = GridLayout(main_layout[4, 3], tellwidth = false, colgap = 8)
-    ymin_input = create_textbox(y_limits_layout[1, 1], ui_style, width = 80)
-    ymax_input = create_textbox(y_limits_layout[1, 2], ui_style, width = 80)
+    ymin_input = _create_textbox(y_limits_layout[1, 1], ui_style, width = 80)
+    ymax_input = _create_textbox(y_limits_layout[1, 2], ui_style, width = 80)
 
     # Z Limits Section (currently unused, but kept for future use)
-    create_label(main_layout[5, 3], "Z Limits", ui_style, fontsize = ui_style.textbox_font)
+    _create_label(main_layout[5, 3], "Z Limits", ui_style, fontsize = ui_style.textbox_font)
     z_limits_layout = GridLayout(main_layout[6, 3], tellwidth = false, colgap = 8)
-    zmin_input = create_textbox(z_limits_layout[1, 1], ui_style, width = 80)
-    zmax_input = create_textbox(z_limits_layout[1, 2], ui_style, width = 80)
+    zmin_input = _create_textbox(z_limits_layout[1, 1], ui_style, width = 80)
+    zmax_input = _create_textbox(z_limits_layout[1, 2], ui_style, width = 80)
 
     # Baseline Section
-    create_label(main_layout[7, 3], "Baseline", ui_style, fontsize = ui_style.textbox_font)
+    _create_label(main_layout[7, 3], "Baseline", ui_style, fontsize = ui_style.textbox_font)
     baseline_layout = GridLayout(main_layout[8, 3], tellwidth = false, colgap = 8)
-    baseline_start = create_textbox(baseline_layout[1, 1], ui_style, width = 80)
-    baseline_end = create_textbox(baseline_layout[1, 2], ui_style, width = 80)
+    baseline_start = _create_textbox(baseline_layout[1, 1], ui_style, width = 80)
+    baseline_end = _create_textbox(baseline_layout[1, 2], ui_style, width = 80)
 
     # Baseline Type
-    create_label(main_layout[9, 3], "Baseline Type TF", ui_style, fontsize = ui_style.textbox_font)
-    baseline_type = create_menu(main_layout[10, 3], ui_style, options = ["Select", "absolute", "relative", "relchange", "perchange", "db"])
+    _create_label(main_layout[9, 3], "Baseline Type TF", ui_style, fontsize = ui_style.textbox_font)
+    baseline_type = _create_menu(main_layout[10, 3], ui_style, options = ["Select", "absolute", "relative", "relchange", "perchange", "db"])
 
     # Invert Y axis option
     invert_y_layout = GridLayout(main_layout[11, 3], tellwidth = false, colgap = 8)
-    create_label(invert_y_layout[1, 1], "Invert Y axis", ui_style, fontsize = ui_style.textbox_font)
+    _create_label(invert_y_layout[1, 1], "Invert Y axis", ui_style, fontsize = ui_style.textbox_font)
     invert_y_checkbox = Checkbox(invert_y_layout[1, 2], checked = false)
 
     # Main plot button
@@ -430,7 +430,7 @@ function plot_gui()
         dir_path = fetch(Threads.@spawn pick_folder(""))
         if dir_path !== nothing && dir_path != ""
             gui_state.directory[] = dir_path
-            directory_label_text[] = "Dir: " * truncate_path(String(strip(dir_path)))
+            directory_label_text[] = "Dir: " * _truncate_path(String(strip(dir_path)))
         end
     end
 
@@ -446,7 +446,7 @@ function plot_gui()
 
     # Display the figure
     display(gui_fig)
-    set_window_title("Makie")
+    _set_window_title("Makie")
 
     return nothing
 end

@@ -219,7 +219,7 @@ fig = plot_artifact_detection(epochs, artifacts, xlim = (-0.2, 0.8), ylim = (-10
 function plot_artifact_detection(epochs::EpochData, artifacts::EpochRejectionInfo; channel_selection::Function = channels(), kwargs...)
     # Generate window title from dataset
     title_str = _generate_window_title(epochs)
-    set_window_title(title_str)
+    _set_window_title(title_str)
 
     # Merge user kwargs with defaults and validate
     plot_kwargs = _merge_plot_kwargs(PLOT_ARTIFACT_KWARGS, kwargs)
@@ -322,8 +322,8 @@ function plot_artifact_detection(epochs::EpochData, artifacts::EpochRejectionInf
     controls.epoch_label.text = "Epoch 1 / $n_epochs"
     controls.artifact_label.text = !isempty(epochs_with_artifacts) ? "Artifact 1 / $(length(epochs_with_artifacts))" : "No artifacts found"
 
-    plot_kwargs[:display_plot] && display_figure(fig)
-    set_window_title("Makie")
+    plot_kwargs[:display_plot] && _display_figure(fig)
+    _set_window_title("Makie")
     return fig
 end
 
@@ -366,7 +366,7 @@ function plot_artifact_repair(
 )
     # Generate window title from dataset
     title_str = _generate_window_title(epochs_original)
-    set_window_title(title_str)
+    _set_window_title(title_str)
 
     # Merge user kwargs with defaults and validate
     plot_kwargs = _merge_plot_kwargs(PLOT_ARTIFACT_KWARGS, kwargs)
@@ -519,8 +519,8 @@ function plot_artifact_repair(
     controls.epoch_label.text = "Epoch 1 / $n_epochs"
     controls.artifact_label.text = !isempty(epochs_with_artifacts) ? "Artifact 1 / $(length(epochs_with_artifacts))" : "No artifacts found"
 
-    plot_kwargs[:display_plot] && display_figure(fig)
-    set_window_title("Makie")
+    plot_kwargs[:display_plot] && _display_figure(fig)
+    _set_window_title("Makie")
     return fig
 end
 
@@ -565,7 +565,7 @@ function plot_artifact_rejection(
 )
     # Generate window title from dataset
     title_str = _generate_window_title(epochs_original)
-    set_window_title(title_str)
+    _set_window_title(title_str)
 
     # Merge user kwargs with defaults and validate
     plot_kwargs = _merge_plot_kwargs(PLOT_ARTIFACT_KWARGS, kwargs)
@@ -745,7 +745,7 @@ function plot_artifact_rejection(
     controls.epoch_label.text = "Epoch 1 / $n_epochs"
     controls.artifact_label.text = !isempty(epochs_with_artifacts) ? "Artifact 1 / $(length(epochs_with_artifacts))" : "No artifacts found"
 
-    plot_kwargs[:display_plot] && display_figure(fig)
-    set_window_title("Makie")
+    plot_kwargs[:display_plot] && _display_figure(fig)
+    _set_window_title("Makie")
     return fig
 end

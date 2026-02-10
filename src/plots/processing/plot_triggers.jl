@@ -355,7 +355,7 @@ function plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwa
     ax.ylabel = "Trigger Value"
     ax.xlabel = "Time (S)"
 
-    plot_kwargs[:display_plot] && display_figure(fig)
+    plot_kwargs[:display_plot] && _display_figure(fig)
     return fig, ax
 
 end
@@ -390,7 +390,7 @@ function plot_trigger_overview(dat::ContinuousData; kwargs...)
 
     # Generate window title from dataset
     title_str = _generate_window_title(dat)
-    set_window_title(title_str)
+    _set_window_title(title_str)
 
     plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
     trigger_codes, trigger_times, trigger_info = _extract_trigger_data(dat, plot_kwargs[:ignore_triggers])
@@ -435,15 +435,15 @@ function plot_trigger_overview(dat::ContinuousData; kwargs...)
         ax.ylabel = "Trigger Value"
         ax.xlabel = "Time (S)"
 
-        plot_kwargs[:display_plot] && display_figure(fig)
+        plot_kwargs[:display_plot] && _display_figure(fig)
 
-        set_window_title("Makie")
+        _set_window_title("Makie")
         return fig, ax
 
     else # Fall back to original behavior
         trigger_count = _count_triggers(trigger_codes)
         fig, ax = plot_trigger_overview(trigger_times, Int.(trigger_codes), trigger_count; kwargs...)
-        set_window_title("Makie")
+        _set_window_title("Makie")
         return fig, ax
     end
 end
@@ -647,7 +647,7 @@ function _create_interactive_trigger_plot(
     _setup_axis_properties!(ax)
     update_plot!()
 
-    plot_kwargs[:display_plot] && display_figure(fig)
+    plot_kwargs[:display_plot] && _display_figure(fig)
 
     return fig, ax
 
@@ -679,11 +679,11 @@ fig, ax = plot_trigger_timing(dat; ignore_triggers=[1, 255])
 function plot_trigger_timing(dat::ContinuousData; kwargs...)
     # Generate window title from dataset
     title_str = _generate_window_title(dat)
-    set_window_title(title_str)
+    _set_window_title(title_str)
 
     plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
     trigger_codes, trigger_times, trigger_info = _extract_trigger_data(dat, plot_kwargs[:ignore_triggers])
     fig, ax = _create_interactive_trigger_plot(trigger_codes, trigger_times, trigger_info; plot_kwargs...)
-    set_window_title("Makie")
+    _set_window_title("Makie")
     return fig, ax
 end

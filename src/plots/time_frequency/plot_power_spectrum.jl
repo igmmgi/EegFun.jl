@@ -468,7 +468,7 @@ function plot_channel_spectrum(
 )
     # Generate window title from dataset
     title_str = _generate_window_title(dat)
-    set_window_title(title_str)
+    _set_window_title(title_str)
 
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
@@ -491,10 +491,10 @@ function plot_channel_spectrum(
     end
 
     if plot_kwargs[:display_plot]
-        display_figure(fig)
+        _display_figure(fig)
     end
 
-    set_window_title("Makie")
+    _set_window_title("Makie")
     return fig, ax
 
 end
@@ -627,7 +627,7 @@ function plot_ica_component_spectrum(
     end
 
     if plot_kwargs[:display_plot]
-        display_figure(fig)
+        _display_figure(fig)
     end
 
     return fig, ax

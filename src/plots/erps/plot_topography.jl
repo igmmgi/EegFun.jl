@@ -116,7 +116,7 @@ function plot_topography(
     kwargs...,
 )
 
-    set_window_title(_generate_window_title(dat))
+    _set_window_title(_generate_window_title(dat))
     fig = Figure()
     ax = Axis(fig[1, 1])
 
@@ -141,9 +141,9 @@ function plot_topography(
         _setup_topo_selection!(fig, ax, dat, interval_selection)
     end
 
-    display_plot && display_figure(fig)
+    display_plot && _display_figure(fig)
 
-    set_window_title("Makie")
+    _set_window_title("Makie")
     return fig, ax
 end
 
@@ -196,7 +196,7 @@ function plot_topography(
 
     # Calculate grid dimensions for plots
     if isnothing(dims)
-        plot_rows, plot_cols = best_rect(n_datasets)
+        plot_rows, plot_cols = _best_rect(n_datasets)
     else
         if length(dims) != 2 || any(dims .<= 0)
             throw(ArgumentError("Invalid dimensions: $dims. Expected [rows, cols] with positive values."))
@@ -234,7 +234,7 @@ function plot_topography(
     end
 
     # Create single figure with subplots
-    set_window_title(_generate_window_title(dat))
+    _set_window_title(_generate_window_title(dat))
     fig = Figure()
     axes = Axis[]
 
@@ -329,9 +329,9 @@ function plot_topography(
         _setup_shared_topo_selection!(fig, dat, shared_selection_state)
     end
 
-    display_plot && display_figure(fig)
+    display_plot && _display_figure(fig)
 
-    set_window_title("Makie")
+    _set_window_title("Makie")
     return fig, axes
 end
 
@@ -399,7 +399,7 @@ function plot_topography(
     kwargs...,
 )
 
-    set_window_title(_generate_window_title(dat) * " - Epoch $epoch")
+    _set_window_title(_generate_window_title(dat) * " - Epoch $epoch")
     fig = Figure()
     ax = Axis(fig[1, 1])
 
@@ -413,9 +413,9 @@ function plot_topography(
         kwargs...,
     )
 
-    display_plot && display_figure(fig)
+    display_plot && _display_figure(fig)
 
-    set_window_title("Makie")
+    _set_window_title("Makie")
     return fig, ax
 
 end

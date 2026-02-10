@@ -1,12 +1,12 @@
 # Utility functions for plot_gui helper functions
 
 """
-    validate_file(gui_state, required_ext::String)
+    _validate_file(gui_state, required_ext::String)
 
 Validates that a file is specified and has the required extension.
 Returns the filename if valid, otherwise shows an error dialog.
 """
-function validate_file(gui_state, required_ext::String)
+function _validate_file(gui_state, required_ext::String)
     gui_state.filename[] == "" && @minimal_error "Error: No file specified!"
 
     file_ext = lowercase(splitext(gui_state.filename[])[2])
@@ -18,20 +18,20 @@ function validate_file(gui_state, required_ext::String)
 end
 
 """
-    gui_selected_channels(gui_state)
+    _gui_selected_channels(gui_state)
 
 Returns the selected channels from GUI state, or all channels if none selected.
 """
-function gui_selected_channels(gui_state)
+function _gui_selected_channels(gui_state)
     isempty(gui_state.electrodes[]) ? channels() : channels(gui_state.electrodes[])
 end
 
 """
-    handle_plot_error(e, plot_type::String)
+    _handle_plot_error(e, plot_type::String)
 
 Standardized error handling for plot functions.
 """
-function handle_plot_error(e, plot_type::String)
+function _handle_plot_error(e, plot_type::String)
     println("Error creating $plot_type plot: $e")
     showerror(stdout, e, catch_backtrace())
 end
@@ -39,10 +39,10 @@ end
 # Helper functions for creating plots from GUI
 
 function _plot_erp_image(gui_state)
-    validate_file(gui_state, ".jld2")
+    _validate_file(gui_state, ".jld2")
 
     try
-        selected_channels = gui_selected_channels(gui_state)
+        selected_channels = _gui_selected_channels(gui_state)
 
         @async begin
             layout_sym = Symbol(gui_state.layout_type[])
@@ -55,55 +55,55 @@ function _plot_erp_image(gui_state)
             )
         end
     catch e
-        handle_plot_error(e, "ERP Image")
+        _handle_plot_error(e, "ERP Image")
     end
 end
 
 function _plot_gfp(gui_state)
-    validate_file(gui_state, ".jld2")
+    _validate_file(gui_state, ".jld2")
 
     try
-        selected_channels = gui_selected_channels(gui_state)
+        selected_channels = _gui_selected_channels(gui_state)
 
         @async begin
             plot_gfp(gui_state.filename[]; channel_selection = selected_channels, xlim = gui_state.xlim[], ylim = gui_state.ylim[])
         end
     catch e
-        handle_plot_error(e, "GFP")
+        _handle_plot_error(e, "GFP")
     end
 end
 
 function _plot_time_frequency(gui_state)
-    validate_file(gui_state, ".jld2")
+    _validate_file(gui_state, ".jld2")
 
     try
         data = read_data(gui_state.filename[])
         isnothing(data) && @minimal_error "Error: No data found in file"
 
-        selected_channels = gui_selected_channels(gui_state)
+        selected_channels = _gui_selected_channels(gui_state)
 
         @async begin
             plot_time_frequency(data; channel_selection = selected_channels, xlim = gui_state.xlim[], colorbar_limits = gui_state.zlim[])
         end
     catch e
-        handle_plot_error(e, "Time-Frequency")
+        _handle_plot_error(e, "Time-Frequency")
     end
 end
 
 function _plot_power_spectrum(gui_state)
-    validate_file(gui_state, ".jld2")
+    _validate_file(gui_state, ".jld2")
 
     try
         data = read_data(gui_state.filename[])
         isnothing(data) && @minimal_error "Error: No data found in file"
 
-        selected_channels = gui_selected_channels(gui_state)
+        selected_channels = _gui_selected_channels(gui_state)
 
         @async begin
             plot_frequency_spectrum(data; channel_selection = selected_channels, xlim = gui_state.xlim[], ylim = gui_state.ylim[])
         end
     catch e
-        handle_plot_error(e, "Power Spectrum")
+        _handle_plot_error(e, "Power Spectrum")
     end
 end
 
@@ -139,12 +139,12 @@ function _plot_triggers(gui_state)
             plot_trigger_overview(dat)
         end
     catch e
-        handle_plot_error(e, "Triggers")
+        _handle_plot_error(e, "Triggers")
     end
 end
 
 function _plot_correlation(gui_state)
-    validate_file(gui_state, ".jld2")
+    _validate_file(gui_state, ".jld2")
 
     try
         data = read_data(gui_state.filename[])
@@ -154,7 +154,7 @@ function _plot_correlation(gui_state)
             plot_correlation_heatmap(data)
         end
     catch e
-        handle_plot_error(e, "Correlation Heatmap")
+        _handle_plot_error(e, "Correlation Heatmap")
     end
 end
 
@@ -168,6 +168,6 @@ function _plot_layout(gui_state)
             plot_layout_2d(layout)
         end
     catch e
-        handle_plot_error(e, "Layout")
+        _handle_plot_error(e, "Layout")
     end
 end

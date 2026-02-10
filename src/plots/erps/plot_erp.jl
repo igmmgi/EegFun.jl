@@ -256,7 +256,7 @@ function plot_erp(
 
     # Generate window title from datasets
     title_str = _generate_window_title(dat_subset)
-    set_window_title(title_str)
+    _set_window_title(title_str)
 
     # Extract layout_* parameters, remove prefix, and pass to create_layout
     layout_kwargs = _extract_layout_kwargs(plot_kwargs)
@@ -336,11 +336,11 @@ function plot_erp(
     end
 
     if plot_kwargs[:display_plot]
-        display_figure(fig)
+        _display_figure(fig)
     end
 
     # reset default title
-    set_window_title("Makie")
+    _set_window_title("Makie")
     # Return named tuple - line_refs available for advanced use (e.g., plot_erp_measurements)
     # Most users can ignore it via: (; fig, axes) = plot_erp(...)
     return (fig = fig, axes = axes, line_refs = line_refs)

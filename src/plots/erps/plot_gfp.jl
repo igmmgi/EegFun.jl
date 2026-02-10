@@ -111,7 +111,7 @@ function plot_gfp(
 
     # Generate window title from datasets
     title_str = _generate_window_title(datasets_filtered)
-    set_window_title(title_str)
+    _set_window_title(title_str)
 
     # Merge user kwargs and default kwargs
     plot_kwargs = _merge_plot_kwargs(PLOT_GFP_KWARGS, kwargs)
@@ -265,7 +265,7 @@ function plot_gfp(
         display(fig)
     end
 
-    set_window_title("Makie")
+    _set_window_title("Makie")
     return fig
 end
 
