@@ -459,12 +459,20 @@ function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; kwargs
     _ensure_coordinates_3d!(ica.layout)
 
     # Extract commonly used kwargs that are NOT plot call specific from plot_kwargs
-    n_visible_components = min(10, length(ica.ica_label))
+    component_selection = pop!(plot_kwargs, :component_selection)
+
+    # Get selected components to determine layout
+    component_mask = component_selection(1:length(ica.ica_label))
+    selected_components = findall(component_mask)
+    n_components = length(selected_components)
+
+    # Adapt n_visible_components to number of selected components (max 10 for scrollable view)
+    n_visible_components = min(n_components, 10)
+
     window_size = min(2000, n_samples(dat))
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
     display_plot = pop!(plot_kwargs, :display_plot)
-    component_selection = pop!(plot_kwargs, :component_selection)
 
     # change some defaults
     plot_kwargs[:point_plot] = false
