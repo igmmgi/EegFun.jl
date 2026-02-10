@@ -179,7 +179,7 @@ function _create_grid_layout(channels::Vector{Symbol}; kwargs...)
         end
     else
         # Auto-calculate dimensions for n_channels + skip_count total positions
-        rows, cols = best_rect(n_channels + skip_count)
+        rows, cols = _best_rect(n_channels + skip_count)
 
         # Validate skip positions are within auto-calculated grid bounds
         if skip_positions !== nothing
@@ -292,8 +292,8 @@ end
     _validate_dims(dims, n_items::Int)
 
 Validate dimensions and ensure they fit n_items.
-If dims is nothing, returns best_rect(n_items).
-If dims is too small for n_items, warns and returns best_rect(n_items).
+If dims is nothing, returns _best_rect(n_items).
+If dims is too small for n_items, warns and returns _best_rect(n_items).
 Otherwise returns dims as-is.
 
 # Arguments
@@ -305,14 +305,14 @@ Otherwise returns dims as-is.
 """
 function _validate_dims(dims, n_items::Int)
 
-    dims === nothing && return best_rect(n_items)
+    dims === nothing && return _best_rect(n_items)
 
     length(dims) !== 2 && throw(ArgumentError("dims must be a tuple of two positive integers (rows, cols), got: $dims"))
 
     # If grid is too small, use best_rect instead
     if dims[1] * dims[2] < n_items
         @minimal_warning "Grid size ($(dims[1])×$(dims[2])) is too small for $n_items items. Using optimal grid dimensions instead."
-        return best_rect(n_items)
+        return _best_rect(n_items)
     else
         return dims
     end
@@ -321,7 +321,7 @@ end
 
 
 """
-    best_rect(n::Int)
+    _best_rect(n::Int)
 
 Find the best rectangular layout for n items.
 Returns (rows, cols) that minimizes the difference between rows and cols,
@@ -329,7 +329,7 @@ preferring arrangements that are as square-like as possible.
 For numbers with poor factors (like primes or near-primes), uses approximate
 square-like arrangements even if they have a few extra spaces.
 """
-function best_rect(n::Int)
+function _best_rect(n::Int)
 
     # Handle edge cases
     n <= 0 && throw(ArgumentError("n must be positive"))

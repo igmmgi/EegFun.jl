@@ -189,7 +189,7 @@ function plot_epochs(
 
     # Generate window title from datasets
     title_str = _generate_window_title(dat_subset)
-    set_window_title(title_str)
+    _set_window_title(title_str)
 
     # Check if subsetting resulted in empty data
     isempty(dat_subset) && @minimal_error_throw "No data matched the selection criteria!"
@@ -356,7 +356,7 @@ function plot_epochs(
 
         elseif layout == :grid
             # Use layout_grid_dims if provided, otherwise calculate best rectangle
-            grid_dims = plot_kwargs[:layout_grid_dims] !== nothing ? plot_kwargs[:layout_grid_dims] : best_rect(length(all_plot_channels))
+            grid_dims = plot_kwargs[:layout_grid_dims] !== nothing ? plot_kwargs[:layout_grid_dims] : _best_rect(length(all_plot_channels))
             _plot_epochs_grid_multi!(fig, axes, dat_subset, all_plot_channels, grid_dims, condition_colors_list, plot_kwargs, line_refs)
 
         elseif layout == :topo
@@ -402,10 +402,10 @@ function plot_epochs(
     end
 
     if plot_kwargs[:display_plot]
-        display_figure(fig)
+        _display_figure(fig)
     end
 
-    set_window_title("Makie")
+    _set_window_title("Makie")
     return (fig = fig, axes = axes)
 end
 

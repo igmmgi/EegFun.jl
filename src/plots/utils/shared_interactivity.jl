@@ -76,7 +76,7 @@ function _setup_shared_interactivity!(fig::Figure, axes::Vector{Axis}, plot_type
     _setup_shared_interactivity!(fig, axes, keyboard_actions)
 
     # Set up help system
-    setup_help_interaction!(fig, plot_type)
+    _setup_help_interaction!(fig, plot_type)
 end
 
 """
@@ -99,38 +99,38 @@ function _handle_shared_navigation!(axes::Vector{Axis}, action::Symbol)
 end
 
 """
-    ymore!(ax::Axis)
+    _ymore!(ax::Axis)
 
 Zoom in on Y-axis by compressing the limits (zoom in on waveforms).
 """
-function ymore!(ax::Axis)
+function _ymore!(ax::Axis)
     ylims!(ax, ax.yaxis.attributes.limits[] .* 0.8)
 end
 
 """
-    yless!(ax::Axis)
+    _yless!(ax::Axis)
 
 Zoom out on Y-axis by expanding the limits (zoom out from waveforms).
 """
-function yless!(ax::Axis)
+function _yless!(ax::Axis)
     ylims!(ax, ax.yaxis.attributes.limits[] .* 1.25)
 end
 
 """
-    xmore!(ax::Axis)
+    _xmore!(ax::Axis)
 
 Zoom in on X-axis by compressing the limits (zoom in on time range).
 """
-function xmore!(ax::Axis)
+function _xmore!(ax::Axis)
     xlims!(ax, ax.xaxis.attributes.limits[] .* 0.8)
 end
 
 """
-    xless!(ax::Axis)
+    _xless!(ax::Axis)
 
 Zoom out on X-axis by expanding the limits (zoom out from time range).
 """
-function xless!(ax::Axis)
+function _xless!(ax::Axis)
     xlims!(ax, ax.xaxis.attributes.limits[] .* 1.25)
 end
 

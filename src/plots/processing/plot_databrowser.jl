@@ -186,11 +186,11 @@ const EpochedDataBrowserState = DataBrowserState{EpochedDataState}
 
 # Analysis settings functions
 """
-    update_analysis_settings!(state::DataBrowserState)
+    _update_analysis_settings!(state::DataBrowserState)
 
 Update the analysis settings observable with current state.
 """
-function update_analysis_settings!(state::DataBrowserState)
+function _update_analysis_settings!(state::DataBrowserState)
     # Get current filter settings
     hp_freq = state.data.filter_state.active[].hp ? state.data.filter_state.hp_freq[] : 0.0
     lp_freq = state.data.filter_state.active[].lp ? state.data.filter_state.lp_freq[] : 0.0
@@ -254,7 +254,7 @@ end
 
 
 # Data browser state creation
-function create_browser_state(dat::T, channel_labels, ax, ica, plot_kwargs) where {T<:EegData}
+function _create_browser_state(dat::T, channel_labels, ax, ica, plot_kwargs) where {T<:EegData}
     state_type = data_state_type(T)
     initial_window = get_initial_window_size(dat)
     return DataBrowserState{state_type}(
@@ -291,46 +291,46 @@ reset_to_original!(state::AbstractDataState) = state.current[] = copy(state.orig
 ######
 # UI #
 ######
-function setup_ui_base(fig, ax, state, dat, ica = nothing, plot_kwargs = nothing)
+function _setup_ui_base(fig, ax, state, dat, ica = nothing)
 
     deregister_interaction!(ax, :rectanglezoom) # need to turn this off!
-    set_axes!(ax, state)
+    _set_axes!(ax, state)
 
     # Mouse and keyboard events
-    handle_mouse_events!(ax, state)
-    handle_keyboard_events!(fig, ax, state)
+    _handle_mouse_events!(ax, state)
+    _handle_keyboard_events!(fig, ax, state)
 
     # Create toggles/markers/menus
-    state.markers = init_markers(ax, state)
-    toggles = create_toggles(fig, ax, state)
-    labels_menu = create_labels_menu(fig, ax, state)
-    reference_menu = create_reference_menu(fig, state, dat)
+    state.markers = _init_markers(ax, state)
+    toggles = _create_toggles(fig, ax, state)
+    labels_menu = _create_labels_menu(fig, ax, state)
+    reference_menu = _create_reference_menu(fig, state, dat)
 
     # Create optional menus (ica/extra channels)
     ica_menu = nothing
     if !isnothing(ica) && !isnothing(state.ica_original)
-        ica_menu = create_ica_menu(fig, ax, state, ica)
+        ica_menu = _create_ica_menu(fig, ax, state, ica)
     end
 
     extra_menu = nothing
     extra_labels_result = extra_labels(state.data.original)
     if !isnothing(extra_labels_result) && !isempty(extra_labels_result)
-        extra_menu = create_extra_channel_menu(fig, ax, state, dat)
+        extra_menu = _create_extra_channel_menu(fig, ax, state, dat)
     end
 
     return (toggles, labels_menu, reference_menu, ica_menu, extra_menu)
 end
 
 # Unified setup_ui method using multiple dispatch for the epoch menu
-function setup_ui(fig, ax, state::DataBrowserState{<:AbstractDataState}, dat, ica = nothing, plot_kwargs = nothing)
+function _setup_ui(fig, ax, state::DataBrowserState{<:AbstractDataState}, dat, ica = nothing, plot_kwargs = nothing)
     # Get common UI elements
-    toggles, labels_menu, reference_menu, ica_menu, extra_menu = setup_ui_base(fig, ax, state, dat, ica, plot_kwargs)
+    toggles, labels_menu, reference_menu, ica_menu, extra_menu = _setup_ui_base(fig, ax, state, dat, ica)
 
     # Get type-specific epoch menu (or nothing)
-    epoch_menu = get_epoch_menu(fig, ax, state)
+    epoch_menu = _get_epoch_menu(fig, ax, state)
 
     # Build the grid components
-    build_grid_components!(fig, dat, state, toggles, labels_menu, reference_menu, ica_menu, extra_menu, epoch_menu)
+    _build_grid_components!(fig, dat, state, toggles, labels_menu, reference_menu, ica_menu, extra_menu, epoch_menu)
 
     # Apply theme
     update_theme!(Theme(fontsize = plot_kwargs[:ui_fontsize]))
@@ -339,8 +339,8 @@ function setup_ui(fig, ax, state::DataBrowserState{<:AbstractDataState}, dat, ic
     return state
 end
 
-function create_toggles(fig, ax, state)
-    configs = [ToggleConfig("Butterfly Plot", (active) -> butterfly_plot!(ax, state))]
+function _create_toggles(fig, ax, state)
+    configs = [ToggleConfig("Butterfly Plot", (active) -> _butterfly_plot!(ax, state))]
 
     # Add marker toggles based on configuration
     marker_toggle_configs = [(:triggers, "Trigger"), (:is_vEOG, "vEOG"), (:is_hEOG, "hEOG")]
@@ -349,17 +349,17 @@ function create_toggles(fig, ax, state)
         if has_column(state.data, marker_symbol)
             marker_index = findfirst(m -> m.name == marker_symbol, state.markers)
             if !isnothing(marker_index)
-                push!(configs, ToggleConfig(toggle_label, (active) -> plot_vertical_lines!(ax, state.markers[marker_index], active)))
+                push!(configs, ToggleConfig(toggle_label, (active) -> _plot_vertical_lines!(ax, state.markers[marker_index], active)))
             end
         end
     end
 
     # Add filter toggles if available
     if state.data.original.analysis_info.hp_filter == 0.0
-        push!(configs, ToggleConfig("HP-Filter On/Off", (_) -> apply_hp_filter!(state)))
+        push!(configs, ToggleConfig("HP-Filter On/Off", (_) -> _apply_hp_filter!(state)))
     end
     if state.data.original.analysis_info.lp_filter == 0.0
-        push!(configs, ToggleConfig("LP-Filter On/Off", (_) -> apply_lp_filter!(state)))
+        push!(configs, ToggleConfig("LP-Filter On/Off", (_) -> _apply_lp_filter!(state)))
     end
 
     # Create toggles
@@ -377,14 +377,14 @@ function create_toggles(fig, ax, state)
 
 end
 
-function create_menu(fig, options, default, label; kwargs...)
+function _create_menu(fig, options, default, label; kwargs...)
     menu = Menu(fig, options = options, default = default, direction = :down, fontsize = 18, width = Auto(), tellwidth = false, kwargs...)
     return hcat(menu, Label(fig, label, fontsize = 22, halign = :left, tellwidth = false))
 end
 
-function create_labels_menu(fig, ax, state)
+function _create_labels_menu(fig, ax, state)
     options = vcat(["All", "Left", "Right", "Central", "BioSemi16", "BioSemi32", "BioSemi64"], state.channels.labels)
-    menu = create_menu(fig, options, "All", "Labels")
+    menu = _create_menu(fig, options, "All", "Labels")
 
     # Flag to prevent recursive updates when programmatically setting menu selection
     updating_menu = Ref(false)
@@ -407,36 +407,8 @@ function create_labels_menu(fig, ax, state)
         elseif s == "Central"
             state.channels.individually_selected = Symbol[]
             state.channels.visible .= occursin.(r"z$", String.(state.channels.labels))
-        elseif s == "BioSemi16"
-            state.channels.individually_selected = Symbol[]
-            package_layouts_dir = joinpath(@__DIR__, "..", "..", "data", "layouts")
-            layout_file = find_file("biosemi16.csv", package_layouts_dir)
-            if layout_file === nothing
-                @minimal_error "Layout file biosemi16.csv not found in $package_layouts_dir"
-                return
-            end
-            tmp_layout = read_layout(layout_file)
-            state.channels.visible .= state.channels.labels .∈ Ref(tmp_layout.data.label)
-        elseif s == "BioSemi32"
-            state.channels.individually_selected = Symbol[]
-            package_layouts_dir = joinpath(@__DIR__, "..", "..", "data", "layouts")
-            layout_file = find_file("biosemi32.csv", package_layouts_dir)
-            if layout_file === nothing
-                @minimal_error "Layout file biosemi32.csv not found in $package_layouts_dir"
-                return
-            end
-            tmp_layout = read_layout(layout_file)
-            state.channels.visible .= state.channels.labels .∈ Ref(tmp_layout.data.label)
-        elseif s == "BioSemi64"
-            state.channels.individually_selected = Symbol[]
-            package_layouts_dir = joinpath(@__DIR__, "..", "..", "data", "layouts")
-            layout_file = find_file("biosemi64.csv", package_layouts_dir)
-            if layout_file === nothing
-                @minimal_error "Layout file biosemi64.csv not found in $package_layouts_dir"
-                return
-            end
-            tmp_layout = read_layout(layout_file)
-            state.channels.visible .= state.channels.labels .∈ Ref(tmp_layout.data.label)
+        elseif s in ("BioSemi16", "BioSemi32", "BioSemi64")
+            _apply_biosemi_layout!(state, lowercase(s) * ".csv") || return
         else
             # Individual electrode selection - toggle selection
             selected_sym = Symbol(s)
@@ -461,37 +433,50 @@ function create_labels_menu(fig, ax, state)
             updating_menu[] = false
         end
 
-        clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
-        update_channel_offsets!(state)
-        draw(ax, state)
+        _clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+        _update_channel_offsets!(state)
+        _draw(ax, state)
 
     end
 
     return menu
-
 end
 
-function create_reference_menu(fig, state, dat)
+""" Apply a BioSemi layout file to filter visible channels. Returns false if file not found. """
+function _apply_biosemi_layout!(state, filename)
+    state.channels.individually_selected = Symbol[]
+    package_layouts_dir = joinpath(@__DIR__, "..", "..", "data", "layouts")
+    layout_file = find_file(filename, package_layouts_dir)
+    if layout_file === nothing
+        @minimal_error "Layout file $filename not found in $package_layouts_dir"
+        return false
+    end
+    tmp_layout = read_layout(layout_file)
+    state.channels.visible .= state.channels.labels .∈ Ref(tmp_layout.data.label)
+    return true
+end
+
+function _create_reference_menu(fig, state, dat)
     options = vcat([:none, :avg, :mastoid], state.channels.labels)
-    menu = create_menu(fig, options, String(dat.analysis_info.reference), "Reference")
+    menu = _create_menu(fig, options, String(dat.analysis_info.reference), "Reference")
 
     on(menu[1].selection) do s
         state.reference_state = s
 
         s == :none && return
-        rereference!(state.data, s)
+        _rereference!(state.data, s)
         notify_data_update(state.data)
-        update_analysis_settings!(state)
+        _update_analysis_settings!(state)
     end
 
     return menu
 end
 
-# Update create_ica_menu to use the new struct
-function create_ica_menu(fig, ax, state, ica)
+
+function _create_ica_menu(fig, ax, state, ica)
 
     options = vcat(["None"], ica.ica_label)
-    menu = create_menu(fig, options, "None", "ICA Components")
+    menu = _create_menu(fig, options, "None", "ICA Components")
 
     # Create observable for removed components display
     removed_components_text = Observable("")
@@ -523,7 +508,7 @@ function create_ica_menu(fig, ax, state, ica)
 
     on(menu[1].selection) do s
 
-        clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+        _clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
 
         # Check explicitly for "None" first
         if s == "None"
@@ -556,7 +541,7 @@ function create_ica_menu(fig, ax, state, ica)
 
                 # Then apply all currently removed components
                 if !isempty(state.removed_ica_components)
-                    apply_ica_removal!(state.data, state.ica_current, state.removed_ica_components)
+                    _apply_ica_removal!(state.data, state.ica_current, state.removed_ica_components)
                 end
 
             end
@@ -566,8 +551,8 @@ function create_ica_menu(fig, ax, state, ica)
         update_removed_display()
 
         notify_data_update(state.data)
-        draw(ax, state)
-        update_analysis_settings!(state)
+        _draw(ax, state)
+        _update_analysis_settings!(state)
     end
 
     # Return menu and removed components label in a vertical stack
@@ -575,7 +560,7 @@ function create_ica_menu(fig, ax, state, ica)
 
 end
 
-function create_epoch_menu(fig, ax, state)
+function _create_epoch_menu(fig, ax, state)
     slider_epoch = Slider(fig[2, 1], range = 1:n_epochs(state.data.original), startvalue = state.data.current_epoch[], snap = true)
     label = Label(
         fig,
@@ -591,12 +576,12 @@ function create_epoch_menu(fig, ax, state)
     # Handle slider input
     on(slider_epoch.value) do epoch_num
         if !updating_from_keyboard[]
-            clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+            _clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
             state.data.current_epoch[] = epoch_num
             ax.title = "Epoch $(epoch_num)/$(n_epochs(state.data.original))"
-            update_markers!(ax, state)
-            draw(ax, state)
-            draw_extra_channel!(ax, state)
+            _update_markers!(ax, state)
+            _draw(ax, state)
+            _draw_extra_channel!(ax, state)
         end
     end
 
@@ -610,7 +595,7 @@ function create_epoch_menu(fig, ax, state)
     return hcat(slider_epoch, label)
 end
 
-function show_additional_menu(state, clicked_region_idx = nothing)
+function _show_additional_menu(state, clicked_region_idx = nothing)
 
     # Create the menu figure
     # TODO: why does new window not always take this size?
@@ -623,13 +608,13 @@ function show_additional_menu(state, clicked_region_idx = nothing)
         on(btn.clicks) do _
             if btn.label[] == "Get Selected Regions"
                 # Get the boolean vector of selected regions
-                selected_regions_bool = get_selected_regions_bool(state)
+                selected_regions_bool = _get_selected_regions_bool(state)
                 @info "Selected regions boolean vector:"
                 @info "Length: $(length(selected_regions_bool))"
                 @info "Number of selected samples: $(sum(selected_regions_bool))"
                 @info "Selected regions: $(state.selection.selected_regions[])"
             else
-                selected_data = subset_selected_data(state, clicked_region_idx)
+                selected_data = _subset_selected_data(state, clicked_region_idx)
                 isnothing(selected_data) && return # No data available, just return
                 if btn.label[] == "Topoplot"
                     plot_topography(selected_data)
@@ -730,7 +715,7 @@ function _channel_repair_menu(state, selected_channels, ax)
     on(action_buttons[1].clicks) do n
         selected_channels = all_channels[findall(cb -> cb.checked[], channel_checkboxes)]
         if !isempty(selected_channels)
-            repair_selected_channels!(state, selected_channels, selected_method[], ax)
+            _repair_selected_channels!(state, selected_channels, selected_method[], ax)
         else
             @info "No channels selected for repair"
         end
@@ -739,7 +724,7 @@ function _channel_repair_menu(state, selected_channels, ax)
     # Undo last repair
     on(action_buttons[2].clicks) do n
         if !isempty(state.channel_repair_history)
-            undo_last_repair!(state, ax)
+            _undo_last_repair!(state, ax)
         else
             @info "No repairs to undo"
         end
@@ -749,7 +734,7 @@ function _channel_repair_menu(state, selected_channels, ax)
     display(new_screen, menu_fig)
 end
 
-function repair_selected_channels!(state, selected_channels, method, ax)
+function _repair_selected_channels!(state, selected_channels, method, ax)
     # Check if any of these channels have already been repaired
     already_repaired = Set{Symbol}()
     for (repaired_channels, _, _) in state.channel_repair_history
@@ -766,14 +751,10 @@ function repair_selected_channels!(state, selected_channels, method, ax)
     end
 
     # Store original data before repair
-    original_data = copy(get_channel_data_matrix(state.data.current[], selected_channels))
+    original_data = copy(_get_channel_data_matrix(state.data.current[], selected_channels))
 
     # Perform the repair
-    if method == :neighbor_interpolation
-        repair_channels!(state.data.current[], selected_channels, method = :neighbor_interpolation)
-    elseif method == :spherical_spline
-        repair_channels!(state.data.current[], selected_channels, method = :spherical_spline)
-    end
+    repair_channels!(state.data.current[], selected_channels, method = method)
 
     # Store repair in history
     push!(state.channel_repair_history, (selected_channels, method, original_data))
@@ -782,18 +763,18 @@ function repair_selected_channels!(state, selected_channels, method, ax)
     notify_data_update(state.data)
 
     # Update analysis settings
-    update_analysis_settings!(state)
+    _update_analysis_settings!(state)
 
     # Clear and redraw the plot
-    clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
-    draw(ax, state)
+    _clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+    _draw(ax, state)
 
     total_repairs = length(state.channel_repair_history)
     @info "Successfully repaired channels: $(join(string.(selected_channels), ", ")) using $method"
     @info "Total repairs in history: $total_repairs"
 end
 
-function undo_last_repair!(state, ax)
+function _undo_last_repair!(state, ax)
 
     if isempty(state.channel_repair_history)
         @info "No repairs to undo"
@@ -804,14 +785,14 @@ function undo_last_repair!(state, ax)
     channels, method, original_data = pop!(state.channel_repair_history)
 
     # Restore original data
-    restore_channel_data!(state.data.current[], channels, original_data)
+    _restore_channel_data!(state.data.current[], channels, original_data)
 
     # Notify that data has been updated
     notify_data_update(state.data)
 
     # Clear and redraw the plot
-    clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
-    draw(ax, state)
+    _clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+    _draw(ax, state)
 
     remaining_repairs = length(state.channel_repair_history)
     @info "Undid repair of channels: $(join(string.(channels), ", ")) (was $method)"
@@ -819,7 +800,7 @@ function undo_last_repair!(state, ax)
 end
 
 # Helper function to get channel data matrix
-function get_channel_data_matrix(data, channels)
+function _get_channel_data_matrix(data, channels)
     if hasfield(typeof(data), :data) && hasfield(typeof(data), :layout)
         channel_data = data.data[:, channels]
         return Matrix(channel_data)
@@ -829,7 +810,7 @@ function get_channel_data_matrix(data, channels)
 end
 
 # Helper function to restore channel data
-function restore_channel_data!(data, channels, original_data)
+function _restore_channel_data!(data, channels, original_data)
     if hasfield(typeof(data), :data) && hasfield(typeof(data), :layout)
         data.data[:, channels] = original_data
     else
@@ -839,7 +820,7 @@ end
 
 
 # Create common sliders for both continuous and epoched data
-function create_common_sliders(fig, state, dat)
+function _create_common_sliders(fig, state, dat)
     sliders = []
 
     # Extreme value slider
@@ -869,22 +850,22 @@ function create_common_sliders(fig, state, dat)
 end
 
 # Main create_sliders function for ContinuousDataBrowserState
-function create_sliders(fig, state::ContinuousDataBrowserState, dat)
-    sliders = create_common_sliders(fig, state, dat)
+function _create_sliders(fig, state::ContinuousDataBrowserState, dat)
+    sliders = _create_common_sliders(fig, state, dat)
 
     # Add navigation sliders specific to continuous data
     slider_range = Slider(fig[3, 1], range = 100:50:30000, startvalue = state.view.xrange[][end], snap = true)
     slider_x = Slider(fig[2, 1], range = 1:50:nrow(state.data.current[].data), startvalue = 1, snap = true)
 
     on(slider_range.value) do x
-        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x+slider_x.value.val)
+        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x + slider_x.value.val)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
     end
 
     on(slider_x.value) do x
-        new_range = x:min(nrow(state.data.current[].data), (x+slider_range.value.val)-1)
+        new_range = x:min(nrow(state.data.current[].data), (x + slider_range.value.val) - 1)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
@@ -894,24 +875,24 @@ function create_sliders(fig, state::ContinuousDataBrowserState, dat)
 end
 
 # Create_sliders function for EpochedDataBrowserState (only common sliders)
-function create_sliders(fig, state::EpochedDataBrowserState, dat)
-    return create_common_sliders(fig, state, dat)
+function _create_sliders(fig, state::EpochedDataBrowserState, dat)
+    return _create_common_sliders(fig, state, dat)
 end
 
-function create_extra_channel_menu(fig, ax, state, dat)
+function _create_extra_channel_menu(fig, ax, state, dat)
     menu = Menu(fig, options = [:none; extra_labels(dat)], default = "none", direction = :down, fontsize = 18, width = 200)
 
     on(menu.selection) do s
         state.extra_channel.channel = s == :none ? nothing : s
         state.extra_channel.visible = s != :none
-        draw_extra_channel!(ax, state)
+        _draw_extra_channel!(ax, state)
     end
 
     return hcat(menu, Label(fig, "Extra Channels", fontsize = 22, halign = :left))
 
 end
 
-function build_grid_components!(
+function _build_grid_components!(
     fig,
     dat,
     state,
@@ -927,7 +908,7 @@ function build_grid_components!(
     push!(grid_components, toggles[:, 1:2])
 
     # Add common controls that exist
-    append!(grid_components, create_sliders(fig, state, dat))
+    append!(grid_components, _create_sliders(fig, state, dat))
     push!(grid_components, labels_menu)
     push!(grid_components, reference_menu)
 
@@ -949,19 +930,19 @@ function build_grid_components!(
 end
 
 # Get epoch menu based on state type
-get_epoch_menu(fig, ax, state::ContinuousDataBrowserState) = nothing
-get_epoch_menu(fig, ax, state::EpochedDataBrowserState) = create_epoch_menu(fig, ax, state)
+_get_epoch_menu(fig, ax, state::ContinuousDataBrowserState) = nothing
+_get_epoch_menu(fig, ax, state::EpochedDataBrowserState) = _create_epoch_menu(fig, ax, state)
 
 ############
 # Navigation
 ############
 const KEYBOARD_ACTIONS = Dict(Keyboard.left => :left, Keyboard.right => :right, Keyboard.up => :up, Keyboard.down => :down)
 
-function handle_navigation!(ax, state::DataBrowserState{<:AbstractDataState}, action::Symbol)
+function _handle_navigation!(ax, state::DataBrowserState{<:AbstractDataState}, action::Symbol)
     if action == :up
-        ymore!(ax, state)
+        _ymore!(ax, state)
     elseif action == :down
-        yless!(ax, state)
+        _yless!(ax, state)
     elseif action == :left
         _handle_left_navigation(ax, state, state.data)
     elseif action == :right
@@ -970,41 +951,41 @@ function handle_navigation!(ax, state::DataBrowserState{<:AbstractDataState}, ac
 end
 
 # Type-specific left/right navigation
-_handle_left_navigation(ax, state, data::ContinuousDataState) = xback!(ax, state)
-_handle_left_navigation(ax, state, data::EpochedDataState) = step_epoch_backward(ax, state)
-_handle_right_navigation(ax, state, data::ContinuousDataState) = xforward!(ax, state)
-_handle_right_navigation(ax, state, data::EpochedDataState) = step_epoch_forward(ax, state)
+_handle_left_navigation(ax, state, data::ContinuousDataState) = _xback!(ax, state)
+_handle_left_navigation(ax, state, data::EpochedDataState) = _step_epoch_backward(ax, state)
+_handle_right_navigation(ax, state, data::ContinuousDataState) = _xforward!(ax, state)
+_handle_right_navigation(ax, state, data::EpochedDataState) = _step_epoch_forward(ax, state)
 
-function xback!(ax, state::ContinuousDataBrowserState)
+function _xback!(ax, state::ContinuousDataBrowserState)
     state.view.xrange.val[1] - 200 < 1 && return
     state.view.xrange[] = state.view.xrange.val .- 200
     xlims!(ax, state.data.current[].data.time[state.view.xrange.val[1]], state.data.current[].data.time[state.view.xrange.val[end]])
 end
 
-function xforward!(ax, state::ContinuousDataBrowserState)
+function _xforward!(ax, state::ContinuousDataBrowserState)
     state.view.xrange.val[1] + 200 > nrow(state.data.current[].data) && return
     state.view.xrange[] = state.view.xrange.val .+ 200
     xlims!(ax, state.data.current[].data.time[state.view.xrange.val[1]], state.data.current[].data.time[state.view.xrange.val[end]])
 end
 
-step_epoch_backward(ax, state::EpochedDataBrowserState) = step_epoch!(ax, state, -1)
-step_epoch_forward(ax, state::EpochedDataBrowserState) = step_epoch!(ax, state, 1)
+_step_epoch_backward(ax, state::EpochedDataBrowserState) = _step_epoch!(ax, state, -1)
+_step_epoch_forward(ax, state::EpochedDataBrowserState) = _step_epoch!(ax, state, 1)
 
-function step_epoch!(ax, state::EpochedDataBrowserState, direction::Int)
-    clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+function _step_epoch!(ax, state::EpochedDataBrowserState, direction::Int)
+    _clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
     current = state.data.current_epoch[]
     total = n_epochs(state.data.original)
     state.data.current_epoch[] = clamp(current + direction, 1, total)
     ax.title = "Epoch $(state.data.current_epoch[])/$total"
-    update_markers!(ax, state)
-    draw(ax, state)
-    draw_extra_channel!(ax, state)
+    _update_markers!(ax, state)
+    _draw(ax, state)
+    _draw_extra_channel!(ax, state)
 end
 
-yless!(ax, state) = yzoom!(ax, state, 1.2)
-ymore!(ax, state) = yzoom!(ax, state, 0.8)
+_yless!(ax, state) = _yzoom!(ax, state, 1.2)
+_ymore!(ax, state) = _yzoom!(ax, state, 0.8)
 
-function yzoom!(ax, state, factor::Float64)
+function _yzoom!(ax, state, factor::Float64)
     if state.view.butterfly[]
         # In butterfly mode: adjust y-range
         y_min, y_max = state.view.yrange.val[1], state.view.yrange.val[end]
@@ -1020,12 +1001,12 @@ function yzoom!(ax, state, factor::Float64)
     end
 end
 
-function is_mouse_in_axis(ax, pos)
+function _is_mouse_in_browser_axis(ax, pos)
     bbox = ax.layoutobservables.computedbbox[]
     return bbox.origin[1] <= pos[1] <= (bbox.origin[1] + bbox.widths[1]) && bbox.origin[2] <= pos[2] <= (bbox.origin[2] + bbox.widths[2])
 end
 
-function find_clicked_region(state, mouse_x)
+function _find_clicked_region(state, mouse_x)
     # Check if click is within any of the selected regions
     regions = state.selection.selected_regions[]
     for (i, (start_time, end_time)) in enumerate(regions)
@@ -1036,7 +1017,7 @@ function find_clicked_region(state, mouse_x)
     return nothing
 end
 
-function remove_region_from_selection!(ax, state, region_idx)
+function _remove_region_from_selection!(ax, state, region_idx)
     # Remove the region from the list
     regions = state.selection.selected_regions[]
     if 1 <= region_idx <= length(regions)
@@ -1053,27 +1034,27 @@ function remove_region_from_selection!(ax, state, region_idx)
 end
 
 # Selection management functions
-function start_selection!(ax, state, mouse_x)
+function _start_selection!(ax, state, mouse_x)
     state.selection.active[] = true
     state.selection.bounds[] = (mouse_x, mouse_x)
-    update_x_region_selection!(ax, state, mouse_x, mouse_x)
+    _update_x_region_selection!(ax, state, mouse_x, mouse_x)
 end
 
-function finish_selection!(ax, state, mouse_x)
+function _finish_selection!(ax, state, mouse_x)
     state.selection.active[] = false
     state.selection.visible[] = true
     state.selection.bounds[] = (state.selection.bounds[][1], mouse_x)
-    update_x_region_selection!(ax, state, state.selection.bounds[][1], mouse_x)
+    _update_x_region_selection!(ax, state, state.selection.bounds[][1], mouse_x)
     state.selection.rectangle.visible[] = true
 
     # Add this selection to the list of selected regions
-    add_region_to_selection!(ax, state, state.selection.bounds[][1], mouse_x)
+    _add_region_to_selection!(ax, state, state.selection.bounds[][1], mouse_x)
 
     # Clear the temporary selection rectangle after adding to permanent regions
-    clear_x_region_selection!(state)
+    _clear_x_region_selection!(state)
 end
 
-function handle_mouse_events!(ax, state)
+function _handle_mouse_events!(ax, state)
     # Track if Shift and Ctrl are currently pressed
     shift_pressed = Ref(false)
     ctrl_pressed = Ref(false)
@@ -1088,7 +1069,7 @@ function handle_mouse_events!(ax, state)
 
     on(events(ax).mousebutton) do event
         pos = events(ax).mouseposition[]
-        if !is_mouse_in_axis(ax, pos)
+        if !_is_mouse_in_browser_axis(ax, pos)
             return
         end
 
@@ -1098,21 +1079,21 @@ function handle_mouse_events!(ax, state)
             if event.action == Mouse.press
                 if ctrl_pressed[]
                     mouse_y = mouseposition(ax)[2]
-                    clicked_channel = find_closest_channel(ax, state, mouse_x, mouse_y)
+                    clicked_channel = _find_closest_browser_channel(ax, state, mouse_x, mouse_y)
                     if !isnothing(clicked_channel)
-                        toggle_channel_visibility!(ax, state, clicked_channel)
+                        _toggle_channel_visibility!(ax, state, clicked_channel)
                         return
                     end
                 elseif shift_pressed[]
-                    handle_left_click!(ax, state, event, mouse_x)
+                    _handle_left_click!(ax, state, event, mouse_x)
                 end
             elseif event.action == Mouse.release
                 if shift_pressed[]
-                    handle_left_click!(ax, state, event, mouse_x)
+                    _handle_left_click!(ax, state, event, mouse_x)
                 end
             end
         elseif event.button == Mouse.right && event.action == Mouse.press
-            handle_right_click!(ax, state, mouse_x)
+            _handle_right_click!(ax, state, mouse_x)
         end
     end
 
@@ -1120,38 +1101,38 @@ function handle_mouse_events!(ax, state)
     on(events(ax).mouseposition) do _
         if state.selection.active[]
             world_pos = mouseposition(ax)[1]
-            update_x_region_selection!(ax, state, state.selection.bounds[][1], world_pos)
+            _update_x_region_selection!(ax, state, state.selection.bounds[][1], world_pos)
         end
     end
 end
 
-function handle_left_click!(ax, state, event, mouse_x)
+function _handle_left_click!(ax, state, event, mouse_x)
     if event.action == Mouse.press
         # Check if click is within any existing selected region
-        clicked_region_idx = find_clicked_region(state, mouse_x)
+        clicked_region_idx = _find_clicked_region(state, mouse_x)
         if clicked_region_idx !== nothing
             # Remove the clicked region
-            remove_region_from_selection!(ax, state, clicked_region_idx)
+            _remove_region_from_selection!(ax, state, clicked_region_idx)
         else
             # Start a new selection
-            start_selection!(ax, state, mouse_x)
+            _start_selection!(ax, state, mouse_x)
         end
     elseif event.action == Mouse.release && state.selection.active[]
-        finish_selection!(ax, state, mouse_x)
+        _finish_selection!(ax, state, mouse_x)
     end
 end
 
-function handle_right_click!(ax, state, mouse_x)
+function _handle_right_click!(ax, state, mouse_x)
     # Check if right-click is within any selected region
-    clicked_region_idx = find_clicked_region(state, mouse_x)
+    clicked_region_idx = _find_clicked_region(state, mouse_x)
     if clicked_region_idx !== nothing
-        show_additional_menu(state, clicked_region_idx)
+        _show_additional_menu(state, clicked_region_idx)
     end
     # Right-click outside regions does nothing (use 'r' key for channel repair)
 end
 
 function _show_channel_repair_menu(state::DataBrowserState{<:ContinuousDataState}, ax)
-    _channel_repair_menu(state, get_selected_channels(state), ax)
+    _channel_repair_menu(state, _get_selected_channels(state), ax)
 end
 
 function _show_channel_repair_menu(state::DataBrowserState{<:EpochedDataState}, ax)
@@ -1159,13 +1140,13 @@ function _show_channel_repair_menu(state::DataBrowserState{<:EpochedDataState}, 
 end
 
 # Helper function to get selected channels
-function get_selected_channels(state)
+function _get_selected_channels(state)
     selected_indices = findall(state.channels.selected)
     return state.channels.labels[selected_indices]
 end
 
 # Helper function to find the closest channel to a click
-function find_closest_channel(ax, state, mouse_x, mouse_y)
+function _find_closest_browser_channel(ax, state, mouse_x, mouse_y)
     current_data = get_current_data(state.data)
     tolerance = 10  # 50 pixel tolerance
 
@@ -1201,16 +1182,16 @@ function find_closest_channel(ax, state, mouse_x, mouse_y)
 end
 
 # Helper function to toggle channel selection
-function toggle_channel_visibility!(ax, state, channel_idx)
+function _toggle_channel_visibility!(ax, state, channel_idx)
     # Toggle the selection of the clicked channel
     state.channels.selected[channel_idx] = !state.channels.selected[channel_idx]
 
     # Immediate redraw for responsive feedback
-    clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
-    draw(ax, state)
+    _clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+    _draw(ax, state)
 end
 
-function handle_keyboard_events!(fig, ax, state)
+function _handle_keyboard_events!(fig, ax, state)
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press && event.key == Keyboard.i
             # Show help for databrowser
@@ -1220,23 +1201,23 @@ function handle_keyboard_events!(fig, ax, state)
             _show_channel_repair_menu(state, ax)
         elseif event.action == Keyboard.press && event.key == Keyboard.c
             # Clear all selected regions
-            clear_all_selected_regions!(ax, state)
+            _clear_all_selected_regions!(ax, state)
         elseif event.action in (Keyboard.press, Keyboard.repeat) && haskey(KEYBOARD_ACTIONS, event.key)
             action = KEYBOARD_ACTIONS[event.key]
             if state.selection.visible[]
-                handle_selection_movement!(ax, state, action)
+                _handle_selection_movement!(ax, state, action)
             else
-                handle_navigation!(ax, state, action)
+                _handle_navigation!(ax, state, action)
             end
         end
     end
 end
 
-function handle_selection_movement!(ax, state, action::Symbol)
+function _handle_selection_movement!(ax, state, action::Symbol)
     if action in (:left, :right)
         _handle_selection_movement_impl(ax, state, action)
     elseif action in (:up, :down)
-        handle_navigation!(ax, state, action)
+        _handle_navigation!(ax, state, action)
     end
 end
 
@@ -1249,10 +1230,10 @@ function _handle_selection_movement_impl(ax, state::DataBrowserState{<:AbstractD
         new_start = min(time_end - width, state.selection.bounds[][1] + width / 5)
     end
     state.selection.bounds[] = (new_start, new_start + width)
-    update_x_region_selection!(ax, state, state.selection.bounds[][1], state.selection.bounds[][2])
+    _update_x_region_selection!(ax, state, state.selection.bounds[][1], state.selection.bounds[][2])
 end
 
-function update_x_region_selection!(ax, state, x1, x2)
+function _update_x_region_selection!(ax, state, x1, x2)
     ylims = ax.limits[][2]
     state.selection.rectangle[1] = Point2f[
         Point2f(Float64(x1), Float64(ylims[1])),
@@ -1263,7 +1244,7 @@ function update_x_region_selection!(ax, state, x1, x2)
     state.selection.rectangle.visible[] = true
 end
 
-function add_region_to_selection!(ax, state, x1, x2)
+function _add_region_to_selection!(ax, state, x1, x2)
     # Ensure x1 <= x2
     if x1 > x2
         x1, x2 = x2, x1
@@ -1287,11 +1268,11 @@ function add_region_to_selection!(ax, state, x1, x2)
     push!(state.selection.region_plots, region_plot)
 
     # Update analysis settings
-    update_analysis_settings!(state)
+    _update_analysis_settings!(state)
 
 end
 
-function clear_x_region_selection!(state)
+function _clear_x_region_selection!(state)
     # Set to a single point instead of empty vector to avoid CairoMakie issues
     state.selection.rectangle[1] = [Point2f(0.0, 0.0)]
     state.selection.bounds[] = (0.0, 0.0)
@@ -1299,7 +1280,7 @@ function clear_x_region_selection!(state)
     state.selection.rectangle.visible[] = false
 end
 
-function clear_all_selected_regions!(ax, state)
+function _clear_all_selected_regions!(ax, state)
     # Clear all region plots
     for plot in state.selection.region_plots
         delete!(ax.scene, plot)
@@ -1312,12 +1293,12 @@ function clear_all_selected_regions!(ax, state)
 end
 
 """
-    get_selected_regions_bool(state::DataBrowserState) -> Vector{Bool}
+    _get_selected_regions_bool(state::DataBrowserState) -> Vector{Bool}
 
 Returns a boolean vector indicating which samples are within the selected regions.
 The vector has the same length as the total number of samples in the data.
 """
-function get_selected_regions_bool(state::DataBrowserState)
+function _get_selected_regions_bool(state::DataBrowserState)
     current_data = get_current_data(state.data)
     total_samples = nrow(current_data)
     time_data = current_data.time
@@ -1343,7 +1324,7 @@ function get_selected_regions_bool(state::DataBrowserState)
 end
 
 """
-    get_selected_regions_info(state::DataBrowserState) -> NamedTuple
+    _get_selected_regions_info(state::DataBrowserState) -> NamedTuple
 
 Returns detailed information about the selected regions including:
 - `bool_vector`: Boolean vector of selected samples
@@ -1351,14 +1332,14 @@ Returns detailed information about the selected regions including:
 - `n_samples`: Number of selected samples
 - `n_regions`: Number of selected regions
 """
-function get_selected_regions_info(state::DataBrowserState)
-    bool_vector = get_selected_regions_bool(state)
+function _get_selected_regions_info(state::DataBrowserState)
+    bool_vector = _get_selected_regions_bool(state)
     regions = state.selection.selected_regions[]
 
     return (bool_vector = bool_vector, regions = regions, n_samples = sum(bool_vector), n_regions = length(regions))
 end
 
-function subset_selected_data(state::ContinuousDataBrowserState, clicked_region_idx = nothing)
+function _subset_selected_data(state::ContinuousDataBrowserState, clicked_region_idx = nothing)
     # Use the clicked region if specified, otherwise use the most recent region, or fall back to bounds
     if clicked_region_idx !== nothing && 1 <= clicked_region_idx <= length(state.selection.selected_regions[])
         # Use the specific clicked region
@@ -1379,7 +1360,7 @@ function subset_selected_data(state::ContinuousDataBrowserState, clicked_region_
     )
 end
 
-function subset_selected_data(state::EpochedDataBrowserState, clicked_region_idx = nothing)
+function _subset_selected_data(state::EpochedDataBrowserState, clicked_region_idx = nothing)
     # Get the selected region
     if clicked_region_idx !== nothing && 1 <= clicked_region_idx <= length(state.selection.selected_regions[])
         x_min, x_max = state.selection.selected_regions[][clicked_region_idx]
@@ -1420,7 +1401,7 @@ end
 ############
 # Filtering
 ############
-function apply_filter!(state::DataBrowserState{T}, filter_type, freq) where {T<:AbstractDataState}
+function _apply_filter!(state::DataBrowserState{T}, filter_type, freq) where {T<:AbstractDataState}
     # Get the current data, apply filter, then update the observable
     current_data = state.data.current[]
     if filter_type == :hp
@@ -1431,23 +1412,23 @@ function apply_filter!(state::DataBrowserState{T}, filter_type, freq) where {T<:
     state.data.current[] = current_data  # Explicitly update the observable
 end
 
-function apply_filters!(state)
+function _apply_filters!(state)
     # Reset to original if no filters active
     if !state.data.filter_state.active[].hp && !state.data.filter_state.active[].lp
         reset_to_original!(state.data)
-        rereference!(state.data, state.reference_state)
+        _rereference!(state.data, state.reference_state)
         notify_data_update(state.data)
         return
     end
 
     # Always start with fresh data when applying filters to ensure clean filtering
     reset_to_original!(state.data)
-    rereference!(state.data, state.reference_state)
+    _rereference!(state.data, state.reference_state)
 
     # Apply active filters
     for (filter_type, freq) in zip([:hp, :lp], [state.data.filter_state.hp_freq[], state.data.filter_state.lp_freq[]])
         if state.data.filter_state.active[][filter_type]
-            apply_filter!(state, filter_type, freq)
+            _apply_filter!(state, filter_type, freq)
         end
     end
 
@@ -1455,20 +1436,20 @@ function apply_filters!(state)
 
 end
 
-function apply_hp_filter!(state)
+function _apply_hp_filter!(state)
     current_state = state.data.filter_state.active[]
     new_state = (hp = !current_state.hp, lp = current_state.lp)
     state.data.filter_state.active[] = new_state
-    apply_filters!(state)
-    update_analysis_settings!(state)
+    _apply_filters!(state)
+    _update_analysis_settings!(state)
 end
 
-function apply_lp_filter!(state)
+function _apply_lp_filter!(state)
     current_state = state.data.filter_state.active[]
     new_state = (hp = current_state.hp, lp = !current_state.lp)
     state.data.filter_state.active[] = new_state
-    apply_filters!(state)
-    update_analysis_settings!(state)
+    _apply_filters!(state)
+    _update_analysis_settings!(state)
 end
 
 
@@ -1476,7 +1457,7 @@ end
 ########################
 # Reference
 ########################
-function rereference!(state::AbstractDataState, ref)
+function _rereference!(state::AbstractDataState, ref)
     rereference!(state.current[], ref, channels())
     notify_data_update(state)  # Notify that data has been updated
 end
@@ -1486,13 +1467,13 @@ end
 ########################
 
 # Apply ICA component removal based on state type
-function apply_ica_removal!(state::ContinuousDataState, ica::InfoIca, components_to_remove::Vector{Int})
+function _apply_ica_removal!(state::ContinuousDataState, ica::InfoIca, components_to_remove::Vector{Int})
     remove_ica_components!(state.current[].data, ica, component_selection = components(components_to_remove))
     return nothing  # Activations are now stored in ica.removed_activations
 end
 
-function apply_ica_removal!(state::EpochedDataState, ica::InfoIca, components_to_remove::Vector{Int})
-    for (i, epoch_df) in enumerate(state.current[].data)
+function _apply_ica_removal!(state::EpochedDataState, ica::InfoIca, components_to_remove::Vector{Int})
+    for epoch_df in state.current[].data
         remove_ica_components!(epoch_df, ica, component_selection = components(components_to_remove))
     end
     return nothing  # Activations are now stored in ica.removed_activations
@@ -1502,7 +1483,7 @@ end
 ########################
 # Drawing
 ########################
-function add_marker!(markers, ax, data, col; label = nothing, trial = nothing, visible = false)
+function _add_marker!(markers, ax, data, col; label = nothing, trial = nothing, visible = false)
     if isnothing(trial)
         # More efficient: filter directly without findall
         mask = data[!, col] .!= 0
@@ -1536,7 +1517,7 @@ function add_marker!(markers, ax, data, col; label = nothing, trial = nothing, v
     )
 end
 
-function update_channel_offsets!(state)
+function _update_channel_offsets!(state)
     nchannels = count(state.channels.visible)
     if nchannels > 1 && !state.view.butterfly[]
         y_max = state.view.yrange[][end] * 0.9
@@ -1551,7 +1532,7 @@ function update_channel_offsets!(state)
     end
 end
 
-function clear_axes!(ax, datas)
+function _clear_axes!(ax, datas)
     for data in datas
         for (key, value) in data
             delete!(ax, value)
@@ -1560,21 +1541,21 @@ function clear_axes!(ax, datas)
     end
 end
 
-function set_axes!(ax, state::DataBrowserState{<:AbstractDataState})
+function _set_axes!(ax, state::DataBrowserState{<:AbstractDataState})
     @lift ylims!(ax, $(state.view.yrange)[1], $(state.view.yrange)[end])
-    set_x_limits!(ax, state, state.data)
+    _set_x_limits!(ax, state, state.data)
 end
 
-function set_x_limits!(ax, state, data::ContinuousDataState)
+function _set_x_limits!(ax, state, data::ContinuousDataState)
     @lift xlims!(ax, $(data.current).data.time[$(state.view.xrange)[1]], $(data.current).data.time[$(state.view.xrange)[end]])
 end
 
-function set_x_limits!(ax, state, data::EpochedDataState)
+function _set_x_limits!(ax, state, data::EpochedDataState)
     @lift xlims!(ax, $(data.current).data[1].time[1], $(data.current).data[1].time[end])
 end
 
 # Common marker initialization
-function init_markers(ax, state; marker_visible = Dict{Symbol,Bool}())
+function _init_markers(ax, state; marker_visible = Dict{Symbol,Bool}())
     markers = Marker[]
     data = get_current_data(state.data)
 
@@ -1584,14 +1565,14 @@ function init_markers(ax, state; marker_visible = Dict{Symbol,Bool}())
     # Add markers based on configuration
     for (symbol, label) in marker_configs
         if has_column(state.data, symbol)
-            add_marker!(markers, ax, data, symbol, label = label, visible = get(marker_visible, symbol, false))
+            _add_marker!(markers, ax, data, symbol, label = label, visible = get(marker_visible, symbol, false))
         end
     end
 
     return markers
 end
 
-function update_markers!(ax, state)
+function _update_markers!(ax, state)
     marker_visible = Dict{Symbol,Bool}()
     for marker in state.markers
         marker_visible[marker.name] = marker.visible
@@ -1599,20 +1580,20 @@ function update_markers!(ax, state)
         delete!(ax, marker.text)
     end
     empty!(state.markers)
-    state.markers = init_markers(ax, state; marker_visible = marker_visible)
+    state.markers = _init_markers(ax, state; marker_visible = marker_visible)
 end
 
-function butterfly_plot!(ax, state)
+function _butterfly_plot!(ax, state)
     state.view.butterfly[] = !state.view.butterfly[]
-    clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
-    update_channel_offsets!(state)
-    draw(ax, state)
+    _clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+    _update_channel_offsets!(state)
+    _draw(ax, state)
 end
 
 # Single function with data access abstraction
-function draw(ax, state::DataBrowserState{<:AbstractDataState})
+function _draw(ax, state::DataBrowserState{<:AbstractDataState})
     # Get data access functions based on type
-    get_data, get_time, get_label_y = get_data_accessors(state.data)
+    get_data, get_time, get_label_y = _get_data_accessors(state.data)
 
     # Pre-compute shared observables
     visible_time_obs = @lift(get_time($(state.data.current), $(state.view.xrange)))
@@ -1650,7 +1631,7 @@ function draw(ax, state::DataBrowserState{<:AbstractDataState})
             end
 
             # Update or create line
-            create_line!(
+            _create_line!(
                 state.channels.data_lines,
                 col,
                 ax,
@@ -1665,25 +1646,25 @@ function draw(ax, state::DataBrowserState{<:AbstractDataState})
             # Handle labels
             if !state.view.butterfly[]
                 label_y_obs = @lift(get_label_y($(state.data.current), $col, state.view.offset[idx]))
-                create_label!(state.channels.data_labels, col, ax, time_start_obs, label_y_obs, is_selected)
+                _create_label!(state.channels.data_labels, col, ax, time_start_obs, label_y_obs, is_selected)
             else
-                hide_channel_label!(state.channels.data_labels, col)
+                _hide_channel_label!(state.channels.data_labels, col)
             end
         else
-            hide_channel_objects!(state.channels, col)
+            _hide_channel_objects!(state.channels, col)
         end
     end
 end
 
 # Data accessor functions
-function get_data_accessors(data::ContinuousDataState)
+function _get_data_accessors(data::ContinuousDataState)
     get_data = (current, range, col) -> current.data[range, col]
     get_time = (current, range) -> current.data.time[range]
     get_label_y = (current, col, offset) -> current.data[1, col] .+ offset
     return get_data, get_time, get_label_y
 end
 
-function get_data_accessors(state::EpochedDataState)
+function _get_data_accessors(state::EpochedDataState)
     get_data = (current, range, col) -> current.data[state.current_epoch[]][range, col]
     get_time = (current, range) -> current.data[state.current_epoch[]].time[range]
     get_label_y = (current, col, offset) -> current.data[state.current_epoch[]][!, col][1] .+ offset
@@ -1691,27 +1672,27 @@ function get_data_accessors(state::EpochedDataState)
 end
 
 # Helper functions for line/label management
-function create_line!(data_lines, col, ax, x_obs, y_obs, color, colormap, linewidth, alpha)
+function _create_line!(data_lines, col, ax, x_obs, y_obs, color, colormap, linewidth, alpha)
     data_lines[col] = lines!(ax, x_obs, y_obs, color = color, colormap = colormap, linewidth = linewidth, alpha = alpha)
 end
 
-function create_label!(data_labels, col, ax, x_obs, y_obs, is_selected)
+function _create_label!(data_labels, col, ax, x_obs, y_obs, is_selected)
     data_labels[col] =
         text!(ax, x_obs, y_obs, text = String(col), align = (:left, :center), fontsize = 18, color = is_selected ? :red : :black)
 end
 
-function hide_channel_label!(data_labels, col)
+function _hide_channel_label!(data_labels, col)
     haskey(data_labels, col) && hide!(data_labels[col])
 end
 
-function hide_channel_objects!(channels, col)
+function _hide_channel_objects!(channels, col)
     haskey(channels.data_lines, col) && hide!(channels.data_lines[col])
     haskey(channels.data_labels, col) && hide!(channels.data_labels[col])
 end
 
 # Single function with data access abstraction
-function draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
-    clear_axes!(ax, [state.extra_channel.data_lines, state.extra_channel.data_labels])
+function _draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
+    _clear_axes!(ax, [state.extra_channel.data_lines, state.extra_channel.data_labels])
 
     if state.extra_channel.visible && !isnothing(state.extra_channel.channel)
         if length(state.view.offset) > 1
@@ -1722,7 +1703,7 @@ function draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
         channel = state.extra_channel.channel
 
         # Get data access functions based on type
-        get_data, get_time, get_label_y = get_data_accessors(state.data)
+        get_data, get_time, get_label_y = _get_data_accessors(state.data)
 
         if eltype(get_data(state.data.current[], 1:1, channel)) == Bool # Boolean data - create highlights
             highlight_data = @views splitgroups(findall(get_data(state.data.current[], :, channel)))
@@ -1760,7 +1741,7 @@ get_title(dat::EpochData) = "Epoch 1/$(n_epochs(dat))"
 get_title(dat::ContinuousData) = ""
 get_title(dat::ErpData) = "Epoch Average (n=$(n_epochs(dat)))"
 
-function plot_vertical_lines!(ax, marker, active)
+function _plot_vertical_lines!(ax, marker, active)
     marker.line.visible = active
     marker.text.visible = active
     marker.visible = active
@@ -1822,7 +1803,7 @@ function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs.
 
     # Generate window title from dataset
     title_str = _generate_window_title(dat)
-    set_window_title(title_str)
+    _set_window_title(title_str)
 
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_DATABROWSER_KWARGS, kwargs)
@@ -1831,11 +1812,11 @@ function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs.
     fig = Figure(figure_padding = plot_kwargs[:figure_padding])
     ax = Axis(fig[1, 1], xlabel = plot_kwargs[:xlabel], ylabel = plot_kwargs[:ylabel], title = get_title(dat))
 
-    state = create_browser_state(dat, dat.layout.data.label, ax, ica, plot_kwargs)
-    setup_ui(fig, ax, state, dat, ica, plot_kwargs)
+    state = _create_browser_state(dat, dat.layout.data.label, ax, ica, plot_kwargs)
+    _setup_ui(fig, ax, state, dat, ica, plot_kwargs)
 
-    draw(ax, state)
-    draw_extra_channel!(ax, state)
+    _draw(ax, state)
+    _draw_extra_channel!(ax, state)
 
     # Add scale indicator
     if plot_kwargs[:show_scale_indicator]
@@ -1849,7 +1830,7 @@ function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs.
         display(fig)
     end
 
-    set_window_title("Makie")
+    _set_window_title("Makie")
     # Return the observable analysis settings
     return (fig = fig, ax = ax, analysis_settings = state.analysis_settings)
 end

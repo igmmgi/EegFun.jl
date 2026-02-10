@@ -177,7 +177,7 @@ function plot_erp_filter_gui(erp_vec::Vector{ErpData}; channel::Union{Symbol,Not
 
     # ===== CREATE SUBPLOTS FOR EACH CONDITION =====
     n_conditions = length(erp_vec)
-    nrows, ncols = best_rect(n_conditions)
+    nrows, ncols = _best_rect(n_conditions)
 
     axes = []
     for i = 1:n_conditions

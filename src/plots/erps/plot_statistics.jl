@@ -3,11 +3,11 @@ Plotting functions for statistical test results.
 """
 
 """
-    find_continuous_regions(mask::BitVector, time_points::Vector{Float64})
+    _find_continuous_regions(mask::BitVector, time_points::Vector{Float64})
 
 Find continuous regions where mask is true, returning start and end times.
 """
-function find_continuous_regions(mask::BitVector, time_points::Vector{Float64})
+function _find_continuous_regions(mask::BitVector, time_points::Vector{Float64})
 
     regions = Vector{Tuple{Float64,Float64}}()
     if isempty(mask) || !any(mask)
@@ -241,7 +241,7 @@ function plot_analytic_test(
 
         if any(sig_any)
             # Find continuous significant regions
-            sig_regions = find_continuous_regions(sig_any, time_points)
+            sig_regions = _find_continuous_regions(sig_any, time_points)
 
             # Always use the single axis for significance bars
             sig_ax = ax

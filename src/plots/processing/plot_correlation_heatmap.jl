@@ -171,7 +171,7 @@ function plot_correlation_heatmap(corr_df::DataFrame; kwargs...)
     # Use the mutating version to plot
     plot_correlation_heatmap!(fig, ax, corr_df; kwargs...)
 
-    plot_kwargs[:display_plot] && display_figure(fig)
+    plot_kwargs[:display_plot] && _display_figure(fig)
 
     return fig, ax
 end

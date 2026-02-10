@@ -132,11 +132,11 @@ function print_plot_help(plot_type::Symbol)
 end
 
 """
-    setup_help_interaction!(fig::Figure, plot_type::Symbol)
+    _setup_help_interaction!(fig::Figure, plot_type::Symbol)
 
 Set up help interaction for a figure. When 'i' key is pressed, shows help information.
 """
-function setup_help_interaction!(fig::Figure, plot_type::Symbol)
+function _setup_help_interaction!(fig::Figure, plot_type::Symbol)
     help_visible = Ref(false)
 
     on(events(fig).keyboardbutton) do event

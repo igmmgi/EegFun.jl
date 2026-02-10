@@ -217,7 +217,7 @@ function plot_layout_2d(
     plot_layout_2d!(fig, ax, layout; neighbours = neighbours, correlation_matrix = correlation_matrix, kwargs...)
 
     if display_plot
-        display_figure(fig)
+        _display_figure(fig)
     end
     return fig, ax
 end
@@ -470,7 +470,7 @@ function plot_layout_3d(layout::Layout; neighbours::Bool = false, display_plot::
     plot_layout_3d!(fig, ax, layout; neighbours = neighbours, kwargs...)
 
     if display_plot
-        display_figure(fig)
+        _display_figure(fig)
     end
 
     return fig, ax

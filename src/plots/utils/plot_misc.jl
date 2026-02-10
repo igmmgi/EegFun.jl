@@ -8,7 +8,7 @@
 # consistency and to avoid confusion when working with Makie's API.
 # =============================================================================
 
-function display_figure(fig)
+function _display_figure(fig)
     backend = Makie.current_backend()
     screen = if backend == GLMakie
         GLMakie.Screen()
@@ -21,11 +21,11 @@ function display_figure(fig)
 end
 
 """
-    set_window_title(title::String)
+    _set_window_title(title::String)
 
 Set the window title for GLMakie. Does nothing for CairoMakie (which doesn't support window titles).
 """
-function set_window_title(title::String)
+function _set_window_title(title::String)
     if Makie.current_backend() == GLMakie
         Makie.current_backend().activate!(title = title)
     end
@@ -51,7 +51,7 @@ function _create_figure_with_axis(data; title_suffix::String = "", figure_kwargs
     if !isempty(title_suffix)
         title = title * title_suffix
     end
-    set_window_title(title)
+    _set_window_title(title)
     fig = Figure(; figure_kwargs...)
     ax = Axis(fig[1, 1])
     return fig, ax

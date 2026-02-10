@@ -301,7 +301,7 @@ function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
 
     # Determine optimal subplot layout using best_rect
     n_subjects = length(decoded_list)
-    rows, cols = best_rect(n_subjects)
+    rows, cols = _best_rect(n_subjects)
 
     # Create figure with appropriate size for subplots
     fig = Figure(title = figure_title, size = (400 * cols, 300 * rows))
@@ -484,42 +484,6 @@ function plot_decoding(decoded::DecodedData, stats::DecodingStatisticsResult; kw
     return fig
 end
 
-"""
-    _find_continuous_regions(mask::BitVector, times::Vector{Float64})
-
-Find continuous regions of true values in a boolean mask.
-
-# Returns
-- `regions::Vector{Tuple{Float64, Float64}}`: List of (start, end) time ranges
-"""
-function _find_continuous_regions(mask::BitVector, times::Vector{Float64})
-    regions = Tuple{Float64,Float64}[]
-
-    if !any(mask)
-        return regions
-    end
-
-    in_region = false
-    region_start = 0
-
-    for (idx, is_sig) in enumerate(mask)
-        if is_sig && !in_region # Start new region
-            in_region = true
-            region_start = idx
-        elseif !is_sig && in_region # End current region
-            in_region = false
-            region_end = idx - 1
-            push!(regions, (times[region_start], times[region_end]))
-        end
-    end
-
-    # Handle region that extends to end
-    if in_region
-        push!(regions, (times[region_start], times[end]))
-    end
-
-    return regions
-end
 
 """
     plot_confusion_matrix(decoded::DecodedData; time_point::Union{Float64, Int, Nothing} = nothing, kwargs...)
