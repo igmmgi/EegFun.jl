@@ -290,7 +290,7 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
     end
 
     _set_window_title("Makie")
-    return fig
+    return (fig = fig,)
 
 end
 
@@ -520,7 +520,7 @@ function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; artifa
         _display_figure(fig)
     end
     _set_window_title("Makie")
-    return fig
+    return (fig = fig,)
 end
 
 
@@ -1493,21 +1493,22 @@ const PLOT_ICA_QUALITY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 )
 
 """
-    plot_eog_component_features(identified_comps::Dict, metrics_df::DataFrame; z_threshold::Float64=3.0)
+    plot_eog_component_features(identified_comps::Dict, metrics_df::DataFrame; kwargs...)
 
 Plot z-scores of EOG correlations from the metrics DataFrame and highlight identified components.
 
 Uses the results from `identify_eye_components`.
 
 # Arguments
-- `identified_comps::Dict`: Dictionary returned by `identify_eye_components` (containing `:vertical_eye`, `:horizontal_eye`).
-- `metrics_df::DataFrame`: DataFrame returned by `identify_eye_components`. Expected to have columns like `:vEOG_zscore`, `:hEOG_zscore` (based on the `v_eog_channel` and `h_eog_channel` arguments) and `:Component`.
-- `vEOG_channel::Symbol`: Symbol of the vertical EOG channel used. Defaults to `:vEOG`. (Used to find column `Symbol("\$(v_eog_channel)_zscore")` in `metrics_df`).
-- `hEOG_channel::Symbol`: Symbol of the horizontal EOG channel used. Defaults to `:hEOG`. (Used to find column `Symbol("\$(h_eog_channel)_zscore")` in `metrics_df`).
+- `identified_comps::Dict`: Dictionary returned by `identify_eye_components` (containing `:vEOG`, `:hEOG`).
+- `metrics_df::DataFrame`: DataFrame returned by `identify_eye_components`. Expected to have columns `:vEOG_zscore`, `:hEOG_zscore`, and `:Component`.
+
+# Keyword Arguments
 - `z_threshold::Float64`: Z-score threshold to draw lines on the plot (default: 3.0).
+- `display_plot::Bool`: Whether to display the plot (default: true).
 
 # Returns
-- `fig::Figure`: The Makie Figure containing the z-score plots.
+- Named tuple `(fig, axes)` where `axes = (ax_v, ax_h)`.
 """
 function plot_eog_component_features(identified_comps::Dict, metrics_df::DataFrame; kwargs...)
     # Merge user kwargs with defaults
@@ -1581,7 +1582,7 @@ function plot_eog_component_features(identified_comps::Dict, metrics_df::DataFra
         _display_figure(fig)
     end
 
-    return fig, (ax_v, ax_h)
+    return (fig = fig, axes = (ax_v, ax_h))
 
 end
 
@@ -1628,22 +1629,20 @@ end
 
 
 """
-    plot_spatial_kurtosis_components(ica::InfoIca, dat::ContinuousData;
-                                   exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
-                                   z_threshold::Float64 = 3.0)
+    plot_spatial_kurtosis_components(kurtosis_comps::Vector{Int}, metrics_df::DataFrame; kwargs...)
 
 Plot spatial kurtosis z-scores for all ICA components and highlight those exceeding the threshold.
 
 # Arguments
-- `ica::InfoIca`: The ICA result object.
-- `dat::ContinuousData`: The continuous data.
+- `kurtosis_comps::Vector{Int}`: Vector of component indices identified as having high spatial kurtosis.
+- `metrics_df::DataFrame`: DataFrame containing spatial kurtosis metrics. Expected to have columns `:Component` and `:z_spatial_kurtosis`.
 
 # Keyword Arguments
-- `exclude_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to exclude. Defaults to `[:is_extreme_value]`.
-- `z_threshold::Float64`: Z-score threshold for identifying high spatial kurtosis components (default: 3.0).
+- `z_threshold::Float64`: Z-score threshold for the reference line (default: 3.0).
+- `display_plot::Bool`: Whether to display the plot (default: true).
 
 # Returns
-- `fig::Figure`: The Makie Figure containing the spatial kurtosis plot.
+- Named tuple `(fig, axis)`.
 """
 function plot_spatial_kurtosis_components(kurtosis_comps::Vector{Int}, metrics_df::DataFrame; kwargs...)
     # Merge user kwargs with defaults
@@ -1690,154 +1689,29 @@ function plot_spatial_kurtosis_components(kurtosis_comps::Vector{Int}, metrics_d
         _display_figure(fig)
     end
 
-    return fig, ax
+    return (fig = fig, axis = ax)
 end
 
 
-"""
-    plot_ecg_component_features(identified_comps::Vector{Int}, metrics_df::DataFrame;
-                              min_bpm::Real=40, max_bpm::Real=120)
-
-Plot metrics used for ECG component identification.
-
-# Arguments
-- `identified_comps::Vector{Int}`: Vector of identified ECG component indices.
-- `metrics_df::DataFrame`: DataFrame containing ECG metrics (from identify_ecg_components).
-- `min_bpm::Real`: Minimum plausible heart rate in BPM (default: 40).
-- `max_bpm::Real`: Maximum plausible heart rate in BPM (default: 120).
-
-# Returns
-- `fig::Figure`: The Makie Figure containing the ECG metrics plots.
-"""
-function plot_ecg_component_features(
-    identified_comps::Vector{Int},
-    metrics_df::DataFrame;
-    min_bpm::Real = 40,
-    max_bpm::Real = 120,
-    kwargs...,
-)
-    # Merge user kwargs with defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_QUALITY_KWARGS, kwargs)
-
-    # Extract commonly used values
-    max_ibi_std_s = plot_kwargs[:max_ibi_std_s]
-    min_peak_ratio = plot_kwargs[:min_peak_ratio]
-    display_plot = plot_kwargs[:display_plot]
-    # Create figure with two panels
-    fig = Figure()
-
-    # Calculate heart rates
-    heart_rates = [isnan(ibi) || ibi <= 0 ? NaN : 60.0 / ibi for ibi in metrics_df.mean_ibi_s]
-    metrics_df[!, :heart_rate_bpm] = heart_rates
-
-    # Left panel: Heart Rate vs Peak Ratio
-    ax1 = Axis(fig[1, 1], xlabel = "Heart Rate (BPM)", ylabel = "Peak Ratio (valid/total)")
-    # Right panel: Heart Rate vs IBI Regularity (std)
-    ax2 = Axis(fig[1, 2], xlabel = "Heart Rate (BPM)", ylabel = "IBI Std Dev (seconds)")
-
-    # Plot non-ECG components
-    non_ecg_idx = setdiff(1:nrow(metrics_df), identified_comps)
-    non_ecg_df = metrics_df[non_ecg_idx, :]
-
-    # Filter out NaNs for plotting
-    valid_non_ecg = findall(.!isnan.(non_ecg_df.heart_rate_bpm) .& .!isnan.(non_ecg_df.peak_ratio))
-    if !isempty(valid_non_ecg)
-        scatter!(ax1, non_ecg_df.heart_rate_bpm[valid_non_ecg], non_ecg_df.peak_ratio[valid_non_ecg], color = :gray, markersize = 10)
-    end
-
-    # Filter valid points for second plot
-    valid_non_ecg2 = findall(.!isnan.(non_ecg_df.heart_rate_bpm) .& .!isnan.(non_ecg_df.std_ibi_s))
-    if !isempty(valid_non_ecg2)
-        scatter!(ax2, non_ecg_df.heart_rate_bpm[valid_non_ecg2], non_ecg_df.std_ibi_s[valid_non_ecg2], color = :gray, markersize = 10)
-    end
-
-    # Plot ECG components
-    ecg_df = metrics_df[in.(metrics_df.Component, Ref(identified_comps)), :]
-
-    # Filter out NaNs
-    valid_ecg = findall(.!isnan.(ecg_df.heart_rate_bpm) .& .!isnan.(ecg_df.peak_ratio))
-    if !isempty(valid_ecg)
-        scatter!(ax1, ecg_df.heart_rate_bpm[valid_ecg], ecg_df.peak_ratio[valid_ecg], color = :black, markersize = 16)
-
-        # Add component labels
-        for i in valid_ecg
-            text!(
-                ax1,
-                ecg_df.heart_rate_bpm[i],
-                ecg_df.peak_ratio[i],
-                text = string(ecg_df.Component[i]),
-                align = (:center, :bottom),
-                offset = (0, 3),
-                fontsize = 12,
-            )
-        end
-    end
-
-    # Plot ECG components in second panel
-    valid_ecg2 = findall(.!isnan.(ecg_df.heart_rate_bpm) .& .!isnan.(ecg_df.std_ibi_s))
-    if !isempty(valid_ecg2)
-        scatter!(ax2, ecg_df.heart_rate_bpm[valid_ecg2], ecg_df.std_ibi_s[valid_ecg2], color = :black, markersize = 16)
-
-        # Add component labels
-        for i in valid_ecg2
-            text!(
-                ax2,
-                ecg_df.heart_rate_bpm[i],
-                ecg_df.std_ibi_s[i],
-                text = string(ecg_df.Component[i]),
-                align = (:center, :bottom),
-                offset = (0, 3),
-                fontsize = 12,
-            )
-        end
-    end
-
-    # Add reference ranges for normal heart boundary and selection criterion
-    vlines!(ax1, [min_bpm, max_bpm], color = (:black, 0.5), linestyle = :dash)
-    vlines!(ax2, [min_bpm, max_bpm], color = (:black, 0.5), linestyle = :dash)
-    hlines!(ax1, [min_peak_ratio], color = (:black, 0.5), linestyle = :dash)
-    hlines!(ax2, [max_ibi_std_s], color = (:black, 0.5), linestyle = :dash)
-
-    if display_plot
-        _display_figure(fig)
-    end
-
-    return fig, (ax1, ax2)
-
-end
-
 
 """
-    plot_line_noise_components(ica::InfoIca, dat::ContinuousData;
-                             exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
-                             line_freq::Real=50.0,
-                             freq_bandwidth::Real=1.0,
-                             z_threshold::Float64=3.0,
-                             min_harmonic_power::Real=0.5)
+    plot_line_noise_components(line_noise_comps::Vector{Int}, metrics_df::DataFrame; kwargs...)
 
 Plot spectral metrics used for line noise component identification.
 
 # Arguments
-- `ica::InfoIca`: The ICA result object.
-- `dat::ContinuousData`: The continuous data.
+- `line_noise_comps::Vector{Int}`: Vector of component indices identified as line noise.
+- `metrics_df::DataFrame`: DataFrame containing line noise metrics. Expected to have columns `:Component`, `:power_ratio_zscore`, and `:harmonic_ratio`.
 
 # Keyword Arguments
-- `exclude_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to exclude. Defaults to `[:is_extreme_value]`.
-- `line_freq::Real`: Line frequency in Hz (default: 50.0).
-- `freq_bandwidth::Real`: Bandwidth around line frequency to consider (default: 1.0 Hz).
-- `z_threshold::Float64`: Z-score threshold for identifying line noise components (default: 3.0).
-- `min_harmonic_power::Real`: Minimum power ratio of harmonics relative to fundamental (default: 0.5).
+- `z_threshold::Float64`: Z-score threshold for the reference line (default: 3.0).
+- `min_harmonic_power::Real`: Minimum harmonic power reference line (default: 0.5).
+- `display_plot::Bool`: Whether to display the plot (default: true).
 
 # Returns
-- `fig::Figure`: The Makie Figure containing the line noise metrics plots.
+- Named tuple `(fig, axes)` where `axes = (ax1, ax2)`.
 """
-function plot_line_noise_components(
-    line_noise_comps::Vector{Int},
-    metrics_df::DataFrame;
-    line_freq::Real = 50.0,
-    freq_bandwidth::Real = 1.0,
-    kwargs...,
-)
+function plot_line_noise_components(line_noise_comps::Vector{Int}, metrics_df::DataFrame; kwargs...)
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_ICA_QUALITY_KWARGS, kwargs)
 
@@ -1919,7 +1793,7 @@ function plot_line_noise_components(
         _display_figure(fig)
     end
 
-    return fig, (ax1, ax2)
+    return (fig = fig, axes = (ax1, ax2))
 end
 
 
@@ -2089,7 +1963,7 @@ function plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df
         _display_figure(fig)
     end
 
-    return fig
+    return (fig = fig,)
 end
 
 """
@@ -2167,7 +2041,7 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
         @minimal_warning "No artifact components found to plot"
         fig = Figure()
         Label(fig[1, 1], "No artifact components found", fontsize = 16)
-        return fig
+        return (fig = fig,)
     end
 
     # Calculate total number of components to plot
@@ -2223,5 +2097,5 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
         _display_figure(fig)
     end
 
-    return fig
+    return (fig = fig,)
 end
