@@ -255,8 +255,8 @@ end
 
 # Data browser state creation
 function _create_browser_state(dat::T, channel_labels, ax, ica, plot_kwargs) where {T<:EegData}
-    state_type = data_state_type(T)
-    initial_window = get_initial_window_size(dat)
+    state_type = _data_state_type(T)
+    initial_window = _get_initial_window_size(dat)
     return DataBrowserState{state_type}(
         view = ViewState(length(channel_labels), initial_window, plot_kwargs),
         channels = ChannelState(channel_labels),
@@ -268,25 +268,25 @@ function _create_browser_state(dat::T, channel_labels, ax, ica, plot_kwargs) whe
 end
 
 # Helper function to get initial window size based on data type
-get_initial_window_size(dat::ContinuousData) = min(5000, nrow(dat.data))  # Show reasonable window, not entire dataset
-get_initial_window_size(dat::ErpData) = nrow(dat.data)  # Show whole epoch
-get_initial_window_size(dat::EpochData) = nrow(dat.data[1])  # Show entire epoch
+_get_initial_window_size(dat::ContinuousData) = min(5000, nrow(dat.data))  # Show reasonable window, not entire dataset
+_get_initial_window_size(dat::ErpData) = nrow(dat.data)  # Show whole epoch
+_get_initial_window_size(dat::EpochData) = nrow(dat.data[1])  # Show entire epoch
 
 # Type mapping
-data_state_type(::Type{ContinuousData}) = ContinuousDataState
-data_state_type(::Type{EpochData}) = EpochedDataState
-data_state_type(::Type{ErpData}) = ContinuousDataState
+_data_state_type(::Type{ContinuousData}) = ContinuousDataState
+_data_state_type(::Type{EpochData}) = EpochedDataState
+_data_state_type(::Type{ErpData}) = ContinuousDataState
 
 # Helper functions for common data access/resetting/updating
-get_current_data(state::ContinuousDataState) = state.current[].data
-get_current_data(state::EpochedDataState) = state.current[].data[state.current_epoch[]]
-get_time_bounds(dat::ContinuousDataState) = (dat.current[].data.time[1], dat.current[].data.time[end])
-get_time_bounds(dat::EpochedDataState) =
+_get_current_data(state::ContinuousDataState) = state.current[].data
+_get_current_data(state::EpochedDataState) = state.current[].data[state.current_epoch[]]
+_get_time_bounds(dat::ContinuousDataState) = (dat.current[].data.time[1], dat.current[].data.time[end])
+_get_time_bounds(dat::EpochedDataState) =
     (dat.current[].data[dat.current_epoch[]].time[1], dat.current[].data[dat.current_epoch[]].time[end])
-has_column(state::ContinuousDataState, col::Symbol) = col in propertynames(state.current[].data)
-has_column(state::EpochedDataState, col::Symbol) = col in propertynames(state.current[].data[state.current_epoch[]])
-notify_data_update(state::AbstractDataState) = notify(state.current)
-reset_to_original!(state::AbstractDataState) = state.current[] = copy(state.original)
+_has_column(state::ContinuousDataState, col::Symbol) = col in propertynames(state.current[].data)
+_has_column(state::EpochedDataState, col::Symbol) = col in propertynames(state.current[].data[state.current_epoch[]])
+_notify_data_update(state::AbstractDataState) = notify(state.current)
+_reset_to_original!(state::AbstractDataState) = state.current[] = copy(state.original)
 
 ######
 # UI #
@@ -346,7 +346,7 @@ function _create_toggles(fig, ax, state)
     marker_toggle_configs = [(:triggers, "Trigger"), (:is_vEOG, "vEOG"), (:is_hEOG, "hEOG")]
 
     for (marker_symbol, toggle_label) in marker_toggle_configs
-        if has_column(state.data, marker_symbol)
+        if _has_column(state.data, marker_symbol)
             marker_index = findfirst(m -> m.name == marker_symbol, state.markers)
             if !isnothing(marker_index)
                 push!(configs, ToggleConfig(toggle_label, (active) -> _plot_vertical_lines!(ax, state.markers[marker_index], active)))
@@ -465,7 +465,7 @@ function _create_reference_menu(fig, state, dat)
 
         s == :none && return
         _rereference!(state.data, s)
-        notify_data_update(state.data)
+        _notify_data_update(state.data)
         _update_analysis_settings!(state)
     end
 
@@ -520,7 +520,7 @@ function _create_ica_menu(fig, ax, state, ica)
             state.ica_current = copy(state.ica_original)
 
             # Reset data to original (no components removed)
-            reset_to_original!(state.data)
+            _reset_to_original!(state.data)
         else
             # Extract component number from selection string
             component_to_toggle_int = extract_int(String(s))
@@ -537,7 +537,7 @@ function _create_ica_menu(fig, ax, state, ica)
 
                 # Always reset to original data first
                 state.ica_current = copy(state.ica_original)
-                reset_to_original!(state.data)
+                _reset_to_original!(state.data)
 
                 # Then apply all currently removed components
                 if !isempty(state.removed_ica_components)
@@ -550,7 +550,7 @@ function _create_ica_menu(fig, ax, state, ica)
         # Update the removed components display
         update_removed_display()
 
-        notify_data_update(state.data)
+        _notify_data_update(state.data)
         _draw(ax, state)
         _update_analysis_settings!(state)
     end
@@ -760,7 +760,7 @@ function _repair_selected_channels!(state, selected_channels, method, ax)
     push!(state.channel_repair_history, (selected_channels, method, original_data))
 
     # Notify that data has been updated
-    notify_data_update(state.data)
+    _notify_data_update(state.data)
 
     # Update analysis settings
     _update_analysis_settings!(state)
@@ -788,7 +788,7 @@ function _undo_last_repair!(state, ax)
     _restore_channel_data!(state.data.current[], channels, original_data)
 
     # Notify that data has been updated
-    notify_data_update(state.data)
+    _notify_data_update(state.data)
 
     # Clear and redraw the plot
     _clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
@@ -1147,7 +1147,7 @@ end
 
 # Helper function to find the closest channel to a click
 function _find_closest_browser_channel(ax, state, mouse_x, mouse_y)
-    current_data = get_current_data(state.data)
+    current_data = _get_current_data(state.data)
     tolerance = 10  # 50 pixel tolerance
 
     min_distance = Inf
@@ -1223,7 +1223,7 @@ end
 
 function _handle_selection_movement_impl(ax, state::DataBrowserState{<:AbstractDataState}, action::Symbol)
     width = state.selection.bounds[][2] - state.selection.bounds[][1]
-    time_start, time_end = get_time_bounds(state.data)
+    time_start, time_end = _get_time_bounds(state.data)
     if action == :left
         new_start = max(time_start, state.selection.bounds[][1] - width / 5)
     else  # :right
@@ -1299,7 +1299,7 @@ Returns a boolean vector indicating which samples are within the selected region
 The vector has the same length as the total number of samples in the data.
 """
 function _get_selected_regions_bool(state::DataBrowserState)
-    current_data = get_current_data(state.data)
+    current_data = _get_current_data(state.data)
     total_samples = nrow(current_data)
     time_data = current_data.time
     bool_vector = falses(total_samples)
@@ -1415,14 +1415,14 @@ end
 function _apply_filters!(state)
     # Reset to original if no filters active
     if !state.data.filter_state.active[].hp && !state.data.filter_state.active[].lp
-        reset_to_original!(state.data)
+        _reset_to_original!(state.data)
         _rereference!(state.data, state.reference_state)
-        notify_data_update(state.data)
+        _notify_data_update(state.data)
         return
     end
 
     # Always start with fresh data when applying filters to ensure clean filtering
-    reset_to_original!(state.data)
+    _reset_to_original!(state.data)
     _rereference!(state.data, state.reference_state)
 
     # Apply active filters
@@ -1432,7 +1432,7 @@ function _apply_filters!(state)
         end
     end
 
-    notify_data_update(state.data)
+    _notify_data_update(state.data)
 
 end
 
@@ -1459,7 +1459,7 @@ end
 ########################
 function _rereference!(state::AbstractDataState, ref)
     rereference!(state.current[], ref, channels())
-    notify_data_update(state)  # Notify that data has been updated
+    _notify_data_update(state)  # Notify that data has been updated
 end
 
 ########################
@@ -1557,14 +1557,14 @@ end
 # Common marker initialization
 function _init_markers(ax, state; marker_visible = Dict{Symbol,Bool}())
     markers = Marker[]
-    data = get_current_data(state.data)
+    data = _get_current_data(state.data)
 
     # Define marker configurations
     marker_configs = [(:triggers, nothing), (:is_vEOG, "v"), (:is_hEOG, "h")]
 
     # Add markers based on configuration
     for (symbol, label) in marker_configs
-        if has_column(state.data, symbol)
+        if _has_column(state.data, symbol)
             _add_marker!(markers, ax, data, symbol, label = label, visible = get(marker_visible, symbol, false))
         end
     end
@@ -1737,9 +1737,9 @@ function _draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
 end
 
 # Helper functions for getting type-specific information
-get_title(dat::EpochData) = "Epoch 1/$(n_epochs(dat))"
-get_title(dat::ContinuousData) = ""
-get_title(dat::ErpData) = "Epoch Average (n=$(n_epochs(dat)))"
+_get_title(dat::EpochData) = "Epoch 1/$(n_epochs(dat))"
+_get_title(dat::ContinuousData) = ""
+_get_title(dat::ErpData) = "Epoch Average (n=$(n_epochs(dat)))"
 
 function _plot_vertical_lines!(ax, marker, active)
     marker.line.visible = active
@@ -1810,7 +1810,7 @@ function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs.
 
     # Common fig/ax/state/ui setup
     fig = Figure(figure_padding = plot_kwargs[:figure_padding])
-    ax = Axis(fig[1, 1], xlabel = plot_kwargs[:xlabel], ylabel = plot_kwargs[:ylabel], title = get_title(dat))
+    ax = Axis(fig[1, 1], xlabel = plot_kwargs[:xlabel], ylabel = plot_kwargs[:ylabel], title = _get_title(dat))
 
     state = _create_browser_state(dat, dat.layout.data.label, ax, ica, plot_kwargs)
     _setup_ui(fig, ax, state, dat, ica, plot_kwargs)
