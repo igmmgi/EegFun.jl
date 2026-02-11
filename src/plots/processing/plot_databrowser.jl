@@ -1707,11 +1707,17 @@ function _draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
 
         if eltype(get_data(state.data.current[], 1:1, channel)) == Bool # Boolean data - create highlights
             highlight_data = @views _splitgroups(findall(get_data(state.data.current[], :, channel)))
-            region_offset = all(iszero, highlight_data[2] .- highlight_data[1]) ? 5 : 0
+            # Widen single-sample regions so they're visible (per-region, not global)
+            end_indices = copy(highlight_data[2])
+            for i in eachindex(end_indices)
+                if end_indices[i] == highlight_data[1][i]
+                    end_indices[i] += 5
+                end
+            end
             state.extra_channel.data_lines[channel] = vspan!(
                 ax,
                 get_time(state.data.current[], highlight_data[1]),
-                get_time(state.data.current[], highlight_data[2] .+ region_offset),
+                get_time(state.data.current[], end_indices),
                 color = :Red,
                 alpha = 0.5,
                 visible = true,

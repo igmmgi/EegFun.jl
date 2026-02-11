@@ -62,6 +62,9 @@ EegFun.plot_databrowser(dat)
 
 # Look for extreme values (adds Bool column to dataframe :is_extreme_value_100)
 EegFun.is_extreme_value!(dat, 100); # 100 mV criterion
+EegFun.is_step_value!(dat, 50, channel_selection = EegFun.channels([:Fp1])); # 50 mV criterion
+
+EegFun.plot_databrowser(dat)
 
 # How many extreme values
 EegFun.n_extreme_value(dat, 100)                    # across all electrodes
@@ -77,7 +80,8 @@ EegFun.is_extreme_value!(dat, 100; channel_selection = x -> .!(endswith.(string.
 # This complements extreme value detection by catching artifacts like cable disconnections 
 # or sharp movements (e.g., [1, 2, 3, 50, 2, ...] where extreme value < 100 wouldn't catch it)
 EegFun.is_step_value!(dat, 50.0); # 50 μV jump criterion
-EegFun.n_values(dat, :is_step_value_50.0)  # how many step artifacts detected
+EegFun.n_step_value(dat, 50.0)                    # how many step artifacts (combined)
+EegFun.n_step_value(dat, 50.0, mode = :separate)  # separately for each electrode
 
 # Step artifact detection with channel selection
 EegFun.is_step_value!(dat, 50.0; channel_selection = EegFun.channels([:Fp1, :Fp2]), channel_out = :is_step_frontal);

@@ -131,8 +131,8 @@ using EegFun
         @test size(count_df, 1) == 2  # 2 channels
 
         # Test that channel Ch2 has more extreme values than Ch1
-        Ch1_count = count_df[count_df.channel .== :Ch1, :n_extreme][1]
-        Ch2_count = count_df[count_df.channel .== :Ch2, :n_extreme][1]
+        Ch1_count = count_df[count_df.channel.==:Ch1, :n_extreme][1]
+        Ch2_count = count_df[count_df.channel.==:Ch2, :n_extreme][1]
         @test Ch2_count > Ch1_count
 
         # Test with channel selection (separate mode)
@@ -764,6 +764,243 @@ using EegFun
             @test isempty(rejection_info.repaired)
             @test !isempty(rejection_info.skipped)
         end
+    end
+
+    @testset "_is_step_value" begin
+        signal = [1.0, 2.0, 50.0, 3.0, -40.0, 4.0, 5.0]
+        threshold = 10.0
+
+        result = EegFun._is_step_value(signal, threshold)
+
+        @test result isa AbstractVector{Bool}
+        @test length(result) == length(signal)
+        # First sample is always false (no previous sample)
+        @test result[1] == false
+        # Sample 2: |2.0 - 1.0| = 1.0 <= 10 → false
+        @test result[2] == false
+        # Sample 3: |50.0 - 2.0| = 48.0 > 10 → true
+        @test result[3] == true
+        # Sample 4: |3.0 - 50.0| = 47.0 > 10 → true
+        @test result[4] == true
+        # Sample 5: |-40.0 - 3.0| = 43.0 > 10 → true
+        @test result[5] == true
+        # Sample 6: |4.0 - (-40.0)| = 44.0 > 10 → true
+        @test result[6] == true
+        # Sample 7: |5.0 - 4.0| = 1.0 <= 10 → false
+        @test result[7] == false
+    end
+
+    @testset "is_step_value" begin
+        dat = EegFun.create_test_continuous_data_with_artifacts()
+
+        # Test with combined mode (default)
+        step_mask = EegFun.is_step_value(dat, 50)
+        @test step_mask isa AbstractVector{Bool}
+        @test length(step_mask) == size(dat.data, 1)
+
+        # Should detect step artifacts in Ch2 (large jumps at artifact boundaries)
+        @test any(step_mask)
+
+        # Ch1 is clean (sin * 20, max step ~1.26), so threshold 50 should catch nothing in Ch1
+        step_ch1_only = EegFun.is_step_value(dat, 50, channel_selection = EegFun.channels([:Ch1]))
+        @test !any(step_ch1_only)
+
+        # Ch2 has jumps > 50 — should detect those
+        step_ch2_only = EegFun.is_step_value(dat, 50, channel_selection = EegFun.channels([:Ch2]))
+        @test any(step_ch2_only)
+
+        # Test separate mode
+        step_df = EegFun.is_step_value(dat, 50, mode = :separate)
+        @test step_df isa DataFrame
+        @test :is_step_value_Ch1_50 in propertynames(step_df)
+        @test :is_step_value_Ch2_50 in propertynames(step_df)
+        @test size(step_df, 1) == size(dat.data, 1)
+
+        # Ch1 should have no steps, Ch2 should have some
+        @test sum(step_df.is_step_value_Ch1_50) == 0
+        @test sum(step_df.is_step_value_Ch2_50) > 0
+
+        # Test with channel selection (separate mode)
+        step_subset = EegFun.is_step_value(dat, 50, channel_selection = EegFun.channels([:Ch1]), mode = :separate)
+        @test :is_step_value_Ch1_50 in propertynames(step_subset)
+        @test :is_step_value_Ch2_50 ∉ propertynames(step_subset)
+
+        # Test empty channel selection
+        @test_throws ErrorException EegFun.is_step_value(dat, 50, channel_selection = EegFun.channels(Symbol[]))
+    end
+
+    @testset "is_step_value!" begin
+        dat = EegFun.create_test_continuous_data_with_artifacts()
+        original_columns = names(dat.data)
+
+        # Test mutating version (default combined mode)
+        EegFun.is_step_value!(dat, 50)
+
+        # Check that new column was added (combined mode creates single column)
+        new_columns = setdiff(names(dat.data), original_columns)
+        @test length(new_columns) == 1
+        @test new_columns[1] == "is_step_value_50"
+
+        # Should detect steps in Ch2
+        @test any(dat.data.is_step_value_50)
+
+        # Test separate mode
+        dat = EegFun.create_test_continuous_data_with_artifacts()
+        EegFun.is_step_value!(dat, 50, mode = :separate)
+
+        new_columns = setdiff(names(dat.data), original_columns)
+        @test length(new_columns) == 2
+        @test "is_step_value_Ch1_50" in new_columns
+        @test "is_step_value_Ch2_50" in new_columns
+
+        # Test with channel selection (separate mode)
+        dat = EegFun.create_test_continuous_data_with_artifacts()
+        EegFun.is_step_value!(dat, 50, channel_selection = EegFun.channels([:Ch1]), mode = :separate)
+
+        new_columns = setdiff(names(dat.data), original_columns)
+        @test length(new_columns) == 1
+        @test "is_step_value_Ch1_50" in new_columns
+
+        # Test with custom channel_out
+        dat = EegFun.create_test_continuous_data_with_artifacts()
+        EegFun.is_step_value!(dat, 50, channel_out = :custom_step_flag)
+        @test :custom_step_flag in propertynames(dat.data)
+    end
+
+    @testset "n_step_value" begin
+        dat = EegFun.create_test_continuous_data_with_artifacts()
+
+        # Test counting step values (default combined mode)
+        total_count = EegFun.n_step_value(dat, 50)
+        @test total_count isa Int
+        @test total_count > 0
+
+        # With very high threshold, no steps should be detected
+        total_count_high = EegFun.n_step_value(dat, 500)
+        @test total_count_high == 0
+
+        # Test separate mode
+        count_df = EegFun.n_step_value(dat, 50, mode = :separate)
+        @test count_df isa DataFrame
+        @test :channel in propertynames(count_df)
+        @test :n_step in propertynames(count_df)
+        @test size(count_df, 1) == 2  # 2 channels
+
+        # Ch1 should have 0 steps, Ch2 should have some
+        Ch1_count = count_df[count_df.channel.==:Ch1, :n_step][1]
+        Ch2_count = count_df[count_df.channel.==:Ch2, :n_step][1]
+        @test Ch1_count == 0
+        @test Ch2_count > 0
+
+        # Test with channel selection
+        count_subset = EegFun.n_step_value(dat, 50, channel_selection = EegFun.channels([:Ch1]), mode = :separate)
+        @test size(count_subset, 1) == 1
+        @test count_subset.channel[1] == :Ch1
+
+        # Test empty channel selection
+        @test_throws ErrorException EegFun.n_step_value(dat, 50, channel_selection = EegFun.channels(Symbol[]))
+    end
+
+    @testset "is_step_value! for EpochData" begin
+        epochs = EegFun.create_test_epoch_data(n_epochs = 5, n_channels = 3)
+
+        # Add step artifacts to some epochs
+        epochs.data[1][50, :Ch1] = 500.0  # Large step up at sample 50
+        epochs.data[3][100, :Ch2] = -500.0  # Large step down at sample 100
+
+        # Test combined mode
+        EegFun.is_step_value!(epochs, 100, mode = :combined)
+
+        for epoch_df in epochs.data
+            @test :is_step_value_100 in propertynames(epoch_df)
+        end
+
+        # Check that artifacts were detected in the epochs where we placed them
+        @test any(epochs.data[1].is_step_value_100)
+        @test any(epochs.data[3].is_step_value_100)
+
+        # Test separate mode
+        epochs2 = EegFun.create_test_epoch_data(n_epochs = 3, n_channels = 2)
+        epochs2.data[1][50, :Ch1] = 500.0
+
+        EegFun.is_step_value!(epochs2, 100, mode = :separate)
+
+        @test :is_step_value_Ch1_100 in propertynames(epochs2.data[1])
+        @test :is_step_value_Ch2_100 in propertynames(epochs2.data[1])
+
+        # Test with epoch selection
+        epochs3 = EegFun.create_test_epoch_data(n_epochs = 5, n_channels = 2)
+        epochs3.data[1][50, :Ch1] = 500.0
+
+        EegFun.is_step_value!(epochs3, 100, epoch_selection = EegFun.epochs([1, 3]))
+
+        @test :is_step_value_100 in propertynames(epochs3.data[1])
+        @test :is_step_value_100 in propertynames(epochs3.data[3])
+
+        # Test error handling
+        @test_throws ErrorException EegFun.is_step_value!(epochs, 100, channel_selection = EegFun.channels(Symbol[]))
+        @test_throws ErrorException EegFun.is_step_value!(epochs, 100, epoch_selection = EegFun.epochs(Int[]))
+    end
+
+    @testset "interval_selection for extreme values" begin
+        dat = EegFun.create_test_continuous_data_with_artifacts()
+
+        # Artifacts in Ch2 are at samples 100-110, 500-505, 800-802
+        # With fs=1000: times 0.099-0.109, 0.499-0.504, 0.799-0.801
+
+        # Detect in full time range — should find all artifacts
+        total_all = EegFun.n_extreme_value(dat, 20)
+        @test total_all > 0
+
+        # Detect only in interval 0.0 to 0.2 — should find the first artifact (100-110)
+        count_early = EegFun.n_extreme_value(dat, 20, interval_selection = EegFun.times(0.0, 0.2))
+        @test count_early > 0
+        @test count_early < total_all
+
+        # Detect only in interval 0.3 to 0.4 — should find nothing (no artifacts there)
+        count_empty = EegFun.n_extreme_value(dat, 20, interval_selection = EegFun.times(0.3, 0.4))
+        @test count_empty == 0
+
+        # Test interval_selection with is_extreme_value (non-mutating)
+        mask_restricted = EegFun.is_extreme_value(dat, 20, interval_selection = EegFun.times(0.0, 0.2))
+        @test mask_restricted isa AbstractVector{Bool}
+        @test length(mask_restricted) == nrow(dat.data)
+        # Should not flag any samples outside the interval
+        @test !any(mask_restricted[600:end])
+
+        # Test interval_selection with is_extreme_value!
+        dat2 = EegFun.create_test_continuous_data_with_artifacts()
+        EegFun.is_extreme_value!(dat2, 20, interval_selection = EegFun.times(0.0, 0.2))
+        @test :is_extreme_value_20 in propertynames(dat2.data)
+        @test !any(dat2.data.is_extreme_value_20[600:end])
+    end
+
+    @testset "interval_selection for step values" begin
+        dat = EegFun.create_test_continuous_data_with_artifacts()
+
+        # Count all steps
+        total_all = EegFun.n_step_value(dat, 50)
+        @test total_all > 0
+
+        # Only early interval should catch the first artifact boundary
+        count_early = EegFun.n_step_value(dat, 50, interval_selection = EegFun.times(0.0, 0.2))
+        @test count_early > 0
+        @test count_early < total_all
+
+        # Interval with no artifacts
+        count_empty = EegFun.n_step_value(dat, 50, interval_selection = EegFun.times(0.3, 0.4))
+        @test count_empty == 0
+
+        # Test interval_selection with is_step_value (non-mutating)
+        mask_restricted = EegFun.is_step_value(dat, 50, interval_selection = EegFun.times(0.0, 0.2))
+        @test mask_restricted isa AbstractVector{Bool}
+        @test !any(mask_restricted[600:end])
+
+        # Test interval_selection with is_step_value!
+        dat2 = EegFun.create_test_continuous_data_with_artifacts()
+        EegFun.is_step_value!(dat2, 50, interval_selection = EegFun.times(0.0, 0.2))
+        @test :is_step_value_50 in propertynames(dat2.data)
+        @test !any(dat2.data.is_step_value_50[600:end])
     end
 
 end

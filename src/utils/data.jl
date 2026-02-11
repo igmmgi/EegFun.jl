@@ -864,6 +864,22 @@ function _interval_to_samples(interval::Interval)
     end
 end
 
+"""
+    _combine_interval_sample(interval::Interval, sample_selection::Function)
+
+Combine an interval selection with a sample selection predicate.
+When `interval` is `nothing` (default), returns the original `sample_selection` unchanged.
+Otherwise combines both predicates with `.&`.
+"""
+function _combine_interval_sample(interval::Interval, sample_selection::Function)
+    if isnothing(interval)
+        return sample_selection
+    else
+        interval_sel = _interval_to_samples(interval)
+        return x -> interval_sel(x) .& sample_selection(x)
+    end
+end
+
 # Helper constructors for subsetting
 _create_subset(dat::ContinuousData, ds, ls) = ContinuousData(dat.file, ds, ls, dat.sample_rate, dat.analysis_info)
 _create_subset(dat::ErpData, ds, ls) =
@@ -891,9 +907,8 @@ function subset(
     interval_selection::Interval = times(),
     include_extra::Bool = false,
 )::T where {T<:SingleDataFrameEeg}
-    # Combine interval and sample selection: first filter by time interval, then by sample predicate
-    interval_sel = _interval_to_samples(interval_selection)
-    combined_sel = x -> interval_sel(x) .& sample_selection(x)
+    # Combine interval and sample selection
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
     selected_channels, selected_samples, layout_subset = _subset_common(dat, channel_selection, combined_sel, include_extra)
     dat_subset = _subset_dataframe(dat.data, selected_channels, selected_samples)
     return _create_subset(dat, dat_subset, layout_subset)
@@ -908,8 +923,7 @@ function subset(
     include_extra::Bool = false,
 )::T where {T<:MultiDataFrameEeg}
     # Combine interval and sample selection
-    interval_sel = _interval_to_samples(interval_selection)
-    combined_sel = x -> interval_sel(x) .& sample_selection(x)
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
     selected_epochs, selected_channels, selected_samples, layout_subset =
         _subset_common(dat, epoch_selection, channel_selection, combined_sel, include_extra)
     dat_subset = _subset_dataframes(dat.data, selected_epochs, selected_channels, selected_samples)
