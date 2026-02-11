@@ -40,7 +40,7 @@ Install EegFun.jl from the Julia REPL:
 
 ```julia
 using Pkg
-Pkg.add("EegFun") 
+Pkg.add(url="https://github.com/igmmgi/EegFun.jl")
 ```
 
 Read and preprocess EEG data:
@@ -61,7 +61,7 @@ EegFun.rereference!(dat, :avg)       # Average reference
 EegFun.is_extreme_value!(dat, 100)   # Mark extreme values
 
 # Continuous data Browser
-Eegfun.plot_databrowser(dat)
+EegFun.plot_databrowser(dat)
 
 # Create epochs and compute ERPs
 epoch_cfg = [
@@ -84,13 +84,13 @@ erps = EegFun.average_epochs(epochs)
 
 EegFun.plot_erp(erps, layout = :grid)
 EegFun.plot_erp(erps, layout = :topo)
-EegFun.plot_topoplot(erps, interval_selection = (0.1, 0.2)) # between 100 and 200 msA
+EegFun.plot_topography(erps, interval_selection = (0.1, 0.2)) # between 100 and 200 ms
 ```
 
 ## Documentation
 
 :::tip Learn EegFun.jl
-[Getting Started Tutorial](tutorials/getting-started.md) 
+[Getting Started Tutorial](tutorials/getting-started.md)
 :::
 
 | Section | Description |

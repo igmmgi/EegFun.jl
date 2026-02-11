@@ -8,14 +8,20 @@ using EegFun
 pages = [
     "Home" => "index.md",
     "Tutorials" => [
+        "Overview" => "tutorials/index.md",
         "Getting Started" => "tutorials/getting-started.md",
+        "Manual Preprocessing" => "tutorials/manual-preprocessing.md",
         "Epoch Selection" => "tutorials/epoch-selection.md",
         "Artifact Handling" => "tutorials/artifact-handling.md",
         "Layouts and Neighbors" => "tutorials/layouts-neighbors.md",
         "Batch Processing" => "tutorials/batch-processing.md",
         "Selection Patterns" => "tutorials/selection-patterns.md",
     ],
-    "Explanations" => ["Data Structures" => "explanations/data-structures.md", "Layouts" => "explanations/layouts.md"],
+    "Explanations" => [
+        "Overview" => "explanations/index.md",
+        "Data Structures" => "explanations/data-structures.md",
+        "Layouts" => "explanations/layouts.md",
+    ],
     "Demos" => [
         "Import" => [
             "BioSemi Import" => "demos/import/biosemi_import.md",
