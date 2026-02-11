@@ -117,6 +117,7 @@ function plot_erp(
         condition_selection = condition_selection,
         channel_selection = channel_selection,
         sample_selection = sample_selection,
+        interval_selection = interval_selection,
         baseline_interval = baseline_interval,
         kwargs...,
     )
@@ -195,6 +196,7 @@ function plot_erp(
         condition_selection = conditions(),  # Always select all (just the one condition)
         channel_selection = channel_selection,
         sample_selection = sample_selection,
+        interval_selection = interval_selection,
         baseline_interval = baseline_interval,
         kwargs...,
     )
@@ -231,6 +233,7 @@ function plot_erp(
         condition_selection = condition_selection,
         channel_selection = channel_selection,
         sample_selection = sample_selection,
+        interval_selection = interval_selection,
         baseline_interval = baseline_interval,
     )
 
@@ -511,6 +514,7 @@ function _prepare_erp_data(
     condition_selection = conditions(),
     channel_selection = channels(),
     sample_selection = samples(),
+    interval_selection::Interval = times(),
     baseline_interval::Interval = times(),
 )
     # Data subsetting - ONLY by condition and sample, NOT by channel
@@ -520,6 +524,7 @@ function _prepare_erp_data(
         condition_selection = condition_selection,
         channel_selection = channels(),  # Select ALL channels (no filtering)
         sample_selection = sample_selection,
+        interval_selection = interval_selection,
         include_extra = true,
     )
 

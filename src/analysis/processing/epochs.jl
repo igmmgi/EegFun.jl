@@ -623,6 +623,11 @@ function extract_epochs(dat::ContinuousData, epoch_conditions::Vector{EpochCondi
     return epochs
 end
 
+function extract_epochs(dat::ContinuousData, epoch_conditions::EpochCondition, epoch_window::Tuple{Real,Real})
+    return extract_epochs(dat, [epoch_conditions], epoch_window)
+end
+
+
 
 """
     average_epochs(dat::EpochData)

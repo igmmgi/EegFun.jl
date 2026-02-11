@@ -17,12 +17,16 @@ dat = EegFun.create_eegfun_data(dat, layout_file);
 EegFun.rereference!(dat, :avg)
 EegFun.highpass_filter!(dat, 0.1)
 
-# Define simple epoch conditions
+# Define simple epoch condition
+epoch_cfg = EegFun.EpochCondition(name = "Trigger1", trigger_sequences = [[1]])
+# Extract epochs (-200ms to 1000ms around triggers)
+epoch = EegFun.extract_epochs(dat, epoch_cfg, (-0.2, 1.0));
+
+# Or multiple epoch conditions
 epoch_cfg = [
     EegFun.EpochCondition(name = "Trigger1", trigger_sequences = [[1]]),
     EegFun.EpochCondition(name = "Trigger2", trigger_sequences = [[2]]),
 ]
-
 # Extract epochs (-200ms to 1000ms around triggers)
 epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.2, 1.0));
 

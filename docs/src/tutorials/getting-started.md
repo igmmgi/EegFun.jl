@@ -23,9 +23,6 @@ Press `Backspace` to return to Julia mode from any other mode.
 
 Julia packages are installed using the built-in package manager. In the Julia REPL, use `Pkg.add("PackageName")` to install packages, or enter package mode by pressing `]` and typing `add PackageName`.
 
-> [!NOTE]
-> Unregistered packages can be installed directly from GitHub using the repository URL: `Pkg.add(url="https://github.com/username/package.jl")`
-
 ### Installation of EegFun
 
 > [!IMPORTANT]
@@ -50,7 +47,7 @@ output = EegFun.XXX # Replace XXX with the actual function name
 
 #### Julia Function Naming Conventions
 
-Julia uses specific naming conventions used within EegFun that are important to understand:
+Julia uses specific naming conventions that are important to understand:
 
 - Functions ending with `!` (e.g., `filter!`) mutate their input arguments
 - Functions without `!` (e.g., `filter`) return new data without modifying inputs
@@ -58,9 +55,9 @@ Julia uses specific naming conventions used within EegFun that are important to 
 
 ## EegFun Philosophy
 
-EegFun.jl is designed with ease-of-use as a core principle, making it accessible even for those without extensive programming experience. While EegFun provides many interactive GUIs for data visualization and exploration, it is not a full GUI application. Instead, the package emphasizes a code-based workflow that remains simple and intuitive.
+EegFun.jl is designed with ease-of-use as a core principle, making it accessible even for those without extensive programming experience. While EegFun provides many interactive GUIs for data visualization and exploration, it is not a full GUI application. Instead, the package emphasizes a code-based workflow that hopes to be simple and intuitive.
 
-The package offers a mix of high-level and lower-level functions, providing complete analysis pipelines that take you from raw data through to ERP analyses, while still allowing fine-grained control when needed. In practice, a complete EEG analysis pipeline can be accomplished with little to zero traditional "coding" — simply typing commands in the Julia REPL and/or combining them into small, readable scripts. This approach provides the flexibility and reproducibility of a programming environment while maintaining the accessibility of interactive tools needed for data visualization and exploration.
+The package offers a mix of high-level and lower-level functions, including complete analysis pipelines that take you from raw data through to ERP analyses, while still allowing fine-grained control when needed. In practice, a complete EEG analysis pipeline can be accomplished with little to zero traditional "coding" — simply typing commands in the Julia REPL and/or combining them into small, readable scripts. This approach provides the flexibility and reproducibility of a programming environment while maintaining the accessibility of interactive tools needed for data visualization and exploration.
 
 ### Useful Julia Resources
 

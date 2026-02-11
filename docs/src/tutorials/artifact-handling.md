@@ -1,28 +1,44 @@
 # Automated Artifact Handling
 
-Low-quality data is an unavoidable part of EEG research. `EegFun.jl` provides a structured workflow for identifying artifacts, repairing what can be salvaged, and rejecting what cannot.
+Artifacts are an unavoidable aspect of EEG research. `EegFun.jl` provides a structured workflow for identifying artifacts, repairing what can be salvaged, and rejecting what cannot.
 
-This tutorial follows the standard pipeline for automated artifact handling.
+## Continuous Data: Sample-Level Detection
 
-## 1. Automatic Detection
+Before epoching, you can flag artifact-contaminated samples in continuous data. This is useful for marking segments to exclude from downstream analysis (e.g., ICA training) or for data quality reporting.
 
-The first step is identifying problematic segments. `EegFun.jl` uses statistical z-scores and absolute voltage thresholds to flag "bad" epochs.
+### Extreme Values
+
+`is_extreme_value!` flags samples where the absolute voltage exceeds a threshold. This catches amplifier saturation, large movement artifacts, and disconnected electrodes.
 
 ```julia
-# Detect bad epochs using default criteria:
-# - Z-scores > 3.0 for variance, range, kurtosis, etc.
-# - Absolute voltage > 100 μV
-artifacts = detect_bad_epochs_automatic(epochs)
+# Flag samples exceeding ±100 μV (adds column :is_extreme_value_100)
+EegFun.is_extreme_value!(dat, 100)
 
-# You can customize these thresholds:
-artifacts = detect_bad_epochs_automatic(
-    epochs, 
-    z_criterion = 2.5,     # More aggressive z-score
-    abs_criterion = 80.0   # 80 μV threshold
-)
+# Check how many samples were flagged
+EegFun.n_values(dat, :is_extreme_value_100)
+
+# Only check specific channels
+EegFun.is_extreme_value!(dat, 100, channel_selection = EegFun.channels([:Fp1, :Fp2]))
 ```
 
-The returned `EpochRejectionInfo` object contains a breakdown of exactly why each epoch was flagged.
+### Step Values
+
+`is_step_value!` flags samples where the voltage jump between consecutive samples exceeds a threshold. This detects sudden discontinuities (cable pulls, electrode pops) that extreme value detection might miss if the signal returns quickly.
+
+```julia
+# Flag jumps > 50 μV between consecutive samples (adds column :is_step_value_50.0)
+EegFun.is_step_value!(dat, 50.0)
+
+# Check how many step artifacts were detected
+EegFun.n_values(dat, :is_step_value_50.0)
+```
+
+> [!TIP]
+> Both functions also have non-mutating versions (`is_extreme_value`, `is_step_value`) that return a boolean mask without modifying the data.
+
+Once flagged, these artifact columns can be visualised in `EegFun.plot_databrowser` — select the relevant column from the **Overlay** dropdown menu to highlight flagged samples on the EEG traces.
+
+## Epoch-Level: Automatic Detection
 
 ## 2. Channel Repair
 

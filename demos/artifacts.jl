@@ -76,11 +76,11 @@ EegFun.is_extreme_value!(dat, 100; channel_selection = x -> .!(endswith.(string.
 # Step artifact detection - detect sudden voltage jumps between consecutive samples
 # This complements extreme value detection by catching artifacts like cable disconnections 
 # or sharp movements (e.g., [1, 2, 3, 50, 2, ...] where extreme value < 100 wouldn't catch it)
-EegFun.is_step_artifact!(dat, 50.0); # 50 μV jump criterion
-EegFun.n_values(dat, :is_step_artifact_50.0)  # how many step artifacts detected
+EegFun.is_step_value!(dat, 50.0); # 50 μV jump criterion
+EegFun.n_values(dat, :is_step_value_50.0)  # how many step artifacts detected
 
 # Step artifact detection with channel selection
-EegFun.is_step_artifact!(dat, 50.0; channel_selection = EegFun.channels([:Fp1, :Fp2]), channel_out = :is_step_frontal);
+EegFun.is_step_value!(dat, 50.0; channel_selection = EegFun.channels([:Fp1, :Fp2]), channel_out = :is_step_frontal);
 
 
 

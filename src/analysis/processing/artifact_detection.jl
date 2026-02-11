@@ -301,7 +301,7 @@ is_extreme_value!(dat::Vector{EpochData}, threshold::Real; kwargs...) = is_extre
 # ==============================================================================
 
 """
-    _is_step_artifact(signal::AbstractVector{Float64}, threshold::Real)
+    _is_step_value(signal::AbstractVector{Float64}, threshold::Real)
 
 Detect step artifacts (sudden jumps) in a signal by computing differences between consecutive samples.
 
@@ -317,14 +317,14 @@ This is useful for detecting cable disconnections, amplifier saturation, or sudd
 
 # Examples
 ```julia
-step_mask = _is_step_artifact(signal, 50.0) # Detect jumps > 50 μV between samples
+step_mask = _is_step_value(signal, 50.0) # Detect jumps > 50 μV between samples
 ```
 
 # Notes
 - The first sample is always false (no previous sample to compare)
 - A step at index i means the jump from i-1 to i exceeded threshold
 """
-function _is_step_artifact(signal::AbstractVector{Float64}, threshold::Real)
+function _is_step_value(signal::AbstractVector{Float64}, threshold::Real)
     n = length(signal)
     mask = Vector{Bool}(undef, n)
     mask[1] = false  # First sample has no previous sample
@@ -337,7 +337,7 @@ function _is_step_artifact(signal::AbstractVector{Float64}, threshold::Real)
 end
 
 """
-    is_step_artifact!(dat::SingleDataFrameEeg, threshold::Real; 
+    is_step_value!(dat::SingleDataFrameEeg, threshold::Real; 
                      channel_selection::Function = channels(), 
                      sample_selection::Function = samples(),
                      interval_selection::Interval = times(),
@@ -357,7 +357,7 @@ jump from 3→50).
 - `sample_selection::Function`: Sample predicate for selecting samples (default: all samples)
 - `interval_selection::Interval`: Time interval for selection (default: all times)
 - `mode::Symbol`: Mode of operation - `:combined` (single combined column, default) or `:separate` (separate columns per channel)
-- `channel_out::Union{Symbol, Nothing}`: Output channel name for combined mode (default: auto-generated as `is_step_artifact_<threshold>`)
+- `channel_out::Union{Symbol, Nothing}`: Output channel name for combined mode (default: auto-generated as `is_step_value_<threshold>`)
 
 # Modifies
 - `dat`: Adds step artifact detection columns to the data
@@ -365,19 +365,19 @@ jump from 3→50).
 # Examples
 ```julia
 # Detect steps > 50 μV between consecutive samples (combined, auto-named)
-is_step_artifact!(dat, 50.0)  # Creates column :is_step_artifact_50.0
+is_step_value!(dat, 50.0)  # Creates column :is_step_value_50.0
 
 # Detect with custom output channel name
-is_step_artifact!(dat, 50.0, channel_out = :is_jump)
+is_step_value!(dat, 50.0, channel_out = :is_jump)
 
 # Detect separately for each channel
-is_step_artifact!(dat, 50.0, mode = :separate)
+is_step_value!(dat, 50.0, mode = :separate)
 
 # Detect only for specific channels
-is_step_artifact!(dat, 50.0, channel_selection = channels([:Fp1, :Fp2]))
+is_step_value!(dat, 50.0, channel_selection = channels([:Fp1, :Fp2]))
 ```
 """
-function is_step_artifact!(
+function is_step_value!(
     dat::SingleDataFrameEeg,
     threshold::Real;
     channel_selection::Function = channels(),
@@ -398,7 +398,7 @@ function is_step_artifact!(
     selected_samples = get_selected_samples(dat.data, sample_selection)
 
     # Use provided channel_out or generate default name
-    channel_out = something(channel_out, Symbol("is_step_artifact_$(threshold)"))
+    channel_out = something(channel_out, Symbol("is_step_value_$(threshold)"))
 
     if mode == :combined
         # Initialize combined output column
@@ -406,7 +406,7 @@ function is_step_artifact!(
 
         # Check each channel and combine results
         for ch in selected_channels
-            step_mask = _is_step_artifact(dat.data[!, ch], threshold)
+            step_mask = _is_step_value(dat.data[!, ch], threshold)
             # Only flag steps that occur within selected samples
             step_mask[.!selected_samples] .= false
             dat.data[!, channel_out] .|= step_mask
@@ -414,10 +414,10 @@ function is_step_artifact!(
     elseif mode == :separate
         # Create separate column for each channel
         for ch in selected_channels
-            step_mask = _is_step_artifact(dat.data[!, ch], threshold)
+            step_mask = _is_step_value(dat.data[!, ch], threshold)
             # Only flag steps that occur within selected samples
             step_mask[.!selected_samples] .= false
-            column_name = Symbol("is_step_artifact_$(ch)_$(threshold)")
+            column_name = Symbol("is_step_value_$(ch)_$(threshold)")
             dat.data[!, column_name] = step_mask
         end
     end
@@ -426,7 +426,7 @@ function is_step_artifact!(
 end
 
 """
-    is_step_artifact!(dat::MultiDataFrameEeg, threshold::Real; 
+    is_step_value!(dat::MultiDataFrameEeg, threshold::Real; 
                      channel_selection::Function = channels(), 
                      sample_selection::Function = samples(),
                      interval_selection::Interval = times(),
@@ -456,16 +456,16 @@ but processes each epoch separately.
 # Examples
 ```julia
 # Detect step artifacts in all epochs
-is_step_artifact!(epoch_data, 50.0)
+is_step_value!(epoch_data, 50.0)
 
 # Detect only in specific epochs
-is_step_artifact!(epoch_data, 50.0, epoch_selection = epochs([1, 3, 5]))
+is_step_value!(epoch_data, 50.0, epoch_selection = epochs([1, 3, 5]))
 
 # Detect with custom output name
-is_step_artifact!(epoch_data, 50.0, channel_out = :is_jump)
+is_step_value!(epoch_data, 50.0, channel_out = :is_jump)
 ```
 """
-function is_step_artifact!(
+function is_step_value!(
     dat::MultiDataFrameEeg,
     threshold::Real;
     channel_selection::Function = channels(),
@@ -487,7 +487,7 @@ function is_step_artifact!(
     isempty(selected_epochs) && @minimal_error_throw("No epochs selected")
 
     # Use provided channel_out or generate default name
-    channel_out = something(channel_out, Symbol("is_step_artifact_$(threshold)"))
+    channel_out = something(channel_out, Symbol("is_step_value_$(threshold)"))
 
     # Process each selected epoch
     for epoch_idx in selected_epochs
@@ -505,13 +505,13 @@ function is_step_artifact!(
 
         if mode == :combined
             for ch in selected_channels
-                step_mask = _is_step_artifact(epoch_df[!, ch], threshold) .& sample_mask
+                step_mask = _is_step_value(epoch_df[!, ch], threshold) .& sample_mask
                 epoch_df[!, channel_out] .|= step_mask
             end
         else
             for ch in selected_channels
-                step_mask = _is_step_artifact(epoch_df[!, ch], threshold) .& sample_mask
-                column_name = Symbol("is_step_artifact_$(ch)_$(threshold)")
+                step_mask = _is_step_value(epoch_df[!, ch], threshold) .& sample_mask
+                column_name = Symbol("is_step_value_$(ch)_$(threshold)")
                 epoch_df[!, column_name] = step_mask
             end
         end
@@ -521,7 +521,7 @@ function is_step_artifact!(
 end
 
 """
-    is_step_artifact!(epochs_list::Vector{EpochData}, threshold::Real; kwargs...)
+    is_step_value!(epochs_list::Vector{EpochData}, threshold::Real; kwargs...)
 
 Detect step artifacts across multiple EpochData objects (conditions).
 
@@ -538,10 +538,81 @@ Applies step artifact detection to each EpochData object in the vector.
 # Examples
 ```julia
 # Detect step artifacts across all conditions
-is_step_artifact!(all_epochs, 50.0)
+is_step_value!(all_epochs, 50.0)
 ```
 """
-is_step_artifact!(dat::Vector{EpochData}, threshold::Real; kwargs...) = is_step_artifact!.(dat, threshold; kwargs...)
+is_step_value!(dat::Vector{EpochData}, threshold::Real; kwargs...) = is_step_value!.(dat, threshold; kwargs...)
+
+
+"""
+    is_step_value(dat::SingleDataFrameEeg, threshold::Real; 
+                  channel_selection::Function = channels(), 
+                  sample_selection::Function = samples(),
+                  interval_selection::Interval = times(),
+                  mode::Symbol = :combined)
+
+Detect step values (sudden voltage jumps) across selected channels and return results
+without modifying the input data.
+
+# Arguments
+- `dat::SingleDataFrameEeg`: The EEG data object
+- `threshold::Real`: Threshold for step detection (in μV)
+- `channel_selection::Function`: Channel predicate for selecting channels (default: all layout channels)
+- `sample_selection::Function`: Sample predicate for selecting samples (default: all samples)
+- `interval_selection::Interval`: Time interval for selection (default: all times)
+- `mode::Symbol`: Mode of operation - `:combined` (boolean vector, default) or `:separate` (DataFrame with separate columns per channel)
+
+# Returns
+- `Vector{Bool}` (combined mode) or `DataFrame` (separate mode)
+
+# Examples
+```julia
+# Detect step values and return combined boolean vector (default)
+step_mask = is_step_value(dat, 50.0)
+
+# Detect step values and return DataFrame with separate columns
+results = is_step_value(dat, 50.0, mode = :separate)
+
+# Detect step values for specific channels
+step_mask = is_step_value(dat, 50.0, channel_selection = channels([:Fp1, :Fp2]))
+```
+"""
+function is_step_value(
+    dat::SingleDataFrameEeg,
+    threshold::Real;
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    interval_selection::Interval = times(),
+    mode::Symbol = :combined,
+)
+
+    mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined")
+    threshold <= 0 && @minimal_error_throw("threshold must be greater than 0")
+
+    # Get selected channels and samples
+    selected_channels = get_selected_channels(dat, channel_selection)
+    isempty(selected_channels) && @minimal_error_throw("No channels selected")
+
+    selected_samples = get_selected_samples(dat.data, sample_selection)
+
+    if mode == :combined
+        combined_mask = falses(nrow(dat.data))
+        sample_mask = falses(nrow(dat.data))
+        sample_mask[selected_samples] .= true
+        for ch in selected_channels
+            step_mask = _is_step_value(dat.data[!, ch], threshold) .& sample_mask
+            combined_mask .|= step_mask
+        end
+        return Vector{Bool}(combined_mask)
+
+    elseif mode == :separate
+        temp_dat = copy(dat)
+        is_step_value!(temp_dat, threshold; channel_selection, sample_selection, mode = :separate)
+
+        extreme_cols = [Symbol("is_step_value_$(ch)_$(threshold)") for ch in selected_channels]
+        return temp_dat.data[:, extreme_cols]
+    end
+end
 
 
 # Helper function to detect extreme values for selected channels
