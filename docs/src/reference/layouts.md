@@ -300,6 +300,324 @@ BrainProducts electrode caps organized by product line:
 ![RNP-BA-MR3-128 layout](/layouts/acticap/R-Net_MR/RNP-BA-MR3-128.png)
 :::
 
+::: details RNP-AP-32 (32 channels) - R-Net for actiCHamp Plus
+![RNP-AP-32 layout](/layouts/acticap/R-Net_RNP-AP_RNP-BA_RNP-LA/R-Net_for_actiCHamp_Plus_RNP-AP/RNP-AP-32/RNP-AP-32.png)
+:::
+
+::: details RNP-AP-64 (64 channels) - R-Net for actiCHamp Plus (with FCz)
+![RNP-AP-64 layout](/layouts/acticap/R-Net_RNP-AP_RNP-BA_RNP-LA/R-Net_for_actiCHamp_Plus_RNP-AP/RNP-AP-64_with_FCz/RNP-AP-64.png)
+:::
+
+::: details RNP-AP-96 (96 channels) - R-Net for actiCHamp Plus (with FCz)
+![RNP-AP-96 layout](/layouts/acticap/R-Net_RNP-AP_RNP-BA_RNP-LA/R-Net_for_actiCHamp_Plus_RNP-AP/RNP-AP-96_with_FCz/RNP-AP-96.png)
+:::
+
+::: details RNP-AP-128 (128 channels) - R-Net for actiCHamp Plus (with FCz)
+![RNP-AP-128 layout](/layouts/acticap/R-Net_RNP-AP_RNP-BA_RNP-LA/R-Net_for_actiCHamp_Plus_RNP-AP/RNP-AP-128_with_FCz/RNP-AP-128.png)
+:::
+
+::: details RNP-AP-160 (160 channels) - R-Net for actiCHamp Plus (with FCz, Iz)
+![RNP-AP-160 layout](/layouts/acticap/R-Net_RNP-AP_RNP-BA_RNP-LA/R-Net_for_actiCHamp_Plus_RNP-AP/RNP-AP-160_with_FCz_Iz/RNP-AP-160.png)
+:::
+
+#### actiCAP (Standard)
+
+::: details AC-21 (21 channels)
+![AC-21 layout](/layouts/acticap/actiCAP_CAC/actiCAP_21/AC-21.png)
+:::
+
+::: details AC-32 (32 channels)
+![AC-32 layout](/layouts/acticap/actiCAP_CAC/actiCAP_32/AC-32.png)
+:::
+
+::: details AC-64 (64 channels)
+![AC-64 layout](/layouts/acticap/actiCAP_CAC/actiCAP_64/AC-64.png)
+:::
+
+::: details AC-96 (96 channels)
+![AC-96 layout](/layouts/acticap/actiCAP_CAC/actiCAP_96/AC-96.png)
+:::
+
+::: details AC-128 (128 channels)
+![AC-128 layout](/layouts/acticap/actiCAP_CAC/actiCAP_128/AC-128.png)
+:::
+
+#### actiCAP Xpress Twist
+
+::: details Twist-32 (32 channels) - for BrainAmp (with REF)
+![Twist-32 REF layout](/layouts/acticap/actiCAP_Xpress_Twist_32/actiCAP_Xpress_Twist_for_BrainAmp/Twist-32_REF.png)
+:::
+
+::: details Twist-32 (32 channels) - for LiveAmp (with REF)
+![Twist-32 REF layout](/layouts/acticap/actiCAP_Xpress_Twist_32/actiCAP_Xpress_Twist_for_LiveAmp/Twist-32_REF.png)
+:::
+
+::: details Twist-32 (32 channels) - for actiCHamp (no REF)
+![Twist-32 NO REF layout](/layouts/acticap/actiCAP_Xpress_Twist_32/actiCAP_Xpress_Twist_for_actiCHamp/Twist-32_NO_REF.png)
+:::
+
+#### actiCHamp Electrode Cap (CAP)
+
+::: details AP-32 (32 channels) - actiCHamp electrode cap
+![AP-32 layout](/layouts/acticap/actiCAP_electrode_cap_CAP/actiCHamp_electrode_cap_32/AP-32.png)
+:::
+
+::: details AP-64 (64 channels) - actiCHamp electrode cap
+![AP-64 layout](/layouts/acticap/actiCAP_electrode_cap_CAP/actiCHamp_electrode_cap_64/AP-64.png)
+:::
+
+::: details AP-96 (96 channels) - actiCHamp electrode cap
+![AP-96 layout](/layouts/acticap/actiCAP_electrode_cap_CAP/actiCHamp_electrode_cap_96/AP-96.png)
+:::
+
+::: details AP-128 (128 channels) - actiCHamp electrode cap
+![AP-128 layout](/layouts/acticap/actiCAP_electrode_cap_CAP/actiCHamp_electrode_cap_128/AP-128.png)
+:::
+
+::: details AP-160 (160 channels) - actiCHamp electrode cap
+![AP-160 layout](/layouts/acticap/actiCAP_electrode_cap_CAP/actiCHamp_electrode_cap_160/AP-160.png)
+:::
+
+#### actiCAP UOL (CMA)
+
+::: details CMA-21 (21 channels) - BrainAmp (with REF)
+![CMA-21 REF layout](/layouts/acticap/actiCAP_electrode_cap_CMA/actiCAP_UOL_21_Channel/BrainAmp/CMA-21_REF.png)
+:::
+
+::: details CMA-21 (21 channels) - actiCHamp (no REF)
+![CMA-21 NO REF layout](/layouts/acticap/actiCAP_electrode_cap_CMA/actiCAP_UOL_21_Channel/actiCHamp/CMA-21_NO_REF.png)
+:::
+
+::: details CMA-21 (21 channels) - actiCHamp Plus (no REF)
+![CMA-21 NO REF layout](/layouts/acticap/actiCAP_electrode_cap_CMA/actiCAP_UOL_21_Channel/actiCHamp_Plus/CMA-21_NO_REF.png)
+:::
+
+::: details CMA-32 (32 channels) - BrainAmp (with REF)
+![CMA-32 REF layout](/layouts/acticap/actiCAP_electrode_cap_CMA/actiCAP_UOL_32_Channel/BrainAmp/CMA-32_REF.png)
+:::
+
+::: details CMA-32 (32 channels) - actiCHamp (no REF)
+![CMA-32 NO REF layout](/layouts/acticap/actiCAP_electrode_cap_CMA/actiCAP_UOL_32_Channel/actiCHamp/CMA-32_NO_REF.png)
+:::
+
+::: details CMA-32 (32 channels) - actiCHamp Plus (no REF)
+![CMA-32 NO REF layout](/layouts/acticap/actiCAP_electrode_cap_CMA/actiCAP_UOL_32_Channel/actiCHamp_Plus/CMA-32_NO_REF.png)
+:::
+
+::: details CMA-64 (64 channels) - BrainAmp (with REF)
+![CMA-64 REF layout](/layouts/acticap/actiCAP_electrode_cap_CMA/actiCAP_UOL_64_Channel/BrainAmp/CMA-64_REF.png)
+:::
+
+::: details CMA-64 (64 channels) - actiCHamp (no REF)
+![CMA-64 NO REF layout](/layouts/acticap/actiCAP_electrode_cap_CMA/actiCAP_UOL_64_Channel/actiCHamp/CMA-64_NO_REF.png)
+:::
+
+::: details CMA-64 (64 channels) - actiCHamp Plus (no REF)
+![CMA-64 NO REF layout](/layouts/acticap/actiCAP_electrode_cap_CMA/actiCAP_UOL_64_Channel/actiCHamp_Plus/CMA-64_NO_REF.png)
+:::
+
+::: details CMA-96 (96 channels) - BrainAmp (with REF)
+![CMA-96 REF layout](/layouts/acticap/actiCAP_electrode_cap_CMA/actiCAP_UOL_96_Channel/BrainAmp/CMA-96_REF.png)
+:::
+
+::: details CMA-96 (96 channels) - actiCHamp (no REF)
+![CMA-96 NO REF layout](/layouts/acticap/actiCAP_electrode_cap_CMA/actiCAP_UOL_96_Channel/actiCHamp/CMA-96_NO_REF.png)
+:::
+
+::: details CMA-96 (96 channels) - actiCHamp Plus (no REF)
+![CMA-96 NO REF layout](/layouts/acticap/actiCAP_electrode_cap_CMA/actiCAP_UOL_96_Channel/actiCHamp_Plus/CMA-96_NO_REF.png)
+:::
+
+::: details CMA-128 (128 channels) - BrainAmp (with REF)
+![CMA-128 REF layout](/layouts/acticap/actiCAP_electrode_cap_CMA/actiCAP_UOL_128_Channel/BrainAmp/CMA-128_REF.png)
+:::
+
+::: details CMA-128 (128 channels) - actiCHamp (no REF)
+![CMA-128 NO REF layout](/layouts/acticap/actiCAP_electrode_cap_CMA/actiCAP_UOL_128_Channel/actiCHamp/CMA-128_NO_REF.png)
+:::
+
+::: details CMA-128 (128 channels) - actiCHamp Plus (no REF)
+![CMA-128 NO REF layout](/layouts/acticap/actiCAP_electrode_cap_CMA/actiCAP_UOL_128_Channel/actiCHamp_Plus/CMA-128_NO_REF.png)
+:::
+
+::: details CMA-160 (160 channels) - BrainAmp (with REF)
+![CMA-160 REF layout](/layouts/acticap/actiCAP_electrode_cap_CMA/actiCAP_UOL_160_Channel/BrainAmp/CMA-160_REF.png)
+:::
+
+::: details CMA-160 (160 channels) - actiCHamp (no REF)
+![CMA-160 NO REF layout](/layouts/acticap/actiCAP_electrode_cap_CMA/actiCAP_UOL_160_Channel/actiCHamp/CMA-160_NO_REF.png)
+:::
+
+::: details CMA-160 (160 channels) - actiCHamp Plus (no REF)
+![CMA-160 NO REF layout](/layouts/acticap/actiCAP_electrode_cap_CMA/actiCAP_UOL_160_Channel/actiCHamp_Plus/CMA-160_NO_REF.png)
+:::
+
+#### actiCAP Slim (AS)
+
+::: details AS-32 (32 channels) - with REF
+![AS-32 REF layout](/layouts/acticap/actiCAP_slim_for_actiCHamp_AS/AS-32/AS-32_REF.png)
+:::
+
+::: details AS-32 (32 channels) - no REF
+![AS-32 NO REF layout](/layouts/acticap/actiCAP_slim_for_actiCHamp_AS/AS-32/AS-32_NO_REF.png)
+:::
+
+::: details AS-64 (64 channels) - with REF
+![AS-64 REF layout](/layouts/acticap/actiCAP_slim_for_actiCHamp_AS/AS-64/AS-64_REF.png)
+:::
+
+::: details AS-64 (64 channels) - no REF
+![AS-64 NO REF layout](/layouts/acticap/actiCAP_slim_for_actiCHamp_AS/AS-64/AS-64_NO_REF.png)
+:::
+
+::: details AS-96 (96 channels) - with REF
+![AS-96 REF layout](/layouts/acticap/actiCAP_slim_for_actiCHamp_AS/AS-96/AS-96_REF.png)
+:::
+
+::: details AS-96 (96 channels) - no REF
+![AS-96 NO REF layout](/layouts/acticap/actiCAP_slim_for_actiCHamp_AS/AS-96/AS-96_NO_REF.png)
+:::
+
+::: details AS-128 (128 channels) - with REF
+![AS-128 REF layout](/layouts/acticap/actiCAP_slim_for_actiCHamp_AS/AS-128/AS-128_REF.png)
+:::
+
+::: details AS-128 (128 channels) - no REF
+![AS-128 NO REF layout](/layouts/acticap/actiCAP_slim_for_actiCHamp_AS/AS-128/AS-128_NO_REF.png)
+:::
+
+::: details AS-160 (160 channels) - with REF
+![AS-160 REF layout](/layouts/acticap/actiCAP_slim_for_actiCHamp_AS/AS-160/AS-160_REF.png)
+:::
+
+::: details AS-160 (160 channels) - no REF
+![AS-160 NO REF layout](/layouts/acticap/actiCAP_slim_for_actiCHamp_AS/AS-160/AS-160_NO_REF.png)
+:::
+
+#### actiCap for LiveAmp
+
+::: details CLA-32 (32 channels) - actiCap for LiveAmp
+![CLA-32 layout](/layouts/acticap/actiCap_for_LiveAmp_32/CLA-32.png)
+:::
+
+#### actiCap Slim (ASP) — for BrainAmpDC
+
+::: details CACS-32 (32 channels) - for BrainAmpDC (with REF)
+![CACS-32 REF layout](/layouts/acticap/actiCap_slim_ASP/actiCap_slim_for_BrainAmpDC_ASP/CACS-32/CACS-32_REF.png)
+:::
+
+::: details CACS-64 (64 channels) - for BrainAmpDC (with REF)
+![CACS-64 REF layout](/layouts/acticap/actiCap_slim_ASP/actiCap_slim_for_BrainAmpDC_ASP/CACS-64/CACS-64_REF.png)
+:::
+
+::: details CACS-96 (96 channels) - for BrainAmpDC (with REF)
+![CACS-96 REF layout](/layouts/acticap/actiCap_slim_ASP/actiCap_slim_for_BrainAmpDC_ASP/CACS-96/CACS-96_REF.png)
+:::
+
+::: details CACS-128 (128 channels) - for BrainAmpDC (with REF)
+![CACS-128 REF layout](/layouts/acticap/actiCap_slim_ASP/actiCap_slim_for_BrainAmpDC_ASP/CACS-128/CACS-128_REF.png)
+:::
+
+#### actiCap Slim (ASP) — for LiveAmp
+
+::: details CACS-32 (32 channels) - for LiveAmp (with REF)
+![CACS-32 REF layout](/layouts/acticap/actiCap_slim_ASP/actiCap_slim_for_LiveAmp_ASP/CACS-32/CACS-32_REF.png)
+:::
+
+::: details CACS-64 (64 channels) - for LiveAmp (with REF)
+![CACS-64 REF layout](/layouts/acticap/actiCap_slim_ASP/actiCap_slim_for_LiveAmp_ASP/CACS-64/CACS-64_REF.png)
+:::
+
+#### actiCap Slim (ASP) — for actiCHamp Plus
+
+::: details CACS-32 (32 channels) - for actiCHamp Plus (no REF)
+![CACS-32 NO REF layout](/layouts/acticap/actiCap_slim_ASP/actiCap_slim_for_actiChamp_Plus_ASP/CACS-32/CACS-32_NO_REF.png)
+:::
+
+::: details CACS-64 (64 channels) - for actiCHamp Plus (no REF)
+![CACS-64 NO REF layout](/layouts/acticap/actiCap_slim_ASP/actiCap_slim_for_actiChamp_Plus_ASP/CACS-64/CACS-64_NO_REF.png)
+:::
+
+::: details CACS-96 (96 channels) - for actiCHamp Plus (no REF)
+![CACS-96 NO REF layout](/layouts/acticap/actiCap_slim_ASP/actiCap_slim_for_actiChamp_Plus_ASP/CACS-96/CACS-96_NO_REF.png)
+:::
+
+::: details CACS-128 (128 channels) - for actiCHamp Plus (no REF)
+![CACS-128 NO REF layout](/layouts/acticap/actiCap_slim_ASP/actiCap_slim_for_actiChamp_Plus_ASP/CACS-128/CACS-128_NO_REF.png)
+:::
+
+::: details CACS-160 (160 channels) - for actiCHamp Plus (no REF)
+![CACS-160 NO REF layout](/layouts/acticap/actiCap_slim_ASP/actiCap_slim_for_actiChamp_Plus_ASP/CACS-160/CACS-160_NO_REF.png)
+:::
+
+#### actiCap Snap — for BrainAmpDC
+
+::: details CACS-21 (21 channels) - for BrainAmpDC (with REF)
+![CACS-21 REF layout](/layouts/acticap/actiCap_snap_CACS_CAS_GACS/actiCap_slim_for_BrainAmpDC/CACS_21/CACS-21_REF.png)
+:::
+
+::: details CACS-32 (32 channels) - snap for BrainAmpDC (with REF)
+![CACS-32 REF layout](/layouts/acticap/actiCap_snap_CACS_CAS_GACS/actiCap_slim_for_BrainAmpDC/CACS-32/CACS-32_REF.png)
+:::
+
+::: details CACS-64 (64 channels) - snap for BrainAmpDC (with REF)
+![CACS-64 REF layout](/layouts/acticap/actiCap_snap_CACS_CAS_GACS/actiCap_slim_for_BrainAmpDC/CACS-64/CACS-64_REF.png)
+:::
+
+::: details CACS-96 (96 channels) - snap for BrainAmpDC (with REF)
+![CACS-96 REF layout](/layouts/acticap/actiCap_snap_CACS_CAS_GACS/actiCap_slim_for_BrainAmpDC/CACS-96/CACS-96_REF.png)
+:::
+
+::: details CACS-128 (128 channels) - snap for BrainAmpDC (with REF)
+![CACS-128 REF layout](/layouts/acticap/actiCap_snap_CACS_CAS_GACS/actiCap_slim_for_BrainAmpDC/CACS-128/CACS-128_REF.png)
+:::
+
+#### actiCap Snap — for LiveAmp
+
+::: details CACS-21 (21 channels) - snap for LiveAmp (with REF)
+![CACS-21 REF layout](/layouts/acticap/actiCap_snap_CACS_CAS_GACS/actiCap_slim_for_LiveAmp/CACS-21/CACS-21_REF.png)
+:::
+
+::: details CACS-32 (32 channels) - snap for LiveAmp (with REF)
+![CACS-32 REF layout](/layouts/acticap/actiCap_snap_CACS_CAS_GACS/actiCap_slim_for_LiveAmp/CACS-32/CACS-32_REF.png)
+:::
+
+::: details CACS-64 (64 channels) - snap for LiveAmp (with REF)
+![CACS-64 REF layout](/layouts/acticap/actiCap_snap_CACS_CAS_GACS/actiCap_slim_for_LiveAmp/CACS-64/CACS-64_REF.png)
+:::
+
+#### actiCap Snap — for actiCHamp Plus
+
+::: details CACS-21 (21 channels) - snap for actiCHamp Plus (no REF)
+![CACS-21 NO REF layout](/layouts/acticap/actiCap_snap_CACS_CAS_GACS/actiCap_slim_for_actiChamp_Plus/CACS-21/CACS-21_NO_REF.png)
+:::
+
+::: details CACS-32 (32 channels) - snap for actiCHamp Plus (no REF)
+![CACS-32 NO REF layout](/layouts/acticap/actiCap_snap_CACS_CAS_GACS/actiCap_slim_for_actiChamp_Plus/CACS-32/CACS-32_NO_REF.png)
+:::
+
+::: details CACS-64 (64 channels) - snap for actiCHamp Plus (no REF)
+![CACS-64 NO REF layout](/layouts/acticap/actiCap_snap_CACS_CAS_GACS/actiCap_slim_for_actiChamp_Plus/CACS-64/CACS-64_NO_REF.png)
+:::
+
+::: details CACS-96 (96 channels) - snap for actiCHamp Plus (no REF)
+![CACS-96 NO REF layout](/layouts/acticap/actiCap_snap_CACS_CAS_GACS/actiCap_slim_for_actiChamp_Plus/CACS-96/CACS-96_NO_REF.png)
+:::
+
+::: details CACS-128 (128 channels) - snap for actiCHamp Plus (no REF)
+![CACS-128 NO REF layout](/layouts/acticap/actiCap_snap_CACS_CAS_GACS/actiCap_slim_for_actiChamp_Plus/CACS-128/CACS-128_NO_REF.png)
+:::
+
+::: details CACS-160 (160 channels) - snap for actiCHamp Plus (no REF)
+![CACS-160 NO REF layout](/layouts/acticap/actiCap_snap_CACS_CAS_GACS/actiCap_slim_for_actiChamp_Plus/CACS-160/CACS-160_NO_REF.png)
+:::
+
+#### actiCap Snap for LiveAmp (CLACS)
+
+::: details CLACS-32 (32 channels) - actiCap snap for LiveAmp
+![CLACS-32 layout](/layouts/acticap/actiCap_snap_for_LiveAmp_CLACS/CLACS-32.png)
+:::
+
 ### EasyCap
 
 EasyCap montage configurations (M-series):

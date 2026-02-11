@@ -70,7 +70,7 @@ Epoch plots display individual trial timecourses, showing:
 
 - Individual trial transparency
 - Average line width
-- Color schemes
+- Colour schemes
 - Axis limits
 
 **Layout parameters**:
@@ -114,7 +114,6 @@ This demo shows epoch visualization workflows:
 - Focus on specific channels
 - Combine with different layouts
 - Maintain consistent scaling
-
 
 ## Code Examples
 

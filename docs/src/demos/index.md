@@ -47,13 +47,10 @@ Browse interactive code examples demonstrating EegFun.jl's capabilities.
 - [Plot Channel Spectrum](plotting/plot_channel_spectrum.md) - Frequency spectra
 - [Plot Channel Summary](plotting/plot_channel_summary.md) - Channel statistics
 - [Plot Correlation Heatmap](plotting/plot_correlation_heatmap.md) - Channel correlations
-- [Plot Databrowser](plotting/plot_databrowser.md) - Interactive data browsing
 - [Plot Epochs](plotting/plot_epochs.md) - Individual epoch visualization
 - [Plot ERP](plotting/plot_erp.md) - ERP waveforms
-- [Plot ERP Filter GUI](plotting/plot_erp_filter_gui.md) - Interactive filter exploration
 - [Plot ERP Image](plotting/plot_erp_image.md) - ERP images
 - [Plot ERP Measurements](plotting/plot_erp_measurements.md) - Measurement visualization
-- [Plot ERP Measurement GUI](plotting/plot_erp_measurement_gui.md) - Interactive measurement GUI
 - [Plot Filter](plotting/plot_filter.md) - Filter responses
 - [Plot Frequency Spectrum](plotting/plot_frequency_spectrum.md) - SpectrumData power spectra
 - [Plot GFP](plotting/plot_gfp.md) - Global Field Power
@@ -62,6 +59,12 @@ Browse interactive code examples demonstrating EegFun.jl's capabilities.
 - [Plot Layout](plotting/plot_layout.md) - Electrode layouts
 - [Plot Topography](plotting/plot_topography.md) - Topographic maps
 - [Plot Triggers](plotting/plot_triggers.md) - Event markers
+
+## Interactive / GUI
+
+- [Plot Databrowser](plotting/plot_databrowser.md) - Interactive data browsing
+- [Plot ERP Filter GUI](plotting/plot_erp_filter_gui.md) - Interactive filter exploration
+- [Plot ERP Measurement GUI](plotting/plot_erp_measurement_gui.md) - Interactive measurement GUI
 
 ## Specialized Visualization
 

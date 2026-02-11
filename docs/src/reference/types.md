@@ -85,6 +85,71 @@ EegFun.IcaConfig
 EegFun.PreprocessConfig
 ```
 
+## Processing Info Types
+
+```@docs
+EegFun.FilterInfo
+EegFun.BaselineInfo
+EegFun.EpochInfo
+EegFun.TriggerInfo
+EegFun.Interval
+EegFun.PlotLayout
+```
+
+## Artifact & Rejection Types
+
+```@docs
+EegFun.Rejection
+EegFun.ArtifactInfo
+EegFun.ArtifactComponents
+EegFun.ZScoreRejectionInfo
+EegFun.EpochRejectionInfo
+EegFun.EpochRepairInfo
+EegFun.ChannelRepairInfo
+EegFun.ContinuousRepairInfo
+EegFun.TemporalCluster
+```
+
+## GUI & State Types
+
+```@docs
+EegFun.EpochRejectionState
+EegFun.SharedSelectionState
+EegFun.TopoSelectionState
+EegFun.PlotHelpInfo
+```
+
+## ERP Measurement Types
+
+```@docs
+EegFun.ErpMeasurementsResult
+EegFun.ValidationResult
+```
+
+## Decoding & Statistics Result Types
+
+```@docs
+EegFun.DecodingStatisticsResult
+```
+
+## Batch & Pipeline Types
+
+```@docs
+EegFun.BatchConfig
+EegFun.BatchResult
+EegFun.AnalysisSettings
+EegFun.ConfigParameter
+EegFun.PipelineTemplateOptions
+```
+
+## Constants
+
+```@docs
+EegFun.VALID_MEASUREMENT_TYPES
+EegFun.MEASUREMENT_TYPE_LABELS
+EegFun._LATENCY_MEASUREMENT_TYPES
+```
+
 ## See Also
 
 - [Data structures explanation](../explanations/data-structures.md)
