@@ -4,7 +4,7 @@
 
 Launch interactive GUI for exploring ERP measurements with live visual feedback.
 
-Perfect for:
+Useful for:
 - **Teaching**: Show students how measurements are extracted
 - **Exploration**: Try different windows/parameters interactively
 - **Visual Validation**: Check measurement windows before batch processing
@@ -14,15 +14,15 @@ Perfect for:
 
 # Keyword Arguments
 - `channel::Union{Symbol,Nothing}`: Initial channel to display (default: first channel)
-- `measurement_type::String`: Initial measurement type (default: "mean_amplitude")
-- `measurement_interval::Union{Tuple{Real,Real},Nothing}`: Initial measurement window (default: auto)
+- `analysis_type::String`: Initial measurement type (default: "mean_amplitude")
+- `analysis_interval::Union{Tuple{Real,Real},Nothing}`: Initial measurement window (default: auto)
 - `baseline_interval::Union{Tuple{Real,Real},Nothing}`: Initial baseline window (default: full range)
 
 # Interactive Controls
 - **Channel Menu**: Switch between channels
-- **Measurement Type Menu**: Select from all 13 measurement types
-- **Measurement Window Sliders**: Adjust start/end times (thin blue band around y=0)
-- **Baseline Window Sliders**: Adjust baseline interval (thin gray band around y=0)
+- **Analysis Type Menu**: Select from all 13 measurement types
+- **Analsis Interval Sliders**: Adjust start/end times (thin blue band around y=0)
+- **Baseline Interval Sliders**: Adjust baseline interval (thin gray band around y=0)
 - **Show Result Markers**: Toggle visualization of measurement results
 
 # Examples
@@ -37,8 +37,8 @@ plot_erp_measurement_gui(erps, channel = :Cz)
 
 # With initial settings for teaching
 plot_erp_measurement_gui(erp,
-                    measurement_type = "max_peak_latency",
-                    measurement_interval = (0.3, 0.5),
+                    analysis_type = "max_peak_latency",
+                    analysis_interval = (0.3, 0.5),
                     baseline_interval = (-0.2, 0.0))
 ```
 
@@ -50,19 +50,19 @@ plot_erp_measurement_gui(erp,
 function plot_erp_measurement_gui(
     erp::ErpData;
     channel::Union{Symbol,Nothing} = nothing,
-    measurement_type::String = "mean_amplitude",
-    measurement_interval::Union{Tuple{Real,Real},Nothing} = nothing,
+    analysis_type::String = "mean_amplitude",
+    analysis_interval::Union{Tuple{Real,Real},Nothing} = nothing,
     baseline_interval::Union{Tuple{Real,Real},Nothing} = nothing,
 )
-    return plot_erp_measurement_gui([erp]; channel, measurement_type, measurement_interval, baseline_interval)
+    return plot_erp_measurement_gui([erp]; channel, analysis_type, analysis_interval, baseline_interval)
 end
 
 # Vector of ErpData - main implementation
 function plot_erp_measurement_gui(
     erp_vec::Vector{ErpData};
     channel::Union{Symbol,Nothing} = nothing,
-    measurement_type::String = "mean_amplitude",
-    measurement_interval::Union{Tuple{Real,Real},Nothing} = nothing,
+    analysis_type::String = "mean_amplitude",
+    analysis_interval::Union{Tuple{Real,Real},Nothing} = nothing,
     baseline_interval::Union{Tuple{Real,Real},Nothing} = nothing,
 )
 
@@ -72,7 +72,7 @@ function plot_erp_measurement_gui(
     all_channels = setdiff(propertynames(first_erp.data), metadata_cols)
 
     if isempty(all_channels)
-        @minimal_error_throw "No channels found in ERP data"
+        @minimal_error_throw "No channels found in data!"
     end
 
     # Set initial channel
@@ -86,8 +86,8 @@ function plot_erp_measurement_gui(
     time_min, time_max = extrema(time_data)
 
     # Set default measurement window if not provided
-    if isnothing(measurement_interval)
-        measurement_interval = (time_min, time_max)
+    if isnothing(analysis_interval)
+        analysis_interval = (time_min, time_max)
     end
 
     # Set default baseline to full time window if not provided
@@ -97,14 +97,15 @@ function plot_erp_measurement_gui(
 
     # ===== OBSERVABLES FOR REACTIVE UPDATES =====
     selected_channel = Observable(initial_channel)
-    selected_type = Observable(measurement_type)
-    meas_window_obs = Observable(measurement_interval)
+    selected_type = Observable(analysis_type)
+    analysis_interval_obs = Observable(analysis_interval)
     baseline_interval_obs = Observable(baseline_interval)
     show_markers_obs = Observable(false)  # Off by default
 
     # Use plot_erp to create the ERP plot
     # We need to handle baseline reactively, so we'll recreate the plot when baseline changes
-    fig = Figure(size = (1200, 700), title = "ERP Measurement Tool")
+    fig = Figure(size = (1280, 960)) # TODO: appropriate figure sizes?
+    _set_window_title("ERP Measurement Tool")
 
     # Create main grid: controls on left (25%), plot area on right (75%)
     main_grid = fig[1, 1] = GridLayout()
@@ -137,12 +138,12 @@ function plot_erp_measurement_gui(
     )
 
     # Measurement window sliders
-    Label(controls_grid[6, 1], "Measurement Window:", halign = :left)
-    meas_window_slider = IntervalSlider(controls_grid[7, 1], range = time_min:0.005:time_max, startvalues = measurement_interval)
-    meas_window_label = Label(controls_grid[8, 1], @sprintf("%.3f s - %.3f s", measurement_interval...), halign = :left)
+    Label(controls_grid[6, 1], "Measurement Interval:", halign = :left)
+    meas_window_slider = IntervalSlider(controls_grid[7, 1], range = time_min:0.005:time_max, startvalues = analysis_interval)
+    meas_window_label = Label(controls_grid[8, 1], @sprintf("%.3f s - %.3f s", analysis_interval...), halign = :left)
 
     # Baseline window sliders
-    Label(controls_grid[9, 1], "Baseline Window:", halign = :left)
+    Label(controls_grid[9, 1], "Baseline Interval:", halign = :left)
     baseline_interval_slider = IntervalSlider(controls_grid[10, 1], range = time_min:0.005:time_max, startvalues = baseline_interval)
     baseline_interval_label = Label(controls_grid[11, 1], @sprintf("%.3f s - %.3f s", baseline_interval...), halign = :left)
 
@@ -163,47 +164,27 @@ function plot_erp_measurement_gui(
     ax = Axis(plot_area_grid[1, 1], xlabel = "Time (s)", ylabel = "μV", title = "ERP: $(initial_channel)")
 
     # Define visualization helpers (need ax to be defined first)
-    meas_vspan_plots = []
-    function update_meas_window!(mw)
-        for p in meas_vspan_plots
+    function _draw_interval_band!(plots_list, interval, color)
+        for p in plots_list
             delete!(ax, p)
         end
-        empty!(meas_vspan_plots)
-        # Draw thin band around y=0, ±5% of y-axis range
+        empty!(plots_list)
         lims = ax.finallimits[]
-        ymin = lims.origin[2]
-        ymax = lims.origin[2] + lims.widths[2]
-        yrange = ymax - ymin
+        yrange = lims.widths[2]
         band_height = 0.01 * yrange
         p = poly!(
             ax,
-            Point2f[(mw[1], -band_height), (mw[2], -band_height), (mw[2], band_height), (mw[1], band_height)],
-            color = (:blue, 0.3),
+            Point2f[(interval[1], -band_height), (interval[2], -band_height), (interval[2], band_height), (interval[1], band_height)],
+            color = color,
         )
-        push!(meas_vspan_plots, p)
+        push!(plots_list, p)
     end
 
+    analysis_vspan_plots = []
+    update_analysis_interval!(mw) = _draw_interval_band!(analysis_vspan_plots, mw, (:blue, 0.3))
+
     baseline_vspan_plots = []
-    function update_baseline_interval!(bw, enabled)
-        for p in baseline_vspan_plots
-            delete!(ax, p)
-        end
-        empty!(baseline_vspan_plots)
-        if enabled
-            # Draw thin band around y=0
-            lims = ax.finallimits[]
-            ymin = lims.origin[2]
-            ymax = lims.origin[2] + lims.widths[2]
-            yrange = ymax - ymin
-            band_height = 0.01 * yrange
-            p = poly!(
-                ax,
-                Point2f[(bw[1], -band_height), (bw[2], -band_height), (bw[2], band_height), (bw[1], band_height)],
-                color = (:gray, 0.2),
-            )
-            push!(baseline_vspan_plots, p)
-        end
-    end
+    update_baseline_interval!(bw, enabled) = enabled && _draw_interval_band!(baseline_vspan_plots, bw, (:gray, 0.3))
 
     # Result markers visualization (vertical for latencies, horizontal for amplitudes)
     marker_plots = []
@@ -229,11 +210,9 @@ function plot_erp_measurement_gui(
                 continue
             end
 
-            if is_latency
-                # Vertical line at latency time point
+            if is_latency # Vertical line at latency time point
                 p = vlines!(ax, result.value, color = (colors[idx], 0.8), linestyle = :dot, linewidth = 2)
-            else
-                # Horizontal line at amplitude value
+            else # Horizontal line at amplitude value
                 p = hlines!(ax, result.value, color = (colors[idx], 0.8), linestyle = :dot, linewidth = 2)
             end
             push!(marker_plots, p)
@@ -244,29 +223,28 @@ function plot_erp_measurement_gui(
     function update_erp_plot!()
         empty!(ax)  # Clear existing plot
 
-        # Baseline is always enabled
-        baseline_int = baseline_interval_obs[]
-
         # Plot using plot_erp!
         plot_erp!(
             fig,
             ax,
             erp_vec,
             channel_selection = channels(selected_channel[]),
-            baseline_interval = baseline_int,
+            baseline_interval = baseline_interval_obs[],
             legend = false,  # Disable auto-legend to prevent redrawing
             legend_position = :rt,
         )
 
         # Redraw vspan overlays (empty! cleared them)
-        update_meas_window!(meas_window_obs[])
+        update_analysis_interval!(analysis_interval_obs[])
         update_baseline_interval!(baseline_interval_obs[], true)  # Always enabled
+        _set_window_title("ERP Measurement Tool")
 
     end
 
     # Initial plot
     update_erp_plot!()
 
+    # TODO: interactive legend not working here!?
     # Add manual legend for multi-condition plots (outside axis, won't be cleared by empty!)
     if length(erp_vec) > 1
         # Get the line elements from the axis
@@ -286,14 +264,14 @@ function plot_erp_measurement_gui(
     end
 
     on(type_menu.selection) do type_pair
-        # Menu returns a Pair (display_name => measurement_type), extract the VALUE
+        # Menu returns a Pair (display_name => analysis_type), extract the VALUE
         type_str = type_pair isa Pair ? type_pair[2] : type_pair
         selected_type[] = type_str
         ax.title = "$(_print_vector([selected_channel[]])): $(type_str)"
     end
 
     on(meas_window_slider.interval) do interval
-        meas_window_obs[] = (interval[1], interval[2])
+        analysis_interval_obs[] = (interval[1], interval[2])
         meas_window_label.text = @sprintf("%.3f s - %.3f s", interval[1], interval[2])
     end
 
@@ -307,12 +285,12 @@ function plot_erp_measurement_gui(
     end
 
     # Initialize visualizations
-    update_meas_window!(measurement_interval)
+    update_analysis_interval!(analysis_interval)
     update_baseline_interval!(baseline_interval, true)
 
     # Connect to observables
-    on(meas_window_obs) do mw
-        update_meas_window!(mw)
+    on(analysis_interval_obs) do mw
+        update_analysis_interval!(mw)
     end
 
     on(baseline_interval_obs) do bw
@@ -320,7 +298,7 @@ function plot_erp_measurement_gui(
     end
 
     # Computed observable for measurement values (one per condition)
-    measurement_results = lift(selected_channel, selected_type, meas_window_obs, baseline_interval_obs) do ch, type_str, mw, bw
+    measurement_results = lift(selected_channel, selected_type, analysis_interval_obs, baseline_interval_obs) do ch, type_str, mw, bw
         # Compute for all conditions (baseline always enabled)
         results = []
         for erp in erp_vec
@@ -387,8 +365,12 @@ function plot_erp_measurement_gui(
         update_result_markers!(measurement_results[], enabled)
     end
 
-    display(fig)
+    # Trigger initial result display 
+    notify(measurement_results)
+
+    _display_figure(fig)
     return (fig = fig)
+
 end
 
 
@@ -399,25 +381,15 @@ Returns NamedTuple with :value field (and optionally :error field if failed).
 function _compute_gui_measurement(
     erp::ErpData,
     channel::Symbol,
-    measurement_type::String,
-    measurement_interval::Tuple{Real,Real},
+    analysis_type::String,
+    analysis_interval::Tuple{Real,Real},
     baseline_interval::Union{Tuple{Real,Real},Nothing},
 )
-    # Get data
-    time_data = time(erp)
-    channel_data = copy(erp.data[!, channel])
-
-    # Apply baseline correction if requested
-    if !isnothing(baseline_interval)
-        time_mask = (time_data .>= baseline_interval[1]) .& (time_data .<= baseline_interval[2])
-        if any(time_mask)
-            baseline_mean = mean(channel_data[time_mask])
-            channel_data .-= baseline_mean
-        end
-    end
-
-    # Get measurement window mask
-    time_mask = (time_data .>= measurement_interval[1]) .& (time_data .<= measurement_interval[2])
+    # Apply baseline correction using existing infrastructure
+    erp_data = baseline(erp, baseline_interval)
+    time_data = time(erp_data)
+    channel_data = erp_data.data[!, channel]
+    time_mask = (time_data .>= analysis_interval[1]) .& (time_data .<= analysis_interval[2])
 
     if !any(time_mask)
         return (value = NaN,)
@@ -427,16 +399,8 @@ function _compute_gui_measurement(
     selected_times = time_data[time_mask]
 
     # Compute measurement using existing internal function logic
-    # Derive defaults from the canonical ERP_MEASUREMENTS_KWARGS
     measurement_kwargs = Dict{Symbol,Any}(k => v[1] for (k, v) in ERP_MEASUREMENTS_KWARGS)
 
-    try
-        value = _compute_measurement(selected_data, selected_times, measurement_type, measurement_kwargs, channel)
-        if isnothing(value)
-            return (value = NaN, error = "Measurement returned nothing")
-        end
-        return (value = value,)
-    catch e
-        return (value = NaN, error = string(e))
-    end
+    value = _compute_measurement(selected_data, selected_times, analysis_type, measurement_kwargs, channel)
+    return isnothing(value) ? (value = NaN,) : (value = value,)
 end
