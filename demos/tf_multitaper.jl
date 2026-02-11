@@ -47,7 +47,7 @@ data_cohen = EegFun.read_data("./data/files/tf_test_epochs.jld2");
 tf_data = EegFun.tf_multitaper(data_cohen, frequencies = logrange(2, 80, length = 30), cycles = 5, time_steps = 0.05, filter_edges = true)
 EegFun.plot_time_frequency(
     tf_data;
-    baseline_window = (-0.5, -0.2),
+    baseline_interval = (-0.5, -0.2),
     baseline_method = :db,
     colorrange = (-3, 3),
     ylogscale = true,

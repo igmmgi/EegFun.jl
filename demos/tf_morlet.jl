@@ -53,7 +53,7 @@ data_cohen = EegFun.read_data("./data/files/tf_test_epochs.jld2");
 tf_data = EegFun.tf_morlet(reconstructed_data, frequencies = range(2, 80, length = 80), cycles = 3, filter_edges = true)
 EegFun.plot_time_frequency(
     tf_data;
-    baseline_window = (-0.5, -0.2),
+    baseline_interval = (-0.5, -0.2),
     baseline_method = :db,
     colorrange = (-3, 3),
     ylogscale = false,
@@ -64,7 +64,7 @@ EegFun.plot_time_frequency(
 tf_data = EegFun.tf_morlet(data_cohen, frequencies = 2:1:80, cycles = (3, 10))
 EegFun.plot_time_frequency(
     tf_data;
-    baseline_window = (-0.5, -0.2),
+    baseline_interval = (-0.5, -0.2),
     baseline_method = :db,
     colorrange = (-3, 3),
     ylogscale = false,
@@ -75,7 +75,7 @@ EegFun.plot_time_frequency(
 tf_data = EegFun.tf_morlet(data_cohen, frequencies = logrange(2, 80, length = 30), cycles = 3)
 EegFun.plot_time_frequency(
     tf_data;
-    baseline_window = (-0.5, -0.2),
+    baseline_interval = (-0.5, -0.2),
     baseline_method = :db,
     colorrange = (-3, 3),
     ylogscale = true,
@@ -86,7 +86,7 @@ EegFun.plot_time_frequency(
 tf_data = EegFun.tf_morlet(data_cohen, frequencies = logrange(2, 80, length = 30), cycles = 10)
 EegFun.plot_time_frequency(
     tf_data;
-    baseline_window = (-0.5, -0.2),
+    baseline_interval = (-0.5, -0.2),
     baseline_method = :db,
     colorrange = (-3, 3),
     ylogscale = true,
@@ -97,7 +97,7 @@ EegFun.plot_time_frequency(
 tf_data = EegFun.tf_morlet(data_cohen, frequencies = logrange(2, 80, length = 30), cycles = (3, 10))
 EegFun.plot_time_frequency(
     tf_data;
-    baseline_window = (-0.5, -0.2),
+    baseline_interval = (-0.5, -0.2),
     baseline_method = :db,
     colorrange = (-3, 3),
     ylogscale = true,

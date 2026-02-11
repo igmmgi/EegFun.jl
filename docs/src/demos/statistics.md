@@ -69,8 +69,8 @@ stat_data = EegFun.prepare_stats(
     condition_selection = EegFun.conditions([1, 2]), # Conditions to compare
     channel_selection = EegFun.channels(1:72),       # Select all 72 channels
     sample_selection = EegFun.samples((-0.5, 2.0)),  # Full time window
-    baseline_window = EegFun.samples((-0.2, 0.0)),   # Baseline: -200 to 0 ms
-    analysis_window = EegFun.samples((0.0, 1.0)),    # Analysis window: 100-1000 ms
+    baseline_interval = EegFun.samples((-0.2, 0.0)),   # Baseline: -200 to 0 ms
+    analysis_interval = EegFun.samples((0.0, 1.0)),    # Analysis window: 100-1000 ms
 )
 
 # ----------------------------------------------------------------------------

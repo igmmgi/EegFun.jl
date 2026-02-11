@@ -44,7 +44,7 @@ The `cycles` parameter controls the time-frequency resolution trade-off:
 Apply baseline correction to isolate event-related changes:
 
 ```julia
-baseline_window = (-0.5, -0.2)  # Pre-stimulus baseline
+baseline_interval = (-0.5, -0.2)  # Pre-stimulus baseline
 baseline_method = :db           # Decibel conversion (10*log10(activity/baseline))
 ```
 

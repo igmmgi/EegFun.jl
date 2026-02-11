@@ -1,6 +1,6 @@
 """
     plot_erp_with_measurements(measurements::ErpMeasurementsResult, erp_data::Union{String, ErpData, Vector{ErpData}};
-                               analysis_window::Union{Function,Nothing} = nothing,
+                               analysis_interval::Union{Function,Nothing} = nothing,
                                layout::Union{Symbol, PlotLayout} = :single,
                                channel_selection::Function = channels(),
                                condition_selection::Function = conditions(),
@@ -8,7 +8,7 @@
                                kwargs...)
 
     plot_erp_with_measurements(measurements_df::DataFrame, erp_data::Union{String, ErpData, Vector{ErpData}}, analysis_type::String;
-                               analysis_window::Function = samples(),
+                               analysis_interval::Function = samples(),
                                layout::Union{Symbol, PlotLayout} = :single,
                                channel_selection::Function = channels(),
                                condition_selection::Function = conditions(),
@@ -25,11 +25,11 @@ the corresponding measurement markers on ERP plots. The type of overlay depends 
 - Fractional latencies: vertical lines at fractional latency points
 
 # Arguments
-- `measurements::ErpMeasurementsResult`: Results from `erp_measurements` (preferred - automatically uses correct analysis_window)
+- `measurements::ErpMeasurementsResult`: Results from `erp_measurements` (preferred - automatically uses correct analysis_interval)
 - `measurements_df::DataFrame`: DataFrame from `erp_measurements` (legacy - requires analysis_type parameter)
 - `erp_data::Union{String, ErpData, Vector{ErpData}}`: ERP data to plot (filepath or data object)
 - `analysis_type::String`: Type of measurement to overlay (only needed for DataFrame input)
-- `analysis_window::Union{Function,Nothing}`: Analysis window predicate (optional - uses value from ErpMeasurementsResult if not provided)
+- `analysis_interval::Union{Function,Nothing}`: Analysis window predicate (optional - uses value from ErpMeasurementsResult if not provided)
 - `layout::Union{Symbol, PlotLayout}`: Plot layout (same as `plot_erp`)
 - `channel_selection::Function`: Channel selection predicate
 - `condition_selection::Function`: Condition selection predicate
@@ -40,9 +40,9 @@ the corresponding measurement markers on ERP plots. The type of overlay depends 
 ```julia
 # Get measurements (returns ErpMeasurementsResult)
 results = erp_measurements("erps_good", "max_peak_amplitude", 
-                          analysis_window = samples((0.1, 0.3)))
+                          analysis_interval = samples((0.1, 0.3)))
 
-# Plot with measurement overlays (automatically uses correct analysis_window)
+# Plot with measurement overlays (automatically uses correct analysis_interval)
 plot_erp_with_measurements(results, "erps_good.jld2")
 
 # Access DataFrame directly
@@ -52,15 +52,15 @@ results.data  # or just use results as a DataFrame
 function plot_erp_with_measurements(
     measurements::ErpMeasurementsResult,
     erp_data::Union{String,ErpData,Vector{ErpData}};
-    analysis_window::Union{Function,Nothing} = nothing,
+    analysis_interval::Union{Function,Nothing} = nothing,
     layout::Union{Symbol,PlotLayout} = :single,
     channel_selection::Function = channels(),
     condition_selection::Function = conditions(),
     participant_selection::Function = participants(),
     kwargs...,
 )
-    # Use analysis_window from measurements if not provided
-    analysis_window = something(analysis_window, measurements.analysis_window)
+    # Use analysis_interval from measurements if not provided
+    analysis_interval = something(analysis_interval, measurements.analysis_interval)
 
     # Extract DataFrame and analysis type from measurements
     measurements_df = measurements.data
@@ -70,7 +70,7 @@ function plot_erp_with_measurements(
         measurements_df,
         erp_data,
         analysis_type,
-        analysis_window,
+        analysis_interval,
         layout,
         channel_selection,
         condition_selection,
@@ -84,7 +84,7 @@ function plot_erp_with_measurements(
     measurements_df::DataFrame,
     erp_data::Union{String,ErpData,Vector{ErpData}},
     analysis_type::String;
-    analysis_window::Function = samples(),
+    analysis_interval::Function = samples(),
     layout::Union{Symbol,PlotLayout} = :single,
     channel_selection::Function = channels(),
     condition_selection::Function = conditions(),
@@ -95,7 +95,7 @@ function plot_erp_with_measurements(
         measurements_df,
         erp_data,
         analysis_type,
-        analysis_window,
+        analysis_interval,
         layout,
         channel_selection,
         condition_selection,
@@ -109,7 +109,7 @@ function _plot_erp_with_measurements_impl(
     measurements_df::DataFrame,
     erp_data::Union{String,ErpData,Vector{ErpData}},
     analysis_type::String,
-    analysis_window::Function,
+    analysis_interval::Function,
     layout::Union{Symbol,PlotLayout},
     channel_selection::Function,
     condition_selection::Function,
@@ -216,7 +216,7 @@ function _plot_erp_with_measurements_impl(
                 if plot_line === nothing
                     @debug "No plot line found for dataset $(dataset.condition_name), channel $channel on axis 1"
                 end
-                _overlay_measurements!(axes[1], measurements_df, dataset, channel, analysis_type, analysis_window, plot_line)
+                _overlay_measurements!(axes[1], measurements_df, dataset, channel, analysis_type, analysis_interval, plot_line)
             end
         end
     else
@@ -230,7 +230,7 @@ function _plot_erp_with_measurements_impl(
                     if plot_line === nothing
                         @debug "No plot line found for dataset $(dataset.condition_name), channel $channel on axis $ax_idx"
                     end
-                    _overlay_measurements!(axes[ax_idx], measurements_df, dataset, channel, analysis_type, analysis_window, plot_line)
+                    _overlay_measurements!(axes[ax_idx], measurements_df, dataset, channel, analysis_type, analysis_interval, plot_line)
                 end
             end
         end
@@ -248,7 +248,7 @@ function _overlay_measurements!(
     dataset::ErpData,
     channel::Symbol,
     analysis_type::String,
-    analysis_window,
+    analysis_interval,
     plot_line::Union{Any,Nothing} = nothing,
 )
     # Find matching row in measurements DataFrame
@@ -265,7 +265,7 @@ function _overlay_measurements!(
     # Check for valid channel data
     channel_mask = hasproperty(measurements_df, channel) .& .!isnan.(measurements_df[!, channel])
 
-    matching_rows = measurements_df[condition_mask .& channel_mask, :]
+    matching_rows = measurements_df[condition_mask.&channel_mask, :]
 
     if isempty(matching_rows)
         @debug "No matching measurements for condition $(dataset.condition), channel $channel"
@@ -288,7 +288,7 @@ function _overlay_measurements!(
     channel_data = dataset.data[!, channel]
 
     # Apply analysis window to get time range
-    time_mask = analysis_window(dataset.data)
+    time_mask = analysis_interval(dataset.data)
     if any(time_mask)
         time_range = extrema(time_data[time_mask])
         time_min, time_max = time_range
