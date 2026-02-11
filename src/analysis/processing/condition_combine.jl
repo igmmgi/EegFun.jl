@@ -84,7 +84,73 @@ function _condition_combine_process_file(filepath::String, output_path::String, 
 end
 
 #=============================================================================
-    MAIN API FUNCTION
+    IN-MEMORY API FUNCTION
+=============================================================================#
+
+"""
+    condition_combine(data::Vector{<:EpochData}, condition_groups::Vector{Vector{Int}})::Vector{EpochData}
+
+Combine epoch conditions.
+
+For each group in `condition_groups`, the epochs from those conditions are concatenated
+into a single new `EpochData` object.
+
+# Arguments
+- `data::Vector{<:EpochData}`: Vector of EpochData, one per condition
+- `condition_groups::Vector{Vector{Int}}`: Groups of condition indices to combine (e.g., `[[1, 2], [3, 4]]`)
+
+# Returns
+- `Vector{EpochData}`: New vector with one EpochData per group
+
+# Example
+```julia
+epochs = extract_epochs(dat, epoch_cfg, (-0.2, 1.0))
+combined = condition_combine(epochs, [[1, 2], [3, 4]])
+```
+"""
+function condition_combine(data::Vector{<:EpochData}, condition_groups::Vector{Vector{Int}})::Vector{EpochData}
+
+    @info "Combining conditions..."
+
+    max_condition = length(data)
+    combined_data = EpochData[]
+
+    for (group_idx, original_conditions) in enumerate(condition_groups)
+        # Validate that all requested conditions exist
+        missing_conditions = filter(c -> c > max_condition || c < 1, original_conditions)
+        if !isempty(missing_conditions)
+            @minimal_error_throw("Condition(s) $missing_conditions not found (only has 1-$max_condition)")
+        end
+
+        # Get data for the specified conditions
+        condition_data = data[original_conditions]
+
+        # Concatenate epoch DataFrames
+        combined_data_frames = reduce(vcat, (epoch_data.data for epoch_data in condition_data))
+
+        # Create combined condition name
+        combined_condition_name = join([cond.condition_name for cond in condition_data], "_")
+
+        # Create new EpochData
+        combined_epochs = EpochData(
+            condition_data[1].file,
+            group_idx,
+            combined_condition_name,
+            combined_data_frames,
+            condition_data[1].layout,
+            condition_data[1].sample_rate,
+            condition_data[1].analysis_info,
+        )
+
+        push!(combined_data, combined_epochs)
+    end
+
+    @info "Combined into $(length(combined_data)) group(s)"
+    return combined_data
+end
+
+#=============================================================================
+    BATCH API FUNCTION
 =============================================================================#
 
 """

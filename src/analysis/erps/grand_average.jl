@@ -123,7 +123,7 @@ end
 """
     grand_average(erps::Vector{ErpData}; condition_selection = conditions())
 
-Create grand averages from a vector of ERP data already in memory.
+Create grand averages from a vector of ERP data already.
 
 This function groups the input ERPs by condition and calculates the average across 
 all participants for each condition.

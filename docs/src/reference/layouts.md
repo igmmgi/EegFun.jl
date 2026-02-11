@@ -5,6 +5,7 @@ EegFun.jl includes a comprehensive collection of electrode layout files that def
 ## Overview
 
 Layout files are stored in CSV format with three required columns:
+
 - `label`: Channel name (Symbol)
 - `inc`: Incidence angle in degrees (vertical angle from vertex)
 - `azi`: Azimuth angle in degrees (horizontal angle)
@@ -411,6 +412,6 @@ EegFun.plot_layout_3d
 
 ## See Also
 
-- [Layout plotting demo](../demos/plot_layout.md)
+- [Layout plotting demo](../demos/plotting/plot_layout.md)
 - [Layout types](types.md#Layout-Types)
 - [Visualization guide](../explanations/data-structures.md)

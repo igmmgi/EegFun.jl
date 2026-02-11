@@ -132,7 +132,78 @@ function _condition_difference_process_file(
 end
 
 #=============================================================================
-    MAIN API FUNCTION
+    IN-MEMORY API FUNCTION
+=============================================================================#
+
+"""
+    condition_difference(data::Vector{<:ErpData}, condition_pairs::Union{Vector{Tuple{Int,Int}}, Vector{Vector{Int}}})::Vector{ErpData}
+
+Create condition difference waves.
+
+For each pair `(a, b)`, subtracts condition `b` from condition `a` across all EEG channels.
+
+# Arguments
+- `data::Vector{<:ErpData}`: Vector of ErpData, one per condition
+- `condition_pairs`: Pairs of condition indices to subtract. Can be:
+  - `Vector{Tuple{Int, Int}}`: e.g., `[(1, 2), (3, 4)]`
+  - `Vector{Vector{Int}}`: e.g., `[[1, 2], [3, 4]]`
+
+# Returns
+- `Vector{ErpData}`: New vector with one difference wave per pair
+
+# Example
+```julia
+erps = average_epochs(epochs)
+diff_waves = condition_difference(erps, [(1, 2)])
+```
+"""
+function condition_difference(
+    data::Vector{<:ErpData},
+    condition_pairs::Union{Vector{Tuple{Int,Int}},Vector{Vector{Int}}},
+)::Vector{ErpData}
+
+    @info "Creating condition difference waves..."
+
+    difference_waves = ErpData[]
+
+    for (pair_idx, pair) in enumerate(condition_pairs)
+        cond1, cond2 = pair[1], pair[2]
+
+        # Find ERP data for each condition
+        erp1 = nothing
+        erp2 = nothing
+        for erp in data
+            cond_num = erp.condition
+            if cond_num == cond1
+                erp1 = erp
+            elseif cond_num == cond2
+                erp2 = erp
+            end
+        end
+
+        if isnothing(erp1)
+            @minimal_warning "Condition $cond1 not found. Skipping pair ($cond1, $cond2)."
+            continue
+        end
+        if isnothing(erp2)
+            @minimal_warning "Condition $cond2 not found. Skipping pair ($cond1, $cond2)."
+            continue
+        end
+
+        diff_wave = _create_difference_wave(erp1, erp2, cond1, cond2, pair_idx)
+        push!(difference_waves, diff_wave)
+    end
+
+    if isempty(difference_waves)
+        @minimal_error_throw("No valid condition pairs found")
+    end
+
+    @info "Created $(length(difference_waves)) difference wave(s)"
+    return difference_waves
+end
+
+#=============================================================================
+    BATCH API FUNCTION
 =============================================================================#
 
 """

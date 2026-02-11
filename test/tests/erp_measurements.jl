@@ -193,14 +193,14 @@ using CSV
 
         output_dir = joinpath(test_dir, "measurements_kwargs")
 
-        # Test local_window
+        # Test local_interval
         result1 = EegFun.erp_measurements(
             "erps_kwargs",
             "max_peak_amplitude",
             analysis_interval = (0.1, 0.2),
             input_dir = test_dir,
             output_dir = output_dir,
-            local_window = 5,
+            local_interval = 5,
         )
         @test result1 isa EegFun.ErpMeasurementsResult
 
@@ -238,14 +238,14 @@ using CSV
 
         output_dir = joinpath(test_dir, "measurements_validate")
 
-        # Test invalid local_window
+        # Test invalid local_interval
         @test_throws Exception EegFun.erp_measurements(
             "erps_validate",
             "max_peak_amplitude",
             analysis_interval = (0.1, 0.2),
             input_dir = test_dir,
             output_dir = output_dir,
-            local_window = 0,
+            local_interval = 0,
         )
 
         # Test invalid fractional_area_fraction
@@ -1036,12 +1036,12 @@ using CSV
             file_path = joinpath(known_test_dir, "1_robust_peak_test.jld2")
             jldsave(file_path; data = [erp])
 
-            # Test with small local_window (should find robust peak)
+            # Test with small local_interval (should find robust peak)
             result = EegFun.erp_measurements(
                 "robust_peak_test",
                 "max_peak_amplitude",
                 analysis_interval = (0.0, 1.0),
-                local_window = 5,
+                local_interval = 5,
                 input_dir = known_test_dir,
                 output_dir = joinpath(known_test_dir, "output_robust"),
             )
@@ -1055,7 +1055,7 @@ using CSV
                 "robust_peak_test",
                 "max_peak_latency",
                 analysis_interval = (0.0, 1.0),
-                local_window = 5,
+                local_interval = 5,
                 input_dir = known_test_dir,
                 output_dir = joinpath(known_test_dir, "output_robust_lat"),
             )
