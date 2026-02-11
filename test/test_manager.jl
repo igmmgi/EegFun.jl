@@ -35,7 +35,7 @@ Pkg.add(["Coverage", "CoverageTools"])
 using Coverage
 using CoverageTools
 
-# Colors for output
+# Colours for output
 const RED = "\033[0;31m"
 const GREEN = "\033[0;32m"
 const YELLOW = "\033[1;33m"
