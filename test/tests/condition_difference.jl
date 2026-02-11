@@ -243,3 +243,100 @@ using CSV
     # Cleanup
     rm(test_dir, recursive = true)
 end
+
+@testset "In-Memory Difference Conditions" begin
+
+    @testset "Basic difference wave" begin
+        erps = [
+            EegFun.create_test_erp_data(condition = 1),
+            EegFun.create_test_erp_data(condition = 2),
+        ]
+
+        diff = EegFun.condition_difference(erps, [(1, 2)])
+
+        @test length(diff) == 1
+        @test diff[1].condition == 1  # pair index
+        @test diff[1].condition_name == "difference_1_2"
+    end
+
+    @testset "Multiple difference pairs" begin
+        erps = [
+            EegFun.create_test_erp_data(condition = 1),
+            EegFun.create_test_erp_data(condition = 2),
+            EegFun.create_test_erp_data(condition = 3),
+            EegFun.create_test_erp_data(condition = 4),
+        ]
+
+        diff = EegFun.condition_difference(erps, [(1, 2), (3, 4)])
+
+        @test length(diff) == 2
+        @test diff[1].condition_name == "difference_1_2"
+        @test diff[2].condition_name == "difference_3_4"
+    end
+
+    @testset "Vector syntax" begin
+        erps = [
+            EegFun.create_test_erp_data(condition = 1),
+            EegFun.create_test_erp_data(condition = 2),
+        ]
+
+        diff = EegFun.condition_difference(erps, [[1, 2]])
+
+        @test length(diff) == 1
+        @test diff[1].condition_name == "difference_1_2"
+    end
+
+    @testset "Data integrity" begin
+        erps = [
+            EegFun.create_test_erp_data(condition = 1),
+            EegFun.create_test_erp_data(condition = 2),
+        ]
+
+        diff = EegFun.condition_difference(erps, [(1, 2)])
+
+        # Verify difference is actually erp1 - erp2 for EEG channels
+        for ch in [:Fz, :Cz, :Pz]
+            if hasproperty(erps[1].data, ch) && hasproperty(erps[2].data, ch) && hasproperty(diff[1].data, ch)
+                expected = erps[1].data[!, ch] .- erps[2].data[!, ch]
+                @test all(abs.(diff[1].data[!, ch] .- expected) .< 1e-10)
+            end
+        end
+    end
+
+    @testset "Metadata preservation" begin
+        erps = [
+            EegFun.create_test_erp_data(condition = 1),
+            EegFun.create_test_erp_data(condition = 2),
+        ]
+
+        diff = EegFun.condition_difference(erps, [(1, 2)])
+
+        @test diff[1].sample_rate == erps[1].sample_rate
+        @test nrow(diff[1].data) == nrow(erps[1].data)
+        @test diff[1].n_epochs == min(erps[1].n_epochs, erps[2].n_epochs)
+    end
+
+    @testset "Missing condition skipping" begin
+        erps = [
+            EegFun.create_test_erp_data(condition = 1),
+            EegFun.create_test_erp_data(condition = 2),
+        ]
+
+        # Pair (3, 4) should be skipped, but (1, 2) should succeed
+        diff = EegFun.condition_difference(erps, [(1, 2), (3, 4)])
+
+        @test length(diff) == 1  # Only (1, 2) succeeded
+        @test diff[1].condition_name == "difference_1_2"
+    end
+
+    @testset "All conditions missing" begin
+        erps = [
+            EegFun.create_test_erp_data(condition = 1),
+            EegFun.create_test_erp_data(condition = 2),
+        ]
+
+        # No valid pairs → should throw
+        @test_throws Exception EegFun.condition_difference(erps, [(5, 6)])
+    end
+end
+

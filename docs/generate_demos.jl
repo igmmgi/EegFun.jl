@@ -1,54 +1,81 @@
 # Script to automatically generate demo documentation from demo scripts
 using Printf
 
-# Demo metadata: (filename_without_ext, title)
+# Demo metadata: (subfolder, filename_without_ext, title)
 demos = [
-    ("artifacts", "Artifacts"),
-    ("baseline", "Baseline"),
-    ("biosemi_import", "BioSemi Import"),
-    ("brainvision_import", "BrainVision Import"),
-    ("channel_metrics", "Channel Metrics"),
-    ("channel_repair", "Channel Repair"),
-    ("channel_summary", "Channel Summary"),
-    ("data", "Data"),
-    ("decoding", "Decoding"),
-    ("erp_measurements", "ERP Measurements"),
-    ("ica", "ICA"),
-    ("mirror", "Mirror"),
-    ("plot_artifacts", "Plot Artifacts"),
-    ("plot_channel_spectrum", "Plot Channel Spectrum"),
-    ("plot_channel_summary", "Plot Channel Summary"),
-    ("plot_correlation_heatmap", "Plot Correlation Heatmap"),
-    ("plot_databrowser", "Plot Databrowser"),
-    ("plot_epochs", "Plot Epochs"),
-    ("plot_erp", "Plot ERP"),
-    ("plot_erp_image", "Plot ERP Image"),
-    ("plot_filter", "Plot Filter"),
-    ("plot_joint_probability", "Plot Joint Probability"),
-    ("plot_layout", "Plot Layout"),
-    ("plot_topography", "Plot Topography"),
-    ("plot_triggers", "Plot Triggers"),
-    ("rereference", "Rereference"),
-    ("resample", "Resample"),
-    ("rsa", "RSA"),
-    ("statistics", "Statistics"),
-    ("tf_morlet", "TF Morlet"),
-    ("tf_multitaper", "TF Multitaper"),
-    ("tf_stft", "TF STFT"),
-    ("eeglab_import", "EEGLAB Import"),
-    ("epochs", "Epoch Extraction"),
-    ("fieldtrip_import", "FieldTrip Import"),
-    ("artifact_detection", "Artifact Detection"),
-    ("grand_average", "Grand Average"),
+    # Import
+    ("import", "biosemi_import", "BioSemi Import"),
+    ("import", "brainvision_import", "BrainVision Import"),
+    ("import", "eeglab_import", "EEGLAB Import"),
+    ("import", "fieldtrip_import", "FieldTrip Import"),
+    ("import", "data", "Data"),
+    ("import", "jld2", "Data Persistence (JLD2)"),
+
+    # Preprocessing
+    ("preprocessing", "filter", "Filter"),
+    ("preprocessing", "rereference", "Rereference"),
+    ("preprocessing", "resample", "Resample"),
+    ("preprocessing", "baseline", "Baseline"),
+    ("preprocessing", "mirror", "Mirror"),
+    ("preprocessing", "triggers", "Triggers"),
+    ("preprocessing", "epochs", "Epoch Extraction"),
+    ("preprocessing", "channel_operations", "Channel Operations"),
+    ("preprocessing", "channel_metrics", "Channel Metrics"),
+    ("preprocessing", "channel_repair", "Channel Repair"),
+    ("preprocessing", "channel_summary", "Channel Summary"),
+    ("preprocessing", "ica", "ICA"),
+
+    # Artifacts
+    ("artifacts", "artifacts", "Artifacts"),
+    ("artifacts", "artifact_detection", "Artifact Detection"),
+
+    # ERP Analysis
+    ("erp", "erp_measurements", "ERP Measurements"),
+    ("erp", "gfp", "Global Field Power"),
+    ("erp", "grand_average", "Grand Average"),
+    ("erp", "jackknife_average", "Jackknife Average"),
+    ("erp", "lrp", "Lateralised Readiness Potential"),
+    ("erp", "realign", "Realignment"),
+    ("erp", "condition_operations", "Condition Operations"),
+
+    # Statistics
+    ("statistics", "statistics", "Statistics"),
+    ("statistics", "decoding", "Decoding"),
+    ("statistics", "rsa", "RSA"),
+
+    # Time-Frequency
+    ("time_frequency", "tf_morlet", "TF Morlet"),
+    ("time_frequency", "tf_multitaper", "TF Multitaper"),
+    ("time_frequency", "tf_stft", "TF STFT"),
+
+    # Plotting
+    ("plotting", "plot_artifacts", "Plot Artifacts"),
+    ("plotting", "plot_channel_spectrum", "Plot Channel Spectrum"),
+    ("plotting", "plot_channel_summary", "Plot Channel Summary"),
+    ("plotting", "plot_correlation_heatmap", "Plot Correlation Heatmap"),
+    ("plotting", "plot_databrowser", "Plot Databrowser"),
+    ("plotting", "plot_epochs", "Plot Epochs"),
+    ("plotting", "plot_erp", "Plot ERP"),
+    ("plotting", "plot_erp_image", "Plot ERP Image"),
+    ("plotting", "plot_erp_measurements", "Plot ERP Measurements"),
+    ("plotting", "plot_erp_measurement_gui", "Plot ERP Measurement GUI"),
+    ("plotting", "plot_filter", "Plot Filter"),
+    ("plotting", "plot_joint_probability", "Plot Joint Probability"),
+    ("plotting", "plot_layout", "Plot Layout"),
+    ("plotting", "plot_topography", "Plot Topography"),
+    ("plotting", "plot_triggers", "Plot Triggers"),
+
+    # Workflows
+    ("workflows", "preprocessing_workflow", "Preprocessing Workflow"),
 ]
 
 # Create demo markdown files
 for demo_info in demos
-    filename, title = demo_info
+    subfolder, filename, title = demo_info
 
-    source_file = "demos/$(filename).jl"
-    output_file = "docs/src/demos/$(filename).md"
-    overview_file = "docs/src/demos/overviews/$(filename).md"
+    source_file = "demos/$(subfolder)/$(filename).jl"
+    output_file = "docs/src/demos/$(subfolder)/$(filename).md"
+    overview_file = "docs/overviews/$(subfolder)/$(filename).md"
 
     if !isfile(source_file)
         @warn "Source file not found: $source_file"
@@ -104,7 +131,7 @@ for demo_info in demos
 
     ## See Also
 
-    - [API Reference](../reference/index.md)
+    - [API Reference](../../reference/index.md)
     """
 
     # Write output file

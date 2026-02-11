@@ -519,3 +519,91 @@ using Statistics
         rm(test_dir, recursive = true, force = true)
     end
 end
+
+@testset "In-Memory Combine Conditions" begin
+
+    @testset "Basic combining" begin
+        epochs = EegFun.create_test_epoch_data_vector(conditions = 1:4)
+
+        combined = EegFun.condition_combine(epochs, [[1, 2], [3, 4]])
+
+        @test length(combined) == 2
+        @test combined[1].condition == 1
+        @test combined[2].condition == 2
+
+        # Each group combines 2 conditions of 10 epochs each
+        @test length(combined[1].data) == 20
+        @test length(combined[2].data) == 20
+    end
+
+    @testset "Single condition per group" begin
+        epochs = EegFun.create_test_epoch_data_vector(conditions = 1:3)
+
+        combined = EegFun.condition_combine(epochs, [[1], [2], [3]])
+
+        @test length(combined) == 3
+        for i = 1:3
+            @test length(combined[i].data) == 10  # unchanged
+            @test combined[i].condition == i
+        end
+    end
+
+    @testset "All conditions in one group" begin
+        epochs = EegFun.create_test_epoch_data_vector(conditions = 1:4)
+
+        combined = EegFun.condition_combine(epochs, [[1, 2, 3, 4]])
+
+        @test length(combined) == 1
+        @test length(combined[1].data) == 40
+    end
+
+    @testset "Overlapping groups" begin
+        epochs = EegFun.create_test_epoch_data_vector(conditions = 1:3)
+
+        combined = EegFun.condition_combine(epochs, [[1, 2], [2, 3]])
+
+        @test length(combined) == 2
+        @test length(combined[1].data) == 20
+        @test length(combined[2].data) == 20
+    end
+
+    @testset "Condition name combining" begin
+        epochs = EegFun.create_test_epoch_data_vector(conditions = 1:4)
+
+        combined = EegFun.condition_combine(epochs, [[1, 2], [3, 4]])
+
+        # Combined names should join originals with _
+        @test contains(combined[1].condition_name, "_")
+        @test contains(combined[2].condition_name, "_")
+    end
+
+    @testset "Metadata preservation" begin
+        epochs = EegFun.create_test_epoch_data_vector(conditions = 1:2)
+        original_sr = epochs[1].sample_rate
+        original_layout = epochs[1].layout
+
+        combined = EegFun.condition_combine(epochs, [[1, 2]])
+
+        @test combined[1].sample_rate == original_sr
+        @test combined[1].layout.data == original_layout.data
+        @test hasproperty(combined[1].data[1], :time)
+    end
+
+    @testset "Error: condition out of range" begin
+        epochs = EegFun.create_test_epoch_data_vector(conditions = 1:2)
+
+        @test_throws Exception EegFun.condition_combine(epochs, [[1, 5]])
+    end
+
+    @testset "Error: negative condition" begin
+        epochs = EegFun.create_test_epoch_data_vector(conditions = 1:2)
+
+        @test_throws Exception EegFun.condition_combine(epochs, [[1, -1]])
+    end
+
+    @testset "Error: zero condition" begin
+        epochs = EegFun.create_test_epoch_data_vector(conditions = 1:2)
+
+        @test_throws Exception EegFun.condition_combine(epochs, [[0, 1]])
+    end
+end
