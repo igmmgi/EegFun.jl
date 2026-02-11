@@ -15,8 +15,8 @@ Perfect for:
 # Keyword Arguments
 - `channel::Union{Symbol,Nothing}`: Initial channel to display (default: first channel)
 - `measurement_type::String`: Initial measurement type (default: "mean_amplitude")
-- `measurement_window::Union{Tuple{Real,Real},Nothing}`: Initial measurement window (default: auto)
-- `baseline_window::Union{Tuple{Real,Real},Nothing}`: Initial baseline window (default: full range)
+- `measurement_interval::Union{Tuple{Real,Real},Nothing}`: Initial measurement window (default: auto)
+- `baseline_interval::Union{Tuple{Real,Real},Nothing}`: Initial baseline window (default: full range)
 
 # Interactive Controls
 - **Channel Menu**: Switch between channels
@@ -38,8 +38,8 @@ plot_erp_measurement_gui(erps, channel = :Cz)
 # With initial settings for teaching
 plot_erp_measurement_gui(erp,
                     measurement_type = "max_peak_latency",
-                    measurement_window = (0.3, 0.5),
-                    baseline_window = (-0.2, 0.0))
+                    measurement_interval = (0.3, 0.5),
+                    baseline_interval = (-0.2, 0.0))
 ```
 
 # Notes
@@ -51,10 +51,10 @@ function plot_erp_measurement_gui(
     erp::ErpData;
     channel::Union{Symbol,Nothing} = nothing,
     measurement_type::String = "mean_amplitude",
-    measurement_window::Union{Tuple{Real,Real},Nothing} = nothing,
-    baseline_window::Union{Tuple{Real,Real},Nothing} = nothing,
+    measurement_interval::Union{Tuple{Real,Real},Nothing} = nothing,
+    baseline_interval::Union{Tuple{Real,Real},Nothing} = nothing,
 )
-    return plot_erp_measurement_gui([erp]; channel, measurement_type, measurement_window, baseline_window)
+    return plot_erp_measurement_gui([erp]; channel, measurement_type, measurement_interval, baseline_interval)
 end
 
 # Vector of ErpData - main implementation
@@ -62,8 +62,8 @@ function plot_erp_measurement_gui(
     erp_vec::Vector{ErpData};
     channel::Union{Symbol,Nothing} = nothing,
     measurement_type::String = "mean_amplitude",
-    measurement_window::Union{Tuple{Real,Real},Nothing} = nothing,
-    baseline_window::Union{Tuple{Real,Real},Nothing} = nothing,
+    measurement_interval::Union{Tuple{Real,Real},Nothing} = nothing,
+    baseline_interval::Union{Tuple{Real,Real},Nothing} = nothing,
 )
 
     # Get available channels from first ERP
@@ -86,20 +86,20 @@ function plot_erp_measurement_gui(
     time_min, time_max = extrema(time_data)
 
     # Set default measurement window if not provided
-    if isnothing(measurement_window)
-        measurement_window = (time_min, time_max)
+    if isnothing(measurement_interval)
+        measurement_interval = (time_min, time_max)
     end
 
     # Set default baseline to full time window if not provided
-    if isnothing(baseline_window)
-        baseline_window = (time_min, time_max)
+    if isnothing(baseline_interval)
+        baseline_interval = (time_min, time_max)
     end
 
     # ===== OBSERVABLES FOR REACTIVE UPDATES =====
     selected_channel = Observable(initial_channel)
     selected_type = Observable(measurement_type)
-    meas_window_obs = Observable(measurement_window)
-    baseline_window_obs = Observable(baseline_window)
+    meas_window_obs = Observable(measurement_interval)
+    baseline_interval_obs = Observable(baseline_interval)
     show_markers_obs = Observable(false)  # Off by default
 
     # Use plot_erp to create the ERP plot
@@ -129,34 +129,22 @@ function plot_erp_measurement_gui(
 
     # Measurement type selection
     Label(controls_grid[4, 1], "Measurement Type:", halign = :left)
-    measurement_types = [
-        "Mean Amplitude" => "mean_amplitude",
-        "Max Peak Amplitude" => "max_peak_amplitude",
-        "Min Peak Amplitude" => "min_peak_amplitude",
-        "Max Peak Latency" => "max_peak_latency",
-        "Min Peak Latency" => "min_peak_latency",
-        "Peak-to-Peak Amplitude" => "peak_to_peak_amplitude",
-        "Peak-to-Peak Latency" => "peak_to_peak_latency",
-        "Rectified Area" => "rectified_area",
-        "Integral" => "integral",
-        "Positive Area" => "positive_area",
-        "Negative Area" => "negative_area",
-        "Fractional Area Latency" => "fractional_area_latency",
-        "Fractional Peak Latency" => "fractional_peak_latency",
-    ]
     # Create menu with display names (labels) that map to full pairs (values)
-    type_menu =
-        Menu(controls_grid[5, 1], options = zip([p.first for p in measurement_types], measurement_types), default = "Mean Amplitude")
+    type_menu = Menu(
+        controls_grid[5, 1],
+        options = zip([p.first for p in MEASUREMENT_TYPE_LABELS], MEASUREMENT_TYPE_LABELS),
+        default = "Mean Amplitude",
+    )
 
     # Measurement window sliders
     Label(controls_grid[6, 1], "Measurement Window:", halign = :left)
-    meas_window_slider = IntervalSlider(controls_grid[7, 1], range = time_min:0.005:time_max, startvalues = measurement_window)
-    meas_window_label = Label(controls_grid[8, 1], @sprintf("%.3f s - %.3f s", measurement_window...), halign = :left)
+    meas_window_slider = IntervalSlider(controls_grid[7, 1], range = time_min:0.005:time_max, startvalues = measurement_interval)
+    meas_window_label = Label(controls_grid[8, 1], @sprintf("%.3f s - %.3f s", measurement_interval...), halign = :left)
 
     # Baseline window sliders
     Label(controls_grid[9, 1], "Baseline Window:", halign = :left)
-    baseline_window_slider = IntervalSlider(controls_grid[10, 1], range = time_min:0.005:time_max, startvalues = baseline_window)
-    baseline_window_label = Label(controls_grid[11, 1], @sprintf("%.3f s - %.3f s", baseline_window...), halign = :left)
+    baseline_interval_slider = IntervalSlider(controls_grid[10, 1], range = time_min:0.005:time_max, startvalues = baseline_interval)
+    baseline_interval_label = Label(controls_grid[11, 1], @sprintf("%.3f s - %.3f s", baseline_interval...), halign = :left)
 
     # Show markers toggle
     Label(controls_grid[12, 1], "Show Result Markers:", halign = :left)
@@ -196,7 +184,7 @@ function plot_erp_measurement_gui(
     end
 
     baseline_vspan_plots = []
-    function update_baseline_window!(bw, enabled)
+    function update_baseline_interval!(bw, enabled)
         for p in baseline_vspan_plots
             delete!(ax, p)
         end
@@ -231,15 +219,7 @@ function plot_erp_measurement_gui(
         end
 
         # Determine if this is a latency or amplitude measurement
-        is_latency = selected_type[] in [
-            "max_peak_latency",
-            "min_peak_latency",
-            "peak_to_peak_latency",
-            "fractional_area_latency",
-            "fractional_peak_latency",
-            "onset_latency",
-            "offset_latency",
-        ]
+        is_latency = _is_latency_measurement(selected_type[])
 
         # Draw markers for each condition
         colors = length(erp_vec) > 1 ? Makie.cgrad(:jet, length(erp_vec), categorical = true) : [:black]
@@ -265,7 +245,7 @@ function plot_erp_measurement_gui(
         empty!(ax)  # Clear existing plot
 
         # Baseline is always enabled
-        baseline_int = baseline_window_obs[]
+        baseline_int = baseline_interval_obs[]
 
         # Plot using plot_erp!
         plot_erp!(
@@ -280,7 +260,7 @@ function plot_erp_measurement_gui(
 
         # Redraw vspan overlays (empty! cleared them)
         update_meas_window!(meas_window_obs[])
-        update_baseline_window!(baseline_window_obs[], true)  # Always enabled
+        update_baseline_interval!(baseline_interval_obs[], true)  # Always enabled
 
     end
 
@@ -317,9 +297,9 @@ function plot_erp_measurement_gui(
         meas_window_label.text = @sprintf("%.3f s - %.3f s", interval[1], interval[2])
     end
 
-    on(baseline_window_slider.interval) do interval
-        baseline_window_obs[] = (interval[1], interval[2])
-        baseline_window_label.text = @sprintf("%.3f s - %.3f s", interval[1], interval[2])
+    on(baseline_interval_slider.interval) do interval
+        baseline_interval_obs[] = (interval[1], interval[2])
+        baseline_interval_label.text = @sprintf("%.3f s - %.3f s", interval[1], interval[2])
         update_erp_plot!()  # Baseline always enabled, so always update
         # Manually redraw markers after plot clears them
         sleep(0.01)  # Small delay to let measurement_results update
@@ -327,20 +307,20 @@ function plot_erp_measurement_gui(
     end
 
     # Initialize visualizations
-    update_meas_window!(measurement_window)
-    update_baseline_window!(baseline_window, true)
+    update_meas_window!(measurement_interval)
+    update_baseline_interval!(baseline_interval, true)
 
     # Connect to observables
     on(meas_window_obs) do mw
         update_meas_window!(mw)
     end
 
-    on(baseline_window_obs) do bw
-        update_baseline_window!(bw, true)  # Always enabled
+    on(baseline_interval_obs) do bw
+        update_baseline_interval!(bw, true)  # Always enabled
     end
 
     # Computed observable for measurement values (one per condition)
-    measurement_results = lift(selected_channel, selected_type, meas_window_obs, baseline_window_obs) do ch, type_str, mw, bw
+    measurement_results = lift(selected_channel, selected_type, meas_window_obs, baseline_interval_obs) do ch, type_str, mw, bw
         # Compute for all conditions (baseline always enabled)
         results = []
         for erp in erp_vec
@@ -365,13 +345,7 @@ function plot_erp_measurement_gui(
         format_value = function (val)
             if isnothing(val) || isnan(val)
                 return "N/A"
-            elseif selected_type[] in [
-                "max_peak_latency",
-                "min_peak_latency",
-                "peak_to_peak_latency",
-                "fractional_area_latency",
-                "fractional_peak_latency",
-            ]
+            elseif _is_latency_measurement(selected_type[])
                 return @sprintf("%.4f s", val)
             elseif selected_type[] in ["rectified_area", "integral", "positive_area", "negative_area"]
                 return @sprintf("%.4f μV·s", val)
@@ -426,16 +400,16 @@ function _compute_gui_measurement(
     erp::ErpData,
     channel::Symbol,
     measurement_type::String,
-    measurement_window::Tuple{Real,Real},
-    baseline_window::Union{Tuple{Real,Real},Nothing},
+    measurement_interval::Tuple{Real,Real},
+    baseline_interval::Union{Tuple{Real,Real},Nothing},
 )
     # Get data
     time_data = time(erp)
     channel_data = copy(erp.data[!, channel])
 
     # Apply baseline correction if requested
-    if !isnothing(baseline_window)
-        time_mask = (time_data .>= baseline_window[1]) .& (time_data .<= baseline_window[2])
+    if !isnothing(baseline_interval)
+        time_mask = (time_data .>= baseline_interval[1]) .& (time_data .<= baseline_interval[2])
         if any(time_mask)
             baseline_mean = mean(channel_data[time_mask])
             channel_data .-= baseline_mean
@@ -443,7 +417,7 @@ function _compute_gui_measurement(
     end
 
     # Get measurement window mask
-    time_mask = (time_data .>= measurement_window[1]) .& (time_data .<= measurement_window[2])
+    time_mask = (time_data .>= measurement_interval[1]) .& (time_data .<= measurement_interval[2])
 
     if !any(time_mask)
         return (value = NaN,)
@@ -453,13 +427,8 @@ function _compute_gui_measurement(
     selected_times = time_data[time_mask]
 
     # Compute measurement using existing internal function logic
-    local_window = 3  # Fixed neighborhood size for peak detection
-    measurement_kwargs = Dict{Symbol,Any}(
-        :local_window => local_window,
-        :fractional_area_fraction => 0.5,  # Default for fractional area latency
-        :fractional_peak_fraction => 0.5,  # Default for fractional peak latency  
-        :fractional_peak_direction => :onset,  # Default direction (before peak)
-    )
+    # Derive defaults from the canonical ERP_MEASUREMENTS_KWARGS
+    measurement_kwargs = Dict{Symbol,Any}(k => v[1] for (k, v) in ERP_MEASUREMENTS_KWARGS)
 
     try
         value = _compute_measurement(selected_data, selected_times, measurement_type, measurement_kwargs, channel)

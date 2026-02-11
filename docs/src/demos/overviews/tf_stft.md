@@ -60,7 +60,7 @@ Smaller = smoother time course, larger = faster computation.
 ```julia
 plot_time_frequency(
     tf_data,
-    baseline_window = (-0.5, -0.2),
+    baseline_interval = (-0.5, -0.2),
     baseline_method = :db,
     colorrange = (-3, 3)
 )

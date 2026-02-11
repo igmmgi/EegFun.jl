@@ -222,7 +222,7 @@ mark_epoch_windows!(dat, [1, 3], [-0.5, 0.5], channel_out = :near_trigger)
 ## Different Time Windows
 ```julia
 # Pre-stimulus baseline window
-mark_epoch_windows!(dat, [1], [-0.2, 0.0], channel_out = :baseline_window)
+mark_epoch_windows!(dat, [1], [-0.2, 0.0], channel_out = :baseline_interval)
 
 # Post-stimulus response window
 mark_epoch_windows!(dat, [1], [0.0, 0.8], channel_out = :response_window)

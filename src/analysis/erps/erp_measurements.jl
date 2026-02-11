@@ -3,6 +3,51 @@ Batch ERP measurements (amplitude, latency) for EEG/ERP data.
 """
 
 #=============================================================================
+    MEASUREMENT TYPES (single source of truth)
+=============================================================================#
+
+"""Valid ERP measurement type strings."""
+const VALID_MEASUREMENT_TYPES = [
+    "mean_amplitude",
+    "max_peak_amplitude",
+    "min_peak_amplitude",
+    "max_peak_latency",
+    "min_peak_latency",
+    "peak_to_peak_amplitude",
+    "peak_to_peak_latency",
+    "rectified_area",
+    "integral",
+    "positive_area",
+    "negative_area",
+    "fractional_area_latency",
+    "fractional_peak_latency",
+]
+
+"""Human-readable labels paired with measurement type strings, for use in GUI menus."""
+const MEASUREMENT_TYPE_LABELS = [
+    "Mean Amplitude" => "mean_amplitude",
+    "Max Peak Amplitude" => "max_peak_amplitude",
+    "Min Peak Amplitude" => "min_peak_amplitude",
+    "Max Peak Latency" => "max_peak_latency",
+    "Min Peak Latency" => "min_peak_latency",
+    "Peak-to-Peak Amplitude" => "peak_to_peak_amplitude",
+    "Peak-to-Peak Latency" => "peak_to_peak_latency",
+    "Rectified Area" => "rectified_area",
+    "Integral" => "integral",
+    "Positive Area" => "positive_area",
+    "Negative Area" => "negative_area",
+    "Fractional Area Latency" => "fractional_area_latency",
+    "Fractional Peak Latency" => "fractional_peak_latency",
+]
+
+"""Set of measurement types that return latency values (seconds) rather than amplitudes (μV)."""
+const _LATENCY_MEASUREMENT_TYPES =
+    Set(["max_peak_latency", "min_peak_latency", "peak_to_peak_latency", "fractional_area_latency", "fractional_peak_latency"])
+
+"""Check whether a measurement type returns a latency value."""
+_is_latency_measurement(t::String) = t in _LATENCY_MEASUREMENT_TYPES
+
+#=============================================================================
     DEFAULT KEYWORD ARGUMENTS
 =============================================================================#
 const ERP_MEASUREMENTS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
@@ -28,22 +73,8 @@ const ERP_MEASUREMENTS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
 """Validate analysis type, returning error message or nothing."""
 function _validate_analysis_type(analysis_type::String)
-    valid_types = [
-        "mean_amplitude",
-        "max_peak_amplitude",
-        "min_peak_amplitude",
-        "max_peak_latency",
-        "min_peak_latency",
-        "peak_to_peak_amplitude",
-        "peak_to_peak_latency",
-        "rectified_area",
-        "integral",
-        "positive_area",
-        "negative_area",
-        "fractional_area_latency",
-        "fractional_peak_latency",
-    ]
-    analysis_type ∉ valid_types && return "Analysis type must be one of: $(join(valid_types, ", ")). Got: $analysis_type"
+    analysis_type ∉ VALID_MEASUREMENT_TYPES &&
+        return "Analysis type must be one of: $(join(VALID_MEASUREMENT_TYPES, ", ")). Got: $analysis_type"
     return nothing
 end
 

@@ -1,11 +1,11 @@
 """
-    tf_baseline!(tf_data::TimeFreqData, baseline_window; method=:db)
+    tf_baseline!(tf_data::TimeFreqData, baseline_interval; method=:db)
 
 Apply baseline correction to TimeFreqData in-place.
 
 # Arguments
 - `tf_data::TimeFreqData`: Time-frequency data to baseline correct
-- `baseline_window::Tuple{Real,Real}`: Time window for baseline (start, stop) in seconds
+- `baseline_interval::Tuple{Real,Real}`: Time window for baseline (start, stop) in seconds
 
 # Keyword Arguments
 - `method::Symbol=:db`: Baseline method 
@@ -23,7 +23,7 @@ Apply baseline correction to TimeFreqData in-place.
 tf_baseline!(tf_data, (-0.3, 0.1); method=:db)
 ```
 """
-function tf_baseline!(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; method::Symbol = :db)
+function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
     # Check if baseline has already been applied
     if tf_data.baseline !== nothing
         error(
@@ -42,14 +42,14 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; 
 
     # Find baseline time indices (MATLAB: dsearchn finds nearest time points)
     # Find the nearest time points to the baseline window boundaries
-    baseline_start_idx = argmin(abs.(times .- baseline_window[1]))
-    baseline_end_idx = argmin(abs.(times .- baseline_window[2]))
+    baseline_start_idx = argmin(abs.(times .- baseline_interval[1]))
+    baseline_end_idx = argmin(abs.(times .- baseline_interval[2]))
 
     # Create mask for baseline time points
     base_mask = falses(n_times)
     base_mask[baseline_start_idx:baseline_end_idx] .= true
     if !any(base_mask)
-        error("Baseline window $(baseline_window) does not overlap with data times")
+        error("Baseline window $(baseline_interval) does not overlap with data times")
     end
 
     # Get channel columns
@@ -153,30 +153,30 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; 
     end
 
     # Store baseline information
-    tf_data.baseline = BaselineInfo(method = method, window = (Float64(baseline_window[1]), Float64(baseline_window[2])))
+    tf_data.baseline = BaselineInfo(method = method, window = (Float64(baseline_interval[1]), Float64(baseline_interval[2])))
 
     return nothing
 end
 
 # Non-mutating version
-function tf_baseline(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; method::Symbol = :db)
+function tf_baseline(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
     tf_copy = copy(tf_data)  # Use custom copy method instead of deepcopy
-    tf_baseline!(tf_copy, baseline_window; method = method)
+    tf_baseline!(tf_copy, baseline_interval; method = method)
     return tf_copy
 end
 
 # Vector version
-function tf_baseline!(tf_data::Vector{TimeFreqData}, baseline_window::Tuple{Real,Real}; method::Symbol = :db)
-    tf_baseline!.(tf_data, Ref(baseline_window); method = method)
+function tf_baseline!(tf_data::Vector{TimeFreqData}, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
+    tf_baseline!.(tf_data, Ref(baseline_interval); method = method)
     return nothing
 end
 
-function tf_baseline(tf_data::Vector{TimeFreqData}, baseline_window::Tuple{Real,Real}; method::Symbol = :db)
-    return [tf_baseline(tf, baseline_window; method = method) for tf in tf_data]
+function tf_baseline(tf_data::Vector{TimeFreqData}, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
+    return [tf_baseline(tf, baseline_interval; method = method) for tf in tf_data]
 end
 
 """
-    tf_baseline(file_pattern::String, baseline_window;
+    tf_baseline(file_pattern::String, baseline_interval;
                 method=:db, input_dir=pwd(), output_dir=nothing,
                 participant_selection=participants(), condition_selection=conditions())
 
@@ -189,7 +189,7 @@ tf_baseline("tf_epochs_wavelet", (-0.3, 0.0); method=:db)
 """
 function tf_baseline(
     file_pattern::String,
-    baseline_window::Tuple{Real,Real};
+    baseline_interval::Tuple{Real,Real};
     method::Symbol = :db,
     input_dir::String = pwd(),
     output_dir::Union{String,Nothing} = nothing,
@@ -216,7 +216,7 @@ function tf_baseline(
             return nothing
         end
 
-        @info "Found $(length(files)) files, baseline: $baseline_window, method: $method"
+        @info "Found $(length(files)) files, baseline: $baseline_interval, method: $method"
 
         process_fn = (input_path, output_path) -> begin
             filename = basename(input_path)
@@ -225,7 +225,7 @@ function tf_baseline(
                 return BatchResult(false, filename, "Invalid data type")
             end
             data = _condition_select(data, condition_selection)
-            tf_baseline!(data, baseline_window; method = method)
+            tf_baseline!(data, baseline_interval; method = method)
             jldsave(output_path; data = data)
             return BatchResult(true, filename, "Baseline corrected")
         end

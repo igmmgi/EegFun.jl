@@ -4,7 +4,7 @@ Time-frequency plotting functions for visualizing TimeFreqData.
 
 """
     plot_time_frequency(tf_data::TimeFreqData, channel::Symbol;
-                        baseline_window=nothing, baseline_method=:db,
+                        baseline_interval=nothing, baseline_method=:db,
                         colormap=:viridis, colorrange=nothing,
                         title=nothing, colorbar=true, ylogscale=false)
 
@@ -15,8 +15,8 @@ Plot time-frequency data for a specific channel.
 - `channel::Symbol`: Channel to plot
 
 # Keyword Arguments
-- `baseline_window`: Optional baseline window (start, stop) in seconds
-- `baseline_method`: Baseline method if baseline_window provided
+- `baseline_interval`: Optional baseline window (start, stop) in seconds
+- `baseline_method`: Baseline method if baseline_interval provided
 - `colormap`: Colormap (default: :viridis)
 - `colorrange`: Color range (default: auto)
 - `title`: Plot title (default: auto)
@@ -28,13 +28,13 @@ Plot time-frequency data for a specific channel.
 
 # Example
 ```julia
-fig, ax = plot_time_frequency(tf_data, :Cz; baseline_window=(-0.3, 0.0), ylogscale=true)
+fig, ax = plot_time_frequency(tf_data, :Cz; baseline_interval=(-0.3, 0.0), ylogscale=true)
 ```
 """
 function plot_time_frequency(
     tf_data::TimeFreqData,
     channel::Symbol;
-    baseline_window::Union{Nothing,Tuple{Real,Real}} = nothing,
+    baseline_interval::Union{Nothing,Tuple{Real,Real}} = nothing,
     baseline_method::Symbol = :db,
     colormap = :viridis,
     colorrange::Union{Nothing,Tuple{Real,Real}} = nothing,
@@ -44,13 +44,13 @@ function plot_time_frequency(
 )
 
     # Apply baseline if requested, but only if data hasn't already been baselined
-    if !isnothing(baseline_window) && tf_data.baseline !== nothing
+    if !isnothing(baseline_interval) && tf_data.baseline !== nothing
         @warn "Data has already been baselined (method: $(tf_data.baseline.method), window: $(tf_data.baseline.window)). " *
-              "Ignoring baseline_window parameter. Use the data as-is or create a new TimeFreqData without baseline."
+              "Ignoring baseline_interval parameter. Use the data as-is or create a new TimeFreqData without baseline."
         tf_plot = tf_data
-    elseif !isnothing(baseline_window)
+    elseif !isnothing(baseline_interval)
         # Apply baseline on-the-fly
-        tf_plot = tf_baseline(tf_data, baseline_window; method = baseline_method)
+        tf_plot = tf_baseline(tf_data, baseline_interval; method = baseline_method)
     else
         tf_plot = tf_data
     end
@@ -136,7 +136,7 @@ function plot_time_frequency(
             else
                 label = "Power"
             end
-        elseif !isnothing(baseline_window)
+        elseif !isnothing(baseline_interval)
             # Baseline was just applied via parameter
             label =
                 baseline_method == :db ? "Power (dB)" :
