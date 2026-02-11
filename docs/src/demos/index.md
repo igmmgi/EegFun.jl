@@ -41,6 +41,39 @@ Browse interactive code examples demonstrating EegFun.jl's capabilities.
 - [Realignment](erp/realign.md) - Response-locked realignment
 - [Condition Operations](erp/condition_operations.md) - Combining and differencing conditions
 
+## Visualization
+
+- [Plot Artifacts](plotting/plot_artifacts.md) - Artifact visualization
+- [Plot Channel Spectrum](plotting/plot_channel_spectrum.md) - Frequency spectra
+- [Plot Channel Summary](plotting/plot_channel_summary.md) - Channel statistics
+- [Plot Correlation Heatmap](plotting/plot_correlation_heatmap.md) - Channel correlations
+- [Plot Databrowser](plotting/plot_databrowser.md) - Interactive data browsing
+- [Plot Epochs](plotting/plot_epochs.md) - Individual epoch visualization
+- [Plot ERP](plotting/plot_erp.md) - ERP waveforms
+- [Plot ERP Filter GUI](plotting/plot_erp_filter_gui.md) - Interactive filter exploration
+- [Plot ERP Image](plotting/plot_erp_image.md) - ERP images
+- [Plot ERP Measurements](plotting/plot_erp_measurements.md) - Measurement visualization
+- [Plot ERP Measurement GUI](plotting/plot_erp_measurement_gui.md) - Interactive measurement GUI
+- [Plot Filter](plotting/plot_filter.md) - Filter responses
+- [Plot Frequency Spectrum](plotting/plot_frequency_spectrum.md) - SpectrumData power spectra
+- [Plot GFP](plotting/plot_gfp.md) - Global Field Power
+- [Plot ICA](plotting/plot_ica.md) - ICA component topographies
+- [Plot Joint Probability](plotting/plot_joint_probability.md) - Artifact detection
+- [Plot Layout](plotting/plot_layout.md) - Electrode layouts
+- [Plot Topography](plotting/plot_topography.md) - Topographic maps
+- [Plot Triggers](plotting/plot_triggers.md) - Event markers
+
+## Specialized Visualization
+
+- [Plot Decoding](plotting/plot_decoding.md) - MVPA decoding results
+- [Plot RSA](plotting/plot_rsa.md) - RSA results (RDM, timecourse, models)
+- [Plot Statistics](plotting/plot_statistics.md) - Statistical test results
+- [Plot Time-Frequency](plotting/plot_time_frequency.md) - Time-frequency heatmaps
+
+## Workflows
+
+- [Preprocessing Workflow](workflows/preprocessing_workflow.md) - End-to-end preprocessing pipeline
+
 ## Time-Frequency Analysis
 
 - [TF Morlet](time_frequency/tf_morlet.md) - Morlet wavelet analysis
@@ -52,25 +85,3 @@ Browse interactive code examples demonstrating EegFun.jl's capabilities.
 - [Statistics](statistics/statistics.md) - Statistical testing
 - [Decoding](statistics/decoding.md) - Multivariate pattern analysis (MVPA)
 - [RSA](statistics/rsa.md) - Representational Similarity Analysis
-
-## Visualization
-
-- [Plot Databrowser](plotting/plot_databrowser.md) - Interactive data browsing
-- [Plot ERP](plotting/plot_erp.md) - ERP waveforms
-- [Plot Epochs](plotting/plot_epochs.md) - Individual epoch visualization
-- [Plot Topography](plotting/plot_topography.md) - Topographic maps
-- [Plot ERP Image](plotting/plot_erp_image.md) - ERP images
-- [Plot ERP Measurements](plotting/plot_erp_measurements.md) - Measurement visualization
-- [Plot ERP Measurement GUI](plotting/plot_erp_measurement_gui.md) - Interactive measurement GUI
-- [Plot Channel Spectrum](plotting/plot_channel_spectrum.md) - Frequency spectra
-- [Plot Channel Summary](plotting/plot_channel_summary.md) - Channel statistics
-- [Plot Correlation Heatmap](plotting/plot_correlation_heatmap.md) - Channel correlations
-- [Plot Filter](plotting/plot_filter.md) - Filter responses
-- [Plot Joint Probability](plotting/plot_joint_probability.md) - Artifact detection
-- [Plot Layout](plotting/plot_layout.md) - Electrode layouts
-- [Plot Triggers](plotting/plot_triggers.md) - Event markers
-- [Plot Artifacts](plotting/plot_artifacts.md) - Artifact visualization
-
-## Workflows
-
-- [Preprocessing Workflow](workflows/preprocessing_workflow.md) - End-to-end preprocessing pipeline
