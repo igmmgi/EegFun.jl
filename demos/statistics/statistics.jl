@@ -13,7 +13,7 @@ options available in EegFun, loosely based on FieldTrip's approach.
 using EegFun
 using BenchmarkTools
 
-input_dir = "./resources/data/erps"
+input_dir = "./resources/data/julia/erps"
 file_pattern = "erps_good"
 
 println("Preparing data...")
