@@ -16,3 +16,9 @@ Understanding EegFun.jl's data structures is essential for effective use of the 
 - **Layout** - Electrode positioning information
 
 Each type is designed to work seamlessly with EegFun.jl's processing pipeline while maintaining flexibility for custom workflows.
+
+## Electrode Layouts
+
+- [Layouts](layouts.md) - Available electrode layouts from BioSemi, BrainProducts actiCap, and EasyCap
+
+Complete catalogue of all supported electrode montage systems, coordinate conventions, and layout visualization.
