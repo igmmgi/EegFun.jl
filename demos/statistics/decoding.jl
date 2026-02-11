@@ -94,7 +94,7 @@ EegFun.plot_decoding(grand_avg_synthetic, stats_cluster, title = "Synthetic Data
 println("Preparing data...")
 participant_epochs = EegFun.prepare_decoding(
     "epochs_good",
-    input_dir = "/home/ian/Documents/Julia/output_data",
+    input_dir = "./resources/data/julia/erps",
     participant_selection = EegFun.participants(),
     condition_selection = EegFun.conditions([1, 2]),  # Compare conditions 1 and 2
     channel_selection = EegFun.channels(),            # All channels
