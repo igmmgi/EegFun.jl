@@ -731,5 +731,5 @@ EegFun.plot_layout_3d
 ## See Also
 
 - [Layout plotting demo](../demos/plotting/plot_layout.md)
-- [Layout types](types.md#Layout-Types)
-- [Visualization guide](../explanations/data-structures.md)
+- [Layout types](../reference/types.md#Layout-Types)
+- [Data structures](data-structures.md)

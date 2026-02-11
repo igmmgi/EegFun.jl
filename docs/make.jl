@@ -15,7 +15,7 @@ pages = [
         "Batch Processing" => "tutorials/batch-processing.md",
         "Selection Patterns" => "tutorials/selection-patterns.md",
     ],
-    "Explanations" => ["Data Structures" => "explanations/data-structures.md"],
+    "Explanations" => ["Data Structures" => "explanations/data-structures.md", "Layouts" => "explanations/layouts.md"],
     "Demos" => [
         "Import" => [
             "BioSemi Import" => "demos/import/biosemi_import.md",
@@ -95,7 +95,7 @@ pages = [
             "RSA" => "demos/statistics/rsa.md",
         ],
     ],
-    "Reference" => ["Overview" => "reference/index.md", "Types" => "reference/types.md", "Layouts" => "reference/layouts.md"],
+    "Reference" => ["Overview" => "reference/index.md", "Types" => "reference/types.md"],
 ]
 
 makedocs(;
