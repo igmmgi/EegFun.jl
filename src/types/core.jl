@@ -238,7 +238,7 @@ Stores information about baseline correction applied to time-frequency data.
 
 # Fields
 - `method::Symbol`: Baseline method (`:db`, `:percent`, `:relchange`)
-- `window::Tuple{Float64,Float64}`: Baseline time window (start, stop) in seconds
+- `window::Tuple{Float64,Float64}`: Baseline time interval (start, stop) in seconds
 """
 @kwdef struct BaselineInfo
     method::Symbol

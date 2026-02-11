@@ -78,6 +78,9 @@ This demo shows re-referencing workflows:
 ::: details Show Code
 
 ```julia
+# Demo: Rereferencing
+# Shows different rereferencing methods (average, linked mastoids, specific channel reference).
+
 using EegFun
 
 # read raw data

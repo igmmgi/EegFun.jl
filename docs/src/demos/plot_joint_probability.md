@@ -105,6 +105,9 @@ This demo shows joint probability analysis:
 ::: details Show Code
 
 ```julia
+# Demo: Joint Probability Plot
+# Shows joint probability distributions for artifact detection.
+
 using EegFun
 
 # read raw data

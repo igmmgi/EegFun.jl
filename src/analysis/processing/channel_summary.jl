@@ -122,11 +122,11 @@ summary = channel_summary(dat, sample_selection = samples_not(:is_extreme_value_
 # Exclude multiple types of bad samples
 summary = channel_summary(dat, sample_selection = samples_or_not([:is_extreme_value_100, :is_vEOG, :is_hEOG]))
 
-# Only include samples within epoch windows
-summary = channel_summary(dat, sample_selection = samples(:epoch_window))
+# Only include samples within epoch intervals
+summary = channel_summary(dat, sample_selection = samples(:epoch_interval))
 
-# Include samples that are both in epoch window AND not extreme
-summary = channel_summary(dat, sample_selection = samples_and([:epoch_window, samples_not(:is_extreme_value_100)]))
+# Include samples that are both in epoch interval AND not extreme
+summary = channel_summary(dat, sample_selection = samples_and([:epoch_interval, samples_not(:is_extreme_value_100)]))
 ```
 
 ## Combined Selection
@@ -147,7 +147,7 @@ summary = channel_summary(dat,
 summary = channel_summary(dat, 
     channel_selection = channels([:Fp1, :Fp2, :F3, :F4, :F5, :F6, :F7, :F8]),
     sample_selection = samples_and([
-        :epoch_window, 
+        :epoch_interval, 
         samples_not(:is_extreme_value_100),
         samples_not(:is_vEOG),
         samples_not(:is_hEOG)

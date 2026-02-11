@@ -71,4 +71,4 @@ This demo shows:
 5. **Average to ERPs** and apply padding
 6. **Visualize padded ERPs**
 
-The visual comparison clearly shows how padding extends the time window while maintaining smooth edges.
+The visual comparison clearly shows how padding extends the time interval while maintaining smooth edges.

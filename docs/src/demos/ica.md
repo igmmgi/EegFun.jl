@@ -200,6 +200,10 @@ This demo shows the complete ICA pipeline:
 ::: details Show Code
 
 ```julia
+# Demo: Independent Component Analysis (ICA)
+# Shows ICA decomposition on continuous and epoched data, component identification
+# (EOG, ECG, line noise, channel noise), component removal/restoration, and visualization.
+
 using EegFun
 
 # read raw data

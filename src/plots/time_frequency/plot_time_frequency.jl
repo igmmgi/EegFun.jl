@@ -15,7 +15,7 @@ Plot time-frequency data for a specific channel.
 - `channel::Symbol`: Channel to plot
 
 # Keyword Arguments
-- `baseline_interval`: Optional baseline window (start, stop) in seconds
+- `baseline_interval`: Optional baseline interval (start, stop) in seconds
 - `baseline_method`: Baseline method if baseline_interval provided
 - `colormap`: Colormap (default: :viridis)
 - `colorrange`: Color range (default: auto)

@@ -41,7 +41,7 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}
     n_times = length(times)
 
     # Find baseline time indices (MATLAB: dsearchn finds nearest time points)
-    # Find the nearest time points to the baseline window boundaries
+    # Find the nearest time points to the baseline interval boundaries
     baseline_start_idx = argmin(abs.(times .- baseline_interval[1]))
     baseline_end_idx = argmin(abs.(times .- baseline_interval[2]))
 
@@ -73,7 +73,7 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}
         # Compute baseline statistics per frequency
         # base_mask is a boolean vector for time points
         # power_mat is (n_freqs, n_times)
-        # We want mean (and std for zscore) across time points in baseline window for each frequency
+        # We want mean (and std for zscore) across time points in baseline interval for each frequency
         # Skip NaN values (from edge filtering) when computing baseline statistics 
         baseline_power = zeros(n_freqs)
         for fi = 1:n_freqs

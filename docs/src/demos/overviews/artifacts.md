@@ -27,7 +27,7 @@ Available approaches include:
 2. **Statistical detection** - Use z-scores to flag outliers based on variance, range, kurtosis, and other metrics
 3. **EOG-specific detection** - Compute differential channels and detect characteristic eye movement patterns
 4. **Visual inspection** - Interactive tools for manual review and refinement of automatic detection
-5. **Epoch windows** - Mark time periods around triggers for focused artifact assessment
+5. **Epoch intervals** - Mark time periods around triggers for focused artifact assessment
 
 ### Repair vs. Rejection
 
@@ -77,8 +77,8 @@ This demo demonstrates some features available in EegFun for artifact detection 
 
 ### 4. Epoch Window Marking
 
-- Mark time windows around experimental triggers
-- Apply artifact detection specifically within epoch windows
+- Mark time intervals around experimental triggers
+- Apply artifact detection specifically within epoch intervals
 - Visualize epoch boundaries and detected artifacts in databrowser
 
 ### 5. Bad Epoch Detection (Epoched Data)

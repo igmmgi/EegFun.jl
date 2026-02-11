@@ -54,5 +54,5 @@ This demo shows basic data operations:
 ### 4. Subset Data
 
 - Subset by channel selection (specific electrodes)
-- Subset by sample selection (time windows)
+- Subset by sample selection (time intervals)
 - Create smaller datasets for analysis

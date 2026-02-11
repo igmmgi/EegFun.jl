@@ -20,12 +20,12 @@ epochs by participant and selecting specified conditions for classification.
 # Load all epoch data
 all_epochs = read_all_data(EpochData, "epochs_good", input_dir, participants())
 
-# Prepare for decoding: select conditions 1 and 2, all channels, time window 0-1s
+# Prepare for decoding: select conditions 1 and 2, all channels, time interval 0-1s
 participant_epochs = prepare_decoding(
     all_epochs,
     condition_selection = conditions([1, 2]),
     channel_selection = channels(),
-    interval_selection = (0.0, 1.0))  # Simple tuple for time window
+    interval_selection = (0.0, 1.0))  # Simple tuple for time interval
 ```
 """
 function prepare_decoding(
@@ -144,14 +144,14 @@ Loads EpochData from JLD2 files matching the pattern and prepares them for decod
 
 # Examples
 ```julia
-# Prepare decoding data: conditions 1 vs 2, specific channels, time window
+# Prepare decoding data: conditions 1 vs 2, specific channels, time interval
 participant_epochs = prepare_decoding(
     "epochs_good",
     input_dir = "/path/to/data",
     participant_selection = participants(),
     condition_selection = conditions([1, 2]),
     channel_selection = channels([:Fz, :Cz, :Pz]),
-    interval_selection = (0.0, 1.0))  # Simple tuple for time window
+    interval_selection = (0.0, 1.0))  # Simple tuple for time interval
 ```
 """
 function prepare_decoding(

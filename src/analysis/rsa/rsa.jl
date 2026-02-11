@@ -332,7 +332,7 @@ showing how dissimilar neural patterns are between different conditions.
   - Example: `channel_selection=channels(:Cz)` for single channel
   - Example: `channel_selection=channels()` for all channels (default)
 - `sample_selection::Function=samples()`: Sample selection predicate. See `samples()` for options.
-  - Example: `sample_selection=samples((-0.2, 0.8))` for time window from -0.2 to 0.8 seconds
+  - Example: `sample_selection=samples((-0.2, 0.8))` for time interval from -0.2 to 0.8 seconds
   - Example: `sample_selection=samples()` for all time points (default)
 - `dissimilarity_measure::Symbol`: Measure to use (:correlation, :spearman, :euclidean, :mahalanobis)
   - `:correlation` or `:pearson` - 1 - Pearson correlation (default, most common)

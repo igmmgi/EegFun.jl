@@ -52,9 +52,9 @@ _is_latency_measurement(t::String) = t in _LATENCY_MEASUREMENT_TYPES
 =============================================================================#
 const ERP_MEASUREMENTS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Robust peak detection
-    :local_window => (
+    :local_interval => (
         3,
-        "Number of samples on each side of peak (total window = 2*local_window + 1). Peak must be larger than neighbors and local averages within this window.",
+        "Number of samples on each side of peak (total interval = 2*local_interval + 1). Peak must be larger than neighbors and local averages within this window.",
     ),
 
     # Fractional area latency
@@ -101,26 +101,26 @@ Returns (peak_value, peak_index) or (nothing, nothing) if no robust peak found.
 function _find_robust_peak(
     data::AbstractVector,
     peak_type::Symbol;  # :max or :min
-    local_window::Int = 3,  # Number of samples on each side (ERPLAB "Neighborhood" parameter)
+    local_interval::Int = 3,  # Number of samples on each side (ERPLAB "Neighborhood" parameter)
 )
     n = length(data)
-    total_window = 2 * local_window + 1
+    total_window = 2 * local_interval + 1
 
     if total_window > n
-        @minimal_warning "local_window ($local_window) requires $(total_window) samples but data has only $n, cannot detect robust peak"
+        @minimal_warning "local_interval ($local_interval) requires $(total_window) samples but data has only $n, cannot detect robust peak"
         return (nothing, nothing)
-    elseif local_window > n ÷ 2
-        @minimal_warning "local_window ($local_window) is > 50% of data length ($n), may be too large for robust peak detection"
+    elseif local_interval > n ÷ 2
+        @minimal_warning "local_interval ($local_interval) is > 50% of data length ($n), may be too large for robust peak detection"
     end
 
     valid_peaks = Tuple{Float64,Int}[]  # Store (value, index) for all valid peaks
 
-    for i = (local_window+1):(n-local_window)
+    for i = (local_interval+1):(n-local_interval)
         val = data[i]
 
         # Use views to avoid allocations
-        left_view = @view data[(i-local_window):(i-1)]
-        right_view = @view data[(i+1):(i+local_window)]
+        left_view = @view data[(i-local_interval):(i-1)]
+        right_view = @view data[(i+1):(i+local_interval)]
 
         # Check if this is a local peak (unified logic for max/min)
         # ERPLAB checks: (i) peak > both adjacent points, (ii) peak > average of neighbors
@@ -268,14 +268,14 @@ end
 Helper function for peak measurements with robust detection and fallback.
 Returns (peak_value, peak_index) or (nothing, nothing) if no robust peak found.
 """
-function _compute_peak_measurement(chan_data::AbstractVector, peak_type::Symbol, local_window::Int, channel_name::Symbol)
-    total_window = 2 * local_window + 1
+function _compute_peak_measurement(chan_data::AbstractVector, peak_type::Symbol, local_interval::Int, channel_name::Symbol)
+    total_window = 2 * local_interval + 1
     if total_window > length(chan_data)
         peak_name = peak_type == :max ? "maximum" : "minimum"
-        @minimal_warning "Channel $channel_name: local_window ($local_window, total window $total_window) > analysis window length ($(length(chan_data)) samples). Cannot detect robust peak, using simple $peak_name."
+        @minimal_warning "Channel $channel_name: local_interval ($local_interval, total interval $total_window) > analysis interval length ($(length(chan_data)) samples). Cannot detect robust peak, using simple $peak_name."
     end
 
-    peak_val, peak_idx = _find_robust_peak(chan_data, peak_type; local_window = local_window)
+    peak_val, peak_idx = _find_robust_peak(chan_data, peak_type; local_interval = local_interval)
     if isnothing(peak_val)
         peak_name = peak_type == :max ? "maximum" : "minimum"
         @minimal_warning "Channel $channel_name: No robust $peak_name peak found, using simple $peak_name"
@@ -287,7 +287,7 @@ function _compute_peak_measurement(chan_data::AbstractVector, peak_type::Symbol,
 end
 
 """
-Compute measurement for a single channel in a time window.
+Compute measurement for a single channel in a time interval.
 """
 function _compute_measurement(
     chan_data::AbstractVector,
@@ -302,9 +302,9 @@ function _compute_measurement(
         # Peak measurements (use robust detection with fallback to simple)
     elseif analysis_type in ["max_peak_amplitude", "min_peak_amplitude", "max_peak_latency", "min_peak_latency"]
         peak_type = startswith(analysis_type, "max") ? :max : :min
-        local_window = measurement_kwargs[:local_window]
+        local_interval = measurement_kwargs[:local_interval]
 
-        peak_val, peak_idx = _compute_peak_measurement(chan_data, peak_type, local_window, channel_name)
+        peak_val, peak_idx = _compute_peak_measurement(chan_data, peak_type, local_interval, channel_name)
 
         if analysis_type in ["max_peak_amplitude", "min_peak_amplitude"]
             return peak_val
@@ -314,11 +314,11 @@ function _compute_measurement(
 
         # Peak-to-peak measurements
     elseif analysis_type in ["peak_to_peak_amplitude", "peak_to_peak_latency"]
-        local_window = measurement_kwargs[:local_window]
+        local_interval = measurement_kwargs[:local_interval]
 
         # Find both max and min peaks
-        max_val, max_idx = _compute_peak_measurement(chan_data, :max, local_window, channel_name)
-        min_val, min_idx = _compute_peak_measurement(chan_data, :min, local_window, channel_name)
+        max_val, max_idx = _compute_peak_measurement(chan_data, :max, local_interval, channel_name)
+        min_val, min_idx = _compute_peak_measurement(chan_data, :min, local_interval, channel_name)
 
         # Handle cases where peaks weren't found
         if isnothing(max_val) || isnothing(min_val)
@@ -367,9 +367,9 @@ function _compute_measurement(
         return _fractional_area_latency(chan_data, selected_times, fraction)
     elseif analysis_type == "fractional_peak_latency"
         # Find the peak with maximum absolute value using robust detection
-        local_window = measurement_kwargs[:local_window]
-        max_val, max_idx = _compute_peak_measurement(chan_data, :max, local_window, channel_name)
-        min_val, min_idx = _compute_peak_measurement(chan_data, :min, local_window, channel_name)
+        local_interval = measurement_kwargs[:local_interval]
+        max_val, max_idx = _compute_peak_measurement(chan_data, :max, local_interval, channel_name)
+        min_val, min_idx = _compute_peak_measurement(chan_data, :min, local_interval, channel_name)
 
         # Use the peak with larger absolute value
         peak_idx = abs(max_val) >= abs(min_val) ? max_idx : min_idx
@@ -606,8 +606,8 @@ Extract ERP measurements from a single ErpData object.
 # Arguments
 - `dat::ErpData`: ErpData object containing a single ERP
 - `analysis_type::String`: Type of measurement to extract
-- `analysis_interval::Interval`: Analysis time window as tuple (e.g., (0.3, 0.5)) or interval object (default: nothing - all samples)
-- `baseline_interval::Interval`: Baseline time window as tuple (e.g., (-0.2, 0.0)) or interval object (default: nothing - no baseline)
+- `analysis_interval::Interval`: Analysis time interval as tuple (e.g., (0.3, 0.5)) or interval object (default: nothing - all samples)
+- `baseline_interval::Interval`: Baseline time interval as tuple (e.g., (-0.2, 0.0)) or interval object (default: nothing - no baseline)
 - `channel_selection::Function`: Channel selection (default: channels() - all)
 - `participant::Int`: Participant ID for metadata (default: 0)
 - `kwargs...`: Additional measurement-specific parameters
@@ -672,8 +672,8 @@ Extract ERP measurements from a single EpochData object (multiple epochs).
 # Arguments
 - `dat::EpochData`: EpochData object containing multiple epochs
 - `analysis_type::String`: Type of measurement to extract
-- `analysis_interval::Interval`: Analysis time window as tuple (e.g., (0.3, 0.5)) or interval object (default: nothing - all samples)
-- `baseline_interval::Interval`: Baseline time window as tuple (e.g., (-0.2, 0.0)) or interval object (default: nothing - no baseline)
+- `analysis_interval::Interval`: Analysis time interval as tuple (e.g., (0.3, 0.5)) or interval object (default: nothing - all samples)
+- `baseline_interval::Interval`: Baseline time interval as tuple (e.g., (-0.2, 0.0)) or interval object (default: nothing - no baseline)
 - `channel_selection::Function`: Channel selection (default: channels() - all)
 - `participant::Int`: Participant ID for metadata (default: 0)
 - `kwargs...`: Additional measurement-specific parameters
@@ -790,16 +790,16 @@ end
 Perform standard ERP measurements on averaged or epoched EEG data.
 
 This function computes basic ERP measurements (mean amplitude, peak amplitude, peak latency) 
-across specified time windows and saves results to CSV files.
+across specified time intervals and saves results to CSV files.
 
 # Arguments
 - `file_pattern::String`: Pattern to match JLD2 files (e.g., "erps", "epochs_cleaned")
 - `analysis_type::String`: Type of measurement to extract:
   
   **Essential Measurements** (recommended for most ERP analyses):
-  - `"mean_amplitude"`: Average amplitude in the analysis window
+  - `"mean_amplitude"`: Average amplitude in the analysis interval
     - Most common ERP measure; suitable for all components (N400, P300, etc.)
-    - For fixed time windows, equivalent to integral scaled by window duration
+    - For fixed time intervals, equivalent to integral scaled by interval duration
   - `"max_peak_amplitude"`: Maximum peak amplitude (for positive components like P1, P3, P300)
     - Uses robust detection: peak must exceed neighbors and local averages
     - Falls back to simple maximum if no robust peak found
@@ -807,9 +807,9 @@ across specified time windows and saves results to CSV files.
     - Uses robust detection: peak must be below neighbors and local averages
     - Falls back to simple minimum if no robust peak found
   - `"max_peak_latency"`: Timing of maximum peak (in seconds)
-    - Returns time point of maximum peak within analysis window
+    - Returns time point of maximum peak within analysis interval
   - `"min_peak_latency"`: Timing of minimum peak (in seconds)
-    - Returns time point of minimum peak within analysis window
+    - Returns time point of minimum peak within analysis interval
   
   **Specialized Measurements** (for specific research questions):
   - `"peak_to_peak_amplitude"`: Difference between max and min peaks
@@ -818,8 +818,8 @@ across specified time windows and saves results to CSV files.
     - Rarely used; can be computed post-hoc from individual peak latencies
   - `"integral"`: Signed area under curve (in µV·s)
     - Net electrical activity accounting for polarity (positive - negative)
-    - For fixed windows: integral = mean × duration
-    - Useful when comparing variable-length windows or for historical compatibility
+    - For fixed intervals: integral = mean × duration
+    - Useful when comparing variable-length intervals or for historical compatibility
   - `"rectified_area"`: Sum of absolute values (in µV·s)
     - Total magnitude of activity regardless of polarity
     - Always non-negative
@@ -834,17 +834,17 @@ across specified time windows and saves results to CSV files.
     - Default: 50% peak amplitude (onset/offset detection)
     - Configurable via `fractional_peak_fraction` and `fractional_peak_direction` parameters
   
-  Note: All peak measurements use robust detection with `local_window` parameter (default: 3 samples)
+  Note: All peak measurements use robust detection with `local_interval` parameter (default: 3 samples)
   
-- `analysis_interval::Interval`: Analysis time window as tuple (e.g., (0.3, 0.5) for 300-500ms) (default: nothing - all samples)
-- `baseline_interval::Interval`: Baseline time window as tuple (e.g., (-0.2, 0.0)) (default: nothing - no baseline correction)
+- `analysis_interval::Interval`: Analysis time interval as tuple (e.g., (0.3, 0.5) for 300-500ms) (default: nothing - all samples)
+- `baseline_interval::Interval`: Baseline time interval as tuple (e.g., (-0.2, 0.0)) (default: nothing - no baseline correction)
 - `participant_selection::Function`: Participant selection predicate (default: participants() - all)
 - `condition_selection::Function`: Condition selection predicate (default: conditions() - all)
 - `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
 - `output_dir::Union{String, Nothing}`: Output directory (default: auto-generated)
 - `output_file::String`: Base name for output files (default: "erp_measurements")
 - `kwargs...`: Additional keyword arguments for measurement parameters:
-  - `local_window::Int`: Window size (in samples) for robust peak detection (default: 3)
+  - `local_interval::Int`: Window size (in samples) for robust peak detection (default: 3)
   - `fractional_area_fraction::Float64`: Fraction for fractional area latency (default: 0.5)
   - `fractional_peak_fraction::Float64`: Fraction for fractional peak latency (default: 0.5)
   - `fractional_peak_direction::Symbol`: Direction for fractional peak latency - :onset (before peak) or :offset (after peak) (default: :onset)
@@ -910,9 +910,9 @@ function erp_measurements(
         measurement_kwargs = _merge_plot_kwargs(ERP_MEASUREMENTS_KWARGS, kwargs)
 
         # Validate measurement kwargs
-        local_window = measurement_kwargs[:local_window]
-        if local_window < 1
-            @minimal_error "local_window must be >= 1, got: $local_window"
+        local_interval = measurement_kwargs[:local_interval]
+        if local_interval < 1
+            @minimal_error "local_interval must be >= 1, got: $local_interval"
         end
 
         fractional_area_fraction = measurement_kwargs[:fractional_area_fraction]

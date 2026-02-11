@@ -1,31 +1,25 @@
 # Epoch Extraction
 
-This demo explores the core functionality of segmenting continuous data into epochs (trials) based on event markers, and basic manipulation of these segments.
+This demo explores the core functionality of segmenting continuous data into epochs (or trials) based on event markers, and basic manipulation of these segments.
 
 ### What are Epochs?
 
-Epoching is the process of extracting specific time windows around events (stimuli or responses) from a continuous recording. This allows for trial-based analysis and averaging to reveal Event-Related Potentials (ERPs).
+Epoching is the process of extracting specific time intervals around events (e.g., stimuli or responses) from a continuous recording. This allows for epoch-based analysis and averaging to reveal Event-Related Potentials (ERPs).
 
 **Key features of EegFun's epoching**:
-- Precise time-relative segmentation
+- Time-relative segmentation
 - Multi-condition definition via trigger sequences
-- In-place baseline correction
-- Seamless conversion to ERP averages
 
 ### Capabilities
 
-- **Flexible Extraction**: Define windows relative to trigger onset (e.g., -200ms to +1000ms).
+- **Flexible Extraction**: Define intervals relative to trigger onset (e.g., -200ms to +1000ms).
 - **Condition Matching**: Match triggers or sequences of triggers to specific condition names.
-- **Baseline Correction**: Subtract mean activity from a pre-stimulus interval to handle slow drifts.
-- **Visualization**: Specialized plots for trial-by-trial data and ERP averages.
 
 ## Workflow Summary
 
 1. **Data Preparation**: Load continuous data, apply layout, and perform basic preprocessing (filtering, re-referencing).
 2. **Define Conditions**: Use `EpochCondition` to specify which triggers belong to which experimental condition.
 3. **Extraction**: Use `extract_epochs()` to create segments. This returns a collection of `EpochedData` objects.
-4. **Baseline Correction**: Correct for voltage offsets using `baseline!()`.
-5. **Averaging and Comparison**: Generate ERPs by averaging across trials and plot them to compare conditions.
 
 
 ## Code Examples
@@ -33,6 +27,9 @@ Epoching is the process of extracting specific time windows around events (stimu
 ::: details Show Code
 
 ```julia
+# Demo: Epoch Extraction
+# Shows how to extract epochs from continuous data using trigger sequences.
+
 using EegFun
 
 # Read raw data
@@ -49,12 +46,16 @@ dat = EegFun.create_eegfun_data(dat, layout_file);
 EegFun.rereference!(dat, :avg)
 EegFun.highpass_filter!(dat, 0.1)
 
-# Define simple epoch conditions
+# Define simple epoch condition
+epoch_cfg = EegFun.EpochCondition(name = "Trigger1", trigger_sequences = [[1]])
+# Extract epochs (-200ms to 1000ms around triggers)
+epoch = EegFun.extract_epochs(dat, epoch_cfg, (-0.2, 1.0));
+
+# Or multiple epoch conditions
 epoch_cfg = [
     EegFun.EpochCondition(name = "Trigger1", trigger_sequences = [[1]]),
     EegFun.EpochCondition(name = "Trigger2", trigger_sequences = [[2]]),
 ]
-
 # Extract epochs (-200ms to 1000ms around triggers)
 epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.2, 1.0));
 

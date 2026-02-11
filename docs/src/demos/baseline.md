@@ -1,6 +1,6 @@
 # Baseline
 
-This demo demonstrates baseline correction methods for ERP data, including different baseline windows and correction approaches for continuous, epoch, and ERP data.
+This demo demonstrates baseline correction methods for ERP data, including different baseline intervals and correction approaches for continuous, epoch, and ERP data.
 
 ### What is Baseline Correction?
 
@@ -28,7 +28,7 @@ Baseline correction removes the pre-stimulus mean from each trial, ensuring that
 
 ## Best Practices
 
-**Baseline window selection**:
+**Baseline interval selection**:
 
 - Choose based on experimental design and paradigm timing
 - Standard: -200 to 0 ms for most ERP paradigms
@@ -76,7 +76,7 @@ This demo demonstrates baseline correction for different data types:
 
 - Average epochs into ERPs
 - Baseline to single timepoint (t=0, t=0.5)
-- Baseline to time window (-200 to 0 ms)
+- Baseline to time interval (-200 to 0 ms)
 - Compare effects across baseline choices
 
 
@@ -85,6 +85,10 @@ This demo demonstrates baseline correction for different data types:
 ::: details Show Code
 
 ```julia
+# Demo: Baseline Correction
+# Shows baseline correction on continuous, epoched, and ERP data using
+# different baseline intervals and visualizes the effects.
+
 using EegFun
 
 # read raw data
@@ -148,7 +152,7 @@ EegFun.plot_erp(erps, channel_selection = EegFun.channels([:Fp1]))
 EegFun.baseline!(erps, (-0.2, 0)) # baseline to t=-0.2 to 0.0
 EegFun.plot_erp(erps, channel_selection = EegFun.channels([:Fp1]))
 
-# We can see the influence of baseline window interactively using the plot_erp_measurement_gui
+# We can see the influence of baseline interval interactively using the plot_erp_measurement_gui
 EegFun.plot_erp_measurement_gui(erps)
 
 ```

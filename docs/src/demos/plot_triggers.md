@@ -95,6 +95,9 @@ This demo shows trigger visualization workflows:
 ::: details Show Code
 
 ```julia
+# Demo: Trigger Visualization
+# Shows trigger/event marker visualization in continuous data.
+
 using EegFun
 
 # read raw data

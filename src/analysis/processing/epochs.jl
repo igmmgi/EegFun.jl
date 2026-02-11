@@ -103,10 +103,10 @@ function condition_parse_epoch(config::Dict)
     return conditions
 end
 
-# Helper function to validate epoch window parameters
-function _validate_epoch_window_params(dat::ContinuousData, epoch_window::Vector{<:Real})
-    @assert length(epoch_window) == 2 "Epoch window must have exactly 2 elements"
-    @assert epoch_window[1] <= epoch_window[2] "Epoch window start must be less than or equal to end"
+# Helper function to validate epoch interval parameters
+function _validate_epoch_interval_params(dat::ContinuousData, epoch_interval::Vector{<:Real})
+    @assert length(epoch_interval) == 2 "Epoch interval must have exactly 2 elements"
+    @assert epoch_interval[1] <= epoch_interval[2] "Epoch interval start must be less than or equal to end"
     @assert hasproperty(dat.data, :triggers) "Data must have a triggers column"
     @assert hasproperty(dat.data, :time) "Data must have a time column"
     @assert !isempty(dat.data.time) "Time column cannot be empty"
@@ -191,8 +191,8 @@ function _mark_windows_at_indices!(
 end
 
 """
-    mark_epoch_windows!(dat::ContinuousData, triggers_of_interest::Vector{Int}, time_window::Vector{<:Real}; 
-                         channel_out::Symbol = :epoch_window)
+    mark_epoch_intervals!(dat::ContinuousData, triggers_of_interest::Vector{Int}, time_window::Vector{<:Real}; 
+                         channel_out::Symbol = :epoch_interval)
 
 Mark samples that are within a specified time window of triggers of interest.
 
@@ -200,7 +200,7 @@ Mark samples that are within a specified time window of triggers of interest.
 - `dat`: ContinuousData object containing the EEG data
 - `triggers_of_interest`: Vector of trigger values to mark windows around
 - `time_window`: Time window in seconds as a vector of two numbers ([-1, 2] for window from -1 to 2 seconds)
-- `channel_out`: Symbol for the output column name (default: :epoch_window)
+- `channel_out`: Symbol for the output column name (default: :epoch_interval)
 
 # Returns
 - The modified ContinuousData object with a new column indicating samples within trigger windows
@@ -210,55 +210,55 @@ Mark samples that are within a specified time window of triggers of interest.
 ## Basic Usage
 ```julia
 # Mark windows around trigger 1 (1 second before to 2 seconds after)
-mark_epoch_windows!(dat, [1], [-1.0, 2.0])
+mark_epoch_intervals!(dat, [1], [-1.0, 2.0])
 
 # Mark windows around multiple (1, 3, and 5) triggers
-mark_epoch_windows!(dat, [1, 3, 5], [-1.0, 2.0])
+mark_epoch_intervals!(dat, [1, 3, 5], [-1.0, 2.0])
 
 # Custom column name
-mark_epoch_windows!(dat, [1, 3], [-0.5, 0.5], channel_out = :near_trigger)
+mark_epoch_intervals!(dat, [1, 3], [-0.5, 0.5], channel_out = :near_trigger)
 ```
 
 ## Different Time Windows
 ```julia
 # Pre-stimulus baseline window
-mark_epoch_windows!(dat, [1], [-0.2, 0.0], channel_out = :baseline_interval)
+mark_epoch_intervals!(dat, [1], [-0.2, 0.0], channel_out = :baseline_interval)
 
 # Post-stimulus response window
-mark_epoch_windows!(dat, [1], [0.0, 0.8], channel_out = :response_window)
+mark_epoch_intervals!(dat, [1], [0.0, 0.8], channel_out = :response_window)
 
 # Asymmetric window (more time after trigger)
-mark_epoch_windows!(dat, [1], [-0.1, 1.0], channel_out = :asymmetric_window)
+mark_epoch_intervals!(dat, [1], [-0.1, 1.0], channel_out = :asymmetric_window)
 
 # Very short window for fast responses
-mark_epoch_windows!(dat, [1], [-0.05, 0.3], channel_out = :fast_response)
+mark_epoch_intervals!(dat, [1], [-0.05, 0.3], channel_out = :fast_response)
 ```
 
 ## Multiple Conditions
 ```julia
 # Different conditions with different windows
-mark_epoch_windows!(dat, [1], [-0.2, 0.8], channel_out = :condition_1)
-mark_epoch_windows!(dat, [2], [-0.2, 1.0], channel_out = :condition_2)
-mark_epoch_windows!(dat, [3], [-0.2, 1.2], channel_out = :condition_3)
+mark_epoch_intervals!(dat, [1], [-0.2, 0.8], channel_out = :condition_1)
+mark_epoch_intervals!(dat, [2], [-0.2, 1.0], channel_out = :condition_2)
+mark_epoch_intervals!(dat, [3], [-0.2, 1.2], channel_out = :condition_3)
 ```
 
 ## Using with Sample Filtering
 ```julia
-# Mark epoch windows
-mark_epoch_windows!(dat, [1, 3], [-1.0, 2.0])
+# Mark epoch intervals
+mark_epoch_intervals!(dat, [1, 3], [-1.0, 2.0])
 
 # Use in analysis (only samples within epochs)
-# summary = channel_summary(dat, samples = samples(:epoch_window))
+# summary = channel_summary(dat, samples = samples(:epoch_interval))
 ```
 """
-function mark_epoch_windows!(
+function mark_epoch_intervals!(
     dat::ContinuousData,
     triggers_of_interest::Vector{Int},
     time_window::Vector{<:Real};
-    channel_out::Symbol = :epoch_window,
+    channel_out::Symbol = :epoch_interval,
 )
     # Input validation
-    _validate_epoch_window_params(dat, time_window)
+    _validate_epoch_interval_params(dat, time_window)
 
     # Initialize result vector with false 
     dat.data[!, channel_out] .= false
@@ -283,11 +283,72 @@ function mark_epoch_windows!(
 end
 
 
+"""
+    mark_epoch_intervals!(dat::ContinuousData, channel_in::Symbol, time_window::Vector{<:Real};
+                         channel_out::Symbol = Symbol(string(channel_in) * "_window"))
+
+Mark samples that are within a specified time window of each `true` sample in a boolean column.
+
+This overload is useful for marking intervals around detected events stored as boolean columns
+(e.g., `:is_vEOG`, `:is_hEOG`, `:is_extreme_value_100`).
+
+# Arguments
+- `dat`: ContinuousData object containing the EEG data
+- `channel_in`: Symbol of the boolean column containing event markers
+- `time_window`: Time window in seconds as a vector of two numbers (e.g., `[-0.1, 0.3]` for 100 ms before to 300 ms after)
+- `channel_out`: Symbol for the output column name (default: `channel_in` with `_window` suffix)
+
+# Returns
+- The modified ContinuousData object with a new boolean column indicating samples within event windows
+
+# Examples
+```julia
+# Mark a −100 to +300 ms window around each vEOG onset
+mark_epoch_intervals!(dat, :is_vEOG, [-0.1, 0.3])
+
+# Custom output column name
+mark_epoch_intervals!(dat, :is_vEOG, [-0.1, 0.3], channel_out = :blink_window)
+
+# Use with sample selection to exclude blink windows from analysis
+mark_epoch_intervals!(dat, :is_vEOG, [-0.1, 0.3])
+summary = channel_summary(dat, sample_selection = samples_not(:is_vEOG_window))
+```
+"""
+function mark_epoch_intervals!(
+    dat::ContinuousData,
+    channel_in::Symbol,
+    time_window::Vector{<:Real};
+    channel_out::Symbol = Symbol(string(channel_in) * "_window"),
+)
+    # Input validation
+    _validate_epoch_interval_params(dat, time_window)
+    channel_in ∉ propertynames(dat.data) && @minimal_error_throw("Column $(channel_in) not found in data")
+    eltype(dat.data[!, channel_in]) <: Bool || @minimal_error_throw("Column $(channel_in) must be a Bool column")
+
+    # Initialize result column
+    dat.data[!, channel_out] .= false
+
+    # Find all true indices in the boolean column
+    reference_indices = findall(dat.data[!, channel_in])
+
+    if isempty(reference_indices)
+        @minimal_warning "No true values found in column $(channel_in)"
+        return dat
+    end
+
+    # Mark windows around all found indices
+    n_marked = _mark_windows_at_indices!(dat, reference_indices, time_window, channel_out)
+    @info "Marked $n_marked samples across $(length(reference_indices)) $(channel_in) events"
+
+    return dat
+end
+
+
 
 
 """
-    mark_epoch_windows!(dat::ContinuousData, epoch_conditions::Vector{EpochCondition}, time_window::Vector{<:Real}; 
-                         channel_out::Symbol = :epoch_window)
+    mark_epoch_intervals!(dat::ContinuousData, epoch_conditions::Vector{EpochCondition}, time_window::Vector{<:Real}; 
+                         channel_out::Symbol = :epoch_interval)
 
 Mark samples that are within a specified time window of trigger sequences defined by epoch conditions.
 
@@ -295,7 +356,7 @@ Mark samples that are within a specified time window of trigger sequences define
 - `dat`: ContinuousData object containing the EEG data
 - `epoch_conditions`: Vector of EpochCondition objects defining trigger sequences and reference points
 - `time_window`: Time window in seconds as a vector of two numbers ([-1, 2] for window from -1 to 2 seconds)
-- `channel_out`: Symbol for the output column name (default: :epoch_window)
+- `channel_out`: Symbol for the output column name (default: :epoch_interval)
 
 # Returns
 - The modified ContinuousData object with a new column indicating samples within trigger sequence windows
@@ -308,20 +369,20 @@ condition2 = EpochCondition(name="condition_2", trigger_ranges=[1:5, 10:15], ref
 conditions = [condition1, condition2]
 
 # Mark windows around trigger sequences
-mark_epoch_windows!(dat, conditions, [-1.0, 2.0])
+mark_epoch_intervals!(dat, conditions, [-1.0, 2.0])
 
 # Custom column name
-mark_epoch_windows!(dat, conditions, [-0.5, 0.5], channel_out = :near_sequences)
+mark_epoch_intervals!(dat, conditions, [-0.5, 0.5], channel_out = :near_sequences)
 ```
 """
-function mark_epoch_windows!(
+function mark_epoch_intervals!(
     dat::ContinuousData,
     epoch_conditions::Vector{EpochCondition},
     time_window::Vector{<:Real};
-    channel_out::Symbol = :epoch_window,
+    channel_out::Symbol = :epoch_interval,
 )
     # Input validation
-    _validate_epoch_window_params(dat, time_window)
+    _validate_epoch_interval_params(dat, time_window)
 
     # Initialize result vector with false
     dat.data[!, channel_out] .= false
@@ -425,7 +486,7 @@ end
 
 
 """
-    extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::EpochCondition, epoch_window::Tuple{Real,Real})
+    extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::EpochCondition, epoch_interval::Tuple{Real,Real})
 
 Extract epochs based on a single EpochCondition object, including timing validation, after/before filtering, 
 trigger ranges, wildcard sequences, and multiple sequences.
@@ -434,7 +495,7 @@ trigger ranges, wildcard sequences, and multiple sequences.
 - `dat::ContinuousData`: The continuous EEG data
 - `condition::Int`: Condition number to assign to epochs
 - `epoch_condition::EpochCondition`: EpochCondition object defining trigger sequence and timing constraints
-- `epoch_window::Tuple{Real,Real}`: Time window relative to reference point (start_time, end_time) in seconds
+- `epoch_interval::Tuple{Real,Real}`: Time window relative to reference point (start_time, end_time) in seconds
 
 # Returns
 - `EpochData`: The extracted epochs
@@ -470,9 +531,9 @@ condition = EpochCondition(
 epochs = extract_epochs(dat, 1, condition, (-0.2, 1.0))
 ```
 """
-function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::EpochCondition, epoch_window::Tuple{Real,Real})
+function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::EpochCondition, epoch_interval::Tuple{Real,Real})
     # Extract start and end times from tuple
-    start_time, end_time = epoch_window
+    start_time, end_time = epoch_interval
 
     # Find t==0 positions based on trigger_sequences (unified approach)
     offset_to_reference = epoch_condition.reference_index - 1
@@ -615,16 +676,16 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
     return EpochData(dat.file, condition, epoch_condition.name, epochs, dat.layout, dat.sample_rate, dat.analysis_info)
 end
 
-function extract_epochs(dat::ContinuousData, epoch_conditions::Vector{EpochCondition}, epoch_window::Tuple{Real,Real})
+function extract_epochs(dat::ContinuousData, epoch_conditions::Vector{EpochCondition}, epoch_interval::Tuple{Real,Real})
     epochs = EpochData[]
     for (idx, epoch_condition) in enumerate(epoch_conditions)
-        push!(epochs, extract_epochs(dat, idx, epoch_condition, epoch_window))
+        push!(epochs, extract_epochs(dat, idx, epoch_condition, epoch_interval))
     end
     return epochs
 end
 
-function extract_epochs(dat::ContinuousData, epoch_conditions::EpochCondition, epoch_window::Tuple{Real,Real})
-    return extract_epochs(dat, [epoch_conditions], epoch_window)
+function extract_epochs(dat::ContinuousData, epoch_conditions::EpochCondition, epoch_interval::Tuple{Real,Real})
+    return extract_epochs(dat, [epoch_conditions], epoch_interval)
 end
 
 

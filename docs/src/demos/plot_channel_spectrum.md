@@ -113,6 +113,9 @@ This demo shows a simple workflow:
 ::: details Show Code
 
 ```julia
+# Demo: Channel Spectrum Plotting
+# Shows power spectrum visualization for selected channels.
+
 using EegFun
 
 # read raw data

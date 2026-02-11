@@ -266,13 +266,13 @@ using Random
         @test_throws Any EegFun.reject_epochs(empty_ep, :is_bad)
     end
 
-    @testset "mark_epoch_windows! (simple triggers)" begin
+    @testset "mark_epoch_intervals! (simple triggers)" begin
         dat = EegFun.create_test_continuous_data_with_triggers()
 
         # Basic functionality - mark windows around trigger 1
-        EegFun.mark_epoch_windows!(dat, [1], [-0.005, 0.005])
-        @test :epoch_window in propertynames(dat.data)
-        @test any(dat.data.epoch_window)  # Should mark some samples
+        EegFun.mark_epoch_intervals!(dat, [1], [-0.005, 0.005])
+        @test :epoch_interval in propertynames(dat.data)
+        @test any(dat.data.epoch_interval)  # Should mark some samples
 
         # Test that windows are marked around trigger 1 occurrences
         trigger_1_indices = findall(dat.data.triggers .== 1)
@@ -281,67 +281,67 @@ using Random
         # Check that some samples near each trigger are marked
         for idx in trigger_1_indices
             # Look for marked samples in a small neighborhood 
-            neighborhood = max(1, idx-5):min(length(dat.data.epoch_window), idx+5)
-            @test any(dat.data.epoch_window[neighborhood])
+            neighborhood = max(1, idx-5):min(length(dat.data.epoch_interval), idx+5)
+            @test any(dat.data.epoch_interval[neighborhood])
         end
 
         # Custom column name
         dat2 = EegFun.create_test_continuous_data_with_triggers()
-        EegFun.mark_epoch_windows!(dat2, [1], [-0.005, 0.005], channel_out = :custom_window)
+        EegFun.mark_epoch_intervals!(dat2, [1], [-0.005, 0.005], channel_out = :custom_window)
         @test :custom_window in propertynames(dat2.data)
         @test any(dat2.data.custom_window)
 
         # Multiple triggers
         dat3 = EegFun.create_test_continuous_data_with_triggers()
-        EegFun.mark_epoch_windows!(dat3, [1, 2], [-0.005, 0.005])
-        @test any(dat3.data.epoch_window)
+        EegFun.mark_epoch_intervals!(dat3, [1, 2], [-0.005, 0.005])
+        @test any(dat3.data.epoch_interval)
 
         # Non-existent trigger should give warning but not error
         dat4 = EegFun.create_test_continuous_data_with_triggers()
-        EegFun.mark_epoch_windows!(dat4, [999], [-0.005, 0.005])
-        @test !any(dat4.data.epoch_window)  # Should be all false
+        EegFun.mark_epoch_intervals!(dat4, [999], [-0.005, 0.005])
+        @test !any(dat4.data.epoch_interval)  # Should be all false
 
         # Test input validation
         dat5 = EegFun.create_test_continuous_data_with_triggers()
-        @test_throws AssertionError EegFun.mark_epoch_windows!(dat5, [1], [-0.005])  # Wrong window length
-        @test_throws AssertionError EegFun.mark_epoch_windows!(dat5, [1], [0.005, -0.005])  # Wrong order
+        @test_throws AssertionError EegFun.mark_epoch_intervals!(dat5, [1], [-0.005])  # Wrong window length
+        @test_throws AssertionError EegFun.mark_epoch_intervals!(dat5, [1], [0.005, -0.005])  # Wrong order
     end
 
-    @testset "mark_epoch_windows! (epoch conditions)" begin
+    @testset "mark_epoch_intervals! (epoch conditions)" begin
         dat = EegFun.create_test_continuous_data_with_triggers()
 
         # Create epoch condition for sequence [1,2,3]
         ec = EegFun.EpochCondition(name = "test_condition", trigger_sequences = [[1, 2, 3]], reference_index = 2)
 
         # Basic functionality
-        EegFun.mark_epoch_windows!(dat, [ec], [-0.005, 0.005])
-        @test :epoch_window in propertynames(dat.data)
-        @test any(dat.data.epoch_window)
+        EegFun.mark_epoch_intervals!(dat, [ec], [-0.005, 0.005])
+        @test :epoch_interval in propertynames(dat.data)
+        @test any(dat.data.epoch_interval)
 
         # Wildcard condition
         dat2 = EegFun.create_test_continuous_data_with_triggers()
         ec_wild = EegFun.EpochCondition(name = "wildcard", trigger_sequences = [[1, :any, 3]], reference_index = 2)
-        EegFun.mark_epoch_windows!(dat2, [ec_wild], [-0.005, 0.005])
-        @test any(dat2.data.epoch_window)
+        EegFun.mark_epoch_intervals!(dat2, [ec_wild], [-0.005, 0.005])
+        @test any(dat2.data.epoch_interval)
 
         # Multiple conditions
         dat3 = EegFun.create_test_continuous_data_with_triggers()
         ec1 = EegFun.EpochCondition(name = "c1", trigger_sequences = [[1, 2, 3]], reference_index = 2)
         ec2 = EegFun.EpochCondition(name = "c2", trigger_sequences = [[1, :any, 3]], reference_index = 1)
-        EegFun.mark_epoch_windows!(dat3, [ec1, ec2], [-0.005, 0.005])
-        @test any(dat3.data.epoch_window)
+        EegFun.mark_epoch_intervals!(dat3, [ec1, ec2], [-0.005, 0.005])
+        @test any(dat3.data.epoch_interval)
 
         # Condition with constraints
         dat4 = EegFun.create_test_continuous_data_with_triggers()
         ec_constrained = EegFun.EpochCondition(name = "constrained", trigger_sequences = [[1, 2, 3]], reference_index = 2, after = 9)
-        EegFun.mark_epoch_windows!(dat4, [ec_constrained], [-0.005, 0.005])
-        @test any(dat4.data.epoch_window)  # Should find constrained sequences
+        EegFun.mark_epoch_intervals!(dat4, [ec_constrained], [-0.005, 0.005])
+        @test any(dat4.data.epoch_interval)  # Should find constrained sequences
 
         # Non-matching condition
         dat5 = EegFun.create_test_continuous_data_with_triggers()
         ec_nomatch = EegFun.EpochCondition(name = "nomatch", trigger_sequences = [[7, 7, 7]], reference_index = 1)
-        EegFun.mark_epoch_windows!(dat5, [ec_nomatch], [-0.005, 0.005])
-        @test !any(dat5.data.epoch_window)  # Should be all false
+        EegFun.mark_epoch_intervals!(dat5, [ec_nomatch], [-0.005, 0.005])
+        @test !any(dat5.data.epoch_interval)  # Should be all false
     end
 
 
@@ -377,28 +377,28 @@ using Random
         @test selected_odd == [1, 3]  # Only epoch 1 is odd
     end
 
-    @testset "_validate_epoch_window_params" begin
+    @testset "_validate_epoch_interval_params" begin
         dat = EegFun.create_test_continuous_data_with_triggers()
 
         # Valid parameters should not throw
-        @test EegFun._validate_epoch_window_params(dat, [-0.1, 0.1]) === nothing
+        @test EegFun._validate_epoch_interval_params(dat, [-0.1, 0.1]) === nothing
 
-        # Invalid time window length
-        @test_throws AssertionError EegFun._validate_epoch_window_params(dat, [-0.1])
-        @test_throws AssertionError EegFun._validate_epoch_window_params(dat, [-0.1, 0.0, 0.1])
+        # Invalid time interval length
+        @test_throws AssertionError EegFun._validate_epoch_interval_params(dat, [-0.1])
+        @test_throws AssertionError EegFun._validate_epoch_interval_params(dat, [-0.1, 0.0, 0.1])
 
-        # Invalid time window order
-        @test_throws AssertionError EegFun._validate_epoch_window_params(dat, [0.1, -0.1])
+        # Invalid time interval order
+        @test_throws AssertionError EegFun._validate_epoch_interval_params(dat, [0.1, -0.1])
 
         # Missing required columns
         df_no_triggers = DataFrame(time = [0.0, 0.1], A = [1.0, 2.0])
         layout = EegFun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing)
         dat_no_triggers = EegFun.ContinuousData("test_data", df_no_triggers, layout, 1000, EegFun.AnalysisInfo())
-        @test_throws AssertionError EegFun._validate_epoch_window_params(dat_no_triggers, [-0.1, 0.1])
+        @test_throws AssertionError EegFun._validate_epoch_interval_params(dat_no_triggers, [-0.1, 0.1])
 
         df_no_time = DataFrame(triggers = [0, 1], A = [1.0, 2.0])
         dat_no_time = EegFun.ContinuousData("test_data", df_no_time, layout, 1000, EegFun.AnalysisInfo())
-        @test_throws AssertionError EegFun._validate_epoch_window_params(dat_no_time, [-0.1, 0.1])
+        @test_throws AssertionError EegFun._validate_epoch_interval_params(dat_no_time, [-0.1, 0.1])
     end
 
     @testset "edge cases and robustness" begin
@@ -409,20 +409,20 @@ using Random
         selected_empty = EegFun.get_selected_epochs(empty_epochs, empty_selector)
         @test isempty(selected_empty)
 
-        # Very short time windows for mark_epoch_windows!
+        # Very short time intervals for mark_epoch_intervals!
         dat = EegFun.create_test_continuous_data_with_triggers()
-        EegFun.mark_epoch_windows!(dat, [1], [-0.001, 0.001])  # 2ms window
-        @test any(dat.data.epoch_window)
+        EegFun.mark_epoch_intervals!(dat, [1], [-0.001, 0.001])  # 2ms window
+        @test any(dat.data.epoch_interval)
 
         # Zero-width window
         dat2 = EegFun.create_test_continuous_data_with_triggers()
-        EegFun.mark_epoch_windows!(dat2, [1], [0.0, 0.0])
-        @test any(dat2.data.epoch_window)  # Should still mark the exact sample
+        EegFun.mark_epoch_intervals!(dat2, [1], [0.0, 0.0])
+        @test any(dat2.data.epoch_interval)  # Should still mark the exact sample
 
-        # Large time windows (should not cause issues if within data bounds)
+        # Large time intervals (should not cause issues if within data bounds)
         dat3 = EegFun.create_test_continuous_data_with_triggers(n = 10000)  # Longer data
-        EegFun.mark_epoch_windows!(dat3, [1], [-0.05, 0.05])  # 100ms window
-        @test any(dat3.data.epoch_window)
+        EegFun.mark_epoch_intervals!(dat3, [1], [-0.05, 0.05])  # 100ms window
+        @test any(dat3.data.epoch_interval)
     end
 
     @testset "additional edge cases and stress tests" begin
@@ -455,7 +455,7 @@ using Random
         # Test with unsorted time vector (should fail validation)
         dat_unsorted = EegFun.create_test_continuous_data_with_triggers()
         dat_unsorted.data.time = reverse(dat_unsorted.data.time)
-        @test_throws AssertionError EegFun.mark_epoch_windows!(dat_unsorted, [1], [-0.01, 0.01])
+        @test_throws AssertionError EegFun.mark_epoch_intervals!(dat_unsorted, [1], [-0.01, 0.01])
 
         # Test reject_epochs with non-boolean columns (should work but warn)
         dat_nonbool = EegFun.create_test_continuous_data_with_triggers()
@@ -470,10 +470,10 @@ using Random
         cleaned_nonbool = EegFun.reject_epochs(eps_nonbool, :bool_bad)
         @test EegFun.n_epochs(cleaned_nonbool) == 2  # One epoch should be removed
 
-        # Test overlapping epoch windows
+        # Test overlapping epoch intervals
         dat_overlap = EegFun.create_test_continuous_data_with_triggers()
-        EegFun.mark_epoch_windows!(dat_overlap, [1], [-0.01, 0.01], channel_out = :window1)
-        EegFun.mark_epoch_windows!(dat_overlap, [2], [-0.01, 0.01], channel_out = :window2)
+        EegFun.mark_epoch_intervals!(dat_overlap, [1], [-0.01, 0.01], channel_out = :window1)
+        EegFun.mark_epoch_intervals!(dat_overlap, [2], [-0.01, 0.01], channel_out = :window2)
         @test :window1 in propertynames(dat_overlap.data)
         @test :window2 in propertynames(dat_overlap.data)
 
@@ -504,7 +504,7 @@ using Random
     end
 
 
-    @testset "mark_epoch_windows! edge cases and constraints" begin
+    @testset "mark_epoch_intervals! edge cases and constraints" begin
         # Create test data with edge cases
         dat = EegFun.create_test_continuous_data(n_channels = 3, n = 1000, fs = 100)
 
@@ -521,7 +521,7 @@ using Random
         # The reference index 999 exists, but when we try to mark a window around it,
         # some samples will be out of bounds. This tests the bounds check in _mark_windows_at_indices!
         # We expect Info log for successful marking (with some samples skipped)
-        @test_logs match_mode = :any EegFun.mark_epoch_windows!(dat, [ec_oob], [-0.1, 0.1], channel_out = :test_oob)
+        @test_logs match_mode = :any EegFun.mark_epoch_intervals!(dat, [ec_oob], [-0.1, 0.1], channel_out = :test_oob)
 
         # Test 2: before constraint filtering - sequence exists but constraint fails
         dat2 = EegFun.create_test_continuous_data(n_channels = 2, n = 500, fs = 100)
@@ -538,7 +538,7 @@ using Random
             before = 99,  # Require trigger 99 AFTER the sequence - it doesn't exist
         )
         # Should warn about no sequences meeting constraints
-        @test_logs (:warn,) match_mode = :any EegFun.mark_epoch_windows!(dat2, [ec_before], [-0.1, 0.1], channel_out = :test_before)
+        @test_logs (:warn,) match_mode = :any EegFun.mark_epoch_intervals!(dat2, [ec_before], [-0.1, 0.1], channel_out = :test_before)
 
         # Test 3: Timing constraints with various edge cases 
         dat3 = EegFun.create_test_continuous_data(n_channels = 2, n = 500, fs = 1000)
@@ -556,7 +556,7 @@ using Random
             max_interval = 0.020,   # But less than 20ms
         )
         # Should filter out sequences that don't meet timing 
-        @test_logs (:warn,) match_mode = :any EegFun.mark_epoch_windows!(dat3, [ec_timing], [-0.01, 0.01], channel_out = :test_timing)
+        @test_logs (:warn,) match_mode = :any EegFun.mark_epoch_intervals!(dat3, [ec_timing], [-0.01, 0.01], channel_out = :test_timing)
 
         # Test 4: Reference index out of bounds warning - sequence exists but reference is beyond length
         dat4 = EegFun.create_test_continuous_data(n_channels = 2, n = 100, fs = 100)
@@ -570,7 +570,7 @@ using Random
             reference_index = 95,  # seq_start=10, ref_idx = 10 + 94 = 104 > 100 (out of bounds!)
         )
         # Should warn about reference index out of bounds
-        @test_logs (:warn,) match_mode = :any EegFun.mark_epoch_windows!(dat4, [ec_ref_oob], [-0.01, 0.01], channel_out = :test_ref_oob)
+        @test_logs (:warn,) match_mode = :any EegFun.mark_epoch_intervals!(dat4, [ec_ref_oob], [-0.01, 0.01], channel_out = :test_ref_oob)
     end
     @testset "extract_epochs constraint error messages" begin
         dat = EegFun.create_test_continuous_data_with_triggers()

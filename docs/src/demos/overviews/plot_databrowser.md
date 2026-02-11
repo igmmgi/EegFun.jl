@@ -21,7 +21,7 @@ The databrowser is an interactive visualization tool for navigating through EEG 
 **Visual Overlays**:
 
 - **Trigger markers**: See event timing
-- **Epoch windows**: Visualize extraction boundaries
+- **Epoch intervals**: Visualize extraction boundaries
 - **Extreme values**: Highlight artifact-contaminated samples
 - **Channel repair**: Mark and repair problematic channels
 
@@ -53,7 +53,7 @@ Extract user-selected:
 | **I** | Show help/info |
 | **R** | Open channel repair menu |
 | **C** | Clear current selections |
-| **Arrow keys** | Navigate time windows |
+| **Arrow keys** | Navigate time intervals |
 
 ### Custom Styling
 
@@ -93,7 +93,7 @@ plot_databrowser("epochs.jld2", "ica.jld2")    # saved epochs and ica result
 
 **3. Epoch Validation**:
 
-- Mark epoch windows with `mark_epoch_windows!()`
+- Mark epoch intervals with `mark_epoch_intervals!()`
 - Verify trigger timing
 - Check epoch boundaries
 
@@ -107,7 +107,7 @@ plot_databrowser("epochs.jld2", "ica.jld2")    # saved epochs and ica result
 
 **Spectral analysis region selection**:
 
-- Identify interesting time windows
+- Identify interesting time intervals
 - Select for further time-frequency analysis
 - Export settings for batch processing
 

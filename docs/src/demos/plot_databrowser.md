@@ -23,7 +23,7 @@ The databrowser is an interactive visualization tool for navigating through EEG 
 **Visual Overlays**:
 
 - **Trigger markers**: See event timing
-- **Epoch windows**: Visualize extraction boundaries
+- **Epoch intervals**: Visualize extraction boundaries
 - **Extreme values**: Highlight artifact-contaminated samples
 - **Channel repair**: Mark and repair problematic channels
 
@@ -55,7 +55,7 @@ Extract user-selected:
 | **I** | Show help/info |
 | **R** | Open channel repair menu |
 | **C** | Clear current selections |
-| **Arrow keys** | Navigate time windows |
+| **Arrow keys** | Navigate time intervals |
 
 ### Custom Styling
 
@@ -95,7 +95,7 @@ plot_databrowser("epochs.jld2", "ica.jld2")    # saved epochs and ica result
 
 **3. Epoch Validation**:
 
-- Mark epoch windows with `mark_epoch_windows!()`
+- Mark epoch intervals with `mark_epoch_intervals!()`
 - Verify trigger timing
 - Check epoch boundaries
 
@@ -109,7 +109,7 @@ plot_databrowser("epochs.jld2", "ica.jld2")    # saved epochs and ica result
 
 **Spectral analysis region selection**:
 
-- Identify interesting time windows
+- Identify interesting time intervals
 - Select for further time-frequency analysis
 - Export settings for batch processing
 
@@ -139,6 +139,10 @@ The databrowser is essential for interactive EEG exploration and quality control
 ::: details Show Code
 
 ```julia
+# Demo: Interactive Databrowser
+# Shows the interactive databrowser for continuous and epoched data with ICA,
+# analysis settings, custom channels, and file-based loading.
+
 using EegFun
 using JLD2
 
@@ -180,7 +184,7 @@ EegFun.highpass_filter!(dat, 0.5)
 
 # E.g. mark data sections (some extreme values and intervals around triggers; Boolean)
 EegFun.is_extreme_value!(dat, 100);
-EegFun.mark_epoch_windows!(dat, [1, 2], [-0.2, 1.0]) # simple epoch marking with trigger 1 and 3
+EegFun.mark_epoch_intervals!(dat, [1, 2], [-0.2, 1.0]) # simple epoch marking with trigger 1 and 3
 
 # Add new channel with a 10 Hz sine wave (50 μV amplitude)
 dat.data[:, :sinewave] = 50.0 .* sin.(2π .* 10.0 .* dat.data[:, :time])

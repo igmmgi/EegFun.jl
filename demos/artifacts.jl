@@ -52,6 +52,11 @@ EegFun.channel_difference!(
 EegFun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 EegFun.detect_eog_onsets!(dat, 50, :hEOG, :is_hEOG)
 
+EegFun.mark_epoch_intervals!(dat, :is_vEOG, [-0.05, 0.4])
+
+EegFun.plot_databrowser(dat)
+
+
 # How many vEOG/hEOG onsets were detected?
 EegFun.n_values(dat, :is_vEOG)
 EegFun.n_values(dat, :is_hEOG)
@@ -90,12 +95,12 @@ EegFun.is_step_value!(dat, 50.0; channel_selection = EegFun.channels([:Fp1, :Fp2
 
 # Artifact Detection in Epoched Data
 EegFun.trigger_count(dat) # our markers or triggers
-EegFun.mark_epoch_windows!(dat, [1, 2, 3, 5, 6], [-0.2, 1.0]) # mark 200 ms and 1000 ms around trigger values
+EegFun.mark_epoch_intervals!(dat, [1, 2, 3, 5, 6], [-0.2, 1.0]) # mark 200 ms and 1000 ms around trigger values
 
-# Can use marked epoch window as a basis for automatic artifact detection
-EegFun.is_extreme_value!(dat, 50; sample_selection = EegFun.samples(:epoch_window), channel_out = :is_extreme_value_epoch)
+# Can use marked epoch interval as a basis for automatic artifact detection
+EegFun.is_extreme_value!(dat, 50; sample_selection = EegFun.samples(:epoch_interval), channel_out = :is_extreme_value_epoch)
 
-# We can now see the epoch windows and artifacts within them in the databrowser under "Epoch Windows"
+# We can now see the epoch intervals and artifacts within them in the databrowser under "Epoch Intervals"
 EegFun.plot_databrowser(dat)
 
 

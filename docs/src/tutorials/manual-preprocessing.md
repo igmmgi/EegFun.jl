@@ -42,11 +42,11 @@ EegFun.get_neighbours_xy!(layout, 40.0) # Calculate neighbors for repair
 ### 2. Mark Epoch Windows
 
 ```julia
-EegFun.mark_epoch_windows!(dat, epoch_cfg, [-0.2, 1.0])
+EegFun.mark_epoch_intervals!(dat, epoch_cfg, [-0.2, 1.0])
 ```
 
 #### Why?
-Creates a boolean column `:epoch_window` in your data, allowing you to:
+Creates a boolean column `:epoch_interval` in your data, allowing you to:
 - Calculate statistics only on task-relevant sections
 - Exclude inter-trial intervals from artifact detection
 - Focus EOG correlation analysis on epochs
@@ -183,8 +183,8 @@ EegFun.is_extreme_value!(dat, 75.0, channel_out = :is_artifact_value_75)
 ### 8. Identify Bad Channels
 
 ```julia
-summary = EegFun.channel_summary(dat, sample_selection = EegFun.samples(:epoch_window))
-cjp = EegFun.channel_joint_probability(dat, sample_selection = EegFun.samples(:epoch_window))
+summary = EegFun.channel_summary(dat, sample_selection = EegFun.samples(:epoch_interval))
+cjp = EegFun.channel_joint_probability(dat, sample_selection = EegFun.samples(:epoch_interval))
 bad_channels = EegFun.identify_bad_channels(summary, cjp)
 ```
 

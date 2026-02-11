@@ -123,6 +123,9 @@ The correlation matrix is a powerful diagnostic tool for both quality control an
 ::: details Show Code
 
 ```julia
+# Demo: Correlation Heatmap
+# Shows correlation matrices between channels or trials.
+
 using EegFun
 
 # read raw data

@@ -3,9 +3,9 @@
 # =============================================================================
 const PLOT_TRIGGERS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :window_size => (10.0, "Size of the time window to display in seconds."),
-    :initial_position => (-2.0, "Initial position of the time window in seconds."),
-    :min_window_size => (0.1, "Minimum size of the time window in seconds."),
-    :max_window_size => (100.0, "Maximum size of the time window in seconds."),
+    :initial_position => (-2.0, "Initial position of the time interval in seconds."),
+    :min_window_size => (0.1, "Minimum size of the time interval in seconds."),
+    :max_window_size => (100.0, "Maximum size of the time interval in seconds."),
     :label_fontsize => (20, "Font size for labels."),
     :display_plot => (true, "Whether to display the plot."),
     :ignore_triggers => (Int[], "Vector of trigger codes to ignore."),

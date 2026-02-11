@@ -1,15 +1,14 @@
 # FieldTrip Import
 
-This demo demonstrates importing FieldTrip `.mat` files into EegFun.jl. FieldTrip is a leading MATLAB toolbox for EEG/MEG analysis, and its structures are a common way to exchange processed data.
+This demo demonstrates importing FieldTrip `.mat` files into EegFun.jl. FieldTrip is a MATLAB toolbox for EEG/MEG analysis, and its structures are a common way to exchange processed data.
 
 ### About FieldTrip .mat Format
 
-FieldTrip stores data in MATLAB structures (typically named `data`, `data_all`, etc.). Since these are generic `.mat` files, EegFun.jl uses `MAT.jl` to parse them and map them onto EegFun types.
+FieldTrip stores data in MATLAB structures (generic `.mat` files). 
+EegFun.jl uses `MAT.jl` to parse them and map them onto EegFun types.
 
 **Key features**:
 - Supports raw, epoched, and averaged (timelock) data
-- Can handle complex data structures with custom fields
-- Widely used in academic research for advanced analysis (TF, connectivity)
 
 ### Import Capabilities
 
@@ -17,7 +16,6 @@ FieldTrip stores data in MATLAB structures (typically named `data`, `data_all`, 
 - Import of continuous `raw` data
 - Import of segmented `epochs` data
 - Import of averaged `timelock` (ERP) data
-- Support for custom Tübingen lab variants of FieldTrip structures
 
 ### Data Mapping
 

@@ -86,6 +86,10 @@ Cohen, M. X. (2014). *Analyzing Neural Time Series Data: Theory and Practice*. C
 ::: details Show Code
 
 ```julia
+# Demo: Time-Frequency Analysis - Morlet Wavelets
+# Shows wavelet-based time-frequency decomposition with synthetic signals
+# and real data, demonstrating different cycle counts and frequency resolution.
+
 using EegFun
 
 #######################################################################
@@ -100,7 +104,7 @@ times, signal = EegFun.generate_signal(
     sample_rate,                            # sample_rate
     [5.0, 25, 35.0],                        # frequencies
     [5.0, 5.0, 5.0],                        # amplitudes
-    [[0.1, 0.5], [0.6, 1.0], [1.1, 1.5]],   # time windows for each freq 
+    [[0.1, 0.5], [0.6, 1.0], [1.1, 1.5]],   # time intervals for each freq 
     0.0,                                    # noise amplitude
 );
 epochs_synthetic = EegFun.signal_to_data(times, signal, :Channel1, sample_rate)

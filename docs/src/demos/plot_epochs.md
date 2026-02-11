@@ -43,7 +43,7 @@ Epoch plots display individual trial timecourses, showing:
 
 **Verify epoching**:
 
-- Check time window selection
+- Check time interval selection
 - Confirm event alignment
 - Validate baseline correction
 
@@ -121,6 +121,9 @@ This demo shows epoch visualization workflows:
 ::: details Show Code
 
 ```julia
+# Demo: Epoch Plotting
+# Shows epoch visualization with channel selection and overlay options.
+
 using EegFun
 
 # read raw data

@@ -18,7 +18,7 @@ Realign epoched data in-place to a different time point specified in a DataFrame
 This function takes stimulus-locked (or any reference-locked) epoched data and
 realigns each epoch so that the time specified in `realignment_column` becomes
 the new time zero. After realignment, all epochs are cropped to a common time
-window determined by the latest start time and earliest end time across all epochs.
+interval determined by the latest start time and earliest end time across all epochs.
 
 # Arguments
 - `dat::EpochData`: Epoched EEG data to realign
@@ -27,7 +27,7 @@ window determined by the latest start time and earliest end time across all epoc
 # Effects
 - Modifies the input data in-place
 - Updates the `:time` column in each epoch
-- Crops all epochs to a common time window
+- Crops all epochs to a common time interval
 - The realignment column values should be relative to the current time zero
 
 # Examples
@@ -44,7 +44,7 @@ realign!(epochs, :rt)
 # Notes
 - The realignment column must exist in all epochs
 - The realignment value should be constant within each epoch (checked automatically)
-- After realignment, epoch length may be shorter due to cropping to common window
+- After realignment, epoch length may be shorter due to cropping to common interval
 - Trials with insufficient data before/after the realignment point will determine the final epoch length
 """
 function realign!(dat::EpochData, realignment_column::Symbol)::Nothing
@@ -58,15 +58,15 @@ function realign!(dat::EpochData, realignment_column::Symbol)::Nothing
     @info "Step 1/3: Realigning individual epochs"
     _realign_epochs!(dat, realignment_column)
 
-    # Step 2: Find common time window across all realigned epochs
-    @info "Step 2/3: Finding common time window"
-    common_window = _find_common_time_window(dat)
+    # Step 2: Find common time interval across all realigned epochs
+    @info "Step 2/3: Finding common time interval"
+    common_interval = _find_common_time_window(dat)
 
-    @info "Common time window: $(common_window[1]) s to $(common_window[2]) s"
+    @info "Common time interval: $(common_interval[1]) s to $(common_interval[2]) s"
 
-    # Step 3: Crop all epochs to common window
-    @info "Step 3/3: Cropping epochs to common window"
-    _crop_epochs_to_window!(dat, common_window)
+    # Step 3: Crop all epochs to common interval
+    @info "Step 3/3: Cropping epochs to common interval"
+    _crop_epochs_to_window!(dat, common_interval)
 
     @info "Realignment complete. Final epoch length: $(nrow(dat.data[1])) samples"
 
@@ -154,7 +154,7 @@ end
 
 
 """
-Find the common time window that is valid for all realigned epochs.
+Find the common time interval that is valid for all realigned epochs.
 
 This finds the latest start time (maximum of all minimum times) and the earliest
 end time (minimum of all maximum times) across all epochs.
@@ -164,7 +164,7 @@ function _find_common_time_window(dat::EpochData)::Tuple{Float64,Float64}
     min_times = [minimum(epoch.time) for epoch in dat.data]
     max_times = [maximum(epoch.time) for epoch in dat.data]
 
-    # Common window is the overlap of all individual windows
+    # Common interval is the overlap of all individual intervals
     # Latest start time
     common_start = maximum(min_times)
     # Earliest end time
@@ -172,7 +172,7 @@ function _find_common_time_window(dat::EpochData)::Tuple{Float64,Float64}
 
     if common_start >= common_end
         @minimal_error_throw(
-            "No common time window found after realignment. " *
+            "No common time interval found after realignment. " *
             "Common start: $(common_start) s, Common end: $(common_end) s. " *
             "The original epochs may not be long enough to accommodate all realignment times."
         )
@@ -183,7 +183,7 @@ end
 
 
 """
-Crop all epochs to the specified time window.
+Crop all epochs to the specified time interval.
 
 Uses sample-count based cropping to ensure all epochs have exactly the same length,
 avoiding floating-point precision issues that can result in different epoch lengths.
@@ -212,7 +212,7 @@ function _crop_epochs_to_window!(dat::EpochData, window::Tuple{Float64,Float64})
         # Validate that we have enough samples
         if end_idx > nrow(epoch)
             @minimal_error_throw(
-                "Epoch $i does not have enough samples for common window. " *
+                "Epoch $i does not have enough samples for common interval. " *
                 "Need samples up to index $end_idx, but epoch only has $(nrow(epoch)) samples. " *
                 "Window: [$start_time, $end_time]"
             )
@@ -319,7 +319,7 @@ realign("epochs_cleaned", :rt,
 
 # Notes
 - Input files should contain EpochData with the specified realignment column
-- All trials within each file are realigned and cropped to a common window
+- All trials within each file are realigned and cropped to a common interval
 - Useful for response-locked LRP analysis or other event-locked analyses
 """
 function realign(

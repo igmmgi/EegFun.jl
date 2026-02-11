@@ -29,7 +29,7 @@ Available approaches include:
 2. **Statistical detection** - Use z-scores to flag outliers based on variance, range, kurtosis, and other metrics
 3. **EOG-specific detection** - Compute differential channels and detect characteristic eye movement patterns
 4. **Visual inspection** - Interactive tools for manual review and refinement of automatic detection
-5. **Epoch windows** - Mark time periods around triggers for focused artifact assessment
+5. **Epoch intervals** - Mark time periods around triggers for focused artifact assessment
 
 ### Repair vs. Rejection
 
@@ -79,8 +79,8 @@ This demo demonstrates some features available in EegFun for artifact detection 
 
 ### 4. Epoch Window Marking
 
-- Mark time windows around experimental triggers
-- Apply artifact detection specifically within epoch windows
+- Mark time intervals around experimental triggers
+- Apply artifact detection specifically within epoch intervals
 - Visualize epoch boundaries and detected artifacts in databrowser
 
 ### 5. Bad Epoch Detection (Epoched Data)
@@ -114,6 +114,10 @@ This demo demonstrates some features available in EegFun for artifact detection 
 ::: details Show Code
 
 ```julia
+# Demo: Comprehensive Artifact Detection and Repair
+# Shows EOG detection, extreme value detection, step artifact detection,
+# automatic and interactive epoch rejection, artifact repair, and visualization.
+
 using EegFun
 
 # read raw data
@@ -164,6 +168,11 @@ EegFun.channel_difference!(
 EegFun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 EegFun.detect_eog_onsets!(dat, 50, :hEOG, :is_hEOG)
 
+EegFun.mark_epoch_intervals!(dat, :is_vEOG, [-0.05, 0.4])
+
+EegFun.plot_databrowser(dat)
+
+
 # How many vEOG/hEOG onsets were detected?
 EegFun.n_values(dat, :is_vEOG)
 EegFun.n_values(dat, :is_hEOG)
@@ -174,6 +183,9 @@ EegFun.plot_databrowser(dat)
 
 # Look for extreme values (adds Bool column to dataframe :is_extreme_value_100)
 EegFun.is_extreme_value!(dat, 100); # 100 mV criterion
+EegFun.is_step_value!(dat, 50, channel_selection = EegFun.channels([:Fp1])); # 50 mV criterion
+
+EegFun.plot_databrowser(dat)
 
 # How many extreme values
 EegFun.n_extreme_value(dat, 100)                    # across all electrodes
@@ -185,15 +197,26 @@ EegFun.is_extreme_value!(dat, 100; channel_selection = x -> endswith.(string.(x)
 EegFun.is_extreme_value!(dat, 100; channel_selection = x -> .!(endswith.(string.(x), "z")));
 EegFun.is_extreme_value!(dat, 100; channel_selection = x -> .!(endswith.(string.(x), "z")), sample_selection = x -> x.sample .> 1000);
 
+# Step artifact detection - detect sudden voltage jumps between consecutive samples
+# This complements extreme value detection by catching artifacts like cable disconnections 
+# or sharp movements (e.g., [1, 2, 3, 50, 2, ...] where extreme value < 100 wouldn't catch it)
+EegFun.is_step_value!(dat, 50.0); # 50 μV jump criterion
+EegFun.n_step_value(dat, 50.0)                    # how many step artifacts (combined)
+EegFun.n_step_value(dat, 50.0, mode = :separate)  # separately for each electrode
+
+# Step artifact detection with channel selection
+EegFun.is_step_value!(dat, 50.0; channel_selection = EegFun.channels([:Fp1, :Fp2]), channel_out = :is_step_frontal);
+
+
 
 # Artifact Detection in Epoched Data
 EegFun.trigger_count(dat) # our markers or triggers
-EegFun.mark_epoch_windows!(dat, [1, 2, 3, 5, 6], [-0.2, 1.0]) # mark 200 ms and 1000 ms around trigger values
+EegFun.mark_epoch_intervals!(dat, [1, 2, 3, 5, 6], [-0.2, 1.0]) # mark 200 ms and 1000 ms around trigger values
 
-# Can use marked epoch window as a basis for automatic artifact detection
-EegFun.is_extreme_value!(dat, 50; sample_selection = EegFun.samples(:epoch_window), channel_out = :is_extreme_value_epoch)
+# Can use marked epoch interval as a basis for automatic artifact detection
+EegFun.is_extreme_value!(dat, 50; sample_selection = EegFun.samples(:epoch_interval), channel_out = :is_extreme_value_epoch)
 
-# We can now see the epoch windows and artifacts within them in the databrowser under "Epoch Windows"
+# We can now see the epoch intervals and artifacts within them in the databrowser under "Epoch Intervals"
 EegFun.plot_databrowser(dat)
 
 
