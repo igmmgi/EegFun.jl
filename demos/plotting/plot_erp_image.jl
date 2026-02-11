@@ -35,6 +35,16 @@ EegFun.plot_erp_image(epochs[1], layout = :single)
 
 fig, axes = EegFun.plot_erp_image(
     epochs[1],
+    channel_selection = EegFun.channels([:PO7, :PO8]),
+    layout = :single,
+    boxcar_average = 2,
+    colorrange = (-50, 50),
+)
+
+
+
+fig, axes = EegFun.plot_erp_image(
+    epochs[1],
     # channel_selection = EegFun.channels([:Fp1, :Fp2]),
     # channel_selection = EegFun.channels([:Fp1, :Fp2]),
     layout = :topo,

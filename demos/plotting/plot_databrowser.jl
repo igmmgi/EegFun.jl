@@ -14,9 +14,7 @@ EegFun.polar_to_cartesian_xy!(layout_file)
 
 # create EegFun data structure (EegFun.ContinuousData)
 dat = EegFun.create_eegfun_data(dat, layout_file);
-
 dat = EegFun.create_eegfun_data(dat);
-
 
 # Basic databrowser
 EegFun.plot_databrowser(dat);

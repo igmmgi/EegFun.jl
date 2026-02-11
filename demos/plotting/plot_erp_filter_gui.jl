@@ -13,10 +13,16 @@ layout = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv")
 EegFun.polar_to_cartesian_xy!(layout)
 dat = EegFun.create_eegfun_data(dat, layout)
 
-# epoch and average
-epochs = EegFun.epoch_data(dat, [:trigger1], (-0.2, 0.8))
-EegFun.baseline!(epochs, (-0.2, 0.0))
-erp = EegFun.average(epochs)
+# Some minimal preprocessing (average reference and highpass filter)
+EegFun.rereference!(dat, :avg)
+EegFun.highpass_filter!(dat, 0.5)
+
+# EPOCHS
+epoch_cfg = [EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
+epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.5, 1.0))
+
+# Create ERP
+erp = EegFun.average_epochs(epochs)
 
 #######################################################################
 # 2. LAUNCH FILTER GUI — SINGLE CONDITION
