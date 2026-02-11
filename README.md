@@ -4,7 +4,6 @@
 ![Julia 1.10+](https://img.shields.io/badge/julia-v1.10+-blue.svg)
 ![Status: Alpha](https://img.shields.io/badge/Status-Alpha-orange.svg)
 
-
 # EegFun.jl
 
 <img src="images/EegFunLogo.png" alt="EegFun Logo" width="150"/>
@@ -107,15 +106,67 @@ EegFun.plot_ica_component_activation(dat, ica_result)
 
 </details>
 
-<img src="images/data_browser_ica.png" alt="Data Browser ICA" width="800"/>
+<img src="images/ica_components_activation.png" alt="ICA Component Activation" width="800"/>
+
+### Plot Gallery
+
+<table>
+  <tr>
+    <td align="center"><b>Epochs (Grid Layout)</b></td>
+    <td align="center"><b>ERP (Topo Layout)</b></td>
+  </tr>
+  <tr>
+    <td><img src="images/epochs_grid_layout.png" alt="Epochs Grid Layout" width="400"/></td>
+    <td><img src="images/erp_topo_layout.png" alt="ERP Topo Layout" width="400"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>ICA Component Topographies</b></td>
+    <td align="center"><b>ICA Component Spectra</b></td>
+  </tr>
+  <tr>
+    <td><img src="images/ica_components_topography.png" alt="ICA Component Topographies" width="400"/></td>
+    <td><img src="images/ica_components_spectrum.png" alt="ICA Component Spectra" width="400"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>ERP Measurement GUI</b></td>
+    <td align="center"><b>ERP Filter GUI</b></td>
+  </tr>
+  <tr>
+    <td><img src="images/erp_measurement_gui.png" alt="ERP Measurement GUI" width="400"/></td>
+    <td><img src="images/erp_filter.png" alt="ERP Filter GUI" width="400"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Time-Frequency Analysis</b></td>
+    <td align="center"><b>Triggers</b></td>
+  </tr>
+  <tr>
+    <td><img src="images/tf.png" alt="Time-Frequency Analysis" width="400"/></td>
+    <td><img src="images/triggers.png" alt="Triggers" width="400"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Plot GUI</b></td>
+    <td align="center"><b>Artifact Detection</b></td>
+  </tr>
+  <tr>
+    <td><img src="images/plot_gui.png" alt="Plot GUI" width="400"/></td>
+    <td><img src="images/artifact_detection.png" alt="Artifact Detection" width="400"/></td>
+  </tr>
+</table>
 
 <details>
-<summary><b>Plot Examples</b></summary>
+<summary><b>More Plot Examples</b></summary>
 
 <details>
 <summary>Artifact Detection</summary>
 
 <img src="images/artifact_detection.png" alt="Artifact Detection" width="600"/>
+
+</details>
+
+<details>
+<summary>ERP Image (Topo Layout)</summary>
+
+<img src="images/erp_image_topo_layout.png" alt="ERP Image Topo Layout" width="600"/>
 
 </details>
 
@@ -132,20 +183,5 @@ EegFun.plot_ica_component_activation(dat, ica_result)
 <img src="images/erp_topo_layout.png" alt="ERP Topo Layout" width="600"/>
 
 </details>
-
-<details>
-<summary>ERP Image (Topo Layout)</summary>
-
-<img src="images/erp_image_topo_layout.png" alt="ERP Image Topo Layout" width="600"/>
-
-</details>
-
-</details>
-
-<details>
-<summary><i>TODO</i></summary>
-
-* Add additional file formats to read_raw_data (currently only Biosemi BDF and BrainVision)
-* Lots more ....
 
 </details>

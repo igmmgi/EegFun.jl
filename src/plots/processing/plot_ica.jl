@@ -1240,9 +1240,9 @@ function _setup_keyboard_interactions!(fig, state)
 
                 if !shift_pressed
                     if event.key == Keyboard.up
-                        ymore!.(state.axs)
+                        _ymore!.(state.axs)
                     else
-                        yless!.(state.axs)
+                        _yless!.(state.axs)
                     end
                     state.ylims[] = state.axs[1].yaxis.attributes.limits[]
 

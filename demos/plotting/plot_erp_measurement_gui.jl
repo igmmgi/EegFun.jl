@@ -15,7 +15,7 @@ EegFun.plot_erp_measurement_gui(dat[1])
 
 # Select some specific initial settings
 EegFun.plot_erp_measurement_gui(
-    dat,
+    dat[1],
     channel = :Cz,
     analysis_type = "mean_amplitude",
     analysis_interval = (0.3, 0.5),
