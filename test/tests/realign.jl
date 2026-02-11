@@ -55,7 +55,7 @@ using DataFrames
         end
     end
 
-    @testset "Time window cropping" begin
+    @testset "Time interval cropping" begin
         # Create epochs with varying RTs
         epoch_data = EegFun.create_test_epoch_data_with_rt(
             participant = 1,
@@ -83,14 +83,14 @@ using DataFrames
         # Realigned length should be less than or equal to original
         @test realigned_lengths[1] <= original_lengths[1]
 
-        # Check that time windows are identical across epochs
+        # Check that time intervals are identical across epochs
         for i = 1:length(realigned.data)
             @test minimum(realigned.data[i].time) ≈ minimum(realigned.data[1].time)
             @test maximum(realigned.data[i].time) ≈ maximum(realigned.data[1].time)
         end
     end
 
-    @testset "Common time window calculation" begin
+    @testset "Common time interval calculation" begin
         # Create epochs with RTs that span a wide range
         epoch_data = EegFun.create_test_epoch_data_with_rt(
             participant = 1,
@@ -213,7 +213,7 @@ using DataFrames
             @test all(length(realigned.data[i].time) > 0 for i = 1:length(realigned.data))
         catch e
             # Should be a clear error message about insufficient epoch length
-            @test occursin("common time window", sprint(showerror, e)) || occursin("No samples found", sprint(showerror, e))
+            @test occursin("common time interval", sprint(showerror, e)) || occursin("No samples found", sprint(showerror, e))
         end
     end
 

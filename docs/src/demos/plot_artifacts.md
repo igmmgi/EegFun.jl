@@ -99,6 +99,9 @@ This demo shows:
 ::: details Show Code
 
 ```julia
+# Demo: Artifact Detection Visualization
+# Shows plots for visualizing artifact detection and rejection.
+
 using EegFun
 
 # read raw data

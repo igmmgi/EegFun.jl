@@ -6,21 +6,21 @@ ERP measurements quantify specific features of averaged event-related potentials
 
 - **Amplitude**: Voltage magnitude at specific times or peaks
 - **Latency**: Timing of component peaks or onsets
-- **Area/Integral**: Total activity over a time window
+- **Area/Integral**: Total activity over a time interval
 - **Peak-to-peak**: Voltage range between positive and negative deflections
 
 ### Measurement Types
 
 **Mean Amplitude**:
 
-- Average voltage in a time window
+- Average voltage in a time interval
 - Most robust amplitude measure
 - Less sensitive to noise than peak measures
 - Standard for most ERP components
 
 **Peak Amplitude**:
 
-- Maximum (or minimum) voltage in window
+- Maximum (or minimum) voltage in interval
 - Captures strongest response
 - Can be affected by noise
 - Useful for P300, N400, etc.
@@ -57,7 +57,7 @@ ERP measurements quantify specific features of averaged event-related potentials
 **`plot_erp_measurement_gui`**:
 
 - Visual interface for exploring measurements
-- Adjust time windows interactively
+- Adjust time intervals interactively
 - Select measurement types
 - Preview results before batch processing
 
@@ -79,7 +79,7 @@ ERP measurements quantify specific features of averaged event-related potentials
 - **Fractional latency**: For robust timing analysis
 - **Area**: For sustained or variable waveforms
 
-**Define time windows carefully**:
+**Define time intervals carefully**:
 
 - Based on grand averages or literature
 - Should capture component of interest
@@ -101,7 +101,7 @@ ERP measurements quantify specific features of averaged event-related potentials
 
 1. **Visualize ERPs** to identify components
 2. **Use GUI** to explore measurement parameters
-3. **Define time windows** based on grand average
+3. **Define time intervals** based on grand average
 4. **Batch process** all files with `erp_measurements`
 5. **Export to CSV** for statistical analysis
 
@@ -114,7 +114,7 @@ This demo shows ERP measurement extraction:
 - Launch `plot_erp_measurement_gui`
 - Visualize ERPs
 - Explore different measurement types
-- Adjust time windows interactively
+- Adjust time intervals interactively
 
 ### 2. Batch Processing
 

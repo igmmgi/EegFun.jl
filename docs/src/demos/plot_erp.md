@@ -150,7 +150,7 @@ Shows ERP waveform with scalp distribution at a specific time point.
 
 - Overlay multiple experimental conditions
 - Identify differences in amplitude or latency
-- Statistical windows highlighted
+- Statistical intervals highlighted
 
 **Component identification**:
 
@@ -197,6 +197,9 @@ ERP plots are the foundation of event-related brain potential analysis!
 ::: details Show Code
 
 ```julia
+# Demo: ERP Plotting
+# Shows ERP waveform visualization with various customization options.
+
 using EegFun
 using JLD2
 

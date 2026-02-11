@@ -86,6 +86,9 @@ This demo shows channel repair workflows:
 ::: details Show Code
 
 ```julia
+# Demo: Channel Repair
+# Shows neighbor interpolation and spherical spline for repairing bad channels.
+
 using EegFun
 
 # read raw data

@@ -136,11 +136,11 @@ function preprocess_v1(config::String; base_dir::Union{String,Nothing} = nothing
                     jldsave(_make_output_filename(output_directory, data_file, "_continuous_original"); data = dat)
                 end
 
-                # Mark epoch windows
+                # Mark epoch intervals
                 # This is useful for x (time/sample) subsetting within the preprocessing pipeline
-                @info section("Marking epoch windows")
-                @info "Epoch windows: $([preprocess_cfg.epoch_start, preprocess_cfg.epoch_end])"
-                mark_epoch_windows!(dat, epoch_cfgs, [preprocess_cfg.epoch_start, preprocess_cfg.epoch_end])
+                @info section("Marking epoch intervals")
+                @info "Epoch intervals: $([preprocess_cfg.epoch_start, preprocess_cfg.epoch_end])"
+                mark_epoch_intervals!(dat, epoch_cfgs, [preprocess_cfg.epoch_start, preprocess_cfg.epoch_end])
 
                 ################### REREFERENCE DATA ###################
                 @info section("Rereference")
@@ -166,11 +166,11 @@ function preprocess_v1(config::String; base_dir::Union{String,Nothing} = nothing
                 EegFun.add_zscore_columns!(hEOG_vEOG_cm)
                 _log_pretty_table(hEOG_vEOG_cm; title = "Channel x vEOG/hEOG Correlation Matrix (whole dataset)")
 
-                # Calculate correlations between all channels and EOG channels (epoch window)
-                @info subsection("Channel x vEOG/hEOG Correlation Matrix (epoch window)")
-                hEOG_vEOG_cm_epoch = EegFun.correlation_matrix_eog(dat, preprocess_cfg.eog; sample_selection = samples(:epoch_window))
+                # Calculate correlations between all channels and EOG channels (epoch interval)
+                @info subsection("Channel x vEOG/hEOG Correlation Matrix (epoch interval)")
+                hEOG_vEOG_cm_epoch = EegFun.correlation_matrix_eog(dat, preprocess_cfg.eog; sample_selection = samples(:epoch_interval))
                 EegFun.add_zscore_columns!(hEOG_vEOG_cm_epoch)
-                _log_pretty_table(hEOG_vEOG_cm_epoch; title = "Channel x vEOG/hEOG Correlation Matrix (epoch window)")
+                _log_pretty_table(hEOG_vEOG_cm_epoch; title = "Channel x vEOG/hEOG Correlation Matrix (epoch interval)")
 
                 #################### INITIAL EPOCH and ERP EXTRACTION ###################
                 # This is just the initial epoch extraction and not the cleaned epoched data.
@@ -201,8 +201,8 @@ function preprocess_v1(config::String; base_dir::Union{String,Nothing} = nothing
                 summary_whole_dataset = channel_summary(dat)
                 _log_pretty_table(summary_whole_dataset; title = "Channel Summary (whole dataset)")
 
-                summary_epoch_window = channel_summary(dat, sample_selection = samples(:epoch_window))
-                _log_pretty_table(summary_epoch_window; title = "Channel Summary (epoch window)")
+                summary_epoch_interval = channel_summary(dat, sample_selection = samples(:epoch_interval))
+                _log_pretty_table(summary_epoch_interval; title = "Channel Summary (epoch interval)")
 
                 #################### DETECT EXTREME VALUES IN CONTINUOUS DATA ###################
                 @info subsection("Artifact Detection (extreme values)")
@@ -226,15 +226,15 @@ function preprocess_v1(config::String; base_dir::Union{String,Nothing} = nothing
                 cjp_whole_dataset = channel_joint_probability(dat)
                 _log_pretty_table(cjp_whole_dataset; title = "Channel Joint Probability (whole dataset)")
 
-                cjp_epoch_window = channel_joint_probability(dat, sample_selection = samples(:epoch_window))
-                _log_pretty_table(cjp_epoch_window; title = "Channel Joint Probability (epoch window)")
+                cjp_epoch_interval = channel_joint_probability(dat, sample_selection = samples(:epoch_interval))
+                _log_pretty_table(cjp_epoch_interval; title = "Channel Joint Probability (epoch interval)")
 
                 @info subsubsection("Bad Channels")
                 bad_channels_whole_dataset = identify_bad_channels(summary_whole_dataset, cjp_whole_dataset)
-                bad_channels_epoch_window = identify_bad_channels(summary_epoch_window, cjp_epoch_window)
+                bad_channels_epoch_interval = identify_bad_channels(summary_epoch_interval, cjp_epoch_interval)
 
-                # Separate identification within whole dataset and epoch windows and taking common seems more reliable
-                bad_channels = intersect(bad_channels_whole_dataset, bad_channels_epoch_window)
+                # Separate identification within whole dataset and epoch intervals and taking common seems more reliable
+                bad_channels = intersect(bad_channels_whole_dataset, bad_channels_epoch_interval)
 
                 # Some channels may be classified as "bad" due to EOG-related activity.
                 # Partition into non-EOG-related (retain) and EOG-related (prob. handled better via ICA later).

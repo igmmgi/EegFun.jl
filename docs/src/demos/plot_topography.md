@@ -8,7 +8,7 @@ Topographic maps (topoplots) show the spatial distribution of electrical activit
 
 - **Color-coded amplitudes**: Activity levels represented by color
 - **Interpolated surfaces**: Smooth maps between discrete electrode positions
-- **Time-specific snapshots**: Activity at particular latencies or time windows
+- **Time-specific snapshots**: Activity at particular latencies or time intervals
 
 ### Interpolation Methods
 
@@ -88,9 +88,9 @@ Topographic maps (topoplots) show the spatial distribution of electrical activit
 
 ### Working with Different Data Types
 
-**Continuous data**: Average over time window
+**Continuous data**: Average over time interval
 
-**Epoched data**: Specify epoch number and time window
+**Epoched data**: Specify epoch number and time interval
 
 **ERP data**: Average directly (already averaged)
 
@@ -102,7 +102,7 @@ This demo shows topographic visualization workflows:
 
 - Load and preprocess data
 - Create topographic maps with different methods
-- Customize time windows and appearance
+- Customize time intervals and appearance
 
 ### 2. Epoched Data
 
@@ -128,6 +128,9 @@ This demo shows topographic visualization workflows:
 ::: details Show Code
 
 ```julia
+# Demo: Topographic Maps
+# Shows scalp topography visualization for ERP data and components.
+
 using EegFun
 
 # read raw data

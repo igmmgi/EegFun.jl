@@ -1,76 +1,145 @@
-# Working with Layouts and Neighbors
+# Layouts and Neighbours
 
-Spatial analysis and artifact repair in `EegFun.jl` depend on knowing where electrodes are and how they relate to each other. This tutorial explains how to manage layouts and discover electrode neighbors.
+Spatial analysis, topographic plotting, and artifact repair in `EegFun.jl` all depend on knowing where electrodes are physically located. A **layout** stores electrode positions; **neighbours** are the set of nearby electrodes computed from those positions.
 
-## 1. Importing Layouts
+## Reading a Layout
 
-A layout is typically stored in a CSV file containing electrode labels and their polar coordinates (incidence and azimuth).
-
-```julia
-# Import a standard layout
-layout = read_layout("biosemi64.csv")
-
-# Access channel labels
-labels = channel_labels(layout)
-```
-
-## 2. Coordinate Transformations
-
-EEG systems often provide data in polar coordinates (angles), but plotting and spatial statistics often require Cartesian coordinates ($x, y, z$).
-
-### 2D Transformations (for Topoplots)
-
-To generate a 2D topographic map, you need flat Cartesian coordinates.
+A layout CSV contains electrode labels and their polar coordinates (incidence and azimuth angles, in degrees). EegFun ships with layouts for BioSemi and EasyCap caps:
 
 ```julia
-# Convert polar to 2D Cartesian (x, y)
-# By default, preserves radial distance (inc=90° maps to radius=1.0)
-polar_to_cartesian_xy!(layout)
+layout = EegFun.read_layout("resources/layouts/biosemi/biosemi64.csv")
+
+# Check the electrode labels
+EegFun.channel_labels(layout)
 ```
 
-### 3D Transformations (for Repair & Source Localization)
+> [!TIP]
+> When you load data with `create_eegfun_data`, the layout is automatically attached to your data object. You can access it via `dat.layout`.
 
-Advanced artifact repair methods (like Spherical Splines) require 3D positions.
+## Coordinate Systems
+
+Layout files store positions in **polar coordinates** (incidence from the vertex, azimuth from the nose). Different operations require different Cartesian representations.
+
+### 2D Coordinates (for Topographic Plots)
+
+Topographic maps need flat x/y positions. The conversion projects electrodes onto a 2D plane, with the vertex (Cz) at the centre:
 
 ```julia
-# Convert polar to 3D Cartesian (x, y, z)
-polar_to_cartesian_xyz!(layout)
+EegFun.polar_to_cartesian_xy!(layout)
+
+# Check positions
+EegFun.positions_2D(layout)
 ```
 
-## 3. Neighbor Discovery
-
-Many algorithms (spatial clustering, channel repair) require a list of "neighboring" sensors for each electrode. `EegFun.jl` calculates these based on Euclidean distance.
+By default, radial distance is preserved — electrodes beyond the scalp edge (inc > 90°, e.g. eye channels from EEGLAB imports) will appear outside the head circle, matching EEGLAB's topoplot rendering. To normalise all electrodes to fit within a fixed radius instead:
 
 ```julia
-# Define a distance criterion (in mm or normalized units)
-# and find all neighbors within that radius
-get_neighbours_xy!(layout, 40.0)
-
-# Check the average number of neighbors per electrode
-avg = average_number_of_neighbours(layout)
-println("Average neighbors: $avg")
+EegFun.polar_to_cartesian_xy!(layout, preserve_radial_distance = false)
 ```
 
-The results are stored in an `OrderedDict` within the layout, mapping each electrode to its neighbors, their distances, and interpolation weights.
+### 3D Coordinates (for Spherical Spline Repair)
 
-## 4. Inspecting Neighbors
-
-It is good practice to verify your neighbor structure to ensure the distance criterion makes sense for your electrode density.
+Spherical spline interpolation and source localisation require 3D positions on the unit sphere:
 
 ```julia
-# Print the neighbor structure to a TOML file for review
-print_layout_neighbours(layout, "my_neighbors.toml")
+EegFun.polar_to_cartesian_xyz!(layout)
+
+# Check positions
+EegFun.positions_3D(layout)
 ```
 
-The generated TOML will show exactly which channels are considered neighbors for every electrode, which is essential for transparent and reproducible analysis.
+> [!NOTE]
+> Both coordinate conversions modify the layout in-place and clear any previously calculated neighbour information, since the distance metric changes.
+
+## Visualising the Layout
+
+Use `plot_layout_2d` or `plot_layout_3d` to verify that electrode positions look correct before proceeding with analysis:
+
+```julia
+# 2D view with head outline
+EegFun.plot_layout_2d(layout)
+
+# 3D view
+EegFun.plot_layout_3d(layout)
+```
+
+## Computing Neighbours
+
+Many algorithms — neighbour interpolation for channel repair, spatial clustering, correlation-based diagnostics — require knowing which electrodes are near each other. EegFun finds neighbours based on Euclidean distance within a specified criterion.
+
+### 2D Neighbours
+
+Computed from the 2D projected coordinates. Suitable for topographic analysis:
+
+```julia
+EegFun.get_neighbours_xy!(layout, 0.5)
+```
+
+### 3D Neighbours
+
+Computed from the 3D spherical coordinates. Preferred for channel repair since distances on the sphere are more accurate than projected distances:
+
+```julia
+EegFun.get_neighbours_xyz!(layout, 0.5)
+```
+
+> [!IMPORTANT]
+> The **distance criterion** determines how many neighbours each electrode has. After computing neighbours, check the average count to ensure the value makes sense for your cap density:
+>
+> ```julia
+> avg = EegFun.average_number_of_neighbours(layout.neighbours)
+> ```
+>
+> A good target is typically 4–6 neighbours per electrode, although this can vary depending on the cap density. If the average is much lower, increase the criterion; if much higher, decrease it. But visual inspection is always recommended.
+
+### Inspecting Neighbours
+
+For transparency and reproducibility, you can export the full neighbour structure — including distances and interpolation weights — to a TOML file:
+
+```julia
+EegFun.print_layout_neighbours(layout, "neighbours.toml")
+```
+
+### Visualising Neighbours
+
+Pass `neighbours = true` to the layout plot to interactively inspect connections. Hovering over an electrode highlights its neighbours:
+
+```julia
+EegFun.plot_layout_2d(layout, neighbours = true)
+EegFun.plot_layout_3d(layout, neighbours = true)
+```
+
+## Checking and Querying
+
+```julia
+# Does the layout have computed neighbours?
+EegFun.has_neighbours(layout)
+
+# What distance criterion was used?
+EegFun.neighbour_criterion(layout)
+
+# Does the layout have valid (non-zero) coordinates?
+EegFun.has_valid_coordinates(layout)
+```
+
+> [!NOTE]
+> Auto-generated layouts (created when loading data without a layout file) have all-zero coordinates. These work for basic data browsing but cannot be used for topographic plots or spatial operations. `has_valid_coordinates` returns `false` for such layouts.
 
 ## Summary
 
-```julia
-# Typical layout setup
-layout = read_layout("cap.csv")
-polar_to_cartesian_xy!(layout)
-get_neighbours_xy!(layout, 45.0)
+A typical layout setup for analysis:
 
-# The layout is now ready for spatial statistics or artifact repair
+```julia
+# Read the layout
+layout = EegFun.read_layout("resources/layouts/biosemi/biosemi64.csv")
+
+# Convert coordinates
+EegFun.polar_to_cartesian_xy!(layout)   # for topoplots
+EegFun.polar_to_cartesian_xyz!(layout)  # for spherical spline repair
+
+# Compute neighbours
+EegFun.get_neighbours_xyz!(layout, 0.5)
+
+# Verify visually
+EegFun.plot_layout_2d(layout, neighbours = true)
 ```

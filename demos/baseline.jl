@@ -1,6 +1,6 @@
 # Demo: Baseline Correction
 # Shows baseline correction on continuous, epoched, and ERP data using
-# different baseline windows and visualizes the effects.
+# different baseline intervals and visualizes the effects.
 
 using EegFun
 
@@ -65,6 +65,6 @@ EegFun.plot_erp(erps, channel_selection = EegFun.channels([:Fp1]))
 EegFun.baseline!(erps, (-0.2, 0)) # baseline to t=-0.2 to 0.0
 EegFun.plot_erp(erps, channel_selection = EegFun.channels([:Fp1]))
 
-# We can see the influence of baseline window interactively using the plot_erp_measurement_gui
+# We can see the influence of baseline interval interactively using the plot_erp_measurement_gui
 EegFun.plot_erp_measurement_gui(erps)
 

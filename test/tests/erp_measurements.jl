@@ -92,10 +92,10 @@ using CSV
                     elseif analysis_type == "min_peak_amplitude"
                         @test all(isfinite.(values))  # Should be finite (may be positive or negative)
                     elseif analysis_type in ["max_peak_latency", "min_peak_latency"]
-                        @test all(0.1 .<= values .<= 0.2)  # Should be in analysis window
+                        @test all(0.1 .<= values .<= 0.2)  # Should be in analysis interval
                     elseif analysis_type == "peak_to_peak_latency"
                         @test all(values .>= 0)  # Should be non-negative (time difference)
-                        @test all(values .<= 0.1)  # Should be <= analysis window duration (0.2 - 0.1 = 0.1)
+                        @test all(values .<= 0.1)  # Should be <= analysis interval duration (0.2 - 0.1 = 0.1)
                     elseif analysis_type == "peak_to_peak_amplitude"
                         @test all(values .> 0)  # Should be positive (difference between max and min)
                     end
@@ -177,7 +177,7 @@ using CSV
                 if hasproperty(result.data, ch)
                     values = result.data[!, ch]
                     @test all(isfinite.(values))
-                    @test all(0.1 .<= values .<= 0.2)  # Should be in analysis window
+                    @test all(0.1 .<= values .<= 0.2)  # Should be in analysis interval
                 end
             end
         end
@@ -441,7 +441,7 @@ using CSV
             )
         end
 
-        @testset "Invalid analysis window" begin
+        @testset "Invalid analysis interval" begin
             @test_throws Exception EegFun.erp_measurements(
                 "erps_cleaned",
                 "mean_amplitude",
@@ -450,7 +450,7 @@ using CSV
             )
         end
 
-        @testset "Analysis window outside data range" begin
+        @testset "Analysis interval outside data range" begin
             output_dir = joinpath(test_dir, "measurements_outside")
 
             result = EegFun.erp_measurements(
@@ -519,7 +519,7 @@ using CSV
             @test result === nothing
         end
 
-        @testset "Empty baseline window" begin
+        @testset "Empty baseline interval" begin
             # Create test ERP files
             for participant = 1:2
                 erps = [EegFun.create_test_erp_data(participant = participant, condition = 1)]
@@ -529,7 +529,7 @@ using CSV
 
             output_dir = joinpath(test_dir, "measurements_baseline_edge")
 
-            # Baseline window with no samples (outside data range)
+            # Baseline interval with no samples (outside data range)
             result = EegFun.erp_measurements(
                 "erps_baseline_edge",
                 "mean_amplitude",
@@ -543,7 +543,7 @@ using CSV
             @test result isa EegFun.ErpMeasurementsResult
         end
 
-        @testset "Single sample analysis window" begin
+        @testset "Single sample analysis interval" begin
             # Create test ERP files
             for participant = 1:2
                 erps = [EegFun.create_test_erp_data(participant = participant, condition = 1)]

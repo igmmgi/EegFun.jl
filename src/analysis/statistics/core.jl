@@ -14,9 +14,9 @@ Validates the design and ensures data consistency across conditions.
 - `design::Symbol`: Design type - `:paired` (same participants in both conditions) or `:independent` (different participants)
 - `condition_selection::Function`: Predicate to select exactly 2 conditions for comparison (default: `conditions([1, 2])`)
 - `channel_selection::Function`: Predicate to filter channels (default: `channels()` - all channels)
-- `interval_selection::Interval`: Time window as tuple (e.g., (0.0, 1.0)) or interval object for initial data selection (default: nothing - all samples)
-- `baseline_interval::Interval`: Baseline window as tuple (e.g., (-0.2, 0.0)) or interval object (default: nothing - no baseline)
-- `analysis_interval::Interval`: Analysis window as tuple (e.g., (0.3, 0.5)) or interval object for statistical testing (default: nothing - use interval_selection)
+- `interval_selection::Interval`: Time interval as tuple (e.g., (0.0, 1.0)) or interval object for initial data selection (default: nothing - all samples)
+- `baseline_interval::Interval`: Baseline interval as tuple (e.g., (-0.2, 0.0)) or interval object (default: nothing - no baseline)
+- `analysis_interval::Interval`: Analysis interval as tuple (e.g., (0.3, 0.5)) or interval object for statistical testing (default: nothing - use interval_selection)
 
 # Returns
 - `StatisticalData`: Prepared data structure ready for statistical testing
@@ -101,10 +101,10 @@ function prepare_stats(
     end
 
     condition1 = subset(condition1; channel_selection = channel_selection, sample_selection = analysis_sel)
-    isempty(condition1) && @minimal_error_throw "No data matched the analysis window criteria!"
+    isempty(condition1) && @minimal_error_throw "No data matched the analysis interval criteria!"
 
     condition2 = subset(condition2; channel_selection = channel_selection, sample_selection = analysis_sel)
-    isempty(condition2) && @minimal_error_throw "No data matched the analysis window criteria!"
+    isempty(condition2) && @minimal_error_throw "No data matched the analysis interval criteria!"
 
     # Get dimensions and metadata from analysis subset
     electrodes = channel_labels(condition1[1])
@@ -134,9 +134,9 @@ Loads ErpData from JLD2 files matching the pattern and prepares them for statist
 - `participant_selection::Function`: Predicate to filter participants (default: `participants()` - all participants)
 - `condition_selection::Function`: Predicate to select exactly 2 conditions for comparison (default: `conditions([1, 2])`)
 - `channel_selection::Function`: Predicate to filter channels (default: `channels()` - all channels)
-- `interval_selection::Interval`: Time window as tuple (e.g., (0.0, 1.0)) or interval object for initial data selection (default: nothing - all samples)
-- `baseline_interval::Interval`: Baseline window as tuple (e.g., (-0.2, 0.0)) or interval object (default: nothing - no baseline)
-- `analysis_interval::Interval`: Analysis window as tuple (e.g., (0.3, 0.5)) or interval object for statistical testing (default: nothing - use interval_selection)
+- `interval_selection::Interval`: Time interval as tuple (e.g., (0.0, 1.0)) or interval object for initial data selection (default: nothing - all samples)
+- `baseline_interval::Interval`: Baseline interval as tuple (e.g., (-0.2, 0.0)) or interval object (default: nothing - no baseline)
+- `analysis_interval::Interval`: Analysis interval as tuple (e.g., (0.3, 0.5)) or interval object for statistical testing (default: nothing - use interval_selection)
 
 # Returns
 - `StatisticalData`: Prepared data structure ready for statistical testing

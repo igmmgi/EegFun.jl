@@ -113,6 +113,9 @@ The channel selection examples show how to:
 ::: details Show Code
 
 ```julia
+# Demo: Channel Summary Plots
+# Shows visualization of channel-wise summary statistics.
+
 using EegFun
 
 # read raw data

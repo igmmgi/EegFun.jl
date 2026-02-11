@@ -32,12 +32,12 @@ Stores core analysis data for statistical tests.
 # Fields
 - `design::Symbol`: Design type - `:paired` or `:independent`
 - `data::Vector{Array{Float64, 3}}`: Data for conditions 1 and 2 [condition1, condition2], each [participants × electrodes × time]
-- `time_points::Vector{Float64}`: Time points in seconds for the analysis window
+- `time_points::Vector{Float64}`: Time points in seconds for the analysis interval
 """
 struct AnalysisData
     design::Symbol                   # :paired vs. :independent
     data::Vector{Array{Float64,3}}  # [condition1, condition2] - each [participants × electrodes × time]
-    time_points::Vector{Float64}     # analysis window
+    time_points::Vector{Float64}     # analysis interval
 end
 
 

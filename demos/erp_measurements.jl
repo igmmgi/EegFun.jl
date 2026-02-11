@@ -25,7 +25,7 @@ EegFun.plot_erp_measurement_gui(dat[1]) # first condition
 input_dir = "./resources/data/julia/erps"
 file_pattern = "erps_good"
 
-# Mean amplitude in a time window
+# Mean amplitude in a time interval
 mean_amp = EegFun.erp_measurements(
     file_pattern,
     "max_peak_latency",

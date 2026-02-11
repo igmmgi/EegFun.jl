@@ -137,6 +137,9 @@ This demo demonstrates:
 ::: details Show Code
 
 ```julia
+# Demo: Resampling
+# Shows how to resample data to different sampling rates.
+
 using EegFun
 
 # read raw data

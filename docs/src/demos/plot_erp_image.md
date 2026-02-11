@@ -107,6 +107,9 @@ ERP images are a powerful complement to traditional ERP plots, revealing the und
 ::: details Show Code
 
 ```julia
+# Demo: ERP Image Plots
+# Shows trial-by-trial ERP activity as image/heatmap plots.
+
 using EegFun
 
 # read raw data

@@ -423,7 +423,7 @@ using cross-validation to estimate classification accuracy at each time point.
   - Example: `channel_selection=channels(:Cz)` for single channel
   - Default: all channels
 - `interval_selection::Interval=samples()`: Sample selection predicate. See `samples()` for options.
-  - Example: `sample_selection=samples((-0.2, 0.8))` for time window from -0.2 to 0.8 seconds
+  - Example: `sample_selection=samples((-0.2, 0.8))` for time interval from -0.2 to 0.8 seconds
   - Example: `sample_selection=samples()` for all time points (default)
 - `n_iterations::Int`: Number of iterations with random shuffling (default: 100, matches erplab default)
 - `n_folds::Int`: Number of cross-validation folds (default: 3, matches erplab default)

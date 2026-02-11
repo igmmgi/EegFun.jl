@@ -35,7 +35,7 @@ This demo shows:
 
 1. **Loading group data**: Multiple participants with condition labels
 2. **Statistical comparison**: T-tests and cluster permutation
-3. **Visualization**: Plotting significant time windows and topographies
+3. **Visualization**: Plotting significant time intervals and topographies
 
 
 ## Code Examples
@@ -68,9 +68,9 @@ stat_data = EegFun.prepare_stats(
     input_dir = input_dir,
     condition_selection = EegFun.conditions([1, 2]), # Conditions to compare
     channel_selection = EegFun.channels(1:72),       # Select all 72 channels
-    sample_selection = EegFun.samples((-0.5, 2.0)),  # Full time window
+    sample_selection = EegFun.samples((-0.5, 2.0)),  # Full time interval
     baseline_interval = EegFun.samples((-0.2, 0.0)),   # Baseline: -200 to 0 ms
-    analysis_interval = EegFun.samples((0.0, 1.0)),    # Analysis window: 100-1000 ms
+    analysis_interval = EegFun.samples((0.0, 1.0)),    # Analysis interval: 100-1000 ms
 )
 
 # ----------------------------------------------------------------------------

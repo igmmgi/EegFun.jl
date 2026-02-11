@@ -93,7 +93,7 @@ This prevents overfitting and gives unbiased accuracy estimates.
 
 **Cluster-based testing**:
 
-Identifies contiguous time windows where decoding is above chance while controlling family-wise error rate.
+Identifies contiguous time intervals where decoding is above chance while controlling family-wise error rate.
 
 ### Interpreting Results
 
@@ -146,4 +146,4 @@ Demonstrates different statistical correction methods for comparison.
 
 - Use cluster-based correction as default
 - Bonferroni is very conservative for time-series data
-- Report corrected p-values and time windows
+- Report corrected p-values and time intervals

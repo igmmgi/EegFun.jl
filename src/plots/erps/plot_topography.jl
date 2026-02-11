@@ -1323,7 +1323,7 @@ end
 
 Show a context menu for plotting selected channels from topography plot.
 Supports both single dataset and multiple datasets (conditions).
-The time_interval is passed to the ERP plot to highlight the topography time window.
+The time_interval is passed to the ERP plot to highlight the topography time interval.
 """
 function _show_topo_context_menu!(
     datasets::Union{ErpData,Vector{ErpData}},

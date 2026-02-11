@@ -33,4 +33,4 @@ This demo shows:
 
 1. **Loading group data**: Multiple participants with condition labels
 2. **Statistical comparison**: T-tests and cluster permutation
-3. **Visualization**: Plotting significant time windows and topographies
+3. **Visualization**: Plotting significant time intervals and topographies

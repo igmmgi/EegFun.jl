@@ -148,7 +148,7 @@ Shows ERP waveform with scalp distribution at a specific time point.
 
 - Overlay multiple experimental conditions
 - Identify differences in amplitude or latency
-- Statistical windows highlighted
+- Statistical intervals highlighted
 
 **Component identification**:
 

@@ -56,7 +56,7 @@ This demo shows basic data operations:
 ### 4. Subset Data
 
 - Subset by channel selection (specific electrodes)
-- Subset by sample selection (time windows)
+- Subset by sample selection (time intervals)
 - Create smaller datasets for analysis
 
 
@@ -65,6 +65,9 @@ This demo shows basic data operations:
 ::: details Show Code
 
 ```julia
+# Demo: Data Manipulation
+# Shows basic data access, subsetting, and manipulation functions.
+
 using EegFun
 
 # read raw data

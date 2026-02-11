@@ -95,7 +95,7 @@ This prevents overfitting and gives unbiased accuracy estimates.
 
 **Cluster-based testing**:
 
-Identifies contiguous time windows where decoding is above chance while controlling family-wise error rate.
+Identifies contiguous time intervals where decoding is above chance while controlling family-wise error rate.
 
 ### Interpreting Results
 
@@ -148,7 +148,7 @@ Demonstrates different statistical correction methods for comparison.
 
 - Use cluster-based correction as default
 - Bonferroni is very conservative for time-series data
-- Report corrected p-values and time windows
+- Report corrected p-values and time intervals
 
 
 ## Code Examples
@@ -156,6 +156,10 @@ Demonstrates different statistical correction methods for comparison.
 ::: details Show Code
 
 ```julia
+# Demo: Multivariate Pattern Analysis (MVPA) / Decoding
+# Shows time-resolved classification using LIBSVM, with synthetic data creation,
+# grand averaging, and statistical testing (uncorrected, Bonferroni, cluster-based).
+
 using EegFun
 using DataFrames
 using Random
@@ -252,7 +256,7 @@ participant_epochs = EegFun.prepare_decoding(
     participant_selection = EegFun.participants(),
     condition_selection = EegFun.conditions([1, 2]),  # Compare conditions 1 and 2
     channel_selection = EegFun.channels(),            # All channels
-    sample_selection = EegFun.samples((-0.2, 1.5)),   # Time window
+    interval_selection = EegFun.times((-0.2, 1.5)),   # Time interval
 )
 
 # Decode all participants (batch method)

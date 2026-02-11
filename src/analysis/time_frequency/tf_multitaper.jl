@@ -22,7 +22,7 @@ Uses multiple orthogonal tapers (Slepian sequences) to reduce variance in spectr
   - Example: `channel_selection=channels(:Cz)` for single channel
   - Example: `channel_selection=channels([:Cz, :Pz])` for multiple channels
 - `interval_selection::Interval=samples()`: Sample selection predicate. See `samples()` for options.
-  - Example: `sample_selection=samples((-0.5, 2.0))` for time window from -0.5 to 2.0 seconds
+  - Example: `sample_selection=samples((-0.5, 2.0))` for time interval from -0.5 to 2.0 seconds
   - Example: `sample_selection=samples()` for all time points (default)
   - Default: all samples
 - `frequencies::Union{AbstractRange,AbstractVector{<:Real}}=range(1, 40, length=40)`: Frequency specification.
@@ -42,7 +42,7 @@ Uses multiple orthogonal tapers (Slepian sequences) to reduce variance in spectr
 - `time_steps::Real=0.05`: Step size for extracting time points in seconds.
   - Creates time points from the selected time range with the specified step size
   - Default: `0.05` (50 ms)
-  - Example: `time_steps=0.01` creates time points every 0.01 seconds within the selected time window
+  - Example: `time_steps=0.01` creates time points every 0.01 seconds within the selected time interval
 - `pad::Union{Nothing,Symbol}=nothing`: Padding method to reduce edge artifacts. Options:
   - `nothing`: No padding (default)
   - `:pre`: Mirror data before each epoch

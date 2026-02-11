@@ -13,7 +13,7 @@ pages = [
         "Artifact Handling" => "tutorials/artifact-handling.md",
         "Layouts and Neighbors" => "tutorials/layouts-neighbors.md",
         "Batch Processing" => "tutorials/batch-processing.md",
-        "File Selection Patterns" => "tutorials/file-selection.md",
+        "Selection Patterns" => "tutorials/selection-patterns.md",
     ],
     "Explanations" => ["Data Structures" => "explanations/data-structures.md"],
     "Demos" => [

@@ -41,7 +41,7 @@ Epoch plots display individual trial timecourses, showing:
 
 **Verify epoching**:
 
-- Check time window selection
+- Check time interval selection
 - Confirm event alignment
 - Validate baseline correction
 

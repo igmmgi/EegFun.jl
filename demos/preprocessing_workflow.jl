@@ -43,15 +43,15 @@ dat = EegFun.create_eegfun_data(raw_data, layout)
 # MARK EPOCH WINDOWS
 #######################################################################
 
-@info EegFun.section("Marking epoch windows")
+@info EegFun.section("Marking epoch intervals")
 
 # Define epoch conditions
 epoch_cfg =
     [EegFun.EpochCondition(name = "Standard", trigger_sequences = [[1]]), EegFun.EpochCondition(name = "Target", trigger_sequences = [[2]])]
 
-# Mark which samples belong to epoch windows
-# This creates a :epoch_window column for targeted analysis
-EegFun.mark_epoch_windows!(dat, epoch_cfg, [-0.2, 1.5]) # -200 to 1.5 seconds 
+# Mark which samples belong to epoch intervals
+# This creates a :epoch_interval column for targeted analysis
+EegFun.mark_epoch_intervals!(dat, epoch_cfg, [-0.2, 1.5]) # -200 to 1.5 seconds 
 
 # Optional: visualize triggers
 # EegFun.plot_trigger_overview(dat)
@@ -121,9 +121,9 @@ hEOG_vEOG_cm = EegFun.correlation_matrix_eog(dat, eog_cfg)
 # Optional: view correlations
 # println(hEOG_vEOG_cm)
 
-# Calculate correlations within epoch windows only
-@info EegFun.subsection("Channel x vEOG/hEOG Correlation Matrix (epoch window)")
-hEOG_vEOG_cm_epoch = EegFun.correlation_matrix_eog(dat, eog_cfg, sample_selection = EegFun.samples(:epoch_window))
+# Calculate correlations within epoch intervals only
+@info EegFun.subsection("Channel x vEOG/hEOG Correlation Matrix (epoch interval)")
+hEOG_vEOG_cm_epoch = EegFun.correlation_matrix_eog(dat, eog_cfg, sample_selection = EegFun.samples(:epoch_interval))
 # This is used later to identify channels with high EOG correlation
 
 #######################################################################
@@ -161,8 +161,8 @@ erps_original = EegFun.average_epochs(epochs_original)
 # Calculate channel statistics on whole dataset
 summary_whole_dataset = EegFun.channel_summary(dat)
 
-# Calculate channel statistics on epoch window only
-summary_epoch_window = EegFun.channel_summary(dat, sample_selection = EegFun.samples(:epoch_window))
+# Calculate channel statistics on epoch interval only
+summary_epoch_interval = EegFun.channel_summary(dat, sample_selection = EegFun.samples(:epoch_interval))
 
 
 #######################################################################
@@ -190,16 +190,16 @@ EegFun.is_extreme_value!(dat, 75.0, channel_out = :is_artifact_value_75)
 # Calculate joint probability on whole dataset
 cjp_whole_dataset = EegFun.channel_joint_probability(dat)
 
-# Calculate joint probability on epoch window
-cjp_epoch_window = EegFun.channel_joint_probability(dat, sample_selection = EegFun.samples(:epoch_window))
+# Calculate joint probability on epoch interval
+cjp_epoch_interval = EegFun.channel_joint_probability(dat, sample_selection = EegFun.samples(:epoch_interval))
 
 # Identify bad channels
 @info EegFun.subsubsection("Bad Channels")
 bad_channels_whole_dataset = EegFun.identify_bad_channels(summary_whole_dataset, cjp_whole_dataset)
-bad_channels_epoch_window = EegFun.identify_bad_channels(summary_epoch_window, cjp_epoch_window)
+bad_channels_epoch_interval = EegFun.identify_bad_channels(summary_epoch_interval, cjp_epoch_interval)
 
 # Take intersection (more conservative)
-bad_channels = intersect(bad_channels_whole_dataset, bad_channels_epoch_window)
+bad_channels = intersect(bad_channels_whole_dataset, bad_channels_epoch_interval)
 
 # Partition into EOG-related vs non-EOG-related
 # EOG-related bad channels are better handled by ICA
@@ -471,7 +471,7 @@ EegFun.plot_erp(erps_good, channel_selection = EegFun.channels([:Cz, :Pz]))
 #
 # PHASE 1: BASIC SETUP AND INITIAL PREPROCESSING
 #   - Load raw data and configure layout
-#   - Mark epoch windows
+#   - Mark epoch intervals
 #   - Rereference (before filtering!)
 #   - Apply initial filters (0.1 Hz high, 30 Hz low)
 #   - Calculate EOG and detect onsets

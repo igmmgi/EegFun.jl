@@ -43,7 +43,7 @@ EegFun.highpass_filter!(dat, 0.5)
 
 # E.g. mark data sections (some extreme values and intervals around triggers; Boolean)
 EegFun.is_extreme_value!(dat, 100);
-EegFun.mark_epoch_windows!(dat, [1, 2], [-0.2, 1.0]) # simple epoch marking with trigger 1 and 3
+EegFun.mark_epoch_intervals!(dat, [1, 2], [-0.2, 1.0]) # simple epoch marking with trigger 1 and 3
 
 # Add new channel with a 10 Hz sine wave (50 μV amplitude)
 dat.data[:, :sinewave] = 50.0 .* sin.(2π .* 10.0 .* dat.data[:, :time])

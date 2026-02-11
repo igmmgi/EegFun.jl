@@ -6,8 +6,8 @@ Launch interactive GUI for exploring ERP measurements with live visual feedback.
 
 Useful for:
 - **Teaching**: Show students how measurements are extracted
-- **Exploration**: Try different windows/parameters interactively
-- **Visual Validation**: Check measurement windows before batch processing
+- **Exploration**: Try different intervals/parameters interactively
+- **Visual Validation**: Check measurement intervals before batch processing
 
 # Arguments
 - `erp::ErpData` or `erps::Vector{ErpData}`: Single ERP or multiple conditions to overlay
@@ -15,8 +15,8 @@ Useful for:
 # Keyword Arguments
 - `channel::Union{Symbol,Nothing}`: Initial channel to display (default: first channel)
 - `analysis_type::String`: Initial measurement type (default: "mean_amplitude")
-- `analysis_interval::Union{Tuple{Real,Real},Nothing}`: Initial measurement window (default: auto)
-- `baseline_interval::Union{Tuple{Real,Real},Nothing}`: Initial baseline window (default: full range)
+- `analysis_interval::Union{Tuple{Real,Real},Nothing}`: Initial measurement interval (default: auto)
+- `baseline_interval::Union{Tuple{Real,Real},Nothing}`: Initial baseline interval (default: full range)
 
 # Interactive Controls
 - **Channel Menu**: Switch between channels
@@ -85,12 +85,12 @@ function plot_erp_measurement_gui(
     time_data = time(first_erp)
     time_min, time_max = extrema(time_data)
 
-    # Set default measurement window if not provided
+    # Set default measurement interval if not provided
     if isnothing(analysis_interval)
         analysis_interval = (time_min, time_max)
     end
 
-    # Set default baseline to full time window if not provided
+    # Set default baseline to full time interval if not provided
     if isnothing(baseline_interval)
         baseline_interval = (time_min, time_max)
     end
@@ -137,12 +137,12 @@ function plot_erp_measurement_gui(
         default = "Mean Amplitude",
     )
 
-    # Measurement window sliders
+    # Measurement interval sliders
     Label(controls_grid[6, 1], "Measurement Interval:", halign = :left)
     meas_window_slider = IntervalSlider(controls_grid[7, 1], range = time_min:0.005:time_max, startvalues = analysis_interval)
     meas_window_label = Label(controls_grid[8, 1], @sprintf("%.3f s - %.3f s", analysis_interval...), halign = :left)
 
-    # Baseline window sliders
+    # Baseline interval sliders
     Label(controls_grid[9, 1], "Baseline Interval:", halign = :left)
     baseline_interval_slider = IntervalSlider(controls_grid[10, 1], range = time_min:0.005:time_max, startvalues = baseline_interval)
     baseline_interval_label = Label(controls_grid[11, 1], @sprintf("%.3f s - %.3f s", baseline_interval...), halign = :left)
