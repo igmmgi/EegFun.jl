@@ -159,7 +159,10 @@ function is_extreme_value!(
     mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined")
     threshold <= 0 && @minimal_error_throw("threshold must be greater than 0")
 
-    results = _detect_extreme_values(dat, threshold; channel_selection, sample_selection)
+    # Combine interval and sample selection
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+
+    results = _detect_extreme_values(dat, threshold; channel_selection, sample_selection = combined_sel)
 
     if mode == :combined  # any channel
         channel_out = something(channel_out, Symbol("is_extreme_value_$(threshold)"))
@@ -245,8 +248,9 @@ function is_extreme_value!(
     for epoch_idx in selected_epochs
         epoch_df = dat.data[epoch_idx]
 
-        # Get selected samples for this epoch
-        selected_samples = get_selected_samples(epoch_df, sample_selection)
+        # Get selected samples for this epoch (combining interval and sample selection)
+        combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+        selected_samples = get_selected_samples(epoch_df, combined_sel)
 
         # Initialize artifact flag column for this epoch
         epoch_df[!, channel_out] = falses(nrow(epoch_df))
@@ -324,7 +328,7 @@ step_mask = _is_step_value(signal, 50.0) # Detect jumps > 50 μV between samples
 - The first sample is always false (no previous sample to compare)
 - A step at index i means the jump from i-1 to i exceeded threshold
 """
-function _is_step_value(signal::AbstractVector{Float64}, threshold::Real)
+function _is_step_value(signal::AbstractVector{<:Real}, threshold::Real)
     n = length(signal)
     mask = Vector{Bool}(undef, n)
     mask[1] = false  # First sample has no previous sample
@@ -390,12 +394,13 @@ function is_step_value!(
     mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined")
     threshold <= 0 && @minimal_error_throw("threshold must be greater than 0")
 
-    # Get selected channels
-    selected_channels = get_selected_channels(dat, channel_selection)
+    # Get selected channels (exclude metadata and extra columns like triggers, EOG flags)
+    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
     isempty(selected_channels) && @minimal_error_throw("No channels selected")
 
-    # Get selected samples
-    selected_samples = get_selected_samples(dat.data, sample_selection)
+    # Get selected samples (combining interval and sample selection)
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+    selected_samples = get_selected_samples(dat.data, combined_sel)
 
     # Use provided channel_out or generate default name
     channel_out = something(channel_out, Symbol("is_step_value_$(threshold)"))
@@ -404,19 +409,23 @@ function is_step_value!(
         # Initialize combined output column
         dat.data[!, channel_out] = falses(nrow(dat.data))
 
+        # Build boolean sample mask from indices
+        sample_mask = falses(nrow(dat.data))
+        sample_mask[selected_samples] .= true
+
         # Check each channel and combine results
         for ch in selected_channels
-            step_mask = _is_step_value(dat.data[!, ch], threshold)
-            # Only flag steps that occur within selected samples
-            step_mask[.!selected_samples] .= false
+            step_mask = _is_step_value(dat.data[!, ch], threshold) .& sample_mask
             dat.data[!, channel_out] .|= step_mask
         end
     elseif mode == :separate
+        # Build boolean sample mask from indices
+        sample_mask = falses(nrow(dat.data))
+        sample_mask[selected_samples] .= true
+
         # Create separate column for each channel
         for ch in selected_channels
-            step_mask = _is_step_value(dat.data[!, ch], threshold)
-            # Only flag steps that occur within selected samples
-            step_mask[.!selected_samples] .= false
+            step_mask = _is_step_value(dat.data[!, ch], threshold) .& sample_mask
             column_name = Symbol("is_step_value_$(ch)_$(threshold)")
             dat.data[!, column_name] = step_mask
         end
@@ -479,8 +488,8 @@ function is_step_value!(
     mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined")
     threshold <= 0 && @minimal_error_throw("threshold must be greater than 0")
 
-    # Get selected channels and epochs
-    selected_channels = get_selected_channels(dat, channel_selection)
+    # Get selected channels (exclude metadata and extra columns) and epochs
+    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
     isempty(selected_channels) && @minimal_error_throw("No channels selected")
 
     selected_epochs = get_selected_epochs(dat, epoch_selection)
@@ -493,8 +502,9 @@ function is_step_value!(
     for epoch_idx in selected_epochs
         epoch_df = dat.data[epoch_idx]
 
-        # Get selected samples for this epoch
-        selected_samples = get_selected_samples(epoch_df, sample_selection)
+        # Get selected samples for this epoch (combining interval and sample selection)
+        combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+        selected_samples = get_selected_samples(epoch_df, combined_sel)
 
         # Initialize artifact flag column for this epoch
         epoch_df[!, channel_out] = falses(nrow(epoch_df))
@@ -589,11 +599,12 @@ function is_step_value(
     mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined")
     threshold <= 0 && @minimal_error_throw("threshold must be greater than 0")
 
-    # Get selected channels and samples
-    selected_channels = get_selected_channels(dat, channel_selection)
+    # Get selected channels (exclude metadata and extra columns) and samples
+    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
     isempty(selected_channels) && @minimal_error_throw("No channels selected")
 
-    selected_samples = get_selected_samples(dat.data, sample_selection)
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+    selected_samples = get_selected_samples(dat.data, combined_sel)
 
     if mode == :combined
         combined_mask = falses(nrow(dat.data))
@@ -607,13 +618,78 @@ function is_step_value(
 
     elseif mode == :separate
         temp_dat = copy(dat)
-        is_step_value!(temp_dat, threshold; channel_selection, sample_selection, mode = :separate)
+        is_step_value!(temp_dat, threshold; channel_selection, sample_selection, interval_selection, mode = :separate)
 
         extreme_cols = [Symbol("is_step_value_$(ch)_$(threshold)") for ch in selected_channels]
         return temp_dat.data[:, extreme_cols]
     end
 end
 
+
+"""
+    n_step_value(dat::SingleDataFrameEeg, threshold::Real; 
+                 channel_selection::Function = channels(), 
+                 sample_selection::Function = samples(),
+                 interval_selection::Interval = times(),
+                 mode::Symbol = :combined)
+
+Count the number of step values (sudden voltage jumps) across selected channels.
+
+# Arguments
+- `dat::SingleDataFrameEeg`: The EEG data object
+- `threshold::Real`: Threshold for step value detection
+- `channel_selection::Function`: Channel predicate for selecting channels (default: all layout channels)
+- `sample_selection::Function`: Sample predicate for selecting samples (default: all samples)
+- `mode::Symbol`: Mode for step value detection (`:separate` or `:combined`, default: `:combined`)
+
+# Returns
+- `Int` (combined mode): Total number of samples with step values across all selected channels
+- `DataFrame` (separate mode): DataFrame with step value counts for each channel
+
+# Examples
+```julia
+# Count total step values across all channels (combined mode, default)
+total_count = n_step_value(dat, 50)
+
+# Count step values per channel (separate mode)
+count_df = n_step_value(dat, 50, mode = :separate)
+
+# Count step values in specific channels
+total_count = n_step_value(dat, 50, channel_selection = channels([:Fp1, :Fp2]))
+```
+"""
+function n_step_value(
+    dat::SingleDataFrameEeg,
+    threshold::Real;
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    interval_selection::Interval = times(),
+    mode::Symbol = :combined,
+)
+
+    mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined")
+    threshold <= 0 && @minimal_error_throw("threshold must be greater than 0")
+
+    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
+    isempty(selected_channels) && @minimal_error_throw("No channels selected")
+
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+    selected_samples = get_selected_samples(dat.data, combined_sel)
+    sample_mask = falses(nrow(dat.data))
+    sample_mask[selected_samples] .= true
+
+    if mode == :combined
+        combined_mask = falses(nrow(dat.data))
+        for ch in selected_channels
+            step_mask = _is_step_value(dat.data[!, ch], threshold) .& sample_mask
+            combined_mask .|= step_mask
+        end
+        return sum(combined_mask)
+    elseif mode == :separate
+        counts = [sum(_is_step_value(dat.data[!, ch], threshold) .& sample_mask) for ch in selected_channels]
+        return DataFrame(channel = selected_channels, n_step = counts)
+    end
+end
 
 # Helper function to detect extreme values for selected channels
 function _detect_extreme_values(
@@ -626,7 +702,8 @@ function _detect_extreme_values(
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
     isempty(selected_channels) && @minimal_error_throw("No channels selected for extreme value detection")
 
-    selected_samples = get_selected_samples(dat, sample_selection)
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+    selected_samples = get_selected_samples(dat, combined_sel)
     isempty(selected_samples) && @minimal_error_throw("No samples selected for extreme value detection")
 
     results = Dict{Symbol,Vector{Bool}}()
@@ -691,7 +768,8 @@ function is_extreme_value(
     mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined")
     threshold <= 0 && @minimal_error_throw("threshold must be greater than 0")
 
-    results = _detect_extreme_values(dat, threshold; channel_selection, sample_selection)
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+    results = _detect_extreme_values(dat, threshold; channel_selection, sample_selection = combined_sel)
 
     if mode == :combined
 
@@ -706,7 +784,7 @@ function is_extreme_value(
     elseif mode == :separate
         # Separate mode - create temporary data object and use mutating version
         temp_dat = copy(dat)
-        is_extreme_value!(temp_dat, threshold; channel_selection, sample_selection, mode = :separate)
+        is_extreme_value!(temp_dat, threshold; channel_selection, sample_selection, interval_selection, mode = :separate)
 
         # Extract the extreme value columns in the same order as the original channels
         selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
@@ -761,7 +839,8 @@ function n_extreme_value(
     mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined")
     threshold <= 0 && @minimal_error_throw("threshold must be greater than 0")
 
-    results = _detect_extreme_values(dat, threshold; channel_selection, sample_selection)
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+    results = _detect_extreme_values(dat, threshold; channel_selection, sample_selection = combined_sel)
 
     if mode == :combined
         combined_mask = Vector{Bool}(falses(nrow(dat.data)))
