@@ -8,6 +8,39 @@
 # consistency and to avoid confusion when working with Makie's API.
 # =============================================================================
 
+"""
+    _find_continuous_regions(mask::BitVector, time_points::Vector{Float64})
+
+Find continuous regions where mask is true, returning start and end times.
+"""
+function _find_continuous_regions(mask::BitVector, time_points::Vector{Float64})
+
+    regions = Vector{Tuple{Float64,Float64}}()
+    if isempty(mask) || !any(mask)
+        return regions
+    end
+
+    in_region = false
+    start_idx = 0
+
+    for (i, is_sig) in enumerate(mask)
+        if is_sig && !in_region # Start of a new region
+            in_region = true
+            start_idx = i
+        elseif !is_sig && in_region # End of a region
+            in_region = false
+            push!(regions, (time_points[start_idx], time_points[i-1]))
+        end
+    end
+
+    # Handle case where region extends to end
+    if in_region
+        push!(regions, (time_points[start_idx], time_points[end]))
+    end
+
+    return regions
+end
+
 function _display_figure(fig)
     backend = Makie.current_backend()
     screen = if backend == GLMakie

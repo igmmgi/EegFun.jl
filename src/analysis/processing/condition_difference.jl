@@ -97,11 +97,9 @@ function _condition_difference_process_file(
         erp2 = nothing
 
         for erp in erps_data
-            # Extract condition number from ErpData.data DataFrame
-            cond_num = erp.data[1, :condition]
-            if cond_num == cond1
+            if erp.condition == cond1
                 erp1 = erp
-            elseif cond_num == cond2
+            elseif erp.condition == cond2
                 erp2 = erp
             end
         end
@@ -157,10 +155,7 @@ erps = average_epochs(epochs)
 diff_waves = condition_difference(erps, [(1, 2)])
 ```
 """
-function condition_difference(
-    data::Vector{<:ErpData},
-    condition_pairs::Union{Vector{Tuple{Int,Int}},Vector{Vector{Int}}},
-)::Vector{ErpData}
+function condition_difference(data::Vector{<:ErpData}, condition_pairs::Union{Vector{Tuple{Int,Int}},Vector{Vector{Int}}})::Vector{ErpData}
 
     @info "Creating condition difference waves..."
 

@@ -24,8 +24,8 @@ stat_data = EegFun.prepare_stats(
     condition_selection = EegFun.conditions([1, 2]), # Conditions to compare
     channel_selection = EegFun.channels(1:72),       # Select all 72 channels
     sample_selection = EegFun.samples((-0.5, 2.0)),  # Full time interval
-    baseline_interval = EegFun.samples((-0.2, 0.0)),   # Baseline: -200 to 0 ms
-    analysis_interval = EegFun.samples((0.0, 1.0)),    # Analysis interval: 100-1000 ms
+    baseline_interval = EegFun.times((-0.2, 0.0)),   # Baseline: -200 to 0 ms
+    analysis_interval = EegFun.times((0.0, 1.0)),    # Analysis interval: 100-1000 ms
 )
 
 # ----------------------------------------------------------------------------
@@ -33,14 +33,13 @@ stat_data = EegFun.prepare_stats(
 # ----------------------------------------------------------------------------
 result_analytic_no = EegFun.analytic_test(stat_data)
 
-# TODO: add plotting types e.g. :grid, :layout, :topo 
-EegFun.plot_analytic_test(
+EegFun.plot_erp_stats(
     result_analytic_no,
-    channel = :PO8,
+    channel_selection = EegFun.channels(:PO8),
     plot_erp = true,
     plot_difference = false,
-    show_significance = true,
-    show_critical_t = true,
+    plot_significance = true,
+    plot_critical_t = true,
 )
 
 # ----------------------------------------------------------------------------
@@ -48,13 +47,13 @@ EegFun.plot_analytic_test(
 # ----------------------------------------------------------------------------
 result_analytic_bonf = EegFun.analytic_test(stat_data, correction_method = :bonferroni)
 
-EegFun.plot_analytic_test(
+EegFun.plot_erp_stats(
     result_analytic_bonf,
-    channel = :PO8,
+    channel_selection = EegFun.channels(:PO8),
     plot_erp = true,
     plot_difference = false,
-    show_significance = true,
-    show_critical_t = true,
+    plot_significance = true,
+    plot_critical_t = true,
 )
 
 # ----------------------------------------------------------------------------
@@ -69,13 +68,13 @@ result_permutation_parametric = EegFun.permutation_test(
     show_progress = true,            # Show progress bar
 )
 
-EegFun.plot_analytic_test(
+EegFun.plot_erp_stats(
     result_permutation_parametric,
-    channel = :PO8,
+    channel_selection = EegFun.channels(:PO8),
     plot_erp = true,
     plot_difference = false,
-    show_significance = true,
-    show_critical_t = true,
+    plot_significance = true,
+    plot_critical_t = true,
 )
 
 
