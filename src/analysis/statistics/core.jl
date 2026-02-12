@@ -80,9 +80,14 @@ function prepare_stats(
     condition2 = subset(condition2; channel_selection = channel_selection, sample_selection = sample_sel)
     isempty(condition2) && @minimal_error_throw "No data matched the selection criteria!"
 
-    # baseline 
-    baseline!.(condition1, Ref(baseline_interval))
-    baseline!.(condition2, Ref(baseline_interval))
+    # baseline (if no interval specified, use the full time range)
+    if isnothing(baseline_interval)
+        baseline!.(condition1)
+        baseline!.(condition2)
+    else
+        baseline!.(condition1, Ref(baseline_interval))
+        baseline!.(condition2, Ref(baseline_interval))
+    end
 
     # create grand averages for ease of use in plotting results
     condition1_avg = _create_grand_average(condition1, selected_cond_nums[1])
@@ -317,8 +322,8 @@ function _compute_t_matrix(
         # Fill pre-allocated t_matrix in-place
         t_matrix .= mean_diff ./ (std_diff ./ sqrt(n_participants))
         # Where std is zero: NaN if mean is also zero, Inf otherwise
-        t_matrix[zero_std_mask .& zero_mean_mask] .= NaN
-        t_matrix[zero_std_mask .& .!zero_mean_mask] .= Inf
+        t_matrix[zero_std_mask.&zero_mean_mask] .= NaN
+        t_matrix[zero_std_mask.&.!zero_mean_mask] .= Inf
 
         # Degrees of freedom (same for all points in paired design)
         df = Float64(n_participants - 1)

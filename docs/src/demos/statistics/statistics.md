@@ -78,14 +78,13 @@ stat_data = EegFun.prepare_stats(
 # ----------------------------------------------------------------------------
 result_analytic_no = EegFun.analytic_test(stat_data)
 
-# TODO: add plotting types e.g. :grid, :layout, :topo 
-EegFun.plot_analytic_test(
+EegFun.plot_erp_stats(
     result_analytic_no,
-    channel = :PO8,
+    channel_selection = EegFun.channels(:PO8),
     plot_erp = true,
     plot_difference = false,
-    show_significance = true,
-    show_critical_t = true,
+    plot_significance = true,
+    plot_critical_t = true,
 )
 
 # ----------------------------------------------------------------------------
@@ -93,13 +92,13 @@ EegFun.plot_analytic_test(
 # ----------------------------------------------------------------------------
 result_analytic_bonf = EegFun.analytic_test(stat_data, correction_method = :bonferroni)
 
-EegFun.plot_analytic_test(
+EegFun.plot_erp_stats(
     result_analytic_bonf,
-    channel = :PO8,
+    channel_selection = EegFun.channels(:PO8),
     plot_erp = true,
     plot_difference = false,
-    show_significance = true,
-    show_critical_t = true,
+    plot_significance = true,
+    plot_critical_t = true,
 )
 
 # ----------------------------------------------------------------------------
@@ -114,13 +113,13 @@ result_permutation_parametric = EegFun.permutation_test(
     show_progress = true,            # Show progress bar
 )
 
-EegFun.plot_analytic_test(
+EegFun.plot_erp_stats(
     result_permutation_parametric,
-    channel = :PO8,
+    channel_selection = EegFun.channels(:PO8),
     plot_erp = true,
     plot_difference = false,
-    show_significance = true,
-    show_critical_t = true,
+    plot_significance = true,
+    plot_critical_t = true,
 )
 
 
