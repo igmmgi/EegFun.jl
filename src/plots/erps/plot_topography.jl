@@ -3,6 +3,97 @@
 ##########################################
 # 2D topographic plot
 ##########################################
+
+"""
+    _render_topo_surface!(fig, ax, channel_data, layout; method, gridscale, colormap, ylim, num_levels, kwargs...)
+
+Core topographic surface rendering. Handles interpolation dispatch, contourf rendering,
+smooth circle masking, and head/electrode overlay via `plot_layout_2d!`.
+
+Caller is responsible for coordinate validation (`has_valid_coordinates`) and coordinate
+conversion (`_ensure_coordinates_2d!`, `_ensure_coordinates_3d!`) before calling this function.
+
+# Arguments
+- `fig::Figure`: Parent figure (needed for `plot_layout_2d!`)
+- `ax::Axis`: Axis to render on
+- `channel_data::AbstractVector{<:Real}`: Values per layout channel (same order as `layout.data.label`)
+- `layout::Layout`: Electrode layout with 2D coordinates
+- `method::Symbol`: Interpolation method (default: `:thin_plate`)
+- `gridscale::Int`: Grid resolution (default: 75)
+- `colormap`: Colormap for contourf (default: `:jet`)
+- `ylim`: Color range as `(min, max)` tuple, or `nothing` for auto-symmetric (default: `nothing`)
+- `num_levels::Int`: Number of contour levels (default: 20)
+
+Additional keyword arguments are forwarded to `plot_layout_2d!`.
+
+# Returns
+- `(contourf_object, x_bounds, y_bounds)`
+"""
+function _render_topo_surface!(
+    fig::Figure,
+    ax::Axis,
+    channel_data::AbstractVector{<:Real},
+    layout::Layout;
+    method::Symbol = :thin_plate,
+    gridscale::Int = 75,
+    colormap = :jet,
+    ylim = nothing,
+    num_levels::Int = 20,
+    kwargs...,
+)
+
+    supported_methods =
+        [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
+
+    if method ∈ supported_methods
+        data_interp, x_bounds, y_bounds = _data_interpolation_topo(channel_data, layout, gridscale; method = method)
+    elseif method == :spherical_spline
+        data_interp = _data_interpolation_topo_spherical_spline(channel_data, layout, gridscale)
+        x_coords = layout.data.x2
+        y_coords = layout.data.y2
+        max_radius = maximum(sqrt.(x_coords .^ 2 .+ y_coords .^ 2))
+        margin = max_radius * 0.05
+        plot_radius = max_radius + margin
+        x_bounds = (-plot_radius, plot_radius)
+        y_bounds = (-plot_radius, plot_radius)
+    else
+        throw(ArgumentError("Unknown interpolation method: $method. Supported: $supported_methods, :spherical_spline"))
+    end
+
+    # Compute symmetric ylim if not provided
+    if isnothing(ylim)
+        valid_data = data_interp[.!isnan.(data_interp)]
+        if !isempty(valid_data)
+            data_min, data_max = extrema(valid_data)
+            max_abs = max(abs(data_min), abs(data_max))
+            ylim = (-max_abs, max_abs)
+        else
+            ylim = (-1.0, 1.0)
+        end
+    end
+
+    co = contourf!(
+        ax,
+        range(x_bounds[1], x_bounds[2], length = gridscale),
+        range(y_bounds[1], y_bounds[2], length = gridscale),
+        data_interp,
+        levels = range(ylim[1], ylim[2], length = num_levels);
+        extendlow = :auto,
+        extendhigh = :auto,
+        colormap = colormap,
+        nan_color = :transparent,
+    )
+    co.colorrange = ylim
+
+    # Draw smooth circle to hide jagged interpolation edge
+    _draw_smooth_circle_mask!(ax, x_bounds, y_bounds)
+
+    # Head shape and electrode overlay
+    plot_layout_2d!(fig, ax, layout; kwargs...)
+
+    return co, x_bounds, y_bounds
+end
+
 function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout; kwargs...)
 
     # Validate that layout has non-zero coordinates for spatial interpolation
@@ -18,11 +109,13 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
 
-    # actual data interpolation
+    # Extract rendering parameters
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
     colorbar_position = pop!(plot_kwargs, :colorbar_position)
     ylim = pop!(plot_kwargs, :ylim)
+    colormap = pop!(plot_kwargs, :colormap)
+    num_levels = pop!(plot_kwargs, :num_levels)
 
     # Set title based on user preferences and data
     if plot_kwargs[:show_title]
@@ -35,60 +128,31 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
         ax.titlesize = plot_kwargs[:title_fontsize]
     end
 
-    # Compute interpolated data
+    # Compute channel data averaged over time window
     channel_data = mean.(eachcol(dat[!, layout.data.label]))
-    supported_methods =
-        [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
 
-    # Interpolation now returns (data, x_bounds, y_bounds)
-    if method ∈ supported_methods
-        data, x_bounds, y_bounds = _data_interpolation_topo(channel_data, layout, gridscale; method = method)
-    elseif method == :spherical_spline
-        data = _data_interpolation_topo_spherical_spline(channel_data, layout, gridscale)
-        # Spherical spline: calculate circular bounds matching electrode extent
-        x_coords = layout.data.x2
-        y_coords = layout.data.y2
-        max_radius = maximum(sqrt.(x_coords .^ 2 .+ y_coords .^ 2))
-        margin = max_radius * 0.05
-        plot_radius = max_radius + margin
-        x_bounds = (-plot_radius, plot_radius)
-        y_bounds = (-plot_radius, plot_radius)
-    else
-        throw(ArgumentError("Unknown interpolation method: $method. Supported: $supported_methods"))
-    end
+    # Extract colorbar kwargs before calling render helper (removes colorbar_* keys)
+    colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
+    colorbar_plot = pop!(plot_kwargs, :colorbar_plot)
 
-    # Calculate ylim if not provided (must be after data is computed)
-    if isnothing(ylim)
-        # Make ylim symmetric around 0 for balanced topographic visualization
-        data_min, data_max = extrema(data[.!isnan.(data)])
-        max_abs = max(abs(data_min), abs(data_max))
-        ylim = (-max_abs, max_abs)
-    end
-
-    co = contourf!(
+    # Render surface using shared helper
+    co, _, _ = _render_topo_surface!(
+        fig,
         ax,
-        range(x_bounds[1], x_bounds[2], length = gridscale),
-        range(y_bounds[1], y_bounds[2], length = gridscale),
-        data,
-        levels = range(ylim[1], ylim[2], div(gridscale, 2));
-        extendlow = :auto,
-        extendhigh = :auto,
-        colormap = pop!(plot_kwargs, :colormap),
-        nan_color = :transparent,
+        channel_data,
+        layout;
+        method = method,
+        gridscale = gridscale,
+        colormap = colormap,
+        ylim = ylim,
+        num_levels = num_levels,
+        plot_kwargs...,
     )
-    co.colorrange = ylim
 
     # colorbar
-    colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
-    if pop!(plot_kwargs, :colorbar_plot)
+    if colorbar_plot
         Colorbar(fig[colorbar_position...], co; colorbar_kwargs...)
     end
-
-    # Draw smooth circle to hide jagged interpolation edge
-    _draw_smooth_circle_mask!(ax, x_bounds, y_bounds)
-
-    # head shape
-    plot_layout_2d!(fig, ax, layout; plot_kwargs...)
 
     return fig, ax
 

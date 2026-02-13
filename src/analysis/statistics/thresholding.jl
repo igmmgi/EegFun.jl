@@ -434,3 +434,187 @@ function _threshold_t_matrix_nonparametric(
 
     return mask_positive, mask_negative
 end
+
+
+# ===================
+# TF PARAMETRIC THRESHOLDING (3D: electrodes × frequencies × time)
+# ===================
+
+"""
+    _threshold_t_matrix_parametric_tf!(mask_positive, mask_negative, t_matrix, critical_t_values, tail)
+
+In-place parametric thresholding of 3D t-matrix for TF data.
+"""
+function _threshold_t_matrix_parametric_tf!(
+    mask_positive::BitArray{3},
+    mask_negative::BitArray{3},
+    t_matrix::Array{Float64,3},
+    critical_t_values::Array{Float64,3},
+    tail::Symbol = :both,
+)
+    if tail == :both
+        for i in eachindex(t_matrix)
+            t_val = t_matrix[i]
+            crit_t = critical_t_values[i]
+
+            if isnan(t_val) || isnan(crit_t) || isinf(t_val) || isinf(crit_t)
+                mask_positive[i] = false
+                mask_negative[i] = false
+            else
+                mask_positive[i] = t_val > crit_t
+                mask_negative[i] = t_val < -crit_t
+            end
+        end
+    elseif tail == :right
+        for i in eachindex(t_matrix)
+            t_val = t_matrix[i]
+            crit_t = critical_t_values[i]
+
+            if isnan(t_val) || isnan(crit_t) || isinf(t_val) || isinf(crit_t)
+                mask_positive[i] = false
+                mask_negative[i] = false
+            else
+                mask_positive[i] = t_val > crit_t
+                mask_negative[i] = false
+            end
+        end
+    elseif tail == :left
+        for i in eachindex(t_matrix)
+            t_val = t_matrix[i]
+            crit_t = critical_t_values[i]
+
+            if isnan(t_val) || isnan(crit_t) || isinf(t_val) || isinf(crit_t)
+                mask_positive[i] = false
+                mask_negative[i] = false
+            else
+                mask_positive[i] = false
+                mask_negative[i] = t_val < crit_t
+            end
+        end
+    else
+        error("tail must be :both, :left, or :right, got :$tail")
+    end
+end
+
+"""
+    _threshold_t_matrix_parametric_tf(t_matrix, critical_t_values, tail)
+
+Parametric thresholding of 3D t-matrix (allocating version).
+"""
+function _threshold_t_matrix_parametric_tf(t_matrix::Array{Float64,3}, critical_t_values::Array{Float64,3}, tail::Symbol = :both)
+    mask_positive = falses(size(t_matrix))
+    mask_negative = falses(size(t_matrix))
+    _threshold_t_matrix_parametric_tf!(mask_positive, mask_negative, t_matrix, critical_t_values, tail)
+    return mask_positive, mask_negative
+end
+
+
+# ===================
+# TF NON-PARAMETRIC THRESHOLDING (3D)
+# ===================
+
+"""
+    _collect_valid_t_values_tf(permutation_t_matrices, predicate, transform)
+
+Collect valid t-values from 4D TF permutation distribution.
+"""
+function _collect_valid_t_values_tf(permutation_t_matrices::Array{Float64,4}, predicate::Function, transform::Function)
+    all_t_values = Float64[]
+    sizehint!(all_t_values, length(permutation_t_matrices) ÷ 2)
+    @inbounds for i in eachindex(permutation_t_matrices)
+        t_val = permutation_t_matrices[i]
+        if !isnan(t_val) && !isinf(t_val) && predicate(t_val)
+            push!(all_t_values, transform(t_val))
+        end
+    end
+    return all_t_values
+end
+
+
+"""
+    _compute_nonparametric_threshold_common_tf(permutation_t_matrices, alpha, tail)
+
+Compute common non-parametric thresholds from 4D TF permutation distribution.
+"""
+function _compute_nonparametric_threshold_common_tf(permutation_t_matrices::Array{Float64,4}, alpha::Float64 = 0.05, tail::Symbol = :both)
+    if tail == :both
+        all_t_values = _collect_valid_t_values_tf(permutation_t_matrices, t -> true, abs)
+        isempty(all_t_values) && return NaN, NaN
+        percentile_level = 1.0 - alpha
+        threshold = quantile(all_t_values, percentile_level)
+        return threshold, threshold
+    elseif tail == :right
+        all_t_values = _collect_valid_t_values_tf(permutation_t_matrices, t -> t > 0, identity)
+        isempty(all_t_values) && return NaN, NaN
+        percentile_level = 1.0 - alpha
+        threshold = quantile(all_t_values, percentile_level)
+        return threshold, NaN
+    elseif tail == :left
+        all_t_values = _collect_valid_t_values_tf(permutation_t_matrices, t -> t < 0, abs)
+        isempty(all_t_values) && return NaN, NaN
+        percentile_level = 1.0 - alpha
+        threshold = quantile(all_t_values, percentile_level)
+        return NaN, threshold
+    else
+        error("tail must be :both, :left, or :right, got :$tail")
+    end
+end
+
+
+"""
+    _threshold_t_matrix_nonparametric_tf!(mask_positive, mask_negative, t_matrix, thresh_pos, thresh_neg, tail)
+
+In-place non-parametric thresholding of 3D t-matrix for TF data.
+"""
+function _threshold_t_matrix_nonparametric_tf!(
+    mask_positive::BitArray{3},
+    mask_negative::BitArray{3},
+    t_matrix::Array{Float64,3},
+    thresholds_positive::Union{Float64,Array{Float64,3}},
+    thresholds_negative::Union{Float64,Array{Float64,3}},
+    tail::Symbol = :both,
+)
+    is_common = isa(thresholds_positive, Float64)
+
+    if tail == :both
+        for i in eachindex(t_matrix)
+            t_val = t_matrix[i]
+            thresh_pos = is_common ? thresholds_positive : thresholds_positive[i]
+            thresh_neg = is_common ? thresholds_negative : thresholds_negative[i]
+
+            if isnan(t_val) || isinf(t_val) || isnan(thresh_pos) || isnan(thresh_neg)
+                mask_positive[i] = false
+                mask_negative[i] = false
+            else
+                mask_positive[i] = t_val > thresh_pos
+                mask_negative[i] = t_val < -thresh_neg
+            end
+        end
+    elseif tail == :right
+        for i in eachindex(t_matrix)
+            t_val = t_matrix[i]
+            thresh_pos = is_common ? thresholds_positive : thresholds_positive[i]
+
+            if isnan(t_val) || isinf(t_val) || isnan(thresh_pos)
+                mask_positive[i] = false
+            else
+                mask_positive[i] = t_val > thresh_pos
+            end
+            mask_negative[i] = false
+        end
+    elseif tail == :left
+        for i in eachindex(t_matrix)
+            t_val = t_matrix[i]
+            thresh_neg = is_common ? thresholds_negative : thresholds_negative[i]
+
+            mask_positive[i] = false
+            if isnan(t_val) || isinf(t_val) || isnan(thresh_neg)
+                mask_negative[i] = false
+            else
+                mask_negative[i] = t_val < -thresh_neg
+            end
+        end
+    else
+        error("tail must be :both, :left, or :right, got :$tail")
+    end
+end

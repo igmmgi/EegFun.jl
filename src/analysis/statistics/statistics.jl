@@ -320,3 +320,367 @@ function analytic_test(prepared::StatisticalData; alpha::Float64 = 0.05, tail::S
 
     return result
 end
+
+
+# ===================
+# TF PERMUTATION TEST
+# ===================
+
+"""
+    permutation_test(prepared::TFStatisticalData; kwargs...)
+
+Perform cluster-based permutation test on prepared TF data.
+
+# Arguments
+- `prepared::TFStatisticalData`: Prepared data from `prepare_stats`
+- `n_permutations::Int`: Number of permutations (default: 1000)
+- `threshold::Float64`: P-value threshold for cluster-forming (default: 0.05)
+- `threshold_method::Symbol`: Threshold method - `:parametric` (default) or `:nonparametric_common`
+- `cluster_type::Symbol`: Connectivity type - `:temporal`, `:spatial`, `:spectral`, `:spatiotemporal`, `:spectrotemporal`, or `:full` (default)
+- `min_num_neighbors::Int`: Min neighbouring significant channels (default: 0)
+- `tail::Symbol`: Test tail - `:both` (default), `:left`, or `:right`
+- `show_progress::Bool`: Show progress bar (default: true)
+
+# Returns
+- `TFClusterPermutationResult`: Complete results structure
+
+# Examples
+```julia
+prepared = prepare_stats(tfs; design=:paired, frequency_selection=(4.0, 30.0))
+result = permutation_test(prepared; n_permutations=1000, cluster_type=:full)
+```
+"""
+function permutation_test(
+    prepared::TFStatisticalData;
+    n_permutations::Int = 1000,
+    threshold::Float64 = 0.05,
+    threshold_method::Symbol = :parametric,
+    cluster_type::Symbol = :full,
+    min_num_neighbors::Int = 0,
+    tail::Symbol = :both,
+    show_progress::Bool = true,
+)
+    # Validate inputs
+    n_permutations < 1 && @minimal_error "n_permutations must be >= 1, got $n_permutations"
+    threshold <= 0.0 || threshold >= 1.0 && @minimal_error "threshold must be between 0 and 1, got $threshold"
+    cluster_type ∉ (:temporal, :spatial, :spectral, :spatiotemporal, :spectrotemporal, :full) &&
+        @minimal_error "cluster_type must be :temporal, :spatial, :spectral, :spatiotemporal, :spectrotemporal, or :full, got :$cluster_type"
+    tail ∉ (:both, :left, :right) && @minimal_error "tail must be :both, :left, or :right, got :$tail"
+    threshold_method ∉ (:parametric, :nonparametric_common) &&
+        @minimal_error "threshold_method must be :parametric or :nonparametric_common, got :$threshold_method"
+
+    # Compute observed t-matrix
+    @info "Computing TF t-statistics..."
+    t_matrix, df, _ = _compute_t_matrix_tf(prepared, tail = tail)
+
+    electrodes = channel_labels(prepared.data[1])
+    frequencies = prepared.analysis.frequencies
+    time_points = prepared.analysis.time_points
+
+    # Determine thresholds
+    if threshold_method == :parametric
+        @info "Computing parametric critical t-values..."
+        critical_t_values = _compute_critical_t_values_tf(df, size(t_matrix), threshold, tail)
+
+        @info "Thresholding observed data (parametric)..."
+        mask_positive, mask_negative = _threshold_t_matrix_parametric_tf(t_matrix, critical_t_values, tail)
+        threshold_for_permutations = critical_t_values
+
+    elseif threshold_method == :nonparametric_common
+        @info "Running preliminary permutations for non-parametric thresholding..."
+        n_electrodes = length(electrodes)
+        n_freqs = length(frequencies)
+        n_time = length(time_points)
+        permutation_t_matrices = Array{Float64,4}(undef, n_electrodes, n_freqs, n_time, n_permutations)
+
+        shuffled_A = similar(prepared.analysis.data[1])
+        shuffled_B = similar(prepared.analysis.data[2])
+        progress = show_progress ? Progress(n_permutations, desc = "Collecting t-matrices: ", showspeed = true) : nothing
+
+        for perm_idx = 1:n_permutations
+            _shuffle_labels_tf!(shuffled_A, shuffled_B, prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design)
+            t_perm, _, _ = _compute_t_matrix_tf(shuffled_A, shuffled_B, prepared.analysis.design, tail = tail)
+            permutation_t_matrices[:, :, :, perm_idx] = t_perm
+            !isnothing(progress) && next!(progress)
+        end
+
+        @info "Computing non-parametric common threshold..."
+        thresh_pos, thresh_neg = _compute_nonparametric_threshold_common_tf(permutation_t_matrices, threshold, tail)
+        critical_t_values = (thresh_pos, thresh_neg)
+
+        @info "Thresholding observed data (non-parametric common)..."
+        mask_positive = falses(size(t_matrix))
+        mask_negative = falses(size(t_matrix))
+        _threshold_t_matrix_nonparametric_tf!(mask_positive, mask_negative, t_matrix, thresh_pos, thresh_neg, tail)
+
+        threshold_for_permutations = critical_t_values
+    end
+
+    # Auto-compute neighbours if needed
+    layout = prepared.data[1].layout
+    if cluster_type ∈ (:spatial, :spatiotemporal, :full) && isnothing(layout.neighbours)
+        @minimal_warning "Layout.neighbours is not set. Computing with default distance criterion (0.25)."
+        get_neighbours_xy!(layout, 0.25)
+        if length(prepared.data) > 1 && prepared.data[2].layout !== layout
+            get_neighbours_xy!(prepared.data[2].layout, 0.25)
+        end
+    end
+
+    # Build spatial connectivity
+    @info "Building connectivity matrix..."
+    spatial_connectivity = _build_connectivity_matrix(electrodes, layout, cluster_type)
+
+    # Pre-filter
+    if min_num_neighbors > 0
+        @info "Pre-filtering masks (min_num_neighbors=$min_num_neighbors)..."
+        _prefilter_mask_by_neighbors_tf!(mask_positive, spatial_connectivity, min_num_neighbors)
+        _prefilter_mask_by_neighbors_tf!(mask_negative, spatial_connectivity, min_num_neighbors)
+    end
+
+    # Find observed clusters
+    @info "Finding observed clusters..."
+    positive_clusters, negative_clusters =
+        _find_clusters_tf(mask_positive, mask_negative, electrodes, frequencies, time_points, spatial_connectivity, cluster_type)
+
+    # Compute observed cluster statistics
+    cluster_stats_positive = Float64[]
+    cluster_stats_negative = Float64[]
+
+    if !isempty(positive_clusters)
+        @info "Computing cluster statistics for $(length(positive_clusters)) positive clusters..."
+        positive_clusters, cluster_stats_positive = _compute_cluster_statistics_tf(positive_clusters, t_matrix, electrodes)
+    end
+
+    if !isempty(negative_clusters)
+        @info "Computing cluster statistics for $(length(negative_clusters)) negative clusters..."
+        negative_clusters, cluster_stats_negative = _compute_cluster_statistics_tf(negative_clusters, t_matrix, electrodes)
+    end
+
+    # Run permutations for cluster-level inference
+    @info "Running $n_permutations permutations for cluster-level inference..."
+    permutation_max_positive, permutation_max_negative = _run_permutations_tf(
+        prepared,
+        n_permutations,
+        threshold_for_permutations,
+        spatial_connectivity,
+        cluster_type,
+        tail,
+        min_num_neighbors,
+        electrodes,
+        frequencies,
+        time_points,
+        show_progress,
+    )
+
+    # Compute p-values for observed clusters
+    @info "Computing p-values..."
+    if !isempty(positive_clusters)
+        positive_clusters =
+            _compute_tf_cluster_pvalues(positive_clusters, cluster_stats_positive, permutation_max_positive, n_permutations, threshold)
+        sort!(positive_clusters, by = c -> (!c.is_significant, -abs(c.cluster_stat)))
+    end
+
+    if !isempty(negative_clusters)
+        negative_clusters =
+            _compute_tf_cluster_pvalues(negative_clusters, cluster_stats_negative, permutation_max_negative, n_permutations, threshold)
+        sort!(negative_clusters, by = c -> (!c.is_significant, -abs(c.cluster_stat)))
+    end
+
+    # Create significance masks from significant clusters only
+    significant_mask_positive = falses(size(mask_positive))
+    significant_mask_negative = falses(size(mask_negative))
+
+    for cluster in positive_clusters
+        if cluster.is_significant
+            for pixel in cluster.pixels
+                significant_mask_positive[pixel] = true
+            end
+        end
+    end
+
+    for cluster in negative_clusters
+        if cluster.is_significant
+            for pixel in cluster.pixels
+                significant_mask_negative[pixel] = true
+            end
+        end
+    end
+
+    # Assemble result
+    cluster_info = ClusterInfo(threshold_method, cluster_type, n_permutations)
+    test_info = TestInfo(prepared.analysis.design, df, threshold, tail, :cluster_permutation, cluster_info)
+    stat_matrix = TFStatMatrix(t_matrix, nothing)
+    masks = TFMasks(significant_mask_positive, significant_mask_negative)
+    clusters = TFClusters(positive_clusters, negative_clusters)
+    permutation_dist = PermutationDistribution(permutation_max_positive, permutation_max_negative)
+
+    result = TFClusterPermutationResult(
+        test_info,
+        prepared.data,
+        stat_matrix,
+        masks,
+        clusters,
+        permutation_dist,
+        electrodes,
+        frequencies,
+        time_points,
+    )
+
+    @info "TF Permutation test complete. Found $(length(clusters.positive)) positive and $(length(clusters.negative)) negative clusters."
+
+    return result
+end
+
+
+# ===================
+# TF ANALYTIC TEST
+# ===================
+
+"""
+    analytic_test(prepared::TFStatisticalData; kwargs...)
+
+Perform analytic (parametric) t-test on prepared TF data.
+
+# Arguments
+- `prepared::TFStatisticalData`: Prepared data from `prepare_stats`
+- `alpha::Float64`: Significance threshold (default: 0.05)
+- `tail::Symbol`: Test tail - `:both` (default), `:left`, or `:right`
+- `correction_method::Symbol`: Multiple comparison correction - `:no` (default) or `:bonferroni`
+
+# Returns
+- `TFAnalyticResult`: Results structure
+
+# Examples
+```julia
+prepared = prepare_stats(tfs; design=:paired)
+result = analytic_test(prepared, alpha=0.05, correction_method=:bonferroni)
+```
+"""
+function analytic_test(prepared::TFStatisticalData; alpha::Float64 = 0.05, tail::Symbol = :both, correction_method::Symbol = :no)
+    correction_method ∉ (:no, :bonferroni) && @minimal_error "correction_method must be :no or :bonferroni. Got :$correction_method"
+    tail ∉ (:both, :left, :right) && @minimal_error "tail must be :both, :left, or :right. Got :$tail"
+
+    # Compute t-statistics, df, p-values
+    t_matrix, df, p_matrix = _compute_t_matrix_tf(prepared, tail = tail)
+
+    # Create significance mask (with optional correction)
+    corrected_mask = _create_significance_mask_tf(p_matrix, alpha, correction_method)
+
+    if correction_method == :bonferroni
+        n_comparisons = count(!isnan, p_matrix)
+        bonferroni_alpha = n_comparisons > 0 ? alpha / n_comparisons : 0.0
+        n_sig_uncorrected = count(p -> !isnan(p) && p <= alpha, p_matrix)
+        n_sig_bonferroni = count(corrected_mask)
+        @info "Bonferroni correction: n_comparisons=$n_comparisons, bonferroni_alpha=$bonferroni_alpha, uncorrected_sig=$n_sig_uncorrected, bonferroni_sig=$n_sig_bonferroni"
+    end
+
+    # Create positive and negative masks
+    if tail == :both
+        mask_positive = corrected_mask .& .!isnan.(t_matrix) .& (t_matrix .> 0)
+        mask_negative = corrected_mask .& .!isnan.(t_matrix) .& (t_matrix .< 0)
+    elseif tail == :right
+        mask_positive = corrected_mask .& .!isnan.(t_matrix)
+        mask_negative = falses(size(t_matrix))
+    elseif tail == :left
+        mask_positive = falses(size(t_matrix))
+        mask_negative = corrected_mask .& .!isnan.(t_matrix)
+    end
+
+    test_info = TestInfo(prepared.analysis.design, df, alpha, tail, correction_method, nothing)
+
+    stat_matrix = TFStatMatrix(t_matrix, p_matrix)
+    masks = TFMasks(mask_positive, mask_negative)
+
+    # Compute critical t-value
+    if isnan(df) || isinf(df) || df <= 0
+        @minimal_error "Invalid degrees of freedom: df=$df!"
+    end
+
+    dist = TDist(df)
+    critical_t = if tail == :both
+        quantile(dist, 1.0 - alpha / 2.0)
+    elseif tail == :right
+        quantile(dist, 1.0 - alpha)
+    else  # :left
+        quantile(dist, alpha)
+    end
+
+    result = TFAnalyticResult(
+        test_info,
+        prepared.data,
+        stat_matrix,
+        masks,
+        channel_labels(prepared.data[1]),
+        prepared.analysis.frequencies,
+        prepared.analysis.time_points,
+        critical_t,
+    )
+
+    @info "TF Analytic test complete: $(count(mask_positive)) +ve, $(count(mask_negative)) -ve significant points."
+
+    return result
+end
+
+
+# ===================
+# TF-SPECIFIC INFERENCE HELPERS
+# ===================
+
+"""
+    _compute_tf_cluster_pvalues(clusters, cluster_stats, permutation_max, n_permutations, alpha)
+
+Compute p-values for TF clusters by comparing to permutation distribution.
+"""
+function _compute_tf_cluster_pvalues(
+    clusters::Vector{TFCluster},
+    cluster_stats::Vector{Float64},
+    permutation_max::Vector{Float64},
+    n_permutations::Int,
+    alpha::Float64 = 0.05,
+)
+    if isempty(clusters)
+        return TFCluster[]
+    end
+
+    updated_clusters = TFCluster[]
+
+    for (i, cluster) in enumerate(clusters)
+        cluster_stat = cluster_stats[i]
+
+        if cluster.polarity == :positive
+            count_exceed = sum(permutation_max .>= cluster_stat) + 1
+        else
+            count_exceed = sum(permutation_max .<= cluster_stat) + 1
+        end
+        p_value = count_exceed / (n_permutations + 1)
+        is_significant = p_value < alpha
+
+        updated_cluster = TFCluster(
+            cluster.id,
+            cluster.electrodes,
+            cluster.freq_indices,
+            cluster.time_indices,
+            cluster.freq_range,
+            cluster.time_range,
+            cluster_stat,
+            p_value,
+            is_significant,
+            cluster.polarity,
+            cluster.pixels,
+        )
+        push!(updated_clusters, updated_cluster)
+    end
+
+    return updated_clusters
+end
+
+
+"""
+    _create_significance_mask_tf(p_matrix, alpha, method)
+
+Create significance mask from 3D p-values.
+"""
+function _create_significance_mask_tf(p_matrix::Array{Float64,3}, alpha::Float64, method::Symbol)
+    method == :bonferroni && (alpha = alpha / count(!isnan, p_matrix))
+    return .!isnan.(p_matrix) .& (p_matrix .<= alpha)
+end

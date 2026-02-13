@@ -43,7 +43,7 @@ Additional keyword arguments from PLOT_TOPOGRAPHY_KWARGS are supported:
 $(_generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
 
 # Returns
-- Named tuple `(fig, axes)`
+- Named tuple `(fig, axes, colorbar)`
 
 # Examples
 ```julia
@@ -93,9 +93,10 @@ function plot_topo_stats(
     pop!(plot_kwargs, :use_global_scale, nothing)
     pop!(plot_kwargs, :component_selection, nothing)
 
-    # Override defaults for stats topo context
-    plot_kwargs[:label_plot] = get(kwargs, :label_plot, false)   # Labels off by default for grid
-    plot_kwargs[:point_plot] = get(kwargs, :point_plot, false)   # Points off by default for grid
+    # Override defaults: labels and points off by default for grid layout
+    # (respects explicit user override via kwargs)
+    plot_kwargs[:label_plot] = get(kwargs, :label_plot, false)
+    plot_kwargs[:point_plot] = get(kwargs, :point_plot, false)
 
     # Get time points and determine range
     all_time_points = result.time_points
@@ -129,6 +130,15 @@ function plot_topo_stats(
     _ensure_coordinates_2d!(layout)
     _ensure_coordinates_3d!(layout)
 
+    # Cache layout labels and valid channel set (avoids per-bin propertynames lookups)
+    layout_labels = layout.data.label
+    if topo_data == :difference
+        cond_A = result.data[1]
+        cond_B = result.data[2]
+        cond_A_props = Set(propertynames(cond_A.data))
+        cond_B_props = Set(propertynames(cond_B.data))
+    end
+
     # Compute data for each bin
     topo_values = Vector{Vector{Float64}}(undef, n_topos)
     sig_masks = Vector{BitVector}(undef, n_topos)
@@ -141,17 +151,15 @@ function plot_topo_stats(
 
         if topo_data == :tvalues
             topo_values[i] = vec(mean(result.stat_matrix.t[:, bin_indices], dims = 2))
-        else  # :difference
-            cond_A = result.data[1]
-            cond_B = result.data[2]
-            diff_per_electrode = Float64[]
-            for ch_sym in electrodes
-                if ch_sym in propertynames(cond_A.data) && ch_sym in propertynames(cond_B.data)
+        else  # :difference — pre-allocated vector, uses cached channel sets
+            diff_per_electrode = Vector{Float64}(undef, length(electrodes))
+            for (j, ch_sym) in enumerate(electrodes)
+                if ch_sym in cond_A_props && ch_sym in cond_B_props
                     a_vals = cond_A.data[bin_indices, ch_sym]
                     b_vals = cond_B.data[bin_indices, ch_sym]
-                    push!(diff_per_electrode, mean(a_vals .- b_vals))
+                    diff_per_electrode[j] = mean(a_vals .- b_vals)
                 else
-                    push!(diff_per_electrode, 0.0)
+                    diff_per_electrode[j] = 0.0
                 end
             end
             topo_values[i] = diff_per_electrode
@@ -196,12 +204,15 @@ function plot_topo_stats(
         Label(fig[0, 1:n_cols], fig_title, fontsize = 18, font = :bold)
     end
 
-    # Supported interpolation methods
-    supported_methods =
-        [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
+    # Extract colorbar kwargs before render loop (removes colorbar_* keys from plot_kwargs)
+    colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
+    pop!(colorbar_kwargs, :colorrange, nothing)
+    pop!(colorbar_kwargs, :label, nothing)
+    pop!(plot_kwargs, :colorbar_plot, nothing)
+    pop!(plot_kwargs, :colorbar_position, nothing)
+    pop!(plot_kwargs, :colorbar_plot_numbers, nothing)
 
     axes = Axis[]
-    layout_labels = layout.data.label
 
     for i = 1:n_topos
         row = div(i - 1, n_cols) + 1
@@ -212,60 +223,24 @@ function plot_topo_stats(
 
         # Map electrode values to layout order
         channel_data = topo_values[i]
-        layout_values = Float64[]
-        for lbl in layout_labels
-            ch_idx = findfirst(==(lbl), electrodes)
-            push!(layout_values, ch_idx !== nothing ? channel_data[ch_idx] : 0.0)
-        end
+        layout_values = Float64[
+            let ch_idx = findfirst(==(lbl), electrodes)
+                ch_idx !== nothing ? channel_data[ch_idx] : 0.0
+            end for lbl in layout_labels
+        ]
 
-        # Interpolate
-        if method ∈ supported_methods
-            data_interp, x_bounds, y_bounds = _data_interpolation_topo(layout_values, layout, gridscale; method = method)
-        elseif method == :spherical_spline
-            data_interp = _data_interpolation_topo_spherical_spline(layout_values, layout, gridscale)
-            x_coords = layout.data.x2
-            y_coords = layout.data.y2
-            max_radius = maximum(sqrt.(x_coords .^ 2 .+ y_coords .^ 2))
-            margin = max_radius * 0.05
-            plot_radius = max_radius + margin
-            x_bounds = (-plot_radius, plot_radius)
-            y_bounds = (-plot_radius, plot_radius)
-        else
-            error("Unknown interpolation method: $method")
-        end
-
-        # Render topography
-        co = contourf!(
-            ax,
-            range(x_bounds[1], x_bounds[2], length = gridscale),
-            range(y_bounds[1], y_bounds[2], length = gridscale),
-            data_interp,
-            levels = range(ylim[1], ylim[2], gridscale);
-            extendlow = :auto,
-            extendhigh = :auto,
-            colormap = colormap,
-            nan_color = :transparent,
-        )
-        co.colorrange = ylim
-
-        # Circle mask and head shape (uses shared kwargs)
-        _draw_smooth_circle_mask!(ax, x_bounds, y_bounds)
-        plot_layout_2d!(
+        # Render using shared helper (uses num_levels, not gridscale, for contour levels)
+        _render_topo_surface!(
             fig,
             ax,
+            layout_values,
             layout;
-            point_plot = plot_kwargs[:point_plot],
-            point_marker = plot_kwargs[:point_marker],
-            point_markersize = plot_kwargs[:point_markersize],
-            point_color = plot_kwargs[:point_color],
-            label_plot = plot_kwargs[:label_plot],
-            label_fontsize = plot_kwargs[:label_fontsize],
-            label_color = plot_kwargs[:label_color],
-            label_xoffset = plot_kwargs[:label_xoffset],
-            label_yoffset = plot_kwargs[:label_yoffset],
-            head_color = plot_kwargs[:head_color],
-            head_linewidth = plot_kwargs[:head_linewidth],
-            head_radius = plot_kwargs[:head_radius],
+            method = method,
+            gridscale = gridscale,
+            colormap = colormap,
+            ylim = ylim,
+            num_levels = num_levels,
+            plot_kwargs...,
         )
 
         # Highlight significant channels
@@ -298,27 +273,27 @@ function plot_topo_stats(
         hidedecorations!(ax)
     end
 
-    # Add shared colorbar (uses shared colorbar kwargs)
+    # Add shared colorbar and include in return value
     cb_label = topo_data == :tvalues ? "t-statistic" : "Difference (μV)"
-    colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
-    # Remove keys we set explicitly to avoid conflicts
-    pop!(colorbar_kwargs, :colorrange, nothing)
-    pop!(colorbar_kwargs, :label, nothing)
-    Colorbar(fig[1:n_rows, n_cols+1]; colorbar_kwargs..., colormap = colormap, colorrange = ylim, label = cb_label)
+    cb = Colorbar(fig[1:n_rows, n_cols+1]; colorbar_kwargs..., colormap = colormap, colorrange = ylim, label = cb_label)
 
     if display_plot
         _display_figure(fig)
     end
 
-    return (fig = fig, axes = axes)
+    return (fig = fig, axes = axes, colorbar = cb)
 end
+
 
 
 """
     _partition_indices(indices::Vector{Int}, n::Int) -> Vector{UnitRange{Int}}
 
-Divide a vector of sorted indices into `n` approximately equal contiguous bins.
-Returns vector of index ranges into the original `indices` vector.
+Divide a vector of sorted, contiguous indices into `n` approximately equal bins.
+Returns vector of UnitRanges spanning from `indices[bin_start]` to `indices[bin_end]`.
+
+Note: assumes the input `indices` are sorted and contiguous (sequential integers).
+For non-contiguous indices, the returned ranges may span unintended values.
 """
 function _partition_indices(indices::Vector{Int}, n::Int)
     len = length(indices)

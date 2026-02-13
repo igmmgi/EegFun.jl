@@ -241,6 +241,28 @@ function group_by_condition(epochs::Vector{<:EpochData})
     return OrderedDict(sort(collect(grouped), by = first))
 end
 
+"""
+    group_by_condition(tfs::Vector{<:TimeFreqData})
+
+Group TimeFreqData by their condition number.
+
+# Arguments
+- `tfs::Vector{<:TimeFreqData}`: TF data to group
+
+# Returns
+- `OrderedDict{Int, Vector{TimeFreqData}}`: TF data grouped by condition number (sorted)
+"""
+function group_by_condition(tfs::Vector{<:TimeFreqData})
+    grouped = OrderedDict{Int,Vector{TimeFreqData}}()
+    for tf in tfs
+        cond_num = tf.condition
+        push!(get!(grouped, cond_num, TimeFreqData[]), tf)
+    end
+    # Sort by condition number
+    return OrderedDict(sort(collect(grouped), by = first))
+end
+
+
 
 """
     validate_input_dir(dir::String)
