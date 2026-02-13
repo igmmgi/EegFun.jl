@@ -69,9 +69,9 @@ function _shuffle_labels!(
         # We use views to avoid copying during indexing
         function get_trial(idx)
             if idx <= n_A
-                return view(data1,idx,:,:)
+                return view(data1, idx, :, :)
             else
-                return view(data2,(idx-n_A),:,:)
+                return view(data2, (idx - n_A), :, :)
             end
         end
 
@@ -305,6 +305,164 @@ function _run_permutations(
             # For negative clusters, the statistic is negative (sum of negative t-values)
             # The most extreme negative value is the MINIMUM (most negative), not maximum
             max_neg = isempty(neg_stats_perm) ? 0.0 : minimum(neg_stats_perm)
+        else
+            max_neg = 0.0
+        end
+
+        push!(permutation_max_positive, max_pos)
+        push!(permutation_max_negative, max_neg)
+
+        if show_progress
+            next!(progress)
+        end
+    end
+
+    return permutation_max_positive, permutation_max_negative
+end
+
+
+# ===================
+# TF LABEL SHUFFLING (4D)
+# ===================
+
+"""
+    _shuffle_labels_tf!(shuffled_A, shuffled_B, data1, data2, design)
+
+In-place label shuffling for TF permutation tests.
+
+For paired design: randomly swap conditions for each participant.
+For independent design: randomly shuffle participants between groups.
+"""
+function _shuffle_labels_tf!(
+    shuffled_A::Array{Float64,4},
+    shuffled_B::Array{Float64,4},
+    data1::Array{Float64,4},
+    data2::Array{Float64,4},
+    design::Symbol,
+)
+    if design == :paired
+        copyto!(shuffled_A, data1)
+        copyto!(shuffled_B, data2)
+
+        n_participants = size(data1, 1)
+        for p_idx = 1:n_participants
+            if rand(Bool)
+                # Swap conditions for this participant
+                shuffled_A[p_idx, :, :, :], shuffled_B[p_idx, :, :, :] = shuffled_B[p_idx, :, :, :], shuffled_A[p_idx, :, :, :]
+            end
+        end
+
+    elseif design == :independent
+        n_A = size(data1, 1)
+        n_B = size(data2, 1)
+        n_total = n_A + n_B
+
+        shuffled_indices = randperm(n_total)
+
+        get_trial(idx) = idx <= n_A ? view(data1, idx, :, :, :) : view(data2, idx - n_A, :, :, :)
+
+        for i = 1:n_A
+            src_idx = shuffled_indices[i]
+            shuffled_A[i, :, :, :] = get_trial(src_idx)
+        end
+        for i = 1:n_B
+            src_idx = shuffled_indices[n_A+i]
+            shuffled_B[i, :, :, :] = get_trial(src_idx)
+        end
+    end
+    return shuffled_A, shuffled_B
+end
+
+
+# ===================
+# TF PERMUTATION LOOP
+# ===================
+
+"""
+    _run_permutations_tf(prepared, n_permutations, critical_t_values, spatial_connectivity,
+                          cluster_type, tail, min_num_neighbors, electrodes, frequencies,
+                          time_points, show_progress)
+
+Run Monte Carlo permutations for TF cluster-based permutation test.
+
+# Returns
+- `permutation_max_positive::Vector{Float64}`: Max positive cluster stats per permutation
+- `permutation_max_negative::Vector{Float64}`: Max negative cluster stats per permutation
+"""
+function _run_permutations_tf(
+    prepared::TFStatisticalData,
+    n_permutations::Int,
+    critical_t_values,  # Can be Array{Float64,3} or Tuple{Float64,Float64}
+    spatial_connectivity::SparseMatrixCSC{Bool},
+    cluster_type::Symbol,
+    tail::Symbol,
+    min_num_neighbors::Int,
+    electrodes::Vector{Symbol},
+    frequencies::Vector{Float64},
+    time_points::Vector{Float64},
+    show_progress::Bool = true,
+)
+    is_parametric = isa(critical_t_values, Array{Float64,3})
+    is_nonparametric_common = isa(critical_t_values, Tuple) && length(critical_t_values) == 2 && isa(critical_t_values[1], Float64)
+
+    n_electrodes = length(electrodes)
+    n_freqs = length(frequencies)
+    n_time = length(time_points)
+
+    permutation_max_positive = Float64[]
+    permutation_max_negative = Float64[]
+    sizehint!(permutation_max_positive, n_permutations)
+    sizehint!(permutation_max_negative, n_permutations)
+
+    # Pre-allocate buffers
+    mask_pos_buffer = BitArray{3}(undef, n_electrodes, n_freqs, n_time)
+    mask_neg_buffer = BitArray{3}(undef, n_electrodes, n_freqs, n_time)
+    shuffled_A = similar(prepared.analysis.data[1])
+    shuffled_B = similar(prepared.analysis.data[2])
+
+    electrode_to_idx = Dict(e => i for (i, e) in enumerate(electrodes))
+
+    if show_progress
+        progress = Progress(n_permutations, desc = "TF Permutations: ", showspeed = true)
+    end
+
+    for perm_idx = 1:n_permutations
+        # Shuffle labels
+        _shuffle_labels_tf!(shuffled_A, shuffled_B, prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design)
+
+        # Compute t-matrix for shuffled data
+        t_matrix_perm, _, _ = _compute_t_matrix_tf(shuffled_A, shuffled_B, prepared.analysis.design, tail = tail)
+
+        # Threshold
+        if is_parametric
+            _threshold_t_matrix_parametric_tf!(mask_pos_buffer, mask_neg_buffer, t_matrix_perm, critical_t_values, tail)
+        elseif is_nonparametric_common
+            thresh_pos, thresh_neg = critical_t_values
+            _threshold_t_matrix_nonparametric_tf!(mask_pos_buffer, mask_neg_buffer, t_matrix_perm, thresh_pos, thresh_neg, tail)
+        end
+
+        # Pre-filter
+        if min_num_neighbors > 0
+            _prefilter_mask_by_neighbors_tf!(mask_pos_buffer, spatial_connectivity, min_num_neighbors)
+            _prefilter_mask_by_neighbors_tf!(mask_neg_buffer, spatial_connectivity, min_num_neighbors)
+        end
+
+        # Find clusters
+        pos_clusters_perm, neg_clusters_perm =
+            _find_clusters_tf(mask_pos_buffer, mask_neg_buffer, electrodes, frequencies, time_points, spatial_connectivity, cluster_type)
+
+        # Get max cluster stat (positive)
+        if !isempty(pos_clusters_perm)
+            pos_stats = _compute_cluster_statistics_tf(pos_clusters_perm, t_matrix_perm, electrode_to_idx, return_clusters = false)
+            max_pos = isempty(pos_stats) ? 0.0 : maximum(pos_stats)
+        else
+            max_pos = 0.0
+        end
+
+        # Get max cluster stat (negative)
+        if !isempty(neg_clusters_perm)
+            neg_stats = _compute_cluster_statistics_tf(neg_clusters_perm, t_matrix_perm, electrode_to_idx, return_clusters = false)
+            max_neg = isempty(neg_stats) ? 0.0 : minimum(neg_stats)
         else
             max_neg = 0.0
         end

@@ -65,14 +65,7 @@ function prepare_stats(
     _have_same_structure(condition1[1], condition2[1]) || @minimal_error("Condition 1 vs. 2: ERPs have inconsistent structure")
 
     # Convert intervals to samples() predicates for subset()
-    # Build sample selection predicate
-    sample_sel = if isnothing(interval_selection)
-        samples()
-    elseif interval_selection isa Tuple
-        samples(interval_selection)
-    else
-        samples(interval_selection)
-    end
+    sample_sel = _interval_to_samples(interval_selection)
 
     condition1 = subset(condition1; channel_selection = channel_selection, sample_selection = sample_sel)
     isempty(condition1) && @minimal_error_throw "No data matched the selection criteria!"
@@ -96,11 +89,7 @@ function prepare_stats(
     # create second subset with analysis_interval for statistical tests
     # Use analysis_interval if provided, otherwise use interval_selection
     analysis_sel = if !isnothing(analysis_interval)
-        if analysis_interval isa Tuple
-            samples(analysis_interval)
-        else
-            samples(analysis_interval)
-        end
+        _interval_to_samples(analysis_interval)
     else
         sample_sel
     end
@@ -434,4 +423,388 @@ function _compute_p_matrix(
         end
     end
     return p_matrix
+end
+
+
+# ===================
+# TF DATA PREPARATION (4D: participants × electrodes × frequencies × time)
+# ===================
+
+"""
+    prepare_stats(tfs::Vector{TimeFreqData}; design, condition_selection, channel_selection, frequency_selection, interval_selection)
+
+Prepare TimeFreqData for comparing two conditions in statistical tests.
+
+Organizes TimeFreqData power values into participant × electrode × frequency × time arrays
+for statistical analysis. Validates the design and ensures data consistency across conditions.
+
+Note: Baseline correction should be applied to individual TimeFreqData objects _before_
+calling this function (via `baseline!` on TF data).
+
+# Arguments
+- `tfs::Vector{TimeFreqData}`: TF data containing data for multiple conditions/participants
+- `design::Symbol`: Design type - `:paired` or `:independent`
+- `condition_selection::Function`: Predicate to select exactly 2 conditions (default: `conditions()` - all conditions)
+- `channel_selection::Function`: Predicate to filter channels (default: `channels()` - all channels)
+- `frequency_selection::Interval`: Frequency range as tuple (e.g., `(4.0, 30.0)`) or `nothing` for all frequencies
+- `interval_selection::Interval`: Time interval as tuple (e.g., `(0.0, 1.0)`) or `nothing` for all time points
+
+# Returns
+- `TFStatisticalData`: Prepared data structure ready for statistical testing
+
+# Examples
+```julia
+# Load TF data from files
+tfs = read_all_data(TimeFreqData, "tf_morlet", input_dir)
+
+# Prepare for paired statistical test
+prepared = prepare_stats(tfs; design=:paired,
+    frequency_selection=(4.0, 30.0),
+    interval_selection=(0.0, 0.8))
+
+# Run permutation test
+result = permutation_test(prepared; n_permutations=1000)
+```
+"""
+function prepare_stats(
+    tfs::Vector{TimeFreqData};
+    design::Symbol = :paired,
+    condition_selection::Function = conditions(),
+    channel_selection::Function = channels(),
+    frequency_selection::Interval = nothing,
+    interval_selection::Interval = nothing,
+)
+    # Group all TF data by condition
+    tfs_by_condition = group_by_condition(tfs)
+
+    # Apply condition selection to the sorted condition numbers
+    all_cond_nums = collect(keys(tfs_by_condition))
+    selected_mask = condition_selection(1:length(all_cond_nums))
+    selected_cond_nums = all_cond_nums[selected_mask]
+
+    # Validate exactly 2 conditions
+    length(selected_cond_nums) == 2 ||
+        @minimal_error_throw "Statistical tests require exactly 2 conditions, got $(length(selected_cond_nums)): $selected_cond_nums. Use condition_selection to select exactly 2 conditions."
+
+    condition1 = tfs_by_condition[selected_cond_nums[1]]
+    condition2 = tfs_by_condition[selected_cond_nums[2]]
+
+    # Validate design
+    design ∉ (:paired, :independent) && @minimal_error "design must be :paired or :independent, got :$design"
+
+    # Extract participant IDs from filenames
+    vps1 = [_extract_participant_id(basename(data.file)) for data in condition1]
+    vps2 = [_extract_participant_id(basename(data.file)) for data in condition2]
+
+    if design == :paired
+        vps1 != vps2 && @minimal_error "Paired design requires same participants in both conditions"
+    elseif design == :independent
+        length(vps1) < 2 || length(vps2) < 2 && @minimal_error "Independent design requires at least 2 participants per group"
+    end
+
+    # Validate all TF data have same structure (same channels, same frequencies, same time points)
+    _have_same_structure(condition1) || @minimal_error("Condition 1: TF data have inconsistent structure")
+    _have_same_structure(condition2) || @minimal_error("Condition 2: TF data have inconsistent structure")
+    _have_same_structure(condition1[1], condition2[1]) || @minimal_error("Condition 1 vs. 2: TF data have inconsistent structure")
+
+    # Get metadata from first TF dataset 
+    ref_tf = condition1[1]
+    all_electrodes = channel_labels(ref_tf)
+    all_freqs = sort(unique(ref_tf.data_power.freq))
+    all_times = sort(unique(ref_tf.data_power.time))
+
+    # Apply channel selection
+    selected_ch_mask = channel_selection(1:length(all_electrodes))
+    electrodes = all_electrodes[selected_ch_mask]
+    isempty(electrodes) && @minimal_error_throw "No channels matched the channel selection."
+
+    # Apply frequency selection
+    if !isnothing(frequency_selection) && frequency_selection isa Tuple
+        freq_mask = (all_freqs .>= frequency_selection[1]) .& (all_freqs .<= frequency_selection[2])
+        frequencies = all_freqs[freq_mask]
+    else
+        frequencies = all_freqs
+    end
+    isempty(frequencies) && @minimal_error_throw "No frequencies matched the frequency selection."
+
+    # Apply time (interval) selection
+    if !isnothing(interval_selection) && interval_selection isa Tuple
+        time_mask = (all_times .>= interval_selection[1]) .& (all_times .<= interval_selection[2])
+        time_points = all_times[time_mask]
+    else
+        time_points = all_times
+    end
+    isempty(time_points) && @minimal_error_throw "No time points matched the interval selection."
+
+    n_electrodes = length(electrodes)
+    n_freqs = length(frequencies)
+    n_time = length(time_points)
+
+    # Extract 4D arrays: [participants × electrodes × frequencies × time]
+    data1 = _extract_tf_array(condition1, electrodes, frequencies, time_points)
+    data2 = _extract_tf_array(condition2, electrodes, frequencies, time_points)
+
+    # Create grand averages (average power across participants)
+    condition1_avg = _create_tf_grand_average(condition1, electrodes, frequencies, time_points, selected_cond_nums[1])
+    condition2_avg = _create_tf_grand_average(condition2, electrodes, frequencies, time_points, selected_cond_nums[2])
+
+    return TFStatisticalData([condition1_avg, condition2_avg], TFAnalysisData(design, [data1, data2], frequencies, time_points))
+end
+
+"""
+    prepare_stats(::Type{TimeFreqData}, file_pattern, design; input_dir, participant_selection, kwargs...)
+
+Prepare TF data for statistical tests from JLD2 files (convenience wrapper).
+"""
+function prepare_stats(
+    ::Type{TimeFreqData},
+    file_pattern::String,
+    design::Symbol;
+    input_dir::String = pwd(),
+    participant_selection::Function = participants(),
+    kwargs...,
+)
+    all_tfs = read_all_data(TimeFreqData, file_pattern, input_dir, participant_selection)
+    isempty(all_tfs) && @minimal_error_throw "No valid TF data found matching pattern '$file_pattern' in $input_dir"
+
+    return prepare_stats(all_tfs; design = design, kwargs...)
+end
+
+
+# ===================
+# TF HELPER FUNCTIONS
+# ===================
+
+"""
+    _extract_tf_array(tfs, electrodes, frequencies, time_points)
+
+Extract power values from TimeFreqData into a 4D array.
+
+# Returns
+- `Array{Float64, 4}`: [participants × electrodes × frequencies × time]
+"""
+function _extract_tf_array(
+    tfs::Vector{TimeFreqData},
+    electrodes::Vector{Symbol},
+    frequencies::Vector{Float64},
+    time_points::Vector{Float64},
+)
+    n_participants = length(tfs)
+    n_electrodes = length(electrodes)
+    n_freqs = length(frequencies)
+    n_time = length(time_points)
+
+    data = Array{Float64,4}(undef, n_participants, n_electrodes, n_freqs, n_time)
+
+    for (p_idx, tf) in enumerate(tfs)
+        df = tf.data_power
+
+        # Build index vectors for this TF dataset
+        tf_freqs = df.freq
+        tf_times = df.time
+
+        for (f_idx, freq) in enumerate(frequencies)
+            for (t_idx, tp) in enumerate(time_points)
+                # Find the row matching this (freq, time) pair
+                row_mask = (tf_freqs .== freq) .& (tf_times .== tp)
+                row_idx = findfirst(row_mask)
+
+                isnothing(row_idx) && @minimal_error "Missing data point for freq=$freq, time=$tp in participant $(tf.file)"
+
+                for (e_idx, elec) in enumerate(electrodes)
+                    data[p_idx, e_idx, f_idx, t_idx] = df[row_idx, elec]
+                end
+            end
+        end
+    end
+
+    return data
+end
+
+
+"""
+    _create_tf_grand_average(tfs, electrodes, frequencies, time_points, cond_num)
+
+Create a grand average TimeFreqData by averaging power across participants.
+"""
+function _create_tf_grand_average(
+    tfs::Vector{TimeFreqData},
+    electrodes::Vector{Symbol},
+    frequencies::Vector{Float64},
+    time_points::Vector{Float64},
+    cond_num::Int,
+)
+    # Extract 4D data and average over participants (dim 1)
+    data_4d = _extract_tf_array(tfs, electrodes, frequencies, time_points)
+    avg_power = dropdims(mean(data_4d, dims = 1), dims = 1)  # [electrodes × freqs × time]
+
+    # Build grand average DataFrame with same structure as input
+    n_freqs = length(frequencies)
+    n_time = length(time_points)
+    n_rows = n_freqs * n_time
+
+    # Create time and freq columns (time varies fastest within each freq)
+    time_col = repeat(time_points, outer = n_freqs)
+    freq_col = repeat(frequencies, inner = n_time)
+
+    # Build DataFrame
+    power_df = DataFrame(time = time_col, freq = freq_col, copycols = false)
+    for (e_idx, elec) in enumerate(electrodes)
+        power_df[!, elec] = vec(avg_power[e_idx, :, :])  # [freqs × time] -> vec
+    end
+
+    # Create a matching phase DataFrame (all zeros for grand average since phase averages to zero)
+    phase_df = copy(power_df)
+    for elec in electrodes
+        phase_df[!, elec] .= 0.0
+    end
+
+    ref_tf = tfs[1]
+    return TimeFreqData(
+        "grand_average",
+        cond_num,
+        ref_tf.condition_name,
+        power_df,
+        phase_df,
+        copy(ref_tf.layout),
+        ref_tf.sample_rate,
+        ref_tf.method,
+        ref_tf.baseline,
+        ref_tf.analysis_info,
+    )
+end
+
+
+# ===================
+# TF T-TEST COMPUTATION (4D)
+# ===================
+
+"""
+    _compute_t_matrix_tf(data1, data2, design; tail)
+
+Compute t-statistics and p-values for all electrode × frequency × time points.
+
+# Arguments
+- `data1::Array{Float64, 4}`: Condition 1 data [participants × electrodes × freqs × time]
+- `data2::Array{Float64, 4}`: Condition 2 data [participants × electrodes × freqs × time]
+- `design::Symbol`: `:paired` or `:independent`
+- `tail::Symbol`: `:both`, `:left`, or `:right`
+
+# Returns
+- `t_matrix::Array{Float64, 3}`: T-statistics [electrodes × freqs × time]
+- `df::Float64`: Degrees of freedom
+- `p_matrix::Array{Float64, 3}`: P-values [electrodes × freqs × time]
+"""
+function _compute_t_matrix_tf(data1::Array{Float64,4}, data2::Array{Float64,4}, design::Symbol; tail::Symbol = :both)
+    n_participants, n_electrodes, n_freqs, n_time = size(data1)
+    t_matrix = Array{Float64,3}(undef, n_electrodes, n_freqs, n_time)
+    p_matrix = Array{Float64,3}(undef, n_electrodes, n_freqs, n_time)
+
+    if design == :paired
+        @inbounds for e_idx = 1:n_electrodes
+            for f_idx = 1:n_freqs
+                for t_idx = 1:n_time
+                    sum_diff = 0.0
+                    sum_diff_sq = 0.0
+                    for p_idx = 1:n_participants
+                        diff_val = data1[p_idx, e_idx, f_idx, t_idx] - data2[p_idx, e_idx, f_idx, t_idx]
+                        sum_diff += diff_val
+                        sum_diff_sq += diff_val * diff_val
+                    end
+                    mean_diff_val = sum_diff / n_participants
+                    variance = (sum_diff_sq / n_participants) - (mean_diff_val * mean_diff_val)
+                    std_diff = sqrt(variance * n_participants / (n_participants - 1))
+
+                    if std_diff == 0.0
+                        t_matrix[e_idx, f_idx, t_idx] = mean_diff_val == 0.0 ? NaN : Inf
+                    else
+                        t_matrix[e_idx, f_idx, t_idx] = mean_diff_val / (std_diff / sqrt(n_participants))
+                    end
+                end
+            end
+        end
+
+        df = Float64(n_participants - 1)
+        _compute_p_matrix_tf!(p_matrix, t_matrix, df, tail)
+
+    else
+        # Independent design
+        result = nothing
+        @inbounds for e_idx = 1:n_electrodes
+            for f_idx = 1:n_freqs
+                for t_idx = 1:n_time
+                    data_A = view(data1, :, e_idx, f_idx, t_idx)
+                    data_B = view(data2, :, e_idx, f_idx, t_idx)
+                    result = independent_ttest(data_A, data_B, tail = tail)
+                    t_matrix[e_idx, f_idx, t_idx] = result.t
+                    p_matrix[e_idx, f_idx, t_idx] = result.p
+                end
+            end
+        end
+        df = result.df
+    end
+
+    return t_matrix, df, p_matrix
+end
+
+function _compute_t_matrix_tf(prepared::TFStatisticalData; tail::Symbol = :both)
+    return _compute_t_matrix_tf(prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design, tail = tail)
+end
+
+
+"""
+    _compute_p_matrix_tf!(p_matrix, t_matrix, df, tail)
+
+In-place computation of p-values from 3D t-statistics matrix.
+"""
+function _compute_p_matrix_tf!(p_matrix::Array{Float64,3}, t_matrix::Array{Float64,3}, df::Float64, tail::Symbol)
+    dist = TDist(df)
+    @inbounds for i in eachindex(t_matrix)
+        t_val = t_matrix[i]
+        p_matrix[i] = if isnan(t_val) || isinf(t_val)
+            NaN
+        elseif tail == :both
+            2 * (1 - cdf(dist, abs(t_val)))
+        elseif tail == :left
+            cdf(dist, t_val)
+        else  # :right
+            1 - cdf(dist, t_val)
+        end
+    end
+    return p_matrix
+end
+
+
+"""
+    _compute_critical_t_values_tf(df, matrix_size, alpha, tail)
+
+Compute critical t-values for parametric thresholding (3D version).
+
+# Returns
+- `critical_t_values::Array{Float64, 3}`: Uniform critical t-values [electrodes × freqs × time]
+"""
+function _compute_critical_t_values_tf(df::Float64, matrix_size::Tuple{Int,Int,Int}, alpha::Float64 = 0.05, tail::Symbol = :both)
+    critical_t_values = Array{Float64,3}(undef, matrix_size)
+
+    if isnan(df) || isinf(df) || df <= 0
+        fill!(critical_t_values, NaN)
+        return critical_t_values
+    end
+
+    dist = TDist(df)
+    if tail == :both
+        alpha_per_tail = alpha / 2.0
+        crit_t = quantile(dist, 1.0 - alpha_per_tail)
+        fill!(critical_t_values, crit_t)
+    elseif tail == :right
+        crit_t = quantile(dist, 1.0 - alpha)
+        fill!(critical_t_values, crit_t)
+    elseif tail == :left
+        crit_t = quantile(dist, alpha)
+        fill!(critical_t_values, crit_t)
+    else
+        error("tail must be :both, :left, or :right, got :$tail")
+    end
+
+    return critical_t_values
 end

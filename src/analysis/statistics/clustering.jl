@@ -436,3 +436,309 @@ function _compute_cluster_statistics(clusters::Vector{Cluster}, t_matrix::Array{
     electrode_to_idx = Dict(e => i for (i, e) in enumerate(electrodes))
     return _compute_cluster_statistics(clusters, t_matrix, electrode_to_idx, return_clusters = true)
 end
+
+
+# ===================
+# TF PRE-FILTERING (3D)
+# ===================
+
+"""
+    _prefilter_mask_by_neighbors_tf!(mask, spatial_connectivity, min_num_neighbors)
+
+In-place pre-filtering of 3D mask to remove spatially isolated points.
+Iterates until stable.
+"""
+function _prefilter_mask_by_neighbors_tf!(mask::BitArray{3}, spatial_connectivity::SparseMatrixCSC{Bool}, min_num_neighbors::Int)
+    if min_num_neighbors <= 0
+        return
+    end
+
+    n_electrodes, n_freqs, n_time = size(mask)
+    spatial_conn_sym = spatial_connectivity .| spatial_connectivity'
+
+    n_removed = 1
+    while n_removed > 0
+        n_removed = 0
+        for t_idx = 1:n_time
+            for f_idx = 1:n_freqs
+                for e_idx = 1:n_electrodes
+                    if !mask[e_idx, f_idx, t_idx]
+                        continue
+                    end
+                    # Count neighbours at same (f, t) that are significant
+                    neighbor_count = 1  # count self
+                    for n_e_idx = 1:n_electrodes
+                        if e_idx != n_e_idx && spatial_conn_sym[e_idx, n_e_idx] && mask[n_e_idx, f_idx, t_idx]
+                            neighbor_count += 1
+                        end
+                    end
+                    if neighbor_count < min_num_neighbors
+                        mask[e_idx, f_idx, t_idx] = false
+                        n_removed += 1
+                    end
+                end
+            end
+        end
+    end
+end
+
+
+# ===================
+# TF CLUSTER FINDING (3D BFS)
+# ===================
+
+"""
+    _find_clusters_connected_components_tf(mask, electrodes, frequencies, time_points, spatial_connectivity, cluster_type)
+
+Find connected clusters in 3D thresholded TF data using BFS.
+
+Connectivity is determined by `cluster_type`:
+- `:temporal`: adjacent time points only
+- `:spatial`: spatially adjacent electrodes only (same freq and time)
+- `:spectral`: adjacent frequency bins only (same electrode and time)
+- `:spatiotemporal`: spatial + temporal neighbours
+- `:spectrotemporal`: spectral + temporal neighbours
+- `:full`: spatial + spectral + temporal neighbours (all 3 dimensions)
+"""
+function _find_clusters_connected_components_tf(
+    mask::BitArray{3},
+    electrodes::Vector{Symbol},
+    frequencies::Vector{Float64},
+    time_points::Vector{Float64},
+    spatial_connectivity::SparseMatrixCSC{Bool},
+    cluster_type::Symbol,
+)
+    n_electrodes, n_freqs, n_time = size(mask)
+    clusters = TFCluster[]
+
+    if !any(mask)
+        return clusters
+    end
+
+    cluster_labels = zeros(Int, n_electrodes, n_freqs, n_time)
+    current_cluster_id = 0
+
+    # Determine which connectivity dimensions are active
+    use_spatial = cluster_type in (:spatial, :spatiotemporal, :full)
+    use_spectral = cluster_type in (:spectral, :spectrotemporal, :full)
+    use_temporal = cluster_type in (:temporal, :spatiotemporal, :spectrotemporal, :full)
+
+    function get_neighbors(e_idx::Int, f_idx::Int, t_idx::Int)
+        neighbors = Tuple{Int,Int,Int}[]
+
+        # Spatial connectivity (same freq, same time)
+        if use_spatial
+            for n_e_idx = 1:n_electrodes
+                if spatial_connectivity[e_idx, n_e_idx] && mask[n_e_idx, f_idx, t_idx]
+                    push!(neighbors, (n_e_idx, f_idx, t_idx))
+                end
+            end
+        end
+
+        # Spectral connectivity (same electrode, same time, adjacent freq)
+        if use_spectral
+            if f_idx > 1 && mask[e_idx, f_idx-1, t_idx]
+                push!(neighbors, (e_idx, f_idx - 1, t_idx))
+            end
+            if f_idx < n_freqs && mask[e_idx, f_idx+1, t_idx]
+                push!(neighbors, (e_idx, f_idx + 1, t_idx))
+            end
+        end
+
+        # Temporal connectivity (same electrode, same freq, adjacent time)
+        if use_temporal
+            if t_idx > 1 && mask[e_idx, f_idx, t_idx-1]
+                push!(neighbors, (e_idx, f_idx, t_idx - 1))
+            end
+            if t_idx < n_time && mask[e_idx, f_idx, t_idx+1]
+                push!(neighbors, (e_idx, f_idx, t_idx + 1))
+            end
+        end
+
+        return neighbors
+    end
+
+    # BFS to find connected components
+    for e_idx = 1:n_electrodes
+        for f_idx = 1:n_freqs
+            for t_idx = 1:n_time
+                if !mask[e_idx, f_idx, t_idx] || cluster_labels[e_idx, f_idx, t_idx] > 0
+                    continue
+                end
+
+                # Start new cluster
+                current_cluster_id += 1
+                cluster_electrodes = Set{Symbol}()
+                cluster_freq_indices = Set{Int}()
+                cluster_time_indices = Set{Int}()
+                cluster_pixels = CartesianIndex{3}[]
+
+                queue = [(e_idx, f_idx, t_idx)]
+                cluster_labels[e_idx, f_idx, t_idx] = current_cluster_id
+                push!(cluster_electrodes, electrodes[e_idx])
+                push!(cluster_freq_indices, f_idx)
+                push!(cluster_time_indices, t_idx)
+                push!(cluster_pixels, CartesianIndex(e_idx, f_idx, t_idx))
+
+                while !isempty(queue)
+                    current_e, current_f, current_t = popfirst!(queue)
+                    neighbors = get_neighbors(current_e, current_f, current_t)
+
+                    for (n_e, n_f, n_t) in neighbors
+                        if cluster_labels[n_e, n_f, n_t] == 0
+                            cluster_labels[n_e, n_f, n_t] = current_cluster_id
+                            push!(queue, (n_e, n_f, n_t))
+                            push!(cluster_electrodes, electrodes[n_e])
+                            push!(cluster_freq_indices, n_f)
+                            push!(cluster_time_indices, n_t)
+                            push!(cluster_pixels, CartesianIndex(n_e, n_f, n_t))
+                        end
+                    end
+                end
+
+                freq_indices_vec = sort(collect(cluster_freq_indices))
+                time_indices_vec = sort(collect(cluster_time_indices))
+                freq_range = (frequencies[freq_indices_vec[1]], frequencies[freq_indices_vec[end]])
+                time_range = (time_points[time_indices_vec[1]], time_points[time_indices_vec[end]])
+                electrodes_vec = collect(cluster_electrodes)
+
+                cluster = TFCluster(
+                    current_cluster_id,
+                    electrodes_vec,
+                    freq_indices_vec,
+                    time_indices_vec,
+                    freq_range,
+                    time_range,
+                    0.0,  # cluster_stat - computed later
+                    1.0,  # p_value - computed later
+                    false,  # is_significant
+                    :positive,  # polarity - set by caller
+                    cluster_pixels,
+                )
+                push!(clusters, cluster)
+            end
+        end
+    end
+
+    return clusters
+end
+
+
+"""
+    _set_cluster_polarity_tf(clusters, polarity)
+
+Create new TFCluster objects with the specified polarity.
+"""
+function _set_cluster_polarity_tf(clusters::Vector{TFCluster}, polarity::Symbol)
+    @assert polarity in (:positive, :negative) "polarity must be :positive or :negative"
+    return [
+        TFCluster(
+            c.id,
+            c.electrodes,
+            c.freq_indices,
+            c.time_indices,
+            c.freq_range,
+            c.time_range,
+            c.cluster_stat,
+            c.p_value,
+            c.is_significant,
+            polarity,
+            c.pixels,
+        ) for c in clusters
+    ]
+end
+
+
+"""
+    _find_clusters_tf(mask_positive, mask_negative, electrodes, frequencies, time_points, spatial_connectivity, cluster_type)
+
+Find positive and negative TF clusters.
+"""
+function _find_clusters_tf(
+    mask_positive::BitArray{3},
+    mask_negative::BitArray{3},
+    electrodes::Vector{Symbol},
+    frequencies::Vector{Float64},
+    time_points::Vector{Float64},
+    spatial_connectivity::SparseMatrixCSC{Bool},
+    cluster_type::Symbol,
+)
+    positive_clusters = TFCluster[]
+    negative_clusters = TFCluster[]
+
+    if !isempty(mask_positive)
+        raw =
+            _find_clusters_connected_components_tf(mask_positive, electrodes, frequencies, time_points, spatial_connectivity, cluster_type)
+        positive_clusters = _set_cluster_polarity_tf(raw, :positive)
+    end
+
+    if !isempty(mask_negative)
+        raw =
+            _find_clusters_connected_components_tf(mask_negative, electrodes, frequencies, time_points, spatial_connectivity, cluster_type)
+        negative_clusters = _set_cluster_polarity_tf(raw, :negative)
+    end
+
+    return positive_clusters, negative_clusters
+end
+
+
+# ===================
+# TF CLUSTER STATISTICS (3D)
+# ===================
+
+"""
+    _compute_cluster_statistics_tf(clusters, t_matrix, electrode_to_idx; return_clusters)
+
+Compute cluster-level statistics (maxsum) for TF clusters.
+Sums t-values at each cluster's exact pixel locations.
+"""
+function _compute_cluster_statistics_tf(
+    clusters::Vector{TFCluster},
+    t_matrix::Array{Float64,3},
+    electrode_to_idx::Dict{Symbol,Int};
+    return_clusters::Bool = true,
+)
+    if isempty(clusters)
+        return return_clusters ? (TFCluster[], Float64[]) : Float64[]
+    end
+
+    cluster_stats = Float64[]
+    sizehint!(cluster_stats, length(clusters))
+    updated_clusters = return_clusters ? TFCluster[] : nothing
+
+    for cluster in clusters
+        cluster_stat = 0.0
+        for pixel in cluster.pixels
+            t_val = t_matrix[pixel]
+            if !isnan(t_val) && !isinf(t_val)
+                cluster_stat += t_val
+            end
+        end
+
+        push!(cluster_stats, cluster_stat)
+
+        if return_clusters
+            updated_cluster = TFCluster(
+                cluster.id,
+                cluster.electrodes,
+                cluster.freq_indices,
+                cluster.time_indices,
+                cluster.freq_range,
+                cluster.time_range,
+                cluster_stat,
+                cluster.p_value,
+                cluster.is_significant,
+                cluster.polarity,
+                cluster.pixels,
+            )
+            push!(updated_clusters, updated_cluster)
+        end
+    end
+
+    return return_clusters ? (updated_clusters, cluster_stats) : cluster_stats
+end
+
+function _compute_cluster_statistics_tf(clusters::Vector{TFCluster}, t_matrix::Array{Float64,3}, electrodes::Vector{Symbol})
+    electrode_to_idx = Dict(e => i for (i, e) in enumerate(electrodes))
+    return _compute_cluster_statistics_tf(clusters, t_matrix, electrode_to_idx, return_clusters = true)
+end
