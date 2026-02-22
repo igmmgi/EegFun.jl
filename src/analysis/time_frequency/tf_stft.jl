@@ -373,6 +373,98 @@ function tf_stft(
     )
 end
 
+# Vector version: process each EpochData element
+function tf_stft(data_vec::Vector{<:EpochData}; kwargs...)
+    return [tf_stft(dat; kwargs...) for dat in data_vec]
+end
 
 
+# =============================================================================
+#     BATCH PROCESSING FUNCTIONS
+# =============================================================================
 
+"""
+    tf_stft(file_pattern::String;
+            input_dir::String=pwd(),
+            output_dir::Union{String,Nothing}=nothing,
+            participant_selection::Function=participants(),
+            condition_selection::Function=conditions(),
+            kwargs...)
+
+Batch STFT time-frequency analysis on EpochData files.
+
+Loads `.jld2` files containing `EpochData` (one or more conditions per file),
+runs `tf_stft` on each condition, and saves the results as `Vector{TimeFreqData}`.
+
+# Arguments
+- `file_pattern::String`: Pattern to match files (e.g., "epochs", "epochs_cleaned")
+- `input_dir::String`: Input directory containing JLD2 files (default: current directory)
+- `output_dir::Union{String, Nothing}`: Output directory (default: creates subdirectory)
+- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
+- `condition_selection::Function`: Condition selection predicate (default: `conditions()` for all)
+- All other keyword arguments are forwarded to `tf_stft` (e.g., `frequencies`, `window_length`, `cycles`, `time_steps`, `pad`, `filter_edges`)
+
+# Examples
+```julia
+# Run STFT TF on all epoch files with fixed window
+tf_stft("epochs_cleaned"; window_length=0.3)
+
+# Adaptive window with specific participants
+tf_stft("epochs_cleaned";
+        participant_selection=participants([1, 2, 3]),
+        frequencies=2:1:30, cycles=7, time_steps=0.05)
+
+# Custom output directory
+tf_stft("epochs"; window_length=0.5, output_dir="/data/tf_results")
+```
+"""
+function tf_stft(
+    file_pattern::String;
+    input_dir::String = pwd(),
+    output_dir::Union{String,Nothing} = nothing,
+    participant_selection::Function = participants(),
+    condition_selection::Function = conditions(),
+    kwargs...,
+)
+    log_file = "tf_stft.log"
+    setup_global_logging(log_file)
+
+    try
+        @info "Batch tf_stft started at $(now())"
+        @log_call "tf_stft"
+
+        if (error_msg = _validate_input_dir(input_dir)) !== nothing
+            @minimal_error_throw(error_msg)
+        end
+
+        output_dir = something(output_dir, joinpath(input_dir, "tf_stft_$(file_pattern)"))
+        mkpath(output_dir)
+
+        files = _find_batch_files(file_pattern, input_dir, participant_selection)
+        if isempty(files)
+            @minimal_warning "No JLD2 files found matching pattern '$file_pattern'"
+            return nothing
+        end
+
+        @info "Found $(length(files)) files for tf_stft analysis"
+
+        process_fn =
+            (input_path, output_path) -> begin
+                filename = basename(input_path)
+                data = read_data(input_path)
+                if isnothing(data) || !(data isa Vector{<:EpochData})
+                    return BatchResult(false, filename, "Invalid data type")
+                end
+                data = _condition_select(data, condition_selection)
+                tf_results = tf_stft(data; kwargs...)
+                jldsave(output_path; data = tf_results)
+                return BatchResult(true, filename, "TF STFT analysis complete ($(length(tf_results)) conditions)")
+            end
+
+        results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "TF STFT")
+        _log_batch_summary(results, output_dir)
+
+    finally
+        _cleanup_logging(log_file, output_dir)
+    end
+end

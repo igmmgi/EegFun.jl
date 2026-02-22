@@ -485,3 +485,59 @@ function signal_to_data(
     end
 end
 
+"""
+    create_test_tf_data(; file, participant, condition, condition_name,
+                         n_channels, frequencies, time_points, power_offset, noise, fs)
+
+Create synthetic `TimeFreqData` for testing statistics.
+
+# Keyword Arguments
+- `file::String`: Filename (default: "participant1")
+- `condition::Int`: Condition number (default: 1)
+- `condition_name::String`: Condition label (default: "condition_1")
+- `n_channels::Int`: Number of electrodes (default: 3)
+- `frequencies::Vector{Float64}`: Frequency values in Hz (default: [4.0, 8.0, 12.0, 16.0])
+- `time_points::Vector{Float64}`: Time points in seconds (default: [0.0, 0.1, 0.2, 0.3, 0.4])
+- `power_offset::Float64`: Constant added to power (useful for creating condition differences, default: 0.0)
+- `noise::Float64`: Noise amplitude (default: 0.1)
+- `fs::Int`: Sample rate (default: 256)
+
+# Returns
+- `TimeFreqData`: Synthetic TF data
+"""
+function create_test_tf_data(;
+    file::String = "participant1",
+    condition::Int = 1,
+    condition_name::String = "condition_$condition",
+    n_channels::Int = 3,
+    frequencies::Vector{Float64} = [4.0, 8.0, 12.0, 16.0],
+    time_points::Vector{Float64} = [0.0, 0.1, 0.2, 0.3, 0.4],
+    power_offset::Float64 = 0.0,
+    noise::Float64 = 0.1,
+    fs::Int = 256,
+)
+    channel_labels = _generate_channel_labels(n_channels)
+    n_freqs = length(frequencies)
+    n_time = length(time_points)
+    n_rows = n_freqs * n_time
+
+    # Build time and freq columns (time varies fastest within each freq block)
+    time_col = repeat(time_points, outer = n_freqs)
+    freq_col = repeat(frequencies, inner = n_time)
+
+    # Build power DataFrame
+    power_df = DataFrame(time = time_col, freq = freq_col)
+    for ch in channel_labels
+        power_df[!, ch] = power_offset .+ noise .* randn(n_rows)
+    end
+
+    # Build matching phase DataFrame (zeros)
+    phase_df = DataFrame(time = time_col, freq = freq_col)
+    for ch in channel_labels
+        phase_df[!, ch] = zeros(n_rows)
+    end
+
+    layout = create_test_layout(n_channels = n_channels)
+
+    return TimeFreqData(file, condition, condition_name, power_df, phase_df, layout, fs, :wavelet, nothing, AnalysisInfo())
+end

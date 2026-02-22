@@ -168,6 +168,7 @@ include("plots/erps/plot_topography_stats.jl")
 include("plots/erps/plot_topography.jl")
 
 include("plots/time_frequency/plot_time_frequency.jl")
+include("plots/time_frequency/plot_tf_stats.jl")
 include("plots/time_frequency/plot_spectrum.jl")
 include("plots/time_frequency/plot_power_spectrum.jl")
 

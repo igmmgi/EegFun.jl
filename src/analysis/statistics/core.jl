@@ -431,15 +431,12 @@ end
 # ===================
 
 """
-    prepare_stats(tfs::Vector{TimeFreqData}; design, condition_selection, channel_selection, frequency_selection, interval_selection)
+    prepare_stats(tfs::Vector{TimeFreqData}; design, condition_selection, channel_selection, frequency_selection, interval_selection, baseline_interval, baseline_method)
 
 Prepare TimeFreqData for comparing two conditions in statistical tests.
 
 Organizes TimeFreqData power values into participant × electrode × frequency × time arrays
 for statistical analysis. Validates the design and ensures data consistency across conditions.
-
-Note: Baseline correction should be applied to individual TimeFreqData objects _before_
-calling this function (via `baseline!` on TF data).
 
 # Arguments
 - `tfs::Vector{TimeFreqData}`: TF data containing data for multiple conditions/participants
@@ -448,19 +445,18 @@ calling this function (via `baseline!` on TF data).
 - `channel_selection::Function`: Predicate to filter channels (default: `channels()` - all channels)
 - `frequency_selection::Interval`: Frequency range as tuple (e.g., `(4.0, 30.0)`) or `nothing` for all frequencies
 - `interval_selection::Interval`: Time interval as tuple (e.g., `(0.0, 1.0)`) or `nothing` for all time points
+- `baseline_interval::Union{Nothing,Tuple{Real,Real}}`: Baseline window in seconds (e.g., `(-0.5, -0.1)`). Default: `nothing` (no baseline)
+- `baseline_method::Symbol`: Baseline method (default: `:db`). Options: `:db`, `:absolute`, `:relative`, `:relchange`, `:percent`, `:zscore`
 
 # Returns
 - `TFStatisticalData`: Prepared data structure ready for statistical testing
 
 # Examples
 ```julia
-# Load TF data from files
-tfs = read_all_data(TimeFreqData, "tf_morlet", input_dir)
-
-# Prepare for paired statistical test
+# Prepare with baseline correction
 prepared = prepare_stats(tfs; design=:paired,
-    frequency_selection=(4.0, 30.0),
-    interval_selection=(0.0, 0.8))
+    baseline_interval=(-0.5, -0.1), baseline_method=:db,
+    frequency_selection=(4.0, 30.0))
 
 # Run permutation test
 result = permutation_test(prepared; n_permutations=1000)
@@ -473,6 +469,8 @@ function prepare_stats(
     channel_selection::Function = channels(),
     frequency_selection::Interval = nothing,
     interval_selection::Interval = nothing,
+    baseline_interval::Union{Nothing,Tuple{Real,Real}} = nothing,
+    baseline_method::Symbol = :db,
 )
     # Group all TF data by condition
     tfs_by_condition = group_by_condition(tfs)
@@ -488,6 +486,18 @@ function prepare_stats(
 
     condition1 = tfs_by_condition[selected_cond_nums[1]]
     condition2 = tfs_by_condition[selected_cond_nums[2]]
+
+    # Apply baseline correction if requested (copy first to avoid mutating original data)
+    if !isnothing(baseline_interval)
+        condition1 = [copy(tf) for tf in condition1]
+        condition2 = [copy(tf) for tf in condition2]
+        for tf in condition1
+            tf_baseline!(tf, baseline_interval; method = baseline_method)
+        end
+        for tf in condition2
+            tf_baseline!(tf, baseline_interval; method = baseline_method)
+        end
+    end
 
     # Validate design
     design ∉ (:paired, :independent) && @minimal_error "design must be :paired or :independent, got :$design"
@@ -650,7 +660,7 @@ function _create_tf_grand_average(
     # Build DataFrame
     power_df = DataFrame(time = time_col, freq = freq_col, copycols = false)
     for (e_idx, elec) in enumerate(electrodes)
-        power_df[!, elec] = vec(avg_power[e_idx, :, :])  # [freqs × time] -> vec
+        power_df[!, elec] = vec(avg_power[e_idx, :, :]')  # [freqs × time]' → [time × freqs], vec gives time-fastest
     end
 
     # Create a matching phase DataFrame (all zeros for grand average since phase averages to zero)
