@@ -240,26 +240,10 @@ end
     _tf_power_matrix(tf_data, channel, frequencies, time_points) -> Matrix{Float64}
 
 Extract a [frequencies × time] power matrix from a TimeFreqData's DataFrame.
-Uses Dict-based lookups with rounded keys to avoid floating-point mismatch.
+Delegates to the shared `_tf_df_to_matrix` helper.
 """
 function _tf_power_matrix(tf_data::TimeFreqData, channel::Symbol, frequencies::Vector{Float64}, time_points::Vector{Float64})
-    n_freqs = length(frequencies)
-    n_time = length(time_points)
-    mat = zeros(n_freqs, n_time)
-
-    # Build index maps with rounded keys for robust matching
-    freq_idx = Dict(round(f, digits = 6) => i for (i, f) in enumerate(frequencies))
-    time_idx = Dict(round(t, digits = 6) => i for (i, t) in enumerate(time_points))
-
-    for row in eachrow(tf_data.data_power)
-        fi = get(freq_idx, round(row.freq, digits = 6), nothing)
-        ti = get(time_idx, round(row.time, digits = 6), nothing)
-        if fi !== nothing && ti !== nothing
-            mat[fi, ti] = row[channel]
-        end
-    end
-
-    return mat
+    return _tf_df_to_matrix(tf_data.data_power, channel, frequencies, time_points)
 end
 
 """

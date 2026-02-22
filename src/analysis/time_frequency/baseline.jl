@@ -14,7 +14,7 @@ Apply baseline correction to TimeFreqData in-place.
   - `:relchange`: Relative change ((power - baseline_mean) / baseline_mean) - fractional change 
   - `:normchange`: Normalized change ((power - baseline) / (power + baseline)) - symmetric normalization
   - `:db`: Decibel change (10 * log10(power/baseline_mean)) 
-  - `:vssum`: Variance-stabilized sum ((power - baseline) / (power + baseline)) 
+  - `:vssum`: Alias for `:normchange`
   - `:zscore`: Z-score normalization ((power - baseline_mean) / baseline_std) 
   - `:percent`: Percent change (100 * (power - baseline) / baseline) - convenience alias for relchange × 100
 
@@ -54,102 +54,91 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}
 
     # Get channel columns
     ch_labels = channel_labels(tf_data)
+    n_channels = length(ch_labels)
 
     @info "Applying $(method) baseline correction ($(baseline_interval[1])s to $(baseline_interval[2])s)"
 
-    # Process each channel 
-    for ch in ch_labels
-        # Reshape to freq × time matrix for baseline calculation
-        # DataFrame structure: [freq1_t1, freq2_t1, ..., freqN_t1, freq1_t2, ...]
-        # freqs_unique is already in the correct order (matches DataFrame row order)
-        # So row_idx = (ti - 1) * n_freqs + fi
-        power_mat = zeros(n_freqs, n_times)
+    # Build row index once
+    row_index = _tf_build_row_index(tf_data.data_power)
 
-        for ti = 1:n_times
-            for fi = 1:n_freqs
-                row_idx = (ti - 1) * n_freqs + fi
-                power_mat[fi, ti] = tf_data.data_power[row_idx, ch]
-            end
-        end
-
-        # Compute baseline statistics per frequency
-        # base_mask is a boolean vector for time points
-        # power_mat is (n_freqs, n_times)
-        # We want mean (and std for zscore) across time points in baseline interval for each frequency
-        # Skip NaN values (from edge filtering) when computing baseline statistics 
-        baseline_power = zeros(n_freqs)
-        for fi = 1:n_freqs
-            baseline_values = power_mat[fi, base_mask]
-            baseline_values_no_nan = baseline_values[.!isnan.(baseline_values)]
-            if isempty(baseline_values_no_nan)
-                baseline_power[fi] = NaN  # All baseline values are NaN
-            else
-                baseline_power[fi] = mean(baseline_values_no_nan)
-            end
-        end
-
-        # Apply baseline correction 
-        if method == :absolute
-            # 'absolute': data - meanVals (simple subtraction)
-
-            power_mat .= power_mat .- reshape(baseline_power, n_freqs, 1)
-        elseif method == :relative
-            # 'relative': power / baseline_mean
-
-            min_baseline = max.(baseline_power, 1e-30)
-            power_mat .= power_mat ./ reshape(min_baseline, n_freqs, 1)
-        elseif method == :relchange
-            # 'relchange': (power - baseline_mean) / baseline_mean
-
-            min_baseline = max.(baseline_power, 1e-30)
-            power_mat .= (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ reshape(min_baseline, n_freqs, 1)
-        elseif method == :normchange
-            # 'normchange': (power - baseline) / (power + baseline)
-
-            power_mat .= (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ (power_mat .+ reshape(baseline_power, n_freqs, 1))
-        elseif method == :db
-            # 'db': 10 * log10(power / baseline_mean)
-
-            min_power = max.(baseline_power, 1e-30)
-            power_mat .= 10 .* log10.(max.(power_mat, 1e-30) ./ reshape(min_power, n_freqs, 1))
-        elseif method == :vssum
-            # 'vssum': (power - baseline) / (power + baseline) - same as normchange
-
-            power_mat .= (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ (power_mat .+ reshape(baseline_power, n_freqs, 1))
-        elseif method == :zscore
-            # 'zscore': (power - baseline_mean) / baseline_std
-            # uses population std (divide by N, not N-1): nanstd(data(:,:,baselineTimes),1, 3)
-
-            # Compute standard deviation for each frequency across baseline time points
-            # Skip NaN values (from edge filtering) when computing std 
-            baseline_std = zeros(n_freqs)
-            for fi = 1:n_freqs
-                baseline_values = power_mat[fi, base_mask]
-                baseline_values_no_nan = baseline_values[.!isnan.(baseline_values)]
-                if isempty(baseline_values_no_nan) || length(baseline_values_no_nan) < 2
-                    baseline_std[fi] = NaN  # All baseline values are NaN or insufficient data
-                else
-                    # Use population std (divide by N, not N-1) 
-                    baseline_std[fi] = std(baseline_values_no_nan, corrected = false)
+    # Extract ALL channels into a 3D array [n_channels × n_freqs × n_times] in one pass
+    power_3d = Array{Float64,3}(undef, n_channels, n_freqs, n_times)
+    for (fi, f) in enumerate(freqs_unique)
+        rf = round(f, digits = 6)
+        for (ti, t) in enumerate(times)
+            row = get(row_index, (rf, round(t, digits = 6)), nothing)
+            if row !== nothing
+                for (ci, ch) in enumerate(ch_labels)
+                    power_3d[ci, fi, ti] = tf_data.data_power[row, ch]
                 end
+            else
+                power_3d[:, fi, ti] .= NaN
             end
-            # Avoid division by zero - use minimum threshold for std
-            min_std = max.(baseline_std, 1e-30)
-            power_mat .= (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ reshape(min_std, n_freqs, 1)
-        elseif method == :percent
-            # Convenience alias: percent change = relchange × 100
-
-            min_baseline = max.(baseline_power, 1e-30)
-            power_mat .= 100 .* (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ reshape(min_baseline, n_freqs, 1)
-        else
-            error("Unknown baseline method: $method. Use :absolute, :relative, :relchange, :normchange, :db, :vssum, :zscore, or :percent")
         end
+    end
 
-        # Write back to DataFrame (using same indexing)
-        for ti = 1:n_times
+    # Compute baseline statistics per channel × frequency
+    # baseline_mean: [n_channels × n_freqs]
+    baseline_mean = zeros(n_channels, n_freqs)
+    baseline_std_mat = nothing  # only computed for :zscore
+
+    for ci = 1:n_channels
+        for fi = 1:n_freqs
+            vals = @view power_3d[ci, fi, base_mask]
+            valid = vals[.!isnan.(vals)]
+            baseline_mean[ci, fi] = isempty(valid) ? NaN : mean(valid)
+        end
+    end
+
+    if method == :zscore
+        baseline_std_mat = zeros(n_channels, n_freqs)
+        for ci = 1:n_channels
             for fi = 1:n_freqs
-                row_idx = (ti - 1) * n_freqs + fi
-                tf_data.data_power[row_idx, ch] = power_mat[fi, ti]
+                vals = @view power_3d[ci, fi, base_mask]
+                valid = vals[.!isnan.(vals)]
+                baseline_std_mat[ci, fi] = (isempty(valid) || length(valid) < 2) ? NaN : std(valid, corrected = false)
+            end
+        end
+    end
+
+    # Apply baseline correction to entire 3D array at once (no per-channel loop)
+    # Reshape baseline_mean to [n_channels × n_freqs × 1] for broadcasting over time
+    bm = reshape(baseline_mean, n_channels, n_freqs, 1)
+
+    if method == :absolute
+        power_3d .-= bm
+    elseif method == :relative
+        safe_bm = max.(bm, 1e-30)
+        power_3d ./= safe_bm
+    elseif method == :relchange
+        safe_bm = max.(bm, 1e-30)
+        power_3d .= (power_3d .- bm) ./ safe_bm
+    elseif method == :normchange || method == :vssum
+        power_3d .= (power_3d .- bm) ./ (power_3d .+ bm)
+    elseif method == :db
+        safe_bm = max.(bm, 1e-30)
+        power_3d .= 10 .* log10.(max.(power_3d, 1e-30) ./ safe_bm)
+    elseif method == :zscore
+        safe_std = reshape(max.(baseline_std_mat, 1e-30), n_channels, n_freqs, 1)
+        power_3d .= (power_3d .- bm) ./ safe_std
+    elseif method == :percent
+        safe_bm = max.(bm, 1e-30)
+        power_3d .= 100 .* (power_3d .- bm) ./ safe_bm
+    else
+        error(
+            "Unknown baseline method: $method. Use :absolute, :relative, :relchange, :normchange, :db, :vssum (alias for :normchange), :zscore, or :percent",
+        )
+    end
+
+    # Write all channels back to DataFrame in one pass
+    for (fi, f) in enumerate(freqs_unique)
+        rf = round(f, digits = 6)
+        for (ti, t) in enumerate(times)
+            row = get(row_index, (rf, round(t, digits = 6)), nothing)
+            if row !== nothing
+                for (ci, ch) in enumerate(ch_labels)
+                    tf_data.data_power[row, ch] = power_3d[ci, fi, ti]
+                end
             end
         end
     end

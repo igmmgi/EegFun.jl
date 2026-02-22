@@ -46,6 +46,10 @@ using LIBSVM
 # TODO: consider using Threads.@threads for parallel processing?
 # using Base.Threads
 
+# Public API declarations
+# Marks names as public without exporting into the user's namespace.
+include("public_api.jl")
+
 # Core types
 include("types/core.jl")
 include("types/pipeline.jl")
@@ -106,6 +110,7 @@ include("analysis/erps/realign.jl")
 
 # Statistics submodules (loaded in dependency order)
 include("analysis/statistics/core.jl")
+include("analysis/statistics/statistics_tf_helpers.jl")
 include("analysis/statistics/thresholding.jl")
 include("analysis/statistics/clustering.jl")
 include("analysis/statistics/permutations.jl")
@@ -116,6 +121,7 @@ include("analysis/statistics/statistics.jl")
 include("analysis/time_frequency/tf_morlet.jl")
 include("analysis/time_frequency/tf_stft.jl")
 include("analysis/time_frequency/tf_multitaper.jl")
+include("analysis/time_frequency/tf_utils.jl")
 include("analysis/time_frequency/baseline.jl")
 include("analysis/time_frequency/utils/utils.jl")
 
