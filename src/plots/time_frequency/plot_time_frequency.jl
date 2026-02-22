@@ -66,29 +66,8 @@ function plot_time_frequency(
     n_times = length(times)
     n_freqs = length(freqs_vec)
 
-    # Always use lookup approach to be robust to DataFrame structure
-    # Create a lookup dictionary: (time, freq) -> power value
-    power_dict = Dict{Tuple{Float64,Float64},Float64}()
-    for row in eachrow(tf_plot.data_power)
-        key = (row.time, row.freq)
-        if !haskey(power_dict, key)  # Take first match if duplicates exist
-            power_dict[key] = row[channel]
-        end
-    end
-
-    # Build power matrix: rows = frequencies, columns = times
-    # power_mat[fi, ti] means: row fi (frequency), column ti (time)
-    power_mat = zeros(n_freqs, n_times)
-    for (ti, t) in enumerate(times)
-        for (fi, f) in enumerate(freqs_vec)
-            key = (t, f)
-            if haskey(power_dict, key)
-                power_mat[fi, ti] = power_dict[key]
-            else
-                power_mat[fi, ti] = NaN
-            end
-        end
-    end
+    # Extract power matrix using shared helper: [n_freqs × n_time]
+    power_mat = _tf_df_to_matrix(tf_plot.data_power, channel, freqs_vec, times)
 
     # Transpose for Makie heatmap (expects n_times × n_freqs)
     # After transpose: rows = times, columns = frequencies
