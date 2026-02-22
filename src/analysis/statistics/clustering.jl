@@ -24,8 +24,13 @@ conn = _build_connectivity_matrix(electrodes, layout, :spatiotemporal)
 function _build_connectivity_matrix(electrodes::Vector{Symbol}, layout::Layout, cluster_type::Symbol)
     n_electrodes = length(electrodes)
 
-    # Build spatial connectivity for :spatial and :spatiotemporal cases
-    if cluster_type in (:spatial, :spatiotemporal)
+    # Types that use spatial connectivity
+    uses_spatial = cluster_type in (:spatial, :spatiotemporal, :full)
+
+    # Types that don't use spatial connectivity (temporal/spectral connections handled in BFS)
+    no_spatial = cluster_type in (:temporal, :spectral, :spectrotemporal)
+
+    if uses_spatial
         if isnothing(layout.neighbours)
             @minimal_warning "Layout.neighbours is not set. Computing with default distance criterion (0.25)."
             get_neighbours_xy!(layout, 0.25)
@@ -58,13 +63,12 @@ function _build_connectivity_matrix(electrodes::Vector{Symbol}, layout::Layout, 
         # Create sparse matrix and return
         return sparse(I, J, true, n_electrodes, n_electrodes)
 
-    elseif cluster_type == :temporal
-        # Temporal clustering doesn't use spatial connectivity
-        # Return empty sparse matrix (temporal connections handled in BFS)
+    elseif no_spatial
+        # No spatial connectivity needed - return empty sparse matrix
         return sparse(Int[], Int[], Bool[], n_electrodes, n_electrodes)
 
     else
-        error("cluster_type must be :spatial, :temporal, or :spatiotemporal, got :$cluster_type")
+        error("cluster_type must be :spatial, :temporal, :spectral, :spatiotemporal, :spectrotemporal, or :full, got :$cluster_type")
     end
 end
 

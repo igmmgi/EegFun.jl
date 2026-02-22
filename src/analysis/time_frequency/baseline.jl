@@ -55,6 +55,8 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}
     # Get channel columns
     ch_labels = channel_labels(tf_data)
 
+    @info "Applying $(method) baseline correction ($(baseline_interval[1])s to $(baseline_interval[2])s)"
+
     # Process each channel 
     for ch in ch_labels
         # Reshape to freq × time matrix for baseline calculation
@@ -89,35 +91,35 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}
         # Apply baseline correction 
         if method == :absolute
             # 'absolute': data - meanVals (simple subtraction)
-            @info "Applying absolute baseline correction"
+
             power_mat .= power_mat .- reshape(baseline_power, n_freqs, 1)
         elseif method == :relative
             # 'relative': power / baseline_mean
-            @info "Applying relative baseline correction"
+
             min_baseline = max.(baseline_power, 1e-30)
             power_mat .= power_mat ./ reshape(min_baseline, n_freqs, 1)
         elseif method == :relchange
             # 'relchange': (power - baseline_mean) / baseline_mean
-            @info "Applying relchange baseline correction"
+
             min_baseline = max.(baseline_power, 1e-30)
             power_mat .= (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ reshape(min_baseline, n_freqs, 1)
         elseif method == :normchange
             # 'normchange': (power - baseline) / (power + baseline)
-            @info "Applying normchange baseline correction"
+
             power_mat .= (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ (power_mat .+ reshape(baseline_power, n_freqs, 1))
         elseif method == :db
             # 'db': 10 * log10(power / baseline_mean)
-            @info "Applying db baseline correction"
+
             min_power = max.(baseline_power, 1e-30)
             power_mat .= 10 .* log10.(max.(power_mat, 1e-30) ./ reshape(min_power, n_freqs, 1))
         elseif method == :vssum
             # 'vssum': (power - baseline) / (power + baseline) - same as normchange
-            @info "Applying vssum baseline correction"
+
             power_mat .= (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ (power_mat .+ reshape(baseline_power, n_freqs, 1))
         elseif method == :zscore
             # 'zscore': (power - baseline_mean) / baseline_std
             # uses population std (divide by N, not N-1): nanstd(data(:,:,baselineTimes),1, 3)
-            @info "Applying z-score baseline correction"
+
             # Compute standard deviation for each frequency across baseline time points
             # Skip NaN values (from edge filtering) when computing std 
             baseline_std = zeros(n_freqs)
@@ -136,7 +138,7 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}
             power_mat .= (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ reshape(min_std, n_freqs, 1)
         elseif method == :percent
             # Convenience alias: percent change = relchange × 100
-            @info "Applying percent baseline correction (convenience alias for relchange × 100)"
+
             min_baseline = max.(baseline_power, 1e-30)
             power_mat .= 100 .* (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ reshape(min_baseline, n_freqs, 1)
         else

@@ -287,3 +287,9 @@ function Base.show(io::IO, result::TFAnalyticResult)
     println(io, "└─ Significant points: $n_sig_pos positive, $n_sig_neg negative")
 end
 
+"""
+    TFStatsResult
+
+Union type for TF statistical results, used for dispatch in plotting functions.
+"""
+const TFStatsResult = Union{TFClusterPermutationResult,TFAnalyticResult}
