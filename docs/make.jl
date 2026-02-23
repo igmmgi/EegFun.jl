@@ -45,10 +45,7 @@ pages = [
             "Channel Summary" => "demos/preprocessing/channel_summary.md",
             "ICA" => "demos/preprocessing/ica.md",
         ],
-        "Artifacts" => [
-            "Artifacts" => "demos/artifacts/artifacts.md",
-            "Artifact Detection" => "demos/artifacts/artifact_detection.md",
-        ],
+        "Artifacts" => ["Artifacts" => "demos/artifacts/artifacts.md", "Artifact Detection" => "demos/artifacts/artifact_detection.md"],
         "ERP Analysis" => [
             "ERP Measurements" => "demos/erp/erp_measurements.md",
             "Global Field Power" => "demos/erp/gfp.md",
@@ -85,11 +82,9 @@ pages = [
             "Plot Decoding" => "demos/plotting/plot_decoding.md",
             "Plot RSA" => "demos/plotting/plot_rsa.md",
             "Plot Statistics" => "demos/plotting/plot_statistics.md",
-            "Plot Time-Frequency" => "demos/plotting/plot_time_frequency.md",
+            "Plot Time-Frequency" => "demos/plotting/plot_tf.md",
         ],
-        "Workflows" => [
-            "Preprocessing Workflow" => "demos/workflows/preprocessing_workflow.md",
-        ],
+        "Workflows" => ["Preprocessing Workflow" => "demos/workflows/preprocessing_workflow.md"],
         "Time-Frequency" => [
             "TF Morlet" => "demos/time_frequency/tf_morlet.md",
             "TF Multitaper" => "demos/time_frequency/tf_multitaper.md",

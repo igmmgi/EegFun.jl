@@ -27,46 +27,39 @@ tf_data = EegFun.tf_morlet(epochs, 2:2:60)
 #######################################################################
 
 # plot first available channel
-EegFun.plot_time_frequency(tf_data)
+EegFun.plot_tf(tf_data)
 
 #######################################################################
 # 3. SPECIFIC CHANNEL
 #######################################################################
 
-EegFun.plot_time_frequency(tf_data, :Cz)
+EegFun.plot_tf(tf_data, channel_selection = EegFun.channels(:Cz))
 
 #######################################################################
 # 4. WITH BASELINE CORRECTION
 #######################################################################
 
 # apply dB baseline on the fly
-EegFun.plot_time_frequency(tf_data, :Cz,
-    baseline_interval = (-0.3, 0.0),
-    baseline_method = :db
-)
+EegFun.plot_tf(tf_data, channel_selection = EegFun.channels(:Cz), baseline_interval = (-0.3, 0.0), baseline_method = :db)
 
 # percentage change baseline
-EegFun.plot_time_frequency(tf_data, :Cz,
-    baseline_interval = (-0.3, 0.0),
-    baseline_method = :percent
-)
+EegFun.plot_tf(tf_data, channel_selection = EegFun.channels(:Cz), baseline_interval = (-0.3, 0.0), baseline_method = :percent)
 
 #######################################################################
 # 5. LOG-SCALED FREQUENCY AXIS
 #######################################################################
 
-EegFun.plot_time_frequency(tf_data, :Cz,
-    baseline_interval = (-0.3, 0.0),
-    ylogscale = true
-)
+EegFun.plot_tf(tf_data, channel_selection = EegFun.channels(:Cz), baseline_interval = (-0.3, 0.0), ylogscale = true)
 
 #######################################################################
 # 6. CUSTOM COLOUR MAP AND RANGE
 #######################################################################
 
-EegFun.plot_time_frequency(tf_data, :Cz,
+EegFun.plot_tf(
+    tf_data,
+    channel_selection = EegFun.channels(:Cz),
     baseline_interval = (-0.3, 0.0),
     colormap = :RdBu,
     colorrange = (-3.0, 3.0),
-    title = "Alpha/Beta ERD"
+    title = "Alpha/Beta ERD",
 )

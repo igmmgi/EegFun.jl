@@ -3,18 +3,22 @@ Time-frequency plotting functions for visualizing TimeFreqData.
 """
 
 """
-    plot_time_frequency(tf_data::TimeFreqData, channel::Symbol;
-                        baseline_interval=nothing, baseline_method=:db,
-                        colormap=:viridis, colorrange=nothing,
-                        title=nothing, colorbar=true, ylogscale=false)
+    plot_tf(tf_data::TimeFreqData;
+            channel_selection::Function = channels(),
+            baseline_interval=nothing, baseline_method=:db,
+            colormap=:viridis, colorrange=nothing,
+            title=nothing, colorbar=true, ylogscale=false)
 
 Plot time-frequency data for a specific channel.
 
 # Arguments
 - `tf_data::TimeFreqData`: Time-frequency data
-- `channel::Symbol`: Channel to plot
 
 # Keyword Arguments
+- `channel_selection::Function`: Channel selection predicate (default: all channels).
+  The first selected channel is plotted.
+  - Example: `channel_selection=channels(:Cz)` for a specific channel
+  - Example: `channel_selection=channels([:Cz, :Pz])` plots the first match
 - `baseline_interval`: Optional baseline interval (start, stop) in seconds
 - `baseline_method`: Baseline method if baseline_interval provided
 - `colormap`: Colormap (default: :viridis)
@@ -28,12 +32,12 @@ Plot time-frequency data for a specific channel.
 
 # Example
 ```julia
-fig, ax = plot_time_frequency(tf_data, :Cz; baseline_interval=(-0.3, 0.0), ylogscale=true)
+fig, ax = plot_tf(tf_data; channel_selection=channels(:Cz), baseline_interval=(-0.3, 0.0), ylogscale=true)
 ```
 """
-function plot_time_frequency(
-    tf_data::TimeFreqData,
-    channel::Symbol;
+function plot_tf(
+    tf_data::TimeFreqData;
+    channel_selection::Function = channels(),
     baseline_interval::Union{Nothing,Tuple{Real,Real}} = nothing,
     baseline_method::Symbol = :db,
     colormap = :viridis,
@@ -55,10 +59,12 @@ function plot_time_frequency(
         tf_plot = tf_data
     end
 
-    # Check channel exists
-    if !(channel in channel_labels(tf_plot))
-        error("Channel $channel not found. Available: $(channel_labels(tf_plot))")
-    end
+    # Resolve channel via channel_selection predicate
+    all_channels = channel_labels(tf_plot)
+    selected_mask = channel_selection(all_channels)
+    selected_channels = all_channels[selected_mask]
+    isempty(selected_channels) && error("No channels matched. Available: $(all_channels)")
+    channel = first(selected_channels)
 
     # Get unique times and frequencies (sorted)
     times = sort(unique(tf_plot.data_power.time))
@@ -95,10 +101,6 @@ function plot_time_frequency(
     end
 
     # Plot heatmap
-    # Makie heatmap!(ax, x, y, data) expects data to be (length(y), length(x))
-    # x = times (n_times), y = freqs_vec (n_freqs)
-    # So data should be (n_freqs, n_times)
-    # After transpose, power_mat is (n_times, n_freqs), which is what Makie expects
     # Set NaN color to transparent so edge-filtered regions are not displayed
     hm = heatmap!(ax, times, freqs_vec, power_mat, colormap = colormap, colorrange = colorrange, nan_color = :transparent)
 
@@ -128,10 +130,4 @@ function plot_time_frequency(
 
     display(fig)
     return fig, ax
-end
-
-# Convenience: plot first channel if not specified
-function plot_time_frequency(tf_data::TimeFreqData; kwargs...)
-    ch = channel_labels(tf_data)[1]
-    return plot_time_frequency(tf_data, ch; kwargs...)
 end

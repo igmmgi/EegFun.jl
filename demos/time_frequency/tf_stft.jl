@@ -26,16 +26,16 @@ EegFun.plot_frequency_spectrum(spectrum, channel_selection = EegFun.channels([:C
 
 # tf_stft_fixed
 tf_data = EegFun.tf_stft(epochs_synthetic, frequencies = 1:1:40, window_length = 0.5)
-EegFun.plot_time_frequency(tf_data, ylogscale = false)
+EegFun.plot_tf(tf_data, ylogscale = false)
 
 tf_data = EegFun.tf_stft(epochs_synthetic, frequencies = 1:1:40, window_length = 0.5)
-EegFun.plot_time_frequency(tf_data, ylogscale = false)
+EegFun.plot_tf(tf_data, ylogscale = false)
 
 tf_data = EegFun.tf_stft(epochs_synthetic, frequencies = logrange(1, 40, length = 30), window_length = 0.5)
-EegFun.plot_time_frequency(tf_data, ylogscale = true)
+EegFun.plot_tf(tf_data, ylogscale = true)
 
 tf_data = EegFun.tf_stft(epochs_synthetic, frequencies = logrange(1, 40, length = 30), window_length = 0.5)
-EegFun.plot_time_frequency(tf_data, ylogscale = true)
+EegFun.plot_tf(tf_data, ylogscale = true)
 
 #######################################################################
 @info EegFun.section("TEST 2: Cohen Data Chapter 13")
@@ -46,57 +46,22 @@ data_cohen = EegFun.read_data("./resources/data/julia/tf_test_epochs.jld2");
 # Figure 13.11 A)
 tf_data =
     EegFun.tf_stft(data_cohen, frequencies = logrange(2, 80, length = 100), window_length = 0.5, time_steps = 0.001, filter_edges = true)
-EegFun.plot_time_frequency(
-    tf_data;
-    baseline_interval = (-0.5, -0.2),
-    baseline_method = :db,
-    colorrange = (-3, 3),
-    ylogscale = true,
-    colormap = :jet,
-)
+EegFun.plot_tf(tf_data; baseline_interval = (-0.5, -0.2), baseline_method = :db, colorrange = (-3, 3), ylogscale = true, colormap = :jet)
 
 # Figure 13.11 A)
 tf_data = EegFun.tf_stft(data_cohen, frequencies = 2:1:80, cycles = 7, time_steps = 0.005, filter_edges = false)
-EegFun.plot_time_frequency(
-    tf_data;
-    baseline_interval = (-0.5, -0.2),
-    baseline_method = :db,
-    colorrange = (-3, 3),
-    ylogscale = false,
-    colormap = :jet,
-)
+EegFun.plot_tf(tf_data; baseline_interval = (-0.5, -0.2), baseline_method = :db, colorrange = (-3, 3), ylogscale = false, colormap = :jet)
 
 # Figure 13.14 A)
 tf_data =
     EegFun.tf_stft(data_cohen, frequencies = logrange(2, 80, length = 30), window_length = 0.5, time_steps = 0.005, filter_edges = true)
-EegFun.plot_time_frequency(
-    tf_data;
-    baseline_interval = (-0.5, -0.2),
-    baseline_method = :db,
-    colorrange = (-3, 3),
-    ylogscale = true,
-    colormap = :jet,
-)
+EegFun.plot_tf(tf_data; baseline_interval = (-0.5, -0.2), baseline_method = :db, colorrange = (-3, 3), ylogscale = true, colormap = :jet)
 
 # Figure 13.14 B)
 tf_data =
     EegFun.tf_stft(data_cohen, frequencies = logrange(2, 80, length = 30), window_length = 0.5, time_steps = 0.005, filter_edges = true)
-EegFun.plot_time_frequency(
-    tf_data;
-    baseline_interval = (-0.5, -0.2),
-    baseline_method = :db,
-    colorrange = (-3, 3),
-    ylogscale = true,
-    colormap = :jet,
-)
+EegFun.plot_tf(tf_data; baseline_interval = (-0.5, -0.2), baseline_method = :db, colorrange = (-3, 3), ylogscale = true, colormap = :jet)
 
 # Figure 13.14 C)
 tf_data = EegFun.tf_stft(data_cohen, frequencies = logrange(2, 80, length = 30), cycles = 5, time_steps = 0.005, filter_edges = true)
-EegFun.plot_time_frequency(
-    tf_data;
-    baseline_interval = (-0.5, -0.2),
-    baseline_method = :db,
-    colorrange = (-3, 3),
-    ylogscale = true,
-    colormap = :jet,
-)
+EegFun.plot_tf(tf_data; baseline_interval = (-0.5, -0.2), baseline_method = :db, colorrange = (-3, 3), ylogscale = true, colormap = :jet)

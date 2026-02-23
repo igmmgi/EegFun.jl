@@ -83,7 +83,7 @@ function _plot_time_frequency(gui_state)
         selected_channels = _gui_selected_channels(gui_state)
 
         @async begin
-            plot_time_frequency(data; channel_selection = selected_channels, xlim = gui_state.xlim[], colorbar_limits = gui_state.zlim[])
+            plot_tf(data; channel_selection = selected_channels, xlim = gui_state.xlim[], colorbar_limits = gui_state.zlim[])
         end
     catch e
         _handle_plot_error(e, "Time-Frequency")

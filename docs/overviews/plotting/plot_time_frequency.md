@@ -2,7 +2,7 @@ This demo shows how to plot time-frequency decomposition results as heatmaps.
 
 ### When to Use
 
-Use `plot_time_frequency` to visualise the output of `tf_morlet`, `tf_multitaper`, or `tf_stft` — the three time-frequency decomposition methods in EegFun.
+Use `plot_tf` to visualise the output of `tf_morlet`, `tf_multitaper`, or `tf_stft` — the three time-frequency decomposition methods in EegFun.
 
 ### Key Parameters
 
