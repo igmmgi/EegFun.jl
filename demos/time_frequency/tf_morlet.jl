@@ -50,21 +50,62 @@ EegFun.plot_tf(tf_data, ylogscale = true)
 data_cohen = EegFun.read_data("./resources/data/julia/tf_test_epochs.jld2");
 
 # Figure 13.11 A)
-tf_data = EegFun.tf_morlet(data_cohen, frequencies = range(2, 80, length = 80), cycles = 3, filter_edges = true)
-EegFun.plot_tf(tf_data; baseline_interval = (-0.5, -0.2), baseline_method = :db, colorrange = (-3, 3), ylogscale = false, colormap = :jet)
+tf_data = EegFun.tf_morlet(data_cohen, frequencies = logrange(2, 80, length = 80), cycles = (3, 7), filter_edges = true)
+EegFun.plot_tf(
+    tf_data;
+    baseline_interval = (-0.5, -0.2),
+    baseline_method = :db,
+    xlim = (-0.2, 1.0),
+    colorrange = (-3, 3),
+    ylogscale = true,
+    colormap = :jet,
+)
 
-# Figure 13.11 A)
-tf_data = EegFun.tf_morlet(data_cohen, frequencies = 2:1:80, cycles = (3, 10))
-EegFun.plot_tf(tf_data; baseline_interval = (-0.5, -0.2), baseline_method = :db, colorrange = (-3, 3), ylogscale = false, colormap = :jet)
+# Figure 13.11 B)
+tf_data = EegFun.tf_morlet(data_cohen, frequencies = 2:1:80, cycles = (3, 7))
+EegFun.plot_tf(
+    tf_data;
+    baseline_interval = (-0.5, -0.2),
+    baseline_method = :db,
+    xlim = (-0.2, 1.0),
+    colorrange = (-3, 3),
+    ylogscale = false,
+    colormap = :jet,
+)
 
 # Figure 13.14 A)
-tf_data = EegFun.tf_morlet(data_cohen, frequencies = logrange(2, 80, length = 30), cycles = 3)
-EegFun.plot_tf(tf_data; baseline_interval = (-0.5, -0.2), baseline_method = :db, colorrange = (-3, 3), ylogscale = true, colormap = :jet)
+tf_data = EegFun.tf_morlet(data_cohen, frequencies = logrange(2, 80, length = 40), cycles = 3)
+EegFun.plot_tf(
+    tf_data;
+    baseline_interval = (-0.5, -0.2),
+    baseline_method = :db,
+    xlim = (-0.2, 1.0),
+    colorrange = (-3, 3),
+    ylogscale = true,
+    colormap = :jet,
+)
 
 # Figure 13.14 B)
-tf_data = EegFun.tf_morlet(data_cohen, frequencies = logrange(2, 80, length = 30), cycles = 10)
-EegFun.plot_tf(tf_data; baseline_interval = (-0.5, -0.2), baseline_method = :db, colorrange = (-3, 3), ylogscale = true, colormap = :jet)
+tf_data = EegFun.tf_morlet(data_cohen, frequencies = logrange(2, 80, length = 40), cycles = 10, filter_edges = false)
+EegFun.plot_tf(
+    tf_data;
+    baseline_interval = (-0.5, -0.2),
+    baseline_method = :db,
+    xlim = (-0.2, 1.0),
+    colorrange = (-3, 3),
+    ylogscale = true,
+    colormap = :jet,
+)
 
 # Figure 13.14 C)
-tf_data = EegFun.tf_morlet(data_cohen, frequencies = logrange(2, 80, length = 30), cycles = (3, 10))
-EegFun.plot_tf(tf_data; baseline_interval = (-0.5, -0.2), baseline_method = :db, colorrange = (-3, 3), ylogscale = true, colormap = :jet)
+tf_data = EegFun.tf_morlet(data_cohen, frequencies = logrange(2, 80, length = 40), cycles = (3, 10))
+EegFun.plot_tf(
+    tf_data;
+    baseline_interval = (-0.5, -0.2),
+    baseline_method = :db,
+    xlim = (-0.2, 1.0),
+    colorrange = (-3, 3),
+    ylogscale = true,
+    colormap = :jet,
+    interpolate = true,
+)
