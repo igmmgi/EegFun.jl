@@ -123,6 +123,7 @@ include("analysis/time_frequency/tf_stft.jl")
 include("analysis/time_frequency/tf_multitaper.jl")
 include("analysis/time_frequency/tf_utils.jl")
 include("analysis/time_frequency/baseline.jl")
+include("analysis/time_frequency/grand_average.jl")
 include("analysis/time_frequency/utils/utils.jl")
 
 # decoding analysis via libsvm
@@ -173,7 +174,7 @@ include("plots/erps/plot_erp_stats.jl")
 include("plots/erps/plot_topography_stats.jl")
 include("plots/erps/plot_topography.jl")
 
-include("plots/time_frequency/plot_time_frequency.jl")
+include("plots/time_frequency/plot_tf.jl")
 include("plots/time_frequency/plot_tf_stats.jl")
 include("plots/time_frequency/plot_spectrum.jl")
 include("plots/time_frequency/plot_power_spectrum.jl")

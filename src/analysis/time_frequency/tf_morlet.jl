@@ -121,7 +121,7 @@ function tf_morlet(
         two_pi_freq = two_pi * freq_val
         inv_2sigma2 = 1.0 / (2 * sigma^2)
         @inbounds @simd for i = 1:wl
-            t = (-wl / 2 + i - 1) * inv_sr
+            t = (i - 1 - hw) * inv_sr
             t2 = t * t
             wavelet_padded[i] = A * exp(im * two_pi_freq * t) * exp(-t2 * inv_2sigma2)
         end

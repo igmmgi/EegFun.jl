@@ -7,447 +7,447 @@
 # =====================
 # Types
 # =====================
-publicAbstractDataState
-publicAnalysisData
-publicAnalysisSettings
-publicAnalyticResult
-publicArtifactComponents
-publicArtifactInfo
-publicBaselineInfo
-publicBatchConfig
-publicBatchResult
-publicChannelRepairInfo
-publicChannelState
-publicCluster
-publicClusterInfo
-publicClusters
-publicComponent
-publicConfigParameter
-publicContinuousData
-publicContinuousDataState
-publicContinuousRepairInfo
-publicDataBrowserState
-publicDecodedData
-publicDecodingParameters
-publicDecodingStatisticsResult
-publicEegConfig
-publicEegData
-publicEegFunData
-publicEogConfig
-publicEpochData
-publicEpochedDataState
-publicEpochInfo
-publicEpochRejectionInfo
-publicEpochRejectionState
-publicEpochRepairInfo
-publicErpData
-publicErpMeasurementsResult
-publicExtraChannelInfo
-publicFilterConfig
-publicFilterInfo
-publicFilterSection
-publicFilterState
-publicIcaComponentState
-publicIcaConfig
-publicIcaPrms
-publicInfoIca
-publicInterval
-publicLayout
-publicLoggingState
-publicMarker
-publicMasks
-publicMultiDataFrameEeg
-publicNeighbours
-publicNoiseCeiling
-publicPermutationDistribution
-publicPermutationResult
-publicPipelineTemplateOptions
-publicPlotHelpInfo
-publicPlotLayout
-publicPreprocessConfig
-publicRejection
-publicRsaData
-publicSelectionState
-publicSharedSelectionState
-publicSingleDataFrameEeg
-publicSpectrumData
-publicStatisticalData
-publicStatMatrix
-publicStatsResult
-publicTemporalCluster
-publicTestInfo
-publicTFAnalysisData
-publicTFAnalyticResult
-publicTFCluster
-publicTFClusterPermutationResult
-publicTFClusters
-publicTFMasks
-publicTFStatisticalData
-publicTFStatMatrix
-publicTFStatsResult
-publicTimeFreqData
-publicTimeFreqEpochData
-publicToggleConfig
-publicTopoSelectionState
-publicTriggerInfo
-publicTTestResult
-publicUIStyle
-publicViewState
-publicWorkArrays
-publicZScoreRejectionInfo
+public AbstractDataState
+public AnalysisData
+public AnalysisSettings
+public AnalyticResult
+public ArtifactComponents
+public ArtifactInfo
+public BaselineInfo
+public BatchConfig
+public BatchResult
+public ChannelRepairInfo
+public ChannelState
+public Cluster
+public ClusterInfo
+public Clusters
+public Component
+public ConfigParameter
+public ContinuousData
+public ContinuousDataState
+public ContinuousRepairInfo
+public DataBrowserState
+public DecodedData
+public DecodingParameters
+public DecodingStatisticsResult
+public EegConfig
+public EegData
+public EegFunData
+public EogConfig
+public EpochData
+public EpochedDataState
+public EpochInfo
+public EpochRejectionInfo
+public EpochRejectionState
+public EpochRepairInfo
+public ErpData
+public ErpMeasurementsResult
+public ExtraChannelInfo
+public FilterConfig
+public FilterInfo
+public FilterSection
+public FilterState
+public IcaComponentState
+public IcaConfig
+public IcaPrms
+public InfoIca
+public Interval
+public Layout
+public LoggingState
+public Marker
+public Masks
+public MultiDataFrameEeg
+public Neighbours
+public NoiseCeiling
+public PermutationDistribution
+public PermutationResult
+public PipelineTemplateOptions
+public PlotHelpInfo
+public PlotLayout
+public PreprocessConfig
+public Rejection
+public RsaData
+public SelectionState
+public SharedSelectionState
+public SingleDataFrameEeg
+public SpectrumData
+public StatisticalData
+public StatMatrix
+public StatsResult
+public TemporalCluster
+public TestInfo
+public TFAnalysisData
+public TFAnalyticResult
+public TFCluster
+public TFClusterPermutationResult
+public TFClusters
+public TFMasks
+public TFStatisticalData
+public TFStatMatrix
+public TFStatsResult
+public TimeFreqData
+public TimeFreqEpochData
+public ToggleConfig
+public TopoSelectionState
+public TriggerInfo
+public TTestResult
+public UIStyle
+public ViewState
+public WorkArrays
+public ZScoreRejectionInfo
 
 # =====================
 # Data access and utilities
 # =====================
-publicall_data
-publicchannel_data
-publicchannel_labels
-publicchannels
-publicconditions
-publicextra_data
-publicfile_name
-publicgroup_by_condition
-publichead
-publicmeta_data
-publicn_values
-publicparticipants
-publicsection
-publicsubset
-publicsubset_bad_data
-publictail
-publictimes
-publicto_data_frame
-publicviewer
+public all_data
+public channel_data
+public channel_labels
+public channels
+public conditions
+public extra_data
+public file_name
+public group_by_condition
+public head
+public meta_data
+public n_values
+public participants
+public section
+public subset
+public subset_bad_data
+public tail
+public times
+public to_data_frame
+public viewer
 
 # =====================
 # I/O
 # =====================
-publiccheck_files_exist
-publicfind_file
-publicget_files
-publicread_all_data
-publicread_config
-publicread_csv
-publicread_data
-publicread_eeglab
-publicread_fieldtrip
-publicread_layout
-publicread_raw_data
+public check_files_exist
+public find_file
+public get_files
+public read_all_data
+public read_config
+public read_csv
+public read_data
+public read_eeglab
+public read_fieldtrip
+public read_layout
+public read_raw_data
 
 # =====================
 # Layout
 # =====================
-publicaverage_number_of_neighbours
-publiccheck_channel_neighbors
-publicclear_neighbours
-publiccreate_custom_layout
-publiccreate_layout
-publicget_neighbours_xy
-publicget_neighbours_xyz
-publichas_valid_coordinates
-publicpolar_to_cartesian_xy
-publicpolar_to_cartesian_xyz
-publicprint_layout_neighbours
-publicsubset_layout
-publicsubset_layout!
-publicvalidate_layout
+public average_number_of_neighbours
+public check_channel_neighbors
+public clear_neighbours
+public create_custom_layout
+public create_layout
+public get_neighbours_xy
+public get_neighbours_xyz
+public has_valid_coordinates
+public polar_to_cartesian_xy
+public polar_to_cartesian_xyz
+public print_layout_neighbours
+public subset_layout
+public subset_layout!
+public validate_layout
 
 # =====================
 # Preprocessing
 # =====================
-publicaverage_epochs
-publicbaseline
-publicbaseline!
-publiccreate_highpass_filter
-publiccreate_lowpass_filter
-publicdetrend
-publicepochs_table
-publicextract_epochs
-publicfind_times
-publicget_filter_characteristics
-publichighpass_filter
-publichighpass_filter!
-publiclog_epochs_table
-publiclowpass_filter
-publiclowpass_filter!
-publicmark_epoch_intervals
-publicmark_epoch_intervals!
-publicmirror
-publicmirror!
-publicprint_filter_characteristics
-publicreject_epochs
-publicreject_epochs!
-publicrereference
-publicrereference!
-publicresample
-publicresample!
-publicunmirror
-publicunmirror!
+public average_epochs
+public baseline
+public baseline!
+public create_highpass_filter
+public create_lowpass_filter
+public detrend
+public epochs_table
+public extract_epochs
+public find_times
+public get_filter_characteristics
+public highpass_filter
+public highpass_filter!
+public log_epochs_table
+public lowpass_filter
+public lowpass_filter!
+public mark_epoch_intervals
+public mark_epoch_intervals!
+public mirror
+public mirror!
+public print_filter_characteristics
+public reject_epochs
+public reject_epochs!
+public rereference
+public rereference!
+public resample
+public resample!
+public unmirror
+public unmirror!
 
 # =====================
 # Channel and condition operations
 # =====================
-publicchannel_average
-publicchannel_average!
-publicchannel_delete
-publicchannel_delete!
-publicchannel_difference
-publicchannel_difference!
-publicchannel_joint_probability
-publicchannel_repairable
-publicchannel_repairable!
-publicchannel_summary
-publiccondition_average
-publiccondition_combine
-publiccondition_difference
-publiccondition_parse_epoch
-publiccorrelation_matrix
-publiccorrelation_matrix_dual_selection
-publiccorrelation_matrix_eog
-publicrename_channel
-publicrename_channel!
+public channel_average
+public channel_average!
+public channel_delete
+public channel_delete!
+public channel_difference
+public channel_difference!
+public channel_joint_probability
+public channel_repairable
+public channel_repairable!
+public channel_summary
+public condition_average
+public condition_combine
+public condition_difference
+public condition_parse_epoch
+public correlation_matrix
+public correlation_matrix_dual_selection
+public correlation_matrix_eog
+public rename_channel
+public rename_channel!
 
 # =====================
 # Artifact detection and repair
 # =====================
-publiccompare_rejections
-publicconsecutive
-publiccreate_continuous_repair_info
-publiccreate_epoch_repair_info
-publicdetect_bad_epochs_automatic
-publicdetect_bad_epochs_interactive
-publicget_rejected_epochs
-publicidentify_bad_channels
-publicis_extreme_value
-publicis_extreme_value!
-publicis_step_value
-publicis_step_value!
-publicn_extreme_value
-publicn_step_value
-publicrepair_artifacts
-publicrepair_artifacts!
-publicrepair_artifacts_neighbor
-publicrepair_artifacts_neighbor!
-publicrepair_artifacts_spherical_spline
-publicrepair_artifacts_spherical_spline!
-publicrepair_channels
-publicrepair_channels_neighbor
-publicrepair_channels_per_epoch
-publicrepair_channels_spherical
-publicsummarize_electrode_repairs
-publicunique_rejections
+public compare_rejections
+public consecutive
+public create_continuous_repair_info
+public create_epoch_repair_info
+public detect_bad_epochs_automatic
+public detect_bad_epochs_interactive
+public get_rejected_epochs
+public identify_bad_channels
+public is_extreme_value
+public is_extreme_value!
+public is_step_value
+public is_step_value!
+public n_extreme_value
+public n_step_value
+public repair_artifacts
+public repair_artifacts!
+public repair_artifacts_neighbor
+public repair_artifacts_neighbor!
+public repair_artifacts_spherical_spline
+public repair_artifacts_spherical_spline!
+public repair_channels
+public repair_channels_neighbor
+public repair_channels_per_epoch
+public repair_channels_spherical
+public summarize_electrode_repairs
+public unique_rejections
 
 # =====================
 # ICA
 # =====================
-publiccalculate_eog_channels
-publiccalculate_eog_channels!
-publiccombine_artifact_components
-publicdetect_eog_onsets
-publicdetect_eog_onsets!
-publicdetect_eog_signals
-publicdetect_eog_signals!
-publicget_all_ica_components
-publicget_eog_channels
-publicget_selected_components
-publicidentify_components
-publicidentify_ecg_components
-publicidentify_eog_components
-publicidentify_line_noise_components
-publicidentify_spatial_kurtosis_components
-publicinfomax_extended_ica
-publicinfomax_ica
-publicpartition_channels_by_eog_correlation
-publicremove_ica_components
-publicrestore_ica_components
-publicrun_ica
-publicsummarize_ica_components
+public calculate_eog_channels
+public calculate_eog_channels!
+public combine_artifact_components
+public detect_eog_onsets
+public detect_eog_onsets!
+public detect_eog_signals
+public detect_eog_signals!
+public get_all_ica_components
+public get_eog_channels
+public get_selected_components
+public identify_components
+public identify_ecg_components
+public identify_eog_components
+public identify_line_noise_components
+public identify_spatial_kurtosis_components
+public infomax_extended_ica
+public infomax_ica
+public partition_channels_by_eog_correlation
+public remove_ica_components
+public restore_ica_components
+public run_ica
+public summarize_ica_components
 
 # =====================
 # ERP analysis
 # =====================
-publicerp_measurements
-publicerp_measurements!
-publicgfp
-publicgfp_and_dissimilarity
-publicglobal_dissimilarity
-publicgrand_average
-publicjackknife_average
-publiclrp
-publicrealign
-publicrealign!
+public erp_measurements
+public erp_measurements!
+public gfp
+public gfp_and_dissimilarity
+public global_dissimilarity
+public grand_average
+public jackknife_average
+public lrp
+public realign
+public realign!
 
 # =====================
 # Statistics
 # =====================
-publicanalytic_test
-publiccompute_probability
-publicpermutation_test
-publicprepare_stats
+public analytic_test
+public compute_probability
+public permutation_test
+public prepare_stats
 
 # =====================
 # Time-frequency
 # =====================
-publicfreq_spectrum
-publictf_baseline
-publictf_baseline!
-publictf_morlet
-publictf_multitaper
-publictf_stft
+public freq_spectrum
+public tf_baseline
+public tf_baseline!
+public tf_morlet
+public tf_multitaper
+public tf_stft
 
 # =====================
 # Decoding / MVPA
 # =====================
-publiccreate_work_arrays
-publicdecode_libsvm
-publiclibsvm_classifier
-publicprepare_decoding
-publicresample_temporal_data
-publictest_against_chance
-publictest_against_chance_cluster
+public create_work_arrays
+public decode_libsvm
+public libsvm_classifier
+public prepare_decoding
+public resample_temporal_data
+public test_against_chance
+public test_against_chance_cluster
 
 # =====================
 # RSA
 # =====================
-publicadd_noise_ceiling
-publicadd_noise_ceiling!
-publiccompare_models
-publiccompute_noise_ceiling
-publiccreate_model_rdms
-publiccreate_rdm_from_categorical
-publiccreate_rdm_from_distances
-publiccreate_rdm_from_matrix
-publiccreate_rdm_from_reaction_times
-publiccreate_rdm_from_similarity_ratings
-publiccreate_rdm_from_timeseries
-publiccreate_rdm_from_vectors
-publiccreate_temporal_model_rdms
-publicnormalize_rdm
-publicrsa
-publicrsa_crossvalidated
+public add_noise_ceiling
+public add_noise_ceiling!
+public compare_models
+public compute_noise_ceiling
+public create_model_rdms
+public create_rdm_from_categorical
+public create_rdm_from_distances
+public create_rdm_from_matrix
+public create_rdm_from_reaction_times
+public create_rdm_from_similarity_ratings
+public create_rdm_from_timeseries
+public create_rdm_from_vectors
+public create_temporal_model_rdms
+public normalize_rdm
+public rsa
+public rsa_crossvalidated
 
 # =====================
 # Triggers
 # =====================
-publicsearch_sequence
-publictrigger_count
+public search_sequence
+public trigger_count
 
 # =====================
 # Pipelines and config
 # =====================
-publicapply_analysis_settings
-publicapply_analysis_settings!
-publicgenerate_config_template
-publicgenerate_pipeline_template
-publicpreprocess_v1
-publicpreprocess_v2
-publicprint_config
-publicshow_parameter_info
+public apply_analysis_settings
+public apply_analysis_settings!
+public generate_config_template
+public generate_pipeline_template
+public preprocess_v1
+public preprocess_v2
+public print_config
+public show_parameter_info
 
 # =====================
 # Plotting
 # =====================
-publicplot_artifact_components
-publicplot_artifact_detection
-publicplot_artifact_rejection
-publicplot_artifact_repair
-publicplot_channel_spectrum
-publicplot_channel_summary
-publicplot_channel_summary!
-publicplot_confusion_matrix
-publicplot_correlation_heatmap
-publicplot_correlation_heatmap!
-publicplot_databrowser
-publicplot_decoding
-publicplot_ecg_component_features
-publicplot_eog_component_features
-publicplot_epochs
-publicplot_erp
-publicplot_erp!
-publicplot_erp_filter_gui
-publicplot_erp_image
-publicplot_erp_measurement_gui
-publicplot_erp_measurements
-publicplot_erp_stats
-publicplot_filter_response
-publicplot_frequency_spectrum
-publicplot_gfp
-publicplot_gui
-publicplot_ica_component_activation
-publicplot_ica_component_spectrum
-publicplot_joint_probability
-publicplot_joint_probability!
-publicplot_layout_2d
-publicplot_layout_2d!
-publicplot_layout_3d
-publicplot_layout_3d!
-publicplot_line_noise_components
-publicplot_model_correlations
-publicplot_power_spectrum
-publicplot_rdm_heatmap
-publicplot_rdm_timecourse
-publicplot_rsa
-publicplot_spatial_kurtosis_components
-publicplot_tf_stats
-publicplot_time_frequency
-publicplot_topography
-publicplot_topography!
-publicplot_topo_stats
-publicplot_trigger_overview
-publicplot_trigger_timing
+public plot_artifact_components
+public plot_artifact_detection
+public plot_artifact_rejection
+public plot_artifact_repair
+public plot_channel_spectrum
+public plot_channel_summary
+public plot_channel_summary!
+public plot_confusion_matrix
+public plot_correlation_heatmap
+public plot_correlation_heatmap!
+public plot_databrowser
+public plot_decoding
+public plot_ecg_component_features
+public plot_eog_component_features
+public plot_epochs
+public plot_erp
+public plot_erp!
+public plot_erp_filter_gui
+public plot_erp_image
+public plot_erp_measurement_gui
+public plot_erp_measurements
+public plot_erp_stats
+public plot_filter_response
+public plot_frequency_spectrum
+public plot_gfp
+public plot_gui
+public plot_ica_component_activation
+public plot_ica_component_spectrum
+public plot_joint_probability
+public plot_joint_probability!
+public plot_layout_2d
+public plot_layout_2d!
+public plot_layout_3d
+public plot_layout_3d!
+public plot_line_noise_components
+public plot_model_correlations
+public plot_power_spectrum
+public plot_rdm_heatmap
+public plot_rdm_timecourse
+public plot_rsa
+public plot_spatial_kurtosis_components
+public plot_tf_stats
+public plot_tf
+public plot_topography
+public plot_topography!
+public plot_topo_stats
+public plot_trigger_overview
+public plot_trigger_timing
 
 # =====================
 # Plot helpers
 # =====================
-publicadd_topo_rois
-publicadd_topo_rois!
-publicadd_zscore_columns
-publiccombine_boolean_columns
-publicget_plot_help_info
-publicget_selected_channels
-publicget_selected_conditions
-publicget_selected_epochs
-publicget_selected_samples
-publicprint_plot_help
-publicshow_plot_help
+public add_topo_rois
+public add_topo_rois!
+public add_zscore_columns
+public combine_boolean_columns
+public get_plot_help_info
+public get_selected_channels
+public get_selected_conditions
+public get_selected_epochs
+public get_selected_samples
+public print_plot_help
+public show_plot_help
 
 # =====================
 # Logging
 # =====================
-publicclose_logging
-publicsetup_logging
+public close_logging
+public setup_logging
 
 # =====================
 # Data creation (testing and demos)
 # =====================
-publiccreate_batch_test_erp_data
-publiccreate_eegfun_data
-publiccreate_test_continuous_data
-publiccreate_test_continuous_data_empty_triggers
-publiccreate_test_continuous_data_with_artifacts
-publiccreate_test_continuous_data_with_triggers
-publiccreate_test_epoch_data
-publiccreate_test_epoch_data_vector
-publiccreate_test_epoch_data_with_artifacts
-publiccreate_test_epoch_data_with_rt
-publiccreate_test_erp_data
-publiccreate_test_layout
-publiccreate_test_lrp_data
-publiccreate_test_summary_data
-publiccreate_test_summary_data_with_epochs
-publiccreate_test_tf_data
+public create_batch_test_erp_data
+public create_eegfun_data
+public create_test_continuous_data
+public create_test_continuous_data_empty_triggers
+public create_test_continuous_data_with_artifacts
+public create_test_continuous_data_with_triggers
+public create_test_epoch_data
+public create_test_epoch_data_vector
+public create_test_epoch_data_with_artifacts
+public create_test_epoch_data_with_rt
+public create_test_erp_data
+public create_test_layout
+public create_test_lrp_data
+public create_test_summary_data
+public create_test_summary_data_with_epochs
+public create_test_tf_data
 
 # =====================
 # Demos
 # =====================
-publicgenerate_signal
-publicsignal_example_1
-publicsignal_example_2
-publicsignal_to_data
-publicsimulate_erp
+public generate_signal
+public signal_example_1
+public signal_example_2
+public signal_to_data
+public simulate_erp
 
 # =====================
 # Misc
 # =====================
-publicEegFun_version_info
-publicget_package_version
+public EegFun_version_info
+public get_package_version

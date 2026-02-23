@@ -242,25 +242,27 @@ function grand_average(
 
         @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
 
-        # Load and group ERP data by condition
-        erps_by_condition = _load_and_group_erps(files, input_dir, condition_selection)
+        # Load all data — narrow to concrete type for dispatch
+        all_data = read_all_data(files, input_dir)
 
-        if isempty(erps_by_condition)
-            @minimal_warning "No valid ERP data found in any files"
+        if isempty(all_data)
+            @minimal_warning "No valid data found in any files"
             return nothing
         end
 
-        @info "Found conditions: $(sort(collect(keys(erps_by_condition))))"
+        # Narrow abstract Vector{EegData} to concrete type for dispatch
+        T = typeof(all_data[1])
+        typed_data = T[x for x in all_data]
 
-        # Create grand averages for each condition
-        grand_averages = _create_all_grand_averages(erps_by_condition)
+        # Dispatch to the appropriate Vector method
+        grand_averages = grand_average(typed_data; condition_selection = condition_selection)
 
         if isempty(grand_averages)
-            @minimal_warning "No grand averages created (insufficient participants for any condition)"
+            @minimal_warning "No grand averages created"
             return nothing
         end
 
-        # Save grand averages
+        # Save
         output_file = "grand_average_$(file_pattern).jld2"
         output_path = joinpath(output_dir, output_file)
         jldsave(output_path; data = grand_averages)
@@ -272,4 +274,5 @@ function grand_average(
         _cleanup_logging(log_file, output_dir)
     end
 end
+
 
