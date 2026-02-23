@@ -71,7 +71,7 @@ Browse interactive code examples demonstrating EegFun.jl's capabilities.
 - [Plot Decoding](plotting/plot_decoding.md) - MVPA decoding results
 - [Plot RSA](plotting/plot_rsa.md) - RSA results (RDM, timecourse, models)
 - [Plot Statistics](plotting/plot_statistics.md) - Statistical test results
-- [Plot Time-Frequency](plotting/plot_time_frequency.md) - Time-frequency heatmaps
+- [Plot Time-Frequency](plotting/plot_tf.md) - Time-frequency heatmaps
 
 ## Workflows
 

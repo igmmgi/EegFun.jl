@@ -69,7 +69,7 @@ demos = [
     ("plotting", "plot_layout", "Plot Layout"),
     ("plotting", "plot_rsa", "Plot RSA"),
     ("plotting", "plot_statistics", "Plot Statistics"),
-    ("plotting", "plot_time_frequency", "Plot Time-Frequency"),
+    ("plotting", "plot_tf", "Plot Time-Frequency"),
     ("plotting", "plot_topography", "Plot Topography"),
     ("plotting", "plot_triggers", "Plot Triggers"),
 

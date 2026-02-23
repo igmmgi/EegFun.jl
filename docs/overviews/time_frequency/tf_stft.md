@@ -58,7 +58,7 @@ Smaller = smoother time course, larger = faster computation.
 ### Baseline Correction
 
 ```julia
-plot_time_frequency(
+plot_tf(
     tf_data,
     baseline_interval = (-0.5, -0.2),
     baseline_method = :db,
