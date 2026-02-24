@@ -89,6 +89,7 @@ pages = [
             "TF Morlet" => "demos/time_frequency/tf_morlet.md",
             "TF Multitaper" => "demos/time_frequency/tf_multitaper.md",
             "TF STFT" => "demos/time_frequency/tf_stft.md",
+            "TF Analysis Workflow" => "demos/time_frequency/tf_analysis.md",
         ],
         "Statistics" => [
             "Statistics" => "demos/statistics/statistics.md",
