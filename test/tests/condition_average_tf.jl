@@ -1,5 +1,6 @@
 using Test
 using DataFrames
+using JLD2
 
 @testset "TF Condition Average" begin
 
@@ -102,4 +103,58 @@ using DataFrames
         # No valid groups → should throw
         @test_throws Exception EegFun.condition_average(tfs, [[5, 6]])
     end
+end
+
+@testset "Batch TF Condition Average" begin
+    test_dir = mktempdir()
+
+    @testset "Basic batch TF average" begin
+        # Create test TF files
+        for participant = 1:2
+            tfs = [
+                EegFun.create_test_tf_data(participant = participant, condition = 1),
+                EegFun.create_test_tf_data(participant = participant, condition = 2),
+                EegFun.create_test_tf_data(participant = participant, condition = 3),
+                EegFun.create_test_tf_data(participant = participant, condition = 4),
+            ]
+
+            file_path = joinpath(test_dir, "$(participant)_tf_morlet.jld2")
+            jldsave(file_path; data = tfs)
+        end
+
+        output_dir = joinpath(test_dir, "tf_averages")
+
+        result = EegFun.condition_average("tf_morlet", [[1, 2], [3, 4]], input_dir = test_dir, output_dir = output_dir)
+
+        # Verify output files were created
+        @test isdir(output_dir)
+        output_files = readdir(output_dir)
+        @test "1_tf_morlet.jld2" in output_files
+        @test "2_tf_morlet.jld2" in output_files
+
+        # Load and verify output
+        averages = load(joinpath(output_dir, "1_tf_morlet.jld2"), "data")
+        @test length(averages) == 2
+
+        # Verify data type is TimeFreqData
+        @test averages[1] isa EegFun.TimeFreqData
+        @test averages[2] isa EegFun.TimeFreqData
+
+        # Verify naming
+        @test averages[1].condition_name == "average_1_2"
+        @test averages[2].condition_name == "average_3_4"
+
+        # Verify both power and phase data exist
+        @test nrow(averages[1].data_power) > 0
+        @test nrow(averages[1].data_phase) > 0
+    end
+
+    @testset "No matching files" begin
+        output_dir = joinpath(test_dir, "tf_avg_none")
+
+        result = EegFun.condition_average("nonexistent_pattern", [[1, 2]], input_dir = test_dir, output_dir = output_dir)
+        @test result.success == 0
+    end
+
+    rm(test_dir, recursive = true)
 end

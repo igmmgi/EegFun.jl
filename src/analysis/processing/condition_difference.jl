@@ -3,15 +3,8 @@ Batch computation of condition difference waves for ERP data.
 """
 
 #=============================================================================
-    DIFFERENCE-SPECIFIC VALIDATION
+    DIFFERENCE-SPECIFIC HELPERS
 =============================================================================#
-
-"""Validate that file pattern is for ERP data."""
-function _validate_erps_pattern(pattern::String)
-    !contains(pattern, "erps") &&
-        return "condition_difference_data only works with ERP data. File pattern must contain 'erps', got: '$pattern'"
-    return nothing
-end
 
 """Generate default output directory name for difference operation."""
 function _condition_difference_default_output_dir(
@@ -175,10 +168,11 @@ end
                          participant_selection::Function = participants(),
                          output_dir::Union{String, Nothing} = nothing)
 
-Batch process ERP data files to create condition difference waves.
+Batch process ERP or time-frequency data files to create condition differences.
 
-This function loads JLD2 files containing ERP data, computes differences between specified condition pairs
-by subtracting EEG channel columns, and saves the resulting difference waves to a new directory.
+This function loads JLD2 files containing ERP or TimeFreqData, computes differences between
+specified condition pairs, and saves the results to a new directory. Data type is
+auto-detected from each file.
 
 # Arguments
 - `file_pattern::String`: Pattern to match JLD2 files (e.g., "erps_cleaned", "erps_original")

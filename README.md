@@ -1,5 +1,6 @@
 
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://igmmgi.github.io/EegFun.jl/dev/)
+[![CI](https://github.com/igmmgi/EegFun.jl/actions/workflows/ci.yml/badge.svg)](https://github.com/igmmgi/EegFun.jl/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Julia 1.12+](https://img.shields.io/badge/julia-v1.12+-blue.svg)
 ![Status: Alpha](https://img.shields.io/badge/Status-Alpha-orange.svg)

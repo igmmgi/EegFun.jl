@@ -1550,7 +1550,7 @@ function repair_artifacts_neighbor!(dat::EpochData, artifacts::EpochRejectionInf
 end
 
 """
-    repair_artifacts_spherical_spline!(dat::EpochData, artifacts::EpochRejectionInfo; m::Int=4, lambda::Float64=1e-5)
+    repair_artifacts_spherical_spline!(dat::EpochData, artifacts::EpochRejectionInfo; m::Int=4, lambda::Real=1e-5)
 
 Repair artifacts using spherical spline interpolation.
 
@@ -1558,7 +1558,7 @@ Repair artifacts using spherical spline interpolation.
 - `dat::EpochData`: The epoch data to repair (modified in-place)
 - `artifacts::EpochRejectionInfo`: Artifact information from detect_artifacts
 - `m::Int`: Order of Legendre polynomials (default: 4)
-- `lambda::Float64`: Regularization parameter (default: 1e-5)
+- `lambda::Real`: Regularization parameter (default: 1e-5)
 
 # Returns
 - `EpochData`: The repaired epoch data (same object, modified in-place)
@@ -1632,7 +1632,7 @@ function subset_bad_data(data_path::String, threshold::Real; subset_directory::S
     !isdir(subset_dir_path) && mkpath(subset_dir_path)
 
     # Find participants with any condition below threshold
-    bad_participants = unique(epoch_summary.file[epoch_summary.percentage .< threshold])
+    bad_participants = unique(epoch_summary.file[epoch_summary.percentage.<threshold])
     println("Subsetting data: $(length(bad_participants))")
     println("   N remaining: $(length(unique(epoch_summary.file)) - length(bad_participants))")
     println("   N removed: $(length(bad_participants))")

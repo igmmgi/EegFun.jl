@@ -60,6 +60,15 @@ end
 
 Non-mutating version of `channel_difference!` for TimeFreqData.
 Creates a copy and applies the operation.
+
+# Examples
+```julia
+# Calculate laterality difference (non-mutating)
+result = EegFun.channel_difference(tf_data,
+    channel_selection1 = EegFun.channels([:C3]),
+    channel_selection2 = EegFun.channels([:C4]),
+    channel_out = :laterality)
+```
 """
 function channel_difference(dat::TimeFreqData; kwargs...)
     data_copy = copy(dat)

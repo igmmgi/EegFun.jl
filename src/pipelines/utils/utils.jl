@@ -288,7 +288,7 @@ function repair_channels_neighbor!(data::ContinuousData, repair_info::Continuous
 end
 
 """
-    repair_channels_spherical!(data::ContinuousData, repair_info::ContinuousRepairInfo; m::Int=4, lambda::Float64=1e-5)
+    repair_channels_spherical!(data::ContinuousData, repair_info::ContinuousRepairInfo; m::Int=4, lambda::Real=1e-5)
 
 Repair channels using spherical spline interpolation.
 Uses `repair_info.repaired` to determine which channels to repair (should be populated by `channel_repairable!`).
@@ -298,7 +298,7 @@ Updates `repair_info` during repair to track actual repairs vs skips.
 - `data::ContinuousData`: Continuous EEG data to repair (modified in-place)
 - `repair_info::ContinuousRepairInfo`: Repair tracking struct with `repaired` channels already populated
 - `m::Int`: Order of Legendre polynomials (default: 4)
-- `lambda::Float64`: Regularization parameter (default: 1e-5)
+- `lambda::Real`: Regularization parameter (default: 1e-5)
 
 # Returns
 - `Nothing`: All modifications are in-place

@@ -110,6 +110,17 @@ end
 
 Non-mutating version of `channel_average!` for TimeFreqData.
 Creates a copy and applies the operation.
+
+# Examples
+```julia
+# Average all channels (non-mutating)
+result = EegFun.channel_average(tf_data)
+
+# Average specific channel groups
+result = EegFun.channel_average(tf_data,
+    channel_selections = [EegFun.channels([:Fz, :Cz, :Pz])],
+    output_labels = [:midline])
+```
 """
 function channel_average(dat::TimeFreqData; kwargs...)
     data_copy = copy(dat)
