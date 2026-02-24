@@ -329,3 +329,96 @@ using DataFrames
     # Cleanup
     rm(test_dir, recursive = true)
 end
+
+@testset "TF Grand Average" begin
+
+    @testset "Basic in-memory TF grand average" begin
+        # Create TF data for multiple "participants" with same condition
+        tfs = [
+            EegFun.create_test_tf_data(participant = 1, condition = 1),
+            EegFun.create_test_tf_data(participant = 2, condition = 1),
+            EegFun.create_test_tf_data(participant = 3, condition = 1),
+            EegFun.create_test_tf_data(participant = 1, condition = 2),
+            EegFun.create_test_tf_data(participant = 2, condition = 2),
+            EegFun.create_test_tf_data(participant = 3, condition = 2),
+        ]
+
+        grand_avgs = EegFun.grand_average(tfs)
+
+        @test length(grand_avgs) == 2
+        @test all(ga -> ga isa EegFun.TimeFreqData, grand_avgs)
+
+        # Verify condition numbering
+        conds = sort([ga.condition for ga in grand_avgs])
+        @test conds == [1, 2]
+    end
+
+    @testset "Structure preservation" begin
+        tfs = [EegFun.create_test_tf_data(participant = 1, condition = 1), EegFun.create_test_tf_data(participant = 2, condition = 1)]
+
+        grand_avgs = EegFun.grand_average(tfs)
+
+        @test length(grand_avgs) == 1
+        ga = grand_avgs[1]
+
+        # Verify structure matches input
+        @test ga.sample_rate == tfs[1].sample_rate
+        @test ga.method == tfs[1].method
+        @test nrow(ga.data_power) == nrow(tfs[1].data_power)
+        @test nrow(ga.data_phase) == nrow(tfs[1].data_phase)
+
+        # Same channels
+        @test EegFun.channel_labels(ga) == EegFun.channel_labels(tfs[1])
+
+        # Same freq/time structure
+        @test sort(unique(ga.data_power.freq)) == sort(unique(tfs[1].data_power.freq))
+        @test sort(unique(ga.data_power.time)) == sort(unique(tfs[1].data_power.time))
+    end
+
+    @testset "Power data is averaged" begin
+        # Create TF data with known power offsets
+        tf1 = EegFun.create_test_tf_data(participant = 1, condition = 1, power_offset = 4.0, noise = 0.0)
+        tf2 = EegFun.create_test_tf_data(participant = 2, condition = 1, power_offset = 8.0, noise = 0.0)
+
+        grand_avgs = EegFun.grand_average([tf1, tf2])
+
+        @test length(grand_avgs) == 1
+        ga = grand_avgs[1]
+
+        # Grand average power should be mean of 4.0 and 8.0 = 6.0
+        for ch in EegFun.channel_labels(ga)
+            @test all(abs.(ga.data_power[!, ch] .- 6.0) .< 1e-10)
+        end
+    end
+
+    @testset "Condition selection" begin
+        tfs = [
+            EegFun.create_test_tf_data(participant = 1, condition = 1),
+            EegFun.create_test_tf_data(participant = 2, condition = 1),
+            EegFun.create_test_tf_data(participant = 1, condition = 2),
+            EegFun.create_test_tf_data(participant = 2, condition = 2),
+            EegFun.create_test_tf_data(participant = 1, condition = 3),
+            EegFun.create_test_tf_data(participant = 2, condition = 3),
+        ]
+
+        grand_avgs = EegFun.grand_average(tfs, condition_selection = EegFun.conditions([1, 3]))
+
+        @test length(grand_avgs) == 2
+        conds = sort([ga.condition for ga in grand_avgs])
+        @test conds == [1, 3]
+    end
+
+    @testset "Single participant skipped" begin
+        tfs = [
+            EegFun.create_test_tf_data(participant = 1, condition = 1),
+            # Only 1 participant for condition 1 → should skip
+        ]
+
+        grand_avgs = EegFun.grand_average(tfs)
+        @test isempty(grand_avgs)
+    end
+
+    @testset "Empty input throws" begin
+        @test_throws Exception EegFun.grand_average(EegFun.TimeFreqData[])
+    end
+end

@@ -492,7 +492,8 @@ end
 Create synthetic `TimeFreqData` for testing statistics.
 
 # Keyword Arguments
-- `file::String`: Filename (default: "participant1")
+- `participant::Int`: Participant number (default: 1), used to construct `file` field
+- `file::String`: Filename (default: "participant\$participant")
 - `condition::Int`: Condition number (default: 1)
 - `condition_name::String`: Condition label (default: "condition_1")
 - `n_channels::Int`: Number of electrodes (default: 3)
@@ -506,7 +507,8 @@ Create synthetic `TimeFreqData` for testing statistics.
 - `TimeFreqData`: Synthetic TF data
 """
 function create_test_tf_data(;
-    file::String = "participant1",
+    participant::Int = 1,
+    file::String = "participant$participant",
     condition::Int = 1,
     condition_name::String = "condition_$condition",
     n_channels::Int = 3,

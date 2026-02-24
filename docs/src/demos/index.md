@@ -82,6 +82,7 @@ Browse interactive code examples demonstrating EegFun.jl's capabilities.
 - [TF Morlet](time_frequency/tf_morlet.md) - Morlet wavelet analysis
 - [TF Multitaper](time_frequency/tf_multitaper.md) - Multitaper spectral estimation
 - [TF STFT](time_frequency/tf_stft.md) - Short-Time Fourier Transform
+- [TF Analysis Workflow](time_frequency/tf_analysis.md) - Condition & channel operations on TF data
 
 ## Statistics
 

@@ -1395,6 +1395,11 @@ function get_selected_conditions(datasets::Vector{EpochData}, condition_selectio
     return findall(condition_selection(datasets))
 end
 
+# Helper to select conditions from Vector{TimeFreqData} based on a predicate
+function get_selected_conditions(datasets::Vector{TimeFreqData}, condition_selection::Function)
+    return findall(condition_selection(datasets))
+end
+
 
 
 

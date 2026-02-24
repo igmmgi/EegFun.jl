@@ -147,6 +147,58 @@ using DataFrames
                 @test all(result.data.time .>= 3.0)
             end
         end
+
+        @testset "TimeFreqData" begin
+            tf = EegFun.create_test_tf_data(n_channels = 3)
+
+            @testset "Channel selection" begin
+                result = EegFun.subset(tf, channel_selection = EegFun.channels([:Ch1]))
+                @test result isa EegFun.TimeFreqData
+                # Both power and phase should be subset
+                power_chs = names(result.data_power)[occursin.(r"^Ch[0-9]+$", names(result.data_power))]
+                phase_chs = names(result.data_phase)[occursin.(r"^Ch[0-9]+$", names(result.data_phase))]
+                @test length(power_chs) == 1
+                @test "Ch1" in power_chs
+                @test power_chs == phase_chs
+            end
+
+            @testset "Power and phase consistency" begin
+                result = EegFun.subset(tf, channel_selection = EegFun.channels([:Ch1, :Ch2]))
+                # Same number of rows in both
+                @test nrow(result.data_power) == nrow(result.data_phase)
+                # Same columns in both
+                @test names(result.data_power) == names(result.data_phase)
+            end
+
+            @testset "Defaults (all data)" begin
+                result = EegFun.subset(tf)
+                @test nrow(result.data_power) == nrow(tf.data_power)
+                @test nrow(result.data_phase) == nrow(tf.data_phase)
+            end
+        end
+
+        @testset "Vector{TimeFreqData}" begin
+            tfs = [
+                EegFun.create_test_tf_data(condition = 1),
+                EegFun.create_test_tf_data(condition = 2),
+                EegFun.create_test_tf_data(condition = 3),
+            ]
+
+            @testset "Condition selection" begin
+                result = EegFun.subset(tfs, condition_selection = EegFun.conditions([1, 2]))
+                @test length(result) == 2
+                @test all(r -> r isa EegFun.TimeFreqData, result)
+            end
+
+            @testset "Channel selection on vector" begin
+                result = EegFun.subset(tfs, channel_selection = EegFun.channels([:Ch1]))
+                @test length(result) == 3
+                for r in result
+                    power_chs = names(r.data_power)[occursin.(r"^Ch[0-9]+$", names(r.data_power))]
+                    @test length(power_chs) == 1
+                end
+            end
+        end
     end
 
     @testset "subset with channel_selection" begin
