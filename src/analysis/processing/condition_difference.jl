@@ -77,56 +77,24 @@ function _condition_difference_process_file(
     filename = basename(filepath)
 
     # Read data (using read_data which finds by type)
-    erps_data = read_data(filepath)
+    file_data = read_data(filepath)
 
-    if isnothing(erps_data)
+    if isnothing(file_data)
         return BatchResult(false, filename, "No data variables found")
     end
 
-    # Validate that data is Vector{ErpData}
-    if !(erps_data isa Vector{<:ErpData})
-        return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData}, got $(typeof(erps_data))")
-    end
-
-    # Create difference waves for each condition pair
-    difference_waves = ErpData[]
-
-    for (pair_idx, (cond1, cond2)) in enumerate(condition_pairs)
-        # Find the ERP data for each condition
-        erp1 = nothing
-        erp2 = nothing
-
-        for erp in erps_data
-            if erp.condition == cond1
-                erp1 = erp
-            elseif erp.condition == cond2
-                erp2 = erp
-            end
+    # Dispatch to the appropriate in-memory condition_difference based on data type
+    if file_data isa Vector{<:ErpData} || file_data isa Vector{<:TimeFreqData}
+        try
+            difference_waves = condition_difference(file_data, condition_pairs)
+            jldsave(output_path; data = difference_waves)
+            return BatchResult(true, filename, "Created $(length(difference_waves)) difference(s)")
+        catch e
+            return BatchResult(false, filename, "$(sprint(showerror, e))")
         end
-
-        # Check if both conditions exist
-        if isnothing(erp1)
-            @minimal_warning "  Condition $cond1 not found in $filename. Skipping pair ($cond1, $cond2)."
-            continue
-        end
-        if isnothing(erp2)
-            @minimal_warning "  Condition $cond2 not found in $filename. Skipping pair ($cond1, $cond2)."
-            continue
-        end
-
-        # Create difference wave with sequential condition number
-        diff_wave = _create_difference_wave(erp1, erp2, cond1, cond2, pair_idx)
-        push!(difference_waves, diff_wave)
+    else
+        return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{TimeFreqData}, got $(typeof(file_data))")
     end
-
-    if isempty(difference_waves)
-        return BatchResult(false, filename, "No valid condition pairs found")
-    end
-
-    # Save difference waves
-    jldsave(output_path; data = difference_waves)
-
-    return BatchResult(true, filename, "Created $(length(difference_waves)) difference wave(s)")
 end
 
 #=============================================================================
@@ -262,9 +230,7 @@ function condition_difference(
             @minimal_error_throw(error_msg)
         end
 
-        if (error_msg = _validate_erps_pattern(file_pattern)) !== nothing
-            @minimal_error_throw(error_msg)
-        end
+
 
         if (error_msg = _validate_condition_pairs(condition_pairs)) !== nothing
             @minimal_error_throw(error_msg)

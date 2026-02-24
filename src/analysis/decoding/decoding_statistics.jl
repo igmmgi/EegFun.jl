@@ -72,7 +72,7 @@ decoded_list = [decoded_p1, decoded_p2, decoded_p3]
 stats = test_against_chance(decoded_list, alpha=0.05, correction_method=:bonferroni)
 ```
 """
-function test_against_chance(decoded_list::Vector{DecodedData}; alpha::Float64 = 0.05, correction_method::Symbol = :none)
+function test_against_chance(decoded_list::Vector{DecodedData}; alpha::Real = 0.05, correction_method::Symbol = :none)
 
     # validate some inputs
     isempty(decoded_list) && @minimal_error_throw("Cannot test empty decoded data list")

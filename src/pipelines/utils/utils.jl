@@ -306,7 +306,7 @@ Updates `repair_info` during repair to track actual repairs vs skips.
 # See also
 - `channel_repairable!`: Analyze which channels can be repaired before calling this function
 """
-function repair_channels_spherical!(data::ContinuousData, repair_info::ContinuousRepairInfo; m::Int = 4, lambda::Float64 = 1e-5)
+function repair_channels_spherical!(data::ContinuousData, repair_info::ContinuousRepairInfo; m::Int = 4, lambda::Real = 1e-5)
     if isempty(repair_info.repaired)
         @info "No channels to repair (all bad channels were skipped)"
         return nothing

@@ -118,9 +118,8 @@ using CSV
             @test_throws Exception EegFun.condition_difference("erps_cleaned", [(1, 2)], input_dir = "/nonexistent/dir")
         end
 
-        @testset "Non-ERP pattern" begin
-            @test_throws Exception EegFun.condition_difference("epochs_cleaned", [(1, 2)], input_dir = test_dir)
-        end
+
+
 
         @testset "Empty condition pairs" begin
             @test_throws Exception EegFun.condition_difference("erps_cleaned", [], input_dir = test_dir)
@@ -173,13 +172,9 @@ using CSV
         @testset "No matching files" begin
             output_dir = joinpath(test_dir, "differences_none")
 
-            # This should throw an error because the pattern doesn't contain 'erps'
-            @test_throws Exception EegFun.condition_difference(
-                "nonexistent_pattern",
-                [(1, 2)],
-                input_dir = test_dir,
-                output_dir = output_dir,
-            )
+            # No files match so the function returns (success=0, errors=0)
+            result = EegFun.condition_difference("nonexistent_pattern", [(1, 2)], input_dir = test_dir, output_dir = output_dir)
+            @test result.success == 0
         end
 
         @testset "Empty ERP data" begin
@@ -247,10 +242,7 @@ end
 @testset "In-Memory Difference Conditions" begin
 
     @testset "Basic difference wave" begin
-        erps = [
-            EegFun.create_test_erp_data(condition = 1),
-            EegFun.create_test_erp_data(condition = 2),
-        ]
+        erps = [EegFun.create_test_erp_data(condition = 1), EegFun.create_test_erp_data(condition = 2)]
 
         diff = EegFun.condition_difference(erps, [(1, 2)])
 
@@ -275,10 +267,7 @@ end
     end
 
     @testset "Vector syntax" begin
-        erps = [
-            EegFun.create_test_erp_data(condition = 1),
-            EegFun.create_test_erp_data(condition = 2),
-        ]
+        erps = [EegFun.create_test_erp_data(condition = 1), EegFun.create_test_erp_data(condition = 2)]
 
         diff = EegFun.condition_difference(erps, [[1, 2]])
 
@@ -287,10 +276,7 @@ end
     end
 
     @testset "Data integrity" begin
-        erps = [
-            EegFun.create_test_erp_data(condition = 1),
-            EegFun.create_test_erp_data(condition = 2),
-        ]
+        erps = [EegFun.create_test_erp_data(condition = 1), EegFun.create_test_erp_data(condition = 2)]
 
         diff = EegFun.condition_difference(erps, [(1, 2)])
 
@@ -304,10 +290,7 @@ end
     end
 
     @testset "Metadata preservation" begin
-        erps = [
-            EegFun.create_test_erp_data(condition = 1),
-            EegFun.create_test_erp_data(condition = 2),
-        ]
+        erps = [EegFun.create_test_erp_data(condition = 1), EegFun.create_test_erp_data(condition = 2)]
 
         diff = EegFun.condition_difference(erps, [(1, 2)])
 
@@ -317,10 +300,7 @@ end
     end
 
     @testset "Missing condition skipping" begin
-        erps = [
-            EegFun.create_test_erp_data(condition = 1),
-            EegFun.create_test_erp_data(condition = 2),
-        ]
+        erps = [EegFun.create_test_erp_data(condition = 1), EegFun.create_test_erp_data(condition = 2)]
 
         # Pair (3, 4) should be skipped, but (1, 2) should succeed
         diff = EegFun.condition_difference(erps, [(1, 2), (3, 4)])
@@ -330,10 +310,7 @@ end
     end
 
     @testset "All conditions missing" begin
-        erps = [
-            EegFun.create_test_erp_data(condition = 1),
-            EegFun.create_test_erp_data(condition = 2),
-        ]
+        erps = [EegFun.create_test_erp_data(condition = 1), EegFun.create_test_erp_data(condition = 2)]
 
         # No valid pairs → should throw
         @test_throws Exception EegFun.condition_difference(erps, [(5, 6)])

@@ -103,9 +103,8 @@ using DataFrames
             @test_throws Exception EegFun.condition_average("erps_cleaned", [[1, 2]], input_dir = "/nonexistent/dir")
         end
 
-        @testset "Non-ERP pattern" begin
-            @test_throws Exception EegFun.condition_average("epochs_cleaned", [[1, 2]], input_dir = test_dir)
-        end
+
+
 
         @testset "Empty condition groups" begin
             @test_throws Exception EegFun.condition_average("erps_cleaned", Vector{Int}[], input_dir = test_dir)

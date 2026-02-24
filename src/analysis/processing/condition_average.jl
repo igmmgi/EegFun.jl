@@ -75,57 +75,24 @@ function _condition_average_process_file(filepath::String, output_path::String, 
     filename = basename(filepath)
 
     # Read data (using read_data which finds by type)
-    erps_data = read_data(filepath)
+    file_data = read_data(filepath)
 
-    if isnothing(erps_data)
+    if isnothing(file_data)
         return BatchResult(false, filename, "No data variables found")
     end
 
-    # Validate that data is Vector{ErpData}
-    if !(erps_data isa Vector{<:ErpData})
-        return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData}, got $(typeof(erps_data))")
-    end
-
-    # Create average waves for each condition group
-    average_waves = ErpData[]
-
-    for (group_idx, conditions) in enumerate(condition_groups)
-        # Find the ERP data for each condition in this group
-        group_erps = ErpData[]
-
-        for cond in conditions
-            found = false
-            for erp in erps_data
-                if erp.condition == cond
-                    push!(group_erps, erp)
-                    found = true
-                    break
-                end
-            end
-            if !found
-                @minimal_warning "  Condition $cond not found in $filename. Skipping group $conditions."
-                break
-            end
+    # Dispatch to the appropriate in-memory condition_average based on data type
+    if file_data isa Vector{<:ErpData} || file_data isa Vector{<:TimeFreqData}
+        try
+            average_waves = condition_average(file_data, condition_groups)
+            jldsave(output_path; data = average_waves)
+            return BatchResult(true, filename, "Created $(length(average_waves)) average(s)")
+        catch e
+            return BatchResult(false, filename, "$(sprint(showerror, e))")
         end
-
-        # Only create average if all conditions in the group were found
-        if length(group_erps) != length(conditions)
-            continue
-        end
-
-        # Create average wave with sequential condition number
-        avg_wave = _create_average_wave(group_erps, conditions, group_idx)
-        push!(average_waves, avg_wave)
+    else
+        return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{TimeFreqData}, got $(typeof(file_data))")
     end
-
-    if isempty(average_waves)
-        return BatchResult(false, filename, "No valid condition groups found")
-    end
-
-    # Save average waves
-    jldsave(output_path; data = average_waves)
-
-    return BatchResult(true, filename, "Created $(length(average_waves)) average wave(s)")
 end
 
 #=============================================================================
@@ -259,9 +226,6 @@ function condition_average(
             @minimal_error_throw(error_msg)
         end
 
-        if (error_msg = _validate_erps_pattern(file_pattern)) !== nothing
-            @minimal_error_throw(error_msg)
-        end
 
         if (error_msg = _validate_condition_groups(condition_groups)) !== nothing
             @minimal_error_throw(error_msg)

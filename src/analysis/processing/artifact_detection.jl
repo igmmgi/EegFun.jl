@@ -1563,7 +1563,7 @@ Repair artifacts using spherical spline interpolation.
 # Returns
 - `EpochData`: The repaired epoch data (same object, modified in-place)
 """
-function repair_artifacts_spherical_spline!(dat::EpochData, artifacts::EpochRejectionInfo; m::Int = 4, lambda::Float64 = 1e-5)
+function repair_artifacts_spherical_spline!(dat::EpochData, artifacts::EpochRejectionInfo; m::Int = 4, lambda::Real = 1e-5)
 
     _ensure_coordinates_3d!(dat.layout)
 
@@ -1614,7 +1614,7 @@ subset_bad_data("preprocessed_files", 75.0)
 subset_bad_data("/path/to/preprocessed", 80.0, subset_directory="excluded")
 ```
 """
-function subset_bad_data(data_path::String, threshold::Float64; subset_directory::String = "excluded")
+function subset_bad_data(data_path::String, threshold::Real; subset_directory::String = "excluded")
 
     # Validate inputs/outputs
     (threshold < 0.0 || threshold > 100.0) && @minimal_error_throw("threshold must be 0 < threshold < 100, got $threshold")
