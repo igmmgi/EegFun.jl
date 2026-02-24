@@ -100,7 +100,11 @@ function get_plot_help_info(plot_type::Symbol)::PlotHelpInfo
         ),
         :triggers => PlotHelpInfo(
             "Trigger Plot",
-            [("Slider Drag", "Adjust time interval position"), ("Slider Drag", "Adjust interval size"), ("Left Click + Drag", "Pan the view")],
+            [
+                ("Slider Drag", "Adjust time interval position"),
+                ("Slider Drag", "Adjust interval size"),
+                ("Left Click + Drag", "Pan the view"),
+            ],
         ),
     )
 

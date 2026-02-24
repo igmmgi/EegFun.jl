@@ -75,4 +75,3 @@ function grand_average(tfs::Vector{TimeFreqData}; condition_selection::Function 
 
     return grand_averages
 end
-

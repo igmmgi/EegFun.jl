@@ -128,18 +128,11 @@ EegFun.plot_tf(tf_data, ylogscale = true)
 @info EegFun.section("TEST 2: Cohen Data Chapter 13")
 #######################################################################
 # This is some data that was presented in Cohen: Analyzin Neural Time Series Data
-data_cohen = EegFun.read_data("./data/files/tf_test_epochs.jld2");
+data_cohen = EegFun.read_data("./resources/data/julia/tf_test_epochs.jld2");
 
 # Figure 13.11 A)
 tf_data = EegFun.tf_multitaper(data_cohen, frequencies = logrange(2, 80, length = 30), cycles = 5, time_steps = 0.05, filter_edges = true)
-EegFun.plot_tf(
-    tf_data;
-    baseline_interval = (-0.5, -0.2),
-    baseline_method = :db,
-    colorrange = (-3, 3),
-    ylogscale = true,
-    colormap = :jet,
-)
+EegFun.plot_tf(tf_data; baseline_interval = (-0.5, -0.2), baseline_method = :db, colorrange = (-3, 3), ylogscale = true, colormap = :jet)
 ```
 
 :::
