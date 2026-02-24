@@ -1,7 +1,7 @@
 
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://igmmgi.github.io/EegFun.jl/dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-![Julia 1.10+](https://img.shields.io/badge/julia-v1.10+-blue.svg)
+![Julia 1.12+](https://img.shields.io/badge/julia-v1.12+-blue.svg)
 ![Status: Alpha](https://img.shields.io/badge/Status-Alpha-orange.svg)
 
 # EegFun.jl
