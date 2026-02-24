@@ -58,6 +58,7 @@ end
 Create condition difference time-frequency data.
 
 For each pair `(a, b)`, subtracts condition `b` power and phase from condition `a`.
+Both `data_power` and `data_phase` DataFrames are subtracted consistently.
 
 # Arguments
 - `data::Vector{TimeFreqData}`: Vector of TimeFreqData, one per condition
@@ -68,10 +69,19 @@ For each pair `(a, b)`, subtracts condition `b` power and phase from condition `
 # Returns
 - `Vector{TimeFreqData}`: New vector with one difference TimeFreqData per pair
 
-# Example
+# Examples
 ```julia
-tf_data = EegFun.tf_morlet(epochs; cycles=5)
-diff_tf = condition_difference(tf_data, [(1, 2)])
+# Single difference: condition 1 minus condition 2
+diff_tf = EegFun.condition_difference(tf_data, [(1, 2)])
+
+# Multiple differences
+diff_tf = EegFun.condition_difference(tf_data, [(1, 2), (3, 4)])
+
+# Using vector syntax
+diff_tf = EegFun.condition_difference(tf_data, [[1, 2], [3, 4]])
+
+# Batch: process all participant files
+EegFun.condition_difference("tf_morlet", [(1, 2)], input_dir = "preprocessed")
 ```
 """
 function condition_difference(

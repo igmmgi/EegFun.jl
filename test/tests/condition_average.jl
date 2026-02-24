@@ -103,8 +103,12 @@ using DataFrames
             @test_throws Exception EegFun.condition_average("erps_cleaned", [[1, 2]], input_dir = "/nonexistent/dir")
         end
 
+        @testset "No matching files" begin
+            output_dir = joinpath(test_dir, "averages_none")
 
-
+            result = EegFun.condition_average("nonexistent_pattern", [[1, 2]], input_dir = test_dir, output_dir = output_dir)
+            @test result.success == 0
+        end
 
         @testset "Empty condition groups" begin
             @test_throws Exception EegFun.condition_average("erps_cleaned", Vector{Int}[], input_dir = test_dir)

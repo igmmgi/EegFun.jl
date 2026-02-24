@@ -173,10 +173,11 @@ end
                       participant_selection::Function = participants(),
                       output_dir::Union{String, Nothing} = nothing)
 
-Batch process ERP data files to create condition average waves.
+Batch process ERP or time-frequency data files to create condition averages.
 
-This function loads JLD2 files containing ERP data, computes averages across specified condition groups
-by averaging EEG channel columns, and saves the resulting average waves to a new directory.
+This function loads JLD2 files containing ERP or TimeFreqData, computes averages across
+specified condition groups, and saves the results to a new directory. Data type is
+auto-detected from each file.
 
 # Arguments
 - `file_pattern::String`: Pattern to match JLD2 files (e.g., "erps_cleaned", "erps_original")

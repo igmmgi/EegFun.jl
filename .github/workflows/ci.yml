@@ -41,7 +41,7 @@ jobs:
 
       - name: Build package
         run: |
-          julia --project=. -e '
+          DISPLAY=:0 xvfb-run -s '-screen 0 1024x768x24' julia --project=. -e '
             using Pkg
             Pkg.instantiate()
             Pkg.build()

@@ -542,6 +542,17 @@ function viewer(dat::EegData)
     viewer(all_data(dat))
 end
 
+"""
+    head(dat::EegData; n=5)
+
+Display and return the first `n` rows of the EEG data.
+
+# Examples
+```julia
+head(erps[1])        # First 5 rows
+head(erps[1], n=10)  # First 10 rows
+```
+"""
 function head(dat::EegData; n = nothing)
     isnothing(n) && (n = 5)
     data = all_data(dat)
@@ -552,12 +563,23 @@ function head(dat::EegData; n = nothing)
     return result
 end
 
+"""
+    tail(dat::EegData; n=5)
+
+Display and return the last `n` rows of the EEG data.
+
+# Examples
+```julia
+tail(erps[1])        # Last 5 rows
+tail(erps[1], n=10)  # Last 10 rows
+```
+"""
 function tail(dat::EegData; n = nothing)
     isnothing(n) && (n = 5)
     data = all_data(dat)
     nrows = nrow(data)
     n = min(n, nrows)  # Don't exceed available rows
-    result = n > 0 ? data[max(1, nrows-n+1):nrows, :] : DataFrame()
+    result = n > 0 ? data[max(1, nrows - n + 1):nrows, :] : DataFrame()
     viewer(result)
     return result
 end
@@ -885,12 +907,12 @@ _create_subset(dat::ContinuousData, ds, ls) = ContinuousData(dat.file, ds, ls, d
 _create_subset(dat::ErpData, ds, ls) =
     ErpData(dat.file, dat.condition, dat.condition_name, ds, ls, dat.sample_rate, dat.analysis_info, dat.n_epochs)
 _create_subset(dat::EpochData, ds, ls) = EpochData(dat.file, dat.condition, dat.condition_name, ds, ls, dat.sample_rate, dat.analysis_info)
-_create_subset(dat::TimeFreqData, ds, ls) = TimeFreqData(
+_create_subset(dat::TimeFreqData, ds_power::DataFrame, ds_phase::DataFrame, ls) = TimeFreqData(
     dat.file,
     dat.condition,
     dat.condition_name,
-    ds.data_power,
-    ds.data_phase,
+    ds_power,
+    ds_phase,
     ls,
     dat.sample_rate,
     dat.method,
@@ -900,6 +922,23 @@ _create_subset(dat::TimeFreqData, ds, ls) = TimeFreqData(
 
 # === SUBSET IMPLEMENTATIONS ===
 
+"""
+    subset(dat::SingleDataFrameEeg; channel_selection, sample_selection, interval_selection, include_extra)
+
+Create a subset of single-DataFrame EEG data (ContinuousData, ErpData).
+
+# Arguments
+- `channel_selection::Function`: Channel predicate (default: `channels()` for all)
+- `sample_selection::Function`: Sample predicate (default: `samples()` for all)
+- `interval_selection::Interval`: Time interval (default: `times()` for all)
+- `include_extra::Bool`: Include extra columns (default: `false`)
+
+# Examples
+```julia
+# Select specific channels and time window
+sub = subset(erp, channel_selection = channels(:Fz, :Cz), interval_selection = times(-0.2, 0.5))
+```
+"""
 function subset(
     dat::T;
     channel_selection::Function = channels(),
@@ -914,6 +953,42 @@ function subset(
     return _create_subset(dat, dat_subset, layout_subset)
 end
 
+"""
+    subset(dat::TimeFreqData; channel_selection, sample_selection, interval_selection, include_extra)
+
+Create a subset of time-frequency data. Subsets both `data_power` and `data_phase` consistently.
+
+# Examples
+```julia
+sub = subset(tf, channel_selection = channels(:Fz, :Cz))
+```
+"""
+function subset(
+    dat::TimeFreqData;
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    interval_selection::Interval = times(),
+    include_extra::Bool = false,
+)::TimeFreqData
+    # Combine interval and sample selection
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+    selected_channels, selected_samples, layout_subset = _subset_common(dat, channel_selection, combined_sel, include_extra)
+    # Subset BOTH power and phase DataFrames
+    power_subset = _subset_dataframe(dat.data_power, selected_channels, selected_samples)
+    phase_subset = _subset_dataframe(dat.data_phase, selected_channels, selected_samples)
+    return _create_subset(dat, power_subset, phase_subset, layout_subset)
+end
+
+"""
+    subset(dat::MultiDataFrameEeg; channel_selection, sample_selection, interval_selection, epoch_selection, include_extra)
+
+Create a subset of multi-DataFrame EEG data (EpochData).
+
+# Examples
+```julia
+sub = subset(epochs, channel_selection = channels(:Fz), epoch_selection = epochs(1:10))
+```
+"""
 function subset(
     dat::T;
     channel_selection::Function = channels(),
@@ -930,6 +1005,16 @@ function subset(
     return _create_subset(dat, dat_subset, layout_subset)
 end
 
+"""
+    subset(datasets::Vector{ErpData}; condition_selection, channel_selection, ...)
+
+Subset a vector of ERP conditions. Filters by condition first, then applies channel/sample/interval selection.
+
+# Examples
+```julia
+sub = subset(erps, condition_selection = conditions(1, 2), channel_selection = channels(:Fz))
+```
+"""
 function subset(
     datasets::Vector{ErpData};
     condition_selection::Function = conditions(),
@@ -952,6 +1037,16 @@ function subset(
     )
 end
 
+"""
+    subset(datasets::Vector{EpochData}; condition_selection, channel_selection, ..., epoch_selection)
+
+Subset a vector of epoch conditions. Filters by condition first, then applies channel/sample/interval/epoch selection.
+
+# Examples
+```julia
+sub = subset(epochs_vec, condition_selection = conditions(1), epoch_selection = epochs(1:20))
+```
+"""
 function subset(
     datasets::Vector{EpochData};
     condition_selection::Function = conditions(),
@@ -972,6 +1067,39 @@ function subset(
         sample_selection = sample_selection,
         interval_selection = interval_selection,
         epoch_selection = epoch_selection,
+        include_extra = include_extra,
+    )
+end
+
+"""
+    subset(datasets::Vector{TimeFreqData}; condition_selection, channel_selection, ...)
+
+Subset a vector of TF conditions. Filters by condition first, then applies channel/sample/interval selection.
+Both `data_power` and `data_phase` are subset consistently.
+
+# Examples
+```julia
+sub = subset(tfs, condition_selection = conditions(1, 2), channel_selection = channels(:Fz))
+```
+"""
+function subset(
+    datasets::Vector{TimeFreqData};
+    condition_selection::Function = conditions(),
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    interval_selection::Interval = times(),
+    include_extra::Bool = false,
+)::Vector{TimeFreqData}
+    # First filter by condition_selection
+    selected_conditions = get_selected_conditions(datasets, condition_selection)
+    datasets_filtered = datasets[selected_conditions]
+
+    # Then apply channel, sample, and interval selection to each dataset
+    return subset.(
+        datasets_filtered;
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        interval_selection = interval_selection,
         include_extra = include_extra,
     )
 end
