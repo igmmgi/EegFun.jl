@@ -1623,10 +1623,8 @@ function subset_bad_data(data_path::String, threshold::Float64; subset_directory
     epoch_summary_path = joinpath(data_path, "epoch_summary.jld2")
     !isfile(epoch_summary_path) && @minimal_error_throw("epoch_summary.jld2 not found: $data_path")
 
-    # Load epoch summary and check required columns
-    epoch_summary = read_data(epoch_summary_path)
-    missing_cols = [col for col in [:file, :percentage] if !(col in propertynames(epoch_summary))]
-    !isempty(missing_cols) && @minimal_error_throw("epoch_summary missing required columns: $(missing_cols)")
+    # Load epoch summary (plain DataFrame, not EegFunData — can't use read_data)
+    epoch_summary = load(epoch_summary_path, "data")
 
     # Use data_path as output directory
     output_directory = abspath(data_path)
@@ -1647,7 +1645,7 @@ function subset_bad_data(data_path::String, threshold::Float64; subset_directory
     file_summary_path = joinpath(data_path, "file_summary.jld2")
     !isfile(file_summary_path) && @minimal_error_throw("file_summary.jld2 not found: $data_path")
 
-    file_summary = read_data(file_summary_path)
+    file_summary = load(file_summary_path, "data")
     file_summary_subset = file_summary[.!in.(file_summary.file, Ref(bad_participants)), :]
 
     # Save subset summary files

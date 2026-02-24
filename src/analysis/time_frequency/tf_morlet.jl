@@ -200,11 +200,11 @@ function tf_morlet(
 
         if return_trials # Store each trial separately
             for trial_idx = 1:n_trials
-                power_df[trial_idx][!, channel] = vec(@view eegpower[:, :, trial_idx])
+                power_df[trial_idx][!, channel] = copy(vec(@view eegpower[:, :, trial_idx]))
                 phase_df[trial_idx][!, channel] = vec(angle.(@view eegconv[:, :, trial_idx]))
             end
         else
-            power_df[!, channel] = vec(eegpower)
+            power_df[!, channel] = copy(vec(eegpower))
             phase_df[!, channel] = vec(angle.(eegconv))
         end
     end
