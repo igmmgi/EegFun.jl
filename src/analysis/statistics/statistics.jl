@@ -248,7 +248,7 @@ result = analytic_test(prepared, alpha=0.05, correction_method=:no)
 result = analytic_test(prepared, alpha=0.05, correction_method=:bonferroni)
 ```
 """
-function analytic_test(prepared::StatisticalData; alpha::Float64 = 0.05, tail::Symbol = :both, correction_method::Symbol = :no)
+function analytic_test(prepared::StatisticalData; alpha::Real = 0.05, tail::Symbol = :both, correction_method::Symbol = :no)
 
     correction_method ∉ (:no, :bonferroni) && @minimal_error "correction_method must be :no or :bonferroni. Got :$correction_method"
     tail ∉ (:both, :left, :right) && @minimal_error "tail must be :both, :left, or :right. Got :$tail"
@@ -556,7 +556,7 @@ prepared = prepare_stats(tfs; design=:paired)
 result = analytic_test(prepared, alpha=0.05, correction_method=:bonferroni)
 ```
 """
-function analytic_test(prepared::TFStatisticalData; alpha::Float64 = 0.05, tail::Symbol = :both, correction_method::Symbol = :no)
+function analytic_test(prepared::TFStatisticalData; alpha::Real = 0.05, tail::Symbol = :both, correction_method::Symbol = :no)
     correction_method ∉ (:no, :bonferroni) && @minimal_error "correction_method must be :no or :bonferroni. Got :$correction_method"
     tail ∉ (:both, :left, :right) && @minimal_error "tail must be :both, :left, or :right. Got :$tail"
 

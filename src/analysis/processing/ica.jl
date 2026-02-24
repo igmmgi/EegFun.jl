@@ -1161,7 +1161,7 @@ function identify_eog_components(
     hEOG_channel::Symbol = :hEOG,
     sample_selection::Function = samples(),
     interval_selection::Interval = times(),
-    z_threshold::Float64 = 3.0,
+    z_threshold::Real = 3.0,
     min_correlation::Float64 = 0.5,
     two_step::Bool = true,
 )
@@ -1580,7 +1580,7 @@ which is characteristic of channel noise or artifacts.
 - `Vector{Int}`: Indices of components with high spatial kurtosis.
 - `DataFrame`: DataFrame containing spatial kurtosis values and z-scores for all components.
 """
-function identify_spatial_kurtosis_components(ica::InfoIca; z_threshold::Float64 = 3.0)
+function identify_spatial_kurtosis_components(ica::InfoIca; z_threshold::Real = 3.0)
 
     # Calculate spatial kurtosis for each component's weights
     n_components = size(ica.mixing, 2)
@@ -1647,7 +1647,7 @@ function identify_line_noise_components(
     interval_selection::Interval = times(),
     line_freq::Real = 50.0,
     freq_bandwidth::Real = 1.0,
-    z_threshold::Float64 = 3.0,
+    z_threshold::Real = 3.0,
     min_harmonic_power::Real = 1.5,
 )
 

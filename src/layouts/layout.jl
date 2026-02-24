@@ -240,7 +240,7 @@ Converts polar coordinates (incidence and azimuth angles) from a layout into Car
 # Notes
 - When `preserve_radial_distance=true`, electrodes imported from EEGLAB with inc>90° (e.g., eye electrodes beyond the scalp) will appear outside the standard head circle, matching EEGLAB's topoplot rendering.
 """
-function polar_to_cartesian_xy!(layout::Layout; normalization_radius::Float64 = 1.0, preserve_radial_distance::Bool = true)
+function polar_to_cartesian_xy!(layout::Layout; normalization_radius::Real = 1.0, preserve_radial_distance::Bool = true)
     df = layout.data
 
     # Check for required columns and numeric types
