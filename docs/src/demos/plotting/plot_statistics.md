@@ -78,72 +78,53 @@ result = EegFun.analytic_test(prepared, correction_method = :bonferroni)
 #######################################################################
 
 # plot ERP waveforms for both conditions at a channel
-EegFun.plot_erp_stats(result,
-    channel_selection = EegFun.channels(:Cz),
-    plot_erp = true
-)
+EegFun.plot_erp_stats(result, channel_selection = EegFun.channels(:Cz), plot_erp = true)
 
 #######################################################################
 # 4. ADD DIFFERENCE WAVE
 #######################################################################
 
-EegFun.plot_erp_stats(result,
-    channel_selection = EegFun.channels(:Cz),
-    plot_erp = true,
-    plot_difference = true
-)
+EegFun.plot_erp_stats(result, channel_selection = EegFun.channels(:Cz), plot_erp = true, plot_difference = true)
 
 #######################################################################
 # 5. ADD SIGNIFICANCE MARKERS
 #######################################################################
 
-EegFun.plot_erp_stats(result,
-    channel_selection = EegFun.channels(:Cz),
-    plot_erp = true,
-    plot_difference = true,
-    plot_significance = true
-)
+EegFun.plot_erp_stats(result, channel_selection = EegFun.channels(:Cz), plot_erp = true, plot_difference = true, plot_significance = true)
 
 #######################################################################
 # 6. SHOW T-VALUES
 #######################################################################
 
-EegFun.plot_erp_stats(result,
-    channel_selection = EegFun.channels(:Pz),
-    plot_tvalues = true,
-    plot_critical_t = true
-)
+EegFun.plot_erp_stats(result, channel_selection = EegFun.channels(:Pz), plot_tvalues = true, plot_critical_t = true)
 
 #######################################################################
 # 7. SHIFT DIFFERENCE WAVE
 #######################################################################
 
 # offset the difference wave for visibility (similar to MATLAB)
-EegFun.plot_erp_stats(result,
-    channel_selection = EegFun.channels(:Cz),
-    plot_erp = true,
-    plot_difference = true,
-    difference_offset = 3.0
-)
+EegFun.plot_erp_stats(result, channel_selection = EegFun.channels(:Cz), plot_erp = true, plot_difference = true, difference_offset = 3.0)
 
 #######################################################################
 # 8. SIGNIFICANCE BAR POSITIONING
 #######################################################################
 
 # position significance bars at the bottom, at zero, or at a custom y
-EegFun.plot_erp_stats(result,
+EegFun.plot_erp_stats(
+    result,
     channel_selection = EegFun.channels(:Cz),
     plot_erp = true,
     plot_significance = true,
     significance_position = :bottom,
-    significance_color = (:red, 0.5)
+    significance_color = (:red, 0.5),
 )
 
 #######################################################################
 # 9. GRID LAYOUT — multiple channels
 #######################################################################
 
-EegFun.plot_erp_stats(result,
+EegFun.plot_erp_stats(
+    result,
     channel_selection = EegFun.channels([:Cz, :Pz, :Oz, :Fz]),
     layout = :grid,
     plot_erp = true,

@@ -1,29 +1,8 @@
 # Plot Time-Frequency
 
-This demo shows how to plot time-frequency decomposition results as heatmaps.
+## Overview
 
-### When to Use
-
-Use `plot_tf` to visualise the output of `tf_morlet`, `tf_multitaper`, or `tf_stft` — the three time-frequency decomposition methods in EegFun.
-
-### Key Parameters
-
-| Parameter | Default | Description |
-| --- | --- | --- |
-| `channel` | First channel | Which channel to plot |
-| `baseline_interval` | `nothing` | Pre-stimulus interval for on-the-fly baseline correction |
-| `baseline_method` | `:db` | `:db`, `:percent`, or `:relchange` |
-| `colormap` | `:viridis` | Colour map for the heatmap |
-| `colorrange` | auto | Explicit `(min, max)` colour range |
-| `ylogscale` | `false` | Log-scale the frequency axis |
-| `colorbar` | `true` | Show colour bar |
-
-### What You'll Learn
-
-1. Plotting time-frequency data for a specific channel
-2. Applying baseline correction on the fly (dB, percent, relative change)
-3. Using log-scaled frequency axes
-4. Customising colour maps and colour range for publication figures
+Demonstrates Plot Time-Frequency functionality.
 
 
 ## Code Examples
@@ -66,42 +45,35 @@ EegFun.plot_tf(tf_data)
 # 3. SPECIFIC CHANNEL
 #######################################################################
 
-EegFun.plot_tf(tf_data, :Cz)
+EegFun.plot_tf(tf_data, channel_selection = EegFun.channels(:Cz))
 
 #######################################################################
 # 4. WITH BASELINE CORRECTION
 #######################################################################
 
 # apply dB baseline on the fly
-EegFun.plot_tf(tf_data, :Cz,
-    baseline_interval = (-0.3, 0.0),
-    baseline_method = :db
-)
+EegFun.plot_tf(tf_data, channel_selection = EegFun.channels(:Cz), baseline_interval = (-0.3, 0.0), baseline_method = :db)
 
 # percentage change baseline
-EegFun.plot_tf(tf_data, :Cz,
-    baseline_interval = (-0.3, 0.0),
-    baseline_method = :percent
-)
+EegFun.plot_tf(tf_data, channel_selection = EegFun.channels(:Cz), baseline_interval = (-0.3, 0.0), baseline_method = :percent)
 
 #######################################################################
 # 5. LOG-SCALED FREQUENCY AXIS
 #######################################################################
 
-EegFun.plot_tf(tf_data, :Cz,
-    baseline_interval = (-0.3, 0.0),
-    ylogscale = true
-)
+EegFun.plot_tf(tf_data, channel_selection = EegFun.channels(:Cz), baseline_interval = (-0.3, 0.0), ylogscale = true)
 
 #######################################################################
 # 6. CUSTOM COLOUR MAP AND RANGE
 #######################################################################
 
-EegFun.plot_tf(tf_data, :Cz,
+EegFun.plot_tf(
+    tf_data,
+    channel_selection = EegFun.channels(:Cz),
     baseline_interval = (-0.3, 0.0),
     colormap = :RdBu,
     colorrange = (-3.0, 3.0),
-    title = "Alpha/Beta ERD"
+    title = "Alpha/Beta ERD",
 )
 ```
 
