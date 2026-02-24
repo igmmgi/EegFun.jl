@@ -124,6 +124,10 @@ include("analysis/time_frequency/tf_multitaper.jl")
 include("analysis/time_frequency/tf_utils.jl")
 include("analysis/time_frequency/baseline.jl")
 include("analysis/time_frequency/grand_average.jl")
+include("analysis/time_frequency/condition_average.jl")
+include("analysis/time_frequency/condition_difference.jl")
+include("analysis/time_frequency/channel_average.jl")
+include("analysis/time_frequency/channel_difference.jl")
 include("analysis/time_frequency/utils/utils.jl")
 
 # decoding analysis via libsvm

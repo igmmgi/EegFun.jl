@@ -407,7 +407,7 @@ function tf_multitaper(
         else
             eegpower ./= n_trials
             eegconv ./= n_trials
-            power_df[!, channel] = vec(eegpower)
+            power_df[!, channel] = copy(vec(eegpower))
             phase_df[!, channel] = vec(angle.(eegconv))
         end
     end
