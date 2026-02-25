@@ -343,12 +343,10 @@ function _create_confusion_matrix(y_true::Vector{Int}, y_pred::Vector{Int}, n_cl
 
     # Validate all labels are in valid range [1, n_classes]
     for (i, label) in enumerate(y_true)
-        (label < 1 || label > n_classes) &&
-            @minimal_error("Invalid true label at index $i: $label (must be in range [1, $n_classes])")
+        (label < 1 || label > n_classes) && @minimal_error("Invalid true label at index $i: $label (must be in range [1, $n_classes])")
     end
     for (i, label) in enumerate(y_pred)
-        (label < 1 || label > n_classes) &&
-            @minimal_error("Invalid predicted label at index $i: $label (must be in range [1, $n_classes])")
+        (label < 1 || label > n_classes) && @minimal_error("Invalid predicted label at index $i: $label (must be in range [1, $n_classes])")
     end
 
     confusion = zeros(Int, n_classes, n_classes)

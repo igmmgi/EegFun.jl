@@ -109,9 +109,7 @@ function _validate_realignment_column(dat::EpochData, realignment_column::Symbol
     # Check that column exists in all epochs
     for (i, epoch) in enumerate(dat.data)
         if !hasproperty(epoch, realignment_column)
-            @minimal_error(
-                "Realignment column :$realignment_column not found in epoch $i. " * "Available columns: $(propertynames(epoch))"
-            )
+            @minimal_error("Realignment column :$realignment_column not found in epoch $i. " * "Available columns: $(propertynames(epoch))")
         end
 
         # Check that the realignment value is constant within the epoch

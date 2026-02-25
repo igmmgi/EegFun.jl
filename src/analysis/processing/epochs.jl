@@ -59,9 +59,7 @@ function condition_parse_epoch(config::Dict)
 
             # Validate that both min and max intervals are specified if timing_pairs is specified
             if isnothing(min_interval) || isnothing(max_interval)
-                @minimal_error(
-                    "Both min_interval and max_interval must be specified when timing_pairs is specified for condition '$name'",
-                )
+                @minimal_error("Both min_interval and max_interval must be specified when timing_pairs is specified for condition '$name'",)
             end
         end
 
@@ -741,9 +739,7 @@ function average_epochs(dat::EpochData)
         # Verify all epochs have the same length
         for (idx, epoch) in enumerate(dat.data)
             if nrow(epoch) != n_timepoints
-                @minimal_error(
-                    "Epoch $idx has $(nrow(epoch)) timepoints, expected $n_timepoints. All epochs must have the same length."
-                )
+                @minimal_error("Epoch $idx has $(nrow(epoch)) timepoints, expected $n_timepoints. All epochs must have the same length.")
             end
         end
 

@@ -76,8 +76,7 @@ function test_against_chance(decoded_list::Vector{DecodedData}; alpha::Real = 0.
 
     # validate some inputs
     isempty(decoded_list) && @minimal_error("Cannot test empty decoded data list")
-    correction_method ∈ (:none, :bonferroni) ||
-        @minimal_error("correction_method must be :none or :bonferroni, got :$correction_method")
+    correction_method ∈ (:none, :bonferroni) || @minimal_error("correction_method must be :none or :bonferroni, got :$correction_method")
 
     # Validate all inputs have same structure
     first_decoded = decoded_list[1]

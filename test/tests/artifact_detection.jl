@@ -413,11 +413,7 @@ using EegFun
         @test_throws Exception EegFun.detect_bad_epochs_automatic(epochs, z_criterion = 3, z_measures = [:invalid_measure])
 
         # Test error handling - empty channel selection
-        @test_throws Exception EegFun.detect_bad_epochs_automatic(
-            epochs,
-            z_criterion = 3,
-            channel_selection = EegFun.channels(Symbol[]),
-        )
+        @test_throws Exception EegFun.detect_bad_epochs_automatic(epochs, z_criterion = 3, channel_selection = EegFun.channels(Symbol[]))
 
         # Test with Vector{EpochData}
         epochs_list = [EegFun.create_test_epoch_data(n_epochs = 5, n_channels = 2) for _ = 1:2]
