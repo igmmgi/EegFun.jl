@@ -19,7 +19,7 @@ A struct containing all information about a digital filter for EEG data processi
 """
 struct FilterInfo
     filter_type::String
-    filter_object::Union{ZeroPoleGain,Vector{Float64}} # TODO: what is going on in DSP?
+    filter_object::Union{ZeroPoleGain,Vector{Float64}} # ZeroPoleGain for IIR, Vector{Float64} for FIR
     filter_method::String
     cutoff_freq::Float64
     sample_rate::Float64
