@@ -93,8 +93,8 @@ function prepare_stats(
     # Get metadata from first TF dataset 
     ref_tf = condition1[1]
     all_electrodes = channel_labels(ref_tf)
-    all_freqs = sort(unique(ref_tf.data_power.freq))
-    all_times = sort(unique(ref_tf.data_power.time))
+    all_freqs = Float64.(sort(unique(ref_tf.data_power.freq)))
+    all_times = Float64.(sort(unique(ref_tf.data_power.time)))
 
     # Apply channel selection
     selected_ch_mask = channel_selection(1:length(all_electrodes))

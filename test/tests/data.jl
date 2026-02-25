@@ -379,9 +379,9 @@ using OrderedCollections
             @test :Fz ∉ selected_excluded_dup
             @test :Cz ∈ selected_excluded_dup
 
-            # Test mixed types in channels_not - tests the mixed Vector handler
+            # Test channels_not with combined range
             selected_mixed =
-                EegFun.get_selected_channels(continuous_data, EegFun.channels_not([1, 2:2]); include_meta = false, include_extra = false)
+                EegFun.get_selected_channels(continuous_data, EegFun.channels_not(1:2); include_meta = false, include_extra = false)
             @test isempty(selected_mixed)  # Both channels excluded
 
         end

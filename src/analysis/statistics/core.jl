@@ -140,25 +140,20 @@ function prepare_stats(
     design::Symbol;
     input_dir::String = pwd(),
     participant_selection::Function = participants(),
-    condition_selection::Function = conditions([1, 2]),
-    channel_selection::Function = channels(),
-    interval_selection::Interval = times(),
-    baseline_interval::Interval = times(),
-    analysis_interval::Interval = times(),
+    kwargs...,
 )
-    # just load all appropriate data and call the main preparation function
-    all_erps = read_all_data(ErpData, file_pattern, input_dir, participant_selection)
-    isempty(all_erps) && @minimal_error_throw "No valid ERP data found matching pattern '$file_pattern' in $input_dir"
+    # Load data and auto-detect type
+    all_data = read_all_data(file_pattern, input_dir, participant_selection)
+    isempty(all_data) && @minimal_error_throw "No valid data found matching pattern '$file_pattern' in $input_dir"
 
-    return prepare_stats(
-        all_erps;
-        design = design,
-        condition_selection = condition_selection,
-        channel_selection = channel_selection,
-        interval_selection = interval_selection,
-        baseline_interval = baseline_interval,
-        analysis_interval = analysis_interval,
-    )
+    first_item = first(all_data)
+    if first_item isa TimeFreqData
+        return prepare_stats(Vector{TimeFreqData}(all_data); design = design, kwargs...)
+    elseif first_item isa ErpData
+        return prepare_stats(Vector{ErpData}(all_data); design = design, kwargs...)
+    else
+        @minimal_error_throw "Unsupported data type: $(typeof(first_item)). Expected ErpData or TimeFreqData."
+    end
 end
 
 
@@ -311,8 +306,8 @@ function _compute_t_matrix(
         # Fill pre-allocated t_matrix in-place
         t_matrix .= mean_diff ./ (std_diff ./ sqrt(n_participants))
         # Where std is zero: NaN if mean is also zero, Inf otherwise
-        t_matrix[zero_std_mask .& zero_mean_mask] .= NaN
-        t_matrix[zero_std_mask .& .!zero_mean_mask] .= Inf
+        t_matrix[zero_std_mask.&zero_mean_mask] .= NaN
+        t_matrix[zero_std_mask.&.!zero_mean_mask] .= Inf
 
         # Degrees of freedom (same for all points in paired design)
         df = Float64(n_participants - 1)
