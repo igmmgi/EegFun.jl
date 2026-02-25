@@ -82,7 +82,40 @@ plot_gfp(erp_data,
 By default, shows only the GFP trace. With `show_erp_traces=true`, adds a top panel
 with all channel traces. With `show_dissimilarity=true`, adds a bottom panel with
 Global Dissimilarity.
+
+    plot_gfp(filepath::String; input_dir=pwd(), participant_selection=participants(), kwargs...)
+
+Load ERP data and plot GFP. Accepts either a `.jld2` filepath or a pattern
+to discover and plot all matching files (one plot per file).
+
+# Examples
+```julia
+plot_gfp("erps_good.jld2")
+plot_gfp("erps_good")
+```
 """
+function plot_gfp(filepath::String; input_dir::String = pwd(), participant_selection::Function = participants(), kwargs...)
+    if endswith(filepath, ".jld2")
+        data = read_data(filepath)
+        isnothing(data) && @minimal_error "No data found in file: $filepath"
+        return plot_gfp(data; kwargs...)
+    else
+        files = _find_batch_files(filepath, input_dir, participant_selection)
+        isempty(files) && @minimal_error "No files matching pattern '$filepath' in $input_dir"
+
+        results = []
+        for file in sort(files, by = _natural_sort_key)
+            file_path = joinpath(input_dir, file)
+            @info "Plotting: $file"
+            data = read_data(file_path)
+            isnothing(data) && continue
+            result = plot_gfp(data; kwargs...)
+            push!(results, result)
+        end
+        return results
+    end
+end
+
 function plot_gfp(dat::ErpData; channel_selection::Function = channels(), normalize::Bool = true, kwargs...)
     return plot_gfp([dat]; channel_selection = channel_selection, normalize = normalize, kwargs...)
 end

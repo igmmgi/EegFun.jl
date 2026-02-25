@@ -858,14 +858,14 @@ function _create_sliders(fig, state::ContinuousDataBrowserState, dat)
     slider_x = Slider(fig[2, 1], range = 1:50:nrow(state.data.current[].data), startvalue = 1, snap = true)
 
     on(slider_range.value) do x
-        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x+slider_x.value.val)
+        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x + slider_x.value.val)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
     end
 
     on(slider_x.value) do x
-        new_range = x:min(nrow(state.data.current[].data), (x+slider_range.value.val)-1)
+        new_range = x:min(nrow(state.data.current[].data), (x + slider_range.value.val) - 1)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
@@ -1841,13 +1841,36 @@ function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs.
     return (fig = fig, ax = ax, analysis_settings = state.analysis_settings)
 end
 
-# can plot saved file
-function plot_databrowser(filename::String, ica = nothing; screen = nothing, kwargs...)
-    dat_eeg = read_data(filename)
-    if !isnothing(ica)
-        ica = read_data(ica)
+# can plot saved file or pattern
+function plot_databrowser(
+    filename::String,
+    ica = nothing;
+    input_dir::String = pwd(),
+    participant_selection::Function = participants(),
+    screen = nothing,
+    kwargs...,
+)
+    if endswith(filename, ".jld2")
+        dat_eeg = read_data(filename)
+        if !isnothing(ica)
+            ica = read_data(ica)
+        end
+        return plot_databrowser(dat_eeg, ica; screen = screen, kwargs...)
+    else
+        files = _find_batch_files(filename, input_dir, participant_selection)
+        isempty(files) && @minimal_error "No files matching pattern '$filename' in $input_dir"
+
+        results = []
+        for file in sort(files, by = _natural_sort_key)
+            file_path = joinpath(input_dir, file)
+            @info "Browsing: $file"
+            dat_eeg = read_data(file_path)
+            isnothing(dat_eeg) && continue
+            result = plot_databrowser(dat_eeg, nothing; screen = screen, kwargs...)
+            push!(results, result)
+        end
+        return results
     end
-    plot_databrowser(dat_eeg, ica; screen = screen, kwargs...)
 end
 
 plot_databrowser(data::Vector{<:EegData}, ica = nothing; screen = nothing, kwargs...) =

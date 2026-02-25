@@ -68,18 +68,24 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
 """
     plot_erp(filepath::String; 
+             input_dir::String = pwd(),
+             participant_selection::Function = participants(),
              layout::Union{Symbol, PlotLayout} = :single,
              condition_selection::Function = conditions(),
              channel_selection::Function = channels(),
              sample_selection::Function = samples(),
-    interval_selection::Interval = times(),
+             interval_selection::Interval = times(),
              baseline_interval::Interval = times(),
              kwargs...)
 
-Load ERP data from a JLD2 file and create plots.
+Load ERP data and create plots. Accepts either a direct `.jld2` filepath or a filename 
+pattern to discover and plot all matching files.
 
 # Arguments
-- `filepath::String`: Path to JLD2 file containing ErpData or Vector{ErpData}
+- `filepath::String`: Either a `.jld2` file path, or a pattern string (e.g. `"erps_good"`) 
+  to match against files in `input_dir`
+- `input_dir::String`: Directory to search for pattern-matched files (default: `pwd()`)
+- `participant_selection::Function`: Participant filter for pattern mode (default: `participants()`)
 - `layout`: Layout specification (see main plot_erp documentation)
 - `channel_selection::Function`: Function that returns boolean vector for channel filtering
 - `sample_selection::Function`: Function that returns boolean vector for sample filtering
@@ -90,12 +96,20 @@ Load ERP data from a JLD2 file and create plots.
 # Load and plot from file
 plot_erp("grand_average_erps_good.jld2")
 
+# Plot all files matching pattern in current directory
+plot_erp("erps_good")
+
+# Plot specific participant
+plot_erp("erps_good", participant_selection = participants(1))
+
 # With channel selection
-plot_erp("grand_average_erps_good.jld2", channel_selection = channels([:PO7, :PO8]), layout = :grid)
+plot_erp("erps_good", channel_selection = channels([:PO7, :PO8]), layout = :grid)
 ```
 """
 function plot_erp(
     filepath::String;
+    input_dir::String = pwd(),
+    participant_selection::Function = participants(),
     layout::Union{Symbol,PlotLayout} = :single,
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
@@ -104,23 +118,53 @@ function plot_erp(
     baseline_interval::Interval = times(),
     kwargs...,
 )
-    # Read data from file
-    data = read_data(filepath)
-    if isnothing(data)
-        @minimal_error "No data found in file: $filepath"
-    end
+    # Detect: filepath (ends with .jld2) vs pattern
+    if endswith(filepath, ".jld2")
+        # Direct file path — existing behavior
+        data = read_data(filepath)
+        if isnothing(data)
+            @minimal_error "No data found in file: $filepath"
+        end
 
-    # Dispatch will handle ErpData vs Vector{ErpData} automatically
-    return plot_erp(
-        data;
-        layout = layout,
-        condition_selection = condition_selection,
-        channel_selection = channel_selection,
-        sample_selection = sample_selection,
-        interval_selection = interval_selection,
-        baseline_interval = baseline_interval,
-        kwargs...,
-    )
+        # Dispatch will handle ErpData vs Vector{ErpData} automatically
+        return plot_erp(
+            data;
+            layout = layout,
+            condition_selection = condition_selection,
+            channel_selection = channel_selection,
+            sample_selection = sample_selection,
+            interval_selection = interval_selection,
+            baseline_interval = baseline_interval,
+            kwargs...,
+        )
+    else
+        # Pattern-based discovery — one plot per file
+        files = _find_batch_files(filepath, input_dir, participant_selection)
+        if isempty(files)
+            @minimal_error "No ERP files matching pattern '$filepath' in $input_dir"
+        end
+
+        results = NamedTuple[]
+        for file in sort(files, by = _natural_sort_key)
+            file_path = joinpath(input_dir, file)
+            @info "Plotting: $file"
+            data = read_data(file_path)
+            isnothing(data) && continue
+
+            result = plot_erp(
+                data;
+                layout = layout,
+                condition_selection = condition_selection,
+                channel_selection = channel_selection,
+                sample_selection = sample_selection,
+                interval_selection = interval_selection,
+                baseline_interval = baseline_interval,
+                kwargs...,
+            )
+            push!(results, result)
+        end
+        return results
+    end
 end
 
 """
