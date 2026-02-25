@@ -40,13 +40,13 @@ function plot_erp_filter_gui(erp_vec::Vector{ErpData}; channel::Union{Symbol,Not
     all_channels = setdiff(propertynames(first_erp.data), metadata_cols)
 
     if isempty(all_channels)
-        @minimal_error_throw "No channels found in ERP data"
+        @minimal_error "No channels found in ERP data"
     end
 
     # Set initial channel
     initial_channel = isnothing(channel) ? all_channels[1] : channel
     if !(initial_channel in all_channels)
-        @minimal_error_throw "Channel $initial_channel not found in data. Available: $(all_channels)"
+        @minimal_error "Channel $initial_channel not found in data. Available: $(all_channels)"
     end
 
     # Get sample rate

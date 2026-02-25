@@ -56,7 +56,7 @@ function mirror!(dat::EpochData, side::Symbol = :both)::Nothing
 
     # Validate side parameter
     if side ∉ [:pre, :post, :both]
-        @minimal_error_throw("side must be :pre, :post, or :both, got :$side")
+        @minimal_error("side must be :pre, :post, or :both, got :$side")
     end
     @info "Mirroring epoched data on side: $side"
 
@@ -102,7 +102,7 @@ unmirror!(erp, :both)
 function mirror!(dat::ErpData, side::Symbol = :both)::Nothing
 
     if side ∉ [:pre, :post, :both]
-        @minimal_error_throw("side must be :pre, :post, or :both, got :$side")
+        @minimal_error("side must be :pre, :post, or :both, got :$side")
     end
     @info "Mirroring ERP data on side: $side"
 
@@ -250,7 +250,7 @@ unmirror!(epochs, :both)
 function unmirror!(dat::EpochData, side::Symbol = :both)::Nothing
 
     if side ∉ [:pre, :post, :both]
-        @minimal_error_throw("side must be :pre, :post, or :both, got :$side")
+        @minimal_error("side must be :pre, :post, or :both, got :$side")
     end
     @info "Unmirroring epoched data on side: $side"
 
@@ -283,7 +283,7 @@ Remove mirrored sections from ERP data in-place.
 function unmirror!(dat::ErpData, side::Symbol = :both)::Nothing
 
     if side ∉ [:pre, :post, :both]
-        @minimal_error_throw("side must be :pre, :post, or :both, got :$side")
+        @minimal_error("side must be :pre, :post, or :both, got :$side")
     end
     @info "Unmirroring ERP data on side: $side"
 

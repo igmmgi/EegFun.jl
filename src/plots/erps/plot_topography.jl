@@ -249,7 +249,7 @@ function plot_topography(
 )
 
     n_datasets = length(dat)
-    n_datasets == 0 && @minimal_error_throw "Cannot plot empty vector of datasets"
+    n_datasets == 0 && @minimal_error "Cannot plot empty vector of datasets"
 
     # Check if colorbars are enabled and get colorbar position
     kwargs_dict = Dict{Symbol,Any}(kwargs)
@@ -274,7 +274,7 @@ function plot_topography(
     end
 
     # Determine layout based on colorbar position
-    if colorbar_enabled && user_colorbar_position !== nothing
+    if colorbar_enabled && user_colorbar_position |> !isnothing
         # User provided custom colorbar position - use it
         cb_row_offset, cb_col_offset = user_colorbar_position
         # Calculate total grid size needed
@@ -307,7 +307,7 @@ function plot_topography(
         base_row = div(idx - 1, plot_cols) + 1
         base_col = mod1(idx, plot_cols)
 
-        if colorbar_enabled && user_colorbar_position !== nothing
+        if colorbar_enabled && user_colorbar_position |> !isnothing
             # User provided custom colorbar position
             cb_row_offset, cb_col_offset = user_colorbar_position
             if cb_row_offset > 1
@@ -369,7 +369,7 @@ function plot_topography(
     end
 
     # Set column sizes only if colorbars are enabled and to the right (default)
-    if colorbar_enabled && (user_colorbar_position === nothing || user_colorbar_position[1] <= 1)
+    if colorbar_enabled && isnothing((user_colorbar_position) || user_colorbar_position[1] <= 1)
         # Make colorbar columns narrower than plot columns
         # This ensures colorbars don't take up too much space while keeping plots visible
         for col = 1:total_cols
@@ -1092,7 +1092,7 @@ function _setup_shared_topo_selection!(fig::Figure, datasets::Vector, shared_sel
         active_ax, active_dataset = _find_active_axis_with_dataset(shared_selection_state.axes, mouse_pos, datasets)
 
         # Only process if mouse is over one of the shared axes
-        active_ax === nothing && return
+        isnothing(active_ax) && return
 
         if event.button == Mouse.left
             if event.action == Mouse.press
@@ -1125,7 +1125,7 @@ function _setup_shared_topo_selection!(fig::Figure, datasets::Vector, shared_sel
         # Only update if selection is active and mouse is over any shared axis
         if shared_selection_state.active[]
             active_ax = _find_active_axis(shared_selection_state.axes, pos)
-            if active_ax !== nothing
+            if active_ax |> !isnothing
                 _update_topo_selection!(active_ax, shared_selection_state)
             end
         end

@@ -107,8 +107,7 @@ using OrderedCollections
         @test isapprox(sum(layout_xyz.neighbours[:Fp1].weights), 1.0, atol = 1e-10)
 
         # Test error handling
-        result = EegFun.get_neighbours_xy!(test_layout, -1.0) # Negative distance
-        @test result === nothing
+        @test_throws Exception EegFun.get_neighbours_xy!(test_layout, -1.0) # Negative distance
     end
 
     @testset "Error Handling" begin
@@ -208,8 +207,7 @@ using OrderedCollections
             @test length(layout.neighbours) == size(layout.data, 1)
 
             # Test error handling for invalid distance criterion
-            result = EegFun.get_neighbours_xy!(layout, -1.0)
-            @test result === nothing
+            @test_throws Exception EegFun.get_neighbours_xy!(layout, -1.0)
 
             # Test xyz neighbours
             EegFun.polar_to_cartesian_xyz!(layout)
@@ -218,8 +216,7 @@ using OrderedCollections
             @test length(layout.neighbours) == size(layout.data, 1)
 
             # Test error handling for invalid distance criterion
-            result = EegFun.get_neighbours_xyz!(layout, -1.0)
-            @test result === nothing
+            @test_throws Exception EegFun.get_neighbours_xyz!(layout, -1.0)
         end
     end
 

@@ -31,7 +31,7 @@ function correlation_matrix(
     include_extra::Bool = false,
 )::DataFrame
     selected_channels = EegFun.get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
-    isempty(selected_channels) && @minimal_error_throw "No channels selected for correlation matrix"
+    isempty(selected_channels) && @minimal_error "No channels selected for correlation matrix"
     selected_samples = EegFun.get_selected_samples(dat, sample_selection)
     return _correlation_matrix(dat.data, selected_samples, selected_channels)
 end
@@ -119,8 +119,8 @@ function correlation_matrix_dual_selection(
     selected_channels1 = get_selected_channels(dat, channel_selection1; include_meta = false, include_extra = include_extra_selection1)
     selected_channels2 = get_selected_channels(dat, channel_selection2; include_meta = false, include_extra = include_extra_selection2)
 
-    isempty(selected_channels1) && @minimal_error_throw "No channels selected for first channel set"
-    isempty(selected_channels2) && @minimal_error_throw "No channels selected for second channel set"
+    isempty(selected_channels1) && @minimal_error "No channels selected for first channel set"
+    isempty(selected_channels2) && @minimal_error "No channels selected for second channel set"
 
     # Get selected samples (same for both channel sets)
     selected_samples = get_selected_samples(dat, sample_selection)
@@ -202,7 +202,7 @@ function channel_joint_probability(
     discret::Int = 1000,
 )::DataFrame
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
-    isempty(selected_channels) && @minimal_error_throw "No channels selected for joint probability calculation"
+    isempty(selected_channels) && @minimal_error "No channels selected for joint probability calculation"
     selected_samples = get_selected_samples(dat, sample_selection)
 
     return _channel_joint_probability(
@@ -296,7 +296,7 @@ Compute probability distribution for a data vector.
 - `Vector{Float64}`: Probability distribution (same as probaMap)
 """
 function compute_probability!(probaMap::Vector{Float64}, data::AbstractVector{Float64}, bins::Int)::Vector{Float64}
-    isempty(data) && @minimal_error_throw "Cannot compute probability for empty data vector"
+    isempty(data) && @minimal_error "Cannot compute probability for empty data vector"
 
     if bins > 0
         min_val, max_val = extrema(data)

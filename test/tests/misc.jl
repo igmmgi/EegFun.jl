@@ -93,8 +93,8 @@ using DataFrames
         # Test _extract_int
         @test EegFun._extract_int("channel_123_data") == 123
         @test EegFun._extract_int("test_456") == 456
-        @test EegFun._extract_int("no_numbers_here") === nothing
-        @test EegFun._extract_int("") === nothing
+        @test isnothing(EegFun._extract_int("no_numbers_here"))
+        @test isnothing(EegFun._extract_int(""))
         @test EegFun._extract_int("123abc456") == 123456  # Concatenates all digits
     end
 

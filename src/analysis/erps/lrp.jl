@@ -54,13 +54,13 @@ function lrp(erp_left::ErpData, erp_right::ErpData; channel_selection::Function 
     @info "Calculating lateralized readiness potential (LRP)"
 
     # Validate inputs
-    _have_same_structure(erp_left, erp_right) || @minimal_error_throw("Left and right ERPs have inconsistent structure")
+    _have_same_structure(erp_left, erp_right) || @minimal_error("Left and right ERPs have inconsistent structure")
 
     # Get selected left/odd channels and find their right/even pairs
     pairs = _get_channel_pairs_from_selection(erp_left, erp_right, channel_selection)
 
     if isempty(pairs)
-        @minimal_error_throw(
+        @minimal_error(
             "No valid lateral channel pairs found. Check that selected channels have odd numbers and their even counterparts exist."
         )
     end
@@ -313,12 +313,12 @@ function lrp(
         @log_call "lrp"
 
         # Validation
-        if (error_msg = _validate_input_dir(input_dir)) !== nothing
-            @minimal_error_throw(error_msg)
+        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+            @minimal_error(error_msg)
         end
 
-        if (error_msg = _validate_lrp_params(condition_pairs)) !== nothing
-            @minimal_error_throw(error_msg)
+        if (error_msg = _validate_lrp_params(condition_pairs)) |> !isnothing
+            @minimal_error(error_msg)
         end
 
         # Setup directories
@@ -406,10 +406,10 @@ function lrp(
     for (idx, (left_cond, right_cond)) in enumerate(condition_pairs)
         # Validate condition indices (now referring to filtered array)
         if left_cond < 1 || left_cond > length(erps_filtered)
-            @minimal_error_throw("Left condition index $left_cond out of range (1-$(length(erps_filtered)))")
+            @minimal_error("Left condition index $left_cond out of range (1-$(length(erps_filtered)))")
         end
         if right_cond < 1 || right_cond > length(erps_filtered)
-            @minimal_error_throw("Right condition index $right_cond out of range (1-$(length(erps_filtered)))")
+            @minimal_error("Right condition index $right_cond out of range (1-$(length(erps_filtered)))")
         end
 
         @info "  Processing pair $idx: condition $left_cond (left) vs $right_cond (right)"

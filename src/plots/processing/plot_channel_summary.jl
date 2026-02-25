@@ -85,7 +85,7 @@ function plot_channel_summary!(fig::Figure, ax::Axis, dat::DataFrame, col::Symbo
 
     # If averaging is requested, compute mean and std
     n_epochs = nothing
-    if plot_kwargs[:average_over] !== nothing
+    if plot_kwargs[:average_over] |> !isnothing
 
         if plot_kwargs[:average_over] ∉ propertynames(dat)
             @minimal_error("Column :$(plot_kwargs[:average_over]) not found in DataFrame for averaging.")
@@ -102,13 +102,13 @@ function plot_channel_summary!(fig::Figure, ax::Axis, dat::DataFrame, col::Symbo
 
     # Optionally sort data
     if plot_kwargs[:sort_values]
-        sort_column = plot_kwargs[:average_over] !== nothing ? :mean : col
+        sort_column = plot_kwargs[:average_over] |> !isnothing ? :mean : col
         dat = sort(dat, sort_column, rev = true)
     end
 
     # Extract plotting variables after sorting
     channel_names = String.(dat.channel)
-    if plot_kwargs[:average_over] !== nothing
+    if plot_kwargs[:average_over] |> !isnothing
         values_to_plot = dat.mean
         margin_of_error = dat.margin_of_error
     else
@@ -129,7 +129,7 @@ function plot_channel_summary!(fig::Figure, ax::Axis, dat::DataFrame, col::Symbo
         alpha = plot_kwargs[:bar_alpha],
     )
 
-    if plot_kwargs[:average_over] !== nothing # add error bars
+    if plot_kwargs[:average_over] |> !isnothing # add error bars
         errorbars!(
             ax,
             1:length(values_to_plot),
@@ -231,7 +231,7 @@ a bar chart of that metric across all channels.
 function _plot_multiple_columns!(fig::Figure, dat::DataFrame, col::Vector{Symbol}, plot_kwargs::Dict)
     n_cols = length(col)
 
-    if plot_kwargs[:dims] === nothing
+    if isnothing(plot_kwargs[:dims])
         rs, cs = _best_rect(n_cols)
     else
         dims = plot_kwargs[:dims]
@@ -282,7 +282,7 @@ function _configure_axis!(ax::Axis, channel_names::Vector{String}, col::Symbol, 
     if plot_kwargs[:ylabel] != ""
         ax.ylabel = plot_kwargs[:ylabel]
     else
-        ax.ylabel = plot_kwargs[:average_over] !== nothing ? "$(String(col)) (± 95% CI n=$n_epochs)" : "$(String(col))"
+        ax.ylabel = plot_kwargs[:average_over] |> !isnothing ? "$(String(col)) (± 95% CI n=$n_epochs)" : "$(String(col))"
     end
 
     # Configure ticks and labels

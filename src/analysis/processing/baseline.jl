@@ -182,9 +182,9 @@ end
 
 """Helper to convert and validate baseline intervals to (start, stop) tuples"""
 function _to_interval(interval::Tuple{Real,Real})
-    length(interval) == 2 || @minimal_error_throw("Baseline interval tuple must have 2 elements (start, stop), got: $interval")
+    length(interval) == 2 || @minimal_error("Baseline interval tuple must have 2 elements (start, stop), got: $interval")
     start, stop = Float64(interval[1]), Float64(interval[2])
-    start > stop && @minimal_error_throw("Baseline start ($start) must be <= stop ($stop)")
+    start > stop && @minimal_error("Baseline start ($start) must be <= stop ($stop)")
     return (start, stop)
 end
 
@@ -232,7 +232,7 @@ function _validate_baseline_interval(time::AbstractVector, baseline_interval::In
     start_time, stop_time = baseline_tuple[1], baseline_tuple[2]
 
     if start_time < time_min || stop_time > time_max
-        @minimal_error_throw "Invalid baseline_interval: $(baseline_tuple) - time values must be within data range ($(time_min) to $(time_max))"
+        @minimal_error "Invalid baseline_interval: $(baseline_tuple) - time values must be within data range ($(time_min) to $(time_max))"
     end
 
     # Convert time tuple to index tuple
@@ -240,14 +240,14 @@ function _validate_baseline_interval(time::AbstractVector, baseline_interval::In
 
     # Check if interval was found
     if isnothing(result)
-        @minimal_error_throw "Invalid baseline_interval: $(baseline_tuple) - interval not found in time vector (range: $(time_min) to $(time_max))"
+        @minimal_error "Invalid baseline_interval: $(baseline_tuple) - interval not found in time vector (range: $(time_min) to $(time_max))"
     end
 
     start_idx, stop_idx = result
 
     # Validate bounds (should always pass if range check passed, but keep for safety)
     if !(1 <= start_idx <= length(time)) || !(1 <= stop_idx <= length(time)) || !(start_idx <= stop_idx)
-        @minimal_error_throw "Invalid baseline_interval: ($start_idx, $stop_idx) (time vector length: $(length(time)))"
+        @minimal_error "Invalid baseline_interval: ($start_idx, $stop_idx) (time vector length: $(length(time)))"
     end
 
     return (start_idx, stop_idx)
@@ -258,7 +258,7 @@ function _validate_baseline_interval(dat::MultiDataFrameEeg, baseline_interval::
         # assume all data have the same time, so we just use the first epoch to get indices
         mask = baseline_interval(dat.data[1])
         indices = findall(mask)
-        isempty(indices) && @minimal_error_throw "Baseline window selection returned no samples!"
+        isempty(indices) && @minimal_error "Baseline window selection returned no samples!"
         return (first(indices), last(indices))
     end
     return _validate_baseline_interval(dat.data[1].time, baseline_interval) # assume all data have the same time
@@ -268,7 +268,7 @@ function _validate_baseline_interval(dat::SingleDataFrameEeg, baseline_interval:
     if baseline_interval isa Function
         mask = baseline_interval(dat.data)
         indices = findall(mask)
-        isempty(indices) && @minimal_error_throw "Baseline window selection returned no samples!"
+        isempty(indices) && @minimal_error "Baseline window selection returned no samples!"
         # Check for contiguity (warn if not, but proceed)
         if !all(diff(indices) .== 1)
             @minimal_warning "Selected baseline window is not contiguous!"
@@ -368,8 +368,8 @@ function baseline(
         @log_call "baseline"
 
         # Validation
-        if (error_msg = _validate_input_dir(input_dir)) !== nothing
-            @minimal_error_throw(error_msg)
+        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+            @minimal_error(error_msg)
         end
 
         # Validate and normalize baseline interval (validates tuple structure)

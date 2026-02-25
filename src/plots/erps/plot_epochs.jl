@@ -114,7 +114,7 @@ function plot_epochs(
     kwargs...,
 )
     data = read_data(filename)
-    isnothing(data) && @minimal_error_throw "No data found in file: $filename"
+    isnothing(data) && @minimal_error "No data found in file: $filename"
 
     # Dispatch to main plot_epochs function (handles both EpochData and Vector{EpochData})
     return plot_epochs(
@@ -192,7 +192,7 @@ function plot_epochs(
     _set_window_title(title_str)
 
     # Check if subsetting resulted in empty data
-    isempty(dat_subset) && @minimal_error_throw "No data matched the selection criteria!"
+    isempty(dat_subset) && @minimal_error "No data matched the selection criteria!"
 
     # Get ALL channels from first dataset (not filtered by channel_selection)
     all_channels = channel_labels(dat_subset[1])
@@ -205,7 +205,7 @@ function plot_epochs(
     all_plot_channels = [ch for ch in selected_channels if ch in all_channels]
 
     # Validate we have channels to plot
-    isempty(all_plot_channels) && @minimal_error_throw "No channels selected for plotting"
+    isempty(all_plot_channels) && @minimal_error "No channels selected for plotting"
 
     # If average_channels is requested, apply channel_average! directly to dat_subset (mutate in place)
     if plot_kwargs[:average_channels]
@@ -356,7 +356,7 @@ function plot_epochs(
 
         elseif layout == :grid
             # Use layout_grid_dims if provided, otherwise calculate best rectangle
-            grid_dims = plot_kwargs[:layout_grid_dims] !== nothing ? plot_kwargs[:layout_grid_dims] : _best_rect(length(all_plot_channels))
+            grid_dims = plot_kwargs[:layout_grid_dims] |> !isnothing ? plot_kwargs[:layout_grid_dims] : _best_rect(length(all_plot_channels))
             _plot_epochs_grid_multi!(fig, axes, dat_subset, all_plot_channels, grid_dims, condition_colors_list, plot_kwargs, line_refs)
 
         elseif layout == :topo
@@ -582,7 +582,7 @@ function _plot_epochs_grid_multi!(
         push!(axes, ax)
 
         # Get line_refs for this axis
-        ax_line_refs = line_refs !== nothing && idx <= length(line_refs) ? line_refs[idx] : nothing
+        ax_line_refs = line_refs |> !isnothing && idx <= length(line_refs) ? line_refs[idx] : nothing
 
         # Plot all conditions for this channel
         for (cond_idx, dat) in enumerate(datasets)
@@ -590,7 +590,7 @@ function _plot_epochs_grid_multi!(
             cond_plot_kwargs = merge(plot_kwargs, Dict(:color => condition_colors[cond_idx]))
             trial_line, trial_y_obs = _plot_epochs!(ax, dat, [channel], cond_plot_kwargs; label = label, line_refs = ax_line_refs)
 
-            if ax_line_refs !== nothing
+            if ax_line_refs |> !isnothing
                 _store_line_ref!(ax_line_refs, cond_idx, channel, trial_line, trial_y_obs)
             end
 
@@ -598,7 +598,7 @@ function _plot_epochs_grid_multi!(
                 erp_dat = average_epochs(dat)
                 avg_label = label * " (avg)"
                 avg_line, y_obs = _plot_erp_average!(ax, erp_dat, [channel], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
-                if ax_line_refs !== nothing
+                if ax_line_refs |> !isnothing
                     _store_avg_line_ref!(ax_line_refs, cond_idx, channel, avg_line, y_obs)
                 end
             end
@@ -691,7 +691,7 @@ function _plot_epochs_topo_multi!(
     # Normalize positions to [0,1] - no margin needed since halign/valign centers the plot at the position
     for (ch_idx, ch) in enumerate(all_plot_channels)
         idx = findfirst(==(ch), dat.layout.data.label)
-        if idx !== nothing
+        if idx |> !isnothing
             x = dat.layout.data.x2[idx]
             y = dat.layout.data.y2[idx]
             halign = (x - minx) / xrange
@@ -706,7 +706,7 @@ function _plot_epochs_topo_multi!(
         push!(axes, ax)
 
         # Get line_refs for this axis
-        ax_line_refs = line_refs !== nothing && ch_idx <= length(line_refs) ? line_refs[ch_idx] : nothing
+        ax_line_refs = line_refs |> !isnothing && ch_idx <= length(line_refs) ? line_refs[ch_idx] : nothing
 
         # Plot all conditions for this channel
         for (cond_idx, dat_cond) in enumerate(datasets)
@@ -714,7 +714,7 @@ function _plot_epochs_topo_multi!(
             cond_plot_kwargs = merge(plot_kwargs, Dict(:color => condition_colors[cond_idx]))
             trial_line, trial_y_obs = _plot_epochs!(ax, dat_cond, [ch], cond_plot_kwargs; label = label, line_refs = ax_line_refs)
 
-            if ax_line_refs !== nothing
+            if ax_line_refs |> !isnothing
                 _store_line_ref!(ax_line_refs, cond_idx, ch, trial_line, trial_y_obs)
             end
 
@@ -722,7 +722,7 @@ function _plot_epochs_topo_multi!(
                 erp_dat = average_epochs(dat_cond)
                 avg_label = label * " (avg)"
                 avg_line, y_obs = _plot_erp_average!(ax, erp_dat, [ch], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
-                if ax_line_refs !== nothing
+                if ax_line_refs |> !isnothing
                     _store_avg_line_ref!(ax_line_refs, cond_idx, ch, avg_line, y_obs)
                 end
             end
@@ -818,7 +818,7 @@ function _add_epochs_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vecto
     # Extract legend parameters
     legend_label = kwargs[:legend_label]
     legend_position = kwargs[:legend_position]
-    if kwargs[:legend_nbanks] === nothing
+    if isnothing(kwargs[:legend_nbanks])
         kwargs[:legend_nbanks] = length(channels) > 10 ? cld(length(channels), 10) : 1
     end
     legend_kwargs = _extract_legend_kwargs(kwargs)
@@ -913,7 +913,7 @@ function _setup_linked_legend_interactions_epochs!(line_refs::Vector{<:Dict})
                     continue
                 end
                 # Collect trial lines
-                if haskey(ch_line_data, :trials) && ch_line_data[:trials] !== nothing
+                if haskey(ch_line_data, :trials) && ch_line_data[:trials] |> !isnothing
                     trial_data = ch_line_data[:trials]
                     trial_line = nothing
                     if trial_data isa Tuple && length(trial_data) == 2
@@ -921,14 +921,14 @@ function _setup_linked_legend_interactions_epochs!(line_refs::Vector{<:Dict})
                     elseif trial_data isa Lines
                         trial_line = trial_data
                     end
-                    if trial_line !== nothing
+                    if trial_line |> !isnothing
                         trial_lines = get!(condition_trial_lines, cond_idx, Any[])
                         push!(trial_lines, trial_line)
                     end
                 end
 
                 # Collect average lines
-                if haskey(ch_line_data, :average) && ch_line_data[:average] !== nothing
+                if haskey(ch_line_data, :average) && ch_line_data[:average] |> !isnothing
                     avg_data = ch_line_data[:average]
                     avg_line = nothing
                     if avg_data isa Tuple && length(avg_data) == 2
@@ -936,7 +936,7 @@ function _setup_linked_legend_interactions_epochs!(line_refs::Vector{<:Dict})
                     elseif avg_data isa Lines
                         avg_line = avg_data
                     end
-                    if avg_line !== nothing
+                    if avg_line |> !isnothing
                         avg_lines = get!(condition_avg_lines, cond_idx, Any[])
                         push!(avg_lines, avg_line)
                     end
@@ -1010,8 +1010,8 @@ function _setup_epochs_control_panel!(
 
     # State: baseline values and condition selections
     start_val, stop_val = _extract_baseline_values(baseline_interval)
-    baseline_start_obs = Observable(start_val === nothing ? "" : string(start_val))
-    baseline_stop_obs = Observable(stop_val === nothing ? "" : string(stop_val))
+    baseline_start_obs = isnothing(Observable(start_val) ? "" : string(start_val))
+    baseline_stop_obs = isnothing(Observable(stop_val) ? "" : string(stop_val))
     condition_checked = [Observable(true) for _ in dat_subset]
     condition_checked_ref[] = condition_checked  # Store for access by right-click handler
 
@@ -1025,13 +1025,13 @@ function _setup_epochs_control_panel!(
         start_val, stop_val = _parse_baseline_values(start_str, stop_str)
 
         # Convert to tuple if valid (baseline! accepts tuples and converts internally)
-        baseline_interval_new = (start_val !== nothing && stop_val !== nothing) ? (start_val, stop_val) : nothing
+        baseline_interval_new = (start_val |> !isnothing && stop_val |> !isnothing) ? (start_val, stop_val) : nothing
 
         # Check if baseline actually changed
         baseline_changed = baseline_interval_new !== previous_baseline[]
 
         # Apply baseline if it changed
-        if baseline_changed && baseline_interval_new !== nothing
+        if baseline_changed && baseline_interval_new |> !isnothing
             baseline!.(dat_subset, Ref(baseline_interval_new))
             baseline!.(dat_subset_avg, Ref(baseline_interval_new))
             previous_baseline[] = baseline_interval_new
@@ -1056,7 +1056,7 @@ function _setup_epochs_control_panel!(
                     end
 
                     # Update trial line visibility and y-data
-                    if haskey(line_data, :trials) && line_data[:trials] !== nothing
+                    if haskey(line_data, :trials) && line_data[:trials] |> !isnothing
                         trial_line, trial_y_obs = line_data[:trials]
                         trial_line.visible = visible
                         if baseline_changed
@@ -1066,7 +1066,7 @@ function _setup_epochs_control_panel!(
                     end
 
                     # Update average line visibility and y-data (if present)
-                    if haskey(line_data, :average) && line_data[:average] !== nothing
+                    if haskey(line_data, :average) && line_data[:average] |> !isnothing
                         avg_line, y_obs = line_data[:average]
                         avg_line.visible = visible
                         if baseline_changed && cond_idx <= length(dat_subset_avg)
@@ -1203,7 +1203,7 @@ Returns filtered Vector{EpochData} or single EpochData if only one condition.
 """
 function _filter_visible_conditions_epochs(data, condition_checked_ref)
     # If no condition_checked available or data is not Vector, return as-is
-    if condition_checked_ref[] === nothing || !(data isa Vector{EpochData})
+    if isnothing(condition_checked_ref[]) || !(data isa Vector{EpochData})
         return data
     end
 

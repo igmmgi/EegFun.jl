@@ -22,7 +22,7 @@ using Logging
         @test result.message == "Success message"
 
         # Test immutable nature
-        @test_throws ErrorException result.success = false
+        @test_throws Exception result.success = false
 
         # Test with false success
         result_fail = EegFun.BatchResult(false, "error.jld2", "Error message")
@@ -43,8 +43,8 @@ using Logging
 
         # Test with nothing values
         config_nothing = EegFun.BatchConfig("test", "/input", "/output", nothing, nothing)
-        @test config_nothing.participants === nothing
-        @test config_nothing.conditions === nothing
+        @test isnothing(config_nothing.participants)
+        @test isnothing(config_nothing.conditions)
 
         # Test with single Int
         config_single = EegFun.BatchConfig("test", "/input", "/output", 1, 1)
@@ -136,7 +136,7 @@ using Logging
     @testset "_validate_input_dir" begin
         # Test existing directory
         result = EegFun._validate_input_dir(test_dir)
-        @test result === nothing
+        @test isnothing(result)
 
         # Test non-existent directory
         result = EegFun._validate_input_dir("/nonexistent/directory")
@@ -155,7 +155,7 @@ using Logging
         # Test valid channel groups
         groups = [[:Fz, :Cz], [:Pz, :Oz], [:M1, :M2]]
         result = EegFun._validate_channel_groups(groups)
-        @test result === nothing
+        @test isnothing(result)
 
         # Test empty groups
         result = EegFun._validate_channel_groups(Vector{Symbol}[])
@@ -170,24 +170,24 @@ using Logging
         # Test single channel group (should warn but not error)
         groups_single = [[:Fz], [:Cz, :Pz]]
         result = EegFun._validate_channel_groups(groups_single)
-        @test result === nothing  # Should not error, just warn
+        @test isnothing(result)  # Should not error, just warn
 
         # Test multiple single-channel groups
         groups_multi_single = [[:Fz], [:Cz], [:Pz]]
         result = EegFun._validate_channel_groups(groups_multi_single)
-        @test result === nothing  # Should warn but not error
+        @test isnothing(result)  # Should warn but not error
 
         # Test large groups
         groups_large = [[:Fz, :Cz, :Pz, :Oz, :M1, :M2]]
         result = EegFun._validate_channel_groups(groups_large)
-        @test result === nothing
+        @test isnothing(result)
     end
 
     @testset "_validate_condition_groups" begin
         # Test valid condition groups
         groups = [[1, 2], [3, 4], [5, 6]]
         result = EegFun._validate_condition_groups(groups)
-        @test result === nothing
+        @test isnothing(result)
 
         # Test empty groups
         result = EegFun._validate_condition_groups(Vector{Int}[])
@@ -198,44 +198,44 @@ using Logging
         groups_with_duplicates = [[1, 1, 2], [3, 4]]
         groups_copy = deepcopy(groups_with_duplicates)
         result = EegFun._validate_condition_groups(groups_copy)
-        @test result === nothing
+        @test isnothing(result)
         @test groups_copy[1] == [1, 2]  # Duplicates should be removed
 
         # Test multiple duplicates
         groups_multi_dup = [[1, 1, 1, 2, 2], [3, 4]]
         groups_copy2 = deepcopy(groups_multi_dup)
         result = EegFun._validate_condition_groups(groups_copy2)
-        @test result === nothing
+        @test isnothing(result)
         @test groups_copy2[1] == [1, 2]  # All duplicates removed
 
         # Test overlap detection (should warn but not error)
         groups_overlap = [[1, 2], [2, 3]]
         groups_copy3 = deepcopy(groups_overlap)
         result = EegFun._validate_condition_groups(groups_copy3)
-        @test result === nothing  # Should warn but not error
+        @test isnothing(result)  # Should warn but not error
 
         # Test multiple overlaps
         groups_multi_overlap = [[1, 2], [2, 3], [3, 4]]
         groups_copy4 = deepcopy(groups_multi_overlap)
         result = EegFun._validate_condition_groups(groups_copy4)
-        @test result === nothing
+        @test isnothing(result)
 
         # Test single condition groups
         groups_single = [[1], [2], [3]]
         result = EegFun._validate_condition_groups(groups_single)
-        @test result === nothing
+        @test isnothing(result)
     end
 
     @testset "_validate_condition_pairs" begin
         # Test valid condition pairs (tuples)
         pairs_tuples = [(1, 2), (3, 4), (5, 6)]
         result = EegFun._validate_condition_pairs(pairs_tuples)
-        @test result === nothing
+        @test isnothing(result)
 
         # Test valid condition pairs (vectors)
         pairs_vectors = [[1, 2], [3, 4], [5, 6]]
         result = EegFun._validate_condition_pairs(pairs_vectors)
-        @test result === nothing
+        @test isnothing(result)
 
         # Test empty pairs
         result = EegFun._validate_condition_pairs(Tuple{Int,Int}[])
@@ -249,12 +249,12 @@ using Logging
         # Test identical conditions (should warn but not error)
         pairs_identical = [(1, 1), (2, 3)]
         result = EegFun._validate_condition_pairs(pairs_identical)
-        @test result === nothing  # Should warn but not error
+        @test isnothing(result)  # Should warn but not error
 
         # Test multiple identical pairs
         pairs_multi_identical = [(1, 1), (2, 2), (3, 3)]
         result = EegFun._validate_condition_pairs(pairs_multi_identical)
-        @test result === nothing
+        @test isnothing(result)
 
     end
 
@@ -445,17 +445,17 @@ using Logging
             # Test with very large condition numbers
             groups_large = [[1000, 2000], [3000, 4000]]
             result = EegFun._validate_condition_groups(groups_large)
-            @test result === nothing
+            @test isnothing(result)
 
             # Test with negative condition numbers
             groups_negative = [[-1, 1], [2, 3]]
             result = EegFun._validate_condition_groups(groups_negative)
-            @test result === nothing  # Should not error, just process
+            @test isnothing(result)  # Should not error, just process
 
             # Test with zero
             groups_zero = [[0, 1], [2, 3]]
             result = EegFun._validate_condition_groups(groups_zero)
-            @test result === nothing
+            @test isnothing(result)
         end
 
         @testset "Batch operation edge cases" begin
@@ -508,7 +508,7 @@ using Logging
 
             # Validate input directory
             validation = EegFun._validate_input_dir(test_dir)
-            @test validation === nothing
+            @test isnothing(validation)
 
             # Process files
             process_fn = (input_path, output_path) -> begin

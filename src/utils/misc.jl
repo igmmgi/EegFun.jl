@@ -108,13 +108,13 @@ Get column indices for specified channel labels.
 - `ArgumentError`: If no matching channels found
 """
 function _get_channel_indices(dat::DataFrame, channel_labels::AbstractVector{<:AbstractString})::Vector{Int}
-    isempty(channel_labels) && @minimal_error_throw "channel_labels cannot be empty"
+    isempty(channel_labels) && @minimal_error "channel_labels cannot be empty"
 
     # Use Set for O(1) membership check during search
     labels_set = Set(channel_labels)
     channel_indices = findall(col -> col in labels_set, names(dat))
 
-    isempty(channel_indices) && @minimal_error_throw "No matching channel_labels found in the data frame"
+    isempty(channel_indices) && @minimal_error "No matching channel_labels found in the data frame"
 
     return channel_indices
 end
@@ -528,7 +528,7 @@ function _merge_plot_kwargs(defaults_dict::Dict{Symbol,Tuple{Any,String}}, user_
         valid_keys = keys(defaults)
         unknown_keys = setdiff(keys(user_dict), valid_keys)
         if !isempty(unknown_keys)
-            @minimal_error_throw "Unknown keyword arguments: $(join(unknown_keys, ", ")). Valid arguments: $(join(valid_keys, ", "))"
+            @minimal_error "Unknown keyword arguments: $(join(unknown_keys, ", ")). Valid arguments: $(join(valid_keys, ", "))"
         end
     end
 

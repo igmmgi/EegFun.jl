@@ -286,8 +286,8 @@ function tf_morlet(
         @info "Batch tf_morlet started at $(now())"
         @log_call "tf_morlet"
 
-        if (error_msg = _validate_input_dir(input_dir)) !== nothing
-            @minimal_error_throw(error_msg)
+        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+            @minimal_error(error_msg)
         end
 
         output_dir = something(output_dir, joinpath(input_dir, "tf_morlet_$(file_pattern)"))

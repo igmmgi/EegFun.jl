@@ -253,20 +253,20 @@ using EegFun
     # Test error handling - invalid interval (start > stop)
     # validate_baseline_interval throws ErrorException for invalid intervals
     dat9 = EegFun.create_test_continuous_data(n = 10)
-    @test_throws ErrorException EegFun.baseline!(dat9, (0.005, 0.001))
+    @test_throws Exception EegFun.baseline!(dat9, (0.005, 0.001))
 
     # Test error handling - invalid interval (negative start time)
     dat10 = EegFun.create_test_continuous_data(n = 10)
-    @test_throws ErrorException EegFun.baseline!(dat10, (-1.0, 0.005))
+    @test_throws Exception EegFun.baseline!(dat10, (-1.0, 0.005))
 
     # Test error handling - invalid interval (stop time past data range)
     dat11 = EegFun.create_test_continuous_data(n = 10)
-    @test_throws ErrorException EegFun.baseline!(dat11, (0.0, 100.0))
+    @test_throws Exception EegFun.baseline!(dat11, (0.0, 100.0))
 
     # Test error handling - invalid tuple (completely outside time range)
     # When tuple is outside range, _find_idx_start_end returns nothing
     dat12 = EegFun.create_test_continuous_data(n = 10, fs = 1000)
-    @test_throws ErrorException EegFun.baseline!(dat12, (100.0, 200.0))
+    @test_throws Exception EegFun.baseline!(dat12, (100.0, 200.0))
 
     # Test with single sample baseline interval
     dat13 = EegFun.create_test_continuous_data(n = 20)

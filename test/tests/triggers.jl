@@ -528,7 +528,7 @@ using OrderedCollections
             layout = EegFun.Layout(DataFrame(label = [:channel], inc = [0.0], azi = [0.0]), nothing, nothing)
             dat = EegFun.ContinuousData("test_data", df, layout, 100, EegFun.AnalysisInfo())
 
-            @test_throws ErrorException EegFun.trigger_count(dat)
+            @test_throws Exception EegFun.trigger_count(dat)
         end
 
         @testset "consistent output types" begin
@@ -618,7 +618,7 @@ using OrderedCollections
             triggers = [0, 1, 2, 3, 0, 1, 5, 3, 0, 2, 7, 8, 0, 1, 6, 3, 0]
 
             # Wildcard at start (should error)
-            @test_throws ErrorException EegFun.search_sequence(triggers, [:any, 2, 3])
+            @test_throws Exception EegFun.search_sequence(triggers, [:any, 2, 3])
 
             # Multiple wildcards (currently not supported)
             @test EegFun.search_sequence(triggers, [1, :any, :any, 3]) == Int[]
@@ -627,7 +627,7 @@ using OrderedCollections
             @test EegFun.search_sequence(triggers, [1, 2, :any]) == [2]
 
             # All wildcards (should error)
-            @test_throws ErrorException EegFun.search_sequence(triggers, [:any, :any, :any])
+            @test_throws Exception EegFun.search_sequence(triggers, [:any, :any, :any])
 
             # Wildcard with ranges
             @test EegFun.search_sequence(triggers, [1, :any, 2:4]) == [2, 6, 14]
@@ -748,11 +748,11 @@ using OrderedCollections
 
         @testset "error conditions" begin
             # Invalid sequence types
-            @test_throws ErrorException EegFun.search_sequence([1, 2, 3], [:any])
+            @test_throws Exception EegFun.search_sequence([1, 2, 3], [:any])
             @test_throws MethodError EegFun.search_sequence([1, 2, 3], [1.5, 2.5])
 
             # Malformed sequences
-            @test_throws ErrorException EegFun.search_sequence([1, 2, 3], [1, "invalid", 3])
+            @test_throws Exception EegFun.search_sequence([1, 2, 3], [1, "invalid", 3])
 
             # Empty ranges in sequences
             @test EegFun.search_sequence([1, 2, 3], [1:0, 2:3]) == [2, 3]

@@ -36,7 +36,7 @@ function channel_average!(
     # Validate that all channel_selections are callable
     for (i, sel) in enumerate(channel_selections)
         if !(sel isa Function)
-            @minimal_error_throw "Channel selection at index $i must be a Function, got $(typeof(sel))"
+            @minimal_error "Channel selection at index $i must be a Function, got $(typeof(sel))"
         end
     end
 
@@ -53,7 +53,7 @@ function channel_average!(
     # Validate channel groups
     if any(isempty, selected_channel_groups)
         empty_selections = findall(isempty, selected_channel_groups)
-        @minimal_error_throw "Channel selections at indices $empty_selections produced no channels"
+        @minimal_error "Channel selections at indices $empty_selections produced no channels"
     end
 
     # Determine labels
@@ -69,7 +69,7 @@ function channel_average!(
         end
     else
         if length(output_labels) != length(selected_channel_groups)
-            @minimal_error_throw "N output_labels ($(length(output_labels))) must match N channel selections ($(length(selected_channel_groups)))"
+            @minimal_error "N output_labels ($(length(output_labels))) must match N channel selections ($(length(selected_channel_groups)))"
         end
         labels = Symbol.(output_labels)
     end

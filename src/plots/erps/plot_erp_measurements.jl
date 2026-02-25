@@ -55,7 +55,7 @@ end
 
 function plot_erp_measurements(filepath::String, analysis_type::String; kwargs...)
     data = read_data(filepath)
-    isnothing(data) && @minimal_error_throw "No data found in file: $filepath"
+    isnothing(data) && @minimal_error "No data found in file: $filepath"
     return plot_erp_measurements(data, analysis_type; kwargs...)
 end
 
@@ -74,7 +74,7 @@ function plot_erp_measurements(
     selected_indices = get_selected_conditions(erp_datasets, condition_selection)
     erp_datasets = erp_datasets[selected_indices]
 
-    isempty(erp_datasets) && @minimal_error_throw "No conditions selected"
+    isempty(erp_datasets) && @minimal_error "No conditions selected"
 
     # Default analysis interval to full time range
     if isnothing(analysis_interval)
@@ -162,9 +162,9 @@ function _build_plot_line_lookup(line_refs, axes)
         return plot_lines
     end
     for (ax_idx, ax_line_refs) in enumerate(line_refs)
-        if ax_idx <= length(plot_lines) && ax_line_refs !== nothing
+        if ax_idx <= length(plot_lines) && ax_line_refs |> !isnothing
             for (dataset_idx, channel_lines) in ax_line_refs
-                if channel_lines !== nothing
+                if channel_lines |> !isnothing
                     for (channel, line_data) in channel_lines
                         if line_data isa Tuple && length(line_data) >= 1
                             plot_lines[ax_idx][(dataset_idx, channel)] = line_data[1]

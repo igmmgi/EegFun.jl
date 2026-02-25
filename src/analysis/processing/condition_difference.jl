@@ -25,7 +25,7 @@ Create a difference wave by subtracting ERP2 from ERP1.
 """
 function _create_difference_wave(erp1::ErpData, erp2::ErpData, cond1::Int, cond2::Int, diff_cond::Int)
     # Validate that both ERPs have the same structure
-    _have_same_structure(erp1, erp2) || @minimal_error_throw("ERPs have inconsistent structure")
+    _have_same_structure(erp1, erp2) || @minimal_error("ERPs have inconsistent structure")
 
     # Get EEG channels (exclude metadata columns)
     metadata_cols = meta_labels(erp1)
@@ -151,7 +151,7 @@ function condition_difference(data::Vector{<:ErpData}, condition_pairs::Union{Ve
     end
 
     if isempty(difference_waves)
-        @minimal_error_throw("No valid condition pairs found")
+        @minimal_error("No valid condition pairs found")
     end
 
     @info "Created $(length(difference_waves)) difference wave(s)"
@@ -220,14 +220,14 @@ function condition_difference(
         @log_call "condition_difference"
 
         # Validation (early return on error)
-        if (error_msg = _validate_input_dir(input_dir)) !== nothing
-            @minimal_error_throw(error_msg)
+        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+            @minimal_error(error_msg)
         end
 
 
 
-        if (error_msg = _validate_condition_pairs(condition_pairs)) !== nothing
-            @minimal_error_throw(error_msg)
+        if (error_msg = _validate_condition_pairs(condition_pairs)) |> !isnothing
+            @minimal_error(error_msg)
         end
 
         # Setup directories

@@ -169,7 +169,7 @@ function permutation_test(
         if cluster.is_significant
             for electrode in cluster.electrodes
                 e_idx = findfirst(==(electrode), electrodes)
-                if e_idx !== nothing
+                if e_idx |> !isnothing
                     for t_idx in cluster.time_indices
                         if 1 <= t_idx <= size(significant_mask_positive, 2)
                             significant_mask_positive[e_idx, t_idx] = true
@@ -184,7 +184,7 @@ function permutation_test(
         if cluster.is_significant
             for electrode in cluster.electrodes
                 e_idx = findfirst(==(electrode), electrodes)
-                if e_idx !== nothing
+                if e_idx |> !isnothing
                     for t_idx in cluster.time_indices
                         if 1 <= t_idx <= size(significant_mask_negative, 2)
                             significant_mask_negative[e_idx, t_idx] = true

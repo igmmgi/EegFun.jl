@@ -132,7 +132,7 @@ using DataFrames
 
         @testset "No matching files" begin
             result = EegFun.grand_average("nonexistent_pattern", input_dir = test_dir)
-            @test result === nothing
+            @test isnothing(result)
         end
 
         @testset "Files with no ERP data" begin
@@ -149,7 +149,7 @@ using DataFrames
                 output_dir = output_dir,
             )
 
-            @test result === nothing
+            @test isnothing(result)
         end
     end
 
@@ -164,7 +164,7 @@ using DataFrames
                 output_dir = output_dir,
             )
 
-            @test result === nothing
+            @test isnothing(result)
         end
 
         @testset "Insufficient participants for some conditions" begin
@@ -207,7 +207,7 @@ using DataFrames
                 output_dir = output_dir,
             )
 
-            @test result === nothing
+            @test isnothing(result)
         end
     end
 

@@ -23,10 +23,8 @@ using OrderedCollections
         @test EegFun._get_cols_by_group(continuous_data, :metadata) == [:time, :sample]
         @test EegFun._get_cols_by_group(continuous_data, :extra) == [:vEOG, :hEOG]
 
-        # Test error handling - the function uses @minimal_error which doesn't throw ErrorException
-        # Instead, it returns nothing and logs an error
-        result = EegFun._get_cols_by_group(continuous_data, :invalid)
-        @test result === nothing
+        # Test error handling - @minimal_error now throws EegFunError
+        @test_throws Exception EegFun._get_cols_by_group(continuous_data, :invalid)
 
         # Test empty layout case - need a layout with a label column
         empty_layout = EegFun.Layout(DataFrame(label = Symbol[]), nothing, nothing)
@@ -258,17 +256,17 @@ using OrderedCollections
         df = DataFrame(time = [0.1, 0.2, 0.3, 0.4, 0.5])
         @test EegFun._data_limits_x(df) == (0.1, 0.5)
         @test EegFun._data_limits_x(df; col = :time) == (0.1, 0.5)
-        @test EegFun._data_limits_x(DataFrame()) === nothing
+        @test isnothing(EegFun._data_limits_x(DataFrame()))
 
         # Test _data_limits_y
         df = DataFrame(Fz = [1.0, 2.0, 3.0, 4.0, 5.0])
         @test EegFun._data_limits_y(df, :Fz) == [1.0, 5.0]
-        @test EegFun._data_limits_y(DataFrame(), :Fz) === nothing
+        @test isnothing(EegFun._data_limits_y(DataFrame(), :Fz))
 
         # Test _data_limits_y with multiple columns
         df = DataFrame(Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0], Pz = [7.0, 8.0, 9.0])
         @test EegFun._data_limits_y(df, [:Fz, :Cz, :Pz]) == [1.0, 9.0]
-        @test EegFun._data_limits_y(DataFrame(), [:Fz, :Cz]) === nothing
+        @test isnothing(EegFun._data_limits_y(DataFrame(), [:Fz, :Cz]))
     end
 
     @testset "DataFrame subsetting utilities" begin
@@ -454,7 +452,7 @@ using OrderedCollections
     @testset "Logging functions" begin
         df = DataFrame(A = [1, 2, 3], B = [4, 5, 6])
         result = EegFun._log_pretty_table(df)
-        @test result === nothing
+        @test isnothing(result)
     end
 
     @testset "Predicate functions" begin

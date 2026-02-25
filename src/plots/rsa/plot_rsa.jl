@@ -85,7 +85,7 @@ function plot_rdm_heatmap(rsa_data::RsaData; time_point::Union{Float64,Int,Nothi
     elseif isa(time_point, Int)
         # Use time index
         if time_point < 1 || time_point > n_times
-            @minimal_error_throw("Time point index $time_point out of range [1, $n_times]")
+            @minimal_error("Time point index $time_point out of range [1, $n_times]")
         end
         rdm_to_plot = rsa_data.rdm[time_point, :, :]
         time_label = "$(round(rsa_data.times[time_point], digits=3)) s"
@@ -190,7 +190,7 @@ function plot_rdm_timecourse(rsa_data::RsaData; condition_pairs::Union{Vector{Tu
         # Validate pairs
         for (i, j) in pairs
             if i < 1 || i > n_conditions || j < 1 || j > n_conditions
-                @minimal_error_throw("Invalid condition pair ($i, $j). Conditions range from 1 to $n_conditions")
+                @minimal_error("Invalid condition pair ($i, $j). Conditions range from 1 to $n_conditions")
             end
         end
     end
@@ -292,7 +292,7 @@ plot_model_correlations(rsa_result, colors=[:red, :blue], title="Model Compariso
 """
 function plot_model_correlations(rsa_data::RsaData; kwargs...)
     if isnothing(rsa_data.model_correlations) || isnothing(rsa_data.model_names)
-        @minimal_error_throw("RSA data does not contain model correlations. Run compare_models() first.")
+        @minimal_error("RSA data does not contain model correlations. Run compare_models() first.")
     end
 
     # Merge defaults with user kwargs
@@ -442,7 +442,7 @@ function plot_rsa(rsa_data::RsaData; kwargs...)
     elseif plot_type == :correlations
         return plot_model_correlations(rsa_data; kwargs...)
     else
-        @minimal_error_throw("Unknown plot_type: $plot_type. Use :rdm or :correlations")
+        @minimal_error("Unknown plot_type: $plot_type. Use :rdm or :correlations")
     end
 end
 

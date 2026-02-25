@@ -93,7 +93,7 @@ using Random
                 ],
             ),
         )
-        @test_throws ErrorException EegFun.condition_parse_epoch(bad_cfg7)
+        @test_throws Exception EegFun.condition_parse_epoch(bad_cfg7)
 
         # Additional edge cases
         # Empty conditions array
@@ -174,7 +174,7 @@ using Random
 
         # No match → throws
         ec_nomatch = EegFun.EpochCondition(name = "none", trigger_sequences = [[7, 7, 7]], reference_index = 2)
-        @test_throws ErrorException EegFun.extract_epochs(dat, 9, ec_nomatch, win)
+        @test_throws Exception EegFun.extract_epochs(dat, 9, ec_nomatch, win)
 
         # Constraints eliminate all → throws
         ec_strict = EegFun.EpochCondition(
@@ -185,7 +185,7 @@ using Random
             min_interval = 0.1,
             max_interval = 0.2,
         )
-        @test_throws ErrorException EegFun.extract_epochs(dat, 10, ec_strict, win)
+        @test_throws Exception EegFun.extract_epochs(dat, 10, ec_strict, win)
 
         # Boundary windows (too wide) → warnings, returns empty or partial epochs
         ep11 = EegFun.extract_epochs(dat, 11, ec1, (-1.0, 0.02))
@@ -258,7 +258,7 @@ using Random
         @test EegFun.n_epochs(cleaned2) == 1
 
         # Missing column → throws
-        @test_throws ErrorException EegFun.reject_epochs(eps, :does_not_exist)
+        @test_throws Exception EegFun.reject_epochs(eps, :does_not_exist)
 
         # Empty EpochData → error (current implementation validates first epoch)
         empty_ep =
@@ -381,7 +381,7 @@ using Random
         dat = EegFun.create_test_continuous_data_with_triggers()
 
         # Valid parameters should not throw
-        @test EegFun._validate_epoch_interval_params(dat, [-0.1, 0.1]) === nothing
+        @test isnothing(EegFun._validate_epoch_interval_params(dat, [-0.1, 0.1]))
 
         # Invalid time interval length
         @test_throws AssertionError EegFun._validate_epoch_interval_params(dat, [-0.1])
@@ -667,7 +667,7 @@ using Random
                 # Test averaging epochs
                 result = EegFun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir)
 
-                @test result !== nothing
+                @test result |> !isnothing
                 @test result.success == 2
                 @test result.errors == 0
                 @test isdir(output_dir)
@@ -770,7 +770,7 @@ using Random
                 # Directory exists but has no JLD2 files matching pattern
                 result = EegFun.average_epochs("epochs_cleaned", input_dir = empty_dir)
 
-                @test result === nothing  # No files to process
+                @test isnothing(result)  # No files to process
             end
 
             @testset "Logging" begin

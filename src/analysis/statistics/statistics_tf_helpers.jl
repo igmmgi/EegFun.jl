@@ -54,7 +54,7 @@ function prepare_stats(
 
     # Validate exactly 2 conditions
     length(selected_cond_nums) == 2 ||
-        @minimal_error_throw "Statistical tests require exactly 2 conditions, got $(length(selected_cond_nums)): $selected_cond_nums. Use condition_selection to select exactly 2 conditions."
+        @minimal_error "Statistical tests require exactly 2 conditions, got $(length(selected_cond_nums)): $selected_cond_nums. Use condition_selection to select exactly 2 conditions."
 
     condition1 = tfs_by_condition[selected_cond_nums[1]]
     condition2 = tfs_by_condition[selected_cond_nums[2]]
@@ -99,7 +99,7 @@ function prepare_stats(
     # Apply channel selection
     selected_ch_mask = channel_selection(1:length(all_electrodes))
     electrodes = all_electrodes[selected_ch_mask]
-    isempty(electrodes) && @minimal_error_throw "No channels matched the channel selection."
+    isempty(electrodes) && @minimal_error "No channels matched the channel selection."
 
     # Apply frequency selection
     if !isnothing(frequency_selection) && frequency_selection isa Tuple
@@ -108,7 +108,7 @@ function prepare_stats(
     else
         frequencies = all_freqs
     end
-    isempty(frequencies) && @minimal_error_throw "No frequencies matched the frequency selection."
+    isempty(frequencies) && @minimal_error "No frequencies matched the frequency selection."
 
     # Apply time (interval) selection
     if !isnothing(interval_selection) && interval_selection isa Tuple
@@ -117,7 +117,7 @@ function prepare_stats(
     else
         time_points = all_times
     end
-    isempty(time_points) && @minimal_error_throw "No time points matched the interval selection."
+    isempty(time_points) && @minimal_error "No time points matched the interval selection."
 
     n_electrodes = length(electrodes)
     n_freqs = length(frequencies)
@@ -148,7 +148,7 @@ function prepare_stats(
     kwargs...,
 )
     all_tfs = read_all_data(TimeFreqData, file_pattern, input_dir, participant_selection)
-    isempty(all_tfs) && @minimal_error_throw "No valid TF data found matching pattern '$file_pattern' in $input_dir"
+    isempty(all_tfs) && @minimal_error "No valid TF data found matching pattern '$file_pattern' in $input_dir"
 
     return prepare_stats(all_tfs; design = design, kwargs...)
 end

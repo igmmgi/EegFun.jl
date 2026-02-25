@@ -242,7 +242,7 @@ using DataFrames
 
     @testset "times() helper function" begin
         @testset "times() returns nothing" begin
-            @test EegFun.times() === nothing
+            @test isnothing(EegFun.times())
         end
 
         @testset "times(start, stop) returns tuple" begin

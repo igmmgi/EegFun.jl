@@ -339,16 +339,16 @@ Create confusion matrix from true and predicted labels.
 - `confusion::Matrix{Int}`: Confusion matrix [true_class × predicted_class]
 """
 function _create_confusion_matrix(y_true::Vector{Int}, y_pred::Vector{Int}, n_classes::Int)
-    length(y_true) == length(y_pred) || @minimal_error_throw("y_true and y_pred must have same length")
+    length(y_true) == length(y_pred) || @minimal_error("y_true and y_pred must have same length")
 
     # Validate all labels are in valid range [1, n_classes]
     for (i, label) in enumerate(y_true)
         (label < 1 || label > n_classes) &&
-            @minimal_error_throw("Invalid true label at index $i: $label (must be in range [1, $n_classes])")
+            @minimal_error("Invalid true label at index $i: $label (must be in range [1, $n_classes])")
     end
     for (i, label) in enumerate(y_pred)
         (label < 1 || label > n_classes) &&
-            @minimal_error_throw("Invalid predicted label at index $i: $label (must be in range [1, $n_classes])")
+            @minimal_error("Invalid predicted label at index $i: $label (must be in range [1, $n_classes])")
     end
 
     confusion = zeros(Int, n_classes, n_classes)
@@ -518,14 +518,14 @@ function decode_libsvm(
 )
 
     # Input validations
-    isempty(epochs) && @minimal_error_throw("Cannot decode with empty epochs vector")
-    length(epochs) < 2 && @minimal_error_throw("Need at least 2 conditions for decoding, got $(length(epochs))")
-    n_folds < 2 && @minimal_error_throw("Need at least 2 folds for cross-validation, got $n_folds")
+    isempty(epochs) && @minimal_error("Cannot decode with empty epochs vector")
+    length(epochs) < 2 && @minimal_error("Need at least 2 conditions for decoding, got $(length(epochs))")
+    n_folds < 2 && @minimal_error("Need at least 2 folds for cross-validation, got $n_folds")
 
     # Subset epochs by channel and sample selection
     epochs = subset(epochs; channel_selection = channel_selection, interval_selection = interval_selection, include_extra = false)
-    isempty(channel_labels(epochs[1])) && @minimal_error_throw("Channel selection produced no channels")
-    isempty(epochs[1].data[1][!, :time]) && @minimal_error_throw("Sample selection produced no time points")
+    isempty(channel_labels(epochs[1])) && @minimal_error("Channel selection produced no channels")
+    isempty(epochs[1].data[1][!, :time]) && @minimal_error("Sample selection produced no time points")
 
     # Prepare data from subsetted epochs
     data_arrays, n_trials_per_condition = _prepare_decoding_data(epochs)
@@ -542,7 +542,7 @@ function decode_libsvm(
     # Validate that we have enough trials for cross-validation
     min_trials_after_equalize = minimum(n_trials_per_condition)
     if min_trials_after_equalize < n_folds
-        @minimal_error_throw(
+        @minimal_error(
             "Not enough trials for $n_folds-fold cross-validation. " *
             "Minimum trials per condition: $min_trials_after_equalize. " *
             "Either reduce n_folds or increase number of trials."
@@ -752,13 +752,13 @@ function decode_libsvm(
 )
 
     # Input validations
-    isempty(epochs) && @minimal_error_throw("Cannot decode with empty epochs vector")
-    length(epochs) < 2 && @minimal_error_throw("Need at least 2 conditions for decoding, got $(length(epochs))")
-    n_folds < 2 && @minimal_error_throw("Need at least 2 folds for cross-validation, got $n_folds")
+    isempty(epochs) && @minimal_error("Cannot decode with empty epochs vector")
+    length(epochs) < 2 && @minimal_error("Need at least 2 conditions for decoding, got $(length(epochs))")
+    n_folds < 2 && @minimal_error("Need at least 2 folds for cross-validation, got $n_folds")
 
     # Subset epochs by channel and interval selection
     epochs = subset(epochs; channel_selection = channel_selection, interval_selection = interval_selection)
-    isempty(channel_labels(epochs[1])) && @minimal_error_throw("Channel selection produced no channels")
+    isempty(channel_labels(epochs[1])) && @minimal_error("Channel selection produced no channels")
 
     # Prepare data from subsetted epochs
     data_arrays, n_trials_per_condition = _prepare_decoding_data(epochs)
@@ -777,7 +777,7 @@ function decode_libsvm(
     # Validate that we have enough trials for cross-validation
     min_trials_after_equalize = minimum(n_trials_per_condition)
     if min_trials_after_equalize < n_folds
-        @minimal_error_throw(
+        @minimal_error(
             "Not enough trials for $n_folds-fold cross-validation. " *
             "Minimum trials per condition: $min_trials_after_equalize. " *
             "Either reduce n_folds or increase number of trials."
@@ -916,7 +916,7 @@ creating a single DecodedData object representing the group-level results.
 """
 function grand_average(dat::Vector{DecodedData})
 
-    isempty(dat) && @minimal_error_throw("Cannot create grand average from empty decoded data list")
+    isempty(dat) && @minimal_error("Cannot create grand average from empty decoded data list")
     length(dat) == 1 && return dat[1]
 
     # Validate all decoded data have same structure
@@ -928,10 +928,10 @@ function grand_average(dat::Vector{DecodedData})
 
     # TODO: should we check for this? warning vs. error?
     for decoded in dat[2:end]
-        decoded.times != first_times && @minimal_error_throw("DecodedData objects have inconsistent time vectors")
-        decoded.condition_names != first_condition_names && @minimal_error_throw("DecodedData objects have inconsistent condition names")
-        decoded.channels != first_channels && @minimal_error_throw("DecodedData objects have inconsistent channels")
-        decoded.parameters.n_classes != first_params.n_classes && @minimal_error_throw(
+        decoded.times != first_times && @minimal_error("DecodedData objects have inconsistent time vectors")
+        decoded.condition_names != first_condition_names && @minimal_error("DecodedData objects have inconsistent condition names")
+        decoded.channels != first_channels && @minimal_error("DecodedData objects have inconsistent channels")
+        decoded.parameters.n_classes != first_params.n_classes && @minimal_error(
             "DecodedData objects have inconsistent number of classes: $(first_params.n_classes) vs $(decoded.parameters.n_classes)"
         )
         decoded.parameters.n_iterations != first_params.n_iterations &&

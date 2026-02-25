@@ -72,13 +72,13 @@ function plot_erp_measurement_gui(
     all_channels = setdiff(propertynames(first_erp.data), metadata_cols)
 
     if isempty(all_channels)
-        @minimal_error_throw "No channels found in data!"
+        @minimal_error "No channels found in data!"
     end
 
     # Set initial channel
     initial_channel = isnothing(channel) ? all_channels[1] : channel
     if !(initial_channel in all_channels)
-        @minimal_error_throw "Channel $initial_channel not found in data. Available: $(all_channels)"
+        @minimal_error "Channel $initial_channel not found in data. Available: $(all_channels)"
     end
 
     # Get time range from first ERP

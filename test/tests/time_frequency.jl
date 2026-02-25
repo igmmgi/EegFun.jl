@@ -136,7 +136,7 @@ using DataFrames
         mktempdir() do tmpdir
             # No files in directory
             result = EegFun.tf_morlet("nonexistent"; input_dir = tmpdir, cycles = 7)
-            @test result === nothing
+            @test isnothing(result)
         end
     end
 

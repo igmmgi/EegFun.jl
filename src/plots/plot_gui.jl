@@ -306,9 +306,9 @@ function plot_gui()
     # Connect callbacks
     # Open file picker when Select File button is clicked
     on(file_select_button.clicks) do _
-        default_path = gui_state.directory[] !== nothing && gui_state.directory[] != "" ? gui_state.directory[] : ""
+        default_path = gui_state.directory[] |> !isnothing && gui_state.directory[] != "" ? gui_state.directory[] : ""
         filename = fetch(Threads.@spawn pick_file(default_path))
-        if filename !== nothing && filename != ""
+        if filename |> !isnothing && filename != ""
             basename_only = basename(filename)
             gui_state.filename[] = filename
             file_label_text[] = strip(basename_only)
@@ -365,9 +365,9 @@ function plot_gui()
 
     # Open layout file picker when Select button is clicked
     on(layout_select_button.clicks) do _
-        default_path = gui_state.directory[] !== nothing && gui_state.directory[] != "" ? gui_state.directory[] : ""
+        default_path = gui_state.directory[] |> !isnothing && gui_state.directory[] != "" ? gui_state.directory[] : ""
         filename = fetch(Threads.@spawn pick_file(default_path))
-        if filename !== nothing && filename != ""
+        if filename |> !isnothing && filename != ""
             basename_only = basename(filename)
             gui_state.layout_file[] = filename
             gui_state.layout[] = basename_only
@@ -428,7 +428,7 @@ function plot_gui()
     # Open directory picker when Select button is clicked
     on(directory_select_button.clicks) do _
         dir_path = fetch(Threads.@spawn pick_folder(""))
-        if dir_path !== nothing && dir_path != ""
+        if dir_path |> !isnothing && dir_path != ""
             gui_state.directory[] = dir_path
             directory_label_text[] = "Dir: " * _truncate_path(String(strip(dir_path)))
         end
@@ -547,7 +547,7 @@ function _plot_erp(gui_state)
 
         # Build baseline interval if provided
         baseline = nothing
-        if gui_state.baseline_start[] !== nothing && gui_state.baseline_end[] !== nothing
+        if gui_state.baseline_start[] |> !isnothing && gui_state.baseline_end[] |> !isnothing
             baseline = (gui_state.baseline_start[], gui_state.baseline_end[])
         end
 

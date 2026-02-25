@@ -21,7 +21,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
 
     # Use config file's directory as base_dir if not provided
     # This makes relative paths in TOML work relative to the analysis script location
-    base_dir === nothing && (base_dir = abspath(dirname(abspath(config))))
+    isnothing(base_dir) && (base_dir = abspath(dirname(abspath(config))))
     @info "Using base directory for relative paths: $base_dir"
 
     # Generate timestamp for unique log filename
@@ -41,11 +41,11 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
         @info "Configuration Files:"
         !isfile(config) && @minimal_error "Config file does not exist: $config"
         cfg = read_config(config)
-        cfg === nothing && @minimal_error "Failed to load configuration from: $config"
+        isnothing(cfg) && @minimal_error "Failed to load configuration from: $config"
 
         # try and merge user config above with default config
         default_config = read_config(joinpath(@__DIR__, "..", "..", "src", "config", "default.toml"))
-        default_config === nothing && @minimal_error "Failed to load default configuration"
+        isnothing(default_config) && @minimal_error "Failed to load default configuration"
         cfg = _merge_configs(default_config, cfg)
 
         # Resolve relative/absolute paths
@@ -300,7 +300,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
                 # Check if any epochs have empty data
                 empty_epochs = [i for (i, ep) in enumerate(epochs) if isempty(ep.data)]
                 if !isempty(empty_epochs)
-                    EegFun.@minimal_error_throw "Epoch extraction resulted in empty epochs for conditions: $(join([epochs[i].condition_name for i in empty_epochs], ", ")). Check epoch interval parameters and trigger locations."
+                    EegFun.@minimal_error "Epoch extraction resulted in empty epochs for conditions: $(join([epochs[i].condition_name for i in empty_epochs], ", ")). Check epoch interval parameters and trigger locations."
                 end
 
                 #################### BASELINE WHOLE EPOCHS ##############
@@ -370,7 +370,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
                 # Collect all artifact-related info into a single structure
                 @info subsection("Artifact Information")
                 artifact_info = ArtifactInfo(
-                    continuous_repair_info !== nothing ? [continuous_repair_info] : ContinuousRepairInfo[],
+                    continuous_repair_info |> !isnothing ? [continuous_repair_info] : ContinuousRepairInfo[],
                     vcat(rejection_info_step1, rejection_info_step2),
                     component_artifacts,  # Save ICA components if ICA was applied, otherwise nothing
                 )

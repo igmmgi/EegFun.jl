@@ -128,8 +128,8 @@ using Makie
             layout = EegFun.Layout(DataFrame(label = [:channel], inc = [0.0], azi = [0.0]), nothing, nothing)
             dat = EegFun.ContinuousData("test_data", df, layout, 100, EegFun.AnalysisInfo())
 
-            # Should trigger minimal_error and return nothing
-            @test EegFun._extract_trigger_data(dat) === nothing
+            # Should throw since @minimal_error now throws
+            @test_throws Exception EegFun._extract_trigger_data(dat)
         end
     end
 

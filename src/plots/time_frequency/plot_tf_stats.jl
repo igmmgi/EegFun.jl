@@ -128,7 +128,7 @@ function plot_tf_stats(
 
     for (ch_i, ch_sym) in enumerate(selected_channels)
         ch_idx = findfirst(==(ch_sym), all_electrodes)
-        ch_idx === nothing && continue
+        isnothing(ch_idx) && continue
 
         row = (ch_i - 1) ÷ n_cols + 1
         col = (ch_i - 1) % n_cols + 1

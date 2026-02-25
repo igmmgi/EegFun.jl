@@ -412,7 +412,7 @@ end # EegFun testset
             # Directory exists but has no JLD2 files matching pattern
             result = EegFun.channel_summary("erps_cleaned", input_dir = empty_dir)
 
-            @test result === nothing  # No files to process
+            @test isnothing(result)  # No files to process
         end
 
         @testset "Logging" begin

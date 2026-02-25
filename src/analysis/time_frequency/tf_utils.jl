@@ -42,7 +42,7 @@ function _tf_df_to_matrix(
         rt = round(t, digits = 6)
         for (fi, f) in enumerate(frequencies)
             row = get(row_index, (round(f, digits = 6), rt), nothing)
-            if row !== nothing
+            if row |> !isnothing
                 mat[fi, ti] = df[row, channel]
             end
         end
@@ -71,7 +71,7 @@ function _tf_matrix_to_df!(
         rt = round(t, digits = 6)
         for (fi, f) in enumerate(frequencies)
             row = get(row_index, (round(f, digits = 6), rt), nothing)
-            if row !== nothing
+            if row |> !isnothing
                 df[row, channel] = mat[fi, ti]
             end
         end

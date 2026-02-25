@@ -139,7 +139,7 @@ function plot_erp_stats(
 
         for ch in channels_to_plot
             channel_idx = findfirst(==(ch), all_electrodes)
-            channel_idx === nothing && continue
+            isnothing(channel_idx) && continue
 
             _plot_erp_stats_channel!(
                 ax,
@@ -315,7 +315,7 @@ function _plot_erp_stats_channel!(
     end
 
     # Show critical t-values if requested
-    if plot_critical_t && plot_tvalues && critical_t_pos !== nothing
+    if plot_critical_t && plot_tvalues && critical_t_pos |> !isnothing
         lines!(ax, time_points, critical_t_pos, color = :grey, linewidth = linewidth, linestyle = :dashdot, label = "Critical t+")
         lines!(ax, time_points, critical_t_neg, color = :grey, linewidth = linewidth, linestyle = :dashdot, label = "Critical t-")
     end
@@ -390,7 +390,7 @@ end
 function _get_amp_min(plot_erp, plot_difference, cond_A_avg, cond_B_avg, diff_wave_plot)
     if plot_erp
         min(minimum(cond_A_avg), minimum(cond_B_avg))
-    elseif plot_difference && diff_wave_plot !== nothing
+    elseif plot_difference && diff_wave_plot |> !isnothing
         minimum(diff_wave_plot)
     else
         0.0
@@ -400,7 +400,7 @@ end
 function _get_amp_max(plot_erp, plot_difference, cond_A_avg, cond_B_avg, diff_wave_plot)
     if plot_erp
         max(maximum(cond_A_avg), maximum(cond_B_avg))
-    elseif plot_difference && diff_wave_plot !== nothing
+    elseif plot_difference && diff_wave_plot |> !isnothing
         maximum(diff_wave_plot)
     else
         0.0

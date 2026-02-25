@@ -447,7 +447,7 @@ function _apply_biosemi_layout!(state, filename)
     state.channels.individually_selected = Symbol[]
     package_layouts_dir = joinpath(@__DIR__, "..", "..", "data", "layouts")
     layout_file = find_file(filename, package_layouts_dir)
-    if layout_file === nothing
+    if isnothing(layout_file)
         @minimal_error "Layout file $filename not found in $package_layouts_dir"
         return false
     end
@@ -1110,7 +1110,7 @@ function _handle_left_click!(ax, state, event, mouse_x)
     if event.action == Mouse.press
         # Check if click is within any existing selected region
         clicked_region_idx = _find_clicked_region(state, mouse_x)
-        if clicked_region_idx !== nothing
+        if clicked_region_idx |> !isnothing
             # Remove the clicked region
             _remove_region_from_selection!(ax, state, clicked_region_idx)
         else
@@ -1125,7 +1125,7 @@ end
 function _handle_right_click!(ax, state, mouse_x)
     # Check if right-click is within any selected region
     clicked_region_idx = _find_clicked_region(state, mouse_x)
-    if clicked_region_idx !== nothing
+    if clicked_region_idx |> !isnothing
         _show_additional_menu(state, clicked_region_idx)
     end
     # Right-click outside regions does nothing (use 'r' key for channel repair)
@@ -1341,7 +1341,7 @@ end
 
 function _subset_selected_data(state::ContinuousDataBrowserState, clicked_region_idx = nothing)
     # Use the clicked region if specified, otherwise use the most recent region, or fall back to bounds
-    if clicked_region_idx !== nothing && 1 <= clicked_region_idx <= length(state.selection.selected_regions[])
+    if clicked_region_idx |> !isnothing && 1 <= clicked_region_idx <= length(state.selection.selected_regions[])
         # Use the specific clicked region
         x_min, x_max = state.selection.selected_regions[][clicked_region_idx]
     elseif !isempty(state.selection.selected_regions[])
@@ -1362,7 +1362,7 @@ end
 
 function _subset_selected_data(state::EpochedDataBrowserState, clicked_region_idx = nothing)
     # Get the selected region
-    if clicked_region_idx !== nothing && 1 <= clicked_region_idx <= length(state.selection.selected_regions[])
+    if clicked_region_idx |> !isnothing && 1 <= clicked_region_idx <= length(state.selection.selected_regions[])
         x_min, x_max = state.selection.selected_regions[][clicked_region_idx]
     elseif !isempty(state.selection.selected_regions[])
         x_min, x_max = state.selection.selected_regions[][end]
@@ -1830,7 +1830,7 @@ function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs.
     end
 
     # Display on the provided screen if given, otherwise use default display
-    if screen !== nothing
+    if screen |> !isnothing
         display(screen, fig)
     else
         display(fig)

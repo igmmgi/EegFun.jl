@@ -186,7 +186,7 @@ rdm = create_rdm_from_distances(distances, 3)
 function create_rdm_from_distances(distances::Vector{Float64}, n_conditions::Int)
     expected_length = div(n_conditions * (n_conditions - 1), 2)
     if length(distances) != expected_length
-        @minimal_error_throw("Distances vector has length $(length(distances)), expected $expected_length for $n_conditions conditions")
+        @minimal_error("Distances vector has length $(length(distances)), expected $expected_length for $n_conditions conditions")
     end
 
     rdm = zeros(Float64, n_conditions, n_conditions)
@@ -391,7 +391,7 @@ function resample_temporal_data(
     n_target_times = length(target_times)
 
     if length(original_times) != n_original_times
-        @minimal_error_throw(
+        @minimal_error(
             "Original times length ($(length(original_times))) doesn't match " * "temporal data time dimension ($n_original_times)"
         )
     end
@@ -472,7 +472,7 @@ function resample_temporal_data(
                 @minimal_warning "Cubic interpolation not fully implemented, using linear"
                 return resample_temporal_data(temporal_data, original_times, target_times; method = :linear)
             else
-                @minimal_error_throw("Unknown interpolation method: $method. Use :linear, :nearest, or :cubic")
+                @minimal_error("Unknown interpolation method: $method. Use :linear, :nearest, or :cubic")
             end
         end
     end
@@ -535,7 +535,7 @@ function create_rdm_from_timeseries(
         elseif isa(align_to, Vector{Float64})
             target_times = align_to
         else
-            @minimal_error_throw("align_to must be Vector{Float64} or RsaData, got $(typeof(align_to))")
+            @minimal_error("align_to must be Vector{Float64} or RsaData, got $(typeof(align_to))")
         end
     end
 
@@ -548,7 +548,7 @@ function create_rdm_from_timeseries(
     n_conditions, n_features, n_timepoints = size(temporal_data)
 
     if length(times) != n_timepoints
-        @minimal_error_throw("Time vector length ($(length(times))) doesn't match temporal data time dimension ($n_timepoints)")
+        @minimal_error("Time vector length ($(length(times))) doesn't match temporal data time dimension ($n_timepoints)")
     end
 
     # Preallocate RDMs: [time × condition × condition]
@@ -606,7 +606,7 @@ function create_rdm_from_timeseries(
     # Validate structure
     for (cond_idx, cond_data) in enumerate(temporal_vectors)
         if length(cond_data) != n_timepoints
-            @minimal_error_throw("Condition $cond_idx has $(length(cond_data)) timepoints, expected $n_timepoints")
+            @minimal_error("Condition $cond_idx has $(length(cond_data)) timepoints, expected $n_timepoints")
         end
     end
 
@@ -673,10 +673,10 @@ function create_temporal_model_rdms(
             # Tuple: (data, times) - model has its own timepoints
             model_data, model_times = data
             if !isa(model_data, Array{Float64,3})
-                @minimal_error_throw("Model '$name': Tuple first element must be Array{Float64, 3}, got $(typeof(model_data))")
+                @minimal_error("Model '$name': Tuple first element must be Array{Float64, 3}, got $(typeof(model_data))")
             end
             if !isa(model_times, Vector{Float64})
-                @minimal_error_throw("Model '$name': Tuple second element must be Vector{Float64}, got $(typeof(model_times))")
+                @minimal_error("Model '$name': Tuple second element must be Vector{Float64}, got $(typeof(model_times))")
             end
             # Use align_to if provided, otherwise use model's own times
             rdm = create_rdm_from_timeseries(
@@ -720,7 +720,7 @@ function create_temporal_model_rdms(
                 interpolation_method = interpolation_method,
             )
         else
-            @minimal_error_throw(
+            @minimal_error(
                 "Unknown temporal model data type for '$name': $(typeof(data)). " *
                 "Supported types: Array{Float64, 3} [conditions × features × time], " *
                 "Tuple{Array{Float64, 3}, Vector{Float64}} (data, times), " *
@@ -789,7 +789,7 @@ function create_model_rdms(model_data::Dict{String,Any})
             push!(model_rdms, rdm)
             push!(model_names, name)
         catch e
-            @minimal_error_throw(
+            @minimal_error(
                 "Failed to create RDM for model '$name' with data type $(typeof(data)). " *
                 "Supported types: Vector{Vector{Float64}}, Matrix{Float64}, Vector{Float64}, Vector{Int}"
             )

@@ -35,7 +35,7 @@ using OrderedCollections
         @test size(cm, 2) == 3  # 2 channels + row column
 
         # Test empty channel selection
-        @test_throws ErrorException EegFun.correlation_matrix(dat, channel_selection = EegFun.channels(Symbol[]))
+        @test_throws Exception EegFun.correlation_matrix(dat, channel_selection = EegFun.channels(Symbol[]))
     end
 
     @testset "channel_joint_probability" begin
@@ -63,7 +63,7 @@ using OrderedCollections
         @test size(jp, 1) == 2
 
         # Test empty channel selection
-        @test_throws ErrorException EegFun.channel_joint_probability(dat, channel_selection = EegFun.channels(Symbol[]))
+        @test_throws Exception EegFun.channel_joint_probability(dat, channel_selection = EegFun.channels(Symbol[]))
     end
 
     @testset "_correlation_matrix" begin
@@ -262,13 +262,13 @@ using OrderedCollections
         @test size(cm, 2) == 2  # Ch3 + :row
 
         # Test error handling - empty channel selection
-        @test_throws ErrorException EegFun.correlation_matrix_dual_selection(
+        @test_throws Exception EegFun.correlation_matrix_dual_selection(
             dat,
             channel_selection1 = EegFun.channels(Symbol[]),
             channel_selection2 = EegFun.channels([:Ch1]),
         )
 
-        @test_throws ErrorException EegFun.correlation_matrix_dual_selection(
+        @test_throws Exception EegFun.correlation_matrix_dual_selection(
             dat,
             channel_selection1 = EegFun.channels([:Ch1]),
             channel_selection2 = EegFun.channels(Symbol[]),
@@ -337,10 +337,9 @@ using OrderedCollections
         @test all(cm3.z_Ch1 .== 0.0)
         @test all(cm3.z_Ch2 .== 0.0)
 
-        # Test with no numeric columns (after excluding all)
+        # Test with no numeric columns (after excluding all) — should throw
         cm4 = DataFrame(row = [:Ch1, :Ch2], name = ["A", "B"])
-        # Should not throw error, just warn
-        EegFun.add_zscore_columns!(cm4)
+        @test_throws Exception EegFun.add_zscore_columns!(cm4)
     end
 
     @testset "add_zscore_columns" begin

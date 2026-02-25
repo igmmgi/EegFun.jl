@@ -47,7 +47,7 @@ function channel_average!(
     # Validate that all channel_selections are callable
     for (i, sel) in enumerate(channel_selections)
         if !(sel isa Function)
-            @minimal_error_throw "Channel selection at index $i must be a Function, got $(typeof(sel))"
+            @minimal_error "Channel selection at index $i must be a Function, got $(typeof(sel))"
         end
     end
 
@@ -67,11 +67,11 @@ function channel_average!(
     # Validate channel groups
     if any(isempty, selected_channel_groups)
         empty_selections = findall(isempty, selected_channel_groups)
-        @minimal_error_throw "Channel selections at indices $empty_selections produced no channels"
+        @minimal_error "Channel selections at indices $empty_selections produced no channels"
     end
 
     # Determine labels (explicit if/else for clarity)
-    if output_labels === nothing
+    if isnothing(output_labels)
         # Get original channel columns (excluding any previously added averaged columns)
         # We need to identify which columns are the original channels vs derived averaged columns
         all_cols = all_labels(dat)
@@ -89,7 +89,7 @@ function channel_average!(
     else
         # Accept Vector of Symbol/String; coerce to Symbol
         if length(output_labels) != length(selected_channel_groups)
-            @minimal_error_throw "N output_labels ($(length(output_labels))) must match N channel selections ($(length(selected_channel_groups)))"
+            @minimal_error "N output_labels ($(length(output_labels))) must match N channel selections ($(length(selected_channel_groups)))"
         end
         labels = Symbol.(output_labels)
     end
@@ -263,8 +263,8 @@ function channel_average(
         @log_call "channel_average"
 
         # Validation (early return on error)
-        if (error_msg = _validate_input_dir(input_dir)) !== nothing
-            @minimal_error_throw(error_msg)
+        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+            @minimal_error(error_msg)
         end
 
         # Generate output labels if not provided
@@ -274,7 +274,7 @@ function channel_average(
 
         # Validate output labels length matches channel selections
         if length(output_labels) != length(channel_selections)
-            @minimal_error_throw(
+            @minimal_error(
                 "Number of output_labels ($(length(output_labels))) must match number of channel_selections ($(length(channel_selections)))"
             )
         end

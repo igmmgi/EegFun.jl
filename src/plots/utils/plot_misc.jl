@@ -159,7 +159,7 @@ function _extract_colorbar_kwargs!(plot_kwargs::Dict{Symbol,Any})
         colorbar_key = Symbol("colorbar_$(attr)")
         if haskey(plot_kwargs, colorbar_key)
             value = pop!(plot_kwargs, colorbar_key)
-            if value !== nothing  # Only add if not the default nothing
+            if value |> !isnothing  # Only add if not the default nothing
                 colorbar_kwargs[attr] = value
             end
         end
@@ -204,7 +204,7 @@ function _extract_legend_kwargs(plot_kwargs::Dict{Symbol,Any}; exclude_positioni
                 println("Skipping positioning attribute: $attr")
                 continue
             end
-            if value !== nothing  # Only add if not the default nothing
+            if value |> !isnothing  # Only add if not the default nothing
                 legend_kwargs[attr] = value  # Store in new dict without "legend_" prefix
             end
         end
@@ -244,7 +244,7 @@ function _extract_layout_kwargs(plot_kwargs::Dict{Symbol,Any})
         layout_key = Symbol("layout_$(param_name)")
         if haskey(plot_kwargs, layout_key)
             value = plot_kwargs[layout_key]
-            if value !== nothing
+            if value |> !isnothing
                 layout_kwargs[param_name] = value
             end
         end
@@ -301,8 +301,8 @@ function _set_axis_properties!(ax; xlim = nothing, ylim = nothing, xlabel = "", 
     ax.yreversed = yreversed
 
     # Set axis limits
-    xlim !== nothing && xlims!(ax, xlim[1], xlim[2])
-    ylim !== nothing && ylims!(ax, ylim[1], ylim[2])
+    xlim |> !isnothing && xlims!(ax, xlim[1], xlim[2])
+    ylim |> !isnothing && ylims!(ax, ylim[1], ylim[2])
 
 end
 
@@ -350,9 +350,9 @@ function _split_into_parts(s::String)
     pattern = r"([A-Z][a-z]*|[a-z]+)(\d*)|(_)|(\d+)"
 
     for m in eachmatch(pattern, s)
-        if m.captures[3] !== nothing  # Underscore
+        if m.captures[3] |> !isnothing  # Underscore
             push!(parts, "_")
-        elseif m.captures[4] !== nothing  # Standalone digits
+        elseif m.captures[4] |> !isnothing  # Standalone digits
             push!(parts, m.captures[4])
         else  # Word with optional digits
             word = m.captures[1]

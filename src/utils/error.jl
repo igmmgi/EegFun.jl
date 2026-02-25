@@ -1,35 +1,42 @@
 """
+    EegFunError <: Exception
+
+Custom exception type for EegFun errors. Try and display a cleaner, user-friendly
+error message without Julia's overly verbose stacktrace spew.
+
+# Example
+```julia
+throw(EegFunError("No data found matching pattern 'xyz'"))
+```
+"""
+struct EegFunError <: Exception
+    msg::String
+end
+
+Base.showerror(io::IO, e::EegFunError) = print(io, e.msg)
+
+
+"""
     @minimal_error(msg)
 
-Displays an error message and stops execution without showing a full stacktrace.
+Throws an `EegFunError` with a clean user-facing error message.
+Also logs the error via `@error` for diagnostics.
 """
 macro minimal_error(msg)
     quote
-        @error "Error: " * $(esc(msg)) _module=nothing _file=nothing _line=nothing
-        return nothing
-    end
-end
-
-"""
-    @minimal_error_throw(msg)
-
-Displays an error message and throws an error without showing a full stacktrace.
-"""
-macro minimal_error_throw(msg)
-    quote
-        @error "Error: " * $(esc(msg)) _module=nothing _file=nothing _line=nothing
-        error($(esc(msg)))
+        @error "Error: " * $(esc(msg)) _module = nothing _file = nothing _line = nothing
+        throw(EegFunError($(esc(msg))))
     end
 end
 
 """
     @minimal_warning(msg)
 
-Displays an error message and stops execution without showing a full stacktrace.
+Displays a warning message without showing module/file/line metadata.
 """
 macro minimal_warning(msg)
     quote
-        @warn $(esc(msg)) _module=nothing _file=nothing _line=nothing
+        @warn $(esc(msg)) _module = nothing _file = nothing _line = nothing
     end
 end
 
@@ -57,6 +64,6 @@ macro minimal_stacktrace(msg, e, max_lines = 5)
         error_msg = sprint(showerror, $(esc(e)), bt)
         st_lines = split(error_msg, '\n')
         limited_msg = join(st_lines[1:min($(esc(max_lines)), length(st_lines))], '\n')
-        @error $(esc(msg)) limited_msg _module=nothing _file=nothing _line=nothing
+        @error $(esc(msg)) limited_msg _module = nothing _file = nothing _line = nothing
     end
 end

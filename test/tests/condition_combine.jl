@@ -26,7 +26,7 @@ using Statistics
             # Combine conditions 1,2 into group 1 and 3,4 into group 2
             result = EegFun.condition_combine("epochs_cleaned", [[1, 2], [3, 4]], input_dir = test_dir, output_dir = output_dir)
 
-            @test result !== nothing
+            @test result |> !isnothing
             @test result.success == 3
             @test result.errors == 0
             @test isdir(output_dir)
@@ -167,7 +167,7 @@ using Statistics
 
             result = EegFun.condition_combine("epochs_cleaned", [[1, 2]], input_dir = empty_dir)
 
-            @test result === nothing  # No files to process
+            @test isnothing(result)  # No files to process
         end
 
         @testset "Data integrity - concatenation preserves all epochs" begin

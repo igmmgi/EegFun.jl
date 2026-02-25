@@ -148,7 +148,7 @@ function _compute_dissimilarity(
         # when dissimilarity_measure == :mahalanobis, so this error should never occur
         # in normal usage. This is a safety check for direct function calls.
         if isnothing(covariance_matrix)
-            @minimal_error_throw(
+            @minimal_error(
                 "Mahalanobis distance requires a covariance matrix. " *
                 "This error should not occur when using rsa() or rsa_crossvalidated() functions, " *
                 "as they automatically compute pooled covariance. " *
@@ -169,7 +169,7 @@ function _compute_dissimilarity(
             return sqrt(sum(diff .^ 2))
         end
     else
-        @minimal_error_throw("Unknown dissimilarity measure: $measure. Use :correlation, :spearman, :euclidean, or :mahalanobis")
+        @minimal_error("Unknown dissimilarity measure: $measure. Use :correlation, :spearman, :euclidean, or :mahalanobis")
     end
 end
 
@@ -287,7 +287,7 @@ function normalize_rdm(rdm::Matrix{Float64}; method::Symbol = :none)
             normalized_values = zeros(Float64, length(upper_values))
         end
     else
-        @minimal_error_throw("Unknown normalization method: $method. Use :none, :zscore, :rank, or :minmax")
+        @minimal_error("Unknown normalization method: $method. Use :none, :zscore, :rank, or :minmax")
     end
 
     # Fill normalized values back into matrix (both upper and lower triangles)
@@ -389,11 +389,11 @@ function rsa(
 
     # Validate input requirements for RSA
     if n_conditions < 2
-        @minimal_error_throw("RSA requires at least 2 conditions, got $n_conditions")
+        @minimal_error("RSA requires at least 2 conditions, got $n_conditions")
     end
     if any(n_trials_per_condition .== 0)
         empty_conditions = condition_names[n_trials_per_condition .== 0]
-        @minimal_error_throw("One or more conditions have zero trials: $(join(empty_conditions, ", "))")
+        @minimal_error("One or more conditions have zero trials: $(join(empty_conditions, ", "))")
     end
 
     # Preallocate RDM array: [time × condition × condition]
@@ -629,7 +629,7 @@ function compare_models(
     if isnothing(model_names)
         model_names = ["Model$(i)" for i = 1:n_models]
     elseif length(model_names) != n_models
-        @minimal_error_throw("Number of model names ($(length(model_names))) doesn't match number of models ($n_models)")
+        @minimal_error("Number of model names ($(length(model_names))) doesn't match number of models ($n_models)")
     end
 
     # Compute correlations at each time point
@@ -674,7 +674,7 @@ grand_avg_rsa = grand_average(all_rsa, compute_noise_ceiling=false)
 """
 function grand_average(rsa_data_list::Vector{RsaData}; compute_noise_ceiling::Bool = true)
     if isempty(rsa_data_list)
-        @minimal_error_throw("Cannot compute grand average with empty RSA data list")
+        @minimal_error("Cannot compute grand average with empty RSA data list")
     end
 
     if length(rsa_data_list) == 1
@@ -688,10 +688,10 @@ function grand_average(rsa_data_list::Vector{RsaData}; compute_noise_ceiling::Bo
 
     for (idx, rsa_data) in enumerate(rsa_data_list)
         if length(rsa_data.condition_names) != n_conditions
-            @minimal_error_throw("RSA data $idx has $(length(rsa_data.condition_names)) conditions, expected $n_conditions")
+            @minimal_error("RSA data $idx has $(length(rsa_data.condition_names)) conditions, expected $n_conditions")
         end
         if length(rsa_data.times) != n_times
-            @minimal_error_throw("RSA data $idx has $(length(rsa_data.times)) time points, expected $n_times")
+            @minimal_error("RSA data $idx has $(length(rsa_data.times)) time points, expected $n_times")
         end
         if rsa_data.dissimilarity_measure != first_rsa.dissimilarity_measure
             @minimal_warning "RSA data $idx uses dissimilarity measure $(rsa_data.dissimilarity_measure), expected $(first_rsa.dissimilarity_measure)"
@@ -747,12 +747,12 @@ function _validate_model_rdms(model_rdms, n_conditions, n_times)
         if isa(model_rdm, Array{Float64,3})
             # Temporal model: [time × condition × condition]
             if size(model_rdm, 1) != n_times
-                @minimal_error_throw(
+                @minimal_error(
                     "Temporal model RDM $idx has $(size(model_rdm, 1)) timepoints, " * "expected $n_times to match neural data"
                 )
             end
             if size(model_rdm, 2) != n_conditions || size(model_rdm, 3) != n_conditions
-                @minimal_error_throw(
+                @minimal_error(
                     "Temporal model RDM $idx has condition dimensions $(size(model_rdm, 2))×$(size(model_rdm, 3)), " *
                     "expected $n_conditions×$n_conditions"
                 )
@@ -761,7 +761,7 @@ function _validate_model_rdms(model_rdms, n_conditions, n_times)
         elseif isa(model_rdm, Matrix{Float64})
             # Static model: [condition × condition]
             if size(model_rdm) != (n_conditions, n_conditions)
-                @minimal_error_throw("Static model RDM $idx has size $(size(model_rdm)), " * "expected ($n_conditions, $n_conditions)")
+                @minimal_error("Static model RDM $idx has size $(size(model_rdm)), " * "expected ($n_conditions, $n_conditions)")
             end
             if !issymmetric(model_rdm)
                 @minimal_warning "Static model RDM $idx is not symmetric, symmetrizing"
@@ -769,7 +769,7 @@ function _validate_model_rdms(model_rdms, n_conditions, n_times)
             end
             push!(is_temporal, false)
         else
-            @minimal_error_throw(
+            @minimal_error(
                 "Model RDM $idx has unsupported type $(typeof(model_rdm)). " *
                 "Expected Matrix{Float64} (static) or Array{Float64, 3} (temporal)"
             )
@@ -853,7 +853,7 @@ function _correlate_vectors(vec1, vec2, correlation_type)
     elseif correlation_type == :pearson
         return cor(vec1, vec2)
     else
-        @minimal_error_throw("Unknown correlation type: $correlation_type. Use :spearman or :pearson")
+        @minimal_error("Unknown correlation type: $correlation_type. Use :spearman or :pearson")
     end
 end
 
@@ -876,22 +876,22 @@ Shared data preparation and validation for RSA modules.
 function _prepare_and_validate_rsa(epochs, channel_selection, sample_selection)
     # Input validations
     if isempty(epochs)
-        @minimal_error_throw("Cannot perform RSA with empty epochs vector")
+        @minimal_error("Cannot perform RSA with empty epochs vector")
     end
 
     if length(epochs) < 2
-        @minimal_error_throw("Need at least 2 conditions for RSA, got $(length(epochs))")
+        @minimal_error("Need at least 2 conditions for RSA, got $(length(epochs))")
     end
 
     # Subset epochs by channel and sample selection
     epochs_subset = subset(epochs; channel_selection = channel_selection, sample_selection = sample_selection, include_extra = false)
 
     if isempty(epochs_subset) || isempty(channel_labels(epochs_subset[1]))
-        @minimal_error_throw("Channel selection produced no channels")
+        @minimal_error("Channel selection produced no channels")
     end
 
     if isempty(epochs_subset[1].data) || isempty(epochs_subset[1].data[1][!, :time])
-        @minimal_error_throw("Sample selection produced no time points")
+        @minimal_error("Sample selection produced no time points")
     end
 
     # Prepare data from subsetted epochs

@@ -158,7 +158,7 @@ function plot_erp_image(
         rows, cols = temp_layout.dims
 
         # Expand grid to accommodate colorbars (default: to the right)
-        if user_colorbar_position !== nothing && user_colorbar_position isa Tuple
+        if user_colorbar_position |> !isnothing && user_colorbar_position isa Tuple
             cb_row_offset, cb_col_offset = user_colorbar_position
             if cb_row_offset > 1
                 # Colorbars below: double rows
@@ -186,7 +186,7 @@ function plot_erp_image(
             base_row = div(idx - 1, cols) + 1
             base_col = mod1(idx, cols)
 
-            if user_colorbar_position !== nothing && user_colorbar_position isa Tuple
+            if user_colorbar_position |> !isnothing && user_colorbar_position isa Tuple
                 cb_row_offset, cb_col_offset = user_colorbar_position
                 if cb_row_offset > 1
                     # Colorbars below
@@ -310,7 +310,7 @@ function plot_erp_image(
                     base_row = div(idx - 1, cols) + 1
                     base_col = mod1(idx, cols)
 
-                    if user_colorbar_position !== nothing && user_colorbar_position isa Tuple
+                    if user_colorbar_position |> !isnothing && user_colorbar_position isa Tuple
                         cb_row_offset, cb_col_offset = user_colorbar_position
                         if cb_row_offset > 1
                             # Colorbars below
@@ -437,7 +437,7 @@ function plot_erp_image(
     # Create it in fig[1, 1] with halign/valign - this is the same approach as the scale axis
     # The key is that all topo elements use absolute positioning within the same grid cell
     # and don't participate in grid size calculations
-    if plot_layout.type == :topo && plot_kwargs[:colorbar_plot] && !isempty(heatmaps) && scale_pos !== nothing
+    if plot_layout.type == :topo && plot_kwargs[:colorbar_plot] && !isempty(heatmaps) && scale_pos |> !isnothing
         # Calculate colorbar position: place it to the right of the scale axis
         # The scale axis width is Relative(plot_kwargs[:layout_topo_plot_width])
         # We add a small fixed offset (0.02) to position the colorbar next to it

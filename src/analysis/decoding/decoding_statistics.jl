@@ -75,9 +75,9 @@ stats = test_against_chance(decoded_list, alpha=0.05, correction_method=:bonferr
 function test_against_chance(decoded_list::Vector{DecodedData}; alpha::Real = 0.05, correction_method::Symbol = :none)
 
     # validate some inputs
-    isempty(decoded_list) && @minimal_error_throw("Cannot test empty decoded data list")
+    isempty(decoded_list) && @minimal_error("Cannot test empty decoded data list")
     correction_method ∈ (:none, :bonferroni) ||
-        @minimal_error_throw("correction_method must be :none or :bonferroni, got :$correction_method")
+        @minimal_error("correction_method must be :none or :bonferroni, got :$correction_method")
 
     # Validate all inputs have same structure
     first_decoded = decoded_list[1]
@@ -86,7 +86,7 @@ function test_against_chance(decoded_list::Vector{DecodedData}; alpha::Real = 0.
     chance_level = first_params.chance_level
 
     for decoded in decoded_list[2:end]
-        decoded.times != first_times && @minimal_error_throw("DecodedData inputs have inconsistent time vectors")
+        decoded.times != first_times && @minimal_error("DecodedData inputs have inconsistent time vectors")
         decoded.parameters.chance_level != chance_level && @minimal_warning "DecodedData objects have different chance_level"
     end
 
@@ -161,7 +161,7 @@ function _apply_correction(p_values::Vector{Float64}, alpha::Float64, method::Sy
     elseif method == :bonferroni
         return _apply_bonferroni_correction(p_values, alpha, t_statistics)
     else
-        @minimal_error_throw("Unknown correction method: $method. Must be :none or :bonferroni.")
+        @minimal_error("Unknown correction method: $method. Must be :none or :bonferroni.")
     end
 end
 
@@ -319,9 +319,9 @@ function test_against_chance_cluster(
     cluster_statistic::Symbol = :sum,
     show_progress::Bool = true,
 )
-    cluster_statistic ∈ (:sum, :max) || @minimal_error_throw("cluster_statistic must be :sum or :max, got :$cluster_statistic")
+    cluster_statistic ∈ (:sum, :max) || @minimal_error("cluster_statistic must be :sum or :max, got :$cluster_statistic")
 
-    isempty(decoded_list) && @minimal_error_throw("Cannot test empty decoded data list")
+    isempty(decoded_list) && @minimal_error("Cannot test empty decoded data list")
 
     # Validate all have same structure
     first_decoded = decoded_list[1]
@@ -330,7 +330,7 @@ function test_against_chance_cluster(
     chance_level = first_params.chance_level
 
     for decoded in decoded_list[2:end]
-        decoded.times != first_times && @minimal_error_throw("DecodedData objects have inconsistent time vectors")
+        decoded.times != first_times && @minimal_error("DecodedData objects have inconsistent time vectors")
         decoded.parameters.chance_level != chance_level && @minimal_warning "DecodedData objects have different chance_level"
     end
 

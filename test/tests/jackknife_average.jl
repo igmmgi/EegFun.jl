@@ -318,7 +318,7 @@ using DataFrames
             result = EegFun.jackknife_average("lrp", input_dir = single_dir, output_dir = output_dir)
 
             # Should return nothing due to insufficient participants
-            @test result === nothing
+            @test isnothing(result)
 
             rm(single_dir, recursive = true)
         end
@@ -329,7 +329,7 @@ using DataFrames
             result = EegFun.jackknife_average("nonexistent", input_dir = test_dir, output_dir = output_dir)
 
             # Should return nothing when no files found
-            @test result === nothing
+            @test isnothing(result)
         end
 
         @testset "Logging" begin

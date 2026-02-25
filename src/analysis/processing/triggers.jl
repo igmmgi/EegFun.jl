@@ -73,7 +73,7 @@ trigger_counts.data.count
 function trigger_count(df::DataFrame)::TriggerInfo
 
     if !hasproperty(df, :triggers)
-        @minimal_error_throw "DataFrame must have a triggers column"
+        @minimal_error "DataFrame must have a triggers column"
     end
 
     # Check if triggers_info column exists and pass it along
@@ -109,10 +109,10 @@ function _trigger_count_impl(
         # Return empty DataFrame with correct structure
         empty_cols = [Int[]]  # trigger column
         append!(empty_cols, [Int[] for _ in column_names])  # count columns
-        if triggers_info !== nothing
+        if triggers_info |> !isnothing
             insert!(empty_cols, 2, String[])  # triggers_info column
         end
-        column_symbols = [:trigger; triggers_info !== nothing ? [:triggers_info] : []; Symbol.(column_names)]
+        column_symbols = [:trigger; triggers_info |> !isnothing ? [:triggers_info] : []; Symbol.(column_names)]
         result_df = DataFrame([col => data for (col, data) in zip(column_symbols, empty_cols)]...)
         return TriggerInfo(result_df)
     end
@@ -136,7 +136,7 @@ function _trigger_count_impl(
     result_df = DataFrame([col => data for (col, data) in zip(column_symbols, result_data)]...)
 
     # Add triggers_info column if provided
-    if triggers_info !== nothing
+    if triggers_info |> !isnothing
         trigger_info_map = Dict{Int,String}()
         for (trigger, info) in zip(trigger_datasets[1], triggers_info)
             if trigger != 0 && !haskey(trigger_info_map, trigger)

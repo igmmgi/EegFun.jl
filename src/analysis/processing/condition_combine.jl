@@ -119,7 +119,7 @@ function condition_combine(data::Vector{<:EpochData}, condition_groups::Vector{V
         # Validate that all requested conditions exist
         missing_conditions = filter(c -> c > max_condition || c < 1, original_conditions)
         if !isempty(missing_conditions)
-            @minimal_error_throw("Condition(s) $missing_conditions not found (only has 1-$max_condition)")
+            @minimal_error("Condition(s) $missing_conditions not found (only has 1-$max_condition)")
         end
 
         # Get data for the specified conditions
@@ -204,17 +204,17 @@ function condition_combine(
         @log_call "condition_combine"
 
         # Validation (early return on error)
-        if (error_msg = _validate_input_dir(input_dir)) !== nothing
-            @minimal_error_throw(error_msg)
+        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+            @minimal_error(error_msg)
         end
 
-        if (error_msg = _validate_epochs_pattern_combine(file_pattern)) !== nothing
-            @minimal_error_throw(error_msg)
+        if (error_msg = _validate_epochs_pattern_combine(file_pattern)) |> !isnothing
+            @minimal_error(error_msg)
         end
 
         # Validate and clean condition groups (modifies in-place)
-        if (error_msg = _validate_condition_groups(condition_groups)) !== nothing
-            @minimal_error_throw(error_msg)
+        if (error_msg = _validate_condition_groups(condition_groups)) |> !isnothing
+            @minimal_error(error_msg)
         end
 
         # Setup directories

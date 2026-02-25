@@ -371,7 +371,7 @@ end
         result = EegFun.realign("nonexistent", :rt, input_dir = test_dir, output_dir = output_dir)
 
         # Should return nothing when no files found
-        @test result === nothing
+        @test isnothing(result)
     end
 
     @testset "Batch logging" begin
