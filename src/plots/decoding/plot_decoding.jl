@@ -223,7 +223,40 @@ plot_decoding(decoded, color=:red, linewidth=3, show_error=false)
 # With custom title
 plot_decoding(decoded, title="Face vs. Object Decoding")
 ```
+
+    plot_decoding(filepath::String; input_dir=pwd(), participant_selection=participants(), kwargs...)
+
+Load decoded data and plot. Accepts either a `.jld2` filepath or a pattern
+to discover and plot all matching files (one plot per file).
+
+# Examples
+```julia
+plot_decoding("decoded.jld2")
+plot_decoding("decoded")
+```
 """
+function plot_decoding(filepath::String; input_dir::String = pwd(), participant_selection::Function = participants(), kwargs...)
+    if endswith(filepath, ".jld2")
+        data = read_data(filepath)
+        isnothing(data) && @minimal_error "No data found in file: $filepath"
+        return plot_decoding(data; kwargs...)
+    else
+        files = _find_batch_files(filepath, input_dir, participant_selection)
+        isempty(files) && @minimal_error "No files matching pattern '$filepath' in $input_dir"
+
+        results = []
+        for file in sort(files, by = _natural_sort_key)
+            file_path = joinpath(input_dir, file)
+            @info "Plotting: $file"
+            data = read_data(file_path)
+            isnothing(data) && continue
+            result = plot_decoding(data; kwargs...)
+            push!(results, result)
+        end
+        return results
+    end
+end
+
 function plot_decoding(decoded::DecodedData; kwargs...)
     # Merge defaults with user kwargs
     plot_kwargs = _merge_plot_kwargs(PLOT_DECODING_KWARGS, kwargs)

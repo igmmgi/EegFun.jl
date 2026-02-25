@@ -75,6 +75,8 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
 """
     plot_epochs(filename::String; 
+               input_dir::String = pwd(),
+               participant_selection::Function = participants(),
                channel_selection::Function = channels(),
                sample_selection::Function = samples(),
     interval_selection::Interval = times(), 
@@ -83,28 +85,20 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
                layout = :single,
                kwargs...)
 
-Load epoch data from a JLD2 file and create plots.
-
-# Arguments
-- `filename::String`: Path to JLD2 file containing EpochData or Vector{EpochData}
-- `channel_selection::Function`: Function that returns boolean vector for channel filtering
-- `sample_selection::Function`: Function that returns boolean vector for sample filtering
-- `epoch_selection::Function`: Function that returns boolean vector for epoch filtering
-- `include_extra::Bool`: Whether to include extra channels
-- `layout`: Layout specification (see main plot_epochs documentation)
-- `kwargs`: Additional keyword arguments
+Load epoch data and create plots. Accepts either a direct `.jld2` filepath or a pattern
+string to discover and plot all matching files (one plot per file).
 
 # Examples
 ```julia
-# Load and plot from file
-plot_epochs("Flank_C_3_epochs_original.jld2")
-
-# With channel selection
-plot_epochs("Flank_C_3_epochs_original.jld2", channel_selection = channels([:PO7, :PO8]), layout = :grid)
+plot_epochs("epochs_original.jld2")
+plot_epochs("epochs_original")
+plot_epochs("epochs_original", participant_selection = participants(1))
 ```
 """
 function plot_epochs(
     filename::String;
+    input_dir::String = pwd(),
+    participant_selection::Function = participants(),
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     interval_selection::Interval = times(),
@@ -113,19 +107,43 @@ function plot_epochs(
     layout = :single,
     kwargs...,
 )
-    data = read_data(filename)
-    isnothing(data) && @minimal_error "No data found in file: $filename"
+    if endswith(filename, ".jld2")
+        data = read_data(filename)
+        isnothing(data) && @minimal_error "No data found in file: $filename"
+        return plot_epochs(
+            data;
+            channel_selection = channel_selection,
+            sample_selection = sample_selection,
+            interval_selection = interval_selection,
+            epoch_selection = epoch_selection,
+            include_extra = include_extra,
+            layout = layout,
+            kwargs...,
+        )
+    else
+        files = _find_batch_files(filename, input_dir, participant_selection)
+        isempty(files) && @minimal_error "No files matching pattern '$filename' in $input_dir"
 
-    # Dispatch to main plot_epochs function (handles both EpochData and Vector{EpochData})
-    return plot_epochs(
-        data;
-        channel_selection = channel_selection,
-        sample_selection = sample_selection,
-        epoch_selection = epoch_selection,
-        include_extra = include_extra,
-        layout = layout,
-        kwargs...,
-    )
+        results = []
+        for file in sort(files, by = _natural_sort_key)
+            file_path = joinpath(input_dir, file)
+            @info "Plotting: $file"
+            data = read_data(file_path)
+            isnothing(data) && continue
+            result = plot_epochs(
+                data;
+                channel_selection = channel_selection,
+                sample_selection = sample_selection,
+                interval_selection = interval_selection,
+                epoch_selection = epoch_selection,
+                include_extra = include_extra,
+                layout = layout,
+                kwargs...,
+            )
+            push!(results, result)
+        end
+        return results
+    end
 end
 
 """
@@ -356,7 +374,8 @@ function plot_epochs(
 
         elseif layout == :grid
             # Use layout_grid_dims if provided, otherwise calculate best rectangle
-            grid_dims = plot_kwargs[:layout_grid_dims] |> !isnothing ? plot_kwargs[:layout_grid_dims] : _best_rect(length(all_plot_channels))
+            grid_dims =
+                plot_kwargs[:layout_grid_dims] |> !isnothing ? plot_kwargs[:layout_grid_dims] : _best_rect(length(all_plot_channels))
             _plot_epochs_grid_multi!(fig, axes, dat_subset, all_plot_channels, grid_dims, condition_colors_list, plot_kwargs, line_refs)
 
         elseif layout == :topo

@@ -53,10 +53,32 @@ function plot_erp_measurements(erp::ErpData, analysis_type::String; kwargs...)
     return plot_erp_measurements([erp], analysis_type; kwargs...)
 end
 
-function plot_erp_measurements(filepath::String, analysis_type::String; kwargs...)
-    data = read_data(filepath)
-    isnothing(data) && @minimal_error "No data found in file: $filepath"
-    return plot_erp_measurements(data, analysis_type; kwargs...)
+function plot_erp_measurements(
+    filepath::String,
+    analysis_type::String;
+    input_dir::String = pwd(),
+    participant_selection::Function = participants(),
+    kwargs...,
+)
+    if endswith(filepath, ".jld2")
+        data = read_data(filepath)
+        isnothing(data) && @minimal_error "No data found in file: $filepath"
+        return plot_erp_measurements(data, analysis_type; kwargs...)
+    else
+        files = _find_batch_files(filepath, input_dir, participant_selection)
+        isempty(files) && @minimal_error "No files matching pattern '$filepath' in $input_dir"
+
+        results = []
+        for file in sort(files, by = _natural_sort_key)
+            file_path = joinpath(input_dir, file)
+            @info "Plotting: $file"
+            data = read_data(file_path)
+            isnothing(data) && continue
+            result = plot_erp_measurements(data, analysis_type; kwargs...)
+            push!(results, result)
+        end
+        return results
+    end
 end
 
 function plot_erp_measurements(

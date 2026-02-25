@@ -106,6 +106,38 @@ plot_erp_image(dat,
 )
 ```
 """
+function plot_erp_image(filepath::String; input_dir::String = pwd(), participant_selection::Function = participants(), kwargs...)
+    if endswith(filepath, ".jld2")
+        data = read_data(filepath)
+        isnothing(data) && @minimal_error "No data found in file: $filepath"
+        return plot_erp_image(data; kwargs...)
+    else
+        files = _find_batch_files(filepath, input_dir, participant_selection)
+        isempty(files) && @minimal_error "No files matching pattern '$filepath' in $input_dir"
+
+        results = []
+        for file in sort(files, by = _natural_sort_key)
+            file_path = joinpath(input_dir, file)
+            @info "Plotting: $file"
+            data = read_data(file_path)
+            isnothing(data) && continue
+            result = plot_erp_image(data; kwargs...)
+            push!(results, result)
+        end
+        return results
+    end
+end
+
+"""
+    plot_erp_image(dat::EpochData; 
+                   layout::Union{Symbol, PlotLayout} = :single,
+                   channel_selection::Function = channels(),
+                   sample_selection::Function = samples(),
+    interval_selection::Interval = times(),
+                   kwargs...)
+
+Plot ERP image for specified channels and samples with flexible layout options.
+"""
 function plot_erp_image(
     dat::EpochData;
     layout::Union{Symbol,PlotLayout} = :single,
@@ -524,8 +556,8 @@ function plot_erp_image(
         end
 
         # Resize rows: 2/3 for heatmap, 1/3 for ERP trace
-        rowsize!(fig.layout, 1, Relative(2/3))
-        rowsize!(fig.layout, 2, Relative(1/3))
+        rowsize!(fig.layout, 1, Relative(2 / 3))
+        rowsize!(fig.layout, 2, Relative(1 / 3))
     end
 
     # Link only x-axes (time dimension) but not y-axes (epoch dimension)

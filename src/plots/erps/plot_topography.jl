@@ -160,6 +160,41 @@ end
 
 
 """
+    plot_topography(filepath::String; input_dir=pwd(), participant_selection=participants(), kwargs...)
+
+Load data and create topographic plots. Accepts either a `.jld2` filepath or a pattern
+to discover and plot all matching files (one plot per file).
+
+# Examples
+```julia
+plot_topography("grand_average_erps_good.jld2")
+plot_topography("erps_good")
+plot_topography("erps_good", participant_selection = participants(1))
+```
+"""
+function plot_topography(filepath::String; input_dir::String = pwd(), participant_selection::Function = participants(), kwargs...)
+    if endswith(filepath, ".jld2")
+        data = read_data(filepath)
+        isnothing(data) && @minimal_error "No data found in file: $filepath"
+        return plot_topography(data; kwargs...)
+    else
+        files = _find_batch_files(filepath, input_dir, participant_selection)
+        isempty(files) && @minimal_error "No files matching pattern '$filepath' in $input_dir"
+
+        results = []
+        for file in sort(files, by = _natural_sort_key)
+            file_path = joinpath(input_dir, file)
+            @info "Plotting: $file"
+            data = read_data(file_path)
+            isnothing(data) && continue
+            result = plot_topography(data; kwargs...)
+            push!(results, result)
+        end
+        return results
+    end
+end
+
+"""
     plot_topography!(fig, ax, dat::SingleDataFrameEeg; kwargs...)
 
 Add a topographic plot to existing figure/axis from single DataFrame EEG data.
