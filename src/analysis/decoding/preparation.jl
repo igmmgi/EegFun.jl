@@ -90,8 +90,7 @@ function prepare_decoding(
 
     # Validate selection produced data
     for (cond_idx, condition_epochs) in enumerate(selected_conditions)
-        isempty(condition_epochs) &&
-            @minimal_error("Condition $(selected_cond_nums[cond_idx]): No data matched the selection criteria!")
+        isempty(condition_epochs) && @minimal_error("Condition $(selected_cond_nums[cond_idx]): No data matched the selection criteria!")
         isempty(channel_labels(condition_epochs[1])) && @minimal_error("Channel selection produced no channels")
         isempty(condition_epochs[1].data[1][!, :time]) && @minimal_error("Sample selection produced no time points")
     end
@@ -267,8 +266,7 @@ function prepare_decoding(
 
     # Validate selection produced data
     for (cond_idx, condition_epochs) in enumerate(selected_conditions)
-        isempty(condition_epochs) &&
-            @minimal_error("Condition $(selected_cond_nums[cond_idx]): No data matched the selection criteria!")
+        isempty(condition_epochs) && @minimal_error("Condition $(selected_cond_nums[cond_idx]): No data matched the selection criteria!")
         isempty(channel_labels(condition_epochs[1])) && @minimal_error("Channel selection produced no channels")
         isempty(condition_epochs[1].data_power[1][!, :time]) && @minimal_error("Sample selection produced no time points")
     end

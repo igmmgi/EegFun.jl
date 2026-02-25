@@ -418,4 +418,3 @@ function _append_layouts(base_layout::Layout, avg_layout::Layout)::Layout
     combined_df = vcat(base_copy.data, avg_copy.data)
     return Layout(combined_df, nothing, nothing)
 end
-

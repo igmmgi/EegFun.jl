@@ -747,9 +747,7 @@ function _validate_model_rdms(model_rdms, n_conditions, n_times)
         if isa(model_rdm, Array{Float64,3})
             # Temporal model: [time × condition × condition]
             if size(model_rdm, 1) != n_times
-                @minimal_error(
-                    "Temporal model RDM $idx has $(size(model_rdm, 1)) timepoints, " * "expected $n_times to match neural data"
-                )
+                @minimal_error("Temporal model RDM $idx has $(size(model_rdm, 1)) timepoints, " * "expected $n_times to match neural data")
             end
             if size(model_rdm, 2) != n_conditions || size(model_rdm, 3) != n_conditions
                 @minimal_error(
