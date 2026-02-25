@@ -13,7 +13,7 @@ using Makie
         ax = Axis(fig[1, 1])
 
         # Should not throw an error
-        @test EegFun.plot_channel_summary!(fig, ax, df, :std) === nothing
+        @test isnothing(EegFun.plot_channel_summary!(fig, ax, df, :std))
 
         # Test that the axis has been modified
         @test ax.title[] == ""  # Default title
@@ -28,16 +28,18 @@ using Makie
         ax = Axis(fig[1, 1])
 
         # Test with custom parameters
-        @test EegFun.plot_channel_summary!(
-            fig,
-            ax,
-            df,
-            :range,
-            title = "Custom Title",
-            xlabel = "Custom X Label",
-            bar_color = :red,
-            sort_values = true,
-        ) === nothing
+        @test isnothing(
+            EegFun.plot_channel_summary!(
+                fig,
+                ax,
+                df,
+                :range,
+                title = "Custom Title",
+                xlabel = "Custom X Label",
+                bar_color = :red,
+                sort_values = true,
+            ),
+        )
 
         # Test that custom parameters were applied
         @test ax.title[] == "Custom Title"
@@ -51,7 +53,7 @@ using Makie
         ax = Axis(fig[1, 1])
 
         # Test with averaging over epochs
-        @test EegFun.plot_channel_summary!(fig, ax, df, :std, average_over = :epoch, error_color = :blue, error_linewidth = 3) === nothing
+        @test isnothing(EegFun.plot_channel_summary!(fig, ax, df, :std, average_over = :epoch, error_color = :blue, error_linewidth = 3))
 
         # Should have error bars when averaging
         @test ax.ylabel[] == "std (± 95% CI n=3)"
@@ -63,15 +65,15 @@ using Makie
         fig = Figure()
         ax = Axis(fig[1, 1])
 
-        # Test missing channel column - should log error but not throw
+        # Test missing channel column - should throw now
         df_no_channel = select(df, Not(:channel))
-        @test EegFun.plot_channel_summary!(fig, ax, df_no_channel, :std) === nothing
+        @test_throws Exception EegFun.plot_channel_summary!(fig, ax, df_no_channel, :std)
 
-        # Test missing data column - should log error but not throw
-        @test EegFun.plot_channel_summary!(fig, ax, df, :nonexistent) === nothing
+        # Test missing data column - should throw now
+        @test_throws Exception EegFun.plot_channel_summary!(fig, ax, df, :nonexistent)
 
-        # Test invalid averaging column - should log error but not throw
-        @test EegFun.plot_channel_summary!(fig, ax, df, :std, average_over = :nonexistent) === nothing
+        # Test invalid averaging column - should throw now
+        @test_throws Exception EegFun.plot_channel_summary!(fig, ax, df, :std, average_over = :nonexistent)
     end
 
     @testset "plot_channel_summary basic functionality" begin

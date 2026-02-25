@@ -47,8 +47,8 @@ using OrderedCollections
         # Test constructor
         layout = EegFun.Layout(df, nothing, nothing)
         @test layout.data == df
-        @test layout.neighbours === nothing
-        @test layout.criterion === nothing
+        @test isnothing(layout.neighbours)
+        @test isnothing(layout.criterion)
 
         # Test mutability
         layout.criterion = 50.0
@@ -152,11 +152,11 @@ using OrderedCollections
         @test condition.name == "test_condition"
         @test condition.trigger_sequences == [[1, 2, 3]]
         @test condition.reference_index == 1
-        @test condition.timing_pairs === nothing
-        @test condition.min_interval === nothing
-        @test condition.max_interval === nothing
-        @test condition.after === nothing
-        @test condition.before === nothing
+        @test isnothing(condition.timing_pairs)
+        @test isnothing(condition.min_interval)
+        @test isnothing(condition.max_interval)
+        @test isnothing(condition.after)
+        @test isnothing(condition.before)
 
         # Test with all parameters
         condition = EegFun.EpochCondition(
@@ -264,7 +264,7 @@ using OrderedCollections
         @test ica_info.filename == "test_file.bdf"
 
         # Test immutability
-        @test_throws ErrorException ica_info.scale = 2.0
+        @test_throws Exception ica_info.scale = 2.0
     end
 
     @testset "Display functions" begin

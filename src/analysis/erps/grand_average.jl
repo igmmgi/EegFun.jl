@@ -20,11 +20,11 @@ Create a grand average by averaging ERP data across participants for a specific 
 """
 function _create_grand_average(erps::Vector{ErpData}, cond_num::Int)
     if isempty(erps)
-        @minimal_error_throw("Cannot create grand average from empty ERP list")
+        @minimal_error("Cannot create grand average from empty ERP list")
     end
 
     # Validate that all ERPs have the same structure
-    _have_same_structure(erps) || @minimal_error_throw("ERPs have inconsistent structure")
+    _have_same_structure(erps) || @minimal_error("ERPs have inconsistent structure")
 
     first_erp = erps[1]
 
@@ -224,8 +224,8 @@ function grand_average(
         @log_call "grand_average"
 
         # Validation (early return on error)
-        if (error_msg = _validate_input_dir(input_dir)) !== nothing
-            @minimal_error_throw(error_msg)
+        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+            @minimal_error(error_msg)
         end
 
         # Setup directories

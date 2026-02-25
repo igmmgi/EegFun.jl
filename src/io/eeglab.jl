@@ -197,10 +197,10 @@ function _eeglab_to_continuousdata(eeg::Dict, filepath::String, preserve_radial_
         lat_idx = findfirst(==("latency"), events.names)
         pos_idx = findfirst(==("position"), events.names)
 
-        if lat_idx !== nothing && type_idx !== nothing
+        if lat_idx |> !isnothing && type_idx |> !isnothing
             latencies = events.values[lat_idx]
             types = events.values[type_idx]
-            positions = pos_idx !== nothing ? events.values[pos_idx] : nothing
+            positions = pos_idx |> !isnothing ? events.values[pos_idx] : nothing
 
             @info "Extracted $(length(latencies)) events"
 
@@ -209,7 +209,7 @@ function _eeglab_to_continuousdata(eeg::Dict, filepath::String, preserve_radial_
                 (latency < 1 || latency > n_timepoints) && continue
 
                 # Extract trigger code from position field (use 0 for events without position)
-                trigger_code = if positions !== nothing && i <= length(positions)
+                trigger_code = if positions |> !isnothing && i <= length(positions)
                     val = positions[i]
                     # Position is either a number or an empty array
                     (val isa Number) ? Int(val) : 0

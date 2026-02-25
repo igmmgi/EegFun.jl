@@ -21,7 +21,7 @@ detect_eog_onsets!(dat, 30.0, :hEOG, :is_hEOG) # Detect horizontal EOG onsets
 
 function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Symbol, channel_out::Symbol; step_size::Int = 20)
     @info "Detecting EOG onsets in channel $(channel_in) with stepsize criterion $(criterion) μV"
-    channel_in ∉ propertynames(dat.data) && @minimal_error_throw("channel $(channel_in) not found in data")
+    channel_in ∉ propertynames(dat.data) && @minimal_error("channel $(channel_in) not found in data")
 
     step_size = div(dat.sample_rate, step_size)
     eog_diff = diff(dat.data[1:step_size:end, channel_in])
@@ -156,8 +156,8 @@ function is_extreme_value!(
     channel_out::Union{Symbol,Nothing} = nothing,
 )
 
-    mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined")
-    threshold <= 0 && @minimal_error_throw("threshold must be greater than 0")
+    mode ∉ [:separate, :combined] && @minimal_error("mode must be :separate or :combined")
+    threshold <= 0 && @minimal_error("threshold must be greater than 0")
 
     # Combine interval and sample selection
     combined_sel = _combine_interval_sample(interval_selection, sample_selection)
@@ -230,16 +230,16 @@ function is_extreme_value!(
     channel_out::Union{Symbol,Nothing} = nothing,
 )
 
-    mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined")
-    threshold <= 0 && @minimal_error_throw("threshold must be greater than 0")
+    mode ∉ [:separate, :combined] && @minimal_error("mode must be :separate or :combined")
+    threshold <= 0 && @minimal_error("threshold must be greater than 0")
 
     # Get selected channels
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
-    isempty(selected_channels) && @minimal_error_throw("No channels selected for extreme value detection")
+    isempty(selected_channels) && @minimal_error("No channels selected for extreme value detection")
 
     # Get selected epochs
     selected_epochs = get_selected_epochs(dat, epoch_selection)
-    isempty(selected_epochs) && @minimal_error_throw("No epochs selected for extreme value detection")
+    isempty(selected_epochs) && @minimal_error("No epochs selected for extreme value detection")
 
     # Use provided channel_out or generate default name
     channel_out = something(channel_out, Symbol("is_extreme_value_$(threshold)"))
@@ -391,12 +391,12 @@ function is_step_value!(
     channel_out::Union{Symbol,Nothing} = nothing,
 )
 
-    mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined")
-    threshold <= 0 && @minimal_error_throw("threshold must be greater than 0")
+    mode ∉ [:separate, :combined] && @minimal_error("mode must be :separate or :combined")
+    threshold <= 0 && @minimal_error("threshold must be greater than 0")
 
     # Get selected channels (exclude metadata and extra columns like triggers, EOG flags)
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
-    isempty(selected_channels) && @minimal_error_throw("No channels selected")
+    isempty(selected_channels) && @minimal_error("No channels selected")
 
     # Get selected samples (combining interval and sample selection)
     combined_sel = _combine_interval_sample(interval_selection, sample_selection)
@@ -485,15 +485,15 @@ function is_step_value!(
     channel_out::Union{Symbol,Nothing} = nothing,
 )
 
-    mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined")
-    threshold <= 0 && @minimal_error_throw("threshold must be greater than 0")
+    mode ∉ [:separate, :combined] && @minimal_error("mode must be :separate or :combined")
+    threshold <= 0 && @minimal_error("threshold must be greater than 0")
 
     # Get selected channels (exclude metadata and extra columns) and epochs
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
-    isempty(selected_channels) && @minimal_error_throw("No channels selected")
+    isempty(selected_channels) && @minimal_error("No channels selected")
 
     selected_epochs = get_selected_epochs(dat, epoch_selection)
-    isempty(selected_epochs) && @minimal_error_throw("No epochs selected")
+    isempty(selected_epochs) && @minimal_error("No epochs selected")
 
     # Use provided channel_out or generate default name
     channel_out = something(channel_out, Symbol("is_step_value_$(threshold)"))
@@ -596,12 +596,12 @@ function is_step_value(
     mode::Symbol = :combined,
 )
 
-    mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined")
-    threshold <= 0 && @minimal_error_throw("threshold must be greater than 0")
+    mode ∉ [:separate, :combined] && @minimal_error("mode must be :separate or :combined")
+    threshold <= 0 && @minimal_error("threshold must be greater than 0")
 
     # Get selected channels (exclude metadata and extra columns) and samples
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
-    isempty(selected_channels) && @minimal_error_throw("No channels selected")
+    isempty(selected_channels) && @minimal_error("No channels selected")
 
     combined_sel = _combine_interval_sample(interval_selection, sample_selection)
     selected_samples = get_selected_samples(dat.data, combined_sel)
@@ -667,11 +667,11 @@ function n_step_value(
     mode::Symbol = :combined,
 )
 
-    mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined")
-    threshold <= 0 && @minimal_error_throw("threshold must be greater than 0")
+    mode ∉ [:separate, :combined] && @minimal_error("mode must be :separate or :combined")
+    threshold <= 0 && @minimal_error("threshold must be greater than 0")
 
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
-    isempty(selected_channels) && @minimal_error_throw("No channels selected")
+    isempty(selected_channels) && @minimal_error("No channels selected")
 
     combined_sel = _combine_interval_sample(interval_selection, sample_selection)
     selected_samples = get_selected_samples(dat.data, combined_sel)
@@ -700,11 +700,11 @@ function _detect_extreme_values(
     interval_selection::Interval = times(),
 )
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
-    isempty(selected_channels) && @minimal_error_throw("No channels selected for extreme value detection")
+    isempty(selected_channels) && @minimal_error("No channels selected for extreme value detection")
 
     combined_sel = _combine_interval_sample(interval_selection, sample_selection)
     selected_samples = get_selected_samples(dat, combined_sel)
-    isempty(selected_samples) && @minimal_error_throw("No samples selected for extreme value detection")
+    isempty(selected_samples) && @minimal_error("No samples selected for extreme value detection")
 
     results = Dict{Symbol,Vector{Bool}}()
 
@@ -765,8 +765,8 @@ function is_extreme_value(
     mode::Symbol = :combined,
 )
 
-    mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined")
-    threshold <= 0 && @minimal_error_throw("threshold must be greater than 0")
+    mode ∉ [:separate, :combined] && @minimal_error("mode must be :separate or :combined")
+    threshold <= 0 && @minimal_error("threshold must be greater than 0")
 
     combined_sel = _combine_interval_sample(interval_selection, sample_selection)
     results = _detect_extreme_values(dat, threshold; channel_selection, sample_selection = combined_sel)
@@ -836,8 +836,8 @@ function n_extreme_value(
     mode::Symbol = :combined,
 )
 
-    mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined")
-    threshold <= 0 && @minimal_error_throw("threshold must be greater than 0")
+    mode ∉ [:separate, :combined] && @minimal_error("mode must be :separate or :combined")
+    threshold <= 0 && @minimal_error("threshold must be greater than 0")
 
     combined_sel = _combine_interval_sample(interval_selection, sample_selection)
     results = _detect_extreme_values(dat, threshold; channel_selection, sample_selection = combined_sel)
@@ -1118,22 +1118,22 @@ function detect_bad_epochs_automatic(
     @info "Condition: $(dat.condition) ($(dat.condition_name)) - Detecting bad epochs"
 
     # Validate inputs
-    z_criterion < 0 && @minimal_error_throw("Z-criterion must be non-negative")
-    abs_criterion < 0 && @minimal_error_throw("Absolute criterion must be non-negative")
-    z_criterion == 0 && abs_criterion == 0 && @minimal_error_throw("One of z_criterion or abs_criterion must be > 0")
+    z_criterion < 0 && @minimal_error("Z-criterion must be non-negative")
+    abs_criterion < 0 && @minimal_error("Absolute criterion must be non-negative")
+    z_criterion == 0 && abs_criterion == 0 && @minimal_error("One of z_criterion or abs_criterion must be > 0")
 
     # Validate measures
     allowed_measures = Set([:variance, :max, :min, :abs, :range, :kurtosis])
     selected_measures = Set(z_measures)
     if !issubset(selected_measures, allowed_measures)
         invalid = collect(setdiff(selected_measures, allowed_measures))
-        @minimal_error_throw("Invalid measures: $(invalid).")
+        @minimal_error("Invalid measures: $(invalid).")
     end
 
     # Get selected channels
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
     @info "Selected channels: $(_print_vector(selected_channels))"
-    isempty(selected_channels) && @minimal_error_throw("No channels selected for epoch rejection")
+    isempty(selected_channels) && @minimal_error("No channels selected for epoch rejection")
 
     # Calculate metrics and identify rejected epochs
     metrics = _calculate_epoch_metrics(dat, selected_channels, Float64(z_criterion), Float64(abs_criterion))
@@ -1239,8 +1239,8 @@ get_rejected(info::Vector{EpochRejectionInfo})::Vector{Vector{Rejection}} = get_
 Validate inputs for epoch rejection.
 """
 function _validate_rejection_inputs(dat::EpochData, z_criterion::Real)
-    isempty(dat.data) && @minimal_error_throw("Cannot reject epochs from empty EpochData")
-    z_criterion <= 0 && @minimal_error_throw("Z-criterion must be positive")
+    isempty(dat.data) && @minimal_error("Cannot reject epochs from empty EpochData")
+    z_criterion <= 0 && @minimal_error("Z-criterion must be positive")
     length(dat.data) < 3 && @minimal_warning "Only $(length(dat.data)) epochs available."
 end
 
@@ -1317,7 +1317,7 @@ function Base.show(io::IO, info::EpochRejectionInfo)
     println(io, "  Artifacts total: $(info.n_artifacts)")
     println(io, "  Rejected epochs: $(_print_vector(unique_epochs(info.rejected)))")
 
-    if info.abs_rejections !== nothing
+    if info.abs_rejections |> !isnothing
         println(io, "  Rejection breakdown (absolute):")
         println(
             io,
@@ -1325,7 +1325,7 @@ function Base.show(io::IO, info::EpochRejectionInfo)
         )
     end
 
-    if info.z_rejections !== nothing
+    if info.z_rejections |> !isnothing
         z_info = info.z_rejections
         # Map measures to fields and labels
         field_map = Dict(
@@ -1617,11 +1617,11 @@ subset_bad_data("/path/to/preprocessed", 80.0, subset_directory="excluded")
 function subset_bad_data(data_path::String, threshold::Real; subset_directory::String = "excluded")
 
     # Validate inputs/outputs
-    (threshold < 0.0 || threshold > 100.0) && @minimal_error_throw("threshold must be 0 < threshold < 100, got $threshold")
-    !isdir(data_path) && @minimal_error_throw("data_path must be a directory: $data_path")
+    (threshold < 0.0 || threshold > 100.0) && @minimal_error("threshold must be 0 < threshold < 100, got $threshold")
+    !isdir(data_path) && @minimal_error("data_path must be a directory: $data_path")
 
     epoch_summary_path = joinpath(data_path, "epoch_summary.jld2")
-    !isfile(epoch_summary_path) && @minimal_error_throw("epoch_summary.jld2 not found: $data_path")
+    !isfile(epoch_summary_path) && @minimal_error("epoch_summary.jld2 not found: $data_path")
 
     # Load epoch summary (plain DataFrame, not EegFunData — can't use read_data)
     epoch_summary = load(epoch_summary_path, "data")
@@ -1643,7 +1643,7 @@ function subset_bad_data(data_path::String, threshold::Real; subset_directory::S
 
     # Load and filter file_summary_subset
     file_summary_path = joinpath(data_path, "file_summary.jld2")
-    !isfile(file_summary_path) && @minimal_error_throw("file_summary.jld2 not found: $data_path")
+    !isfile(file_summary_path) && @minimal_error("file_summary.jld2 not found: $data_path")
 
     file_summary = load(file_summary_path, "data")
     file_summary_subset = file_summary[.!in.(file_summary.file, Ref(bad_participants)), :]

@@ -102,7 +102,7 @@ using Test
 
         # Test non-recursive search
         result = EegFun.find_file("biosemi64.csv", test_dir, recursive = false)
-        @test result === nothing  # File is in subdirectory
+        @test isnothing(result)  # File is in subdirectory
 
         # Test non-recursive search in subdirectory
         result = EegFun.find_file("biosemi64.csv", subdir1, recursive = false)
@@ -110,11 +110,11 @@ using Test
 
         # Test file not found
         result = EegFun.find_file("nonexistent.csv", test_dir)
-        @test result === nothing
+        @test isnothing(result)
 
         # Test directory doesn't exist
         result = EegFun.find_file("test.csv", "/nonexistent/directory")
-        @test result === nothing
+        @test isnothing(result)
 
         # Test with empty extensions
         result = EegFun.find_file("test_file.csv", test_dir, extensions = String[])
@@ -128,7 +128,7 @@ using Test
 
         # Test find_file with empty filename
         result = EegFun.find_file("", test_dir)
-        @test result === nothing
+        @test isnothing(result)
 
         # Test get_files with empty directory
         empty_dir = mktempdir()

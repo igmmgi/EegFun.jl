@@ -177,7 +177,7 @@ function detect_bad_epochs_interactive(
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
 
     if isempty(selected_channels)
-        @minimal_error_throw("No channels selected for display")
+        @minimal_error("No channels selected for display")
     end
 
     n_total_epochs = n_epochs(dat)
@@ -471,10 +471,10 @@ Validate inputs for the rejection GUI.
 """
 function _validate_rejection_gui_inputs(dat::EpochData, dims::Tuple{Int,Int})
     if isempty(dat.data)
-        @minimal_error_throw("Cannot create rejection interface for empty EpochData")
+        @minimal_error("Cannot create rejection interface for empty EpochData")
     end
     if dims[1] * dims[2] <= 1
-        @minimal_error_throw("dims must be positive, got $dims")
+        @minimal_error("dims must be positive, got $dims")
     end
 end
 

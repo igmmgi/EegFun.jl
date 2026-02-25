@@ -122,7 +122,7 @@ end
                 output_dir = output_dir,
             )
 
-            @test result !== nothing
+            @test result |> !isnothing
             @test result.success == 2
             @test result.errors == 0
             @test isdir(output_dir)
@@ -286,7 +286,7 @@ end
 
             result = EegFun.channel_average("erps_cleaned", [EegFun.channels([:Ch1, :Ch2])], input_dir = empty_dir)
 
-            @test result === nothing
+            @test isnothing(result)
         end
 
         @testset "Logging" begin

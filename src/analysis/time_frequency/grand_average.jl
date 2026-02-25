@@ -30,7 +30,7 @@ plot_tf(grand_avgs; channel_selection=channels(:Cz), baseline_interval=(-0.5, -0
 ```
 """
 function grand_average(tfs::Vector{TimeFreqData}; condition_selection::Function = conditions())
-    isempty(tfs) && @minimal_error_throw("Cannot create grand average from empty TF list")
+    isempty(tfs) && @minimal_error("Cannot create grand average from empty TF list")
 
     # Group by condition
     tfs_by_condition = group_by_condition(tfs)
@@ -57,7 +57,7 @@ function grand_average(tfs::Vector{TimeFreqData}; condition_selection::Function 
         end
 
         # Validate consistent structure
-        _have_same_structure(condition_tfs) || @minimal_error_throw("TF data for condition $cond_num have inconsistent structure")
+        _have_same_structure(condition_tfs) || @minimal_error("TF data for condition $cond_num have inconsistent structure")
 
         # Get shared metadata
         ref_tf = condition_tfs[1]

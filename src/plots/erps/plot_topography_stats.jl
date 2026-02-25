@@ -224,7 +224,7 @@ function plot_topo_stats(
         # Map electrode values to layout order
         channel_data = topo_values[i]
         layout_values = Float64[let ch_idx = findfirst(==(lbl), electrodes)
-            ch_idx !== nothing ? channel_data[ch_idx] : 0.0
+            ch_idx |> !isnothing ? channel_data[ch_idx] : 0.0
         end for lbl in layout_labels]
 
         # Render using shared helper (uses num_levels, not gridscale, for contour levels)
@@ -249,7 +249,7 @@ function plot_topo_stats(
             for ch_idx in sig_channel_indices
                 ch_sym = electrodes[ch_idx]
                 layout_idx = findfirst(==(ch_sym), layout_labels)
-                if layout_idx !== nothing
+                if layout_idx |> !isnothing
                     push!(sig_x, layout.data.x2[layout_idx])
                     push!(sig_y, layout.data.y2[layout_idx])
                 end

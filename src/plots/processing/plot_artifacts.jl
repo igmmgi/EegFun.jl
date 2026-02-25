@@ -117,14 +117,14 @@ function _create_channel_selection_handlers(fig, ax, epochs, selected_channels, 
     on(events(ax).mousebutton, priority = 0) do event
         if event.button == Mouse.left && event.action == Mouse.press && _is_shift_held(fig)
             mouse_pos = _get_mouse_position(ax)
-            mouse_pos === nothing && return Consume(false)
+            isnothing(mouse_pos) && return Consume(false)
 
             mouse_time, mouse_amp = mouse_pos
             current_epoch = epochs.data[epoch_idx[]]
 
             closest_channel, min_distance = _find_closest_channel(mouse_time, mouse_amp, current_epoch, selected_channels)
 
-            if closest_channel !== nothing && min_distance < plot_kwargs[:selection_threshold]
+            if closest_channel |> !isnothing && min_distance < plot_kwargs[:selection_threshold]
                 _toggle_channel_selection(closest_channel, selected_channels_set)
                 update_plot!()
             end
@@ -270,7 +270,7 @@ function plot_artifact_detection(epochs::EpochData, artifacts::EpochRejectionInf
         empty!(ax)
 
         # Delete existing legend if present
-        if current_legend[] !== nothing
+        if current_legend[] |> !isnothing
             delete!(current_legend[])
             current_legend[] = nothing
         end
@@ -431,11 +431,11 @@ function plot_artifact_repair(
         empty!(ax2)
 
         # Delete existing legends if present
-        if current_legend1[] !== nothing
+        if current_legend1[] |> !isnothing
             delete!(current_legend1[])
             current_legend1[] = nothing
         end
-        if current_legend2[] !== nothing
+        if current_legend2[] |> !isnothing
             delete!(current_legend2[])
             current_legend2[] = nothing
         end
@@ -637,11 +637,11 @@ function plot_artifact_rejection(
         empty!(ax2)
 
         # Delete existing legends if present
-        if current_legend1[] !== nothing
+        if current_legend1[] |> !isnothing
             delete!(current_legend1[])
             current_legend1[] = nothing
         end
-        if current_legend2[] !== nothing
+        if current_legend2[] |> !isnothing
             delete!(current_legend2[])
             current_legend2[] = nothing
         end
@@ -670,7 +670,7 @@ function plot_artifact_rejection(
         _plot_channels!(ax1, epoch_orig, selected_channels, epoch_rejected_channels, selected_channels_set, rejected_color_map, plot_kwargs)
 
         # Plot rejected epoch if it exists, otherwise show blank with red spines
-        if rejected_idx !== nothing
+        if rejected_idx |> !isnothing
             epoch_rejected = epochs_rejected.data[rejected_idx]
             _plot_channels!(
                 ax2,

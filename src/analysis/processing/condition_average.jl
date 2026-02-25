@@ -22,7 +22,7 @@ Create an average wave by averaging ERP data across conditions.
 function _create_average_wave(erps::Vector{<:ErpData}, conditions::Vector{Int}, avg_cond::Int)
     # Validate that all ERPs have the same structure
     for i = 2:length(erps)
-        _have_same_structure(erps[1], erps[i]) || @minimal_error_throw("ERPs have inconsistent structure")
+        _have_same_structure(erps[1], erps[i]) || @minimal_error("ERPs have inconsistent structure")
     end
 
     # Get EEG channels (exclude metadata columns)
@@ -156,7 +156,7 @@ function condition_average(data::Vector{<:ErpData}, condition_groups::Vector{Vec
     end
 
     if isempty(average_waves)
-        @minimal_error_throw("No valid condition groups found")
+        @minimal_error("No valid condition groups found")
     end
 
     @info "Created $(length(average_waves)) average wave(s)"
@@ -223,13 +223,13 @@ function condition_average(
         @log_call "condition_average"
 
         # Validation (early return on error)
-        if (error_msg = _validate_input_dir(input_dir)) !== nothing
-            @minimal_error_throw(error_msg)
+        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+            @minimal_error(error_msg)
         end
 
 
-        if (error_msg = _validate_condition_groups(condition_groups)) !== nothing
-            @minimal_error_throw(error_msg)
+        if (error_msg = _validate_condition_groups(condition_groups)) |> !isnothing
+            @minimal_error(error_msg)
         end
 
         # Setup directories

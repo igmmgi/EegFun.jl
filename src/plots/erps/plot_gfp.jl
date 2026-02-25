@@ -166,7 +166,7 @@ function plot_gfp(
     ax_gfp = Axis(fig[panel_idx, 1])
 
     # Determine y-label
-    ylabel_gfp = if plot_kwargs[:ylabel] !== nothing
+    ylabel_gfp = if plot_kwargs[:ylabel] |> !isnothing
         plot_kwargs[:ylabel]
     else
         normalize ? "GFP (%)" : "GFP (μV)"
@@ -301,10 +301,10 @@ function plot_gfp(gfp_data::DataFrame; kwargs...)
 
     # Check required columns
     if !hasproperty(gfp_data, :time)
-        @minimal_error_throw("DataFrame must have :time column")
+        @minimal_error("DataFrame must have :time column")
     end
     if !hasproperty(gfp_data, :gfp)
-        @minimal_error_throw("DataFrame must have :gfp column")
+        @minimal_error("DataFrame must have :gfp column")
     end
 
     # Determine if dissimilarity should be plotted
@@ -323,7 +323,7 @@ function plot_gfp(gfp_data::DataFrame; kwargs...)
 
     # Determine if data is normalized (simple heuristic: check if values are 0-100)
     is_normalized = all(0 .<= gfp_data.gfp .<= 100)
-    ylabel_gfp = if plot_kwargs[:ylabel] !== nothing
+    ylabel_gfp = if plot_kwargs[:ylabel] |> !isnothing
         plot_kwargs[:ylabel]
     else
         is_normalized ? "GFP (%)" : "GFP (μV)"
@@ -430,10 +430,10 @@ function plot_gfp(gfp_data::Vector{DataFrame}; kwargs...)
     # Check required columns in all DataFrames
     for (i, df) in enumerate(gfp_data)
         if !hasproperty(df, :time)
-            @minimal_error_throw("DataFrame $i must have :time column")
+            @minimal_error("DataFrame $i must have :time column")
         end
         if !hasproperty(df, :gfp)
-            @minimal_error_throw("DataFrame $i must have :gfp column")
+            @minimal_error("DataFrame $i must have :gfp column")
         end
     end
 
@@ -453,7 +453,7 @@ function plot_gfp(gfp_data::Vector{DataFrame}; kwargs...)
 
     # Determine if data is normalized (check first dataset)
     is_normalized = all(0 .<= gfp_data[1].gfp .<= 100)
-    ylabel_gfp = if plot_kwargs[:ylabel] !== nothing
+    ylabel_gfp = if plot_kwargs[:ylabel] |> !isnothing
         plot_kwargs[:ylabel]
     else
         is_normalized ? "GFP (%)" : "GFP (μV)"

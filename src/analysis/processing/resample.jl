@@ -73,7 +73,7 @@ function resample!(dat::SingleDataFrameEeg, factor::Int)::Nothing
 
     # Validation
     if factor < 1
-        @minimal_error_throw("Downsampling factor must be positive, got $factor")
+        @minimal_error("Downsampling factor must be positive, got $factor")
     end
 
     if factor == 1
@@ -82,7 +82,7 @@ function resample!(dat::SingleDataFrameEeg, factor::Int)::Nothing
     end
 
     if dat.sample_rate % factor != 0
-        @minimal_error_throw(
+        @minimal_error(
             "Sample rate $(dat.sample_rate) Hz is not evenly divisible by factor $factor. " *
             "New sample rate would be $(dat.sample_rate / factor) Hz. " *
             "Choose a factor that results in an integer sample rate."
@@ -150,7 +150,7 @@ resample!(epochs, 2)
 function resample!(dat::EpochData, factor::Int)::Nothing
     # Validation
     if factor < 1
-        @minimal_error_throw("Downsampling factor must be positive, got $factor")
+        @minimal_error("Downsampling factor must be positive, got $factor")
     end
 
     if factor == 1
@@ -159,7 +159,7 @@ function resample!(dat::EpochData, factor::Int)::Nothing
     end
 
     if dat.sample_rate % factor != 0
-        @minimal_error_throw(
+        @minimal_error(
             "Sample rate $(dat.sample_rate) Hz is not evenly divisible by factor $factor. " *
             "New sample rate would be $(dat.sample_rate / factor) Hz. " *
             "Choose a factor that results in an integer sample rate."
@@ -363,12 +363,12 @@ function resample(
         @log_call "resample"
 
         # Validation
-        if (error_msg = _validate_input_dir(input_dir)) !== nothing
-            @minimal_error_throw(error_msg)
+        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+            @minimal_error(error_msg)
         end
 
         if factor <= 0
-            @minimal_error_throw("Downsampling factor must be positive, got $factor")
+            @minimal_error("Downsampling factor must be positive, got $factor")
         end
 
         # Setup directories

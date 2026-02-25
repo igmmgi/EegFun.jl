@@ -149,7 +149,7 @@ using LinearAlgebra
         dat_no_eog = copy(dat)
         select!(dat_no_eog.data, Not([:vEOG, :hEOG]))
         result = EegFun.identify_eog_components(dat_no_eog, ica_res)
-        @test result[1] === nothing
+        @test isnothing(result[1])
         # No samples selected -> returns empty dict and empty df
         empty_eog, empty_eog_df = EegFun.identify_eog_components(dat, ica_res; sample_selection = x -> falses(nrow(x)))
         @test empty_eog == Dict(:vEOG => Int[], :hEOG => Int[])

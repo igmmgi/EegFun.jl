@@ -633,7 +633,7 @@ Returns (x, y) tuple or nothing if position is invalid.
 """
 function _get_mouse_position(ax::Axis)
     pos = mouseposition(ax.scene)
-    if pos[1] !== nothing && pos[2] !== nothing
+    if pos[1] |> !isnothing && pos[2] |> !isnothing
         return (pos[1], pos[2])  # (x, y) in data coordinates
     end
     return nothing

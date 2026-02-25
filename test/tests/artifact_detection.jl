@@ -77,7 +77,7 @@ using EegFun
         @test :is_extreme_value_Ch2_20 ∉ propertynames(extreme_subset)
 
         # Test empty channel selection
-        @test_throws ErrorException EegFun.is_extreme_value(dat, 20, channel_selection = EegFun.channels(Symbol[]))
+        @test_throws Exception EegFun.is_extreme_value(dat, 20, channel_selection = EegFun.channels(Symbol[]))
     end
 
     @testset "is_extreme_value!" begin
@@ -141,7 +141,7 @@ using EegFun
         @test count_subset.channel[1] == :Ch1
 
         # Test empty channel selection
-        @test_throws ErrorException EegFun.n_extreme_value(dat, 20, channel_selection = EegFun.channels(Symbol[]))
+        @test_throws Exception EegFun.n_extreme_value(dat, 20, channel_selection = EegFun.channels(Symbol[]))
     end
 
     @testset "_n_extreme_value" begin
@@ -167,7 +167,7 @@ using EegFun
         @test sum(extreme_mask_low) > sum(extreme_mask)
 
         # Test with zero threshold (should find all values as extreme)
-        @test_throws ErrorException extreme_mask_zero = EegFun.is_extreme_value(dat, -1)
+        @test_throws Exception extreme_mask_zero = EegFun.is_extreme_value(dat, -1)
 
         # Test separate mode for detailed analysis
         extreme_df = EegFun.is_extreme_value(dat, 1000, mode = :separate)
@@ -179,19 +179,19 @@ using EegFun
         dat = EegFun.create_test_continuous_data_with_artifacts()
 
         # Test detect_eog_onsets! with non-existent channel (should throw error)
-        @test_throws ErrorException EegFun.detect_eog_onsets!(dat, 20, :NonExistentChannel, :output)
+        @test_throws Exception EegFun.detect_eog_onsets!(dat, 20, :NonExistentChannel, :output)
         @test :output ∉ propertynames(dat.data)  # Should not add the output column
 
         # Test is_extreme_value with empty channel selection (should throw error)
-        @test_throws ErrorException EegFun.is_extreme_value(dat, 20, channel_selection = EegFun.channels(Symbol[]))
+        @test_throws Exception EegFun.is_extreme_value(dat, 20, channel_selection = EegFun.channels(Symbol[]))
 
         # Test is_extreme_value! with empty channel selection (should throw error)
         original_columns = names(dat.data)
-        @test_throws ErrorException EegFun.is_extreme_value!(dat, 20, channel_selection = EegFun.channels(Symbol[]))
+        @test_throws Exception EegFun.is_extreme_value!(dat, 20, channel_selection = EegFun.channels(Symbol[]))
         @test names(dat.data) == original_columns  # Should not add any columns
 
         # Test n_extreme_value with empty channel selection (should throw error)
-        @test_throws ErrorException EegFun.n_extreme_value(dat, 20, channel_selection = EegFun.channels(Symbol[]))
+        @test_throws Exception EegFun.n_extreme_value(dat, 20, channel_selection = EegFun.channels(Symbol[]))
     end
 
     @testset "data type handling" begin
@@ -309,10 +309,10 @@ using EegFun
         @test :is_extreme_value_100 in propertynames(epochs4.data[1])
 
         # Test error handling - empty channel selection
-        @test_throws ErrorException EegFun.is_extreme_value!(epochs, 100, channel_selection = EegFun.channels(Symbol[]))
+        @test_throws Exception EegFun.is_extreme_value!(epochs, 100, channel_selection = EegFun.channels(Symbol[]))
 
         # Test error handling - empty epoch selection
-        @test_throws ErrorException EegFun.is_extreme_value!(epochs, 100, epoch_selection = EegFun.epochs(Int[]))
+        @test_throws Exception EegFun.is_extreme_value!(epochs, 100, epoch_selection = EegFun.epochs(Int[]))
     end
 
     @testset "is_extreme_value! for Vector{EpochData}" begin
@@ -370,8 +370,8 @@ using EegFun
         @test rejection_info isa EegFun.EpochRejectionInfo
         @test rejection_info.abs_criterion == 150.0
         @test rejection_info.z_criterion == 0
-        @test rejection_info.z_rejections === nothing
-        @test rejection_info.abs_rejections !== nothing
+        @test isnothing(rejection_info.z_rejections)
+        @test rejection_info.abs_rejections |> !isnothing
         @test length(rejection_info.rejected) > 0
 
         # Test with z-score criterion only
@@ -383,8 +383,8 @@ using EegFun
 
         @test rejection_info2.z_criterion == 2.0
         @test rejection_info2.abs_criterion == 0
-        @test rejection_info2.abs_rejections === nothing
-        @test rejection_info2.z_rejections !== nothing
+        @test isnothing(rejection_info2.abs_rejections)
+        @test rejection_info2.z_rejections |> !isnothing
 
         # Test with both criteria
         epochs3 = EegFun.create_test_epoch_data(n_epochs = 15, n_channels = 3)
@@ -394,8 +394,8 @@ using EegFun
 
         @test rejection_info3.z_criterion == 3.0
         @test rejection_info3.abs_criterion == 150.0
-        @test rejection_info3.z_rejections !== nothing
-        @test rejection_info3.abs_rejections !== nothing
+        @test rejection_info3.z_rejections |> !isnothing
+        @test rejection_info3.abs_rejections |> !isnothing
 
         # Test with custom z_measures
         rejection_info4 = EegFun.detect_bad_epochs_automatic(epochs3, z_criterion = 2.0, abs_criterion = 0, z_measures = [:variance, :max])
@@ -403,17 +403,17 @@ using EegFun
         @test rejection_info4.z_rejections.z_measures == [:variance, :max]
 
         # Test error handling - both criteria zero
-        @test_throws ErrorException EegFun.detect_bad_epochs_automatic(epochs, z_criterion = 0, abs_criterion = 0)
+        @test_throws Exception EegFun.detect_bad_epochs_automatic(epochs, z_criterion = 0, abs_criterion = 0)
 
         # Test error handling - negative criteria
-        @test_throws ErrorException EegFun.detect_bad_epochs_automatic(epochs, z_criterion = -1, abs_criterion = 100)
-        @test_throws ErrorException EegFun.detect_bad_epochs_automatic(epochs, z_criterion = 3, abs_criterion = -1)
+        @test_throws Exception EegFun.detect_bad_epochs_automatic(epochs, z_criterion = -1, abs_criterion = 100)
+        @test_throws Exception EegFun.detect_bad_epochs_automatic(epochs, z_criterion = 3, abs_criterion = -1)
 
         # Test error handling - invalid measures
-        @test_throws ErrorException EegFun.detect_bad_epochs_automatic(epochs, z_criterion = 3, z_measures = [:invalid_measure])
+        @test_throws Exception EegFun.detect_bad_epochs_automatic(epochs, z_criterion = 3, z_measures = [:invalid_measure])
 
         # Test error handling - empty channel selection
-        @test_throws ErrorException EegFun.detect_bad_epochs_automatic(
+        @test_throws Exception EegFun.detect_bad_epochs_automatic(
             epochs,
             z_criterion = 3,
             channel_selection = EegFun.channels(Symbol[]),
@@ -529,8 +529,8 @@ using EegFun
         # Test channel_repairable!
         EegFun.channel_repairable!(rejection_info, layout)
 
-        @test rejection_info.repaired !== nothing
-        @test rejection_info.skipped !== nothing
+        @test rejection_info.repaired |> !isnothing
+        @test rejection_info.skipped |> !isnothing
 
         # Test with Vector{EpochRejectionInfo}
         epochs_list = [EegFun.create_test_epoch_data(n_epochs = 3, n_channels = 4) for _ = 1:2]
@@ -542,7 +542,7 @@ using EegFun
         rejection_list = EegFun.detect_bad_epochs_automatic(epochs_list, abs_criterion = 150.0, z_criterion = 0)
         EegFun.channel_repairable!(rejection_list, layout)
 
-        @test all(info -> info.repaired !== nothing, rejection_list)
+        @test all(info -> info.repaired |> !isnothing, rejection_list)
     end
 
     @testset "repair_artifacts! and repair_artifacts" begin
@@ -610,7 +610,7 @@ using EegFun
         rejection_info3 = EegFun.detect_bad_epochs_automatic(epochs3, abs_criterion = 150.0, z_criterion = 0)
 
         # repaired should be nothing (not yet populated)
-        @test rejection_info3.repaired === nothing
+        @test isnothing(rejection_info3.repaired)
 
         # Should throw error when calling repair_artifacts_neighbor! directly with repaired = nothing
         @test_throws ArgumentError EegFun.repair_artifacts_neighbor!(epochs3, rejection_info3)
@@ -621,10 +621,10 @@ using EegFun
         epochs4.layout = layout
         epochs4.data[1][!, :Ch1] .= 200.0
         rejection_info4 = EegFun.detect_bad_epochs_automatic(epochs4, abs_criterion = 150.0, z_criterion = 0)
-        @test rejection_info4.repaired === nothing
+        @test isnothing(rejection_info4.repaired)
         # This should work because repair_artifacts! calls channel_repairable! automatically
         EegFun.repair_artifacts!(epochs4, rejection_info4, method = :neighbor_interpolation)
-        @test rejection_info4.repaired !== nothing  # Should be populated now
+        @test rejection_info4.repaired |> !isnothing  # Should be populated now
 
         # Test error handling - unknown method
         epochs5 = EegFun.create_test_epoch_data(n_epochs = 3, n_channels = 3)
@@ -826,7 +826,7 @@ using EegFun
         @test :is_step_value_Ch2_50 ∉ propertynames(step_subset)
 
         # Test empty channel selection
-        @test_throws ErrorException EegFun.is_step_value(dat, 50, channel_selection = EegFun.channels(Symbol[]))
+        @test_throws Exception EegFun.is_step_value(dat, 50, channel_selection = EegFun.channels(Symbol[]))
     end
 
     @testset "is_step_value!" begin
@@ -898,7 +898,7 @@ using EegFun
         @test count_subset.channel[1] == :Ch1
 
         # Test empty channel selection
-        @test_throws ErrorException EegFun.n_step_value(dat, 50, channel_selection = EegFun.channels(Symbol[]))
+        @test_throws Exception EegFun.n_step_value(dat, 50, channel_selection = EegFun.channels(Symbol[]))
     end
 
     @testset "is_step_value! for EpochData" begin
@@ -938,8 +938,8 @@ using EegFun
         @test :is_step_value_100 in propertynames(epochs3.data[3])
 
         # Test error handling
-        @test_throws ErrorException EegFun.is_step_value!(epochs, 100, channel_selection = EegFun.channels(Symbol[]))
-        @test_throws ErrorException EegFun.is_step_value!(epochs, 100, epoch_selection = EegFun.epochs(Int[]))
+        @test_throws Exception EegFun.is_step_value!(epochs, 100, channel_selection = EegFun.channels(Symbol[]))
+        @test_throws Exception EegFun.is_step_value!(epochs, 100, epoch_selection = EegFun.epochs(Int[]))
     end
 
     @testset "interval_selection for extreme values" begin

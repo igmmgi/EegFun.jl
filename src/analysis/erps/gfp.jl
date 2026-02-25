@@ -68,7 +68,7 @@ function gfp(dat::ErpData; channel_selection::Function = channels(), normalize::
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
 
     if isempty(selected_channels)
-        @minimal_error_throw("No channels selected for GFP calculation")
+        @minimal_error("No channels selected for GFP calculation")
     end
 
     @info "Using $(length(selected_channels)) channels for GFP calculation"
@@ -208,7 +208,7 @@ function global_dissimilarity(dat::ErpData; channel_selection::Function = channe
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
 
     if isempty(selected_channels)
-        @minimal_error_throw("No channels selected for dissimilarity calculation")
+        @minimal_error("No channels selected for dissimilarity calculation")
     end
 
     @info "Using $(length(selected_channels)) channels for dissimilarity calculation"
@@ -336,7 +336,7 @@ function gfp_and_dissimilarity(dat::ErpData; channel_selection::Function = chann
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
 
     if isempty(selected_channels)
-        @minimal_error_throw("No channels selected for GFP/dissimilarity calculation")
+        @minimal_error("No channels selected for GFP/dissimilarity calculation")
     end
 
     @info "Using $(length(selected_channels)) channels"

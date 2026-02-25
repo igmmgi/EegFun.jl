@@ -25,7 +25,7 @@ tf_baseline!(tf_data, (-0.3, 0.1); method=:db)
 """
 function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
     # Check if baseline has already been applied
-    if tf_data.baseline !== nothing
+    if tf_data.baseline |> !isnothing
         error(
             "Baseline correction has already been applied to this data (method: $(tf_data.baseline.method), window: $(tf_data.baseline.window)). " *
             "Baseline corrections are non-linear and cannot be chained. Use the original data to apply a different baseline.",
@@ -67,7 +67,7 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}
         rf = round(f, digits = 6)
         for (ti, t) in enumerate(times)
             row = get(row_index, (rf, round(t, digits = 6)), nothing)
-            if row !== nothing
+            if row |> !isnothing
                 for (ci, ch) in enumerate(ch_labels)
                     power_3d[ci, fi, ti] = tf_data.data_power[row, ch]
                 end
@@ -135,7 +135,7 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}
         rf = round(f, digits = 6)
         for (ti, t) in enumerate(times)
             row = get(row_index, (rf, round(t, digits = 6)), nothing)
-            if row !== nothing
+            if row |> !isnothing
                 for (ci, ch) in enumerate(ch_labels)
                     tf_data.data_power[row, ch] = power_3d[ci, fi, ti]
                 end
@@ -194,8 +194,8 @@ function tf_baseline(
         @info "Batch TF baseline started at $(now())"
         @log_call "tf_baseline"
 
-        if (error_msg = _validate_input_dir(input_dir)) !== nothing
-            @minimal_error_throw(error_msg)
+        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+            @minimal_error(error_msg)
         end
 
         output_dir = something(output_dir, joinpath(input_dir, "tf_baseline_$(file_pattern)"))

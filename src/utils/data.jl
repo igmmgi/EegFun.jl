@@ -427,22 +427,22 @@ _have_same_structure(erps)
 """
 function _have_same_structure(dat1::EegData, dat2::EegData)::Bool
     if sample_rate(dat1) != sample_rate(dat2)
-        @minimal_error_throw("Sample rates do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
+        @minimal_error("Sample rates do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
         return false
     end
     if n_samples(dat1) != n_samples(dat2)
-        @minimal_error_throw("Number of samples do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
+        @minimal_error("Number of samples do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
         return false
     end
     if channel_labels(dat1) != channel_labels(dat2)
-        @minimal_error_throw("Channel labels do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
+        @minimal_error("Channel labels do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
         return false
     end
     # Check time vectors match (if they exist)
     time1 = time(dat1)
     time2 = time(dat2)
     if !isempty(time1) && !isempty(time2) && !all(time1 .≈ time2)
-        @minimal_error_throw("Time vectors do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
+        @minimal_error("Time vectors do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
         return false
     end
     return true
@@ -1419,11 +1419,11 @@ function get_selected_channels(dat, channel_selection::Function; include_meta::B
     if hasfield(selection_type, :channel_names)
         user_order_names = getfield(channel_selection, :channel_names)
         ordered = _handle_channel_names_order(user_order_names, selectable_cols, selected)
-        ordered !== nothing && (selected = ordered)
+        ordered |> !isnothing && (selected = ordered)
     elseif hasfield(selection_type, :channel_numbers)
         user_order_numbers = getfield(channel_selection, :channel_numbers)
         ordered = _handle_channel_numbers_order(user_order_numbers, selectable_cols, selected)
-        ordered !== nothing && (selected = ordered)
+        ordered |> !isnothing && (selected = ordered)
     end
 
     return vcat(metadata_cols, selected)
@@ -1578,7 +1578,7 @@ function _rename_data_columns!(df::DataFrame, rename_dict::Dict{Symbol,Symbol}, 
     # Check for duplicates in final names
     if length(final_names) != length(unique(final_names))
         duplicate_names = filter(x -> count(==(x), final_names) > 1, unique(final_names))
-        @minimal_error_throw "Cannot rename channels to duplicate names: $(join(duplicate_names, ", "))"
+        @minimal_error "Cannot rename channels to duplicate names: $(join(duplicate_names, ", "))"
     end
 
     # Apply the renaming with proper swap handling
@@ -1725,11 +1725,11 @@ function _create_eegfun_dataframe(dat::BrainVisionDataFormat.BrainVisionData)::D
 
     # Check if data is available
     if isnothing(dat.data)
-        @minimal_error_throw "BrainVision data is empty (data field is nothing)"
+        @minimal_error "BrainVision data is empty (data field is nothing)"
     end
 
     if isnothing(dat.header)
-        @minimal_error_throw "BrainVision header is empty (header field is nothing)"
+        @minimal_error "BrainVision header is empty (header field is nothing)"
     end
 
     # Extract basic information
@@ -1749,7 +1749,7 @@ function _create_eegfun_dataframe(dat::BrainVisionDataFormat.BrainVisionData)::D
 
     # Verify channel count matches
     if length(channel_labels) != n_channels
-        @minimal_error_throw "Number of channel labels ($(length(channel_labels))) does not match number of channels ($n_channels)"
+        @minimal_error "Number of channel labels ($(length(channel_labels))) does not match number of channels ($n_channels)"
     end
 
     # Create triggers and marker strings columns from markers

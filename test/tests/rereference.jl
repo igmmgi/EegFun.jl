@@ -112,7 +112,7 @@ end
             result = EegFun.rereference("erps_cleaned", input_dir = test_dir, reference_selection = :Ch2, output_dir = output_dir)
 
             # Ch2 reference should work
-            @test result !== nothing
+            @test result |> !isnothing
             @test result.success > 0  # Should have successful files
             @test result.errors == 0  # Should have no errors
         end
@@ -231,7 +231,7 @@ end
             )
 
             # Should return BatchResult with errors, not nothing
-            @test result !== nothing
+            @test result |> !isnothing
             @test result.success == 0
             @test result.errors > 0
         end
@@ -260,7 +260,7 @@ end
             )
 
             # Should return NamedTuple with both empty file (success) and unrecognized file (error)
-            @test result !== nothing
+            @test result |> !isnothing
             @test result.success == 1  # Only the empty file gets processed successfully
             @test result.errors == 1   # One error for the unrecognized file
         end
@@ -273,7 +273,7 @@ end
                 EegFun.rereference("erps_cleaned", input_dir = test_dir, reference_selection = [:InvalidChannel], output_dir = output_dir)
 
             # Should have errors due to invalid channels
-            @test result !== nothing
+            @test result |> !isnothing
             @test result.errors > 0
         end
     end

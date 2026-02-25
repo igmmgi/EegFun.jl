@@ -31,7 +31,7 @@ function _correlate_rdms(rdm1::Matrix{Float64}, rdm2::Matrix{Float64}; method::S
 
     # Validate dimensions
     if size(rdm1) != size(rdm2)
-        @minimal_error_throw("RDMs must have the same dimensions, got $(size(rdm1)) and $(size(rdm2))")
+        @minimal_error("RDMs must have the same dimensions, got $(size(rdm1)) and $(size(rdm2))")
     end
 
     # Extract upper triangle (excluding diagonal)
@@ -45,7 +45,7 @@ function _correlate_rdms(rdm1::Matrix{Float64}, rdm2::Matrix{Float64}; method::S
     elseif method == :pearson
         return cor(vec1, vec2)
     else
-        @minimal_error_throw("Unknown correlation method: $method. Use :spearman or :pearson")
+        @minimal_error("Unknown correlation method: $method. Use :spearman or :pearson")
     end
 end
 
@@ -114,7 +114,7 @@ A toolbox for representational similarity analysis. PLoS computational biology, 
 function compute_noise_ceiling(rsa_data_list::Vector{RsaData}; correlation_method::Symbol = :spearman)
     # Validate input
     if length(rsa_data_list) < 2
-        @minimal_error_throw("Noise ceiling requires at least 2 participants, got $(length(rsa_data_list))")
+        @minimal_error("Noise ceiling requires at least 2 participants, got $(length(rsa_data_list))")
     end
 
     # Validate all participants have same structure
@@ -124,10 +124,10 @@ function compute_noise_ceiling(rsa_data_list::Vector{RsaData}; correlation_metho
 
     for (idx, rsa_data) in enumerate(rsa_data_list)
         if length(rsa_data.condition_names) != n_conditions
-            @minimal_error_throw("Participant $idx has $(length(rsa_data.condition_names)) conditions, expected $n_conditions")
+            @minimal_error("Participant $idx has $(length(rsa_data.condition_names)) conditions, expected $n_conditions")
         end
         if length(rsa_data.times) != n_times
-            @minimal_error_throw("Participant $idx has $(length(rsa_data.times)) time points, expected $n_times")
+            @minimal_error("Participant $idx has $(length(rsa_data.times)) time points, expected $n_times")
         end
     end
 

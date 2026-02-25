@@ -583,11 +583,11 @@ function _run_filter_batch(
         @info "  cutoff: $cutoff_freq Hz"
 
         # Validation
-        if (error_msg = _validate_input_dir(input_dir)) !== nothing
-            @minimal_error_throw(error_msg)
+        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+            @minimal_error(error_msg)
         end
         if cutoff_freq <= 0
-            @minimal_error_throw("Cutoff frequency must be positive, got: $cutoff_freq")
+            @minimal_error("Cutoff frequency must be positive, got: $cutoff_freq")
         end
 
         # Setup directories

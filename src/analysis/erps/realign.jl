@@ -109,7 +109,7 @@ function _validate_realignment_column(dat::EpochData, realignment_column::Symbol
     # Check that column exists in all epochs
     for (i, epoch) in enumerate(dat.data)
         if !hasproperty(epoch, realignment_column)
-            @minimal_error_throw(
+            @minimal_error(
                 "Realignment column :$realignment_column not found in epoch $i. " * "Available columns: $(propertynames(epoch))"
             )
         end
@@ -117,7 +117,7 @@ function _validate_realignment_column(dat::EpochData, realignment_column::Symbol
         # Check that the realignment value is constant within the epoch
         realignment_values = epoch[!, realignment_column]
         if !all(realignment_values .≈ realignment_values[1])
-            @minimal_error_throw(
+            @minimal_error(
                 "Realignment column :$realignment_column has varying values within epoch $i. " *
                 "The realignment time should be constant for each epoch."
             )
@@ -125,13 +125,13 @@ function _validate_realignment_column(dat::EpochData, realignment_column::Symbol
 
         # Check that the realignment value is finite
         if !isfinite(realignment_values[1])
-            @minimal_error_throw("Realignment column :$realignment_column has non-finite value (NaN or Inf) in epoch $i")
+            @minimal_error("Realignment column :$realignment_column has non-finite value (NaN or Inf) in epoch $i")
         end
     end
 
     # Check that :time column exists
     if !hasproperty(dat.data[1], :time)
-        @minimal_error_throw("Time column :time not found in epochs")
+        @minimal_error("Time column :time not found in epochs")
     end
 end
 
@@ -171,7 +171,7 @@ function _find_common_time_window(dat::EpochData)::Tuple{Float64,Float64}
     common_end = minimum(max_times)
 
     if common_start >= common_end
-        @minimal_error_throw(
+        @minimal_error(
             "No common time interval found after realignment. " *
             "Common start: $(common_start) s, Common end: $(common_end) s. " *
             "The original epochs may not be long enough to accommodate all realignment times."
@@ -211,7 +211,7 @@ function _crop_epochs_to_window!(dat::EpochData, window::Tuple{Float64,Float64})
 
         # Validate that we have enough samples
         if end_idx > nrow(epoch)
-            @minimal_error_throw(
+            @minimal_error(
                 "Epoch $i does not have enough samples for common interval. " *
                 "Need samples up to index $end_idx, but epoch only has $(nrow(epoch)) samples. " *
                 "Window: [$start_time, $end_time]"
@@ -339,8 +339,8 @@ function realign(
         @log_call "realign"
 
         # Validation
-        if (error_msg = _validate_input_dir(input_dir)) !== nothing
-            @minimal_error_throw(error_msg)
+        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+            @minimal_error(error_msg)
         end
 
         # Setup directories

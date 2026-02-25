@@ -122,7 +122,7 @@ function Base.show(io::IO, info::EpochRepairInfo)
     println(io, "  Epochs with repairs: $(length(info.repaired))")
     println(io, "  Total channel repairs: $total_repairs")
     println(io, "  Total channels skipped: $total_skipped")
-    if info.neighbors !== nothing && !isempty(info.neighbors)
+    if info.neighbors |> !isnothing && !isempty(info.neighbors)
         println(io, "  Neighbors used:")
         for (ch, neighs) in info.neighbors
             println(io, "    $ch → $(neighs)")
@@ -132,7 +132,7 @@ end
 
 function Base.show(io::IO, info::ChannelRepairInfo)
     println(io, "ChannelRepairInfo:")
-    if info.continuous !== nothing
+    if info.continuous |> !isnothing
         println(io, "Continuous level:")
         println(io, info.continuous)
     else
@@ -379,7 +379,7 @@ function create_epoch_repair_info(
     end
 
     neighbors_info = nothing
-    if method == :neighbor_interpolation && neighbors_dict !== nothing
+    if method == :neighbor_interpolation && neighbors_dict |> !isnothing
         neighbors_info = Dict{Symbol,Vector{Symbol}}()
         # Collect unique repaired channels and their neighbors
         all_repaired_channels = Set{Symbol}()

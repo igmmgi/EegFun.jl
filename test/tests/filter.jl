@@ -16,21 +16,21 @@ using JLD2
         @test fi_iir.cutoff_freq == 40.0
         @test fi_iir.sample_rate == fs
         @test fi_iir.order == 4
-        @test fi_iir.n_taps === nothing
+        @test isnothing(fi_iir.n_taps)
 
         # FIR high-pass
         fi_fir = EegFun.create_highpass_filter(1.0, fs; filter_method = "fir", transition_width = 0.25)
         @test fi_fir isa EegFun.FilterInfo
         @test fi_fir.filter_type == "hp"
         @test fi_fir.filter_method == "fir"
-        @test fi_fir.n_taps !== nothing
+        @test fi_fir.n_taps |> !isnothing
         @test fi_fir.n_taps % 2 == 1  # odd taps
         @test fi_fir.n_taps >= 101
 
         # FIR low-pass and tap sizing monotonicity
         fi_lp_wide = EegFun.create_lowpass_filter(40.0, fs; filter_method = "fir", transition_width = 0.2)
         fi_lp_narrow = EegFun.create_lowpass_filter(40.0, fs; filter_method = "fir", transition_width = 0.05)
-        @test fi_lp_wide.n_taps !== nothing && fi_lp_narrow.n_taps !== nothing
+        @test fi_lp_wide.n_taps |> !isnothing && fi_lp_narrow.n_taps |> !isnothing
         @test fi_lp_narrow.n_taps > fi_lp_wide.n_taps
 
     end
@@ -69,7 +69,7 @@ using JLD2
         dat_orig = copy(dat)
         # channel_selection picks none
         result = EegFun.highpass_filter!(dat, 1.0; channel_selection = EegFun.channels(Symbol[]))
-        @test result === nothing
+        @test isnothing(result)
         # Data and analysis_info unchanged
         @test all(dat.data.Ch1 .== dat_orig.data.Ch1)
         @test dat.analysis_info.hp_filter == dat_orig.analysis_info.hp_filter
@@ -136,7 +136,7 @@ using JLD2
         @test any(abs.(chars.cutoff_freq_3db .- 40.0) .< 5.0)  # near cutoff
         @test chars.stopband_atten < -10  # should be attenuated
         # print helper should not error
-        @test EegFun.print_filter_characteristics(fi; npoints = 128) === nothing
+        @test isnothing(EegFun.print_filter_characteristics(fi; npoints = 128))
     end
 
     @testset "plot_filter_response (no display)" begin
@@ -176,7 +176,7 @@ end
             # Test low-pass filtering
             result = EegFun.lowpass_filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir)
 
-            @test result !== nothing
+            @test result |> !isnothing
             @test result.success == 2
             @test result.errors == 0
             @test isdir(output_dir)
@@ -259,7 +259,7 @@ end
             # Pattern that won't match any files
             result = EegFun.lowpass_filter("nonexistent_pattern", 30.0, input_dir = test_dir, output_dir = output_dir)
 
-            @test result === nothing  # Function returns nothing when no files found
+            @test isnothing(result)  # Function returns nothing when no files found
         end
 
         @testset "Logging" begin
@@ -404,7 +404,7 @@ end
             # Directory exists but has no JLD2 files
             result = EegFun.lowpass_filter("erps", 30.0, input_dir = empty_dir)
 
-            @test result === nothing  # No files to process
+            @test isnothing(result)  # No files to process
         end
 
         @testset "Return value structure" begin

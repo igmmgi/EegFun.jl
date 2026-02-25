@@ -50,7 +50,7 @@ function plot_topography(
     kwargs...,
 )
     # Apply baseline correction if requested
-    if !isnothing(baseline_interval) && tf.baseline !== nothing
+    if !isnothing(baseline_interval) && tf.baseline |> !isnothing
         @warn "Data has already been baselined (method: $(tf.baseline.method)). " * "Ignoring baseline_interval parameter."
         tf_plot = tf
     elseif !isnothing(baseline_interval)
@@ -63,7 +63,7 @@ function plot_topography(
 
     # Validate layout
     if !has_valid_coordinates(layout)
-        @minimal_error_throw("Cannot create topographic plot: layout has no spatial coordinates.")
+        @minimal_error("Cannot create topographic plot: layout has no spatial coordinates.")
     end
 
     # Extract unique time and frequency values
@@ -73,7 +73,7 @@ function plot_topography(
     # Apply frequency range filter
     freq_mask = freq_range[1] .<= all_freqs .<= freq_range[2]
     isempty(findall(freq_mask)) &&
-        @minimal_error_throw("No frequencies found in range $(freq_range). Data range: $(first(all_freqs)) to $(last(all_freqs)) Hz")
+        @minimal_error("No frequencies found in range $(freq_range). Data range: $(first(all_freqs)) to $(last(all_freqs)) Hz")
 
     # Apply time range filter
     if isnothing(interval_selection)
@@ -83,7 +83,7 @@ function plot_topography(
         time_mask = t_start .<= all_times .<= t_stop
     end
     isempty(findall(time_mask)) &&
-        @minimal_error_throw("No time points found in interval. Data range: $(first(all_times)) to $(last(all_times)) s")
+        @minimal_error("No time points found in interval. Data range: $(first(all_times)) to $(last(all_times)) s")
 
     selected_freqs = all_freqs[freq_mask]
     selected_times = all_times[time_mask]
@@ -104,7 +104,7 @@ function plot_topography(
     layout_labels = layout.data.label
     layout_values = Float64[
         let ch_idx = findfirst(==(lbl), channels_list)
-            ch_idx !== nothing ? channel_data[ch_idx] : 0.0
+            ch_idx |> !isnothing ? channel_data[ch_idx] : 0.0
         end for lbl in layout_labels
     ]
 
@@ -208,12 +208,12 @@ function plot_topography(
     baseline_method::Symbol = :db,
     kwargs...,
 )
-    isempty(tfs) && @minimal_error_throw("Cannot plot empty vector of TimeFreqData")
+    isempty(tfs) && @minimal_error("Cannot plot empty vector of TimeFreqData")
 
     # Apply baseline correction
     if !isnothing(baseline_interval)
         tf_plots = map(tfs) do tf
-            if tf.baseline !== nothing
+            if tf.baseline |> !isnothing
                 @warn "$(tf.condition_name) already baselined, skipping."
                 tf
             else
@@ -231,7 +231,7 @@ function plot_topography(
 
     layout = tf_plots[1].layout
     if !has_valid_coordinates(layout)
-        @minimal_error_throw("Cannot create topographic plot: layout has no spatial coordinates.")
+        @minimal_error("Cannot create topographic plot: layout has no spatial coordinates.")
     end
 
     # Merge kwargs
@@ -279,7 +279,7 @@ function plot_topography(
         end
         layout_values = Float64[
             let ch_idx = findfirst(==(lbl), channels_list)
-                ch_idx !== nothing ? channel_data[ch_idx] : 0.0
+                ch_idx |> !isnothing ? channel_data[ch_idx] : 0.0
             end for lbl in layout_labels
         ]
         all_layout_values[idx] = layout_values
@@ -558,7 +558,7 @@ function plot_topo_stats(
         channel_data = topo_values[i]
         layout_values = Float64[
             let ch_idx = findfirst(==(lbl), electrodes)
-                ch_idx !== nothing ? channel_data[ch_idx] : 0.0
+                ch_idx |> !isnothing ? channel_data[ch_idx] : 0.0
             end for lbl in layout_labels
         ]
 
@@ -583,7 +583,7 @@ function plot_topo_stats(
             for ch_idx in sig_channel_indices
                 ch_sym = electrodes[ch_idx]
                 layout_idx = findfirst(==(ch_sym), layout_labels)
-                if layout_idx !== nothing
+                if layout_idx |> !isnothing
                     push!(sig_x, layout.data.x2[layout_idx])
                     push!(sig_y, layout.data.y2[layout_idx])
                 end

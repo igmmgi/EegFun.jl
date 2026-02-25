@@ -11,7 +11,7 @@ Create a difference TF result by subtracting tf2 from tf1 (power and phase).
 """
 function _create_tf_difference_wave(tf1::TimeFreqData, tf2::TimeFreqData, cond1::Int, cond2::Int, diff_cond::Int)
     # Validate that both TFs have the same structure
-    _have_same_structure(tf1, tf2) || @minimal_error_throw("TF data have inconsistent structure")
+    _have_same_structure(tf1, tf2) || @minimal_error("TF data have inconsistent structure")
 
     # Get EEG channels (exclude metadata columns like :time, :freq)
     metadata_cols = meta_labels(tf1)
@@ -122,7 +122,7 @@ function condition_difference(
     end
 
     if isempty(difference_waves)
-        @minimal_error_throw("No valid condition pairs found")
+        @minimal_error("No valid condition pairs found")
     end
 
     @info "Created $(length(difference_waves)) TF difference wave(s)"

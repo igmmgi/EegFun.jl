@@ -462,7 +462,7 @@ using CSV
             )
 
             # Should return nothing when no data in window
-            @test result === nothing
+            @test isnothing(result)
         end
     end
 
@@ -478,7 +478,7 @@ using CSV
                 output_dir = output_dir,
             )
 
-            @test result === nothing
+            @test isnothing(result)
         end
 
         @testset "Empty data files" begin
@@ -497,7 +497,7 @@ using CSV
                 output_dir = output_dir,
             )
 
-            @test result === nothing
+            @test isnothing(result)
         end
 
         @testset "Files with no recognized data variable" begin
@@ -516,7 +516,7 @@ using CSV
                 output_dir = output_dir,
             )
 
-            @test result === nothing
+            @test isnothing(result)
         end
 
         @testset "Empty baseline interval" begin
@@ -589,7 +589,7 @@ using CSV
             )
 
             # Should return nothing
-            @test result === nothing
+            @test isnothing(result)
         end
     end
 

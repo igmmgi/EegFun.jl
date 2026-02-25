@@ -422,7 +422,7 @@ function _process_dataframe_measurements(
 
         # Validate interval
         if interval[1] > interval[2]
-            @minimal_error_throw "Analysis interval start must be <= stop. Got: ($(interval[1]), $(interval[2]))"
+            @minimal_error "Analysis interval start must be <= stop. Got: ($(interval[1]), $(interval[2]))"
         end
 
         # Find time range
@@ -888,11 +888,11 @@ function erp_measurements(
         @log_call "erp_measurements"
 
         # Validation 
-        if (error_msg = _validate_input_dir(input_dir)) !== nothing
-            @minimal_error_throw error_msg
+        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+            @minimal_error error_msg
         end
-        if (error_msg = _validate_analysis_type(analysis_type)) !== nothing
-            @minimal_error_throw error_msg
+        if (error_msg = _validate_analysis_type(analysis_type)) |> !isnothing
+            @minimal_error error_msg
         end
 
         # Validate analysis_interval
@@ -902,7 +902,7 @@ function erp_measurements(
                 interval = (first(interval), last(interval))
             end
             if interval[1] > interval[2]
-                @minimal_error_throw "Analysis interval start must be <= stop. Got: ($(interval[1]), $(interval[2]))"
+                @minimal_error "Analysis interval start must be <= stop. Got: ($(interval[1]), $(interval[2]))"
             end
         end
 
@@ -977,7 +977,7 @@ function erp_measurements(
                 end
             catch e
                 # Re-throw invalid window errors (user errors that should propagate)
-                # @minimal_error_throw throws ErrorException
+                # @minimal_error throws ErrorException
                 if e isa ErrorException
                     error_msg = e.msg
                     if occursin("invalid", lowercase(error_msg)) && occursin("window", lowercase(error_msg))

@@ -109,7 +109,7 @@ function rsa_crossvalidated(
     elseif cv_method == :leaveoneout && min_trials < 5
         @minimal_warning "Leave-one-out CV requires at least 5 trials per condition, got $min_trials"
     elseif cv_method == :kfold && min_trials < n_folds
-        @minimal_error_throw("K-fold CV requires at least $n_folds trials per condition, got $min_trials")
+        @minimal_error("K-fold CV requires at least $n_folds trials per condition, got $min_trials")
     end
 
     # Preallocate RDM array
@@ -123,7 +123,7 @@ function rsa_crossvalidated(
     elseif cv_method == :kfold
         rdms = _cv_kfold(data_arrays, n_timepoints, n_conditions, selected_channels, dissimilarity_measure, n_folds)
     else
-        @minimal_error_throw("Unknown CV method: $cv_method. Use :splithalf, :leaveoneout, or :kfold")
+        @minimal_error("Unknown CV method: $cv_method. Use :splithalf, :leaveoneout, or :kfold")
     end
 
     # Apply normalization using shared helper

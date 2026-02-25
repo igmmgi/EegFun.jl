@@ -518,7 +518,7 @@ function _add_interactive_points!(
         if haskey(neighbours, Symbol(label))
             for neighbor in neighbours[Symbol(label)].channels
                 neighbor_idx = findfirst(==(neighbor), layout.label)
-                if neighbor_idx !== nothing
+                if neighbor_idx |> !isnothing
                     push!(neighbor_indices[i], neighbor_idx)
                 end
             end
@@ -661,7 +661,7 @@ function _add_interactive_correlation_points!(
     new_corr_values = fill(0.0, length(layout.label))
     on(events(fig).mouseposition) do mp
         plt, i = pick(fig)
-        if (plt == p || plt == corr_scatter) && i !== nothing
+        if (plt == p || plt == corr_scatter) && i |> !isnothing
 
             # Reset all sizes 
             fill!(new_sizes, base_size)

@@ -49,7 +49,7 @@ function _build_connectivity_matrix(electrodes::Vector{Symbol}, layout::Layout, 
                 for neighbour in neighbours.channels
                     # Find index of neighbour in electrodes list
                     n_idx = findfirst(==(neighbour), electrodes)
-                    if n_idx !== nothing
+                    if n_idx |> !isnothing
                         push!(I, e_idx)
                         push!(J, n_idx)
                         # Also add reverse

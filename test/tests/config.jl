@@ -28,10 +28,10 @@ using Dates
             allowed = nothing,
         )
         @test param.description == "Test parameter"
-        @test param.default === nothing
-        @test param.min === nothing
-        @test param.max === nothing
-        @test param.allowed === nothing
+        @test isnothing(param.default)
+        @test isnothing(param.min)
+        @test isnothing(param.max)
+        @test isnothing(param.allowed)
     end
 
     # =============================================================================
@@ -143,7 +143,7 @@ using Dates
 
             # Test 4: Test that logging occurs but doesn't prevent successful loading
             # (We don't test stderr content since @info logging is expected and normal)
-            @test config !== nothing
+            @test config |> !isnothing
         end
 
         @testset "Configuration Merging" begin
@@ -168,45 +168,40 @@ using Dates
         end
 
         @testset "Error Handling" begin
-            # Test 6: Non-existent file - expect nothing to be returned
-            result = EegFun.read_config("nonexistent_file.toml")
-            @test result === nothing
+            # Test 6: Non-existent file - should throw
+            @test_throws Exception EegFun.read_config("nonexistent_file.toml")
 
-            # Test 7: Invalid TOML syntax - expect nothing to be returned
+            # Test 7: Invalid TOML syntax - should throw
             invalid_toml_path = joinpath(test_dir, "invalid.toml")
             open(invalid_toml_path, "w") do io
                 println(io, "[section")  # Missing closing bracket
                 println(io, "key = value")
             end
-            result = EegFun.read_config(invalid_toml_path)
-            @test result === nothing
+            @test_throws Exception EegFun.read_config(invalid_toml_path)
 
-            # Test 8: Invalid parameter values - expect nothing to be returned
+            # Test 8: Invalid parameter values - should throw
             invalid_values_path = joinpath(test_dir, "invalid_values.toml")
             open(invalid_values_path, "w") do io
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "freq = -5.0")  # Below minimum
             end
-            result = EegFun.read_config(invalid_values_path)
-            @test result === nothing
+            @test_throws Exception EegFun.read_config(invalid_values_path)
 
-            # Test 9: Invalid parameter type - expect nothing to be returned
+            # Test 9: Invalid parameter type - should throw
             invalid_type_path = joinpath(test_dir, "invalid_type.toml")
             open(invalid_type_path, "w") do io
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "freq = \"not_a_number\"")  # Wrong type
             end
-            result = EegFun.read_config(invalid_type_path)
-            @test result === nothing
+            @test_throws Exception EegFun.read_config(invalid_type_path)
 
-            # Test 10: Invalid allowed values - expect nothing to be returned
+            # Test 10: Invalid allowed values - should throw
             invalid_allowed_path = joinpath(test_dir, "invalid_allowed.toml")
             open(invalid_allowed_path, "w") do io
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "type = \"invalid_type\"")  # Not in allowed values
             end
-            result = EegFun.read_config(invalid_allowed_path)
-            @test result === nothing
+            @test_throws Exception EegFun.read_config(invalid_allowed_path)
         end
 
         @testset "Boundary Value Testing" begin
@@ -347,8 +342,7 @@ using Dates
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "freq = 0.005")  # Below minimum
             end
-            result = EegFun.read_config(range_config_path)
-            @test result === nothing
+            @test_throws Exception EegFun.read_config(range_config_path)
 
             # Test allowed values validation
             allowed_config_path = joinpath(test_dir, "allowed_config.toml")
@@ -356,8 +350,7 @@ using Dates
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "method = \"invalid\"")  # Not in allowed values
             end
-            result = EegFun.read_config(allowed_config_path)
-            @test result === nothing
+            @test_throws Exception EegFun.read_config(allowed_config_path)
 
             # Test type conversion validation
             type_config_path = joinpath(test_dir, "type_config.toml")
@@ -365,8 +358,7 @@ using Dates
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "order = \"not_a_number\"")  # Invalid type
             end
-            result = EegFun.read_config(type_config_path)
-            @test result === nothing
+            @test_throws Exception EegFun.read_config(type_config_path)
         end
 
         @testset "Config Validation" begin
@@ -379,7 +371,7 @@ using Dates
                 println(io, "order = 2")
             end
             config = EegFun.read_config(valid_config_path)
-            @test config !== nothing
+            @test config |> !isnothing
             @test config["preprocess"]["filter"]["highpass"]["freq"] == 0.5
 
             # Test invalid parameter value
@@ -388,8 +380,7 @@ using Dates
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "freq = -1.0")  # Below minimum
             end
-            result = EegFun.read_config(invalid_value_path)
-            @test result === nothing
+            @test_throws Exception EegFun.read_config(invalid_value_path)
 
             # Test invalid parameter type
             invalid_type_path = joinpath(test_dir, "invalid_type.toml")
@@ -397,8 +388,7 @@ using Dates
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "order = \"not_a_number\"")
             end
-            result = EegFun.read_config(invalid_type_path)
-            @test result === nothing
+            @test_throws Exception EegFun.read_config(invalid_type_path)
         end
 
         @testset "Config Merging" begin
@@ -409,7 +399,7 @@ using Dates
                 println(io, "freq = 0.5")
             end
             config = EegFun.read_config(custom_config_path)
-            @test config !== nothing
+            @test config |> !isnothing
             @test config["preprocess"]["filter"]["highpass"]["freq"] == 0.5
             @test config["preprocess"]["filter"]["highpass"]["method"] == "iir"  # Default value
             @test config["preprocess"]["filter"]["highpass"]["order"] == 1     # Default value
@@ -422,7 +412,7 @@ using Dates
                 println(io, "raw_data_files = [\"file1.bdf\", \"file2.bdf\"]")
             end
             config = EegFun.read_config(nested_config_path)
-            @test config !== nothing
+            @test config |> !isnothing
             @test config["files"]["input"]["directory"] == "/custom/path"
             @test config["files"]["input"]["raw_data_files"] == ["file1.bdf", "file2.bdf"]
         end
@@ -434,8 +424,7 @@ using Dates
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "freq = 0.005")  # Below minimum
             end
-            result = EegFun.read_config(range_config_path)
-            @test result === nothing
+            @test_throws Exception EegFun.read_config(range_config_path)
 
             # Test allowed values validation
             allowed_config_path = joinpath(test_dir, "allowed_config.toml")
@@ -443,8 +432,7 @@ using Dates
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "method = \"invalid\"")  # Not in allowed values
             end
-            result = EegFun.read_config(allowed_config_path)
-            @test result === nothing
+            @test_throws Exception EegFun.read_config(allowed_config_path)
 
             # Test type conversion validation
             type_config_path = joinpath(test_dir, "type_config.toml")
@@ -452,8 +440,7 @@ using Dates
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "order = \"not_a_number\"")  # Invalid type
             end
-            result = EegFun.read_config(type_config_path)
-            @test result === nothing
+            @test_throws Exception EegFun.read_config(type_config_path)
 
             # Test optional parameters
             optional_config_path = joinpath(test_dir, "optional.toml")
@@ -462,7 +449,7 @@ using Dates
                 println(io, "epoch_condition_file = \"\"")  # Empty string for optional parameter
             end
             config = EegFun.read_config(optional_config_path)
-            @test config !== nothing
+            @test config |> !isnothing
             @test config["files"]["input"]["epoch_condition_file"] == ""
         end
     end
@@ -475,14 +462,14 @@ using Dates
         # Test successful validation
         result = EegFun.ValidationResult(success = true)
         @test result.success
-        @test result.error === nothing
-        @test result.key_path === nothing
+        @test isnothing(result.error)
+        @test isnothing(result.key_path)
 
         # Test failed validation with error
         result = EegFun.ValidationResult(success = false, error = "Test error")
         @test !result.success
         @test result.error == "Test error"
-        @test result.key_path === nothing
+        @test isnothing(result.key_path)
 
         # Test failed validation with path
         result = EegFun.ValidationResult(success = false, error = "Test error", key_path = "test.path")
@@ -519,8 +506,8 @@ using Dates
         )
         result = EegFun._validate_config(invalid_config)
         @test !result.success
-        @test result.error !== nothing
-        @test result.key_path !== nothing
+        @test result.error |> !isnothing
+        @test result.key_path |> !isnothing
 
         # Test invalid configuration - out of range
         invalid_config = Dict{String,Any}(
@@ -537,8 +524,8 @@ using Dates
         )
         result = EegFun._validate_config(invalid_config)
         @test !result.success
-        @test result.error !== nothing
-        @test result.key_path !== nothing
+        @test result.error |> !isnothing
+        @test result.key_path |> !isnothing
 
         # Test invalid configuration - wrong allowed value
         invalid_config = Dict{String,Any}(
@@ -555,8 +542,8 @@ using Dates
         )
         result = EegFun._validate_config(invalid_config)
         @test !result.success
-        @test result.error !== nothing
-        @test result.key_path !== nothing
+        @test result.error |> !isnothing
+        @test result.key_path |> !isnothing
     end
 
     # =============================================================================
@@ -621,8 +608,8 @@ using Dates
         # Test number_param without min/max
         param = EegFun.number_param("Test number", 5.0)
         @test param.default == 5.0
-        @test param.min === nothing
-        @test param.max === nothing
+        @test isnothing(param.min)
+        @test isnothing(param.max)
 
         # Test channel_groups_param
         default = [["Fp1"], ["Fp2"]]
@@ -657,7 +644,7 @@ using Dates
         # Test _param with Union types
         param = EegFun._param(Union{String,Nothing}, "Test union", nothing)
         @test param isa EegFun.ConfigParameter{Union{String,Nothing}}
-        @test param.default === nothing
+        @test isnothing(param.default)
     end
 
     @testset "ConfigParameter Constructor Tests" begin
@@ -671,18 +658,18 @@ using Dates
         # Test with minimal fields
         param = EegFun.ConfigParameter{String}(description = "Test parameter")
         @test param.description == "Test parameter"
-        @test param.default === nothing
-        @test param.min === nothing
-        @test param.max === nothing
-        @test param.allowed === nothing
+        @test isnothing(param.default)
+        @test isnothing(param.min)
+        @test isnothing(param.max)
+        @test isnothing(param.allowed)
 
         # Test with some fields
         param = EegFun.ConfigParameter{Float64}(description = "Test parameter", default = 1.0, min = 0.0)
         @test param.description == "Test parameter"
         @test param.default == 1.0
         @test param.min == 0.0
-        @test param.max === nothing
-        @test param.allowed === nothing
+        @test isnothing(param.max)
+        @test isnothing(param.allowed)
     end
 
     # =============================================================================
@@ -707,8 +694,8 @@ using Dates
 
         # Test with nothing defaults
         param = EegFun._param(Bool, "Test param")
-        @test param.default === nothing
-        @test param.allowed === nothing
+        @test isnothing(param.default)
+        @test isnothing(param.allowed)
     end
 
     @testset "_filter_param_spec Tests" begin
@@ -958,7 +945,7 @@ using Dates
 
         # Test that it doesn't throw errors when called
         # (This function uses @info for output, so we can't easily capture it)
-        @test nothing === nothing  # Placeholder to ensure test runs
+        @test isnothing(nothing)  # Placeholder to ensure test runs
     end
 
     # =============================================================================

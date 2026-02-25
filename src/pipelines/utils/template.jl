@@ -116,7 +116,7 @@ function _generate_setup_section()
         
         # Find and load layout file
         layout_file = find_file(cfg["files"]["input"]["layout_file"], joinpath(@__DIR__, "..", "..", "data", "layouts"))
-        layout_file === nothing && @minimal_error "Layout file not found: \$layout_name"
+        isnothing(layout_file) && @minimal_error "Layout file not found: \$layout_name"
         layout = read_layout(layout_file)
         
         # Check if requested output directory exists and if not, create it

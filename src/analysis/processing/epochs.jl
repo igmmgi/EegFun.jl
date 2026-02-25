@@ -29,7 +29,7 @@ function condition_parse_epoch(config::Dict)
         # Parse trigger sequences (unified approach)
         trigger_sequences_raw = get(condition_config, "trigger_sequences", nothing)
         if isnothing(trigger_sequences_raw)
-            @minimal_error_throw("trigger_sequences must be specified for condition '$name'")
+            @minimal_error("trigger_sequences must be specified for condition '$name'")
         end
 
 
@@ -59,7 +59,7 @@ function condition_parse_epoch(config::Dict)
 
             # Validate that both min and max intervals are specified if timing_pairs is specified
             if isnothing(min_interval) || isnothing(max_interval)
-                @minimal_error_throw(
+                @minimal_error(
                     "Both min_interval and max_interval must be specified when timing_pairs is specified for condition '$name'",
                 )
             end
@@ -72,29 +72,29 @@ function condition_parse_epoch(config::Dict)
         # Validation - cache sequence length for efficiency
         seq_length = length(trigger_sequences[1])
         if reference_index < 1 || reference_index > seq_length
-            @minimal_error_throw("reference_index must be between 1 and $seq_length for condition '$name'")
+            @minimal_error("reference_index must be between 1 and $seq_length for condition '$name'")
         end
 
         # Only validate timing constraints if they're specified
         if !isnothing(timing_pairs)
             if min_interval >= max_interval
-                @minimal_error_throw("min_interval must be < max_interval for condition '$name'")
+                @minimal_error("min_interval must be < max_interval for condition '$name'")
             end
 
             # Validate timing pairs
             for (start_idx, end_idx) in timing_pairs
                 if start_idx < 1 || start_idx > seq_length || end_idx < 1 || end_idx > seq_length
-                    @minimal_error_throw("timing_pairs contains invalid indices for sequence of length $seq_length in condition '$name'",)
+                    @minimal_error("timing_pairs contains invalid indices for sequence of length $seq_length in condition '$name'",)
                 end
                 if start_idx >= end_idx
-                    @minimal_error_throw("timing_pairs must have start_idx < end_idx for condition '$name'")
+                    @minimal_error("timing_pairs must have start_idx < end_idx for condition '$name'")
                 end
             end
         end
 
         # Validate after/before constraints
         if !isnothing(after) && !isnothing(before)
-            @minimal_error_throw("Cannot specify both 'after' and 'before' constraints for condition '$name'")
+            @minimal_error("Cannot specify both 'after' and 'before' constraints for condition '$name'")
         end
 
         push!(conditions, EpochCondition(name, trigger_sequences, reference_index, timing_pairs, min_interval, max_interval, after, before))
@@ -322,8 +322,8 @@ function mark_epoch_intervals!(
 )
     # Input validation
     _validate_epoch_interval_params(dat, time_window)
-    channel_in ∉ propertynames(dat.data) && @minimal_error_throw("Column $(channel_in) not found in data")
-    eltype(dat.data[!, channel_in]) <: Bool || @minimal_error_throw("Column $(channel_in) must be a Bool column")
+    channel_in ∉ propertynames(dat.data) && @minimal_error("Column $(channel_in) not found in data")
+    eltype(dat.data[!, channel_in]) <: Bool || @minimal_error("Column $(channel_in) must be a Bool column")
 
     # Initialize result column
     dat.data[!, channel_out] .= false
@@ -401,10 +401,10 @@ function mark_epoch_intervals!(
         end
 
         # Apply after/before filtering if specified
-        if condition.after !== nothing || condition.before !== nothing
+        if condition.after |> !isnothing || condition.before |> !isnothing
             sequence_indices = filter(sequence_indices) do seq_start_idx
                 # Check after constraint
-                if condition.after !== nothing
+                if condition.after |> !isnothing
                     found_after = any(dat.data.triggers[1:(seq_start_idx-1)] .== condition.after)
                     if !found_after
                         return false
@@ -412,7 +412,7 @@ function mark_epoch_intervals!(
                 end
 
                 # Check before constraint  
-                if condition.before !== nothing
+                if condition.before |> !isnothing
                     sequence_end = seq_start_idx + length(condition.trigger_sequences[1]) - 1
                     found_before = any(dat.data.triggers[(sequence_end+1):end] .== condition.before)
                     if !found_before
@@ -423,15 +423,15 @@ function mark_epoch_intervals!(
                 return true
             end
             if isempty(sequence_indices)
-                after_msg = condition.after !== nothing ? " after trigger $(condition.after)" : ""
-                before_msg = condition.before !== nothing ? " before trigger $(condition.before)" : ""
+                after_msg = condition.after |> !isnothing ? " after trigger $(condition.after)" : ""
+                before_msg = condition.before |> !isnothing ? " before trigger $(condition.before)" : ""
                 @minimal_warning "No trigger sequences found that meet position constraints$(after_msg)$(before_msg) for condition '$(condition.name)'"
                 continue
             end
         end
 
         # Apply timing constraints if specified
-        if condition.timing_pairs !== nothing && condition.min_interval !== nothing && condition.max_interval !== nothing
+        if condition.timing_pairs |> !isnothing && condition.min_interval |> !isnothing && condition.max_interval |> !isnothing
 
             sequence_indices = filter(sequence_indices) do seq_start_idx
                 for (start_idx, end_idx) in condition.timing_pairs
@@ -538,7 +538,7 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
     # Find t==0 positions based on trigger_sequences (unified approach)
     offset_to_reference = epoch_condition.reference_index - 1
     zero_idx = search_sequence(dat.data.triggers, epoch_condition.trigger_sequences) .+ offset_to_reference
-    isempty(zero_idx) && @minimal_error_throw("None of the trigger sequences $(epoch_condition.trigger_sequences) found!")
+    isempty(zero_idx) && @minimal_error("None of the trigger sequences $(epoch_condition.trigger_sequences) found!")
 
     # Apply after/before filtering if specified
     if !isnothing(epoch_condition.after) || !isnothing(epoch_condition.before)
@@ -554,7 +554,7 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
             # Check if this sequence meets the after/before constraints
             valid_position = true
 
-            if epoch_condition.after !== nothing
+            if epoch_condition.after |> !isnothing
                 # Check if there's a trigger with value 'after' before this sequence
                 # Look backwards from sequence start to find the trigger
                 found_after_trigger = false
@@ -569,7 +569,7 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
                 end
             end
 
-            if epoch_condition.before !== nothing
+            if epoch_condition.before |> !isnothing
                 # Check if there's a trigger with value 'before' after this sequence
                 # Look forwards from sequence end to find the trigger
                 sequence_end = sequence_start + sequence_length - 1
@@ -592,9 +592,9 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
 
         zero_idx = filtered_indices
         if isempty(zero_idx)
-            after_msg = epoch_condition.after !== nothing ? " after trigger $(epoch_condition.after)" : ""
-            before_msg = epoch_condition.before !== nothing ? " before trigger $(epoch_condition.before)" : ""
-            @minimal_error_throw(
+            after_msg = epoch_condition.after |> !isnothing ? " after trigger $(epoch_condition.after)" : ""
+            before_msg = epoch_condition.before |> !isnothing ? " before trigger $(epoch_condition.before)" : ""
+            @minimal_error(
                 "No trigger sequences found that meet position constraints$(after_msg)$(before_msg) for condition '$(epoch_condition.name)'",
             )
         end
@@ -640,7 +640,7 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
 
         zero_idx = valid_indices
         isempty(zero_idx) &&
-            @minimal_error_throw("No trigger sequences found that meet timing constraints for condition '$(epoch_condition.name)'")
+            @minimal_error("No trigger sequences found that meet timing constraints for condition '$(epoch_condition.name)'")
     end
 
     # find number of samples pre/post epoch t = 0 position
@@ -708,7 +708,7 @@ Average epochs to create an ERP. This function:
 function average_epochs(dat::EpochData)
 
     # Input validation
-    isempty(dat.data) && @minimal_error_throw("Cannot average empty EpochData")
+    isempty(dat.data) && @minimal_error("Cannot average empty EpochData")
 
     # Get all columns from the first epoch
     first_epoch = first(dat.data)
@@ -731,7 +731,7 @@ function average_epochs(dat::EpochData)
     eeg_channels = setdiff(numeric_columns, metadata_columns)
 
     # Ensure we have some channels to average
-    isempty(eeg_channels) && @minimal_error_throw("No EEG channels found to average")
+    isempty(eeg_channels) && @minimal_error("No EEG channels found to average")
 
     # Average epochs directly by row index (all epochs have same length and time values)
     try
@@ -741,7 +741,7 @@ function average_epochs(dat::EpochData)
         # Verify all epochs have the same length
         for (idx, epoch) in enumerate(dat.data)
             if nrow(epoch) != n_timepoints
-                @minimal_error_throw(
+                @minimal_error(
                     "Epoch $idx has $(nrow(epoch)) timepoints, expected $n_timepoints. All epochs must have the same length."
                 )
             end
@@ -771,7 +771,7 @@ function average_epochs(dat::EpochData)
 
         return ErpData(dat.file, dat.condition, dat.condition_name, erp, dat.layout, dat.sample_rate, dat.analysis_info, n_epochs)
     catch e
-        @minimal_error_throw("Failed to average epochs: $(e)")
+        @minimal_error("Failed to average epochs: $(e)")
     end
 end
 
@@ -893,14 +893,14 @@ Remove epochs that contain any true values in the specified boolean columns.
 """
 function reject_epochs(dat::EpochData, bad_columns::Vector{Symbol})
     # Input validation
-    isempty(dat.data) && @minimal_error_throw("Cannot remove bad epochs from empty EpochData")
+    isempty(dat.data) && @minimal_error("Cannot remove bad epochs from empty EpochData")
     isempty(bad_columns) && return dat  # No columns to check
 
     # Validate that all bad_columns exist in the data
     first_epoch = first(dat.data)
     for col in bad_columns
         if !hasproperty(first_epoch, col)
-            @minimal_error_throw("Column '$col' not found in epoch data")
+            @minimal_error("Column '$col' not found in epoch data")
         end
 
         # Check if column is boolean
@@ -1191,12 +1191,12 @@ function average_epochs(
         @log_call "average_epochs"
 
         # Validation (early return on error)
-        if (error_msg = _validate_input_dir(input_dir)) !== nothing
-            @minimal_error_throw(error_msg)
+        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+            @minimal_error(error_msg)
         end
 
-        if (error_msg = _validate_epochs_pattern(file_pattern)) !== nothing
-            @minimal_error_throw(error_msg)
+        if (error_msg = _validate_epochs_pattern(file_pattern)) |> !isnothing
+            @minimal_error(error_msg)
         end
 
         # Setup directories

@@ -26,16 +26,16 @@ Internal implementation for computing channel summary statistics.
 """
 function _channel_summary_impl(data::DataFrame, sample_selection::Vector{Int}, channel_selection::Vector{Symbol})::DataFrame
     # Input validation
-    isempty(sample_selection) && @minimal_error_throw("No samples selected for channel summary")
-    isempty(channel_selection) && @minimal_error_throw("No channels selected for channel summary")
+    isempty(sample_selection) && @minimal_error("No samples selected for channel summary")
+    isempty(channel_selection) && @minimal_error("No channels selected for channel summary")
 
     # Check that all selected channels exist in data
     missing_channels = setdiff(channel_selection, propertynames(data))
-    !isempty(missing_channels) && @minimal_error_throw("Channels not found in data: $(missing_channels)")
+    !isempty(missing_channels) && @minimal_error("Channels not found in data: $(missing_channels)")
 
     # Check that all sample indices are valid
     invalid_samples = sample_selection[(sample_selection .< 1) .| (sample_selection .> nrow(data))]
-    !isempty(invalid_samples) && @minimal_error_throw("Invalid sample indices: $(invalid_samples)")
+    !isempty(invalid_samples) && @minimal_error("Invalid sample indices: $(invalid_samples)")
 
     selected_data = @view data[sample_selection, channel_selection]
 
@@ -174,7 +174,7 @@ function channel_summary(
     include_extra::Bool = false,
 )::DataFrame
     # Input validation
-    nrow(dat.data) == 0 && @minimal_error_throw("Cannot compute channel summary: data is empty")
+    nrow(dat.data) == 0 && @minimal_error("Cannot compute channel summary: data is empty")
 
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = include_meta, include_extra = include_extra)
     selected_samples = get_selected_samples(dat, sample_selection)
@@ -223,7 +223,7 @@ function channel_summary(
     include_extra::Bool = false,
 )::DataFrame
     # Input validation
-    isempty(dat.data) && @minimal_error_throw("Cannot compute channel summary: no epochs in data")
+    isempty(dat.data) && @minimal_error("Cannot compute channel summary: no epochs in data")
 
     # Process each epoch and collect results
     results = DataFrame[]
@@ -257,7 +257,7 @@ function channel_summary(
     end
 
     # Check if we have any results
-    isempty(results) && @minimal_error_throw("No valid epochs found for channel summary")
+    isempty(results) && @minimal_error("No valid epochs found for channel summary")
 
     # Combine all results
     return vcat(results...)
@@ -399,8 +399,8 @@ function channel_summary(
         @log_call "channel_summary"
 
         # Validation (early return on error)
-        if (error_msg = _validate_input_dir(input_dir)) !== nothing
-            @minimal_error_throw(error_msg)
+        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+            @minimal_error(error_msg)
         end
 
         # Setup directories

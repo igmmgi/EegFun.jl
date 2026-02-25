@@ -34,7 +34,7 @@ function prepare_decoding(
     channel_selection::Function = channels(),
     interval_selection::Interval = times(),
 )
-    isempty(epochs) && @minimal_error_throw("Cannot prepare decoding with empty epochs vector")
+    isempty(epochs) && @minimal_error("Cannot prepare decoding with empty epochs vector")
 
     # Group all epochs by condition first
     epochs_by_condition = group_by_condition(epochs)
@@ -45,7 +45,7 @@ function prepare_decoding(
     selected_cond_nums = all_cond_nums[selected_mask]
 
     # Validate at least 2 conditions for classification
-    length(selected_cond_nums) >= 2 || @minimal_error_throw(
+    length(selected_cond_nums) >= 2 || @minimal_error(
         "Decoding requires at least 2 conditions, got $(length(selected_cond_nums)): $selected_cond_nums. Use condition_selection to select at least 2 conditions."
     )
 
@@ -59,7 +59,7 @@ function prepare_decoding(
     # Validate all conditions have the same participants
     first_participants = participant_ids_per_condition[1]
     for (cond_idx, participants) in enumerate(participant_ids_per_condition[2:end])
-        sort(participants) != sort(first_participants) && @minimal_error_throw(
+        sort(participants) != sort(first_participants) && @minimal_error(
             "Condition $(selected_cond_nums[cond_idx+1]) has different participants than condition $(selected_cond_nums[1]). " *
             "Decoding requires the same participants across all conditions."
         )
@@ -76,7 +76,7 @@ function prepare_decoding(
 
     # Validate structure is consistent across conditions
     for cond_idx = (firstindex(selected_conditions)+1):lastindex(selected_conditions)
-        _have_same_structure(selected_conditions[1][1], selected_conditions[cond_idx][1]) || @minimal_error_throw(
+        _have_same_structure(selected_conditions[1][1], selected_conditions[cond_idx][1]) || @minimal_error(
             "Condition $(selected_cond_nums[1]) vs $(selected_cond_nums[cond_idx]): " *
             "Epochs have inconsistent structure (different channels, sample rates, or time vectors)"
         )
@@ -91,9 +91,9 @@ function prepare_decoding(
     # Validate selection produced data
     for (cond_idx, condition_epochs) in enumerate(selected_conditions)
         isempty(condition_epochs) &&
-            @minimal_error_throw("Condition $(selected_cond_nums[cond_idx]): No data matched the selection criteria!")
-        isempty(channel_labels(condition_epochs[1])) && @minimal_error_throw("Channel selection produced no channels")
-        isempty(condition_epochs[1].data[1][!, :time]) && @minimal_error_throw("Sample selection produced no time points")
+            @minimal_error("Condition $(selected_cond_nums[cond_idx]): No data matched the selection criteria!")
+        isempty(channel_labels(condition_epochs[1])) && @minimal_error("Channel selection produced no channels")
+        isempty(condition_epochs[1].data[1][!, :time]) && @minimal_error("Sample selection produced no time points")
     end
 
     # Organize by participant: for each participant, collect their data for all selected conditions
@@ -108,10 +108,10 @@ function prepare_decoding(
             # Find this participant's epoch for this condition
             participant_epoch = findfirst(epoch -> _extract_participant_id(basename(epoch.file)) == participant_id, condition_epochs)
 
-            if participant_epoch !== nothing
+            if participant_epoch |> !isnothing
                 push!(participant_data, condition_epochs[participant_epoch])
             else
-                @minimal_error_throw(
+                @minimal_error(
                     "Participant $participant_id is missing data for condition. " *
                     "All participants must have data for all selected conditions."
                 )
@@ -164,7 +164,7 @@ function prepare_decoding(
 )
     # Load all appropriate data and call the main preparation function
     all_epochs = read_all_data(EpochData, file_pattern, input_dir, participant_selection)
-    isempty(all_epochs) && @minimal_error_throw("No valid epoch data found matching pattern '$file_pattern' in $input_dir")
+    isempty(all_epochs) && @minimal_error("No valid epoch data found matching pattern '$file_pattern' in $input_dir")
 
     return prepare_decoding(
         all_epochs;
@@ -211,7 +211,7 @@ function prepare_decoding(
     channel_selection::Function = channels(),
     interval_selection::Interval = times(),
 )
-    isempty(epochs) && @minimal_error_throw("Cannot prepare decoding with empty TF epochs vector")
+    isempty(epochs) && @minimal_error("Cannot prepare decoding with empty TF epochs vector")
 
     # Group all epochs by condition first
     epochs_by_condition = group_by_condition(epochs)
@@ -222,7 +222,7 @@ function prepare_decoding(
     selected_cond_nums = all_cond_nums[selected_mask]
 
     # Validate at least 2 conditions for classification
-    length(selected_cond_nums) >= 2 || @minimal_error_throw(
+    length(selected_cond_nums) >= 2 || @minimal_error(
         "Decoding requires at least 2 conditions, got $(length(selected_cond_nums)): $selected_cond_nums. Use condition_selection to select at least 2 conditions."
     )
 
@@ -236,7 +236,7 @@ function prepare_decoding(
     # Validate all conditions have the same participants
     first_participants = participant_ids_per_condition[1]
     for (cond_idx, participants) in enumerate(participant_ids_per_condition[2:end])
-        sort(participants) != sort(first_participants) && @minimal_error_throw(
+        sort(participants) != sort(first_participants) && @minimal_error(
             "Condition $(selected_cond_nums[cond_idx+1]) has different participants than condition $(selected_cond_nums[1]). " *
             "Decoding requires the same participants across all conditions."
         )
@@ -253,7 +253,7 @@ function prepare_decoding(
 
     # Validate structure is consistent across conditions
     for cond_idx = (firstindex(selected_conditions)+1):lastindex(selected_conditions)
-        _have_same_structure(selected_conditions[1][1], selected_conditions[cond_idx][1]) || @minimal_error_throw(
+        _have_same_structure(selected_conditions[1][1], selected_conditions[cond_idx][1]) || @minimal_error(
             "Condition $(selected_cond_nums[1]) vs $(selected_cond_nums[cond_idx]): " *
             "TF epochs have inconsistent structure (different channels, sample rates, or time/freq vectors)"
         )
@@ -268,9 +268,9 @@ function prepare_decoding(
     # Validate selection produced data
     for (cond_idx, condition_epochs) in enumerate(selected_conditions)
         isempty(condition_epochs) &&
-            @minimal_error_throw("Condition $(selected_cond_nums[cond_idx]): No data matched the selection criteria!")
-        isempty(channel_labels(condition_epochs[1])) && @minimal_error_throw("Channel selection produced no channels")
-        isempty(condition_epochs[1].data_power[1][!, :time]) && @minimal_error_throw("Sample selection produced no time points")
+            @minimal_error("Condition $(selected_cond_nums[cond_idx]): No data matched the selection criteria!")
+        isempty(channel_labels(condition_epochs[1])) && @minimal_error("Channel selection produced no channels")
+        isempty(condition_epochs[1].data_power[1][!, :time]) && @minimal_error("Sample selection produced no time points")
     end
 
     # Organize by participant
@@ -284,10 +284,10 @@ function prepare_decoding(
         for condition_epochs in selected_conditions
             participant_epoch = findfirst(epoch -> _extract_participant_id(basename(epoch.file)) == participant_id, condition_epochs)
 
-            if participant_epoch !== nothing
+            if participant_epoch |> !isnothing
                 push!(participant_data, condition_epochs[participant_epoch])
             else
-                @minimal_error_throw(
+                @minimal_error(
                     "Participant $participant_id is missing data for condition. " *
                     "All participants must have data for all selected conditions."
                 )
@@ -338,7 +338,7 @@ function prepare_decoding(
 )
     # Load all appropriate data and call the main preparation function
     all_epochs = read_all_data(TimeFreqEpochData, file_pattern, input_dir, participant_selection)
-    isempty(all_epochs) && @minimal_error_throw("No valid TF epoch data found matching pattern '$file_pattern' in $input_dir")
+    isempty(all_epochs) && @minimal_error("No valid TF epoch data found matching pattern '$file_pattern' in $input_dir")
 
     return prepare_decoding(
         all_epochs;

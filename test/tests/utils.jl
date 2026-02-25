@@ -30,8 +30,8 @@ using Logging
 
         # Test with nothing values
         config_nothing = EegFun.BatchConfig("test", "/input", "/output", nothing, nothing)
-        @test config_nothing.participants === nothing
-        @test config_nothing.conditions === nothing
+        @test isnothing(config_nothing.participants)
+        @test isnothing(config_nothing.conditions)
     end
 
     @testset "_find_batch_files" begin
@@ -85,7 +85,7 @@ using Logging
         jldsave(erps_file; data = erps)
 
         result = EegFun.read_data(erps_file)
-        @test result !== nothing
+        @test result |> !isnothing
         @test length(result) == length(erps)
         @test result[1].data == erps[1].data
 
@@ -94,7 +94,7 @@ using Logging
         jldsave(epochs_file; data = erps)
 
         result = EegFun.read_data(epochs_file)
-        @test result !== nothing
+        @test result |> !isnothing
         @test length(result) == length(erps)
         @test result[1].data == erps[1].data
 
@@ -104,10 +104,60 @@ using Logging
 
         result = EegFun.read_data(other_file)
         # read_data only returns EegData, InfoIca, or Nothing - other types return nothing
-        @test result === nothing
+        @test isnothing(result)
 
         # Test with non-existent file (jldopen throws SystemError, not ArgumentError)
         @test_throws SystemError EegFun.read_data("/nonexistent/file.jld2")
+    end
+
+    @testset "read_data - edge cases" begin
+        # Empty JLD2 file (no keys)
+        empty_file = joinpath(test_dir, "test_empty.jld2")
+        jldopen(empty_file, "w") do f
+        end
+        @test isnothing(EegFun.read_data(empty_file))
+
+        # JLD2 with non-EEG data under the only key
+        number_file = joinpath(test_dir, "test_number.jld2")
+        jldsave(number_file; data = 42)
+        @test isnothing(EegFun.read_data(number_file))
+
+        # JLD2 with Vector of mixed types (some EEG, some not)
+        mixed_file = joinpath(test_dir, "test_mixed.jld2")
+        jldsave(mixed_file; data = Any[EegFun.create_test_erp_data(), "not_eeg", 123])
+        @test isnothing(EegFun.read_data(mixed_file))  # not all elements are EegFunData
+
+        # TimeFreqData round-trip
+        tf_file = joinpath(test_dir, "test_tf.jld2")
+        tf_data = [EegFun.create_test_tf_data(condition = 1), EegFun.create_test_tf_data(condition = 2)]
+        jldsave(tf_file; data = tf_data)
+        result = EegFun.read_data(tf_file)
+        @test result |> !isnothing
+        @test length(result) == 2
+        @test result[1] isa EegFun.TimeFreqData
+        @test result[2] isa EegFun.TimeFreqData
+
+        # Single EegFunData (not wrapped in vector)
+        single_file = joinpath(test_dir, "test_single.jld2")
+        single_erp = EegFun.create_test_erp_data()
+        jldsave(single_file; data = single_erp)
+        result = EegFun.read_data(single_file)
+        @test result |> !isnothing
+        @test result isa EegFun.ErpData
+
+        # Dict with multiple keys — some valid, some not
+        multi_key_file = joinpath(test_dir, "test_multikey.jld2")
+        jldopen(multi_key_file, "w") do f
+            f["erps"] = [EegFun.create_test_erp_data()]
+            f["metadata"] = "some metadata string"
+        end
+        result = EegFun.read_data(multi_key_file)
+        @test result |> !isnothing  # should extract ERP data from the valid key
+
+        # Empty vector
+        empty_vec_file = joinpath(test_dir, "test_empty_vec.jld2")
+        jldsave(empty_vec_file; data = Any[])
+        @test isnothing(EegFun.read_data(empty_vec_file))
     end
 
     @testset "_condition_select" begin
@@ -138,7 +188,7 @@ using Logging
     @testset "_validate_input_dir" begin
         # Test existing directory
         result = EegFun._validate_input_dir(test_dir)
-        @test result === nothing
+        @test isnothing(result)
 
         # Test non-existent directory
         result = EegFun._validate_input_dir("/nonexistent/directory")
@@ -157,7 +207,7 @@ using Logging
         # Test valid channel groups
         groups = [[:Fz, :Cz], [:Pz, :Oz], [:M1, :M2]]
         result = EegFun._validate_channel_groups(groups)
-        @test result === nothing
+        @test isnothing(result)
 
         # Test empty groups
         result = EegFun._validate_channel_groups(Vector{Symbol}[])
@@ -172,14 +222,14 @@ using Logging
         # Test single channel group (should warn but not error)
         groups_single = [[:Fz], [:Cz, :Pz]]
         result = EegFun._validate_channel_groups(groups_single)
-        @test result === nothing  # Should not error, just warn
+        @test isnothing(result)  # Should not error, just warn
     end
 
     @testset "_validate_condition_groups" begin
         # Test valid condition groups
         groups = [[1, 2], [3, 4], [5, 6]]
         result = EegFun._validate_condition_groups(groups)
-        @test result === nothing
+        @test isnothing(result)
 
         # Test empty groups
         result = EegFun._validate_condition_groups(Vector{Int}[])
@@ -189,25 +239,25 @@ using Logging
         # Test duplicate removal
         groups_with_duplicates = [[1, 1, 2], [3, 4]]
         result = EegFun._validate_condition_groups(groups_with_duplicates)
-        @test result === nothing
+        @test isnothing(result)
         @test groups_with_duplicates[1] == [1, 2]  # Duplicates should be removed
 
         # Test overlap detection
         groups_overlap = [[1, 2], [2, 3]]
         result = EegFun._validate_condition_groups(groups_overlap)
-        @test result === nothing  # Should warn but not error
+        @test isnothing(result)  # Should warn but not error
     end
 
     @testset "_validate_condition_pairs" begin
         # Test valid condition pairs (tuples)
         pairs_tuples = [(1, 2), (3, 4), (5, 6)]
         result = EegFun._validate_condition_pairs(pairs_tuples)
-        @test result === nothing
+        @test isnothing(result)
 
         # Test valid condition pairs (vectors)
         pairs_vectors = [[1, 2], [3, 4], [5, 6]]
         result = EegFun._validate_condition_pairs(pairs_vectors)
-        @test result === nothing
+        @test isnothing(result)
 
         # Test empty pairs
         result = EegFun._validate_condition_pairs(Tuple{Int,Int}[])
@@ -217,7 +267,7 @@ using Logging
         # Test identical conditions (should warn but not error)
         pairs_identical = [(1, 1), (2, 3)]
         result = EegFun._validate_condition_pairs(pairs_identical)
-        @test result === nothing  # Should warn but not error
+        @test isnothing(result)  # Should warn but not error
     end
 
     @testset "_run_batch_operation" begin
@@ -339,17 +389,17 @@ using Logging
             # Test with very large condition numbers
             groups_large = [[1000, 2000], [3000, 4000]]
             result = EegFun._validate_condition_groups(groups_large)
-            @test result === nothing
+            @test isnothing(result)
 
             # Test with negative condition numbers
             groups_negative = [[-1, 1], [2, 3]]
             result = EegFun._validate_condition_groups(groups_negative)
-            @test result === nothing  # Should not error, just process
+            @test isnothing(result)  # Should not error, just process
 
             # Test with mixed data types in groups
             groups_mixed = [[1, 2], [3, 4]]  # All Int
             result = EegFun._validate_condition_groups(groups_mixed)
-            @test result === nothing  # Should handle gracefully
+            @test isnothing(result)  # Should handle gracefully
         end
 
         @testset "Batch operation edge cases" begin
@@ -386,7 +436,7 @@ using Logging
 
             # Validate input directory
             validation = EegFun._validate_input_dir(test_dir)
-            @test validation === nothing
+            @test isnothing(validation)
 
             # Process files
             process_fn = (input_path, output_path) -> begin

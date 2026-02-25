@@ -163,7 +163,7 @@ Reads a layout file in CSV format and returns a DataFrame containing the layout 
 """
 function read_layout(file)
     if !isfile(file)
-        @minimal_error_throw "Cannot open file: $file"
+        @minimal_error "Cannot open file: $file"
     end
     @info "Reading layout from $file"
     df = DataFrame(CSV.File(file, types = Dict(:label => Symbol)))
@@ -814,7 +814,7 @@ function rename_channel!(layout::Layout, rename_dict::Dict{Symbol,Symbol})
     # Check for duplicates in final names
     if length(final_names) != length(unique(final_names))
         duplicate_names = filter(x -> count(==(x), final_names) > 1, unique(final_names))
-        @minimal_error_throw "Cannot rename channels to duplicate names: $(join(duplicate_names, ", "))"
+        @minimal_error "Cannot rename channels to duplicate names: $(join(duplicate_names, ", "))"
     end
 
     # Apply the renaming with proper swap handling

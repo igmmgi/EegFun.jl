@@ -287,7 +287,7 @@ plot_decoding(all_decoded, title = "Individual Subjects")
 """
 function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
     if isempty(decoded_list)
-        @minimal_error_throw("Cannot plot empty decoded data list")
+        @minimal_error("Cannot plot empty decoded data list")
     end
 
     # Merge defaults with user kwargs
@@ -409,7 +409,7 @@ function plot_decoding(decoded::DecodedData, stats::DecodingStatisticsResult; kw
 
     # Validate that times match
     if decoded.times != stats.times
-        @minimal_error_throw("DecodedData and DecodingStatisticsResult must have matching time vectors")
+        @minimal_error("DecodedData and DecodingStatisticsResult must have matching time vectors")
     end
 
     # Create base plot (without displaying yet)
@@ -506,7 +506,7 @@ plot_confusion_matrix(decoded)
 """
 function plot_confusion_matrix(decoded::DecodedData; time_point::Union{Float64,Int,Nothing} = nothing, kwargs...)
     if isnothing(decoded.confusion_matrix)
-        @minimal_error_throw("No confusion matrix data available in DecodedData")
+        @minimal_error("No confusion matrix data available in DecodedData")
     end
 
     # Determine which time point to plot

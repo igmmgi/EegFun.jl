@@ -40,7 +40,7 @@ function prepare_stats(
 
     # Validate exactly 2 conditions
     length(selected_cond_nums) == 2 ||
-        @minimal_error_throw "Statistical tests require exactly 2 conditions, got $(length(selected_cond_nums)): $selected_cond_nums. Use condition_selection to select exactly 2 conditions."
+        @minimal_error "Statistical tests require exactly 2 conditions, got $(length(selected_cond_nums)): $selected_cond_nums. Use condition_selection to select exactly 2 conditions."
 
     condition1 = erps_by_condition[selected_cond_nums[1]]
     condition2 = erps_by_condition[selected_cond_nums[2]]
@@ -68,10 +68,10 @@ function prepare_stats(
     sample_sel = _interval_to_samples(interval_selection)
 
     condition1 = subset(condition1; channel_selection = channel_selection, sample_selection = sample_sel)
-    isempty(condition1) && @minimal_error_throw "No data matched the selection criteria!"
+    isempty(condition1) && @minimal_error "No data matched the selection criteria!"
 
     condition2 = subset(condition2; channel_selection = channel_selection, sample_selection = sample_sel)
-    isempty(condition2) && @minimal_error_throw "No data matched the selection criteria!"
+    isempty(condition2) && @minimal_error "No data matched the selection criteria!"
 
     # baseline (if no interval specified, use the full time range)
     if isnothing(baseline_interval)
@@ -95,10 +95,10 @@ function prepare_stats(
     end
 
     condition1 = subset(condition1; channel_selection = channel_selection, sample_selection = analysis_sel)
-    isempty(condition1) && @minimal_error_throw "No data matched the analysis interval criteria!"
+    isempty(condition1) && @minimal_error "No data matched the analysis interval criteria!"
 
     condition2 = subset(condition2; channel_selection = channel_selection, sample_selection = analysis_sel)
-    isempty(condition2) && @minimal_error_throw "No data matched the analysis interval criteria!"
+    isempty(condition2) && @minimal_error "No data matched the analysis interval criteria!"
 
     # Get dimensions and metadata from analysis subset
     electrodes = channel_labels(condition1[1])
@@ -144,7 +144,7 @@ function prepare_stats(
 )
     # Load data and auto-detect type
     all_data = read_all_data(file_pattern, input_dir, participant_selection)
-    isempty(all_data) && @minimal_error_throw "No valid data found matching pattern '$file_pattern' in $input_dir"
+    isempty(all_data) && @minimal_error "No valid data found matching pattern '$file_pattern' in $input_dir"
 
     first_item = first(all_data)
     if first_item isa TimeFreqData
@@ -152,7 +152,7 @@ function prepare_stats(
     elseif first_item isa ErpData
         return prepare_stats(Vector{ErpData}(all_data); design = design, kwargs...)
     else
-        @minimal_error_throw "Unsupported data type: $(typeof(first_item)). Expected ErpData or TimeFreqData."
+        @minimal_error "Unsupported data type: $(typeof(first_item)). Expected ErpData or TimeFreqData."
     end
 end
 
@@ -248,7 +248,7 @@ function _compute_t_matrix(
 
         # Compute mean of differences: mean(data1 - data2) = mean(data1) - mean(data2)
         # Use pre-allocated buffers if provided, otherwise allocate
-        if mean1_buffer !== nothing
+        if mean1_buffer |> !isnothing
             mean1 = mean1_buffer
             mean2 = mean2_buffer
             mean_diff = mean_diff_buffer
@@ -259,7 +259,7 @@ function _compute_t_matrix(
         end
 
         # Compute means and std of differences in one pass (avoids diff array allocation)
-        if std_diff_buffer !== nothing
+        if std_diff_buffer |> !isnothing
             std_diff = std_diff_buffer
         else
             std_diff = Array{Float64,2}(undef, n_electrodes, n_time)
@@ -290,7 +290,7 @@ function _compute_t_matrix(
                 std_diff[e_idx, t_idx] = sqrt(variance * n_participants / (n_participants - 1))
 
                 # Only store mean1/mean2 if buffers were provided
-                if mean1_buffer !== nothing
+                if mean1_buffer |> !isnothing
                     mean1[e_idx, t_idx] = mean1_val
                     mean2[e_idx, t_idx] = mean2_val
                 end
@@ -399,7 +399,7 @@ function _compute_p_matrix(
     tail::Symbol,
     p_matrix_buffer::Union{Nothing,Array{Float64,2}} = nothing,
 )
-    if p_matrix_buffer !== nothing
+    if p_matrix_buffer |> !isnothing
         p_matrix = p_matrix_buffer
     else
         p_matrix = Array{Float64,2}(undef, size(t_matrix))

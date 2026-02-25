@@ -12,7 +12,7 @@ Create an average TF result by averaging power and phase across conditions.
 function _create_tf_average_wave(tfs::Vector{TimeFreqData}, conditions::Vector{Int}, avg_cond::Int)
     # Validate that all TFs have the same structure
     for i = 2:length(tfs)
-        _have_same_structure(tfs[1], tfs[i]) || @minimal_error_throw("TF data have inconsistent structure")
+        _have_same_structure(tfs[1], tfs[i]) || @minimal_error("TF data have inconsistent structure")
     end
 
     # Get EEG channels (exclude metadata columns like :time, :freq)
@@ -120,7 +120,7 @@ function condition_average(data::Vector{TimeFreqData}, condition_groups::Vector{
     end
 
     if isempty(average_waves)
-        @minimal_error_throw("No valid condition groups found")
+        @minimal_error("No valid condition groups found")
     end
 
     @info "Created $(length(average_waves)) TF average(s)"

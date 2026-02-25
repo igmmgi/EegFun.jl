@@ -12,7 +12,7 @@ using EegFun
 # ==============================================================================
 # 0. Regenerate TF morlet data from epoch data (fixes old data bug)
 # ==============================================================================
-epoch_dir = "/home/ian/Documents/Julia/TestDataSets/AttentionExp/output_data"
+epoch_dir = joinpath(homedir(), "Documents", "Julia", "TestDataSets", "AttentionExp", "output_data")  # ← Update to your data path
 println("Regenerating TF morlet data from epochs...")
 
 EegFun.tf_morlet(

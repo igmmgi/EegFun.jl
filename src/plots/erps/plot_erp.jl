@@ -107,7 +107,7 @@ function plot_erp(
     # Read data from file
     data = read_data(filepath)
     if isnothing(data)
-        @minimal_error_throw "No data found in file: $filepath"
+        @minimal_error "No data found in file: $filepath"
     end
 
     # Dispatch will handle ErpData vs Vector{ErpData} automatically
@@ -245,7 +245,7 @@ function plot_erp(
 
     # Check if any channels remain after filtering
     if isempty(all_plot_channels)
-        @minimal_error_throw "No valid channels found. Selected channels: $selected_channels, Available channels: $all_channels"
+        @minimal_error "No valid channels found. Selected channels: $selected_channels, Available channels: $all_channels"
     end
 
     # set default plot title only for single layouts
@@ -296,7 +296,7 @@ function plot_erp(
             user_provided_color = user_provided_color,
             plot_kwargs...,
         )
-        if plot_kwargs[:interactive] && legend_refs !== nothing
+        if plot_kwargs[:interactive] && legend_refs |> !isnothing
             legend_refs[ax_idx] = leg
         end
     end
@@ -473,7 +473,7 @@ function _plot_erp!(
             )
 
             # Store line and y Observable if references are requested
-            if line_refs !== nothing
+            if line_refs |> !isnothing
                 if !haskey(line_refs, dataset_idx)
                     line_refs[dataset_idx] = Dict{Symbol,Tuple{Any,Observable}}()
                 end
@@ -532,14 +532,14 @@ function _prepare_erp_data(
     if isempty(dat_subset)
         n_conditions = length(datasets)
         if n_conditions == 0
-            @minimal_error_throw "No data available (empty dataset)"
+            @minimal_error "No data available (empty dataset)"
         else
-            @minimal_error_throw "No data matched the selection criteria. Available condition indices: 1:$n_conditions"
+            @minimal_error "No data matched the selection criteria. Available condition indices: 1:$n_conditions"
         end
     end
 
     # Apply baseline correction if requested
-    if baseline_interval !== nothing
+    if baseline_interval |> !isnothing
         @info "Applying baseline correction to $(length(dat_subset)) datasets"
         baseline!.(dat_subset, Ref(baseline_interval))
     end
@@ -639,7 +639,7 @@ Returns filtered Vector{ErpData} or single ErpData if only one condition.
 """
 function _filter_visible_conditions(data, condition_checked_ref)
     # If no condition_checked available or data is not Vector, return as-is
-    if condition_checked_ref[] === nothing || !(data isa Vector{ErpData})
+    if isnothing(condition_checked_ref[]) || !(data isa Vector{ErpData})
         return data
     end
 
@@ -663,7 +663,7 @@ Reuses _create_grand_average which averages ErpData objects together.
 """
 function _average_conditions(erps::Vector{ErpData})
     if isempty(erps)
-        @minimal_error_throw("Cannot average empty ERP list")
+        @minimal_error("Cannot average empty ERP list")
     end
     if length(erps) == 1
         return erps[1]  # Nothing to average
@@ -758,7 +758,7 @@ function _add_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vector{ErpDa
     # Extract legend parameters
     legend_label = kwargs[:legend_label]
     legend_position = kwargs[:legend_position]
-    if kwargs[:legend_nbanks] === nothing
+    if isnothing(kwargs[:legend_nbanks])
         kwargs[:legend_nbanks] = length(channels) > 10 ? cld(length(channels), 10) : 1
     end
     legend_kwargs = _extract_legend_kwargs(kwargs)
@@ -833,14 +833,14 @@ function _setup_erp_control_panel!(
     control_fig = Ref{Union{Figure,Nothing}}(nothing)
 
     # Set up linked legend interactions
-    if line_refs !== nothing
+    if line_refs |> !isnothing
         _setup_linked_legend_interactions!(line_refs)
     end
 
     # State: baseline values and condition selections
     start_val, stop_val = _extract_baseline_values(baseline_interval)
-    baseline_start_obs = Observable(start_val === nothing ? "" : string(start_val))
-    baseline_stop_obs = Observable(stop_val === nothing ? "" : string(stop_val))
+    baseline_start_obs = Observable(isnothing(start_val) ? "" : string(start_val))
+    baseline_stop_obs = Observable(isnothing(stop_val) ? "" : string(stop_val))
     condition_checked = [Observable(true) for _ in dat_subset]
     condition_checked_ref[] = condition_checked  # Store for access by right-click handler
 
@@ -853,13 +853,13 @@ function _setup_erp_control_panel!(
         start_val, stop_val = _parse_baseline_values(start_str, stop_str)
 
         # Convert to tuple if valid (baseline! accepts tuples and converts internally)
-        baseline_interval_new = (start_val !== nothing && stop_val !== nothing) ? (start_val, stop_val) : nothing
+        baseline_interval_new = (start_val |> !isnothing && stop_val |> !isnothing) ? (start_val, stop_val) : nothing
 
         # Check if baseline actually changed
         baseline_changed = baseline_interval_new !== previous_baseline[]
 
         # Apply baseline if it changed
-        if baseline_changed && baseline_interval_new !== nothing
+        if baseline_changed && baseline_interval_new |> !isnothing
             baseline!.(dat_subset, Ref(baseline_interval_new))
             previous_baseline[] = baseline_interval_new
         end
