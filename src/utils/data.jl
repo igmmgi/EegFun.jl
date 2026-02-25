@@ -919,6 +919,18 @@ _create_subset(dat::TimeFreqData, ds_power::DataFrame, ds_phase::DataFrame, ls) 
     dat.baseline,
     dat.analysis_info,
 )
+_create_subset(dat::TimeFreqEpochData, ds_power::Vector{DataFrame}, ds_phase::Vector{DataFrame}, ls) = TimeFreqEpochData(
+    dat.file,
+    dat.condition,
+    dat.condition_name,
+    ds_power,
+    ds_phase,
+    ls,
+    dat.sample_rate,
+    dat.method,
+    dat.baseline,
+    dat.analysis_info,
+)
 
 # === SUBSET IMPLEMENTATIONS ===
 
@@ -1003,6 +1015,35 @@ function subset(
         _subset_common(dat, epoch_selection, channel_selection, combined_sel, include_extra)
     dat_subset = _subset_dataframes(dat.data, selected_epochs, selected_channels, selected_samples)
     return _create_subset(dat, dat_subset, layout_subset)
+end
+
+"""
+    subset(dat::TimeFreqEpochData; channel_selection, sample_selection, interval_selection, epoch_selection, include_extra)
+
+Create a subset of time-frequency epoch data. Subsets both `data_power` and `data_phase` consistently
+across all trials.
+
+# Examples
+```julia
+sub = subset(tf_epochs, channel_selection = channels(:Fz, :Cz), epoch_selection = epochs(1:10))
+```
+"""
+function subset(
+    dat::TimeFreqEpochData;
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    interval_selection::Interval = times(),
+    epoch_selection::Function = epochs(),
+    include_extra::Bool = false,
+)::TimeFreqEpochData
+    # Combine interval and sample selection
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+    selected_epochs, selected_channels, selected_samples, layout_subset =
+        _subset_common(dat, epoch_selection, channel_selection, combined_sel, include_extra)
+    # Subset BOTH power and phase Vector{DataFrame}
+    power_subset = _subset_dataframes(dat.data_power, selected_epochs, selected_channels, selected_samples)
+    phase_subset = _subset_dataframes(dat.data_phase, selected_epochs, selected_channels, selected_samples)
+    return _create_subset(dat, power_subset, phase_subset, layout_subset)
 end
 
 """
@@ -1104,6 +1145,41 @@ function subset(
     )
 end
 
+"""
+    subset(datasets::Vector{TimeFreqEpochData}; condition_selection, channel_selection, ..., epoch_selection)
+
+Subset a vector of TF epoch conditions. Filters by condition first, then applies channel/sample/interval/epoch selection.
+Both `data_power` and `data_phase` are subset consistently.
+
+# Examples
+```julia
+sub = subset(tf_epochs_vec, condition_selection = conditions(1, 2), channel_selection = channels(:Fz))
+```
+"""
+function subset(
+    datasets::Vector{TimeFreqEpochData};
+    condition_selection::Function = conditions(),
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    interval_selection::Interval = times(),
+    epoch_selection::Function = epochs(),
+    include_extra::Bool = false,
+)::Vector{TimeFreqEpochData}
+    # First filter by condition_selection
+    selected_conditions = get_selected_conditions(datasets, condition_selection)
+    datasets_filtered = datasets[selected_conditions]
+
+    # Then apply channel, sample, interval, and epoch selection to each dataset
+    return subset.(
+        datasets_filtered;
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        interval_selection = interval_selection,
+        epoch_selection = epoch_selection,
+        include_extra = include_extra,
+    )
+end
+
 
 
 """
@@ -1160,36 +1236,25 @@ end
 channels() = x -> fill(true, length(x))  # Default: select all channels given
 channels(channel_names::Vector{Symbol}) = x -> x .∈ Ref(channel_names)
 channels(channel_name::Symbol) = x -> x .== channel_name
+channels(channel_names::Symbol...) = channels(collect(channel_names))
 channels(channel_number::Int) = channels([channel_number])
 channels(channel_numbers::Union{Vector{Int},UnitRange}) = x -> [i in channel_numbers for i = 1:length(x)]
 channels(channel_ranges::Vector{UnitRange{Int}}) = x -> [i in union(channel_ranges...) for i = 1:length(x)]
 channels(predicate::Function) = predicate  # Allow custom function predicates
 channels_not(channel_names::Vector{Symbol}) = x -> .!(x .∈ Ref(channel_names))
 channels_not(channel_name::Symbol) = x -> .!(x .== channel_name)
+channels_not(channel_names::Symbol...) = channels_not(collect(channel_names))
 channels_not(channel_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in channel_numbers for i = 1:length(x)])
-channels_not(mixed::Vector) =
-    x -> begin
-        # Handle mixed Int and UnitRange{Int} (e.g., [-2, 1:10])
-        combined = Set{Int}()
-        for item in mixed
-            if item isa Int
-                push!(combined, item)
-            elseif item isa UnitRange{Int}
-                union!(combined, item)
-            else
-                throw(ArgumentError("channels_not() only accepts Int or UnitRange{Int}, got $(typeof(item))"))
-            end
-        end
-        .!([i in combined for i = 1:length(x)])
-    end
 
 # Helper function predicates for easier component filtering
 components() = x -> fill(true, length(x))  # Default: select all components given
 components(component_numbers::Union{Vector{Int},UnitRange}) = x -> [i in component_numbers for i = 1:length(x)]
 components(component_number::Int) = x -> x .== component_number
+components(component_numbers::Int...) = components(collect(component_numbers))
 components(predicate::Function) = predicate  # Allow custom function predicates
 components_not(component_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in component_numbers for i = 1:length(x)])
 components_not(component_number::Int) = x -> .!(x .== component_number)
+components_not(component_numbers::Int...) = components_not(collect(component_numbers))
 
 # Helper function predicates for easier sample filtering
 samples() = x -> fill(true, nrow(x))
@@ -1236,9 +1301,11 @@ times(interval::Tuple{Real,Real}) = interval
 epochs() = x -> fill(true, length(x))  # Default: select all epochs given
 epochs(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> [i in epoch_numbers for i in x]
 epochs(epoch_number::Int) = x -> x .== epoch_number
+epochs(epoch_numbers::Int...) = epochs(collect(epoch_numbers))
 epochs(predicate::Function) = predicate  # Allow custom function predicates
 epochs_not(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in epoch_numbers for i in x])
 epochs_not(epoch_number::Int) = x -> .!(x .== epoch_number)
+epochs_not(epoch_numbers::Int...) = epochs_not(collect(epoch_numbers))
 
 # Helper to extract condition number and name (returns tuple)
 condition_info(dat::EpochData) = (dat.condition, dat.condition_name)
@@ -1252,21 +1319,26 @@ condition_info(dat::SingleDataFrameEeg) =
 participants() = x -> fill(true, length(x))  # Default: select all participants given
 participants(participant_ids::Union{Vector{Int},UnitRange}) = x -> [id in participant_ids for id in x]
 participants(participant_id::Int) = x -> x .== participant_id
+participants(participant_ids::Int...) = participants(collect(participant_ids))
 participants(predicate::Function) = predicate  # Allow custom function predicates
 participants_not(participant_ids::Union{Vector{Int},UnitRange}) = x -> .!([id in participant_ids for id in x])
 participants_not(participant_id::Int) = x -> .!(x .== participant_id)
+participants_not(participant_ids::Int...) = participants_not(collect(participant_ids))
 
 # Helper function predicates for easier condition filtering (for Vector{ErpData} and Vector{EpochData})
 conditions() = x -> fill(true, length(x))  # Default: select all conditions given
 conditions(condition_indices::Union{Vector{Int},UnitRange}) = x -> [i in condition_indices for i = 1:length(x)]
 conditions(condition_index::Int) = x -> [i == condition_index for i = 1:length(x)]
+conditions(condition_indices::Int...) = conditions(collect(condition_indices))
 conditions(condition_names::Vector{String}) = x -> [_get_condition_name(dat) in condition_names for dat in x]
 conditions(condition_name::String) = x -> [_get_condition_name(dat) == condition_name for dat in x]
 conditions(predicate::Function) = predicate  # Allow custom function predicates
 conditions_not(condition_indices::Union{Vector{Int},UnitRange}) = x -> .!([i in condition_indices for i = 1:length(x)])
 conditions_not(condition_index::Int) = x -> .!([i == condition_index for i = 1:length(x)])
+conditions_not(condition_indices::Int...) = conditions_not(collect(condition_indices))
 conditions_not(condition_names::Vector{String}) = x -> .!([_get_condition_name(dat) in condition_names for dat in x])
 conditions_not(condition_name::String) = x -> .!([_get_condition_name(dat) == condition_name for dat in x])
+conditions_not(condition_names::String...) = conditions_not(collect(condition_names))
 
 # Internal helper to validate and preserve order for channel names
 function _handle_channel_names_order(user_order::Vector{Symbol}, selectable_cols::Vector{Symbol}, selected::Vector{Symbol})
@@ -1397,6 +1469,11 @@ end
 
 # Helper to select conditions from Vector{TimeFreqData} based on a predicate
 function get_selected_conditions(datasets::Vector{TimeFreqData}, condition_selection::Function)
+    return findall(condition_selection(datasets))
+end
+
+# Helper to select conditions from Vector{TimeFreqEpochData} based on a predicate
+function get_selected_conditions(datasets::Vector{TimeFreqEpochData}, condition_selection::Function)
     return findall(condition_selection(datasets))
 end
 

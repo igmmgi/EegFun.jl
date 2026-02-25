@@ -182,6 +182,7 @@ include("plots/time_frequency/plot_tf.jl")
 include("plots/time_frequency/plot_tf_stats.jl")
 include("plots/time_frequency/plot_spectrum.jl")
 include("plots/time_frequency/plot_power_spectrum.jl")
+include("plots/time_frequency/plot_topography_tf.jl")
 
 include("plots/decoding/plot_decoding.jl")
 include("plots/rsa/plot_rsa.jl")

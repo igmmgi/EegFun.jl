@@ -436,6 +436,7 @@ public create_test_lrp_data
 public create_test_summary_data
 public create_test_summary_data_with_epochs
 public create_test_tf_data
+public create_test_tf_epoch_data
 
 # =====================
 # Demos

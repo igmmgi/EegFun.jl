@@ -667,4 +667,127 @@ end
     end
 
 
+    # ────────────────────────────────────────────────────────────
+    # Helper: Load real TF data for plotting tests
+    # ────────────────────────────────────────────────────────────
+    TF_TEST_DIR = joinpath(@__DIR__, "..", "..", "resources", "data", "julia", "tf")
+    _load_tf(file) = EegFun.read_data(joinpath(TF_TEST_DIR, file))
+
+    # ────────────────────────────────────────────────────────────
+    # 11. plot_topography (TF) — single TimeFreqData
+    # ────────────────────────────────────────────────────────────
+    @testset "plot_topography (single TF)" begin
+        tfs = _load_tf("tf_data_1.jld2")
+        tf = tfs[1]
+
+        # Basic call — alpha band
+        out = EegFun.plot_topography(tf, freq_range = (8.0, 13.0), display_plot = false)
+        @test out.fig isa Figure
+
+        # With interval selection
+        out2 = EegFun.plot_topography(tf, freq_range = (4.0, 8.0), interval_selection = EegFun.times(0.0, 0.5), display_plot = false)
+        @test out2.fig isa Figure
+    end
+
+    @testset "plot_topography (single TF) - baseline correction" begin
+        tfs = _load_tf("tf_data_1.jld2")
+        tf = tfs[1]
+
+        # With baseline applied at plot time
+        out = EegFun.plot_topography(
+            tf,
+            freq_range = (8.0, 13.0),
+            interval_selection = EegFun.times(0.0, 0.5),
+            baseline_interval = (-0.5, 0.0),
+            baseline_method = :db,
+            display_plot = false,
+        )
+        @test out.fig isa Figure
+
+        # Pre-baselined data
+        tf_bl = EegFun.tf_baseline(tf, (-0.5, 0.0); method = :db)
+        out2 = EegFun.plot_topography(tf_bl, freq_range = (8.0, 13.0), display_plot = false)
+        @test out2.fig isa Figure
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # 12. plot_topography (Vector{TimeFreqData})
+    # ────────────────────────────────────────────────────────────
+    @testset "plot_topography (multi TF)" begin
+        tfs = _load_tf("tf_data_1.jld2")
+
+        # Two conditions
+        out = EegFun.plot_topography(tfs, freq_range = (8.0, 13.0), display_plot = false)
+        @test out.fig isa Figure
+
+        # Single element vector
+        out2 = EegFun.plot_topography([tfs[1]], freq_range = (8.0, 13.0), display_plot = false)
+        @test out2.fig isa Figure
+    end
+
+    @testset "plot_topography (multi TF) - baseline" begin
+        tfs = _load_tf("tf_data_1.jld2")
+
+        out = EegFun.plot_topography(
+            tfs,
+            freq_range = (4.0, 13.0),
+            baseline_interval = (-0.5, 0.0),
+            baseline_method = :percent,
+            display_plot = false,
+        )
+        @test out.fig isa Figure
+    end
+
+    @testset "plot_topography (TF) - empty/invalid" begin
+        @test_throws Exception EegFun.plot_topography(EegFun.TimeFreqData[], freq_range = (4.0, 12.0))
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # 13. plot_topo_stats (TF)
+    # ────────────────────────────────────────────────────────────
+    @testset "plot_topo_stats - analytic result" begin
+        # Load both participants
+        tfs = vcat(_load_tf("tf_data_1.jld2"), _load_tf("tf_data_2.jld2"))
+        prepared = EegFun.prepare_stats(tfs; design = :paired, condition_selection = EegFun.conditions([1, 2]))
+        result = EegFun.analytic_test(prepared)
+
+        out = EegFun.plot_topo_stats(result, freq_range = (8.0, 13.0), n_topos = 4, display_plot = false)
+        @test out.fig isa Figure
+        @test length(out.axes) == 4
+    end
+
+    @testset "plot_topo_stats - data modes" begin
+        tfs = vcat(_load_tf("tf_data_1.jld2"), _load_tf("tf_data_2.jld2"))
+        prepared = EegFun.prepare_stats(tfs; design = :paired, condition_selection = EegFun.conditions([1, 2]))
+        result = EegFun.analytic_test(prepared)
+
+        for mode in (:tvalues, :difference)
+            out = EegFun.plot_topo_stats(result, freq_range = (8.0, 13.0), n_topos = 3, topo_data = mode, display_plot = false)
+            @test out.fig isa Figure
+        end
+
+        # Invalid mode
+        @test_throws ErrorException EegFun.plot_topo_stats(result, freq_range = (8.0, 13.0), topo_data = :invalid, display_plot = false)
+    end
+
+    @testset "plot_topo_stats - invalid freq range" begin
+        tfs = vcat(_load_tf("tf_data_1.jld2"), _load_tf("tf_data_2.jld2"))
+        prepared = EegFun.prepare_stats(tfs; design = :paired, condition_selection = EegFun.conditions([1, 2]))
+        result = EegFun.analytic_test(prepared)
+
+        @test_throws ErrorException EegFun.plot_topo_stats(result, freq_range = (100.0, 200.0), display_plot = false)
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # 14. Auto-detect prepare_stats (file-based)
+    # ────────────────────────────────────────────────────────────
+    @testset "prepare_stats - auto-detect file-based" begin
+        prepared = EegFun.prepare_stats("tf_data", :paired; input_dir = TF_TEST_DIR, condition_selection = EegFun.conditions([1, 2]))
+        @test prepared isa EegFun.TFStatisticalData
+        @test length(prepared.data) == 2  # 2 conditions
+        @test size(prepared.analysis.data[1], 1) == 2  # 2 participants
+    end
+
+
 end # @testset "TF Statistics"
+
