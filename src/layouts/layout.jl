@@ -344,7 +344,7 @@ end
 
 # === DISTANCE CALCULATIONS ===
 """
-    calculate_distance_xy(x1::Real, y1::Real, x2::Real, y2::Real)
+    _distance_xy(x1::Real, y1::Real, x2::Real, y2::Real)
 
 Calculates the Euclidean distance between two points in 2D space.
 
@@ -374,7 +374,7 @@ Calculates the squared distance between two points in 2D space.
 end
 
 """
-    calculate_distance_xyz(x1::Real, y1::Real, z1::Real, x2::Real, y2::Real, z2::Real)
+    _distance_xyz(x1::Real, y1::Real, z1::Real, x2::Real, y2::Real, z2::Real)
 
 Calculates the Euclidean distance between two points in 3D space.
 
