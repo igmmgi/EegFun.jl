@@ -1,6 +1,6 @@
 # Base UI styling values
 const BASE_FONTS = (label = 20, button = 18, textbox = 16)
-const BASE_SIZES = (input_width = 160, input_height = 22)
+const BASE_SIZES = (input_width = 160, input_height = 30)
 
 # UI styling parameters struct with defaults
 struct UIStyle
@@ -27,7 +27,8 @@ function _create_select_button(parent, label, style::UIStyle)
     )
 end
 
-function _create_textbox(parent, style::UIStyle; width = nothing, placeholder = "")
+function _create_textbox(parent, style::UIStyle; width = nothing, placeholder = "", boxcolor_obs = nothing)
+    bc = isnothing(boxcolor_obs) ? Observable(:white) : boxcolor_obs
     Textbox(
         parent,
         placeholder = placeholder,
@@ -35,7 +36,7 @@ function _create_textbox(parent, style::UIStyle; width = nothing, placeholder = 
         width = isnothing(width) ? style.input_width : width,
         height = style.input_height,
         halign = :center,
-        boxcolor = :white,
+        boxcolor = bc,
         cornerradius = 0,
     )
 end
@@ -74,19 +75,22 @@ Interactive GUI for quick data plotting and visualization.
 **Column 1: File & Plot Selection**
 - Directory and file browser
 - Plot type dropdown with hierarchical submenus:
-  - Common plots: Data Browser, Epochs, ERP, ERP Image, Topography, GFP
-  - Time-Frequency >: Time-Frequency Analysis, Power Spectrum
-  - ICA >: ICA Components  
-  - Diagnostic Plots >: Artifact Detection, Triggers, Correlation, Layout View, Filter Response
+  - Common plots: Data Browser, Epochs, ERP, ERP Image, Topography
+  - Time-Frequency >: Time-Frequency, Power Spectrum
+  - ICA >: ICA Components
+  - ERP Analysis >: ERP Measurement GUI
+  - Diagnostic Plots >: Artifact Detection, Triggers, Channel Summary,
+    Joint Probability, Correlation Heatmap, Global Field Power,
+    Layout View, Filter Response
 
 **Column 2: Data Selection & Layout**
-- Participant, Condition, Epoch filters
+- Participant, Condition, Epoch filters (integers, space/comma-separated)
 - Layout type: Single, Single Avg, Grid, Topo
 - Channel selection with multi-select support
 
 **Column 3: Axis Settings**
-- X, Y, Z axis limits
-- Baseline correction settings
+- X, Y, Z axis limits (validated numeric input with range checking)
+- Baseline correction window and type
 - Display options (invert Y-axis)
 
 # Supported Plot Types
@@ -108,7 +112,7 @@ function plot_gui()
 
     # main figure window, layout, and UI style
     _set_window_title("PLOT GUI")
-    gui_fig = Figure(size = (650, 550), title = "Plot GUI", backgroundcolor = :lightgrey, figure_padding = (20, 20, 20, 20))
+    gui_fig = Figure(size = (650, 650), title = "Plot GUI", backgroundcolor = :lightgrey, figure_padding = (20, 20, 20, 20))
     main_layout = GridLayout(gui_fig[1, 1:3], rowgap = 2, colgap = 4)
     ui_style = UIStyle()
 
@@ -128,12 +132,10 @@ function plot_gui()
     layout_label_text = Observable("File: ")
     _create_label(main_layout[6, 1], layout_label_text, ui_style, fontsize = ui_style.textbox_font, color = :gray)
 
-    # File Filter Section
-    _create_label(main_layout[7, 1], "File Filter", ui_style)
-    _create_textbox(main_layout[8, 1], ui_style)
+    # Plot Type Section (row 7-8 reserved for future use)
 
     # Plot Type Section
-    _create_label(main_layout[9, 1], "Plot Type", ui_style)
+    _create_label(main_layout[7, 1], "Plot Type", ui_style)
     plottype_options = [
         "Select",
         "Data Browser",
@@ -141,29 +143,34 @@ function plot_gui()
         "ERP",
         "ERP Image",
         "Topography",
-        "Global Field Power",
         "─────────────────",  # Visual separator
         "Time-Frequency >",
         "ICA >",
+        "ERP Analysis >",
         "Diagnostic Plots >",
     ]
-    plottype_dropdown = _create_menu(main_layout[10, 1], ui_style, options = plottype_options)
+    plottype_dropdown = _create_menu(main_layout[8, 1], ui_style, options = plottype_options)
 
     # Submenu dropdown (starts with placeholder to appear inactive)
-    submenu_dropdown = _create_menu(main_layout[11, 1], ui_style, options = ["---"])
+    submenu_dropdown = _create_menu(main_layout[9, 1], ui_style, options = ["---"])
 
     # Column 2: Participant, Condition, Epoch, Channels
+    # Create boxcolor Observables for validated inputs
+    participant_bc = Observable(:white)
+    condition_bc = Observable(:white)
+    epoch_bc = Observable(:white)
+
     # Participant Section
     _create_label(main_layout[1, 2], "Participant", ui_style)
-    participant_input = _create_textbox(main_layout[2, 2], ui_style)
+    participant_input = _create_textbox(main_layout[2, 2], ui_style, boxcolor_obs = participant_bc)
 
     # Condition Section
     _create_label(main_layout[3, 2], "Condition", ui_style)
-    condition_input = _create_textbox(main_layout[4, 2], ui_style)
+    condition_input = _create_textbox(main_layout[4, 2], ui_style, boxcolor_obs = condition_bc)
 
     # Epoch Section
     _create_label(main_layout[5, 2], "Epoch", ui_style)
-    epoch_input = _create_textbox(main_layout[6, 2], ui_style)
+    epoch_input = _create_textbox(main_layout[6, 2], ui_style, boxcolor_obs = epoch_bc)
 
     # Layout Section (replaces Channel(s) and Average Channels)
     _create_label(main_layout[7, 2], "Layout", ui_style)
@@ -178,29 +185,39 @@ function plot_gui()
     _create_label(main_layout[11, 2], selected_channels_text, ui_style, fontsize = ui_style.textbox_font, color = :gray)
 
     # Column 3: Axis Settings
+    # Create boxcolor Observables for validated inputs
+    xmin_bc = Observable(:white)
+    xmax_bc = Observable(:white)
+    ymin_bc = Observable(:white)
+    ymax_bc = Observable(:white)
+    zmin_bc = Observable(:white)
+    zmax_bc = Observable(:white)
+    bl_start_bc = Observable(:white)
+    bl_end_bc = Observable(:white)
+
     # X Limits Section
     _create_label(main_layout[1, 3], "X Limits", ui_style, fontsize = ui_style.textbox_font)
     x_limits_layout = GridLayout(main_layout[2, 3], tellwidth = false, colgap = 8)
-    xmin_input = _create_textbox(x_limits_layout[1, 1], ui_style, width = 80)
-    xmax_input = _create_textbox(x_limits_layout[1, 2], ui_style, width = 80)
+    xmin_input = _create_textbox(x_limits_layout[1, 1], ui_style, width = 80, boxcolor_obs = xmin_bc)
+    xmax_input = _create_textbox(x_limits_layout[1, 2], ui_style, width = 80, boxcolor_obs = xmax_bc)
 
     # Y Limits Section
     _create_label(main_layout[3, 3], "Y Limits", ui_style, fontsize = ui_style.textbox_font)
     y_limits_layout = GridLayout(main_layout[4, 3], tellwidth = false, colgap = 8)
-    ymin_input = _create_textbox(y_limits_layout[1, 1], ui_style, width = 80)
-    ymax_input = _create_textbox(y_limits_layout[1, 2], ui_style, width = 80)
+    ymin_input = _create_textbox(y_limits_layout[1, 1], ui_style, width = 80, boxcolor_obs = ymin_bc)
+    ymax_input = _create_textbox(y_limits_layout[1, 2], ui_style, width = 80, boxcolor_obs = ymax_bc)
 
     # Z Limits Section (currently unused, but kept for future use)
     _create_label(main_layout[5, 3], "Z Limits", ui_style, fontsize = ui_style.textbox_font)
     z_limits_layout = GridLayout(main_layout[6, 3], tellwidth = false, colgap = 8)
-    zmin_input = _create_textbox(z_limits_layout[1, 1], ui_style, width = 80)
-    zmax_input = _create_textbox(z_limits_layout[1, 2], ui_style, width = 80)
+    zmin_input = _create_textbox(z_limits_layout[1, 1], ui_style, width = 80, boxcolor_obs = zmin_bc)
+    zmax_input = _create_textbox(z_limits_layout[1, 2], ui_style, width = 80, boxcolor_obs = zmax_bc)
 
     # Baseline Section
     _create_label(main_layout[7, 3], "Baseline", ui_style, fontsize = ui_style.textbox_font)
     baseline_layout = GridLayout(main_layout[8, 3], tellwidth = false, colgap = 8)
-    baseline_start = _create_textbox(baseline_layout[1, 1], ui_style, width = 80)
-    baseline_end = _create_textbox(baseline_layout[1, 2], ui_style, width = 80)
+    baseline_start = _create_textbox(baseline_layout[1, 1], ui_style, width = 80, boxcolor_obs = bl_start_bc)
+    baseline_end = _create_textbox(baseline_layout[1, 2], ui_style, width = 80, boxcolor_obs = bl_end_bc)
 
     # Baseline Type
     _create_label(main_layout[9, 3], "Baseline Type TF", ui_style, fontsize = ui_style.textbox_font)
@@ -240,11 +257,11 @@ function plot_gui()
         layout_file = Observable(""),
         layout_object = Observable{Any}(nothing),
         electrodes = Observable(String[]),
-        xlim = Observable((nothing, nothing)),
-        ylim = Observable((nothing, nothing)),
-        zlim = Observable((nothing, nothing)),
-        baseline_start = Observable(nothing),
-        baseline_end = Observable(nothing),
+        xlim = Observable{Tuple{Union{Nothing,Float64},Union{Nothing,Float64}}}((nothing, nothing)),
+        ylim = Observable{Tuple{Union{Nothing,Float64},Union{Nothing,Float64}}}((nothing, nothing)),
+        zlim = Observable{Tuple{Union{Nothing,Float64},Union{Nothing,Float64}}}((nothing, nothing)),
+        baseline_start = Observable{Union{Nothing,Float64}}(nothing),
+        baseline_end = Observable{Union{Nothing,Float64}}(nothing),
         baseline_type = Observable("select"),
         layout_type = Observable("single"),
         average_channels = Observable(false),
@@ -254,54 +271,108 @@ function plot_gui()
         channel_menu = channel_menu,
     )
 
+    # Plot type dispatch table
+    plot_dispatch = Dict{String,Function}(
+        "Data Browser"        => gs -> _plot_databrowser(gs),
+        "Epochs"              => gs -> _plot_epochs(gs),
+        "ERP"                 => gs -> _plot_erp(gs),
+        "ERP Image"           => gs -> _plot_erp_image(gs),
+        "Topography"          => gs -> _plot_topography(gs),
+        "Global Field Power"  => gs -> _plot_gfp(gs),
+        "Time-Frequency"      => gs -> _plot_time_frequency(gs),
+        "Power Spectrum"      => gs -> _plot_power_spectrum(gs),
+        "ICA Components"      => gs -> _plot_ica(gs),
+        "ERP Measurement GUI" => gs -> _plot_erp_measurement_gui(gs),
+        "Filter Response"     => gs -> _plot_filter(gs),
+        "Artifact Detection"  => gs -> _plot_artifacts(gs),
+        "Triggers"            => gs -> _plot_triggers(gs),
+        "Correlation Heatmap" => gs -> _plot_correlation(gs),
+        "Channel Summary"     => gs -> _plot_channel_summary(gs),
+        "Joint Probability"   => gs -> _plot_joint_probability(gs),
+        "Layout View"         => gs -> _plot_layout(gs),
+    )
+
     function plot()
         plot_type = gui_state.plottype[]
         # Skip placeholder and separator options
-        if plot_type == "Select" || startswith(plot_type, "─")
+        if plot_type == "Select" || startswith(plot_type, "─") || plot_type == "select"
             return
         end
-        if plot_type == "Data Browser"
-            _plot_databrowser(gui_state)
-        elseif startswith(plot_type, "Epochs")
-            _plot_epochs(gui_state)
-        elseif startswith(plot_type, "ERP Image")
-            _plot_erp_image(gui_state)
-        elseif startswith(plot_type, "ERP")
-            _plot_erp(gui_state)
-        elseif plot_type == "Topography"
-            _plot_topography(gui_state)
-        elseif plot_type == "Global Field Power"
-            _plot_gfp(gui_state)
-        elseif plot_type == "Time-Frequency"
-            _plot_time_frequency(gui_state)
-        elseif plot_type == "Power Spectrum"
-            _plot_power_spectrum(gui_state)
-        elseif plot_type == "ICA Components"
-            _plot_ica(gui_state)
-        elseif plot_type == "Filter Response"
-            _plot_filter(gui_state)
-        elseif plot_type == "Artifact Detection"
-            _plot_artifacts(gui_state)
-        elseif plot_type == "Triggers"
-            _plot_triggers(gui_state)
-        elseif plot_type == "Correlation Heatmap"
-            _plot_correlation(gui_state)
-        elseif plot_type == "Layout View"
-            _plot_layout(gui_state)
+        handler = get(plot_dispatch, plot_type, nothing)
+        if !isnothing(handler)
+            handler(gui_state)
         else
-            println("Error: Unsupported plot type: $plot_type")
+            @minimal_warning "Unsupported plot type: $plot_type"
         end
     end
 
-    # Helper function for limit input callbacks
-    function setup_limit_callback(input, limit_observable, position::Symbol)
+    # Helper function for numeric input validation with visual feedback
+    function setup_numeric_callback(input, bc_obs::Observable, field_name::String, update_fn::Function; range_check = nothing)
+        function validate(value)
+            stripped = strip(value)
+            if isempty(stripped)
+                bc_obs[] = :white
+                update_fn(nothing)
+            else
+                parsed = tryparse(Float64, stripped)
+                if isnothing(parsed)
+                    bc_obs[] = :lightcoral
+                    @minimal_warning "Invalid $field_name value: \"$stripped\" (must be a number)"
+                else
+                    bc_obs[] = :white
+                    update_fn(parsed)
+                end
+            end
+            # Run range check after updating value
+            !isnothing(range_check) && range_check()
+        end
+
+        # Validate on Enter
         on(input.stored_string) do value
-            parsed_value = tryparse(Float64, value)
-            current = limit_observable[]
-            new_tuple = position == :min ? (parsed_value, current[2]) : (current[1], parsed_value)
-            limit_observable[] = new_tuple
+            validate(value)
+        end
+
+        # Validate on defocus (clicking away)
+        on(input.focused) do is_focused
+            if !is_focused
+                validate(input.displayed_string[])
+            end
         end
     end
+
+    # Range validation: if both values are set and min >= max, both boxes turn red
+    function check_range(limit_obs, min_bc, max_bc, label)
+        lo, hi = limit_obs[]
+        if !isnothing(lo) && !isnothing(hi) && lo >= hi
+            min_bc[] = :lightcoral
+            max_bc[] = :lightcoral
+            @minimal_warning "Invalid $label range: min ($lo) must be less than max ($hi)"
+        end
+    end
+
+    # Set up X/Y/Z limit callbacks with range checks
+    x_check = () -> check_range(gui_state.xlim, xmin_bc, xmax_bc, "X Limits")
+    y_check = () -> check_range(gui_state.ylim, ymin_bc, ymax_bc, "Y Limits")
+    z_check = () -> check_range(gui_state.zlim, zmin_bc, zmax_bc, "Z Limits")
+    bl_check = () -> begin
+        s, e = gui_state.baseline_start[], gui_state.baseline_end[]
+        if !isnothing(s) && !isnothing(e) && s >= e
+            bl_start_bc[] = :lightcoral
+            bl_end_bc[] = :lightcoral
+            @minimal_warning "Invalid Baseline range: start ($s) must be less than end ($e)"
+        end
+    end
+
+    setup_numeric_callback(xmin_input, xmin_bc, "X min", v -> gui_state.xlim[] = (v, gui_state.xlim[][2]); range_check = x_check)
+    setup_numeric_callback(xmax_input, xmax_bc, "X max", v -> gui_state.xlim[] = (gui_state.xlim[][1], v); range_check = x_check)
+    setup_numeric_callback(ymin_input, ymin_bc, "Y min", v -> gui_state.ylim[] = (v, gui_state.ylim[][2]); range_check = y_check)
+    setup_numeric_callback(ymax_input, ymax_bc, "Y max", v -> gui_state.ylim[] = (gui_state.ylim[][1], v); range_check = y_check)
+    setup_numeric_callback(zmin_input, zmin_bc, "Z min", v -> gui_state.zlim[] = (v, gui_state.zlim[][2]); range_check = z_check)
+    setup_numeric_callback(zmax_input, zmax_bc, "Z max", v -> gui_state.zlim[] = (gui_state.zlim[][1], v); range_check = z_check)
+
+    # Set up baseline callbacks with range check
+    setup_numeric_callback(baseline_start, bl_start_bc, "Baseline start", v -> gui_state.baseline_start[] = v; range_check = bl_check)
+    setup_numeric_callback(baseline_end, bl_end_bc, "Baseline end", v -> gui_state.baseline_end[] = v; range_check = bl_check)
 
     # Connect callbacks
     # Open file picker when Select File button is clicked
@@ -319,34 +390,35 @@ function plot_gui()
         if selection == "Select" || selection == "─────────────────"
             return
         elseif selection == "Time-Frequency >"
-            # Show submenu with time-frequency plot options
             submenu_dropdown.options = ["Select", "Time-Frequency", "Power Spectrum"]
             gui_state.submenu_active[] = true
             gui_state.submenu_type[] = "timefreq"
-        elseif selection == "Diagnostic Plots >"
         elseif selection == "ICA >"
-            # Show submenu with ICA plot options
             submenu_dropdown.options = ["Select", "ICA Components"]
             gui_state.submenu_active[] = true
             gui_state.submenu_type[] = "ica"
-            # Show submenu with diagnostic plot options
-            submenu_dropdown.options = ["Select", "Artifact Detection", "Triggers", "Correlation Heatmap", "Layout View", "Filter Response"]
+        elseif selection == "ERP Analysis >"
+            submenu_dropdown.options = ["Select", "ERP Measurement GUI"]
+            gui_state.submenu_active[] = true
+            gui_state.submenu_type[] = "erp_analysis"
+        elseif selection == "Diagnostic Plots >"
+            submenu_dropdown.options = [
+                "Select",
+                "Artifact Detection",
+                "Triggers",
+                "Channel Summary",
+                "Joint Probability",
+                "Correlation Heatmap",
+                "Global Field Power",
+                "Layout View",
+                "Filter Response",
+            ]
             gui_state.submenu_active[] = true
             gui_state.submenu_type[] = "diagnostic"
-        elseif selection == "Data Browser" || selection == "Topography" || selection == "Global Field Power"
-            # Direct plot types without layout variants
-            gui_state.plottype[] = selection
-            gui_state.submenu_active[] = false
-        elseif selection == "Epochs" || selection == "ERP" || selection == "ERP Image"
-            # Plot types that support layout variants
-            gui_state.plottype[] = selection
-            gui_state.submenu_active[] = false
-            # Keep submenu showing previous selection
         else
-            # Fallback for any other selections
+            # Direct plot type (Data Browser, Epochs, ERP, etc.)
             gui_state.plottype[] = selection
             gui_state.submenu_active[] = false
-            # Keep submenu showing previous selection
         end
     end
 
@@ -378,9 +450,9 @@ function plot_gui()
                 layout = read_layout(filename)
                 gui_state.layout_object[] = layout
                 channel_menu.options = vcat(["Select"], string.(channel_labels(layout)))
-                println("Loaded layout with $(length(channel_labels(layout))) channels")
+                @info "Loaded layout with $(length(channel_labels(layout))) channels"
             catch layout_error
-                println("Error loading layout: $layout_error")
+                @minimal_warning "Error loading layout: $layout_error"
                 gui_state.layout_object[] = nothing
             end
         end
@@ -407,17 +479,42 @@ function plot_gui()
         update_selected_channels_display()
     end
 
-    on(participant_input.stored_string) do value
-        gui_state.participant[] = value
+    # Multi-number validation helper (accepts space/comma-separated integers)
+    function setup_multi_int_callback(input, bc_obs::Observable, field_name::String, state_obs::Observable)
+        function validate(value)
+            stripped = strip(value)
+            if isempty(stripped)
+                bc_obs[] = :white
+                state_obs[] = ""
+            else
+                # Split on spaces, commas, or both
+                tokens = filter(!isempty, split(stripped, r"[\s,]+"))
+                parsed = [tryparse(Int, t) for t in tokens]
+                if any(isnothing, parsed)
+                    bc_obs[] = :lightcoral
+                    @minimal_warning "Invalid $field_name value: \"$stripped\" (must be integers, e.g. 1 2 3)"
+                else
+                    bc_obs[] = :white
+                    state_obs[] = stripped
+                end
+            end
+        end
+
+        on(input.stored_string) do value
+            validate(value)
+        end
+
+        on(input.focused) do is_focused
+            if !is_focused
+                validate(input.displayed_string[])
+            end
+        end
     end
 
-    on(condition_input.stored_string) do value
-        gui_state.condition[] = value
-    end
+    setup_multi_int_callback(participant_input, participant_bc, "Participant", gui_state.participant)
+    setup_multi_int_callback(condition_input, condition_bc, "Condition", gui_state.condition)
+    setup_multi_int_callback(epoch_input, epoch_bc, "Epoch", gui_state.epoch)
 
-    on(epoch_input.stored_string) do value
-        gui_state.epoch[] = value
-    end
 
     # Plot option callbacks
 
@@ -433,12 +530,6 @@ function plot_gui()
             directory_label_text[] = "Dir: " * _truncate_path(String(strip(dir_path)))
         end
     end
-
-    # Set up limit input callbacks using helper function
-    setup_limit_callback(xmin_input, gui_state.xlim, :min)
-    setup_limit_callback(xmax_input, gui_state.xlim, :max)
-    setup_limit_callback(ymin_input, gui_state.ylim, :min)
-    setup_limit_callback(ymax_input, gui_state.ylim, :max)
 
     on(plot_button.clicks) do _
         plot()
@@ -458,38 +549,43 @@ function _plot_databrowser(gui_state)
     # Check if we have the required files
     gui_state.filename[] == "" && @minimal_error "Error: No file specified!"
 
-    # Read data file (could be BDF or other format)
-    file_ext = lowercase(splitext(gui_state.filename[])[2])  # [2] is the extension (with dot)
-    if file_ext ∉ [".bdf"]
-        @minimal_error "Error: Unsupported file format"
+    file_ext = lowercase(splitext(gui_state.filename[])[2])
+    if file_ext ∉ [".bdf", ".jld2"]
+        @minimal_error "Error: Data Browser supports BDF and JLD2 formats"
     end
 
     try
-
-        layout = nothing
-        if gui_state.layout_file[] != ""
-            layout = read_layout(gui_state.layout_file[])
-            polar_to_cartesian_xy!(layout)
-        end
-
-        dat = read_raw_data(gui_state.filename[])
-        if isnothing(layout)
-            dat = create_eegfun_data(dat)
+        if file_ext == ".jld2"
+            # Load from JLD2 — supports continuous, epoch, and ERP data
+            @async begin
+                new_screen = GLMakie.Screen()
+                plot_databrowser(gui_state.filename[]; screen = new_screen)
+            end
         else
-            dat = create_eegfun_data(dat, layout)
-        end
+            # Load from BDF
+            layout = nothing
+            if gui_state.layout_file[] != ""
+                layout = read_layout(gui_state.layout_file[])
+                polar_to_cartesian_xy!(layout)
+            end
 
-        # Update electrode menu with actual channel labels from the loaded data
-        gui_state.channel_menu.options = vcat(["Select"], string.(channel_labels(dat)))
+            dat = read_raw_data(gui_state.filename[])
+            if isnothing(layout)
+                dat = create_eegfun_data(dat)
+            else
+                dat = create_eegfun_data(dat, layout)
+            end
 
-        # Create a new screen/window for the plot
-        @async begin
-            new_screen = GLMakie.Screen()
-            plot_databrowser(dat; screen = new_screen)
+            # Update electrode menu with actual channel labels from the loaded data
+            gui_state.channel_menu.options = vcat(["Select"], string.(channel_labels(dat)))
+
+            @async begin
+                new_screen = GLMakie.Screen()
+                plot_databrowser(dat; screen = new_screen)
+            end
         end
     catch e
-        println("Error creating EEG plot: $e")
-        showerror(stdout, e, catch_backtrace())
+        _handle_plot_error(e, "Data Browser")
     end
 end
 
@@ -525,8 +621,7 @@ function _plot_epochs(gui_state)
             )
         end
     catch e
-        println("Error creating epochs plot: $e")
-        showerror(stdout, e, catch_backtrace())
+        _handle_plot_error(e, "Epochs")
     end
 end
 
@@ -565,8 +660,7 @@ function _plot_erp(gui_state)
             )
         end
     catch e
-        println("Error creating ERP plot: $e")
-        showerror(stdout, e, catch_backtrace())
+        _handle_plot_error(e, "ERP")
     end
 end
 
@@ -609,7 +703,6 @@ function _plot_topography(gui_state)
             end
         end
     catch e
-        println("Error creating topography plot: $e")
-        showerror(stdout, e, catch_backtrace())
+        _handle_plot_error(e, "Topography")
     end
 end

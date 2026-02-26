@@ -2,12 +2,13 @@
 # The `public` keyword marks names as part of the public API without
 # exporting them into the user's namespace (no namespace clash risk).
 # Internal functions are prefixed with _ and are not listed here.
+# Internal types (state machines, GUI state, buffers) are NOT listed here
+# but remain accessible via EegFun.TypeName if needed.
 # Alphabetically sorted within each category.
 
 # =====================
-# Types
+# Types — User-facing data, result, and config types
 # =====================
-public AbstractDataState
 public AnalysisData
 public AnalysisSettings
 public AnalyticResult
@@ -17,16 +18,12 @@ public BaselineInfo
 public BatchConfig
 public BatchResult
 public ChannelRepairInfo
-public ChannelState
 public Cluster
 public ClusterInfo
 public Clusters
 public Component
-public ConfigParameter
 public ContinuousData
-public ContinuousDataState
 public ContinuousRepairInfo
-public DataBrowserState
 public DecodedData
 public DecodingParameters
 public DecodingStatisticsResult
@@ -35,10 +32,8 @@ public EegData
 public EegFunData
 public EogConfig
 public EpochData
-public EpochedDataState
 public EpochInfo
 public EpochRejectionInfo
-public EpochRejectionState
 public EpochRepairInfo
 public ErpData
 public ErpMeasurementsResult
@@ -46,33 +41,23 @@ public ExtraChannelInfo
 public FilterConfig
 public FilterInfo
 public FilterSection
-public FilterState
-public IcaComponentState
 public IcaConfig
 public IcaPrms
 public InfoIca
 public Interval
 public Layout
-public LoggingState
 public Marker
-public Masks
 public MultiDataFrameEeg
 public Neighbours
 public NoiseCeiling
 public PermutationDistribution
 public PermutationResult
-public PipelineTemplateOptions
-public PlotHelpInfo
-public PlotLayout
 public PreprocessConfig
 public Rejection
 public RsaData
-public SelectionState
-public SharedSelectionState
 public SingleDataFrameEeg
 public SpectrumData
 public StatisticalData
-public StatMatrix
 public StatsResult
 public TemporalCluster
 public TestInfo
@@ -81,19 +66,12 @@ public TFAnalyticResult
 public TFCluster
 public TFClusterPermutationResult
 public TFClusters
-public TFMasks
 public TFStatisticalData
-public TFStatMatrix
 public TFStatsResult
 public TimeFreqData
 public TimeFreqEpochData
-public ToggleConfig
-public TopoSelectionState
 public TriggerInfo
 public TTestResult
-public UIStyle
-public ViewState
-public WorkArrays
 public ZScoreRejectionInfo
 
 # =====================
@@ -397,19 +375,14 @@ public plot_trigger_overview
 public plot_trigger_timing
 
 # =====================
-# Plot helpers
+# Plot helpers (user-facing selection helpers)
 # =====================
 public add_topo_rois
 public add_topo_rois!
-public add_zscore_columns
-public combine_boolean_columns
-public get_plot_help_info
 public get_selected_channels
 public get_selected_conditions
 public get_selected_epochs
 public get_selected_samples
-public print_plot_help
-public show_plot_help
 
 # =====================
 # Logging

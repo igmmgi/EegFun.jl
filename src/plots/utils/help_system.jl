@@ -12,11 +12,11 @@ struct PlotHelpInfo
 end
 
 """
-    get_plot_help_info(plot_type::Symbol) -> PlotHelpInfo
+    _get_plot_help_info(plot_type::Symbol) -> PlotHelpInfo
 
 Get help information for a specific plot type.
 """
-function get_plot_help_info(plot_type::Symbol)::PlotHelpInfo
+function _get_plot_help_info(plot_type::Symbol)::PlotHelpInfo
     help_info = Dict(
         :erp => PlotHelpInfo(
             "ERP Plot",
@@ -112,12 +112,12 @@ function get_plot_help_info(plot_type::Symbol)::PlotHelpInfo
 end
 
 """
-    print_plot_help(plot_type::Symbol)
+    _print_plot_help(plot_type::Symbol)
 
 Print help information for a specific plot type to the console.
 """
-function print_plot_help(plot_type::Symbol)
-    help_info = get_plot_help_info(plot_type)
+function _print_plot_help(plot_type::Symbol)
+    help_info = _get_plot_help_info(plot_type)
 
     # If no interactions, do nothing
     if isempty(help_info.interactions)
@@ -151,7 +151,7 @@ function _setup_help_interaction!(fig::Figure, plot_type::Symbol)
                 help_visible[] = false
             else
                 # Show help
-                print_plot_help(plot_type)
+                _print_plot_help(plot_type)
                 help_visible[] = true
             end
         end
@@ -159,10 +159,10 @@ function _setup_help_interaction!(fig::Figure, plot_type::Symbol)
 end
 
 """
-    show_plot_help(plot_type::Symbol)
+    _show_plot_help(plot_type::Symbol)
 
 Convenience function to show help for a plot type without setting up interaction.
 """
-function show_plot_help(plot_type::Symbol)
-    print_plot_help(plot_type)
+function _show_plot_help(plot_type::Symbol)
+    _print_plot_help(plot_type)
 end

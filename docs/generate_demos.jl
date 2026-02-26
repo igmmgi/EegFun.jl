@@ -40,6 +40,7 @@ demos = [
 
     # Statistics
     ("statistics", "statistics", "Statistics"),
+    ("statistics", "tf_stats_test", "TF Statistics"),
     ("statistics", "decoding", "Decoding"),
     ("statistics", "rsa", "RSA"),
 
@@ -47,6 +48,7 @@ demos = [
     ("time_frequency", "tf_morlet", "TF Morlet"),
     ("time_frequency", "tf_multitaper", "TF Multitaper"),
     ("time_frequency", "tf_stft", "TF STFT"),
+    ("time_frequency", "tf_operations", "TF Operations"),
 
     # Plotting
     ("plotting", "plot_artifacts", "Plot Artifacts"),

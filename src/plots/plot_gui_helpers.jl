@@ -108,35 +108,75 @@ function _plot_power_spectrum(gui_state)
 end
 
 function _plot_ica(gui_state)
-    @minimal_error "Error: ICA Components plot requires ICA results.\nPlease load a file with ICA decomposition data."
+    _validate_file(gui_state, ".jld2")
+
+    try
+        data = read_data(gui_state.filename[])
+        isnothing(data) && @minimal_error "Error: No ICA data found in file"
+
+        @async begin
+            plot_topography(data)
+        end
+    catch e
+        _handle_plot_error(e, "ICA Components")
+    end
 end
 
 function _plot_filter(gui_state)
-    @minimal_error "Error: Filter Response plot requires filter parameters.\nThis feature is not yet implemented in the GUI."
+    _validate_file(gui_state, ".jld2")
+
+    try
+        data = read_data(gui_state.filename[])
+        isnothing(data) && @minimal_error "Error: No data found in file"
+
+        @async begin
+            plot_filter(data)
+        end
+    catch e
+        _handle_plot_error(e, "Filter Response")
+    end
 end
 
 function _plot_artifacts(gui_state)
-    @minimal_error "Error: Artifact Detection plot requires pre-detected artifacts.\nPlease run artifact detection first and save the results."
+    _validate_file(gui_state, ".jld2")
+
+    try
+        data = read_data(gui_state.filename[])
+        isnothing(data) && @minimal_error "Error: No data found in file"
+
+        @async begin
+            plot_artifact_detection(data)
+        end
+    catch e
+        _handle_plot_error(e, "Artifact Detection")
+    end
 end
 
 function _plot_triggers(gui_state)
     gui_state.filename[] == "" && @minimal_error "Error: No file specified!"
-    gui_state.layout_file[] == "" && @minimal_error "Error: No layout file selected!"
 
     file_ext = lowercase(splitext(gui_state.filename[])[2])
-    if file_ext ∉ [".bdf"]
-        @minimal_error "Error: Trigger plot currently only supports BDF format"
-    end
 
     try
-        layout = read_layout(gui_state.layout_file[])
-        polar_to_cartesian_xy!(layout)
+        if file_ext == ".jld2"
+            data = read_data(gui_state.filename[])
+            isnothing(data) && @minimal_error "Error: No data found in file"
 
-        dat = read_raw_data(gui_state.filename[])
-        dat = create_eegfun_data(dat, layout)
+            @async begin
+                plot_trigger_overview(data)
+            end
+        elseif file_ext == ".bdf"
+            gui_state.layout_file[] == "" && @minimal_error "Error: No layout file selected!"
+            layout = read_layout(gui_state.layout_file[])
+            polar_to_cartesian_xy!(layout)
+            dat = read_raw_data(gui_state.filename[])
+            dat = create_eegfun_data(dat, layout)
 
-        @async begin
-            plot_trigger_overview(dat)
+            @async begin
+                plot_trigger_overview(dat)
+            end
+        else
+            @minimal_error "Error: Trigger plot supports BDF and JLD2 formats"
         end
     catch e
         _handle_plot_error(e, "Triggers")
@@ -155,6 +195,51 @@ function _plot_correlation(gui_state)
         end
     catch e
         _handle_plot_error(e, "Correlation Heatmap")
+    end
+end
+
+function _plot_channel_summary(gui_state)
+    _validate_file(gui_state, ".jld2")
+
+    try
+        data = read_data(gui_state.filename[])
+        isnothing(data) && @minimal_error "Error: No data found in file"
+
+        @async begin
+            plot_channel_summary(data)
+        end
+    catch e
+        _handle_plot_error(e, "Channel Summary")
+    end
+end
+
+function _plot_joint_probability(gui_state)
+    _validate_file(gui_state, ".jld2")
+
+    try
+        data = read_data(gui_state.filename[])
+        isnothing(data) && @minimal_error "Error: No data found in file"
+
+        @async begin
+            plot_joint_probability(data)
+        end
+    catch e
+        _handle_plot_error(e, "Joint Probability")
+    end
+end
+
+function _plot_erp_measurement_gui(gui_state)
+    _validate_file(gui_state, ".jld2")
+
+    try
+        data = read_data(gui_state.filename[])
+        isnothing(data) && @minimal_error "Error: No ERP data found in file"
+
+        @async begin
+            plot_erp_measurement_gui(data)
+        end
+    catch e
+        _handle_plot_error(e, "ERP Measurement GUI")
     end
 end
 

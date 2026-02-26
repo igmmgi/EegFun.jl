@@ -1195,7 +1195,7 @@ function _handle_keyboard_events!(fig, ax, state)
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press && event.key == Keyboard.i
             # Show help for databrowser
-            show_plot_help(:databrowser)
+            _show_plot_help(:databrowser)
         elseif event.action == Keyboard.press && event.key == Keyboard.r
             # Open channel repair menu
             _show_channel_repair_menu(state, ax)
