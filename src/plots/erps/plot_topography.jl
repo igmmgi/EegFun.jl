@@ -841,23 +841,6 @@ function _data_interpolation_topo_spherical_spline(dat::Vector{<:AbstractFloat},
     return result
 end
 
-# Legendre polynomial calculation using iterative method
-function _legendre_polynomial(n::Int, x::Float64)
-    n == 0 && return 1.0
-    n == 1 && return x
-
-    p_prev = 1.0  # P_0
-    p_curr = x    # P_1
-
-    for i = 2:n
-        p_next = ((2i - 1) * x * p_curr - (i - 1) * p_prev) / i
-        p_prev = p_curr
-        p_curr = p_next
-    end
-
-    return p_curr
-
-end
 
 # Optimized Legendre polynomial series evaluation using recurrence
 # Pre-calculate recurrence coefficients to avoid divisions in the inner loop
@@ -908,18 +891,6 @@ function _get_g_factors(n_legendre_terms::Int = 15)
     return _G_FACTORS_CACHE[n_legendre_terms]::Vector{Float64}
 end
 
-# MNE-Python's exact g-function calculation for EEG topography (m=4)
-function _calc_g_function(cosang::Float64, n_legendre_terms::Int = 15)
-    """Calculate spherical spline g function between points on a sphere.
-
-    This is the exact implementation from MNE-Python, optimized for EEG topography (m=4).
-    """
-    cosang ≈ 1.0 && return 0.0
-
-    # Use cached factors and Legendre evaluation
-    factors = _get_g_factors(n_legendre_terms)
-    return _legendre_val(cosang, factors)
-end
 
 # MNE-Python's exact G matrix calculation for EEG topography (m=4)
 function _calc_g_matrix(cosang::Matrix{Float64}, n_legendre_terms::Int = 15)
