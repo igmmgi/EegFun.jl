@@ -131,8 +131,8 @@ using EegFun
         @test size(count_df, 1) == 2  # 2 channels
 
         # Test that channel Ch2 has more extreme values than Ch1
-        Ch1_count = count_df[count_df.channel.==:Ch1, :n_extreme][1]
-        Ch2_count = count_df[count_df.channel.==:Ch2, :n_extreme][1]
+        Ch1_count = count_df[count_df.channel .== :Ch1, :n_extreme][1]
+        Ch2_count = count_df[count_df.channel .== :Ch2, :n_extreme][1]
         @test Ch2_count > Ch1_count
 
         # Test with channel selection (separate mode)
@@ -883,8 +883,8 @@ using EegFun
         @test size(count_df, 1) == 2  # 2 channels
 
         # Ch1 should have 0 steps, Ch2 should have some
-        Ch1_count = count_df[count_df.channel.==:Ch1, :n_step][1]
-        Ch2_count = count_df[count_df.channel.==:Ch2, :n_step][1]
+        Ch1_count = count_df[count_df.channel .== :Ch1, :n_step][1]
+        Ch2_count = count_df[count_df.channel .== :Ch2, :n_step][1]
         @test Ch1_count == 0
         @test Ch2_count > 0
 
