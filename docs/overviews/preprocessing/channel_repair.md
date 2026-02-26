@@ -54,25 +54,25 @@ Channel repair is appropriate when:
 
 This demo shows channel repair workflows:
 
-### 1. Identify Channels to Repair
+### Identify Channels to Repair
 
 - Load and preprocess data
 - Select specific channels for demonstration
 - Verify channels exist in the dataset
 
-### 2. Calculate Neighbor Relationships
+### Calculate Neighbor Relationships
 
 - Compute spatial neighbors based on 3D electrode positions
 - Use distance threshold to define neighborhood
 - Required for neighbor interpolation method
 
-### 3. Apply Interpolation
+### Apply Interpolation
 
 - Test neighbor interpolation method
 - Test spherical spline method
 - Store original data for comparison
 
-### 4. Validate Repair Quality
+### Validate Repair Quality
 
 - Compare interpolated vs. original data
 - Verify that interpolation changed the data as expected

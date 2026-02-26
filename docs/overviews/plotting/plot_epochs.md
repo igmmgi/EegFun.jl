@@ -89,25 +89,25 @@ When `interactive=true` (default):
 
 This demo shows epoch visualization workflows:
 
-### 1. Load and Prepare Data
+### Load and Prepare Data
 
 - Read raw data
 - Apply preprocessing
 - Extract epochs
 
-### 2. Basic Plotting
+### Basic Plotting
 
 - Plot single condition
 - Select specific channels
 - Compare conditions with overlay
 
-### 3. Layout Options
+### Layout Options
 
 - Single plot: All channels together
 - Grid layout: Individual subplots
 - Topo layout: Spatial arrangement
 
-### 4. Channel Selection
+### Channel Selection
 
 - Focus on specific channels
 - Combine with different layouts

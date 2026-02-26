@@ -7,6 +7,7 @@ using EegFun
 
 pages = [
     "Home" => "index.md",
+    "Cheatsheet" => "cheatsheet.md",
     "Tutorials" => [
         "Overview" => "tutorials/index.md",
         "Getting Started" => "tutorials/getting-started.md",
@@ -89,10 +90,12 @@ pages = [
             "TF Morlet" => "demos/time_frequency/tf_morlet.md",
             "TF Multitaper" => "demos/time_frequency/tf_multitaper.md",
             "TF STFT" => "demos/time_frequency/tf_stft.md",
+            "TF Operations" => "demos/time_frequency/tf_operations.md",
             "TF Analysis Workflow" => "demos/time_frequency/tf_analysis.md",
         ],
         "Statistics" => [
             "Statistics" => "demos/statistics/statistics.md",
+            "TF Statistics" => "demos/statistics/tf_stats_test.md",
             "Decoding" => "demos/statistics/decoding.md",
             "RSA" => "demos/statistics/rsa.md",
         ],

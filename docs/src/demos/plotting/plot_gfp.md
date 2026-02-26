@@ -45,7 +45,7 @@ This demo shows how to visualise Global Field Power (GFP) and Global Dissimilari
 using EegFun
 
 #######################################################################
-# 1. LOAD DATA AND CREATE ERPS
+# LOAD DATA AND CREATE ERPS
 #######################################################################
 
 dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf")
@@ -64,21 +64,21 @@ erp1 = EegFun.average(epochs, condition_selection = conditions(:trigger1))
 erp2 = EegFun.average(epochs, condition_selection = conditions(:trigger2))
 
 #######################################################################
-# 2. BASIC GFP PLOT
+# BASIC GFP PLOT
 #######################################################################
 
 # plot GFP for a single condition
 EegFun.plot_gfp(erp1)
 
 #######################################################################
-# 3. COMPARE CONDITIONS
+# COMPARE CONDITIONS
 #######################################################################
 
 # overlay GFP for multiple conditions
 EegFun.plot_gfp([erp1, erp2])
 
 #######################################################################
-# 4. WITH ERP TRACES AND DISSIMILARITY
+# WITH ERP TRACES AND DISSIMILARITY
 #######################################################################
 
 # show all three panels: ERP traces, GFP, and Global Dissimilarity
@@ -88,14 +88,14 @@ EegFun.plot_gfp([erp1, erp2],
 )
 
 #######################################################################
-# 5. RAW VS NORMALISED
+# RAW VS NORMALISED
 #######################################################################
 
 # plot in raw microvolts instead of percentage
 EegFun.plot_gfp(erp1, normalize = false)
 
 #######################################################################
-# 6. PRE-COMPUTED GFP
+# PRE-COMPUTED GFP
 #######################################################################
 
 # compute GFP separately, then plot the result
@@ -103,7 +103,7 @@ gfp_result = EegFun.gfp(erp1, normalize = true)
 EegFun.plot_gfp(gfp_result, color = :red, linewidth = 3)
 
 #######################################################################
-# 7. CHANNEL SELECTION
+# CHANNEL SELECTION
 #######################################################################
 
 # compute GFP over a subset of channels

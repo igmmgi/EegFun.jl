@@ -58,21 +58,21 @@ Baseline correction assumes the pre-stimulus period represents neutral brain act
 
 This demo demonstrates baseline correction for different data types:
 
-### 1. Baseline Continuous Data 
+### Baseline Continuous Data 
 
 - Load raw BioSemi data
 - Apply baseline to entire continuous recording
 - Visualize DC offset removal in databrowser
 - Baseline to specific timepoint (t=0)
 
-### 2. Baseline Epoch Data
+### Baseline Epoch Data
 
 - Extract epochs around experimental events
 - Apply baseline at different timepoints (t=0, t=0.5)
 - Visualize effect on individual trials
 - Compare baseline choices
 
-### 3. Baseline ERP Data
+### Baseline ERP Data
 
 - Average epochs into ERPs
 - Baseline to single timepoint (t=0, t=0.5)

@@ -26,19 +26,19 @@ This demo shows how to plot ERP waveforms with measurement overlays using `EegFu
 
 This demo covers:
 
-### 1. Mean Amplitude Overlay
+### Mean Amplitude Overlay
 
 - Plot ERP with shaded analysis window and computed mean
 
-### 2. Peak Latency
+### Peak Latency
 
 - Show peak markers on specific channels
 
-### 3. Grid Layout
+### Grid Layout
 
 - Display each channel in its own panel with measurement annotations
 
-### 4. File Path Input
+### File Path Input
 
 - Load data directly from JLD2 file path without pre-loading
 

@@ -98,25 +98,25 @@ Topographic maps (topoplots) show the spatial distribution of electrical activit
 
 This demo shows topographic visualization workflows:
 
-### 1. Basic Continuous Data
+### Basic Continuous Data
 
 - Load and preprocess data
 - Create topographic maps with different methods
 - Customize time intervals and appearance
 
-### 2. Epoched Data
+### Epoched Data
 
 - Extract epochs from continuous data
 - Plot topographies for specific epochs
 - Customize interpolation and display
 
-### 3. ERP Data
+### ERP Data
 
 - Average epochs into ERPs
 - Create condition-specific topographies
 - Control colorbar placement
 
-### 4. Multi-Panel Figures
+### Multi-Panel Figures
 
 - Create custom figure layouts
 - Combine multiple topographies

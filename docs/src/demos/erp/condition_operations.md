@@ -1,6 +1,6 @@
 # Condition Operations
 
-This demo shows how to combine and compute differences between experimental conditions at the batch level (processing all participants at once).
+This demo shows how to combine epoch conditions, compute ERP difference waves, and create condition average waves.
 
 ### Key Functions
 
@@ -8,31 +8,36 @@ This demo shows how to combine and compute differences between experimental cond
 | --- | --- | --- |
 | `condition_combine` | Merge epoch conditions into new groups | Epoch data |
 | `condition_difference` | Subtract one condition's ERP from another | ERP data |
+| `condition_average` | Average multiple conditions into one ERP | ERP data |
 
 ### When to Use
 
 - **`condition_combine`**: When you have many conditions and want to pool some together before averaging (e.g., merge "Go left" and "Go right" into a single "Go" condition)
 - **`condition_difference`**: When you need difference waves for analysis (e.g., target minus standard, congruent minus incongruent)
+- **`condition_average`**: When you want to average across conditions after computing ERPs (e.g., collapsing across irrelevant factors)
 
 ### Important Notes
 
-- Both functions operate as batch processors — they find and process all matching JLD2 files in a directory
-- `condition_combine` works on epoch data; `condition_difference` works on ERP data
-- Output is saved to a new directory automatically
+- `condition_combine` works on epoch data (before averaging); `condition_difference` and `condition_average` work on ERP data (after averaging)
+- All three also have batch versions that process all matching JLD2 files in a directory
 
 ## Workflow Summary
 
-### 1. Condition Combining
+### Condition Combining
 
-- Merge multiple epoch conditions into new groups across all participants
+- Merge multiple epoch conditions into new groups (operates on epochs, before averaging)
 
-### 2. Condition Differences
+### Condition Differences
 
-- Create difference waves from ERP condition pairs across all participants
+- Create difference waves from ERP condition pairs (e.g., `[(1, 2), (3, 4)]`)
 
-### 3. Typical Pipeline
+### Condition Averaging
 
-- Preprocess → Combine conditions → Average → Difference waves → Grand average
+- Average ERP conditions into combined waves (e.g., `[[1, 2], [3, 4]]` or `[[1, 2, 3, 4]]`)
+
+### Typical Pipeline
+
+- Preprocess → Combine conditions → Average → Difference/Average waves → Grand average
 
 
 ## Code Examples
@@ -41,13 +46,14 @@ This demo shows how to combine and compute differences between experimental cond
 
 ```julia
 # Demo: Condition Operations
-# Shows how to combine epoch conditions and compute ERP difference waves.
-# Covers condition_combine and condition_difference.
+# Shows how to combine epoch conditions, compute ERP difference waves,
+# and create condition average waves.
+# Covers condition_combine, condition_difference, and condition_average.
 
 using EegFun
 
 #######################################################################
-# 1. CREATE EXAMPLE DATA
+# CREATE EXAMPLE DATA
 #######################################################################
 
 # Load raw data and do minimal preprocessing
@@ -71,12 +77,17 @@ epoch_cfg = [
 epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.2, 1.0))
 EegFun.baseline!(epochs, (-0.2, 0.0))
 
+
+#######################################################################
+# CONDITION COMBINE (EPOCHS)
+#######################################################################
+
 # Combine conditions 1+2 into one group and 3+4 into another
 epochs_combined = EegFun.condition_combine(epochs, [[1, 2], [3, 4]])
 
 
 #######################################################################
-# 3. CONDITION DIFFERENCE WAVES (IN MEMORY)
+# CONDITION DIFFERENCE WAVES (ERPS)
 #######################################################################
 
 # Create ERPs from the original four conditions
@@ -90,6 +101,15 @@ EegFun.plot_erp(diff_waves, channel_selection = EegFun.channels([:Cz]))
 diff_waves = EegFun.condition_difference(erps, [(1, 2), (3, 4)])
 
 
+#######################################################################
+# CONDITION AVERAGE WAVES (ERPS)
+#######################################################################
+
+# Average conditions 1 and 2 together, and 3 and 4 together
+avg_waves = EegFun.condition_average(erps, [[1, 2], [3, 4]])
+
+# Average all four conditions into one
+avg_all = EegFun.condition_average(erps, [[1, 2, 3, 4]])
 ```
 
 :::

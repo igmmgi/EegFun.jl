@@ -154,39 +154,39 @@ Both approaches work - choose based on your workflow and data characteristics.
 
 This demo shows the complete ICA pipeline:
 
-### 1. Prepare Data
+### Prepare Data
 
 - Load and preprocess continuous data
 - Create EOG channels
 - Detect extreme values
 - Apply high-pass filter
 
-### 2. Run ICA
+### Run ICA
 
 - Standard infomax on full dataset
 - Extended infomax on subset (20%)
 - Compare algorithms
 
-### 3. Visualize Components
+### Visualize Components
 
 - Topographic maps of components
 - Component activations over time
 - Frequency spectra
 - Interactive databrowser
 
-### 4. Identify Artifacts
+### Identify Artifacts
 
 - Automated identification (all types)
 - Individual identification methods
 - Plot component features
 
-### 5. Remove and Validate
+### Remove and Validate
 
 - Remove identified artifact components
 - Reconstruct to verify correctness
 - Compare original vs. cleaned data
 
-### 6. Apply to Epochs
+### Apply to Epochs
 
 - Run ICA on epoched data
 - Same identification and removal workflow

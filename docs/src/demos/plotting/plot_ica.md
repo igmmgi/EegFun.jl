@@ -45,7 +45,7 @@ This demo shows how to visualise ICA component topographies as scalp maps.
 using EegFun
 
 #######################################################################
-# 1. LOAD DATA AND RUN ICA
+# LOAD DATA AND RUN ICA
 #######################################################################
 
 dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf")
@@ -60,14 +60,14 @@ EegFun.highpass_filter!(dat, 1.0)
 ica = EegFun.run_ica(dat)
 
 #######################################################################
-# 2. BASIC TOPOGRAPHY GRID
+# BASIC TOPOGRAPHY GRID
 #######################################################################
 
 # plot all components in a grid
 EegFun.plot_topography(ica)
 
 #######################################################################
-# 3. SELECT SPECIFIC COMPONENTS
+# SELECT SPECIFIC COMPONENTS
 #######################################################################
 
 # plot only the first 10 components
@@ -77,7 +77,7 @@ EegFun.plot_topography(ica, component_selection = components(1:10))
 EegFun.plot_topography(ica, component_selection = components(2:2:20))
 
 #######################################################################
-# 4. CUSTOM GRID SIZE
+# CUSTOM GRID SIZE
 #######################################################################
 
 # control rows × columns layout
@@ -87,7 +87,7 @@ EegFun.plot_topography(ica,
 )
 
 #######################################################################
-# 5. DISPLAY OPTIONS
+# DISPLAY OPTIONS
 #######################################################################
 
 # shared colour scale across all components

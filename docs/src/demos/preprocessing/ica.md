@@ -156,39 +156,39 @@ Both approaches work - choose based on your workflow and data characteristics.
 
 This demo shows the complete ICA pipeline:
 
-### 1. Prepare Data
+### Prepare Data
 
 - Load and preprocess continuous data
 - Create EOG channels
 - Detect extreme values
 - Apply high-pass filter
 
-### 2. Run ICA
+### Run ICA
 
 - Standard infomax on full dataset
 - Extended infomax on subset (20%)
 - Compare algorithms
 
-### 3. Visualize Components
+### Visualize Components
 
 - Topographic maps of components
 - Component activations over time
 - Frequency spectra
 - Interactive databrowser
 
-### 4. Identify Artifacts
+### Identify Artifacts
 
 - Automated identification (all types)
 - Individual identification methods
 - Plot component features
 
-### 5. Remove and Validate
+### Remove and Validate
 
 - Remove identified artifact components
 - Reconstruct to verify correctness
 - Compare original vs. cleaned data
 
-### 6. Apply to Epochs
+### Apply to Epochs
 
 - Run ICA on epoched data
 - Same identification and removal workflow
@@ -279,18 +279,18 @@ EegFun.plot_databrowser(dat, ica_result_infomax_extended)
 
 # identify components
 component_artifacts, component_metrics =
-    EegFun.identify_components(dat, ica_result_infomax, sample_selection = EegFun.samples_not(:is_extreme_value_200))
+    EegFun.identify_components(dat, ica_result_infomax, sample_selection = EegFun.samples_not(:is_extreme_value_200));
 
 # or individually
 eog_comps, eog_comps_metrics_df =
-    EegFun.identify_eog_components(dat, ica_result_infomax_extended, sample_selection = EegFun.samples_not(:is_extreme_value_200))
+    EegFun.identify_eog_components(dat, ica_result_infomax, sample_selection = EegFun.samples_not(:is_extreme_value_200));
 
 ecg_comps, ecg_comps_metrics_df =
-    EegFun.identify_ecg_components(dat, ica_result_infomax_extended, sample_selection = EegFun.samples_not(:is_extreme_value_200))
+    EegFun.identify_ecg_components(dat, ica_result_infomax, sample_selection = EegFun.samples_not(:is_extreme_value_200));
 
-line_noise_comps, line_noise_comps_metrics_df = EegFun.identify_line_noise_components(dat, ica_result_infomax_extended)
+line_noise_comps, line_noise_comps_metrics_df = EegFun.identify_line_noise_components(dat, ica_result_infomax);
 
-channel_noise_comps, channel_noise_comps_metrics_df = EegFun.identify_spatial_kurtosis_components(ica_result_infomax_extended)
+channel_noise_comps, channel_noise_comps_metrics_df = EegFun.identify_spatial_kurtosis_components(ica_result_infomax);
 
 
 # Get all identified component artifacts

@@ -1,19 +1,7 @@
-"""
-Demo: Loading and Processing BrainVision Files
-
-This demo shows how to:
-- Load BrainVision format files (.vhdr, .eeg, .vmrk)
-- Create EegFun data structures 
-- Apply basic preprocessing
-- Get the triggers/events
-
-The format consists of three files:
-- .vhdr (header file with metadata)
-- .eeg (binary data file)
-- .vmrk (marker/trigger file)
-"""
-# Demo: BrainVision Import
-# Shows how to load BrainVision .vhdr files and create EegFun data structures.
+# Demo: Loading and Processing BrainVision Files
+# Shows how to load BrainVision format files (.vhdr, .eeg, .vmrk),
+# create EegFun data structures, apply basic preprocessing,
+# and get the triggers/events.
 
 using EegFun
 

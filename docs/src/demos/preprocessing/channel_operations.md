@@ -19,21 +19,21 @@ This demo shows how to manipulate channels by averaging groups together, computi
 
 ## Workflow Summary
 
-### 1. Channel Difference
+### Channel Difference
 
 - Calculate EOG channels from electrode pairs
 - Create arbitrary difference channels
 
-### 2. EOG Configuration
+### EOG Configuration
 
 - Use `EogConfig` to calculate both EOG channels in one call
 
-### 3. Channel Averaging
+### Channel Averaging
 
 - Average channel groups with custom labels
 - Reduce dataset to only averaged channels
 
-### 4. Channel Deletion
+### Channel Deletion
 
 - Remove single or multiple channels (mutating and non-mutating versions)
 
@@ -50,7 +50,7 @@ This demo shows how to manipulate channels by averaging groups together, computi
 using EegFun
 
 #######################################################################
-# 1. LOAD DATA
+# LOAD DATA
 #######################################################################
 
 dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf")
@@ -65,7 +65,7 @@ EegFun.highpass_filter!(dat, 0.1)
 
 
 #######################################################################
-# 2. CHANNEL DIFFERENCE (EOG CALCULATION)
+# CHANNEL DIFFERENCE (EOG CALCULATION)
 #######################################################################
 
 # Vertical EOG: average of upper channels minus average of lower channels
@@ -86,7 +86,7 @@ EegFun.channel_difference!(
 
 
 #######################################################################
-# 3. EOG WITH CONFIGURATION
+# EOG WITH CONFIGURATION
 #######################################################################
 
 # Calculate both EOG channels from a configuration
@@ -100,7 +100,7 @@ EegFun.calculate_eog_channels!(dat, eog_cfg)
 
 
 #######################################################################
-# 4. CHANNEL AVERAGING
+# CHANNEL AVERAGING
 #######################################################################
 
 # Average all channels into a single column
@@ -110,10 +110,7 @@ dat.data[!, :avg] # average of all channels
 
 # Average specific channel groups (average of Fp1 and Fp2, average of O1 and O2 with 
 # default output labels of :Fp1_Fp2 and :O1_O2)
-EegFun.channel_average!(
-    dat,
-    channel_selections = [EegFun.channels([:Fp1, :Fp2]), EegFun.channels([:O1, :O2])],
-)
+EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Fp1, :Fp2]), EegFun.channels([:O1, :O2])])
 
 # Average with custom output labels
 EegFun.channel_average!(
@@ -123,15 +120,11 @@ EegFun.channel_average!(
 )
 
 # Reduce to just the averaged channels (drops originals)
-dat_reduced = EegFun.channel_average(
-    dat,
-    channel_selections = [EegFun.channels([:Fp1, :Fp2])],
-    reduce = true,
-)
+dat_reduced = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Fp1, :Fp2])], reduce = true)
 
 
 #######################################################################
-# 5. CHANNEL DELETION
+# CHANNEL DELETION
 #######################################################################
 
 # Delete a single channel

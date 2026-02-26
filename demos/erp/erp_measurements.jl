@@ -1,40 +1,123 @@
-"""
-Tutorial: ERP Measurement Options
-
-This script provides an introduction to the ERP measurement capabilities 
-in EegFun for extracting quantitative features from ERP data.
-
-1. Amplitude measurements (mean, peak)
-2. Latency measurements (peak, fractional)
-3. Area/integral measurements
-4. Peak-to-peak measurements
-"""
+# Demo: ERP Measurements and Traditional Statistics
+# Shows how to extract ERP measurements (amplitudes, latencies) and 
+# analyse them using AnovaFun for traditional t-tests and ANOVA.
 
 using EegFun
-dat = EegFun.read_data("./resources/data/julia/erps/example1_erps_good.jld2")
+using AnovaFun
 
-# We can use the plot_erp_measurements_gui to explore the data and select the measurement parameters
-EegFun.plot_erp_measurement_gui(dat)    # all conditions
-EegFun.plot_erp_measurement_gui(dat[1]) # first condition
 
-# ----------------------------------------------------------------------------
-# Amplitude Measurements
-# ----------------------------------------------------------------------------
+#######################################################################
+# EXTRACT ERP MEASUREMENTS
+#######################################################################
 
-# batch type analyses
+# This batch function loads all participant ERP files, extracts 
+# measurements, and saves results to a CSV file.
+
 input_dir = "./resources/data/julia/erps"
 file_pattern = "erps_good"
 
-# Mean amplitude in a time interval
+# Mean amplitude in the P300 window
 mean_amp = EegFun.erp_measurements(
+    file_pattern,
+    "mean_amplitude",
+    input_dir = input_dir,
+    condition_selection = EegFun.conditions([1, 2]),
+    channel_selection = EegFun.channels([:Pz, :Cz, :Fz]),
+    analysis_interval = (0.3, 0.5),
+    baseline_interval = (-0.2, 0.0),
+)
+
+# Result is an ErpMeasurementsResult containing a DataFrame
+# It's also saved as a CSV to the output directory
+mean_amp.data  # DataFrame with: participant, condition, channel, measurement
+
+
+#######################################################################
+# AVAILABLE MEASUREMENT TYPES
+#######################################################################
+
+# Amplitude measurements
+# "mean_amplitude"          — mean voltage in interval
+# "max_peak_amplitude"      — maximum peak value (robust detection)
+# "min_peak_amplitude"      — minimum peak value (robust detection)
+# "peak_to_peak_amplitude"  — difference between max and min peaks
+
+# Latency measurements
+# "max_peak_latency"        — time of maximum peak
+# "min_peak_latency"        — time of minimum peak
+# "peak_to_peak_latency"    — time difference between max and min peaks
+# "fractional_area_latency" — time point dividing area into fraction
+# "fractional_peak_latency" — time where amplitude is fraction of peak
+
+# Area measurements
+# "rectified_area"          — sum of absolute voltage values
+# "integral"                — signed area (positive minus negative)
+# "positive_area"           — area of positive deflections only
+# "negative_area"           — area of negative deflections only
+
+
+#######################################################################
+# EXPLORE MEASUREMENTS INTERACTIVELY
+#######################################################################
+
+# GUI for exploring measurements interactively before batch extraction
+dat = EegFun.read_data("./resources/data/julia/erps/example1_erps_good.jld2")
+EegFun.plot_erp_measurement_gui(dat)     # all conditions
+# EegFun.plot_erp_measurement_gui(dat[1]) # first condition only
+
+
+#######################################################################
+# PEAK AMPLITUDE AND LATENCY
+#######################################################################
+
+# Max peak with robust detection (requires peak to be larger than neighbors)
+max_peak = EegFun.erp_measurements(
+    file_pattern,
+    "max_peak_amplitude",
+    input_dir = input_dir,
+    condition_selection = EegFun.conditions([1, 2]),
+    channel_selection = EegFun.channels([:Pz]),
+    analysis_interval = (0.3, 0.6),
+    baseline_interval = (-0.2, 0.0),
+    local_interval = 3,  # peak must be larger than 3 neighbors on each side
+)
+
+# Corresponding latency
+max_latency = EegFun.erp_measurements(
     file_pattern,
     "max_peak_latency",
     input_dir = input_dir,
     condition_selection = EegFun.conditions([1, 2]),
-    channel_selection = EegFun.channels(),  # all channels
-    # channel_selection = EegFun.channels([:Pz, :Cz, :Fz]),
-    analysis_interval = (0.6, 0.8),
-    baseline_interval = (-0.2, 0.0),  # 200 ms pre-stimulus baseline
+    channel_selection = EegFun.channels([:Pz]),
+    analysis_interval = (0.3, 0.6),
+    baseline_interval = (-0.2, 0.0),
 )
 
-# the above results data AND saves the results to a csv file
+
+#######################################################################
+# TRADITIONAL STATISTICS WITH ANOVAFUN
+#######################################################################
+
+# The CSV output from erp_measurements can be used directly with AnovaFun.
+# Here we demonstrate the workflow in-memory using the DataFrame.
+
+# --- Paired t-test: condition 1 vs condition 2 at Pz ---
+df = mean_amp.data
+
+# Extract data for each condition at Pz
+cond1_pz = df[(df.condition.==1).&(df.channel.==:Pz), :measurement]
+cond2_pz = df[(df.condition.==1).&(df.channel.==:Pz), :measurement]
+result = paired_ttest(cond1_pz, cond2_pz)
+result.t   # t-statistic
+result.p   # p-value
+
+# --- Independent t-test ---
+# result = independent_ttest(group1_data, group2_data)
+
+# --- Repeated-measures ANOVA ---
+# For a 2-factor within-subject ANOVA (condition × channel), reshape your 
+# data into the format AnovaFun expects and call:
+# result = anova(data, within = [:condition, :channel])
+# anova_table(result)
+# emmeans(result, :condition)
+# pairwise(result, :condition)

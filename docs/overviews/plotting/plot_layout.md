@@ -84,31 +84,31 @@ Calculate spatial neighbors based on distance thresholds:
 
 This demo shows electrode layout visualization:
 
-### 1. Basic 2D Visualization
+### Basic 2D Visualization
 
 - Load electrode layout
 - Convert to 2D coordinates
 - Plot with default settings
 
-### 2. Customize Appearance
+### Customize Appearance
 
 - Adjust head outline (color, width, radius)
 - Modify markers (style, size, color)
 - Customize labels (size, color, offsets)
 
-### 3. Add Regions of Interest
+### Add Regions of Interest
 
 - Highlight electrode groups
 - Customize ROI borders and fills
 - Create multiple ROIs with different styles
 
-### 4. Neighbor Visualization
+### Neighbor Visualization
 
 - Calculate neighbor relationships
 - Plot with neighbor connections
 - Export neighbor definitions
 
-### 5. Save Figures
+### Save Figures
 
 - Export publication-ready figures
 - Use CairoMakie for vector graphics

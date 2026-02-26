@@ -1,11 +1,6 @@
-"""
-Demo: Loading and Processing BioSemi BDF Files
-
-This demo shows how to:
-- Load BioSemi .bdf files (raw continuous data format)
-- Create EegFun data structures with layouts
-- Get the triggers/events
-"""
+# Demo: Loading and Processing BioSemi BDF Files
+# Shows how to load BioSemi .bdf files, create EegFun data structures
+# with layouts, and get the triggers/events.
 
 using EegFun
 

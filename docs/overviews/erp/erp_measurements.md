@@ -1,131 +1,35 @@
-This demo demonstrates extracting quantitative measurements from ERP waveforms for statistical analysis and reporting.
+This demo shows how to extract quantitative measurements from ERPs and analyse them with traditional statistics using AnovaFun.
 
-### What are ERP Measurements?
+### Key Functions
 
-ERP measurements quantify specific features of averaged event-related potentials:
+| Function | Purpose |
+| --- | --- |
+| `erp_measurements` | Batch extract amplitude/latency/area from all participant ERPs → CSV |
+| `plot_erp_measurement_gui` | Interactive GUI to explore measurements before batch extraction |
+| `paired_ttest` | AnovaFun: paired t-test between two conditions |
+| `independent_ttest` | AnovaFun: independent samples t-test |
+| `anova` | AnovaFun: repeated-measures or between-subject ANOVA |
+| `emmeans` / `pairwise` | AnovaFun: estimated marginal means and pairwise contrasts |
 
-- **Amplitude**: Voltage magnitude at specific times or peaks
-- **Latency**: Timing of component peaks or onsets
-- **Area/Integral**: Total activity over a time interval
-- **Peak-to-peak**: Voltage range between positive and negative deflections
+### Available Measurement Types
 
-### Measurement Types
-
-**Mean Amplitude**:
-
-- Average voltage in a time interval
-- Most robust amplitude measure
-- Less sensitive to noise than peak measures
-- Standard for most ERP components
-
-**Peak Amplitude**:
-
-- Maximum (or minimum) voltage in interval
-- Captures strongest response
-- Can be affected by noise
-- Useful for P300, N400, etc.
-
-**Peak Latency**:
-
-- Time of maximum deflection
-- Identifies when component peaks
-- Sensitive to individual differences
-- Important for timing analyses
-
-**Fractional Area Latency**:
-
-- Time point dividing area (e.g., 50% of total area)
-- More robust than peak latency
-- Less affected by noise and waveform shape
-- Better reflects central tendency
-
-**Area/Integral**:
-
-- Total voltage × time in window
-- Captures sustained activity
-- Less sensitive to brief noise
-- Good for slow components
-
-**Peak-to-Peak**:
-
-- Voltage difference between positive and negative peaks
-- Useful for biphasic components
-- Captures full deflection range
-
-### Interactive GUI
-
-**`plot_erp_measurement_gui`**:
-
-- Visual interface for exploring measurements
-- Adjust time intervals interactively
-- Select measurement types
-- Preview results before batch processing
-
-### Batch Processing
-
-**`erp_measurements`**:
-
-- Process multiple files at once
-- Apply consistent measurement parameters
-- Export to CSV for statistical analysis
-- Includes metadata (file, condition, channel)
-
-### Best Practices
-
-**Choose appropriate measures**:
-
-- **Mean amplitude**: Default for most components
-- **Peak measures**: When timing precision matters
-- **Fractional latency**: For robust timing analysis
-- **Area**: For sustained or variable waveforms
-
-**Define time intervals carefully**:
-
-- Based on grand averages or literature
-- Should capture component of interest
-- Avoid overlapping components when possible
-
-**Baseline correction**:
-
-- Apply before measurements
-- Use pre-stimulus interval
-- Ensures consistent zero reference
-
-**Multiple measurements**:
-
-- Combine amplitude and latency
-- Use area for validation
-- Report multiple metrics when appropriate
-
-### Typical Workflow
-
-1. **Visualize ERPs** to identify components
-2. **Use GUI** to explore measurement parameters
-3. **Define time intervals** based on grand average
-4. **Batch process** all files with `erp_measurements`
-5. **Export to CSV** for statistical analysis
+| Category | Types |
+| --- | --- |
+| **Amplitude** | `mean_amplitude`, `max_peak_amplitude`, `min_peak_amplitude`, `peak_to_peak_amplitude` |
+| **Latency** | `max_peak_latency`, `min_peak_latency`, `peak_to_peak_latency`, `fractional_area_latency`, `fractional_peak_latency` |
+| **Area** | `rectified_area`, `integral`, `positive_area`, `negative_area` |
 
 ## Workflow Summary
 
-This demo shows ERP measurement extraction:
+### Extract Measurements
 
-### 1. Interactive Exploration
+- Use `plot_erp_measurement_gui` to explore and choose parameters interactively
+- Run `erp_measurements` to batch-extract values across all participants
+- Output is a DataFrame and a saved CSV with columns: participant, condition, channel, measurement
 
-- Launch `plot_erp_measurement_gui`
-- Visualize ERPs
-- Explore different measurement types
-- Adjust time intervals interactively
+### Traditional Statistics with AnovaFun
 
-### 2. Batch Processing
-
-- Define measurement parameters
-- Process multiple files with `erp_measurements`
-- Select conditions and channels
-- Specify analysis and baseline intervals
-
-### 3. Export Results
-
-- Measurements saved to CSV
-- Includes metadata (file, condition, channel)
-- Ready for statistical analysis
-- Reproducible parameters documented
+- Load the CSV or use the in-memory DataFrame
+- Use `paired_ttest` for condition comparisons at specific channels
+- Use `anova` for multi-factor within/between-subject designs
+- Follow up with `emmeans` and `pairwise` for post-hoc contrasts

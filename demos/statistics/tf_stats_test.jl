@@ -1,16 +1,11 @@
-"""
-Test Script: Time-Frequency Statistics & Topography Plots
-
-Tests the new TF topography plotting functions, then runs TF statistical tests
-and visualizes results using the new `plot_topo_stats` for TF data.
-
-Data: AttentionExp TF morlet averages (TimeFreqData), 16 participants, 2 conditions
-"""
+# Demo: Time-Frequency Statistics & Topography Plots
+# Shows TF topography plotting, statistical tests, and
+# visualization using plot_topo_stats for TF data.
 
 using EegFun
 
 # ==============================================================================
-# 0. Regenerate TF morlet data from epoch data (fixes old data bug)
+# Regenerate TF morlet data from epoch data 
 # ==============================================================================
 epoch_dir = joinpath(homedir(), "Documents", "Julia", "TestDataSets", "AttentionExp", "output_data")  # ← Update to your data path
 println("Regenerating TF morlet data from epochs...")
@@ -31,7 +26,7 @@ input_dir = joinpath(epoch_dir, "tf_morlet_epochs_good")
 file_pattern = "epochs_good"
 
 # ==============================================================================
-# 1. Load a single participant to test plot_topography for TF data
+# Load a single participant to test plot_topography for TF data
 # ==============================================================================
 println("Loading single participant TF data...")
 single_data = EegFun.read_data(joinpath(input_dir, "example1_epochs_good.jld2"))
@@ -49,7 +44,7 @@ println("Time range: ", extrema(tf_cond1.data_power.time))
 println("Channels: ", EegFun.channel_labels(tf_cond1))
 
 # ==============================================================================
-# 2. Test plot_topography for single TimeFreqData
+# Test plot_topography for single TimeFreqData
 # ==============================================================================
 println("\n--- Testing plot_topography (single TF) ---")
 
@@ -65,14 +60,14 @@ EegFun.plot_topography(
 )
 
 # ==============================================================================
-# 3. Test plot_topography for Vector{TimeFreqData} (multiple conditions)
+# Test plot_topography for Vector{TimeFreqData} (multiple conditions)
 # ==============================================================================
 println("\n--- Testing plot_topography (multi-condition) ---")
 
 EegFun.plot_topography(single_data, freq_range = (8.0, 12.0), interval_selection = EegFun.times(0.2, 0.4), baseline_interval = (-0.3, 0.0))
 
 # ==============================================================================
-# 4. Prepare TF statistics (all participants, 2 conditions)
+# Prepare TF statistics (all participants, 2 conditions)
 # ==============================================================================
 println("\n--- Preparing TF statistics ---")
 
@@ -89,21 +84,21 @@ tf_stat_data = EegFun.prepare_stats(
 println(tf_stat_data)
 
 # ==============================================================================
-# 5. Analytic test (fast, no permutations)
+# Analytic test (fast, no permutations)
 # ==============================================================================
 println("\n--- Running analytic test ---")
 result_analytic = EegFun.analytic_test(tf_stat_data)
 println(result_analytic)
 
 # ==============================================================================
-# 6. Plot TF stats (existing per-channel heatmap)
+# Plot TF stats (existing per-channel heatmap)
 # ==============================================================================
 println("\n--- Plotting TF stats (heatmap) ---")
 
 EegFun.plot_tf_stats(result_analytic, channel_selection = EegFun.channels(:Cz), significance = :contour)
 
 # ==============================================================================
-# 7. Plot TF topo stats (NEW — topography with significance)
+# Plot TF topo stats (NEW — topography with significance)
 # ==============================================================================
 println("\n--- Plotting TF topo stats (alpha band) ---")
 
@@ -115,7 +110,7 @@ println("\n--- Plotting TF topo stats (theta band) ---")
 EegFun.plot_topo_stats(result_analytic, freq_range = (4.0, 7.0), n_topos = 8, highlight_threshold = 0.3, topo_data = :difference)
 
 # ==============================================================================
-# 8. Cluster permutation test (slower but more robust)
+# Cluster permutation test (slower but more robust)
 # ==============================================================================
 println("\n--- Running cluster permutation test ---")
 
@@ -130,7 +125,7 @@ result_perm = EegFun.permutation_test(
 println(result_perm)
 
 # ==============================================================================
-# 9. Plot cluster permutation TF topo stats
+# Plot cluster permutation TF topo stats
 # ==============================================================================
 println("\n--- Plotting permutation TF topo stats ---")
 

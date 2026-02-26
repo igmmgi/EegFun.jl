@@ -4,7 +4,7 @@
 using EegFun
 
 #######################################################################
-# 1. LOAD DATA
+# LOAD DATA
 #######################################################################
 
 dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf")
@@ -14,7 +14,7 @@ dat = EegFun.create_eegfun_data(dat, layout)
 
 
 #######################################################################
-# 2. TRIGGER OVERVIEW
+# TRIGGER OVERVIEW
 #######################################################################
 
 # Count how often each trigger occurs (raw and cleaned)
@@ -28,7 +28,7 @@ trigger_info.data
 
 
 #######################################################################
-# 3. SEARCH FOR TRIGGER SEQUENCES
+# SEARCH FOR TRIGGER SEQUENCES
 #######################################################################
 
 # Find all onsets of trigger value 1
@@ -42,7 +42,7 @@ idx = EegFun.search_sequence(dat.data.trigger, [1, 2], ignore_values = [0])
 
 
 #######################################################################
-# 4. WILDCARDS AND RANGES
+# WILDCARDS AND RANGES
 #######################################################################
 
 # Use :any wildcard to match any trigger between two specific triggers
@@ -54,7 +54,7 @@ idx = EegFun.search_sequence(dat.data.trigger, [1:3, 10:12])  # multiple ranges
 
 
 #######################################################################
-# 5. MULTIPLE SEQUENCES (OR LOGIC)
+# MULTIPLE SEQUENCES (OR LOGIC)
 #######################################################################
 
 # Find onsets where any of several sequences occurs
@@ -62,7 +62,7 @@ idx = EegFun.search_sequence(dat.data.trigger, [[1, 2], [3, 4]])
 
 
 #######################################################################
-# 6. VISUALIZE TRIGGERS
+# VISUALIZE TRIGGERS
 #######################################################################
 
 # Plot trigger timing overview

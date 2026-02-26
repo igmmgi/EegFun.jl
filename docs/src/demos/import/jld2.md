@@ -1,10 +1,20 @@
 # Data Persistence (JLD2)
 
-This demo shows how to save and load processed EEG data using the JLD2 format.
+This demo shows how to save and load processed EEG data using the JLD2 format and EegFun's built-in loading utilities.
 
 ### Why JLD2?
 
 JLD2 is the standard approach for persisting Julia objects. When used with EegFun.jl, it preserves all data types and metadata without conversion, so you can save and reload continuous data, epochs, ERPs, and ICA results exactly as they are.
+
+### Key Functions
+
+| Function | Purpose |
+| --- | --- |
+| `jldsave` | Save one or more objects to a JLD2 file |
+| `load` | Load specific keys or all data from a JLD2 file |
+| `read_data` | Smart EegFun loader — auto-detects data types from JLD2 |
+| `read_all_data` | Batch load all matching files from a directory |
+| `group_by_condition` | Organise loaded data into an OrderedDict by condition |
 
 ### Key Patterns
 
@@ -22,7 +32,15 @@ epochs = load("epochs.jld2", "data")
 results = load("results.jld2")    # loads everything as a Dict
 ```
 
-**Direct file paths** — many EegFun plot functions accept JLD2 file paths directly, which is convenient for quick visualization without loading data:
+**EegFun utilities** — smart loading and batch operations:
+
+```julia
+loaded = EegFun.read_data("erps.jld2")                    # auto-detect types
+all_erps = EegFun.read_all_data("erps", "derivatives/erps/")  # load all matching
+grouped = EegFun.group_by_condition(all_erps)               # organise by condition
+```
+
+**Direct file paths** — many EegFun plot functions accept JLD2 file paths directly:
 
 ```julia
 EegFun.plot_databrowser("continuous_data.jld2")
@@ -31,37 +49,32 @@ EegFun.plot_databrowser("continuous_data.jld2", "ica.jld2")
 
 ## Workflow Summary
 
-This demo covers:
+### Basic Saving and Loading
 
-### 1. Basic Saving and Loading
-
-- Save and reload continuous data
+- Save and reload continuous data, epochs, ERPs, and ICA results
 - Verify round-trip consistency
 
-### 2. Epoched Data and ERPs
-
-- Save all conditions in one file or individually
-- Save averaged ERPs
-
-### 3. ICA Results
-
-- Persist ICA decompositions for reuse across sessions
-- Load and apply to new data
-
-### 4. Multiple Items per File
+### Multiple Items per File
 
 - Store related objects (epochs, ERPs, ICA) in a single file
 - Load individual keys by name
 
-### 5. Batch Loading
+### EegFun Loading Utilities
+
+- `read_data` for smart single-file loading with auto type detection
+- `read_all_data` for batch loading a cohort with participant selection
+- `group_by_condition` for organising loaded data by condition number
+
+### Batch Loading
 
 - Use file patterns to load a cohort of participants
-- Feed into group-level analysis
+- Feed into group-level analysis (e.g., grand average)
 
-### 6. File Organization
+### File Organization
 
 - Recommended project directory structure
 - Naming conventions for easy batch processing
+- Memory considerations for large datasets
 
 
 ## Code Examples
@@ -71,13 +84,14 @@ This demo covers:
 ```julia
 # Demo: Data Persistence with JLD2
 # Shows how to save and load processed EEG data using JLD2 format,
-# including batch loading patterns and file organization best practices.
+# including EegFun's built-in loading utilities and file organization.
 
 using EegFun
 using JLD2
 
+
 #######################################################################
-# 1. BASIC SAVING AND LOADING
+# BASIC SAVING AND LOADING
 #######################################################################
 
 # Read and prepare some data
@@ -101,7 +115,7 @@ EegFun.all_data(loaded_dat) == EegFun.all_data(dat)
 
 
 #######################################################################
-# 2. SAVING EPOCHED DATA
+# SAVING EPOCHED DATA
 #######################################################################
 
 # Extract epochs
@@ -123,7 +137,7 @@ loaded_epochs = load("epochs_all.jld2", "data")
 
 
 #######################################################################
-# 3. SAVING ERPs
+# SAVING ERPs
 #######################################################################
 
 # Create ERPs
@@ -137,7 +151,7 @@ loaded_erps = load("erps.jld2", "data")
 
 
 #######################################################################
-# 4. SAVING ICA RESULTS
+# SAVING ICA RESULTS
 #######################################################################
 
 # Run ICA
@@ -155,7 +169,7 @@ EegFun.plot_databrowser(dat, loaded_ica)
 
 
 #######################################################################
-# 5. SAVING MULTIPLE ITEMS IN ONE FILE
+# SAVING MULTIPLE ITEMS IN ONE FILE
 #######################################################################
 
 # Save multiple related objects together
@@ -173,7 +187,27 @@ results["ica"]
 
 
 #######################################################################
-# 6. BATCH LOADING FROM DIRECTORY
+# EEGFUN DATA LOADING UTILITIES
+#######################################################################
+
+# read_data — smart loader that auto-detects EegFun data types from JLD2 files
+# Returns the data directly (single variable) or a Dict (multiple variables)
+loaded = EegFun.read_data("erps.jld2")
+
+# read_all_data — batch load all files matching a pattern from a directory
+# Useful for loading an entire cohort for group analysis
+# all_erps = EegFun.read_all_data("erps", "derivatives/erps/")
+
+# With participant selection
+# all_erps = EegFun.read_all_data("erps", "derivatives/erps/", EegFun.participants([1, 2, 3]))
+
+# group_by_condition — organise loaded data by condition number
+# Returns an OrderedDict{Int, Vector{ErpData}}
+# grouped = EegFun.group_by_condition(all_erps)
+
+
+#######################################################################
+# BATCH LOADING FROM DIRECTORY
 #######################################################################
 
 # Suppose you have multiple participant files:
@@ -193,7 +227,19 @@ all_participant_epochs = [load(file, "data") for file in epoch_files]
 
 
 #######################################################################
-# 7. ORGANIZED FILE STRUCTURE
+# READING DATA IN PLOT FUNCTIONS
+#######################################################################
+
+# Many EegFun plot functions accept file paths directly
+EegFun.plot_databrowser("continuous_data.jld2")
+EegFun.plot_databrowser("epochs_all.jld2")
+EegFun.plot_databrowser("continuous_data.jld2", "ica_decomposition.jld2")
+
+# This is convenient for quick visualization without loading into memory
+
+
+#######################################################################
+# FILE ORGANIZATION
 #######################################################################
 
 # Best practice: organize outputs by processing stage
@@ -217,7 +263,7 @@ jldsave(joinpath(output_dir, "$(participant_id)_epochs.jld2"); data = epochs)
 
 
 #######################################################################
-# 8. NAMING CONVENTIONS
+# NAMING CONVENTIONS
 #######################################################################
 
 # Use consistent naming for easy batch processing:
@@ -233,19 +279,7 @@ jldsave(joinpath(output_dir, "$(participant_id)_epochs.jld2"); data = epochs)
 
 
 #######################################################################
-# 9. READING DATA IN PLOT FUNCTIONS
-#######################################################################
-
-# Many EegFun plot functions accept file paths directly
-EegFun.plot_databrowser("continuous_data.jld2")
-EegFun.plot_databrowser("epochs_all.jld2")
-EegFun.plot_databrowser("continuous_data.jld2", "ica_decomposition.jld2")
-
-# This is convenient for quick visualization without loading into memory
-
-
-#######################################################################
-# 10. MEMORY CONSIDERATIONS
+# MEMORY CONSIDERATIONS
 #######################################################################
 
 # For large datasets, load only what you need

@@ -52,19 +52,19 @@ You can change references multiple times. EegFun tracks the current reference an
 
 This demo shows re-referencing workflows:
 
-### 1. Continuous Data
+### Continuous Data
 
 - Load and preprocess data
 - Apply different reference schemes (`:Fp1`, `:AF7`)
 - Visualize in databrowser to see effects
 
-### 2. Epoched Data
+### Epoched Data
 
 - Create epochs from continuous data
 - Apply references to segmented trials
 - Data structure automatically updated
 
-### 3. ERP Data
+### ERP Data
 
 - Average epochs into ERPs
 - Apply references to averaged data

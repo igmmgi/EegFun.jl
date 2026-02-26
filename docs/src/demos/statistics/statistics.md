@@ -1,41 +1,53 @@
 # Statistics
 
-This demo demonstrates statistical approaches for comparing ERP conditions and controlling for multiple comparisons.
+This demo shows permutation-based statistical testing for ERP data, with multiple thresholding and cluster correction approaches.
 
-### Statistical Testing Approaches
+### Key Functions
 
-**Parametric Tests:**
+| Function | Purpose |
+| --- | --- |
+| `prepare_stats` | Load multi-participant ERPs and prepare for statistical comparison |
+| `analytic_test` | Parametric t-test (uncorrected or Bonferroni) |
+| `permutation_test` | Cluster-based permutation test with multiple thresholding options |
+| `plot_erp_stats` | Visualise results with significance shading and critical t-values |
 
-- **T-tests**: Two-condition comparisons
-- **ANOVA**: Multiple conditions or factorial designs
+### Thresholding Methods
 
-**Non-parametric Tests:**
-
-- **Cluster-based permutation**: Controls for multiple comparisons across space and time
-- **Distribution-free**: No normality assumptions
-- **Spatiotemporal sensitivity**: Leverages natural clustering in EEG data
+| Method | Description |
+| --- | --- |
+| `:parametric` | T-distribution threshold (fastest, default) |
+| `:nonparametric_common` | Single threshold from pooled permutation distribution |
+| `:nonparametric_individual` | Point-specific thresholds from permutation distributions |
 
 ### Cluster-Based Permutation Testing
 
-This method addresses the multiple comparisons problem inherent in ERP analysis:
+Addresses the multiple comparisons problem in ERP analysis:
 
-1. Compute test statistic at each time point/channel
-2. Identify clusters of contiguous (spatial/temporal) significant effects
-3. Permute condition labels and repeat many times
+1. Compute test statistic at each time point × channel
+2. Identify clusters of contiguous spatiotemporal significant effects
+3. Permute condition labels and repeat (e.g., 1000 times)
 4. Compare observed cluster mass to permutation distribution
 
 **Key advantages:**
-
-- Controls family-wise error rate without being overly conservative (e.g., Bonferroni)
+- Controls family-wise error rate without being overly conservative
 - Sensitive to spatially and temporally distributed effects
 
-### Workflow Summary
+## Workflow Summary
 
-This demo shows:
+### Prepare Data
 
-1. **Loading group data**: Multiple participants with condition labels
-2. **Statistical comparison**: T-tests and cluster permutation
-3. **Visualization**: Plotting significant time intervals and topographies
+- Load group ERP data with `prepare_stats` specifying conditions, channels, and time intervals
+- Supports `:paired` (within-subject) and `:independent` (between-subject) designs
+
+### Analytic Tests
+
+- Quick uncorrected or Bonferroni-corrected t-tests for exploration
+
+### Permutation Tests
+
+- Choose thresholding method based on assumptions and computational budget
+- Set `cluster_type = :spatiotemporal` and `min_num_neighbors` for spatial constraints
+- Visualise results with `plot_erp_stats`
 
 
 ## Code Examples
@@ -43,20 +55,11 @@ This demo shows:
 ::: details Show Code
 
 ```julia
-"""
-Tutorial: Statistical Analysis Options for ERP Data
-
-This script provides an introduction to the statistical analysis
-options available in EegFun, loosely based on FieldTrip's approach. 
-
-1. Data preparation for statistical tests
-2. Analytic t-tests (with/without multiple comparison correction)
-3. Cluster-based permutation tests (with different thresholding methods)
-4. Visualization of results
-"""
+# Demo: Permutation-Based Statistical Testing for ERPs
+# Shows how to run permutation tests on ERP data using different
+# thresholding and cluster correction approaches.
 
 using EegFun
-using BenchmarkTools
 
 input_dir = "./resources/data/julia/erps"
 file_pattern = "erps_good"
@@ -127,11 +130,11 @@ EegFun.plot_erp_stats(
 # Option: Non-Parametric Common Thresholding
 # ----------------------------------------------------------------------------
 # What actually happens:
-# 1. Run ALL permutations first (collect t-matrices)
-# 2. Pool all t-values from all permutations
-# 3. Compute (1-α) percentile threshold from pooled distribution
-# 4. Use this single threshold for all points
-# 5. Reuse stored t-matrices for cluster-level inference
+# Run ALL permutations first (collect t-matrices)
+# Pool all t-values from all permutations
+# Compute (1-α) percentile threshold from pooled distribution
+# Use this single threshold for all points
+# Reuse stored t-matrices for cluster-level inference
 # Equivalent to FieldTrip: method='montecarlo', corrMethod='cluster', clusterThreshold='nonparametric_common'
 
 result_permutation_nonparametric_common = EegFun.permutation_test(
@@ -147,15 +150,15 @@ result_permutation_nonparametric_common = EegFun.permutation_test(
 # Option: Non-Parametric Individual Thresholding
 # ----------------------------------------------------------------------------
 # What actually happens:
-# 1. Run ALL permutations first (collect t-matrices)
-# 2. For each electrode × time point:
+# Run ALL permutations first (collect t-matrices)
+# For each electrode × time point:
 #    - Extract t-values from all permutations at that point
 #    - Compute (1-α) percentile threshold from point-specific distribution
-# 3. Threshold observed data using point-specific thresholds
-# 4. Reuse stored t-matrices for cluster-level inference
+# Threshold observed data using point-specific thresholds
+# Reuse stored t-matrices for cluster-level inference
 # Equivalent to FieldTrip: method='montecarlo', corrMethod='cluster', clusterThreshold='nonparametric_individual'
 
-@btime result_permutation_nonparametric_individual = EegFun.permutation_test(
+result_permutation_nonparametric_individual = EegFun.permutation_test(
     stat_data,
     n_permutations = 1000,
     threshold_method = :nonparametric_individual,  # Non-parametric individual thresholds

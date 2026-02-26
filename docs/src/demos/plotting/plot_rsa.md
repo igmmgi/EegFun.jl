@@ -44,7 +44,7 @@ This demo shows how to visualise Representational Similarity Analysis (RSA) resu
 using EegFun
 
 #######################################################################
-# 1. LOAD DATA AND COMPUTE RSA
+# LOAD DATA AND COMPUTE RSA
 #######################################################################
 
 dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf")
@@ -62,14 +62,14 @@ EegFun.baseline!(epochs, (-0.2, 0.0))
 rsa_result = EegFun.rsa(epochs)
 
 #######################################################################
-# 2. RDM HEATMAP — AVERAGE ACROSS TIME
+# RDM HEATMAP — AVERAGE ACROSS TIME
 #######################################################################
 
 # visualise overall representational structure
 EegFun.plot_rdm_heatmap(rsa_result)
 
 #######################################################################
-# 3. RDM HEATMAP — SPECIFIC TIME POINT
+# RDM HEATMAP — SPECIFIC TIME POINT
 #######################################################################
 
 # RDM at 300 ms post-stimulus
@@ -79,7 +79,7 @@ EegFun.plot_rdm_heatmap(rsa_result, time_point = 0.3)
 EegFun.plot_rdm_heatmap(rsa_result, time_point = 50)
 
 #######################################################################
-# 4. DISSIMILARITY TIMECOURSE
+# DISSIMILARITY TIMECOURSE
 #######################################################################
 
 # plot dissimilarity over time for all condition pairs
@@ -89,7 +89,7 @@ EegFun.plot_rdm_timecourse(rsa_result)
 EegFun.plot_rdm_timecourse(rsa_result, condition_pairs = [(1, 2), (1, 3)])
 
 #######################################################################
-# 5. MODEL CORRELATIONS
+# MODEL CORRELATIONS
 #######################################################################
 
 # compare RSA results against theoretical models

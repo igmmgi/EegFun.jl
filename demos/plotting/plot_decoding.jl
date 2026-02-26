@@ -5,7 +5,7 @@
 using EegFun
 
 #######################################################################
-# 1. LOAD DATA AND PREPARE FOR DECODING
+# LOAD DATA AND PREPARE FOR DECODING
 #######################################################################
 
 dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf")
@@ -22,21 +22,21 @@ epochs = EegFun.epoch_data(dat, [:trigger1, :trigger2], (-0.2, 0.8))
 EegFun.baseline!(epochs, (-0.2, 0.0))
 
 #######################################################################
-# 2. RUN DECODING
+# RUN DECODING
 #######################################################################
 
 # decode condition from EEG patterns
 decoded = EegFun.decode(epochs)
 
 #######################################################################
-# 3. BASIC DECODING PLOT
+# BASIC DECODING PLOT
 #######################################################################
 
 # plot accuracy over time with error shading
 EegFun.plot_decoding(decoded)
 
 #######################################################################
-# 4. CUSTOM STYLING
+# CUSTOM STYLING
 #######################################################################
 
 # change colour, line width, title
@@ -50,7 +50,7 @@ EegFun.plot_decoding(decoded,
 EegFun.plot_decoding(decoded, show_error = false)
 
 #######################################################################
-# 5. MULTI-SUBJECT SUBPLOT GRID
+# MULTI-SUBJECT SUBPLOT GRID
 #######################################################################
 
 # when you have a list of decoded results (one per subject),
@@ -58,7 +58,7 @@ EegFun.plot_decoding(decoded, show_error = false)
 # EegFun.plot_decoding(all_decoded, title = "Individual Subjects")
 
 #######################################################################
-# 6. DECODING WITH SIGNIFICANCE
+# DECODING WITH SIGNIFICANCE
 #######################################################################
 
 # after running statistics on the decoded data:

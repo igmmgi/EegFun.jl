@@ -23,21 +23,21 @@ This demo shows how to apply temporal filters to EEG data to remove unwanted fre
 
 ## Workflow Summary
 
-### 1. High-Pass Filtering
+### High-Pass Filtering
 
 - Standard 0.1 Hz for ERP analysis
 - Stronger 1 Hz for ICA preprocessing
 
-### 2. Low-Pass Filtering
+### Low-Pass Filtering
 
 - 30 Hz for typical ERP analysis
 - Anti-aliasing before resampling
 
-### 3. Channel-Specific Filtering
+### Channel-Specific Filtering
 
 - Apply filters to selected channels only
 
-### 4. Filter Inspection
+### Filter Inspection
 
 - Create filter objects and visualise frequency response
 - Compare IIR vs FIR characteristics

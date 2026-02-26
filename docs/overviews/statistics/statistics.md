@@ -1,36 +1,48 @@
-This demo demonstrates statistical approaches for comparing ERP conditions and controlling for multiple comparisons.
+This demo shows permutation-based statistical testing for ERP data, with multiple thresholding and cluster correction approaches.
 
-### Statistical Testing Approaches
+### Key Functions
 
-**Parametric Tests:**
+| Function | Purpose |
+| --- | --- |
+| `prepare_stats` | Load multi-participant ERPs and prepare for statistical comparison |
+| `analytic_test` | Parametric t-test (uncorrected or Bonferroni) |
+| `permutation_test` | Cluster-based permutation test with multiple thresholding options |
+| `plot_erp_stats` | Visualise results with significance shading and critical t-values |
 
-- **T-tests**: Two-condition comparisons
-- **ANOVA**: Multiple conditions or factorial designs
+### Thresholding Methods
 
-**Non-parametric Tests:**
-
-- **Cluster-based permutation**: Controls for multiple comparisons across space and time
-- **Distribution-free**: No normality assumptions
-- **Spatiotemporal sensitivity**: Leverages natural clustering in EEG data
+| Method | Description |
+| --- | --- |
+| `:parametric` | T-distribution threshold (fastest, default) |
+| `:nonparametric_common` | Single threshold from pooled permutation distribution |
+| `:nonparametric_individual` | Point-specific thresholds from permutation distributions |
 
 ### Cluster-Based Permutation Testing
 
-This method addresses the multiple comparisons problem inherent in ERP analysis:
+Addresses the multiple comparisons problem in ERP analysis:
 
-1. Compute test statistic at each time point/channel
-2. Identify clusters of contiguous (spatial/temporal) significant effects
-3. Permute condition labels and repeat many times
+1. Compute test statistic at each time point × channel
+2. Identify clusters of contiguous spatiotemporal significant effects
+3. Permute condition labels and repeat (e.g., 1000 times)
 4. Compare observed cluster mass to permutation distribution
 
 **Key advantages:**
-
-- Controls family-wise error rate without being overly conservative (e.g., Bonferroni)
+- Controls family-wise error rate without being overly conservative
 - Sensitive to spatially and temporally distributed effects
 
-### Workflow Summary
+## Workflow Summary
 
-This demo shows:
+### Prepare Data
 
-1. **Loading group data**: Multiple participants with condition labels
-2. **Statistical comparison**: T-tests and cluster permutation
-3. **Visualization**: Plotting significant time intervals and topographies
+- Load group ERP data with `prepare_stats` specifying conditions, channels, and time intervals
+- Supports `:paired` (within-subject) and `:independent` (between-subject) designs
+
+### Analytic Tests
+
+- Quick uncorrected or Bonferroni-corrected t-tests for exploration
+
+### Permutation Tests
+
+- Choose thresholding method based on assumptions and computational budget
+- Set `cluster_type = :spatiotemporal` and `min_num_neighbors` for spatial constraints
+- Visualise results with `plot_erp_stats`

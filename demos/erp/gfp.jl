@@ -5,14 +5,14 @@
 using EegFun
 
 #######################################################################
-# 1. LOAD ERP DATA
+# LOAD ERP DATA
 #######################################################################
 
 dat = EegFun.read_data("./resources/data/julia/erps/example1_erps_good.jld2")
 
 
 #######################################################################
-# 2. GLOBAL FIELD POWER (GFP)
+# GLOBAL FIELD POWER (GFP)
 #######################################################################
 
 # GFP = standard deviation across all channels at each time point
@@ -29,7 +29,7 @@ gfp_result = EegFun.gfp(dat, normalize = true)
 
 
 #######################################################################
-# 3. GLOBAL DISSIMILARITY
+# GLOBAL DISSIMILARITY
 #######################################################################
 
 # Global dissimilarity = rate of topographic change over time
@@ -42,7 +42,7 @@ gd_result = EegFun.global_dissimilarity(dat, normalize = true)
 
 
 #######################################################################
-# 4. COMBINED CALCULATION
+# COMBINED CALCULATION
 #######################################################################
 
 # Calculate both GFP and global dissimilarity in one call
@@ -55,7 +55,7 @@ result.dissimilarity
 
 
 #######################################################################
-# 5. MULTIPLE CONDITIONS
+# MULTIPLE CONDITIONS
 #######################################################################
 
 # GFP for all conditions
