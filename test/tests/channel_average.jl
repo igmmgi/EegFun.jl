@@ -8,13 +8,13 @@ using Statistics
 
     dat = EegFun.create_test_continuous_data(n = 500)
 
-    # 1) Append averaged columns only (Symbols input)
+    # Append averaged columns only (Symbols input)
     EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])])
 
     @test :Ch1_Ch2 ∈ propertynames(dat.data)
     @test all(dat.data.Ch1_Ch2 .== (dat.data.Ch1 .+ dat.data.Ch2) ./ 2)
 
-    # 2) Reduce to only averages and create averaged layout
+    # Reduce to only averages and create averaged layout
     dat = EegFun.create_test_continuous_data(n = 500)
     dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])]; reduce = true)
     @test all(propertynames(dat.data) .== [:time, :sample, :triggers, :Ch1_Ch2])
@@ -22,29 +22,29 @@ using Statistics
     @test :inc ∈ propertynames(dat.layout.data)
     @test :azi ∈ propertynames(dat.layout.data)
 
-    # 3) Append averaged channels to layout
+    # Append averaged channels to layout
     dat = EegFun.create_test_continuous_data(n = 500)
     dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch2, :Ch3])])
     @test :Ch2_Ch3 ∈ propertynames(dat.data)
     @test any(dat.layout.data.label .== :Ch2_Ch3)
 
-    # 4) Mutating version
+    # Mutating version
     dat = EegFun.create_test_continuous_data(n = 500)
     EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch1, :Ch3])])
     @test :Ch1_Ch3 ∈ propertynames(dat.data)
     @test :Ch1_Ch2 ∉ propertynames(dat.data)
 
-    # 5) Auto-label :avg for all channels
+    # Auto-label :avg for all channels
     dat = EegFun.create_test_continuous_data(n = 500)
     dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2, :Ch3])]; reduce = true)
     @test :avg ∈ propertynames(dat.data)
 
-    # 6) Custom output_labels applied 
+    # Custom output_labels applied 
     dat = EegFun.create_test_continuous_data(n = 500)
     EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])]; output_labels = [:output_label])
     @test :output_label ∈ propertynames(dat.data)
 
-    # 7) Duplicate labels in layout (should accumulate)
+    # Duplicate labels in layout (should accumulate)
     # First add B_C, then add again to verify rows accumulate
     dat = EegFun.create_test_continuous_data(n = 500)
     EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch2, :Ch3])])
@@ -53,7 +53,7 @@ using Statistics
     n2 = sum(dat.layout.data.label .== :Ch2_Ch3)
     @test n1 == 1 && n2 == 2
 
-    # 8) EpochData append and reduce
+    # EpochData append and reduce
     # Create simple EpochData (2 epochs) from dat
     dat = EegFun.create_test_epoch_data(n = 500)
     dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])])
@@ -69,7 +69,7 @@ using Statistics
     @test cols[end] == :Ch1_Ch2
     @test :Ch1 ∉ cols && :Ch2 ∉ cols && :Ch3 ∉ cols
 
-    # 9) ErpData reduce path
+    # ErpData reduce path
     dat = EegFun.create_test_epoch_data(n = 500)
     dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])]; reduce = true)
     # condition and condition_name are now in struct, not DataFrame
@@ -78,14 +78,14 @@ using Statistics
     @test hasproperty(dat, :condition)
     @test hasproperty(dat, :condition_name)
 
-    # 10) Test default behavior (average all channels)
+    # Test default behavior (average all channels)
     dat = EegFun.create_test_epoch_data(n = 500)
     EegFun.channel_average!(dat)  # Should use default channels() from second function
     @test :avg ∈ propertynames(dat.data[1])
     @test all(dat.data[1].avg .== (dat.data[1].Ch1 .+ dat.data[1].Ch2 .+ dat.data[1].Ch3) ./ 3)
     @test all(dat.data[end].avg .== (dat.data[end].Ch1 .+ dat.data[end].Ch2 .+ dat.data[end].Ch3) ./ 3)
 
-    # 11) Test single channel selection with custom label
+    # Test single channel selection with custom label
     dat = EegFun.create_test_epoch_data(n = 500)
     EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])], output_labels = [:custom])
     @test :custom ∈ propertynames(dat.data[1])
@@ -837,5 +837,86 @@ end
     finally
         # Cleanup
         rm(test_dir, recursive = true, force = true)
+    end
+end
+
+@testset "TF Channel Average" begin
+
+    @testset "Mutating: basic average all channels" begin
+        tf = EegFun.create_test_tf_data(n_channels = 3, power_offset = 3.0, noise = 0.0)
+
+        EegFun.channel_average!(tf)
+
+        # Should have added :avg column to both power and phase
+        @test hasproperty(tf.data_power, :avg)
+        @test hasproperty(tf.data_phase, :avg)
+
+        # :avg should be the mean of Ch1, Ch2, Ch3 (all 3.0 with noise=0)
+        @test all(tf.data_power[!, :avg] .≈ 3.0)
+    end
+
+    @testset "Mutating: specific channel group" begin
+        tf = EegFun.create_test_tf_data(n_channels = 3, power_offset = 2.0, noise = 0.0)
+
+        EegFun.channel_average!(tf, channel_selections = [EegFun.channels([:Ch1, :Ch2])], output_labels = [:frontal])
+
+        @test hasproperty(tf.data_power, :frontal)
+        @test hasproperty(tf.data_phase, :frontal)
+        @test all(tf.data_power[!, :frontal] .≈ 2.0)
+    end
+
+    @testset "Mutating: reduce mode" begin
+        tf = EegFun.create_test_tf_data(n_channels = 3, power_offset = 1.0, noise = 0.0)
+
+        EegFun.channel_average!(tf, channel_selections = [EegFun.channels([:Ch1, :Ch2])], output_labels = [:avg_group], reduce = true)
+
+        # Should only have metadata + averaged columns
+        @test hasproperty(tf.data_power, :time)
+        @test hasproperty(tf.data_power, :freq)
+        @test hasproperty(tf.data_power, :avg_group)
+        @test !hasproperty(tf.data_power, :Ch1)
+        @test !hasproperty(tf.data_power, :Ch3)
+
+        # Same for phase
+        @test hasproperty(tf.data_phase, :avg_group)
+        @test !hasproperty(tf.data_phase, :Ch1)
+    end
+
+    @testset "Non-mutating: returns copy" begin
+        tf = EegFun.create_test_tf_data(n_channels = 3)
+
+        result = EegFun.channel_average(tf)
+
+        # Original should not be modified
+        @test !hasproperty(tf.data_power, :avg)
+
+        # Result should have the averaged column
+        @test hasproperty(result.data_power, :avg)
+        @test hasproperty(result.data_phase, :avg)
+    end
+
+    @testset "Non-mutating: Vector{TimeFreqData}" begin
+        tfs = [EegFun.create_test_tf_data(condition = 1), EegFun.create_test_tf_data(condition = 2)]
+
+        results = EegFun.channel_average(tfs)
+
+        @test length(results) == 2
+        @test all(hasproperty(r.data_power, :avg) for r in results)
+        @test all(hasproperty(r.data_phase, :avg) for r in results)
+
+        # Originals untouched
+        @test !hasproperty(tfs[1].data_power, :avg)
+    end
+
+    @testset "Both DataFrames stay in sync" begin
+        tf = EegFun.create_test_tf_data(n_channels = 3)
+
+        EegFun.channel_average!(tf, channel_selections = [EegFun.channels([:Ch1, :Ch2])], output_labels = [:test_avg])
+
+        # Same number of rows
+        @test nrow(tf.data_power) == nrow(tf.data_phase)
+
+        # Same columns added
+        @test propertynames(tf.data_power) == propertynames(tf.data_phase)
     end
 end

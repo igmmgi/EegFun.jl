@@ -8,57 +8,61 @@ using DataFrames
 
 @testset "EEGLAB Import" begin
     # Test file path
-    test_file = "./resources/data/eeglab/epochs.set"
+    test_file = joinpath(dirname(dirname(@__DIR__)), "resources", "data", "eeglab", "epochs.set")
 
     if !isfile(test_file)
-        @warn "Test file not found: $test_file"
-        @warn "Skipping EEGLAB import tests"
+        EegFun.@minimal_warning "Test file not found: $test_file"
+        EegFun.@minimal_warning "Skipping EEGLAB import tests"
         return
     end
 
-    @testset "Basic Loading" begin
-        # Read data
-        epochs = read_eeglab(test_file, verbose = false)
+    # read_eeglab returns (EpochData, InfoIca) when ICA is present
+    result = EegFun.read_eeglab(test_file)
 
-        # Test data type
-        @test epochs isa EpochData
+    @testset "Basic Loading" begin
+        # Result is a tuple when ICA data is present
+        @test result isa Tuple
+        epochs, ica_info = result
+
+        @test epochs isa EegFun.EpochData
+        @test ica_info isa EegFun.InfoIca
 
         # Test dimensions
-        @test length(epochs.data) == 91  # 91 trials
+        @test length(epochs.data) == 267
 
         # Each epoch should be a DataFrame
         @test epochs.data[1] isa DataFrame
 
         # Should have time column
-        @test :time in names(epochs.data[1])
+        @test :time in propertynames(epochs.data[1])
 
         # Test sample rate
         @test epochs.sample_rate == 125
 
         # Test file path stored
-        @test occursin("Probe.set", epochs.file)
+        @test occursin("epochs.set", epochs.file)
     end
 
     @testset "Channel Information" begin
-        epochs = read_eeglab(test_file, verbose = false)
+        epochs = result[1]
 
-        # Get channel names (excluding time)
-        ch_names = filter(x -> x != :time, names(epochs.data[1]))
+        # Get channel names (excluding metadata columns)
+        ch_labels = EegFun.channel_labels(epochs)
 
         # Test number of channels
-        @test length(ch_names) == 71
+        @test length(ch_labels) == 71
 
         # Test some expected channels
-        @test :OZ in ch_names || :Oz in ch_names
-        @test :FP1 in ch_names || :Fp1 in ch_names
+        @test :OZ in ch_labels || :Oz in ch_labels
+        @test :FP1 in ch_labels || :Fp1 in ch_labels
 
         # Test layout
-        @test epochs.layout isa Layout
+        @test epochs.layout isa EegFun.Layout
         @test size(epochs.layout.data, 1) == 71
     end
 
     @testset "Time Vector" begin
-        epochs = read_eeglab(test_file, verbose = false)
+        epochs = result[1]
 
         # Get time vector from first epoch
         times = epochs.data[1].time
@@ -67,12 +71,12 @@ using DataFrames
         @test minimum(times) ≈ -1.0 atol = 0.01
         @test maximum(times) ≈ 1.992 atol = 0.01
 
-        # Test number of timepoints
+        # Test number of timepoints per epoch
         @test length(times) == 375
     end
 
     @testset "Data Integrity" begin
-        epochs = read_eeglab(test_file, verbose = false)
+        epochs = result[1]
 
         # All epochs should have same dimensions
         n_rows = nrow(epochs.data[1])
@@ -85,7 +89,8 @@ using DataFrames
 
         # Data should be numeric
         first_epoch = epochs.data[1]
-        ch_name = names(first_epoch)[1]  # First channel
+        ch_labels = EegFun.channel_labels(epochs)
+        ch_name = string(ch_labels[1])
         @test eltype(first_epoch[!, ch_name]) <: Real
 
         # Should not have NaN or Inf
@@ -93,21 +98,31 @@ using DataFrames
         @test !any(isinf.(first_epoch[!, ch_name]))
     end
 
+    @testset "ICA Data" begin
+        ica_info = result[2]
+
+        @test ica_info isa EegFun.InfoIca
+        @test size(ica_info.unmixing) == (71, 71)
+        @test size(ica_info.mixing) == (71, 71)
+        @test size(ica_info.sphere) == (71, 71)
+        @test length(ica_info.ica_label) == 71
+    end
+
     @testset "Integration with EegFun Functions" begin
-        epochs = read_eeglab(test_file, verbose = false)
+        epochs = result[1]
 
         # Test averaging works
-        erp = average_epochs(epochs)
-        @test erp isa ErpData
+        erp = EegFun.average_epochs(epochs)
+        @test erp isa EegFun.ErpData
 
         # Test filtering works
         epochs_copy = copy(epochs)
-        lowpass_filter!(epochs_copy, 30.0)
-        @test epochs_copy isa EpochData
+        EegFun.lowpass_filter!(epochs_copy, 30.0)
+        @test epochs_copy isa EegFun.EpochData
 
         # Test baseline works
         epochs_copy2 = copy(epochs)
-        baseline!(epochs_copy2, (-1.0, 0.0))
-        @test epochs_copy2 isa EpochData
+        EegFun.baseline!(epochs_copy2, (-1.0, 0.0))
+        @test epochs_copy2 isa EegFun.EpochData
     end
 end

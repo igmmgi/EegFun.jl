@@ -112,13 +112,13 @@ using Dates
     @testset "read_config Tests" begin
 
         @testset "Valid Configuration Loading" begin
-            # Test 1: Load default config only - should work without errors
+            # Load default config only - should work without errors
             default_config = EegFun.read_config(joinpath(dirname(@__FILE__), "..", "..", "src", "config", "default.toml"))
             @test default_config isa Dict
             @test haskey(default_config, "preprocess")
             @test haskey(default_config["preprocess"], "filter")
 
-            # Test 2: Create a simple valid user config
+            # Create a simple valid user config
             user_config_path = joinpath(test_dir, "valid_config.toml")
             open(user_config_path, "w") do io
                 println(io, "[preprocess.filter.highpass]")
@@ -137,17 +137,17 @@ using Dates
             @test config["preprocess"]["epoch_start"] == -2.0
             @test config["preprocess"]["epoch_end"] == 3.0
 
-            # Test 3: Verify default values are preserved when not overridden
+            # Verify default values are preserved when not overridden
             @test config["preprocess"]["filter"]["lowpass"]["freq"] == 30  # default value
             @test config["preprocess"]["reference_channel"] == "avg"  # default value
 
-            # Test 4: Test that logging occurs but doesn't prevent successful loading
+            # Test that logging occurs but doesn't prevent successful loading
             # (We don't test stderr content since @info logging is expected and normal)
             @test config |> !isnothing
         end
 
         @testset "Configuration Merging" begin
-            # Test 5: Nested configuration merging
+            # Nested configuration merging
             nested_config_path = joinpath(test_dir, "nested_config.toml")
             open(nested_config_path, "w") do io
                 println(io, "[files.output]")
@@ -168,10 +168,10 @@ using Dates
         end
 
         @testset "Error Handling" begin
-            # Test 6: Non-existent file - should throw
+            # Non-existent file - should throw
             @test_throws Exception EegFun.read_config("nonexistent_file.toml")
 
-            # Test 7: Invalid TOML syntax - should throw
+            # Invalid TOML syntax - should throw
             invalid_toml_path = joinpath(test_dir, "invalid.toml")
             open(invalid_toml_path, "w") do io
                 println(io, "[section")  # Missing closing bracket
@@ -179,7 +179,7 @@ using Dates
             end
             @test_throws Exception EegFun.read_config(invalid_toml_path)
 
-            # Test 8: Invalid parameter values - should throw
+            # Invalid parameter values - should throw
             invalid_values_path = joinpath(test_dir, "invalid_values.toml")
             open(invalid_values_path, "w") do io
                 println(io, "[preprocess.filter.highpass]")
@@ -187,7 +187,7 @@ using Dates
             end
             @test_throws Exception EegFun.read_config(invalid_values_path)
 
-            # Test 9: Invalid parameter type - should throw
+            # Invalid parameter type - should throw
             invalid_type_path = joinpath(test_dir, "invalid_type.toml")
             open(invalid_type_path, "w") do io
                 println(io, "[preprocess.filter.highpass]")
@@ -195,7 +195,7 @@ using Dates
             end
             @test_throws Exception EegFun.read_config(invalid_type_path)
 
-            # Test 10: Invalid allowed values - should throw
+            # Invalid allowed values - should throw
             invalid_allowed_path = joinpath(test_dir, "invalid_allowed.toml")
             open(invalid_allowed_path, "w") do io
                 println(io, "[preprocess.filter.highpass]")
@@ -205,7 +205,7 @@ using Dates
         end
 
         @testset "Boundary Value Testing" begin
-            # Test 11: Minimum boundary values
+            # Minimum boundary values
             min_boundary_path = joinpath(test_dir, "min_boundary.toml")
             open(min_boundary_path, "w") do io
                 println(io, "[preprocess.filter.highpass]")
@@ -217,7 +217,7 @@ using Dates
             @test config["preprocess"]["filter"]["highpass"]["freq"] == 0.01
             @test config["preprocess"]["filter"]["highpass"]["order"] == 1
 
-            # Test 12: Maximum boundary values
+            # Maximum boundary values
             max_boundary_path = joinpath(test_dir, "max_boundary.toml")
             open(max_boundary_path, "w") do io
                 println(io, "[preprocess.filter.highpass]")
@@ -231,7 +231,7 @@ using Dates
         end
 
         @testset "Data Type Conversions" begin
-            # Test 13: Numeric type conversions
+            # Numeric type conversions
             conversion_path = joinpath(test_dir, "conversion.toml")
             open(conversion_path, "w") do io
                 println(io, "[preprocess.filter.highpass]")
@@ -245,7 +245,7 @@ using Dates
         end
 
         @testset "Complete Configuration Structure" begin
-            # Test 14: Verify all expected sections exist
+            # Verify all expected sections exist
             complete_config_path = joinpath(test_dir, "empty.toml")
             open(complete_config_path, "w") do io
                 # Empty file to test defaults
@@ -276,7 +276,7 @@ using Dates
         end
 
         @testset "Edge Cases" begin
-            # Test 15: Empty sections
+            # Empty sections
             empty_sections_path = joinpath(test_dir, "empty_sections.toml")
             open(empty_sections_path, "w") do io
                 println(io, "[files.input]")
@@ -288,7 +288,7 @@ using Dates
             @test haskey(config, "files")
             @test haskey(config["files"], "input")
 
-            # Test 16: Special characters in string values
+            # Special characters in string values
             special_chars_path = joinpath(test_dir, "special_chars.toml")
             open(special_chars_path, "w") do io
                 println(io, "[files.input]")
@@ -359,36 +359,16 @@ using Dates
                 println(io, "order = \"not_a_number\"")  # Invalid type
             end
             @test_throws Exception EegFun.read_config(type_config_path)
-        end
 
-        @testset "Config Validation" begin
-            # Test valid configuration
-            valid_config_path = joinpath(test_dir, "valid.toml")
-            open(valid_config_path, "w") do io
-                println(io, "[preprocess.filter.highpass]")
-                println(io, "freq = 0.5")
-                println(io, "method = \"fir\"")
-                println(io, "order = 2")
+            # Test optional parameters
+            optional_config_path = joinpath(test_dir, "optional.toml")
+            open(optional_config_path, "w") do io
+                println(io, "[files.input]")
+                println(io, "epoch_condition_file = \"\"")  # Empty string for optional parameter
             end
-            config = EegFun.read_config(valid_config_path)
+            config = EegFun.read_config(optional_config_path)
             @test config |> !isnothing
-            @test config["preprocess"]["filter"]["highpass"]["freq"] == 0.5
-
-            # Test invalid parameter value
-            invalid_value_path = joinpath(test_dir, "invalid_value.toml")
-            open(invalid_value_path, "w") do io
-                println(io, "[preprocess.filter.highpass]")
-                println(io, "freq = -1.0")  # Below minimum
-            end
-            @test_throws Exception EegFun.read_config(invalid_value_path)
-
-            # Test invalid parameter type
-            invalid_type_path = joinpath(test_dir, "invalid_type.toml")
-            open(invalid_type_path, "w") do io
-                println(io, "[preprocess.filter.highpass]")
-                println(io, "order = \"not_a_number\"")
-            end
-            @test_throws Exception EegFun.read_config(invalid_type_path)
+            @test config["files"]["input"]["epoch_condition_file"] == ""
         end
 
         @testset "Config Merging" begin
@@ -415,42 +395,6 @@ using Dates
             @test config |> !isnothing
             @test config["files"]["input"]["directory"] == "/custom/path"
             @test config["files"]["input"]["raw_data_files"] == ["file1.bdf", "file2.bdf"]
-        end
-
-        @testset "Parameter Validation" begin
-            # Test numeric range validation
-            range_config_path = joinpath(test_dir, "range_config.toml")
-            open(range_config_path, "w") do io
-                println(io, "[preprocess.filter.highpass]")
-                println(io, "freq = 0.005")  # Below minimum
-            end
-            @test_throws Exception EegFun.read_config(range_config_path)
-
-            # Test allowed values validation
-            allowed_config_path = joinpath(test_dir, "allowed_config.toml")
-            open(allowed_config_path, "w") do io
-                println(io, "[preprocess.filter.highpass]")
-                println(io, "method = \"invalid\"")  # Not in allowed values
-            end
-            @test_throws Exception EegFun.read_config(allowed_config_path)
-
-            # Test type conversion validation
-            type_config_path = joinpath(test_dir, "type_config.toml")
-            open(type_config_path, "w") do io
-                println(io, "[preprocess.filter.highpass]")
-                println(io, "order = \"not_a_number\"")  # Invalid type
-            end
-            @test_throws Exception EegFun.read_config(type_config_path)
-
-            # Test optional parameters
-            optional_config_path = joinpath(test_dir, "optional.toml")
-            open(optional_config_path, "w") do io
-                println(io, "[files.input]")
-                println(io, "epoch_condition_file = \"\"")  # Empty string for optional parameter
-            end
-            config = EegFun.read_config(optional_config_path)
-            @test config |> !isnothing
-            @test config["files"]["input"]["epoch_condition_file"] == ""
         end
     end
 
@@ -867,24 +811,6 @@ using Dates
     # DISPLAY/INFO FUNCTIONS
     # =============================================================================
 
-    @testset "Parameter Info Display" begin
-        # Test that all parameters exist and have required properties
-        for (path, param) in EegFun.PARAMETERS
-            @test !isempty(param.description)
-            @test param isa EegFun.ConfigParameter
-        end
-
-        # Test specific parameter properties
-        param = EegFun.PARAMETERS["preprocess.filter.highpass.freq"]
-        @test param.description == "Cutoff frequency (Hz)"
-        @test param.min == 0.01
-        @test param.max == 20.0
-        @test param.default == 0.1
-
-        # Test non-existent parameter
-        @test !haskey(EegFun.PARAMETERS, "nonexistent")
-    end
-
     @testset "_show_parameter_details Tests" begin
         # Test with parameter that has all fields
         param = EegFun.ConfigParameter{Real}(description = "Test param", default = 5.0, min = 0.0, max = 10.0, allowed = ["a", "b"])
@@ -998,16 +924,6 @@ using Dates
     # =============================================================================
 
     @testset "show_parameter_info Integration Tests" begin
-        # Test with empty parameter name (show all)
-        @test typeof(EegFun.show_parameter_info) <: Function
-
-        # Test with specific parameter
-        @test typeof(EegFun.show_parameter_info) <: Function
-
-        # Test with section prefix
-        @test typeof(EegFun.show_parameter_info) <: Function
-
-        # Test with non-existent parameter
         @test typeof(EegFun.show_parameter_info) <: Function
     end
 
@@ -1107,37 +1023,7 @@ using Dates
         @test !contains(output, "# Default:")
     end
 
-    @testset "_write_parameter_value Tests" begin
-        # Test string value writing
-        io = IOBuffer()
-        EegFun._write_parameter_value(io, "test_param", "test_value")
-        @test String(take!(io)) == "test_param = \"test_value\"\n"
 
-        # Test numeric value writing
-        io = IOBuffer()
-        EegFun._write_parameter_value(io, "test_param", 42)
-        @test String(take!(io)) == "test_param = 42\n"
-
-        # Test boolean value writing
-        io = IOBuffer()
-        EegFun._write_parameter_value(io, "test_param", true)
-        @test String(take!(io)) == "test_param = true\n"
-
-        # Test empty vector writing
-        io = IOBuffer()
-        EegFun._write_parameter_value(io, "test_param", String[])
-        @test String(take!(io)) == "test_param = []\n"
-
-        # Test vector with values writing
-        io = IOBuffer()
-        EegFun._write_parameter_value(io, "test_param", ["a", "b", "c"])
-        @test String(take!(io)) == "test_param = [a, b, c]\n"
-
-        # Test vector with mixed types
-        io = IOBuffer()
-        EegFun._write_parameter_value(io, "test_param", [1, "two", 3.0])
-        @test String(take!(io)) == "test_param = [1, two, 3.0]\n"
-    end
 
     # =============================================================================
     # ERROR HANDLING

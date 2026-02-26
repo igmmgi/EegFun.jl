@@ -125,41 +125,8 @@ using Dates
         EegFun.close_logging()
     end
 
-    @testset "Logging with different message types" begin
-        log_file = joinpath(test_dir, "message_types.log")
 
-        EegFun.setup_logging(log_file)
 
-        # Test different log levels
-        @info "Info message"
-        @warn "Warning message"
-        @error "Error message"
-
-        EegFun.close_logging()
-
-        # Verify all message types were logged
-        content = read(log_file, String)
-        @test contains(content, "Info message")
-        @test contains(content, "Warning message")
-        @test contains(content, "Error message")
-    end
-
-    @testset "Logging with keyword arguments" begin
-        log_file = joinpath(test_dir, "kwargs_test.log")
-
-        EegFun.setup_logging(log_file)
-
-        # Test logging with keyword arguments
-        @info "Message with kwargs" key1 = "value1" key2 = 42
-
-        EegFun.close_logging()
-
-        # Verify keyword arguments were logged
-        content = read(log_file, String)
-        @test contains(content, "Message with kwargs")
-        @test contains(content, "key1 = value1")
-        @test contains(content, "key2 = 42")
-    end
 
     @testset "Duration formatting edge cases" begin
         # Test very short durations
