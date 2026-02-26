@@ -1118,9 +1118,9 @@ function _add_boolean_indicators!(state, channel_sym)
                 # Create vertical lines at each true position
                 # Only create lines within the current view range
                 current_range = state.xrange[]
-                visible_times = true_times[true_times .>= state.dat.data.time[first(
+                visible_times = true_times[true_times.>=state.dat.data.time[first(
                     current_range,
-                )].&&true_times .<= state.dat.data.time[last(current_range)]]
+                )].&&true_times.<=state.dat.data.time[last(current_range)]]
 
                 if !isempty(visible_times)
                     lines = vlines!(ax_channel, visible_times, color = :red, linewidth = 1)
@@ -1611,17 +1611,45 @@ function _find_peaks(data::AbstractVector; min_prominence_std::Real = 2.0, windo
     threshold_pos = (std_val ≈ 0) ? mean_val : mean_val + min_prominence_std * std_val
     threshold_neg = (std_val ≈ 0) ? mean_val : mean_val - min_prominence_std * std_val
 
-    for i = (window_size+1):(length(data)-window_size)
-        # Get the window around the current point
-        left_window = data[(i-window_size):(i-1)]
-        right_window = data[(i+1):(i+window_size)]
+    @inbounds for i = (window_size+1):(length(data)-window_size)
+        val = data[i]
 
         # Positive peaks (greater than all neighbors in window and above threshold)
-        if all(data[i] .> left_window) && all(data[i] .> right_window) && data[i] > threshold_pos
-            push!(peaks, i)
+        if val > threshold_pos
+            is_peak = true
+            for j = (i-window_size):(i-1)
+                if val <= data[j]
+                    is_peak = false
+                    break
+                end
+            end
+            if is_peak
+                for j = (i+1):(i+window_size)
+                    if val <= data[j]
+                        is_peak = false
+                        break
+                    end
+                end
+            end
+            is_peak && push!(peaks, i)
             # Negative peaks (less than all neighbors in window and below threshold)
-        elseif all(data[i] .< left_window) && all(data[i] .< right_window) && data[i] < threshold_neg
-            push!(peaks, i)
+        elseif val < threshold_neg
+            is_trough = true
+            for j = (i-window_size):(i-1)
+                if val >= data[j]
+                    is_trough = false
+                    break
+                end
+            end
+            if is_trough
+                for j = (i+1):(i+window_size)
+                    if val >= data[j]
+                        is_trough = false
+                        break
+                    end
+                end
+            end
+            is_trough && push!(peaks, i)
         end
     end
     return peaks
@@ -1743,7 +1771,7 @@ function plot_line_noise_components(line_noise_comps::Vector{Int}, metrics_df::D
 
         # Add component numbers as labels
         for (i, comp) in enumerate(line_noise_comps)
-            row = metrics_df[metrics_df.Component .== comp, :]
+            row = metrics_df[metrics_df.Component.==comp, :]
             text!(
                 ax1,
                 comp,

@@ -92,7 +92,7 @@ end
     run_ica(epoched_data::Vector{EpochData};
             n_components::Union{Nothing,Int} = nothing,
             sample_selection::Function = samples(),
-    interval_selection::Interval = times(),
+            interval_selection::Interval = times(),
             channel_selection::Function = channels(),
             include_extra::Bool = false,
             remove_duplicates::Bool = true,
@@ -1164,6 +1164,8 @@ function identify_eog_components(
     z_threshold::Real = 3.0,
     min_correlation::Float64 = 0.5,
     two_step::Bool = true,
+    _precomputed_components::Union{Nothing,Tuple{Matrix{Float64},Int}} = nothing,
+    _precomputed_samples::Union{Nothing,Vector{Int}} = nothing,
 )
 
     # Check basic inputs - return nothing as first value if EOG channels are missing
@@ -1172,8 +1174,13 @@ function identify_eog_components(
         return nothing, DataFrame()
     end
 
-    # Get samples to use
-    selected_samples = get_selected_samples(dat, sample_selection)
+    # Get samples to use (skip if pre-computed)
+    selected_samples = if !isnothing(_precomputed_samples)
+        _precomputed_samples
+    else
+        combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+        get_selected_samples(dat, combined_sel)
+    end
     if isempty(selected_samples)
         @minimal_warning "No samples remaining after applying exclude criteria. Cannot identify eye components."
         return Dict(:vEOG => Int[], :hEOG => Int[]), DataFrame()
@@ -1219,35 +1226,20 @@ function identify_eog_components(
         return spatial_corrs, secondary_components
     end
 
-    # Function to calculate lagged correlations between idenitified vEOG/hEOG components and remaining components (used in Step2) 
-    function calculate_lagged_correlations(
-        remaining_components,
-        primary_components,
-        components_matrix,
-        lp_filter,
-        max_lag_samples,
-        lag_step,
-    )
+    # Function to calculate lagged correlations between components
+    function calculate_lagged_correlations(remaining_components, primary_components, comp_matrix, max_lag_samples, lag_step)
 
         lagged_corrs = fill(NaN, n_components)
         if isempty(remaining_components) || isempty(primary_components)
             return lagged_corrs
         end
 
-        # Pre-filter all primary EOG components (they don't depend on remaining components)
-        eog_components_filtered = Dict{Int,Vector{Float64}}()
-        for eog_comp_idx in primary_components
-            eog_components_filtered[eog_comp_idx] = abs.(filtfilt(lp_filter.filter_object, components_matrix[eog_comp_idx, :]))
-        end
-
         for comp_idx in remaining_components
-            # Apply low-pass filter to remove high-frequency noise
-            comp_ts = abs.(filtfilt(lp_filter.filter_object, components_matrix[comp_idx, :]))
+            comp_ts = @view comp_matrix[comp_idx, :]
 
             max_corr = 0.0
             for eog_comp_idx in primary_components
-                eog_comp_ts = eog_components_filtered[eog_comp_idx]
-                # Use crosscor to compute correlations at all lags, then take maximum absolute value
+                eog_comp_ts = @view comp_matrix[eog_comp_idx, :]
                 corrs = crosscor(eog_comp_ts, comp_ts, (-max_lag_samples):lag_step:max_lag_samples)
                 max_corr_val = maximum(abs.(corrs))
                 if max_corr_val > max_corr
@@ -1265,8 +1257,12 @@ function identify_eog_components(
     vEOG = dat.data[selected_samples, vEOG_channel]
     hEOG = dat.data[selected_samples, hEOG_channel]
 
-    # Calculate components for valid samples
-    components, n_components = _prepare_ica_data_matrix(dat, ica, selected_samples)
+    # Calculate components for valid samples (skip if pre-computed)
+    components, n_components = if !isnothing(_precomputed_components)
+        _precomputed_components
+    else
+        _prepare_ica_data_matrix(dat, ica, selected_samples)
+    end
 
     # Step 1: Always calculate correlations and z-scores (used in both single-step and two-step modes)
     vEOG_corrs = calculate_correlations(vEOG)
@@ -1287,18 +1283,14 @@ function identify_eog_components(
     vEOG_spatial_corr, _ = calculate_spatial_correlations(remaining_vEOG, primary_vEOG, ica.mixing, min_correlation)
     hEOG_spatial_corr, _ = calculate_spatial_correlations(remaining_hEOG, primary_hEOG, ica.mixing, min_correlation)
 
-    # Calculate vEOG/hEOG step2: lagged correlations with primary vEOG/hEOG components
-    # Create low-pass filter for component time series (EOG artifacts are typically < 15 Hz)
-    lp_filter = create_lowpass_filter(10.0, dat.sample_rate; order = 3)
-
     # Lag range: +- 100ms  
     # Convert to samples based on sample rate
     max_lag_samples = round(Int, 100.0 * dat.sample_rate / 1000.0) # 100 ms lag
     lag_step = max(1, round(Int, 5.0 * dat.sample_rate / 1000.0)) # 5 ms step
 
-    # Calculate lagged correlations for vEOG and hEOG
-    vEOG_temporal_corr = calculate_lagged_correlations(remaining_vEOG, primary_vEOG, components, lp_filter, max_lag_samples, lag_step)
-    hEOG_temporal_corr = calculate_lagged_correlations(remaining_hEOG, primary_hEOG, components, lp_filter, max_lag_samples, lag_step)
+    # Calculate lagged correlations (zero-allocation, uses pre-computed component means)
+    vEOG_temporal_corr = calculate_lagged_correlations(remaining_vEOG, primary_vEOG, components, max_lag_samples, lag_step)
+    hEOG_temporal_corr = calculate_lagged_correlations(remaining_hEOG, primary_hEOG, components, max_lag_samples, lag_step)
 
     # Helper function to compute z-scores only for remaining components
     function zscore_for_remaining(corr_vector, remaining_indices)
@@ -1425,17 +1417,28 @@ function identify_ecg_components(
     min_peak_ratio::Real = 0.5,
     sample_selection::Function = samples(),
     interval_selection::Interval = times(),
+    _precomputed_components::Union{Nothing,Tuple{Matrix{Float64},Int}} = nothing,
+    _precomputed_samples::Union{Nothing,Vector{Int}} = nothing,
 )
 
-    # Data Preparation 
-    selected_samples = get_selected_samples(dat, sample_selection)
+    # Data Preparation (skip if pre-computed)
+    selected_samples = if !isnothing(_precomputed_samples)
+        _precomputed_samples
+    else
+        combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+        get_selected_samples(dat, combined_sel)
+    end
     if isempty(selected_samples)
         @minimal_warning "No samples remaining after applying exclude criteria."
         return Int[], DataFrame()
     end
 
-    # Calculate components for valid samples
-    components_subset, n_components = _prepare_ica_data_matrix(dat, ica, selected_samples)
+    # Calculate components for valid samples (skip if pre-computed)
+    components_subset, n_components = if !isnothing(_precomputed_components)
+        _precomputed_components
+    else
+        _prepare_ica_data_matrix(dat, ica, selected_samples)
+    end
 
     # Early return if no components
     if n_components == 0
@@ -1459,10 +1462,10 @@ function identify_ecg_components(
     identified_ecg = Int[]
 
     for comp_idx = 1:n_components
-        component_ts = components_subset[comp_idx, :]
+        component_ts = @view components_subset[comp_idx, :]
 
         # Z-score the time series for consistent peak detection across components
-        ts_zscored = StatsBase.zscore(component_ts)
+        ts_zscored = (component_ts .- mean(component_ts)) ./ std(component_ts)
 
         # Find prominent peaks 
         peak_indices = _find_peaks(ts_zscored; min_prominence_std = min_prominence_std)
@@ -1649,17 +1652,28 @@ function identify_line_noise_components(
     freq_bandwidth::Real = 1.0,
     z_threshold::Real = 3.0,
     min_harmonic_power::Real = 1.5,
+    _precomputed_components::Union{Nothing,Tuple{Matrix{Float64},Int}} = nothing,
+    _precomputed_samples::Union{Nothing,Vector{Int}} = nothing,
 )
 
-    # Get samples to use
-    samples_to_use = get_selected_samples(dat, sample_selection)
+    # Get samples to use (skip if pre-computed)
+    samples_to_use = if !isnothing(_precomputed_samples)
+        _precomputed_samples
+    else
+        combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+        get_selected_samples(dat, combined_sel)
+    end
     if isempty(samples_to_use)
         @minimal_warning "No samples remaining after applying exclude criteria. Cannot identify line noise components."
         return Int[], DataFrame()
     end
 
-    # Calculate components for valid samples
-    components, n_components = _prepare_ica_data_matrix(dat, ica, samples_to_use)
+    # Calculate components for valid samples (skip if pre-computed)
+    components, n_components = if !isnothing(_precomputed_components)
+        _precomputed_components
+    else
+        _prepare_ica_data_matrix(dat, ica, samples_to_use)
+    end
 
     # Calculate power spectrum for each component
     # Use a reasonable FFT size (power of 2, but not too large)
@@ -1843,16 +1857,42 @@ function identify_components(
     interval_selection::Interval = times(),
     kwargs...,
 )
+    # Pre-compute shared data ONCE (avoids 3x redundant matrix operations)
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+    selected_samples = get_selected_samples(dat, combined_sel)
+    precomputed = _prepare_ica_data_matrix(dat, ica, selected_samples)
+
     # Identify EOG components (pass through use_robust_zscore if provided)
-    eog_comps, eog_metrics_df = identify_eog_components(dat, ica; sample_selection = sample_selection, kwargs...)
+    eog_comps, eog_metrics_df = identify_eog_components(
+        dat,
+        ica;
+        sample_selection = sample_selection,
+        _precomputed_components = precomputed,
+        _precomputed_samples = selected_samples,
+        kwargs...,
+    )
 
     # Identify ECG components
-    ecg_comps, ecg_metrics_df = identify_ecg_components(dat, ica; sample_selection = sample_selection, kwargs...)
+    ecg_comps, ecg_metrics_df = identify_ecg_components(
+        dat,
+        ica;
+        sample_selection = sample_selection,
+        _precomputed_components = precomputed,
+        _precomputed_samples = selected_samples,
+        kwargs...,
+    )
 
     # Identify line noise components
-    line_noise_comps, line_noise_metrics_df = identify_line_noise_components(dat, ica; kwargs...)
+    line_noise_comps, line_noise_metrics_df = identify_line_noise_components(
+        dat,
+        ica;
+        sample_selection = sample_selection,
+        _precomputed_components = precomputed,
+        _precomputed_samples = selected_samples,
+        kwargs...,
+    )
 
-    # Identify channel noise components (spatial kurtosis)
+    # Identify channel noise components (spatial kurtosis - uses only ica.mixing, no data matrix needed)
     channel_noise_comps, channel_noise_metrics_df = identify_spatial_kurtosis_components(ica; kwargs...)
 
     # Combine all components
