@@ -23,14 +23,14 @@ Triggers mark experimental events (stimulus onsets, responses, conditions) in th
 
 ## Workflow Summary
 
-### 1. Trigger Counting
+### Trigger Counting
 
 - View raw and cleaned trigger counts in a formatted table
 
-### 2. Sequence Searching
+### Sequence Searching
 
 - Find single triggers, multi-trigger sequences, and patterns with wildcards
 
-### 3. Visualisation
+### Visualisation
 
 - Plot trigger timing and distribution

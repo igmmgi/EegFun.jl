@@ -83,26 +83,26 @@ Filter response plots show how a filter affects different frequencies:
 
 This demo shows filter response visualization:
 
-### 1. Create Filters
+### Create Filters
 
 - Lowpass IIR filter (30 Hz)
 - Highpass IIR filter (1 Hz)
 - Lowpass FIR filter (40 Hz)
 - Various cutoff frequencies
 
-### 2. Plot Responses
+### Plot Responses
 
 - Basic magnitude response plots
 - Compare IIR vs FIR characteristics
 - Visualize different cutoffs
 
-### 3. Customize Appearance
+### Customize Appearance
 
 - Custom colors and line widths
 - Reference lines at specific dB levels
 - Titles and styling options
 
-### 4. Verify Characteristics
+### Verify Characteristics
 
 - Check cutoff frequency accuracy
 - Assess transition band steepness

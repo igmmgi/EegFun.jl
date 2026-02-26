@@ -5,7 +5,7 @@
 using EegFun
 
 #######################################################################
-# 1. LOAD DATA AND CREATE ERPS
+# LOAD DATA AND CREATE ERPS
 #######################################################################
 
 dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf")
@@ -25,21 +25,21 @@ epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.5, 1.0))
 erp = EegFun.average_epochs(epochs)
 
 #######################################################################
-# 2. LAUNCH FILTER GUI — SINGLE CONDITION
+# LAUNCH FILTER GUI — SINGLE CONDITION
 #######################################################################
 
 # interactive GUI with sliders for cutoff, order, method
 EegFun.plot_erp_filter_gui(erp)
 
 #######################################################################
-# 3. SPECIFY A CHANNEL
+# SPECIFY A CHANNEL
 #######################################################################
 
 # focus on a specific channel
 EegFun.plot_erp_filter_gui(erp, channel = :Cz)
 
 #######################################################################
-# 4. COMPARE MULTIPLE CONDITIONS
+# COMPARE MULTIPLE CONDITIONS
 #######################################################################
 
 # pass a vector of ERPs to see filter effects side-by-side

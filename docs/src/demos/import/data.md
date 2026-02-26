@@ -36,24 +36,24 @@ This demo demonstrates understanding the core data structures in EegFun.jl and h
 
 This demo shows basic data operations:
 
-### 1. Load and Structure Data
+### Load and Structure Data
 
 - Load raw BioSemi data
 - Load electrode layout
 - Create ContinuousData structure
 
-### 2. Access Data Components
+### Access Data Components
 
 - Extract all data, channel data, and metadata
 - Understand different data access patterns
 
-### 3. Create Epochs
+### Create Epochs
 
 - Define epoch conditions around triggers
 - Extract segmented trials
 - Access epoch data with selection functions
 
-### 4. Subset Data
+### Subset Data
 
 - Subset by channel selection (specific electrodes)
 - Subset by sample selection (time intervals)

@@ -31,13 +31,13 @@ Channel summary provides aggregate statistics across all EEG channels, offering 
 
 This demo shows channel summary analysis:
 
-### 1. Generate Initial Summary
+### Generate Initial Summary
 
 - Load and preprocess data (average reference, high-pass filter)
 - Calculate summary statistics across all channels
 - Display results using formatted table
 
-### 2. Summary with Sample Selection
+### Summary with Sample Selection
 
 - Mark extreme values for exclusion
 - Recalculate summary excluding artifacts

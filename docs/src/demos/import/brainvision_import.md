@@ -81,18 +81,18 @@ EegFun imports all markers and makes them available for epoch extraction and ana
 
 This demo shows the complete BrainVision import workflow:
 
-### 1. Load Raw BrainVision Data
+### Load Raw BrainVision Data
 
 - Use `read_raw_data()` with path to any file in the triplet (`.vhdr`, `.eeg`, or `.vmrk`)
 - Automatic format detection based on file extension
 - All three files loaded automatically
 
-### 2. Prepare Layout
+### Prepare Layout
 
 - Load appropriate layout file for your cap configuration
 - Convert polar coordinates to cartesian for visualization
 
-### 3. Create EegFun Data Structure
+### Create EegFun Data Structure
 
 - Combine raw data with layout using `create_eegfun_data()`
 - Results in `ContinuousData` ready for analysis
@@ -103,22 +103,10 @@ This demo shows the complete BrainVision import workflow:
 ::: details Show Code
 
 ```julia
-"""
-Demo: Loading and Processing BrainVision Files
-
-This demo shows how to:
-- Load BrainVision format files (.vhdr, .eeg, .vmrk)
-- Create EegFun data structures 
-- Apply basic preprocessing
-- Get the triggers/events
-
-The format consists of three files:
-- .vhdr (header file with metadata)
-- .eeg (binary data file)
-- .vmrk (marker/trigger file)
-"""
-# Demo: BrainVision Import
-# Shows how to load BrainVision .vhdr files and create EegFun data structures.
+# Demo: Loading and Processing BrainVision Files
+# Shows how to load BrainVision format files (.vhdr, .eeg, .vmrk),
+# create EegFun data structures, apply basic preprocessing,
+# and get the triggers/events.
 
 using EegFun
 

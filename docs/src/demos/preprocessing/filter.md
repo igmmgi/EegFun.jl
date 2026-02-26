@@ -25,21 +25,21 @@ This demo shows how to apply temporal filters to EEG data to remove unwanted fre
 
 ## Workflow Summary
 
-### 1. High-Pass Filtering
+### High-Pass Filtering
 
 - Standard 0.1 Hz for ERP analysis
 - Stronger 1 Hz for ICA preprocessing
 
-### 2. Low-Pass Filtering
+### Low-Pass Filtering
 
 - 30 Hz for typical ERP analysis
 - Anti-aliasing before resampling
 
-### 3. Channel-Specific Filtering
+### Channel-Specific Filtering
 
 - Apply filters to selected channels only
 
-### 4. Filter Inspection
+### Filter Inspection
 
 - Create filter objects and visualise frequency response
 - Compare IIR vs FIR characteristics
@@ -57,7 +57,7 @@ This demo shows how to apply temporal filters to EEG data to remove unwanted fre
 using EegFun
 
 #######################################################################
-# 1. LOAD DATA
+# LOAD DATA
 #######################################################################
 
 dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf")
@@ -67,7 +67,7 @@ dat = EegFun.create_eegfun_data(dat, layout)
 
 
 #######################################################################
-# 2. HIGH-PASS FILTER
+# HIGH-PASS FILTER
 #######################################################################
 
 # Remove slow drifts with a 0.1 Hz high-pass (standard for ERPs)
@@ -79,7 +79,7 @@ EegFun.highpass_filter!(dat_ica, 1.0)
 
 
 #######################################################################
-# 3. LOW-PASS FILTER
+# LOW-PASS FILTER
 #######################################################################
 
 # Remove high-frequency noise (30 Hz low-pass)
@@ -90,7 +90,7 @@ EegFun.lowpass_filter!(dat, 40.0, order = 3)
 
 
 #######################################################################
-# 4. FILTER SPECIFIC CHANNELS
+# FILTER SPECIFIC CHANNELS
 #######################################################################
 
 # Apply filter to only certain channels
@@ -98,7 +98,7 @@ EegFun.lowpass_filter!(dat, 30.0, channel_selection = EegFun.channels([:Cz, :Pz,
 
 
 #######################################################################
-# 5. IIR vs FIR FILTERS
+# IIR vs FIR FILTERS
 #######################################################################
 
 # Default: IIR (Butterworth) — fast, good for most uses
@@ -109,7 +109,7 @@ EegFun.highpass_filter!(dat, 0.1, filter_method = "fir")
 
 
 #######################################################################
-# 6. VISUALIZE FILTER RESPONSE
+# VISUALIZE FILTER RESPONSE
 #######################################################################
 
 # Create a filter object for inspection

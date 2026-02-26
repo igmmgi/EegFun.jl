@@ -55,8 +55,10 @@ function baseline!(dat::EegData, baseline_interval::Interval; channel_selection:
         return
     end
 
-    # Apply baseline correction (dispatch handles DataFrame vs Vector{DataFrame})
-    @info "Applying baseline correction to $(length(selected_channels)) channels over interval: $(baseline_interval[1]) to $(baseline_interval[2])"
+    time = time_vector(dat)
+    t_start = round(time[baseline_interval[1]], digits = 3)
+    t_end = round(time[baseline_interval[2]], digits = 3)
+    @info "Applying baseline correction to $(length(selected_channels)) channels over interval $(baseline_interval[1]):$(baseline_interval[2]) ($(t_start) to $(t_end) s)"
     _apply_baseline!(dat.data, selected_channels, baseline_interval)
     return nothing
 end

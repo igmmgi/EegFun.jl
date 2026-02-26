@@ -39,20 +39,9 @@ The `.set` format is a MATLAB-based file that contains a header structure with a
 ::: details Show Code
 
 ```julia
-"""
-Demo: Loading and Processing EEGLAB .set Files
-
-This demo shows how to:
-
-TODO: This can be considered work in progress. I am not familiar with eeglab *.set/*.fdt files, so 
-the code here is a bit of a guesswork. But it does seem to work with the two example datasets 
-I found in eeglab/sample_data.
-
-NB. trigger/event strings are hashed for the :triggers column, but are available in the :trigger_info column
-
-Once the data is loaded, all EegFun functions should work as expected as 
-read_eeglab converts to EegFun types.
-"""
+# Demo: Loading and Processing EEGLAB .set Files
+# Note: trigger/event strings are hashed for :triggers, but available in :trigger_info.
+# Once loaded, all EegFun functions work as expected.
 
 using EegFun
 

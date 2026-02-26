@@ -74,24 +74,24 @@ The default threshold identifies statistical outliers, but you may need to adjus
 
 This demo shows joint probability analysis:
 
-### 1. Load and Preprocess
+### Load and Preprocess
 
 - Read continuous data
 - Apply basic preprocessing (reference, filter)
 
-### 2. Compute Joint Probability
+### Compute Joint Probability
 
 - Calculate multi-dimensional statistics
 - Build probability distribution
 - Returns metrics for each channel
 
-### 3. Visualize Results
+### Visualize Results
 
 - Plot probability values per channel
 - Identify low-probability outliers
 - Assess spatial patterns
 
-### 4. Use Results for QC
+### Use Results for QC
 
 - Flag suspicious channels
 - Combine with other metrics

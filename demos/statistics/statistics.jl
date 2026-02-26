@@ -1,17 +1,8 @@
-"""
-Tutorial: Statistical Analysis Options for ERP Data
-
-This script provides an introduction to the statistical analysis
-options available in EegFun, loosely based on FieldTrip's approach. 
-
-1. Data preparation for statistical tests
-2. Analytic t-tests (with/without multiple comparison correction)
-3. Cluster-based permutation tests (with different thresholding methods)
-4. Visualization of results
-"""
+# Demo: Permutation-Based Statistical Testing for ERPs
+# Shows how to run permutation tests on ERP data using different
+# thresholding and cluster correction approaches.
 
 using EegFun
-using BenchmarkTools
 
 input_dir = "./resources/data/julia/erps"
 file_pattern = "erps_good"
@@ -82,11 +73,11 @@ EegFun.plot_erp_stats(
 # Option: Non-Parametric Common Thresholding
 # ----------------------------------------------------------------------------
 # What actually happens:
-# 1. Run ALL permutations first (collect t-matrices)
-# 2. Pool all t-values from all permutations
-# 3. Compute (1-α) percentile threshold from pooled distribution
-# 4. Use this single threshold for all points
-# 5. Reuse stored t-matrices for cluster-level inference
+# Run ALL permutations first (collect t-matrices)
+# Pool all t-values from all permutations
+# Compute (1-α) percentile threshold from pooled distribution
+# Use this single threshold for all points
+# Reuse stored t-matrices for cluster-level inference
 # Equivalent to FieldTrip: method='montecarlo', corrMethod='cluster', clusterThreshold='nonparametric_common'
 
 result_permutation_nonparametric_common = EegFun.permutation_test(
@@ -102,15 +93,15 @@ result_permutation_nonparametric_common = EegFun.permutation_test(
 # Option: Non-Parametric Individual Thresholding
 # ----------------------------------------------------------------------------
 # What actually happens:
-# 1. Run ALL permutations first (collect t-matrices)
-# 2. For each electrode × time point:
+# Run ALL permutations first (collect t-matrices)
+# For each electrode × time point:
 #    - Extract t-values from all permutations at that point
 #    - Compute (1-α) percentile threshold from point-specific distribution
-# 3. Threshold observed data using point-specific thresholds
-# 4. Reuse stored t-matrices for cluster-level inference
+# Threshold observed data using point-specific thresholds
+# Reuse stored t-matrices for cluster-level inference
 # Equivalent to FieldTrip: method='montecarlo', corrMethod='cluster', clusterThreshold='nonparametric_individual'
 
-@btime result_permutation_nonparametric_individual = EegFun.permutation_test(
+result_permutation_nonparametric_individual = EegFun.permutation_test(
     stat_data,
     n_permutations = 1000,
     threshold_method = :nonparametric_individual,  # Non-parametric individual thresholds

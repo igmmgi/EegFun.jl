@@ -5,7 +5,7 @@
 using EegFun
 
 #######################################################################
-# 1. LOAD DATA
+# LOAD DATA
 #######################################################################
 
 dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf")
@@ -16,19 +16,19 @@ dat = EegFun.create_eegfun_data(dat, layout)
 EegFun.highpass_filter!(dat, 0.5)
 
 #######################################################################
-# 2. COMPUTE SPECTRUM
+# COMPUTE SPECTRUM
 #######################################################################
 
 spectrum = EegFun.compute_spectrum(dat)
 
 #######################################################################
-# 3. BASIC SPECTRUM PLOT — ALL CHANNELS
+# BASIC SPECTRUM PLOT — ALL CHANNELS
 #######################################################################
 
 EegFun.plot_frequency_spectrum(spectrum)
 
 #######################################################################
-# 4. SINGLE CHANNEL
+# SINGLE CHANNEL
 #######################################################################
 
 EegFun.plot_frequency_spectrum(spectrum,
@@ -36,7 +36,7 @@ EegFun.plot_frequency_spectrum(spectrum,
 )
 
 #######################################################################
-# 5. LOG SCALE AXES
+# LOG SCALE AXES
 #######################################################################
 
 EegFun.plot_frequency_spectrum(spectrum,
@@ -46,7 +46,7 @@ EegFun.plot_frequency_spectrum(spectrum,
 )
 
 #######################################################################
-# 6. DECIBEL UNITS
+# DECIBEL UNITS
 #######################################################################
 
 EegFun.plot_frequency_spectrum(spectrum,
@@ -56,7 +56,7 @@ EegFun.plot_frequency_spectrum(spectrum,
 )
 
 #######################################################################
-# 7. CUSTOM STYLING
+# CUSTOM STYLING
 #######################################################################
 
 EegFun.plot_frequency_spectrum(spectrum,

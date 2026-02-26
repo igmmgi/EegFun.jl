@@ -17,20 +17,20 @@ This demo shows how to manipulate channels by averaging groups together, computi
 
 ## Workflow Summary
 
-### 1. Channel Difference
+### Channel Difference
 
 - Calculate EOG channels from electrode pairs
 - Create arbitrary difference channels
 
-### 2. EOG Configuration
+### EOG Configuration
 
 - Use `EogConfig` to calculate both EOG channels in one call
 
-### 3. Channel Averaging
+### Channel Averaging
 
 - Average channel groups with custom labels
 - Reduce dataset to only averaged channels
 
-### 4. Channel Deletion
+### Channel Deletion
 
 - Remove single or multiple channels (mutating and non-mutating versions)

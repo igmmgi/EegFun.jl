@@ -22,14 +22,14 @@ This demo shows how to compute Global Field Power (GFP) and Global Dissimilarity
 
 ## Workflow Summary
 
-### 1. GFP Calculation
+### GFP Calculation
 
 - All channels or a subset; raw or normalised
 
-### 2. Global Dissimilarity
+### Global Dissimilarity
 
 - Identify topographic transition points
 
-### 3. Combined Calculation
+### Combined Calculation
 
 - Compute both metrics efficiently in one call

@@ -5,14 +5,14 @@
 using EegFun
 
 #######################################################################
-# 1. LOAD ERP DATA
+# LOAD ERP DATA
 #######################################################################
 
 dat = EegFun.read_data("./resources/data/julia/erps/example1_erps_good.jld2")
 
 
 #######################################################################
-# 2. SINGLE-PARTICIPANT LRP
+# SINGLE-PARTICIPANT LRP
 #######################################################################
 
 # Calculate LRP from two conditions:
@@ -27,7 +27,7 @@ lrp_data = EegFun.lrp(dat[1], dat[2], channel_selection = EegFun.channels([:C3, 
 
 
 #######################################################################
-# 3. BATCH LRP (MULTIPLE PARTICIPANTS)
+# BATCH LRP (MULTIPLE PARTICIPANTS)
 #######################################################################
 
 # Process all participant ERP files in a directory.
@@ -43,7 +43,7 @@ lrp_data = EegFun.lrp(dat[1], dat[2], channel_selection = EegFun.channels([:C3, 
 
 
 #######################################################################
-# 4. VISUALIZE
+# VISUALIZE
 #######################################################################
 
 EegFun.plot_erp(lrp_data)

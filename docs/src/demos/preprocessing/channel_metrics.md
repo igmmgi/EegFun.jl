@@ -41,20 +41,20 @@ Channel quality metrics quantify various characteristics of the EEG signal at ea
 
 This demo shows channel quality assessment workflows:
 
-### 1. Basic Channel Metrics
+### Basic Channel Metrics
 
 - Load and preprocess raw data (average reference, high-pass filter)
 - Calculate channel joint probability metrics
 - Identify channels with extreme values
 
-### 2. EOG Correlation Analysis
+### EOG Correlation Analysis
 
 - Compute vertical and horizontal EOG channels
 - Detect EOG onsets automatically
 - Calculate correlation between EEG channels and EOG
 - Partition bad channels into EOG-related vs. non-EOG artifacts
 
-### 3. Metric Interpretation
+### Metric Interpretation
 
 - Add z-score columns for standardized thresholds
 - Identify channels that are artifact-related vs. bad contacts

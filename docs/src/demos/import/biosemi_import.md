@@ -57,17 +57,17 @@ BioSemi encodes triggers in a dedicated Status channel using binary encoding. Ee
 
 This demo shows the complete BioSemi import workflow:
 
-### 1. Load Raw BDF Data
+### Load Raw BDF Data
 
 - Use `read_raw_data()` with path to `.bdf` file
 - Automatic format detection based on file extension
 
-### 2. Prepare Layout
+### Prepare Layout
 
 - Load appropriate BioSemi layout file
 - Convert polar coordinates to cartesian for visualization
 
-### 3. Create EegFun Data Structure
+### Create EegFun Data Structure
 
 - Combine raw data with layout using `create_eegfun_data()`
 - Results in `ContinuousData` ready for analysis
@@ -78,14 +78,9 @@ This demo shows the complete BioSemi import workflow:
 ::: details Show Code
 
 ```julia
-"""
-Demo: Loading and Processing BioSemi BDF Files
-
-This demo shows how to:
-- Load BioSemi .bdf files (raw continuous data format)
-- Create EegFun data structures with layouts
-- Get the triggers/events
-"""
+# Demo: Loading and Processing BioSemi BDF Files
+# Shows how to load BioSemi .bdf files, create EegFun data structures
+# with layouts, and get the triggers/events.
 
 using EegFun
 

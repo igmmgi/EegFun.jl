@@ -28,15 +28,15 @@ Common use cases:
 
 ## Workflow Summary
 
-### 1. Single-Participant Realignment
+### Single-Participant Realignment
 
 - Realign epochs to response time column
 
-### 2. Batch Realignment
+### Batch Realignment
 
 - Process all participant files in a directory
 
-### 3. Typical Pipeline
+### Typical Pipeline
 
 - Extract stimulus-locked epochs → realign to RT → average → LRP → jackknife
 
@@ -53,7 +53,7 @@ Common use cases:
 using EegFun
 
 #######################################################################
-# 1. SINGLE-PARTICIPANT REALIGNMENT
+# SINGLE-PARTICIPANT REALIGNMENT
 #######################################################################
 
 # Load stimulus-locked epoched data
@@ -67,7 +67,7 @@ using EegFun
 
 
 #######################################################################
-# 2. BATCH REALIGNMENT
+# BATCH REALIGNMENT
 #######################################################################
 
 # Process all participant epoch files in a directory.
@@ -84,19 +84,19 @@ using EegFun
 
 
 #######################################################################
-# 3. TYPICAL WORKFLOW
+# TYPICAL WORKFLOW
 #######################################################################
 
 # Response-locked LRP analysis:
 #
-# 1. Extract stimulus-locked epochs with RT column
-# 2. Realign to response time:
+# Extract stimulus-locked epochs with RT column
+# Realign to response time:
 #      realign("epochs_cleaned", :rt)
-# 3. Average to ERPs:
+# Average to ERPs:
 #      average_epochs in realigned directory
-# 4. Calculate LRP:
+# Calculate LRP:
 #      lrp("realigned_erps", [(1, 2)])
-# 5. Jackknife average:
+# Jackknife average:
 #      jackknife_average("lrp")
 ```
 

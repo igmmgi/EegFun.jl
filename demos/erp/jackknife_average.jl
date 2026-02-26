@@ -5,7 +5,7 @@
 using EegFun
 
 #######################################################################
-# 1. SINGLE-PARTICIPANT JACKKNIFE
+# SINGLE-PARTICIPANT JACKKNIFE
 #######################################################################
 
 # Jackknife averaging creates N averages from N participants,
@@ -20,7 +20,7 @@ using EegFun
 
 
 #######################################################################
-# 2. BATCH JACKKNIFE
+# BATCH JACKKNIFE
 #######################################################################
 
 # Process all participant ERP/LRP files in a directory
@@ -35,15 +35,15 @@ using EegFun
 
 
 #######################################################################
-# 3. TYPICAL WORKFLOW
+# TYPICAL WORKFLOW
 #######################################################################
 
 # Jackknife method for onset latency:
 #
-# 1. Calculate LRP:               lrp("erps", [(1, 2)])
-# 2. Jackknife average:           jackknife_average("lrp")
-# 3. Measure onset latency in each jackknife average
-# 4. Apply jackknife correction to the t-test:
+# Calculate LRP:               lrp("erps", [(1, 2)])
+# Jackknife average:           jackknife_average("lrp")
+# Measure onset latency in each jackknife average
+# Apply jackknife correction to the t-test:
 #      t_corrected = t_original / (n - 1)
 #
 # Reference: Miller, Patterson, & Ulrich (1998)

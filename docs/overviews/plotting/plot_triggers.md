@@ -64,24 +64,24 @@ Use `ignore_triggers` to exclude specific codes:
 
 This demo shows trigger visualization workflows:
 
-### 1. Count Triggers
+### Count Triggers
 
 - Load raw data
 - Count triggers before processing
 - Verify expected trigger codes exist
 
-### 2. Create Data Structure
+### Create Data Structure
 
 - Load layout and create EegFun structure
 - Count triggers again to verify preservation
 
-### 3. Visualize Overview
+### Visualize Overview
 
 - Plot trigger distribution
 - Optionally ignore certain trigger codes
 - Assess trigger patterns
 
-### 4. Analyze Timing
+### Analyze Timing
 
 - Plot inter-trigger intervals
 - Verify timing consistency

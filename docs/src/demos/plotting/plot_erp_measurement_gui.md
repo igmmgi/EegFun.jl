@@ -18,15 +18,15 @@ Use the GUI to explore and decide on your measurement parameters, then apply tho
 
 This demo covers:
 
-### 1. Basic Usage
+### Basic Usage
 
 - Launch the GUI with all conditions overlaid
 
-### 2. Single Condition
+### Single Condition
 
 - Explore one condition at a time
 
-### 3. Pre-configured Settings
+### Pre-configured Settings
 
 - Open the GUI with specific initial channel, measurement type, and intervals
 

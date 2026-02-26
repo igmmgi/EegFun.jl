@@ -76,19 +76,19 @@ EegFun.plot_databrowser(dat, ica_result_infomax_extended)
 
 
 # identify components
-@btime component_artifacts, component_metrics =
+component_artifacts, component_metrics =
     EegFun.identify_components(dat, ica_result_infomax, sample_selection = EegFun.samples_not(:is_extreme_value_200));
 
 # or individually
-@btime eog_comps, eog_comps_metrics_df =
+eog_comps, eog_comps_metrics_df =
     EegFun.identify_eog_components(dat, ica_result_infomax, sample_selection = EegFun.samples_not(:is_extreme_value_200));
 
-@btime ecg_comps, ecg_comps_metrics_df =
+ecg_comps, ecg_comps_metrics_df =
     EegFun.identify_ecg_components(dat, ica_result_infomax, sample_selection = EegFun.samples_not(:is_extreme_value_200));
 
-@btime line_noise_comps, line_noise_comps_metrics_df = EegFun.identify_line_noise_components(dat, ica_result_infomax);
+line_noise_comps, line_noise_comps_metrics_df = EegFun.identify_line_noise_components(dat, ica_result_infomax);
 
-@btime channel_noise_comps, channel_noise_comps_metrics_df = EegFun.identify_spatial_kurtosis_components(ica_result_infomax);
+channel_noise_comps, channel_noise_comps_metrics_df = EegFun.identify_spatial_kurtosis_components(ica_result_infomax);
 
 
 # Get all identified component artifacts
