@@ -281,7 +281,7 @@ using Random
         # Check that some samples near each trigger are marked
         for idx in trigger_1_indices
             # Look for marked samples in a small neighborhood 
-            neighborhood = max(1, idx-5):min(length(dat.data.epoch_interval), idx+5)
+            neighborhood = max(1, idx - 5):min(length(dat.data.epoch_interval), idx + 5)
             @test any(dat.data.epoch_interval[neighborhood])
         end
 
@@ -508,7 +508,7 @@ using Random
         # Create test data with edge cases
         dat = EegFun.create_test_continuous_data(n_channels = 3, n = 1000, fs = 100)
 
-        # Test 1: Out-of-bounds reference indices - set up triggers near end of data
+        # Out-of-bounds reference indices - set up triggers near end of data
         # Add trigger sequence at position where reference will be out of bounds
         dat.data.triggers[998] = 1
         dat.data.triggers[999] = 2
@@ -523,7 +523,7 @@ using Random
         # We expect Info log for successful marking (with some samples skipped)
         @test_logs match_mode = :any EegFun.mark_epoch_intervals!(dat, [ec_oob], [-0.1, 0.1], channel_out = :test_oob)
 
-        # Test 2: before constraint filtering - sequence exists but constraint fails
+        # before constraint filtering - sequence exists but constraint fails
         dat2 = EegFun.create_test_continuous_data(n_channels = 2, n = 500, fs = 100)
         # Set up triggers: 1, 2, 3 (without trigger 99 after it)
         dat2.data.triggers[10] = 1
@@ -540,7 +540,7 @@ using Random
         # Should warn about no sequences meeting constraints
         @test_logs (:warn,) match_mode = :any EegFun.mark_epoch_intervals!(dat2, [ec_before], [-0.1, 0.1], channel_out = :test_before)
 
-        # Test 3: Timing constraints with various edge cases 
+        # Timing constraints with various edge cases 
         dat3 = EegFun.create_test_continuous_data(n_channels = 2, n = 500, fs = 1000)
         # Set up triggers with specific timing
         dat3.data.triggers[100] = 1
@@ -558,7 +558,7 @@ using Random
         # Should filter out sequences that don't meet timing 
         @test_logs (:warn,) match_mode = :any EegFun.mark_epoch_intervals!(dat3, [ec_timing], [-0.01, 0.01], channel_out = :test_timing)
 
-        # Test 4: Reference index out of bounds warning - sequence exists but reference is beyond length
+        # Reference index out of bounds warning - sequence exists but reference is beyond length
         dat4 = EegFun.create_test_continuous_data(n_channels = 2, n = 100, fs = 100)
         dat4.data.triggers[10] = 1
         dat4.data.triggers[11] = 2

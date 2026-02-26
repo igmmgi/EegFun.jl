@@ -984,7 +984,7 @@ function erp_measurements(
                         rethrow(e)
                     end
                 end
-                @error "Error processing $file" exception = (e, catch_backtrace())
+                @minimal_warning "Error processing $file: $(sprint(showerror, e))"
                 error_count += 1
             end
             next!(p)

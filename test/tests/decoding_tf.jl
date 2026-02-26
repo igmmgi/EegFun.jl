@@ -1,5 +1,6 @@
 using Test
 using Random
+using Statistics
 
 @testset "TF Decoding" begin
 

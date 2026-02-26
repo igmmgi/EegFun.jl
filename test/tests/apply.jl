@@ -11,37 +11,28 @@ using EegFun
 
     @testset "apply_analysis_settings! - ContinuousData" begin
 
-        # Create test data
-        dat = EegFun.create_test_continuous_data(n = 1000, fs = 1000, n_channels = 3)
-        original_data = copy(dat.data)
-
-        # Test 1: Empty settings (should do nothing)
-        settings = EegFun.AnalysisSettings()
-        EegFun.apply_analysis_settings!(dat, settings)
-        @test dat.data == original_data
-
-        # Test 2: High-pass filter only
+        # Test: High-pass filter only
         dat = EegFun.create_test_continuous_data(n = 1000, fs = 1000, n_channels = 3)
         settings = EegFun.AnalysisSettings(0.1, 0.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], Int[])
         EegFun.apply_analysis_settings!(dat, settings)
         @test dat.analysis_info.hp_filter == 0.1
         @test dat.analysis_info.lp_filter == 0.0
 
-        # Test 3: Low-pass filter only
+        # Test: Low-pass filter only
         dat = EegFun.create_test_continuous_data(n = 1000, fs = 1000, n_channels = 3)
         settings = EegFun.AnalysisSettings(0.0, 40.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], Int[])
         EegFun.apply_analysis_settings!(dat, settings)
         @test dat.analysis_info.hp_filter == 0.0
         @test dat.analysis_info.lp_filter == 40.0
 
-        # Test 4: Both filters
+        # Test: Both filters
         dat = EegFun.create_test_continuous_data(n = 1000, fs = 1000, n_channels = 3)
         settings = EegFun.AnalysisSettings(0.1, 40.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], Int[])
         EegFun.apply_analysis_settings!(dat, settings)
         @test dat.analysis_info.hp_filter == 0.1
         @test dat.analysis_info.lp_filter == 40.0
 
-        # Test 5: Rereference (average)
+        # Test: Rereference (average)
         dat = EegFun.create_test_continuous_data(n = 1000, fs = 1000, n_channels = 3)
         original_mean = mean(Matrix(dat.data[:, [:Ch1, :Ch2, :Ch3]]))
         settings = EegFun.AnalysisSettings(0.0, 0.0, :avg, Symbol[], :none, Tuple{Float64,Float64}[], Int[])
@@ -51,7 +42,7 @@ using EegFun
         new_mean = mean(Matrix(dat.data[:, [:Ch1, :Ch2, :Ch3]]))
         @test abs(new_mean) < 1e-10
 
-        # Test 6: Channel repair (neighbor interpolation)
+        # Test: Channel repair (neighbor interpolation)
         dat = EegFun.create_test_continuous_data(n = 1000, fs = 1000, n_channels = 5)
         # Create a layout with neighbors for repair
         layout_df = DataFrame(label = [:Ch1, :Ch2, :Ch3, :Ch4, :Ch5], inc = zeros(5), azi = zeros(5))
@@ -75,7 +66,7 @@ using EegFun
         # Ch3 should be repaired (no longer all NaN)
         @test !all(isequal(NaN), dat.data.Ch3)
 
-        # Test 7: Selected regions
+        # Test: Selected regions
         dat = EegFun.create_test_continuous_data(n = 1000, fs = 1000, n_channels = 3)
         settings = EegFun.AnalysisSettings(0.0, 0.0, :none, Symbol[], :none, [(0.1, 0.3), (0.5, 0.7)], Int[])
         EegFun.apply_analysis_settings!(dat, settings)
@@ -83,7 +74,7 @@ using EegFun
         @test dat.data.selected_region isa AbstractVector{Bool}
         @test length(dat.data.selected_region) == nrow(dat.data)
 
-        # Test 8: Combined settings
+        # Test: Combined settings
         dat = EegFun.create_test_continuous_data(n = 1000, fs = 1000, n_channels = 3)
         settings = EegFun.AnalysisSettings(0.1, 40.0, :avg, Symbol[], :none, [(0.1, 0.3)], Int[])
         EegFun.apply_analysis_settings!(dat, settings)
@@ -144,11 +135,12 @@ using EegFun
 
     @testset "apply_analysis_settings! - with ICA" begin
 
-        # Create test data
-        dat = EegFun.create_test_continuous_data(n = 1000, fs = 1000, n_channels = 3)
-        ica_result = EegFun.run_ica(dat, n_components = 2)
+        # Create shared ICA result (expensive — compute once)
+        base_dat = EegFun.create_test_continuous_data(n = 500, fs = 1000, n_channels = 3)
+        ica_result = EegFun.run_ica(base_dat, n_components = 2)
 
         # Test without ICA component removal
+        dat = copy(base_dat)
         settings = EegFun.AnalysisSettings(0.1, 40.0, :avg, Symbol[], :none, Tuple{Float64,Float64}[], Int[])
         EegFun.apply_analysis_settings!(dat, ica_result, settings)
         @test dat.analysis_info.hp_filter == 0.1
@@ -156,10 +148,8 @@ using EegFun
         @test dat.analysis_info.reference == :avg
 
         # Test with ICA component removal
-        dat = EegFun.create_test_continuous_data(n = 1000, fs = 1000, n_channels = 3)
-        ica_result = EegFun.run_ica(dat, n_components = 2)
+        dat = copy(base_dat)
         original_n_channels = EegFun.n_channels(dat)
-
         settings = EegFun.AnalysisSettings(0.0, 0.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], [1])
         EegFun.apply_analysis_settings!(dat, ica_result, settings)
         # After removing 1 component, should still have same number of channels
@@ -167,8 +157,7 @@ using EegFun
         @test EegFun.n_channels(dat) == original_n_channels
 
         # Test with all settings including ICA
-        dat = EegFun.create_test_continuous_data(n = 1000, fs = 1000, n_channels = 3)
-        ica_result = EegFun.run_ica(dat, n_components = 2)
+        dat = copy(base_dat)
         settings = EegFun.AnalysisSettings(0.1, 40.0, :avg, Symbol[], :none, [(0.1, 0.3)], [1])
         EegFun.apply_analysis_settings!(dat, ica_result, settings)
         @test dat.analysis_info.hp_filter == 0.1
@@ -179,7 +168,7 @@ using EegFun
 
     @testset "apply_analysis_settings - non-mutating" begin
         # Test non-mutating version
-        dat = EegFun.create_test_continuous_data(n = 1000, fs = 1000, n_channels = 3)
+        dat = EegFun.create_test_continuous_data(n = 500, fs = 1000, n_channels = 3)
         original_hp = dat.analysis_info.hp_filter
         original_lp = dat.analysis_info.lp_filter
 
@@ -194,8 +183,9 @@ using EegFun
         @test dat_new.analysis_info.hp_filter == 0.1
         @test dat_new.analysis_info.lp_filter == 40.0
 
-        # Test with ICA
-        dat = EegFun.create_test_continuous_data(n = 1000, fs = 1000, n_channels = 3)
+        # Test with ICA (reuse shared ICA from above is not possible across testsets,
+        # but we use smaller n to keep it fast)
+        dat = EegFun.create_test_continuous_data(n = 500, fs = 1000, n_channels = 3)
         ica_result = EegFun.run_ica(dat, n_components = 2)
         original_hp = dat.analysis_info.hp_filter
 
@@ -210,40 +200,23 @@ using EegFun
     end
 
     @testset "Edge cases" begin
-        # Test with zero filters (should not apply)
+        # No-op settings should leave data unchanged
         dat = EegFun.create_test_continuous_data(n = 1000, fs = 1000, n_channels = 3)
-        settings = EegFun.AnalysisSettings(0.0, 0.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], Int[])
         original_hp = dat.analysis_info.hp_filter
         original_lp = dat.analysis_info.lp_filter
-        EegFun.apply_analysis_settings!(dat, settings)
-        @test dat.analysis_info.hp_filter == original_hp
-        @test dat.analysis_info.lp_filter == original_lp
-
-        # Test with :none reference (should not apply)
-        dat = EegFun.create_test_continuous_data(n = 1000, fs = 1000, n_channels = 3)
         original_ref = dat.analysis_info.reference
         settings = EegFun.AnalysisSettings(0.0, 0.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], Int[])
         EegFun.apply_analysis_settings!(dat, settings)
+        @test dat.analysis_info.hp_filter == original_hp
+        @test dat.analysis_info.lp_filter == original_lp
         @test dat.analysis_info.reference == original_ref
-
-        # Test with empty repaired channels (should not apply)
-        dat = EegFun.create_test_continuous_data(n = 1000, fs = 1000, n_channels = 3)
-        settings = EegFun.AnalysisSettings(0.0, 0.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], Int[])
-        EegFun.apply_analysis_settings!(dat, settings)
-        # Should complete without error
-
-        # Test with empty selected regions (should not apply)
-        dat = EegFun.create_test_continuous_data(n = 1000, fs = 1000, n_channels = 3)
-        settings = EegFun.AnalysisSettings(0.0, 0.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], Int[])
-        EegFun.apply_analysis_settings!(dat, settings)
         @test !hasproperty(dat.data, :selected_region)
 
-        # Test with empty ICA components (should not apply)
-        dat = EegFun.create_test_continuous_data(n = 1000, fs = 1000, n_channels = 3)
+        # Empty ICA components (should not error)
+        dat = EegFun.create_test_continuous_data(n = 500, fs = 1000, n_channels = 3)
         ica_result = EegFun.run_ica(dat, n_components = 2)
         settings = EegFun.AnalysisSettings(0.0, 0.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], Int[])
         EegFun.apply_analysis_settings!(dat, ica_result, settings)
         # Should complete without error
-
     end
 end

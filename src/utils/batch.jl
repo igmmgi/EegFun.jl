@@ -399,7 +399,7 @@ function _run_batch_operation(
         result = try
             process_fn(input_path, output_path)
         catch e
-            @error "Error processing $file" exception = (e, catch_backtrace())
+            @minimal_warning "Error processing $file"
             BatchResult(false, file, "Exception: $(sprint(showerror, e))")
         end
 
