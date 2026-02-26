@@ -584,7 +584,7 @@ end
 
 
 """
-    combine_boolean_columns!(dat::ContinuousData, columns::Vector{Symbol}, operation::Symbol; output_column::Symbol = :combined_flags)
+    _combine_boolean_columns!(dat::ContinuousData, columns::Vector{Symbol}, operation::Symbol; output_column::Symbol = :combined_flags)
 
 Combine multiple boolean columns using logical operations.
 
@@ -600,13 +600,13 @@ Combine multiple boolean columns using logical operations.
 # Examples
 ```julia
 # Combine multiple artifact detection columns with AND operation
-combine_boolean_columns!(dat, [:is_extreme_value_100, :is_eog_onset], :and)
+_combine_boolean_columns!(dat, [:is_extreme_value_100, :is_eog_onset], :and)
 
 # Combine with OR operation
-combine_boolean_columns!(dat, [:is_extreme_value_100, :is_eog_onset], :or, output_column = :any_artifact)
+_combine_boolean_columns!(dat, [:is_extreme_value_100, :is_eog_onset], :or, output_column = :any_artifact)
 ```
 """
-function combine_boolean_columns!(dat::ContinuousData, columns::Vector{Symbol}, operation::Symbol; output_column::Symbol = :combined_flags)
+function _combine_boolean_columns!(dat::ContinuousData, columns::Vector{Symbol}, operation::Symbol; output_column::Symbol = :combined_flags)
     # Input validation
     @assert !isempty(columns) "Must specify at least one column to combine"
     @assert all(col -> hasproperty(dat.data, col), columns) "All specified columns must exist in the data"
@@ -629,5 +629,5 @@ function combine_boolean_columns!(dat::ContinuousData, columns::Vector{Symbol}, 
     # Store the result
     dat.data[!, output_column] = result
 
-    @info "combine_boolean_columns!: Combined $(length(columns)) columns using :$operation operation into column :$output_column"
+    @info "_combine_boolean_columns!: Combined $(length(columns)) columns using :$operation operation into column :$output_column"
 end

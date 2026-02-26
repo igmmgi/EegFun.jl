@@ -606,7 +606,7 @@ function _setup_erp_image_interactivity!(fig::Figure, axes::Vector{Axis}, heatma
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press && event.key == Keyboard.i
             # Show help for ERP image
-            show_plot_help(:erp_image)
+            _show_plot_help(:erp_image)
         elseif event.action in (Keyboard.press, Keyboard.repeat) && haskey(keyboard_actions, event.key)
             action = keyboard_actions[event.key]
             _handle_erp_image_navigation!(axes, heatmaps, action, active_axis[])

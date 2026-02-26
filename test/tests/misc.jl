@@ -244,25 +244,25 @@ using DataFrames
         continuous_data = EegFun.ContinuousData("test_data", df, layout, 250, analysis_info)
 
         # Test AND operation
-        EegFun.combine_boolean_columns!(continuous_data, [:is_extreme, :is_eog], :and)
+        EegFun._combine_boolean_columns!(continuous_data, [:is_extreme, :is_eog], :and)
         @test continuous_data.data[!, :combined_flags] == [false, false, false]
 
         # Test OR operation
-        EegFun.combine_boolean_columns!(continuous_data, [:is_extreme, :is_eog], :or, output_column = :any_flag)
+        EegFun._combine_boolean_columns!(continuous_data, [:is_extreme, :is_eog], :or, output_column = :any_flag)
         @test continuous_data.data[!, :any_flag] == [true, true, true]
 
         # Test NAND operation
-        EegFun.combine_boolean_columns!(continuous_data, [:is_extreme, :is_eog], :nand, output_column = :nand_flags)
+        EegFun._combine_boolean_columns!(continuous_data, [:is_extreme, :is_eog], :nand, output_column = :nand_flags)
         @test continuous_data.data[!, :nand_flags] == [true, true, true]
 
         # Test NOR operation
-        EegFun.combine_boolean_columns!(continuous_data, [:is_extreme, :is_eog], :nor, output_column = :nor_flags)
+        EegFun._combine_boolean_columns!(continuous_data, [:is_extreme, :is_eog], :nor, output_column = :nor_flags)
         @test continuous_data.data[!, :nor_flags] == [false, false, false]
 
         # Test error handling
-        @test_throws AssertionError EegFun.combine_boolean_columns!(continuous_data, Symbol[], :and)  # Empty columns
-        @test_throws AssertionError EegFun.combine_boolean_columns!(continuous_data, [:nonexistent], :and)  # Non-existent column
-        @test_throws AssertionError EegFun.combine_boolean_columns!(continuous_data, [:is_extreme], :invalid)  # Invalid operation
+        @test_throws AssertionError EegFun._combine_boolean_columns!(continuous_data, Symbol[], :and)  # Empty columns
+        @test_throws AssertionError EegFun._combine_boolean_columns!(continuous_data, [:nonexistent], :and)  # Non-existent column
+        @test_throws AssertionError EegFun._combine_boolean_columns!(continuous_data, [:is_extreme], :invalid)  # Invalid operation
     end
 
     @testset "Documentation generation" begin

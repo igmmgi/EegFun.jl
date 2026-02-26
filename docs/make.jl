@@ -91,7 +91,6 @@ pages = [
             "TF Multitaper" => "demos/time_frequency/tf_multitaper.md",
             "TF STFT" => "demos/time_frequency/tf_stft.md",
             "TF Operations" => "demos/time_frequency/tf_operations.md",
-            "TF Analysis Workflow" => "demos/time_frequency/tf_analysis.md",
         ],
         "Statistics" => [
             "Statistics" => "demos/statistics/statistics.md",

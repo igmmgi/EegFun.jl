@@ -123,13 +123,13 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
                 # Calculate correlations between all channels and EOG channels
                 @info subsection("Channel x vEOG/hEOG Correlation Matrix")
                 hEOG_vEOG_cm = correlation_matrix_eog(dat, preprocess_cfg.eog)
-                add_zscore_columns!(hEOG_vEOG_cm)
+                _add_zscore_columns!(hEOG_vEOG_cm)
                 _log_pretty_table(hEOG_vEOG_cm; title = "Channel x vEOG/hEOG Correlation Matrix (whole dataset)")
 
                 # Calculate correlations between all channels and EOG channels (epoch interval)
                 @info subsection("Channel x vEOG/hEOG Correlation Matrix (epoch interval)")
                 hEOG_vEOG_cm_epoch = correlation_matrix_eog(dat, preprocess_cfg.eog; sample_selection = samples(:epoch_interval))
-                add_zscore_columns!(hEOG_vEOG_cm_epoch)
+                _add_zscore_columns!(hEOG_vEOG_cm_epoch)
                 _log_pretty_table(hEOG_vEOG_cm_epoch; title = "Channel x vEOG/hEOG Correlation Matrix (epoch interval)")
 
                 #################### INITIAL EPOCH and ERP EXTRACTION ###################

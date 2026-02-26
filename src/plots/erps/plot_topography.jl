@@ -951,7 +951,7 @@ function _setup_topo_keyboard_handlers!(fig::Figure, axes::Union{Axis,Vector{Axi
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press
             if event.key == Keyboard.i
-                show_plot_help(:topography)
+                _show_plot_help(:topography)
             elseif event.key == Keyboard.up
                 axes isa Vector ? _topo_scale_up!.(axes) : _topo_scale_up!(axes)
             elseif event.key == Keyboard.down

@@ -1210,7 +1210,7 @@ function _setup_keyboard_interactions!(fig, state)
 
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press && event.key == Keyboard.i
-            show_plot_help(:ica)
+            _show_plot_help(:ica)
         elseif event.action in (Keyboard.press, Keyboard.repeat)
             if event.key == Keyboard.left || event.key == Keyboard.right
 
