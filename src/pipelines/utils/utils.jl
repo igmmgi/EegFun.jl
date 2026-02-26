@@ -1,29 +1,4 @@
 # Helper functions used during preprocess to make logging easier/prettier
-function _applied_filters(filter_cfg::FilterConfig; filter_sections::Vector{Symbol} = [:highpass, :lowpass])
-    applied_filters = []
-    for name in filter_sections
-        section = getproperty(filter_cfg, name)
-        if section.apply
-            push!(applied_filters, "$(section.freq) Hz $(section.type), $(section.method), $(section.func), order $(section.order)")
-        end
-    end
-    return join(applied_filters, "; ")
-end
-
-function _eog_config_string(eog_cfg::EogConfig)
-
-    format_channels(channels) = begin
-        left = join(channels[1], ", ")
-        right = join(channels[2], ", ")
-        ref = channels[3][1]
-        return "$left - $right → $ref"
-    end
-
-    vEOG = format_channels(eog_cfg.vEOG_channels)
-    hEOG = format_channels(eog_cfg.hEOG_channels)
-    return "vEOG: $vEOG ($(eog_cfg.vEOG_criterion) μV); hEOG: $hEOG ($(eog_cfg.hEOG_criterion) μV)"
-end
-
 _flag_symbol(base::AbstractString, criterion) = Symbol("$(base)_$(criterion)")
 
 function _center_title(title::String, width::Int)

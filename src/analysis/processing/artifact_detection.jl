@@ -1235,14 +1235,6 @@ rejected_indices = get_rejected(state)
 """
 get_rejected(info::Vector{EpochRejectionInfo})::Vector{Vector{Rejection}} = get_rejected.(info)
 
-"""
-Validate inputs for epoch rejection.
-"""
-function _validate_rejection_inputs(dat::EpochData, z_criterion::Real)
-    isempty(dat.data) && @minimal_error("Cannot reject epochs from empty EpochData")
-    z_criterion <= 0 && @minimal_error("Z-criterion must be positive")
-    length(dat.data) < 3 && @minimal_warning "Only $(length(dat.data)) epochs available."
-end
 
 
 """
@@ -1632,7 +1624,7 @@ function subset_bad_data(data_path::String, threshold::Real; subset_directory::S
     !isdir(subset_dir_path) && mkpath(subset_dir_path)
 
     # Find participants with any condition below threshold
-    bad_participants = unique(epoch_summary.file[epoch_summary.percentage .< threshold])
+    bad_participants = unique(epoch_summary.file[epoch_summary.percentage.<threshold])
     println("Subsetting data: $(length(bad_participants))")
     println("   N remaining: $(length(unique(epoch_summary.file)) - length(bad_participants))")
     println("   N removed: $(length(bad_participants))")

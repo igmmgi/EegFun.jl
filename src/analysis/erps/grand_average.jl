@@ -75,24 +75,6 @@ end
 
 
 """
-Load and group ERP data by condition from multiple files.
-Returns OrderedDict{Int, Vector{ErpData}} mapping condition number to ERPs.
-"""
-function _load_and_group_erps(files::Vector{String}, input_dir::String, condition_selection::Function)
-    # Load all ERPs and group by condition
-    all_erps = read_all_data(ErpData, files, input_dir)
-    erps_by_condition = group_by_condition(all_erps)
-
-    # Apply condition selection to the sorted condition numbers
-    all_cond_nums = collect(keys(erps_by_condition))  # Already sorted
-    selected_mask = condition_selection(1:length(all_cond_nums))
-    selected_cond_nums = all_cond_nums[selected_mask]
-
-    # Return only the selected conditions
-    return OrderedDict(num => erps_by_condition[num] for num in selected_cond_nums)
-end
-
-"""
 Create grand averages for all conditions in the grouped data.
 Returns Vector{ErpData}.
 """
