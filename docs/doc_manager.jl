@@ -450,6 +450,26 @@ function generate_demos(project_root::String)
     end
 end
 
+function generate_demo_screenshots(project_root::String)
+    print_colored(YELLOW, "Generating demo screenshots (requires CairoMakie)...")
+
+    screenshots_script = joinpath(project_root, "docs", "generate_demo_screenshots.jl")
+    if !isfile(screenshots_script)
+        print_colored(RED, " generate_demo_screenshots.jl not found at $screenshots_script")
+        return false
+    end
+
+    try
+        include(screenshots_script)
+        generate_all_screenshots()
+        print_colored(GREEN, " Demo screenshots generated successfully")
+        return true
+    catch e
+        print_colored(RED, " Error generating screenshots: $e")
+        return false
+    end
+end
+
 function show_interactive_menu(project_root::String)
     print_header()
 
@@ -462,9 +482,10 @@ function show_interactive_menu(project_root::String)
         println("5. Clean build artifacts")
         println("6. Run complete workflow")
         println("7. View documentation (via LiveServer)")
-        println("8. Exit")
+        println("8. Generate demo screenshots")
+        println("9. Exit")
 
-        print("\nEnter your choice (1-8): ")
+        print("\nEnter your choice (1-9): ")
         choice = readline()
 
         if choice == "1"
@@ -486,9 +507,11 @@ function show_interactive_menu(project_root::String)
         elseif choice == "7"
             view_documentation(project_root)
         elseif choice == "8"
+            generate_demo_screenshots(project_root)
+        elseif choice == "9"
             break
         else
-            print_colored(RED, "Invalid choice. Please enter 1-8.")
+            print_colored(RED, "Invalid choice. Please enter 1-9.")
         end
     end
 end
@@ -516,6 +539,8 @@ function main()
         format_and_check(project_root)
     elseif command == "clean"
         clean_docs(project_root)
+    elseif command == "screenshots"
+        generate_demo_screenshots(project_root)
     elseif command == "all"
         run_all_docs(project_root)
     elseif command == "interactive"
@@ -532,6 +557,7 @@ function main()
         println("  format                   - Format Julia source files")
         println("  format-check             - Format files and run syntax check")
         println("  clean                    - Clean build artifacts")
+        println("  screenshots              - Generate demo screenshots (local only)")
         println("  interactive              - Show interactive menu")
         println("  all                      - Run complete documentation workflow")
         println()
@@ -539,6 +565,7 @@ function main()
         println("  julia --project=. docs/build_docs.jl build")
         println("  julia --project=. docs/build_docs.jl format")
         println("  julia --project=. docs/build_docs.jl clean")
+        println("  julia --project=. docs/build_docs.jl screenshots")
         println("  julia --project=. docs/build_docs.jl interactive")
     end
 end

@@ -8,8 +8,12 @@ demos = [
     ("import", "brainvision_import", "BrainVision Import"),
     ("import", "eeglab_import", "EEGLAB Import"),
     ("import", "fieldtrip_import", "FieldTrip Import"),
-    ("import", "data", "Data"),
     ("import", "jld2", "Data Persistence (JLD2)"),
+
+    # Data
+    ("data", "data", "Data"),
+    ("data", "data_access", "Data Access"),
+    ("data", "selection_helpers", "Selection Helpers"),
 
     # Preprocessing
     ("preprocessing", "filter", "Filter"),
@@ -24,9 +28,10 @@ demos = [
     ("preprocessing", "channel_repair", "Channel Repair"),
     ("preprocessing", "channel_summary", "Channel Summary"),
     ("preprocessing", "ica", "ICA"),
+    ("preprocessing", "layouts", "Layouts & Neighbours"),
+    ("preprocessing", "analysis_settings", "Analysis Settings"),
 
     # Artifacts
-    ("artifacts", "artifacts", "Artifacts"),
     ("artifacts", "artifact_detection", "Artifact Detection"),
 
     # ERP Analysis
@@ -77,6 +82,8 @@ demos = [
 
     # Workflows
     ("workflows", "preprocessing_workflow", "Preprocessing Workflow"),
+    ("workflows", "batch_processing", "Batch Processing"),
+    ("workflows", "pipeline_templates", "Pipeline Templates"),
 ]
 
 # Create demo markdown files

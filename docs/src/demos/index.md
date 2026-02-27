@@ -8,8 +8,13 @@ Browse interactive code examples demonstrating EegFun.jl's capabilities.
 - [BrainVision Import](import/brainvision_import.md) - Loading BrainVision format files
 - [EEGLAB Import](import/eeglab_import.md) - Loading EEGLAB .set files
 - [FieldTrip Import](import/fieldtrip_import.md) - Loading FieldTrip .mat files
-- [Data Creation](import/data.md) - Creating synthetic test data
 - [Data Persistence](import/jld2.md) - Saving and loading with JLD2
+
+## Working with Data
+
+- [Data Manipulation](data/data.md) - Data access, subsetting, and manipulation
+- [Data Access](data/data_access.md) - Inspecting data with head, tail, viewer
+- [Selection Helpers](data/selection_helpers.md) - Filtering with channels(), times(), epochs()
 
 ## Data Processing
 
@@ -25,10 +30,11 @@ Browse interactive code examples demonstrating EegFun.jl's capabilities.
 - [Channel Repair](preprocessing/channel_repair.md) - Interpolating bad channels
 - [Channel Summary](preprocessing/channel_summary.md) - Summarizing channel data
 - [ICA](preprocessing/ica.md) - Independent Component Analysis
+- [Layouts & Neighbours](preprocessing/layouts.md) - Electrode layouts and spatial neighbours
+- [Analysis Settings](preprocessing/analysis_settings.md) - Saving and replaying preprocessing recipes
 
 ## Artifact Detection & Correction
 
-- [Artifacts](artifacts/artifacts.md) - Detecting and managing artifacts
 - [Artifact Detection](artifacts/artifact_detection.md) - Automatic epoch rejection
 
 ## ERP Analysis
@@ -76,16 +82,19 @@ Browse interactive code examples demonstrating EegFun.jl's capabilities.
 ## Workflows
 
 - [Preprocessing Workflow](workflows/preprocessing_workflow.md) - End-to-end preprocessing pipeline
+- [Batch Processing](workflows/batch_processing.md) - Loading and grouping multiple files
+- [Pipeline Templates](workflows/pipeline_templates.md) - Generating scaffold files
 
 ## Time-Frequency Analysis
 
 - [TF Morlet](time_frequency/tf_morlet.md) - Morlet wavelet analysis
 - [TF Multitaper](time_frequency/tf_multitaper.md) - Multitaper spectral estimation
 - [TF STFT](time_frequency/tf_stft.md) - Short-Time Fourier Transform
-- [TF Analysis Workflow](time_frequency/tf_analysis.md) - Condition & channel operations on TF data
+- [TF Operations](time_frequency/tf_operations.md) - Condition & channel operations on TF data
 
 ## Statistics
 
 - [Statistics](statistics/statistics.md) - Statistical testing
+- [TF Statistics](statistics/tf_stats_test.md) - Time-frequency statistical testing
 - [Decoding](statistics/decoding.md) - Multivariate pattern analysis (MVPA)
 - [RSA](statistics/rsa.md) - Representational Similarity Analysis
