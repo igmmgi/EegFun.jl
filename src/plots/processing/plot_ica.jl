@@ -175,7 +175,10 @@ fig = plot_topography(ica,
 """
 function plot_topography(ica::InfoIca; component_selection = components(), kwargs...)
 
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+    # ICA weights are dimensionless — override the default "μV" label
+    merged_kwargs = Dict{Symbol,Any}(:colorbar_label => "a.u.", pairs(kwargs)...)
+
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, merged_kwargs)
     dims = pop!(plot_kwargs, :dims)
     display_plot = pop!(plot_kwargs, :display_plot)
 
@@ -460,8 +463,11 @@ function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; artifa
     title_str = _generate_window_title(dat)
     _set_window_title(title_str)
 
+    # ICA weights are dimensionless — override the default "μV" label
+    merged_kwargs = Dict{Symbol,Any}(:colorbar_label => "a.u.", pairs(kwargs)...)
+
     # Merge user kwargs with defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, merged_kwargs)
 
     # ensure coordinates are 2d
     _ensure_coordinates_2d!(ica.layout)
@@ -514,7 +520,8 @@ function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; artifa
 
     colsize!(fig.layout, 1, Relative(0.15))
     colsize!(fig.layout, 2, Relative(0.85))
-    rowgap!(fig.layout, state.n_visible_components, 80)  # Increased gap to prevent overlap
+    rowgap!(fig.layout, 5)  # Tight spacing between component rows
+    rowgap!(fig.layout, state.n_visible_components, 80)  # Larger gap before controls
 
     if display_plot
         _display_figure(fig)
@@ -676,7 +683,7 @@ function _plot_topo_on_axis!(
         label_yoffset = label_yoffset,
     )
 
-    hidedecorations!(ax, grid = false)
+    hidedecorations!(ax, grid = false, label = false)
 
     return co
 
@@ -751,7 +758,7 @@ function _plot_ica_topo_in_viewer!(
         label_yoffset = label_yoffset,
         kwargs...,
     )
-    hidedecorations!(topo_ax, grid = false)
+    hidedecorations!(topo_ax, grid = false, label = false)
 
     return co
 end
@@ -767,7 +774,7 @@ function _create_component_activation_plots!(fig, state)
 
     for i = 1:num_plots
 
-        topo_ax = Axis(fig[i, 1], aspect = DataAspect())
+        topo_ax = Axis(fig[i, 1], aspect = DataAspect(), titlevisible = false)
         push!(state.topo_axs, topo_ax)
 
         # Get the actual component number
@@ -868,10 +875,11 @@ function _create_component_activation_plots!(fig, state)
         # Create the topo plot using the dedicated viewer function
         if comp_idx <= size(state.component_data, 1)
             _plot_ica_topo_in_viewer!(fig, topo_ax, state.ica, comp_idx; use_global_scale = state.use_global_scale[], state.plot_kwargs...)
-            topo_ax.title = @sprintf("IC %d (%.1f%%)", comp_idx, state.ica.variance[comp_idx] * 100)
+            topo_ax.ylabel = @sprintf("IC %d\n(%.1f%%)", comp_idx, state.ica.variance[comp_idx] * 100)
+            topo_ax.ylabelvisible = true
         else
             empty!(topo_ax) # Clear axis if comp_idx is invalid
-            topo_ax.title = @sprintf("Invalid IC %d", comp_idx)
+            topo_ax.ylabel = @sprintf("Invalid IC %d", comp_idx)
         end
 
         # Add left-click handler to plot component spectrum (only when clicking on the topoplot)
@@ -1118,9 +1126,9 @@ function _add_boolean_indicators!(state, channel_sym)
                 # Create vertical lines at each true position
                 # Only create lines within the current view range
                 current_range = state.xrange[]
-                visible_times = true_times[true_times .>= state.dat.data.time[first(
+                visible_times = true_times[true_times.>=state.dat.data.time[first(
                     current_range,
-                )].&&true_times .<= state.dat.data.time[last(current_range)]]
+                )].&&true_times.<=state.dat.data.time[last(current_range)]]
 
                 if !isempty(visible_times)
                     lines = vlines!(ax_channel, visible_times, color = :red, linewidth = 1)
@@ -1358,8 +1366,8 @@ function _update_components!(state)
                     pre_calculated_levels = level_to_use,
                     state.plot_kwargs...,
                 )
-                # Update title
-                topo_ax.title = @sprintf("IC %d (%.1f%%)", comp_idx, state.ica.variance[comp_idx] * 100)
+                topo_ax.ylabel = @sprintf("IC %d\n(%.1f%%)", comp_idx, state.ica.variance[comp_idx] * 100)
+                topo_ax.ylabelvisible = true
             else
                 @minimal_warning "Trying to update non-existent topo_axs at index $i"
             end
@@ -1374,7 +1382,8 @@ function _update_components!(state)
             end
             if i <= length(state.topo_axs)
                 empty!(state.topo_axs[i])
-                state.topo_axs[i].title = @sprintf("Invalid IC %d", comp_idx)
+                state.topo_axs[i].ylabel = @sprintf("Invalid IC %d", comp_idx)
+                state.topo_axs[i].ylabelvisible = true
             end
             if i <= length(state.axs)
                 state.axs[i].ylabel = ""
@@ -1771,7 +1780,7 @@ function plot_line_noise_components(line_noise_comps::Vector{Int}, metrics_df::D
 
         # Add component numbers as labels
         for (i, comp) in enumerate(line_noise_comps)
-            row = metrics_df[metrics_df.Component .== comp, :]
+            row = metrics_df[metrics_df.Component.==comp, :]
             text!(
                 ax1,
                 comp,
@@ -2032,8 +2041,11 @@ fig = plot_artifact_components(ica, artifacts)
 ```
 """
 function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; kwargs...)
+    # ICA weights are dimensionless — override the default "μV" label
+    merged_kwargs = Dict{Symbol,Any}(:colorbar_label => "a.u.", pairs(kwargs)...)
+
     # Merge user kwargs with defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, merged_kwargs)
 
     # Extract commonly used kwargs
     method = pop!(plot_kwargs, :method)

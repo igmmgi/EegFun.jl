@@ -7,7 +7,7 @@
 
 # EegFun.jl
 
-<img src="images/EegFunLogo.png" alt="EegFun Logo" width="150"/>
+<img src="images/readme/EegFunLogo.png" alt="EegFun Logo" width="150"/>
 
 A Julia package for EEG/ERP data analysis and visualization. Currently under active development.
 
@@ -60,7 +60,7 @@ EegFun.plot_databrowser(dat);
 
 </details>
 
-<img src="images/data_browser.png" alt="Data Browser" width="800"/>
+<img src="images/readme/data_browser.png" alt="Data Browser" width="800"/>
 
 ### ICA Data Browser
 
@@ -107,7 +107,7 @@ EegFun.plot_ica_component_activation(dat, ica_result)
 
 </details>
 
-<img src="images/ica_components_activation.png" alt="ICA Component Activation" width="800"/>
+<img src="images/readme/ica_components_activation.png" alt="ICA Component Activation" width="800"/>
 
 ### Plot Gallery
 
@@ -117,40 +117,40 @@ EegFun.plot_ica_component_activation(dat, ica_result)
     <td align="center"><b>ERP (Topo Layout)</b></td>
   </tr>
   <tr>
-    <td><img src="images/epochs_grid_layout.png" alt="Epochs Grid Layout" width="400"/></td>
-    <td><img src="images/erp_topo_layout.png" alt="ERP Topo Layout" width="400"/></td>
+    <td><img src="images/readme/epochs_grid_layout.png" alt="Epochs Grid Layout" width="400"/></td>
+    <td><img src="images/readme/erp_topo_layout.png" alt="ERP Topo Layout" width="400"/></td>
   </tr>
   <tr>
     <td align="center"><b>ICA Component Topographies</b></td>
     <td align="center"><b>ICA Component Spectra</b></td>
   </tr>
   <tr>
-    <td><img src="images/ica_components_topography.png" alt="ICA Component Topographies" width="400"/></td>
-    <td><img src="images/ica_components_spectrum.png" alt="ICA Component Spectra" width="400"/></td>
+    <td><img src="images/readme/ica_components_topography.png" alt="ICA Component Topographies" width="400"/></td>
+    <td><img src="images/readme/ica_components_spectrum.png" alt="ICA Component Spectra" width="400"/></td>
   </tr>
   <tr>
     <td align="center"><b>ERP Measurement GUI</b></td>
     <td align="center"><b>ERP Filter GUI</b></td>
   </tr>
   <tr>
-    <td><img src="images/erp_measurement_gui.png" alt="ERP Measurement GUI" width="400"/></td>
-    <td><img src="images/erp_filter.png" alt="ERP Filter GUI" width="400"/></td>
+    <td><img src="images/readme/erp_measurement_gui.png" alt="ERP Measurement GUI" width="400"/></td>
+    <td><img src="images/readme/erp_filter.png" alt="ERP Filter GUI" width="400"/></td>
   </tr>
   <tr>
     <td align="center"><b>Time-Frequency Analysis</b></td>
     <td align="center"><b>Triggers</b></td>
   </tr>
   <tr>
-    <td><img src="images/tf.png" alt="Time-Frequency Analysis" width="400"/></td>
-    <td><img src="images/triggers.png" alt="Triggers" width="400"/></td>
+    <td><img src="images/readme/tf.png" alt="Time-Frequency Analysis" width="400"/></td>
+    <td><img src="images/readme/triggers.png" alt="Triggers" width="400"/></td>
   </tr>
   <tr>
     <td align="center"><b>Plot GUI</b></td>
     <td align="center"><b>Artifact Detection</b></td>
   </tr>
   <tr>
-    <td><img src="images/plot_gui.png" alt="Plot GUI" width="400"/></td>
-    <td><img src="images/artifact_detection.png" alt="Artifact Detection" width="400"/></td>
+    <td><img src="images/readme/plot_gui.png" alt="Plot GUI" width="400"/></td>
+    <td><img src="images/readme/artifact_detection.png" alt="Artifact Detection" width="400"/></td>
   </tr>
 </table>
 
@@ -160,28 +160,28 @@ EegFun.plot_ica_component_activation(dat, ica_result)
 <details>
 <summary>Artifact Detection</summary>
 
-<img src="images/artifact_detection.png" alt="Artifact Detection" width="600"/>
+<img src="images/readme/artifact_detection.png" alt="Artifact Detection" width="600"/>
 
 </details>
 
 <details>
 <summary>ERP Image (Topo Layout)</summary>
 
-<img src="images/erp_image_topo_layout.png" alt="ERP Image Topo Layout" width="600"/>
+<img src="images/readme/erp_image_topo_layout.png" alt="ERP Image Topo Layout" width="600"/>
 
 </details>
 
 <details>
 <summary>Epoch Plots (Grid Layout)</summary>
 
-<img src="images/epochs_grid_layout.png" alt="Epochs Grid Layout" width="800"/>
+<img src="images/readme/epochs_grid_layout.png" alt="Epochs Grid Layout" width="800"/>
 
 </details>
 
 <details>
 <summary>ERP (Topo Layout)</summary>
 
-<img src="images/erp_topo_layout.png" alt="ERP Topo Layout" width="600"/>
+<img src="images/readme/erp_topo_layout.png" alt="ERP Topo Layout" width="600"/>
 
 </details>
 
