@@ -15,6 +15,71 @@ References:
   Brain Topography, 3(1), 137-141.
 """
 
+# ==============================================================================
+#   INTERNAL HELPERS
+# ==============================================================================
+
+"""Normalize values to 0-100% range. Returns original values if range is zero."""
+function _normalize_to_percent(values::Vector{Float64})
+    v_min = minimum(values)
+    v_max = maximum(values)
+    if v_max - v_min > eps()
+        return ((values .- v_min) ./ (v_max - v_min)) .* 100
+    else
+        return values
+    end
+end
+
+"""Build a result DataFrame with metadata columns from the source data, plus named result columns."""
+function _build_gfp_result_df(dat::ErpData, result_pairs::Pair{Symbol,Vector{Float64}}...)
+    result_df = DataFrame()
+
+    # Copy metadata columns
+    for col in meta_labels(dat)
+        result_df[!, col] = copy(dat.data[!, col])
+    end
+
+    # Add result columns
+    for (name, values) in result_pairs
+        result_df[!, name] = values
+    end
+
+    return result_df
+end
+
+"""Get channel matrix and selected channels, with validation."""
+function _get_channel_matrix(dat::ErpData, channel_selection::Function, operation::String)
+    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
+
+    if isempty(selected_channels)
+        @minimal_error("No channels selected for $operation")
+    end
+
+    @info "Using $(length(selected_channels)) channels for $operation"
+    channel_matrix = Matrix(dat.data[!, selected_channels])
+
+    return channel_matrix
+end
+
+"""Apply a single-ErpData function across a vector of ErpData, with condition filtering."""
+function _apply_to_conditions(
+    fn::Function,
+    dat::Vector{ErpData};
+    condition_selection::Function = conditions(),
+    operation::String = "calculation",
+    kwargs...,
+)::Vector{DataFrame}
+    dat_filtered = dat[get_selected_conditions(dat, condition_selection)]
+
+    @info "$operation for $(length(dat_filtered)) dataset(s)"
+
+    return [fn(erp_data; kwargs...) for erp_data in dat_filtered]
+end
+
+# ==============================================================================
+#   GFP
+# ==============================================================================
+
 """
     gfp(dat::ErpData; 
         channel_selection::Function = channels(),
@@ -64,48 +129,18 @@ function gfp(dat::ErpData; channel_selection::Function = channels(), normalize::
 
     @info "Calculating Global Field Power (GFP)"
 
-    # Get selected channels (exclude metadata)
-    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
+    channel_matrix = _get_channel_matrix(dat, channel_selection, "GFP calculation")
 
-    if isempty(selected_channels)
-        @minimal_error("No channels selected for GFP calculation")
-    end
-
-    @info "Using $(length(selected_channels)) channels for GFP calculation"
-
-    # Extract channel data as matrix: n_timepoints × n_channels
-    channel_matrix = Matrix(dat.data[!, selected_channels])
-
-    # Calculate GFP as standard deviation across channels at each time point
     # GFP(t) = std(channels at time t) - population std (corrected=false)
     gfp_values = vec(std(channel_matrix, dims = 2, corrected = false))
 
-    # Normalize if requested
     if normalize
-        gfp_min = minimum(gfp_values)
-        gfp_max = maximum(gfp_values)
-        if gfp_max - gfp_min > eps()  # Avoid division by zero
-            gfp_values = ((gfp_values .- gfp_min) ./ (gfp_max - gfp_min)) .* 100
-            @info "GFP normalized to 0-100% range"
-        else
-            @minimal_warning "GFP range is zero, normalization skipped"
-        end
+        gfp_values = _normalize_to_percent(gfp_values)
+        @info "GFP normalized to 0-100% range"
     end
-
-    # Create output DataFrame with metadata
-    result_df = DataFrame()
-
-    # Copy metadata columns
-    meta_cols = meta_labels(dat)
-    for col in meta_cols
-        result_df[!, col] = copy(dat.data[!, col])
-    end
-
-    # Add GFP column
-    result_df[!, :gfp] = gfp_values
 
     @info "GFP calculation complete"
-    return result_df
+    return _build_gfp_result_df(dat, :gfp => gfp_values)
 end
 
 
@@ -149,22 +184,13 @@ function gfp(
     channel_selection::Function = channels(),
     normalize::Bool = false,
 )::Vector{DataFrame}
-
-    # Apply condition_selection first
-    dat_filtered = dat[get_selected_conditions(dat, condition_selection)]
-
-    @info "Calculating GFP for $(length(dat_filtered)) dataset(s)"
-
-    results = DataFrame[]
-    for (i, erp_data) in enumerate(dat_filtered)
-        @info "Processing dataset $i/$(length(dat_filtered))"
-        gfp_result = gfp(erp_data; channel_selection = channel_selection, normalize = normalize)
-        push!(results, gfp_result)
-    end
-
-    return results
+    return _apply_to_conditions(gfp, dat; condition_selection, operation = "Calculating GFP", channel_selection, normalize)
 end
 
+
+# ==============================================================================
+#   GLOBAL DISSIMILARITY
+# ==============================================================================
 
 """
     global_dissimilarity(dat::ErpData;
@@ -204,63 +230,26 @@ function global_dissimilarity(dat::ErpData; channel_selection::Function = channe
 
     @info "Calculating Global Dissimilarity (GD)"
 
-    # Get selected channels
-    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
-
-    if isempty(selected_channels)
-        @minimal_error("No channels selected for dissimilarity calculation")
-    end
-
-    @info "Using $(length(selected_channels)) channels for dissimilarity calculation"
-
-    # Extract channel data as matrix: n_timepoints × n_channels
-    channel_matrix = Matrix(dat.data[!, selected_channels])
-
-    # Calculate GFP for normalization (population std)
-    gfp_values = vec(std(channel_matrix, dims = 2, corrected = false))
+    channel_matrix = _get_channel_matrix(dat, channel_selection, "dissimilarity calculation")
 
     # Normalize channel data by GFP at each time point
-    # This creates a matrix where each row has unit variance
+    gfp_values = vec(std(channel_matrix, dims = 2, corrected = false))
     normalized_map = channel_matrix ./ gfp_values
 
-    # Calculate differences between consecutive time points
-    # diff(normalized_map, dims=1) gives (t+1) - t
-    map_diff = diff(normalized_map, dims = 1)
-
-    # Global dissimilarity is the RMS (root mean square) difference across channels
     # GD(t) = sqrt(mean((u_i(t) - u_i(t-1))^2))
+    map_diff = diff(normalized_map, dims = 1)
     gd_values = vec(sqrt.(mean(map_diff .^ 2, dims = 2)))
 
     # Replicate first value to maintain same length as time vector
-    # (diff reduces length by 1)
     gd_values = vcat(gd_values[1], gd_values)
 
-    # Normalize if requested
     if normalize
-        gd_min = minimum(gd_values)
-        gd_max = maximum(gd_values)
-        if gd_max - gd_min > eps()
-            gd_values = ((gd_values .- gd_min) ./ (gd_max - gd_min)) .* 100
-            @info "Global Dissimilarity normalized to 0-100% range"
-        else
-            @minimal_warning "GD range is zero, normalization skipped"
-        end
+        gd_values = _normalize_to_percent(gd_values)
+        @info "Global Dissimilarity normalized to 0-100% range"
     end
-
-    # Create output DataFrame with metadata
-    result_df = DataFrame()
-
-    # Copy metadata columns
-    meta_cols = meta_labels(dat)
-    for col in meta_cols
-        result_df[!, col] = copy(dat.data[!, col])
-    end
-
-    # Add dissimilarity column
-    result_df[!, :dissimilarity] = gd_values
 
     @info "Global Dissimilarity calculation complete"
-    return result_df
+    return _build_gfp_result_df(dat, :dissimilarity => gd_values)
 end
 
 
@@ -280,22 +269,20 @@ function global_dissimilarity(
     channel_selection::Function = channels(),
     normalize::Bool = false,
 )::Vector{DataFrame}
-
-    # Apply condition_selection first
-    dat_filtered = dat[get_selected_conditions(dat, condition_selection)]
-
-    @info "Calculating Global Dissimilarity for $(length(dat_filtered)) dataset(s)"
-
-    results = DataFrame[]
-    for (i, erp_data) in enumerate(dat_filtered)
-        @info "Processing dataset $i/$(length(dat_filtered))"
-        gd_result = global_dissimilarity(erp_data; channel_selection = channel_selection, normalize = normalize)
-        push!(results, gd_result)
-    end
-
-    return results
+    return _apply_to_conditions(
+        global_dissimilarity,
+        dat;
+        condition_selection,
+        operation = "Calculating Global Dissimilarity",
+        channel_selection,
+        normalize,
+    )
 end
 
+
+# ==============================================================================
+#   GFP AND DISSIMILARITY (combined)
+# ==============================================================================
 
 """
     gfp_and_dissimilarity(dat::ErpData;
@@ -332,69 +319,24 @@ function gfp_and_dissimilarity(dat::ErpData; channel_selection::Function = chann
 
     @info "Calculating Global Field Power and Global Dissimilarity"
 
-    # Get selected channels
-    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
-
-    if isempty(selected_channels)
-        @minimal_error("No channels selected for GFP/dissimilarity calculation")
-    end
-
-    @info "Using $(length(selected_channels)) channels"
-
-    # Extract channel data as matrix
-    channel_matrix = Matrix(dat.data[!, selected_channels])
+    channel_matrix = _get_channel_matrix(dat, channel_selection, "GFP/dissimilarity calculation")
 
     # Calculate GFP (population std)
     gfp_values = vec(std(channel_matrix, dims = 2, corrected = false))
 
-    # Normalize GFP if requested
-    if normalize
-        gfp_min = minimum(gfp_values)
-        gfp_max = maximum(gfp_values)
-        if gfp_max - gfp_min > eps()
-            gfp_normalized = ((gfp_values .- gfp_min) ./ (gfp_max - gfp_min)) .* 100
-        else
-            gfp_normalized = gfp_values
-        end
-    else
-        gfp_normalized = gfp_values
-    end
-
     # Calculate Global Dissimilarity using GFP for normalization
     normalized_map = channel_matrix ./ gfp_values
     map_diff = diff(normalized_map, dims = 1)
-    # Use RMS (root mean square) difference
     gd_values = vec(sqrt.(mean(map_diff .^ 2, dims = 2)))
     gd_values = vcat(gd_values[1], gd_values)
 
-    # Normalize dissimilarity if requested
     if normalize
-        gd_min = minimum(gd_values)
-        gd_max = maximum(gd_values)
-        if gd_max - gd_min > eps()
-            gd_normalized = ((gd_values .- gd_min) ./ (gd_max - gd_min)) .* 100
-        else
-            gd_normalized = gd_values
-        end
-    else
-        gd_normalized = gd_values
+        gfp_values = _normalize_to_percent(gfp_values)
+        gd_values = _normalize_to_percent(gd_values)
     end
-
-    # Create output DataFrame
-    result_df = DataFrame()
-
-    # Copy metadata columns
-    meta_cols = meta_labels(dat)
-    for col in meta_cols
-        result_df[!, col] = copy(dat.data[!, col])
-    end
-
-    # Add computed columns
-    result_df[!, :gfp] = gfp_normalized
-    result_df[!, :dissimilarity] = gd_normalized
 
     @info "GFP and Global Dissimilarity calculation complete"
-    return result_df
+    return _build_gfp_result_df(dat, :gfp => gfp_values, :dissimilarity => gd_values)
 end
 
 
@@ -423,18 +365,12 @@ function gfp_and_dissimilarity(
     channel_selection::Function = channels(),
     normalize::Bool = false,
 )::Vector{DataFrame}
-
-    # Apply condition_selection first
-    dat_filtered = dat[get_selected_conditions(dat, condition_selection)]
-
-    @info "Calculating GFP and Global Dissimilarity for $(length(dat_filtered)) dataset(s)"
-
-    results = DataFrame[]
-    for (i, erp_data) in enumerate(dat_filtered)
-        @info "Processing dataset $i/$(length(dat_filtered))"
-        result = gfp_and_dissimilarity(erp_data; channel_selection = channel_selection, normalize = normalize)
-        push!(results, result)
-    end
-
-    return results
+    return _apply_to_conditions(
+        gfp_and_dissimilarity,
+        dat;
+        condition_selection,
+        operation = "Calculating GFP and Global Dissimilarity",
+        channel_selection,
+        normalize,
+    )
 end

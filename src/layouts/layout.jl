@@ -509,7 +509,7 @@ function _format_neighbours_toml(neighbours_dict::OrderedDict{Symbol,Neighbours}
 end
 
 """
-    print_neighbours_dict(neighbours_dict::OrderedDict{Symbol, Neighbours}, filename::String)
+    print_layout_neighbours(neighbours_dict::OrderedDict{Symbol, Neighbours}, filename::String)
 
 Write the neighbors dictionary to a TOML file in a structured format, showing for each electrode:
 - Its neighbors

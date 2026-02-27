@@ -221,63 +221,23 @@ function group_by_condition(erps::Vector{<:ErpData})
 end
 
 """
-    group_by_condition(epochs::Vector{<:EpochData})
+    group_by_condition(items::Vector{T}) where T
 
-Group Epochs by their condition number.
+Group EEG data objects by their condition number.
 
-# Arguments
-- `epochs::Vector{<:EpochData}`: Epochs to group
-
-# Returns
-- `OrderedDict{Int, Vector{EpochData}}`: Epochs grouped by condition number (sorted)
-"""
-function group_by_condition(epochs::Vector{<:EpochData})
-    grouped = OrderedDict{Int,Vector{EpochData}}()
-    for epoch in epochs
-        cond_num = epoch.condition
-        push!(get!(grouped, cond_num, EpochData[]), epoch)
-    end
-    # Sort by condition number
-    return OrderedDict(sort(collect(grouped), by = first))
-end
-
-"""
-    group_by_condition(tfs::Vector{<:TimeFreqData})
-
-Group TimeFreqData by their condition number.
+Works with any type that has a `.condition` field (EpochData, TimeFreqData, TimeFreqEpochData, etc.).
 
 # Arguments
-- `tfs::Vector{<:TimeFreqData}`: TF data to group
+- `items::Vector{T}`: Vector of data objects to group
 
 # Returns
-- `OrderedDict{Int, Vector{TimeFreqData}}`: TF data grouped by condition number (sorted)
+- `OrderedDict{Int, Vector{T}}`: Data grouped by condition number (sorted)
 """
-function group_by_condition(tfs::Vector{<:TimeFreqData})
-    grouped = OrderedDict{Int,Vector{TimeFreqData}}()
-    for tf in tfs
-        cond_num = tf.condition
-        push!(get!(grouped, cond_num, TimeFreqData[]), tf)
-    end
-    # Sort by condition number
-    return OrderedDict(sort(collect(grouped), by = first))
-end
-
-"""
-    group_by_condition(tfs::Vector{<:TimeFreqEpochData})
-
-Group TimeFreqEpochData by their condition number.
-
-# Arguments
-- `tfs::Vector{<:TimeFreqEpochData}`: TF epoch data to group
-
-# Returns
-- `OrderedDict{Int, Vector{TimeFreqEpochData}}`: TF epoch data grouped by condition number (sorted)
-"""
-function group_by_condition(tfs::Vector{<:TimeFreqEpochData})
-    grouped = OrderedDict{Int,Vector{TimeFreqEpochData}}()
-    for tf in tfs
-        cond_num = tf.condition
-        push!(get!(grouped, cond_num, TimeFreqEpochData[]), tf)
+function group_by_condition(items::Vector{T}) where {T}
+    grouped = OrderedDict{Int,Vector{T}}()
+    for item in items
+        cond_num = item.condition
+        push!(get!(grouped, cond_num, T[]), item)
     end
     # Sort by condition number
     return OrderedDict(sort(collect(grouped), by = first))

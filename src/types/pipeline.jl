@@ -72,8 +72,8 @@ end
 Configuration for EEG-specific preprocessing settings.
 
 # Fields
-- `artifact_value_criterion::Int`: Threshold for artifact detection (μV)
-- `extreme_value_criterion::Int`: Threshold for extreme value detection (μV)
+- `artifact_value_abs_criterion::Int`: Threshold for artifact detection (μV)
+- `extreme_value_abs_criterion::Int`: Threshold for extreme value detection (μV)
 """
 @kwdef struct EegConfig
     artifact_value_abs_criterion::Int

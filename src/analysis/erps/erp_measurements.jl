@@ -73,8 +73,9 @@ const ERP_MEASUREMENTS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
 """Validate analysis type, returning error message or nothing."""
 function _validate_analysis_type(analysis_type::String)
-    analysis_type ∉ VALID_MEASUREMENT_TYPES &&
+    if analysis_type ∉ VALID_MEASUREMENT_TYPES
         return "Analysis type must be one of: $(join(VALID_MEASUREMENT_TYPES, ", ")). Got: $analysis_type"
+    end
     return nothing
 end
 
