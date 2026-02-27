@@ -5,6 +5,7 @@ using DocumenterVitepress
 push!(LOAD_PATH, dirname(@__DIR__))
 using EegFun
 
+
 pages = [
     "Home" => "index.md",
     "Cheatsheet" => "cheatsheet.md",

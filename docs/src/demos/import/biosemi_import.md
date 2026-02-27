@@ -91,7 +91,10 @@ raw_data = EegFun.read_raw_data("./resources/data/bdf/example1.bdf")
 # EegFun uses the Julia package: BiosemiDataFormat.jl
 # https://github.com/igmmgi/BiosemiDataFormat.jl
 
-raw_data.header.xxx # tab-autocomplete in REPPL
+
+raw_data.header.channel_labels  # electrode labels
+raw_data.header.sample_rate     # sampling rate
+raw_data.header.num_channels    # number of channels
 raw_data.data
 raw_data.triggers
 

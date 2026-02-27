@@ -395,7 +395,7 @@ function get_eog_channels(eog_cfg::EogConfig)
 end
 
 """
-    _add_zscore_columns!(df::DataFrame, exclude_columns::Vector{Symbol} = [:row])
+    add_zscore_columns!(df::DataFrame, exclude_columns::Vector{Symbol} = [:row])
 
 Add z-score columns to a correlation matrix DataFrame.
 
@@ -416,13 +416,13 @@ cm = correlation_matrix_dual_selection(dat,
     channel_selection1 = channels(),
     channel_selection2 = channels([:vEOG, :hEOG])
 )
-_add_zscore_columns!(cm)  # Adds z_vEOG, z_hEOG columns
+add_zscore_columns!(cm)  # Adds z_vEOG, z_hEOG columns
 
 # Exclude additional columns from z-score calculation
-_add_zscore_columns!(cm, [:row, :channel_name])
+add_zscore_columns!(cm, [:row, :channel_name])
 ```
 """
-function _add_zscore_columns!(df::DataFrame, exclude_columns::Vector{Symbol} = [:row])
+function add_zscore_columns!(df::DataFrame, exclude_columns::Vector{Symbol} = [:row])
     # Get numeric columns (excluding specified columns)
     numeric_columns = filter(col -> eltype(df[!, col]) <: Number && !(col in exclude_columns), names(df))
 
@@ -448,9 +448,9 @@ function _add_zscore_columns!(df::DataFrame, exclude_columns::Vector{Symbol} = [
 end
 
 """
-    _add_zscore_columns(df::DataFrame, exclude_columns::Vector{Symbol} = [:row])
+    add_zscore_columns(df::DataFrame, exclude_columns::Vector{Symbol} = [:row])
 
-Non-mutating version of _add_zscore_columns!.
+Non-mutating version of add_zscore_columns!.
 
 # Arguments
 - `df::DataFrame`: The correlation matrix DataFrame
@@ -462,15 +462,15 @@ Non-mutating version of _add_zscore_columns!.
 # Examples
 ```julia
 # Create new DataFrame with z-score columns
-cm_with_z = _add_zscore_columns(correlation_matrix_dual_selection(dat, 
+cm_with_z = add_zscore_columns(correlation_matrix_dual_selection(dat, 
     channel_selection1 = channels(),
     channel_selection2 = channels([:vEOG, :hEOG])
 ))
 ```
 """
-function _add_zscore_columns(df::DataFrame, exclude_columns::Vector{Symbol} = [:row])
+function add_zscore_columns(df::DataFrame, exclude_columns::Vector{Symbol} = [:row])
     df_copy = copy(df)
-    _add_zscore_columns!(df_copy, exclude_columns)
+    add_zscore_columns!(df_copy, exclude_columns)
     return df_copy
 end
 
@@ -509,7 +509,7 @@ cm = correlation_matrix_eog(dat, eog_cfg,
 
 # Add z-score columns
 cm = correlation_matrix_eog(dat, eog_cfg)
-_add_zscore_columns!(cm)
+add_zscore_columns!(cm)
 ```
 """
 function correlation_matrix_eog(
@@ -565,7 +565,7 @@ bad_channels = identify_bad_channels(summary_df, joint_prob_df, zvar_criterion =
 function identify_bad_channels(summary_df::DataFrame, joint_prob_df::DataFrame; zvar_criterion::Real = 3.0)::Vector{Symbol}
 
     # Identify bad channels based on z-variance criterion
-    bad_by_zvar = summary_df[abs.(summary_df.zvar) .> zvar_criterion, :channel]
+    bad_by_zvar = summary_df[abs.(summary_df.zvar).>zvar_criterion, :channel]
 
     # Identify bad channels based on joint probability criterion
     bad_by_jp = joint_prob_df[joint_prob_df.rejection, :channel]
@@ -614,7 +614,7 @@ function partition_channels_by_eog_correlation(
 
     eog_related = Symbol[]
     for ch in bad_channels
-        rows = eog_correlation_df[eog_correlation_df.row .== ch, :]
+        rows = eog_correlation_df[eog_correlation_df.row.==ch, :]
         if nrow(rows) > 0
             if any(hasproperty(rows, c) && abs(rows[1, c]) > threshold for c in cols_to_use)
                 push!(eog_related, ch)

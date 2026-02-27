@@ -451,7 +451,7 @@ using OrderedCollections
 
     @testset "Logging functions" begin
         df = DataFrame(A = [1, 2, 3], B = [4, 5, 6])
-        result = EegFun._log_pretty_table(df)
+        result = EegFun.log_pretty_table(df)
         @test isnothing(result)
     end
 

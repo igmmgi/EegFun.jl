@@ -200,8 +200,15 @@ function plot_filter_response(
 
     # Calculate and plot impulse response
     # Create a unit impulse with samples before and after
-    n_samples_before = 200  # Samples before impulse
-    n_samples_after = 200  # Samples after impulse
+    # For FIR filters, ensure impulse is long enough for filtfilt (needs >= 3× filter length)
+    if filter_info.filter_method == "fir" && filter_info.filter_object isa Vector
+        fir_len = length(filter_info.filter_object)
+        n_samples_before = max(200, fir_len * 2)
+        n_samples_after = max(200, fir_len * 2)
+    else
+        n_samples_before = 200
+        n_samples_after = 200
+    end
     n_total = n_samples_before + n_samples_after + 1
     impulse = zeros(n_total)
     impulse[n_samples_before+1] = 1.0  # Unit impulse at t=0

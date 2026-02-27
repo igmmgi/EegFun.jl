@@ -1029,8 +1029,8 @@ function _setup_epochs_control_panel!(
 
     # State: baseline values and condition selections
     start_val, stop_val = _extract_baseline_values(baseline_interval)
-    baseline_start_obs = isnothing(Observable(start_val) ? "" : string(start_val))
-    baseline_stop_obs = isnothing(Observable(stop_val) ? "" : string(stop_val))
+    baseline_start_obs = Observable(isnothing(start_val) ? "" : string(start_val))
+    baseline_stop_obs = Observable(isnothing(stop_val) ? "" : string(stop_val))
     condition_checked = [Observable(true) for _ in dat_subset]
     condition_checked_ref[] = condition_checked  # Store for access by right-click handler
 

@@ -548,6 +548,16 @@ function print_layout_neighbours(layout::Layout, filename::String)
     print_layout_neighbours(layout.neighbours, filename)
 end
 
+function print_layout_neighbours(layout::Layout)
+    if isnothing(layout.neighbours)
+        @minimal_error "No neighbours to print"
+        return
+    end
+    nneighbours = average_number_of_neighbours(layout.neighbours)
+    toml_data = _format_neighbours_toml(layout.neighbours, nneighbours)
+    TOML.print(stdout, toml_data)
+end
+
 """
     average_number_of_neighbours(neighbours_dict::OrderedDict{Symbol, Neighbours})
 

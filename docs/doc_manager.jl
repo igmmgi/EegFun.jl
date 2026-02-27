@@ -480,9 +480,9 @@ function show_interactive_menu(project_root::String)
         println("3. Format source files")
         println("4. Format and check syntax")
         println("5. Clean build artifacts")
-        println("6. Run complete workflow")
-        println("7. View documentation (via LiveServer)")
-        println("8. Generate demo screenshots")
+        println("6. View documentation (via LiveServer)")
+        println("7. Generate demo screenshots")
+        println("8. Run complete workflow")
         println("9. Exit")
 
         print("\nEnter your choice (1-9): ")
@@ -503,11 +503,11 @@ function show_interactive_menu(project_root::String)
         elseif choice == "5"
             clean_docs(project_root)
         elseif choice == "6"
-            run_all_docs(project_root)
-        elseif choice == "7"
             view_documentation(project_root)
-        elseif choice == "8"
+        elseif choice == "7"
             generate_demo_screenshots(project_root)
+        elseif choice == "8"
+            run_all_docs(project_root)
         elseif choice == "9"
             break
         else

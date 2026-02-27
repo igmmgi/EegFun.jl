@@ -163,14 +163,14 @@ function preprocess_v1(config::String; base_dir::Union{String,Nothing} = nothing
                 # Calculate correlations between all channels and EOG channels
                 @info subsection("Channel x vEOG/hEOG Correlation Matrix")
                 hEOG_vEOG_cm = EegFun.correlation_matrix_eog(dat, preprocess_cfg.eog)
-                EegFun._add_zscore_columns!(hEOG_vEOG_cm)
-                _log_pretty_table(hEOG_vEOG_cm; title = "Channel x vEOG/hEOG Correlation Matrix (whole dataset)")
+                EegFun.add_zscore_columns!(hEOG_vEOG_cm)
+                log_pretty_table(hEOG_vEOG_cm; title = "Channel x vEOG/hEOG Correlation Matrix (whole dataset)")
 
                 # Calculate correlations between all channels and EOG channels (epoch interval)
                 @info subsection("Channel x vEOG/hEOG Correlation Matrix (epoch interval)")
                 hEOG_vEOG_cm_epoch = EegFun.correlation_matrix_eog(dat, preprocess_cfg.eog; sample_selection = samples(:epoch_interval))
-                EegFun._add_zscore_columns!(hEOG_vEOG_cm_epoch)
-                _log_pretty_table(hEOG_vEOG_cm_epoch; title = "Channel x vEOG/hEOG Correlation Matrix (epoch interval)")
+                EegFun.add_zscore_columns!(hEOG_vEOG_cm_epoch)
+                log_pretty_table(hEOG_vEOG_cm_epoch; title = "Channel x vEOG/hEOG Correlation Matrix (epoch interval)")
 
                 #################### INITIAL EPOCH and ERP EXTRACTION ###################
                 # This is just the initial epoch extraction and not the cleaned epoched data.
@@ -199,10 +199,10 @@ function preprocess_v1(config::String; base_dir::Union{String,Nothing} = nothing
                 ################### INITIAL CHANNEL SUMMARY ###################
                 @info subsection("Channel Summary")
                 summary_whole_dataset = channel_summary(dat)
-                _log_pretty_table(summary_whole_dataset; title = "Channel Summary (whole dataset)")
+                log_pretty_table(summary_whole_dataset; title = "Channel Summary (whole dataset)")
 
                 summary_epoch_interval = channel_summary(dat, sample_selection = samples(:epoch_interval))
-                _log_pretty_table(summary_epoch_interval; title = "Channel Summary (epoch interval)")
+                log_pretty_table(summary_epoch_interval; title = "Channel Summary (epoch interval)")
 
                 #################### DETECT EXTREME VALUES IN CONTINUOUS DATA ###################
                 @info subsection("Artifact Detection (extreme values)")
@@ -224,10 +224,10 @@ function preprocess_v1(config::String; base_dir::Union{String,Nothing} = nothing
                 #################### CHANNEL JOINT PROBABILITY IN CONTINUOUS DATA ###################
                 @info subsection("Bad Channel Detection using Channel Joint Probability + Z-Score Variance")
                 cjp_whole_dataset = channel_joint_probability(dat)
-                _log_pretty_table(cjp_whole_dataset; title = "Channel Joint Probability (whole dataset)")
+                log_pretty_table(cjp_whole_dataset; title = "Channel Joint Probability (whole dataset)")
 
                 cjp_epoch_interval = channel_joint_probability(dat, sample_selection = samples(:epoch_interval))
-                _log_pretty_table(cjp_epoch_interval; title = "Channel Joint Probability (epoch interval)")
+                log_pretty_table(cjp_epoch_interval; title = "Channel Joint Probability (epoch interval)")
 
                 @info subsubsection("Bad Channels")
                 bad_channels_whole_dataset = identify_bad_channels(summary_whole_dataset, cjp_whole_dataset)
@@ -293,10 +293,10 @@ function preprocess_v1(config::String; base_dir::Union{String,Nothing} = nothing
                     )
 
                     # Print component metrics to log files
-                    _log_pretty_table(component_metrics[:eog_metrics]; title = "EOG Component Metrics")
-                    _log_pretty_table(component_metrics[:ecg_metrics]; title = "ECG Component Metrics")
-                    _log_pretty_table(component_metrics[:line_noise_metrics]; title = "Line Noise Component Metrics")
-                    _log_pretty_table(component_metrics[:channel_noise_metrics]; title = "Channel Noise Component Metrics")
+                    log_pretty_table(component_metrics[:eog_metrics]; title = "EOG Component Metrics")
+                    log_pretty_table(component_metrics[:ecg_metrics]; title = "ECG Component Metrics")
+                    log_pretty_table(component_metrics[:line_noise_metrics]; title = "Line Noise Component Metrics")
+                    log_pretty_table(component_metrics[:channel_noise_metrics]; title = "Channel Noise Component Metrics")
 
                     @info subsection("Removing ICA components")
                     all_removed_components = get_all_ica_components(component_artifacts)
@@ -387,7 +387,7 @@ function preprocess_v1(config::String; base_dir::Union{String,Nothing} = nothing
                 #################### COMPARE REJECTION STEPS ###################
                 @info subsection("Rejection Step Comparison (before vs after repair)")
                 rejection_comparison = compare_rejections(rejection_info_step1, rejection_info_step2)
-                _log_pretty_table(rejection_comparison; title = "Rejection Step Comparison: Effectiveness of Channel Repair")
+                log_pretty_table(rejection_comparison; title = "Rejection Step Comparison: Effectiveness of Channel Repair")
 
                 #################### SAVE EPOCH DATA ###################
                 if cfg["files"]["output"]["save_epoch_data_cleaned"]
@@ -455,19 +455,19 @@ function preprocess_v1(config::String; base_dir::Union{String,Nothing} = nothing
         @info subsection("Electrode Repair Summary Across All Participants (Continuous Level Only)")
         electrode_repair_summary = summarize_electrode_repairs("_artifact_info", input_dir = output_directory)
         if !isempty(electrode_repair_summary)
-            _log_pretty_table(electrode_repair_summary; title = "Electrode Repairs at Continuous Level: Number of Participants Affected")
+            log_pretty_table(electrode_repair_summary; title = "Electrode Repairs at Continuous Level: Number of Participants Affected")
         end
 
         # Print ICA component summary (load from saved artifact info files)
         @info subsection("ICA Component Removal Summary")
         ica_per_file, ica_avg = summarize_ica_components("_artifact_info", input_dir = output_directory)
         if !isempty(ica_per_file)
-            _log_pretty_table(
+            log_pretty_table(
                 ica_per_file;
                 title = "ICA Components Removed per Participant",
                 alignment = [:l, :r, :r, :r, :r, :r, :r],  # First column left, rest right
             )
-            _log_pretty_table(
+            log_pretty_table(
                 ica_avg;
                 title = "Average ICA Components Removed per Participant",
                 alignment = [:l, :r],  # First column left, second right
@@ -479,8 +479,8 @@ function preprocess_v1(config::String; base_dir::Union{String,Nothing} = nothing
             epoch_summary, file_summary = _epoch_and_file_summary(all_epoch_counts)
             # Merge with existing summaries (replaces data for files that already exist)
             merged_epoch_summary, merged_file_summary = _merge_summaries(epoch_summary, file_summary, output_directory)
-            _log_pretty_table(merged_epoch_summary, title = "Combined epoch counts across all files:", alignment = [:l, :r, :l, :r, :r, :r])
-            _log_pretty_table(
+            log_pretty_table(merged_epoch_summary, title = "Combined epoch counts across all files:", alignment = [:l, :r, :l, :r, :r, :r])
+            log_pretty_table(
                 merged_file_summary,
                 title = "Average percentage per condition (averaged across conditions):",
                 alignment = [:l, :r],

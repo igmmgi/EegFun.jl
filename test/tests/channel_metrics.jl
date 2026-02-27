@@ -300,13 +300,13 @@ using OrderedCollections
         @test eog_channels == [:vEOG, :hEOG]
     end
 
-    @testset "_add_zscore_columns!" begin
+    @testset "add_zscore_columns!" begin
         # Create a test correlation matrix
         dat = EegFun.create_test_continuous_data(n = 1000, n_channels = 5)
         cm = EegFun.correlation_matrix(dat, channel_selection = EegFun.channels([:Ch1, :Ch2, :Ch3]))
 
         # Test basic functionality
-        EegFun._add_zscore_columns!(cm)
+        EegFun.add_zscore_columns!(cm)
         @test :z_Ch1 in propertynames(cm)
         @test :z_Ch2 in propertynames(cm)
         @test :z_Ch3 in propertynames(cm)
@@ -324,14 +324,14 @@ using OrderedCollections
         @test !(:z_Ch1 in propertynames(cm2_exclude))
         @test !(:z_Ch2 in propertynames(cm2_exclude))
         # Add z-scores excluding row (which should work)
-        EegFun._add_zscore_columns!(cm2_exclude, [:row])
+        EegFun.add_zscore_columns!(cm2_exclude, [:row])
         @test :z_Ch1 in propertynames(cm2_exclude)  # Ch1 should get z-score (String column)
         @test :z_Ch2 in propertynames(cm2_exclude)  # Ch2 should get z-score (String column)
         @test !(:z_row in propertynames(cm2_exclude))  # row should be excluded (Symbol column)
 
         # Test with all values the same (std = 0)
         cm3 = DataFrame(row = [:Ch1, :Ch2], Ch1 = [1.0, 1.0], Ch2 = [1.0, 1.0])
-        EegFun._add_zscore_columns!(cm3)
+        EegFun.add_zscore_columns!(cm3)
         @test :z_Ch1 in propertynames(cm3)
         @test :z_Ch2 in propertynames(cm3)
         @test all(cm3.z_Ch1 .== 0.0)
@@ -339,15 +339,15 @@ using OrderedCollections
 
         # Test with no numeric columns (after excluding all) — should throw
         cm4 = DataFrame(row = [:Ch1, :Ch2], name = ["A", "B"])
-        @test_throws Exception EegFun._add_zscore_columns!(cm4)
+        @test_throws Exception EegFun.add_zscore_columns!(cm4)
     end
 
-    @testset "_add_zscore_columns" begin
+    @testset "add_zscore_columns" begin
         dat = EegFun.create_test_continuous_data(n = 1000, n_channels = 5)
         cm = EegFun.correlation_matrix(dat, channel_selection = EegFun.channels([:Ch1, :Ch2]))
 
         # Test non-mutating version
-        cm_with_z = EegFun._add_zscore_columns(cm)
+        cm_with_z = EegFun.add_zscore_columns(cm)
         @test :z_Ch1 in propertynames(cm_with_z)
         @test :z_Ch2 in propertynames(cm_with_z)
         @test !(:z_Ch1 in propertynames(cm))  # Original should not be modified

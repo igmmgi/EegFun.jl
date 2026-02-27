@@ -1183,7 +1183,7 @@ end
 
 
 """
-    _log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
+    log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
 
 Log a pretty table with specified log level. For general DataFrame logging.
 Sets show_row_number=false and show_subheader=false by default for cleaner logs.
@@ -1196,16 +1196,16 @@ Sets show_row_number=false and show_subheader=false by default for cleaner logs.
 # Examples
 ```julia
 # Log with default info level
-_log_pretty_table(df; title = "My Table")
+log_pretty_table(df; title = "My Table")
 
 # Log with debug level
-_log_pretty_table(df; log_level = :debug, title = "Debug Table")
+log_pretty_table(df; log_level = :debug, title = "Debug Table")
 
 # Log with warn level
-_log_pretty_table(df; log_level = :warn, title = "Warning Table")
+log_pretty_table(df; log_level = :warn, title = "Warning Table")
 ```
 """
-function _log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
+function log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
 
     table_output = sprint() do output_io
         # TODO: better way of doing this?

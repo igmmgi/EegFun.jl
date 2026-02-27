@@ -151,6 +151,9 @@ for demo_info in demos
     - [API Reference](../../reference/index.md)
     """
 
+    # Ensure output directory exists
+    mkpath(dirname(output_file))
+
     # Write output file
     write(output_file, markdown_content)
     @info "Created: $output_file"

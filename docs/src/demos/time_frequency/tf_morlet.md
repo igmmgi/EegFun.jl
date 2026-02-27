@@ -138,7 +138,7 @@ EegFun.plot_tf(tf_data, ylogscale = true)
 data_cohen = EegFun.read_data("./resources/data/julia/tf/tf_test_epochs.jld2");
 
 # Figure 13.11 A)
-tf_data = EegFun.tf_morlet(data_cohen, frequencies = logrange(2, 80, length = 80), cycles = (3, 7), filter_edges = true)
+tf_data = EegFun.tf_morlet(data_cohen, frequencies = logrange(2, 80, length = 80), cycles = (3, 7), filter_edges = false)
 EegFun.plot_tf(
     tf_data;
     baseline_interval = (-0.5, -0.2),
@@ -147,6 +147,7 @@ EegFun.plot_tf(
     colorrange = (-3, 3),
     ylogscale = true,
     colormap = :jet,
+    interpolate = true,
 )
 
 # Figure 13.11 B)

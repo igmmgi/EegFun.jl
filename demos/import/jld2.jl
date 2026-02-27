@@ -173,7 +173,7 @@ EegFun.plot_databrowser("continuous_data.jld2", "ica_decomposition.jld2")
 #     └── grand_averages/   # Group-level results
 
 # Example: saving with organized structure
-output_dir = "derivatives/epochs"
+output_dir = mktempdir()
 participant_id = "sub-01"
 jldsave(joinpath(output_dir, "$(participant_id)_epochs.jld2"); data = epochs)
 

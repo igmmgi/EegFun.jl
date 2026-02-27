@@ -307,7 +307,7 @@ EegFun.channel_data(dat) ≈ EegFun.channel_data(dat_ica_reconstructed)
 
 # Plot component features
 fig, ax = EegFun.plot_eog_component_features(eog_comps, eog_comps_metrics_df)
-fig, ax = EegFun.plot_ecg_component_features_(ecg_comps, ecg_comps_metrics_df)
+fig, ax = EegFun.plot_ecg_component_features(ecg_comps, ecg_comps_metrics_df)
 fig, ax = EegFun.plot_line_noise_components(line_noise_comps, line_noise_comps_metrics_df)
 fig, ax = EegFun.plot_spatial_kurtosis_components(channel_noise_comps, channel_noise_comps_metrics_df)
 
