@@ -62,13 +62,13 @@ EegFun.highpass_filter!(dat, 0.1, filter_method = "fir")
 
 # Create a filter object for inspection
 filt = EegFun.create_highpass_filter(0.1, 2048.0)
-EegFun.plot_filter(filt)
+EegFun.plot_filter_response(filt)
 
 filt_lp = EegFun.create_lowpass_filter(30.0, 2048.0)
-EegFun.plot_filter(filt_lp)
+EegFun.plot_filter_response(filt_lp)
 
 # Compare IIR vs FIR
 filt_iir = EegFun.create_highpass_filter(0.1, 2048.0, filter_method = "iir")
 filt_fir = EegFun.create_highpass_filter(0.1, 2048.0, filter_method = "fir")
-EegFun.plot_filter(filt_iir)
-EegFun.plot_filter(filt_fir)
+EegFun.plot_filter_response(filt_iir)
+EegFun.plot_filter_response(filt_fir)

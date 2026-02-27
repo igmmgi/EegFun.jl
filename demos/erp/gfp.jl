@@ -48,10 +48,10 @@ gd_result = EegFun.global_dissimilarity(dat, normalize = true)
 # Calculate both GFP and global dissimilarity in one call
 result = EegFun.gfp_and_dissimilarity(dat)
 
-# Access the values
-result.time
-result.gfp
-result.dissimilarity
+# Access the values (one result per condition)
+result[1].time
+result[1].gfp
+result[1].dissimilarity
 
 
 #######################################################################

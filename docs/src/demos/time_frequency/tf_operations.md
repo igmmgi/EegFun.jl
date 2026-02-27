@@ -76,7 +76,7 @@ epoch_cfg = [
 epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.2, 1.0))
 
 # Compute time-frequency decomposition (Morlet wavelets)
-tf_data = EegFun.tf_morlet(epochs, frequencies = 4:1:30, n_cycles = 3)
+tf_data = EegFun.tf_morlet(epochs, frequencies = 4:1:30, cycles = 3)
 
 
 #######################################################################

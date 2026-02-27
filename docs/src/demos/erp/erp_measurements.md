@@ -148,9 +148,9 @@ max_latency = EegFun.erp_measurements(
 # --- Paired t-test: condition 1 vs condition 2 at Pz ---
 df = mean_amp.data
 
-# Extract data for each condition at Pz
-cond1_pz = df[(df.condition.==1).&(df.channel.==:Pz), :measurement]
-cond2_pz = df[(df.condition.==1).&(df.channel.==:Pz), :measurement]
+# Channels are in wide format (each channel is a column, e.g. :Pz, :Cz, :Fz)
+cond1_pz = df[df.condition.==1, :Pz]
+cond2_pz = df[df.condition.==2, :Pz]
 result = paired_ttest(cond1_pz, cond2_pz)
 result.t   # t-statistic
 result.p   # p-value

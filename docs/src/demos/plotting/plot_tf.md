@@ -49,11 +49,13 @@ dat = EegFun.create_eegfun_data(dat, layout)
 EegFun.highpass_filter!(dat, 0.5)
 EegFun.lowpass_filter!(dat, 100.0)
 
-epochs = EegFun.epoch_data(dat, [:trigger1], (-0.5, 1.0))
+epoch_cfg = [EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
+epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.5, 1.0))  # -200 to 1000 ms
+
 EegFun.baseline!(epochs, (-0.2, 0.0))
 
 # Morlet wavelet decomposition
-tf_data = EegFun.tf_morlet(epochs, 2:2:60)
+tf_data = EegFun.tf_morlet(epochs, frequencies = 2:2:60)
 
 #######################################################################
 # BASIC TIME-FREQUENCY PLOT
@@ -93,8 +95,7 @@ EegFun.plot_tf(
     channel_selection = EegFun.channels(:Cz),
     baseline_interval = (-0.3, 0.0),
     colormap = :RdBu,
-    colorrange = (-3.0, 3.0),
-    title = "Alpha/Beta ERD",
+    colorrange = (-15.0, 15.0),
 )
 ```
 

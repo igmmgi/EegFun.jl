@@ -13,13 +13,17 @@ EegFun.polar_to_cartesian_xy!(layout_file)
 # create EegFun data structure (EegFun.ContinuousData)
 dat = EegFun.create_eegfun_data(dat, layout_file);
 
-EegFun.sample_rate(dat)   # current sample rate
-EegFun.trigger_count(dat) # current triggers in file
+EegFun.sample_rate(dat)      # current sample rate
+EegFun.trigger_count(dat)    # current triggers in file
+EegFun.plot_databrowser(dat) # view current data
 
 dat_new = EegFun.resample(dat, 2) # downsample by a factor of 2
 EegFun.sample_rate(dat_new)       # should = original ÷ 2
 EegFun.trigger_count(dat_new)     # triggers should be preserved
+EegFun.plot_databrowser(dat_new)  # view current data
+
 
 dat_new = EegFun.resample(dat, 4) # downsample by a factor of 4
 EegFun.sample_rate(dat_new)       # should = original ÷ 4
 EegFun.trigger_count(dat_new)     # triggers should be preserved
+EegFun.plot_databrowser(dat_new)  # view current data

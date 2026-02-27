@@ -6,7 +6,6 @@ using EegFun
 
 # read raw data
 dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf");
-dat = EegFun.read_raw_data("/home/ian/Documents/Julia/TestDataSets/AttentionExp/example1.bdf");
 
 # read and preprate layout file
 layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
@@ -106,7 +105,7 @@ EegFun.channel_data(dat) ≈ EegFun.channel_data(dat_ica_reconstructed)
 
 # Plot component features
 fig, ax = EegFun.plot_eog_component_features(eog_comps, eog_comps_metrics_df)
-fig, ax = EegFun.plot_ecg_component_features_(ecg_comps, ecg_comps_metrics_df)
+fig, ax = EegFun.plot_ecg_component_features(ecg_comps, ecg_comps_metrics_df)
 fig, ax = EegFun.plot_line_noise_components(line_noise_comps, line_noise_comps_metrics_df)
 fig, ax = EegFun.plot_spatial_kurtosis_components(channel_noise_comps, channel_noise_comps_metrics_df)
 

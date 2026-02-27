@@ -118,29 +118,24 @@ dat = EegFun.read_raw_data("./resources/data/brainvision/example1.vhdr")
 
 # EegFun uses the Julia package: BrainVisionDataFormat.jl
 # https://github.com/igmmgi/BrainVisionDataFormat.jl
-raw_data.data
-raw_data.header
-raw_data.markers
-raw_data.markers[1]
-raw_data.markers[2]
-raw_data.markers[3]
-# and so on
+dat.data
+dat.header
 
 # Create EegFun data structure
-dat = EegFun.create_eegfun_data(raw_data)
+eeg = EegFun.create_eegfun_data(dat)
 
-EegFun.all_data(dat)
-EegFun.meta_data(dat)
-EegFun.all_labels(dat)
-EegFun.channel_labels(dat)
-EegFun.meta_labels(dat)
-EegFun.extra_labels(dat)
+EegFun.all_data(eeg)
+EegFun.meta_data(eeg)
+EegFun.all_labels(eeg)
+EegFun.channel_labels(eeg)
+EegFun.meta_labels(eeg)
+EegFun.extra_labels(eeg)
 
 # Check trigger information
 # EegFun creates a hash of the marker names for the numeric trigger column
 # triggers_info contains the mapping of trigger names to numeric values
 println("\nTrigger summary:")
-EegFun.trigger_count(dat)
+EegFun.trigger_count(eeg)
 
 
 ```

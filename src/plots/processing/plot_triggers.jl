@@ -501,11 +501,18 @@ end
 
 Core function to plot trigger events on the given axis.
 """
-function _plot_trigger_events!(ax::Axis, trigger_times::Vector{Float64}, trigger_codes::Vector{Int16})
-    _plot_trigger_events!(ax, trigger_times, trigger_codes, fill("", length(trigger_codes)))
+function _plot_trigger_events!(ax::Axis, trigger_times::Vector{Float64}, trigger_codes::Vector{Int16}; kwargs...)
+    _plot_trigger_events!(ax, trigger_times, trigger_codes, fill("", length(trigger_codes)); kwargs...)
 end
 
-function _plot_trigger_events!(ax::Axis, trigger_times::Vector{Float64}, trigger_codes::Vector{Int16}, trigger_info::Vector{String})
+function _plot_trigger_events!(
+    ax::Axis,
+    trigger_times::Vector{Float64},
+    trigger_codes::Vector{Int16},
+    trigger_info::Vector{String};
+    timeline_start::Float64 = trigger_times[1],
+    timeline_end::Float64 = trigger_times[end],
+)
     # Early return if no triggers to plot
     if isempty(trigger_times)
         @minimal_error "No triggers to plot"
@@ -528,16 +535,15 @@ function _plot_trigger_events!(ax::Axis, trigger_times::Vector{Float64}, trigger
         end
     end
 
-    time_strings = [string(round(time, digits = 2)) for time in trigger_times]
+    time_strings = [string(round(time, digits = 3)) for time in trigger_times]
 
     # Pre-compute intervals and their string representations
     intervals = diff(trigger_times)
-    interval_strings = [string(round(interval, digits = 2)) for interval in intervals]
+    interval_strings = [string(round(interval, digits = 3)) for interval in intervals]
     interval_positions = [(trigger_times[i] + trigger_times[i+1]) / 2 for i = 1:length(intervals)]
 
-    # Plot horizontal timeline
-    timeline_start = 0.0
-    lines!(ax, [timeline_start, trigger_times[end]], [0, 0], color = :black, linewidth = timeline_width)
+    # Plot horizontal timeline — span the full visible window
+    lines!(ax, [timeline_start, timeline_end], [0, 0], color = :black, linewidth = timeline_width)
 
     # Plot vertical lines for each event
     for (time, code_str, time_str) in zip(trigger_times, code_strings, time_strings)
@@ -628,11 +634,22 @@ function _create_interactive_trigger_plot(
         window_codes = trigger_codes[window_mask]
         window_info = trigger_info[window_mask]
 
+        # Always draw the horizontal timeline across the visible window
+        timeline_width = PLOT_TRIGGERS_KWARGS[:timeline_width][1]
+        lines!(ax, [current_start, current_end], [0, 0], color = :black, linewidth = timeline_width)
+
         if !isempty(window_times)
             if has_info
-                _plot_trigger_events!(ax, window_times, window_codes, window_info)
+                _plot_trigger_events!(
+                    ax,
+                    window_times,
+                    window_codes,
+                    window_info,
+                    timeline_start = current_start,
+                    timeline_end = current_end,
+                )
             else
-                _plot_trigger_events!(ax, window_times, window_codes)
+                _plot_trigger_events!(ax, window_times, window_codes, timeline_start = current_start, timeline_end = current_end)
             end
         end
 
