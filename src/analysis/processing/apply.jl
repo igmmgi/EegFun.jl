@@ -22,11 +22,8 @@ Apply analysis settings to data in-place, including ICA component removal.
 """
 function apply_analysis_settings!(dat::EegData, ica::InfoIca, settings::AnalysisSettings)
 
-    settings.hp_filter != 0 && highpass_filter!(dat, settings.hp_filter)
-    settings.lp_filter != 0 && lowpass_filter!(dat, settings.lp_filter)
-    settings.reference != :none && rereference!(dat, settings.reference)
-    !isempty(settings.repaired_channels) && repair_channels!(dat, settings.repaired_channels, method = settings.repair_method)
-    !isempty(settings.selected_regions) && _add_selected_regions!(dat, settings.selected_regions)
+    # Apply base settings (filter, rereference, repair, regions)
+    apply_analysis_settings!(dat, settings)
 
     # ICA component removal if selected
     if !isempty(settings.removed_ica_components)

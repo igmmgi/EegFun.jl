@@ -229,10 +229,6 @@ function _eeglab_to_continuousdata(eeg::Dict, filepath::String, preserve_radial_
     insertcols!(df, 2, :triggers => trigger_vec)
     insertcols!(df, 3, :trigger_info => trigger_info_vec)
 
-    # Parse layout
-    layout = _parse_channel_locations(eeg["chanlocs"], ch_names)
-    polar_to_cartesian_xy!(layout, preserve_radial_distance = preserve_radial_distance)
-
     # Create AnalysisInfo
     analysis_info = AnalysisInfo()
 

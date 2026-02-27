@@ -40,40 +40,8 @@ function _condition_combine_process_file(filepath::String, output_path::String, 
     if !(data isa Vector{<:EpochData})
         return BatchResult(false, filename, "Invalid data type: expected Vector{EpochData}")
     end
-    max_condition = length(data)
 
-    # Combine conditions for epochs
-    combined_data = EpochData[]
-
-    for (group_idx, original_conditions) in enumerate(condition_groups)
-        # Validate that all requested conditions exist
-        missing_conditions = filter(c -> c > max_condition || c < 1, original_conditions)
-        if !isempty(missing_conditions)
-            return BatchResult(false, filename, "Condition(s) $missing_conditions not found (only has 1-$max_condition)")
-        end
-
-        # Get data for the specified conditions
-        condition_data = data[original_conditions]
-
-        # For epochs: combine (concatenate) the conditions
-        # Each condition is an EpochData object, we need to concatenate their data fields
-        combined_data_frames = reduce(vcat, (epoch_data.data for epoch_data in condition_data))
-
-        # Create new EpochData with concatenated data, using metadata from first condition
-        # For combined conditions, use group_idx as condition number and create combined name
-        combined_condition_name = join([cond.condition_name for cond in condition_data], "_")
-        combined_epochs = EpochData(
-            condition_data[1].file,  # All should have same file
-            group_idx,  # Use group index as condition number
-            combined_condition_name,
-            combined_data_frames,
-            condition_data[1].layout,
-            condition_data[1].sample_rate,
-            condition_data[1].analysis_info,
-        )
-
-        push!(combined_data, combined_epochs)
-    end
+    combined_data = condition_combine(data, condition_groups)
 
     # Save (always use "data" as variable name since read_data finds by type)
     jldsave(output_path; data = combined_data)

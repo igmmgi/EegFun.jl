@@ -240,34 +240,12 @@ function _compute_cluster_statistics(clusters::Vector{TemporalCluster}, t_statis
         return Float64[]
     end
 
-    # Convert to 2D format (1 electrode × n_timepoints)
-    t_matrix_2d = reshape(t_statistics, 1, length(t_statistics))
+    cluster_stats = Vector{Float64}(undef, length(clusters))
 
-    # Create electrode mapping
-    electrode_to_idx = Dict(:TimePoint => 1)
-
-    # Convert TemporalCluster to Cluster for general function
-    general_clusters = Cluster[]
-    for tc in clusters
-        c = Cluster(
-            tc.id,
-            [:TimePoint],  # Single dummy electrode
-            tc.time_indices,
-            tc.time_range,
-            tc.cluster_stat,
-            tc.p_value,
-            tc.is_significant,
-            :positive,  # Dummy polarity
-        )
-        push!(general_clusters, c)
-    end
-
-    # Use general cluster statistics computation (return_clusters=false to get just stats)
-    cluster_stats = _compute_cluster_statistics(general_clusters, t_matrix_2d, electrode_to_idx; return_clusters = false)
-
-    # If using :max statistic, apply it
-    if statistic_type == :max
-        for (i, cluster) in enumerate(clusters)
+    for (i, cluster) in enumerate(clusters)
+        if statistic_type == :sum
+            cluster_stats[i] = sum(t_statistics[t_idx] for t_idx in cluster.time_indices)
+        elseif statistic_type == :max
             cluster_stats[i] = maximum(abs(t_statistics[t_idx]) for t_idx in cluster.time_indices)
         end
     end
@@ -381,7 +359,7 @@ function test_against_chance_cluster(
         progress = Progress(n_permutations, desc = "Permutations: ", showspeed = true)
     end
 
-    for perm_idx = 1:n_permutations
+    for _ = 1:n_permutations
         # Shuffle participant labels (sign-flip for one-sample test)
         # For one-sample t-test, we randomly flip signs of accuracies
         shuffled_accuracies = copy(accuracies)

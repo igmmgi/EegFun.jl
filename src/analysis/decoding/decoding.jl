@@ -112,7 +112,7 @@ end
 
 
 """
-    _equalize_trials(data_arrays::Vector{Array{Float64, 3}}, n_trials_per_condition::Vector{Int}, n_classes::Int)
+    _equalize_trials(data_arrays::Vector{Array{Float64, 3}}, n_trials_per_condition::Vector{Int})
 
 Equalize the number of trials across conditions by randomly downsampling to the minimum.
 
@@ -121,13 +121,12 @@ This ensures balanced classification by preventing bias toward conditions with m
 # Arguments
 - `data_arrays::Vector{Array{Float64, 3}}`: Data arrays for each condition [channels × time × trials]
 - `n_trials_per_condition::Vector{Int}`: Number of trials per condition
-- `n_classes::Int`: Number of classes/conditions
 
 # Returns
 - `data_arrays::Vector{Array{Float64, 3}}`: Equalized data arrays
 - `n_trials_per_condition::Vector{Int}`: Updated trial counts (all equal to minimum)
 """
-function _equalize_trials(data_arrays::Vector{Array{Float64,3}}, n_trials_per_condition::Vector{Int}, n_classes::Int)
+function _equalize_trials(data_arrays::Vector{Array{Float64,3}}, n_trials_per_condition::Vector{Int})
     min_trials = minimum(n_trials_per_condition)
     for (cond_idx, data_array) in enumerate(data_arrays)
         if size(data_array, 3) > min_trials
@@ -135,7 +134,7 @@ function _equalize_trials(data_arrays::Vector{Array{Float64,3}}, n_trials_per_co
             data_arrays[cond_idx] = data_array[:, :, selected_trials]
         end
     end
-    n_trials_per_condition = fill(min_trials, n_classes)
+    n_trials_per_condition = fill(min_trials, length(data_arrays))
     return data_arrays, n_trials_per_condition
 end
 
@@ -164,25 +163,25 @@ function _shuffle_trials(data_arrays::Vector{Array{Float64,3}})
 end
 
 """
-    _extract_timepoint_data!(X_all::Matrix{Float64}, labels::Vector{Int}, 
+    _extract_timepoint_data!(x_all::Matrix{Float64}, labels::Vector{Int}, 
                               data_arrays::Vector{Array{Float64, 3}}, 
                               shuffled_indices::Vector{Vector{Int}}, t::Int)
 
 Extract data at a specific time point into pre-allocated arrays.
-Fills X_all [all_trials × channels] and labels [all_trials] in-place.
+Fills x_all [all_trials × channels] and labels [all_trials] in-place.
 
 # Arguments
-- `X_all::Matrix{Float64}`: Pre-allocated matrix to fill [all_trials × channels]
+- `x_all::Matrix{Float64}`: Pre-allocated matrix to fill [all_trials × channels]
 - `labels::Vector{Int}`: Pre-allocated vector to fill with condition labels [all_trials]
 - `data_arrays::Vector{Array{Float64, 3}}`: Data arrays for each condition [channels × time × trials]
 - `shuffled_indices::Vector{Vector{Int}}`: Shuffled trial indices per condition
 - `t::Int`: Time point index to extract
 
 # Returns
-- Nothing (modifies `X_all` and `labels` in-place)
+- Nothing (modifies `x_all` and `labels` in-place)
 """
 function _extract_timepoint_data!(
-    X_all::Matrix{Float64},
+    x_all::Matrix{Float64},
     labels::Vector{Int},
     data_arrays::Vector{Array{Float64,3}},
     shuffled_indices::Vector{Vector{Int}},
@@ -192,7 +191,7 @@ function _extract_timepoint_data!(
     @inbounds for (cond_idx, cond_data) in enumerate(data_arrays)
         trial_indices = shuffled_indices[cond_idx]
         for trial_idx in trial_indices
-            copyto!(@view(X_all[row, :]), @view(cond_data[:, t, trial_idx]))
+            copyto!(@view(x_all[row, :]), @view(cond_data[:, t, trial_idx]))
             labels[row] = cond_idx
             row += 1
         end
@@ -455,6 +454,159 @@ function libsvm_classifier(
 end
 
 
+# ==============================================================================
+#   CORE DECODING ENGINE (shared by ERP and TF decode_libsvm)
+# ==============================================================================
+
+"""
+    _decode_core(data_arrays, n_trials_per_condition, time_points, selected_channels,
+                 condition_names, file; n_iterations, n_folds, equalize_trials, cost,
+                 show_progress, progress_desc)
+
+Shared decoding engine used by both ERP and TF `decode_libsvm` methods.
+
+Performs trial equalization, cross-validated SVM classification at each time point,
+and assembles the final `DecodedData` result.
+
+# Arguments
+- `data_arrays::Vector{Array{Float64,3}}`: Feature arrays per condition [features × time × trials]
+- `n_trials_per_condition::Vector{Int}`: Trial counts per condition
+- `time_points::Vector{Float64}`: Time vector for the decoded results
+- `selected_channels::Vector{Symbol}`: Channel labels used
+- `condition_names::Vector{String}`: Condition name labels
+- `file::String`: Source filename for the result
+
+# Keyword Arguments
+- `n_iterations::Int`: Number of shuffle iterations
+- `n_folds::Int`: Number of cross-validation folds
+- `equalize_trials::Bool`: Whether to equalize trial counts
+- `cost::Float64`: SVM regularization parameter
+- `show_progress::Bool`: Show progress bar
+- `progress_desc::String`: Progress bar description
+
+# Returns
+- `DecodedData`: Decoding results
+"""
+function _decode_core(
+    data_arrays::Vector{Array{Float64,3}},
+    n_trials_per_condition::Vector{Int},
+    time_points::Vector{Float64},
+    selected_channels::Vector{Symbol},
+    condition_names::Vector{String},
+    file::String;
+    n_iterations::Int,
+    n_folds::Int,
+    equalize_trials::Bool,
+    cost::Float64,
+    show_progress::Bool,
+    progress_desc::String,
+)
+    n_classes = length(data_arrays)
+    n_timepoints = length(time_points)
+
+    # Equalize trials if requested
+    if equalize_trials
+        data_arrays, n_trials_per_condition = _equalize_trials(data_arrays, n_trials_per_condition)
+    end
+
+    # Validate that we have enough trials for cross-validation
+    min_trials_after_equalize = minimum(n_trials_per_condition)
+    if min_trials_after_equalize < n_folds
+        @minimal_error(
+            "Not enough trials for $n_folds-fold cross-validation. " *
+            "Minimum trials per condition: $min_trials_after_equalize. " *
+            "Either reduce n_folds or increase number of trials."
+        )
+    end
+
+    # Preallocate results
+    all_accuracies = zeros(Float64, n_iterations, n_folds, n_timepoints)
+
+    # Determine max test set size for preallocation
+    n_trials_per_fold = [div(n_trials, n_folds) for n_trials in n_trials_per_condition]
+    max_test_size = sum(n_trials_per_fold)
+    all_predictions = Array{Float64}(undef, n_iterations, n_folds, n_timepoints, max_test_size)
+    all_targets = similar(all_predictions)
+
+    # Pre-compute all CV splits once (reused for all iterations/timepoints)
+    cv_splits = _precompute_cv_splits(n_trials_per_condition, n_folds)
+
+    # Pre-allocate reusable arrays
+    total_trials = sum(n_trials_per_condition)
+    n_features = size(data_arrays[1], 1)
+    X_all = Matrix{Float64}(undef, total_trials, n_features)
+    labels = Vector{Int}(undef, total_trials)
+
+    # Initialize progress bar
+    total_steps = n_iterations * n_timepoints
+    if show_progress
+        progress = Progress(total_steps, desc = progress_desc, showspeed = true)
+    end
+
+    # Main decoding loop
+    for iter = 1:n_iterations
+        shuffled_indices = _shuffle_trials(data_arrays)
+
+        for t = 1:n_timepoints
+            _extract_timepoint_data!(X_all, labels, data_arrays, shuffled_indices, t)
+
+            for fold = 1:n_folds
+                train_indices, test_indices = cv_splits[fold]
+
+                X_train_view = @view X_all[train_indices, :]
+                y_train = labels[train_indices]
+                X_test_view = @view X_all[test_indices, :]
+                y_test = labels[test_indices]
+
+                y_pred = libsvm_classifier(X_train_view, y_train, X_test_view; cost = cost)
+
+                n_correct = 0
+                @inbounds for i in eachindex(y_test)
+                    n_correct += (y_test[i] == y_pred[i])
+                end
+                accuracy = n_correct / length(y_test)
+                all_accuracies[iter, fold, t] = accuracy
+
+                n_test = length(y_test)
+                if n_test <= size(all_predictions, 4)
+                    all_predictions[iter, fold, t, 1:n_test] = y_pred
+                    all_targets[iter, fold, t, 1:n_test] = y_test
+                    if n_test < size(all_predictions, 4)
+                        all_predictions[iter, fold, t, (n_test+1):end] .= 0
+                        all_targets[iter, fold, t, (n_test+1):end] .= 0
+                    end
+                end
+            end
+
+            if show_progress
+                next!(progress)
+            end
+        end
+    end
+
+    # Average across iterations and folds
+    average_score = vec(mean(mean(all_accuracies, dims = 2), dims = 1))
+    stderror = vec(std(mean(all_accuracies, dims = 2), dims = 1) / sqrt(n_iterations))
+
+    # Compute confusion matrices
+    confusion_matrices =
+        _compute_confusion_matrices(all_targets, all_predictions, n_trials_per_fold, n_timepoints, n_classes, n_iterations, n_folds)
+
+    parameters = DecodingParameters(1.0 / n_classes, n_iterations, n_folds, n_classes == 2 ? :binary : :one_vs_one, n_classes)
+
+    return DecodedData(
+        file,
+        condition_names,
+        time_points,
+        average_score,
+        selected_channels,
+        parameters;
+        stderror = stderror,
+        confusion_matrix = confusion_matrices,
+        raw_predictions = all_predictions,
+    )
+end
+
 # ===========================
 #   DECODE WITH DIRECT LIBSVM 
 # ===========================
@@ -470,7 +622,7 @@ end
         show_progress::Bool = true,
     )
 
-Perform multivariate pattern classification (decoding) analysis using LIBSVM 
+Perform multivariate pattern classification (decoding) analysis using LIBSVM.
 
 This function performs time-point-by-time-point decoding analysis on epoch data from one participant,
 using cross-validation to estimate classification accuracy at each time point.
@@ -484,9 +636,9 @@ using cross-validation to estimate classification accuracy at each time point.
   - Example: `channel_selection=channels([:Fz, :Cz, :Pz])` for specific channels
   - Example: `channel_selection=channels(:Cz)` for single channel
   - Default: all channels
-- `interval_selection::Interval=samples()`: Sample selection predicate. See `samples()` for options.
-  - Example: `sample_selection=samples((-0.2, 0.8))` for time interval from -0.2 to 0.8 seconds
-  - Example: `sample_selection=samples()` for all time points (default)
+- `interval_selection::Interval=times()`: Time interval selection. See `times()` for options.
+  - Example: `interval_selection=times(-0.2, 0.8)` for time interval from -0.2 to 0.8 seconds
+  - Example: `interval_selection=times()` for all time points (default)
 - `n_iterations::Int`: Number of iterations with random shuffling (default: 100, matches erplab default)
 - `n_folds::Int`: Number of cross-validation folds (default: 3, matches erplab default)
 - `equalize_trials::Bool`: Whether to equalize number of trials across conditions (default: true, matches erplab)
@@ -514,161 +666,52 @@ function decode_libsvm(
     cost::Float64 = 1.0,
     show_progress::Bool = true,
 )
-
     # Input validations
     isempty(epochs) && @minimal_error("Cannot decode with empty epochs vector")
     length(epochs) < 2 && @minimal_error("Need at least 2 conditions for decoding, got $(length(epochs))")
     n_folds < 2 && @minimal_error("Need at least 2 folds for cross-validation, got $n_folds")
 
-    # Subset epochs by channel and sample selection
+    # Subset epochs by channel and interval selection
     epochs = subset(epochs; channel_selection = channel_selection, interval_selection = interval_selection, include_extra = false)
     isempty(channel_labels(epochs[1])) && @minimal_error("Channel selection produced no channels")
-    isempty(epochs[1].data[1][!, :time]) && @minimal_error("Sample selection produced no time points")
+    isempty(time(epochs[1])) && @minimal_error("Interval selection produced no time points")
 
     # Prepare data from subsetted epochs
     data_arrays, n_trials_per_condition = _prepare_decoding_data(epochs)
-    n_classes = length(epochs)
-    times = time(epochs)
-    selected_channels = channel_labels(epochs)
-    n_timepoints = length(times)
-
-    # Equalize trials if requested
-    if equalize_trials
-        data_arrays, n_trials_per_condition = _equalize_trials(data_arrays, n_trials_per_condition, n_classes)
-    end
-
-    # Validate that we have enough trials for cross-validation
-    min_trials_after_equalize = minimum(n_trials_per_condition)
-    if min_trials_after_equalize < n_folds
-        @minimal_error(
-            "Not enough trials for $n_folds-fold cross-validation. " *
-            "Minimum trials per condition: $min_trials_after_equalize. " *
-            "Either reduce n_folds or increase number of trials."
-        )
-    end
-
-    # Preallocate results
-    all_accuracies = zeros(Float64, n_iterations, n_folds, n_timepoints)
-
-    # Determine max test set size for preallocation
-    n_trials_per_fold = [div(n_trials, n_folds) for n_trials in n_trials_per_condition]
-    max_test_size = sum(n_trials_per_fold)
-    all_predictions = Array{Float64}(undef, n_iterations, n_folds, n_timepoints, max_test_size)
-    all_targets = similar(all_predictions)
-    condition_names = [ep.condition_name for ep in epochs]
-
-    # Pre-compute all CV splits once (n_folds different splits, reused for all iterations/timepoints)
-    # cv_splits[i] contains (train_indices, test_indices) for fold i
-    cv_splits = _precompute_cv_splits(n_trials_per_condition, n_folds)
-
-    # Pre-allocate reusable arrays
-    total_trials = sum(n_trials_per_condition)
-    n_channels = size(data_arrays[1], 1)
-    X_all = Matrix{Float64}(undef, total_trials, n_channels)
-    labels = Vector{Int}(undef, total_trials)
+    time_points = time(epochs)
 
     # Log decoding parameters
-    @info "Starting decoding analysis" file = epochs[1].file n_conditions = n_classes n_channels = n_channels n_timepoints = n_timepoints time_range =
-        (first(times), last(times)) n_iterations = n_iterations n_folds = n_folds trials_per_condition = n_trials_per_condition
+    @info "Starting decoding analysis" file = epochs[1].file n_conditions = length(epochs) n_channels = length(channel_labels(epochs)) n_timepoints =
+        length(time_points) time_range = (first(time_points), last(time_points)) n_iterations = n_iterations n_folds = n_folds trials_per_condition =
+        n_trials_per_condition
 
-    # Initialize progress bar if requested (track timepoint × iteration for finer granularity)
-    total_steps = n_iterations * n_timepoints
-    if show_progress
-        progress = Progress(total_steps, desc = "Decoding (iter × time): ", showspeed = true)
-    end
-
-    # Main decoding loop
-    for iter = 1:n_iterations
-        shuffled_indices = _shuffle_trials(data_arrays)
-
-        # For each time point
-        for t = 1:n_timepoints
-            # Fill pre-allocated arrays
-            _extract_timepoint_data!(X_all, labels, data_arrays, shuffled_indices, t)
-
-            # Cross-validation: use pre-computed splits for each fold
-            for fold = 1:n_folds
-                train_indices, test_indices = cv_splits[fold]
-
-                # Extract training and test sets (use views to avoid copying)
-                X_train_view = @view X_all[train_indices, :]
-                y_train = labels[train_indices]
-                X_test_view = @view X_all[test_indices, :]
-                y_test = labels[test_indices]
-
-                # Classify using direct LIBSVM (pass views directly - LIBSVM accepts AbstractMatrix)
-                y_pred = libsvm_classifier(X_train_view, y_train, X_test_view; cost = cost)
-
-                # Compute accuracy (more efficient than broadcasting)
-                n_correct = 0
-                @inbounds for i in eachindex(y_test)
-                    n_correct += (y_test[i] == y_pred[i])
-                end
-                accuracy = n_correct / length(y_test)
-                all_accuracies[iter, fold, t] = accuracy
-
-                # Store predictions and targets
-                n_test = length(y_test)
-                if n_test <= size(all_predictions, 4)
-                    all_predictions[iter, fold, t, 1:n_test] = y_pred
-                    all_targets[iter, fold, t, 1:n_test] = y_test
-                    if n_test < size(all_predictions, 4)
-                        all_predictions[iter, fold, t, (n_test+1):end] .= 0
-                        all_targets[iter, fold, t, (n_test+1):end] .= 0
-                    end
-                end
-            end
-
-            # Update progress bar after each timepoint (more granular feedback)
-            if show_progress
-                next!(progress)
-            end
-        end
-    end
-
-    # Average across iterations and folds
-    average_score = vec(mean(mean(all_accuracies, dims = 2), dims = 1))  # Average over iterations and folds
-    stderror = vec(std(mean(all_accuracies, dims = 2), dims = 1) / sqrt(n_iterations))  # SE across iterations
-
-    # Compute confusion matrices
-    confusion_matrices =
-        _compute_confusion_matrices(all_targets, all_predictions, n_trials_per_fold, n_timepoints, n_classes, n_iterations, n_folds)
-
-    parameters = DecodingParameters(
-        1.0 / n_classes,  # chance_level
+    return _decode_core(
+        data_arrays,
+        n_trials_per_condition,
+        time_points,
+        channel_labels(epochs),
+        [ep.condition_name for ep in epochs],
+        epochs[1].file;
         n_iterations,
         n_folds,
-        n_classes == 2 ? :binary : :one_vs_one,  # class_coding: Binary for 2 classes, one-vs-one for 3+ classes
-        n_classes,
+        equalize_trials,
+        cost,
+        show_progress,
+        progress_desc = "Decoding (iter × time): ",
     )
-
-    return DecodedData(
-        epochs[1].file,
-        condition_names,
-        times,
-        average_score,
-        selected_channels,
-        parameters;
-        stderror = stderror,
-        confusion_matrix = confusion_matrices,
-        raw_predictions = all_predictions,
-    )
-
 end
 
 """
-    decode_libsvm(
-        participant_epochs::Vector{Vector{EpochData}};
-        kwargs...
-    )
+    decode_libsvm(participant_epochs::Vector{Vector{T}}; kwargs...) where {T<:MultiDataFrameEeg}
 
 Decode all participants at once (batch processing).
 
 This convenience method accepts the output from `prepare_decoding` and decodes
 all participants, returning a vector of DecodedData objects.
+Works with both EpochData and TimeFreqEpochData.
 
 # Arguments
-- `participant_epochs::Vector{Vector{EpochData}}`: Vector of participant data (from `prepare_decoding`)
+- `participant_epochs::Vector{Vector{T}}`: Vector of participant data (from `prepare_decoding`)
 - `kwargs...`: All other arguments are passed to the single-participant `decode_libsvm` method
 
 # Returns
@@ -689,7 +732,7 @@ stats = test_against_chance_cluster(all_decoded, alpha=0.05)
 plot_decoding(grand_avg, stats)
 ```
 """
-function decode_libsvm(participant_epochs::Vector{Vector{EpochData}}; kwargs...)
+function decode_libsvm(participant_epochs::Vector{Vector{T}}; kwargs...) where {T<:MultiDataFrameEeg}
     return [decode_libsvm(epochs; kwargs...) for epochs in participant_epochs]
 end
 
@@ -748,7 +791,6 @@ function decode_libsvm(
     cost::Float64 = 1.0,
     show_progress::Bool = true,
 )
-
     # Input validations
     isempty(epochs) && @minimal_error("Cannot decode with empty epochs vector")
     length(epochs) < 2 && @minimal_error("Need at least 2 conditions for decoding, got $(length(epochs))")
@@ -760,139 +802,36 @@ function decode_libsvm(
 
     # Prepare data from subsetted epochs
     data_arrays, n_trials_per_condition = _prepare_decoding_data(epochs)
-    n_classes = length(epochs)
-    selected_channels = channel_labels(epochs)
 
     # Extract unique time points from TF data (time is repeated per frequency)
     unique_time_points = sort(unique(epochs[1].data_power[1].time))
-    n_timepoints = length(unique_time_points)
-
-    # Equalize trials if requested
-    if equalize_trials
-        data_arrays, n_trials_per_condition = _equalize_trials(data_arrays, n_trials_per_condition, n_classes)
-    end
-
-    # Validate that we have enough trials for cross-validation
-    min_trials_after_equalize = minimum(n_trials_per_condition)
-    if min_trials_after_equalize < n_folds
-        @minimal_error(
-            "Not enough trials for $n_folds-fold cross-validation. " *
-            "Minimum trials per condition: $min_trials_after_equalize. " *
-            "Either reduce n_folds or increase number of trials."
-        )
-    end
-
-    # Preallocate results
-    all_accuracies = zeros(Float64, n_iterations, n_folds, n_timepoints)
-
-    # Determine max test set size for preallocation
-    n_trials_per_fold = [div(n_trials, n_folds) for n_trials in n_trials_per_condition]
-    max_test_size = sum(n_trials_per_fold)
-    all_predictions = Array{Float64}(undef, n_iterations, n_folds, n_timepoints, max_test_size)
-    all_targets = similar(all_predictions)
-    condition_names = [ep.condition_name for ep in epochs]
-
-    # Pre-compute all CV splits
-    cv_splits = _precompute_cv_splits(n_trials_per_condition, n_folds)
-
-    # Pre-allocate reusable arrays
-    total_trials = sum(n_trials_per_condition)
-    n_features = size(data_arrays[1], 1)  # (channels × frequencies)
-    X_all = Matrix{Float64}(undef, total_trials, n_features)
-    labels = Vector{Int}(undef, total_trials)
 
     # Log decoding parameters
-    n_channels_used = length(selected_channels)
-    n_freqs = n_features ÷ n_channels_used
-    @info "Starting TF decoding analysis" file = epochs[1].file n_conditions = n_classes n_channels = n_channels_used n_frequencies =
-        n_freqs n_features = n_features n_timepoints = n_timepoints time_range = (first(unique_time_points), last(unique_time_points)) n_iterations =
-        n_iterations n_folds = n_folds trials_per_condition = n_trials_per_condition
+    n_channels = length(channel_labels(epochs))
+    n_features = size(data_arrays[1], 1)
+    n_freqs = n_features ÷ n_channels
+    @info "Starting TF decoding analysis" file = epochs[1].file n_conditions = length(epochs) n_channels = n_channels n_frequencies =
+        n_freqs n_features = n_features n_timepoints = length(unique_time_points) time_range =
+        (first(unique_time_points), last(unique_time_points)) n_iterations = n_iterations n_folds = n_folds trials_per_condition =
+        n_trials_per_condition
 
-    # Initialize progress bar
-    total_steps = n_iterations * n_timepoints
-    if show_progress
-        progress = Progress(total_steps, desc = "TF Decoding (iter × time): ", showspeed = true)
-    end
-
-    # Main decoding loop
-    for iter = 1:n_iterations
-        shuffled_indices = _shuffle_trials(data_arrays)
-
-        for t = 1:n_timepoints
-            _extract_timepoint_data!(X_all, labels, data_arrays, shuffled_indices, t)
-
-            for fold = 1:n_folds
-                train_indices, test_indices = cv_splits[fold]
-
-                X_train_view = @view X_all[train_indices, :]
-                y_train = labels[train_indices]
-                X_test_view = @view X_all[test_indices, :]
-                y_test = labels[test_indices]
-
-                y_pred = libsvm_classifier(X_train_view, y_train, X_test_view; cost = cost)
-
-                n_correct = 0
-                @inbounds for i in eachindex(y_test)
-                    n_correct += (y_test[i] == y_pred[i])
-                end
-                accuracy = n_correct / length(y_test)
-                all_accuracies[iter, fold, t] = accuracy
-
-                n_test = length(y_test)
-                if n_test <= size(all_predictions, 4)
-                    all_predictions[iter, fold, t, 1:n_test] = y_pred
-                    all_targets[iter, fold, t, 1:n_test] = y_test
-                    if n_test < size(all_predictions, 4)
-                        all_predictions[iter, fold, t, (n_test+1):end] .= 0
-                        all_targets[iter, fold, t, (n_test+1):end] .= 0
-                    end
-                end
-            end
-
-            if show_progress
-                next!(progress)
-            end
-        end
-    end
-
-    # Average across iterations and folds
-    average_score = vec(mean(mean(all_accuracies, dims = 2), dims = 1))
-    stderror = vec(std(mean(all_accuracies, dims = 2), dims = 1) / sqrt(n_iterations))
-
-    # Compute confusion matrices
-    confusion_matrices =
-        _compute_confusion_matrices(all_targets, all_predictions, n_trials_per_fold, n_timepoints, n_classes, n_iterations, n_folds)
-
-    parameters = DecodingParameters(1.0 / n_classes, n_iterations, n_folds, n_classes == 2 ? :binary : :one_vs_one, n_classes)
-
-    return DecodedData(
-        epochs[1].file,
-        condition_names,
+    return _decode_core(
+        data_arrays,
+        n_trials_per_condition,
         unique_time_points,
-        average_score,
-        selected_channels,
-        parameters;
-        stderror = stderror,
-        confusion_matrix = confusion_matrices,
-        raw_predictions = all_predictions,
+        channel_labels(epochs),
+        [ep.condition_name for ep in epochs],
+        epochs[1].file;
+        n_iterations,
+        n_folds,
+        equalize_trials,
+        cost,
+        show_progress,
+        progress_desc = "TF Decoding (iter × time): ",
     )
 end
 
-"""
-    decode_libsvm(participant_epochs::Vector{Vector{TimeFreqEpochData}}; kwargs...)
 
-Decode all participants at once from TF epoch data (batch processing).
-
-# Arguments
-- `participant_epochs::Vector{Vector{TimeFreqEpochData}}`: Vector of participant data (from `prepare_decoding`)
-- `kwargs...`: All other arguments are passed to the single-participant `decode_libsvm` method
-
-# Returns
-- `Vector{DecodedData}`: Decoded results for all participants
-"""
-function decode_libsvm(participant_epochs::Vector{Vector{TimeFreqEpochData}}; kwargs...)
-    return [decode_libsvm(epochs; kwargs...) for epochs in participant_epochs]
-end
 
 # ====================================
 #   GRAND AVERAGE FOR DECODING RESULTS
@@ -924,7 +863,7 @@ function grand_average(dat::Vector{DecodedData})
     first_channels = first_decoded.channels
     first_params = first_decoded.parameters
 
-    # TODO: should we check for this? warning vs. error?
+
     for decoded in dat[2:end]
         decoded.times != first_times && @minimal_error("DecodedData objects have inconsistent time vectors")
         decoded.condition_names != first_condition_names && @minimal_error("DecodedData objects have inconsistent condition names")
