@@ -88,13 +88,13 @@ function _handle_shared_navigation!(axes::Vector{Axis}, action::Symbol)
     # Only zoom the first axis - the linkaxes! will handle synchronizing all others
     ax = first(axes)
     if action == :up
-        ymore!(ax)
+        _ymore!(ax)
     elseif action == :down
-        yless!(ax)
+        _yless!(ax)
     elseif action == :left
-        xless!(ax)
+        _xless!(ax)
     elseif action == :right
-        xmore!(ax)
+        _xmore!(ax)
     end
 end
 

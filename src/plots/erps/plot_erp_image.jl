@@ -632,7 +632,7 @@ function _handle_erp_image_navigation!(axes::Vector{Axis}, heatmaps::Vector, act
             end
         else # ERP waveform axis
             # For ERP waveform, adjust y-axis limits
-            func = action == :y_less ? ymore! : yless!
+            func = action == :y_less ? _ymore! : _yless!
             func(active_axis)
         end
     end
