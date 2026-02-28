@@ -1,0 +1,35 @@
+%% Source Mermaid for pipeline_flowchart.svg
+%% Edit here and re-render to SVG if changes are needed
+graph TD
+    subgraph A["Load"]
+        A1["Raw Data"] --- A2["Layout File"]
+    end
+    style A fill:none,stroke:#666
+    A --> B["Rereference"]
+    B --> C["Highpass Filter"]
+    subgraph D["EOG"]
+        D1["Calculate vEOG / hEOG"] --> D2["Detect EOG Onsets"] --> D3["EOG Correlation Matrix"]
+    end
+    style D fill:none,stroke:#666
+    C --> D
+    D --> E0["Initial Epoch + ERP Extraction"]
+    subgraph E["Artifact Scan"]
+        E1["Channel Summary"] --> E2["Extreme Value Detection"] --> E3["Channel Joint Probability"] --> E4["Identify Bad Channels"]
+    end
+    style E fill:none,stroke:#666
+    E0 --> E
+    subgraph F["ICA"]
+        F1["Stricter Highpass"] --> F2["Run ICA"] --> F3["Identify Components"] --> F4["Remove Components"]
+    end
+    style F fill:none,stroke:#666
+    E --> F
+    F --> F0["Channel Repair"]
+    F0 --> G["Recalculate EOG"]
+    G --> G1["Detect Artifact Values"]
+    G1 --> H["Extract Epochs + Baseline"]
+    subgraph I["Epoch QC"]
+        I1["Detect Bad Epochs"] --> I2["Repair Channels per Epoch"] --> I3["Re-detect + Reject"]
+    end
+    style I fill:none,stroke:#666
+    H --> I
+    I --> J["Average ERPs + Save"]
