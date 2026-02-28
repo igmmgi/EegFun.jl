@@ -175,6 +175,8 @@ function plot_layout_2d!(
     return nothing
 end
 
+plot_layout_2d!(fig, ax, dat::EegFunData; kwargs...) = plot_layout_2d!(fig, ax, dat.layout; kwargs...)
+
 
 """
     plot_layout_2d(layout::Layout; neighbours::Bool=false, correlation_matrix::Union{DataFrame, Nothing}=nothing, display_plot::Bool=true, kwargs...)
@@ -221,6 +223,8 @@ function plot_layout_2d(
     end
     return fig, ax
 end
+
+plot_layout_2d(dat::EegFunData; kwargs...) = plot_layout_2d(dat.layout; kwargs...)
 
 
 

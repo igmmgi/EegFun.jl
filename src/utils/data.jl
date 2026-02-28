@@ -1695,7 +1695,7 @@ end
 function _create_eegfun_dataframe(dat::BiosemiDataFormat.BiosemiData)::DataFrame
     @info "Creating EEG DataFrame"
     df = hcat(
-        DataFrame(time = dat.time, sample = 1:length(dat.time), triggers = _clean_triggers(dat.triggers.raw)),
+        DataFrame(time = dat.time, sample = 1:length(dat.time), trigger = _clean_triggers(dat.triggers.raw)),
         DataFrame(Float64.(dat.data), Symbol.(dat.header.channel_labels[1:(end-1)])),  # assumes last channel is trigger
     )
     return df
@@ -1713,7 +1713,7 @@ function create_eegfun_data(dat::BiosemiDataFormat.BiosemiData)
     df = _create_eegfun_dataframe(dat)
     # Extract channel labels from DataFrame (exclude metadata columns)
     all_cols = Symbol.(names(df))
-    metadata_cols = [:time, :sample, :triggers, :triggers_info]
+    metadata_cols = [:time, :sample, :trigger, :trigger_info]
     channel_labels = [col for col in all_cols if !(col in metadata_cols)]
     layout = _create_layout_from_labels(channel_labels)
     return create_eegfun_data(dat, layout)
@@ -1752,21 +1752,18 @@ function _create_eegfun_dataframe(dat::BrainVisionDataFormat.BrainVisionData)::D
         @minimal_error "Number of channel labels ($(length(channel_labels))) does not match number of channels ($n_channels)"
     end
 
-    # Create triggers and marker strings columns from markers
+    # Create trigger and marker strings columns from markers
     if isnothing(dat.markers) || isempty(dat.markers)
         @info "_create_eegfun_dataframe: No markers found, creating empty trigger columns"
-        triggers = zeros(Int, n_samples)
-        triggers_info = fill("", n_samples)
+        trigger = zeros(Int, n_samples)
+        trigger_info = fill("", n_samples)
     else
         @info "_create_eegfun_dataframe: Found $(length(dat.markers)) markers"
-        triggers, triggers_info = _extract_triggers_from_markers(dat.markers, n_samples)
+        trigger, trigger_info = _extract_triggers_from_markers(dat.markers, n_samples)
     end
 
     # Create the DataFrame 
-    df = hcat(
-        DataFrame(time = time, sample = sample, triggers = triggers, triggers_info = triggers_info),
-        DataFrame(dat.data, channel_labels),
-    )
+    df = hcat(DataFrame(time = time, sample = sample, trigger = trigger, trigger_info = trigger_info), DataFrame(dat.data, channel_labels))
 
     return df
 end
@@ -1803,7 +1800,7 @@ function create_eegfun_data(dat::BrainVisionDataFormat.BrainVisionData)
     df = _create_eegfun_dataframe(dat)
     # Extract channel labels from DataFrame (exclude metadata columns)
     all_cols = Symbol.(names(df))
-    metadata_cols = [:time, :sample, :triggers, :triggers_info]
+    metadata_cols = [:time, :sample, :trigger, :trigger_info]
     channel_labels = [col for col in all_cols if !(col in metadata_cols)]
     layout = _create_layout_from_labels(channel_labels)
     return create_eegfun_data(dat, layout)
@@ -1825,8 +1822,8 @@ function _extract_triggers_from_markers(
     markers::Vector{BrainVisionDataFormat.BrainVisionMarker},
     n_samples::Int,
 )::Tuple{Vector{Int},Vector{String}}
-    triggers = zeros(Int, n_samples)
-    triggers_info = fill("", n_samples)
+    trigger = zeros(Int, n_samples)
+    trigger_info = fill("", n_samples)
 
     @info "Processing $(length(markers)) markers for $n_samples samples"
 
@@ -1871,14 +1868,14 @@ function _extract_triggers_from_markers(
 
         if 1 <= sample_idx <= n_samples
             # Include all markers, even those with empty values
-            triggers[sample_idx] = value_to_trigger[marker.value]
-            triggers_info[sample_idx] = marker.value
+            trigger[sample_idx] = value_to_trigger[marker.value]
+            trigger_info[sample_idx] = marker.value
         end
     end
 
-    non_zero_triggers = count(x -> x != 0, triggers)
-    non_empty_strings = count(x -> x != "", triggers_info)
-    @info "Created triggers with $non_zero_triggers non-zero values and $non_empty_strings non-empty marker strings"
+    non_zero_triggers = count(x -> x != 0, trigger)
+    non_empty_strings = count(x -> x != "", trigger_info)
+    @info "Created trigger with $non_zero_triggers non-zero values and $non_empty_strings non-empty marker strings"
 
-    return triggers, triggers_info
+    return trigger, trigger_info
 end

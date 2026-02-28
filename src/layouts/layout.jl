@@ -742,6 +742,7 @@ function get_neighbours_xy!(layout::Layout, distance_criterion::Real)
     end
     return nothing
 end
+get_neighbours_xy!(dat::EegFunData, distance_criterion::Real) = get_neighbours_xy!(dat.layout, distance_criterion)
 
 """
     get_neighbours_xyz!(layout::Layout, distance_criterion::Real)
@@ -772,6 +773,7 @@ function get_neighbours_xyz!(layout::Layout, distance_criterion::Real)
     end
     return nothing
 end
+get_neighbours_xyz!(dat::EegFunData, distance_criterion::Real) = get_neighbours_xyz!(dat.layout, distance_criterion)
 
 # === LAYOUT VALIDATION AND MANIPULATION ===
 """

@@ -96,7 +96,7 @@ using CSV
 
             # Test include_meta and include_extra flags
             result_meta = EegFun.channel_summary(dat, include_meta = true)
-            @test :time in result_meta.channel || :triggers in result_meta.channel  # Should include meta columns
+            @test :time in result_meta.channel || :trigger in result_meta.channel  # Should include meta columns
 
             # Test statistics are reasonable
             result = EegFun.channel_summary(dat)

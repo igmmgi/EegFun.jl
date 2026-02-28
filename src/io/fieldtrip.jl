@@ -200,7 +200,7 @@ function _fieldtrip_to_continuousdata(ft::Dict, filepath::String, layout::Layout
         end
     end
 
-    insertcols!(df, 2, :triggers => trigger_vec)
+    insertcols!(df, 2, :trigger => trigger_vec)
     insertcols!(df, 3, :trigger_info => trigger_info_vec)
 
     # Create ContinuousData
@@ -257,7 +257,7 @@ function _fieldtrip_to_epochdata(ft::Dict, filepath::String, layout::Layout, sam
             end
         end
 
-        insertcols!(df, 2, :triggers => trigger_vec)
+        insertcols!(df, 2, :trigger => trigger_vec)
         insertcols!(df, 3, :trigger_info => trigger_info_vec)
 
         epoch_dataframes[trial_idx] = df
@@ -301,7 +301,7 @@ function _fieldtrip_to_erpdata(ft::Dict, filepath::String, layout::Layout, sampl
     insertcols!(df, 1, :time => time_vec)
 
     trigger_vec, trigger_info_vec = _create_trigger_columns(n_timepoints)
-    insertcols!(df, 2, :triggers => trigger_vec)
+    insertcols!(df, 2, :trigger => trigger_vec)
     insertcols!(df, 3, :trigger_info => trigger_info_vec)
 
     # Create ErpData

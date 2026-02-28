@@ -80,9 +80,9 @@ using OrderedCollections
     @testset "trigger_count" begin
         @testset "ContinuousData trigger counting" begin
             # Create test data
-            triggers = [0, 1, 1, 0, 2, 2, 2, 0, 1, 0]
+            trigger = [0, 1, 1, 0, 2, 2, 2, 0, 1, 0]
             time = collect(0:9) ./ 100.0
-            df = DataFrame(time = time, triggers = triggers, A = zeros(10), B = zeros(10))
+            df = DataFrame(time = time, trigger = trigger, A = zeros(10), B = zeros(10))
             layout = EegFun.Layout(DataFrame(label = [:A, :B], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
             dat = EegFun.ContinuousData("test_data", df, layout, 100, EegFun.AnalysisInfo())
 
@@ -92,15 +92,15 @@ using OrderedCollections
             @test size(result.data, 1) == 2  # Two unique non-zero triggers
             @test result.data.trigger == [1, 2]
             @test result.data.count == [3, 3]  # Raw counts before cleaning
-            @test !("triggers_info" in names(result.data))  # No triggers_info column when not present
+            @test !("trigger_info" in names(result.data))  # No trigger_info column when not present
         end
 
-        @testset "ContinuousData with triggers_info" begin
-            # Create test data with triggers_info
-            triggers = [0, 1, 1, 0, 2, 2, 2, 0, 1, 0]
-            triggers_info = ["", "S 1", "", "", "S 2", "", "", "", "S 1", ""]
+        @testset "ContinuousData with trigger_info" begin
+            # Create test data with trigger_info
+            trigger = [0, 1, 1, 0, 2, 2, 2, 0, 1, 0]
+            trigger_info = ["", "S 1", "", "", "S 2", "", "", "", "S 1", ""]
             time = collect(0:9) ./ 100.0
-            df = DataFrame(time = time, triggers = triggers, triggers_info = triggers_info, A = zeros(10), B = zeros(10))
+            df = DataFrame(time = time, trigger = trigger, trigger_info = trigger_info, A = zeros(10), B = zeros(10))
             layout = EegFun.Layout(DataFrame(label = [:A, :B], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
             dat = EegFun.ContinuousData("test_data", df, layout, 100, EegFun.AnalysisInfo())
 
@@ -110,15 +110,15 @@ using OrderedCollections
             @test size(result.data, 1) == 2  # Two unique non-zero triggers
             @test result.data.trigger == [1, 2]
             @test result.data.count == [3, 3]  # Raw counts before cleaning
-            @test "triggers_info" in names(result.data)  # triggers_info column should be present
-            @test result.data.triggers_info == ["S 1", "S 2"]  # Should show the info for each trigger
+            @test "trigger_info" in names(result.data)  # trigger_info column should be present
+            @test result.data.trigger_info == ["S 1", "S 2"]  # Should show the info for each trigger
         end
 
         @testset "empty triggers" begin
             # Create test data with no triggers
-            triggers = [0, 0, 0, 0, 0]
+            trigger = [0, 0, 0, 0, 0]
             time = collect(0:4) ./ 100.0
-            df = DataFrame(time = time, triggers = triggers, A = zeros(5), B = zeros(5))
+            df = DataFrame(time = time, trigger = trigger, A = zeros(5), B = zeros(5))
             layout = EegFun.Layout(DataFrame(label = [:A, :B], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
             dat = EegFun.ContinuousData("test_data", df, layout, 100, EegFun.AnalysisInfo())
 
@@ -129,9 +129,9 @@ using OrderedCollections
 
         @testset "data structure integration" begin
             # Test with ContinuousData structure
-            triggers = [0, 1, 0, 2, 0, 1, 0]
+            trigger = [0, 1, 0, 2, 0, 1, 0]
             time = collect(0:6) ./ 100.0
-            df = DataFrame(time = time, triggers = triggers, channel1 = randn(7), channel2 = randn(7))
+            df = DataFrame(time = time, trigger = trigger, channel1 = randn(7), channel2 = randn(7))
             layout = EegFun.Layout(DataFrame(label = [:channel1, :channel2], inc = [0.0, 90.0], azi = [0.0, 0.0]), nothing, nothing)
             dat = EegFun.ContinuousData("test_data", df, layout, 100, EegFun.AnalysisInfo())
 
@@ -146,8 +146,8 @@ using OrderedCollections
 
     @testset "_trigger_count_impl unified helper function" begin
         @testset "single dataset counting" begin
-            triggers = [0, 1, 1, 0, 2, 2, 2, 0, 1, 0]
-            result = EegFun._trigger_count_impl([triggers], ["count"])
+            trigger = [0, 1, 1, 0, 2, 2, 2, 0, 1, 0]
+            result = EegFun._trigger_count_impl([trigger], ["count"])
             @test isa(result, EegFun.TriggerInfo)
             @test size(result.data, 1) == 2
             @test result.data.trigger == [1, 2]
@@ -166,28 +166,28 @@ using OrderedCollections
         end
 
         @testset "no triggers" begin
-            triggers = [0, 0, 0, 0]
-            result = EegFun._trigger_count_impl([triggers], ["count"])
+            trigger = [0, 0, 0, 0]
+            result = EegFun._trigger_count_impl([trigger], ["count"])
             @test isa(result, EegFun.TriggerInfo)
             @test size(result.data, 1) == 0
             @test names(result.data) == ["trigger", "count"]
         end
 
-        @testset "with triggers_info" begin
-            triggers = [0, 1, 1, 0, 2, 2, 0]
-            triggers_info = ["", "S 1", "", "", "S 2", "", ""]
-            result = EegFun._trigger_count_impl([triggers], ["count"], triggers_info = triggers_info)
+        @testset "with trigger_info" begin
+            trigger = [0, 1, 1, 0, 2, 2, 0]
+            trigger_info = ["", "S 1", "", "", "S 2", "", ""]
+            result = EegFun._trigger_count_impl([trigger], ["count"], trigger_info = trigger_info)
             @test isa(result, EegFun.TriggerInfo)
             @test size(result.data, 1) == 2
             @test result.data.trigger == [1, 2]
             @test result.data.count == [2, 2]
-            @test "triggers_info" in names(result.data)
-            @test result.data.triggers_info == ["S 1", "S 2"]
+            @test "trigger_info" in names(result.data)
+            @test result.data.trigger_info == ["S 1", "S 2"]
         end
 
         @testset "custom column names" begin
-            triggers = [0, 1, 0, 2, 0]
-            result = EegFun._trigger_count_impl([triggers], ["custom_count"])
+            trigger = [0, 1, 0, 2, 0]
+            result = EegFun._trigger_count_impl([trigger], ["custom_count"])
             @test isa(result, EegFun.TriggerInfo)
             @test names(result.data) == ["trigger", "custom_count"]
             @test size(result.data, 1) == 2
@@ -197,8 +197,8 @@ using OrderedCollections
     @testset "search_sequence" begin
         @testset "basic functionality" begin
             # Test basic trigger finding
-            triggers = [0, 1, 0, 1, 0, 2, 0]
-            indices = EegFun.search_sequence(triggers, 1)
+            trigger = [0, 1, 0, 1, 0, 2, 0]
+            indices = EegFun.search_sequence(trigger, 1)
             @test indices == [2, 4]  # Both occurrences of trigger 1
 
             # Test with onset detection built-in
@@ -207,7 +207,7 @@ using OrderedCollections
             @test indices == [2, 6]  # Only onset positions
 
             # Test non-existent trigger
-            indices = EegFun.search_sequence(triggers, 99)
+            indices = EegFun.search_sequence(trigger, 99)
             @test indices == Int[]
         end
 
@@ -282,34 +282,34 @@ using OrderedCollections
 
     @testset "search_sequence (ranges)" begin
         @testset "basic range searching" begin
-            triggers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+            trigger = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
             # Single range
-            indices = EegFun.search_sequence(triggers, [3:5])
+            indices = EegFun.search_sequence(trigger, [3:5])
             @test indices == [3, 4, 5]  # Positions of triggers 3, 4, 5
 
             # Multiple ranges
-            indices = EegFun.search_sequence(triggers, [1:3, 8:10])
+            indices = EegFun.search_sequence(trigger, [1:3, 8:10])
             @test indices == [1, 2, 3, 8, 9, 10]
 
             # Overlapping ranges (no duplicates)
-            indices = EegFun.search_sequence(triggers, [2:4, 3:5])
+            indices = EegFun.search_sequence(trigger, [2:4, 3:5])
             @test indices == [2, 3, 4, 5]
         end
 
         @testset "edge cases" begin
-            triggers = [1, 2, 3, 4, 5]
+            trigger = [1, 2, 3, 4, 5]
 
             # Empty ranges
-            indices = EegFun.search_sequence(triggers, UnitRange{Int}[])
+            indices = EegFun.search_sequence(trigger, UnitRange{Int}[])
             @test indices == Int[]
 
             # Range outside data
-            indices = EegFun.search_sequence(triggers, [10:15])
+            indices = EegFun.search_sequence(trigger, [10:15])
             @test indices == Int[]
 
             # Single value range
-            indices = EegFun.search_sequence(triggers, [3:3])
+            indices = EegFun.search_sequence(trigger, [3:3])
             @test indices == [3]
         end
     end
@@ -317,102 +317,104 @@ using OrderedCollections
     @testset "search_sequence (single sequence)" begin
         @testset "exact sequences" begin
             # More realistic trigger data with proper onsets
-            triggers = [0, 1, 2, 3, 0, 1, 2, 4, 0, 1, 2, 3, 0]
+            trigger = [0, 1, 2, 3, 0, 1, 2, 4, 0, 1, 2, 3, 0]
 
             # Find exact sequence [1, 2, 3]
             sequence = Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 2, 3])
-            indices = EegFun.search_sequence(triggers, sequence)
-            @test indices == [2, 10]  # Two occurrences
+            matches = EegFun.search_sequence(trigger, sequence)
+            @test first.(matches) == [2, 10]  # Two occurrences
+            @test matches == [[2, 3, 4], [10, 11, 12]]  # Full positions
 
             # Find sequence [1, 2, 4]
             sequence = Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 2, 4])
-            indices = EegFun.search_sequence(triggers, sequence)
-            @test indices == [6]  # One occurrence
+            matches = EegFun.search_sequence(trigger, sequence)
+            @test first.(matches) == [6]  # One occurrence
+            @test matches == [[6, 7, 8]]  # Full positions
         end
 
         @testset "wildcard sequences" begin
             # More realistic trigger data with proper onsets
-            triggers = [0, 1, 2, 3, 0, 1, 5, 3, 0, 1, 7, 3, 0]
+            trigger = [0, 1, 2, 3, 0, 1, 5, 3, 0, 1, 7, 3, 0]
 
             # Wildcard sequence [1, :any, 3]
             sequence = Vector{Union{Int,Symbol,UnitRange{Int}}}([1, :any, 3])
-            indices = EegFun.search_sequence(triggers, sequence)
-            @test indices == [2, 6, 10]  # All three occurrences
+            matches = EegFun.search_sequence(trigger, sequence)
+            @test first.(matches) == [2, 6, 10]  # All three occurrences
         end
 
         @testset "range sequences" begin
             # More realistic trigger data with proper onsets
-            triggers = [0, 1, 2, 3, 0, 1, 4, 3, 0, 1, 5, 3, 0]
+            trigger = [0, 1, 2, 3, 0, 1, 4, 3, 0, 1, 5, 3, 0]
 
             # Range sequence [1, 2:5, 3]
             sequence = Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 2:5, 3])
-            indices = EegFun.search_sequence(triggers, sequence)
-            @test indices == [2, 6, 10]  # All match since 2, 4, 5 are in range 2:5
+            matches = EegFun.search_sequence(trigger, sequence)
+            @test first.(matches) == [2, 6, 10]  # All match since 2, 4, 5 are in range 2:5
         end
 
         @testset "single element sequences" begin
-            triggers = [1, 2, 3, 1, 2, 3]
+            trigger = [1, 2, 3, 1, 2, 3]
 
             # Single integer
             sequence = Vector{Union{Int,Symbol,UnitRange{Int}}}([2])
-            indices = EegFun.search_sequence(triggers, sequence)
-            @test indices == [2, 5]  # Both occurrences of trigger 2
+            matches = EegFun.search_sequence(trigger, sequence)
+            @test first.(matches) == [2, 5]  # Both occurrences of trigger 2
 
             # Single range
             sequence = Vector{Union{Int,Symbol,UnitRange{Int}}}([2:3])
-            indices = EegFun.search_sequence(triggers, sequence)
-            @test indices == [2, 3, 5, 6]  # All occurrences of triggers 2 and 3
+            matches = EegFun.search_sequence(trigger, sequence)
+            @test first.(matches) == [2, 3, 5, 6]  # All occurrences of triggers 2 and 3
         end
 
         @testset "error handling" begin
-            triggers = [1, 2, 3, 4, 5]
+            trigger = [1, 2, 3, 4, 5]
 
             # First element cannot be wildcard
             sequence1 = Vector{Union{Int,Symbol,UnitRange{Int}}}([:any, 2])
-            @test_throws Exception EegFun.search_sequence(triggers, sequence1)
+            @test_throws Exception EegFun.search_sequence(trigger, sequence1)
 
             # Single wildcard not supported
             sequence2 = Vector{Union{Int,Symbol,UnitRange{Int}}}([:any])
-            @test_throws Exception EegFun.search_sequence(triggers, sequence2)
+            @test_throws Exception EegFun.search_sequence(trigger, sequence2)
 
             # Unsupported trigger type
             sequence3 = Vector{Union{Int,Symbol,UnitRange{Int},String}}([1, "invalid"])
-            @test_throws Exception EegFun.search_sequence(triggers, sequence3)
+            @test_throws Exception EegFun.search_sequence(trigger, sequence3)
         end
 
         @testset "boundary conditions" begin
-            triggers = [1, 2]
+            trigger = [1, 2]
 
             # Sequence longer than array
             sequence = Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 2, 3, 4])
-            indices = EegFun.search_sequence(triggers, sequence)
-            @test indices == Int[]
+            matches = EegFun.search_sequence(trigger, sequence)
+            @test matches == Vector{Int}[]
 
             # Sequence matches entire array
             sequence = Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 2])
-            indices = EegFun.search_sequence(triggers, sequence)
-            @test indices == [1]
+            matches = EegFun.search_sequence(trigger, sequence)
+            @test first.(matches) == [1]
         end
     end
 
     @testset "search_sequence" begin
         @testset "multiple sequences (OR logic)" begin
             # More realistic trigger data with proper onsets (0 between sequences)
-            triggers = [0, 1, 2, 3, 0, 1, 4, 3, 0, 1, 5, 1, 0]
+            trigger = [0, 1, 2, 3, 0, 1, 4, 3, 0, 1, 5, 1, 0]
 
             # Multiple exact sequences
             sequences = [Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 2, 3]), Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 4, 3])]
-            indices = EegFun.search_sequence(triggers, sequences)
-            @test sort(indices) == [2, 6]  # Both sequences found at positions 2 and 6
+            matches = EegFun.search_sequence(trigger, sequences)
+            @test sort(first.(matches)) == [2, 6]  # Both sequences found at positions 2 and 6
 
             # Mix of wildcards and exact
             sequences = [Vector{Union{Int,Symbol,UnitRange{Int}}}([1, :any, 3]), Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 5, 1])]
-            indices = EegFun.search_sequence(triggers, sequences)
-            @test sort(indices) == [2, 6, 10]  # Three matches at positions 2, 6, 10
+            matches = EegFun.search_sequence(trigger, sequences)
+            @test sort(first.(matches)) == [2, 6, 10]  # Three matches at positions 2, 6, 10
         end
 
         @testset "overlapping sequences" begin
-            triggers = [1, 2, 3, 4, 5]
+            trigger = [1, 2, 3, 4, 5]
 
             # Overlapping sequences should return unique indices
             sequences = [
@@ -420,20 +422,20 @@ using OrderedCollections
                 Vector{Union{Int,Symbol,UnitRange{Int}}}([2, 3, 4]),
                 Vector{Union{Int,Symbol,UnitRange{Int}}}([3, 4, 5]),
             ]
-            indices = EegFun.search_sequence(triggers, sequences)
-            @test sort(indices) == [1, 2, 3]  # Unique starting positions
+            matches = EegFun.search_sequence(trigger, sequences)
+            @test sort(first.(matches)) == [1, 2, 3]  # Unique starting positions
         end
 
         @testset "no matches" begin
-            triggers = [1, 2, 3, 4, 5]
+            trigger = [1, 2, 3, 4, 5]
             sequences = [Vector{Union{Int,Symbol,UnitRange{Int}}}([6, 7, 8]), Vector{Union{Int,Symbol,UnitRange{Int}}}([9, 10, 11])]
-            indices = EegFun.search_sequence(triggers, sequences)
-            @test indices == Int[]
+            matches = EegFun.search_sequence(trigger, sequences)
+            @test matches == Vector{Int}[]
         end
 
         @testset "complex mixed sequences" begin
             # More realistic trigger data with proper onsets
-            triggers = [0, 1, 2, 3, 0, 1, 5, 3, 0, 2, 7, 8, 0, 1, 6, 3, 0]
+            trigger = [0, 1, 2, 3, 0, 1, 5, 3, 0, 2, 7, 8, 0, 1, 6, 3, 0]
 
             # Mix of ranges, wildcards, and exact values
             sequences = [
@@ -441,36 +443,36 @@ using OrderedCollections
                 Vector{Union{Int,Symbol,UnitRange{Int}}}([2, :any, 8]),     # Should match position 10
                 Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 6, 3]),         # Should match position 14
             ]
-            indices = EegFun.search_sequence(triggers, sequences)
-            @test sort(unique(indices)) == [2, 6, 10, 14]
+            matches = EegFun.search_sequence(trigger, sequences)
+            @test sort(unique(first.(matches))) == [2, 6, 10, 14]
         end
     end
 
     @testset "integration tests" begin
         @testset "realistic EEG workflow with sequences" begin
             # Create realistic test data with trigger sequences
-            triggers = [0, 1, 2, 3, 0, 0, 1, 5, 3, 0, 1, 2, 4, 0, 0]
+            trigger = [0, 1, 2, 3, 0, 0, 1, 5, 3, 0, 1, 2, 4, 0, 0]
             time_data = collect(0:14) ./ 100.0
 
             # Test basic search functions
-            @test EegFun.search_sequence(triggers, 1) == [2, 7, 11]  # All trigger 1 onsets
+            @test EegFun.search_sequence(trigger, 1) == [2, 7, 11]  # All trigger 1 onsets
 
             # Test sequence searching
-            seq_123 = EegFun.search_sequence(triggers, Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 2, 3]))
-            @test seq_123 == [2]  # Only one [1,2,3] sequence
+            seq_123 = EegFun.search_sequence(trigger, Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 2, 3]))
+            @test first.(seq_123) == [2]  # Only one [1,2,3] sequence
 
             # Test wildcard sequences
-            seq_1_any_3 = EegFun.search_sequence(triggers, Vector{Union{Int,Symbol,UnitRange{Int}}}([1, :any, 3]))
-            @test sort(seq_1_any_3) == [2, 7]  # [1,2,3] and [1,5,3]
+            seq_1_any_3 = EegFun.search_sequence(trigger, Vector{Union{Int,Symbol,UnitRange{Int}}}([1, :any, 3]))
+            @test sort(first.(seq_1_any_3)) == [2, 7]  # [1,2,3] and [1,5,3]
 
             # Test range sequences
-            seq_1_range_3 = EegFun.search_sequence(triggers, Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 2:5, 3]))
-            @test sort(seq_1_range_3) == [2, 7]  # Both sequences match
+            seq_1_range_3 = EegFun.search_sequence(trigger, Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 2:5, 3]))
+            @test sort(first.(seq_1_range_3)) == [2, 7]  # Both sequences match
 
             # Test multiple sequences
             sequences = [Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 2, 3]), Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 2, 4])]
-            multiple_seqs = EegFun.search_sequence(triggers, sequences)
-            @test sort(multiple_seqs) == [2, 11]  # Both sequences found
+            multiple_seqs = EegFun.search_sequence(trigger, sequences)
+            @test sort(first.(multiple_seqs)) == [2, 11]  # Both sequences found
         end
 
         @testset "performance with larger data" begin
@@ -498,22 +500,22 @@ using OrderedCollections
 
         @testset "integration with ContinuousData" begin
             # Test that search functions work with real data structures
-            triggers = [0, 1, 2, 3, 0, 1, 5, 3, 0, 0]
+            trigger = [0, 1, 2, 3, 0, 1, 5, 3, 0, 0]
             time = collect(0:9) ./ 100.0
-            df = DataFrame(time = time, triggers = triggers, channel = randn(10))
+            df = DataFrame(time = time, trigger = trigger, channel = randn(10))
             layout = EegFun.Layout(DataFrame(label = [:channel], inc = [0.0], azi = [0.0]), nothing, nothing)
             dat = EegFun.ContinuousData("test_data", df, layout, 100, EegFun.AnalysisInfo())
 
             # Test that we can extract triggers and use search functions
-            trigger_data = dat.data.triggers
+            trigger_data = dat.data.trigger
 
             # Basic searching
             indices_1 = EegFun.search_sequence(trigger_data, 1)
             @test indices_1 == [2, 6]
 
             # Sequence searching
-            seq_indices = EegFun.search_sequence(trigger_data, Vector{Union{Int,Symbol,UnitRange{Int}}}([1, :any, 3]))
-            @test sort(seq_indices) == [2, 6]  # Both [1,2,3] and [1,5,3]
+            seq_matches = EegFun.search_sequence(trigger_data, Vector{Union{Int,Symbol,UnitRange{Int}}}([1, :any, 3]))
+            @test sort(first.(seq_matches)) == [2, 6]  # Both [1,2,3] and [1,5,3]
 
             # Verify trigger counting still works
             count_result = EegFun.trigger_count(dat)
@@ -560,99 +562,99 @@ using OrderedCollections
 
             # search_single_sequence should handle empty arrays
             sequence = Vector{Union{Int,Symbol,UnitRange{Int}}}([1, 2])
-            @test EegFun.search_sequence(empty_triggers, sequence) == Int[]
+            @test EegFun.search_sequence(empty_triggers, sequence) == Vector{Int}[]
 
             # search_sequences should handle empty sequence list
             empty_sequences = Vector{Vector{Union{Int,Symbol,UnitRange{Int}}}}()
-            @test EegFun.search_sequence(single_trigger, empty_sequences) == Int[]
+            @test EegFun.search_sequence(single_trigger, empty_sequences) == Vector{Int}[]
         end
     end
 
     @testset "comprehensive edge cases" begin
         @testset "range edge cases" begin
-            triggers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+            trigger = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
             # Empty range
-            @test EegFun.search_sequence(triggers, 5:4) == Int[]
-            @test EegFun.search_sequence(triggers, [5:4, 1:2]) == [1, 2]
+            @test EegFun.search_sequence(trigger, 5:4) == Int[]
+            @test EegFun.search_sequence(trigger, [5:4, 1:2]) == [1, 2]
 
             # Single element range
-            @test EegFun.search_sequence(triggers, 5:5) == [5]
-            @test EegFun.search_sequence(triggers, [5:5, 1:1]) == [1, 5]
+            @test EegFun.search_sequence(trigger, 5:5) == [5]
+            @test EegFun.search_sequence(trigger, [5:5, 1:1]) == [1, 5]
 
             # Large range
-            @test EegFun.search_sequence(triggers, 1:10) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+            @test EegFun.search_sequence(trigger, 1:10) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
             # Range beyond array bounds (should not crash)
-            @test EegFun.search_sequence(triggers, 15:20) == Int[]
+            @test EegFun.search_sequence(trigger, 15:20) == Int[]
 
             # Negative range (should not crash)
-            @test EegFun.search_sequence(triggers, -5:-1) == Int[]
+            @test EegFun.search_sequence(trigger, -5:-1) == Int[]
         end
 
         @testset "sequence edge cases" begin
-            triggers = [0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0]
+            trigger = [0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0]
 
             # Empty sequence
-            @test EegFun.search_sequence(triggers, Int[]) == Int[]
-            @test EegFun.search_sequence(triggers, [Int[]]) == Int[]
+            @test EegFun.search_sequence(trigger, Int[]) == Vector{Int}[]
+            @test EegFun.search_sequence(trigger, [Int[]]) == Vector{Int}[]
 
             # Single element sequence
-            @test EegFun.search_sequence(triggers, [1]) == [2, 6, 10]
-            @test EegFun.search_sequence(triggers, [[1]]) == [2, 6, 10]
+            @test first.(EegFun.search_sequence(trigger, [1])) == [2, 6, 10]
+            @test first.(EegFun.search_sequence(trigger, [[1]])) == [2, 6, 10]
 
             # Very long sequence
             long_seq = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
             long_triggers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0]
-            @test EegFun.search_sequence(long_triggers, long_seq) == [2, 13]
+            @test first.(EegFun.search_sequence(long_triggers, long_seq)) == [2, 13]
 
             # Sequence longer than array
-            @test EegFun.search_sequence([1, 2], [1, 2, 3, 4, 5]) == Int[]
+            @test EegFun.search_sequence([1, 2], [1, 2, 3, 4, 5]) == Vector{Int}[]
 
             # Sequence with repeated elements (onset detection)
             # [1, 1, 2] cannot match because 1,1,2 requires a 1 that's not at onset
-            @test EegFun.search_sequence([1, 1, 1, 2, 2, 2], [1, 1, 2]) == Int[]
+            @test EegFun.search_sequence([1, 1, 1, 2, 2, 2], [1, 1, 2]) == Vector{Int}[]
         end
 
         @testset "wildcard edge cases" begin
-            triggers = [0, 1, 2, 3, 0, 1, 5, 3, 0, 2, 7, 8, 0, 1, 6, 3, 0]
+            trigger = [0, 1, 2, 3, 0, 1, 5, 3, 0, 2, 7, 8, 0, 1, 6, 3, 0]
 
             # Wildcard at start (should error)
-            @test_throws Exception EegFun.search_sequence(triggers, [:any, 2, 3])
+            @test_throws Exception EegFun.search_sequence(trigger, [:any, 2, 3])
 
             # Multiple wildcards (currently not supported)
-            @test EegFun.search_sequence(triggers, [1, :any, :any, 3]) == Int[]
+            @test EegFun.search_sequence(trigger, [1, :any, :any, 3]) == Vector{Int}[]
 
             # Wildcard at end
-            @test EegFun.search_sequence(triggers, [1, 2, :any]) == [2]
+            @test first.(EegFun.search_sequence(trigger, [1, 2, :any])) == [2]
 
             # All wildcards (should error)
-            @test_throws Exception EegFun.search_sequence(triggers, [:any, :any, :any])
+            @test_throws Exception EegFun.search_sequence(trigger, [:any, :any, :any])
 
             # Wildcard with ranges
-            @test EegFun.search_sequence(triggers, [1, :any, 2:4]) == [2, 6, 14]
+            @test first.(EegFun.search_sequence(trigger, [1, :any, 2:4])) == [2, 6, 14]
         end
 
         @testset "type edge cases" begin
             # Test with different integer types
             triggers_int8 = Int8[0, 1, 2, 3, 0, 1, 2, 3, 0]
             @test EegFun.search_sequence(triggers_int8, Int8(1)) == [2, 6]
-            @test EegFun.search_sequence(triggers_int8, [Int8(1), Int8(2)]) == [2, 6]
+            @test first.(EegFun.search_sequence(triggers_int8, [Int8(1), Int8(2)])) == [2, 6]
             @test EegFun.search_sequence(triggers_int8, Int8(1):Int8(3)) == [2, 3, 4, 6, 7, 8]
 
             triggers_int16 = Int16[0, 1, 2, 3, 0, 1, 2, 3, 0]
             @test EegFun.search_sequence(triggers_int16, Int16(1)) == [2, 6]
-            @test EegFun.search_sequence(triggers_int16, [Int16(1), Int16(2)]) == [2, 6]
+            @test first.(EegFun.search_sequence(triggers_int16, [Int16(1), Int16(2)])) == [2, 6]
             @test EegFun.search_sequence(triggers_int16, Int16(1):Int16(3)) == [2, 3, 4, 6, 7, 8]
 
             # Test with Float64 arrays (should work with integer values)
             triggers_float = Float64[0.0, 1.0, 2.0, 3.0, 0.0, 1.0, 2.0, 3.0, 0.0]
             @test EegFun.search_sequence(triggers_float, 1) == [2, 6]
-            @test EegFun.search_sequence(triggers_float, [1, 2]) == [2, 6]
+            @test first.(EegFun.search_sequence(triggers_float, [1, 2])) == [2, 6]
             @test EegFun.search_sequence(triggers_float, 1:3) == [2, 3, 4, 6, 7, 8]
 
             # Test type promotion in sequences
-            @test EegFun.search_sequence([1, 2, 3, 4, 5], [1, 2, 3]) == [1]
+            @test first.(EegFun.search_sequence([1, 2, 3, 4, 5], [1, 2, 3])) == [1]
         end
 
         @testset "performance edge cases" begin
@@ -673,56 +675,56 @@ using OrderedCollections
         end
 
         @testset "boundary conditions" begin
-            triggers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+            trigger = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
             # Sequence at start
-            @test EegFun.search_sequence(triggers, [1, 2, 3]) == [1]
+            @test first.(EegFun.search_sequence(trigger, [1, 2, 3])) == [1]
 
             # Sequence at end
-            @test EegFun.search_sequence(triggers, [8, 9, 10]) == [8]
+            @test first.(EegFun.search_sequence(trigger, [8, 9, 10])) == [8]
 
             # Sequence spanning entire array
-            @test EegFun.search_sequence(triggers, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) == [1]
+            @test first.(EegFun.search_sequence(trigger, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])) == [1]
 
             # Sequence that would go beyond array bounds
-            @test EegFun.search_sequence(triggers, [8, 9, 10, 11]) == Int[]
+            @test EegFun.search_sequence(trigger, [8, 9, 10, 11]) == Vector{Int}[]
 
             # Single element at boundaries
-            @test EegFun.search_sequence(triggers, [1]) == [1]
-            @test EegFun.search_sequence(triggers, [10]) == [10]
+            @test first.(EegFun.search_sequence(trigger, [1])) == [1]
+            @test first.(EegFun.search_sequence(trigger, [10])) == [10]
         end
 
         @testset "ignore_values edge cases" begin
-            triggers = [0, 1, 0, 2, 0, 1, 0, 2, 0]
+            trigger = [0, 1, 0, 2, 0, 1, 0, 2, 0]
 
             # Default ignore_values (0)
-            @test EegFun.search_sequence(triggers, [1, 2]) == [2, 6]
+            @test first.(EegFun.search_sequence(trigger, [1, 2])) == [2, 6]
 
             # Custom ignore_values
-            @test EegFun.search_sequence(triggers, [1, 2]; ignore_values = [1]) == Int[]
-            @test EegFun.search_sequence(triggers, [1, 2]; ignore_values = [2]) == Int[]
-            @test EegFun.search_sequence(triggers, [1, 2]; ignore_values = [0, 1]) == Int[]
+            @test EegFun.search_sequence(trigger, [1, 2]; ignore_values = [1]) == Vector{Int}[]
+            @test EegFun.search_sequence(trigger, [1, 2]; ignore_values = [2]) == Vector{Int}[]
+            @test EegFun.search_sequence(trigger, [1, 2]; ignore_values = [0, 1]) == Vector{Int}[]
 
             # Empty ignore_values (should not match because 0 is not ignored)
-            @test EegFun.search_sequence(triggers, [1, 2]; ignore_values = Int[]) == Int[]
+            @test EegFun.search_sequence(trigger, [1, 2]; ignore_values = Int[]) == Vector{Int}[]
 
             # Multiple ignore_values
-            @test EegFun.search_sequence(triggers, [1, 2]; ignore_values = [0, 1, 2]) == Int[]
+            @test EegFun.search_sequence(trigger, [1, 2]; ignore_values = [0, 1, 2]) == Vector{Int}[]
         end
 
         @testset "sort_indices edge cases" begin
-            triggers = [0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0]
+            trigger = [0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0]
 
             # sort_indices=true (default)
-            result1 = EegFun.search_sequence(triggers, [1, 2])
-            @test result1 == sort(result1)
+            result1 = EegFun.search_sequence(trigger, [1, 2])
+            @test result1 == sort(result1, by = first)
 
             # sort_indices=false
-            result2 = EegFun.search_sequence(triggers, [1, 2]; sort_indices = false)
-            @test result2 == [2, 6, 10]  # Should be in order of discovery
+            result2 = EegFun.search_sequence(trigger, [1, 2]; sort_indices = false)
+            @test first.(result2) == [2, 6, 10]  # Should be in order of discovery
 
             # Range with sort_indices=false
-            result3 = EegFun.search_sequence(triggers, 1:3; sort_indices = false)
+            result3 = EegFun.search_sequence(trigger, 1:3; sort_indices = false)
             @test result3 == [2, 6, 10, 3, 7, 11, 4, 8, 12]  # Should be in order of discovery
         end
 
@@ -734,16 +736,16 @@ using OrderedCollections
             @test EegFun.search_sequence(eeg_triggers, 1) == [4, 10, 19]
 
             # Find response windows (trigger 1 followed by trigger 2)
-            @test EegFun.search_sequence(eeg_triggers, [1, 2]) == [4]
+            @test first.(EegFun.search_sequence(eeg_triggers, [1, 2])) == [4]
 
             # Find any stimulus or response (triggers 1 or 2)
             @test EegFun.search_sequence(eeg_triggers, [1:2]) == [4, 7, 10, 16, 19]
 
             # Find complex patterns (stimulus, any, response)
-            @test EegFun.search_sequence(eeg_triggers, [1, :any, 2]) == [10]
+            @test first.(EegFun.search_sequence(eeg_triggers, [1, :any, 2])) == [10]
 
             # Find multiple stimulus types
-            @test EegFun.search_sequence(eeg_triggers, [[1, 2], [1, 3]]) == [4, 10, 19]
+            @test sort(first.(EegFun.search_sequence(eeg_triggers, [[1, 2], [1, 3]]))) == [4, 10, 19]
         end
 
         @testset "error conditions" begin
@@ -755,7 +757,7 @@ using OrderedCollections
             @test_throws Exception EegFun.search_sequence([1, 2, 3], [1, "invalid", 3])
 
             # Empty ranges in sequences
-            @test EegFun.search_sequence([1, 2, 3], [1:0, 2:3]) == [2, 3]
+            @test first.(EegFun.search_sequence([1, 2, 3], [1:0, 2:3])) == [2, 3]
         end
     end
 end

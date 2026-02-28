@@ -26,7 +26,7 @@ Create synthetic `ContinuousData` for testing.
 """
 function create_test_continuous_data(; n = 2000, fs = 1000, n_channels = 3)
     t = collect(0:(n-1)) ./ fs
-    df = DataFrame(time = t, sample = 1:n, triggers = zeros(Int, n))
+    df = DataFrame(time = t, sample = 1:n, trigger = zeros(Int, n))
 
     channel_labels = _generate_channel_labels(n_channels)
     for ch in channel_labels
@@ -159,15 +159,15 @@ function create_test_continuous_data_with_triggers(; n = 1000, fs = 1000)
     t = collect(0:(n-1)) ./ fs
     x = _synthetic_signal(t, freq = 10.0, amp = 1.0, noise = 0.1)
 
-    triggers = zeros(Int, n)
-    triggers[300:302] .= [1, 7, 3]
-    triggers[400:402] .= [1, 2, 3]
-    triggers[750:752] .= [1, 2, 3]
-    triggers[850] = 8
-    triggers[900] = 9
-    triggers[950:952] .= [1, 2, 3]
+    trigger = zeros(Int, n)
+    trigger[300:302] .= [1, 7, 3]
+    trigger[400:402] .= [1, 2, 3]
+    trigger[750:752] .= [1, 2, 3]
+    trigger[850] = 8
+    trigger[900] = 9
+    trigger[950:952] .= [1, 2, 3]
 
-    df = DataFrame(time = t, triggers = triggers, A = x)
+    df = DataFrame(time = t, trigger = trigger, A = x)
     layout = EegFun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing)
     return EegFun.ContinuousData("test_data", copy(df, copycols = true), layout, fs, EegFun.AnalysisInfo(:none, 0.0, 0.0))
 end
@@ -185,7 +185,7 @@ function create_test_continuous_data_with_artifacts(; n::Int = 1000, fs::Int = 1
     artifact_signal[500:505] .= -200.0  # Large negative artifact
     artifact_signal[800:802] .= 100.0  # Smaller positive artifact
 
-    df = DataFrame(:time => t, :triggers => zeros(Int, n), :Ch1 => clean_signal, :Ch2 => artifact_signal)
+    df = DataFrame(:time => t, :trigger => zeros(Int, n), :Ch1 => clean_signal, :Ch2 => artifact_signal)
     layout = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
 
     dat = EegFun.ContinuousData("test_data", df, layout, fs, EegFun.AnalysisInfo())
@@ -202,7 +202,7 @@ Create `ContinuousData` with zero triggers.
 """
 function create_test_continuous_data_empty_triggers(; n_samples = 1000, fs = 1000)
     t = collect(0:(n_samples-1)) ./ fs
-    df = DataFrame(time = t, triggers = zeros(Int16, n_samples), channel1 = _synthetic_signal(t), channel2 = _synthetic_signal(t))
+    df = DataFrame(time = t, trigger = zeros(Int16, n_samples), channel1 = _synthetic_signal(t), channel2 = _synthetic_signal(t))
 
     layout = EegFun.Layout(DataFrame(label = [:channel1, :channel2], inc = [0.0, 90.0], azi = [0.0, 0.0]), nothing, nothing)
     return EegFun.ContinuousData("test_data", df, layout, fs, EegFun.AnalysisInfo(:none, 0.0, 0.0))

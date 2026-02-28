@@ -17,7 +17,7 @@ using Statistics
     # Reduce to only averages and create averaged layout
     dat = EegFun.create_test_continuous_data(n = 500)
     dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])]; reduce = true)
-    @test all(propertynames(dat.data) .== [:time, :sample, :triggers, :Ch1_Ch2])
+    @test all(propertynames(dat.data) .== [:time, :sample, :trigger, :Ch1_Ch2])
     @test size(dat.layout.data, 1) == 1
     @test :inc ∈ propertynames(dat.layout.data)
     @test :azi ∈ propertynames(dat.layout.data)

@@ -266,13 +266,13 @@ using EegFun
     dat = EegFun.create_test_continuous_data(n = 20)
     original_time = copy(dat.data.time)
     original_sample = copy(dat.data.sample)
-    original_triggers = copy(dat.data.triggers)
+    original_triggers = copy(dat.data.trigger)
 
     EegFun.baseline!(dat, (0.0, 0.009))
 
     @test dat.data.time == original_time
     @test dat.data.sample == original_sample
-    @test dat.data.triggers == original_triggers
+    @test dat.data.trigger == original_triggers
 
     # Test baseline! without interval on EpochData (uses entire time range)
     # This test catches the bug where dat.data.time was accessed directly on Vector{DataFrame}

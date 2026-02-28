@@ -113,14 +113,14 @@ using Random
         arr = [0, 1, 2, 3, 0, 1, 9, 3]
         to_seq(v) = Vector{Union{Int,Symbol,UnitRange{Int}}}(v)
         idxs = EegFun.search_sequence(arr, [to_seq([1, 2, 3])])
-        @test idxs == [2]
+        @test first.(idxs) == [2]  # Returns Vector{Vector{Int}}, extract start positions
         idxs2 = EegFun.search_sequence(arr, [to_seq([1, :any, 3])])
-        @test Set(idxs2) == Set([2, 6])  # [1,2,3] and [1,9,3]
+        @test Set(first.(idxs2)) == Set([2, 6])  # [1,2,3] and [1,9,3]
         idxr = EegFun.search_sequence(arr, [1:2])
-        @test Set(idxr) == Set([2, 3, 6])
+        @test Set(idxr) == Set([2, 3, 6])  # Range search still returns flat indices
         # onset detection for single value
         idxsingle = EegFun.search_sequence([0, 1, 1, 0, 2, 2], 1)
-        @test idxsingle == [2]
+        @test idxsingle == [2]  # Single value search returns flat indices
     end
 
     @testset "extract_epochs basic and constraints" begin
@@ -225,7 +225,7 @@ using Random
         @test erp_mixed isa EegFun.ErpData
 
         # No EEG channels with layout mismatch → expect error (current implementation)
-        only_meta = [DataFrame(time = [0.0, 0.001], triggers = [0, 0], condition = [1, 1], condition_name = ["x", "x"], epoch = [1, 1])]
+        only_meta = [DataFrame(time = [0.0, 0.001], trigger = [0, 0], condition = [1, 1], condition_name = ["x", "x"], epoch = [1, 1])]
         em = EegFun.EpochData(eps.file, eps.condition, eps.condition_name, only_meta, eps.layout, eps.sample_rate, eps.analysis_info)
         @test_throws Any EegFun.average_epochs(em)
     end
@@ -275,7 +275,7 @@ using Random
         @test any(dat.data.epoch_interval)  # Should mark some samples
 
         # Test that windows are marked around trigger 1 occurrences
-        trigger_1_indices = findall(dat.data.triggers .== 1)
+        trigger_1_indices = findall(dat.data.trigger .== 1)
         @test !isempty(trigger_1_indices)
 
         # Check that some samples near each trigger are marked
@@ -396,7 +396,7 @@ using Random
         dat_no_triggers = EegFun.ContinuousData("test_data", df_no_triggers, layout, 1000, EegFun.AnalysisInfo())
         @test_throws AssertionError EegFun._validate_epoch_interval_params(dat_no_triggers, [-0.1, 0.1])
 
-        df_no_time = DataFrame(triggers = [0, 1], A = [1.0, 2.0])
+        df_no_time = DataFrame(trigger = [0, 1], A = [1.0, 2.0])
         dat_no_time = EegFun.ContinuousData("test_data", df_no_time, layout, 1000, EegFun.AnalysisInfo())
         @test_throws AssertionError EegFun._validate_epoch_interval_params(dat_no_time, [-0.1, 0.1])
     end
@@ -510,8 +510,8 @@ using Random
 
         # Out-of-bounds reference indices - set up triggers near end of data
         # Add trigger sequence at position where reference will be out of bounds
-        dat.data.triggers[998] = 1
-        dat.data.triggers[999] = 2
+        dat.data.trigger[998] = 1
+        dat.data.trigger[999] = 2
 
         ec_oob = EegFun.EpochCondition(
             name = "out_of_bounds",
@@ -526,9 +526,9 @@ using Random
         # before constraint filtering - sequence exists but constraint fails
         dat2 = EegFun.create_test_continuous_data(n_channels = 2, n = 500, fs = 100)
         # Set up triggers: 1, 2, 3 (without trigger 99 after it)
-        dat2.data.triggers[10] = 1
-        dat2.data.triggers[11] = 2
-        dat2.data.triggers[12] = 3
+        dat2.data.trigger[10] = 1
+        dat2.data.trigger[11] = 2
+        dat2.data.trigger[12] = 3
         # No trigger 99 anywhere in the data
 
         ec_before = EegFun.EpochCondition(
@@ -543,9 +543,9 @@ using Random
         # Timing constraints with various edge cases 
         dat3 = EegFun.create_test_continuous_data(n_channels = 2, n = 500, fs = 1000)
         # Set up triggers with specific timing
-        dat3.data.triggers[100] = 1
-        dat3.data.triggers[101] = 2  # 1ms apart
-        dat3.data.triggers[102] = 3  # 2ms from start
+        dat3.data.trigger[100] = 1
+        dat3.data.trigger[101] = 2  # 1ms apart
+        dat3.data.trigger[102] = 3  # 2ms from start
 
         ec_timing = EegFun.EpochCondition(
             name = "tight_timing",
@@ -560,9 +560,9 @@ using Random
 
         # Reference index out of bounds warning - sequence exists but reference is beyond length
         dat4 = EegFun.create_test_continuous_data(n_channels = 2, n = 100, fs = 100)
-        dat4.data.triggers[10] = 1
-        dat4.data.triggers[11] = 2
-        dat4.data.triggers[12] = 3
+        dat4.data.trigger[10] = 1
+        dat4.data.trigger[11] = 2
+        dat4.data.trigger[12] = 3
 
         ec_ref_oob = EegFun.EpochCondition(
             name = "ref_out_of_bounds",
@@ -595,9 +595,9 @@ using Random
 
         # Test with valid sequence but failing timing constraints
         dat_timing = EegFun.create_test_continuous_data(n_channels = 2, n = 500, fs = 1000)
-        dat_timing.data.triggers[100] = 1
-        dat_timing.data.triggers[101] = 2
-        dat_timing.data.triggers[102] = 3
+        dat_timing.data.trigger[100] = 1
+        dat_timing.data.trigger[101] = 2
+        dat_timing.data.trigger[102] = 3
 
         ec_strict_timing = EegFun.EpochCondition(
             name = "strict_timing",

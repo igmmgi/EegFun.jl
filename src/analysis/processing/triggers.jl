@@ -49,7 +49,7 @@ like a DataFrame (e.g., `info.data.trigger`, `info.data.count`).
 
 # Arguments
 - `dat::ContinuousData`: The ContinuousData object containing EEG data.
-- `df::DataFrame`: A DataFrame with a `:triggers` column.
+- `df::DataFrame`: A DataFrame with a `:trigger` column.
 
 # Returns
 A `TriggerInfo` object containing trigger counts. Display the object to see a formatted table.
@@ -72,34 +72,34 @@ trigger_counts.data.count
 """
 function trigger_count(df::DataFrame)::TriggerInfo
 
-    if !hasproperty(df, :triggers)
-        @minimal_error "DataFrame must have a triggers column"
+    if !hasproperty(df, :trigger)
+        @minimal_error "DataFrame must have a trigger column"
     end
 
-    # Check if triggers_info column exists and pass it along
-    triggers_info = hasproperty(df, :triggers_info) ? df.triggers_info : nothing
-    return _trigger_count_impl([df.triggers], ["count"], triggers_info = triggers_info)
+    # Check if trigger_info column exists and pass it along
+    trigger_info = hasproperty(df, :trigger_info) ? df.trigger_info : nothing
+    return _trigger_count_impl([df.trigger], ["count"], trigger_info = trigger_info)
 end
 trigger_count(dat::ContinuousData)::TriggerInfo = trigger_count(dat.data)
 
 
 """
-    _trigger_count_impl(trigger_datasets, column_names; triggers_info=nothing)
+    _trigger_count_impl(trigger_datasets, column_names; trigger_info=nothing)
 
 Trigger counting function with optional trigger info support.
 
 # Arguments
 - `trigger_datasets::Vector{<:Vector{<:Integer}}`: Vector of trigger datasets to analyze
 - `column_names::Vector{String}`: Names for the count columns in the output DataFrame
-- `triggers_info::Union{Nothing,Vector{String}}`: Optional trigger info strings
+- `trigger_info::Union{Nothing,Vector{String}}`: Optional trigger info strings
 
 # Returns
-- `TriggerInfo`: TriggerInfo object containing DataFrame with 'trigger' column and count columns (plus triggers_info if provided)
+- `TriggerInfo`: TriggerInfo object containing DataFrame with 'trigger' column and count columns (plus trigger_info if provided)
 """
 function _trigger_count_impl(
     trigger_datasets::Vector{<:Vector{<:Integer}},
     column_names::Vector{String};
-    triggers_info::Union{Nothing,Vector{String}} = nothing,
+    trigger_info::Union{Nothing,Vector{String}} = nothing,
 )
     # Get unique non-zero trigger values from all datasets
     all_triggers = vcat(trigger_datasets...)
@@ -109,10 +109,10 @@ function _trigger_count_impl(
         # Return empty DataFrame with correct structure
         empty_cols = [Int[]]  # trigger column
         append!(empty_cols, [Int[] for _ in column_names])  # count columns
-        if triggers_info |> !isnothing
-            insert!(empty_cols, 2, String[])  # triggers_info column
+        if trigger_info |> !isnothing
+            insert!(empty_cols, 2, String[])  # trigger_info column
         end
-        column_symbols = [:trigger; triggers_info |> !isnothing ? [:triggers_info] : []; Symbol.(column_names)]
+        column_symbols = [:trigger; trigger_info |> !isnothing ? [:trigger_info] : []; Symbol.(column_names)]
         result_df = DataFrame([col => data for (col, data) in zip(column_symbols, empty_cols)]...)
         return TriggerInfo(result_df)
     end
@@ -135,22 +135,22 @@ function _trigger_count_impl(
     column_symbols = [:trigger; Symbol.(column_names)]
     result_df = DataFrame([col => data for (col, data) in zip(column_symbols, result_data)]...)
 
-    # Add triggers_info column if provided
-    if triggers_info |> !isnothing
+    # Add trigger_info column if provided
+    if trigger_info |> !isnothing
         trigger_info_map = Dict{Int,String}()
-        for (trigger, info) in zip(trigger_datasets[1], triggers_info)
+        for (trigger, info) in zip(trigger_datasets[1], trigger_info)
             if trigger != 0 && !haskey(trigger_info_map, trigger)
                 trigger_info_map[trigger] = info
             end
         end
 
-        # Insert triggers_info column after trigger column
-        triggers_info_col = [get(trigger_info_map, trigger, "") for trigger in non_zero_triggers]
-        result_df.triggers_info = triggers_info_col
+        # Insert trigger_info column after trigger column
+        trigger_info_col = [get(trigger_info_map, trigger, "") for trigger in non_zero_triggers]
+        result_df.trigger_info = trigger_info_col
 
-        # Reorder columns: trigger, triggers_info, count columns
-        count_cols = [col for col in names(result_df) if col != :trigger && col != :triggers_info]
-        result_df = result_df[:, Cols(:trigger, :triggers_info, count_cols...)]
+        # Reorder columns: trigger, trigger_info, count columns
+        count_cols = [col for col in names(result_df) if col != :trigger && col != :trigger_info]
+        result_df = result_df[:, Cols(:trigger, :trigger_info, count_cols...)]
     end
 
     return TriggerInfo(result_df)
@@ -174,8 +174,8 @@ function Base.show(io::IO, info::TriggerInfo)
 
     # Calculate alignment based on actual DataFrame columns
     n_cols = length(names(info.data))
-    alignment = if hasproperty(info.data, :triggers_info)
-        # trigger (r), triggers_info (l), then rest (r)
+    alignment = if hasproperty(info.data, :trigger_info)
+        # trigger (r), trigger_info (l), then rest (r)
         [:r, :l, fill(:r, n_cols - 2)...]
     else
         # All columns right-aligned
@@ -234,65 +234,70 @@ end
 """
     search_sequence(array, sequences; ignore_values::Vector{Int} = [0], sort_indices::Bool = true)
 
-Return indices of any of the specified sequences within an array, handling wildcards and ranges.
+Return the matched positions of any of the specified sequences within an array.
+
+Each match is returned as a `Vector{Int}` containing the sample indices of all
+triggers in the matched sequence. For example, matching `[1, 5]` in trigger data
+might return `[[30, 450], [800, 1220]]` — two matches, each with positions of
+triggers 1 and 5.
 
 # Arguments
 - `array`: Array to search within
 - `sequences::Vector{Vector{Union{Int,Symbol,UnitRange{Int}}}}`: Vector of sequences to find
 - `ignore_values::Vector{Int}`: Values to ignore when detecting onsets (default: [0])
-- `sort_indices::Bool`: Whether to sort the returned indices (default: true)
+- `sort_indices::Bool`: Whether to sort the returned matches by start position (default: true)
 
 # Returns
-- `Vector{Int}`: Indices where any of the sequences start
+- `Vector{Vector{Int}}`: Each element is a vector of matched sample positions
 
 # Examples
 ```julia
 # Multiple sequences (OR logic)
-idx = search_sequence([1, 2, 1, 3, 1, 3, 1], [[1, 2, 1], [1, 3, 1]])
+matches = search_sequence([1, 2, 1, 3, 1, 3, 1], [[1, 2, 1], [1, 3, 1]])
 
 # Wildcards
-idx = search_sequence([1, 2, 3, 4, 5, 1, 4, 1], [[1, :any, 3]])
+matches = search_sequence([1, 2, 3, 4, 5, 1, 4, 1], [[1, :any, 3]])
 
 # Ranges
-idx = search_sequence([1, 2, 3, 4, 5], [[1:3], [5:5]])
+matches = search_sequence([1, 2, 3, 4, 5], [[1:3], [5:5]])
 
 # Mixed sequences
-idx = search_sequence([1, 2, 3, 4, 5], [[1, 2:4, 5]])
+matches = search_sequence([1, 2, 3, 4, 5], [[1, 2:4, 5]])
 ```
 """
 function search_sequence(array, sequences::Vector{<:Vector}; ignore_values::Vector{Int} = [0], sort_indices::Bool = true)
-    isempty(array) && return Int[]
-    isempty(sequences) && return Int[]
+    isempty(array) && return Vector{Int}[]
+    isempty(sequences) && return Vector{Int}[]
 
     # Optimize common case of single sequence
     if length(sequences) == 1
         return search_sequence(array, sequences[1]; ignore_values = ignore_values, sort_indices = sort_indices)
     end
 
-    all_indices = Int[]
+    all_matches = Vector{Int}[]
     for sequence in sequences
-        # Use sort_indices=false for individual calls since will be sorted at end if true
-        indices = search_sequence(array, sequence; ignore_values = ignore_values, sort_indices = false)
-        append!(all_indices, indices)
+        matches = search_sequence(array, sequence; ignore_values = ignore_values, sort_indices = false)
+        append!(all_matches, matches)
     end
 
-    result = unique(all_indices)
-    return sort_indices ? sort(result) : result
+    # Deduplicate by start position and optionally sort
+    unique!(m -> m[1], all_matches)
+    return sort_indices ? sort(all_matches, by = first) : all_matches
 end
 
 """
     search_sequence(array, sequence; ignore_values::Vector{Int} = [0], sort_indices::Bool = true)
 
-Return indices of a single sequence within an array, handling wildcards and ranges.
+Return matched positions of a single sequence within an array, handling wildcards and ranges.
 
 # Arguments
 - `array`: Array to search within
 - `sequence::Vector{Union{Int,Symbol,UnitRange{Int}}}`: Sequence pattern to find
 - `ignore_values::Vector{Int}`: Values to ignore when detecting onsets (default: [0])
-- `sort_indices::Bool`: Whether to sort the returned indices (default: true)
+- `sort_indices::Bool`: Whether to sort the returned matches by start position (default: true)
 
 # Returns
-- `Vector{Int}`: Indices where the sequence starts
+- `Vector{Vector{Int}}`: Each element is a vector of matched sample positions
 
 # Notes
 - Supports wildcards (`:any`) and ranges (`1:3`)
@@ -302,45 +307,42 @@ Return indices of a single sequence within an array, handling wildcards and rang
 
 # Examples
 ```julia
-idx = search_sequence([1,0,2,3,1,0,2,3], [1,2]; ignore_values=[0])  # Returns [1, 5]
+matches = search_sequence([1,0,2,3,1,0,2,3], [1,2]; ignore_values=[0])  # Returns [[1,3], [5,7]]
 ```
 """
 function search_sequence(array, sequence::Vector; ignore_values::Vector{Int} = [0], sort_indices::Bool = true)
-    isempty(array) && return Int[]
-    isempty(sequence) && return Int[]
+    isempty(array) && return Vector{Int}[]
+    isempty(sequence) && return Vector{Int}[]
 
     # Handle case where sequence is all UnitRanges (treat as range search)
     if all(x -> x isa UnitRange, sequence)
-        # Call the Vector{UnitRange} method directly
-        all_indices = Int[]
-        for value in union(sequence...)
-            indices = search_sequence(array, value)
-            append!(all_indices, indices)
-        end
-        return sort_indices ? sort(all_indices) : all_indices
+        indices = search_sequence(array, UnitRange{Int}[x for x in sequence]; sort_indices = sort_indices)
+        return [[idx] for idx in indices]
     end
 
     # Handle single trigger case
     if length(sequence) == 1
-        return _search_single_trigger(array, sequence[1], ignore_values)
+        indices = _search_single_trigger(array, sequence[1], ignore_values)
+        return [[idx] for idx in indices]
     end
 
     # Find starting positions for the first trigger
     idx_start_positions = _search_single_trigger(array, sequence[1], ignore_values)
 
-    idx_positions = Int[]
+    matches = Vector{Int}[]
     seq_len = length(sequence)
     max_idx = length(array) - seq_len + 1
     for idx in idx_start_positions
         if idx > max_idx
             continue
         end
-        if _matches_sequence(array, sequence, idx, ignore_values)
-            push!(idx_positions, idx)
+        positions = _collect_sequence_positions(array, sequence, idx, ignore_values)
+        if positions !== nothing
+            push!(matches, positions)
         end
     end
 
-    return sort_indices ? sort(idx_positions) : idx_positions
+    return sort_indices ? sort(matches, by = first) : matches
 end
 
 """
@@ -395,7 +397,7 @@ function search_sequence(array, range::UnitRange; sort_indices::Bool = true)
 end
 
 """
-    search_sequence(array, ranges::Vector{UnitRange}; sort_indices::Bool = true)
+    search_sequence(array, ranges::Vector{<:UnitRange}; sort_indices::Bool = true)
 
 Return indices where array values match any of the values within specified ranges.
 
@@ -412,30 +414,32 @@ Return indices where array values match any of the values within specified range
 idx = search_sequence([1, 2, 3, 4, 5, 6], [1:3, 5:6])  # Returns indices of 1,2,3,5,6
 ```
 """
-function search_sequence(array, ranges::Vector{UnitRange}; sort_indices::Bool = true)
+function search_sequence(array, ranges::Vector{<:UnitRange}; sort_indices::Bool = true)
+    isempty(ranges) && return Int[]
     all_indices = Int[]
     for value in union(ranges...)
-        indices = search_sequence(array, value; sort_indices = false)
+        indices = search_sequence(array, value)
         append!(all_indices, indices)
     end
     return sort_indices ? sort(all_indices) : all_indices
 end
 
 # Helper function to search for a single trigger using dispatch
-function _search_single_trigger(array, trigger::Integer, ignore_values::Vector{Int} = [0])
-    indices = Int[]
-    for (i, val) in enumerate(array)
-        if val == trigger && (i == 1 || array[i-1] != trigger) && !(val in ignore_values)
-            push!(indices, i)
-        end
-    end
-    return indices
-end
+_search_single_trigger(array, trigger::Integer, ignore_values::Vector{Int} = [0]) =
+    search_sequence(array, trigger; ignore_values = ignore_values)
 _search_single_trigger(array, trigger::UnitRange, ignore_values::Vector{Int} = [0]) = search_sequence(array, [trigger])
 _search_single_trigger(array, trigger::Symbol, ignore_values::Vector{Int} = [0]) = error("Single wildcard sequences not supported")
 
-# Helper function to check if a sequence matches at a given position
-function _matches_sequence(array, sequence, start_idx, ignore_values)
+# Helper function to collect the actual sample positions for a matched sequence
+"""
+    _collect_sequence_positions(array, sequence, start_idx, ignore_values) -> Union{Nothing, Vector{Int}}
+
+Attempt to match a sequence starting at `start_idx`, collecting the actual sample
+index of each matched trigger. Returns `nothing` if the sequence doesn't match,
+or a `Vector{Int}` of positions if it does.
+"""
+function _collect_sequence_positions(array, sequence, start_idx, ignore_values)
+    positions = Int[start_idx]
     current_idx = start_idx
     @inbounds for expected in sequence[2:end]
         current_idx += 1
@@ -444,11 +448,12 @@ function _matches_sequence(array, sequence, start_idx, ignore_values)
             current_idx += 1
         end
         # Check if we've gone beyond the array bounds
-        current_idx > length(array) && return false
+        current_idx > length(array) && return nothing
         # Check if the current value matches the expected value
-        _matches_expected(array[current_idx], expected) || return false
+        _matches_expected(array[current_idx], expected) || return nothing
+        push!(positions, current_idx)
     end
-    return true
+    return positions
 end
 
 # Dispatch-based pattern matching
@@ -459,3 +464,4 @@ _matches_expected(actual::Real, expected::Real) = actual == expected
 _matches_expected(actual::Real, expected::Symbol) = expected == :any  # Wildcard matches anything
 _matches_expected(actual::Real, expected::UnitRange) = actual in expected
 _matches_expected(actual, expected) = error("Unsupported sequence type: $expected")
+

@@ -100,6 +100,7 @@ pages = [
             "RSA" => "demos/statistics/rsa.md",
         ],
     ],
+    "Experiments" => ["Visual Attention" => "demos/experiments/visual-attention.md"],
     "Reference" => ["Overview" => "reference/index.md", "Types" => "reference/types.md"],
 ]
 

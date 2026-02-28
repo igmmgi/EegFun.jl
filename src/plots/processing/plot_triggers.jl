@@ -202,7 +202,7 @@ Extract trigger information from ContinuousData.
 - `trigger_info`: Vector of trigger info strings (empty strings if not available)
 """
 function _extract_trigger_data(dat::ContinuousData, ignore_triggers = Int[])
-    trigger_col = :triggers
+    trigger_col = :trigger
     if !hasproperty(dat.data, trigger_col)
         @minimal_error("No triggers column found in data. Expected column name: $trigger_col")
     end
@@ -212,7 +212,7 @@ function _extract_trigger_data(dat::ContinuousData, ignore_triggers = Int[])
     trigger_times = dat.data[trigger_positions, :time]
 
     # Extract trigger info if available
-    trigger_info = hasproperty(dat.data, :triggers_info) ? dat.data[trigger_positions, :triggers_info] : fill("", length(trigger_positions))
+    trigger_info = hasproperty(dat.data, :trigger_info) ? dat.data[trigger_positions, :trigger_info] : fill("", length(trigger_positions))
 
     # Filter out ignored triggers if any are specified
     if !isempty(ignore_triggers)

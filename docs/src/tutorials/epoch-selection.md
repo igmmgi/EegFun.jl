@@ -4,6 +4,20 @@
 
 This tutorial covers the various ways you can define epochs, from the simplest single-trigger approach to advanced pattern matching.
 
+## Quick Reference
+
+| Feature | Field(s) | Example |
+|---------|----------|---------|
+| Single trigger | `trigger_sequences = [[1]]` | Epoch around trigger 1 |
+| Multiple triggers (OR) | `trigger_sequences = [[1], [2]]` | Either trigger 1 or 2 |
+| Trigger sequence | `trigger_sequences = [[1, 10]]` | Trigger 1 followed by 10 |
+| Wildcard | `trigger_sequences = [[1, :any, 3]]` | 1, then anything, then 3 |
+| Range | `trigger_sequences = [[1:5, 10]]` | Any of 1–5, then 10 |
+| t=0 reference | `reference_index = 2` | Align to 2nd trigger in sequence |
+| Timing constraint | `timing_pairs`, `min_interval`, `max_interval` | Only if triggers 200–800ms apart |
+| Position: after | `after = 99` | Only after marker trigger 99 |
+| Position: before | `before = 88` | Only before marker trigger 88 |
+
 ## The `EpochCondition` Structure
 
 At the heart of epoch selection is the `EpochCondition` structure. It allows you to define exactly what constitutes an epoch in your study.
@@ -112,6 +126,10 @@ condition = EegFun.EpochCondition(
     reference_index = 2
 )
 ```
+
+::: tip
+`reference_index` refers to the position within the trigger sequence, not the trigger value itself. The sequence matcher internally tracks the *actual sample position* for each element in the matched sequence, so `reference_index = 2` correctly resolves to the sample where trigger 2 occurred — even when zero-valued samples are skipped between triggers.
+:::
 
 ## Timing Constraints
 
