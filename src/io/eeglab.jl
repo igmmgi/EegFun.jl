@@ -149,7 +149,7 @@ function _eeglab_to_epochdata(eeg::Dict, filepath::String, preserve_radial_dista
         trigger_info_vec = fill("", n_timepoints)
         trigger_info_vec[zero_idx] = trigger_info[trial_idx]
 
-        insertcols!(df, 2, :triggers => trigger_vec)
+        insertcols!(df, 2, :trigger => trigger_vec)
         insertcols!(df, 3, :trigger_info => trigger_info_vec)
 
         epoch_dataframes[trial_idx] = df
@@ -226,7 +226,7 @@ function _eeglab_to_continuousdata(eeg::Dict, filepath::String, preserve_radial_
     # Create DataFrame
     df = DataFrame(data_matrix, ch_names)
     insertcols!(df, 1, :time => times)
-    insertcols!(df, 2, :triggers => trigger_vec)
+    insertcols!(df, 2, :trigger => trigger_vec)
     insertcols!(df, 3, :trigger_info => trigger_info_vec)
 
     # Create AnalysisInfo
@@ -358,7 +358,7 @@ end
 Extract trigger codes from EEGLAB epoch structure.
 
 Maps unique trigger strings to sequential integers (1, 2, 3, ...) and returns both
-the integer codes and original strings for storage in :triggers and :trigger_info columns.
+the integer codes and original strings for storage in :trigger and :trigger_info columns.
 """
 function _extract_triggers(epochs, n_trials::Int)
     # First pass: collect all unique trigger strings

@@ -92,7 +92,7 @@ function resample!(dat::SingleDataFrameEeg, factor::Int)::Nothing
     @info "Resampling data from $(dat.sample_rate) Hz to $(dat.sample_rate ÷ factor) Hz (factor: $factor)"
 
     # Resample the DataFrame
-    dat.data = _resample_dataframe!(dat.data, factor, :triggers)
+    dat.data = _resample_dataframe!(dat.data, factor, :trigger)
 
     # For continuous/ERP data, renumber sample column to be sequential
     if hasproperty(dat.data, :sample)

@@ -343,7 +343,7 @@ function _create_toggles(fig, ax, state)
     configs = [ToggleConfig("Butterfly Plot", (active) -> _butterfly_plot!(ax, state))]
 
     # Add marker toggles based on configuration
-    marker_toggle_configs = [(:triggers, "Trigger"), (:is_vEOG, "vEOG"), (:is_hEOG, "hEOG")]
+    marker_toggle_configs = [(:trigger, "Trigger"), (:is_vEOG, "vEOG"), (:is_hEOG, "hEOG")]
 
     for (marker_symbol, toggle_label) in marker_toggle_configs
         if _has_column(state.data, marker_symbol)
@@ -1560,7 +1560,7 @@ function _init_markers(ax, state; marker_visible = Dict{Symbol,Bool}())
     data = _get_current_data(state.data)
 
     # Define marker configurations
-    marker_configs = [(:triggers, nothing), (:is_vEOG, "v"), (:is_hEOG, "h")]
+    marker_configs = [(:trigger, nothing), (:is_vEOG, "v"), (:is_hEOG, "h")]
 
     # Add markers based on configuration
     for (symbol, label) in marker_configs

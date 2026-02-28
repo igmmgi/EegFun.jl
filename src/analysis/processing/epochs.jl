@@ -32,7 +32,6 @@ function condition_parse_epoch(config::Dict)
             @minimal_error("trigger_sequences must be specified for condition '$name'")
         end
 
-
         # Parse trigger sequences - convert from TOML arrays to proper types
         trigger_sequences = Vector{Vector{Union{Int,Symbol,UnitRange{Int}}}}()
         for sequence in trigger_sequences_raw
@@ -105,10 +104,10 @@ end
 function _validate_epoch_interval_params(dat::ContinuousData, epoch_interval::Vector{<:Real})
     @assert length(epoch_interval) == 2 "Epoch interval must have exactly 2 elements"
     @assert epoch_interval[1] <= epoch_interval[2] "Epoch interval start must be less than or equal to end"
-    @assert hasproperty(dat.data, :triggers) "Data must have a triggers column"
+    @assert hasproperty(dat.data, :trigger) "Data must have a trigger column"
     @assert hasproperty(dat.data, :time) "Data must have a time column"
     @assert !isempty(dat.data.time) "Time column cannot be empty"
-    @assert !isempty(dat.data.triggers) "Triggers column cannot be empty"
+    @assert !isempty(dat.data.trigger) "Triggers column cannot be empty"
     @assert issorted(dat.data.time) "Time column must be sorted in ascending order"
 end
 
@@ -265,7 +264,7 @@ function mark_epoch_intervals!(
     all_reference_indices = Int[]
 
     for trigger in triggers_of_interest
-        trigger_indices = findall(dat.data.triggers .== trigger)
+        trigger_indices = findall(dat.data.trigger .== trigger)
         if isempty(trigger_indices)
             @minimal_warning "Trigger $trigger not found in data"
             continue
@@ -341,8 +340,39 @@ function mark_epoch_intervals!(
     return dat
 end
 
+"""
+    _filter_matches(matches, condition, triggers, time_data) -> Vector{Vector{Int}}
 
+Filter sequence matches by after/before position constraints and timing pair constraints.
+Used by both `extract_epochs` and `mark_epoch_intervals!`.
+"""
+function _filter_matches(matches::Vector{Vector{Int}}, condition::EpochCondition, triggers, time_data)
+    # Apply after/before filtering
+    if !isnothing(condition.after) || !isnothing(condition.before)
+        matches = filter(matches) do m
+            if !isnothing(condition.after)
+                any(triggers[1:(m[1]-1)] .== condition.after) || return false
+            end
+            if !isnothing(condition.before)
+                any(triggers[(m[end]+1):end] .== condition.before) || return false
+            end
+            return true
+        end
+    end
 
+    # Apply timing constraints
+    if !isnothing(condition.timing_pairs) && !isnothing(condition.min_interval) && !isnothing(condition.max_interval)
+        matches = filter(matches) do m
+            for (start_idx, end_idx) in condition.timing_pairs
+                interval = time_data[m[end_idx]] - time_data[m[start_idx]]
+                (interval < condition.min_interval || interval > condition.max_interval) && return false
+            end
+            return true
+        end
+    end
+
+    return matches
+end
 
 """
     mark_epoch_intervals!(dat::ContinuousData, epoch_conditions::Vector{EpochCondition}, time_window::Vector{<:Real}; 
@@ -391,79 +421,30 @@ function mark_epoch_intervals!(
     # For each epoch condition
     for condition in epoch_conditions
 
-        # Find all occurrences of the trigger sequences 
-        sequence_indices = search_sequence(dat.data.triggers, condition.trigger_sequences)
-        if isempty(sequence_indices)
+        # Find all occurrences of the trigger sequences — each match is [pos1, pos2, ...]
+        matches = search_sequence(dat.data.trigger, condition.trigger_sequences)
+        if isempty(matches)
             @minimal_warning "No triggers found for condition '$(condition.name)'"
             continue
         end
 
-        # Apply after/before filtering if specified
-        if condition.after |> !isnothing || condition.before |> !isnothing
-            sequence_indices = filter(sequence_indices) do seq_start_idx
-                # Check after constraint
-                if condition.after |> !isnothing
-                    found_after = any(dat.data.triggers[1:(seq_start_idx-1)] .== condition.after)
-                    if !found_after
-                        return false
-                    end
-                end
-
-                # Check before constraint  
-                if condition.before |> !isnothing
-                    sequence_end = seq_start_idx + length(condition.trigger_sequences[1]) - 1
-                    found_before = any(dat.data.triggers[(sequence_end+1):end] .== condition.before)
-                    if !found_before
-                        return false
-                    end
-                end
-
-                return true
-            end
-            if isempty(sequence_indices)
-                after_msg = condition.after |> !isnothing ? " after trigger $(condition.after)" : ""
-                before_msg = condition.before |> !isnothing ? " before trigger $(condition.before)" : ""
-                @minimal_warning "No trigger sequences found that meet position constraints$(after_msg)$(before_msg) for condition '$(condition.name)'"
-                continue
-            end
+        # Apply position and timing constraints
+        matches = _filter_matches(matches, condition, dat.data.trigger, dat.data.time)
+        if isempty(matches)
+            after_msg = !isnothing(condition.after) ? " after trigger $(condition.after)" : ""
+            before_msg = !isnothing(condition.before) ? " before trigger $(condition.before)" : ""
+            @minimal_warning "No trigger sequences found that meet constraints$(after_msg)$(before_msg) for condition '$(condition.name)'"
+            continue
         end
 
-        # Apply timing constraints if specified
-        if condition.timing_pairs |> !isnothing && condition.min_interval |> !isnothing && condition.max_interval |> !isnothing
-
-            sequence_indices = filter(sequence_indices) do seq_start_idx
-                for (start_idx, end_idx) in condition.timing_pairs
-                    # Calculate actual indices in the trigger array
-                    actual_start_idx = seq_start_idx + (start_idx - 1)
-                    actual_end_idx = seq_start_idx + (end_idx - 1)
-
-                    # Check bounds
-                    if actual_start_idx < 1 || actual_end_idx > length(dat.data.triggers)
-                        return false
-                    end
-
-                    # Calculate time interval between the two triggers
-                    start_time_val = dat.data.time[actual_start_idx]
-                    end_time_val = dat.data.time[actual_end_idx]
-                    interval = end_time_val - start_time_val
-
-                    # Check if interval meets constraints
-                    if interval < condition.min_interval || interval > condition.max_interval
-                        return false
-                    end
-                end
-                return true
-            end
-            if isempty(sequence_indices)
-                @minimal_warning "No trigger sequences found that meet timing constraints for condition '$(condition.name)'"
+        # Convert matches to reference positions and collect them
+        for m in matches
+            if condition.reference_index > length(m)
+                @minimal_warning "Reference index $(condition.reference_index) exceeds sequence length $(length(m)) for condition '$(condition.name)'"
                 continue
             end
-        end
-
-        # Convert sequence start indices to reference indices and collect them
-        for seq_start_idx in sequence_indices
-            reference_idx = seq_start_idx + (condition.reference_index - 1)
-            if reference_idx <= length(dat.data.triggers)
+            reference_idx = m[condition.reference_index]
+            if reference_idx <= length(dat.data.trigger)
                 push!(all_reference_indices, reference_idx)
             else
                 @minimal_warning "Reference index $(condition.reference_index) for condition '$(condition.name)' is out of bounds"
@@ -533,113 +514,24 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
     # Extract start and end times from tuple
     start_time, end_time = epoch_interval
 
-    # Find t==0 positions based on trigger_sequences (unified approach)
-    offset_to_reference = epoch_condition.reference_index - 1
-    zero_idx = search_sequence(dat.data.triggers, epoch_condition.trigger_sequences) .+ offset_to_reference
-    isempty(zero_idx) && @minimal_error("None of the trigger sequences $(epoch_condition.trigger_sequences) found!")
+    # Find matched positions for trigger sequences — each match is [pos1, pos2, ...]
+    matches = search_sequence(dat.data.trigger, epoch_condition.trigger_sequences)
+    isempty(matches) && @minimal_error("None of the trigger sequences $(epoch_condition.trigger_sequences) found!")
 
-    # Apply after/before filtering if specified
-    if !isnothing(epoch_condition.after) || !isnothing(epoch_condition.before)
-        filtered_indices = Int[]
-
-        for zero_pos in zero_idx
-            # Find the position of the sequence start
-            sequence_start = zero_pos - offset_to_reference
-
-            # Determine sequence length based on the first sequence (all should have same length for timing validation)
-            sequence_length = length(epoch_condition.trigger_sequences[1])
-
-            # Check if this sequence meets the after/before constraints
-            valid_position = true
-
-            if epoch_condition.after |> !isnothing
-                # Check if there's a trigger with value 'after' before this sequence
-                # Look backwards from sequence start to find the trigger
-                found_after_trigger = false
-                for i = (sequence_start-1):-1:1
-                    if dat.data.triggers[i] == epoch_condition.after
-                        found_after_trigger = true
-                        break
-                    end
-                end
-                if !found_after_trigger
-                    valid_position = false
-                end
-            end
-
-            if epoch_condition.before |> !isnothing
-                # Check if there's a trigger with value 'before' after this sequence
-                # Look forwards from sequence end to find the trigger
-                sequence_end = sequence_start + sequence_length - 1
-                found_before_trigger = false
-                for i = (sequence_end+1):length(dat.data.triggers)
-                    if dat.data.triggers[i] == epoch_condition.before
-                        found_before_trigger = true
-                        break
-                    end
-                end
-                if !found_before_trigger
-                    valid_position = false
-                end
-            end
-
-            if valid_position
-                push!(filtered_indices, zero_pos)
-            end
-        end
-
-        zero_idx = filtered_indices
-        if isempty(zero_idx)
-            after_msg = epoch_condition.after |> !isnothing ? " after trigger $(epoch_condition.after)" : ""
-            before_msg = epoch_condition.before |> !isnothing ? " before trigger $(epoch_condition.before)" : ""
-            @minimal_error(
-                "No trigger sequences found that meet position constraints$(after_msg)$(before_msg) for condition '$(epoch_condition.name)'",
-            )
-        end
+    # Apply position and timing constraints
+    matches = _filter_matches(matches, epoch_condition, dat.data.trigger, dat.data.time)
+    if isempty(matches)
+        after_msg = !isnothing(epoch_condition.after) ? " after trigger $(epoch_condition.after)" : ""
+        before_msg = !isnothing(epoch_condition.before) ? " before trigger $(epoch_condition.before)" : ""
+        @minimal_error("No trigger sequences found that meet constraints$(after_msg)$(before_msg) for condition '$(epoch_condition.name)'",)
     end
 
-    # Apply timing constraints if specified
-    if !isnothing(epoch_condition.timing_pairs)
-
-        valid_indices = Int[]
-
-        for zero_pos in zero_idx
-            # Check if this sequence meets all timing constraints
-            sequence_start = zero_pos - offset_to_reference
-            valid_sequence = true
-
-            for (start_idx, end_idx) in epoch_condition.timing_pairs
-                # Calculate actual indices in the trigger array
-                actual_start_idx = sequence_start + (start_idx - 1)
-                actual_end_idx = sequence_start + (end_idx - 1)
-
-                # Check bounds
-                if actual_start_idx < 1 || actual_end_idx > length(dat.data.triggers)
-                    valid_sequence = false
-                    break
-                end
-
-                # Calculate time interval between the two triggers
-                start_time_val = dat.data.time[actual_start_idx]
-                end_time_val = dat.data.time[actual_end_idx]
-                interval = end_time_val - start_time_val
-
-                # Check if interval meets constraints
-                if interval < epoch_condition.min_interval || interval > epoch_condition.max_interval
-                    valid_sequence = false
-                    break
-                end
-            end
-
-            if valid_sequence
-                push!(valid_indices, zero_pos)
-            end
-        end
-
-        zero_idx = valid_indices
-        isempty(zero_idx) &&
-            @minimal_error("No trigger sequences found that meet timing constraints for condition '$(epoch_condition.name)'")
+    # Extract t==0 positions using reference_index (filter out matches where reference_index exceeds match length)
+    matches = filter(m -> epoch_condition.reference_index <= length(m), matches)
+    if isempty(matches)
+        @minimal_error("Reference index $(epoch_condition.reference_index) exceeds sequence length for condition '$(epoch_condition.name)'")
     end
+    zero_idx = [m[epoch_condition.reference_index] for m in matches]
 
     # find number of samples pre/post epoch t = 0 position
     n_pre, n_post = _find_idx_start_end(dat.data.time, abs(start_time), abs(end_time))

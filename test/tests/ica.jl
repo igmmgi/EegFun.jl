@@ -28,7 +28,7 @@ using LinearAlgebra
         # EOG channels roughly correlated to first two sources
         vEOG = s1 .+ 0.1 .* randn(n)
         hEOG = s2 .+ 0.1 .* randn(n)
-        df = DataFrame(time = t, sample = 1:n, triggers = zeros(Int, n))
+        df = DataFrame(time = t, sample = 1:n, trigger = zeros(Int, n))
         for (k, v) in cols
             df[!, k] = v
         end
