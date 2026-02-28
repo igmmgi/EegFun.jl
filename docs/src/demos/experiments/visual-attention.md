@@ -6,78 +6,7 @@ This tutorial uses a complete example dataset to walk through the EegFun.jl anal
 
 The task is a variation of a standard **Posner cueing paradigm** investigating the neural correlates of endogenous attention allocation. On each trial, participants fixate a central cross, receive a directional cue indicating the likely location (80% valid) of an upcoming target, then respond (simple target detection) to the target.
 
-<svg viewBox="0 0 700 480" xmlns="http://www.w3.org/2000/svg" style="max-width:700px; margin: 1em auto; display:block;">
-  <style>
-    .screen { fill:#f0f0f0; stroke:#333; stroke-width:2; }
-    .label { font:14px sans-serif; fill:#555; }
-    .symbol { font:bold 24px sans-serif; fill:#333; }
-    .heading { font:bold 18px sans-serif; fill:#333; }
-    .subheading { font:bold 15px sans-serif; fill:#555; }
-    .arrow { stroke:#666; stroke-width:1.5; fill:none; marker-end:url(#arrowhead); }
-  </style>
-  <defs>
-    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-      <polygon points="0 0, 8 3, 0 6" fill="#666"/>
-    </marker>
-  </defs>
-
-  <!-- Outer box -->
-  <rect x="5" y="5" width="690" height="470" rx="6" fill="none" stroke="#666" stroke-width="1.5"/>
-  <text x="350" y="30" text-anchor="middle" class="heading">Trial Structure</text>
-
-  <!-- ===== VALID (left column) ===== -->
-  <rect x="20" y="42" width="325" height="420" rx="4" fill="none" stroke="#999" stroke-width="1"/>
-  <text x="182" y="62" text-anchor="middle" class="subheading">Valid</text>
-
-  <!-- Fixation -->
-  <rect x="75" y="78" width="90" height="55" rx="3" class="screen"/>
-  <text x="120" y="113" text-anchor="middle" class="symbol">+</text>
-  <text x="180" y="113" class="label">Fixation (500 ms)</text>
-  <line x1="120" y1="133" x2="120" y2="158" class="arrow"/>
-
-  <!-- Cue -->
-  <rect x="75" y="165" width="90" height="55" rx="3" class="screen"/>
-  <text x="120" y="200" text-anchor="middle" class="symbol">➔</text>
-  <text x="180" y="200" class="label">Cue (300 ms)</text>
-  <line x1="120" y1="220" x2="120" y2="245" class="arrow"/>
-
-  <!-- CTI -->
-  <rect x="75" y="252" width="90" height="55" rx="3" class="screen"/>
-  <text x="180" y="287" class="label">CTI (500 ms)</text>
-  <line x1="120" y1="307" x2="120" y2="332" class="arrow"/>
-
-  <!-- Target (right side = valid) -->
-  <rect x="75" y="339" width="90" height="55" rx="3" class="screen"/>
-  <rect x="145" y="358" width="14" height="14" fill="#333"/>
-  <text x="180" y="374" class="label">Target (150 ms)</text>
-
-  <!-- ===== INVALID (right column) ===== -->
-  <rect x="355" y="42" width="325" height="420" rx="4" fill="none" stroke="#999" stroke-width="1"/>
-  <text x="517" y="62" text-anchor="middle" class="subheading">Invalid</text>
-
-  <!-- Fixation -->
-  <rect x="410" y="78" width="90" height="55" rx="3" class="screen"/>
-  <text x="455" y="113" text-anchor="middle" class="symbol">+</text>
-  <text x="515" y="113" class="label">Fixation (500 ms)</text>
-  <line x1="455" y1="133" x2="455" y2="158" class="arrow"/>
-
-  <!-- Cue -->
-  <rect x="410" y="165" width="90" height="55" rx="3" class="screen"/>
-  <text x="455" y="200" text-anchor="middle" class="symbol">➔</text>
-  <text x="515" y="200" class="label">Cue (300 ms)</text>
-  <line x1="455" y1="220" x2="455" y2="245" class="arrow"/>
-
-  <!-- CTI -->
-  <rect x="410" y="252" width="90" height="55" rx="3" class="screen"/>
-  <text x="515" y="287" class="label">CTI (500 ms)</text>
-  <line x1="455" y1="307" x2="455" y2="332" class="arrow"/>
-
-  <!-- Target (left side = invalid) -->
-  <rect x="410" y="339" width="90" height="55" rx="3" class="screen"/>
-  <rect x="416" y="358" width="14" height="14" fill="#333"/>
-  <text x="515" y="374" class="label">Target (150 ms)</text>
-
-</svg>
+![Trial Structure](/demos/experiments/trial_structure.svg)
 
 - **Valid trials**: The target appears at the cued location
 - **Invalid trials**: The target appears at the uncued location
@@ -136,6 +65,8 @@ Plot the channel layout to check that electrode positions look correct:
 EegFun.plot_layout_2d(dat)
 ```
 
+![Biosemi 72-channel layout](/demos/experiments/biosemi72.png)
+
 
 Define channel neighbours (used later potential electrode repair via nearest neighbours, or for cluster based statistics):
 
@@ -172,6 +103,8 @@ Get a visual overview of the trigger distribution:
 EegFun.plot_trigger_overview(dat)
 ```
 
+![Trigger overview](/demos/experiments/trigger_overview.png)
+
 
 Inspect trigger timing — when each trigger occurred and the interval between triggers:
 
@@ -190,6 +123,8 @@ The databrowser lets you scroll through the continuous recording and visually in
 EegFun.plot_databrowser(dat)
 ```
 
+![Data browser](/demos/experiments/databrowser.png)
+
 
 Before going further, remove the DC offset with a high-pass filter and rereference to the average — this makes the traces much easier to read:
 
@@ -203,6 +138,8 @@ EegFun.rereference!(dat, :avg)
 # Plot again to see the effect
 EegFun.plot_databrowser(dat)
 ```
+
+![Data browser after filtering](/demos/experiments/eye_blink.png)
 
 > [!TIP]
 > Look for obvious artifacts: flat channels, excessive drift, large muscle movements. This gives you a feel for data quality before automated processing.
@@ -275,6 +212,8 @@ EegFun.plot_channel_summary(cs, [:range, :min, :max, :var])
 EegFun.plot_channel_summary(cs_epoch, :range)
 ```
 
+![Channel summary (range)](/demos/experiments/channel_summary.png)
+
 
 Next, flag every sample where **any** channel exceeds ±200 μV. This creates a Boolean column (`:is_extreme_value_200`) that the databrowser renders as shaded overlays:
 
@@ -286,6 +225,7 @@ EegFun.is_extreme_value!(dat, 200)
 EegFun.plot_databrowser(dat)
 ```
 
+![Extreme values in the databrowser](/demos/experiments/extreme_values.png)
 
 ### 1.8 Detect and Repair Bad Channels
 
@@ -314,6 +254,8 @@ If any channels are flagged, you can repair them interactively in the databrowse
 EegFun.plot_databrowser(dat)
 # → Press R to open the repair menu
 ```
+
+![Channel repair interface](/demos/experiments/channel_repair.png)
 
 
 ### 1.9 ICA
@@ -349,6 +291,9 @@ EegFun.plot_topography(ica_result, component_selection = EegFun.components(1:10)
 EegFun.plot_ica_component_activation(dat, ica_result)
 ```
 
+![ICA component topographies](/demos/experiments/ica_topography.png)
+![ICA component activation](/demos/experiments/ica_activation.png)
+
 
 Components are ordered by the percentage of total variance they explain — the first few typically capture the most prominent signals or artifacts. In most EEG recordings, the largest components are **vertical EOG activity** (eye blinks, showing a frontal topography) and **horizontal eye movements** (lateral frontal pattern). Standard ERP analyses use ICA primarily to remove these ocular components so that the cleaned data better reflects neural activity.
 
@@ -357,6 +302,8 @@ You can immediately browse the data with ICA components overlaid — this lets y
 ```julia
 EegFun.plot_databrowser(dat, ica_result)
 ```
+
+![Databrowser with ICA components](/demos/experiments/ica_databrowser.png)
 
 
 Automatically identify artifact components via EOG correlation and spatial kurtosis:
@@ -439,6 +386,8 @@ EegFun.plot_artifact_detection(epochs[1], rejection_info[1]) # Condition 1
 EegFun.plot_artifact_detection(epochs[2], rejection_info[2]) # Condition 2
 ```
 
+![Artifact detection](/demos/experiments/artifact_detection.png)
+
 
 ```julia
 # Repair channels that can be interpolated
@@ -451,6 +400,8 @@ rejection_info2 = EegFun.detect_bad_epochs_automatic(epochs, abs_criterion = 100
 # Visually review epochs in a grid — automatically detected artifacts are pre-checked
 EegFun.detect_bad_epochs_interactive(epochs[1], artifact_info = rejection_info2[1], dims = (3, 3)))
 ```
+
+![Interactive epoch rejection grid](/demos/experiments/epoch_rejection_grid.png)
 
 
 ```julia
@@ -499,7 +450,29 @@ The `preprocess_v1` pipeline automates all single-participant steps across every
 EegFun.preprocess_v1("pipeline.toml")
 ```
 
-This runs through filtering, ICA, epoching, artifact rejection, and averaging for each participant and saves all results to `output_data/`.
+For each participant, the pipeline runs through the following stages:
+
+<div style="text-align: center;">
+
+```mermaid
+graph TD
+    A["&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Load&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"] --> B["&nbsp;&nbsp;Rereference&nbsp;&nbsp;"] --> C["&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Filter&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"] --> D["&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;EOG&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"] --> E["&nbsp;&nbsp;Artifact Scan&nbsp;&nbsp;"] --> F["&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ICA&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"] --> G["Channel Repair"] --> H["&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Epoch&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"] --> I["&nbsp;&nbsp;&nbsp;Epoch QC&nbsp;&nbsp;&nbsp;"] --> J["Average & Save"]
+```
+
+</div>
+
+| # | Stage | Description |
+|---|-------|-------------|
+| 1 | **Load** | Read raw BDF file and apply electrode layout |
+| 2 | **Rereference** | Apply the chosen reference (e.g., average, mastoid) |
+| 3 | **Filter** | Bandpass filter the continuous data (e.g., 0.1 – 30 Hz) |
+| 4 | **EOG** | Calculate vEOG / hEOG channels and detect eye-movement onsets |
+| 5 | **Artifact Scan** | Flag extreme values, compute channel joint probability, identify bad channels |
+| 6 | **ICA** | Decompose data, auto-identify artifact components (EOG, ECG, line noise), and remove them |
+| 7 | **Channel Repair** | Interpolate bad channels from their neighbours |
+| 8 | **Epoch** | Cut continuous data into trial-locked segments and baseline-correct |
+| 9 | **Epoch QC** | Detect bad epochs, attempt per-epoch channel repair, then reject remaining artifacts |
+| 10 | **Average & Save** | Compute ERPs per condition and save all outputs to `output_data/` |
 
 ### 2.2 Batch Filter ERPs
 

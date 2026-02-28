@@ -1,0 +1,49 @@
+<svg viewBox="0 0 700 480" xmlns="http://www.w3.org/2000/svg" style="max-width:700px; margin: 1em auto; display:block;">
+  <style>
+    .screen { fill:#f0f0f0; stroke:#333; stroke-width:2; }
+    .label { font:14px sans-serif; fill:#555; }
+    .symbol { font:bold 24px sans-serif; fill:#333; }
+    .heading { font:bold 18px sans-serif; fill:#333; }
+    .subheading { font:bold 15px sans-serif; fill:#555; }
+    .arrow { stroke:#666; stroke-width:1.5; fill:none; marker-end:url(#arrowhead); }
+  </style>
+  <defs>
+    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#666"/>
+    </marker>
+  </defs>
+  <rect x="5" y="5" width="690" height="470" rx="6" fill="none" stroke="#666" stroke-width="1.5"/>
+  <text x="350" y="30" text-anchor="middle" class="heading">Trial Structure</text>
+  <rect x="20" y="42" width="325" height="420" rx="4" fill="none" stroke="#999" stroke-width="1"/>
+  <text x="182" y="62" text-anchor="middle" class="subheading">Valid</text>
+  <rect x="75" y="78" width="90" height="55" rx="3" class="screen"/>
+  <text x="120" y="113" text-anchor="middle" class="symbol">+</text>
+  <text x="180" y="113" class="label">Fixation (500 ms)</text>
+  <line x1="120" y1="133" x2="120" y2="158" class="arrow"/>
+  <rect x="75" y="165" width="90" height="55" rx="3" class="screen"/>
+  <text x="120" y="200" text-anchor="middle" class="symbol">➔</text>
+  <text x="180" y="200" class="label">Cue (300 ms)</text>
+  <line x1="120" y1="220" x2="120" y2="245" class="arrow"/>
+  <rect x="75" y="252" width="90" height="55" rx="3" class="screen"/>
+  <text x="180" y="287" class="label">CTI (500 ms)</text>
+  <line x1="120" y1="307" x2="120" y2="332" class="arrow"/>
+  <rect x="75" y="339" width="90" height="55" rx="3" class="screen"/>
+  <rect x="145" y="358" width="14" height="14" fill="#333"/>
+  <text x="180" y="374" class="label">Target (150 ms)</text>
+  <rect x="355" y="42" width="325" height="420" rx="4" fill="none" stroke="#999" stroke-width="1"/>
+  <text x="517" y="62" text-anchor="middle" class="subheading">Invalid</text>
+  <rect x="410" y="78" width="90" height="55" rx="3" class="screen"/>
+  <text x="455" y="113" text-anchor="middle" class="symbol">+</text>
+  <text x="515" y="113" class="label">Fixation (500 ms)</text>
+  <line x1="455" y1="133" x2="455" y2="158" class="arrow"/>
+  <rect x="410" y="165" width="90" height="55" rx="3" class="screen"/>
+  <text x="455" y="200" text-anchor="middle" class="symbol">➔</text>
+  <text x="515" y="200" class="label">Cue (300 ms)</text>
+  <line x1="455" y1="220" x2="455" y2="245" class="arrow"/>
+  <rect x="410" y="252" width="90" height="55" rx="3" class="screen"/>
+  <text x="515" y="287" class="label">CTI (500 ms)</text>
+  <line x1="455" y1="307" x2="455" y2="332" class="arrow"/>
+  <rect x="410" y="339" width="90" height="55" rx="3" class="screen"/>
+  <rect x="416" y="358" width="14" height="14" fill="#333"/>
+  <text x="515" y="374" class="label">Target (150 ms)</text>
+</svg>
