@@ -452,27 +452,137 @@ EegFun.preprocess_v1("pipeline.toml")
 
 For each participant, the pipeline runs through the following stages:
 
-<div style="text-align: center;">
+![Pipeline flowchart](/demos/experiments/pipeline_flowchart.svg)
 
-```mermaid
-graph TD
-    A["&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Load&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"] --> B["&nbsp;&nbsp;Rereference&nbsp;&nbsp;"] --> C["&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Filter&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"] --> D["&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;EOG&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"] --> E["&nbsp;&nbsp;Artifact Scan&nbsp;&nbsp;"] --> F["&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ICA&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"] --> G["Channel Repair"] --> H["&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Epoch&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"] --> I["&nbsp;&nbsp;&nbsp;Epoch QC&nbsp;&nbsp;&nbsp;"] --> J["Average & Save"]
-```
-
-</div>
+*↻ Repeated for each participant file*
 
 | # | Stage | Description |
 |---|-------|-------------|
 | 1 | **Load** | Read raw BDF file and apply electrode layout |
 | 2 | **Rereference** | Apply the chosen reference (e.g., average, mastoid) |
-| 3 | **Filter** | Bandpass filter the continuous data (e.g., 0.1 – 30 Hz) |
-| 4 | **EOG** | Calculate vEOG / hEOG channels and detect eye-movement onsets |
-| 5 | **Artifact Scan** | Flag extreme values, compute channel joint probability, identify bad channels |
-| 6 | **ICA** | Decompose data, auto-identify artifact components (EOG, ECG, line noise), and remove them |
-| 7 | **Channel Repair** | Interpolate bad channels from their neighbours |
-| 8 | **Epoch** | Cut continuous data into trial-locked segments and baseline-correct |
-| 9 | **Epoch QC** | Detect bad epochs, attempt per-epoch channel repair, then reject remaining artifacts |
-| 10 | **Average & Save** | Compute ERPs per condition and save all outputs to `output_data/` |
+| 3 | **Filter** | High-pass filter the continuous data (e.g., 0.1 Hz) |
+| 4 | **EOG** | Calculate vEOG / hEOG, detect onsets, compute channel–EOG correlations |
+| 5 | **Initial Epochs** | Extract preliminary epochs and ERPs (before cleaning) |
+| 6 | **Artifact Scan** | Channel summary, extreme-value detection, joint probability, bad-channel identification |
+| 7 | **ICA** | Apply stricter high-pass filter (on copy of data), decompose, auto-identify artifact components (e.g., EOG, ECG), remove them |
+| 8 | **Channel Repair** | Interpolate bad channels (previously removed) from their neighbours (or spline interpolation) |
+| 9 | **Recalculate EOG** | Recompute vEOG / hEOG after ICA and channel repair |
+| 10 | **Artifact Values** | Re-detect extreme values on cleaned continuous data (used for epoch exclusion) |
+| 11 | **Epoch + Baseline** | Cut cleaned continuous data into trial segments and baseline-correct |
+| 12 | **Epoch QC** | Detect bad epochs, attempt per-epoch channel repair, re-detect and reject remaining artifacts |
+| 13 | **Average & Save** | Compute ERPs per condition and save all outputs to `output_data/` |
+
+#### Key Default Parameters
+
+The most commonly adjusted parameters are shown below. The full configuration (with all available options) can be generated with `EegFun.generate_config_template("my_config.toml")`.
+
+| Section | Parameter | Default | Description |
+|---------|-----------|---------|-------------|
+| **Epochs** | `epoch_start` | −1 s | Epoch start relative to trigger |
+| | `epoch_end` | 1 s | Epoch end relative to trigger |
+| **Reference** | `reference_channel` | `avg` | Reference type (avg, mastoid, etc.) |
+| **Highpass** | `filter.highpass.freq` | 0.1 Hz | Main highpass cutoff |
+| | `filter.highpass.order` | 1 | Filter order |
+| **Lowpass** | `filter.lowpass.apply` | `false` | Lowpass off by default |
+| | `filter.lowpass.freq` | 30 Hz | Lowpass cutoff (if enabled) |
+| **ICA** | `ica.apply` | `false` | ICA off by default |
+| | `filter.ica_highpass.freq` | 1.0 Hz | Stricter highpass for ICA |
+| | `ica.percentage_of_data` | 100% | Proportion of data used for ICA |
+| **Artifacts** | `eeg.extreme_value_abs_criterion` | 500 μV | Extreme value threshold (continuous) |
+| | `eeg.artifact_value_abs_criterion` | 100 μV | Artifact threshold (epoch rejection) |
+| **EOG** | `eog.vEOG_channels` | Fp1/Fp2 − IO1/IO2 | Vertical EOG electrode pairs |
+| | `eog.hEOG_channels` | F9 − F10 | Horizontal EOG electrode pairs |
+| **Layout** | `layout.neighbour_criterion` | 0.25 | Distance for neighbour definition |
+
+<details>
+<summary>Full default configuration (click to expand)</summary>
+
+```toml
+# ──── Files ────
+
+[files.input]
+directory = "."
+epoch_condition_file = ""
+layout_file = "biosemi72.csv"
+raw_data_files = "\\.bdf"
+
+[files.output]
+directory = "./preprocessed_files"
+save_continuous_data_original = true
+save_continuous_data_cleaned = true
+save_epoch_data_original = true
+save_epoch_data_cleaned = true
+save_epoch_data_good = true
+save_erp_data_original = true
+save_erp_data_cleaned = true
+save_erp_data_good = true
+save_ica_data = true
+
+# ──── Preprocessing ────
+
+[preprocess]
+epoch_start = -1
+epoch_end = 1
+reference_channel = "avg"
+
+[preprocess.eeg]
+extreme_value_abs_criterion = 500    # μV — flags extreme samples
+artifact_value_abs_criterion = 100   # μV — epoch rejection threshold
+artifact_value_z_criterion = 0       # z-score (0 = off)
+
+[preprocess.eog]
+vEOG_channels = [["Fp1", "Fp2"], ["IO1", "IO2"], ["vEOG"]]
+vEOG_criterion = 50
+hEOG_channels = [["F9"], ["F10"], ["hEOG"]]
+hEOG_criterion = 30
+
+# ──── Filters ────
+
+[preprocess.filter.highpass]
+apply = true
+freq = 0.1
+order = 1
+method = "iir"
+func = "filtfilt"
+type = "hp"
+
+[preprocess.filter.lowpass]
+apply = false
+freq = 30.0
+order = 3
+method = "iir"
+func = "filtfilt"
+type = "lp"
+
+[preprocess.filter.ica_highpass]
+apply = true
+freq = 1.0
+order = 1
+method = "iir"
+func = "filtfilt"
+type = "hp"
+
+[preprocess.filter.ica_lowpass]
+apply = false
+freq = 30.0
+order = 3
+method = "iir"
+func = "filtfilt"
+type = "lp"
+
+# ──── ICA ────
+
+[preprocess.ica]
+apply = false
+percentage_of_data = 100.0
+
+# ──── Layout ────
+
+[preprocess.layout]
+neighbour_criterion = 0.25
+```
+
+</details>
 
 ### 2.2 Batch Filter ERPs
 
