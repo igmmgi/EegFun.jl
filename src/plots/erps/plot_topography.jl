@@ -404,7 +404,7 @@ function plot_topography(
     end
 
     # Set column sizes only if colorbars are enabled and to the right (default)
-    if colorbar_enabled && isnothing((user_colorbar_position) || user_colorbar_position[1] <= 1)
+    if colorbar_enabled && (isnothing(user_colorbar_position) || user_colorbar_position[1] <= 1)
         # Make colorbar columns narrower than plot columns
         # This ensures colorbars don't take up too much space while keeping plots visible
         for col = 1:total_cols
