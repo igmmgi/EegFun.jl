@@ -81,6 +81,13 @@ end
         # Grand averages should reflect condition names (prefixed with grand_avg_)
         @test contains(prepared.data[1].condition_name, "condition_1")
         @test contains(prepared.data[2].condition_name, "condition_2")
+
+        # Per-condition SE should be computed over full display interval
+        n_display_time = nrow(prepared.data[1].data)
+        @test size(prepared.se_cond1) == (n_channels, n_display_time)
+        @test size(prepared.se_cond2) == (n_channels, n_display_time)
+        @test all(x -> x >= 0, prepared.se_cond1)
+        @test all(x -> x >= 0, prepared.se_cond2)
     end
 
     @testset "prepare_stats - requires 2 conditions" begin
@@ -114,11 +121,12 @@ end
         data1 = fill(5.0, n_participants, n_electrodes, n_time) .+ 0.01 .* randn(n_participants, n_electrodes, n_time)
         data2 = fill(3.0, n_participants, n_electrodes, n_time) .+ 0.01 .* randn(n_participants, n_electrodes, n_time)
 
-        t_matrix, df, p_matrix = EegFun._compute_t_matrix(data1, data2, :paired)
+        t_matrix, df, p_matrix, se_matrix = EegFun._compute_t_matrix(data1, data2, :paired)
 
         # Dimensions: [electrodes × time]
         @test size(t_matrix) == (n_electrodes, n_time)
         @test size(p_matrix) == (n_electrodes, n_time)
+        @test size(se_matrix) == (n_electrodes, n_time)
 
         # df for paired = n_participants - 1
         @test df == Float64(n_participants - 1)
@@ -128,6 +136,9 @@ end
 
         # All p-values should be very small
         @test all(p_matrix .< 0.001)
+
+        # SE should be positive
+        @test all(se_matrix .> 0)
     end
 
     @testset "_compute_t_matrix - no difference" begin
@@ -135,10 +146,28 @@ end
         n = 10
         data_same = fill(5.0, n, 3, 4)
 
-        t_matrix, df, p_matrix = EegFun._compute_t_matrix(data_same, data_same, :paired)
+        t_matrix, df, p_matrix, se_matrix = EegFun._compute_t_matrix(data_same, data_same, :paired)
 
         # Zero difference → NaN t-values (0/0)
         @test all(isnan, t_matrix)
+
+        # SE should be zero (no variability in differences)
+        @test all(se_matrix .== 0.0)
+    end
+
+    @testset "_compute_t_matrix - SE correctness" begin
+        # Known data: 4 participants, 1 electrode, 1 time point
+        # Differences: [2, 4, 6, 8] → mean=5, std=sqrt(20/3), se=std/sqrt(4)
+        using Statistics: std as std_func
+        data1 = reshape([12.0, 14.0, 16.0, 18.0], 4, 1, 1)
+        data2 = reshape([10.0, 10.0, 10.0, 10.0], 4, 1, 1)
+
+        t_matrix, df, p_matrix, se_matrix = EegFun._compute_t_matrix(data1, data2, :paired)
+
+        diffs = [2.0, 4.0, 6.0, 8.0]
+        expected_se = std_func(diffs) / sqrt(4)
+        @test se_matrix[1, 1] ≈ expected_se
+        @test t_matrix[1, 1] ≈ mean(diffs) / expected_se
     end
 
     @testset "_compute_t_matrix - prepared dispatch" begin
@@ -146,11 +175,12 @@ end
         erps = _build_erp_test_data(n_participants = 5, n_channels = 3)
         prepared = EegFun.prepare_stats(erps; design = :paired)
 
-        t_matrix, df, p_matrix = EegFun._compute_t_matrix(prepared)
+        t_matrix, df, p_matrix, se_matrix = EegFun._compute_t_matrix(prepared)
 
         @test size(t_matrix, 1) == 3   # n_channels
         @test df == 4.0                # 5 participants - 1
         @test size(t_matrix) == size(p_matrix)
+        @test size(se_matrix) == size(t_matrix)
     end
 
 
@@ -433,6 +463,15 @@ end
         # Critical t should be positive
         @test result.critical_t > 0
 
+        # SE should have correct dimensions and be positive
+        @test size(result.se) == size(result.stat_matrix.t)
+        @test all(x -> x > 0 || isnan(x), result.se)
+
+        # Per-condition SE should cover full display interval
+        n_display_time = nrow(result.data[1].data)
+        @test size(result.se_cond1) == (3, n_display_time)
+        @test size(result.se_cond2) == (3, n_display_time)
+
         # Electrodes and time_points
         @test length(result.electrodes) == 3
     end
@@ -507,6 +546,10 @@ end
 
         # Result metadata
         @test length(result.electrodes) == 3
+
+        # SE should have correct dimensions
+        @test size(result.se) == size(result.stat_matrix.t)
+        @test all(x -> x > 0 || isnan(x), result.se)
 
         # Clusters should be Cluster vectors
         @test result.clusters.positive isa Vector{EegFun.Cluster}

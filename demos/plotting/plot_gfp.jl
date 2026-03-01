@@ -17,54 +17,13 @@ dat = EegFun.create_eegfun_data(dat, layout)
 EegFun.highpass_filter!(dat, 0.1)
 EegFun.lowpass_filter!(dat, 30.0)
 
-# epoch and average
-epochs = EegFun.epoch_data(dat, [:trigger1, :trigger2], (-0.2, 0.8))
-EegFun.baseline!(epochs, (-0.2, 0.0))
-erp1 = EegFun.average(epochs, condition_selection = conditions(:trigger1))
-erp2 = EegFun.average(epochs, condition_selection = conditions(:trigger2))
+# extract epochs
+epoch_cfg = EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])
+epochs = EegFun.extract_epochs(dat, epoch_cfg, (-2, 4))
 
-#######################################################################
-# BASIC GFP PLOT
-#######################################################################
+EegFun.baseline!(epochs, (-0.2, 0.0))
+erps = EegFun.average_epochs(epochs)
 
 # plot GFP for a single condition
-EegFun.plot_gfp(erp1)
+EegFun.plot_gfp(erps)
 
-#######################################################################
-# COMPARE CONDITIONS
-#######################################################################
-
-# overlay GFP for multiple conditions
-EegFun.plot_gfp([erp1, erp2])
-
-#######################################################################
-# WITH ERP TRACES AND DISSIMILARITY
-#######################################################################
-
-# show all three panels: ERP traces, GFP, and Global Dissimilarity
-EegFun.plot_gfp([erp1, erp2],
-    show_erp_traces = true,
-    show_dissimilarity = true
-)
-
-#######################################################################
-# RAW VS NORMALISED
-#######################################################################
-
-# plot in raw microvolts instead of percentage
-EegFun.plot_gfp(erp1, normalize = false)
-
-#######################################################################
-# PRE-COMPUTED GFP
-#######################################################################
-
-# compute GFP separately, then plot the result
-gfp_result = EegFun.gfp(erp1, normalize = true)
-EegFun.plot_gfp(gfp_result, color = :red, linewidth = 3)
-
-#######################################################################
-# CHANNEL SELECTION
-#######################################################################
-
-# compute GFP over a subset of channels
-EegFun.plot_gfp(erp1, channel_selection = channels([:Cz, :Pz, :Oz]))

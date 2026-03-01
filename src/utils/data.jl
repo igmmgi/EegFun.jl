@@ -579,7 +579,7 @@ function tail(dat::EegData; n = nothing)
     data = all_data(dat)
     nrows = nrow(data)
     n = min(n, nrows)  # Don't exceed available rows
-    result = n > 0 ? data[max(1, nrows-n+1):nrows, :] : DataFrame()
+    result = n > 0 ? data[max(1, nrows - n + 1):nrows, :] : DataFrame()
     viewer(result)
     return result
 end
@@ -1688,7 +1688,7 @@ Useful when no proper electrode layout is available.
 function _create_layout_from_labels(labels::Vector{Symbol})::Layout
     n_channels = length(labels)
     df = DataFrame(label = labels, inc = zeros(n_channels), azi = zeros(n_channels))
-    return Layout(df, nothing, nothing)
+    return Layout(df, nothing, nothing, nothing)
 end
 
 # Internal helper: Creates a DataFrame from BiosemiData (used by public create_eegfun_data)

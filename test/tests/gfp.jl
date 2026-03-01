@@ -89,7 +89,7 @@ using Makie
         df.Ch2 = [2.0, 3.0, 4.0]
         df.Ch3 = [3.0, 4.0, 5.0]
 
-        layout = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2, :Ch3], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2, :Ch3], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]), nothing, nothing, nothing)
         erp_data = EegFun.ErpData("test_data", 1, "test", df, layout, 1000, EegFun.AnalysisInfo(), 10)
 
         # Calculate GFP
@@ -303,7 +303,7 @@ end
         df.Ch2 = [1.0, 2.0, 3.0]
         df.Ch3 = [1.0, 2.0, 3.0]
 
-        layout = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2, :Ch3], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2, :Ch3], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]), nothing, nothing, nothing)
         erp_data = EegFun.ErpData("test_data", 1, "test", df, layout, 1000, EegFun.AnalysisInfo(), 10)
 
         # Calculate GFP
@@ -323,7 +323,7 @@ end
         df.Ch2 = [0.0, 0.0, 0.0]
         df.Ch3 = [-10.0, -10.0, -10.0]
 
-        layout = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2, :Ch3], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2, :Ch3], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]), nothing, nothing, nothing)
         erp_data = EegFun.ErpData("test_data", 1, "test", df, layout, 1000, EegFun.AnalysisInfo(), 10)
 
         # Calculate GFP

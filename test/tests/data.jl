@@ -14,7 +14,7 @@ using OrderedCollections
             vEOG = [0.1, 0.2, 0.3],
             hEOG = [0.4, 0.5, 0.6],
         )
-        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz, :Pz], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz, :Pz], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]), nothing, nothing, nothing)
         analysis_info = EegFun.AnalysisInfo()
         continuous_data = EegFun.ContinuousData("test_data", df, layout, 250, analysis_info)
 
@@ -27,7 +27,7 @@ using OrderedCollections
         @test_throws Exception EegFun._get_cols_by_group(continuous_data, :invalid)
 
         # Test empty layout case - need a layout with a label column
-        empty_layout = EegFun.Layout(DataFrame(label = Symbol[]), nothing, nothing)
+        empty_layout = EegFun.Layout(DataFrame(label = Symbol[]), nothing, nothing, nothing)
         empty_df = DataFrame(time = [0.1], sample = [1])
         empty_data = EegFun.ContinuousData("test_data", empty_df, empty_layout, 250, analysis_info)
         @test EegFun._get_cols_by_group(empty_data, :channels) == Symbol[]
@@ -38,7 +38,7 @@ using OrderedCollections
     @testset "Data access functions" begin
         # Create test data
         df = DataFrame(time = [0.1, 0.2, 0.3], sample = [1, 2, 3], Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0])
-        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
         analysis_info = EegFun.AnalysisInfo()
         continuous_data = EegFun.ContinuousData("test_data", df, layout, 250, analysis_info)
 
@@ -69,7 +69,7 @@ using OrderedCollections
         # Create test epoch data
         epoch1 = DataFrame(time = [0.1, 0.2], sample = [1, 2], Fz = [1.0, 2.0], Cz = [3.0, 4.0])
         epoch2 = DataFrame(time = [0.1, 0.2], sample = [1, 2], Fz = [5.0, 6.0], Cz = [7.0, 8.0])
-        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
         analysis_info = EegFun.AnalysisInfo()
         epoch_data = EegFun.EpochData("test_data", 1, "condition_1", [epoch1, epoch2], layout, 250, analysis_info)
 
@@ -117,7 +117,7 @@ using OrderedCollections
     @testset "Convenience functions" begin
         # Create test data
         df = DataFrame(time = [0.1, 0.2, 0.3], sample = [1, 2, 3], Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0])
-        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
         analysis_info = EegFun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
         continuous_data = EegFun.ContinuousData("test_data", df, layout, 250, analysis_info)
 
@@ -154,7 +154,7 @@ using OrderedCollections
 
         # Test common_channels
         df2 = DataFrame(time = [0.1, 0.2], sample = [1, 2], Fz = [1.0, 2.0], Pz = [7.0, 8.0])
-        layout2 = EegFun.Layout(DataFrame(label = [:Fz, :Pz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        layout2 = EegFun.Layout(DataFrame(label = [:Fz, :Pz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
         continuous_data2 = EegFun.ContinuousData("test_data", df2, layout2, 250, analysis_info)
         @test EegFun.common_channels(continuous_data, continuous_data2) == [:Fz]
     end
@@ -162,7 +162,7 @@ using OrderedCollections
     @testset "ErpData specific functions" begin
         # Create test ERP data
         df = DataFrame(time = [0.1, 0.2, 0.3], sample = [1, 2, 3], Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0])
-        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
         analysis_info = EegFun.AnalysisInfo()
         erp_data = EegFun.ErpData("test_data", 1, "condition_1", df, layout, 250, analysis_info, 10)
 
@@ -178,7 +178,7 @@ using OrderedCollections
             Fz = [1.0, 2.0, 3.0, 4.0, 5.0],
             Cz = [6.0, 7.0, 8.0, 9.0, 10.0],
         )
-        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
         analysis_info = EegFun.AnalysisInfo()
         continuous_data = EegFun.ContinuousData("test_data", df, layout, 250, analysis_info)
 
@@ -206,7 +206,7 @@ using OrderedCollections
 
         # Test with empty DataFrame
         empty_df = DataFrame()
-        empty_layout = EegFun.Layout(DataFrame(), nothing, nothing)
+        empty_layout = EegFun.Layout(DataFrame(), nothing, nothing, nothing)
         empty_data = EegFun.ContinuousData("test_data", empty_df, empty_layout, 250, analysis_info)
         @test isempty(EegFun.head(empty_data))
         @test isempty(EegFun.tail(empty_data))
@@ -216,7 +216,7 @@ using OrderedCollections
         # Create test epoch data
         epoch1 = DataFrame(time = [0.1, 0.2], sample = [1, 2], Fz = [1.0, 2.0], Cz = [3.0, 4.0])
         epoch2 = DataFrame(time = [0.1, 0.2], sample = [1, 2], Fz = [5.0, 6.0], Cz = [7.0, 8.0])
-        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
         analysis_info = EegFun.AnalysisInfo()
         epoch_data = EegFun.EpochData("test_data", 1, "condition_1", [epoch1, epoch2], layout, 250, analysis_info)
 
@@ -295,7 +295,7 @@ using OrderedCollections
     @testset "Helper functions" begin
         # Create test data
         df = DataFrame(time = [0.1, 0.2, 0.3], sample = [1, 2, 3], Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0], vEOG = [0.1, 0.2, 0.3])
-        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
         analysis_info = EegFun.AnalysisInfo()
         continuous_data = EegFun.ContinuousData("test_data", df, layout, 250, analysis_info)
 
@@ -398,7 +398,7 @@ using OrderedCollections
         # Create test epoch data
         epoch1 = DataFrame(time = [0.1, 0.2], sample = [1, 2], Fz = [1.0, 2.0], Cz = [3.0, 4.0])
         epoch2 = DataFrame(time = [0.1, 0.2], sample = [1, 2], Fz = [5.0, 6.0], Cz = [7.0, 8.0])
-        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
         analysis_info = EegFun.AnalysisInfo()
         epoch_data = EegFun.EpochData("test_data", 1, "condition_1", [epoch1, epoch2], layout, 250, analysis_info)
 
@@ -419,7 +419,7 @@ using OrderedCollections
     @testset "Channel renaming" begin
         # Create test data
         df = DataFrame(time = [0.1, 0.2, 0.3], sample = [1, 2, 3], Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0])
-        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
         analysis_info = EegFun.AnalysisInfo()
         continuous_data = EegFun.ContinuousData("test_data", df, layout, 250, analysis_info)
 
@@ -435,7 +435,7 @@ using OrderedCollections
 
         # Test rename_channel (copy)
         df2 = DataFrame(time = [0.1, 0.2, 0.3], sample = [1, 2, 3], Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0])
-        layout2 = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        layout2 = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
         continuous_data2 = EegFun.ContinuousData("test_data", df2, layout2, 250, analysis_info)
 
         renamed_data = EegFun.rename_channel(continuous_data2, rename_dict)
@@ -505,7 +505,7 @@ using OrderedCollections
             Cz = [6.0, 7.0, 8.0, 9.0, 10.0],
             vEOG = [0.1, 0.2, 0.3, 0.4, 0.5],
         )
-        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
         analysis_info = EegFun.AnalysisInfo()
         continuous_data = EegFun.ContinuousData("test_data", df, layout, 250, analysis_info)
 
@@ -539,7 +539,7 @@ using OrderedCollections
     @testset "Y-limits functions" begin
         # Create test ERP data
         df = DataFrame(time = [0.1, 0.2, 0.3], sample = [1, 2, 3], Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0])
-        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
         analysis_info = EegFun.AnalysisInfo()
         erp_data = EegFun.ErpData("test_data", 1, "condition_1", df, layout, 250, analysis_info, 5)
 

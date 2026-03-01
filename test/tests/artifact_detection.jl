@@ -131,8 +131,8 @@ using EegFun
         @test size(count_df, 1) == 2  # 2 channels
 
         # Test that channel Ch2 has more extreme values than Ch1
-        Ch1_count = count_df[count_df.channel .== :Ch1, :n_extreme][1]
-        Ch2_count = count_df[count_df.channel .== :Ch2, :n_extreme][1]
+        Ch1_count = count_df[count_df.channel.==:Ch1, :n_extreme][1]
+        Ch2_count = count_df[count_df.channel.==:Ch2, :n_extreme][1]
         @test Ch2_count > Ch1_count
 
         # Test with channel selection (separate mode)
@@ -244,7 +244,7 @@ using EegFun
 
         # Update layout to include EOG channels
         layout_df = DataFrame(label = [:Ch1, :Ch2, :vEOG, :hEOG], inc = [0.0, 0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0, 0.0])
-        dat.layout = EegFun.Layout(layout_df, nothing, nothing)
+        dat.layout = EegFun.Layout(layout_df, nothing, nothing, nothing)
 
         eog_cfg = Dict(
             "vEOG_criterion" => 50.0,
@@ -334,7 +334,7 @@ using EegFun
         r2 = EegFun.Rejection(:Ch2, 2)
         r3 = EegFun.Rejection(:Ch1, 1)  # Duplicate
 
-        @test r1.label == :Ch1
+        @test r1.channel == :Ch1
         @test r1.epoch == 1
 
         # Test is_equal_rejection
@@ -509,7 +509,7 @@ using EegFun
             :Ch4 => EegFun.Neighbours([:Ch2], [1.0], [1.0]),
         )
 
-        layout = EegFun.Layout(layout_df, neighbours_dict, nothing)
+        layout = EegFun.Layout(layout_df, neighbours_dict, nothing, nothing)
 
         # Create epochs with layout
         epochs = EegFun.create_test_epoch_data(n_epochs = 5, n_channels = 4)
@@ -551,7 +551,7 @@ using EegFun
             :Ch3 => EegFun.Neighbours([:Ch1, :Ch2], [1.0, 1.0], [0.5, 0.5]),
         )
 
-        layout = EegFun.Layout(layout_df, neighbours_dict, nothing)
+        layout = EegFun.Layout(layout_df, neighbours_dict, nothing, nothing)
 
         # Create epochs with artifacts
         epochs = EegFun.create_test_epoch_data(n_epochs = 5, n_channels = 3)
@@ -746,7 +746,7 @@ using EegFun
         neighbours_dict =
             OrderedDict(:Ch1 => EegFun.Neighbours(Symbol[], Float64[], Float64[]), :Ch2 => EegFun.Neighbours([:Ch1], [1.0], [1.0]))
 
-        layout = EegFun.Layout(layout_df, neighbours_dict, nothing)
+        layout = EegFun.Layout(layout_df, neighbours_dict, nothing, nothing)
 
         epochs = EegFun.create_test_epoch_data(n_epochs = 3, n_channels = 2)
         epochs.layout = layout
@@ -883,8 +883,8 @@ using EegFun
         @test size(count_df, 1) == 2  # 2 channels
 
         # Ch1 should have 0 steps, Ch2 should have some
-        Ch1_count = count_df[count_df.channel .== :Ch1, :n_step][1]
-        Ch2_count = count_df[count_df.channel .== :Ch2, :n_step][1]
+        Ch1_count = count_df[count_df.channel.==:Ch1, :n_step][1]
+        Ch2_count = count_df[count_df.channel.==:Ch2, :n_step][1]
         @test Ch1_count == 0
         @test Ch2_count > 0
 

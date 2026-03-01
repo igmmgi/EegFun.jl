@@ -6,7 +6,7 @@ using EegFun
 dat = EegFun.read_data("./resources/data/julia/erps/example1_erps_good.jld2")
 
 # Mean amplitude
-EegFun.plot_erp_measurements(dat, "mean_amplitude", analysis_interval = (0.3, 0.5), baseline_interval = (-0.2, 0.0))
+# EegFun.plot_erp_measurements(dat, "mean_amplitude", analysis_interval = (0.3, 0.5), baseline_interval = (-0.2, 0.0)) # not really useful as too crowded!
 
 # Peak latency with specific channels
 EegFun.plot_erp_measurements(

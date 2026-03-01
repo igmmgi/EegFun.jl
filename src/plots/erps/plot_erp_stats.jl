@@ -12,6 +12,8 @@ Plotting functions for statistical test results (analytic and permutation tests)
                     plot_tvalues::Bool = false,
                     plot_significance::Bool = false,
                     plot_critical_t::Bool = false,
+                    plot_se::Bool = false,
+                    colors::Vector = [:blue, :red, :black, :purple],
                     difference_offset::Real = 0.0,
                     significance_position::Union{Symbol, Real} = :auto,
                     significance_color = (:gray, 0.6),
@@ -35,6 +37,7 @@ Works with both `AnalyticResult` (from `analytic_test`) and `PermutationResult` 
 - `plot_significance::Bool`: Whether to highlight significant time points (default: false)
 - `plot_critical_t::Bool`: Whether to plot critical t-values (default: false). Only relevant when `plot_tvalues=true`
 - `difference_offset::Real`: Vertical offset for difference wave (default: 0.0). Set to non-zero to shift for visibility
+- `plot_se::Bool`: Whether to plot ±1 SEM bands around waveforms (default: false). Bands are drawn around condition ERPs and difference wave
 - `significance_position::Union{Symbol, Real}`: Position for significance bars (default: `:auto`). Options:
   - `:auto` - Automatically place at y=0 if visible, otherwise at bottom (default)
   - `:zero` - Always place at y=0
@@ -71,6 +74,7 @@ function plot_erp_stats(
     plot_tvalues::Bool = false,
     plot_significance::Bool = false,
     plot_critical_t::Bool = false,
+    plot_se::Bool = false,
     difference_offset::Real = 0.0,
     significance_position::Union{Symbol,Real} = :auto,
     significance_color = (:gray, 0.6),
@@ -87,6 +91,19 @@ function plot_erp_stats(
     # Prepare kwargs (reuse PLOT_ERP_KWARGS, override stats-specific defaults)
     plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs)
     plot_kwargs[:figure_title] = get(kwargs, :figure_title, "ERP Stats")
+
+    # Compute colors for stats plot elements: [cond1, cond2, difference, t-values]
+    default_stats_colors = [:blue, :red, :black, :purple]
+    user_color = plot_kwargs[:color]
+    stats_colors = if user_color isa Vector
+        # Pad with defaults if user provides fewer than 4
+        [i <= length(user_color) ? user_color[i] : default_stats_colors[i] for i = 1:4]
+    elseif haskey(kwargs, :color)
+        # User provided a single color — use it for both conditions
+        [user_color, user_color, :black, :purple]
+    else
+        default_stats_colors
+    end
 
     # Determine selected channels from result electrodes
     all_electrodes = result.electrodes
@@ -151,6 +168,8 @@ function plot_erp_stats(
                 plot_tvalues = plot_tvalues,
                 plot_significance = plot_significance,
                 plot_critical_t = plot_critical_t,
+                plot_se = plot_se,
+                colors = stats_colors,
                 difference_offset = difference_offset,
                 significance_position = significance_position,
                 significance_color = significance_color,
@@ -209,6 +228,8 @@ function _plot_erp_stats_channel!(
     plot_tvalues::Bool = false,
     plot_significance::Bool = false,
     plot_critical_t::Bool = false,
+    plot_se::Bool = false,
+    colors::Vector = [:blue, :red, :black, :purple],
     difference_offset::Real = 0.0,
     significance_position::Union{Symbol,Real} = :auto,
     significance_color = (:gray, 0.6),
@@ -239,12 +260,20 @@ function _plot_erp_stats_channel!(
         end
     end
 
-    # Plot condition averages (ERP waveforms)
+    # Plot condition averages (ERP waveforms) with optional SE bands
     if plot_erp
         cond_A_name = result.data[1].condition_name
         cond_B_name = result.data[2].condition_name
-        lines!(ax, erp_time_points, cond_A_avg, color = :blue, linewidth = linewidth, label = cond_A_name)
-        lines!(ax, erp_time_points, cond_B_avg, color = :red, linewidth = linewidth, label = cond_B_name)
+        lines!(ax, erp_time_points, cond_A_avg, color = colors[1], linewidth = linewidth, label = cond_A_name)
+        lines!(ax, erp_time_points, cond_B_avg, color = colors[2], linewidth = linewidth, label = cond_B_name)
+
+        # SE bands around individual condition ERPs (full display interval)
+        if plot_se
+            se_A = result.se_cond1[channel_idx, :]
+            se_B = result.se_cond2[channel_idx, :]
+            band!(ax, erp_time_points, cond_A_avg .- se_A, cond_A_avg .+ se_A, color = (colors[1], 0.15))
+            band!(ax, erp_time_points, cond_B_avg .- se_B, cond_B_avg .+ se_B, color = (colors[2], 0.15))
+        end
     end
 
     # Compute difference wave only when needed
@@ -275,12 +304,25 @@ function _plot_erp_stats_channel!(
             diff_label = "Difference"
         end
 
-        lines!(ax, erp_time_points, diff_wave_plot, color = :black, linewidth = linewidth, label = diff_label)
+        lines!(ax, erp_time_points, diff_wave_plot, color = colors[3], linewidth = linewidth, label = diff_label)
+
+        # SE band around difference wave (full display interval)
+        if plot_se
+            se_diff_channel = result.se_diff[channel_idx, :]
+            band!(
+                ax,
+                erp_time_points,
+                diff_wave_plot .- se_diff_channel,
+                diff_wave_plot .+ se_diff_channel,
+                color = (colors[3], 0.15),
+                label = "±1 SEM",
+            )
+        end
     end
 
     # Plot t-values (if requested)
     if plot_tvalues
-        lines!(ax, time_points, t_values, color = :purple, linewidth = linewidth, label = "t-statistic")
+        lines!(ax, time_points, t_values, color = colors[4], linewidth = linewidth, label = "t-statistic")
     end
 
     # Show significance regions as bars

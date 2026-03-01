@@ -144,11 +144,11 @@ using JLD2
         fi = EegFun.create_highpass_filter(1.0, fs)
         fig, axes = EegFun.plot_filter_response(fi; xscale = :linear, display_plot = false)
         @test fig isa Figure
-        @test length(axes) == 3
+        @test length(axes) == 2
         # log scale path
         fig2, axes2 = EegFun.plot_filter_response(fi; xscale = :log, display_plot = false)
         @test fig2 isa Figure
-        @test length(axes2) == 3
+        @test length(axes2) == 2
     end
 
 end

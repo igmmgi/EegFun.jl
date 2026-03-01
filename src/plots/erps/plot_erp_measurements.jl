@@ -68,7 +68,7 @@ function plot_erp_measurements(
         files = _find_batch_files(filepath, input_dir, participant_selection)
         isempty(files) && @minimal_error "No files matching pattern '$filepath' in $input_dir"
 
-        results = []
+        results = NamedTuple[]
         for file in sort(files, by = _natural_sort_key)
             file_path = joinpath(input_dir, file)
             @info "Plotting: $file"
@@ -136,17 +136,26 @@ function plot_erp_measurements(
     measurement_kwargs = Dict{Symbol,Any}(k => v[1] for (k, v) in ERP_MEASUREMENTS_KWARGS)
 
     # Compute measurements and overlay for each dataset/channel
+    # Pre-compute baseline-corrected data per dataset (avoid redundant copies per channel)
+    baseline_cache = Dict{Int,Tuple{ErpData,Vector{Float64}}}()
+    for (idx, dataset) in enumerate(erp_datasets)
+        erp_data = baseline(dataset, baseline_interval)
+        time_data = time(erp_data)
+        baseline_cache[idx] = (erp_data, time_data)
+    end
+
     if layout == :single
-        for (dataset_idx, dataset) in enumerate(erp_datasets)
+        for dataset_idx in eachindex(erp_datasets)
+            erp_data, time_data = baseline_cache[dataset_idx]
             for channel in selected_channels
                 plot_line = get(plot_lines[1], (dataset_idx, channel), nothing)
                 _compute_and_overlay!(
                     axes[1],
-                    dataset,
+                    erp_data,
+                    time_data,
                     channel,
                     analysis_type,
                     analysis_interval,
-                    baseline_interval,
                     measurement_kwargs,
                     plot_line,
                 )
@@ -156,15 +165,16 @@ function plot_erp_measurements(
         # One channel per axis (grid or topo layout)
         for (ax_idx, channel) in enumerate(selected_channels)
             if ax_idx <= length(axes)
-                for (dataset_idx, dataset) in enumerate(erp_datasets)
+                for dataset_idx in eachindex(erp_datasets)
+                    erp_data, time_data = baseline_cache[dataset_idx]
                     plot_line = get(plot_lines[ax_idx], (dataset_idx, channel), nothing)
                     _compute_and_overlay!(
                         axes[ax_idx],
-                        dataset,
+                        erp_data,
+                        time_data,
                         channel,
                         analysis_type,
                         analysis_interval,
-                        baseline_interval,
                         measurement_kwargs,
                         plot_line,
                     )
@@ -184,9 +194,9 @@ function _build_plot_line_lookup(line_refs, axes)
         return plot_lines
     end
     for (ax_idx, ax_line_refs) in enumerate(line_refs)
-        if ax_idx <= length(plot_lines) && ax_line_refs |> !isnothing
+        if ax_idx <= length(plot_lines) && !isnothing(ax_line_refs)
             for (dataset_idx, channel_lines) in ax_line_refs
-                if channel_lines |> !isnothing
+                if !isnothing(channel_lines)
                     for (channel, line_data) in channel_lines
                         if line_data isa Tuple && length(line_data) >= 1
                             plot_lines[ax_idx][(dataset_idx, channel)] = line_data[1]
@@ -201,22 +211,19 @@ end
 
 
 """
-Compute measurement for a single dataset/channel and draw overlay markers.
-Combines computation and visualization in one pass — no intermediate DataFrame needed.
+Compute measurement for a single channel and draw overlay markers.
+Uses pre-computed baseline-corrected data to avoid redundant copies.
 """
 function _compute_and_overlay!(
     ax::Axis,
-    dataset::ErpData,
+    erp_data::ErpData,
+    time_data::Vector{Float64},
     channel::Symbol,
     analysis_type::String,
     analysis_interval::Tuple{Real,Real},
-    baseline_interval::Union{Tuple{Real,Real},Nothing},
     measurement_kwargs::Dict{Symbol,Any},
     plot_line,
 )
-    # Get baseline-corrected data
-    erp_data = baseline(dataset, baseline_interval)
-    time_data = time(erp_data)
     channel_data = erp_data.data[!, channel]
 
     # Get analysis interval mask
@@ -298,7 +305,7 @@ function _draw_measurement_overlay!(
         # Value is latency; draw vline there
         latency = value
         if time_min <= latency <= time_max
-            latency_idx = argmin(abs.(time_data .- latency))
+            latency_idx = searchsortedfirst(time_data, latency)
             latency_amp = channel_data[latency_idx]
 
             vlines!(ax, latency, color = marker_color, linewidth = 2, linestyle = :solid, visible = marker_visible)
@@ -342,17 +349,8 @@ function _draw_measurement_overlay!(
         y_min, y_max = extrema(selected_data)
         concrete_color = marker_color isa Observable ? marker_color[] : marker_color
         rect = [Point2f(time_min, y_min), Point2f(time_max, y_min), Point2f(time_max, y_max), Point2f(time_min, y_max)]
-        poly!(ax, rect, color = concrete_color, alpha = 0.3, strokewidth = 0, visible = marker_visible)
-        hlines!(
-            ax,
-            value,
-            xmin = time_min,
-            xmax = time_max,
-            color = concrete_color,
-            linewidth = 2,
-            linestyle = :dash,
-            visible = marker_visible,
-        )
+        poly!(ax, rect, color = (concrete_color, 0.3), strokewidth = 0, visible = marker_visible)
+        lines!(ax, [time_min, time_max], [value, value], color = concrete_color, linewidth = 2, linestyle = :dash, visible = marker_visible)
         text!(
             ax,
             (time_min + time_max) / 2,
@@ -369,7 +367,7 @@ function _draw_measurement_overlay!(
         y_min, y_max = extrema(selected_data)
         concrete_color = marker_color isa Observable ? marker_color[] : marker_color
         rect = [Point2f(time_min, y_min), Point2f(time_max, y_min), Point2f(time_max, y_max), Point2f(time_min, y_max)]
-        poly!(ax, rect, color = concrete_color, alpha = 0.15, strokewidth = 0, visible = marker_visible)
+        poly!(ax, rect, color = (concrete_color, 0.15), strokewidth = 0, visible = marker_visible)
         text!(
             ax,
             (time_min + time_max) / 2,
@@ -385,7 +383,7 @@ function _draw_measurement_overlay!(
         latency = value
         if time_min <= latency <= time_max
             vlines!(ax, latency, color = marker_color, linewidth = 2, linestyle = :solid, visible = marker_visible)
-            latency_idx = argmin(abs.(time_data .- latency))
+            latency_idx = searchsortedfirst(time_data, latency)
             latency_amp = channel_data[latency_idx]
             text!(
                 ax,
@@ -403,7 +401,7 @@ function _draw_measurement_overlay!(
         latency = value
         if time_min <= latency <= time_max
             vlines!(ax, latency, color = marker_color, linewidth = 2, linestyle = :solid, visible = marker_visible)
-            latency_idx = argmin(abs.(time_data .- latency))
+            latency_idx = searchsortedfirst(time_data, latency)
             latency_amp = channel_data[latency_idx]
             text!(
                 ax,

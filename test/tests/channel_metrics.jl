@@ -494,7 +494,7 @@ using OrderedCollections
             :Ch5 => EegFun.Neighbours([:Ch4], [1.0], [1.0]),  # Only 1 neighbor (not enough)
         )
 
-        layout = EegFun.Layout(layout_df, neighbours, nothing)  # data, neighbours, criterion
+        layout = EegFun.Layout(layout_df, neighbours, nothing, nothing)  # data, neighbours, criterion
 
         # Test with bad channels that have all good neighbors
         # Ch1 and Ch3 are neighbors of each other, so we can't test them together
@@ -524,14 +524,14 @@ using OrderedCollections
         @test isempty(repairable)
 
         # Test with channel that has no neighbors defined
-        layout_no_neighbors = EegFun.Layout(layout_df, nothing, nothing)
+        layout_no_neighbors = EegFun.Layout(layout_df, nothing, nothing, nothing)
         bad_channels = [:Ch1]
         repairable = EegFun.check_channel_neighbors(bad_channels, layout_no_neighbors)
         @test isempty(repairable)
 
         # Test with channel not in neighbors dict
         neighbours_partial = OrderedDict(:Ch2 => EegFun.Neighbours([:Ch1], [1.0], [1.0]))
-        layout_partial = EegFun.Layout(layout_df, neighbours_partial, nothing)
+        layout_partial = EegFun.Layout(layout_df, neighbours_partial, nothing, nothing)
         bad_channels = [:Ch3]
         repairable = EegFun.check_channel_neighbors(bad_channels, layout_partial)
         @test isempty(repairable)  # Ch3 not in neighbours dict

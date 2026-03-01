@@ -125,7 +125,7 @@ using Makie
         @testset "missing triggers column" begin
             # Create ContinuousData without triggers column
             df = DataFrame(time = [0.0, 0.1, 0.2], channel = [1.0, 2.0, 3.0])
-            layout = EegFun.Layout(DataFrame(label = [:channel], inc = [0.0], azi = [0.0]), nothing, nothing)
+            layout = EegFun.Layout(DataFrame(label = [:channel], inc = [0.0], azi = [0.0]), nothing, nothing, nothing)
             dat = EegFun.ContinuousData("test_data", df, layout, 100, EegFun.AnalysisInfo())
 
             # Should throw since @minimal_error now throws

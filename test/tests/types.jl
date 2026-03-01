@@ -45,7 +45,7 @@ using OrderedCollections
         df = DataFrame(label = [:Fz, :Cz, :Pz], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0])
 
         # Test constructor
-        layout = EegFun.Layout(df, nothing, nothing)
+        layout = EegFun.Layout(df, nothing, nothing, nothing)
         @test layout.data == df
         @test isnothing(layout.neighbours)
         @test isnothing(layout.criterion)
@@ -57,7 +57,7 @@ using OrderedCollections
         # Test with neighbours
         neighbours_dict = OrderedDict{Symbol,EegFun.Neighbours}()
         neighbours_dict[:Fz] = EegFun.Neighbours([:Cz], [10.0], [1.0])
-        layout_with_neighbours = EegFun.Layout(df, neighbours_dict, 50.0)
+        layout_with_neighbours = EegFun.Layout(df, neighbours_dict, 50.0, nothing)
         @test layout_with_neighbours.neighbours == neighbours_dict
         @test layout_with_neighbours.criterion == 50.0
     end
@@ -67,7 +67,7 @@ using OrderedCollections
         df = DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0])
         neighbours_dict = OrderedDict{Symbol,EegFun.Neighbours}()
         neighbours_dict[:Fz] = EegFun.Neighbours([:Cz], [10.0], [1.0])
-        layout = EegFun.Layout(df, neighbours_dict, 50.0)
+        layout = EegFun.Layout(df, neighbours_dict, 50.0, nothing)
 
         # Test copy
         copied = copy(layout)
@@ -83,7 +83,7 @@ using OrderedCollections
     @testset "ContinuousData" begin
         # Create test data
         df = DataFrame(time = [0.1, 0.2, 0.3], Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0])
-        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
         analysis_info = EegFun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
 
         # Test constructor
@@ -101,7 +101,7 @@ using OrderedCollections
     @testset "ErpData" begin
         # Create test data
         df = DataFrame(time = [0.1, 0.2, 0.3], Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0])
-        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
         analysis_info = EegFun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
 
         # Test constructor
@@ -121,7 +121,7 @@ using OrderedCollections
         # Create test data
         epoch1 = DataFrame(time = [0.1, 0.2], Fz = [1.0, 2.0], Cz = [3.0, 4.0])
         epoch2 = DataFrame(time = [0.1, 0.2], Fz = [5.0, 6.0], Cz = [7.0, 8.0])
-        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
         analysis_info = EegFun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
 
         # Test constructor
@@ -233,7 +233,7 @@ using OrderedCollections
         ica_label = [:IC1, :IC2]
         removed_activations = OrderedDict{Int,Matrix{Float64}}()
         removed_activations[1] = [1.0 2.0; 3.0 4.0]
-        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
 
         # Test constructor
         is_sub_gaussian = falses(2)  # All super-Gaussian for test (all false)
@@ -270,7 +270,7 @@ using OrderedCollections
     @testset "Display functions" begin
         # Test Layout display
         df = DataFrame(label = [:Fz, :Cz, :Pz], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0])
-        layout = EegFun.Layout(df, nothing, nothing)
+        layout = EegFun.Layout(df, nothing, nothing, nothing)
 
         # Test that show doesn't throw errors
         @test_nowarn show(stdout, layout)
@@ -319,7 +319,7 @@ using OrderedCollections
         ica_label = [:IC1, :IC2]
         removed_activations = OrderedDict{Int,Matrix{Float64}}()
         removed_activations[1] = [1.0 2.0; 3.0 4.0]
-        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
         ica_info = EegFun.InfoIca(
             "test_file.bdf",
             unmixing,
@@ -353,7 +353,7 @@ using OrderedCollections
     @testset "Filename functions" begin
         # Test filename function for SingleDataFrameEeg
         df = DataFrame(time = [0.1, 0.2], Fz = [1.0, 2.0])
-        layout = EegFun.Layout(DataFrame(label = [:Fz], inc = [0.0], azi = [0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:Fz], inc = [0.0], azi = [0.0]), nothing, nothing, nothing)
         analysis_info = EegFun.AnalysisInfo()
         continuous_data = EegFun.ContinuousData("test_file.jld2", df, layout, 250, analysis_info)
 

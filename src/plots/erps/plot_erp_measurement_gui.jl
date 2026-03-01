@@ -21,18 +21,18 @@ Useful for:
 # Interactive Controls
 - **Channel Menu**: Switch between channels
 - **Analysis Type Menu**: Select from all 13 measurement types
-- **Analsis Interval Sliders**: Adjust start/end times (thin blue band around y=0)
+- **Analysis Interval Sliders**: Adjust start/end times (thin blue band around y=0)
 - **Baseline Interval Sliders**: Adjust baseline interval (thin gray band around y=0)
 - **Show Result Markers**: Toggle visualization of measurement results
 
 # Examples
 ```julia
 # Single condition
-erp = load_erp("participant_1.jld2")[1]
+erp = read_data("participant_1.jld2")
 plot_erp_measurement_gui(erp)
 
 # Multiple conditions overlaid
-erps = load_erp("grand_average.jld2")
+erps = read_data("grand_average.jld2")
 plot_erp_measurement_gui(erps, channel = :Cz)
 
 # With initial settings for teaching
@@ -64,6 +64,7 @@ function plot_erp_measurement_gui(
     analysis_type::String = "mean_amplitude",
     analysis_interval::Union{Tuple{Real,Real},Nothing} = nothing,
     baseline_interval::Union{Tuple{Real,Real},Nothing} = nothing,
+    display_plot::Bool = true,
 )
 
     # Get available channels from first ERP
@@ -163,31 +164,37 @@ function plot_erp_measurement_gui(
     # Create axis in plot area
     ax = Axis(plot_area_grid[1, 1], xlabel = "Time (s)", ylabel = "μV", title = "ERP: $(initial_channel)")
 
-    # Define visualization helpers (need ax to be defined first)
-    function _draw_interval_band!(plots_list, interval, color)
+    # ===== INTERVAL BAND VISUALIZATION (thin band near y=0 + edge vlines for dragging) =====
+
+    # Observables for band plot objects (recreated on each update_erp_plot!)
+    analysis_band_plots = AbstractPlot[]
+    baseline_band_plots = AbstractPlot[]
+
+    function _draw_interval_band!(plots_list, interval, band_color, edge_color)
         for p in plots_list
             delete!(ax, p)
         end
         empty!(plots_list)
+        # Thin band near y=0 (original style)
         lims = ax.finallimits[]
         yrange = lims.widths[2]
         band_height = 0.01 * yrange
-        p = poly!(
+        p_band = poly!(
             ax,
             Point2f[(interval[1], -band_height), (interval[2], -band_height), (interval[2], band_height), (interval[1], band_height)],
-            color = color,
+            color = (band_color, 0.3),
         )
-        push!(plots_list, p)
+        # Subtle edge lines for drag interaction
+        p_left = vlines!(ax, interval[1], color = (edge_color, 0.2), linewidth = 1, linestyle = :dash)
+        p_right = vlines!(ax, interval[2], color = (edge_color, 0.2), linewidth = 1, linestyle = :dash)
+        push!(plots_list, p_band, p_left, p_right)
     end
 
-    analysis_vspan_plots = []
-    update_analysis_interval!(mw) = _draw_interval_band!(analysis_vspan_plots, mw, (:blue, 0.3))
-
-    baseline_vspan_plots = []
-    update_baseline_interval!(bw, enabled) = enabled && _draw_interval_band!(baseline_vspan_plots, bw, (:gray, 0.3))
+    update_analysis_band!(mw) = _draw_interval_band!(analysis_band_plots, mw, :blue, :blue)
+    update_baseline_band!(bw) = _draw_interval_band!(baseline_band_plots, bw, :gray, :gray)
 
     # Result markers visualization (vertical for latencies, horizontal for amplitudes)
-    marker_plots = []
+    marker_plots = AbstractPlot[]
     function update_result_markers!(results, show)
         # Clear existing markers
         for p in marker_plots
@@ -234,9 +241,9 @@ function plot_erp_measurement_gui(
             legend_position = :rt,
         )
 
-        # Redraw vspan overlays (empty! cleared them)
-        update_analysis_interval!(analysis_interval_obs[])
-        update_baseline_interval!(baseline_interval_obs[], true)  # Always enabled
+        # Redraw band overlays (empty! cleared them)
+        update_analysis_band!(analysis_interval_obs[])
+        update_baseline_band!(baseline_interval_obs[])
         _set_window_title("ERP Measurement Tool")
 
     end
@@ -253,13 +260,144 @@ function plot_erp_measurement_gui(
         Legend(plot_area_grid[1, 2], line_elements[1:length(erp_vec)], labels, halign = :right, valign = :top)
     end
 
+    # ===== DRAG STATE FOR INTERACTIVE EDGE/BAND DRAGGING =====
+    # Targets: :none, :analysis_left, :analysis_right, :analysis_middle, :baseline_left, :baseline_right, :baseline_middle
+    drag_target = Observable{Symbol}(:none)
+    drag_suppress_slider = Ref(false)  # prevent feedback loops during drag
+    drag_offset = Ref(0.0)  # offset from mouse to interval start (for middle drag)
+
+    # Hit detection: find which drag target (if any) is at the mouse x position
+    function _find_drag_target(mouse_x)
+        time_range = time_max - time_min
+        tolerance = 0.02 * time_range  # 2% of time range
+
+        ai = analysis_interval_obs[]
+        bi = baseline_interval_obs[]
+
+        # Edge detection first (higher priority than middle)
+        if abs(mouse_x - ai[1]) < tolerance
+            return :analysis_left
+        elseif abs(mouse_x - ai[2]) < tolerance
+            return :analysis_right
+        elseif abs(mouse_x - bi[1]) < tolerance
+            return :baseline_left
+        elseif abs(mouse_x - bi[2]) < tolerance
+            return :baseline_right
+        end
+
+        # Middle detection: click inside the band (analysis has priority)
+        if ai[1] < mouse_x < ai[2]
+            return :analysis_middle
+        elseif bi[1] < mouse_x < bi[2]
+            return :baseline_middle
+        end
+
+        return :none
+    end
+
+    # Mouse press: start dragging if on an edge or inside a band
+    on(events(ax).mousebutton, priority = 100) do event
+        if event.button == Mouse.left && event.action == Mouse.press
+            # Check if mouse is over the axis
+            mouse_pos = events(fig).mouseposition[]
+            area = ax.scene.viewport[]
+            if !(
+                area.origin[1] <= mouse_pos[1] <= area.origin[1] + area.widths[1] &&
+                area.origin[2] <= mouse_pos[2] <= area.origin[2] + area.widths[2]
+            )
+                return Consume(false)
+            end
+
+            world_x = mouseposition(ax)[1]
+            target = _find_drag_target(world_x)
+            if target != :none
+                drag_target[] = target
+                # For middle drag, store offset from mouse to interval left edge
+                if target == :analysis_middle
+                    drag_offset[] = world_x - analysis_interval_obs[][1]
+                elseif target == :baseline_middle
+                    drag_offset[] = world_x - baseline_interval_obs[][1]
+                end
+                return Consume(true)  # consume to prevent axis pan
+            end
+        elseif event.button == Mouse.left && event.action == Mouse.release
+            if drag_target[] != :none
+                drag_target[] = :none
+                return Consume(true)
+            end
+        end
+        return Consume(false)
+    end
+
+    # Mouse move: update position during drag
+    on(events(fig).mouseposition) do _
+        if drag_target[] == :none
+            return
+        end
+
+        world_x = mouseposition(ax)[1]
+        world_x = clamp(world_x, time_min, time_max)
+
+        target = drag_target[]
+        drag_suppress_slider[] = true
+
+        if target == :analysis_left
+            ai = analysis_interval_obs[]
+            new_left = min(world_x, ai[2] - 0.005)
+            analysis_interval_obs[] = (new_left, ai[2])
+            set_close_to!(meas_window_slider, new_left, ai[2])
+            meas_window_label.text = @sprintf("%.3f s - %.3f s", new_left, ai[2])
+        elseif target == :analysis_right
+            ai = analysis_interval_obs[]
+            new_right = max(world_x, ai[1] + 0.005)
+            analysis_interval_obs[] = (ai[1], new_right)
+            set_close_to!(meas_window_slider, ai[1], new_right)
+            meas_window_label.text = @sprintf("%.3f s - %.3f s", ai[1], new_right)
+        elseif target == :analysis_middle
+            ai = analysis_interval_obs[]
+            width = ai[2] - ai[1]
+            new_left = world_x - drag_offset[]
+            new_left = clamp(new_left, time_min, time_max - width)
+            new_right = new_left + width
+            analysis_interval_obs[] = (new_left, new_right)
+            set_close_to!(meas_window_slider, new_left, new_right)
+            meas_window_label.text = @sprintf("%.3f s - %.3f s", new_left, new_right)
+        elseif target == :baseline_left
+            bi = baseline_interval_obs[]
+            new_left = min(world_x, bi[2] - 0.005)
+            baseline_interval_obs[] = (new_left, bi[2])
+            set_close_to!(baseline_interval_slider, new_left, bi[2])
+            baseline_interval_label.text = @sprintf("%.3f s - %.3f s", new_left, bi[2])
+            update_erp_plot!()
+        elseif target == :baseline_right
+            bi = baseline_interval_obs[]
+            new_right = max(world_x, bi[1] + 0.005)
+            baseline_interval_obs[] = (bi[1], new_right)
+            set_close_to!(baseline_interval_slider, bi[1], new_right)
+            baseline_interval_label.text = @sprintf("%.3f s - %.3f s", bi[1], new_right)
+            update_erp_plot!()
+        elseif target == :baseline_middle
+            bi = baseline_interval_obs[]
+            width = bi[2] - bi[1]
+            new_left = world_x - drag_offset[]
+            new_left = clamp(new_left, time_min, time_max - width)
+            new_right = new_left + width
+            baseline_interval_obs[] = (new_left, new_right)
+            set_close_to!(baseline_interval_slider, new_left, new_right)
+            baseline_interval_label.text = @sprintf("%.3f s - %.3f s", new_left, new_right)
+            update_erp_plot!()
+        end
+
+        drag_suppress_slider[] = false
+    end
+
     # Connect menu/slider changes to observables
     on(channel_menu.selection) do ch
         selected_channel[] = ch
         update_erp_plot!()
         ax.title = "$(_print_vector([ch])): $(selected_type[])"
         # Redraw markers after plot update
-        sleep(0.01)
+        yield()
         update_result_markers!(measurement_results[], show_markers_obs[])
     end
 
@@ -271,36 +409,34 @@ function plot_erp_measurement_gui(
     end
 
     on(meas_window_slider.interval) do interval
+        drag_suppress_slider[] && return  # skip if drag is driving this
         analysis_interval_obs[] = (interval[1], interval[2])
         meas_window_label.text = @sprintf("%.3f s - %.3f s", interval[1], interval[2])
     end
 
     on(baseline_interval_slider.interval) do interval
+        drag_suppress_slider[] && return  # skip if drag is driving this
         baseline_interval_obs[] = (interval[1], interval[2])
         baseline_interval_label.text = @sprintf("%.3f s - %.3f s", interval[1], interval[2])
         update_erp_plot!()  # Baseline always enabled, so always update
         # Manually redraw markers after plot clears them
-        sleep(0.01)  # Small delay to let measurement_results update
+        yield()  # Small delay to let measurement_results update
         update_result_markers!(measurement_results[], show_markers_obs[])
     end
 
-    # Initialize visualizations
-    update_analysis_interval!(analysis_interval)
-    update_baseline_interval!(baseline_interval, true)
-
-    # Connect to observables
+    # Connect observables to band visuals
     on(analysis_interval_obs) do mw
-        update_analysis_interval!(mw)
+        update_analysis_band!(mw)
     end
 
     on(baseline_interval_obs) do bw
-        update_baseline_interval!(bw, true)  # Always enabled
+        update_baseline_band!(bw)
     end
 
     # Computed observable for measurement values (one per condition)
     measurement_results = lift(selected_channel, selected_type, analysis_interval_obs, baseline_interval_obs) do ch, type_str, mw, bw
         # Compute for all conditions (baseline always enabled)
-        results = []
+        results = NamedTuple[]
         for erp in erp_vec
             try
                 result = _compute_gui_measurement(erp, ch, type_str, mw, bw)
@@ -320,7 +456,7 @@ function plot_erp_measurement_gui(
         end
 
         # Format based on measurement type
-        format_value = function (val)
+        function format_value(val)
             if isnothing(val) || isnan(val)
                 return "N/A"
             elseif _is_latency_measurement(selected_type[])
@@ -368,7 +504,9 @@ function plot_erp_measurement_gui(
     # Trigger initial result display 
     notify(measurement_results)
 
-    _display_figure(fig)
+    if display_plot
+        _display_figure(fig)
+    end
     return (fig = fig)
 
 end

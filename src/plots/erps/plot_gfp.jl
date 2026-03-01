@@ -103,7 +103,7 @@ function plot_gfp(filepath::String; input_dir::String = pwd(), participant_selec
         files = _find_batch_files(filepath, input_dir, participant_selection)
         isempty(files) && @minimal_error "No files matching pattern '$filepath' in $input_dir"
 
-        results = []
+        results = NamedTuple[]
         for file in sort(files, by = _natural_sort_key)
             file_path = joinpath(input_dir, file)
             @info "Plotting: $file"
@@ -199,7 +199,7 @@ function plot_gfp(
     ax_gfp = Axis(fig[panel_idx, 1])
 
     # Determine y-label
-    ylabel_gfp = if plot_kwargs[:ylabel] |> !isnothing
+    ylabel_gfp = if !isnothing(plot_kwargs[:ylabel])
         plot_kwargs[:ylabel]
     else
         normalize ? "GFP (%)" : "GFP (μV)"
@@ -356,7 +356,7 @@ function plot_gfp(gfp_data::DataFrame; kwargs...)
 
     # Determine if data is normalized (simple heuristic: check if values are 0-100)
     is_normalized = all(0 .<= gfp_data.gfp .<= 100)
-    ylabel_gfp = if plot_kwargs[:ylabel] |> !isnothing
+    ylabel_gfp = if !isnothing(plot_kwargs[:ylabel])
         plot_kwargs[:ylabel]
     else
         is_normalized ? "GFP (%)" : "GFP (μV)"
@@ -431,10 +431,11 @@ function plot_gfp(gfp_data::DataFrame; kwargs...)
         end
     end
 
-    # Display the plot if requested
+    _set_window_title("GFP")
     if plot_kwargs[:display_plot]
         display(fig)
     end
+    _set_window_title("Makie")
 
     return fig
 end
@@ -486,7 +487,7 @@ function plot_gfp(gfp_data::Vector{DataFrame}; kwargs...)
 
     # Determine if data is normalized (check first dataset)
     is_normalized = all(0 .<= gfp_data[1].gfp .<= 100)
-    ylabel_gfp = if plot_kwargs[:ylabel] |> !isnothing
+    ylabel_gfp = if !isnothing(plot_kwargs[:ylabel])
         plot_kwargs[:ylabel]
     else
         is_normalized ? "GFP (%)" : "GFP (μV)"
@@ -574,10 +575,11 @@ function plot_gfp(gfp_data::Vector{DataFrame}; kwargs...)
         end
     end
 
-    # Display the plot if requested
+    _set_window_title("GFP")
     if plot_kwargs[:display_plot]
         display(fig)
     end
+    _set_window_title("Makie")
 
     return fig
 end

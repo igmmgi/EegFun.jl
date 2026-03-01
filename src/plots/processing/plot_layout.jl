@@ -218,6 +218,7 @@ function plot_layout_2d(
 
     plot_layout_2d!(fig, ax, layout; neighbours = neighbours, correlation_matrix = correlation_matrix, kwargs...)
 
+    _set_window_title("Layout 2D")
     if display_plot
         _display_figure(fig)
     end
@@ -244,8 +245,8 @@ Create a convex hull around a set of 2D points with a specified border size usin
 function _create_convex_hull_graham(xpos::Vector{<:Real}, ypos::Vector{<:Real}, border_size::Real)
     # Generate points around each electrode with the border
     circle_points = 0:(2π/361):2π
-    xs = (border_size .* sin.(circle_points) .+ transpose(xpos))[:]
-    ys = (border_size .* cos.(circle_points) .+ transpose(ypos))[:]
+    xs = (border_size.*sin.(circle_points).+transpose(xpos))[:]
+    ys = (border_size.*cos.(circle_points).+transpose(ypos))[:]
 
     # Convert to array of points
     points = [[xs[i], ys[i]] for i in eachindex(xs)]
@@ -439,7 +440,7 @@ function plot_layout_3d!(fig::Figure, ax::Axis3, layout::Layout; neighbours::Boo
     hidedecorations!(ax)
     hidespines!(ax)
 
-    return fig, ax
+    return nothing
 end
 
 
@@ -473,6 +474,7 @@ function plot_layout_3d(layout::Layout; neighbours::Bool = false, display_plot::
 
     plot_layout_3d!(fig, ax, layout; neighbours = neighbours, kwargs...)
 
+    _set_window_title("Layout 3D")
     if display_plot
         _display_figure(fig)
     end
@@ -522,7 +524,7 @@ function _add_interactive_points!(
         if haskey(neighbours, Symbol(label))
             for neighbor in neighbours[Symbol(label)].channels
                 neighbor_idx = findfirst(==(neighbor), layout.label)
-                if neighbor_idx |> !isnothing
+                if !isnothing(neighbor_idx)
                     push!(neighbor_indices[i], neighbor_idx)
                 end
             end
@@ -665,7 +667,7 @@ function _add_interactive_correlation_points!(
     new_corr_values = fill(0.0, length(layout.label))
     on(events(fig).mouseposition) do mp
         plt, i = pick(fig)
-        if (plt == p || plt == corr_scatter) && i |> !isnothing
+        if (plt == p || plt == corr_scatter) && !isnothing(i)
 
             # Reset all sizes 
             fill!(new_sizes, base_size)

@@ -1,5 +1,14 @@
 # Note: PLOT_TOPOGRAPHY_KWARGS is defined in plot_ica.jl
 
+"""Format a time range string using the specified time unit (:s or :ms)."""
+function _format_time_range(t_min::Real, t_max::Real, time_unit::Symbol)
+    if time_unit == :ms
+        return @sprintf("%.0f to %.0f ms", t_min * 1000, t_max * 1000)
+    else
+        return @sprintf("%.3f to %.3f s", t_min, t_max)
+    end
+end
+
 ##########################################
 # 2D topographic plot
 ##########################################
@@ -62,7 +71,7 @@ function _render_topo_surface!(
 
     # Compute symmetric ylim if not provided
     if isnothing(ylim)
-        valid_data = data_interp[.!isnan.(data_interp)]
+        valid_data = filter(!isnan, vec(data_interp))
         if !isempty(valid_data)
             data_min, data_max = extrema(valid_data)
             max_abs = max(abs(data_min), abs(data_max))
@@ -123,7 +132,8 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
             ax.title = plot_kwargs[:title] # Use user-provided title
         else # get time from data 
             time_min, time_max = extrema(dat.time)
-            ax.title = @sprintf("%.3f to %.3f s", time_min, time_max)
+            time_unit = get(plot_kwargs, :time_unit, :s)
+            ax.title = _format_time_range(time_min, time_max, time_unit)
         end
         ax.titlesize = plot_kwargs[:title_fontsize]
     end
@@ -181,7 +191,7 @@ function plot_topography(filepath::String; input_dir::String = pwd(), participan
         files = _find_batch_files(filepath, input_dir, participant_selection)
         isempty(files) && @minimal_error "No files matching pattern '$filepath' in $input_dir"
 
-        results = []
+        results = NamedTuple[]
         for file in sort(files, by = _natural_sort_key)
             file_path = joinpath(input_dir, file)
             @info "Plotting: $file"
@@ -195,25 +205,82 @@ function plot_topography(filepath::String; input_dir::String = pwd(), participan
 end
 
 """
-    plot_topography!(fig, ax, dat::SingleDataFrameEeg; kwargs...)
+    plot_topography(dat::SingleDataFrameEeg; n_topo=nothing, kwargs...)
 
-Add a topographic plot to existing figure/axis from single DataFrame EEG data.
+Create a topographic plot from single DataFrame EEG data.
 
 # Arguments
-- `fig`: Figure object
-- `ax`: Axis object
 - `dat`: SingleDataFrameEeg object (ContinuousData or ErpData)
+- `n_topo::Union{Int,Nothing}`: Number of topographic panels to display across the selected
+  time range. If `nothing` (default), a single topo is shown with data averaged over the
+  entire selected interval. If an integer > 1, the time range is divided into `n_topo`
+  equal bins and a grid of topoplots is created.
 - `kwargs...`: Additional keyword arguments
+
+# Examples
+```julia
+# Single topo averaged over 300-500ms
+plot_topography(erp, sample_selection = x -> x.time .>= 0.3 .&& x.time .<= 0.5)
+
+# Grid of 10 topos spanning the full epoch
+plot_topography(erp, sample_selection = x -> x.time .>= -0.2 .&& x.time .<= 0.8, n_topo = 10)
+```
 """
 function plot_topography(
     dat::SingleDataFrameEeg;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     interval_selection::Interval = times(),
+    n_topo::Union{Int,Nothing} = nothing,
     display_plot = true,
     interactive = true,
     kwargs...,
 )
+    # If n_topo is requested, split time range into bins and use the Vector method
+    if !isnothing(n_topo) && n_topo > 1
+        # First apply the user's sample_selection to get the selected time range
+        dat_selected =
+            subset(dat, channel_selection = channel_selection, sample_selection = sample_selection, interval_selection = interval_selection)
+        time_data = time(dat_selected)
+        t_min, t_max = extrema(time_data)
+
+        # Create evenly-spaced bin edges
+        bin_edges = range(t_min, t_max, length = n_topo + 1)
+
+        # Create a vector of datasets — one per time bin
+        bin_datasets = typeof(dat)[]
+        for i = 1:n_topo
+            bin_start = bin_edges[i]
+            bin_stop = bin_edges[i+1]
+            bin_selection = x -> x.time .>= bin_start .&& x.time .<= bin_stop
+            bin_dat = subset(
+                dat,
+                channel_selection = channel_selection,
+                sample_selection = bin_selection,
+                interval_selection = interval_selection,
+            )
+            # Set title to time range label for subplot titles
+            if hasproperty(bin_dat, :condition_name)
+                time_unit_val = get(Dict(kwargs), :time_unit, :s)
+                if time_unit_val == :ms
+                    bin_dat.condition_name = @sprintf("%.0f – %.0f ms", bin_start * 1000, bin_stop * 1000)
+                else
+                    bin_dat.condition_name = @sprintf("%.3f – %.3f s", bin_start, bin_stop)
+                end
+            end
+            push!(bin_datasets, bin_dat)
+        end
+
+        return plot_topography(
+            bin_datasets;
+            channel_selection = channels(),  # already applied above
+            sample_selection = samples(),    # already applied per bin
+            interval_selection = times(),    # already applied per bin
+            display_plot = display_plot,
+            interactive = interactive,
+            kwargs...,
+        )
+    end
 
     _set_window_title(_generate_window_title(dat))
     fig = Figure()
@@ -265,7 +332,7 @@ function plot_topography!(
 end
 
 """
-    plot_topography(dat::Vector{ErpData}; kwargs...)
+    plot_topography(dat::Vector{<:SingleDataFrameEeg}; kwargs...)
 
 Create topographic plots from a vector of ERP datasets by broadcasting across conditions.
 
@@ -292,6 +359,73 @@ function plot_topography(
     user_colorbar_position = get(kwargs_dict, :colorbar_position, nothing)
     colorbar_plot_numbers = get(kwargs_dict, :colorbar_plot_numbers, [])
     dims = get(kwargs_dict, :dims, nothing)
+    n_topo = pop!(kwargs_dict, :n_topo, nothing)
+
+    # If n_topo is requested, expand each dataset into n_topo time bins
+    if !isnothing(n_topo) && n_topo > 1
+        expanded = eltype(dat)[]
+        for dataset in dat
+            dat_selected = subset(
+                dataset,
+                channel_selection = channel_selection,
+                sample_selection = sample_selection,
+                interval_selection = interval_selection,
+            )
+            time_data = time(dat_selected)
+            t_min, t_max = extrema(time_data)
+            bin_edges = range(t_min, t_max, length = n_topo + 1)
+
+            for i = 1:n_topo
+                bin_start = bin_edges[i]
+                bin_stop = bin_edges[i+1]
+                bin_selection = x -> x.time .>= bin_start .&& x.time .<= bin_stop
+                bin_dat = subset(
+                    dataset,
+                    channel_selection = channel_selection,
+                    sample_selection = bin_selection,
+                    interval_selection = interval_selection,
+                )
+                if hasproperty(bin_dat, :condition_name)
+                    cond = bin_dat.condition_name
+                    time_unit = get(kwargs_dict, :time_unit, :s)
+                    if time_unit == :ms
+                        bin_dat.condition_name = @sprintf("%s (%.0f – %.0f ms)", cond, bin_start * 1000, bin_stop * 1000)
+                    else
+                        bin_dat.condition_name = @sprintf("%s (%.3f – %.3f s)", cond, bin_start, bin_stop)
+                    end
+                end
+                push!(expanded, bin_dat)
+            end
+        end
+
+        # Default dims to n_conditions rows × n_topo columns if not specified
+        if isnothing(dims)
+            dims = (n_datasets, n_topo)
+            kwargs_dict[:dims] = dims
+        end
+
+        # Default to no colorbars for n_topo grids unless user explicitly requested them
+        if !haskey(kwargs_dict, :colorbar_plot)
+            # If user specified colorbar_plot_numbers, they want colorbars — remap indices
+            if haskey(kwargs_dict, :colorbar_plot_numbers) && !isempty(kwargs_dict[:colorbar_plot_numbers])
+                # Remap: original condition index i → last bin of that row (i * n_topo)
+                kwargs_dict[:colorbar_plot_numbers] = [i * n_topo for i in kwargs_dict[:colorbar_plot_numbers]]
+            else
+                kwargs_dict[:colorbar_plot] = false
+            end
+        end
+
+        # Recurse with expanded datasets (n_topo already popped)
+        return plot_topography(
+            expanded;
+            channel_selection = channels(),
+            sample_selection = samples(),
+            interval_selection = times(),
+            display_plot = display_plot,
+            interactive = interactive,
+            kwargs_dict...,
+        )
+    end
 
     # Calculate grid dimensions for plots
     if isnothing(dims)
@@ -309,7 +443,7 @@ function plot_topography(
     end
 
     # Determine layout based on colorbar position
-    if colorbar_enabled && user_colorbar_position |> !isnothing
+    if colorbar_enabled && !isnothing(user_colorbar_position)
         # User provided custom colorbar position - use it
         cb_row_offset, cb_col_offset = user_colorbar_position
         # Calculate total grid size needed
@@ -342,7 +476,7 @@ function plot_topography(
         base_row = div(idx - 1, plot_cols) + 1
         base_col = mod1(idx, plot_cols)
 
-        if colorbar_enabled && user_colorbar_position |> !isnothing
+        if colorbar_enabled && !isnothing(user_colorbar_position)
             # User provided custom colorbar position
             cb_row_offset, cb_col_offset = user_colorbar_position
             if cb_row_offset > 1
@@ -574,9 +708,8 @@ function _draw_smooth_circle_mask!(ax::Axis, x_bounds::Tuple, y_bounds::Tuple)
     x_radius = max(abs(x_bounds[1]), abs(x_bounds[2]))
     y_radius = max(abs(y_bounds[1]), abs(y_bounds[2]))
 
-    # Calculate annulus width - scales with plot size but has reasonable min/max
-    avg_radius = (x_radius + y_radius) / 2
-    annulus_width = clamp(avg_radius * 0.05, 0.05, 0.05)
+    # Fixed annulus width for clean edge masking
+    annulus_width = 0.05
 
     # Inner circle at data boundary, outer circle extends outward to cover artifacts
     inner_x = x_radius * 0.97
@@ -1131,7 +1264,7 @@ function _setup_shared_topo_selection!(fig::Figure, datasets::Vector, shared_sel
         # Only update if selection is active and mouse is over any shared axis
         if shared_selection_state.active[]
             active_ax = _find_active_axis(shared_selection_state.axes, pos)
-            if active_ax |> !isnothing
+            if !isnothing(active_ax)
                 _update_topo_selection!(active_ax, shared_selection_state)
             end
         end

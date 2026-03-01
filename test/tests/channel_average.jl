@@ -365,7 +365,7 @@ end
 
             df = DataFrame(time = collect(t), sample = 1:n_samples, condition = fill(1, n_samples), Ch1 = ch1_vals, Ch2 = ch2_vals)
 
-            layout = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+            layout = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
 
             erps = [EegFun.ErpData("test_data", 1, "condition_1", df, layout, fs, EegFun.AnalysisInfo(), 1)]
             jldsave(joinpath(math_dir, "1_erps_math.jld2"); data = erps)
@@ -739,7 +739,7 @@ end
                 df[!, ch] = randn(n_samples)
             end
 
-            layout = EegFun.Layout(DataFrame(label = channel_names, inc = zeros(20), azi = zeros(20)), nothing, nothing)
+            layout = EegFun.Layout(DataFrame(label = channel_names, inc = zeros(20), azi = zeros(20)), nothing, nothing, nothing)
 
             erps = [EegFun.ErpData("test_data", 1, "condition_1", df, layout, fs, EegFun.AnalysisInfo(), 1)]
             jldsave(joinpath(many_ch_dir, "1_erps_many.jld2"); data = erps)

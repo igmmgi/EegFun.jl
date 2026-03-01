@@ -83,7 +83,7 @@ using OrderedCollections
             trigger = [0, 1, 1, 0, 2, 2, 2, 0, 1, 0]
             time = collect(0:9) ./ 100.0
             df = DataFrame(time = time, trigger = trigger, A = zeros(10), B = zeros(10))
-            layout = EegFun.Layout(DataFrame(label = [:A, :B], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+            layout = EegFun.Layout(DataFrame(label = [:A, :B], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
             dat = EegFun.ContinuousData("test_data", df, layout, 100, EegFun.AnalysisInfo())
 
             # Test trigger counting
@@ -101,7 +101,7 @@ using OrderedCollections
             trigger_info = ["", "S 1", "", "", "S 2", "", "", "", "S 1", ""]
             time = collect(0:9) ./ 100.0
             df = DataFrame(time = time, trigger = trigger, trigger_info = trigger_info, A = zeros(10), B = zeros(10))
-            layout = EegFun.Layout(DataFrame(label = [:A, :B], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+            layout = EegFun.Layout(DataFrame(label = [:A, :B], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
             dat = EegFun.ContinuousData("test_data", df, layout, 100, EegFun.AnalysisInfo())
 
             # Test trigger counting
@@ -119,7 +119,7 @@ using OrderedCollections
             trigger = [0, 0, 0, 0, 0]
             time = collect(0:4) ./ 100.0
             df = DataFrame(time = time, trigger = trigger, A = zeros(5), B = zeros(5))
-            layout = EegFun.Layout(DataFrame(label = [:A, :B], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+            layout = EegFun.Layout(DataFrame(label = [:A, :B], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
             dat = EegFun.ContinuousData("test_data", df, layout, 100, EegFun.AnalysisInfo())
 
             result = EegFun.trigger_count(dat)
@@ -132,7 +132,7 @@ using OrderedCollections
             trigger = [0, 1, 0, 2, 0, 1, 0]
             time = collect(0:6) ./ 100.0
             df = DataFrame(time = time, trigger = trigger, channel1 = randn(7), channel2 = randn(7))
-            layout = EegFun.Layout(DataFrame(label = [:channel1, :channel2], inc = [0.0, 90.0], azi = [0.0, 0.0]), nothing, nothing)
+            layout = EegFun.Layout(DataFrame(label = [:channel1, :channel2], inc = [0.0, 90.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
             dat = EegFun.ContinuousData("test_data", df, layout, 100, EegFun.AnalysisInfo())
 
             # Test trigger counting
@@ -503,7 +503,7 @@ using OrderedCollections
             trigger = [0, 1, 2, 3, 0, 1, 5, 3, 0, 0]
             time = collect(0:9) ./ 100.0
             df = DataFrame(time = time, trigger = trigger, channel = randn(10))
-            layout = EegFun.Layout(DataFrame(label = [:channel], inc = [0.0], azi = [0.0]), nothing, nothing)
+            layout = EegFun.Layout(DataFrame(label = [:channel], inc = [0.0], azi = [0.0]), nothing, nothing, nothing)
             dat = EegFun.ContinuousData("test_data", df, layout, 100, EegFun.AnalysisInfo())
 
             # Test that we can extract triggers and use search functions
@@ -527,7 +527,7 @@ using OrderedCollections
         @testset "missing triggers column" begin
             # Test ContinuousData without triggers column
             df = DataFrame(time = [0.0, 0.1, 0.2], channel = [1.0, 2.0, 3.0])
-            layout = EegFun.Layout(DataFrame(label = [:channel], inc = [0.0], azi = [0.0]), nothing, nothing)
+            layout = EegFun.Layout(DataFrame(label = [:channel], inc = [0.0], azi = [0.0]), nothing, nothing, nothing)
             dat = EegFun.ContinuousData("test_data", df, layout, 100, EegFun.AnalysisInfo())
 
             @test_throws Exception EegFun.trigger_count(dat)

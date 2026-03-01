@@ -328,7 +328,7 @@ function plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwa
     end
 
     fig = Figure()
-    ax = Axis(fig[1, 1], yticks = (1:length(trigger_count.keys), string.(trigger_count.keys)))
+    ax = Axis(fig[1, 1], yticks = (1:length(keys(trigger_count)), string.(collect(keys(trigger_count)))))
 
     # Set grid using the shared function
     _set_axis_grid!(
@@ -342,7 +342,7 @@ function plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwa
     # Pre-compute trigger data for each type to avoid repeated filtering
     trigger_data = Dict{Int,Vector{Float64}}()
     for (key, _) in trigger_count
-        trigger_data[key] = trigger_times[trigger_values .== key]
+        trigger_data[key] = trigger_times[trigger_values.==key]
     end
 
     for (unique, (key, value)) in enumerate(trigger_count)
@@ -353,7 +353,7 @@ function plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwa
     end
     fig[1, 2] = Legend(fig, ax)
     ax.ylabel = "Trigger Value"
-    ax.xlabel = "Time (S)"
+    ax.xlabel = "Time (s)"
 
     plot_kwargs[:display_plot] && _display_figure(fig)
     return fig, ax
@@ -401,7 +401,7 @@ function plot_trigger_overview(dat::ContinuousData; kwargs...)
         trigger_count, trigger_labels = _count_triggers(trigger_codes, trigger_info)
 
         fig = Figure()
-        ax = Axis(fig[1, 1], yticks = (1:length(trigger_count.keys), [trigger_labels[k] for k in trigger_count.keys]))
+        ax = Axis(fig[1, 1], yticks = (1:length(keys(trigger_count)), [trigger_labels[k] for k in keys(trigger_count)]))
 
         # Set grid using the shared function
         _set_axis_grid!(
@@ -415,7 +415,7 @@ function plot_trigger_overview(dat::ContinuousData; kwargs...)
         # Pre-compute trigger data for each type
         trigger_data = Dict{Int,Vector{Float64}}()
         for (key, _) in trigger_count
-            trigger_data[key] = trigger_times[Int.(trigger_codes) .== key]
+            trigger_data[key] = trigger_times[Int.(trigger_codes).==key]
         end
 
         for (unique, (key, value)) in enumerate(trigger_count)
@@ -473,25 +473,21 @@ end
 Create interactive sliders for position and window size.
 """
 function _create_interactive_sliders(fig::Figure, end_time::Float64, plot_kwargs::Dict)
-    initial_position = PLOT_TRIGGERS_KWARGS[:initial_position][1]
+    initial_position = plot_kwargs[:initial_position]
 
-    slider_position = Slider(
-        fig[2, 1],
-        range = initial_position:PLOT_TRIGGERS_KWARGS[:position_step][1]:end_time,
-        startvalue = initial_position,
-        snap = true,
-    )
+    slider_position =
+        Slider(fig[2, 1], range = initial_position:plot_kwargs[:position_step]:end_time, startvalue = initial_position, snap = true)
 
     slider_size = Slider(
         fig[3, 1],
-        range = plot_kwargs[:min_window_size]:PLOT_TRIGGERS_KWARGS[:window_size_step][1]:plot_kwargs[:max_window_size],
+        range = plot_kwargs[:min_window_size]:plot_kwargs[:window_size_step]:plot_kwargs[:max_window_size],
         startvalue = plot_kwargs[:window_size],
         snap = true,
     )
 
     # Create labels for sliders
-    position_label = Label(fig[2, 2], @lift("Position: $(round($(slider_position.value), digits=1))s"), fontsize = plot_kwargs[:label_fontsize])
-    size_label     = Label(fig[3, 2], @lift("Window Size: $(round($(slider_size.value), digits=1))s"), fontsize = plot_kwargs[:label_fontsize])
+    Label(fig[2, 2], @lift("Position: $(round($(slider_position.value), digits=1))s"), fontsize = plot_kwargs[:label_fontsize])
+    Label(fig[3, 2], @lift("Window Size: $(round($(slider_size.value), digits=1))s"), fontsize = plot_kwargs[:label_fontsize])
 
     return slider_position, slider_size, initial_position
 end
@@ -629,14 +625,13 @@ function _create_interactive_trigger_plot(
         current_end = min(current_start + window_size[], end_time)
 
         # Filter triggers within the current window
-        window_mask = (trigger_times .>= current_start) .&& (trigger_times .<= current_end)
+        window_mask = (trigger_times .>= current_start) .& (trigger_times .<= current_end)
         window_times = trigger_times[window_mask]
         window_codes = trigger_codes[window_mask]
         window_info = trigger_info[window_mask]
 
         # Always draw the horizontal timeline across the visible window
-        timeline_width = PLOT_TRIGGERS_KWARGS[:timeline_width][1]
-        lines!(ax, [current_start, current_end], [0, 0], color = :black, linewidth = timeline_width)
+        lines!(ax, [current_start, current_end], [0, 0], color = :black, linewidth = PLOT_TRIGGERS_KWARGS[:timeline_width][1])
 
         if !isempty(window_times)
             if has_info

@@ -18,7 +18,6 @@ const PLOT_FILTER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :title_fontsize => (24, "Font size for title"),
     :label_fontsize => (22, "Font size for axis labels"),
     :tick_fontsize => (20, "Font size for tick labels"),
-    :legend_fontsize => (32, "Font size for legend"),
 
     # Grid
     :xgrid => (false, "Whether to show x-axis grid"),
@@ -27,22 +26,13 @@ const PLOT_FILTER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :yminorgrid => (false, "Whether to show y-axis minor grid"),
 
     # Line styling
-    :actual_linewidth => (4, "Line width for actual response"),
-    :ideal_linewidth => (3, "Line width for ideal response"),
-    :actual_color => (:black, "Color for actual response"),
-    :ideal_color => (:green, "Color for ideal response"),
-    :ideal_linestyle => (:dash, "Line style for ideal response"),
+    :linewidth => (4, "Line width for response curves"),
+    :color => (:blue, "Color for response curves"),
 
     # Reference lines
     :reference_lines => ([-3, -6], "Reference lines in dB to display"),
     :reference_color => (:gray, "Color for reference lines"),
     :reference_linestyle => (:dash, "Line style for reference lines"),
-
-    # Transition region styling
-    :transition_alpha => (0.2, "Transparency for transition region shading"),
-    :transition_color => (:gray, "Color for transition region shading"),
-    :transition_line_color => (:gray, "Color for transition region lines"),
-    :transition_line_style => (:dash, "Line style for transition region lines"),
 
     # Plot parameters
     :n_points => (2000, "Number of frequency points for response calculation"),
@@ -56,7 +46,7 @@ const PLOT_FILTER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 """
     plot_filter_response(filter_info::FilterInfo; kwargs...)
 
-Plot the frequency response of a digital filter with ideal response overlay.
+Plot the frequency response and impulse response of a digital filter.
 
 # Arguments
 - `filter_info::FilterInfo`: Filter information struct
@@ -66,7 +56,7 @@ $(_generate_kwargs_doc(PLOT_FILTER_KWARGS))
 
 # Returns
 - `fig`: Makie Figure object
-- `ax`: Tuple of Makie Axis objects (linear, dB, impulse)
+- `ax`: Tuple of Makie Axis objects (dB, impulse)
 """
 function plot_filter_response(
     filter_info::FilterInfo;
@@ -86,7 +76,8 @@ function plot_filter_response(
         end
     end
 
-    fig = Figure()
+    _set_window_title("Filter Response")
+    fig = Figure(size = (1200, 600))
 
     # Base axis properties
     base_props = (
@@ -114,14 +105,13 @@ function plot_filter_response(
     # Add xscale from kwargs
     xscale_props = (xscale = xscale,)
 
-    # Create three axes in a row
-    ax1 = Axis(fig[1, 1]; base_props..., xscale_props..., ylabel = "Magnitude (linear)", limits = (xlim, (0, 1.1)))
-    ax2 = Axis(fig[1, 2]; base_props..., xscale_props..., ylabel = plot_kwargs[:ylabel], limits = (xlim, plot_kwargs[:ylim]))
-    ax3 = Axis(
-        fig[1, 3];
+    # Create two axes: dB magnitude response + impulse response
+    ax_db = Axis(fig[1, 1]; base_props..., xscale_props..., ylabel = plot_kwargs[:ylabel], limits = (xlim, plot_kwargs[:ylim]))
+    ax_imp = Axis(
+        fig[1, 2];
         xlabel = "Time (samples)",
         ylabel = "Amplitude",
-        title = "Impulse response",
+        title = "Impulse Response",
         titlesize = plot_kwargs[:title_fontsize],
         xlabelsize = plot_kwargs[:label_fontsize],
         ylabelsize = plot_kwargs[:label_fontsize],
@@ -129,28 +119,15 @@ function plot_filter_response(
         yticklabelsize = plot_kwargs[:tick_fontsize],
     )
 
-    # Set grid using the shared function
-    _set_axis_grid!(
-        ax1;
-        xgrid = plot_kwargs[:xgrid],
-        ygrid = plot_kwargs[:ygrid],
-        xminorgrid = plot_kwargs[:xminorgrid],
-        yminorgrid = plot_kwargs[:yminorgrid],
-    )
-    _set_axis_grid!(
-        ax2;
-        xgrid = plot_kwargs[:xgrid],
-        ygrid = plot_kwargs[:ygrid],
-        xminorgrid = plot_kwargs[:xminorgrid],
-        yminorgrid = plot_kwargs[:yminorgrid],
-    )
-    _set_axis_grid!(
-        ax3;
-        xgrid = plot_kwargs[:xgrid],
-        ygrid = plot_kwargs[:ygrid],
-        xminorgrid = plot_kwargs[:xminorgrid],
-        yminorgrid = plot_kwargs[:yminorgrid],
-    )
+    for a in (ax_db, ax_imp)
+        _set_axis_grid!(
+            a;
+            xgrid = plot_kwargs[:xgrid],
+            ygrid = plot_kwargs[:ygrid],
+            xminorgrid = plot_kwargs[:xminorgrid],
+            yminorgrid = plot_kwargs[:yminorgrid],
+        )
+    end
 
     # Simple logarithmic frequency spacing
     n_points = plot_kwargs[:n_points]
@@ -167,7 +144,7 @@ function plot_filter_response(
         resp = freqresp(filter_info.filter_object, w)
     end
 
-    # Calculate magnitude responses
+    # Calculate magnitude response
     mag_linear = abs.(resp)
 
     # If using filtfilt, the filter is applied twice (forward + backward)
@@ -178,20 +155,15 @@ function plot_filter_response(
 
     mag_db = 20 * log10.(mag_linear)
 
-    # Plot actual responses
-    lines!(ax1, freqs, mag_linear, label = "Actual", color = plot_kwargs[:actual_color], linewidth = plot_kwargs[:actual_linewidth])
-    lines!(ax2, freqs, mag_db, label = "Actual", color = plot_kwargs[:actual_color], linewidth = plot_kwargs[:actual_linewidth])
+    # Plot dB magnitude response
+    lines!(ax_db, freqs, mag_db, color = plot_kwargs[:color], linewidth = plot_kwargs[:linewidth])
 
-    # Add vertical line at cutoff frequency to both subplots
-    vlines!(ax1, [filter_info.cutoff_freq], color = :red, linestyle = :dash, linewidth = 2)
-    vlines!(ax2, [filter_info.cutoff_freq], color = :red, linestyle = :dash, linewidth = 2)
+    # Add vertical line at cutoff frequency
+    vlines!(ax_db, [filter_info.cutoff_freq], color = :red, linestyle = :dash, linewidth = 2)
 
     # Add reference lines
-    # Calculate -3dB magnitude in linear scale, accounting for filtfilt if used
-    ref_mag_3db = filter_func == filtfilt ? 0.5 : 0.707  # -6dB for filtfilt, -3dB for single-pass
-    hlines!(ax1, [ref_mag_3db], color = plot_kwargs[:reference_color], linestyle = plot_kwargs[:reference_linestyle], alpha = 0.5)
     hlines!(
-        ax2,
+        ax_db,
         plot_kwargs[:reference_lines],
         color = plot_kwargs[:reference_color],
         linestyle = plot_kwargs[:reference_linestyle],
@@ -223,7 +195,7 @@ function plot_filter_response(
         else
             # Single-pass: just show the coefficients
             impulse_response = filter_info.filter_object
-            time_samples = (-(length(impulse_response)÷2)):((length(impulse_response)-1)÷2)
+            time_samples = (-(length(impulse_response) ÷ 2)):((length(impulse_response)-1)÷2)
         end
     else  # IIR filter
         impulse_response = filter_func(filter_info.filter_object, impulse)
@@ -231,12 +203,13 @@ function plot_filter_response(
     end
 
     # Plot impulse response
-    lines!(ax3, time_samples, impulse_response, color = plot_kwargs[:actual_color], linewidth = plot_kwargs[:actual_linewidth])
+    lines!(ax_imp, time_samples, impulse_response, color = plot_kwargs[:color], linewidth = plot_kwargs[:linewidth])
 
     # Add zero line for reference
-    hlines!(ax3, [0], color = plot_kwargs[:reference_color], linestyle = plot_kwargs[:reference_linestyle], alpha = 0.5)
+    hlines!(ax_imp, [0], color = plot_kwargs[:reference_color], linestyle = plot_kwargs[:reference_linestyle], alpha = 0.5)
 
     plot_kwargs[:display_plot] && _display_figure(fig)
+    _set_window_title("Makie")
 
-    return fig, (ax1, ax2, ax3)
+    return fig, (ax_db, ax_imp)
 end

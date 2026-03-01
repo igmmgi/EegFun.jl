@@ -11,7 +11,7 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Axis limits and labels
     :xlim => (nothing, "X-axis limits as (min, max) tuple. If nothing, automatically determined"),
     :ylim => (nothing, "Y-axis limits for ERP waveform as (min, max) tuple. If nothing, automatically determined"),
-    :xlabel => ("Time (S)", "Label for x-axis"),
+    :xlabel => ("Time (s)", "Label for x-axis"),
     :ylabel => ("Epoch", "Label for y-axis"),
     :yreversed => (false, "Whether to reverse the y-axis"),
 
@@ -22,6 +22,7 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Image styling
     :colormap => (:jet, "Colormap for the image"),
     :colorrange => (nothing, "Color range for the image. If nothing, automatically determined"),
+    :interpolate => (false, "Whether to interpolate the heatmap pixels for smoother appearance"),
 
     # ERP overlay
     :plot_erp => (true, "Whether to plot ERP average overlay"),
@@ -115,7 +116,7 @@ function plot_erp_image(filepath::String; input_dir::String = pwd(), participant
         files = _find_batch_files(filepath, input_dir, participant_selection)
         isempty(files) && @minimal_error "No files matching pattern '$filepath' in $input_dir"
 
-        results = []
+        results = NamedTuple[]
         for file in sort(files, by = _natural_sort_key)
             file_path = joinpath(input_dir, file)
             @info "Plotting: $file"
@@ -190,7 +191,7 @@ function plot_erp_image(
         rows, cols = temp_layout.dims
 
         # Expand grid to accommodate colorbars (default: to the right)
-        if user_colorbar_position |> !isnothing && user_colorbar_position isa Tuple
+        if !isnothing(user_colorbar_position) && user_colorbar_position isa Tuple
             cb_row_offset, cb_col_offset = user_colorbar_position
             if cb_row_offset > 1
                 # Colorbars below: double rows
@@ -218,7 +219,7 @@ function plot_erp_image(
             base_row = div(idx - 1, cols) + 1
             base_col = mod1(idx, cols)
 
-            if user_colorbar_position |> !isnothing && user_colorbar_position isa Tuple
+            if !isnothing(user_colorbar_position) && user_colorbar_position isa Tuple
                 cb_row_offset, cb_col_offset = user_colorbar_position
                 if cb_row_offset > 1
                     # Colorbars below
@@ -253,7 +254,7 @@ function plot_erp_image(
     end
 
     # Plot ERP images for each channel
-    heatmaps = []
+    heatmaps = Heatmap[]
     for (ax, channel) in zip(axes, channels)
         if plot_layout.type == :single
             # For single layout: average across all selected channels
@@ -287,6 +288,7 @@ function plot_erp_image(
             transpose(data),
             colormap = plot_kwargs[:colormap],
             colorrange = plot_kwargs[:colorrange],
+            interpolate = plot_kwargs[:interpolate],
         )
         push!(heatmaps, hm)
 
@@ -342,7 +344,7 @@ function plot_erp_image(
                     base_row = div(idx - 1, cols) + 1
                     base_col = mod1(idx, cols)
 
-                    if user_colorbar_position |> !isnothing && user_colorbar_position isa Tuple
+                    if !isnothing(user_colorbar_position) && user_colorbar_position isa Tuple
                         cb_row_offset, cb_col_offset = user_colorbar_position
                         if cb_row_offset > 1
                             # Colorbars below
@@ -469,7 +471,7 @@ function plot_erp_image(
     # Create it in fig[1, 1] with halign/valign - this is the same approach as the scale axis
     # The key is that all topo elements use absolute positioning within the same grid cell
     # and don't participate in grid size calculations
-    if plot_layout.type == :topo && plot_kwargs[:colorbar_plot] && !isempty(heatmaps) && scale_pos |> !isnothing
+    if plot_layout.type == :topo && plot_kwargs[:colorbar_plot] && !isempty(heatmaps) && !isnothing(scale_pos)
         # Calculate colorbar position: place it to the right of the scale axis
         # The scale axis width is Relative(plot_kwargs[:layout_topo_plot_width])
         # We add a small fixed offset (0.02) to position the colorbar next to it
@@ -621,7 +623,7 @@ Handle navigation actions for ERP images.
 """
 function _handle_erp_image_navigation!(axes::Vector{Axis}, heatmaps::Vector, action::Symbol, active_axis::Axis)
     if action in (:x_less, :x_more) # Adjust time axis
-        func = action == :x_less ? xmore! : xless!
+        func = action == :x_less ? _xless! : _xmore!
         func(active_axis)
     elseif action in (:y_less, :y_more) # Adjust y-axis based on active plot
         if active_axis == axes[1] # ERP image axis
@@ -632,7 +634,7 @@ function _handle_erp_image_navigation!(axes::Vector{Axis}, heatmaps::Vector, act
             end
         else # ERP waveform axis
             # For ERP waveform, adjust y-axis limits
-            func = action == :y_less ? _ymore! : _yless!
+            func = action == :y_more ? _ymore! : _yless!
             func(active_axis)
         end
     end
@@ -677,3 +679,6 @@ function _apply_boxcar_average(data::Matrix, window_size::Int)
 
     return smoothed_data
 end
+
+# Vector dispatch: plot each condition separately
+plot_erp_image(data::Vector{EpochData}; kwargs...) = plot_erp_image.(data; kwargs...)
