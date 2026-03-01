@@ -7,7 +7,7 @@
 
   <!-- Styles -->
   <style>
-    .box { fill:#e8f4fd; stroke:#4a90d9; stroke-width:1.5; rx:6; }
+    .box { fill:#ffffff; stroke:#bbb; stroke-width:1.5; rx:6; }
     .box-text { font-size:13px; fill:#333; text-anchor:middle; dominant-baseline:central; }
     .group { fill:none; stroke:#999; stroke-width:1.2; stroke-dasharray:4,3; rx:8; }
     .group-label { font-size:11px; fill:#888; font-weight:600; text-anchor:start; }

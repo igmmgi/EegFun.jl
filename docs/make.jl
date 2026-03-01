@@ -18,6 +18,8 @@ pages = [
         "Layouts and Neighbors" => "tutorials/layouts-neighbors.md",
         "Batch Processing" => "tutorials/batch-processing.md",
         "Selection Patterns" => "tutorials/selection-patterns.md",
+        "Preprocessing Walkthrough" => "demos/workflows/preprocessing_workflow.md",
+        "Worked Examples" => ["Visual Attention (Posner Cueing)" => "demos/experiments/visual-attention.md"],
     ],
     "Explanations" => [
         "Overview" => "explanations/index.md",
@@ -86,7 +88,6 @@ pages = [
             "Plot Statistics" => "demos/plotting/plot_statistics.md",
             "Plot Time-Frequency" => "demos/plotting/plot_tf.md",
         ],
-        "Workflows" => ["Preprocessing Workflow" => "demos/workflows/preprocessing_workflow.md"],
         "Time-Frequency" => [
             "TF Morlet" => "demos/time_frequency/tf_morlet.md",
             "TF Multitaper" => "demos/time_frequency/tf_multitaper.md",
@@ -100,7 +101,6 @@ pages = [
             "RSA" => "demos/statistics/rsa.md",
         ],
     ],
-    "Experiments" => ["Visual Attention" => "demos/experiments/visual-attention.md"],
     "Reference" => ["Overview" => "reference/index.md", "Types" => "reference/types.md"],
 ]
 
