@@ -340,7 +340,7 @@ end
 # Internal: build a layout with one row per averaged group
 function _layout_from_groups(layout::Layout, channel_groups::Vector{Vector{Symbol}}, labels::Vector{Symbol})::Layout
     df = layout.data
-    isempty(df) && return Layout(DataFrame(), nothing, nothing)
+    isempty(df) && return Layout(DataFrame(), nothing, nothing, nothing)
 
     # Ensure coordinates once
     work_layout = copy(layout)
@@ -365,7 +365,7 @@ function _layout_from_groups(layout::Layout, channel_groups::Vector{Vector{Symbo
 
     # Build new layout and ensure coordinates
     new_df = isempty(new_rows) ? df[1:0, :] : reduce(vcat, new_rows)
-    new_layout = Layout(new_df, nothing, nothing)
+    new_layout = Layout(new_df, nothing, nothing, nothing)
     _ensure_all_coordinates!(new_layout)
     return new_layout
 end
@@ -416,5 +416,5 @@ function _append_layouts(base_layout::Layout, avg_layout::Layout)::Layout
 
     # Simple append - no complex merging needed
     combined_df = vcat(base_copy.data, avg_copy.data)
-    return Layout(combined_df, nothing, nothing)
+    return Layout(combined_df, nothing, nothing, nothing)
 end

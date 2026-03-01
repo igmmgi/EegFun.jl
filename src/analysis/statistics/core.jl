@@ -86,6 +86,33 @@ function prepare_stats(
     condition1_avg = _create_grand_average(condition1, selected_cond_nums[1])
     condition2_avg = _create_grand_average(condition2, selected_cond_nums[2])
 
+    # Compute per-condition SE over the full display interval (before analysis subset narrows it)
+    # SE = std(across participants) / sqrt(n) at each electrode × time point
+    display_electrodes = channel_labels(condition1[1])
+    n_display_electrodes = length(display_electrodes)
+    n_display_time = nrow(condition1[1].data)
+    n_cond1 = length(condition1)
+    n_cond2 = length(condition2)
+
+    # Stack per-participant data: [participants × electrodes × time]
+    cond1_stacked =
+        cat([reshape(Matrix(erp.data[!, display_electrodes])', 1, n_display_electrodes, n_display_time) for erp in condition1]..., dims = 1)
+    cond2_stacked =
+        cat([reshape(Matrix(erp.data[!, display_electrodes])', 1, n_display_electrodes, n_display_time) for erp in condition2]..., dims = 1)
+
+    # SE = std across participants (dim 1) / sqrt(n), result is [electrodes × time]
+    se_cond1 = dropdims(std(cond1_stacked, dims = 1), dims = 1) ./ sqrt(n_cond1)
+    se_cond2 = dropdims(std(cond2_stacked, dims = 1), dims = 1) ./ sqrt(n_cond2)
+
+    # SE of the mean difference (for paired: std of per-participant differences / sqrt(n))
+    if design == :paired
+        diff_stacked = cond1_stacked .- cond2_stacked  # [participants × electrodes × time]
+        se_diff = dropdims(std(diff_stacked, dims = 1), dims = 1) ./ sqrt(n_cond1)
+    else
+        # Independent: SE of difference = sqrt(SE_A^2 + SE_B^2)
+        se_diff = sqrt.(se_cond1 .^ 2 .+ se_cond2 .^ 2)
+    end
+
     # create second subset with analysis_interval for statistical tests
     # Use analysis_interval if provided, otherwise use interval_selection
     analysis_sel = if !isnothing(analysis_interval)
@@ -110,7 +137,13 @@ function prepare_stats(
     condition1 = cat([reshape(Matrix(erp.data[!, electrodes])', 1, n_electrodes, n_time) for erp in condition1]..., dims = 1)
     condition2 = cat([reshape(Matrix(erp.data[!, electrodes])', 1, n_electrodes, n_time) for erp in condition2]..., dims = 1)
 
-    return StatisticalData([condition1_avg, condition2_avg], AnalysisData(design, [condition1, condition2], time_points))
+    return StatisticalData(
+        [condition1_avg, condition2_avg],
+        AnalysisData(design, [condition1, condition2], time_points),
+        se_cond1,
+        se_cond2,
+        se_diff,
+    )
 
 end
 
@@ -221,6 +254,7 @@ Compute t-statistics and p-values for all electrode × time points.
 - `t_matrix::Array{Float64, 2}`: T-statistics [electrodes × time]
 - `df::Float64`: Degrees of freedom (constant across all electrodes/time points)
 - `p_matrix::Array{Float64, 2}`: P-values [electrodes × time]
+- `se_matrix::Array{Float64, 2}`: Standard error of the mean difference [electrodes × time]
 
 # Examples
 ```julia
@@ -297,17 +331,20 @@ function _compute_t_matrix(
             end
         end
 
-        # Compute t-statistics: t = mean_diff / (std_diff / sqrt(n))
+        # Compute SE: se = std_diff / sqrt(n)
+        se_matrix = std_diff ./ sqrt(n_participants)
+
+        # Compute t-statistics: t = mean_diff / se
         # Use in-place assignment to fill pre-allocated t_matrix
         # Handle division by zero
         zero_std_mask = std_diff .== 0.0
         zero_mean_mask = mean_diff .== 0.0
 
         # Fill pre-allocated t_matrix in-place
-        t_matrix .= mean_diff ./ (std_diff ./ sqrt(n_participants))
+        t_matrix .= mean_diff ./ se_matrix
         # Where std is zero: NaN if mean is also zero, Inf otherwise
-        t_matrix[zero_std_mask .& zero_mean_mask] .= NaN
-        t_matrix[zero_std_mask .& .!zero_mean_mask] .= Inf
+        t_matrix[zero_std_mask.&zero_mean_mask] .= NaN
+        t_matrix[zero_std_mask.&.!zero_mean_mask] .= Inf
 
         # Degrees of freedom (same for all points in paired design)
         df = Float64(n_participants - 1)
@@ -318,6 +355,7 @@ function _compute_t_matrix(
 
     else
         # Independent design: need to loop (but df is constant across all points)
+        se_matrix = Array{Float64,2}(undef, n_electrodes, n_time)
         result = nothing
         @inbounds for e_idx = 1:n_electrodes
             @inbounds for t_idx = 1:n_time
@@ -326,16 +364,22 @@ function _compute_t_matrix(
                 result = independent_ttest(data_A, data_B, tail = tail)
                 t_matrix[e_idx, t_idx] = result.t
                 p_matrix[e_idx, t_idx] = result.p
+                # SE for independent t-test: sqrt(var_A/n_A + var_B/n_B)
+                n_A = length(data_A)
+                n_B = length(data_B)
+                se_matrix[e_idx, t_idx] = sqrt(var(data_A) / n_A + var(data_B) / n_B)
             end
         end
         df = result.df
     end
 
-    return t_matrix, df, p_matrix
+    return t_matrix, df, p_matrix, se_matrix
 end
 
 function _compute_t_matrix(prepared::StatisticalData; tail::Symbol = :both)
-    return _compute_t_matrix(prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design, tail = tail)
+    t_matrix, df, p_matrix, se_matrix =
+        _compute_t_matrix(prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design, tail = tail)
+    return t_matrix, df, p_matrix, se_matrix
 end
 
 """

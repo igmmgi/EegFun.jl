@@ -11,7 +11,7 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Axis limits, labels, and direction
     :title => (nothing, "Plot title. If nothing, automatically determined"),
-    :xlabel => ("Time (S)", "Label for x-axis"),
+    :xlabel => ("Time (s)", "Label for x-axis"),
     :ylabel => ("μV", "Label for y-axis"),
     :xlim => (nothing, "X-axis limits as (min, max) tuple. If nothing, automatically determined"),
     :ylim => (nothing, "Y-axis limits as (min, max) tuple. If nothing, automatically determined"),
@@ -124,7 +124,7 @@ function plot_epochs(
         files = _find_batch_files(filename, input_dir, participant_selection)
         isempty(files) && @minimal_error "No files matching pattern '$filename' in $input_dir"
 
-        results = []
+        results = NamedTuple[]
         for file in sort(files, by = _natural_sort_key)
             file_path = joinpath(input_dir, file)
             @info "Plotting: $file"
@@ -374,8 +374,7 @@ function plot_epochs(
 
         elseif layout == :grid
             # Use layout_grid_dims if provided, otherwise calculate best rectangle
-            grid_dims =
-                plot_kwargs[:layout_grid_dims] |> !isnothing ? plot_kwargs[:layout_grid_dims] : _best_rect(length(all_plot_channels))
+            grid_dims = !isnothing(plot_kwargs[:layout_grid_dims]) ? plot_kwargs[:layout_grid_dims] : _best_rect(length(all_plot_channels))
             _plot_epochs_grid_multi!(fig, axes, dat_subset, all_plot_channels, grid_dims, condition_colors_list, plot_kwargs, line_refs)
 
         elseif layout == :topo
@@ -601,7 +600,7 @@ function _plot_epochs_grid_multi!(
         push!(axes, ax)
 
         # Get line_refs for this axis
-        ax_line_refs = line_refs |> !isnothing && idx <= length(line_refs) ? line_refs[idx] : nothing
+        ax_line_refs = !isnothing(line_refs) && idx <= length(line_refs) ? line_refs[idx] : nothing
 
         # Plot all conditions for this channel
         for (cond_idx, dat) in enumerate(datasets)
@@ -609,7 +608,7 @@ function _plot_epochs_grid_multi!(
             cond_plot_kwargs = merge(plot_kwargs, Dict(:color => condition_colors[cond_idx]))
             trial_line, trial_y_obs = _plot_epochs!(ax, dat, [channel], cond_plot_kwargs; label = label, line_refs = ax_line_refs)
 
-            if ax_line_refs |> !isnothing
+            if !isnothing(ax_line_refs)
                 _store_line_ref!(ax_line_refs, cond_idx, channel, trial_line, trial_y_obs)
             end
 
@@ -617,7 +616,7 @@ function _plot_epochs_grid_multi!(
                 erp_dat = average_epochs(dat)
                 avg_label = label * " (avg)"
                 avg_line, y_obs = _plot_erp_average!(ax, erp_dat, [channel], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
-                if ax_line_refs |> !isnothing
+                if !isnothing(ax_line_refs)
                     _store_avg_line_ref!(ax_line_refs, cond_idx, channel, avg_line, y_obs)
                 end
             end
@@ -710,7 +709,7 @@ function _plot_epochs_topo_multi!(
     # Normalize positions to [0,1] - no margin needed since halign/valign centers the plot at the position
     for (ch_idx, ch) in enumerate(all_plot_channels)
         idx = findfirst(==(ch), dat.layout.data.label)
-        if idx |> !isnothing
+        if !isnothing(idx)
             x = dat.layout.data.x2[idx]
             y = dat.layout.data.y2[idx]
             halign = (x - minx) / xrange
@@ -725,7 +724,7 @@ function _plot_epochs_topo_multi!(
         push!(axes, ax)
 
         # Get line_refs for this axis
-        ax_line_refs = line_refs |> !isnothing && ch_idx <= length(line_refs) ? line_refs[ch_idx] : nothing
+        ax_line_refs = !isnothing(line_refs) && ch_idx <= length(line_refs) ? line_refs[ch_idx] : nothing
 
         # Plot all conditions for this channel
         for (cond_idx, dat_cond) in enumerate(datasets)
@@ -733,7 +732,7 @@ function _plot_epochs_topo_multi!(
             cond_plot_kwargs = merge(plot_kwargs, Dict(:color => condition_colors[cond_idx]))
             trial_line, trial_y_obs = _plot_epochs!(ax, dat_cond, [ch], cond_plot_kwargs; label = label, line_refs = ax_line_refs)
 
-            if ax_line_refs |> !isnothing
+            if !isnothing(ax_line_refs)
                 _store_line_ref!(ax_line_refs, cond_idx, ch, trial_line, trial_y_obs)
             end
 
@@ -741,7 +740,7 @@ function _plot_epochs_topo_multi!(
                 erp_dat = average_epochs(dat_cond)
                 avg_label = label * " (avg)"
                 avg_line, y_obs = _plot_erp_average!(ax, erp_dat, [ch], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
-                if ax_line_refs |> !isnothing
+                if !isnothing(ax_line_refs)
                     _store_avg_line_ref!(ax_line_refs, cond_idx, ch, avg_line, y_obs)
                 end
             end
@@ -780,7 +779,7 @@ function _plot_epochs_topo_multi!(
     # Note: This is a custom feature for plot_epochs, not present in plot_erp
     # Using layout_topo_scale_pos for consistency with the layout system
     if plot_kwargs[:layout_topo_show_scale]
-        println("Showing scale axis")
+        @info "Showing scale axis"
         scale_pos = plot_kwargs[:layout_topo_scale_pos]
         scale_ax = Axis(
             fig[1, 1],
@@ -815,6 +814,11 @@ function _plot_epochs_topo_multi!(
         scale_ax.yticklabelsvisible = true
         scale_ax.xticksvisible = true
         scale_ax.yticksvisible = true
+    end
+
+    # Link axes for synchronized zooming (arrow keys control all axes together)
+    if length(axes) > 1
+        Makie.linkaxes!(axes...)
     end
 end
 
@@ -932,7 +936,7 @@ function _setup_linked_legend_interactions_epochs!(line_refs::Vector{<:Dict})
                     continue
                 end
                 # Collect trial lines
-                if haskey(ch_line_data, :trials) && ch_line_data[:trials] |> !isnothing
+                if haskey(ch_line_data, :trials) && !isnothing(ch_line_data[:trials])
                     trial_data = ch_line_data[:trials]
                     trial_line = nothing
                     if trial_data isa Tuple && length(trial_data) == 2
@@ -940,14 +944,14 @@ function _setup_linked_legend_interactions_epochs!(line_refs::Vector{<:Dict})
                     elseif trial_data isa Lines
                         trial_line = trial_data
                     end
-                    if trial_line |> !isnothing
+                    if !isnothing(trial_line)
                         trial_lines = get!(condition_trial_lines, cond_idx, Any[])
                         push!(trial_lines, trial_line)
                     end
                 end
 
                 # Collect average lines
-                if haskey(ch_line_data, :average) && ch_line_data[:average] |> !isnothing
+                if haskey(ch_line_data, :average) && !isnothing(ch_line_data[:average])
                     avg_data = ch_line_data[:average]
                     avg_line = nothing
                     if avg_data isa Tuple && length(avg_data) == 2
@@ -955,7 +959,7 @@ function _setup_linked_legend_interactions_epochs!(line_refs::Vector{<:Dict})
                     elseif avg_data isa Lines
                         avg_line = avg_data
                     end
-                    if avg_line |> !isnothing
+                    if !isnothing(avg_line)
                         avg_lines = get!(condition_avg_lines, cond_idx, Any[])
                         push!(avg_lines, avg_line)
                     end
@@ -1044,13 +1048,13 @@ function _setup_epochs_control_panel!(
         start_val, stop_val = _parse_baseline_values(start_str, stop_str)
 
         # Convert to tuple if valid (baseline! accepts tuples and converts internally)
-        baseline_interval_new = (start_val |> !isnothing && stop_val |> !isnothing) ? (start_val, stop_val) : nothing
+        baseline_interval_new = (!isnothing(start_val) && !isnothing(stop_val)) ? (start_val, stop_val) : nothing
 
         # Check if baseline actually changed
         baseline_changed = baseline_interval_new !== previous_baseline[]
 
         # Apply baseline if it changed
-        if baseline_changed && baseline_interval_new |> !isnothing
+        if baseline_changed && !isnothing(baseline_interval_new)
             baseline!.(dat_subset, Ref(baseline_interval_new))
             baseline!.(dat_subset_avg, Ref(baseline_interval_new))
             previous_baseline[] = baseline_interval_new
@@ -1075,7 +1079,7 @@ function _setup_epochs_control_panel!(
                     end
 
                     # Update trial line visibility and y-data
-                    if haskey(line_data, :trials) && line_data[:trials] |> !isnothing
+                    if haskey(line_data, :trials) && !isnothing(line_data[:trials])
                         trial_line, trial_y_obs = line_data[:trials]
                         trial_line.visible = visible
                         if baseline_changed
@@ -1085,7 +1089,7 @@ function _setup_epochs_control_panel!(
                     end
 
                     # Update average line visibility and y-data (if present)
-                    if haskey(line_data, :average) && line_data[:average] |> !isnothing
+                    if haskey(line_data, :average) && !isnothing(line_data[:average])
                         avg_line, y_obs = line_data[:average]
                         avg_line.visible = visible
                         if baseline_changed && cond_idx <= length(dat_subset_avg)

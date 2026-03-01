@@ -17,7 +17,7 @@ const PLOT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :title_fontsize => (16, "Font size for title."),
     :label_fontsize => (14, "Font size for axis labels."),
     :tick_fontsize => (12, "Font size for tick labels."),
-    :xtick_rotation => (π/4, "Rotation angle for x-axis tick labels."),
+    :xtick_rotation => (π / 4, "Rotation angle for x-axis tick labels."),
 
     # Grid
     :xgrid => (false, "Whether to show x-axis grid"),
@@ -85,7 +85,7 @@ function plot_channel_summary!(fig::Figure, ax::Axis, dat::DataFrame, col::Symbo
 
     # If averaging is requested, compute mean and std
     n_epochs = nothing
-    if plot_kwargs[:average_over] |> !isnothing
+    if !isnothing(plot_kwargs[:average_over])
 
         if plot_kwargs[:average_over] ∉ propertynames(dat)
             @minimal_error("Column :$(plot_kwargs[:average_over]) not found in DataFrame for averaging.")
@@ -102,13 +102,13 @@ function plot_channel_summary!(fig::Figure, ax::Axis, dat::DataFrame, col::Symbo
 
     # Optionally sort data
     if plot_kwargs[:sort_values]
-        sort_column = plot_kwargs[:average_over] |> !isnothing ? :mean : col
+        sort_column = !isnothing(plot_kwargs[:average_over]) ? :mean : col
         dat = sort(dat, sort_column, rev = true)
     end
 
     # Extract plotting variables after sorting
     channel_names = String.(dat.channel)
-    if plot_kwargs[:average_over] |> !isnothing
+    if !isnothing(plot_kwargs[:average_over])
         values_to_plot = dat.mean
         margin_of_error = dat.margin_of_error
     else
@@ -129,7 +129,7 @@ function plot_channel_summary!(fig::Figure, ax::Axis, dat::DataFrame, col::Symbo
         alpha = plot_kwargs[:bar_alpha],
     )
 
-    if plot_kwargs[:average_over] |> !isnothing # add error bars
+    if !isnothing(plot_kwargs[:average_over]) # add error bars
         errorbars!(
             ax,
             1:length(values_to_plot),
@@ -143,8 +143,16 @@ function plot_channel_summary!(fig::Figure, ax::Axis, dat::DataFrame, col::Symbo
     return nothing
 end
 
-# Share documentation with the non-mutating version (set once for all methods)
-@doc (@doc plot_channel_summary!) plot_channel_summary
+"""
+    plot_channel_summary(dat::DataFrame, col::Symbol; kwargs...)
+
+Plot a bar chart summarizing a specific metric per channel. Creates a new figure.
+
+See `plot_channel_summary!` for full documentation of arguments and keyword arguments.
+
+# Returns
+- `(fig::Figure, ax::Axis)` - The created figure and axis objects
+"""
 function plot_channel_summary(dat::DataFrame, col::Symbol; kwargs...)
     # Merge user kwargs with defaults and validate
     plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
@@ -153,13 +161,16 @@ function plot_channel_summary(dat::DataFrame, col::Symbol; kwargs...)
     ax = Axis(fig[1, 1])
     plot_channel_summary!(fig, ax, dat, col; plot_kwargs...)
 
-    plot_kwargs[:display_plot] && _display_figure(fig)
+    if plot_kwargs[:display_plot]
+        _set_window_title("Channel Summary")
+        _display_figure(fig)
+    end
     return fig, ax
 end
 
+plot_channel_summary(dat::Vector{DataFrame}, col::Symbol; kwargs...) = plot_channel_summary.(dat, col; kwargs...)
 
 """
-    plot_channel_summary!(fig, ax, dat::DataFrame, col::Vector{Symbol}; kwargs...)
     plot_channel_summary(dat::DataFrame, col::Vector{Symbol}; kwargs...)
 
 Plot multiple bar charts summarizing different metrics per channel from a DataFrame.
@@ -168,8 +179,6 @@ Creates a grid layout with one subplot per column specified in `col`. Each subpl
 a bar chart for that specific metric across all channels.
 
 # Arguments
-- `fig`: The Makie Figure object to plot on (mutating version only)
-- `ax`: The Makie Axis object to plot on (mutating version only) - **Note**: This parameter is ignored in the multiple column version as each subplot gets its own axis
 - `dat::DataFrame`: DataFrame containing channel summary data
 - `col::Vector{Symbol}`: Vector of column symbols to plot, each will get its own subplot
 
@@ -177,8 +186,7 @@ a bar chart for that specific metric across all channels.
 $(_generate_kwargs_doc(PLOT_CHANNEL_SUMMARY_KWARGS))
 
 # Returns
-- **Mutating version**: `nothing` (modifies the provided figure in-place)
-- **Non-mutating version**: `fig::Figure` - The created figure object
+- `fig::Figure` - The created figure object
 
 # Examples
 ```julia
@@ -194,18 +202,18 @@ fig = plot_channel_summary(summary_df, [:kurtosis, :variance],
     sort_values = true)
 ```
 """
-function plot_channel_summary!(fig, ax, dat::DataFrame, col::Vector{Symbol}; kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
-    _plot_multiple_columns!(fig, dat, col, plot_kwargs)
-end
-
 function plot_channel_summary(dat::DataFrame, col::Vector{Symbol}; kwargs...)
     plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
     fig = Figure()
     _plot_multiple_columns!(fig, dat, col, plot_kwargs)
-    plot_kwargs[:display_plot] && _display_figure(fig)
+    if plot_kwargs[:display_plot]
+        _set_window_title("Channel Summary")
+        _display_figure(fig)
+    end
     return fig
 end
+
+plot_channel_summary(dat::Vector{DataFrame}, col::Vector{Symbol}; kwargs...) = plot_channel_summary.(dat, Ref(col); kwargs...)
 
 
 """
@@ -282,7 +290,7 @@ function _configure_axis!(ax::Axis, channel_names::Vector{String}, col::Symbol, 
     if plot_kwargs[:ylabel] != ""
         ax.ylabel = plot_kwargs[:ylabel]
     else
-        ax.ylabel = plot_kwargs[:average_over] |> !isnothing ? "$(String(col)) (± 95% CI n=$n_epochs)" : "$(String(col))"
+        ax.ylabel = !isnothing(plot_kwargs[:average_over]) ? "$(String(col)) (± 95% CI n=$n_epochs)" : "$(String(col))"
     end
 
     # Configure ticks and labels

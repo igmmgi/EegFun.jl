@@ -261,7 +261,7 @@ function plot_artifact_detection(epochs::EpochData, artifacts::EpochRejectionInf
     selected_channels_set = Set{Symbol}()
 
     # Create color map for rejected channels
-    rejected_channels = [r.label for r in artifacts.rejected]
+    rejected_channels = [r.channel for r in artifacts.rejected]
     rejected_color_map = _create_rejected_color_map(rejected_channels, plot_kwargs[:colormap_name])
 
     # Function to update plot based on epoch
@@ -277,7 +277,7 @@ function plot_artifact_detection(epochs::EpochData, artifacts::EpochRejectionInf
 
         # Get current epoch data and rejected channels
         epoch = epochs.data[epoch_idx_val]
-        epoch_rejected_channels = [r.label for r in artifacts.rejected if r.epoch == epoch_idx_val]
+        epoch_rejected_channels = [r.channel for r in artifacts.rejected if r.epoch == epoch_idx_val]
 
         # Update title
         ax.title = "Artifact Detection - Epoch $(epoch_idx_val)"
@@ -325,6 +325,26 @@ function plot_artifact_detection(epochs::EpochData, artifacts::EpochRejectionInf
     plot_kwargs[:display_plot] && _display_figure(fig)
     _set_window_title("Makie")
     return fig
+end
+
+"""
+    plot_artifact_detection(epochs::Vector{EpochData}, artifacts::Vector{EpochRejectionInfo}; channel_selection::Function=channels(), kwargs...)
+
+Convenience method that calls `plot_artifact_detection` for each condition when given vectors
+(as returned by `detect_bad_epochs_automatic`).
+
+# Returns
+- `Vector{Figure}`: One figure per condition
+"""
+function plot_artifact_detection(
+    epochs::Vector{EpochData},
+    artifacts::Vector{EpochRejectionInfo};
+    channel_selection::Function = channels(),
+    kwargs...,
+)
+    length(epochs) == length(artifacts) ||
+        throw(ArgumentError("epochs and artifacts must have the same length (got $(length(epochs)) and $(length(artifacts)))"))
+    return [plot_artifact_detection(epochs[i], artifacts[i]; channel_selection = channel_selection, kwargs...) for i in eachindex(epochs)]
 end
 
 """
@@ -421,7 +441,7 @@ function plot_artifact_repair(
     selected_channels_set = Set{Symbol}()
 
     # Create color map for rejected channels
-    rejected_channels = [r.label for r in artifacts.rejected]
+    rejected_channels = [r.channel for r in artifacts.rejected]
     rejected_color_map = _create_rejected_color_map(rejected_channels, plot_kwargs[:colormap_name])
 
     # Function to update comparison plot
@@ -445,7 +465,7 @@ function plot_artifact_repair(
         epoch_repaired = epochs_repaired.data[epoch_idx_val]
 
         # Find rejected channels for this epoch
-        epoch_rejected_channels = [r.label for r in artifacts.rejected if r.epoch == epoch_idx_val]
+        epoch_rejected_channels = [r.channel for r in artifacts.rejected if r.epoch == epoch_idx_val]
 
         # Update titles
         ax1.title = "Original Data - Epoch $(epoch_idx_val)"
@@ -620,7 +640,7 @@ function plot_artifact_rejection(
     selected_channels_set = Set{Symbol}()
 
     # Create color map for rejected channels
-    rejected_channels = [r.label for r in artifacts.rejected]
+    rejected_channels = [r.channel for r in artifacts.rejected]
     rejected_color_map = _create_rejected_color_map(rejected_channels, plot_kwargs[:colormap_name])
 
     # Build a lookup map from epoch number to index in epochs_rejected
@@ -651,7 +671,7 @@ function plot_artifact_rejection(
         epoch_num = epoch_orig.epoch[1]
 
         # Find rejected channels for this epoch
-        epoch_rejected_channels = [r.label for r in artifacts.rejected if r.epoch == epoch_num]
+        epoch_rejected_channels = [r.channel for r in artifacts.rejected if r.epoch == epoch_num]
 
         # Check if this epoch exists in epochs_rejected
         rejected_idx = get(epoch_number_to_idx, epoch_num, nothing)

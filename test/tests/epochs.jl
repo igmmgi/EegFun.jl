@@ -281,7 +281,7 @@ using Random
         # Check that some samples near each trigger are marked
         for idx in trigger_1_indices
             # Look for marked samples in a small neighborhood 
-            neighborhood = max(1, idx-5):min(length(dat.data.epoch_interval), idx+5)
+            neighborhood = max(1, idx - 5):min(length(dat.data.epoch_interval), idx + 5)
             @test any(dat.data.epoch_interval[neighborhood])
         end
 
@@ -392,7 +392,7 @@ using Random
 
         # Missing required columns
         df_no_triggers = DataFrame(time = [0.0, 0.1], A = [1.0, 2.0])
-        layout = EegFun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing, nothing)
         dat_no_triggers = EegFun.ContinuousData("test_data", df_no_triggers, layout, 1000, EegFun.AnalysisInfo())
         @test_throws AssertionError EegFun._validate_epoch_interval_params(dat_no_triggers, [-0.1, 0.1])
 
@@ -403,7 +403,7 @@ using Random
 
     @testset "edge cases and robustness" begin
         # Empty EpochData for get_selected_epochs
-        layout = EegFun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing, nothing)
         empty_epochs = EegFun.EpochData("test_data", 1, "condition_1", DataFrame[], layout, 1000, EegFun.AnalysisInfo())
         empty_selector = x -> trues(length(x))
         selected_empty = EegFun.get_selected_epochs(empty_epochs, empty_selector)
@@ -642,7 +642,7 @@ using Random
                         push!(dfs, df)
                     end
 
-                    layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+                    layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
 
                     # EpochData constructor: (file, condition, condition_name, data, layout, sample_rate, analysis_info)
                     push!(epochs, EegFun.EpochData("test_data", cond, "condition_$cond", dfs, layout, fs, EegFun.AnalysisInfo()))
@@ -941,7 +941,7 @@ using Random
                     push!(dfs2, df)
                 end
 
-                layout = EegFun.Layout(DataFrame(label = [:Fz], inc = [0.0], azi = [0.0]), nothing, nothing)
+                layout = EegFun.Layout(DataFrame(label = [:Fz], inc = [0.0], azi = [0.0]), nothing, nothing, nothing)
 
                 push!(epochs_var, EegFun.EpochData("test_data", 1, "condition_1", dfs1, layout, fs, EegFun.AnalysisInfo()))
                 push!(epochs_var, EegFun.EpochData("test_data", 2, "condition_2", dfs2, layout, fs, EegFun.AnalysisInfo()))
@@ -971,7 +971,7 @@ using Random
 
                 # This should trigger an error when trying to average
                 # We'll test this by creating a minimal epochs structure
-                layout = EegFun.Layout(DataFrame(label = [:Fz], inc = [0.0], azi = [0.0]), nothing, nothing)
+                layout = EegFun.Layout(DataFrame(label = [:Fz], inc = [0.0], azi = [0.0]), nothing, nothing, nothing)
 
                 empty_epoch = EegFun.EpochData("test_data", 1, "condition_1", DataFrame[], layout, 256, EegFun.AnalysisInfo())
                 jldsave(joinpath(empty_epochs_dir, "1_epochs_empty.jld2"); data = [empty_epoch])
@@ -1041,7 +1041,7 @@ using Random
                     push!(dfs, df)
                 end
 
-                layout = EegFun.Layout(DataFrame(label = [:Ch1], inc = [0.0], azi = [0.0]), nothing, nothing)
+                layout = EegFun.Layout(DataFrame(label = [:Ch1], inc = [0.0], azi = [0.0]), nothing, nothing, nothing)
 
                 epoch_data = EegFun.EpochData("test_data", 1, "condition_1", dfs, layout, fs, EegFun.AnalysisInfo())
                 jldsave(joinpath(math_dir, "1_epochs_math.jld2"); data = [epoch_data])
@@ -1116,7 +1116,7 @@ using Random
                 )
                 push!(dfs, df)
 
-                layout = EegFun.Layout(DataFrame(label = [:Cz], inc = [0.0], azi = [0.0]), nothing, nothing)
+                layout = EegFun.Layout(DataFrame(label = [:Cz], inc = [0.0], azi = [0.0]), nothing, nothing, nothing)
 
                 epoch_data = EegFun.EpochData("test_data", 1, "condition_1", dfs, layout, fs, EegFun.AnalysisInfo())
                 jldsave(joinpath(single_dir, "1_epochs_single.jld2"); data = [epoch_data])
@@ -1189,7 +1189,7 @@ using Random
                 end
 
                 layout_df = DataFrame(label = channel_names, inc = zeros(10), azi = zeros(10))
-                layout = EegFun.Layout(layout_df, nothing, nothing)
+                layout = EegFun.Layout(layout_df, nothing, nothing, nothing)
 
                 epoch_data = EegFun.EpochData("test_data", 1, "condition_1", dfs, layout, fs, EegFun.AnalysisInfo())
                 jldsave(joinpath(many_ch_dir, "1_epochs_many.jld2"); data = [epoch_data])
@@ -1310,7 +1310,7 @@ using Random
                 1,
                 "condition_1",
                 DataFrame[],
-                EegFun.Layout(DataFrame(label = [:ch1], x = [0], y = [0], z = [0]), nothing, nothing),
+                EegFun.Layout(DataFrame(label = [:ch1], x = [0], y = [0], z = [0]), nothing, nothing, nothing),
                 1000,
                 EegFun.AnalysisInfo(),
             )

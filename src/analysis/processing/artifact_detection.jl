@@ -922,20 +922,20 @@ using z-score thresholds. This is useful for removing epochs with artifacts
 without manual inspection.
 """
 struct Rejection
-    label::Symbol
+    channel::Symbol
     epoch::Int
 end
 
-Base.show(io::IO, r::Rejection) = print(io, "Rejection(:$(r.label), $(r.epoch))")
+Base.show(io::IO, r::Rejection) = print(io, "Rejection(:$(r.channel), $(r.epoch))")
 
 # Are two Rejections equal?
-is_equal_rejection(a::Rejection, b::Rejection) = a.label == b.label && a.epoch == b.epoch
+is_equal_rejection(a::Rejection, b::Rejection) = a.channel == b.channel && a.epoch == b.epoch
 
 function unique_rejections(rejections::Vector{Rejection})
     seen = Set{Tuple{Symbol,Int}}()
     out = Rejection[]
     for rejection in rejections
-        key = (rejection.label, rejection.epoch)
+        key = (rejection.channel, rejection.epoch)
         if key ∉ seen
             push!(seen, key)
             push!(out, rejection)
@@ -944,7 +944,7 @@ function unique_rejections(rejections::Vector{Rejection})
     return out
 end
 
-unique_channels(rejections::Vector{Rejection}) = unique(map(x -> x.label, rejections))
+unique_channels(rejections::Vector{Rejection}) = unique(map(x -> x.channel, rejections))
 unique_epochs(rejections::Vector{Rejection}) = unique(map(x -> x.epoch, rejections))
 
 
@@ -1210,28 +1210,22 @@ detect_bad_epochs_automatic(dat::Vector{EpochData}; kwargs...) = detect_bad_epoc
 
 
 """
-    get_rejected(state::EpochRejectionState)::Vector{Int}
+    get_rejected(info::EpochRejectionInfo)::Vector{Rejection}
 
-Get indices of rejected epochs from the rejection state.
+Get the list of rejected channel-epoch pairs from the rejection info.
 
 # Examples
 ```julia
-state = detect_bad_epochs_interactive(epochs)
-rejected_indices = get_rejected(state)
+info = detect_bad_epochs_automatic(epochs)
+rejected = get_rejected(info)
 ```
 """
 get_rejected(info::EpochRejectionInfo)::Vector{Rejection} = info.rejected
 
 """
-    get_rejected(state::Vector{EpochRejectionState})::Vector{Int}
+    get_rejected(info::Vector{EpochRejectionInfo})::Vector{Vector{Rejection}}
 
-Get indices of rejected epochs from the rejection state.
-
-# Examples
-```julia
-state = detect_bad_epochs_interactive(epochs)
-rejected_indices = get_rejected(state)
-```
+Get the list of rejected channel-epoch pairs for each condition.
 """
 get_rejected(info::Vector{EpochRejectionInfo})::Vector{Vector{Rejection}} = get_rejected.(info)
 
@@ -1466,7 +1460,7 @@ function channel_repairable!(artifacts::EpochRejectionInfo, layout::Layout)
 
     # Process epochs in sorted order to maintain ordering in OrderedDict
     for epoch_idx in sort(rejected)
-        bad_channels = [artifact.label for artifact in artifacts.rejected if artifact.epoch == epoch_idx]
+        bad_channels = [artifact.channel for artifact in artifacts.rejected if artifact.epoch == epoch_idx]
         isempty(bad_channels) && continue
 
         repairable_channels = check_channel_neighbors(bad_channels, layout)
@@ -1564,7 +1558,7 @@ function repair_artifacts_spherical_spline!(dat::EpochData, artifacts::EpochReje
 
     for epoch_idx in rejected
         # Get bad channels for this epoch
-        bad_channels = [artifact.label for artifact in artifacts.rejected if artifact.epoch == epoch_idx]
+        bad_channels = [artifact.channel for artifact in artifacts.rejected if artifact.epoch == epoch_idx]
         isempty(bad_channels) && continue
 
         @info "Repairing epoch $epoch_idx channels $(bad_channels) using spherical spline interpolation"
@@ -1624,7 +1618,7 @@ function subset_bad_data(data_path::String, threshold::Real; subset_directory::S
     !isdir(subset_dir_path) && mkpath(subset_dir_path)
 
     # Find participants with any condition below threshold
-    bad_participants = unique(epoch_summary.file[epoch_summary.percentage .< threshold])
+    bad_participants = unique(epoch_summary.file[epoch_summary.percentage.<threshold])
     println("Subsetting data: $(length(bad_participants))")
     println("   N remaining: $(length(unique(epoch_summary.file)) - length(bad_participants))")
     println("   N removed: $(length(bad_participants))")

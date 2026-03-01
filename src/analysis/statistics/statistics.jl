@@ -42,7 +42,7 @@ function permutation_test(
 
     # Compute observed t-matrix and df
     @info "Computing t-statistics..."
-    t_matrix, df, _ = _compute_t_matrix(prepared)
+    t_matrix, df, _, se_matrix = _compute_t_matrix(prepared)
 
     # Handle different thresholding methods
     if threshold_method == :parametric
@@ -215,6 +215,10 @@ function permutation_test(
         electrodes,
         time_points,
         critical_t_values,
+        se_matrix,
+        prepared.se_cond1,
+        prepared.se_cond2,
+        prepared.se_diff,
     )
 
     @info "Permutation test complete. Found $(length(clusters.positive)) positive and $(length(clusters.negative)) negative clusters."
@@ -254,7 +258,7 @@ function analytic_test(prepared::StatisticalData; alpha::Real = 0.05, tail::Symb
     tail ∉ (:both, :left, :right) && @minimal_error "tail must be :both, :left, or :right. Got :$tail"
 
     # Compute t-statistics, degrees of freedom, and p-values in one pass
-    t_matrix, df, p_matrix = _compute_t_matrix(prepared, tail = tail)
+    t_matrix, df, p_matrix, se_matrix = _compute_t_matrix(prepared, tail = tail)
 
     # Create significance mask (with optional correction)
     corrected_mask = _create_significance_mask(p_matrix, alpha, correction_method)
@@ -314,6 +318,10 @@ function analytic_test(prepared::StatisticalData; alpha::Real = 0.05, tail::Symb
         channel_labels(prepared.data[1]),
         prepared.analysis.time_points,
         critical_t,
+        se_matrix,
+        prepared.se_cond1,
+        prepared.se_cond2,
+        prepared.se_diff,
     )
 
     @info "Analytic test complete: $(count(mask_positive)) +ve, $(count(mask_negative)) -ve significant points."

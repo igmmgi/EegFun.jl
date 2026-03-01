@@ -49,10 +49,16 @@ Stores prepared data for statistical tests (both permutation and analytic tests)
 # Fields
 - `data::Vector{ErpData}`: Grand average ERPs for conditions 1 and 2 (for visualization/storage)
 - `analysis::AnalysisData`: Core analysis data (design, data arrays, time points)
+- `se_cond1::Array{Float64, 2}`: Standard error for condition 1 over the full display interval [electrodes × time]
+- `se_cond2::Array{Float64, 2}`: Standard error for condition 2 over the full display interval [electrodes × time]
+- `se_diff::Array{Float64, 2}`: Standard error of the mean difference over the full display interval [electrodes × time]
 """
 struct StatisticalData
     data::Vector{ErpData}
     analysis::AnalysisData
+    se_cond1::Array{Float64,2}
+    se_cond2::Array{Float64,2}
+    se_diff::Array{Float64,2}
 end
 
 function Base.show(io::IO, data::StatisticalData)
@@ -222,6 +228,7 @@ Abstract type for statistical test results. All statistical test results share c
 - `electrodes::Vector{Symbol}`: Electrode labels
 - `time_points::Vector{Float64}`: Time points in seconds
 - `critical_t`: Critical t-values (type varies by test method)
+- `se::Array{Float64, 2}`: Standard error of the mean difference [electrodes × time]
 """
 abstract type StatsResult <: EegFunData end
 
@@ -240,6 +247,10 @@ Stores complete results from a cluster-based permutation test.
 - `electrodes::Vector{Symbol}`: Electrode labels
 - `time_points::Vector{Float64}`: Time points in seconds
 - `critical_t::Union{Array{Float64, 2}, Tuple{Float64, Float64}, Tuple{Array{Float64, 2}, Array{Float64, 2}}}`: Critical t-values used
+- `se::Array{Float64, 2}`: Standard error of the mean difference [electrodes × time] (analysis interval)
+- `se_cond1::Array{Float64, 2}`: Standard error for condition 1 [electrodes × time] (full display interval)
+- `se_cond2::Array{Float64, 2}`: Standard error for condition 2 [electrodes × time] (full display interval)
+- `se_diff::Array{Float64, 2}`: Standard error of the mean difference [electrodes × time] (full display interval)
 """
 struct PermutationResult <: StatsResult
     test_info::TestInfo
@@ -251,6 +262,10 @@ struct PermutationResult <: StatsResult
     electrodes::Vector{Symbol}
     time_points::Vector{Float64}
     critical_t::Union{Array{Float64,2},Tuple{Float64,Float64},Tuple{Array{Float64,2},Array{Float64,2}}}
+    se::Array{Float64,2}
+    se_cond1::Array{Float64,2}
+    se_cond2::Array{Float64,2}
+    se_diff::Array{Float64,2}
 end
 
 function Base.show(io::IO, result::PermutationResult)
@@ -343,6 +358,10 @@ Stores results from an analytic (parametric) t-test without permutation.
 - `electrodes::Vector{Symbol}`: Electrode labels
 - `time_points::Vector{Float64}`: Time points in seconds
 - `critical_t::Float64`: Critical t-value for significance (uniform across all points)
+- `se::Array{Float64, 2}`: Standard error of the mean difference [electrodes × time] (analysis interval)
+- `se_cond1::Array{Float64, 2}`: Standard error for condition 1 [electrodes × time] (full display interval)
+- `se_cond2::Array{Float64, 2}`: Standard error for condition 2 [electrodes × time] (full display interval)
+- `se_diff::Array{Float64, 2}`: Standard error of the mean difference [electrodes × time] (full display interval)
 """
 struct AnalyticResult <: StatsResult
     test_info::TestInfo
@@ -352,6 +371,10 @@ struct AnalyticResult <: StatsResult
     electrodes::Vector{Symbol}
     time_points::Vector{Float64}
     critical_t::Float64
+    se::Array{Float64,2}
+    se_cond1::Array{Float64,2}
+    se_cond2::Array{Float64,2}
+    se_diff::Array{Float64,2}
 end
 
 function Base.show(io::IO, result::AnalyticResult)

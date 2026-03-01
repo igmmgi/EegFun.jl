@@ -69,9 +69,9 @@ function _shuffle_labels!(
         # We use views to avoid copying during indexing
         function get_trial(idx)
             if idx <= n_A
-                return view(data1,idx,:,:)
+                return view(data1, idx, :, :)
             else
-                return view(data2,(idx-n_A),:,:)
+                return view(data2, (idx - n_A), :, :)
             end
         end
 
@@ -151,7 +151,7 @@ function _collect_permutation_t_matrices(prepared::StatisticalData, n_permutatio
         )
 
         # Compute t-matrix directly from arrays (no StatisticalData needed)
-        t_matrix_perm, _, _ = _compute_t_matrix(shuffled_A_buffer, shuffled_B_buffer, prepared.analysis.design)
+        t_matrix_perm, _, _, _ = _compute_t_matrix(shuffled_A_buffer, shuffled_B_buffer, prepared.analysis.design)
         permutation_t_matrices[:, :, perm_idx] = t_matrix_perm
 
         if show_progress
@@ -260,7 +260,7 @@ function _run_permutations(
                 prepared.analysis.data[2],
                 prepared.analysis.design,
             )
-            t_matrix_perm, _, _ = _compute_t_matrix(
+            t_matrix_perm, _, _, _ = _compute_t_matrix(
                 shuffled_A_buffer,
                 shuffled_B_buffer,
                 prepared.analysis.design,
@@ -359,7 +359,7 @@ function _shuffle_labels_tf!(
 
         shuffled_indices = randperm(n_total)
 
-        get_trial(idx) = idx <= n_A ? view(data1,idx,:,:,:) : view(data2,(idx-n_A),:,:,:)
+        get_trial(idx) = idx <= n_A ? view(data1, idx, :, :, :) : view(data2, (idx - n_A), :, :, :)
 
         for i = 1:n_A
             src_idx = shuffled_indices[i]

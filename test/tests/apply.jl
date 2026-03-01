@@ -54,7 +54,7 @@ using EegFun
             :Ch4 => EegFun.Neighbours([:Ch2, :Ch3, :Ch5], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]),
             :Ch5 => EegFun.Neighbours([:Ch3, :Ch4], [1.0, 1.0], [1.0, 1.0]),
         )
-        layout = EegFun.Layout(layout_df, neighbours_dict, nothing)
+        layout = EegFun.Layout(layout_df, neighbours_dict, nothing, nothing)
         dat.layout = layout
 
         # Set a channel to NaN to test repair

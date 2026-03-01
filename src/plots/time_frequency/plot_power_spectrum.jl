@@ -156,6 +156,7 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
     x_scale_obs = Observable(x_scale)
     y_scale_obs = Observable(y_scale)
     unit_obs = Observable(unit)
+    band_ax_ref = Ref{Union{Nothing,Axis}}(nothing)
 
     # Add x/y checkboxes for axis types with labels
     x_log_checkbox = Checkbox(controls_area[1, 1], checked = x_scale == :log10)
@@ -274,10 +275,11 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
     if show_freq_bands
 
         band_ax = Axis(fig[2, 1], height = 30)
+        band_ax_ref[] = band_ax
         linkxaxes!(ax, band_ax)
 
         # Set limits and hide decorations
-        xlims!(band_ax, 0, max_freq)
+        xlims!(band_ax, 0.1, max_freq)
         ylims!(band_ax, 0, 1)
         hidedecorations!(band_ax)
         hidespines!(band_ax)
@@ -300,9 +302,15 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
         if scale == :log10
             xlims!(ax, (0.1, max_freq))
             ax.xscale = log10
+            if !isnothing(band_ax_ref[])
+                band_ax_ref[].xscale = log10
+            end
         else
             xlims!(ax, (0.1, max_freq))
             ax.xscale = identity
+            if !isnothing(band_ax_ref[])
+                band_ax_ref[].xscale = identity
+            end
         end
     end
 

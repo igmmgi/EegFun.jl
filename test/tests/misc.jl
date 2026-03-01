@@ -150,7 +150,7 @@ using DataFrames
 
     @testset "Copy functions" begin
         # Create test data
-        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
         analysis_info = EegFun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
 
         # Test ContinuousData copy
@@ -239,7 +239,7 @@ using DataFrames
             is_eog = [false, true, false],
             is_artifact = [true, true, false],
         )
-        layout = EegFun.Layout(DataFrame(label = [:Fz], inc = [0.0], azi = [0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:Fz], inc = [0.0], azi = [0.0]), nothing, nothing, nothing)
         analysis_info = EegFun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
         continuous_data = EegFun.ContinuousData("test_data", df, layout, 250, analysis_info)
 

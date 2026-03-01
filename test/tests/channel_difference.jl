@@ -132,7 +132,7 @@ using EegFun
 
     # Update layout to include new channels
     layout_df = DataFrame(label = [:Ch1, :Ch2, :Ch3, :Fp1, :Fp2, :IO1, :IO2, :F9, :F10], inc = zeros(9), azi = zeros(9))
-    dat.layout = EegFun.Layout(layout_df, nothing, nothing)
+    dat.layout = EegFun.Layout(layout_df, nothing, nothing, nothing)
 
     eog_cfg = EegFun.EogConfig(
         vEOG_criterion = 50.0,
@@ -161,7 +161,7 @@ using EegFun
     dat.data[!, :F10] = dat.data.Ch3 .+ 0.3
 
     layout_df = DataFrame(label = [:Ch1, :Ch2, :Ch3, :Fp1, :Fp2, :IO1, :IO2, :F9, :F10], inc = zeros(9), azi = zeros(9))
-    dat.layout = EegFun.Layout(layout_df, nothing, nothing)
+    dat.layout = EegFun.Layout(layout_df, nothing, nothing, nothing)
 
     eog_cfg_dict = Dict(
         "vEOG_criterion" => 50.0,
@@ -185,7 +185,7 @@ using EegFun
     end
 
     layout_df = DataFrame(label = [:Ch1, :Ch2, :Ch3, :Fp1, :Fp2, :IO1, :IO2], inc = zeros(7), azi = zeros(7))
-    epochs.layout = EegFun.Layout(layout_df, nothing, nothing)
+    epochs.layout = EegFun.Layout(layout_df, nothing, nothing, nothing)
 
     eog_cfg_epochs = EegFun.EogConfig(
         vEOG_criterion = 50.0,
@@ -220,7 +220,7 @@ using EegFun
     dat.data[!, :hEOG] = hEOG_signal
 
     layout_df = DataFrame(label = [:Ch1, :Ch2, :Ch3, :vEOG, :hEOG], inc = zeros(5), azi = zeros(5))
-    dat.layout = EegFun.Layout(layout_df, nothing, nothing)
+    dat.layout = EegFun.Layout(layout_df, nothing, nothing, nothing)
 
     eog_cfg_detect = EegFun.EogConfig(
         vEOG_criterion = 50.0,

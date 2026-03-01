@@ -169,7 +169,7 @@ function read_layout(file)
     df = DataFrame(CSV.File(file, types = Dict(:label => Symbol)))
     rename!(df, Symbol.(names(df)))
 
-    return Layout(df, nothing, nothing)
+    return Layout(df, nothing, nothing, nothing)
 end
 # === COORDINATE CONVERSIONS ===
 """
@@ -664,6 +664,7 @@ clear_neighbours!(layout)
 function clear_neighbours!(layout::Layout)
     layout.neighbours = nothing
     layout.criterion = nothing
+    layout.criterion_type = nothing
 end
 
 """
@@ -726,7 +727,7 @@ get_neighbours_xy!(layout, 40.0)
 ```
 """
 function get_neighbours_xy!(layout::Layout, distance_criterion::Real)
-    if !has_neighbours(layout) || layout.criterion != distance_criterion
+    if !has_neighbours(layout) || layout.criterion != distance_criterion || layout.criterion_type != :xy
         if distance_criterion <= 0
             @minimal_error "Distance criterion must be positive"
         end
@@ -739,6 +740,7 @@ function get_neighbours_xy!(layout::Layout, distance_criterion::Real)
 
         layout.neighbours = _find_neighbours(layout.data.label, coords, distance_criterion)
         layout.criterion = Float64(distance_criterion)
+        layout.criterion_type = :xy
     end
     return nothing
 end
@@ -757,7 +759,7 @@ if the distance criterion has changed. It caches the results for efficiency.
 - `distance_criterion::Real`: The distance criterion for neighbors in mm
 """
 function get_neighbours_xyz!(layout::Layout, distance_criterion::Real)
-    if !has_neighbours(layout) || layout.criterion != distance_criterion
+    if !has_neighbours(layout) || layout.criterion != distance_criterion || layout.criterion_type != :xyz
         if distance_criterion <= 0
             @minimal_error "Distance criterion must be positive"
         end
@@ -770,6 +772,7 @@ function get_neighbours_xyz!(layout::Layout, distance_criterion::Real)
 
         layout.neighbours = _find_neighbours(layout.data.label, coords, distance_criterion)
         layout.criterion = Float64(distance_criterion)
+        layout.criterion_type = :xyz
     end
     return nothing
 end
@@ -884,7 +887,7 @@ new_layout = rename(layout, rename_dict)
 """
 function rename_channel(layout::Layout, rename_dict::Dict{Symbol,Symbol})
     # Create a copy of the layout and apply renaming
-    renamed_layout = Layout(copy(layout.data), nothing, nothing)
+    renamed_layout = Layout(copy(layout.data), nothing, nothing, nothing)
     rename_channel!(renamed_layout, rename_dict)
     return renamed_layout
 end
@@ -960,7 +963,7 @@ Create a subset copy of a Layout object using channel selection predicates.
 """
 function subset_layout(layout::Layout; channel_selection = channels())
     # Create a copy of the layout and apply subsetting
-    subset_layout = Layout(copy(layout.data), nothing, nothing)
+    subset_layout = Layout(copy(layout.data), nothing, nothing, nothing)
     subset_layout!(subset_layout, channel_selection = channel_selection)
     return subset_layout
 end

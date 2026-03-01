@@ -32,7 +32,7 @@ function plot_erp_filter_gui(erp::ErpData; channel::Union{Symbol,Nothing} = noth
 end
 
 # Vector of ErpData - main implementation
-function plot_erp_filter_gui(erp_vec::Vector{ErpData}; channel::Union{Symbol,Nothing} = nothing)
+function plot_erp_filter_gui(erp_vec::Vector{ErpData}; channel::Union{Symbol,Nothing} = nothing, display_plot::Bool = true)
 
     # Get available channels from first ERP
     first_erp = erp_vec[1]
@@ -72,7 +72,8 @@ function plot_erp_filter_gui(erp_vec::Vector{ErpData}; channel::Union{Symbol,Not
     mirror_enabled = Observable(false)
 
     # Create Figure
-    fig = Figure(size = (1200, 700), title = "ERP Filter Tool")
+    _set_window_title("ERP Filter Tool")
+    fig = Figure(size = (1200, 700))
 
     # Create main grid: controls on left (20%), plot area on right (80%)
     main_grid = fig[1, 1] = GridLayout()
@@ -179,7 +180,7 @@ function plot_erp_filter_gui(erp_vec::Vector{ErpData}; channel::Union{Symbol,Not
     n_conditions = length(erp_vec)
     nrows, ncols = _best_rect(n_conditions)
 
-    axes = []
+    axes = Axis[]
     for i = 1:n_conditions
         row_idx = div(i - 1, ncols) + 1
         col_idx = mod(i - 1, ncols) + 1
@@ -333,6 +334,9 @@ function plot_erp_filter_gui(erp_vec::Vector{ErpData}; channel::Union{Symbol,Not
         update_plot!()
     end
 
-    display(fig)
-    return (fig=fig)
+    if display_plot
+        display(fig)
+    end
+    _set_window_title("Makie")
+    return (fig = fig)
 end

@@ -168,7 +168,7 @@ function create_test_continuous_data_with_triggers(; n = 1000, fs = 1000)
     trigger[950:952] .= [1, 2, 3]
 
     df = DataFrame(time = t, trigger = trigger, A = x)
-    layout = EegFun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing)
+    layout = EegFun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing, nothing)
     return EegFun.ContinuousData("test_data", copy(df, copycols = true), layout, fs, EegFun.AnalysisInfo(:none, 0.0, 0.0))
 end
 
@@ -186,7 +186,7 @@ function create_test_continuous_data_with_artifacts(; n::Int = 1000, fs::Int = 1
     artifact_signal[800:802] .= 100.0  # Smaller positive artifact
 
     df = DataFrame(:time => t, :trigger => zeros(Int, n), :Ch1 => clean_signal, :Ch2 => artifact_signal)
-    layout = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+    layout = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
 
     dat = EegFun.ContinuousData("test_data", df, layout, fs, EegFun.AnalysisInfo())
 
@@ -204,7 +204,7 @@ function create_test_continuous_data_empty_triggers(; n_samples = 1000, fs = 100
     t = collect(0:(n_samples-1)) ./ fs
     df = DataFrame(time = t, trigger = zeros(Int16, n_samples), channel1 = _synthetic_signal(t), channel2 = _synthetic_signal(t))
 
-    layout = EegFun.Layout(DataFrame(label = [:channel1, :channel2], inc = [0.0, 90.0], azi = [0.0, 0.0]), nothing, nothing)
+    layout = EegFun.Layout(DataFrame(label = [:channel1, :channel2], inc = [0.0, 90.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
     return EegFun.ContinuousData("test_data", df, layout, fs, EegFun.AnalysisInfo(:none, 0.0, 0.0))
 end
 
@@ -240,6 +240,7 @@ function create_test_lrp_data(; participant = 1, condition = 1, n_timepoints = 1
     channel_labels = [:C3, :C4, :C1, :C2, :Fp1, :Fp2, :Fz]
     layout = EegFun.Layout(
         DataFrame(label = channel_labels, inc = zeros(length(channel_labels)), azi = zeros(length(channel_labels))),
+        nothing,
         nothing,
         nothing,
     )
@@ -284,7 +285,7 @@ function create_test_layout(; n_channels::Int = 4, layout_type::Symbol = :grid)
         error("Unknown layout_type: $layout_type")
     end
 
-    return EegFun.Layout(layout_data, nothing, nothing)
+    return EegFun.Layout(layout_data, nothing, nothing, nothing)
 end
 
 function create_test_summary_data()
@@ -467,7 +468,7 @@ function signal_to_data(
 
     # Create minimal layout for the channel
     layout_df = DataFrame(:label => [channel_name])
-    layout = Layout(layout_df, nothing, nothing)
+    layout = Layout(layout_df, nothing, nothing, nothing)
 
     # Create AnalysisInfo
     analysis_info = AnalysisInfo()

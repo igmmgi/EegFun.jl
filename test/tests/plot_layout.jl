@@ -53,12 +53,10 @@ using Makie
         ax = Axis3(fig[1, 1])
 
         # Test basic functionality
-        result = EegFun.plot_layout_3d!(fig, ax, layout, display_plot = false)
-        @test result isa Tuple && length(result) == 2
+        @test isnothing(EegFun.plot_layout_3d!(fig, ax, layout, display_plot = false))
 
         # Test with neighbours
-        result = EegFun.plot_layout_3d!(fig, ax, layout, neighbours = true, display_plot = false)
-        @test result isa Tuple && length(result) == 2
+        @test isnothing(EegFun.plot_layout_3d!(fig, ax, layout, neighbours = true, display_plot = false))
     end
 
     @testset "plot_layout_3d basic functionality" begin
@@ -190,7 +188,7 @@ using Makie
     @testset "edge cases and boundary conditions" begin
         # Test with empty layout
         empty_df = DataFrame(label = Symbol[], x2 = Float64[], y2 = Float64[], x3 = Float64[], y3 = Float64[], z3 = Float64[])
-        empty_layout = EegFun.Layout(empty_df, nothing, nothing)
+        empty_layout = EegFun.Layout(empty_df, nothing, nothing, nothing)
 
         fig, ax = EegFun.plot_layout_2d(empty_layout, display_plot = false)
         @test fig isa Figure
@@ -198,7 +196,7 @@ using Makie
 
         # Test with single electrode
         single_df = DataFrame(label = [:Cz], x2 = [0.0], y2 = [0.0], x3 = [0.0], y3 = [0.0], z3 = [0.0])
-        single_layout = EegFun.Layout(single_df, nothing, nothing)
+        single_layout = EegFun.Layout(single_df, nothing, nothing, nothing)
 
         fig, ax = EegFun.plot_layout_2d(single_layout, display_plot = false)
         @test fig isa Figure

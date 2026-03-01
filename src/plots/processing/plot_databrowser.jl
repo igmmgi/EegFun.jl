@@ -383,7 +383,7 @@ function _create_menu(fig, options, default, label; kwargs...)
 end
 
 function _create_labels_menu(fig, ax, state)
-    options = vcat(["All", "Left", "Right", "Central", "BioSemi16", "BioSemi32", "BioSemi64"], state.channels.labels)
+    options = vcat(["All", "Left", "Right", "Central"], state.channels.labels)
     menu = _create_menu(fig, options, "All", "Labels")
 
     # Flag to prevent recursive updates when programmatically setting menu selection
@@ -407,8 +407,6 @@ function _create_labels_menu(fig, ax, state)
         elseif s == "Central"
             state.channels.individually_selected = Symbol[]
             state.channels.visible .= occursin.(r"z$", String.(state.channels.labels))
-        elseif s in ("BioSemi16", "BioSemi32", "BioSemi64")
-            _apply_biosemi_layout!(state, lowercase(s) * ".csv") || return
         else
             # Individual electrode selection - toggle selection
             selected_sym = Symbol(s)
@@ -442,19 +440,7 @@ function _create_labels_menu(fig, ax, state)
     return menu
 end
 
-""" Apply a BioSemi layout file to filter visible channels. Returns false if file not found. """
-function _apply_biosemi_layout!(state, filename)
-    state.channels.individually_selected = Symbol[]
-    package_layouts_dir = joinpath(@__DIR__, "..", "..", "data", "layouts")
-    layout_file = find_file(filename, package_layouts_dir)
-    if isnothing(layout_file)
-        @minimal_error "Layout file $filename not found in $package_layouts_dir"
-        return false
-    end
-    tmp_layout = read_layout(layout_file)
-    state.channels.visible .= state.channels.labels .∈ Ref(tmp_layout.data.label)
-    return true
-end
+
 
 function _create_reference_menu(fig, state, dat)
     options = vcat([:none, :avg, :mastoid], state.channels.labels)
@@ -649,8 +635,8 @@ function _channel_repair_menu(state, selected_channels, ax)
     scroll_area = menu_fig[2, 1] = GridLayout()
 
     # Create checkboxes and labels arrays
-    channel_checkboxes = []
-    channel_labels = []
+    channel_checkboxes = Checkbox[]
+    channel_labels = Label[]
 
     # Add all channels in 7-column layout
     for (i, ch) in enumerate(all_channels)
@@ -713,9 +699,9 @@ function _channel_repair_menu(state, selected_channels, ax)
 
     # Apply repair
     on(action_buttons[1].clicks) do n
-        selected_channels = all_channels[findall(cb -> cb.checked[], channel_checkboxes)]
-        if !isempty(selected_channels)
-            _repair_selected_channels!(state, selected_channels, selected_method[], ax)
+        channels_to_repair = all_channels[findall(cb -> cb.checked[], channel_checkboxes)]
+        if !isempty(channels_to_repair)
+            _repair_selected_channels!(state, channels_to_repair, selected_method[], ax)
         else
             @info "No channels selected for repair"
         end
@@ -858,14 +844,14 @@ function _create_sliders(fig, state::ContinuousDataBrowserState, dat)
     slider_x = Slider(fig[2, 1], range = 1:50:nrow(state.data.current[].data), startvalue = 1, snap = true)
 
     on(slider_range.value) do x
-        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x+slider_x.value.val)
+        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x + slider_x.value.val)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
     end
 
     on(slider_x.value) do x
-        new_range = x:min(nrow(state.data.current[].data), (x+slider_range.value.val)-1)
+        new_range = x:min(nrow(state.data.current[].data), (x + slider_range.value.val) - 1)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
@@ -1110,7 +1096,7 @@ function _handle_left_click!(ax, state, event, mouse_x)
     if event.action == Mouse.press
         # Check if click is within any existing selected region
         clicked_region_idx = _find_clicked_region(state, mouse_x)
-        if clicked_region_idx |> !isnothing
+        if !isnothing(clicked_region_idx)
             # Remove the clicked region
             _remove_region_from_selection!(ax, state, clicked_region_idx)
         else
@@ -1125,7 +1111,7 @@ end
 function _handle_right_click!(ax, state, mouse_x)
     # Check if right-click is within any selected region
     clicked_region_idx = _find_clicked_region(state, mouse_x)
-    if clicked_region_idx |> !isnothing
+    if !isnothing(clicked_region_idx)
         _show_additional_menu(state, clicked_region_idx)
     end
     # Right-click outside regions does nothing (use 'r' key for channel repair)
@@ -1148,7 +1134,7 @@ end
 # Helper function to find the closest channel to a click
 function _find_closest_browser_channel(ax, state, mouse_x, mouse_y)
     current_data = _get_current_data(state.data)
-    tolerance = 10  # 50 pixel tolerance
+    tolerance = 10  # pixel tolerance for snap detection
 
     min_distance = Inf
     closest_channel = nothing
@@ -1167,18 +1153,16 @@ function _find_closest_browser_channel(ax, state, mouse_x, mouse_y)
             # Calculate distance to the clicked point
             distance = abs(mouse_y - channel_y)
 
-            # If this is the closest channel so far
+            # Track closest channel overall
             if distance < min_distance
                 min_distance = distance
                 closest_channel = idx
             end
-            if distance < tolerance
-                return closest_channel
-            end
         end
     end
 
-    return closest_channel
+    # Only return if within tolerance
+    return min_distance <= tolerance ? closest_channel : nothing
 end
 
 # Helper function to toggle channel selection
@@ -1341,7 +1325,7 @@ end
 
 function _subset_selected_data(state::ContinuousDataBrowserState, clicked_region_idx = nothing)
     # Use the clicked region if specified, otherwise use the most recent region, or fall back to bounds
-    if clicked_region_idx |> !isnothing && 1 <= clicked_region_idx <= length(state.selection.selected_regions[])
+    if !isnothing(clicked_region_idx) && 1 <= clicked_region_idx <= length(state.selection.selected_regions[])
         # Use the specific clicked region
         x_min, x_max = state.selection.selected_regions[][clicked_region_idx]
     elseif !isempty(state.selection.selected_regions[])
@@ -1362,7 +1346,7 @@ end
 
 function _subset_selected_data(state::EpochedDataBrowserState, clicked_region_idx = nothing)
     # Get the selected region
-    if clicked_region_idx |> !isnothing && 1 <= clicked_region_idx <= length(state.selection.selected_regions[])
+    if !isnothing(clicked_region_idx) && 1 <= clicked_region_idx <= length(state.selection.selected_regions[])
         x_min, x_max = state.selection.selected_regions[][clicked_region_idx]
     elseif !isempty(state.selection.selected_regions[])
         x_min, x_max = state.selection.selected_regions[][end]
@@ -1718,7 +1702,7 @@ function _draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
                 ax,
                 get_time(state.data.current[], highlight_data[1]),
                 get_time(state.data.current[], end_indices),
-                color = :Red,
+                color = :red,
                 alpha = 0.5,
                 visible = true,
             )
@@ -1830,7 +1814,7 @@ function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs.
     end
 
     # Display on the provided screen if given, otherwise use default display
-    if screen |> !isnothing
+    if !isnothing(screen)
         display(screen, fig)
     else
         display(fig)
@@ -1860,7 +1844,7 @@ function plot_databrowser(
         files = _find_batch_files(filename, input_dir, participant_selection)
         isempty(files) && @minimal_error "No files matching pattern '$filename' in $input_dir"
 
-        results = []
+        results = NamedTuple[]
         for file in sort(files, by = _natural_sort_key)
             file_path = joinpath(input_dir, file)
             @info "Browsing: $file"
@@ -1873,5 +1857,7 @@ function plot_databrowser(
     end
 end
 
-plot_databrowser(data::Vector{<:EegData}, ica = nothing; screen = nothing, kwargs...) =
-    plot_databrowser(data[1], ica; screen = screen, kwargs...);
+function plot_databrowser(data::Vector{<:EegData}, ica = nothing; screen = nothing, kwargs...)
+    @info "Vector of $(length(data)) datasets provided — browsing first element only"
+    return plot_databrowser(data[1], ica; screen = screen, kwargs...)
+end

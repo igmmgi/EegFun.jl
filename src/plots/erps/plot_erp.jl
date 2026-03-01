@@ -10,7 +10,7 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Axis limits and labels
     :xlim => (nothing, "X-axis limits as (min, max) tuple. If nothing, automatically determined"),
     :ylim => (nothing, "Y-axis limits as (min, max) tuple. If nothing, automatically determined"),
-    :xlabel => ("Time (S)", "Label for x-axis"),
+    :xlabel => ("Time (s)", "Label for x-axis"),
     :ylabel => ("μV", "Label for y-axis"),
     :yreversed => (false, "Whether to reverse the y-axis"),
 
@@ -25,7 +25,6 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :colormap => (:jet, "Colormap for multi-channel plots"),
 
     # Plot configuration
-    :yreversed => (false, "Reverse the y-axis (true/false)"),
     :average_channels => (false, "Average across channels (true/false)"),
 
     # Legend parameters - get all Legend attributes with their actual defaults
@@ -172,7 +171,7 @@ end
              layout::Union{Symbol, PlotLayout} = :single,
              channel_selection::Function = channels(),
              sample_selection::Function = samples(),
-    interval_selection::Interval = times(),
+             interval_selection::Interval = times(),
              baseline_interval::Interval = times(),
              kwargs...)
 
@@ -252,7 +251,7 @@ end
              condition_selection::Function = conditions(),
              channel_selection::Function = channels(), 
              sample_selection::Function = samples(),
-    interval_selection::Interval = times(),
+             interval_selection::Interval = times(),
              baseline_interval::Interval = times(),
              kwargs...)
 
@@ -340,7 +339,7 @@ function plot_erp(
             user_provided_color = user_provided_color,
             plot_kwargs...,
         )
-        if plot_kwargs[:interactive] && legend_refs |> !isnothing
+        if plot_kwargs[:interactive] && !isnothing(legend_refs)
             legend_refs[ax_idx] = leg
         end
     end
@@ -517,7 +516,7 @@ function _plot_erp!(
             )
 
             # Store line and y Observable if references are requested
-            if line_refs |> !isnothing
+            if !isnothing(line_refs)
                 if !haskey(line_refs, dataset_idx)
                     line_refs[dataset_idx] = Dict{Symbol,Tuple{Any,Observable}}()
                 end
@@ -583,7 +582,7 @@ function _prepare_erp_data(
     end
 
     # Apply baseline correction if requested
-    if baseline_interval |> !isnothing
+    if !isnothing(baseline_interval)
         @info "Applying baseline correction to $(length(dat_subset)) datasets"
         baseline!.(dat_subset, Ref(baseline_interval))
     end
@@ -625,6 +624,7 @@ end
 
 function _show_erp_context_menu!(selection_state, data, condition_checked_ref)
 
+    _set_window_title("ERP Context Menu")
     menu_fig = Figure(size = (300, 300))
 
     # Filter by visible conditions to determine if we have multiple visible conditions
@@ -877,7 +877,7 @@ function _setup_erp_control_panel!(
     control_fig = Ref{Union{Figure,Nothing}}(nothing)
 
     # Set up linked legend interactions
-    if line_refs |> !isnothing
+    if !isnothing(line_refs)
         _setup_linked_legend_interactions!(line_refs)
     end
 
@@ -897,13 +897,13 @@ function _setup_erp_control_panel!(
         start_val, stop_val = _parse_baseline_values(start_str, stop_str)
 
         # Convert to tuple if valid (baseline! accepts tuples and converts internally)
-        baseline_interval_new = (start_val |> !isnothing && stop_val |> !isnothing) ? (start_val, stop_val) : nothing
+        baseline_interval_new = (!isnothing(start_val) && !isnothing(stop_val)) ? (start_val, stop_val) : nothing
 
         # Check if baseline actually changed
         baseline_changed = baseline_interval_new !== previous_baseline[]
 
         # Apply baseline if it changed
-        if baseline_changed && baseline_interval_new |> !isnothing
+        if baseline_changed && !isnothing(baseline_interval_new)
             baseline!.(dat_subset, Ref(baseline_interval_new))
             previous_baseline[] = baseline_interval_new
         end

@@ -22,9 +22,6 @@ const PLOT_EPOCHS_REJECTION_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Line styling
     :linewidth => (1, "Line width for epoch traces"),
-    :origin_linewidth => (0.5, "Line width for origin line at y=0"),
-    :origin_linestyle => (:dash, "Line style for origin line"),
-    :origin_color => (:black, "Color for origin line"),
 
     # Origin lines
     :add_xy_origin => (true, "Whether to add origin lines at x=0 and y=0"),
@@ -36,7 +33,7 @@ const PLOT_EPOCHS_REJECTION_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :yminorgrid => (false, "Whether to show y-axis minor grid"),
 
     # Color scheme
-    :colormap => (:GnBu, "Colormap for channel traces"),
+    :colormap => (:jet, "Colormap for channel traces"),
     :good_epoch_color => (:green, "Color for good epoch spines"),
     :bad_epoch_color => (:red, "Color for bad epoch spines"),
 
@@ -167,6 +164,10 @@ function detect_bad_epochs_interactive(
 
     @info "Starting interactive epoch rejection interface"
 
+    # Set window title
+    title_str = _generate_window_title(dat)
+    _set_window_title(title_str)
+
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_EPOCHS_REJECTION_KWARGS, kwargs)
 
@@ -182,7 +183,7 @@ function detect_bad_epochs_interactive(
 
     n_total_epochs = n_epochs(dat)
     epochs_per_page = plot_kwargs[:dims][1] * plot_kwargs[:dims][2]
-    n_pages = floor(Int, n_total_epochs / epochs_per_page)
+    n_pages = cld(n_total_epochs, epochs_per_page)
 
     @info "Displaying $(length(selected_channels)) channels"
     @info "Total epochs: $n_total_epochs across $n_pages pages"
@@ -224,7 +225,7 @@ function detect_bad_epochs_interactive(
 
     # Display figure
     if plot_kwargs[:display_plot]
-        display(fig)
+        _display_figure(fig)
     end
 
     @info "Interface ready. Review epochs and mark bad ones by checking the boxes."
@@ -233,6 +234,29 @@ function detect_bad_epochs_interactive(
     return state
 end
 
+"""
+    detect_bad_epochs_interactive(epochs::Vector{EpochData}; channel_selection::Function=channels(), kwargs...)
+
+Convenience method that calls `detect_bad_epochs_interactive` for each condition when given a vector.
+
+# Returns
+- `Vector{EpochRejectionState}`: One state per condition
+"""
+function detect_bad_epochs_interactive(
+    epochs::Vector{EpochData};
+    channel_selection::Function = channels(),
+    artifact_info::Union{Nothing,Vector{EpochRejectionInfo}} = nothing,
+    kwargs...,
+)
+    return [
+        detect_bad_epochs_interactive(
+            epochs[i];
+            channel_selection = channel_selection,
+            artifact_info = isnothing(artifact_info) ? nothing : artifact_info[i],
+            kwargs...,
+        ) for i in eachindex(epochs)
+    ]
+end
 
 #=============================================================================
     UI CREATION FUNCTIONS
@@ -318,7 +342,7 @@ function _create_rejection_interface!(
     end
     btn_next = Button(nav_gl[1, 2], label = "Next ▶", width = 100, height = 40)
     on(btn_next.clicks) do _
-        if state.current_page[] <= state.n_pages
+        if state.current_page[] < state.n_pages
             state.current_page[] += 1
             _update_epoch_display!(state, artifact_info, plot_kwargs)
         end
@@ -434,23 +458,8 @@ function _plot_single_epoch!(ax::Axis, state::EpochRejectionState, epoch_idx::In
         lines!(ax, t, epoch[!, ch], color = color, linewidth = plot_kwargs[:linewidth])
     end
 
-    # Add origin lines if enabled
-    if plot_kwargs[:add_xy_origin]
-        hlines!(
-            ax,
-            [0.0],
-            color = plot_kwargs[:origin_color],
-            linewidth = plot_kwargs[:origin_linewidth],
-            linestyle = plot_kwargs[:origin_linestyle],
-        )
-        vlines!(
-            ax,
-            [0.0],
-            color = plot_kwargs[:origin_color],
-            linewidth = plot_kwargs[:origin_linewidth],
-            linestyle = plot_kwargs[:origin_linestyle],
-        )
-    end
+    # Add origin lines using shared helper
+    _set_origin_lines!(ax; add_xy_origin = plot_kwargs[:add_xy_origin])
 end
 
 function Base.show(io::IO, state::EpochRejectionState)
@@ -494,7 +503,7 @@ function _get_bad_channels_for_epoch(artifact_info::Union{Nothing,EpochRejection
         return Set{Symbol}()
     end
 
-    bad_channels = [r.label for r in artifact_info.rejected if r.epoch == epoch_idx]
+    bad_channels = [r.channel for r in artifact_info.rejected if r.epoch == epoch_idx]
     return Set(bad_channels)
 end
 
@@ -546,3 +555,74 @@ rejected_indices = get_rejected_epochs(state)
 function get_rejected_epochs(state::EpochRejectionState)::Vector{Int}
     return findall(state.rejected)
 end
+
+"""
+    _to_rejection_info(state::EpochRejectionState)::EpochRejectionInfo
+
+Internal: Convert an interactive `EpochRejectionState` into an `EpochRejectionInfo`.
+Called internally by `reject_epochs(dat, state)` — users should not need to call this directly.
+
+Since interactive rejection only records which epochs are bad (not which channels caused
+the rejection), all selected channels are marked as rejected for each flagged epoch.
+"""
+function _to_rejection_info(state::EpochRejectionState)::EpochRejectionInfo
+    dat = state.epoch_data
+    rejected_epoch_indices = findall(state.rejected)
+
+    # Build Rejection objects — mark all layout channels for each rejected epoch
+    layout_channels = state.selected_channels
+    rejections = Rejection[]
+    for epoch_idx in rejected_epoch_indices
+        for ch in layout_channels
+            push!(rejections, Rejection(ch, epoch_idx))
+        end
+    end
+
+    info = EpochInfo(dat.condition, dat.condition_name, state.n_total_epochs)
+
+    return EpochRejectionInfo(
+        "interactive_rejection",
+        info,
+        length(rejections),
+        0,        # abs_criterion (not applicable)
+        nothing,  # abs_rejections
+        0,        # z_criterion (not applicable)
+        nothing,  # z_rejections
+        rejections,
+        nothing,  # repaired
+        nothing,  # skipped
+    )
+end
+
+"""
+    _to_rejection_info(states::Vector{EpochRejectionState})::Vector{EpochRejectionInfo}
+
+Convert a vector of interactive rejection states into rejection info objects.
+"""
+_to_rejection_info(states::Vector{EpochRejectionState})::Vector{EpochRejectionInfo} = _to_rejection_info.(states)
+
+# --- reject_epochs dispatch for EpochRejectionState ---
+
+"""
+    reject_epochs(dat::EpochData, state::EpochRejectionState)::EpochData
+
+Remove interactively rejected epochs. Converts the interactive `EpochRejectionState`
+to `EpochRejectionInfo` internally, so both automatic and interactive paths use the
+same downstream API.
+
+# Examples
+```julia
+state = detect_bad_epochs_interactive(epochs)
+# ... review and close window ...
+epochs_good = reject_epochs(epochs, state)
+```
+"""
+reject_epochs(dat::EpochData, state::EpochRejectionState)::EpochData = reject_epochs(dat, _to_rejection_info(state))
+
+"""
+    reject_epochs(dat::Vector{EpochData}, states::Vector{EpochRejectionState})::Vector{EpochData}
+
+Remove interactively rejected epochs for multiple conditions.
+"""
+reject_epochs(dat::Vector{EpochData}, states::Vector{EpochRejectionState})::Vector{EpochData} =
+    reject_epochs.(dat, _to_rejection_info.(states))

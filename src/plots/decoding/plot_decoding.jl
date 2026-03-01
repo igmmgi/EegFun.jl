@@ -244,7 +244,7 @@ function plot_decoding(filepath::String; input_dir::String = pwd(), participant_
         files = _find_batch_files(filepath, input_dir, participant_selection)
         isempty(files) && @minimal_error "No files matching pattern '$filepath' in $input_dir"
 
-        results = []
+        results = NamedTuple[]
         for file in sort(files, by = _natural_sort_key)
             file_path = joinpath(input_dir, file)
             @info "Plotting: $file"
@@ -292,10 +292,11 @@ function plot_decoding(decoded::DecodedData; kwargs...)
     # Plot decoding data to axis
     _plot_decoding_to_axis!(ax, times, accuracy, stderror, chance_level, plot_kwargs)
 
-    # Display if requested
+    _set_window_title("Decoding")
     if display_plot
         display(fig)
     end
+    _set_window_title("Makie")
 
     return fig, ax
 end
@@ -401,10 +402,11 @@ function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
         _plot_decoding_to_axis!(ax, times, accuracy, stderror, chance_level, plot_kwargs)
     end
 
-    # Display if requested
+    _set_window_title("Decoding")
     if display_plot
         display(fig)
     end
+    _set_window_title("Makie")
 
     return fig
 end
@@ -509,10 +511,11 @@ function plot_decoding(decoded::DecodedData, stats::DecodingStatisticsResult; kw
         end
     end
 
-    # Display if originally requested
+    _set_window_title("Decoding")
     if display_plot_orig
         display(fig)
     end
+    _set_window_title("Makie")
 
     return fig
 end
@@ -537,7 +540,7 @@ plot_confusion_matrix(decoded, time_point=0.3)
 plot_confusion_matrix(decoded)
 ```
 """
-function plot_confusion_matrix(decoded::DecodedData; time_point::Union{Float64,Int,Nothing} = nothing, kwargs...)
+function plot_confusion_matrix(decoded::DecodedData; time_point::Union{Float64,Int,Nothing} = nothing, display_plot::Bool = true, kwargs...)
     if isnothing(decoded.confusion_matrix)
         @minimal_error("No confusion matrix data available in DecodedData")
     end
@@ -563,7 +566,7 @@ function plot_confusion_matrix(decoded::DecodedData; time_point::Union{Float64,I
     ax = Axis(fig[1, 1], title = title_text, xlabel = "Predicted", ylabel = "True")
 
     # Create heatmap
-    heatmap!(ax, confusion, colormap = :viridis, colorrange = (0, 1))
+    heatmap!(ax, confusion, colormap = :jet, colorrange = (0, 1))
 
     # Add text labels
     n_classes = size(confusion, 1)
@@ -584,7 +587,11 @@ function plot_confusion_matrix(decoded::DecodedData; time_point::Union{Float64,I
     ax.xticks = (1:n_classes, decoded.condition_names)
     ax.yticks = (1:n_classes, decoded.condition_names)
 
-    display(fig)
+    _set_window_title("Confusion Matrix")
+    if display_plot
+        display(fig)
+    end
+    _set_window_title("Makie")
     return fig
 end
 

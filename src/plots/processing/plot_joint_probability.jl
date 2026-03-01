@@ -14,7 +14,7 @@ const PLOT_JOINT_PROBABILITY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :xlabel => ("Electrode", "Label for x-axis"),
     :ylabel => ("Joint Probability", "Label for y-axis"),
     :title => ("", "Plot title"),
-    :xtick_rotation => (π/4, "Rotation angle for x-axis tick labels"),
+    :xtick_rotation => (π / 4, "Rotation angle for x-axis tick labels"),
 
     # Font sizes
     :title_fontsize => (16, "Font size for title"),
@@ -154,9 +154,11 @@ function plot_joint_probability(dat::DataFrame; kwargs...)
     # Use the mutating version to plot
     plot_joint_probability!(fig, ax, dat; kwargs...)
 
+    _set_window_title("Joint Probability")
     if plot_kwargs[:display_plot]
         _display_figure(fig)
     end
+    _set_window_title("Makie")
 
     return fig, ax
 end

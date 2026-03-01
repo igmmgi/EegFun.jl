@@ -59,15 +59,16 @@ function plot_frequency_spectrum(
     y_scale::Symbol = :linear,
     unit::Symbol = :linear,
     max_freq::Union{Nothing,Real} = nothing,
-    colormap = :default,
+    colormap = :jet,
     title::Union{Nothing,String} = nothing,
     show_legend::Bool = true,
     linewidth::Real = 2,
     line_alpha::Real = 0.8,
+    display_plot::Bool = true,
 )
     # Get selected channels
     selected_channels = get_selected_channels(spectrum_data, channel_selection; include_meta = false, include_extra = false)
-    isempty(selected_channels) && error("No channels selected. Available channels: $(channel_labels(spectrum_data))")
+    isempty(selected_channels) && @minimal_error "No channels selected. Available channels: $(channel_labels(spectrum_data))"
 
     # Filter to only channels that actually exist in the spectrum data
     # Use propertynames to get column names as Symbols
@@ -75,11 +76,8 @@ function plot_frequency_spectrum(
     available_channels = [ch for ch in all_names if ch != :freq]
     valid_channels = [ch for ch in selected_channels if ch in available_channels]
 
-    if isempty(valid_channels)
-        error(
-            "No valid channels found in spectrum data. Selected channels: $(selected_channels), Available channels: $(available_channels)",
-        )
-    end
+    isempty(valid_channels) &&
+        @minimal_error "No valid channels found in spectrum data. Selected channels: $(selected_channels), Available channels: $(available_channels)"
 
     # Warn about channels that were selected but don't exist
     missing_channels = setdiff(selected_channels, valid_channels)
@@ -145,9 +143,13 @@ function plot_frequency_spectrum(
         yscale = y_scale == :log10 ? log10 : identity,
     )
 
+    # Generate colors from colormap
+    n_channels = length(valid_channels)
+    line_colors = n_channels == 1 ? [:black] : [Makie.cgrad(colormap)[i/n_channels] for i = 1:n_channels]
+
     # Plot each valid channel
-    for channel in valid_channels
-        lines!(ax, freqs, power_data[channel], label = string(channel), linewidth = linewidth, alpha = line_alpha)
+    for (i, channel) in enumerate(valid_channels)
+        lines!(ax, freqs, power_data[channel], label = string(channel), linewidth = linewidth, alpha = line_alpha, color = line_colors[i])
     end
 
     # Add legend if requested and we have plots
@@ -177,7 +179,11 @@ function plot_frequency_spectrum(
         ylims!(ax, (0.0, max(0.1, maximum(all_powers))))
     end
 
-    display(fig)
+    _set_window_title("Power Spectrum")
+    if display_plot
+        display(fig)
+    end
+    _set_window_title("Makie")
     return fig, ax
 end
 

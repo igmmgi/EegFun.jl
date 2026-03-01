@@ -108,7 +108,7 @@ using CSV
         @testset "channel_summary SingleDataFrameEeg input validation" begin
             # Test empty data
             empty_df = DataFrame()
-            layout = EegFun.Layout(DataFrame(label = Symbol[], inc = Float64[], azi = Float64[]), nothing, nothing)
+            layout = EegFun.Layout(DataFrame(label = Symbol[], inc = Float64[], azi = Float64[]), nothing, nothing, nothing)
             empty_dat = EegFun.ContinuousData("test_data", empty_df, layout, 100, EegFun.AnalysisInfo())
             @test_throws Exception EegFun.channel_summary(empty_dat)
         end
@@ -147,7 +147,7 @@ using CSV
 
         @testset "channel_summary MultiDataFrameEeg input validation" begin
             # Test empty epoch data
-            empty_layout = EegFun.Layout(DataFrame(label = Symbol[], inc = Float64[], azi = Float64[]), nothing, nothing)
+            empty_layout = EegFun.Layout(DataFrame(label = Symbol[], inc = Float64[], azi = Float64[]), nothing, nothing, nothing)
             empty_epochs = EegFun.EpochData("test_data", 1, "condition_1", DataFrame[], empty_layout, 100, EegFun.AnalysisInfo())
             @test_throws Exception EegFun.channel_summary(empty_epochs)
         end
@@ -508,7 +508,7 @@ end # EegFun testset
                 Ch3 = zeros(n_samples),
             )
 
-            layout = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2, :Ch3], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]), nothing, nothing)
+            layout = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2, :Ch3], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]), nothing, nothing, nothing)
 
             erps = [EegFun.ErpData("test_data", 1, "condition_1", df, layout, fs, EegFun.AnalysisInfo(), 1)]
             jldsave(joinpath(stats_dir, "1_erps_stats.jld2"); data = erps)
@@ -650,7 +650,7 @@ end # EegFun testset
                 df[!, ch] = i .* randn(n_samples)  # Different variance for each channel
             end
 
-            layout = EegFun.Layout(DataFrame(label = channel_names, inc = zeros(10), azi = zeros(10)), nothing, nothing)
+            layout = EegFun.Layout(DataFrame(label = channel_names, inc = zeros(10), azi = zeros(10)), nothing, nothing, nothing)
 
             erps = [EegFun.ErpData("test_data", 1, "condition_1", df, layout, fs, EegFun.AnalysisInfo(), 1)]
             jldsave(joinpath(many_ch_dir, "1_erps_many.jld2"); data = erps)

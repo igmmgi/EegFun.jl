@@ -57,7 +57,7 @@ function plot_tf(
 
     # Apply baseline to all conditions
     tf_plots = map(tf_data) do tf
-        if !isnothing(baseline_interval) && tf.baseline |> !isnothing
+        if !isnothing(baseline_interval) && !isnothing(tf.baseline)
             tf
         elseif !isnothing(baseline_interval)
             tf_baseline(tf, baseline_interval; method = baseline_method)
@@ -126,12 +126,13 @@ function plot_tf(
 
     length(axes) > 1 && linkaxes!(axes...)
 
-    if colorbar && last_hm |> !isnothing
+    if colorbar && !isnothing(last_hm)
         cb_label = _tf_colorbar_label(first(tf_plots), baseline_interval, baseline_method)
         Colorbar(fig[1:rows, cols+1], last_hm, label = cb_label)
     end
 
     display(fig)
+    _set_window_title("Makie")
     return (fig = fig, axes = axes)
 end
 
@@ -212,7 +213,7 @@ function plot_tf(
 )
 
     # Apply baseline if requested, but only if data hasn't already been baselined
-    if !isnothing(baseline_interval) && tf_data.baseline |> !isnothing
+    if !isnothing(baseline_interval) && !isnothing(tf_data.baseline)
         @warn "Data has already been baselined (method: $(tf_data.baseline.method), window: $(tf_data.baseline.window)). " *
               "Ignoring baseline_interval parameter. Use the data as-is or create a new TimeFreqData without baseline."
         tf_plot = tf_data
@@ -251,7 +252,7 @@ function plot_tf(
         (1200, 1000)
     else # :grid
         n = length(plot_channels)
-        rows, cols = layout_grid_dims |> !isnothing ? layout_grid_dims : _best_rect(n)
+        rows, cols = !isnothing(layout_grid_dims) ? layout_grid_dims : _best_rect(n)
         (max(600, cols * 350), max(400, rows * 300))
     end
 
@@ -334,7 +335,7 @@ function plot_tf(
     length(axes) > 1 && linkaxes!(axes...)
 
     # Add shared colorbar
-    if colorbar && last_hm |> !isnothing
+    if colorbar && !isnothing(last_hm)
         cb_label = _tf_colorbar_label(tf_plot, baseline_interval, baseline_method)
         if layout === :single
             Colorbar(fig[1, 2], last_hm, label = cb_label)
@@ -347,6 +348,7 @@ function plot_tf(
     end
 
     display(fig)
+    _set_window_title("Makie")
     return (fig = fig, axes = axes)
 end
 
@@ -412,7 +414,7 @@ end
 Determine the colorbar label based on baseline information.
 """
 function _tf_colorbar_label(tf_plot::TimeFreqData, baseline_interval, baseline_method::Symbol)
-    if tf_plot.baseline |> !isnothing
+    if !isnothing(tf_plot.baseline)
         method = tf_plot.baseline.method
         return method == :db ? "Power (dB)" : method == :percent ? "Power (% change)" : method == :relchange ? "Power (relative)" : "Power"
     elseif !isnothing(baseline_interval)

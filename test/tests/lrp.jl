@@ -70,7 +70,7 @@ using DataFrames
         )
 
         # Create layouts and ErpData objects
-        layout = EegFun.Layout(DataFrame(label = [:C3, :C4], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:C3, :C4], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
 
         erp_left = EegFun.ErpData("test_data", 1, "condition_1", df_left, layout, 250, EegFun.AnalysisInfo(), 10)
         erp_right = EegFun.ErpData("test_data", 2, "condition_2", df_right, layout, 250, EegFun.AnalysisInfo(), 10)
@@ -174,7 +174,7 @@ using DataFrames
                 Cz = randn(n_timepoints),
             )
 
-            layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+            layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
             erp_no_pairs = EegFun.ErpData("test_data", 1, "condition_1", df, layout, 250, EegFun.AnalysisInfo(), 10)
 
             @test_throws Exception EegFun.lrp(erp_no_pairs, erp_no_pairs)
@@ -199,7 +199,7 @@ using DataFrames
             PO8 = randn(n_timepoints),
         )
 
-        layout = EegFun.Layout(DataFrame(label = [:CP3, :CP4, :PO7, :PO8], inc = zeros(4), azi = zeros(4)), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:CP3, :CP4, :PO7, :PO8], inc = zeros(4), azi = zeros(4)), nothing, nothing, nothing)
         erp1 = EegFun.ErpData("test_data", 1, "condition_1", df, layout, 250, EegFun.AnalysisInfo(), 10)
         erp2 = EegFun.ErpData("test_data", 2, "condition_2", copy(df), layout, 250, EegFun.AnalysisInfo(), 10)
 
@@ -272,7 +272,7 @@ using DataFrames
             C4 = fill(1.0, n_timepoints),  # Right hemisphere: low activity
         )
 
-        layout = EegFun.Layout(DataFrame(label = [:C3, :C4], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:C3, :C4], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
 
         erp_left = EegFun.ErpData("test_data", 1, "condition_1", df_left, layout, 250, EegFun.AnalysisInfo(), 10)
         erp_right = EegFun.ErpData("test_data", 2, "condition_2", df_right, layout, 250, EegFun.AnalysisInfo(), 10)

@@ -14,7 +14,7 @@ const PLOT_CORRELATION_HEATMAP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :show_title => (true, "Whether to show the title"),
 
     # Heatmap styling
-    :colormap => (:viridis, "Colormap for the heatmap"),
+    :colormap => (:jet, "Colormap for the heatmap"),
     :colorrange => ((-1, 1), "Color range for the heatmap and colorbar (should be -1 to 1 for correlations)"),
     :nan_color => (:transparent, "Color for NaN values"),
 
@@ -92,7 +92,7 @@ function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kw
     # Mask values within the specified range
     if !isnothing(plot_kwargs[:mask_range])
         min_val, max_val = plot_kwargs[:mask_range]
-        corr_matrix[(corr_matrix .>= min_val) .& (corr_matrix .<= max_val)] .= NaN
+        corr_matrix[(corr_matrix.>=min_val).&(corr_matrix.<=max_val)] .= NaN
     end
 
     # Use the specified colorrange
@@ -143,13 +143,10 @@ function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kw
 
     # Add a colorbar if requested
     if plot_kwargs[:colorbar_plot]
-        # Use the specified colorrange for colorbar
-        colorbar_range = plot_kwargs[:colorrange]
-        colorbar_position = plot_kwargs[:colorbar_position]
-
         Colorbar(
-            fig[colorbar_position...],
-            limits = colorbar_range,
+            fig[plot_kwargs[:colorbar_position]...],
+            colormap = plot_kwargs[:colormap],
+            limits = colorrange,
             label = plot_kwargs[:colorbar_label],
             width = plot_kwargs[:colorbar_width],
             labelsize = plot_kwargs[:colorbar_fontsize],
@@ -159,7 +156,16 @@ function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kw
     return nothing
 end
 
-@doc (@doc plot_correlation_heatmap!) plot_correlation_heatmap
+"""
+    plot_correlation_heatmap(corr_df::DataFrame; kwargs...)
+
+Plot a heatmap of a correlation matrix. Creates a new figure.
+
+See `plot_correlation_heatmap!` for full documentation of arguments and keyword arguments.
+
+# Returns
+- `(fig::Figure, ax::Axis)` - The created figure and axis objects
+"""
 function plot_correlation_heatmap(corr_df::DataFrame; kwargs...)
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_CORRELATION_HEATMAP_KWARGS, kwargs)
@@ -171,7 +177,10 @@ function plot_correlation_heatmap(corr_df::DataFrame; kwargs...)
     # Use the mutating version to plot
     plot_correlation_heatmap!(fig, ax, corr_df; kwargs...)
 
-    plot_kwargs[:display_plot] && _display_figure(fig)
+    if plot_kwargs[:display_plot]
+        _set_window_title("Correlation Heatmap")
+        _display_figure(fig)
+    end
 
     return fig, ax
 end

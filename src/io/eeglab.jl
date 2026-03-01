@@ -430,7 +430,7 @@ function _parse_channel_locations(chanlocs, ch_names::Vector{Symbol})
             inc = radius .* 180.0
             azi = mod.(azi, 360.0)
             @info "Loaded $(length(ch_names)) channels using native polar coordinates (theta, radius)"
-            return Layout(DataFrame(label = ch_names, inc = inc, azi = azi), nothing, nothing)
+            return Layout(DataFrame(label = ch_names, inc = inc, azi = azi), nothing, nothing, nothing)
         end
 
     end
@@ -450,7 +450,7 @@ function _parse_channel_locations(chanlocs, ch_names::Vector{Symbol})
             azi = 90.0 .+ sph_theta
             azi = mod.(azi, 360.0)
             @info "Loaded $(length(ch_names)) channels using 3D spherical coordinates (sph_theta, sph_phi, sph_radius)"
-            return Layout(DataFrame(label = ch_names, inc = inc, azi = azi), nothing, nothing)
+            return Layout(DataFrame(label = ch_names, inc = inc, azi = azi), nothing, nothing, nothing)
         end
 
     end

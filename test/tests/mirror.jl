@@ -17,7 +17,7 @@ using DataFrames
             1,
             "condition_1",
             [epoch1, epoch2],
-            EegFun.Layout(DataFrame(), nothing, nothing),
+            EegFun.Layout(DataFrame(), nothing, nothing, nothing),
             100,
             EegFun.AnalysisInfo(),
         )
@@ -55,7 +55,7 @@ using DataFrames
             1,
             "condition_1",
             [epoch1],
-            EegFun.Layout(DataFrame(), nothing, nothing),
+            EegFun.Layout(DataFrame(), nothing, nothing, nothing),
             100,
             EegFun.AnalysisInfo(),
         )
@@ -100,7 +100,7 @@ using DataFrames
             1,
             "condition_1",
             [epoch1],
-            EegFun.Layout(DataFrame(), nothing, nothing),
+            EegFun.Layout(DataFrame(), nothing, nothing, nothing),
             100,
             EegFun.AnalysisInfo(),
         )
@@ -141,7 +141,7 @@ using DataFrames
             1,
             "condition_1",
             [epoch1],
-            EegFun.Layout(DataFrame(), nothing, nothing),
+            EegFun.Layout(DataFrame(), nothing, nothing, nothing),
             100,
             EegFun.AnalysisInfo(),
         )
@@ -177,7 +177,7 @@ using DataFrames
             1,
             "condition_1",
             erp_df,
-            EegFun.Layout(DataFrame(), nothing, nothing),
+            EegFun.Layout(DataFrame(), nothing, nothing, nothing),
             100,
             EegFun.AnalysisInfo(),
             10,
@@ -218,7 +218,7 @@ using DataFrames
             1,
             "condition_1",
             erp_df,
-            EegFun.Layout(DataFrame(), nothing, nothing),
+            EegFun.Layout(DataFrame(), nothing, nothing, nothing),
             100,
             EegFun.AnalysisInfo(),
             10,
@@ -255,7 +255,7 @@ using DataFrames
             1,
             "condition_1",
             [epoch1],
-            EegFun.Layout(DataFrame(), nothing, nothing),
+            EegFun.Layout(DataFrame(), nothing, nothing, nothing),
             100,
             EegFun.AnalysisInfo(),
         )
@@ -282,7 +282,7 @@ using DataFrames
             1,
             "condition_1",
             [epoch1, epoch2, epoch3],
-            EegFun.Layout(DataFrame(), nothing, nothing),
+            EegFun.Layout(DataFrame(), nothing, nothing, nothing),
             100,
             EegFun.AnalysisInfo(),
         )
@@ -320,7 +320,7 @@ using DataFrames
             2,
             "condition_2",
             [epoch1],
-            EegFun.Layout(DataFrame(), nothing, nothing),
+            EegFun.Layout(DataFrame(), nothing, nothing, nothing),
             100,
             EegFun.AnalysisInfo(),
         )
@@ -353,7 +353,7 @@ using DataFrames
             1,
             "condition_1",
             [epoch1],
-            EegFun.Layout(DataFrame(), nothing, nothing),
+            EegFun.Layout(DataFrame(), nothing, nothing, nothing),
             10,
             EegFun.AnalysisInfo(),
         )
@@ -408,7 +408,7 @@ using DataFrames
             1,
             "condition_1",
             [epoch1],
-            EegFun.Layout(DataFrame(), nothing, nothing),
+            EegFun.Layout(DataFrame(), nothing, nothing, nothing),
             100,
             EegFun.AnalysisInfo(),
         )

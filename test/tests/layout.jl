@@ -112,13 +112,17 @@ using OrderedCollections
 
     @testset "Error Handling" begin
         # Test missing columns
-        invalid_layout = EegFun.Layout(DataFrame(label = [:Fp1, :Fp2]), nothing, nothing)
+        invalid_layout = EegFun.Layout(DataFrame(label = [:Fp1, :Fp2]), nothing, nothing, nothing)
         @test_throws ArgumentError EegFun.polar_to_cartesian_xy!(invalid_layout)
         @test_throws ArgumentError EegFun.polar_to_cartesian_xyz!(invalid_layout)
 
         # Test invalid data types
-        invalid_types =
-            EegFun.Layout(DataFrame(label = [:Fp1, :Fp2], inc = ["invalid", "invalid"], azi = ["invalid", "invalid"]), nothing, nothing)
+        invalid_types = EegFun.Layout(
+            DataFrame(label = [:Fp1, :Fp2], inc = ["invalid", "invalid"], azi = ["invalid", "invalid"]),
+            nothing,
+            nothing,
+            nothing,
+        )
         @test_throws ArgumentError EegFun.polar_to_cartesian_xy!(invalid_types)
         @test_throws ArgumentError EegFun.polar_to_cartesian_xyz!(invalid_types)
     end
@@ -145,6 +149,7 @@ using OrderedCollections
                 DataFrame(label = [:Fp1, :Fp2, :F3, :F4], inc = [90.0, 90.0, 45.0, 45.0], azi = [0.0, 180.0, 45.0, 135.0]),
                 nothing,
                 nothing,
+                nothing,
             )
 
             # Test xy conversion
@@ -164,12 +169,13 @@ using OrderedCollections
             @test all(isfinite.(layout.data.z3))
 
             # Test error handling for missing columns
-            invalid_layout = EegFun.Layout(DataFrame(label = [:Fp1, :Fp2]), nothing, nothing)
+            invalid_layout = EegFun.Layout(DataFrame(label = [:Fp1, :Fp2]), nothing, nothing, nothing)
             @test_throws ArgumentError EegFun.polar_to_cartesian_xy!(invalid_layout)
             @test_throws ArgumentError EegFun.polar_to_cartesian_xyz!(invalid_layout)
 
             # Test error handling for non-numeric values
-            invalid_layout = EegFun.Layout(DataFrame(label = [:Fp1, :Fp2], inc = ["90", "90"], azi = ["0", "180"]), nothing, nothing)
+            invalid_layout =
+                EegFun.Layout(DataFrame(label = [:Fp1, :Fp2], inc = ["90", "90"], azi = ["0", "180"]), nothing, nothing, nothing)
             @test_throws ArgumentError EegFun.polar_to_cartesian_xy!(invalid_layout)
             @test_throws ArgumentError EegFun.polar_to_cartesian_xyz!(invalid_layout)
         end
@@ -198,6 +204,7 @@ using OrderedCollections
                 DataFrame(label = [:Fp1, :Fp2, :F3, :F4], inc = [90.0, 90.0, 45.0, 45.0], azi = [0.0, 180.0, 45.0, 135.0]),
                 nothing,
                 nothing,
+                nothing,
             )
             EegFun.polar_to_cartesian_xy!(layout)
 
@@ -224,6 +231,7 @@ using OrderedCollections
         # Create a simple test layout
         test_layout = EegFun.Layout(
             DataFrame(label = [:Fp1, :Fp2, :F3, :F4, :Cz], inc = [90.0, 90.0, 45.0, 45.0, 0.0], azi = [0.0, 180.0, 45.0, 135.0, 0.0]),
+            nothing,
             nothing,
             nothing,
         )

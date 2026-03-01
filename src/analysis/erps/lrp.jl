@@ -533,5 +533,5 @@ function _create_lrp_layout(original_layout::Layout, lrp_channels::Vector{Symbol
         nothing
     end
 
-    return Layout(filtered_layout_df, filtered_neighbours, original_layout.criterion)
+    return Layout(filtered_layout_df, filtered_neighbours, original_layout.criterion, original_layout.criterion_type)
 end

@@ -5,12 +5,7 @@ using EegFun
 
 # read raw data
 dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf");
-
-# read and preprate layout file
-layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
-
-# create EegFun data structure (EegFun.ContinuousData)
-dat = EegFun.create_eegfun_data(dat, layout_file);
+dat = EegFun.create_eegfun_data(dat);
 
 # Some minimal preprocessing (average reference and highpass filter)
 EegFun.rereference!(dat, :avg)
@@ -33,10 +28,21 @@ EegFun.plot_channel_summary(cs, [:min, :max, :std, :range, :var, :zvar])
 # Epoched DataFrameEeg
 #################################
 # some epoched data
-epoch_cfg = [EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
+epoch_cfg = EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])
 epochs = EegFun.extract_epochs(dat, epoch_cfg, (-2, 4))
-
-cs = EegFun.channel_summary(epochs[1])
+cs = EegFun.channel_summary(epochs)
 
 EegFun.plot_channel_summary(cs, :range, average_over = :epoch)
 EegFun.plot_channel_summary(cs, [:min, :max, :std, :range, :var, :zvar], average_over = :epoch)
+
+# some epoched data
+epoch_cfg = [
+    EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]]),
+    EegFun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[2]]),
+]
+epochs = EegFun.extract_epochs(dat, epoch_cfg, (-2, 4))
+cs = EegFun.channel_summary(epochs)
+
+EegFun.plot_channel_summary(cs, :range, average_over = :epoch)
+EegFun.plot_channel_summary(cs, [:min, :max, :std, :range, :var, :zvar], average_over = :epoch)
+

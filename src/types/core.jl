@@ -121,16 +121,27 @@ electrode positions in various coordinate systems (polar, 2D Cartesian,
 - `data::DataFrame`: DataFrame containing layout information with metadata groups
 - `neighbours::Union{Nothing, OrderedDict{Symbol, Neighbours}}`: Dictionary of neighbours for each electrode
 - `criterion::Union{Nothing, Float64}`: Distance criterion for neighbour calculation in mm
+- `criterion_type::Union{Nothing, Symbol}`: Type of neighbour calculation (`:xy` or `:xyz`)
 """
 mutable struct Layout
     data::DataFrame
     neighbours::Union{Nothing,OrderedDict{Symbol,Neighbours}}
     criterion::Union{Nothing,Float64}
+    criterion_type::Union{Nothing,Symbol}
 end
 
 
 # Empty constructor for quick visualization without layout information
-Layout() = Layout(DataFrame(), nothing, nothing)
+Layout() = Layout(DataFrame(), nothing, nothing, nothing)
+
+# JLD2 backward compatibility: old Layout files have 3 fields (data, neighbours, criterion)
+# The new Layout adds criterion_type. This convert method allows JLD2 to reconstruct old files.
+function Base.convert(
+    ::Type{Layout},
+    old::JLD2.ReconstructedMutable{Symbol("EegFun.Layout"),(:data, :neighbours, :criterion),Tuple{Any,Any,Any}},
+)
+    return Layout(old.data, old.neighbours, old.criterion, nothing)
+end
 """
     Base.copy(layout::Layout) -> Layout
 
@@ -143,6 +154,7 @@ function Base.copy(layout::Layout)::Layout
         copy(layout.data, copycols = true),
         layout.neighbours,  # Share since OrderedDict and Neighbours are immutable
         layout.criterion,    # Share since Float64 is immutable
+        layout.criterion_type,
     )
 end
 
@@ -637,7 +649,7 @@ function Base.show(io::IO, layout::Layout)
 
     if has_neigh
         avg_neighbours = average_number_of_neighbours(layout.neighbours)
-        println(io, "Criterion: $(layout.criterion), Avg neighbours: $(round(avg_neighbours, digits=1))")
+        println(io, "Criterion: $(layout.criterion) ($(layout.criterion_type)), Avg neighbours: $(round(avg_neighbours, digits=1))")
     end
     println(io)
 
