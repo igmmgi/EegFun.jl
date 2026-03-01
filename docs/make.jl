@@ -19,7 +19,10 @@ pages = [
         "Batch Processing" => "tutorials/batch-processing.md",
         "Selection Patterns" => "tutorials/selection-patterns.md",
         "Preprocessing Walkthrough" => "demos/workflows/preprocessing_workflow.md",
-        "Worked Examples" => ["Visual Attention (Posner Cueing)" => "demos/experiments/visual-attention.md"],
+        "Worked Examples" => [
+            "Visual Attention (Posner Cueing)" => "demos/experiments/visual-attention.md",
+            "N170 (Face/Body)" => "demos/experiments/n170.md",
+        ],
     ],
     "Explanations" => [
         "Overview" => "explanations/index.md",
