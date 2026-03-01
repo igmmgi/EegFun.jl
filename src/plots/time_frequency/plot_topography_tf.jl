@@ -85,7 +85,6 @@ function plot_topography(
     isempty(findall(time_mask)) &&
         @minimal_error("No time points found in interval. Data range: $(first(all_times)) to $(last(all_times)) s")
 
-    selected_freqs = all_freqs[freq_mask]
     selected_times = all_times[time_mask]
 
     # Get channel labels
@@ -95,16 +94,20 @@ function plot_topography(
     channel_data = Float64[]
     for ch in channels_list
         power_mat = _tf_df_to_matrix(tf_plot.data_power, ch, all_freqs, all_times)  # [freqs × time]
-        # Subset to selected freq and time ranges
-        avg_power = mean(power_mat[freq_mask, time_mask])
+        # Subset to selected freq and time ranges; filter non-finite values
+        # (dB baseline can produce -Inf for near-zero power)
+        vals = filter(isfinite, vec(power_mat[freq_mask, time_mask]))
+        avg_power = isempty(vals) ? 0.0 : mean(vals)
         push!(channel_data, avg_power)
     end
 
     # Map channel data onto layout order
     layout_labels = layout.data.label
-    layout_values = Float64[let ch_idx = findfirst(==(lbl), channels_list)
-        ch_idx |> !isnothing ? channel_data[ch_idx] : 0.0
-    end for lbl in layout_labels]
+    layout_values = Float64[
+        let ch_idx = findfirst(==(lbl), channels_list)
+            ch_idx |> !isnothing ? channel_data[ch_idx] : 0.0
+        end for lbl in layout_labels
+    ]
 
     # Merge user kwargs with shared topography defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
@@ -273,11 +276,14 @@ function plot_topography(
         channel_data = Float64[]
         for ch in channels_list
             power_mat = _tf_df_to_matrix(tf.data_power, ch, all_freqs, all_times)
-            push!(channel_data, mean(power_mat[freq_mask, time_mask]))
+            vals = filter(isfinite, vec(power_mat[freq_mask, time_mask]))
+            push!(channel_data, isempty(vals) ? 0.0 : mean(vals))
         end
-        layout_values = Float64[let ch_idx = findfirst(==(lbl), channels_list)
-            ch_idx |> !isnothing ? channel_data[ch_idx] : 0.0
-        end for lbl in layout_labels]
+        layout_values = Float64[
+            let ch_idx = findfirst(==(lbl), channels_list)
+                ch_idx |> !isnothing ? channel_data[ch_idx] : 0.0
+            end for lbl in layout_labels
+        ]
         all_layout_values[idx] = layout_values
         global_min = min(global_min, minimum(layout_values))
         global_max = max(global_max, maximum(layout_values))
@@ -484,7 +490,8 @@ function plot_topo_stats(
 
         if topo_data == :tvalues
             # Average t-values across selected freqs and time bin: stat_matrix.t is [electrodes × freqs × time]
-            topo_values[i] = vec(mean(result.stat_matrix.t[:, freq_indices, bin_indices], dims = (2, 3)))
+            raw = vec(mean(result.stat_matrix.t[:, freq_indices, bin_indices], dims = (2, 3)))
+            topo_values[i] = replace(raw, NaN => 0.0, Inf => 0.0, -Inf => 0.0)
         else  # :difference
             # Compute power difference from grand average TF data per electrode
             diff_per_electrode = Vector{Float64}(undef, length(electrodes))
@@ -492,7 +499,8 @@ function plot_topo_stats(
                 power_a = _tf_power_matrix(result.data[1], ch_sym, all_frequencies, all_time_points)
                 power_b = _tf_power_matrix(result.data[2], ch_sym, all_frequencies, all_time_points)
                 diff_mat = power_a .- power_b  # [freqs × time]
-                diff_per_electrode[j] = mean(diff_mat[freq_indices, bin_indices])
+                vals = filter(isfinite, vec(diff_mat[freq_indices, bin_indices]))
+                diff_per_electrode[j] = isempty(vals) ? 0.0 : mean(vals)
             end
             topo_values[i] = diff_per_electrode
         end
@@ -552,9 +560,12 @@ function plot_topo_stats(
 
         # Map electrode values to layout order
         channel_data = topo_values[i]
-        layout_values = Float64[let ch_idx = findfirst(==(lbl), electrodes)
-            ch_idx |> !isnothing ? channel_data[ch_idx] : 0.0
-        end for lbl in layout_labels]
+        layout_values = Float64[
+            let ch_idx = findfirst(==(lbl), electrodes)
+                v = ch_idx |> !isnothing ? channel_data[ch_idx] : 0.0
+                isfinite(v) ? v : 0.0
+            end for lbl in layout_labels
+        ]
 
         _render_topo_surface!(
             fig,
