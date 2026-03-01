@@ -592,6 +592,10 @@ Apply a low-pass filter to the saved ERP files (e.g., 30 Hz for clean plotting):
 EegFun.lowpass_filter("erps_good", 30.0, input_dir = "output_data")
 ```
 
+The interactive filter GUI lets you preview the effect of different filter settings before applying them in batch:
+
+![Filter GUI](/demos/experiments/filter_gui.png)
+
 This creates a new directory `output_data/filtered_erps_good_lp_30.0hz/` with filtered copies of each participant's ERPs.
 
 ### 2.3 Create Condition Averages
@@ -654,6 +658,22 @@ ga_diff = EegFun.read_data(
 EegFun.plot_erp(ga_diff, channel_selection = EegFun.channels([:PO7, :PO8, :O1, :O2]))
 ```
 
+![Grand average ERP waveforms at PO7 and PO8](/demos/experiments/erp_plot1.png)
+
+![P1 topography (113–117 ms)](/demos/experiments/p1_topo.png)
+
+After collapsing across target side (Section 2.3), the condition-averaged ERPs show the validity effect more clearly:
+
+![Condition-averaged ERP (Valid vs Invalid)](/demos/experiments/erp_plot2.png)
+
+Custom publication-quality plots can highlight specific components and time windows:
+
+![Publication-quality ERP with P1 and N1 component labels](/demos/experiments/erp_plot1_custom.png)
+
+The difference wave (Invalid − Valid) isolates the attention effect:
+
+![Difference wave (Invalid − Valid)](/demos/experiments/erp_diff.png)
+
 ---
 
 ## Part 3: Statistical Analysis
@@ -669,6 +689,8 @@ erps = EegFun.read_data("output_data/example1_erps_good.jld2")
 # Open the measurement GUI
 EegFun.plot_erp_measurement_gui(erps)
 ```
+
+![ERP measurement GUI](/demos/experiments/erp_measurment_gui.png)
 
 The GUI lets you select channels, time windows, and measurement types interactively to determine optimal parameters before running batch extraction.
 
@@ -691,6 +713,8 @@ mean_amp = EegFun.erp_measurements(
 # Columns: participant, condition, PO7, PO8, O1, O2
 mean_amp.data
 ```
+
+![P1 mean amplitude by validity condition](/demos/experiments/p1_amp.png)
 
 ### 3.3 Traditional Statistics with AnovaFun
 
