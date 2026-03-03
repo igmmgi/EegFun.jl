@@ -1858,6 +1858,10 @@ function plot_databrowser(
 end
 
 function plot_databrowser(data::Vector{<:EegData}, ica = nothing; screen = nothing, kwargs...)
-    @info "Vector of $(length(data)) datasets provided — browsing first element only"
-    return plot_databrowser(data[1], ica; screen = screen, kwargs...)
+    @info "Vector of $(length(data)) datasets provided — opening a browser for each"
+    for dat in data
+        _set_window_title(_generate_window_title(dat))  # must be before Screen()
+        s = GLMakie.Screen()
+        plot_databrowser(dat, ica; screen = s, kwargs...)
+    end
 end

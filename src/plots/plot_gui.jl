@@ -118,7 +118,7 @@ function plot_gui()
 
     # Select Directory Section
     directory_select_button = _create_select_button(main_layout[1, 1], "Select Directory", ui_style)
-    directory_label_text = Observable("Dir: ")
+    directory_label_text = Observable("Dir:")
     _create_label(main_layout[2, 1], directory_label_text, ui_style, fontsize = ui_style.textbox_font, color = :gray)
 
 
@@ -129,7 +129,7 @@ function plot_gui()
 
     # Layout Section
     layout_select_button = _create_select_button(main_layout[5, 1], "Select Layout", ui_style)
-    layout_label_text = Observable("File: ")
+    layout_label_text = Observable("File:")
     _create_label(main_layout[6, 1], layout_label_text, ui_style, fontsize = ui_style.textbox_font, color = :gray)
 
     # Plot Type Section (row 7-8 reserved for future use)
@@ -141,8 +141,8 @@ function plot_gui()
         "Data Browser",
         "Epochs",
         "ERP",
-        "ERP Image",
         "Topography",
+        "ERP Image",
         "─────────────────",  # Visual separator
         "Time-Frequency >",
         "ICA >",
@@ -356,7 +356,7 @@ function plot_gui()
     z_check = () -> check_range(gui_state.zlim, zmin_bc, zmax_bc, "Z Limits")
     bl_check = () -> begin
         s, e = gui_state.baseline_start[], gui_state.baseline_end[]
-        if !isnothing(s) && !isnothing(e) && s >= e
+        if !isnothing(s) && !isnothing(e) && s > e
             bl_start_bc[] = :lightcoral
             bl_end_bc[] = :lightcoral
             @minimal_warning "Invalid Baseline range: start ($s) must be less than end ($e)"
@@ -377,7 +377,7 @@ function plot_gui()
     # Connect callbacks
     # Open file picker when Select File button is clicked
     on(file_select_button.clicks) do _
-        default_path = gui_state.directory[] |> !isnothing && gui_state.directory[] != "" ? gui_state.directory[] : ""
+        default_path = gui_state.directory[] != "" ? gui_state.directory[] : pwd()
         filename = fetch(Threads.@spawn pick_file(default_path))
         if filename |> !isnothing && filename != ""
             basename_only = basename(filename)
@@ -437,7 +437,7 @@ function plot_gui()
 
     # Open layout file picker when Select button is clicked
     on(layout_select_button.clicks) do _
-        default_path = gui_state.directory[] |> !isnothing && gui_state.directory[] != "" ? gui_state.directory[] : ""
+        default_path = gui_state.directory[] != "" ? gui_state.directory[] : pwd()
         filename = fetch(Threads.@spawn pick_file(default_path))
         if filename |> !isnothing && filename != ""
             basename_only = basename(filename)
@@ -470,13 +470,18 @@ function plot_gui()
     on(channel_menu.selection) do selection
         if selection == "Select"
             gui_state.electrodes[] = String[]
+        elseif selection in gui_state.electrodes[]
+            # Already selected — remove it (deselect)
+            gui_state.electrodes[] = filter(!=(selection), gui_state.electrodes[])
         else
-            # Add to selection if not already present
-            if !(selection in gui_state.electrodes[])
-                gui_state.electrodes[] = vcat(gui_state.electrodes[], selection)
-            end
+            # Not yet selected — add it
+            gui_state.electrodes[] = vcat(gui_state.electrodes[], selection)
         end
         update_selected_channels_display()
+        # Reset to "no selection" (index 0) so every click — including repeated picks
+        # and the "Select" clear option — always registers as a new change event.
+        channel_menu.i_selected.val = 0
+        channel_menu.selection.val = nothing
     end
 
     # Multi-number validation helper (accepts space/comma-separated integers)
@@ -487,12 +492,20 @@ function plot_gui()
                 bc_obs[] = :white
                 state_obs[] = ""
             else
-                # Split on spaces, commas, or both
+                # Split on spaces/commas; each token may be an integer or a n:m range
                 tokens = filter(!isempty, split(stripped, r"[\s,]+"))
-                parsed = [tryparse(Int, t) for t in tokens]
-                if any(isnothing, parsed)
+                valid = all(tokens) do t
+                    if occursin(':', t)
+                        parts = split(t, ':')
+                        length(parts) == 2 && !isnothing(tryparse(Int, parts[1])) && !isnothing(tryparse(Int, parts[2]))
+                    else
+                        !isnothing(tryparse(Int, t))
+                    end
+                end
+                if !valid
                     bc_obs[] = :lightcoral
-                    @minimal_warning "Invalid $field_name value: \"$stripped\" (must be integers, e.g. 1 2 3)"
+                    state_obs[] = "__INVALID__"
+                    @minimal_warning "Invalid $field_name value: \"$stripped\" (must be integers or ranges, e.g. 1 2 3 or 1:50)"
                 else
                     bc_obs[] = :white
                     state_obs[] = stripped
@@ -524,10 +537,11 @@ function plot_gui()
 
     # Open directory picker when Select button is clicked
     on(directory_select_button.clicks) do _
-        dir_path = fetch(Threads.@spawn pick_folder(""))
+        default_path = gui_state.directory[] != "" ? gui_state.directory[] : pwd()
+        dir_path = fetch(Threads.@spawn pick_folder(default_path))
         if dir_path |> !isnothing && dir_path != ""
             gui_state.directory[] = dir_path
-            directory_label_text[] = "Dir: " * _truncate_path(String(strip(dir_path)))
+            directory_label_text[] = "." * _truncate_path(String(strip(dir_path)))
         end
     end
 
@@ -547,22 +561,35 @@ end
 function _plot_databrowser(gui_state)
 
     # Check if we have the required files
-    gui_state.filename[] == "" && @minimal_error "Error: No file specified!"
+    if gui_state.filename[] == ""
+        @minimal_warning "Requested plot settings incompatible: recheck!"
+        return
+    end
 
     file_ext = lowercase(splitext(gui_state.filename[])[2])
     if file_ext ∉ [".bdf", ".jld2"]
-        @minimal_error "Error: Data Browser supports BDF and JLD2 formats"
+        @minimal_warning "Requested plot settings incompatible: recheck!"
+        return
     end
 
     try
         if file_ext == ".jld2"
-            # Load from JLD2 — supports continuous, epoch, and ERP data
+            # Screen must be created for single datasets to open in a separate window.
+            # For Vectors, the Vector dispatch handles its own screens — creating one
+            # upfront would produce a spurious empty window.
             @async begin
-                new_screen = GLMakie.Screen()
-                plot_databrowser(gui_state.filename[]; screen = new_screen)
+                dat = read_data(gui_state.filename[])
+                isnothing(dat) && return
+                dat = _apply_gui_filters(dat, gui_state)
+                isnothing(dat) && return
+                if dat isa Vector
+                    plot_databrowser(dat)
+                else
+                    new_screen = GLMakie.Screen()
+                    plot_databrowser(dat; screen = new_screen)
+                end
             end
-        else
-            # Load from BDF
+        else # Load from raw eeg data file
             layout = nothing
             if gui_state.layout_file[] != ""
                 layout = read_layout(gui_state.layout_file[])
@@ -578,7 +605,6 @@ function _plot_databrowser(gui_state)
 
             # Update electrode menu with actual channel labels from the loaded data
             gui_state.channel_menu.options = vcat(["Select"], string.(channel_labels(dat)))
-
             @async begin
                 new_screen = GLMakie.Screen()
                 plot_databrowser(dat; screen = new_screen)
@@ -591,22 +617,35 @@ end
 
 function _plot_epochs(gui_state)
     # Check if we have the required files
-    gui_state.filename[] == "" && @minimal_error "Error: No file specified!"
-    gui_state.layout_file[] == "" && @minimal_error "Error: No layout file selected!"
+    if gui_state.filename[] == ""
+        @minimal_warning "Requested plot settings incompatible: recheck!"
+        return
+    end
+    if gui_state.layout_file[] == ""
+        @minimal_warning "Requested plot settings incompatible: recheck!"
+        return
+    end
 
     # Read data file (should be JLD2 with EpochData)
     file_ext = lowercase(splitext(gui_state.filename[])[2])
     if file_ext != ".jld2"
-        @minimal_error "Error: Epochs plot requires JLD2 file format"
+        @minimal_warning "Requested plot settings incompatible: recheck!"
+        return
     end
 
     try
-        # Read data from JLD2 file
-        data = read_data(gui_state.filename[])
-        isnothing(data) && @minimal_error "Error: No data found in file"
+        # Validate and parse the condition and epoch fields
+        cond_list  = _parse_gui_int_field(gui_state.condition[])
+        epoch_list = _parse_gui_int_field(gui_state.epoch[])
+        if isnothing(cond_list) || isnothing(epoch_list)
+            @minimal_warning "Requested plot settings incompatible: recheck!"
+            return
+        end
+        cond_sel  = isempty(cond_list) ? conditions() : conditions(cond_list)
+        epoch_sel = isempty(epoch_list) ? epochs() : epochs(epoch_list)
 
         # Build channel selection from GUI
-        selected_channels = isempty(gui_state.electrodes[]) ? channels() : channels(gui_state.electrodes[])
+        selected_channels = isempty(gui_state.electrodes[]) ? channels() : channels(Symbol.(gui_state.electrodes[]))
 
         # Create a new screen/window for the plot
         @async begin
@@ -614,6 +653,8 @@ function _plot_epochs(gui_state)
             plot_epochs(
                 gui_state.filename[];
                 channel_selection = selected_channels,
+                condition_selection = cond_sel,
+                epoch_selection = epoch_sel,
                 layout = layout_sym,
                 average_channels = gui_state.average_channels[],
                 xlim = gui_state.xlim[],
@@ -627,18 +668,33 @@ end
 
 function _plot_erp(gui_state)
     # Check if we have the required files
-    gui_state.filename[] == "" && @minimal_error "Error: No file specified!"
-    gui_state.layout_file[] == "" && @minimal_error "Error: No layout file selected!"
+    if gui_state.filename[] == ""
+        @minimal_warning "Requested plot settings incompatible: recheck!"
+        return
+    end
+    if gui_state.layout_file[] == ""
+        @minimal_warning "Requested plot settings incompatible: recheck!"
+        return
+    end
 
     # Read data file (should be JLD2 with ErpData)
     file_ext = lowercase(splitext(gui_state.filename[])[2])
     if file_ext != ".jld2"
-        @minimal_error "Error: ERP plot requires JLD2 file format"
+        @minimal_warning "Requested plot settings incompatible: recheck!"
+        return
     end
 
     try
+        # Validate and parse the condition field
+        cond_list = _parse_gui_int_field(gui_state.condition[])
+        if isnothing(cond_list)
+            @minimal_warning "Requested plot settings incompatible: recheck!"
+            return
+        end
+        cond_sel = isempty(cond_list) ? conditions() : conditions(cond_list)
+
         # Build channel selection from GUI
-        selected_channels = isempty(gui_state.electrodes[]) ? channels() : channels(gui_state.electrodes[])
+        selected_channels = isempty(gui_state.electrodes[]) ? channels() : channels(Symbol.(gui_state.electrodes[]))
 
         # Build baseline interval if provided
         baseline = nothing
@@ -652,6 +708,7 @@ function _plot_erp(gui_state)
             plot_erp(
                 gui_state.filename[];
                 layout = layout_sym,
+                condition_selection = cond_sel,
                 channel_selection = selected_channels,
                 baseline_interval = baseline,
                 average_channels = gui_state.average_channels[],
@@ -666,22 +723,32 @@ end
 
 function _plot_topography(gui_state)
     # Check if we have the required files
-    gui_state.filename[] == "" && @minimal_error "Error: No file specified!"
-    gui_state.layout_file[] == "" && @minimal_error "Error: No layout file selected!"
+    if gui_state.filename[] == ""
+        @minimal_warning "Requested plot settings incompatible: recheck!"
+        return
+    end
+    if gui_state.layout_file[] == ""
+        @minimal_warning "Requested plot settings incompatible: recheck!"
+        return
+    end
 
     # Read data file (should be JLD2 with ErpData or EpochData)
     file_ext = lowercase(splitext(gui_state.filename[])[2])
     if file_ext != ".jld2"
-        @minimal_error "Error: Topography plot requires JLD2 file format"
+        @minimal_warning "Requested plot settings incompatible: recheck!"
+        return
     end
 
     try
         # Read data from JLD2 file
         data = read_data(gui_state.filename[])
-        isnothing(data) && @minimal_error "Error: No data found in file"
+        if isnothing(data)
+            @minimal_warning "Requested plot settings incompatible: recheck!"
+            return
+        end
 
         # Build channel selection from GUI
-        selected_channels = isempty(gui_state.electrodes[]) ? channels() : channels(gui_state.electrodes[])
+        selected_channels = isempty(gui_state.electrodes[]) ? channels() : channels(Symbol.(gui_state.electrodes[]))
 
         # Create a new screen/window for the plot
         @async begin
@@ -699,7 +766,7 @@ function _plot_topography(gui_state)
                 end
                 plot_topography(data, epoch_num; channel_selection = selected_channels)
             else
-                @minimal_error "Error: Topography plot requires ErpData or EpochData"
+                @minimal_warning "Requested plot settings incompatible: recheck!"
             end
         end
     catch e
