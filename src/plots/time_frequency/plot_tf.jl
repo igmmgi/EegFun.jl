@@ -53,7 +53,7 @@ function plot_tf(
     n = length(tf_data)
     rows, cols = isnothing(grid_dims) ? _best_rect(n) : grid_dims
     fig = Figure(size = (max(600, cols * 400), max(400, rows * 350)))
-    _set_window_title("Time-Frequency — $(n) conditions")
+    _set_window_title("$(basename(first(tf_data).file)) — Time-Frequency ($(n) conditions)")
 
     # Apply baseline to all conditions
     tf_plots = map(tf_data) do tf
@@ -131,7 +131,7 @@ function plot_tf(
         Colorbar(fig[1:rows, cols+1], last_hm, label = cb_label)
     end
 
-    display(fig)
+    _display_figure(fig)
     _set_window_title("Makie")
     return (fig = fig, axes = axes)
 end
@@ -256,7 +256,7 @@ function plot_tf(
         (max(600, cols * 350), max(400, rows * 300))
     end
 
-    _set_window_title("$(tf_data.condition_name) — Time-Frequency")
+    _set_window_title("$(basename(tf_data.file)) — $(tf_data.condition_name) — Time-Frequency")
     fig = Figure(size = fig_size)
 
     eeg_layout = hasproperty(tf_data, :layout) ? tf_data.layout : nothing
@@ -347,7 +347,7 @@ function plot_tf(
         end
     end
 
-    display(fig)
+    _display_figure(fig)
     _set_window_title("Makie")
     return (fig = fig, axes = axes)
 end
