@@ -122,7 +122,15 @@ function plot_epochs(
         )
     else
         files = _find_batch_files(filename, input_dir, participant_selection)
-        isempty(files) && @minimal_error "No files matching pattern '$filename' in $input_dir"
+        if isempty(files)
+            all_matching = _find_batch_files(filename, input_dir)  # without participant filter
+            if isempty(all_matching)
+                @minimal_error "No files matching pattern '$filename' in $input_dir"
+            else
+                avail_ids = sort(unique(_extract_participant_id.(all_matching)))
+                @minimal_error "Pattern '$filename' matched $(length(all_matching)) file(s), but none passed the participant selection. Available participant IDs: $avail_ids"
+            end
+        end
 
         results = NamedTuple[]
         for file in sort(files, by = _natural_sort_key)

@@ -191,7 +191,7 @@ function plot_topography(filepath::String; input_dir::String = pwd(), participan
         files = _find_batch_files(filepath, input_dir, participant_selection)
         isempty(files) && @minimal_error "No files matching pattern '$filepath' in $input_dir"
 
-        results = NamedTuple[]
+        results = Any[]
         for file in sort(files, by = _natural_sort_key)
             file_path = joinpath(input_dir, file)
             @info "Plotting: $file"

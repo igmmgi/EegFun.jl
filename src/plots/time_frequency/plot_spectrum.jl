@@ -181,7 +181,7 @@ function plot_frequency_spectrum(
 
     _set_window_title("Power Spectrum")
     if display_plot
-        display(fig)
+        _display_figure(fig)
     end
     _set_window_title("Makie")
     return fig, ax

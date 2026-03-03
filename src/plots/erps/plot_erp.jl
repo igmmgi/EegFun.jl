@@ -140,7 +140,13 @@ function plot_erp(
         # Pattern-based discovery — one plot per file
         files = _find_batch_files(filepath, input_dir, participant_selection)
         if isempty(files)
-            @minimal_error "No ERP files matching pattern '$filepath' in $input_dir"
+            all_matching = _find_batch_files(filepath, input_dir)  # without participant filter
+            if isempty(all_matching)
+                @minimal_error "No ERP files matching pattern '$filepath' in $input_dir"
+            else
+                avail_ids = sort(unique(_extract_participant_id.(all_matching)))
+                @minimal_error "Pattern '$filepath' matched $(length(all_matching)) file(s), but none passed the participant selection. Available participant IDs: $avail_ids"
+            end
         end
 
         results = NamedTuple[]
