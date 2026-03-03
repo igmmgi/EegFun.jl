@@ -160,7 +160,7 @@ function plot_erp_image(
     # Get all available channels
     selected_channels = channel_labels(dat_subset)  # Gets EEG channels from layout
     extra_channels = extra_labels(dat_subset)       # Gets extra channels (EOG, etc.)
-    all_plot_channels = vcat(selected_channels, extra_channels)
+    all_plot_channels = unique(vcat(selected_channels, extra_channels))
 
     # Validate we have channels to plot
     if isempty(all_plot_channels)
