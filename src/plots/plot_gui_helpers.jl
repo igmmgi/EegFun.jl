@@ -45,6 +45,35 @@ function _handle_plot_error(e, plot_type::String)
     @minimal_warning "Unexpected error creating $plot_type plot: $(sprint(showerror, e))"
 end
 
+# Convert a (lo, hi) GUI observable pair to Union{Nothing,Tuple{Real,Real}}
+_gui_lim(tup) = (!isnothing(tup[1]) && !isnothing(tup[2])) ? (tup[1], tup[2]) : nothing
+
+"""
+    _simple_jld2_plot(gui_state, plot_fn, plot_type)
+
+Boilerplate for bridges that just load a .jld2 file and call a single-argument plot function.
+"""
+function _simple_jld2_plot(gui_state, plot_fn, plot_type::String)
+    isnothing(_validate_file(gui_state, ".jld2")) && return
+    try
+        data = read_data(gui_state.filename[])
+        if isnothing(data)
+            @minimal_warning "Requested plot settings incompatible: recheck!"
+            return
+        end
+        @async begin
+            try
+                plot_fn(data)
+            catch e
+                _handle_plot_error(e, plot_type)
+            end
+        end
+    catch e
+        _handle_plot_error(e, plot_type)
+    end
+end
+
+
 # Helper functions for creating plots from GUI
 
 """
@@ -153,8 +182,25 @@ function _plot_gfp(gui_state)
 
     try
         selected_channels = _gui_selected_channels(gui_state)
+        xlim_val = _gui_lim(gui_state.xlim[])
+        ylim_val = _gui_lim(gui_state.ylim[])
+        input_dir = gui_state.directory[] == "" ? pwd() : gui_state.directory[]
+        part_list = _parse_gui_int_field(gui_state.participant[])
+        part_sel = (isnothing(part_list) || isempty(part_list)) ? participants() : participants(part_list)
+
         @async begin
-            plot_gfp(gui_state.filename[]; channel_selection = selected_channels, xlim = gui_state.xlim[], ylim = gui_state.ylim[])
+            try
+                plot_gfp(
+                    gui_state.filename[];
+                    input_dir             = input_dir,
+                    participant_selection = part_sel,
+                    channel_selection     = selected_channels,
+                    xlim                  = xlim_val,
+                    ylim                  = ylim_val,
+                )
+            catch e
+                _handle_plot_error(e, "GFP")
+            end
         end
     catch e
         _handle_plot_error(e, "GFP")
@@ -170,12 +216,9 @@ function _plot_time_frequency(gui_state)
 
     # Shared plot kwargs
     selected_channels = _gui_selected_channels(gui_state)
-    x_lo, x_hi = gui_state.xlim[]
-    xlim_val = (!isnothing(x_lo) && !isnothing(x_hi)) ? (x_lo, x_hi) : nothing
-    z_lo, z_hi = gui_state.zlim[]
-    zlim_val = (!isnothing(z_lo) && !isnothing(z_hi)) ? (z_lo, z_hi) : nothing
-    b_lo, b_hi = gui_state.baseline_start[], gui_state.baseline_end[]
-    baseline_val = (!isnothing(b_lo) && !isnothing(b_hi)) ? (b_lo, b_hi) : nothing
+    xlim_val = _gui_lim(gui_state.xlim[])
+    zlim_val = _gui_lim(gui_state.zlim[])
+    baseline_val = _gui_lim((gui_state.baseline_start[], gui_state.baseline_end[]))
     valid_tf_methods = ("db", "absolute", "relative", "relchange", "percent", "zscore", "normchange", "vssum")
     baseline_method_sym = let bt = gui_state.baseline_type[]
         bt ∈ valid_tf_methods ? Symbol(bt) : :db
@@ -308,56 +351,11 @@ function _plot_power_spectrum(gui_state)
     end
 end
 
-function _plot_ica(gui_state)
-    isnothing(_validate_file(gui_state, ".jld2")) && return
+_plot_ica(gui_state) = _simple_jld2_plot(gui_state, plot_topography, "ICA Components")
 
-    try
-        data = read_data(gui_state.filename[])
-        if isnothing(data)
-            @minimal_warning "Requested plot settings incompatible: recheck!"
-            return
-        end
-        @async begin
-            plot_topography(data)
-        end
-    catch e
-        _handle_plot_error(e, "ICA Components")
-    end
-end
+_plot_filter(gui_state) = _simple_jld2_plot(gui_state, plot_filter, "Filter Response")
 
-function _plot_filter(gui_state)
-    isnothing(_validate_file(gui_state, ".jld2")) && return
-
-    try
-        data = read_data(gui_state.filename[])
-        if isnothing(data)
-            @minimal_warning "Requested plot settings incompatible: recheck!"
-            return
-        end
-        @async begin
-            plot_filter(data)
-        end
-    catch e
-        _handle_plot_error(e, "Filter Response")
-    end
-end
-
-function _plot_artifacts(gui_state)
-    isnothing(_validate_file(gui_state, ".jld2")) && return
-
-    try
-        data = read_data(gui_state.filename[])
-        if isnothing(data)
-            @minimal_warning "Requested plot settings incompatible: recheck!"
-            return
-        end
-        @async begin
-            plot_artifact_detection(data)
-        end
-    catch e
-        _handle_plot_error(e, "Artifact Detection")
-    end
-end
+_plot_artifacts(gui_state) = _simple_jld2_plot(gui_state, plot_artifact_detection, "Artifact Detection")
 
 function _plot_triggers(gui_state)
     if gui_state.filename[] == ""
@@ -397,73 +395,13 @@ function _plot_triggers(gui_state)
     end
 end
 
-function _plot_correlation(gui_state)
-    isnothing(_validate_file(gui_state, ".jld2")) && return
+_plot_correlation(gui_state) = _simple_jld2_plot(gui_state, plot_correlation_heatmap, "Correlation Heatmap")
 
-    try
-        data = read_data(gui_state.filename[])
-        if isnothing(data)
-            @minimal_warning "Requested plot settings incompatible: recheck!"
-            return
-        end
-        @async begin
-            plot_correlation_heatmap(data)
-        end
-    catch e
-        _handle_plot_error(e, "Correlation Heatmap")
-    end
-end
+_plot_channel_summary(gui_state) = _simple_jld2_plot(gui_state, plot_channel_summary, "Channel Summary")
 
-function _plot_channel_summary(gui_state)
-    isnothing(_validate_file(gui_state, ".jld2")) && return
+_plot_joint_probability(gui_state) = _simple_jld2_plot(gui_state, plot_joint_probability, "Joint Probability")
 
-    try
-        data = read_data(gui_state.filename[])
-        if isnothing(data)
-            @minimal_warning "Requested plot settings incompatible: recheck!"
-            return
-        end
-        @async begin
-            plot_channel_summary(data)
-        end
-    catch e
-        _handle_plot_error(e, "Channel Summary")
-    end
-end
-
-function _plot_joint_probability(gui_state)
-    isnothing(_validate_file(gui_state, ".jld2")) && return
-
-    try
-        data = read_data(gui_state.filename[])
-        if isnothing(data)
-            @minimal_warning "Requested plot settings incompatible: recheck!"
-            return
-        end
-        @async begin
-            plot_joint_probability(data)
-        end
-    catch e
-        _handle_plot_error(e, "Joint Probability")
-    end
-end
-
-function _plot_erp_measurement_gui(gui_state)
-    isnothing(_validate_file(gui_state, ".jld2")) && return
-
-    try
-        data = read_data(gui_state.filename[])
-        if isnothing(data)
-            @minimal_warning "Requested plot settings incompatible: recheck!"
-            return
-        end
-        @async begin
-            plot_erp_measurement_gui(data)
-        end
-    catch e
-        _handle_plot_error(e, "ERP Measurement GUI")
-    end
-end
+_plot_erp_measurement_gui(gui_state) = _simple_jld2_plot(gui_state, plot_erp_measurement_gui, "ERP Measurement GUI")
 
 function _plot_layout(gui_state)
     if gui_state.layout_file[] == ""
@@ -474,7 +412,11 @@ function _plot_layout(gui_state)
     try
         layout = read_layout(gui_state.layout_file[])
         @async begin
-            plot_layout_2d(layout)
+            try
+                plot_layout_2d(layout)
+            catch e
+                _handle_plot_error(e, "Layout")
+            end
         end
     catch e
         _handle_plot_error(e, "Layout")
