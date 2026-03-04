@@ -57,7 +57,7 @@ function _create_label(parent, text, style::UIStyle; fontsize = nothing, color =
 end
 
 """Truncate a path string to a maximum length, showing the end with '...' prefix."""
-function _truncate_path(path::String, max_length::Int = 30)
+function _truncate_path(path::String, max_length::Int = 20)
     if length(path) <= max_length
         return path
     end
@@ -115,16 +115,17 @@ function plot_gui()
     gui_fig = Figure(size = (650, 650), title = "Plot GUI", backgroundcolor = :lightgrey, figure_padding = (20, 20, 20, 20))
     main_layout = GridLayout(gui_fig[1, 1:3], rowgap = 2, colgap = 4)
     ui_style = UIStyle()
+    colsize!(main_layout, 1, Fixed(ui_style.input_width))  # pin col 1 so widgets don't drift on resize
 
     # Select Directory Section
     directory_select_button = _create_select_button(main_layout[1, 1], "Select Directory", ui_style)
     directory_label_text = Observable("Dir:")
     _create_label(main_layout[2, 1], directory_label_text, ui_style, fontsize = ui_style.textbox_font, color = :gray)
 
-
     # Select File Section — Browse button + editable textbox (type path or pattern)
     file_select_button = _create_select_button(main_layout[3, 1], "Select File", ui_style)
     file_pattern_input = _create_textbox(main_layout[4, 1], ui_style, placeholder = "", halign = :left)
+    println(file_pattern_input)
 
     # Layout Section
     layout_select_button = _create_select_button(main_layout[5, 1], "Select Layout", ui_style)
@@ -378,7 +379,8 @@ function plot_gui()
         default_path = gui_state.directory[] != "" ? gui_state.directory[] : pwd()
         filename = fetch(Threads.@spawn pick_file(default_path))
         if filename |> !isnothing && filename != ""
-            # Show only the basename in the textbox; store the full path for bridge use
+            # Clear first to reset Makie's internal scroll offset, then set value
+            file_pattern_input.displayed_string[] = ""
             file_pattern_input.displayed_string[] = basename(filename)
             gui_state.filename[] = filename
         end

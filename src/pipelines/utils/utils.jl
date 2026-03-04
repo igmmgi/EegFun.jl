@@ -134,7 +134,7 @@ Can hold multiple continuous repair infos and epoch rejection infos.
 - `epoch_rejections::Vector{EpochRejectionInfo}`: Vector of epoch rejection info objects
 - `ica_components::Union{ArtifactComponents, Nothing}`: ICA artifact components (Nothing if ICA was not applied)
 """
-struct ArtifactInfo
+struct ArtifactInfo <: EegFunData
     continuous_repairs::Vector{ContinuousRepairInfo}
     epoch_rejections::Vector{EpochRejectionInfo}
     ica_components::Union{ArtifactComponents,Nothing}
@@ -560,58 +560,71 @@ Summarize electrode repairs by loading ArtifactInfo files from a directory (cont
 Uses `_find_batch_files` to match files by pattern.
 
 # Arguments
-- `file_pattern::String`: Pattern to match filenames (e.g., "_artifact_info")
+- `file_pattern::String`: Pattern to match filenames (e.g., `"_artifact_info"`)
 - `input_dir::String`: Directory containing `_artifact_info.jld2` files (default: current directory)
 
 # Returns
-- `DataFrame`: Summary table with columns:
+- `DataFrame`: Per-participant table with columns:
+  - `file::String`: Base filename
+  - `repaired::String`: Comma-separated list of repaired channels (`"none"` if none)
+  - `skipped::String`: Comma-separated list of channels that could not be repaired
+- `DataFrame`: Aggregate table with columns:
   - `electrode::Symbol`: Electrode name
-  - `n_participants::Int`: Number of participants where this electrode was repaired at the continuous level
+  - `n_participants::Int`: Number of participants where this electrode was repaired
 
 # Examples
 ```julia
-# Load all artifact info files from current directory
-summary = summarize_electrode_repairs("_artifact_info")
-
-# Load from specific directory
-summary = summarize_electrode_repairs("_artifact_info", input_dir="/path/to/output")
+per_file, summary = summarize_electrode_repairs("_artifact_info")
+per_file, summary = summarize_electrode_repairs("_artifact_info", input_dir="/path/to/output")
 ```
 """
 function summarize_electrode_repairs(file_pattern::String; input_dir::String = pwd())
-    # Find matching files using _find_batch_files
-    files = _find_batch_files(file_pattern, input_dir)
+    files = sort(_find_batch_files(file_pattern, input_dir), by = _natural_sort_key)
 
+    empty_return =
+        (DataFrame(file = String[], repaired = String[], skipped = String[]), DataFrame(electrode = Symbol[], n_participants = Int[]))
     if isempty(files)
         @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-        return DataFrame(electrode = Symbol[], n_participants = Int[])
+        return empty_return
     end
 
-    # Load all ArtifactInfo objects and extract ContinuousRepairInfo
+    per_file_data = []
     continuous_repairs = ContinuousRepairInfo[]
+
     for file in files
         file_path = joinpath(input_dir, file)
         try
             if isfile(file_path)
                 artifact_info = read_data(file_path)
-                # If read_data returned a Dict, extract "data" key
-                if isa(artifact_info, Dict) && haskey(artifact_info, "data")
-                    artifact_info = artifact_info["data"]
-                end
-                # Check if artifact_info is valid
+                base_filename = replace(file, "_artifact_info.jld2" => "")
+                file_repaired = Symbol[]
+                file_skipped  = Symbol[]
                 if !isnothing(artifact_info)
                     for repair_info in artifact_info.continuous_repairs
+                        append!(file_repaired, repair_info.repaired)
+                        append!(file_skipped, repair_info.skipped)
                         if !isempty(repair_info.repaired)
                             push!(continuous_repairs, repair_info)
                         end
                     end
                 end
+                push!(
+                    per_file_data,
+                    (
+                        file     = base_filename,
+                        repaired = isempty(file_repaired) ? "none" : join(sort(string.(unique(file_repaired))), ", "),
+                        skipped  = isempty(file_skipped) ? "" : join(sort(string.(unique(file_skipped))), ", "),
+                    ),
+                )
             end
         catch e
             @minimal_warning "Failed to load artifact info from $file_path: $e"
         end
     end
 
-    return summarize_electrode_repairs(continuous_repairs)
+    per_file_df  = DataFrame(per_file_data)
+    aggregate_df = summarize_electrode_repairs(continuous_repairs)
+    return per_file_df, aggregate_df
 end
 
 
@@ -754,14 +767,9 @@ function summarize_ica_components(file_pattern::String; input_dir::String = pwd(
         try
             if isfile(file_path)
                 artifact_info = read_data(file_path)
-                # If read_data returned a Dict, extract "data" key
-                if isa(artifact_info, Dict) && haskey(artifact_info, "data")
-                    artifact_info = artifact_info["data"]
-                end
-                # Check if artifact_info is valid
                 if !isnothing(artifact_info) && !isnothing(artifact_info.ica_components)
                     push!(ica_components, artifact_info.ica_components)
-                    push!(filenames, file)  # _find_batch_files returns filenames, not full paths
+                    push!(filenames, file)
                 end
             end
         catch e

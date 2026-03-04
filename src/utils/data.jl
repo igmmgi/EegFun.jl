@@ -579,7 +579,7 @@ function tail(dat::EegData; n = nothing)
     data = all_data(dat)
     nrows = nrow(data)
     n = min(n, nrows)  # Don't exceed available rows
-    result = n > 0 ? data[max(1, nrows-n+1):nrows, :] : DataFrame()
+    result = n > 0 ? data[max(1, nrows - n + 1):nrows, :] : DataFrame()
     viewer(result)
     return result
 end
@@ -1211,7 +1211,12 @@ function log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
         # TODO: better way of doing this?
         # Set a large display size to avoid terminal limitations (i.e., cropping!)
         io_context = IOContext(output_io, :displaysize => (2000, 2000))
-        pretty_table(io_context, df; kwargs...)
+        # Default column_labels to column names only — this suppresses the auto-generated
+        # type subheader row that PrettyTables adds when given a DataFrame directly.
+        # Callers can still override by passing their own column_labels kwarg.
+        kw = Dict{Symbol,Any}(kwargs)
+        get!(kw, :column_labels, names(df))
+        pretty_table(io_context, df; kw...)
     end
 
     # Log with specified level
