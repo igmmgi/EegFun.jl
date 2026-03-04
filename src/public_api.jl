@@ -100,7 +100,6 @@ public viewer
 # =====================
 # I/O
 # =====================
-public check_files_exist
 public find_file
 public get_files
 public read_all_data

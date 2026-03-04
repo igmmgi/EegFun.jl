@@ -24,7 +24,8 @@ end
 
 Create synthetic `ContinuousData` for testing.
 """
-function create_test_continuous_data(; n = 2000, fs = 1000, n_channels = 3)
+function create_test_continuous_data(; n = 2000, fs = 1000, n_channels = 3, seed::Union{Int,Nothing} = nothing)
+    seed !== nothing && Random.seed!(seed)
     t = collect(0:(n-1)) ./ fs
     df = DataFrame(time = t, sample = 1:n, trigger = zeros(Int, n))
 
@@ -42,7 +43,8 @@ end
 
 Create synthetic `EpochData` for a single condition. Returns `EpochData`.
 """
-function create_test_epoch_data(; n = 2000, fs = 1000, condition = 1, n_epochs = 10, n_channels = 3)
+function create_test_epoch_data(; n = 2000, fs = 1000, condition = 1, n_epochs = 10, n_channels = 3, seed::Union{Int,Nothing} = nothing)
+    seed !== nothing && Random.seed!(seed)
     t = collect(0:(n-1)) ./ fs
     channel_labels = _generate_channel_labels(n_channels)
     layout = create_test_layout(n_channels = n_channels)
@@ -80,7 +82,8 @@ end
 
 Create synthetic `ErpData` for testing.
 """
-function create_test_erp_data(; participant = 1, condition = 1, fs = 1000, n_channels = 3)
+function create_test_erp_data(; participant = 1, condition = 1, fs = 1000, n_channels = 3, seed::Union{Int,Nothing} = nothing)
+    seed !== nothing && Random.seed!(seed)
     time = collect(-0.5:(1/fs):2.0)
     df = DataFrame(
         time = time,
@@ -104,7 +107,8 @@ end
 
 Create a vector of ErpData objects for testing batch operations.
 """
-function create_batch_test_erp_data(; n_conditions = 2, fs = 1000, n_channels = 3)
+function create_batch_test_erp_data(; n_conditions = 2, fs = 1000, n_channels = 3, seed::Union{Int,Nothing} = nothing)
+    seed !== nothing && Random.seed!(seed)
     return [create_test_erp_data(condition = c, fs = fs, n_channels = n_channels) for c = 1:n_conditions]
 end
 
@@ -155,7 +159,8 @@ end
 
 Create synthetic `ContinuousData` with trigger sequences.
 """
-function create_test_continuous_data_with_triggers(; n = 1000, fs = 1000)
+function create_test_continuous_data_with_triggers(; n = 1000, fs = 1000, seed::Union{Int,Nothing} = nothing)
+    seed !== nothing && Random.seed!(seed)
     t = collect(0:(n-1)) ./ fs
     x = _synthetic_signal(t, freq = 10.0, amp = 1.0, noise = 0.1)
 
@@ -200,7 +205,8 @@ end
 
 Create `ContinuousData` with zero triggers.
 """
-function create_test_continuous_data_empty_triggers(; n_samples = 1000, fs = 1000)
+function create_test_continuous_data_empty_triggers(; n_samples = 1000, fs = 1000, seed::Union{Int,Nothing} = nothing)
+    seed !== nothing && Random.seed!(seed)
     t = collect(0:(n_samples-1)) ./ fs
     df = DataFrame(time = t, trigger = zeros(Int16, n_samples), channel1 = _synthetic_signal(t), channel2 = _synthetic_signal(t))
 
@@ -213,7 +219,15 @@ end
 
 Create `ErpData` with lateralized channel pairs.
 """
-function create_test_lrp_data(; participant = 1, condition = 1, n_timepoints = 100, signal_scale = 1.0, fs = 250)
+function create_test_lrp_data(;
+    participant = 1,
+    condition = 1,
+    n_timepoints = 100,
+    signal_scale = 1.0,
+    fs = 250,
+    seed::Union{Int,Nothing} = nothing,
+)
+    seed !== nothing && Random.seed!(seed)
     time = collect(range(-0.2, 0.8, length = n_timepoints))
 
     df = DataFrame(
@@ -326,7 +340,9 @@ function create_test_epoch_data_with_artifacts(;
     n_channels = 3,
     fs = 1000,
     n_bad_epochs = 1,
+    seed::Union{Int,Nothing} = nothing,
 )
+    seed !== nothing && Random.seed!(seed)
     dfs = DataFrame[]
     bad_indices = collect(1:n_bad_epochs)
 

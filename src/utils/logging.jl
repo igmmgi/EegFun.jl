@@ -201,7 +201,8 @@ close_global_logging() = close_logging(is_global = true)
 # ============================================================================
 # FUNCTION CALL LOGGING
 # ============================================================================
-# TODO: Must be a better way of doing this. This hack is simpler than previous code mess but ...
+# NOTE: Reads the REPL history file to log the actual call typed by the user.
+# Falls back to the function name string if history is unavailable (scripts, CI, non-REPL contexts).
 
 """Helper to get the last command from Julia REPL history file."""
 function _get_last_history_line()::Union{String,Nothing}

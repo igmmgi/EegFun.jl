@@ -8,7 +8,6 @@ using EegFun
 
 pages = [
     "Home" => "index.md",
-    "Cheatsheet" => "cheatsheet.md",
     "Tutorials" => [
         "Overview" => "tutorials/index.md",
         "Getting Started" => "tutorials/getting-started.md",
@@ -105,6 +104,7 @@ pages = [
             "RSA" => "demos/statistics/rsa.md",
         ],
     ],
+    "Cheatsheet" => "cheatsheet.md",
     "Reference" => ["Overview" => "reference/index.md", "Types" => "reference/types.md"],
 ]
 

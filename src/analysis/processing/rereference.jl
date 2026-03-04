@@ -181,17 +181,17 @@ Process a single file through rereferencing pipeline.
 Returns BatchResult with success/failure info.
 """
 function _process_rereference_file(filepath::String, output_path::String, reference_selection, condition_selection::Function)
-    filename = basename(filepath)
+    fname = basename(filepath)
 
     # Read data
     data = read_data(filepath)
     if isnothing(data)
-        return BatchResult(false, filename, "No data variables found")
+        return BatchResult(false, fname, "No data variables found")
     end
 
     # Validate that data is valid EEG data (Vector of ErpData or EpochData)
     if !(data isa Vector{<:Union{ErpData,EpochData}})
-        return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{EpochData}")
+        return BatchResult(false, fname, "Invalid data type: expected Vector{ErpData} or Vector{EpochData}")
     end
 
     # Select conditions
@@ -201,7 +201,7 @@ function _process_rereference_file(filepath::String, output_path::String, refere
     if isempty(data)
         jldsave(output_path; data = data)
         ref_str = reference_selection isa Symbol ? string(reference_selection) : join(reference_selection, ", ")
-        return BatchResult(true, filename, "Rereferenced to $ref_str (empty data)")
+        return BatchResult(true, fname, "Rereferenced to $ref_str (empty data)")
     end
 
     # Apply rereferencing (mutates data in-place)
@@ -211,7 +211,7 @@ function _process_rereference_file(filepath::String, output_path::String, refere
     jldsave(output_path; data = data)
 
     ref_str = reference_selection isa Symbol ? string(reference_selection) : join(reference_selection, ", ")
-    return BatchResult(true, filename, "Rereferenced to $ref_str")
+    return BatchResult(true, fname, "Rereferenced to $ref_str")
 end
 
 #=============================================================================

@@ -43,7 +43,7 @@ function get_package_version(; package_name::String = "EegFun")
             end
         end
         return version
-    catch # TODO: can this actually fail if installed properly?
+    catch # Defensive: guards against unusual install layouts or missing Project.toml
         return "unknown"
     end
 end
@@ -99,32 +99,19 @@ end
 """
     EegFun_version_info() -> Dict{String,Any}
 
-Get comprehensive version information for logging purposes.
+Get version information for logging purposes.
 
-This function returns a dictionary containing:
-- `julia_version`: Julia version
-- `EegFun_version`: EEGfun package version
-- `git_commit`: Git commit hash (if available)
-- `timestamp`: Current timestamp
-
-# Returns
-- `Dict{String,Any}`: Dictionary with version information
+Returns a dictionary with the keys:
+- `"julia_version"`: Julia version string
+- `"EegFun_version"`: EegFun package version string
+- `"timestamp"`: Current timestamp string
 
 # Examples
 ```julia
-# Get version info for logging
 ver_info = EegFun_version_info()
 @info "Starting analysis" ver_info...
 
-# Log specific fields
-ver_info = EegFun_version_info()
 @info "Running EegFun \$(ver_info["EegFun_version"]) on Julia \$(ver_info["julia_version"])"
-
-# Write to log file
-ver_info = EegFun_version_info()
-open("analysis.log", "a") do io
-    println(io, "Version: \$(ver_info["EegFun_version"]), Commit: \$(ver_info["git_commit"])")
-end
 ```
 """
 function EegFun_version_info()

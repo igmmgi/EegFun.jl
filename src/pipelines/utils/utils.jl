@@ -1,6 +1,19 @@
 # Helper functions used during preprocess to make logging easier/prettier
 _flag_symbol(base::AbstractString, criterion) = Symbol("$(base)_$(criterion)")
 
+# Check that a list of file paths all exist, warning for any that don't.
+function check_files_exist(files::Vector{String})
+    all_files_exist = true
+    for fname in files
+        if !isfile(fname)
+            @minimal_warning "File not found: $(fname)"
+            all_files_exist = false
+        end
+    end
+    return all_files_exist
+end
+
+
 function _center_title(title::String, width::Int)
     total_dashes = width - length(title) - 2  # 2 spaces around title
     left_dashes = div(total_dashes, 2)
