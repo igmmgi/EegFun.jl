@@ -1,14 +1,3 @@
-function check_files_exist(files::Vector{String})
-    all_files_exist = true
-    for fname in files
-        if !isfile(fname)
-            @minimal_warning "File not found: $(fname)"
-            all_files_exist = false
-        end
-    end
-    return all_files_exist
-end
-
 function get_files(directory::String, files::String)
     # replace common wildcard with regex syntax
     matching_files = filter(f -> occursin(Regex(files), f), readdir(directory))
