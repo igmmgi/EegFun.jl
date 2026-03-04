@@ -125,7 +125,6 @@ function plot_gui()
     # Select File Section — Browse button + editable textbox (type path or pattern)
     file_select_button = _create_select_button(main_layout[3, 1], "Select File", ui_style)
     file_pattern_input = _create_textbox(main_layout[4, 1], ui_style, placeholder = "", halign = :left)
-    println(file_pattern_input)
 
     # Layout Section
     layout_select_button = _create_select_button(main_layout[5, 1], "Select Layout", ui_style)
