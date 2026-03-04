@@ -32,11 +32,12 @@ PrecompileTools.@compile_workload begin
         local epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.5, 1.0))
         local erp = EegFun.average_epochs(epochs)
 
-        # # Key plot types
-        # EegFun.plot_databrowser(dat)
-        # EegFun.plot_epochs(epochs[1])
-        # EegFun.plot_erp(erp)
-        # EegFun.plot_topography(erp)
+        # Key plot types
+        EegFun.plot_databrowser(dat)
+        EegFun.plot_epochs(epochs[1])
+        EegFun.plot_erp(erp)
+        EegFun.plot_topography(erp)
+        EegFun.plot_gui()
 
         println("Precompilation complete!")
     else
