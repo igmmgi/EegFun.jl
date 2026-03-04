@@ -3,10 +3,8 @@ __precompile__(true)
 module EegFun
 
 # Core dependencies
-using AnovaFun
 using BiosemiDataFormat
 using BrainVisionDataFormat
-using CategoricalArrays
 using CSV
 using DataFrames
 using JLD2
@@ -21,15 +19,16 @@ using FFTW
 using Makie
 using CairoMakie
 using GLMakie
-using NativeFileDialog
 using ScatteredInterpolation
 
 # Utilities
+using AnovaFun
 using Dates
 using Distributions
 using DocStringExtensions
 using Logging
 using LoggingExtras
+using NativeFileDialog
 using OrderedCollections
 using PrettyTables
 using Printf

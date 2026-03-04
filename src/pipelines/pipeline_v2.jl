@@ -413,9 +413,12 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
 
         # Print electrode repair summary (load from saved artifact info files)
         @info subsection("Electrode Repair Summary Across All Participants (Continuous Level Only)")
-        electrode_repair_summary = summarize_electrode_repairs("_artifact_info", input_dir = output_directory)
-        if !isempty(electrode_repair_summary)
-            log_pretty_table(electrode_repair_summary; title = "Electrode Repairs at Continuous Level: Number of Participants Affected")
+        electrode_per_file, electrode_summary = summarize_electrode_repairs("_artifact_info", input_dir = output_directory)
+        if !isempty(electrode_per_file)
+            log_pretty_table(electrode_per_file; title = "Electrode Repairs per Participant:")
+        end
+        if !isempty(electrode_summary)
+            log_pretty_table(electrode_summary; title = "Electrode Repairs: Number of Participants Affected")
         end
 
         # Print ICA component summary (load from saved artifact info files)
