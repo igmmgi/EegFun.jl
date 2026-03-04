@@ -148,23 +148,10 @@ EegFun.rereference!(dat, :avg)
 EegFun.highpass_filter!(dat, 1)
 
 # visually selected blink like artifact
-EegFun.plot_topography(
-    dat,
-    sample_selection = x -> x.time .>= 5.973 .&& x.time .<= 6.02,
-    gridscale = 75,
-    ylim = (-200, 200),
-    head_radius = 1.0,
-)
+EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 5.973 .&& x.time .<= 6.02, ylim = (-200, 200))
 
-# different methods
-EegFun.plot_topography(
-    dat,
-    sample_selection = x -> x.time .>= 5.973 .&& x.time .<= 6.02,
-    gridscale = 75,
-    ylim = (-200, 200),
-    head_radius = 1.0,
-    method = :multiquadratic, # :nearest, :shepard, :spherical_spline, :thin_plate, :multiquadratic
-)
+# visually selected blink like artifact
+EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 5.5 .&& x.time .<= 6.5, ylim = (-100, 100), n_topo = 5, dims = (1, 5))
 
 # Various combinations
 EegFun.plot_topography(dat, colorbar_plot = false, head_radius = 1.25)
@@ -187,9 +174,8 @@ epoch_cfg = [
 epochs = EegFun.extract_epochs(dat, epoch_cfg, (-2, 4))
 
 # Separate plots
-EegFun.plot_topography(epochs[1], 1) # epoch 1
-EegFun.plot_topography(epochs[2], 1) # epoch 2
-EegFun.plot_topography(epochs) # TODO: aspect ration?; global scale?
+EegFun.plot_topography(epochs[1], 1) # Condition 1, Epoch 1
+EegFun.plot_topography(epochs[2], 1) # Condition 2, Epoch 1
 EegFun.plot_topography(epochs, ylim = (-0.1, 0.1)) # TODO: aspect ration?; global scale?
 EegFun.plot_topography(epochs, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6)
 
@@ -200,10 +186,10 @@ EegFun.plot_topography(epochs, sample_selection = x -> x.time .>= 0.4 .&& x.time
 #################################
 erps = EegFun.average_epochs(epochs)
 
-EegFun.plot_topography(erps, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6, ylim = (-2, 2))
+EegFun.plot_topography(erps, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6, ylim = (-2, 2), time_unit = :ms)
 EegFun.plot_topography(erps, interval_selection = (0.4, 0.6), ylim = (-2, 2))
 
-EegFun.plot_topography(erps, interval_selection = (0.4, 0.6), ylim = (-2, 2), colorbar_plot_numbers = [2], dims = (1, 2))
+EegFun.plot_topography(erps, interval_selection = (0.4, 0.6), ylim = (-2, 2), colorbar_plot_numbers = [1, 2])
 
 EegFun.plot_topography(
     erps,

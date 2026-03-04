@@ -149,7 +149,7 @@ using JLD2
 # read raw data
 dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf");
 
-# read and preprate layout file
+# read and prepare layout file
 layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
 EegFun.polar_to_cartesian_xy!(layout_file)
 
@@ -182,7 +182,7 @@ EegFun.highpass_filter!(dat, 0.5)
 
 # E.g. mark data sections (some extreme values and intervals around triggers; Boolean)
 EegFun.is_extreme_value!(dat, 100);
-EegFun.mark_epoch_intervals!(dat, [1, 2], [-0.2, 1.0]) # simple epoch marking with trigger 1 and 3
+EegFun.mark_epoch_intervals!(dat, [1, 2], [-0.2, 1.0]) # simple epoch marking with trigger 1 and 2
 
 # Add new channel with a 10 Hz sine wave (50 μV amplitude)
 dat.data[:, :sinewave] = 50.0 .* sin.(2π .* 10.0 .* dat.data[:, :time])
@@ -196,7 +196,7 @@ EegFun.channel_labels(dat)
 EegFun.extra_labels(dat)
 
 # try some custom styling
-EegFun.plot_databrowser(dat; :channel_line_width => 2, :selection_color => (:green, 0.1))
+EegFun.plot_databrowser(dat; channel_line_width = 2, selection_color = (:green, 0.1))
 
 
 #######################################################################

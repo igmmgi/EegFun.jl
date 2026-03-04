@@ -92,7 +92,7 @@ function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kw
     # Mask values within the specified range
     if !isnothing(plot_kwargs[:mask_range])
         min_val, max_val = plot_kwargs[:mask_range]
-        corr_matrix[(corr_matrix.>=min_val).&(corr_matrix.<=max_val)] .= NaN
+        corr_matrix[(corr_matrix .>= min_val) .& (corr_matrix .<= max_val)] .= NaN
     end
 
     # Use the specified colorrange

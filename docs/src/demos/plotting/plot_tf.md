@@ -49,7 +49,7 @@ dat = EegFun.create_eegfun_data(dat, layout)
 EegFun.highpass_filter!(dat, 0.5)
 EegFun.lowpass_filter!(dat, 100.0)
 
-epoch_cfg = [EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
+epoch_cfg = EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])
 epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.5, 1.0))  # -200 to 1000 ms
 
 EegFun.baseline!(epochs, (-0.2, 0.0))
@@ -74,7 +74,7 @@ EegFun.plot_tf(tf_data, channel_selection = EegFun.channels(:Cz))
 # WITH BASELINE CORRECTION
 #######################################################################
 
-# apply dB baseline on the fly
+# apply dB baseline 
 EegFun.plot_tf(tf_data, channel_selection = EegFun.channels(:Cz), baseline_interval = (-0.3, 0.0), baseline_method = :db)
 
 # percentage change baseline

@@ -77,8 +77,8 @@ Interactive GUI for quick data plotting and visualization.
 - Plot type dropdown with hierarchical submenus:
   - Common plots: Data Browser, Epochs, ERP, ERP Image, Topography
   - Time-Frequency >: Time-Frequency, Power Spectrum
-  - ICA >: ICA Components
-  - ERP Analysis >: ERP Measurement GUI
+  - ICA > : Components, Activation
+  - ERP Analysis > : ERP GUI
   - Diagnostic Plots >: Artifact Detection, Triggers, Channel Summary,
     Joint Probability, Correlation Heatmap, Global Field Power,
     Layout View, Filter Response
@@ -124,14 +124,12 @@ function plot_gui()
 
     # Select File Section — Browse button + editable textbox (type path or pattern)
     file_select_button = _create_select_button(main_layout[3, 1], "Select File", ui_style)
-    file_pattern_input = _create_textbox(main_layout[4, 1], ui_style, placeholder = "select file or enter pattern…", halign = :left)
+    file_pattern_input = _create_textbox(main_layout[4, 1], ui_style, placeholder = "", halign = :left)
 
     # Layout Section
     layout_select_button = _create_select_button(main_layout[5, 1], "Select Layout", ui_style)
     layout_label_text = Observable("File:")
     _create_label(main_layout[6, 1], layout_label_text, ui_style, fontsize = ui_style.textbox_font, color = :gray)
-
-    # Plot Type Section (row 7-8 reserved for future use)
 
     # Plot Type Section
     _create_label(main_layout[7, 1], "Plot Type", ui_style)
@@ -153,6 +151,9 @@ function plot_gui()
     # Submenu dropdown (starts with placeholder to appear inactive)
     submenu_dropdown = _create_menu(main_layout[9, 1], ui_style, options = ["---"])
 
+    # Component input textbox — "hidden" (lightgrey) by default, revealed (white) when ICA is active.
+    component_bc = Observable(:lightgrey)
+    component_input = _create_textbox(main_layout[10, 1], ui_style, placeholder = "", boxcolor_obs = component_bc)
     # Column 2: Participant, Condition, Epoch, Channels
     # Create boxcolor Observables for validated inputs
     participant_bc = Observable(:white)
@@ -272,27 +273,22 @@ function plot_gui()
         submenu_active = Observable(false),
         submenu_type = Observable(""),
         channel_menu = channel_menu,
+        ica_components = Observable(""),
     )
 
     # Plot type dispatch table
     plot_dispatch = Dict{String,Function}(
-        "Data Browser"        => gs -> _plot_databrowser(gs),
-        "Epochs"              => gs -> _plot_epochs(gs),
-        "ERP"                 => gs -> _plot_erp(gs),
-        "ERP Image"           => gs -> _plot_erp_image(gs),
-        "Topography"          => gs -> _plot_topography(gs),
-        "Global Field Power"  => gs -> _plot_gfp(gs),
-        "Time-Frequency"      => gs -> _plot_time_frequency(gs),
-        "Power Spectrum"      => gs -> _plot_power_spectrum(gs),
-        "ICA Components"      => gs -> _plot_ica(gs),
-        "ERP Measurement GUI" => gs -> _plot_erp_measurement_gui(gs),
-        "Filter Response"     => gs -> _plot_filter(gs),
-        "Artifact Detection"  => gs -> _plot_artifacts(gs),
-        "Triggers"            => gs -> _plot_triggers(gs),
-        "Correlation Heatmap" => gs -> _plot_correlation(gs),
-        "Channel Summary"     => gs -> _plot_channel_summary(gs),
-        "Joint Probability"   => gs -> _plot_joint_probability(gs),
-        "Layout View"         => gs -> _plot_layout(gs),
+        "Data Browser"    => gs -> _plot_databrowser(gs),
+        "Epochs"          => gs -> _plot_epochs(gs),
+        "ERP"             => gs -> _plot_erp(gs),
+        "ERP Image"       => gs -> _plot_erp_image(gs),
+        "Topography"      => gs -> _plot_topography(gs),
+        "Time-Frequency"  => gs -> _plot_time_frequency(gs),
+        "Components"      => gs -> _plot_ica(gs),
+        "Activation"      => gs -> _plot_ica_activation(gs),
+        "ERP GUI"         => gs -> _plot_erp_measurement_gui(gs),
+        "Channel Summary" => gs -> _plot_channel_summary(gs),
+        "Layout View"     => gs -> _plot_layout(gs),
     )
 
     function plot()
@@ -411,31 +407,25 @@ function plot_gui()
         if selection == "Select" || selection == "─────────────────"
             return
         elseif selection == "ICA >"
-            submenu_dropdown.options = ["Select", "ICA Components"]
+            submenu_dropdown.options = ["Select", "Components", "Activation"]
             gui_state.submenu_active[] = true
             gui_state.submenu_type[] = "ica"
+            component_bc[] = :white
         elseif selection == "ERP Analysis >"
-            submenu_dropdown.options = ["Select", "ERP Measurement GUI"]
+            submenu_dropdown.options = ["Select", "ERP GUI"]
             gui_state.submenu_active[] = true
             gui_state.submenu_type[] = "erp_analysis"
+            component_bc[] = :lightgrey
         elseif selection == "Diagnostic Plots >"
-            submenu_dropdown.options = [
-                "Select",
-                "Artifact Detection",
-                "Triggers",
-                "Channel Summary",
-                "Joint Probability",
-                "Correlation Heatmap",
-                "Global Field Power",
-                "Layout View",
-                "Filter Response",
-            ]
+            submenu_dropdown.options = ["Select", "Channel Summary", "Layout View"]
             gui_state.submenu_active[] = true
             gui_state.submenu_type[] = "diagnostic"
+            component_bc[] = :lightgrey
         else
             # Direct plot type (Data Browser, Epochs, ERP, etc.)
             gui_state.plottype[] = selection
             gui_state.submenu_active[] = false
+            component_bc[] = :lightgrey
         end
     end
 
@@ -553,6 +543,16 @@ function plot_gui()
     setup_multi_int_callback(participant_input, participant_bc, "Participant", gui_state.participant)
     setup_multi_int_callback(condition_input, condition_bc, "Condition", gui_state.condition)
     setup_multi_int_callback(epoch_input, epoch_bc, "Epoch", gui_state.epoch)
+
+    # Component input callback (used by ICA bridges via gui_state.ica_components)
+    on(component_input.stored_string) do value
+        gui_state.ica_components[] = strip(value)
+    end
+    on(component_input.focused) do is_focused
+        if !is_focused
+            gui_state.ica_components[] = strip(component_input.displayed_string[])
+        end
+    end
 
 
     # Plot option callbacks
@@ -688,6 +688,7 @@ function _plot_epochs(gui_state)
                     layout                = layout_sym,
                     xlim                  = gui_state.xlim[],
                     ylim                  = gui_state.ylim[],
+                    yreversed             = gui_state.invert_y[],
                 )
             catch e
                 _handle_plot_error(e, "Epochs")
@@ -721,6 +722,7 @@ function _plot_epochs(gui_state)
                     average_channels = gui_state.average_channels[],
                     xlim = gui_state.xlim[],
                     ylim = gui_state.ylim[],
+                    yreversed = gui_state.invert_y[],
                 )
             catch e
                 _handle_plot_error(e, "Epochs")
@@ -779,6 +781,7 @@ function _plot_erp(gui_state)
                     average_channels = gui_state.average_channels[],
                     xlim = gui_state.xlim[],
                     ylim = gui_state.ylim[],
+                    yreversed = gui_state.invert_y[],
                 )
             catch e
                 _handle_plot_error(e, "ERP")
@@ -815,6 +818,7 @@ function _plot_erp(gui_state)
                     average_channels = gui_state.average_channels[],
                     xlim = gui_state.xlim[],
                     ylim = gui_state.ylim[],
+                    yreversed = gui_state.invert_y[],
                 )
             catch e
                 _handle_plot_error(e, "ERP")

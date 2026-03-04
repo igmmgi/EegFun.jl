@@ -161,6 +161,7 @@ function _plot_erp_image(gui_state)
                     layout = layout_sym,
                     channel_selection = selected_channels,
                     xlim = gui_state.xlim[],
+                    yreversed = gui_state.invert_y[],
                     extra_kwargs...,
                 )
             else
@@ -169,7 +170,14 @@ function _plot_erp_image(gui_state)
                 isnothing(dat) && return
                 dat = _apply_gui_filters(dat, gui_state)
                 isnothing(dat) && return
-                plot_erp_image(dat; layout = layout_sym, channel_selection = selected_channels, xlim = gui_state.xlim[], extra_kwargs...)
+                plot_erp_image(
+                    dat;
+                    layout = layout_sym,
+                    channel_selection = selected_channels,
+                    xlim = gui_state.xlim[],
+                    yreversed = gui_state.invert_y[],
+                    extra_kwargs...,
+                )
             end
         catch e
             _handle_plot_error(e, "ERP Image")
@@ -177,35 +185,6 @@ function _plot_erp_image(gui_state)
     end
 end
 
-function _plot_gfp(gui_state)
-    isnothing(_validate_file(gui_state, ".jld2")) && return
-
-    try
-        selected_channels = _gui_selected_channels(gui_state)
-        xlim_val = _gui_lim(gui_state.xlim[])
-        ylim_val = _gui_lim(gui_state.ylim[])
-        input_dir = gui_state.directory[] == "" ? pwd() : gui_state.directory[]
-        part_list = _parse_gui_int_field(gui_state.participant[])
-        part_sel = (isnothing(part_list) || isempty(part_list)) ? participants() : participants(part_list)
-
-        @async begin
-            try
-                plot_gfp(
-                    gui_state.filename[];
-                    input_dir             = input_dir,
-                    participant_selection = part_sel,
-                    channel_selection     = selected_channels,
-                    xlim                  = xlim_val,
-                    ylim                  = ylim_val,
-                )
-            catch e
-                _handle_plot_error(e, "GFP")
-            end
-        end
-    catch e
-        _handle_plot_error(e, "GFP")
-    end
-end
 
 function _plot_time_frequency(gui_state)
     isnothing(_validate_file(gui_state, ".jld2")) && return
@@ -289,117 +268,263 @@ function _plot_time_frequency(gui_state)
     end
 
     # .jld2 direct mode
-    try
-        data = read_data(fname)
-        if isnothing(data)
-            @minimal_warning "Requested plot settings incompatible: recheck!"
-            return
-        end
-        tf_vec = _apply_tf_conditions(data)
-        isempty(tf_vec) && return
-        tf = length(tf_vec) == 1 ? only(tf_vec) : tf_vec
-        @async begin
-            try
-                layout_kw = tf isa TimeFreqData ? (layout = layout_sym,) : (;)
-                plot_tf(
-                    tf;
-                    layout_kw...,
-                    channel_selection = selected_channels,
-                    xlim              = xlim_val,
-                    colorrange        = zlim_val,
-                    baseline_interval = baseline_val,
-                    baseline_method   = baseline_method_sym,
-                )
-            catch e
-                _handle_plot_error(e, "Time-Frequency")
-            end
-        end
-    catch e
-        _handle_plot_error(e, "Time-Frequency")
-    end
-end
-
-function _plot_power_spectrum(gui_state)
-    isnothing(_validate_file(gui_state, ".jld2")) && return
-
-    try
-        data = read_data(gui_state.filename[])
-        if isnothing(data)
-            @minimal_warning "Requested plot settings incompatible: recheck!"
-            return
-        end
-
-        # plot_frequency_spectrum only accepts SpectrumData — unwrap vector if needed
-        spectrum = data isa AbstractVector ? first(data) : data
-        if !(spectrum isa SpectrumData)
-            @minimal_warning "Power Spectrum requires a SpectrumData file (got $(typeof(data))). Select a file produced by compute_spectrum()."
-            return
-        end
-
-        selected_channels = _gui_selected_channels(gui_state)
-        _, x_hi = gui_state.xlim[]   # upper bound → max_freq
-
-        @async begin
-            try
-                plot_frequency_spectrum(spectrum; channel_selection = selected_channels, max_freq = x_hi)
-            catch e
-                _handle_plot_error(e, "Power Spectrum")
-            end
-        end
-    catch e
-        _handle_plot_error(e, "Power Spectrum")
-    end
-end
-
-_plot_ica(gui_state) = _simple_jld2_plot(gui_state, plot_topography, "ICA Components")
-
-_plot_filter(gui_state) = _simple_jld2_plot(gui_state, plot_filter, "Filter Response")
-
-_plot_artifacts(gui_state) = _simple_jld2_plot(gui_state, plot_artifact_detection, "Artifact Detection")
-
-function _plot_triggers(gui_state)
-    if gui_state.filename[] == ""
-        @minimal_warning "Requested plot settings incompatible: recheck!"
-        return
-    end
-
-    file_ext = lowercase(splitext(gui_state.filename[])[2])
-
-    try
-        if file_ext == ".jld2"
-            data = read_data(gui_state.filename[])
+    @async begin
+        try
+            data = read_data(fname)
             if isnothing(data)
                 @minimal_warning "Requested plot settings incompatible: recheck!"
                 return
             end
-            @async begin
-                plot_trigger_overview(data)
-            end
-        elseif file_ext == ".bdf"
-            if gui_state.layout_file[] == ""
-                @minimal_warning "Requested plot settings incompatible: recheck!"
-                return
-            end
-            layout = read_layout(gui_state.layout_file[])
-            polar_to_cartesian_xy!(layout)
-            dat = read_raw_data(gui_state.filename[])
-            dat = create_eegfun_data(dat, layout)
-            @async begin
-                plot_trigger_overview(dat)
-            end
-        else
-            @minimal_warning "Requested plot settings incompatible: recheck!"
+            tf_vec = _apply_tf_conditions(data)
+            isempty(tf_vec) && return
+            tf = length(tf_vec) == 1 ? only(tf_vec) : tf_vec
+            layout_kw = tf isa TimeFreqData ? (layout = layout_sym,) : (;)
+            plot_tf(
+                tf;
+                layout_kw...,
+                channel_selection = selected_channels,
+                xlim              = xlim_val,
+                colorrange        = zlim_val,
+                baseline_interval = baseline_val,
+                baseline_method   = baseline_method_sym,
+            )
+        catch e
+            _handle_plot_error(e, "Time-Frequency")
         end
-    catch e
-        _handle_plot_error(e, "Triggers")
     end
 end
 
-_plot_correlation(gui_state) = _simple_jld2_plot(gui_state, plot_correlation_heatmap, "Correlation Heatmap")
 
-_plot_channel_summary(gui_state) = _simple_jld2_plot(gui_state, plot_channel_summary, "Channel Summary")
+function _plot_ica(gui_state)
+    fname      = gui_state.filename[]
+    input_dir  = gui_state.directory[] == "" ? pwd() : gui_state.directory[]
+    is_pattern = lowercase(splitext(fname)[2]) != ".jld2"
 
-_plot_joint_probability(gui_state) = _simple_jld2_plot(gui_state, plot_joint_probability, "Joint Probability")
+    # Parse component selection from the component textbox (shared by both modes)
+    comp_list = _parse_gui_int_field(gui_state.ica_components[])
+    if isnothing(comp_list)
+        @minimal_warning "Invalid component selection — use integers or ranges (e.g. 1:10, 1 3 5)"
+        return
+    end
+    comp_sel = isempty(comp_list) ? components() : components(comp_list)
+
+    if is_pattern
+        # ── Batch / pattern mode ──────────────────────────────────────────────
+        part_list = _parse_gui_int_field(gui_state.participant[])
+        if isnothing(part_list)
+            @minimal_warning "Requested plot settings incompatible: recheck!"
+            return
+        end
+        part_sel = isempty(part_list) ? participants() : participants(part_list)
+
+        # Warn about missing participant IDs
+        if !isempty(part_list)
+            all_files   = _find_batch_files(fname, input_dir)
+            avail_ids   = sort(unique(_extract_participant_id.(all_files)))
+            missing_ids = filter(id -> id ∉ avail_ids, part_list)
+            if !isempty(missing_ids)
+                @minimal_warning "Participant ID(s) $missing_ids not found in '$fname'. Available IDs: $avail_ids"
+            end
+        end
+
+        files = _find_batch_files(fname, input_dir, part_sel)
+        isempty(files) && return
+
+        @async begin
+            for file in sort(files, by = _natural_sort_key)
+                @info "Plotting ICA: $file"
+                try
+                    data = read_data(joinpath(input_dir, file))
+                    isnothing(data) && continue
+                    if !(data isa InfoIca)
+                        @minimal_warning "Skipping $file — not an InfoIca file"
+                        continue
+                    end
+                    _set_window_title("ICA Components — " * basename(file))
+                    plot_topography(data; component_selection = comp_sel)
+                catch e
+                    _handle_plot_error(e, "ICA Components ($file)")
+                end
+            end
+        end
+
+    else
+        # ── Single .jld2 mode ─────────────────────────────────────────────────
+        isnothing(_validate_file(gui_state, ".jld2")) && return
+        try
+            data = read_data(fname)
+            if isnothing(data)
+                @minimal_warning "Requested plot settings incompatible: recheck!"
+                return
+            end
+            if !(data isa InfoIca)
+                @minimal_warning "ICA Components requires an InfoIca file. Select a file produced by run_ica()."
+                return
+            end
+            @async begin
+                try
+                    _set_window_title("ICA Components — " * basename(fname))
+                    plot_topography(data; component_selection = comp_sel)
+                catch e
+                    _handle_plot_error(e, "ICA Components")
+                end
+            end
+        catch e
+            _handle_plot_error(e, "ICA Components")
+        end
+    end
+end
+
+
+"""
+    _find_ica_source_file(ica_path, search_dirs) -> String
+
+Locate the raw EEG source file that a given InfoIca was computed from.
+Searches `search_dirs` (in order) for a file matching `ica.filename` basename
+with common EEG extensions. Returns the first match, or "" if not found.
+"""
+function _find_ica_source_file(source_basename::String, search_dirs::Vector{String})
+    extensions = [".bdf", ".jld2", ".set", ".vhdr"]
+    for dir in search_dirs, ext in extensions
+        candidate = joinpath(dir, source_basename * ext)
+        isfile(candidate) && return candidate
+    end
+    return ""
+end
+
+"""
+    _plot_one_ica_activation(ica_path, comp_sel, layout, gui_dir)
+
+Load one InfoIca .jld2, locate its source EEG file, preprocess (for raw files),
+and call `plot_ica_component_activation`. Used by both single and batch modes.
+"""
+function _plot_one_ica_activation(ica_path::String, comp_sel, layout, gui_dir::String)
+    try
+        ica = read_data(ica_path)
+        isnothing(ica) && return
+        if !(ica isa InfoIca)
+            @minimal_warning "Skipping $(basename(ica_path)) — not an InfoIca file"
+            return
+        end
+
+        source_basename = splitext(basename(ica.filename))[1]
+        search_dirs =
+            unique(filter(!isempty, [dirname(ica_path), dirname(dirname(ica_path)), dirname(dirname(dirname(ica_path))), gui_dir, pwd()]))
+        source_path = _find_ica_source_file(source_basename, search_dirs)
+
+        if isempty(source_path)
+            extensions = [".bdf", ".jld2", ".set", ".vhdr"]
+            searched = join(["  $d/$source_basename{$(join(extensions, ","))}" for d in search_dirs], "\n")
+            @minimal_warning "Cannot locate source data for Component Activation.\n" *
+                             "Searched for \"$source_basename\" with extensions $(join(extensions, ", ")) in:\n" *
+                             searched
+            return
+        end
+
+        src_ext = lowercase(splitext(source_path)[2])
+        dat = if src_ext == ".jld2"
+            read_data(source_path)
+        else
+            raw = read_raw_data(source_path)
+            d = isnothing(layout) ? create_eegfun_data(raw) : create_eegfun_data(raw, layout)
+            @info "Applying preprocessing: highpass 0.1 Hz + average rereference"
+            highpass_filter!(d, 0.1)
+            rereference!(d, :avg)
+            d
+        end
+
+        if isnothing(dat) || !(dat isa ContinuousData)
+            @minimal_warning "Source file \"$source_path\" did not load as ContinuousData."
+            return
+        end
+        _set_window_title("Component Activation — " * basename(ica_path))
+        plot_ica_component_activation(dat, ica; component_selection = comp_sel)
+    catch e
+        _handle_plot_error(e, "Component Activation ($(basename(ica_path)))")
+    end
+end
+
+function _plot_ica_activation(gui_state)
+    fname      = gui_state.filename[]
+    input_dir  = gui_state.directory[] == "" ? pwd() : gui_state.directory[]
+    is_pattern = lowercase(splitext(fname)[2]) != ".jld2"
+    layout     = gui_state.layout_object[]
+
+    comp_list = _parse_gui_int_field(gui_state.ica_components[])
+    if isnothing(comp_list)
+        @minimal_warning "Invalid component selection — use integers or ranges (e.g. 1:10, 1 3 5)"
+        return
+    end
+    comp_sel = isempty(comp_list) ? components() : components(comp_list)
+
+    if is_pattern
+        part_list = _parse_gui_int_field(gui_state.participant[])
+        if isnothing(part_list)
+            @minimal_warning "Requested plot settings incompatible: recheck!"
+            return
+        end
+        part_sel = isempty(part_list) ? participants() : participants(part_list)
+
+        if !isempty(part_list)
+            all_files   = _find_batch_files(fname, input_dir)
+            avail_ids   = sort(unique(_extract_participant_id.(all_files)))
+            missing_ids = filter(id -> id ∉ avail_ids, part_list)
+            isempty(missing_ids) || @minimal_warning "Participant ID(s) $missing_ids not found. Available: $avail_ids"
+        end
+
+        files = _find_batch_files(fname, input_dir, part_sel)
+        isempty(files) && return
+
+        @async begin
+            for file in sort(files, by = _natural_sort_key)
+                @info "Plotting Component Activation: $file"
+                _plot_one_ica_activation(joinpath(input_dir, file), comp_sel, layout, input_dir)
+            end
+        end
+    else
+        isnothing(_validate_file(gui_state, ".jld2")) && return
+        @async _plot_one_ica_activation(fname, comp_sel, layout, input_dir)
+    end
+end
+
+
+function _plot_channel_summary(gui_state)
+    fname = gui_state.filename[]
+    if fname == ""
+        @minimal_warning "No file selected — use 'Select File' to choose one."
+        return
+    end
+
+    file_ext = lowercase(splitext(fname)[2])
+    layout   = gui_state.layout_object[]
+
+    @async begin
+        try
+            dat = if file_ext ∈ (".bdf", ".set", ".vhdr")
+                raw = read_raw_data(fname)
+                d = isnothing(layout) ? create_eegfun_data(raw) : create_eegfun_data(raw, layout)
+                @info "Applying preprocessing: highpass 0.1 Hz + average rereference"
+                highpass_filter!(d, 0.1)
+                rereference!(d, :avg)
+                d
+            else
+                read_data(fname)
+            end
+            isnothing(dat) && return
+            df = channel_summary(dat)
+            # channel_summary returns DataFrame or Vector{DataFrame} (epoch data)
+            non_plot = (:channel, :epoch, :file, :condition)
+            df_ref = df isa AbstractVector ? first(df) : df
+            plot_cols = Symbol[c for c in propertynames(df_ref) if c ∉ non_plot]
+            isempty(plot_cols) && return
+            # If epoch column present, average across epochs and show 95% CI
+            avg_kw = :epoch ∈ propertynames(df_ref) ? (average_over = :epoch,) : (;)
+            plot_channel_summary(df, plot_cols; avg_kw...)
+        catch e
+            _handle_plot_error(e, "Channel Summary")
+        end
+    end
+end
 
 _plot_erp_measurement_gui(gui_state) = _simple_jld2_plot(gui_state, plot_erp_measurement_gui, "ERP Measurement GUI")
 

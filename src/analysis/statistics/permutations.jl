@@ -69,9 +69,9 @@ function _shuffle_labels!(
         # We use views to avoid copying during indexing
         function get_trial(idx)
             if idx <= n_A
-                return view(data1, idx, :, :)
+                return view(data1,idx,:,:)
             else
-                return view(data2, (idx - n_A), :, :)
+                return view(data2,(idx-n_A),:,:)
             end
         end
 
@@ -359,7 +359,7 @@ function _shuffle_labels_tf!(
 
         shuffled_indices = randperm(n_total)
 
-        get_trial(idx) = idx <= n_A ? view(data1, idx, :, :, :) : view(data2, (idx - n_A), :, :, :)
+        get_trial(idx) = idx <= n_A ? view(data1,idx,:,:,:) : view(data2,(idx-n_A),:,:,:)
 
         for i = 1:n_A
             src_idx = shuffled_indices[i]

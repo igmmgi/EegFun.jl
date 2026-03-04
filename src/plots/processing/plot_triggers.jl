@@ -342,7 +342,7 @@ function plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwa
     # Pre-compute trigger data for each type to avoid repeated filtering
     trigger_data = Dict{Int,Vector{Float64}}()
     for (key, _) in trigger_count
-        trigger_data[key] = trigger_times[trigger_values.==key]
+        trigger_data[key] = trigger_times[trigger_values .== key]
     end
 
     for (unique, (key, value)) in enumerate(trigger_count)
@@ -415,7 +415,7 @@ function plot_trigger_overview(dat::ContinuousData; kwargs...)
         # Pre-compute trigger data for each type
         trigger_data = Dict{Int,Vector{Float64}}()
         for (key, _) in trigger_count
-            trigger_data[key] = trigger_times[Int.(trigger_codes).==key]
+            trigger_data[key] = trigger_times[Int.(trigger_codes) .== key]
         end
 
         for (unique, (key, value)) in enumerate(trigger_count)

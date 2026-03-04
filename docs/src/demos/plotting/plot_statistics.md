@@ -51,85 +51,150 @@ This demo shows how to visualise ERP statistical test results, including conditi
 using EegFun
 
 #######################################################################
-# LOAD DATA AND CREATE ERPS
+# PREPARE DATA (requires pre-saved per-participant ERPs)
 #######################################################################
 
-dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf")
-layout = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv")
-EegFun.polar_to_cartesian_xy!(layout)
-dat = EegFun.create_eegfun_data(dat, layout)
+input_dir = "./resources/data/julia/erps"
+file_pattern = "erps_good"
 
-EegFun.highpass_filter!(dat, 0.1)
-EegFun.lowpass_filter!(dat, 30.0)
-
-epochs = EegFun.epoch_data(dat, [:trigger1, :trigger2], (-0.2, 0.8))
-EegFun.baseline!(epochs, (-0.2, 0.0))
-
-#######################################################################
-# RUN STATISTICAL TEST
-#######################################################################
-
-# prepare for comparison and run analytic test
-prepared = EegFun.prepare_statistics(epochs)
-result = EegFun.analytic_test(prepared, correction_method = :bonferroni)
+prepared = EegFun.prepare_stats(
+    file_pattern,
+    :paired;
+    input_dir = input_dir,
+    condition_selection = EegFun.conditions([1, 2]),
+    baseline_interval = EegFun.times((-0.2, 0.0)),
+    analysis_interval = EegFun.times((0.0, 2.0)),
+)
 
 #######################################################################
-# BASIC PLOT — ERP WAVEFORMS (single channel)
+# RUN ANALYTIC TEST
 #######################################################################
 
-# plot ERP waveforms for both conditions at a channel
-EegFun.plot_erp_stats(result, channel_selection = EegFun.channels(:Cz), plot_erp = true)
+result = EegFun.analytic_test(prepared, correction_method = :no)
 
 #######################################################################
-# ADD DIFFERENCE WAVE
+# 1. BASIC — ERP waveforms (single channel)
 #######################################################################
 
-EegFun.plot_erp_stats(result, channel_selection = EegFun.channels(:Cz), plot_erp = true, plot_difference = true)
+EegFun.plot_erp_stats(result, channel_selection = EegFun.channels(:PO7))
 
 #######################################################################
-# ADD SIGNIFICANCE MARKERS
+# 2. ADD DIFFERENCE WAVE
 #######################################################################
 
-EegFun.plot_erp_stats(result, channel_selection = EegFun.channels(:Cz), plot_erp = true, plot_difference = true, plot_significance = true)
+EegFun.plot_erp_stats(result, channel_selection = EegFun.channels(:Cz), plot_difference = true)
 
 #######################################################################
-# SHOW T-VALUES
+# 3. ADD SIGNIFICANCE MARKERS
+#######################################################################
+
+EegFun.plot_erp_stats(result, channel_selection = EegFun.channels(:PO7), plot_difference = true, plot_significance = true)
+
+#######################################################################
+# 4. T-VALUES ONLY (no ERPs)
+#######################################################################
+
+EegFun.plot_erp_stats(
+    result,
+    channel_selection = EegFun.channels(:PO8),
+    plot_erp = false,
+    plot_tvalues = true,
+    plot_critical_t = true,
+    plot_significance = true,
+)
+
+#######################################################################
+# 5. T-VALUES + ERPs TOGETHER
 #######################################################################
 
 EegFun.plot_erp_stats(result, channel_selection = EegFun.channels(:Pz), plot_tvalues = true, plot_critical_t = true)
 
 #######################################################################
-# SHIFT DIFFERENCE WAVE
+# 6. SHIFT DIFFERENCE WAVE (for visibility)
 #######################################################################
 
-# offset the difference wave for visibility (similar to MATLAB)
-EegFun.plot_erp_stats(result, channel_selection = EegFun.channels(:Cz), plot_erp = true, plot_difference = true, difference_offset = 3.0)
+EegFun.plot_erp_stats(result, channel_selection = EegFun.channels(:Cz), plot_difference = true, difference_offset = 3.0)
 
 #######################################################################
-# SIGNIFICANCE BAR POSITIONING
+# 7. SIGNIFICANCE BAR POSITIONING
 #######################################################################
 
-# position significance bars at the bottom, at zero, or at a custom y
+# :bottom
 EegFun.plot_erp_stats(
     result,
     channel_selection = EegFun.channels(:Cz),
-    plot_erp = true,
     plot_significance = true,
     significance_position = :bottom,
     significance_color = (:red, 0.5),
 )
 
+# :zero
+EegFun.plot_erp_stats(result, channel_selection = EegFun.channels(:Cz), plot_significance = true, significance_position = :zero)
+
+# custom y-position
+EegFun.plot_erp_stats(result, channel_selection = EegFun.channels(:Cz), plot_significance = true, significance_position = -5.0)
+
 #######################################################################
-# GRID LAYOUT — multiple channels
+# 8. CUSTOM FIGURE TITLE
 #######################################################################
 
-EegFun.plot_erp_stats(
+EegFun.plot_erp_stats(result, channel_selection = EegFun.channels(:Cz), plot_significance = true, figure_title = "N2pc Analytic Test")
+
+#######################################################################
+# 9. GRID LAYOUT — multiple channels
+#######################################################################
+
+EegFun.plot_erp_stats(result, channel_selection = EegFun.channels([:Cz, :Pz, :Oz, :Fz]), layout = :grid, plot_significance = true)
+
+#######################################################################
+# 10. TOPO LAYOUT — channels at electrode positions
+#######################################################################
+
+EegFun.plot_erp_stats(result, layout = :topo, plot_significance = true)
+
+#######################################################################
+# 11. CAPTURE RETURN VALUE for further customisation
+#######################################################################
+
+(; fig, axes) = EegFun.plot_erp_stats(
     result,
-    channel_selection = EegFun.channels([:Cz, :Pz, :Oz, :Fz]),
-    layout = :grid,
-    plot_erp = true,
+    channel_selection = EegFun.channels(:Cz),
+    plot_difference = true,
     plot_significance = true,
+    display_plot = false,
 )
+# axes[1] is a regular Makie Axis — add annotations, save, etc.
+
+#######################################################################
+# 12. SEM BANDS (±1 SEM around waveforms)
+#######################################################################
+
+# ±1 SEM
+EegFun.plot_erp_stats(result, channel_selection = EegFun.channels(:PO7), plot_se = true)
+
+# SEM + difference wave
+EegFun.plot_erp_stats(result, channel_selection = EegFun.channels(:PO7), plot_se = true, plot_difference = true)
+
+# SEM + significance markers + t-values
+EegFun.plot_erp_stats(result, channel_selection = EegFun.channels(:PO7), plot_se = true, plot_significance = true, plot_tvalues = true)
+
+#######################################################################
+# RUN PERMUTATION TEST
+#######################################################################
+
+result_perm = EegFun.permutation_test(prepared, n_permutations = 1000)
+
+#######################################################################
+# 12. PERMUTATION RESULTS — ERPs + significance
+#######################################################################
+
+EegFun.plot_erp_stats(result_perm, channel_selection = EegFun.channels(:Cz), plot_significance = true)
+
+#######################################################################
+# 13. PERMUTATION RESULTS — t-values + critical t
+#######################################################################
+
+EegFun.plot_erp_stats(result_perm, channel_selection = EegFun.channels(:Cz), plot_erp = false, plot_tvalues = true, plot_critical_t = true)
 ```
 
 :::

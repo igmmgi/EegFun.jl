@@ -179,7 +179,7 @@ function create_synthetic_epochs(
     noise_level = 0.3,
 )
     time = range(-0.2, 0.8, length = n_timepoints)
-    layout = EegFun.Layout(DataFrame(label = channels, inc = [90.0, 0.0, -90.0], azi = [0.0, 0.0, 0.0]), nothing, nothing)
+    layout = EegFun.Layout(DataFrame(label = channels, inc = [90.0, 0.0, -90.0], azi = [0.0, 0.0, 0.0]), nothing, nothing, nothing)
 
     epochs = DataFrame[]
     for epoch = 1:n_epochs

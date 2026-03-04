@@ -170,12 +170,14 @@ EegFun.add_topo_rois!(
 EegFun.get_neighbours_xy!(layout, 0.5);
 EegFun.plot_layout_2d(layout, neighbours = true)
 
-EegFun.get_neighbours_xyz!(layout, 0.5);
-EegFun.plot_layout_3d(layout, neighbours = true)
-
-# how to print neighbours to a file
+# Print neighbours while 2D neighbours are still computed
+# (the 3D coordinate conversion below clears cached neighbours)
 EegFun.print_layout_neighbours(layout, "electrode_neighbours_1.toml")
 EegFun.print_layout_neighbours(layout.neighbours, "electrode_neighbours_2.toml")
+
+# 3D layout with neighbours
+EegFun.get_neighbours_xyz!(layout, 0.5);
+EegFun.plot_layout_3d(layout, neighbours = true)
 
 # save a basic figure
 # NB. for vector graphics, use CairoMakie

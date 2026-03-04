@@ -1618,7 +1618,7 @@ function subset_bad_data(data_path::String, threshold::Real; subset_directory::S
     !isdir(subset_dir_path) && mkpath(subset_dir_path)
 
     # Find participants with any condition below threshold
-    bad_participants = unique(epoch_summary.file[epoch_summary.percentage.<threshold])
+    bad_participants = unique(epoch_summary.file[epoch_summary.percentage .< threshold])
     println("Subsetting data: $(length(bad_participants))")
     println("   N remaining: $(length(unique(epoch_summary.file)) - length(bad_participants))")
     println("   N removed: $(length(bad_participants))")

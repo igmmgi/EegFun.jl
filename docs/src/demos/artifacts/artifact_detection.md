@@ -64,7 +64,6 @@ This demo is a comprehensive walkthrough of artifact handling in EegFun: continu
 
 using EegFun
 
-
 #######################################################################
 # LOAD AND PREPROCESS DATA
 #######################################################################
@@ -79,7 +78,7 @@ EegFun.rereference!(dat, :avg)
 EegFun.highpass_filter!(dat, 0.1)
 
 # Browse raw data (press "i" for interaction help)
-# EegFun.plot_databrowser(dat)
+EegFun.plot_databrowser(dat)
 
 
 #######################################################################

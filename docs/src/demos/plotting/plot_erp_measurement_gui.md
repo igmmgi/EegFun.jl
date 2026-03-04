@@ -46,10 +46,10 @@ using EegFun
 dat = EegFun.read_data("./resources/data/julia/erps/example1_erps_good.jld2")
 
 # All conditions overlaid
-EegFun.plot_erp_measurement_gui(dat)
-
-# Single condition
-EegFun.plot_erp_measurement_gui(dat[1])
+# EegFun.plot_erp_measurement_gui(dat)
+# 
+# # Single condition
+# EegFun.plot_erp_measurement_gui(dat[1])
 
 # Select some specific initial settings
 EegFun.plot_erp_measurement_gui(

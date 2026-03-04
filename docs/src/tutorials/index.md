@@ -20,3 +20,7 @@ Step-by-step guides for learning EegFun.jl, from installation through to advance
 ## Scaling Up
 
 - [Batch Processing](batch-processing.md) - Processing multiple participants efficiently
+
+## Visualization
+
+- [Plot GUI](plot-gui.md) - Exploring data interactively with the plot GUI

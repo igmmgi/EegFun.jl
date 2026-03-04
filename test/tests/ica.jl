@@ -36,7 +36,8 @@ using LinearAlgebra
         df[!, :hEOG] = hEOG
         # Keep mask: first half only
         df[!, :keepmask] = [i <= n ÷ 2 for i = 1:n]
-        layout = EegFun.Layout(DataFrame(label = Symbol.(collect(keys(cols))), inc = zeros(nch), azi = zeros(nch)), nothing, nothing, nothing)
+        layout =
+            EegFun.Layout(DataFrame(label = Symbol.(collect(keys(cols))), inc = zeros(nch), azi = zeros(nch)), nothing, nothing, nothing)
         dat = EegFun.ContinuousData("test_data", copy(df, copycols = true), layout, fs, EegFun.AnalysisInfo())
         return dat
     end

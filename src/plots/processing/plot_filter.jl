@@ -195,7 +195,7 @@ function plot_filter_response(
         else
             # Single-pass: just show the coefficients
             impulse_response = filter_info.filter_object
-            time_samples = (-(length(impulse_response) ÷ 2)):((length(impulse_response)-1)÷2)
+            time_samples = (-(length(impulse_response)÷2)):((length(impulse_response)-1)÷2)
         end
     else  # IIR filter
         impulse_response = filter_func(filter_info.filter_object, impulse)

@@ -126,41 +126,32 @@ EegFun.rereference!(dat, :avg)
 EegFun.highpass_filter!(dat, 1)
 
 # EPOCHS
-epoch_cfg = [EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
+epoch_cfg = EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])
 epochs = EegFun.extract_epochs(dat, epoch_cfg, (-2, 4))
 
-EegFun.plot_erp_image(epochs[1], layout = :single)  # average of all channels
-EegFun.plot_erp_image(epochs[1], layout = :single, channel_selection = EegFun.channels([:PO7, :PO8]))
+EegFun.plot_erp_image(epochs, layout = :single)  # average of all channels
+EegFun.plot_erp_image(epochs, layout = :single, channel_selection = EegFun.channels([:PO7, :PO8]))
+EegFun.plot_erp_image(epochs, layout = :single, channel_selection = EegFun.channels([:PO7, :PO8]), interpolate = true)
 
-EegFun.plot_erp_image(epochs[1], layout = :grid, colorbar_plot = false)
-EegFun.plot_erp_image(epochs[1], layout = :grid, colorbar_plot = true)
+EegFun.plot_erp_image(epochs, layout = :grid, colorbar_plot = false)
+EegFun.plot_erp_image(epochs, layout = :grid, colorbar_plot = true)
 
-EegFun.plot_erp_image(epochs[1], layout = :topo)
-EegFun.plot_erp_image(epochs[1], channel_selection = EegFun.channels([:PO7]))
-EegFun.plot_erp_image(epochs[1], channel_selection = EegFun.channels([:Fp1]), plot_erp = false)
+EegFun.plot_erp_image(epochs, layout = :topo)
+EegFun.plot_erp_image(epochs, channel_selection = EegFun.channels([:PO7]))
+EegFun.plot_erp_image(epochs, channel_selection = EegFun.channels([:Fp1]), plot_erp = false)
 
 
-EegFun.plot_erp_image(epochs[1], layout = :single)
+EegFun.plot_erp_image(epochs, layout = :single)
 
 fig, axes = EegFun.plot_erp_image(
-    epochs[1],
+    epochs,
     channel_selection = EegFun.channels([:PO7, :PO8]),
     layout = :single,
     boxcar_average = 2,
     colorrange = (-50, 50),
 )
 
-
-
-fig, axes = EegFun.plot_erp_image(
-    epochs[1],
-    # channel_selection = EegFun.channels([:Fp1, :Fp2]),
-    # channel_selection = EegFun.channels([:Fp1, :Fp2]),
-    layout = :topo,
-    boxcar_average = 20,
-    colorrange = (-50, 50),
-)
-
+fig, axes = EegFun.plot_erp_image(epochs, layout = :topo, boxcar_average = 20, colorrange = (-50, 50))
 ```
 
 :::

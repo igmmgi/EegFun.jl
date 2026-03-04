@@ -132,7 +132,8 @@ using OrderedCollections
             trigger = [0, 1, 0, 2, 0, 1, 0]
             time = collect(0:6) ./ 100.0
             df = DataFrame(time = time, trigger = trigger, channel1 = randn(7), channel2 = randn(7))
-            layout = EegFun.Layout(DataFrame(label = [:channel1, :channel2], inc = [0.0, 90.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
+            layout =
+                EegFun.Layout(DataFrame(label = [:channel1, :channel2], inc = [0.0, 90.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
             dat = EegFun.ContinuousData("test_data", df, layout, 100, EegFun.AnalysisInfo())
 
             # Test trigger counting
