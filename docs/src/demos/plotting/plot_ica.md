@@ -79,15 +79,12 @@ EegFun.plot_topography(ica, label_plot = false, point_plot = false)
 # plot only the first 10 components
 EegFun.plot_topography(ica, component_selection = EegFun.components(1:10))
 
-# plot even-numbered components
-EegFun.plot_topography(ica, component_selection = EegFun.components(2:2:20))
-
 #######################################################################
 # CUSTOM GRID SIZE
 #######################################################################
 
 # control rows × columns layout
-EegFun.plot_topography(ica, component_selection = EegFun.components(1:12), dims = (3, 4))
+EegFun.plot_topography(ica, component_selection = EegFun.components(1:12), dims = (4, 3))
 
 #######################################################################
 # DISPLAY OPTIONS

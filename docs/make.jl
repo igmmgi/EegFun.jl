@@ -18,6 +18,7 @@ pages = [
         "Layouts and Neighbors" => "tutorials/layouts-neighbors.md",
         "Batch Processing" => "tutorials/batch-processing.md",
         "Selection Patterns" => "tutorials/selection-patterns.md",
+        "Plot GUI" => "tutorials/plot-gui.md",
         "Preprocessing Walkthrough" => "demos/workflows/preprocessing_workflow.md",
         "Worked Examples" => [
             "Visual Attention (Posner Cueing)" => "demos/experiments/visual-attention.md",

@@ -1128,9 +1128,9 @@ function _add_boolean_indicators!(state, channel_sym)
                 # Create vertical lines at each true position
                 # Only create lines within the current view range
                 current_range = state.xrange[]
-                visible_times = true_times[true_times.>=state.dat.data.time[first(
+                visible_times = true_times[true_times .>= state.dat.data.time[first(
                     current_range,
-                )].&&true_times.<=state.dat.data.time[last(current_range)]]
+                )].&&true_times .<= state.dat.data.time[last(current_range)]]
 
                 if !isempty(visible_times)
                     lines = vlines!(ax_channel, visible_times, color = :red, linewidth = 1)
@@ -1782,7 +1782,7 @@ function plot_line_noise_components(line_noise_comps::Vector{Int}, metrics_df::D
 
         # Add component numbers as labels
         for (i, comp) in enumerate(line_noise_comps)
-            row = metrics_df[metrics_df.Component.==comp, :]
+            row = metrics_df[metrics_df.Component .== comp, :]
             text!(
                 ax1,
                 comp,

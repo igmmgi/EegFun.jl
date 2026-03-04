@@ -34,7 +34,7 @@ This demo shows how to plot power spectra from `SpectrumData` objects.
 
 ```julia
 # Demo: Plotting Power Spectrum from SpectrumData
-# Shows how to visualise frequency spectra computed by compute_spectrum,
+# Shows how to visualise frequency spectra computed by freq_spectrum,
 # with options for channel selection, axis scaling, and dB units.
 
 using EegFun
@@ -54,7 +54,7 @@ EegFun.highpass_filter!(dat, 0.5)
 # COMPUTE SPECTRUM
 #######################################################################
 
-spectrum = EegFun.compute_spectrum(dat)
+spectrum = EegFun.freq_spectrum(dat)
 
 #######################################################################
 # BASIC SPECTRUM PLOT — ALL CHANNELS
@@ -66,39 +66,30 @@ EegFun.plot_frequency_spectrum(spectrum)
 # SINGLE CHANNEL
 #######################################################################
 
-EegFun.plot_frequency_spectrum(spectrum,
-    channel_selection = channels(:Cz)
-)
+EegFun.plot_frequency_spectrum(spectrum, channel_selection = EegFun.channels(:Cz))
 
 #######################################################################
 # LOG SCALE AXES
 #######################################################################
 
-EegFun.plot_frequency_spectrum(spectrum,
-    channel_selection = channels(:Cz),
-    x_scale = :log10,
-    y_scale = :log10
-)
+EegFun.plot_frequency_spectrum(spectrum, channel_selection = EegFun.channels(:Cz), x_scale = :log10, y_scale = :log10)
 
 #######################################################################
 # DECIBEL UNITS
 #######################################################################
 
-EegFun.plot_frequency_spectrum(spectrum,
-    channel_selection = channels([:Cz, :Pz]),
-    unit = :dB,
-    max_freq = 100.0
-)
+EegFun.plot_frequency_spectrum(spectrum, channel_selection = EegFun.channels([:Cz, :Pz]), unit = :dB, max_freq = 100.0)
 
 #######################################################################
 # CUSTOM STYLING
 #######################################################################
 
-EegFun.plot_frequency_spectrum(spectrum,
-    channel_selection = channels([:Cz, :Oz]),
+EegFun.plot_frequency_spectrum(
+    spectrum,
+    channel_selection = EegFun.channels([:Cz, :Oz]),
     linewidth = 3,
     line_alpha = 0.6,
-    title = "Power Spectrum"
+    title = "Power Spectrum",
 )
 ```
 

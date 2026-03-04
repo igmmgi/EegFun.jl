@@ -508,7 +508,12 @@ end # EegFun testset
                 Ch3 = zeros(n_samples),
             )
 
-            layout = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2, :Ch3], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]), nothing, nothing, nothing)
+            layout = EegFun.Layout(
+                DataFrame(label = [:Ch1, :Ch2, :Ch3], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]),
+                nothing,
+                nothing,
+                nothing,
+            )
 
             erps = [EegFun.ErpData("test_data", 1, "condition_1", df, layout, fs, EegFun.AnalysisInfo(), 1)]
             jldsave(joinpath(stats_dir, "1_erps_stats.jld2"); data = erps)
