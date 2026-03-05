@@ -5,25 +5,6 @@ Provides TF-specific `channel_difference!` and `channel_difference` that apply
 differencing to both `data_power` and `data_phase` DataFrames.
 """
 
-"""
-    channel_difference!(dat::TimeFreqData; channel_selection1::Function = channels(),
-                        channel_selection2::Function = channels(),
-                        channel_out::Symbol = :diff) -> Nothing
-
-Calculate channel difference for TimeFreqData, applying to both power and phase DataFrames.
-
-See `channel_difference!` for full documentation. This method ensures both `data_power`
-and `data_phase` are updated consistently.
-
-# Examples
-```julia
-# Calculate difference between two channel groups
-channel_difference!(tf_data,
-    channel_selection1 = channels([:Ch1, :Ch2]),
-    channel_selection2 = channels([:Ch3]),
-    channel_out = :laterality)
-```
-"""
 function channel_difference!(
     dat::TimeFreqData;
     channel_selection1::Function = channels(),
@@ -55,21 +36,6 @@ function channel_difference!(
 end
 
 
-"""
-    channel_difference(dat::TimeFreqData; kwargs...) -> TimeFreqData
-
-Non-mutating version of `channel_difference!` for TimeFreqData.
-Creates a copy and applies the operation.
-
-# Examples
-```julia
-# Calculate laterality difference (non-mutating)
-result = EegFun.channel_difference(tf_data,
-    channel_selection1 = EegFun.channels([:C3]),
-    channel_selection2 = EegFun.channels([:C4]),
-    channel_out = :laterality)
-```
-"""
 function channel_difference(dat::TimeFreqData; kwargs...)
     data_copy = copy(dat)
     channel_difference!(data_copy; kwargs...)

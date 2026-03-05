@@ -611,49 +611,36 @@ end
 #   DECODE WITH DIRECT LIBSVM 
 # ===========================
 """
-    decode_libsvm(
-        epochs::Vector{EpochData};
-        channel_selection::Function = channels(),
-        interval_selection::Interval = times(),
-        n_iterations::Int = 100,
-        n_folds::Int = 3,
-        equalize_trials::Bool = true,
-        cost::Float64 = 1.0,
-        show_progress::Bool = true,
-    )
+    decode_libsvm(epochs::Vector{EpochData}; channel_selection = channels(),
+    interval_selection = times(), n_iterations::Int = 100, n_folds::Int = 3,
+    equalize_trials::Bool = true, cost::Float64 = 1.0, show_progress::Bool = true)
+    decode_libsvm(epochs::Vector{TimeFreqEpochData}; channel_selection = channels(),
+    interval_selection = times(), n_iterations::Int = 100, n_folds::Int = 3,
+    equalize_trials::Bool = true, cost::Float64 = 1.0, show_progress::Bool = true)
+    decode_libsvm(participant_epochs::Vector{Vector{T}}; kwargs...) where {T<:MultiDataFrameEeg}
 
-Perform multivariate pattern classification (decoding) analysis using LIBSVM.
+Perform multivariate pattern classification (decoding) using LIBSVM.
 
-This function performs time-point-by-time-point decoding analysis on epoch data from one participant,
-using cross-validation to estimate classification accuracy at each time point.
-
-# Arguments
-- `epochs::Vector{EpochData}`: Vector of EpochData from a SINGLE participant, one per condition/class.
-  Example: `[epoch_cond1_participant1, epoch_cond2_participant1]` for participant 1
+Time-point-by-time-point SVM classification using k-fold cross-validation. Works with
+`EpochData` (channel features) and `TimeFreqEpochData` (channel × frequency features).
+The `Vector{Vector{T}}` form batch-processes all participants at once.
 
 # Keyword Arguments
-- `channel_selection::Function=channels()`: Channel selection predicate. See `channels()` for options.
-  - Example: `channel_selection=channels([:Fz, :Cz, :Pz])` for specific channels
-  - Example: `channel_selection=channels(:Cz)` for single channel
-  - Default: all channels
-- `interval_selection::Interval=times()`: Time interval selection. See `times()` for options.
-  - Example: `interval_selection=times(-0.2, 0.8)` for time interval from -0.2 to 0.8 seconds
-  - Example: `interval_selection=times()` for all time points (default)
-- `n_iterations::Int`: Number of iterations with random shuffling (default: 100, matches erplab default)
-- `n_folds::Int`: Number of cross-validation folds (default: 3, matches erplab default)
-- `equalize_trials::Bool`: Whether to equalize number of trials across conditions (default: true, matches erplab)
-- `cost::Float64`: SVM regularization parameter (default: 1.0). Larger values = less regularization.
+- `channel_selection`: Channel selection predicate (default: all channels)
+- `interval_selection`: Time interval selection (default: all time points)
+- `n_iterations::Int`: Shuffle iterations (default: 100)
+- `n_folds::Int`: Cross-validation folds (default: 3)
+- `equalize_trials::Bool`: Equalize trial counts (default: true)
+- `cost::Float64`: SVM regularization (default: 1.0)
 - `show_progress::Bool`: Show progress bar (default: true)
 
 # Returns
-- `DecodedData`: Object containing decoding results for this participant
+- `DecodedData` (or `Vector{DecodedData}` for batch)
 
-# Notes
-For reproducible results, call `Random.seed!(xxx)` in your Julia session before running decoding.
-
-# Examples
+# Example
 ```julia
-decoded = decode_libsvm(epochs; channel_selection=channels(:Cz))
+decoded = decode_libsvm(epochs; channel_selection = channels(:Cz))
+all_decoded = decode_libsvm(participant_epochs; n_iterations = 100)
 ```
 """
 function decode_libsvm(
@@ -701,37 +688,6 @@ function decode_libsvm(
     )
 end
 
-"""
-    decode_libsvm(participant_epochs::Vector{Vector{T}}; kwargs...) where {T<:MultiDataFrameEeg}
-
-Decode all participants at once (batch processing).
-
-This convenience method accepts the output from `prepare_decoding` and decodes
-all participants, returning a vector of DecodedData objects.
-Works with both EpochData and TimeFreqEpochData.
-
-# Arguments
-- `participant_epochs::Vector{Vector{T}}`: Vector of participant data (from `prepare_decoding`)
-- `kwargs...`: All other arguments are passed to the single-participant `decode_libsvm` method
-
-# Returns
-- `Vector{DecodedData}`: Decoded results for all participants
-
-# Examples
-```julia
-# Prepare data
-participant_epochs = prepare_decoding("epochs_good", input_dir="/path/to/data", 
-                                     condition_selection=conditions([1, 2]))
-
-# Decode all participants at once
-all_decoded = decode_libsvm(participant_epochs; n_iterations=100, n_folds=5)
-
-# Statistics and visualization
-grand_avg = grand_average(all_decoded)
-stats = test_against_chance_cluster(all_decoded, alpha=0.05)
-plot_decoding(grand_avg, stats)
-```
-"""
 function decode_libsvm(participant_epochs::Vector{Vector{T}}; kwargs...) where {T<:MultiDataFrameEeg}
     return [decode_libsvm(epochs; kwargs...) for epochs in participant_epochs]
 end
@@ -740,47 +696,6 @@ end
 # ===========================
 #   TF DECODING WITH LIBSVM
 # ===========================
-"""
-    decode_libsvm(
-        epochs::Vector{TimeFreqEpochData};
-        channel_selection::Function = channels(),
-        interval_selection::Interval = times(),
-        n_iterations::Int = 100,
-        n_folds::Int = 3,
-        equalize_trials::Bool = true,
-        cost::Float64 = 1.0,
-        show_progress::Bool = true,
-    )
-
-Perform multivariate pattern classification (decoding) on time-frequency data using LIBSVM.
-
-At each time point, channel × frequency pairs are used as features for classification.
-This provides richer feature representations than ERP decoding, capturing spectral information.
-
-# Arguments
-- `epochs::Vector{TimeFreqEpochData}`: Vector of TimeFreqEpochData from a SINGLE participant, one per condition/class.
-
-# Keyword Arguments
-- `channel_selection::Function=channels()`: Channel selection predicate
-- `interval_selection::Interval=times()`: Time window selection
-- `n_iterations::Int`: Number of iterations with random shuffling (default: 100)
-- `n_folds::Int`: Number of cross-validation folds (default: 3)
-- `equalize_trials::Bool`: Whether to equalize trials across conditions (default: true)
-- `cost::Float64`: SVM regularization parameter (default: 1.0)
-- `show_progress::Bool`: Show progress bar (default: true)
-
-# Returns
-- `DecodedData`: Object containing decoding results for this participant
-
-# Notes
-For reproducible results, call `Random.seed!(xxx)` in your Julia session before running decoding.
-
-# Examples
-```julia
-tf_epochs = [tf_cond1, tf_cond2]  # TimeFreqEpochData from morlet_wavelet(...; return_trials=true)
-decoded = decode_libsvm(tf_epochs; n_iterations=20, n_folds=3)
-```
-"""
 function decode_libsvm(
     epochs::Vector{TimeFreqEpochData};
     channel_selection::Function = channels(),
@@ -837,20 +752,6 @@ end
 #   GRAND AVERAGE FOR DECODING RESULTS
 # ====================================
 
-"""
-    grand_average(decoded_list::Vector{DecodedData})
-
-Create grand average decoding results across multiple participants.
-
-Averages classification accuracy and standard errors across participants,
-creating a single DecodedData object representing the group-level results.
-
-# Arguments
-- `decoded_list::Vector{DecodedData}`: Vector of DecodedData objects, one per participant
-
-# Returns
-- `DecodedData`: Grand average decoding results
-"""
 function grand_average(dat::Vector{DecodedData})
 
     isempty(dat) && @minimal_error("Cannot create grand average from empty decoded data list")

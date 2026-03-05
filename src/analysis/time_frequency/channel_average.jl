@@ -5,27 +5,6 @@ Provides TF-specific `channel_average!` and `channel_average` that apply
 averaging to both `data_power` and `data_phase` DataFrames.
 """
 
-"""
-    channel_average!(dat::TimeFreqData; channel_selections::AbstractVector = [channels()],
-                     output_labels = nothing, reduce::Bool = false) -> Nothing
-
-Create averaged channels for TimeFreqData, applying to both power and phase DataFrames.
-
-See `channel_average!` for full documentation. This method ensures both `data_power`
-and `data_phase` are updated consistently.
-
-# Examples
-```julia
-# Average all channels
-channel_average!(tf_data)
-
-# Average specific channel groups
-channel_average!(tf_data, channel_selections = [channels([:Ch1, :Ch2])], output_labels = [:frontal])
-
-# Reduce to only averaged channels
-channel_average!(tf_data, channel_selections = [channels([:Ch1, :Ch2])]; reduce = true)
-```
-"""
 function channel_average!(
     dat::TimeFreqData;
     channel_selections::AbstractVector = [channels()],
@@ -105,23 +84,6 @@ function channel_average!(
 end
 
 
-"""
-    channel_average(dat::TimeFreqData; kwargs...) -> TimeFreqData
-
-Non-mutating version of `channel_average!` for TimeFreqData.
-Creates a copy and applies the operation.
-
-# Examples
-```julia
-# Average all channels (non-mutating)
-result = EegFun.channel_average(tf_data)
-
-# Average specific channel groups
-result = EegFun.channel_average(tf_data,
-    channel_selections = [EegFun.channels([:Fz, :Cz, :Pz])],
-    output_labels = [:midline])
-```
-"""
 function channel_average(dat::TimeFreqData; kwargs...)
     data_copy = copy(dat)
     channel_average!(data_copy; kwargs...)

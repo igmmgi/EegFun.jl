@@ -95,25 +95,24 @@ end
 =============================================================================#
 
 """
-    condition_difference(data::Vector{<:ErpData}, condition_pairs::Union{Vector{Tuple{Int,Int}}, Vector{Vector{Int}}})::Vector{ErpData}
+    condition_difference(data::Vector{<:ErpData}, condition_pairs) -> Vector{ErpData}
+    condition_difference(data::Vector{TimeFreqData}, condition_pairs) -> Vector{TimeFreqData}
+    condition_difference(file_pattern::String, condition_pairs;
+    input_dir::String = pwd(), participant_selection::Function = participants(),
+    output_dir = nothing)
 
-Create condition difference waves.
+Create condition difference waves (or time-frequency differences), or batch-process JLD2 files.
 
-For each pair `(a, b)`, subtracts condition `b` from condition `a` across all EEG channels.
-
-# Arguments
-- `data::Vector{<:ErpData}`: Vector of ErpData, one per condition
-- `condition_pairs`: Pairs of condition indices to subtract. Can be:
-  - `Vector{Tuple{Int, Int}}`: e.g., `[(1, 2), (3, 4)]`
-  - `Vector{Vector{Int}}`: e.g., `[[1, 2], [3, 4]]`
-
-# Returns
-- `Vector{ErpData}`: New vector with one difference wave per pair
+For each pair `(a, b)`, subtracts condition `b` from condition `a`. `condition_pairs` can be
+`Vector{Tuple{Int,Int}}` or `Vector{Vector{Int}}`. The `file_pattern` method loads JLD2 files.
 
 # Example
 ```julia
 erps = average_epochs(epochs)
 diff_waves = condition_difference(erps, [(1, 2)])
+
+# Batch
+condition_difference("erps_cleaned", [(1, 2)])
 ```
 """
 function condition_difference(data::Vector{<:ErpData}, condition_pairs::Union{Vector{Tuple{Int,Int}},Vector{Vector{Int}}})::Vector{ErpData}
@@ -162,46 +161,6 @@ end
     BATCH API FUNCTION
 =============================================================================#
 
-"""
-    condition_difference(file_pattern::String, condition_pairs; 
-                         input_dir::String = pwd(), 
-                         participant_selection::Function = participants(),
-                         output_dir::Union{String, Nothing} = nothing)
-
-Batch process ERP or time-frequency data files to create condition differences.
-
-This function loads JLD2 files containing ERP or TimeFreqData, computes differences between
-specified condition pairs, and saves the results to a new directory. Data type is
-auto-detected from each file.
-
-# Arguments
-- `file_pattern::String`: Pattern to match JLD2 files (e.g., "erps_cleaned", "erps_original")
-- `condition_pairs`: Pairs of conditions to subtract. Can be:
-  - `Vector{Tuple{Int, Int}}`: e.g., `[(1,2), (3,4)]`
-  - `Vector{Vector{Int}}`: e.g., `[[1,2], [3,4]]`
-- `input_dir::String`: Input directory containing JLD2 files (default: current directory)
-- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
-- `output_dir::Union{String, Nothing}`: Output directory (default: auto-generated)
-
-# Examples
-```julia
-# Create difference waves for conditions 1-2 and 3-4 (tuples)
-condition_difference("erps_cleaned", [(1,2), (3,4)])
-
-# Or with vectors
-condition_difference("erps_cleaned", [[1,2], [3,4]])
-
-# Process specific participants
-condition_difference("erps_cleaned", [(1,2)], 
-                     input_dir = "/path/to/data", 
-                     participants = [1, 2, 3])
-
-# Specify custom output directory
-condition_difference("erps_cleaned", [(1,2), (3,4)], 
-                     input_dir = "/path/to/data", 
-                     output_dir = "/path/to/output")
-```
-"""
 function condition_difference(
     file_pattern::String,
     condition_pairs::Union{Vector{Tuple{Int,Int}},Vector{Vector{Int}}};

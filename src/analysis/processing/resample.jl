@@ -34,40 +34,33 @@ function _resample_dataframe!(df::DataFrame, factor::Int, trigger_col::Symbol)
 end
 
 """
-    resample!(dat::Union{ContinuousData, ErpData}, factor::Int)::Nothing
+    resample!(dat::Union{ContinuousData, ErpData}, factor::Int)
+    resample!(dat::EpochData, factor::Int)
+    resample!(data_vec::Vector{T}, factor::Int) where {T<:EegData}
+    resample(dat, factor)
+    resample(data_vec::Vector{T}, factor) where {T<:EegData}
+    resample(file_pattern::String, factor::Int; input_dir = pwd(), participant_selection = participants(), output_dir = nothing)
 
-Resample data in-place by downsampling by the specified factor.
+Downsample EEG data by keeping every `factor`-th sample.
 
-This function reduces the sampling rate of the data by keeping every nth sample,
-where n is the downsampling factor. All metadata columns (triggers, trial info,
-conditions, etc.) are preserved. The sample rate is updated accordingly.
+Mutating (`!`) variants modify in-place and update `sample_rate`; non-mutating variants return a copy.
+The `file_pattern` form batch-processes JLD2 files across participants.
 
-# Arguments
-- `dat::Union{ContinuousData, ErpData}`: Data to resample
-- `factor::Int`: Downsampling factor (e.g., 2 = keep every 2nd sample, halving the sample rate)
+⚠️ Simple decimation is used — **low-pass filter the data first** to avoid aliasing.
 
-# Effects
-- Modifies the input data in-place
-- Updates the sample rate: new_rate = old_rate / factor
-- Preserves all metadata columns
+# Notes
+- `factor` must be a positive integer; `sample_rate` must be divisible by `factor`
+- All DataFrame columns (triggers, time, metadata) are preserved
+- Trigger positions are scaled to the new sample grid for `ContinuousData`
 
 # Examples
 ```julia
-using EegFun
-
-# Load continuous data at 512 Hz
-data = load("participant_1_continuous.jld2", "data")
-
-# Downsample to 256 Hz (factor of 2)
-resample!(data, 2)
+resample!(dat, 2)                    # 512 Hz → 256 Hz in-place
+dat_256 = resample(dat, 2)           # non-mutating copy
+resample!(all_epochs, 4)             # Vector: broadcasts to every element
+resample("continuous", 2)            # batch: all JLD2 files in current dir
+resample("continuous", 2, input_dir = "/data/study1", participant_selection = participants(1:20))
 ```
-
-# Notes
-- Factor must be a positive integer
-- New sample rate must be an integer (old_rate must be divisible by factor)
-- Simple decimation is used 
-- For proper downsampling, low-pass filter data first to avoid aliasing
-- All DataFrame columns are preserved, including time, triggers, and metadata
 """
 function resample!(dat::SingleDataFrameEeg, factor::Int)::Nothing
 
@@ -109,44 +102,7 @@ end
 
 
 
-"""
-    resample!(dat::EpochData, factor::Int)::Nothing
 
-Resample epoched data in-place by downsampling each epoch by the specified factor.
-
-This function reduces the sampling rate of each epoch by keeping every nth sample,
-where n is the downsampling factor. All metadata columns (triggers, trial info,
-conditions, etc.) are preserved in each epoch. The sample rate is updated accordingly.
-
-# Arguments
-- `dat::EpochData`: Epoched data to resample
-- `factor::Int`: Downsampling factor (e.g., 2 = keep every 2nd sample, halving the sample rate)
-
-# Effects
-- Modifies the input data in-place
-- Updates the sample rate: new_rate = old_rate / factor
-- Resamples all epochs
-- Preserves all metadata columns in each epoch
-
-# Examples
-```julia
-using EegFun
-
-# Load epoched data at 512 Hz
-epochs = load("participant_1_epochs.jld2", "epochs")
-
-# Downsample to 256 Hz (factor of 2)
-resample!(epochs, 2)
-```
-
-# Notes
-- Factor must be a positive integer
-- New sample rate must be an integer (old_rate must be divisible by factor)
-- Simple decimation is used (no anti-aliasing filter applied)
-- For proper downsampling, low-pass filter data first to avoid aliasing
-- All DataFrame columns in each epoch are preserved
-- Triggers and metadata are maintained for each epoch
-"""
 function resample!(dat::EpochData, factor::Int)::Nothing
     # Validation
     if factor < 1
@@ -190,61 +146,19 @@ end
 
 
 
-"""
-    resample(dat::ContinuousData, factor::Int)
 
-Non-mutating version of resample!. Returns a new data object with resampled data.
-
-# Examples
-```julia
-# Downsample without modifying original
-data_256hz = resample(data_512hz, 2)
-
-# Original data unchanged
-@assert data_512hz.sample_rate == 512
-@assert data_256hz.sample_rate == 256
-```
-"""
 function resample(dat::T, factor::Int)::T where {T<:EegData}
     dat_copy = copy(dat)
     resample!(dat_copy, factor)
     return dat_copy
 end
 
-"""
-    resample(data_vec::Vector{T}, factor::Int)::Vector{T} where T <: EegData
 
-Resample a vector of EEG data objects (e.g., multiple participants or conditions).
-Returns a new vector with each element resampled.
-
-# Examples
-```julia
-# Resample multiple participants' data
-resampled_data = resample(all_participants, 2)
-```
-"""
 function resample(data_vec::Vector{T}, factor::Int)::Vector{T} where {T<:EegData}
     return [resample(dat, factor) for dat in data_vec]
 end
 
-"""
-    resample!(data_vec::Vector{T}, factor::Int)::Nothing where {T<:EegData}
 
-Mutating version of resample for vector of EEG data objects.
-
-# Arguments
-- `data_vec::Vector{T}`: Vector of EEG data objects to resample (modified in-place)
-- `factor::Int`: Downsampling factor (must be positive integer)
-
-# Returns
-- `Nothing`: All objects in the vector are modified in-place
-
-# Examples
-```julia
-# Resample multiple EpochData objects
-resample!(epochs_vector, 2)  # Downsample by factor of 2
-```
-"""
 function resample!(data_vec::Vector{T}, factor::Int)::Nothing where {T<:EegData}
     for dat in data_vec
         resample!(dat, factor)
@@ -300,52 +214,7 @@ function _process_resample_file(filepath::String, output_path::String, factor::I
 end
 
 
-"""
-    resample(file_pattern::String, factor::Int;
-            input_dir::String = pwd(),
-            participant_selection::Function = participants(),
-            output_dir::Union{String, Nothing} = nothing)
 
-Batch resample data files and save to a new directory.
-
-This function processes multiple participant files at once, downsampling each
-by the specified factor.
-
-# Arguments
-- `file_pattern::String`: Pattern to match files (e.g., "continuous", "epochs", "erp")
-- `factor::Int`: Downsampling factor
-- `input_dir::String`: Input directory containing JLD2 files (default: current directory)
-- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
-- `output_dir::Union{String, Nothing}`: Output directory (default: creates subdirectory)
-
-# Examples
-```julia
-# Downsample all continuous data files by factor of 2
-resample("continuous", 2)
-
-# Specific participants only
-resample("epochs", 4, participants = [1, 2, 3])
-
-# Custom output directory
-resample("erp", 2, output_dir = "/path/to/output")
-
-# Full example workflow
-resample("continuous", 2,
-        input_dir = "/data/study1",
-        participants = 1:20)
-```
-
-# Output
-- Creates new directory with resampled data files
-- Each output file contains the same variable name as input
-- Log file saved to output directory
-
-# Notes
-- All input files should have the same sample rate
-- Factor must result in integer sample rates for all files
-- For proper downsampling, low-pass filter data first to avoid aliasing
-- Typical factors: 2, 4, 8 (powers of 2 work best)
-"""
 function resample(
     file_pattern::String,
     factor::Int;

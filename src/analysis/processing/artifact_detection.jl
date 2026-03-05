@@ -109,41 +109,26 @@ function _is_extreme_value!(mask::Vector{Bool}, signal::AbstractVector{Float64},
 end
 
 """
-    is_extreme_value!(dat::SingleDataFrameEeg, threshold::Real; 
-                     channel_selection::Function = channels(), 
-                     sample_selection::Union{Vector{Bool}, Nothing} = nothing,
-                     mode::Symbol = :combined,
-                     channel_out::Union{Symbol, Nothing} = nothing)
+    is_extreme_value!(dat::SingleDataFrameEeg, threshold::Real; channel_selection = channels(),
+    sample_selection = samples(), interval_selection = times(), mode::Symbol = :combined, channel_out = nothing)
+    is_extreme_value!(dat::MultiDataFrameEeg, threshold::Real; channel_selection = channels(),
+    sample_selection = samples(), interval_selection = times(), epoch_selection = epochs(), mode::Symbol = :combined, channel_out = nothing)
+    is_extreme_value!(epochs_list::Vector{EpochData}, threshold::Real; kwargs...)
 
-Detect extreme values across selected channels and add results to the data.
+Detect extreme values and flag them in-place. Adds a boolean column (`:is_extreme_value_<threshold>` by default)
+to the data. The `Vector{EpochData}` form broadcasts across conditions.
 
-# Arguments
-- `dat::SingleDataFrameEeg`: The EEG data object
-- `threshold::Int`: Threshold for extreme value detection
-- `channel_selection::Function`: Channel predicate for selecting channels (default: all layout channels)
-- `sample_selection::Function`: Sample predicate for selecting samples (default: all samples)
-- `mode::Symbol`: Mode of operation - `:combined` (single combined column, default) or `:separate` (separate columns per channel)
-- `channel_out::Union{Symbol, Nothing}`: Output channel name for combined mode (default: auto-generated as `is_extreme_value_<threshold>`)
-
-# Modifies
-- `dat`: Adds extreme value detection columns to the data
+# Keyword Arguments
+- `channel_selection`: Channels to check (default: all layout channels)
+- `mode::Symbol`: `:combined` (single OR'd column) or `:separate` (one column per channel)
+- `channel_out`: Output column name (default: auto-generated)
 
 # Examples
 ```julia
-# Detect extreme values and combine into single output channel (default, auto-named)
-is_extreme_value!(dat, 100)  # Creates column :is_extreme_value_100
-
-# Detect extreme values with custom output channel name
-is_extreme_value!(dat, 100, channel_out = :is_extreme_value)
-
-# Detect extreme values and add separate columns for each channel
+is_extreme_value!(dat, 100)             # → :is_extreme_value_100
 is_extreme_value!(dat, 100, mode = :separate)
-
-# Detect extreme values for specific channels (auto-named)
-is_extreme_value!(dat, 100, channel_selection = channels([:Fp1, :Fp2]))
-
-# Detect extreme values only for selected samples (auto-named)
-is_extreme_value!(dat, 100, sample_selection = sample_mask)
+is_extreme_value!(epoch_data, 100, epoch_selection = epochs([1, 3]))
+is_extreme_value!(epochs_cleaned, 100)  # batch over conditions
 ```
 """
 function is_extreme_value!(
@@ -180,45 +165,7 @@ function is_extreme_value!(
     return nothing
 end
 
-"""
-    is_extreme_value!(dat::MultiDataFrameEeg, threshold::Real; 
-                     channel_selection::Function = channels(), 
-                     sample_selection::Function = samples(),
-    interval_selection::Interval = times(),
-                     epoch_selection::Function = epochs(),
-                     mode::Symbol = :combined,
-                     channel_out::Union{Symbol, Nothing} = nothing)
 
-Detect extreme values across selected channels in multi-DataFrame EEG data (e.g., EpochData).
-
-For each epoch DataFrame in the data, detects extreme values across selected channels and
-adds results to that epoch's DataFrame. Works similarly to the SingleDataFrameEeg version
-but processes each epoch separately.
-
-# Arguments
-- `dat::MultiDataFrameEeg`: The EEG data object (e.g., EpochData)
-- `threshold::Real`: Threshold for extreme value detection
-- `channel_selection::Function`: Channel predicate for selecting channels (default: all layout channels)
-- `sample_selection::Function`: Sample predicate for selecting samples (default: all samples)
-- `epoch_selection::Function`: Epoch predicate for selecting epochs (default: all epochs)
-- `mode::Symbol`: Mode of operation - `:combined` (single combined column, default) or `:separate` (separate columns per channel)
-- `channel_out::Union{Symbol, Nothing}`: Output channel name for combined mode (default: auto-generated as `is_extreme_value_<threshold>`)
-
-# Modifies
-- `dat`: Adds extreme value detection columns to each epoch DataFrame
-
-# Examples
-```julia
-# Detect extreme values in all epochs (default)
-is_extreme_value!(epoch_data, 100)
-
-# Detect extreme values only in specific epochs
-is_extreme_value!(epoch_data, 100, epoch_selection = epochs([1, 3, 5]))
-
-# Detect with custom output channel name
-is_extreme_value!(epoch_data, 100, channel_out = :is_artifact_value_100)
-```
-"""
 function is_extreme_value!(
     dat::MultiDataFrameEeg,
     threshold::Real;
@@ -276,28 +223,7 @@ function is_extreme_value!(
     return nothing
 end
 
-"""
-    is_extreme_value!(epochs_list::Vector{EpochData}, threshold::Real; kwargs...)
 
-Detect extreme values across multiple EpochData objects (conditions).
-
-Applies extreme value detection to each EpochData object in the vector. This is useful
-when processing multiple experimental conditions.
-
-# Arguments
-- `epochs_list::Vector{EpochData}`: Vector of EpochData objects (one per condition)
-- `threshold::Int`: Threshold for extreme value detection
-- `kwargs...`: Same keyword arguments as `is_extreme_value!(dat::MultiDataFrameEeg, ...)`
-
-# Examples
-```julia
-# Detect extreme values in all conditions
-is_extreme_value!(epochs_cleaned, 100)
-
-# Detect with custom output channel name
-is_extreme_value!(epochs_cleaned, 100, channel_out = :is_artifact_value_100)
-```
-"""
 is_extreme_value!(dat::Vector{EpochData}, threshold::Real; kwargs...) = is_extreme_value!.(dat, threshold; kwargs...)
 
 # ==============================================================================
@@ -341,44 +267,21 @@ function _is_step_value(signal::AbstractVector{<:Real}, threshold::Real)
 end
 
 """
-    is_step_value!(dat::SingleDataFrameEeg, threshold::Real; 
-                     channel_selection::Function = channels(), 
-                     sample_selection::Function = samples(),
-                     interval_selection::Interval = times(),
-                     mode::Symbol = :combined,
-                     channel_out::Union{Symbol, Nothing} = nothing)
+    is_step_value!(dat::SingleDataFrameEeg, threshold::Real; channel_selection = channels(),
+    sample_selection = samples(), interval_selection = times(), mode::Symbol = :combined, channel_out = nothing)
+    is_step_value!(dat::MultiDataFrameEeg, threshold::Real; channel_selection = channels(),
+    sample_selection = samples(), interval_selection = times(), epoch_selection = epochs(), mode::Symbol = :combined, channel_out = nothing)
+    is_step_value!(epochs_list::Vector{EpochData}, threshold::Real; kwargs...)
 
-Detect step artifacts (sudden voltage jumps) across selected channels and add results to the data.
-
-A step artifact is detected when the absolute difference between consecutive samples exceeds the threshold.
-This detects sudden transitions that extreme value detection might miss (e.g., [1, 2, 3, 50, 2] with a 
-jump from 3→50).
-
-# Arguments
-- `dat::SingleDataFrameEeg`: The EEG data object
-- `threshold::Real`: Threshold for step detection (in μV)
-- `channel_selection::Function`: Channel predicate for selecting channels (default: all layout channels)
-- `sample_selection::Function`: Sample predicate for selecting samples (default: all samples)
-- `interval_selection::Interval`: Time interval for selection (default: all times)
-- `mode::Symbol`: Mode of operation - `:combined` (single combined column, default) or `:separate` (separate columns per channel)
-- `channel_out::Union{Symbol, Nothing}`: Output channel name for combined mode (default: auto-generated as `is_step_value_<threshold>`)
-
-# Modifies
-- `dat`: Adds step artifact detection columns to the data
+Detect step artifacts (sudden voltage jumps) and flag them in-place. Adds a boolean column
+(`:is_step_value_<threshold>` by default). The `Vector{EpochData}` form broadcasts across conditions.
 
 # Examples
 ```julia
-# Detect steps > 50 μV between consecutive samples (combined, auto-named)
-is_step_value!(dat, 50.0)  # Creates column :is_step_value_50.0
-
-# Detect with custom output channel name
-is_step_value!(dat, 50.0, channel_out = :is_jump)
-
-# Detect separately for each channel
+is_step_value!(dat, 50.0)             # → :is_step_value_50.0
 is_step_value!(dat, 50.0, mode = :separate)
-
-# Detect only for specific channels
-is_step_value!(dat, 50.0, channel_selection = channels([:Fp1, :Fp2]))
+is_step_value!(epoch_data, 50.0, epoch_selection = epochs([1, 3]))
+is_step_value!(all_epochs, 50.0)      # batch over conditions
 ```
 """
 function is_step_value!(
@@ -434,46 +337,7 @@ function is_step_value!(
     return nothing
 end
 
-"""
-    is_step_value!(dat::MultiDataFrameEeg, threshold::Real; 
-                     channel_selection::Function = channels(), 
-                     sample_selection::Function = samples(),
-                     interval_selection::Interval = times(),
-                     epoch_selection::Function = epochs(),
-                     mode::Symbol = :combined,
-                     channel_out::Union{Symbol, Nothing} = nothing)
 
-Detect step artifacts across selected channels in multi-DataFrame EEG data (e.g., EpochData).
-
-For each epoch DataFrame in the data, detects step artifacts across selected channels and
-adds results to that epoch's DataFrame. Works similarly to the SingleDataFrameEeg version
-but processes each epoch separately.
-
-# Arguments
-- `dat::MultiDataFrameEeg`: The EEG data object (e.g., EpochData)
-- `threshold::Real`: Threshold for step detection (in μV)
-- `channel_selection::Function`: Channel predicate for selecting channels (default: all layout channels)
-- `sample_selection::Function`: Sample predicate for selecting samples (default: all samples)
-- `interval_selection::Interval`: Time interval for selection (default: all times)
-- `epoch_selection::Function`: Epoch predicate for selecting epochs (default: all epochs)
-- `mode::Symbol`: Mode of operation - `:combined` or `:separate`
-- `channel_out::Union{Symbol, Nothing}`: Output channel name for combined mode
-
-# Modifies
-- `dat`: Adds step artifact detection columns to each epoch DataFrame
-
-# Examples
-```julia
-# Detect step artifacts in all epochs
-is_step_value!(epoch_data, 50.0)
-
-# Detect only in specific epochs
-is_step_value!(epoch_data, 50.0, epoch_selection = epochs([1, 3, 5]))
-
-# Detect with custom output name
-is_step_value!(epoch_data, 50.0, channel_out = :is_jump)
-```
-"""
 function is_step_value!(
     dat::MultiDataFrameEeg,
     threshold::Real;
@@ -530,27 +394,7 @@ function is_step_value!(
     return nothing
 end
 
-"""
-    is_step_value!(epochs_list::Vector{EpochData}, threshold::Real; kwargs...)
 
-Detect step artifacts across multiple EpochData objects (conditions).
-
-Applies step artifact detection to each EpochData object in the vector.
-
-# Arguments
-- `epochs_list::Vector{EpochData}`: Vector of EpochData objects
-- `threshold::Real`: Threshold for step detection
-- `kwargs...`: Additional keyword arguments passed to the MultiDataFrameEeg method
-
-# Modifies
-- Each EpochData object in the vector
-
-# Examples
-```julia
-# Detect step artifacts across all conditions
-is_step_value!(all_epochs, 50.0)
-```
-"""
 is_step_value!(dat::Vector{EpochData}, threshold::Real; kwargs...) = is_step_value!.(dat, threshold; kwargs...)
 
 
@@ -723,37 +567,16 @@ function _detect_extreme_values(
 end
 
 """
-    is_extreme_value(dat::SingleDataFrameEeg, threshold::Real; 
-                    channel_selection::Function = channels(), 
-                    sample_selection::Function = samples(),
-    interval_selection::Interval = times(),
-                    mode::Symbol = :combined)
+    is_extreme_value(dat::SingleDataFrameEeg, threshold::Real; channel_selection = channels(),
+    sample_selection = samples(), interval_selection = times(), mode::Symbol = :combined)
 
-Detect extreme values across selected channels and return results.
-
-# Arguments
-- `dat::SingleDataFrameEeg`: The EEG data object
-- `threshold::Real`: Threshold for extreme value detection
-- `channel_selection::Function`: Channel predicate for selecting channels (default: all layout channels)
-- `sample_selection::Function`: Sample predicate for selecting samples (default: all samples)
-- `mode::Symbol`: Mode of operation - `:combined` (boolean vector, default) or `:separate` (DataFrame with separate columns per channel)
-
-# Returns
-- `DataFrame` or `Vector{Bool}`: Results depending on mode
+Detect extreme values without modifying data. Returns `Vector{Bool}` (`:combined` mode)
+or a `DataFrame` (`:separate` mode).
 
 # Examples
 ```julia
-# Detect extreme values and return combined boolean vector (default)
 extreme_mask = is_extreme_value(dat, 100)
-
-# Detect extreme values and return DataFrame with separate columns
 results = is_extreme_value(dat, 100, mode = :separate)
-
-# Detect extreme values for specific channels
-extreme_mask = is_extreme_value(dat, 100, channel_selection = channels([:Fp1, :Fp2]))
-
-# Detect extreme values only for selected samples
-extreme_mask = is_extreme_value(dat, 100, sample_selection = sample_mask)
 ```
 """
 function is_extreme_value(
@@ -857,36 +680,24 @@ end
 
 """
     n_values(df::DataFrame, column::Symbol)
+    n_values(dat::SingleDataFrameEeg, column::Symbol)
+    n_values(dat::MultiDataFrameEeg, column::Symbol)
+    n_values(dat::Vector{<:EegData}, column::Symbol)
 
-Count the number of `true` values in a boolean column of a DataFrame.
-If the column is not found, returns 0.
+Count the number of `true` values in a boolean column. Returns 0 if the column is not found.
+For `MultiDataFrameEeg` and `Vector` inputs, counts are summed across all epochs/items.
 """
 function n_values(df::DataFrame, column::Symbol)
     column ∉ propertynames(df) && return 0
     return sum(df[!, column])
 end
 
-"""
-    n_values(dat::SingleDataFrameEeg, column::Symbol)
-
-Count the number of `true` values in a boolean column of the data.
-"""
 n_values(dat::SingleDataFrameEeg, column::Symbol) = n_values(dat.data, column)
 
-"""
-    n_values(dat::MultiDataFrameEeg, column::Symbol)
-
-Count the total number of `true` values in a boolean column across all epochs.
-"""
 function n_values(dat::MultiDataFrameEeg, column::Symbol)
     return sum(n_values(epoch, column) for epoch in dat.data)
 end
 
-"""
-    n_values(dat::Vector{<:EegData}, column::Symbol)
-
-Count the total number of `true` values in a boolean column across multiple data objects.
-"""
 n_values(dat::Vector{<:EegData}, column::Symbol) = sum(n_values(d, column) for d in dat)
 
 """
@@ -1309,11 +1120,6 @@ end
 # REPORTING FUNCTIONS
 # ===================
 
-"""
-    Base.show(io::IO, info::EpochRejectionInfo)
-
-Display rejection information in a human-readable format.
-"""
 function Base.show(io::IO, info::EpochRejectionInfo)
     println(io, "EpochRejectionInfo: $(info.name)")
     println(io, "Condition: $(info.info.number): $(info.info.name)")

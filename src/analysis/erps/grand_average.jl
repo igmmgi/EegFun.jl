@@ -103,28 +103,28 @@ end
 
 
 """
-    grand_average(erps::Vector{ErpData}; condition_selection = conditions())
+    grand_average(erps::Vector{ErpData}; condition_selection = conditions()) -> Vector{ErpData}
+    grand_average(tfs::Vector{TimeFreqData}; condition_selection = conditions()) -> Vector{TimeFreqData}
+    grand_average(rsa_data_list::Vector{RsaData}; compute_noise_ceiling::Bool = true) -> RsaData
+    grand_average(decoded_list::Vector{DecodedData}) -> DecodedData
+    grand_average(file_pattern::String; input_dir::String = pwd(),
+    participant_selection::Function = participants(), condition_selection::Function = conditions(),
+    output_dir = nothing)
 
-Create grand averages from a vector of ERP data already.
+Create grand averages by averaging across participants.
 
-This function groups the input ERPs by condition and calculates the average across 
-all participants for each condition.
-
-# Arguments
-- `erps::Vector{ErpData}`: List of ERP data from different participants/conditions.
-- `condition_selection::Function`: Predicate to select specific conditions (default: all).
-
-# Returns
-- `Vector{ErpData}`: Vector containing one grand-averaged ERP per condition.
+For `ErpData` / `TimeFreqData`: groups by condition and averages across participants.
+For `RsaData`: averages RDMs at each time point with optional noise ceiling.
+For `DecodedData`: averages classification accuracy across participants.
+The `file_pattern` method batch-processes JLD2 ERP files.
 
 # Examples
 ```julia
-# Average a list of loaded ERP objects
-group_results = [erp1, erp2, erp3]
-grand_avgs = grand_average(group_results)
-
-# Average only specific conditions (e.g., indices 1 and 3)
-grand_avgs = grand_average(group_results, condition_selection = conditions([1, 3]))
+grand_avgs = grand_average([erp1, erp2, erp3])
+grand_avgs = grand_average(erps, condition_selection = conditions([1, 3]))
+grand_avg_rsa = grand_average([rsa_p1, rsa_p2, rsa_p3])
+grand_avg_decoding = grand_average([decoded_p1, decoded_p2])
+grand_average("erps_cleaned")
 ```
 """
 function grand_average(erps::Vector{ErpData}; condition_selection::Function = conditions())
@@ -152,43 +152,6 @@ end
     MAIN API FUNCTION
 =============================================================================#
 
-"""
-    grand_average(file_pattern::String; 
-                 input_dir::String = pwd(), 
-                 participant_selection::Function = participants(),
-                 condition_selection::Function = conditions(),
-                 output_dir::Union{String, Nothing} = nothing)
-
-Batch process ERP data files to create grand averages across participants.
-
-This function loads JLD2 files containing ERP data from multiple participants, groups by condition,
-and creates grand averages by averaging the EEG channel data across participants for each condition.
-
-# Arguments
-- `file_pattern::String`: Pattern to match JLD2 files (e.g., "erps_cleaned", "my_data", "study1_averages")
-- `input_dir::String`: Input directory containing JLD2 files (default: current directory)
-- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
-- `condition_selection::Function`: Condition selection predicate (default: `conditions()` for all)
-- `output_dir::Union{String, Nothing}`: Output directory (default: auto-generated)
-
-# Examples
-```julia
-# Grand average all ERP files in current directory
-grand_average("erps_cleaned")
-
-# Process specific participants and conditions
-grand_average("erps_cleaned", 
-            input_dir = "/path/to/data", 
-            participant_selection = participants([1, 2, 3]), 
-            condition_selection = conditions([1, 2]))
-
-# Custom predicate (participants > 5)
-grand_average("erps_cleaned", participant_selection = participants(x -> x .> 5))
-
-# Load the results
-grand_avgs = read_data("grand_average_erps_cleaned.jld2")
-```
-"""
 function grand_average(
     file_pattern::String;
     input_dir::String = pwd(),

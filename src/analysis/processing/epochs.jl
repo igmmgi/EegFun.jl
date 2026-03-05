@@ -188,64 +188,21 @@ function _mark_windows_at_indices!(
 end
 
 """
-    mark_epoch_intervals!(dat::ContinuousData, triggers_of_interest::Vector{Int}, time_window::Vector{<:Real}; 
-                         channel_out::Symbol = :epoch_interval)
+    mark_epoch_intervals!(dat::ContinuousData, triggers_of_interest::Vector{Int}, time_window::Vector{<:Real}; channel_out::Symbol = :epoch_interval)
+    mark_epoch_intervals!(dat::ContinuousData, channel_in::Symbol, time_window::Vector{<:Real}; channel_out = Symbol(string(channel_in)*"_window"))
+    mark_epoch_intervals!(dat::ContinuousData, epoch_conditions::Vector{EpochCondition}, time_window::Vector{<:Real}; channel_out::Symbol = :epoch_interval)
 
-Mark samples that are within a specified time window of triggers of interest.
+Mark samples within a time window in-place by adding a boolean column to the data.
 
-# Arguments
-- `dat`: ContinuousData object containing the EEG data
-- `triggers_of_interest`: Vector of trigger values to mark windows around
-- `time_window`: Time window in seconds as a vector of two numbers ([-1, 2] for window from -1 to 2 seconds)
-- `channel_out`: Symbol for the output column name (default: :epoch_interval)
-
-# Returns
-- The modified ContinuousData object with a new column indicating samples within trigger windows
+- **Trigger form**: marks windows around samples matching any trigger in `triggers_of_interest`
+- **Column form**: marks windows around each `true` sample in a boolean column (e.g., `:is_vEOG`)
+- **EpochCondition form**: marks windows around trigger sequences defined by `epoch_conditions`
 
 # Examples
-
-## Basic Usage
 ```julia
-# Mark windows around trigger 1 (1 second before to 2 seconds after)
-mark_epoch_intervals!(dat, [1], [-1.0, 2.0])
-
-# Mark windows around multiple (1, 3, and 5) triggers
 mark_epoch_intervals!(dat, [1, 3, 5], [-1.0, 2.0])
-
-# Custom column name
-mark_epoch_intervals!(dat, [1, 3], [-0.5, 0.5], channel_out = :near_trigger)
-```
-
-## Different Time Windows
-```julia
-# Pre-stimulus baseline window
-mark_epoch_intervals!(dat, [1], [-0.2, 0.0], channel_out = :baseline_interval)
-
-# Post-stimulus response window
-mark_epoch_intervals!(dat, [1], [0.0, 0.8], channel_out = :response_window)
-
-# Asymmetric window (more time after trigger)
-mark_epoch_intervals!(dat, [1], [-0.1, 1.0], channel_out = :asymmetric_window)
-
-# Very short window for fast responses
-mark_epoch_intervals!(dat, [1], [-0.05, 0.3], channel_out = :fast_response)
-```
-
-## Multiple Conditions
-```julia
-# Different conditions with different windows
-mark_epoch_intervals!(dat, [1], [-0.2, 0.8], channel_out = :condition_1)
-mark_epoch_intervals!(dat, [2], [-0.2, 1.0], channel_out = :condition_2)
-mark_epoch_intervals!(dat, [3], [-0.2, 1.2], channel_out = :condition_3)
-```
-
-## Using with Sample Filtering
-```julia
-# Mark epoch intervals
-mark_epoch_intervals!(dat, [1, 3], [-1.0, 2.0])
-
-# Use in analysis (only samples within epochs)
-# summary = channel_summary(dat, samples = samples(:epoch_interval))
+mark_epoch_intervals!(dat, :is_vEOG, [-0.1, 0.3])
+mark_epoch_intervals!(dat, [condition1, condition2], [-1.0, 2.0])
 ```
 """
 function mark_epoch_intervals!(
@@ -280,37 +237,7 @@ function mark_epoch_intervals!(
 end
 
 
-"""
-    mark_epoch_intervals!(dat::ContinuousData, channel_in::Symbol, time_window::Vector{<:Real};
-                         channel_out::Symbol = Symbol(string(channel_in) * "_window"))
 
-Mark samples that are within a specified time window of each `true` sample in a boolean column.
-
-This overload is useful for marking intervals around detected events stored as boolean columns
-(e.g., `:is_vEOG`, `:is_hEOG`, `:is_extreme_value_100`).
-
-# Arguments
-- `dat`: ContinuousData object containing the EEG data
-- `channel_in`: Symbol of the boolean column containing event markers
-- `time_window`: Time window in seconds as a vector of two numbers (e.g., `[-0.1, 0.3]` for 100 ms before to 300 ms after)
-- `channel_out`: Symbol for the output column name (default: `channel_in` with `_window` suffix)
-
-# Returns
-- The modified ContinuousData object with a new boolean column indicating samples within event windows
-
-# Examples
-```julia
-# Mark a −100 to +300 ms window around each vEOG onset
-mark_epoch_intervals!(dat, :is_vEOG, [-0.1, 0.3])
-
-# Custom output column name
-mark_epoch_intervals!(dat, :is_vEOG, [-0.1, 0.3], channel_out = :blink_window)
-
-# Use with sample selection to exclude blink windows from analysis
-mark_epoch_intervals!(dat, :is_vEOG, [-0.1, 0.3])
-summary = channel_summary(dat, sample_selection = samples_not(:is_vEOG_window))
-```
-"""
 function mark_epoch_intervals!(
     dat::ContinuousData,
     channel_in::Symbol,
@@ -374,35 +301,8 @@ function _filter_matches(matches::Vector{Vector{Int}}, condition::EpochCondition
     return matches
 end
 
-"""
-    mark_epoch_intervals!(dat::ContinuousData, epoch_conditions::Vector{EpochCondition}, time_window::Vector{<:Real}; 
-                         channel_out::Symbol = :epoch_interval)
 
-Mark samples that are within a specified time window of trigger sequences defined by epoch conditions.
 
-# Arguments
-- `dat`: ContinuousData object containing the EEG data
-- `epoch_conditions`: Vector of EpochCondition objects defining trigger sequences and reference points
-- `time_window`: Time window in seconds as a vector of two numbers ([-1, 2] for window from -1 to 2 seconds)
-- `channel_out`: Symbol for the output column name (default: :epoch_interval)
-
-# Returns
-- The modified ContinuousData object with a new column indicating samples within trigger sequence windows
-
-# Examples
-```julia
-# Define epoch conditions with wildcards and ranges
-condition1 = EpochCondition(name="condition_1", trigger_sequence=[1, :any, 3], reference_index=2)
-condition2 = EpochCondition(name="condition_2", trigger_ranges=[1:5, 10:15], reference_index=1)
-conditions = [condition1, condition2]
-
-# Mark windows around trigger sequences
-mark_epoch_intervals!(dat, conditions, [-1.0, 2.0])
-
-# Custom column name
-mark_epoch_intervals!(dat, conditions, [-0.5, 0.5], channel_out = :near_sequences)
-```
-"""
 function mark_epoch_intervals!(
     dat::ContinuousData,
     epoch_conditions::Vector{EpochCondition},
@@ -669,32 +569,18 @@ average_epochs(dat::Vector{EpochData}) = average_epochs.(dat)
 
 
 """
-    reject_epochs!(dat::EpochData, info::EpochRejectionInfo)::EpochData
+    reject_epochs!(dat::EpochData, info::EpochRejectionInfo) -> EpochData
 
 Remove epochs identified in `info` from `dat` in-place.
 
 # Arguments
 - `dat::EpochData`: Epoched EEG data to modify
-- `info::EpochRejectionInfo`: Information about which epochs to reject
-
-# Returns
-- `EpochData`: The modified data (same as input)
+- `info::EpochRejectionInfo`: Rejection information from `detect_bad_epochs_automatic` etc.
 
 # Examples
 ```julia
-using EegFun, JLD2
-
-# Load epoched data
-epochs = load("participant_1_epochs.jld2", "epochs")
-
-# Detect bad epochs
 info = detect_bad_epochs_automatic(epochs, z_criterion = 2.0)
-
-# Remove the bad epochs
 reject_epochs!(epochs, info)
-
-# Save cleaned data
-jldsave("participant_1_cleaned.jld2"; data = epochs)
 ```
 """
 function reject_epochs!(dat::EpochData, info::EpochRejectionInfo)::EpochData
@@ -716,24 +602,27 @@ end
 
 
 """
-    reject_epochs(dat::EpochData, info::EpochRejectionInfo)::EpochData
+    reject_epochs(dat::EpochData, info::EpochRejectionInfo) -> EpochData
+    reject_epochs(dat::Vector{EpochData}, info::Vector{EpochRejectionInfo}) -> Vector{EpochData}
+    reject_epochs(dat::EpochData, bad_column::Symbol) -> EpochData
+    reject_epochs(dat::EpochData, bad_columns::Vector{Symbol}) -> EpochData
+    reject_epochs(dat::Vector{EpochData}, bad_column::Symbol) -> Vector{EpochData}
+    reject_epochs(dat::Vector{EpochData}, bad_columns::Vector{Symbol}) -> Vector{EpochData}
 
-Non-mutating version. Returns new `EpochData` with rejected epochs removed.
+Non-mutating epoch rejection. Returns new `EpochData` with bad epochs removed.
 
-# Arguments
-- `dat::EpochData`: Epoched EEG data (not modified)
-- `info::EpochRejectionInfo`: Information about which epochs to reject
-
-# Returns
-- `EpochData`: New data with rejected epochs removed
+Accepts rejection info from `detect_bad_epochs_automatic`, or one or more boolean column
+names — epochs where any sample is `true` in those columns are removed.
 
 # Examples
 ```julia
-# Detect bad epochs
+# From detection info
 info = detect_bad_epochs_automatic(epochs, z_criterion = 2.0)
+cleaned = reject_epochs(epochs, info)
 
-# Get cleaned copy (original preserved)
-cleaned_epochs = reject_epochs(epochs, info)
+# From boolean artifact column
+cleaned = reject_epochs(epochs, :is_vEOG)
+cleaned = reject_epochs(epochs, [:is_vEOG, :is_extreme_value_100])
 ```
 """
 function reject_epochs(dat::EpochData, info::EpochRejectionInfo)::EpochData
@@ -742,43 +631,9 @@ function reject_epochs(dat::EpochData, info::EpochRejectionInfo)::EpochData
     return dat_copy
 end
 
-"""
-    reject_epochs(dat::Vector{EpochData}, info::Vector{EpochRejectionInfo})::Vector{EpochData}
-
-Remove epochs identified in `info` from each `EpochData` in `dat`.
-
-# Arguments
-- `dat::Vector{EpochData}`: Vector of epoched EEG data to filter
-- `info::Vector{EpochRejectionInfo}`: Vector of rejection information (one per condition)
-
-# Returns
-- `Vector{EpochData}`: Vector of new EpochData objects with rejected epochs removed
-
-# Examples
-```julia
-# Detect bad epochs for multiple conditions
-rejection_info = detect_bad_epochs_automatic(epochs)
-
-# Get cleaned copies (originals preserved)
-cleaned_epochs = reject_epochs(epochs, rejection_info)
-```
-"""
 reject_epochs(dat::Vector{EpochData}, info::Vector{EpochRejectionInfo})::Vector{EpochData} = reject_epochs.(dat, info)
 
 
-"""
-    reject_epochs(dat::EpochData, bad_columns::Vector{Symbol})
-
-Remove epochs that contain any true values in the specified boolean columns.
-
-# Arguments
-- `dat::EpochData`: The epoched data to filter
-- `bad_columns::Vector{Symbol}`: Vector of column names to check for true values
-
-# Returns
-- `EpochData`: A new EpochData object with bad epochs removed
-
-"""
 function reject_epochs(dat::EpochData, bad_columns::Vector{Symbol})
     # Input validation
     isempty(dat.data) && @minimal_error("Cannot remove bad epochs from empty EpochData")
@@ -833,70 +688,9 @@ function reject_epochs(dat::EpochData, bad_columns::Vector{Symbol})
     return EpochData(dat.file, dat.condition, dat.condition_name, good_epochs, dat.layout, dat.sample_rate, dat.analysis_info)
 end
 
-"""
-    reject_epochs(dat::EpochData, bad_column::Symbol)
-
-Remove epochs that contain any true values in the specified boolean column.
-
-# Arguments
-- `dat::EpochData`: The epoched data to filter
-- `bad_column::Symbol`: Column name to check for true values
-
-# Returns
-- `EpochData`: A new EpochData object with bad epochs removed
-
-# Examples
-```julia
-# Remove epochs with extreme values
-cleaned_epochs = reject_epochs(epochs, :is_extreme_value_100)
-
-# Remove epochs with EOG artifacts
-cleaned_epochs = reject_epochs(epochs, :is_vEOG)
-```
-"""
 reject_epochs(dat::EpochData, bad_column::Symbol) = reject_epochs(dat, [bad_column])
 
-"""
-    reject_epochs(dat::Vector{EpochData}, bad_column::Symbol)
-
-Remove epochs that contain any true values in the specified boolean column for each EpochData in the vector.
-
-# Arguments
-- `dat::Vector{EpochData}`: Vector of epoched data to filter
-- `bad_column::Symbol`: Column name to check for true values
-
-# Returns
-- `Vector{EpochData}`: Vector of new EpochData objects with bad epochs removed
-
-# Examples
-```julia
-# Remove epochs with extreme values from multiple datasets
-cleaned_epochs = reject_epochs(epochs_list, :is_extreme_value_100)
-
-# Remove epochs with EOG artifacts from multiple datasets
-cleaned_epochs = reject_epochs(epochs_list, :is_vEOG)
-```
-"""
 reject_epochs(dat::Vector{EpochData}, bad_column::Symbol) = reject_epochs.(dat, bad_column)
-
-"""
-    reject_epochs(dat::Vector{EpochData}, bad_columns::Vector{Symbol})
-
-Remove epochs that contain any true values in the specified boolean columns for each EpochData in the vector.
-
-# Arguments
-- `dat::Vector{EpochData}`: Vector of epoched data to filter
-- `bad_columns::Vector{Symbol}`: Vector of column names to check for true values
-
-# Returns
-- `Vector{EpochData}`: Vector of new EpochData objects with bad epochs removed
-
-# Examples
-```julia
-# Remove epochs with multiple artifact types from multiple datasets
-cleaned_epochs = reject_epochs(epochs_list, [:is_extreme_value_100, :is_vEOG, :is_hEOG])
-```
-"""
 reject_epochs(dat::Vector{EpochData}, bad_columns::Vector{Symbol}) = reject_epochs.(dat, bad_columns)
 
 

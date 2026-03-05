@@ -600,21 +600,39 @@ function _apply_baseline_correction!(dfs::Vector{DataFrame}, baseline_interval::
 end
 
 """
-    erp_measurements!(dat::ErpData, analysis_type::String; kwargs...)
+    erp_measurements!(dat::ErpData, analysis_type::String; analysis_interval = times(), baseline_interval = times(), channel_selection = channels(), participant = 0, kwargs...)
+    erp_measurements!(dat::EpochData, analysis_type::String; kwargs...)
+    erp_measurements!(data::Vector{<:Union{ErpData,EpochData}}, analysis_type::String; kwargs...)
+    erp_measurements(file_pattern::String, analysis_type::String; analysis_interval = times(), baseline_interval = times(),
+    participant_selection = participants(), condition_selection = conditions(), channel_selection = channels(),
+    input_dir = pwd(), output_dir = nothing, output_file = "erp_measurements", kwargs...)
 
-Extract ERP measurements from a single ErpData object.
+Extract ERP measurements from EEG data. The mutating (`!`) forms accumulate results in Julia;
+the `file_pattern` form batch-processes JLD2 files and saves a CSV.
 
-# Arguments
-- `dat::ErpData`: ErpData object containing a single ERP
-- `analysis_type::String`: Type of measurement to extract
-- `analysis_interval::Interval`: Analysis time interval as tuple (e.g., (0.3, 0.5)) or interval object (default: nothing - all samples)
-- `baseline_interval::Interval`: Baseline time interval as tuple (e.g., (-0.2, 0.0)) or interval object (default: nothing - no baseline)
-- `channel_selection::Function`: Channel selection (default: channels() - all)
-- `participant::Int`: Participant ID for metadata (default: 0)
-- `kwargs...`: Additional measurement-specific parameters
+# `analysis_type` Options
+**Essential:**
+- `"mean_amplitude"` — average amplitude in the analysis interval
+- `"max_peak_amplitude"` / `"min_peak_amplitude"` — robust peak detection (fallback to simple max/min)
+- `"max_peak_latency"` / `"min_peak_latency"` — timing of peak (in seconds)
 
-# Returns
-- `NamedTuple`: Single measurement result with participant, condition, and channel measurements
+**Specialized:**
+- `"peak_to_peak_amplitude"` / `"peak_to_peak_latency"`
+- `"integral"` / `"rectified_area"` / `"positive_area"` / `"negative_area"` — area in µV·s
+- `"fractional_area_latency"` / `"fractional_peak_latency"` — onset/offset-style latencies
+
+# Examples
+```julia
+# In-memory, single ERP
+erp_measurements!(dat, "mean_amplitude", analysis_interval = (0.1, 0.2), baseline_interval = (-0.2, 0.0))
+
+# Batch across participants
+erp_measurements("erps", "max_peak_amplitude",
+    analysis_interval = (0.3, 0.5),
+    baseline_interval = (-0.2, 0.0),
+    participant_selection = participants(1:20),
+    condition_selection = conditions([1, 2]))
+```
 """
 function erp_measurements!(
     dat::ErpData,
@@ -665,23 +683,7 @@ function erp_measurements!(
     )
 end
 
-"""
-    erp_measurements!(dat::EpochData, analysis_type::String; kwargs...)
 
-Extract ERP measurements from a single EpochData object (multiple epochs).
-
-# Arguments
-- `dat::EpochData`: EpochData object containing multiple epochs
-- `analysis_type::String`: Type of measurement to extract
-- `analysis_interval::Interval`: Analysis time interval as tuple (e.g., (0.3, 0.5)) or interval object (default: nothing - all samples)
-- `baseline_interval::Interval`: Baseline time interval as tuple (e.g., (-0.2, 0.0)) or interval object (default: nothing - no baseline)
-- `channel_selection::Function`: Channel selection (default: channels() - all)
-- `participant::Int`: Participant ID for metadata (default: 0)
-- `kwargs...`: Additional measurement-specific parameters
-
-# Returns
-- `Vector{NamedTuple}`: Measurement results, one per epoch
-"""
 function erp_measurements!(
     dat::EpochData,
     analysis_type::String;
@@ -741,19 +743,7 @@ function erp_measurements!(
     return isempty(results) ? nothing : results
 end
 
-"""
-    erp_measurements!(data::Vector{<:Union{ErpData,EpochData}}, analysis_type::String; kwargs...)
 
-Extract ERP measurements from a vector of ErpData/EpochData objects.
-
-# Arguments
-- `data::Vector{<:Union{ErpData,EpochData}}`: Vector of data objects
-- `analysis_type::String`: Type of measurement to extract
-- `kwargs...`: Passed to individual methods
-
-# Returns
-- `Vector{NamedTuple}`: Flattened measurement results from all data objects
-"""
 function erp_measurements!(data::Vector{<:Union{ErpData,EpochData}}, analysis_type::String; kwargs...)
     all_results = Vector{Any}()
 
@@ -777,94 +767,7 @@ end
     MAIN API FUNCTION
 =============================================================================#
 
-"""
-    erp_measurements(file_pattern::String, analysis_type::String;
-                    analysis_interval::Function = samples(),
-                    baseline_interval::Function = samples(),
-                    participant_selection::Function = participants(),
-                    condition_selection::Function = conditions(),
-                    channel_selection::Function = channels(),
-                    input_dir::String = pwd(),
-                    output_dir::Union{String, Nothing} = nothing,
-                    output_file::String = "erp_measurements")
 
-Perform standard ERP measurements on averaged or epoched EEG data.
-
-This function computes basic ERP measurements (mean amplitude, peak amplitude, peak latency) 
-across specified time intervals and saves results to CSV files.
-
-# Arguments
-- `file_pattern::String`: Pattern to match JLD2 files (e.g., "erps", "epochs_cleaned")
-- `analysis_type::String`: Type of measurement to extract:
-  
-  **Essential Measurements** (recommended for most ERP analyses):
-  - `"mean_amplitude"`: Average amplitude in the analysis interval
-    - Most common ERP measure; suitable for all components (N400, P300, etc.)
-    - For fixed time intervals, equivalent to integral scaled by interval duration
-  - `"max_peak_amplitude"`: Maximum peak amplitude (for positive components like P1, P3, P300)
-    - Uses robust detection: peak must exceed neighbors and local averages
-    - Falls back to simple maximum if no robust peak found
-  - `"min_peak_amplitude"`: Minimum peak amplitude (for negative components like N1, N2, N400, MMN)
-    - Uses robust detection: peak must be below neighbors and local averages
-    - Falls back to simple minimum if no robust peak found
-  - `"max_peak_latency"`: Timing of maximum peak (in seconds)
-    - Returns time point of maximum peak within analysis interval
-  - `"min_peak_latency"`: Timing of minimum peak (in seconds)
-    - Returns time point of minimum peak within analysis interval
-  
-  **Specialized Measurements** (for specific research questions):
-  - `"peak_to_peak_amplitude"`: Difference between max and min peaks
-    - Occasionally used in MMN research or when measuring component-to-component differences
-  - `"peak_to_peak_latency"`: Time difference between max and min peaks
-    - Rarely used; can be computed post-hoc from individual peak latencies
-  - `"integral"`: Signed area under curve (in µV·s)
-    - Net electrical activity accounting for polarity (positive - negative)
-    - For fixed intervals: integral = mean × duration
-    - Useful when comparing variable-length intervals or for historical compatibility
-  - `"rectified_area"`: Sum of absolute values (in µV·s)
-    - Total magnitude of activity regardless of polarity
-    - Always non-negative
-  - `"positive_area"`: Area of positive deflections only (in µV·s)
-    - Negative values treated as zero; always non-negative
-  - `"negative_area"`: Area of negative deflections only (in µV·s, reported as absolute value)
-    - Positive values treated as zero; always non-negative
-  - `"fractional_area_latency"`: Time point where specified fraction of area is reached
-    - Default: 50% area point (median latency by area)
-    - Configurable via `fractional_area_fraction` parameter
-  - `"fractional_peak_latency"`: Time point where amplitude reaches fraction of peak
-    - Default: 50% peak amplitude (onset/offset detection)
-    - Configurable via `fractional_peak_fraction` and `fractional_peak_direction` parameters
-  
-  Note: All peak measurements use robust detection with `local_interval` parameter (default: 3 samples)
-  
-- `analysis_interval::Interval`: Analysis time interval as tuple (e.g., (0.3, 0.5) for 300-500ms) (default: nothing - all samples)
-- `baseline_interval::Interval`: Baseline time interval as tuple (e.g., (-0.2, 0.0)) (default: nothing - no baseline correction)
-- `participant_selection::Function`: Participant selection predicate (default: participants() - all)
-- `condition_selection::Function`: Condition selection predicate (default: conditions() - all)
-- `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
-- `output_dir::Union{String, Nothing}`: Output directory (default: auto-generated)
-- `output_file::String`: Base name for output files (default: "erp_measurements")
-- `kwargs...`: Additional keyword arguments for measurement parameters:
-  - `local_interval::Int`: Window size (in samples) for robust peak detection (default: 3)
-  - `fractional_area_fraction::Float64`: Fraction for fractional area latency (default: 0.5)
-  - `fractional_peak_fraction::Float64`: Fraction for fractional peak latency (default: 0.5)
-  - `fractional_peak_direction::Symbol`: Direction for fractional peak latency - :onset (before peak) or :offset (after peak) (default: :onset)
-
-# Examples
-```julia
-# Mean amplitude between 100-200 ms with baseline
-erp_measurements("erps", "mean_amplitude", analysis_interval=(0.1, 0.2), baseline_interval=(-0.2, 0.0))
-
-# Maximum peak between 300-500 ms for specific participants
-erp_measurements("erps", "max_peak_amplitude", analysis_interval=(0.3, 0.5), participant_selection=participants([1, 2, 3]), condition_selection=conditions([1, 2]))
-
-# Exclude specific participants
-erp_measurements("erps", "max_peak_amplitude", analysis_interval=(0.3, 0.5), participant_selection=participants_not([10, 11]))
-
-# Minimum peak for specific channels
-erp_measurements("erps", "min_peak_amplitude", analysis_interval=(0.0, 0.6), channel_selection=channels([:Fz, :Cz, :Pz]))
-```
-"""
 function erp_measurements(
     file_pattern::String,
     analysis_type::String;

@@ -142,13 +142,6 @@ function Base.convert(
 )
     return Layout(old.data, old.neighbours, old.criterion, nothing)
 end
-"""
-    Base.copy(layout::Layout) -> Layout
-
-Create a copy of Layout with copied DataFrame and shared immutable fields.
-The data DataFrame is copied with `copycols=true` to ensure independence,
-while neighbours and criterion are shared since they are immutable.
-"""
 function Base.copy(layout::Layout)::Layout
     return Layout(
         copy(layout.data, copycols = true),
@@ -301,12 +294,6 @@ function Base.getproperty(tf_data::TimeFreqData, name::Symbol)
     end
 end
 
-"""
-    Base.copy(tf_data::TimeFreqData) -> TimeFreqData
-
-Create a copy of TimeFreqData with copied DataFrames and layout.
-The data DataFrames are copied with `copycols=true` to ensure independence.
-"""
 function Base.copy(tf_data::TimeFreqData)::TimeFreqData
     return TimeFreqData(
         tf_data.file,
@@ -396,11 +383,6 @@ mutable struct SpectrumData <: SingleDataFrameEeg
     analysis_info::AnalysisInfo
 end
 
-"""
-    Base.copy(spectrum_data::SpectrumData) -> SpectrumData
-
-Create a copy of SpectrumData with copied DataFrame and layout.
-"""
 function Base.copy(spectrum_data::SpectrumData)::SpectrumData
     return SpectrumData(
         spectrum_data.file,

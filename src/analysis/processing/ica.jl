@@ -1,39 +1,38 @@
 """
-    run_ica(dat::ContinuousData;
-            n_components::Union{Nothing,Int} = nothing,
-            sample_selection::Function = samples(),
-    interval_selection::Interval = times(),
-            channel_selection::Function = channels(),
-            include_extra::Bool = false,
-            percentage_of_data::Real = 100.0,
-            algorithm::Symbol = :infomax,
-            params::IcaPrms = IcaPrms())
+    run_ica(dat::ContinuousData; n_components = nothing, sample_selection = samples(),
+    interval_selection = times(), channel_selection = channels(), include_extra = false,
+    percentage_of_data = 100.0, algorithm = :infomax, params = IcaPrms())
+    run_ica(epoched_data::Vector{EpochData}; n_components = nothing, sample_selection = samples(),
+    channel_selection = channels(), remove_duplicates = true, percentage_of_data = 100.0,
+    algorithm = :infomax, params = IcaPrms())
 
-Runs Independent Component Analysis (ICA) on EEG data. Preprocessing (e.g., filtering) should be applied prior to calling this function.
+Run Independent Component Analysis (ICA) on EEG data.
 
-# Arguments
-- `dat::ContinuousData`: The EEG data object.
-- `n_components::Union{Nothing,Int}`: Number of ICA components (default: number of channels - 1).
-- `sample_selection::Function`: Sample selector for quality filtering (default: include all samples).
-- `channel_selection::Function`: Channel selector (default: layout channels).
-- `include_extra::Bool`: Whether to allow channels outside the layout (e.g., EOG) in selection.
-- `percentage_of_data::Real`: Percentage of good data to use for ICA (default: 100.0). Values < 100 enable faster computation by random subsampling.
-- `algorithm::Symbol`: ICA algorithm to use. Options: `:infomax` (default), `:infomax_extended` (handles both sub- and super-Gaussian sources) 
-- `params::IcaPrms`: ICA parameters (algorithm-specific).
+The `ContinuousData` form runs ICA on a single recording. The `Vector{EpochData}` form
+concatenates all epochs into a continuous matrix before decomposition (the standard approach
+for epoched data, since ICA benefits from many data points).
+
+⚠️ **Pre-filter to ≥1 Hz** before running ICA to ensure a good decomposition.
+
+# Key Arguments
+- `n_components`: Number of components (default: n_channels − 1)
+- `sample_selection`: Exclude bad samples (e.g., `samples_not(:is_extreme_value_100)`)
+- `percentage_of_data`: Use a random subset of data for faster ICA (e.g., `25.0` = 25%)
+- `algorithm`: `:infomax` (default) or `:infomax_extended` (handles sub- and super-Gaussian sources)
+- `remove_duplicates` *(Vector form only)*: Remove duplicate samples across conditions (default: true)
 
 # Returns
 `InfoIca` with unmixing, mixing, sphere, variance, and metadata.
 
 # Examples
 ```julia
-# Basic ICA on layout channels (Infomax default algorithm)
+# Continuous data
 ica_result = run_ica(dat)
-
-# Excluding extreme samples 
 ica_result = run_ica(dat, sample_selection = samples_not(:is_extreme_value_100))
+ica_result = run_ica(dat, percentage_of_data = 25.0)
 
-# Speed up ICA by using only 25% of good data 
-ica_result = run_ica(dat, sample_selection = samples_not(:is_extreme_value_100), percentage_of_data = 25.0)
+# Epoched data
+ica_result = run_ica(epochs_cleaned)
 ```
 """
 function run_ica(
@@ -88,54 +87,8 @@ function run_ica(
     return ica_result
 end
 
-"""
-    run_ica(epoched_data::Vector{EpochData};
-            n_components::Union{Nothing,Int} = nothing,
-            sample_selection::Function = samples(),
-            interval_selection::Interval = times(),
-            channel_selection::Function = channels(),
-            include_extra::Bool = false,
-            remove_duplicates::Bool = true,
-            percentage_of_data::Real = 100.0,
-            algorithm::Symbol = :infomax,
-            params::IcaPrms = IcaPrms())
 
-Runs Independent Component Analysis (ICA) on concatenated epoched EEG data.
 
-This method concatenates all epochs from all EpochData objects into a continuous 
-data matrix before running ICA. This is the standard approach since ICA benefits 
-from more data points and temporal structure is not critical for decomposition.
-
-Automatically checks for duplicate samples (same original data appearing in multiple epochs)
-and removes them by default, as duplicates can bias ICA decomposition.
-
-# Arguments
-- `epoched_data::Vector{EpochData}`: Vector of epoched EEG data objects to concatenate
-- `n_components::Union{Nothing,Int}`: Number of ICA components (default: number of channels - 1)
-- `sample_selection::Function`: Sample selector for quality filtering applied to each epoch (default: include all samples)
-- `channel_selection::Function`: Channel selector (default: layout channels)
-- `include_extra::Bool`: Whether to allow channels outside the layout (e.g., EOG) in selection
-- `remove_duplicates::Bool`: Automatically remove duplicate samples based on samples column (default: true)
-- `percentage_of_data::Real`: Percentage of good data to use for ICA (default: 100.0). Values < 100 enable faster computation by random subsampling.
-- `algorithm::Symbol`: ICA algorithm to use. Options: `:infomax` (default), `:sobi`, `:jade`. More algorithms coming soon.
-- `params::IcaPrms`: ICA parameters (algorithm-specific)
-
-# Returns
-`InfoIca` with unmixing, mixing, sphere, variance, and metadata.
-
-# Examples
-```julia
-# Basic ICA on concatenated epochs (Infomax algorithm)
-epochs = extract_epochs(dat, epoch_conditions, -1, 2)
-ica_result = run_ica(epochs)
-
-# Excluding artifact samples from each epoch
-ica_result = run_ica(epochs, sample_selection = samples_not(:is_extreme_value_100))
-
-# Keep duplicate samples (not recommended for ICA)
-ica_result = run_ica(epochs, remove_duplicates = false)
-```
-"""
 function run_ica(
     epoched_data::Vector{EpochData};
     n_components::Union{Nothing,Int} = nothing,
@@ -780,21 +733,24 @@ end
 
 
 """
-    remove_ica_components!(dat::DataFrame, ica::InfoIca, components_to_remove::Vector{Int})
+    remove_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
+    remove_ica_components!(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
+    remove_ica_components(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
+    remove_ica_components(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
 
-Remove ICA components from data in-place and store the removed activations in the ICA result.
-
-# Arguments
-- `dat::DataFrame`: DataFrame containing the data to clean
-- `ica::InfoIca`: ICA result object (will be mutated to store removed activations)
-- `components_to_remove::Vector{Int}`: Vector of component indices to remove
-
-# Returns
-- `DataFrame`: The mutated data (same as input dat)
+Remove ICA components from data. Mutating (`!`) versions operate in-place; non-mutating versions
+return a copy of the data with components removed along with an updated `InfoIca` object.
 
 # Example
 ```julia
-dat_cleaned = remove_ica_components!(dat.data, ica_result, [1, 3, 5])
+# In-place
+remove_ica_components!(dat, ica_result)
+
+# Non-mutating
+cleaned_dat, ica_updated = remove_ica_components(dat, ica_result)
+
+# Select specific components
+remove_ica_components!(dat, ica_result, component_selection = components([1, 3, 5]))
 ```
 """
 function remove_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
@@ -834,24 +790,6 @@ function remove_ica_components!(dat::DataFrame, ica::InfoIca; component_selectio
     return nothing
 end
 
-"""
-    remove_ica_components(dat::DataFrame, ica::InfoIca, components_to_remove::Vector{Int})
-
-Remove ICA components from data and return cleaned data and updated ICA result.
-
-# Arguments
-- `dat::DataFrame`: DataFrame containing the data to clean
-- `ica::InfoIca`: ICA result object
-- `components_to_remove::Vector{Int}`: Vector of component indices to remove
-
-# Returns
-- `Tuple{DataFrame, InfoIca}`: Copy of input data with components removed, and copy of ICA result with stored activations
-
-# Example
-```julia
-cleaned_data, ica_updated = remove_ica_components(dat.data, ica_result, [1, 3, 5])
-```
-"""
 function remove_ica_components(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
     dat_out = copy(dat)
     ica_out = copy(ica)  # Use our custom copy method
@@ -859,24 +797,6 @@ function remove_ica_components(dat::DataFrame, ica::InfoIca; component_selection
     return dat_out, ica_out
 end
 
-"""
-    remove_ica_components(dat::ContinuousData, ica::InfoIca, components_to_remove::Vector{Int})
-
-Remove ICA components from ContinuousData and return cleaned data and updated ICA result.
-
-# Arguments
-- `dat::ContinuousData`: ContinuousData object containing the data to clean
-- `ica::InfoIca`: ICA result object
-- `components_to_remove::Vector{Int}`: Vector of component indices to remove
-
-# Returns
-- `Tuple{ContinuousData, InfoIca}`: Copy of input data with components removed, and copy of ICA result with stored activations
-
-# Example
-```julia
-cleaned_dat, ica_updated = remove_ica_components(dat, ica_result, [1, 3, 5])
-```
-"""
 function remove_ica_components(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
     dat_out = copy(dat)
     ica_out = copy(ica)  # Use our custom copy method
@@ -884,25 +804,6 @@ function remove_ica_components(dat::ContinuousData, ica::InfoIca; component_sele
     return dat_out, ica_out
 end
 
-"""
-    remove_ica_components!(dat::ContinuousData, ica::InfoIca, components_to_remove::Vector{Int})
-
-Remove ICA components from ContinuousData in-place and store the removed activations in the ICA result.
-
-# Arguments
-- `dat::ContinuousData`: ContinuousData object to clean in-place
-- `ica::InfoIca`: ICA result object (will be mutated to store removed activations)
-- `components_to_remove::Vector{Int}`: Vector of component indices to remove
-
-# Returns
-- `nothing` (data and ICA result are modified in-place)
-
-# Example
-```julia
-dat_cleaned = remove_ica_components!(dat, ica_result, [1, 3, 5])
-# Removed activations are now stored in ica_result.removed_activations
-```
-"""
 function remove_ica_components!(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
     remove_ica_components!(dat.data, ica, component_selection = component_selection)
     return nothing
@@ -910,21 +811,25 @@ end
 
 
 """
-    restore_ica_components!(dat::DataFrame, ica::InfoIca, components_to_restore::Vector{Int})
+    restore_ica_components!(dat::DataFrame, ica::InfoIca; component_selection = components())
+    restore_ica_components!(dat::ContinuousData, ica::InfoIca; component_selection = components())
+    restore_ica_components(dat::DataFrame, ica::InfoIca; component_selection = components())
+    restore_ica_components(dat::ContinuousData, ica::InfoIca; component_selection = components())
 
-Restore ICA components to data in-place using stored activations and update ICA result.
-
-# Arguments
-- `dat::DataFrame`: DataFrame containing the data to restore
-- `ica::InfoIca`: ICA result object with stored activations (will be updated)
-- `components_to_restore::Vector{Int}`: Vector of component indices to restore
-
-# Returns
-- `nothing` (data and ICA result are modified in-place)
+Restore previously removed ICA components using stored activations.
+Mutating (`!`) versions operate in-place; non-mutating versions return a copy and an updated `InfoIca`.
+Components must have been removed first (activations stored in `ica.removed_activations`).
 
 # Example
 ```julia
-restore_ica_components!(dat.data, ica_result, [1, 3, 5])
+# In-place
+restore_ica_components!(dat, ica_result)
+
+# Non-mutating
+restored_dat, ica_updated = restore_ica_components(dat, ica_result)
+
+# Select specific components to restore
+restore_ica_components!(dat, ica_result, component_selection = components([1, 3]))
 ```
 """
 function restore_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
@@ -970,24 +875,7 @@ function restore_ica_components!(dat::DataFrame, ica::InfoIca; component_selecti
     return nothing
 end
 
-"""
-    restore_ica_components(dat::DataFrame, ica::InfoIca, components_to_restore::Vector{Int})
 
-Restore ICA components to data and return restored data and updated ICA result.
-
-# Arguments
-- `dat::DataFrame`: DataFrame containing the data to restore
-- `ica::InfoIca`: ICA result object with stored activations
-- `components_to_restore::Vector{Int}`: Vector of component indices to restore
-
-# Returns
-- `Tuple{DataFrame, InfoIca}`: Copy of input data with components restored, and copy of ICA result with updated removed_activations
-
-# Example
-```julia
-restored_data, ica_updated = restore_ica_components(dat.data, ica_result, [1, 3, 5])
-```
-"""
 function restore_ica_components(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
     dat_out = copy(dat)
     ica_out = copy(ica)  # Use our custom copy method
@@ -995,24 +883,7 @@ function restore_ica_components(dat::DataFrame, ica::InfoIca; component_selectio
     return dat_out, ica_out
 end
 
-"""
-    restore_ica_components(dat::ContinuousData, ica::InfoIca, components_to_restore::Vector{Int})
 
-Restore ICA components to ContinuousData and return restored data and updated ICA result.
-
-# Arguments
-- `dat::ContinuousData`: ContinuousData object containing the data to restore
-- `ica::InfoIca`: ICA result object with stored activations
-- `components_to_restore::Vector{Int}`: Vector of component indices to restore
-
-# Returns
-- `Tuple{ContinuousData, InfoIca}`: Copy of input data with components restored, and copy of ICA result with updated removed_activations
-
-# Example
-```julia
-restored_dat, ica_updated = restore_ica_components(dat, ica_result, [1, 3, 5])
-```
-"""
 function restore_ica_components(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
     dat_out = copy(dat)
     ica_out = copy(ica)  # Use our custom copy method
@@ -1020,24 +891,7 @@ function restore_ica_components(dat::ContinuousData, ica::InfoIca; component_sel
     return dat_out, ica_out
 end
 
-"""
-    restore_ica_components!(dat::ContinuousData, ica::InfoIca, components_to_restore::Vector{Int})
 
-Restore ICA components to ContinuousData in-place and update ICA result.
-
-# Arguments
-- `dat::ContinuousData`: ContinuousData object to restore in-place
-- `ica::InfoIca`: ICA result object with stored activations (will be updated)
-- `components_to_restore::Vector{Int}`: Vector of component indices to restore
-
-# Returns
-- `nothing` (data and ICA result are modified in-place)
-
-# Example
-```julia
-restore_ica_components!(dat, ica_result, [1, 3, 5])
-```
-"""
 function restore_ica_components!(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
     restore_ica_components!(dat.data, ica, component_selection = component_selection)
     return nothing
@@ -1938,11 +1792,6 @@ end
 
 
 
-"""
-    Base.show(io::IO, artifacts::ArtifactComponents)
-
-Custom printing for ArtifactComponents structure.
-"""
 function Base.show(io::IO, artifacts::ArtifactComponents)
     # Get all components for and print short summary
     all_comps = get_all_ica_components(artifacts)

@@ -232,37 +232,38 @@ end
 # =============================================================================
 
 """
-    search_sequence(array, sequences; ignore_values::Vector{Int} = [0], sort_indices::Bool = true)
+    search_sequence(array, sequences::Vector{<:Vector}; ignore_values = [0], sort_indices = true) -> Vector{Vector{Int}}
+    search_sequence(array, sequence::Vector; ignore_values = [0], sort_indices = true) -> Vector{Vector{Int}}
+    search_sequence(array, value::Integer; ignore_values = [0]) -> Vector{Int}
+    search_sequence(array, range::UnitRange; sort_indices = true) -> Vector{Int}
+    search_sequence(array, ranges::Vector{<:UnitRange}; sort_indices = true) -> Vector{Int}
 
-Return the matched positions of any of the specified sequences within an array.
+Search for trigger patterns in an array. Returns matched sample positions.
 
-Each match is returned as a `Vector{Int}` containing the sample indices of all
-triggers in the matched sequence. For example, matching `[1, 5]` in trigger data
-might return `[[30, 450], [800, 1220]]` — two matches, each with positions of
-triggers 1 and 5.
+- **Multiple sequences** (`Vector{Vector}`): OR logic — matches any of the provided sequences.
+- **Single sequence** (`Vector`): supports integer values, `:any` wildcard, and `UnitRange` elements.
+- **Single value** (`Integer`): onset detection — returns each start position.
+- **Range / Vector{UnitRange}**: returns indices of any value within the range(s).
 
-# Arguments
-- `array`: Array to search within
-- `sequences::Vector{Vector{Union{Int,Symbol,UnitRange{Int}}}}`: Vector of sequences to find
-- `ignore_values::Vector{Int}`: Values to ignore when detecting onsets (default: [0])
-- `sort_indices::Bool`: Whether to sort the returned matches by start position (default: true)
-
-# Returns
-- `Vector{Vector{Int}}`: Each element is a vector of matched sample positions
+Each match in the multi-element methods is a `Vector{Int}` of sample positions for each
+trigger in the matched sequence (e.g., `[[30, 450], [800, 1220]]`).
 
 # Examples
 ```julia
-# Multiple sequences (OR logic)
-matches = search_sequence([1, 2, 1, 3, 1, 3, 1], [[1, 2, 1], [1, 3, 1]])
+# Single value
+search_sequence([0, 1, 1, 0, 2], 1)              # => [2]
 
-# Wildcards
-matches = search_sequence([1, 2, 3, 4, 5, 1, 4, 1], [[1, :any, 3]])
+# Exact sequence
+search_sequence([1, 0, 2, 3, 1, 0, 2, 3], [1, 2]) # => [[1,3], [5,7]]
 
-# Ranges
-matches = search_sequence([1, 2, 3, 4, 5], [[1:3], [5:5]])
+# Wildcard
+search_sequence([1, 2, 3], [[1, :any, 3]])        # => [[1,2,3]]
 
-# Mixed sequences
-matches = search_sequence([1, 2, 3, 4, 5], [[1, 2:4, 5]])
+# Range
+search_sequence([1, 2, 3, 4, 5], 1:3)             # => [1, 2, 3]
+
+# Multiple sequences (OR)
+search_sequence([1, 2, 1, 3, 1], [[1, 2, 1], [1, 3, 1]])  # => [[1,2,3], [3,4,5]]
 ```
 """
 function search_sequence(array, sequences::Vector{<:Vector}; ignore_values::Vector{Int} = [0], sort_indices::Bool = true)
@@ -285,31 +286,6 @@ function search_sequence(array, sequences::Vector{<:Vector}; ignore_values::Vect
     return sort_indices ? sort(all_matches, by = first) : all_matches
 end
 
-"""
-    search_sequence(array, sequence; ignore_values::Vector{Int} = [0], sort_indices::Bool = true)
-
-Return matched positions of a single sequence within an array, handling wildcards and ranges.
-
-# Arguments
-- `array`: Array to search within
-- `sequence::Vector{Union{Int,Symbol,UnitRange{Int}}}`: Sequence pattern to find
-- `ignore_values::Vector{Int}`: Values to ignore when detecting onsets (default: [0])
-- `sort_indices::Bool`: Whether to sort the returned matches by start position (default: true)
-
-# Returns
-- `Vector{Vector{Int}}`: Each element is a vector of matched sample positions
-
-# Notes
-- Supports wildcards (`:any`) and ranges (`1:3`)
-- First element cannot be a wildcard
-- Single wildcard sequences are not supported
-- Ignores specified values when detecting onsets
-
-# Examples
-```julia
-matches = search_sequence([1,0,2,3,1,0,2,3], [1,2]; ignore_values=[0])  # Returns [[1,3], [5,7]]
-```
-"""
 function search_sequence(array, sequence::Vector; ignore_values::Vector{Int} = [0], sort_indices::Bool = true)
     isempty(array) && return Vector{Int}[]
     isempty(sequence) && return Vector{Int}[]
@@ -345,25 +321,6 @@ function search_sequence(array, sequence::Vector; ignore_values::Vector{Int} = [
     return sort_indices ? sort(matches, by = first) : matches
 end
 
-"""
-    search_sequence(array, value::Integer; ignore_values::Vector{Int} = [0])
-
-Return indices of a single integer value within an array (onset detection).
-
-# Arguments
-- `array`: Array to search within
-- `value::Integer`: Integer value to find
-- `ignore_values::Vector{Int}`: Values to ignore when detecting onsets (default: [0])
-
-# Returns
-- `Vector{Int}`: Indices where the value starts (onsets only)
-
-# Examples
-```julia
-idx = search_sequence([0, 1, 1, 0, 2, 2], 1)  # Returns [2]
-idx = search_sequence([0, 1, 0, 2, 0, 1], 1)  # Returns [2, 6]
-```
-"""
 function search_sequence(array, value::Integer; ignore_values::Vector{Int} = [0])
     indices = Int[]
     for (i, val) in enumerate(array)
@@ -374,46 +331,10 @@ function search_sequence(array, value::Integer; ignore_values::Vector{Int} = [0]
     return indices
 end
 
-"""
-    search_sequence(array, range::UnitRange; sort_indices::Bool = true)
-
-Return indices where array values match any value within the specified range.
-
-# Arguments
-- `array`: Array to search within
-- `range::UnitRange`: Integer range to match
-- `sort_indices::Bool`: Whether to sort the returned indices (default: true)
-
-# Returns
-- `Vector{Int}`: Indices where values in range match
-
-# Examples
-```julia
-idx = search_sequence([1, 2, 3, 4, 5, 6], 1:3)  # Returns indices of 1,2,3
-```
-"""
 function search_sequence(array, range::UnitRange; sort_indices::Bool = true)
     return search_sequence(array, [range]; sort_indices = sort_indices)
 end
 
-"""
-    search_sequence(array, ranges::Vector{<:UnitRange}; sort_indices::Bool = true)
-
-Return indices where array values match any of the values within specified ranges.
-
-# Arguments
-- `array`: Array to search within
-- `ranges::Vector{UnitRange}`: Vector of integer ranges to match
-- `sort_indices::Bool`: Whether to sort the returned indices (default: true)
-
-# Returns
-- `Vector{Int}`: Indices where values in ranges match
-
-# Examples
-```julia
-idx = search_sequence([1, 2, 3, 4, 5, 6], [1:3, 5:6])  # Returns indices of 1,2,3,5,6
-```
-"""
 function search_sequence(array, ranges::Vector{<:UnitRange}; sort_indices::Bool = true)
     isempty(ranges) && return Int[]
     all_indices = Int[]
