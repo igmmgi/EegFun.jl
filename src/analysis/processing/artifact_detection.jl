@@ -1034,6 +1034,26 @@ unique_channels(info::Vector{EpochRejectionInfo}) = unique_channels.(info)
 unique_epochs(rejections::EpochRejectionInfo) = unique_epochs(rejections.rejected)
 unique_epochs(info::Vector{EpochRejectionInfo}) = unique_epochs.(info)
 
+function all_data(info::EpochRejectionInfo)::DataFrame
+    rows = NamedTuple{(:condition_number, :condition_name, :epoch, :channel, :reason),Tuple{Int,String,Int,Symbol,Symbol}}[]
+    cnum = info.info.number
+    cname = info.info.name
+    _push!(rs, tag, list) =
+        foreach(r -> push!(rs, (condition_number = cnum, condition_name = cname, epoch = r.epoch, channel = r.channel, reason = tag)), list)
+    !isnothing(info.abs_rejections) && _push!(rows, :abs_threshold, info.abs_rejections)
+    if !isnothing(info.z_rejections)
+        z = info.z_rejections
+        _push!(rows, :z_variance, z.z_variance)
+        _push!(rows, :z_max, z.z_max)
+        _push!(rows, :z_min, z.z_min)
+        _push!(rows, :z_abs, z.z_abs)
+        _push!(rows, :z_range, z.z_range)
+        _push!(rows, :z_kurtosis, z.z_kurtosis)
+    end
+    return DataFrame(rows)
+end
+all_data(infos::Vector{EpochRejectionInfo})::DataFrame = vcat(all_data.(infos)...)
+
 
 """
     detect_bad_epochs_automatic(dat::EpochData; z_criterion::Real = 3,

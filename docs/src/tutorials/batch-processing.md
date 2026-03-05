@@ -179,3 +179,10 @@ Several processing steps draw on the statistical thresholding approach described
 - Delorme, A. (2023). EEG is better left alone. *Scientific Reports*, 13(1), 2372.
 - Nolan, H., Whelan, R., & Reilly, R. B. (2010). FASTER: Fully automated statistical thresholding for EEG artifact rejection. *Journal of Neuroscience Methods*, 192(1), 152–162.
 - Dudschig, C., Mackenzie, I. G., Strozyk, J., Kaup, B., & Leuthold, H. (2016). The sounds of sentences: Differentiating the influence of physical sound, sound imagery, and linguistically implied sounds on physical sound processing. *Cognitive, Affective, & Behavioral Neuroscience*, 16(5), 940–961.
+
+## Next Steps
+
+- **Understanding each step** — [Manual Preprocessing](manual-preprocessing.md) explains the rationale behind every pipeline stage
+- **Artifact detection options** — [Artifact Handling](artifact-handling.md) for interactive review and fine-grained control
+- **Epoch condition syntax** — [Epoch Selection](epoch-selection.md) for trigger patterns and TOML condition files
+- **Selection predicates** — [Selection Patterns](selection-patterns.md) for channel, sample, and time filters used in config and scripts

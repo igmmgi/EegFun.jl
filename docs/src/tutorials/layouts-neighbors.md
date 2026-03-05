@@ -143,3 +143,9 @@ EegFun.get_neighbours_xyz!(layout, 0.5)
 # Verify visually
 EegFun.plot_layout_2d(layout, neighbours = true)
 ```
+
+## Next Steps
+
+- **Channel repair** — [Artifact Handling](artifact-handling.md) uses the neighbour structure computed here for `repair_channels!` and `repair_artifacts!`
+- **Manual preprocessing** — [Manual Preprocessing](manual-preprocessing.md) shows how layout setup fits into the full preprocessing workflow
+- **Batch pipelines** — [Batch Processing](batch-processing.md) configures the layout and neighbour criterion via TOML

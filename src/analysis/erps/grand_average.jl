@@ -225,7 +225,7 @@ function grand_average(
         @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
 
         # Load all data — narrow to concrete type for dispatch
-        all_data = read_all_data(files, input_dir)
+        all_data = _read_all_data_core(EegData, files, input_dir)
 
         if isempty(all_data)
             @minimal_warning "No valid data found in any files"

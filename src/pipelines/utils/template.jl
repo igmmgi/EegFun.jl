@@ -93,11 +93,11 @@ function _generate_setup_section()
         @info section("Setup")
         !isfile(config) && @minimal_error "Config file does not exist: \$config"
         cfg = read_config(config)
-        cfg == nothing && @minimal_error "Failed to load configuration from: \$config"
+        isnothing(cfg) && @minimal_error "Failed to load configuration from: \$config"
         
         # Try and merge user config above with default config
         default_config = read_config(joinpath(@__DIR__, "..", "..", "src", "config", "default.toml"))
-        default_config == nothing && @minimal_error "Failed to load default configuration"
+        isnothing(default_config) && @minimal_error "Failed to load default configuration"
         cfg = _merge_configs(default_config, cfg)
         
         # Create the PreprocessConfig object

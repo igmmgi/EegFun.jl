@@ -412,7 +412,7 @@ EegFun.channel_repairable!(rejection_info_step2, epochs[1].layout)
 
 # Collect all artifact information
 artifact_info = EegFun.ArtifactInfo(
-    continuous_repair_info !== nothing ? [continuous_repair_info] : EegFun.ContinuousRepairInfo[],
+    !isnothing(continuous_repair_info) ? [continuous_repair_info] : EegFun.ContinuousRepairInfo[],
     vcat(rejection_info_step1, rejection_info_step2),
     component_artifacts,
 )

@@ -10,7 +10,7 @@ pages = [
     "Home" => "index.md",
     "Tutorials" => [
         "Overview" => "tutorials/index.md",
-        "Getting Started" => "tutorials/getting-started.md",
+        "Getting Started" => ["tutorials/getting-started.md", "IDE Workflows" => "tutorials/ide-workflows.md"],
         "Manual Preprocessing" => "tutorials/manual-preprocessing.md",
         "Epoch Selection" => "tutorials/epoch-selection.md",
         "Artifact Handling" => "tutorials/artifact-handling.md",

@@ -176,7 +176,7 @@ function prepare_stats(
     kwargs...,
 )
     # Load data and auto-detect type
-    all_data = read_all_data(file_pattern, input_dir, participant_selection)
+    all_data = read_all_data(joinpath(input_dir, file_pattern), participant_selection)
     isempty(all_data) && @minimal_error "No valid data found matching pattern '$file_pattern' in $input_dir"
 
     first_item = first(all_data)

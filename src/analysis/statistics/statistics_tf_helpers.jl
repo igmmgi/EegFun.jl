@@ -147,7 +147,7 @@ function prepare_stats(
     participant_selection::Function = participants(),
     kwargs...,
 )
-    all_tfs = read_all_data(TimeFreqData, file_pattern, input_dir, participant_selection)
+    all_tfs = read_all_data(TimeFreqData, joinpath(input_dir, file_pattern), participant_selection)
     isempty(all_tfs) && @minimal_error "No valid TF data found matching pattern '$file_pattern' in $input_dir"
 
     return prepare_stats(all_tfs; design = design, kwargs...)

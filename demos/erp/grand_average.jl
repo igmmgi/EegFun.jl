@@ -1,32 +1,66 @@
 # Demo: Grand Average
-# Shows how to create grand averages across multiple participants from disk.
+# Shows how to compute grand averages across participants, both from
+# in-memory ERP data and from saved JLD2 files on disk.
 
 using EegFun
 
-# Suppose we have ERPs from three participants
-# results = [erp_p1, erp_p2, erp_p3]
-# For this demo, let's assume 'results' is already defined
 
-# Create grand averages for all conditions found in the list
-# grand_avgs = grand_average(results)
+#######################################################################
+# LOAD MULTI-PARTICIPANT ERP DATA
+#######################################################################
 
-# --- Batch Averaging (from Disk) ---
+# Each file is one participant's averaged ERPs (saved by batch_erp or manually)
+erps_p1 = EegFun.read_data("./resources/data/julia/erps/example1_erps_good.jld2")
+erps_p2 = EegFun.read_data("./resources/data/julia/erps/example2_erps_good.jld2")
+erps_p3 = EegFun.read_data("./resources/data/julia/erps/example3_erps_good.jld2")
 
-# Averages all JLD2 files in the folder that match the "erps_cleaned" pattern
-# This creates a new directory "grand_average_erps_cleaned" containing the results
-# grand_average("erps_cleaned", input_dir = "derivatives/erp_analysis/")
+# Flatten into a single list — one ErpData per participant per condition
+all_erps = vcat(erps_p1, erps_p2, erps_p3)
 
-# Filtering Participants and Conditions
-# grand_average("erps_cleaned",
-#     participant_selection = participants(1:10),  # Only first 10 participants
-#     condition_selection = conditions([1, 2]),    # Only "Standard" and "Target"
-#     output_dir = "results/grand_averages"
-# )
 
-# --- Visualizing the Result ---
+#######################################################################
+# GRAND AVERAGE (IN-MEMORY)
+#######################################################################
 
-# Load the batch results
-# ga_results = read_data("results/grand_averages/grand_average_erps_cleaned.jld2")
+# Average across participants for every condition found in the list
+grand_avgs = EegFun.grand_average(all_erps)
 
-# Plot with standard error shading (if n > 1)
-# plot_erp(ga_results, labels = ["Standard", "Target"])
+# Only average specific conditions
+grand_avgs_12 = EegFun.grand_average(all_erps, condition_selection = EegFun.conditions([1, 2]))
+
+
+#######################################################################
+# VISUALIZE
+#######################################################################
+
+# Plot grand average ERPs (SE shading is automatic when n > 1)
+EegFun.plot_erp(grand_avgs, channel_selection = EegFun.channels([:Cz, :Pz]))
+
+# Single condition
+EegFun.plot_erp(grand_avgs, condition_selection = EegFun.conditions([1]), channel_selection = EegFun.channels(:Pz))
+
+
+#######################################################################
+# BATCH GRAND AVERAGE (FROM DISK)
+#######################################################################
+
+# Averages all JLD2 files whose name contains "erps_good" in the given directory.
+# Saves the result to derivatives/grand_average/grand_average_erps_good.jld2
+EegFun.grand_average("erps_good", input_dir  = "./resources/data/julia/erps/", output_dir = "./derivatives/grand_average/")
+
+# With participant and condition filtering
+EegFun.grand_average(
+    "erps_good",
+    input_dir = "./resources/data/julia/erps/",
+    participant_selection = EegFun.participants(1:10),
+    condition_selection = EegFun.conditions([1, 2]),
+    output_dir = "./derivatives/grand_average/",
+)
+
+
+#######################################################################
+# LOAD AND PLOT BATCH RESULT
+#######################################################################
+
+ga = EegFun.read_data("./derivatives/grand_average/grand_average_erps_good.jld2")
+EegFun.plot_erp(ga, channel_selection = EegFun.channels([:Cz, :Pz]))
