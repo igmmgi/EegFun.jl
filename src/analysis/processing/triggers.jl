@@ -337,7 +337,7 @@ function search_sequence(array, sequence::Vector; ignore_values::Vector{Int} = [
             continue
         end
         positions = _collect_sequence_positions(array, sequence, idx, ignore_values)
-        if positions !== nothing
+        if !isnothing(positions)
             push!(matches, positions)
         end
     end

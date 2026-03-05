@@ -174,28 +174,41 @@ function _read_all_data_core(::Type{T}, files::Vector{String}, input_dir::String
 end
 
 """
-    read_all_data(files::Vector{String}, input_dir::String)
-    read_all_data(::Type{T}, files::Vector{String}, input_dir::String)
+    read_all_data(path_pattern::String, participant_selection = participants())
+    read_all_data(::Type{T}, path_pattern::String, participant_selection = participants())
 
-Load EEG data from a list of files into a flat vector.
-"""
-read_all_data(files::Vector{String}, input_dir::String) = _read_all_data_core(EegData, files, input_dir)
-read_all_data(::Type{T}, files::Vector{String}, input_dir::String) where {T} = _read_all_data_core(T, files, input_dir)
+Find and load EEG data from JLD2 files whose names contain the basename of
+`path_pattern`, searching in the directory given by `dirname(path_pattern)`.
 
-"""
-    read_all_data(pattern::String, input_dir::String, participant_selection = participants())
-    read_all_data(::Type{T}, pattern::String, input_dir::String, participant_selection = participants())
+This mirrors the single-argument form of `read_data`, so you compose the path
+the same way:
 
-Find and load EEG data matching a pattern and participant selection.
+```julia
+read_data("./derivatives/erps/example1_erps_good.jld2")   # single file
+read_all_data("./derivatives/erps/erps_good")              # all matching files
+```
+
+# Arguments
+- `path_pattern`: A file-system path whose `dirname` is the search directory and
+  whose `basename` is matched (via `contains`) against `.jld2` filenames.
+- `participant_selection`: Predicate function (default: `participants()` — all).
 """
-function read_all_data(pattern::String, input_dir::String = pwd(), participant_selection::Function = participants())
-    files = _find_batch_files(pattern, input_dir, participant_selection)
-    return read_all_data(files, input_dir)
+function read_all_data(path_pattern::String, participant_selection::Function = participants())
+    input_dir = let d = dirname(path_pattern)
+        isempty(d) ? pwd() : d
+    end
+    pattern   = basename(path_pattern)
+    files     = _find_batch_files(pattern, input_dir, participant_selection)
+    return _read_all_data_core(EegData, files, input_dir)
 end
 
-function read_all_data(::Type{T}, pattern::String, input_dir::String = pwd(), participant_selection::Function = participants()) where {T}
-    files = _find_batch_files(pattern, input_dir, participant_selection)
-    return read_all_data(T, files, input_dir)
+function read_all_data(::Type{T}, path_pattern::String, participant_selection::Function = participants()) where {T}
+    input_dir = let d = dirname(path_pattern)
+        isempty(d) ? pwd() : d
+    end
+    pattern   = basename(path_pattern)
+    files     = _find_batch_files(pattern, input_dir, participant_selection)
+    return _read_all_data_core(T, files, input_dir)
 end
 
 

@@ -195,3 +195,9 @@ EegFun.remove_ica_components!(dat, ica, component_selection = components([1, 3, 
 | **Epochs** | `epochs(...)` | `epochs_not(...)` | — |
 | **Components** | `components(...)` | `components_not(...)` | — |
 | **Files** | regex / list | — | — |
+
+## Next Steps
+
+- **Using selections in preprocessing** — [Manual Preprocessing](manual-preprocessing.md) shows channel and sample selectors applied throughout the pipeline
+- **Using selections with artifacts** — [Artifact Handling](artifact-handling.md) uses `channel_selection` and `sample_selection` in detection functions
+- **File patterns in batch pipelines** — [Batch Processing](batch-processing.md) uses the regex file selector in TOML configuration

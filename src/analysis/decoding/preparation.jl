@@ -19,7 +19,7 @@ Works with both EpochData and TimeFreqEpochData.
 # Examples
 ```julia
 # ERP decoding
-all_epochs = read_all_data(EpochData, "epochs_good", input_dir, participants())
+# all_epochs = read_all_data(EpochData, joinpath(input_dir, "epochs_good"))
 participant_epochs = prepare_decoding(
     all_epochs,
     condition_selection = conditions([1, 2]),
@@ -27,7 +27,7 @@ participant_epochs = prepare_decoding(
     interval_selection = (0.0, 1.0))
 
 # TF decoding
-all_tf_epochs = read_all_data(TimeFreqEpochData, "tf_epochs", input_dir, participants())
+# all_tf_epochs = read_all_data(TimeFreqEpochData, joinpath(input_dir, "tf_epochs"))
 participant_tf = prepare_decoding(
     all_tf_epochs,
     condition_selection = conditions([1, 2]),
@@ -177,7 +177,7 @@ function prepare_decoding(
     interval_selection::Interval = times(),
 )
     # Load all data (auto-detects type from files)
-    all_data = read_all_data(file_pattern, input_dir, participant_selection)
+    all_data = read_all_data(joinpath(input_dir, file_pattern), participant_selection)
     isempty(all_data) && @minimal_error("No valid data found matching pattern '$file_pattern' in $input_dir")
 
     # Filter to epoch-based types suitable for decoding

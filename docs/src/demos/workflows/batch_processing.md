@@ -42,67 +42,54 @@ This demo covers:
 
 ```julia
 # Demo: Batch Processing
-# Shows how to load and process multiple files, read saved data,
-# and group results by condition.
+# Shows how to load multi-participant ERP data, group by condition,
+# and compute grand averages.
 
 using EegFun
 
-#######################################################################
-# LOADING MULTIPLE FILES
-#######################################################################
-
-# read_all_data loads all matching files from a directory
-# Pattern matching: looks for files containing the pattern string
-# erps = EegFun.read_all_data("_erps_good", input_dir = "/path/to/output")
-
-# With participant selection (e.g., only participants 1-10)
-# erps = EegFun.read_all_data("_erps_good", "/path/to/output", EegFun.participants(1:10))
+const ERP_DIR = "./resources/data/julia/erps/"
 
 
 #######################################################################
-# READING SINGLE FILES
+# LOAD PROCESSED DATA
 #######################################################################
 
-# read_data automatically handles JLD2 files with EegFun data types
-# data = EegFun.read_data("/path/to/output/participant_01_erps_good.jld2")
+# Load a single participant's ERPs
+erps_p1 = EegFun.read_data(joinpath(ERP_DIR, "example1_erps_good.jld2"))
 
+# Load all 12 participants from the ERP directory
+erps_all = EegFun.read_all_data(joinpath(ERP_DIR, "erps_good"))
 
-#######################################################################
-# GROUP BY CONDITION
-#######################################################################
-
-# Create some test data to demonstrate grouping
-erps = EegFun.create_batch_test_erp_data(n_participants = 5)
-
-# Group by condition — returns OrderedDict{Int, Vector{ErpData}}
-grouped = EegFun.group_by_condition(erps)
-
-# Access specific condition groups
-for (cond_num, cond_erps) in grouped
-    println("Condition $cond_num: $(length(cond_erps)) ERPs")
-end
+# Subset to first 6 participants
+erps_subset = EegFun.read_all_data(joinpath(ERP_DIR, "erps_good"), EegFun.participants(1:6))
 
 
 #######################################################################
-# GRAND AVERAGE FROM BATCH DATA
+# GRAND AVERAGE
 #######################################################################
 
-# Average across participants for each condition
-grand_avg = EegFun.grand_average(erps)
+# Average across all participants, one ErpData per condition
+grand_avgs = EegFun.grand_average(erps_all)
+
+# Specific conditions only
+grand_avgs_12 = EegFun.grand_average(erps_all, condition_selection = EegFun.conditions([1, 2]))
+
+# From disk directly — saves to output_dir automatically
+# EegFun.grand_average("erps_good", input_dir = ERP_DIR, output_dir = "./resources/data/julia/grand_average/")
 
 
 #######################################################################
-# FILE MANAGEMENT
+# FILE UTILITIES
 #######################################################################
 
-# Check if files exist
-EegFun.check_files_exist(["./resources/data/bdf/example1.bdf"])
+# List all .bdf files in a directory (regex pattern)
+bdf_files = EegFun.get_files("./resources/data/bdf", "\\.bdf")
 
-# Get files matching a pattern in a directory
-files = EegFun.get_files("./resources/data/bdf", ".*\\.bdf")
+# Verify all files exist before starting a long pipeline run
+EegFun.check_files_exist(bdf_files)
 
-# Find a file by searching directories recursively
-found = EegFun.find_file("biosemi72.csv", "./resources/layouts")
+# Find a single file by searching recursively
+layout_path = EegFun.find_file("biosemi72.csv", "./resources/layouts")
 ```
 
 :::

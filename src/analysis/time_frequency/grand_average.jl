@@ -20,7 +20,7 @@ across all participants for each condition.
 # Examples
 ```julia
 # Load all TF data
-tfs = EegFun.read_all_data(EegFun.TimeFreqData, "tf_morlet_epochs", "./output")
+tfs = EegFun.read_all_data(EegFun.TimeFreqData, "./output/tf_morlet_epochs")
 
 # Create grand averages
 grand_avgs = grand_average(tfs)

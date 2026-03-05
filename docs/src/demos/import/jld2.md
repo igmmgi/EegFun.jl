@@ -196,10 +196,10 @@ loaded = EegFun.read_data("erps.jld2")
 
 # read_all_data — batch load all files matching a pattern from a directory
 # Useful for loading an entire cohort for group analysis
-# all_erps = EegFun.read_all_data("erps", "derivatives/erps/")
+# all_erps = EegFun.read_all_data("derivatives/erps/erps")
 
 # With participant selection
-# all_erps = EegFun.read_all_data("erps", "derivatives/erps/", EegFun.participants([1, 2, 3]))
+# all_erps = EegFun.read_all_data("derivatives/erps/erps", EegFun.participants([1, 2, 3]))
 
 # group_by_condition — organise loaded data by condition number
 # Returns an OrderedDict{Int, Vector{ErpData}}

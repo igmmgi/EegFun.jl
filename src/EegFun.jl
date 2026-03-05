@@ -65,6 +65,7 @@ include("utils/data.jl")
 include("utils/files.jl")
 include("utils/logging.jl")
 include("utils/misc.jl")
+include("utils/viewer.jl")
 include("utils/print.jl")
 include("utils/extern/read_csv.jl")
 

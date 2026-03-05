@@ -231,3 +231,9 @@ conditions = EegFun.condition_parse_epoch(config)
 # Extract epochs
 epochs = EegFun.extract_epochs(dat, conditions, (-0.2, 1.0))
 ```
+
+## Next Steps
+
+- **Artifact handling** — [Artifact Handling](artifact-handling.md) for detecting and rejecting bad epochs after extraction
+- **Batch pipelines** — [Batch Processing](batch-processing.md) uses epoch condition TOML files as part of its automated workflow
+- **Selection predicates** — [Selection Patterns](selection-patterns.md) for filtering channels, samples, and time intervals in downstream analysis

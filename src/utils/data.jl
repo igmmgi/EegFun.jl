@@ -93,6 +93,33 @@ Get the complete DataFrame with all columns.
 all_data(dat::SingleDataFrameEeg)::DataFrame = dat.data # single data frame
 all_data(dat::MultiDataFrameEeg)::DataFrame = to_data_frame(dat) # single data frame with all epochs
 all_data(dat::Vector{<:MultiDataFrameEeg})::DataFrame = to_data_frame(dat) # single data frame with all epochs from all objects
+all_data(dat::DataFrame)::DataFrame = dat
+all_data(dat::Vector{DataFrame})::DataFrame = isempty(dat) ? DataFrame() : vcat(dat...)
+
+function all_data(dat::Vector{<:SingleDataFrameEeg})::DataFrame
+    isempty(dat) && return DataFrame()
+    dfs = map(dat) do d
+        df = copy(d.data)
+        insertcols!(df, 1, :condition => condition_number(d), :condition_name => condition_name(d); makeunique = true)
+        df
+    end
+    return vcat(dfs...)
+end
+
+all_data(dat::Layout)::DataFrame = dat.data
+all_data(dat::BiosemiDataFormat.BiosemiData)::DataFrame = _create_eegfun_dataframe(dat)
+all_data(dat::ErpMeasurementsResult)::DataFrame = dat.data
+all_data(dat::TriggerInfo)::DataFrame = dat.data
+
+function all_data(ica::InfoIca)::DataFrame
+    removed = Set(keys(ica.removed_activations))
+    return DataFrame(
+        component = ica.ica_label,
+        variance_pct = round.(ica.variance .* 100; digits = 2),
+        is_sub_gaussian = ica.is_sub_gaussian,
+        removed = [i in removed for i in eachindex(ica.ica_label)],
+    )
+end
 
 # Handle collections and epoch selections
 function all_data(dat::Union{MultiDataFrameEeg,Vector{<:MultiDataFrameEeg}}; epoch_selection::Function = epochs())
@@ -508,81 +535,8 @@ Find common channels between two EEG data objects.
 """
 common_channels(dat1::EegData, dat2::EegData)::Vector{Symbol} = intersect(channel_labels(dat1), channel_labels(dat2))
 
-# === DATA VIEWING FUNCTIONS ===
 
-"""
-    viewer(dat)
 
-Display data using VS Code viewer if available, otherwise use standard display.
-
-# Arguments
-- `dat`: Any data object to display
-"""
-function viewer(dat)
-    if get(ENV, "TERM_PROGRAM", "") == "vscode"
-        try
-            Main.vscodedisplay(dat)
-        catch
-            display(dat)
-        end
-    else
-        display(dat)
-    end
-end
-
-"""
-    viewer(dat::EegData)
-
-Display EEG data by extracting all data and using the appropriate viewer.
-
-# Arguments
-- `dat::EegData`: The EEG data object to display
-"""
-function viewer(dat::EegData)
-    viewer(all_data(dat))
-end
-
-"""
-    head(dat::EegData; n=5)
-
-Display and return the first `n` rows of the EEG data.
-
-# Examples
-```julia
-head(erps[1])        # First 5 rows
-head(erps[1], n=10)  # First 10 rows
-```
-"""
-function head(dat::EegData; n = nothing)
-    isnothing(n) && (n = 5)
-    data = all_data(dat)
-    nrows = nrow(data)
-    n = min(n, nrows)  # Don't exceed available rows
-    result = n > 0 ? data[1:n, :] : DataFrame()
-    viewer(result)
-    return result
-end
-
-"""
-    tail(dat::EegData; n=5)
-
-Display and return the last `n` rows of the EEG data.
-
-# Examples
-```julia
-tail(erps[1])        # Last 5 rows
-tail(erps[1], n=10)  # Last 10 rows
-```
-"""
-function tail(dat::EegData; n = nothing)
-    isnothing(n) && (n = 5)
-    data = all_data(dat)
-    nrows = nrow(data)
-    n = min(n, nrows)  # Don't exceed available rows
-    result = n > 0 ? data[max(1, nrows-n+1):nrows, :] : DataFrame()
-    viewer(result)
-    return result
-end
 
 """
     to_data_frame(dat::MultiDataFrameEeg) -> DataFrame

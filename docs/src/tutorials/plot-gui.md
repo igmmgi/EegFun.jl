@@ -183,3 +183,9 @@ Some plot types (Data Browser with a raw `.bdf` file, Layout View) require an el
 - **Baseline** fields apply to ERP and Time-Frequency plots.
 - The GUI state is preserved between plots — change one setting at a time to compare results.
 - If a plot fails, a brief warning appears in the Julia REPL. The GUI remains open and usable.
+
+## Next Steps
+
+- **Preprocessing your data** — [Manual Preprocessing](manual-preprocessing.md) or [Batch Processing](batch-processing.md) to produce clean epochs and ERPs to explore in the GUI
+- **Layouts** — [Layouts and Neighbours](layouts-neighbors.md) for loading the layout file required by topographic and data browser plots
+- **Artifact review** — [Artifact Handling](artifact-handling.md) for the `detect_bad_epochs_interactive` GUI workflow

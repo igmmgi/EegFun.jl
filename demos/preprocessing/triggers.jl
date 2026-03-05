@@ -32,13 +32,13 @@ trigger_info.data
 #######################################################################
 
 # Find all onsets of trigger value 1
-idx = EegFun.search_sequence(dat.data.triggers, 1)
+idx = EegFun.search_sequence(dat.data.trigger, 1)
 
 # Find a two-trigger sequence (e.g., warning cue followed by target)
-idx = EegFun.search_sequence(dat.data.triggers, [1, 2])
+idx = EegFun.search_sequence(dat.data.trigger, [1, 2])
 
 # Find a sequence while ignoring zeros between triggers
-idx = EegFun.search_sequence(dat.data.triggers, [1, 2], ignore_values = [0])
+idx = EegFun.search_sequence(dat.data.trigger, [1, 2], ignore_values = [0])
 
 
 #######################################################################
@@ -46,11 +46,11 @@ idx = EegFun.search_sequence(dat.data.triggers, [1, 2], ignore_values = [0])
 #######################################################################
 
 # Use :any wildcard to match any trigger between two specific triggers
-idx = EegFun.search_sequence(dat.data.triggers, [1, :any, 2])
+idx = EegFun.search_sequence(dat.data.trigger, [1, :any, 2])
 
 # Use ranges to match a set of trigger values
-idx = EegFun.search_sequence(dat.data.triggers, [1:5])     # triggers 1 through 5
-idx = EegFun.search_sequence(dat.data.triggers, [1:3, 10:12])  # multiple ranges
+idx = EegFun.search_sequence(dat.data.trigger, [1:5])     # triggers 1 through 5
+idx = EegFun.search_sequence(dat.data.trigger, [1:3, 10:12])  # multiple ranges
 
 
 #######################################################################
@@ -58,7 +58,7 @@ idx = EegFun.search_sequence(dat.data.triggers, [1:3, 10:12])  # multiple ranges
 #######################################################################
 
 # Find onsets where any of several sequences occurs
-idx = EegFun.search_sequence(dat.data.triggers, [[1, 2], [3, 4]])
+idx = EegFun.search_sequence(dat.data.trigger, [[1, 2], [3, 4]])
 
 
 #######################################################################

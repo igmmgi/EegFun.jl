@@ -94,7 +94,7 @@ tf_avg_cond = EegFun.condition_average(tf_data, [[1, 2]])
 #######################################################################
 
 # Grand average across participants (requires multi-participant data)
-# all_tf = EegFun.read_all_data(EegFun.TimeFreqData, "tf_morlet", "derivatives/tf/")
+# all_tf = EegFun.read_all_data(EegFun.TimeFreqData, "derivatives/tf/tf_morlet")
 # grand_avg = EegFun.grand_average(all_tf)
 
 # With condition selection

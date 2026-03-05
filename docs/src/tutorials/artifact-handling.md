@@ -234,3 +234,9 @@ EegFun.repair_artifacts!(epochs, artifacts, method = :neighbor_interpolation)
 EegFun.reject_epochs!(epochs, artifacts)
 ```
 
+## Next Steps
+
+- **Before epoching** — [Manual Preprocessing](manual-preprocessing.md) covers continuous-data artifact detection and ICA in full context
+- **Defining epochs** — [Epoch Selection](epoch-selection.md) for trigger-based epoch extraction which feeds into artifact handling
+- **Automating rejection** — [Batch Processing](batch-processing.md) runs detect → repair → reject automatically across a cohort
+- **Interactive exploration** — [Plot GUI](plot-gui.md) for visually reviewing flagged epochs and channel data
