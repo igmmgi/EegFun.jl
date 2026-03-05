@@ -46,28 +46,19 @@ end
 
 
 """
-    rereference!(dat::Union{ContinuousData,ErpData,EpochData}, reference_channel; channel_selection::Function = channels())
+    rereference!(dat::Union{ContinuousData,ErpData,EpochData}, reference_selection; channel_selection = channels())
+    rereference!(dat::Vector{EpochData}, reference_selection; channel_selection = channels())
+    rereference!(dat::Vector{ErpData}, reference_selection; channel_selection = channels())
 
-Apply rereferencing to EEG data types using predicate-based channel selection.
+Rereference EEG data in-place. `reference_selection` can be `:avg`, `:mastoid`, or
+a channel name / vector of channel names. The `Vector` form broadcasts across conditions.
 
-# Arguments
-- `dat::Union{ContinuousData,ErpData,EpochData}`: The EEG data to rereference
-- `reference_channel`: Channels to use as reference, can be:
-    - Channel names (as symbols): `[:M1, :M2]`, `[:Cz]`, etc.
-    - Special symbols: `:avg` (average reference) or `:mastoid` (M1+M2)
-- `channel_selection::Function`: Channel selection predicate (default: `channels()` - all EEG channels)
-
-# Effects
-- For ContinuousData/ErpData: Modifies data in-place
-- For EpochData: Modifies each epoch in-place
-- Applies to channels selected by the predicate
-- If a channel is included in both reference and rereferenced set, it will become zero
-
-# Notes
-- The reference signal is calculated per epoch for EpochData to maintain proper signal processing
-- Reference channels must exist in the EEG data layout
-- Uses efficient pre-allocated vectors and @views for better performance
-- For EpochData, the same reference channels are used across all epochs, but the reference signal is calculated from each epoch's data
+# Examples
+```julia
+rereference!(dat, :avg)
+rereference!(dat, :mastoid)
+rereference!(epochs, [:M1, :M2])
+```
 """
 # helper function to handle special reference cases such as :avg and :mastoid
 function _get_reference_channels(dat, reference_channel::Vector{Symbol})
@@ -115,40 +106,13 @@ function rereference!(dat::EegData, reference_selection::Union{Symbol,Vector{Sym
 
 end
 
-"""
-    rereference!(dat::Vector{EpochData}, reference_selection; channel_selection=channels())
 
-Apply rereferencing in-place to a vector of EpochData objects.
-
-# Arguments
-- `dat::Vector{EpochData}`: Vector of epoch data to rereference
-- `reference_selection::Union{Symbol, Vector{Symbol}}`: Reference channels (`:avg`, `:mastoid`, or specific channels)
-- `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
-
-# Notes
-- Modifies each EpochData in the vector in-place by applying rereferencing
-- Reference channels can be special symbols (`:avg`, `:mastoid`) or specific channel names
-- Reference signal is calculated per epoch to maintain proper signal processing
-"""
 function rereference!(dat::Vector{EpochData}, reference_selection::Union{Symbol,Vector{Symbol}}, channel_selection::Function = channels())
     rereference!.(dat, Ref(reference_selection), channel_selection)
     return nothing
 end
 
-"""
-    rereference!(dat::Vector{ErpData}, reference_selection; channel_selection=channels())
 
-Apply rereferencing in-place to a vector of ErpData objects.
-
-# Arguments
-- `dat::Vector{ErpData}`: Vector of ERP data to rereference
-- `reference_selection::Union{Symbol, Vector{Symbol}}`: Reference channels (`:avg`, `:mastoid`, or specific channels)
-- `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
-
-# Notes
-- Modifies each ErpData in the vector in-place by applying rereferencing
-- Reference channels can be special symbols (`:avg`, `:mastoid`) or specific channel names
-"""
 function rereference!(dat::Vector{ErpData}, reference_selection::Union{Symbol,Vector{Symbol}}, channel_selection::Function = channels())
     rereference!.(dat, Ref(reference_selection), channel_selection)
     return nothing
@@ -158,9 +122,6 @@ end
 @add_nonmutating rereference!
 
 
-"""
-Batch rereferencing for EEG/ERP data.
-"""
 
 #=============================================================================
     REREFERENCE-SPECIFIC VALIDATION

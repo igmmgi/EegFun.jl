@@ -77,11 +77,6 @@ mutable struct DecodedData <: SingleDataFrameEeg
     end
 end
 
-"""
-    Base.show(io::IO, decoded::DecodedData)
-
-Display DecodedData in a readable format.
-"""
 function Base.show(io::IO, decoded::DecodedData)
     println(io, "DecodedData:")
     println(io, "  File: $(decoded.file)")

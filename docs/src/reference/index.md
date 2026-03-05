@@ -1,10 +1,11 @@
 # API Reference
 
-Complete technical documentation for all EegFun.jl functions.
+Complete documentation for all public EegFun.jl functions.
 
 ## Index
 
 ```@index
+Filter = t -> !startswith(string(t), "_")
 ```
 
 ## Functions
@@ -12,4 +13,5 @@ Complete technical documentation for all EegFun.jl functions.
 ```@autodocs
 Modules = [EegFun]
 Order = [:function, :macro]
+Filter = t -> !startswith(string(t), "_")
 ```

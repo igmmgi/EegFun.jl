@@ -30,19 +30,32 @@ function _apply_baseline!(dat::Vector{DataFrame}, channels::Vector{Symbol}, base
 end
 
 """
-    baseline!(dat::EegData, baseline_interval; channel_selection=channels())
+    baseline!(dat::EegData, baseline_interval::Interval; channel_selection = channels()) -> Nothing
+    baseline!(dat::EegData; channel_selection = channels()) -> Nothing
+    baseline!(dat::Vector{EpochData}, baseline_interval::Interval; channel_selection = channels()) -> Nothing
+    baseline!(dat::Vector{EpochData}; channel_selection = channels()) -> Nothing
+    baseline!(dat::Vector{ErpData}, baseline_interval::Interval; channel_selection = channels()) -> Nothing
+    baseline!(dat::Vector{ErpData}; channel_selection = channels()) -> Nothing
 
-Apply baseline correction in-place to EEG data.
+Apply baseline correction in-place. Subtracts the mean amplitude over `baseline_interval`
+from each selected channel. Omitting `baseline_interval` uses the full time range.
 
 # Arguments
-- `dat::EegData`: The data to baseline correct
-- `baseline_interval::Interval`: Time/index interval, tuple, range, or predicate function
-- `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
+- `dat`: `EegData` (any subtype), `Vector{EpochData}`, or `Vector{ErpData}`
+- `baseline_interval`: time range as a tuple `(-0.2, 0.0)` or a range `-0.2:0.0`
+- `channel_selection`: channel predicate (default: all channels)
 
-# Notes
-- Modifies the input data in-place by subtracting the baseline mean
-- Uses the specified time/index interval for baseline calculation
-- If a predicate function is provided, it's applied to the data to determine the baseline window
+# Examples
+```julia
+# Correct all channels over -200 to 0 ms
+baseline!(erp, (-0.2, 0.0))
+
+# Correct a channel subset
+baseline!(epochs, (-0.2, 0.0), channel_selection = channels([:Fz, :Cz, :Pz]))
+
+# Correct using entire time range
+baseline!(erp)
+```
 """
 function baseline!(dat::EegData, baseline_interval::Interval; channel_selection::Function = channels())
     # Validate baseline interval
@@ -64,20 +77,6 @@ function baseline!(dat::EegData, baseline_interval::Interval; channel_selection:
 end
 
 
-
-"""
-    baseline!(dat::EegData; channel_selection=channels())
-
-Apply baseline correction in-place to EEG data using the entire time range.
-
-# Arguments
-- `dat::EegData`: The data to baseline correct
-- `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
-
-# Notes
-- Modifies the input data in-place by subtracting the baseline mean
-- Uses the entire time range for baseline calculation
-"""
 function baseline!(dat::EegData; channel_selection::Function = channels())
     # Use entire time range for baseline
     time_vec = time_vector(dat)
@@ -85,81 +84,23 @@ function baseline!(dat::EegData; channel_selection::Function = channels())
     return nothing
 end
 
-"""
-    baseline!(dat::Vector{EpochData}, baseline_interval; channel_selection=channels())
-
-Apply baseline correction in-place to a vector of EpochData objects.
-
-# Arguments
-- `dat::Vector{EpochData}`: Vector of epoch data to baseline correct
-- `baseline_interval::Interval`: Time/index interval for baseline calculation, or a predicate function
-- `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
-
-# Notes
-- Modifies each EpochData in the vector in-place by subtracting the baseline mean
-- Uses the specified time/index interval for baseline calculation
-- If a predicate function is provided, it's applied to each epoch's data to determine the baseline window
-"""
 function baseline!(dat::Vector{EpochData}, baseline_interval::Interval; channel_selection::Function = channels())
     baseline!.(dat, Ref(baseline_interval); channel_selection = channel_selection)
     return nothing
 end
 
 
-
-"""
-    baseline!(dat::Vector{EpochData}; channel_selection=channels())
-
-Apply baseline correction in-place to a vector of EpochData objects using the entire time range.
-
-# Arguments
-- `dat::Vector{EpochData}`: Vector of epoch data to baseline correct
-- `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
-
-# Notes
-- Modifies each EpochData in the vector in-place by subtracting the baseline mean
-- Uses the entire time range for baseline calculation
-"""
 function baseline!(dat::Vector{EpochData}; channel_selection::Function = channels())
     baseline!.(dat; channel_selection = channel_selection)
     return nothing
 end
 
-"""
-    baseline!(dat::Vector{ErpData}, baseline_interval; channel_selection=channels())
-
-Apply baseline correction in-place to a vector of ErpData objects.
-
-# Arguments
-- `dat::Vector{ErpData}`: Vector of ERP data to baseline correct
-- `baseline_interval::Interval`: Time/index interval for baseline calculation, or a predicate function
-- `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
-
-# Notes
-- Modifies each ErpData in the vector in-place by subtracting the baseline mean
-- Uses the specified time/index interval for baseline calculation
-- If a predicate function is provided, it's applied to each ERP's data to determine the baseline window
-"""
 function baseline!(dat::Vector{ErpData}, baseline_interval::Interval; channel_selection::Function = channels())
     baseline!.(dat, Ref(baseline_interval); channel_selection = channel_selection)
     return nothing
 end
 
 
-
-"""
-    baseline!(dat::Vector{ErpData}; channel_selection=channels())
-
-Apply baseline correction in-place to a vector of ErpData objects using the entire time range.
-
-# Arguments
-- `dat::Vector{ErpData}`: Vector of ERP data to baseline correct
-- `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
-
-# Notes
-- Modifies each ErpData in the vector in-place by subtracting the baseline mean
-- Uses the entire time range for baseline calculation
-"""
 function baseline!(dat::Vector{ErpData}; channel_selection::Function = channels())
     baseline!.(dat; channel_selection = channel_selection)
     return nothing

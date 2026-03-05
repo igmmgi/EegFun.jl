@@ -8,49 +8,29 @@ Provides functions to mirror (reverse and append) EEG data before and/or after e
 =============================================================================#
 
 """
-    mirror!(dat::EpochData, side::Symbol = :both)::Nothing
+    mirror!(dat::EpochData, side::Symbol = :both) -> Nothing
+    mirror!(dat::ErpData, side::Symbol = :both) -> Nothing
+    mirror!(data_vec::Vector{EpochData}, side::Symbol = :both) -> Nothing
+    mirror!(data_vec::Vector{ErpData}, side::Symbol = :both) -> Nothing
 
-Mirror epoched data in-place by appending reversed data sections.
-
-Data mirroring adds reversed (time-flipped) copies of the data before and/or after
-each epoch. This reduces edge artifacts when filtering by creating smooth continuity
-at epoch boundaries.
+Mirror data in-place by appending time-reversed copies before and/or after the data.
+Reduces edge artifacts when filtering by creating smooth continuity at boundaries.
+Always call [`unmirror!`](@ref) after processing to restore the original length.
 
 # Arguments
-- `dat::EpochData`: Epoched data to mirror
-- `side::Symbol`: Which side(s) to mirror - `:pre`, `:post`, or `:both` (default: `:both`)
+- `dat` / `data_vec`: `EpochData`, `ErpData`, or a `Vector` of either
+- `side`: `:pre`, `:post`, or `:both` (default: `:both`)
 
-# Effects
-- Modifies epochs in-place, extending their length
-- Updates time vectors to reflect the extended data
-- Original data is preserved in the middle section
+# Notes
+- Mirrored data will be approximately 3× longer with `:both`
+- The `side` argument to `unmirror!` must match
 
 # Examples
 ```julia
-using EegFun, JLD2
-
-# Load epochs
-epochs = load("participant_1_epochs.jld2", "epochs")
-
-# Mirror on both sides (recommended for filtering)
 mirror!(epochs, :both)
-
-# Now filter the data (edges are protected)
-filter!(epochs, 1, filter_type = "hp")
-
-# Remove mirrored sections after filtering
+filter!(epochs, 1.0, filter_type = "hp")
 unmirror!(epochs, :both)
 ```
-
-# Use Cases
-- **Before filtering**: Reduce edge artifacts
-- **Any processing sensitive to edges**: FFT, wavelet analysis, etc.
-
-# Important Notes
-- Always call `unmirror!()` after processing to remove mirrored sections
-- The `side` parameter for unmirroring must match the mirroring side
-- Mirrored epochs will be approximately 3× longer with `:both` mirroring
-- Sample rate is preserved
 """
 function mirror!(dat::EpochData, side::Symbol = :both)::Nothing
 
@@ -69,9 +49,17 @@ end
 
 
 """
-    mirror(dat::EpochData, side::Symbol = :both)::EpochData
+    mirror(dat::EpochData, side::Symbol = :both) -> EpochData
+    mirror(dat::ErpData, side::Symbol = :both) -> ErpData
+    mirror(data_vec::Vector{EpochData}, side::Symbol = :both) -> Vector{EpochData}
+    mirror(data_vec::Vector{ErpData}, side::Symbol = :both) -> Vector{ErpData}
 
-Non-mutating version of mirror!. Returns new EpochData with mirrored epochs.
+Non-mutating version of [`mirror!`](@ref). Returns a new object with mirrored data,
+leaving the original unchanged.
+
+# Arguments
+- `dat` / `data_vec`: `EpochData`, `ErpData`, or a `Vector` of either
+- `side`: `:pre`, `:post`, or `:both` (default: `:both`)
 """
 function mirror(dat::EpochData, side::Symbol = :both)::EpochData
     dat_copy = copy(dat)
@@ -80,25 +68,6 @@ function mirror(dat::EpochData, side::Symbol = :both)::EpochData
 end
 
 
-"""
-    mirror!(dat::ErpData, side::Symbol = :both)::Nothing
-
-Mirror ERP data in-place by appending reversed data sections.
-
-For averaged ERP data, mirroring extends the time series with time-reversed copies.
-This is useful before filtering averaged data to reduce edge artifacts.
-
-# Examples
-```julia
-# Load some data
-erp = load("participant_1_erp.jld2", "erp")
-
-# Mirror, filter, then unmirror
-mirror!(erp, :both)
-filter!(erp, 1, filter_type = "hp")
-unmirror!(erp, :both)
-```
-"""
 function mirror!(dat::ErpData, side::Symbol = :both)::Nothing
 
     if side ∉ [:pre, :post, :both]
@@ -112,11 +81,6 @@ function mirror!(dat::ErpData, side::Symbol = :both)::Nothing
 end
 
 
-"""
-    mirror(dat::ErpData, side::Symbol = :both)::ErpData
-
-Non-mutating version of mirror! for ERP data.
-"""
 function mirror(dat::ErpData, side::Symbol = :both)::ErpData
     dat_copy = copy(dat)
     mirror!(dat_copy, side)
@@ -124,24 +88,6 @@ function mirror(dat::ErpData, side::Symbol = :both)::ErpData
 end
 
 
-"""
-    mirror!(data_vec::Vector{EpochData}, side::Symbol = :both)::Nothing
-
-Mutating version of mirror for vector of EpochData objects.
-
-# Arguments
-- `data_vec::Vector{EpochData}`: Vector of EpochData objects to mirror (modified in-place)
-- `side::Symbol`: Which side to mirror (`:left`, `:right`, or `:both`, default: `:both`)
-
-# Returns
-- `Nothing`: All objects in the vector are modified in-place
-
-# Examples
-```julia
-# Mirror multiple EpochData objects
-mirror!(epochs_vector, :both)  # Mirror both sides
-```
-"""
 function mirror!(data_vec::Vector{EpochData}, side::Symbol = :both)::Nothing
     for dat in data_vec
         mirror!(dat, side)
@@ -150,47 +96,11 @@ function mirror!(data_vec::Vector{EpochData}, side::Symbol = :both)::Nothing
 end
 
 
-"""
-    mirror(data_vec::Vector{EpochData}, side::Symbol = :both)::Vector{EpochData}
-
-Non-mutating version of mirror for vector of EpochData objects.
-
-# Arguments
-- `data_vec::Vector{EpochData}`: Vector of EpochData objects to mirror (NOT modified)
-- `side::Symbol`: Which side to mirror (`:left`, `:right`, or `:both`, default: `:both`)
-
-# Returns
-- `Vector{EpochData}`: New vector with mirrored EpochData objects
-
-# Examples
-```julia
-# Mirror multiple EpochData objects (creates new objects)
-mirrored_epochs = mirror(epochs_vector, :both)
-```
-"""
 function mirror(data_vec::Vector{EpochData}, side::Symbol = :both)::Vector{EpochData}
     return [mirror(dat, side) for dat in data_vec]
 end
 
 
-"""
-    mirror!(data_vec::Vector{ErpData}, side::Symbol = :both)::Nothing
-
-Mutating version of mirror for vector of ErpData objects.
-
-# Arguments
-- `data_vec::Vector{ErpData}`: Vector of ErpData objects to mirror (modified in-place)
-- `side::Symbol`: Which side to mirror (`:left`, `:right`, or `:both`, default: `:both`)
-
-# Returns
-- `Nothing`: All objects in the vector are modified in-place
-
-# Examples
-```julia
-# Mirror multiple ErpData objects
-mirror!(erps_vector, :both)  # Mirror both sides
-```
-"""
 function mirror!(data_vec::Vector{ErpData}, side::Symbol = :both)::Nothing
     for dat in data_vec
         mirror!(dat, side)
@@ -199,24 +109,6 @@ function mirror!(data_vec::Vector{ErpData}, side::Symbol = :both)::Nothing
 end
 
 
-"""
-    mirror(data_vec::Vector{ErpData}, side::Symbol = :both)::Vector{ErpData}
-
-Non-mutating version of mirror for vector of ErpData objects.
-
-# Arguments
-- `data_vec::Vector{ErpData}`: Vector of ErpData objects to mirror (NOT modified)
-- `side::Symbol`: Which side to mirror (`:left`, `:right`, or `:both`, default: `:both`)
-
-# Returns
-- `Vector{ErpData}`: New vector with mirrored ErpData objects
-
-# Examples
-```julia
-# Mirror multiple ErpData objects (creates new objects)
-mirrored_erps = mirror(erps_vector, :both)
-```
-"""
 function mirror(data_vec::Vector{ErpData}, side::Symbol = :both)::Vector{ErpData}
     return [mirror(dat, side) for dat in data_vec]
 end
@@ -227,24 +119,23 @@ end
 =============================================================================#
 
 """
-    unmirror!(dat::EpochData, side::Symbol = :both)::Nothing
+    unmirror!(dat::EpochData, side::Symbol = :both) -> Nothing
+    unmirror!(dat::ErpData, side::Symbol = :both) -> Nothing
+    unmirror!(data_vec::Vector{EpochData}, side::Symbol = :both) -> Nothing
+    unmirror!(data_vec::Vector{ErpData}, side::Symbol = :both) -> Nothing
 
-Remove mirrored sections from epoched data in-place.
-
-This function removes the mirrored sections that were added by `mirror!()`,
-restoring the data to its original length. Must be called with the same `side`
-parameter as was used for mirroring.
+Remove mirrored sections from data in-place, restoring the original length.
+Must be called with the same `side` as the preceding `mirror!` call.
 
 # Arguments
-- `dat::EpochData`: Mirrored epoched data
-- `side::Symbol`: Which side(s) were mirrored - must match original mirroring
+- `dat` / `data_vec`: `EpochData`, `ErpData`, or a `Vector` of either
+- `side`: `:pre`, `:post`, or `:both` (default: `:both`)
 
 # Examples
 ```julia
-# Mirror, process, then unmirror
 mirror!(epochs, :both)
-filter!(epochs, 1, filter_type = "hp")
-unmirror!(epochs, :both)
+filter!(epochs, 1.0, filter_type = "hp")
+unmirror!(epochs, :both)  # restores original length
 ```
 """
 function unmirror!(dat::EpochData, side::Symbol = :both)::Nothing
@@ -263,11 +154,6 @@ function unmirror!(dat::EpochData, side::Symbol = :both)::Nothing
 end
 
 
-"""
-    unmirror(dat::EpochData, side::Symbol = :both)::EpochData
-
-Non-mutating version of unmirror!.
-"""
 function unmirror(dat::EpochData, side::Symbol = :both)::EpochData
     dat_copy = copy(dat)
     unmirror!(dat_copy, side)
@@ -275,11 +161,6 @@ function unmirror(dat::EpochData, side::Symbol = :both)::EpochData
 end
 
 
-"""
-    unmirror!(dat::ErpData, side::Symbol = :both)::Nothing
-
-Remove mirrored sections from ERP data in-place.
-"""
 function unmirror!(dat::ErpData, side::Symbol = :both)::Nothing
 
     if side ∉ [:pre, :post, :both]
@@ -293,11 +174,6 @@ function unmirror!(dat::ErpData, side::Symbol = :both)::Nothing
 end
 
 
-"""
-    unmirror(dat::ErpData, side::Symbol = :both)::ErpData
-
-Non-mutating version of unmirror! for ERP data.
-"""
 function unmirror(dat::ErpData, side::Symbol = :both)::ErpData
     dat_copy = copy(dat)
     unmirror!(dat_copy, side)
@@ -305,24 +181,6 @@ function unmirror(dat::ErpData, side::Symbol = :both)::ErpData
 end
 
 
-"""
-    unmirror!(data_vec::Vector{EpochData}, side::Symbol = :both)::Nothing
-
-Mutating version of unmirror for vector of EpochData objects.
-
-# Arguments
-- `data_vec::Vector{EpochData}`: Vector of EpochData objects to unmirror (modified in-place)
-- `side::Symbol`: Which side to unmirror (`:left`, `:right`, or `:both`, default: `:both`)
-
-# Returns
-- `Nothing`: All objects in the vector are modified in-place
-
-# Examples
-```julia
-# Unmirror multiple EpochData objects
-unmirror!(epochs_vector, :both)  # Unmirror both sides
-```
-"""
 function unmirror!(data_vec::Vector{EpochData}, side::Symbol = :both)::Nothing
     for dat in data_vec
         unmirror!(dat, side)
@@ -332,46 +190,23 @@ end
 
 
 """
-    unmirror(data_vec::Vector{EpochData}, side::Symbol = :both)::Vector{EpochData}
+    unmirror(dat::EpochData, side::Symbol = :both) -> EpochData
+    unmirror(dat::ErpData, side::Symbol = :both) -> ErpData
+    unmirror(data_vec::Vector{EpochData}, side::Symbol = :both) -> Vector{EpochData}
+    unmirror(data_vec::Vector{ErpData}, side::Symbol = :both) -> Vector{ErpData}
 
-Non-mutating version of unmirror for vector of EpochData objects.
+Non-mutating version of [`unmirror!`](@ref). Returns a new object with mirrored
+sections removed, leaving the original unchanged.
 
 # Arguments
-- `data_vec::Vector{EpochData}`: Vector of EpochData objects to unmirror (NOT modified)
-- `side::Symbol`: Which side to unmirror (`:left`, `:right`, or `:both`, default: `:both`)
-
-# Returns
-- `Vector{EpochData}`: New vector with unmirrored EpochData objects
-
-# Examples
-```julia
-# Unmirror multiple EpochData objects (creates new objects)
-unmirrored_epochs = unmirror(epochs_vector, :both)
-```
+- `dat` / `data_vec`: `EpochData`, `ErpData`, or a `Vector` of either
+- `side`: `:pre`, `:post`, or `:both` (default: `:both`) — must match the original `mirror!` call
 """
 function unmirror(data_vec::Vector{EpochData}, side::Symbol = :both)::Vector{EpochData}
     return [unmirror(dat, side) for dat in data_vec]
 end
 
 
-"""
-    unmirror!(data_vec::Vector{ErpData}, side::Symbol = :both)::Nothing
-
-Mutating version of unmirror for vector of ErpData objects.
-
-# Arguments
-- `data_vec::Vector{ErpData}`: Vector of ErpData objects to unmirror (modified in-place)
-- `side::Symbol`: Which side to unmirror (`:left`, `:right`, or `:both`, default: `:both`)
-
-# Returns
-- `Nothing`: All objects in the vector are modified in-place
-
-# Examples
-```julia
-# Unmirror multiple ErpData objects
-unmirror!(erps_vector, :both)  # Unmirror both sides
-```
-"""
 function unmirror!(data_vec::Vector{ErpData}, side::Symbol = :both)::Nothing
     for dat in data_vec
         unmirror!(dat, side)
@@ -380,24 +215,6 @@ function unmirror!(data_vec::Vector{ErpData}, side::Symbol = :both)::Nothing
 end
 
 
-"""
-    unmirror(data_vec::Vector{ErpData}, side::Symbol = :both)::Vector{ErpData}
-
-Non-mutating version of unmirror for vector of ErpData objects.
-
-# Arguments
-- `data_vec::Vector{ErpData}`: Vector of ErpData objects to unmirror (NOT modified)
-- `side::Symbol`: Which side to unmirror (`:left`, `:right`, or `:both`, default: `:both`)
-
-# Returns
-- `Vector{ErpData}`: New vector with unmirrored ErpData objects
-
-# Examples
-```julia
-# Unmirror multiple ErpData objects (creates new objects)
-unmirrored_erps = unmirror(erps_vector, :both)
-```
-"""
 function unmirror(data_vec::Vector{ErpData}, side::Symbol = :both)::Vector{ErpData}
     return [unmirror(dat, side) for dat in data_vec]
 end

@@ -34,11 +34,6 @@ struct NoiseCeiling <: EegFunData
     n_participants::Int
 end
 
-"""
-    Base.show(io::IO, nc::NoiseCeiling)
-
-Display NoiseCeiling in a readable format.
-"""
 function Base.show(io::IO, nc::NoiseCeiling)
     println(io, "NoiseCeiling:")
     println(io, "  Participants: $(nc.n_participants)")
@@ -124,11 +119,6 @@ function RsaData(
     )
 end
 
-"""
-    Base.show(io::IO, rsa::RsaData)
-
-Display RsaData in a readable format.
-"""
 function Base.show(io::IO, rsa::RsaData)
     n_conditions = length(rsa.condition_names)
     n_times = length(rsa.times)

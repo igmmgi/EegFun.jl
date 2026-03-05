@@ -602,27 +602,6 @@ Convert a vector of interactive rejection states into rejection info objects.
 _to_rejection_info(states::Vector{EpochRejectionState})::Vector{EpochRejectionInfo} = _to_rejection_info.(states)
 
 # --- reject_epochs dispatch for EpochRejectionState ---
-
-"""
-    reject_epochs(dat::EpochData, state::EpochRejectionState)::EpochData
-
-Remove interactively rejected epochs. Converts the interactive `EpochRejectionState`
-to `EpochRejectionInfo` internally, so both automatic and interactive paths use the
-same downstream API.
-
-# Examples
-```julia
-state = detect_bad_epochs_interactive(epochs)
-# ... review and close window ...
-epochs_good = reject_epochs(epochs, state)
-```
-"""
 reject_epochs(dat::EpochData, state::EpochRejectionState)::EpochData = reject_epochs(dat, _to_rejection_info(state))
-
-"""
-    reject_epochs(dat::Vector{EpochData}, states::Vector{EpochRejectionState})::Vector{EpochData}
-
-Remove interactively rejected epochs for multiple conditions.
-"""
 reject_epochs(dat::Vector{EpochData}, states::Vector{EpochRejectionState})::Vector{EpochData} =
     reject_epochs.(dat, _to_rejection_info.(states))

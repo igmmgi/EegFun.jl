@@ -2,33 +2,6 @@
 Grand averaging of time-frequency data across participants.
 """
 
-"""
-    grand_average(tfs::Vector{TimeFreqData}; condition_selection = conditions())
-
-Create grand averages from a vector of TimeFreqData by averaging power across participants.
-
-Groups input by condition and calculates the mean power at each frequency × time point
-across all participants for each condition.
-
-# Arguments
-- `tfs::Vector{TimeFreqData}`: TF data from different participants/conditions
-- `condition_selection::Function`: Predicate to select specific conditions (default: all)
-
-# Returns
-- `Vector{TimeFreqData}`: One grand-averaged TimeFreqData per condition
-
-# Examples
-```julia
-# Load all TF data
-tfs = EegFun.read_all_data(EegFun.TimeFreqData, "./output/tf_morlet_epochs")
-
-# Create grand averages
-grand_avgs = grand_average(tfs)
-
-# Plot
-plot_tf(grand_avgs; channel_selection=channels(:Cz), baseline_interval=(-0.5, -0.2))
-```
-"""
 function grand_average(tfs::Vector{TimeFreqData}; condition_selection::Function = conditions())
     isempty(tfs) && @minimal_error("Cannot create grand average from empty TF list")
 

@@ -63,105 +63,37 @@ end
 # ============================================================================ #
 
 """
-    channel_summary(dat::ContinuousData; sample_selection::Function = samples(),
+    channel_summary(dat::SingleDataFrameEeg; sample_selection::Function = samples(),
     interval_selection::Interval = times(), channel_selection::Function = channels(), include_extra::Bool = false)::DataFrame
+    channel_summary(dat::MultiDataFrameEeg; sample_selection::Function = samples(),
+    interval_selection::Interval = times(), channel_selection::Function = channels(), include_meta::Bool = false, include_extra::Bool = false)::DataFrame
+    channel_summary(file_pattern::String; input_dir::String = pwd(),
+    participant_selection::Function = participants(), condition_selection::Function = conditions(),
+    sample_selection::Function = samples(), channel_selection::Function = channels(),
+    include_extra::Bool = false, output_dir = nothing, output_file::String = "channel_summary")
 
-Computes summary statistics for EEG channels.
+Compute summary statistics (min, max, std, range, var, zvar) for EEG channels.
 
-# Arguments
-- `dat::ContinuousData`: The ContinuousData object containing EEG data.
-- `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
-- `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
-- `include_extra::Bool`: Whether to include additional channels (default: false).
-
-# Returns
-A DataFrame containing summary statistics for each channel.
+The `SingleDataFrameEeg` method returns one row per channel; the `MultiDataFrameEeg` method
+(e.g. `EpochData`) returns one row per channel per epoch with an `:epoch` column.
+The `file_pattern` method batch-processes JLD2 files and writes results to CSV.
 
 # Examples
-
-## Basic Usage
 ```julia
-# Channel summary for layout channels only (default)
+# Basic usage
 summary = channel_summary(dat)
 
-# Channel summary for specific layout channels
-summary = channel_summary(dat, channel_selection = channels([:Fp1, :Fp2, :F3, :F4]))
+# Specific channel selection
+summary = channel_summary(dat, channel_selection = channels([:Fp1, :Fp2]))
 
-# Channel summary excluding reference channels from layout
-summary = channel_summary(dat, channel_selection = channels_not([:M1, :M2]))
-```
-
-## Including Additional Channels
-```julia
-# Channel summary for additional channels (EOG, extreme value flags, etc.)
-# The function automatically detects when you specify additional channels
-summary = channel_summary(dat, channel_selection = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
-```
-
-## Channel Selection
-```julia
-# Summary for specific channels
-summary = channel_summary(dat, channel_selection = channels([:Fp1, :Fp2, :F3, :F4]))
-
-# Summary excluding reference channels
-summary = channel_summary(dat, channel_selection = channels_not([:M1, :M2]))
-
-# Summary for frontal channels only (channels 1-10)
-summary = channel_summary(dat, channel_selection = channels(1:10))
-
-# Summary for channels starting with "F" (frontal)
-summary = channel_summary(dat, channel_selection = x -> startswith.(string.(x), "F"))
-```
-
-## Sample Selection
-```julia
-# Exclude extreme values
+# Exclude bad samples
 summary = channel_summary(dat, sample_selection = samples_not(:is_extreme_value_100))
 
-# Exclude multiple types of bad samples
-summary = channel_summary(dat, sample_selection = samples_or_not([:is_extreme_value_100, :is_vEOG, :is_hEOG]))
+# Epoch-wise summary
+summary = channel_summary(epoch_data, channel_selection = channels([:Fp1, :Fp2]))
 
-# Only include samples within epoch intervals
-summary = channel_summary(dat, sample_selection = samples(:epoch_interval))
-
-# Include samples that are both in epoch interval AND not extreme
-summary = channel_summary(dat, sample_selection = samples_and([:epoch_interval, samples_not(:is_extreme_value_100)]))
-```
-
-## Combined Selection
-```julia
-# Exclude reference channels and extreme values
-summary = channel_summary(dat, 
-    channel_selection = channels_not([:M1, :M2]),
-    sample_selection = samples_not(:is_extreme_value_100)
-)
-
-# Only frontal channels, exclude bad samples
-summary = channel_summary(dat, 
-    channel_selection = channels(1:10),
-    sample_selection = samples_or_not([:is_extreme_value_100, :is_vEOG])
-)
-
-# Complex filtering: frontal channels, good samples, within epochs
-summary = channel_summary(dat, 
-    channel_selection = channels([:Fp1, :Fp2, :F3, :F4, :F5, :F6, :F7, :F8]),
-    sample_selection = samples_and([
-        :epoch_interval, 
-        samples_not(:is_extreme_value_100),
-        samples_not(:is_vEOG),
-        samples_not(:is_hEOG)
-    ])
-)
-```
-
-## Additional Channels (not in layout)
-```julia
-# Include derived channels like EOG
-# The function automatically switches to all available channels when needed
-summary = channel_summary(dat, channel_selection = channels([:vEOG, :hEOG]))
-
-# Mix layout channels and additional channels
-summary = channel_summary(dat, channel_selection = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
+# Batch processing
+channel_summary("epochs", channel_selection = channels([:Fp1, :Fp2]))
 ```
 """
 function channel_summary(
@@ -185,34 +117,7 @@ end
 #                       MULTI DATAFRAME EEG CHANNEL SUMMARY                   #
 # ============================================================================ #
 
-"""
-    channel_summary(dat::MultiDataFrameEeg; sample_selection::Function = samples(),
-    interval_selection::Interval = times(), channel_selection::Function = channels(), include_meta::Bool = false, include_extra::Bool = false)::DataFrame
 
-Computes summary statistics for EEG channels across multiple epochs.
-
-# Arguments
-- `dat::MultiDataFrameEeg`: The MultiDataFrameEeg object containing epoch data (e.g., EpochData)
-- `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: include all samples)
-- `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: include all channels)
-- `include_meta::Bool`: Whether to include metadata columns (default: false)
-- `include_extra::Bool`: Whether to include additional channels (default: false)
-
-# Returns
-A DataFrame containing summary statistics for each channel in each epoch, with an additional `epoch` column.
-
-# Examples
-```julia
-# Basic epoch-wise channel summary
-summary = channel_summary(epoch_data)
-
-# Summary for specific channels across epochs
-summary = channel_summary(epoch_data, channel_selection = channels([:Fp1, :Fp2]))
-
-# Summary excluding bad samples
-summary = channel_summary(epoch_data, sample_selection = samples_not(:is_bad))
-```
-"""
 function channel_summary(
     dat::MultiDataFrameEeg;
     sample_selection::Function = samples(),
@@ -335,49 +240,7 @@ end
     MAIN API FUNCTION
 =============================================================================#
 
-"""
-    channel_summary(file_pattern::String; 
-                    input_dir::String = pwd(), 
-                    participant_selection::Function = participants(),
-                    condition_selection::Function = conditions(),
-                    sample_selection::Function = samples(),
-    interval_selection::Interval = times(),
-                    channel_selection::Function = channels(),
-                    include_extra::Bool = false,
-                    output_dir::Union{String, Nothing} = nothing,
-                    output_file::String = "channel_summary")
 
-Batch process EEG/ERP data files to compute channel summary statistics.
-
-This function loads JLD2 files, computes channel summary statistics for each file,
-and saves the results to CSV files.
-
-# Arguments
-- `file_pattern::String`: Pattern to match JLD2 files (e.g., "epochs", "erps", "cleaned")
-- `input_dir::String`: Input directory containing JLD2 files (default: current directory)
-- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
-- `condition_selection::Function`: Condition selection predicate (default: `conditions()` for all)
-- `sample_selection::Function`: Function for sample filtering (default: all samples)
-- `channel_selection::Function`: Function for channel filtering (default: all channels)
-- `include_extra::Bool`: Whether to include extra channels (default: false)
-- `output_dir::Union{String, Nothing}`: Output directory (default: auto-generated)
-- `output_file::String`: Base name for output files (default: "channel_summary")
-
-# Examples
-```julia
-# Compute channel summary for all epoch files
-channel_summary("epochs")
-
-# Process specific participants and conditions
-channel_summary("erps_cleaned", participants=[1, 2, 3], conditions=[1, 2])
-
-# Compute summary for specific channels only
-channel_summary("epochs", channel_selection=channels([:Fp1, :Fp2, :F3, :F4]))
-
-# Include extra channels (EOG, etc.)
-channel_summary("epochs", include_extra=true)
-```
-"""
 function channel_summary(
     file_pattern::String;
     input_dir::String = pwd(),

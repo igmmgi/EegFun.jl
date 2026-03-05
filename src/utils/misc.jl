@@ -376,24 +376,23 @@ macro add_nonmutating(func)
 end
 
 
-# Custom copy functions for main types to avoid deepcopy
 """
     Base.copy(dat::ContinuousData) -> ContinuousData
+    Base.copy(dat::EpochData) -> EpochData
+    Base.copy(dat::ErpData) -> ErpData
+    Base.copy(info::AnalysisInfo) -> AnalysisInfo
+    Base.copy(layout::Layout) -> Layout
+    Base.copy(tf_data::TimeFreqData) -> TimeFreqData
+    Base.copy(spectrum_data::SpectrumData) -> SpectrumData
+    Base.copy(ica::InfoIca) -> InfoIca
 
-Create a copy of ContinuousData with copied DataFrames and analysis info.
-The data and layout DataFrames are copied with `copycols=true` to ensure 
-independence, while immutable fields are shared.
+Create a shallow copy of an EegFun data object. DataFrames are copied with
+`copycols=true` for independence; small immutable fields are shared.
 """
 function Base.copy(dat::ContinuousData)::ContinuousData
     return ContinuousData(dat.file, copy(dat.data, copycols = true), copy(dat.layout), dat.sample_rate, copy(dat.analysis_info))
 end
 
-"""
-    Base.copy(dat::EpochData) -> EpochData
-
-Create a copy of EpochData with copied epoch DataFrames and analysis info.
-Each epoch DataFrame in the data vector is copied independently.
-"""
 function Base.copy(dat::EpochData)::EpochData
     return EpochData(
         dat.file,
@@ -406,11 +405,6 @@ function Base.copy(dat::EpochData)::EpochData
     )
 end
 
-"""
-    Base.copy(dat::ErpData) -> ErpData
-
-Create a copy of ErpData with copied data DataFrame and analysis info.
-"""
 function Base.copy(dat::ErpData)::ErpData
     return ErpData(
         dat.file,
@@ -424,12 +418,6 @@ function Base.copy(dat::ErpData)::ErpData
     )
 end
 
-"""
-    Base.copy(info::AnalysisInfo) -> AnalysisInfo
-
-Create a copy of AnalysisInfo. Since all fields are immutable (Symbol and Float64),
-this creates a new instance with the same field values.
-"""
 function Base.copy(info::AnalysisInfo)::AnalysisInfo
     return AnalysisInfo(info.reference, info.hp_filter, info.lp_filter)
 end

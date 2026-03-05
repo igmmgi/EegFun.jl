@@ -52,38 +52,6 @@ end
     IN-MEMORY API FUNCTION
 =============================================================================#
 
-"""
-    condition_difference(data::Vector{TimeFreqData}, condition_pairs::Union{Vector{Tuple{Int,Int}}, Vector{Vector{Int}}})::Vector{TimeFreqData}
-
-Create condition difference time-frequency data.
-
-For each pair `(a, b)`, subtracts condition `b` power and phase from condition `a`.
-Both `data_power` and `data_phase` DataFrames are subtracted consistently.
-
-# Arguments
-- `data::Vector{TimeFreqData}`: Vector of TimeFreqData, one per condition
-- `condition_pairs`: Pairs of condition indices to subtract. Can be:
-  - `Vector{Tuple{Int, Int}}`: e.g., `[(1, 2), (3, 4)]`
-  - `Vector{Vector{Int}}`: e.g., `[[1, 2], [3, 4]]`
-
-# Returns
-- `Vector{TimeFreqData}`: New vector with one difference TimeFreqData per pair
-
-# Examples
-```julia
-# Single difference: condition 1 minus condition 2
-diff_tf = EegFun.condition_difference(tf_data, [(1, 2)])
-
-# Multiple differences
-diff_tf = EegFun.condition_difference(tf_data, [(1, 2), (3, 4)])
-
-# Using vector syntax
-diff_tf = EegFun.condition_difference(tf_data, [[1, 2], [3, 4]])
-
-# Batch: process all participant files
-EegFun.condition_difference("tf_morlet", [(1, 2)], input_dir = "preprocessed")
-```
-"""
 function condition_difference(
     data::Vector{TimeFreqData},
     condition_pairs::Union{Vector{Tuple{Int,Int}},Vector{Vector{Int}}},

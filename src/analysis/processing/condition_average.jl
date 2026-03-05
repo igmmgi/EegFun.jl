@@ -100,23 +100,28 @@ end
 =============================================================================#
 
 """
-    condition_average(data::Vector{<:ErpData}, condition_groups::Vector{Vector{Int}})::Vector{ErpData}
+    condition_average(data::Vector{<:ErpData}, condition_groups::Vector{Vector{Int}}) -> Vector{ErpData}
+    condition_average(data::Vector{TimeFreqData}, condition_groups::Vector{Vector{Int}}) -> Vector{TimeFreqData}
+    condition_average(file_pattern::String, condition_groups::Vector{Vector{Int}};
+    input_dir::String = pwd(), participant_selection::Function = participants(),
+    output_dir = nothing)
 
-Create condition average waves.
+Create condition average waves (or time-frequency averages), or batch-process JLD2 files.
 
-For each group of condition indices, averages the EEG channels across those conditions.
+For each group of condition indices, averages the EEG channels (or TF power/phase) across those
+conditions. The `file_pattern` method loads JLD2 files and saves results to a new directory.
 
 # Arguments
-- `data::Vector{<:ErpData}`: Vector of ErpData, one per condition
-- `condition_groups::Vector{Vector{Int}}`: Groups of condition indices to average (e.g., `[[1, 2], [3, 4]]`)
-
-# Returns
-- `Vector{ErpData}`: New vector with one averaged ERP per group
+- `data`: `Vector{<:ErpData}` or `Vector{TimeFreqData}`, one element per condition
+- `condition_groups`: Groups of condition indices to average (e.g., `[[1, 2], [3, 4]]`)
 
 # Example
 ```julia
 erps = average_epochs(epochs)
 avg_waves = condition_average(erps, [[1, 2], [3, 4]])
+
+# Batch
+condition_average("erps_cleaned", [[1, 2], [3, 4]])
 ```
 """
 function condition_average(data::Vector{<:ErpData}, condition_groups::Vector{Vector{Int}})::Vector{ErpData}
@@ -167,44 +172,7 @@ end
     BATCH API FUNCTION
 =============================================================================#
 
-"""
-    condition_average(file_pattern::String, condition_groups::Vector{Vector{Int}}; 
-                      input_dir::String = pwd(), 
-                      participant_selection::Function = participants(),
-                      output_dir::Union{String, Nothing} = nothing)
 
-Batch process ERP or time-frequency data files to create condition averages.
-
-This function loads JLD2 files containing ERP or TimeFreqData, computes averages across
-specified condition groups, and saves the results to a new directory. Data type is
-auto-detected from each file.
-
-# Arguments
-- `file_pattern::String`: Pattern to match JLD2 files (e.g., "erps_cleaned", "erps_original")
-- `condition_groups::Vector{Vector{Int}}`: Groups of conditions to average (e.g., [[1, 2], [3, 4]])
-- `input_dir::String`: Input directory containing JLD2 files (default: current directory)
-- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
-- `output_dir::Union{String, Nothing}`: Output directory (default: auto-generated)
-
-# Examples
-```julia
-# Average conditions 1 and 2 together, and 3 and 4 together
-condition_average("erps_cleaned", [[1, 2], [3, 4]])
-
-# Average all four conditions into one
-condition_average("erps_cleaned", [[1, 2, 3, 4]])
-
-# Process specific participants
-condition_average("erps_cleaned", [[1, 2]], 
-                  input_dir = "/path/to/data", 
-                  participant_selection = participants([1, 2, 3]))
-
-# Specify custom output directory
-condition_average("erps_cleaned", [[1, 2], [3, 4]], 
-                  input_dir = "/path/to/data", 
-                  output_dir = "/path/to/output")
-```
-"""
 function condition_average(
     file_pattern::String,
     condition_groups::Vector{Vector{Int}};

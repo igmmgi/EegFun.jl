@@ -56,33 +56,6 @@ end
     IN-MEMORY API FUNCTION
 =============================================================================#
 
-"""
-    condition_average(data::Vector{TimeFreqData}, condition_groups::Vector{Vector{Int}})::Vector{TimeFreqData}
-
-Create condition average time-frequency data.
-
-For each group of condition indices, averages the power and phase across those conditions.
-Both `data_power` and `data_phase` DataFrames are averaged consistently.
-
-# Arguments
-- `data::Vector{TimeFreqData}`: Vector of TimeFreqData, one per condition
-- `condition_groups::Vector{Vector{Int}}`: Groups of condition indices to average (e.g., `[[1, 2], [3, 4]]`)
-
-# Returns
-- `Vector{TimeFreqData}`: New vector with one averaged TimeFreqData per group
-
-# Examples
-```julia
-# Average conditions 1 and 2 together, and 3 and 4 together
-avg_tf = EegFun.condition_average(tf_data, [[1, 2], [3, 4]])
-
-# Average all four conditions into a single TF result
-avg_tf = EegFun.condition_average(tf_data, [[1, 2, 3, 4]])
-
-# Batch: process all participant files
-EegFun.condition_average("tf_morlet", [[1, 2], [3, 4]], input_dir = "preprocessed")
-```
-"""
 function condition_average(data::Vector{TimeFreqData}, condition_groups::Vector{Vector{Int}})::Vector{TimeFreqData}
 
     @info "Creating TF condition average waves..."

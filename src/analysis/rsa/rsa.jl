@@ -467,42 +467,6 @@ function rsa(
     return rsa_result
 end
 
-"""
-    rsa(
-        all_participant_epochs::Vector{Vector{EpochData}};
-        kwargs...
-    )
-
-Convenience method for batch RSA processing across multiple participants.
-
-Applies RSA analysis to each participant's data and returns a vector of results.
-This eliminates the need to write manual loops when processing data organized
-by participant.
-
-# Arguments
-- `all_participant_epochs::Vector{Vector{EpochData}}`: Vector of participant data,
-  where each element is a vector of EpochData (one per condition) for that participant
-- `kwargs...`: Additional keyword arguments passed to `rsa()` for each participant
-
-# Returns
-- `Vector{RsaData}`: Vector of RSA results, one per participant
-
-# Examples
-```julia
-# Create data for multiple participants
-all_data = [
-    [participant1_cond1, participant1_cond2, participant1_cond3],
-    [participant2_cond1, participant2_cond2, participant2_cond3],
-    [participant3_cond1, participant3_cond2, participant3_cond3]
-]
-
-# Batch process all participants at once
-all_rsa_results = rsa(all_data, dissimilarity_measure=:correlation)
-
-# Then compute grand average
-grand_avg = grand_average(all_rsa_results)
-```
-"""
 function rsa(all_participant_epochs::Vector{Vector{EpochData}}; kwargs...)
     return [rsa(participant_epochs; kwargs...) for participant_epochs in all_participant_epochs]
 end
@@ -647,31 +611,6 @@ end
 #   GRAND AVERAGE
 # ==============================================================================
 
-"""
-    grand_average(rsa_data_list::Vector{RsaData}; compute_noise_ceiling::Bool = true)
-
-Compute grand average RSA results across participants.
-
-Averages RDMs across participants at each time point. Optionally computes
-noise ceiling using leave-one-out cross-validation.
-
-# Arguments
-- `rsa_data_list::Vector{RsaData}`: Vector of RsaData objects, one per participant
-- `compute_noise_ceiling::Bool`: Whether to compute noise ceiling (default: true)
-
-# Returns
-- `RsaData`: Grand-averaged RSA results with noise ceiling when computed
-
-# Examples
-```julia
-# Average across participants with noise ceiling
-all_rsa = [rsa_p1, rsa_p2, rsa_p3]
-grand_avg_rsa = grand_average(all_rsa)
-
-# Without noise ceiling
-grand_avg_rsa = grand_average(all_rsa, compute_noise_ceiling=false)
-```
-"""
 function grand_average(rsa_data_list::Vector{RsaData}; compute_noise_ceiling::Bool = true)
     if isempty(rsa_data_list)
         @minimal_error("Cannot compute grand average with empty RSA data list")

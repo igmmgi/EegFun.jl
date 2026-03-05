@@ -1,52 +1,47 @@
 """
-    lrp(erp_left, erp_right; channel_selection = channels())
+    lrp(erp_left::ErpData, erp_right::ErpData; channel_selection = channels())
+    lrp(erps::Vector{ErpData}, condition_pairs::Vector{Tuple{Int,Int}}; channel_selection = channels())
+    lrp(file_pattern::String, condition_pairs::Vector{Tuple{Int,Int}}; input_dir = pwd(),
+    channel_selection = channels(), participant_selection = participants(), output_dir = nothing)
 
-Calculate the lateralized readiness potential (LRP) from two ERP datasets.
+Calculate the lateralized readiness potential (LRP) from ERP data.
 
-The lateralized readiness potential is a measure of lateralized motor preparation
-derived from event-related potentials recorded over motor cortex. This implementation
-follows the approach described in:
+- **Two-argument form**: takes paired left/right ERP datasets, returns one `ErpData` with LRP values.
+- **`Vector{ErpData}` form**: computes LRP for multiple condition pairs at once.
+- **`file_pattern` form**: batch-processes JLD2 files across participants.
 
-- Coles, M. G. H. (1989). Modern mind-brain reading: Psychophysiology, physiology, 
-  and cognition. Psychophysiology, 26(3), 251-269.
-- de Jong, R., Wierda, M., Mulder, G., & Mulder, L. J. (1988). Use of partial 
-  stimulus information in response processing. Journal of Experimental Psychology: 
-  Human Perception and Performance, 14(4), 682-692.
-- Oostenveld, R., Stegeman, D. F., Praamstra, P., & van Oosterom, A. (2003). 
-  Brain symmetry and topographic analysis of lateralized event-related potentials. 
-  Clinical Neurophysiology, 114(7), 1194-1202.
-
-# Arguments
-- `erp_left::ErpData`: ERP data for left-hand responses (ipsilateral activation)
-- `erp_right::ErpData`: ERP data for right-hand responses (contralateral activation)
-- `channel_selection::Function`: Channel predicate to select left/odd hemisphere channels.
-   The function automatically pairs them with corresponding right/even channels.
-   Default: `channels()` auto-detects all odd/even pairs (e.g., C3/C4, C1/C2, Fp1/Fp2)
-
-# Returns
-- `ErpData`: New ERP dataset containing LRP values for each channel in the pairs
-
-# Description
-For each channel pair (e.g., C3/C4), the LRP is calculated as:
+The LRP is a measure of lateralized motor preparation. For each channel pair (e.g., C3/C4):
 - LRP_C3 = 0.5 × ((C3_right - C4_right) + (C4_left - C3_left))
 - LRP_C4 = 0.5 × ((C4_right - C3_right) + (C3_left - C4_left))
 
-Where:
-- C3_right/C4_right: Activity at C3/C4 for right-hand responses (contralateral/ipsilateral)
-- C3_left/C4_left: Activity at C3/C4 for left-hand responses (ipsilateral/contralateral)
+This formula isolates lateralized activity by averaging the difference between
+contralateral and ipsilateral activation across both hemispheres.
 
-This formula isolates lateralized activity by averaging the difference between 
-contralateral and ipsilateral activation across both hemispheres, canceling out 
-non-lateralized activity.
+# References
+- Coles, M. G. H. (1989). Modern mind-brain reading. *Psychophysiology*, 26(3), 251-269.
+- de Jong, R. et al. (1988). Use of partial stimulus information. *JEP:HPP*, 14(4), 682-692.
+- Oostenveld, R. et al. (2003). Brain symmetry and topographic analysis. *Clin. Neurophysiology*, 114(7), 1194-1202.
+
+# Arguments (two-argument form)
+- `erp_left::ErpData`: ERP data for left-hand responses (ipsilateral activation)
+- `erp_right::ErpData`: ERP data for right-hand responses (contralateral activation)
+- `channel_selection`: Channel predicate selecting left/odd hemisphere channels.
+  Default `channels()` auto-detects all odd/even pairs (C3/C4, C1/C2, Fp1/Fp2, …)
 
 # Examples
 ```julia
-# Auto-detect all lateral pairs (C3/C4, C1/C2, Fp1/Fp2, etc.)
+# Auto-detect all lateral pairs (C3/C4, C1/C2, etc.)
 lrp_data = lrp(erps[1], erps[2])
 
-# Select specific left hemisphere channels (automatically pairs with right)
-# This calculates LRP for C3/C4 and CP3/CP4
+# Only C3/C4 and CP3/CP4
 lrp_data = lrp(erps[1], erps[2], channel_selection = channels([:C3, :CP3]))
+
+# Multiple condition pairs from one participant file
+pairs = [(i, i+1) for i in 1:2:15]
+lrp_results = lrp(erps, pairs)
+
+# Batch across all participants
+lrp("erps_cleaned", [(1, 2), (3, 4)], input_dir = "/data/study1")
 ```
 """
 function lrp(erp_left::ErpData, erp_right::ErpData; channel_selection::Function = channels())::ErpData
@@ -247,54 +242,7 @@ end
     MAIN API FUNCTION FOR BATCH PROCESSING
 =============================================================================#
 
-"""
-    lrp(file_pattern::String, condition_pairs::Vector{Tuple{Int,Int}};
-        input_dir::String = pwd(),
-        channel_selection::Function = channels(),
-        participant_selection::Function = participants(),
-        output_dir::Union{String, Nothing} = nothing)
 
-Calculate LRP from ERP data in JLD2 files and save to a new directory.
-
-This function processes multiple participant files at once, calculating the
-lateralized readiness potential for specified condition pairs.
-
-# Arguments
-- `file_pattern::String`: Pattern to match files (e.g., "erps", "erps_cleaned")
-- `condition_pairs::Vector{Tuple{Int,Int}}`: Pairs of condition indices (left, right)
-- `input_dir::String`: Input directory containing JLD2 files (default: current directory)
-- `channel_selection::Function`: Channel predicate for selecting left/odd channels (default: all lateral pairs)
-- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
-- `output_dir::Union{String, Nothing}`: Output directory (default: creates subdirectory)
-
-# Examples
-```julia
-# Calculate LRP for all participants with 16 conditions (odd=left, even=right)
-pairs = [(i, i+1) for i in 1:2:15]
-lrp("erps_cleaned", pairs)
-
-# Specific participants only
-lrp("erps_cleaned", [(1,2), (3,4)], participant_selection=participants([1, 2, 3]))
-
-# Only C3/C4 pair
-lrp("erps_cleaned", [(1,2), (3,4)], channel_selection=channels([:C3]))
-
-# Custom output directory
-lrp("erps_cleaned", [(1,2)], output_dir="/path/to/output")
-
-# Full example workflow
-pairs = [(i, i+1) for i in 1:2:15]
-lrp("erps_cleaned", pairs, 
-    input_dir="/data/study1",
-    channel_selection=channels([:C3, :CP3]),
-    participants=1:20)
-```
-
-# Output
-- Creates new directory with LRP data files
-- Each output file contains "data" variable with Vector{ErpData}
-- Log file saved to output directory
-"""
 function lrp(
     file_pattern::String,
     condition_pairs::Vector{Tuple{Int,Int}};
@@ -351,44 +299,7 @@ function lrp(
 end
 
 
-"""
-    lrp(erps::Vector{ErpData}, condition_pairs::Vector{Tuple{Int,Int}}; channel_selection = channels())
 
-Calculate LRP for multiple condition pairs from a vector of ErpData.
-
-This is a convenience function for batch processing multiple condition pairs.
-Useful when you have many conditions organized as left/right hand response pairs.
-
-# Arguments
-- `erps::Vector{ErpData}`: Vector of ERP data for all conditions
-- `condition_pairs::Vector{Tuple{Int,Int}}`: Pairs of condition indices (left, right)
-- `channel_selection::Function`: Channel predicate to select left/odd channels (automatically pairs with right/even)
-
-# Returns
-- `Vector{ErpData}`: Vector of LRP results, one for each condition pair
-
-# Examples
-```julia
-# For 16 conditions where odd=left, even=right
-erps = load("participant_05_erps.jld2", "erps")
-
-# Define pairs: (1,2), (3,4), (5,6), (7,8), etc.
-pairs = [(i, i+1) for i in 1:2:15]
-
-# Calculate all LRPs at once (auto-detect all lateral pairs)
-lrp_results = lrp(erps, pairs)
-
-# Only calculate LRP for C3/C4 and CP3/CP4
-lrp_results = lrp(erps, pairs, channel_selection = channels([:C3, :CP3]))
-
-# Use pattern matching for all C-channels
-lrp_results = lrp(erps, pairs, 
-                  channel_selection = channels(x -> startswith.(string.(x), "C")))
-
-# Save results
-jldsave("participant_05_lrp.jld2"; data = lrp_results)
-```
-"""
 function lrp(
     erps::Vector{ErpData},
     condition_pairs::Vector{Tuple{Int,Int}};

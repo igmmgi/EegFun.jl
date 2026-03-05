@@ -57,23 +57,26 @@ end
 
 """
     condition_combine(data::Vector{<:EpochData}, condition_groups::Vector{Vector{Int}})::Vector{EpochData}
+    condition_combine(file_pattern::String, condition_groups::Vector{Vector{Int}};
+    input_dir::String = pwd(), participant_selection::Function = participants(),
+    output_dir = nothing)
 
-Combine epoch conditions.
+Combine epoch conditions by concatenating epochs from specified groups.
 
-For each group in `condition_groups`, the epochs from those conditions are concatenated
-into a single new `EpochData` object.
+For each group in `condition_groups`, epochs from those conditions are concatenated into a single
+new `EpochData` object. The `file_pattern` method saves results to a new JLD2 directory.
 
 # Arguments
 - `data::Vector{<:EpochData}`: Vector of EpochData, one per condition
 - `condition_groups::Vector{Vector{Int}}`: Groups of condition indices to combine (e.g., `[[1, 2], [3, 4]]`)
 
-# Returns
-- `Vector{EpochData}`: New vector with one EpochData per group
-
 # Example
 ```julia
 epochs = extract_epochs(dat, epoch_cfg, (-0.2, 1.0))
 combined = condition_combine(epochs, [[1, 2], [3, 4]])
+
+# Batch
+condition_combine("epochs", [[1, 2], [3, 4]])
 ```
 """
 function condition_combine(data::Vector{<:EpochData}, condition_groups::Vector{Vector{Int}})::Vector{EpochData}
@@ -121,38 +124,7 @@ end
     BATCH API FUNCTION
 =============================================================================#
 
-"""
-    condition_combine(file_pattern::String, condition_groups::Vector{Vector{Int}}; 
-                      input_dir::String = pwd(), 
-                      participant_selection::Function = participants(),
-                      output_dir::Union{String, Nothing} = nothing)
 
-Combine EEG epoch conditions from JLD2 files and save to a new directory.
-
-# Arguments
-- `file_pattern::String`: Pattern to match files (should contain "epochs")
-- `condition_groups::Vector{Vector{Int}}`: Groups of condition numbers to combine (e.g., [[1,2], [3,4]])
-- `input_dir::String`: Input directory containing JLD2 files (default: current directory)
-- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
-- `output_dir::Union{String, Nothing}`: Output directory (default: creates subdirectory based on groups)
-
-# Example
-```julia
-# Combine conditions 1,2 into first group and 3,4 into second group
-condition_combine("epochs", [[1, 2], [3, 4]])
-
-# Combine specific participant
-condition_combine("epochs_cleaned", [[1, 2], [3, 4]], participants=3)
-
-# Combine with custom output directory
-condition_combine("epochs", [[1, 2], [3, 4]], output_dir="/path/to/output/")
-```
-
-# Note
-- Only works with epoch data (not ERPs)
-- Conditions are combined (concatenated) into new conditions
-- Use `average_epochs()` separately to create ERPs from combined epochs
-"""
 function condition_combine(
     file_pattern::String,
     condition_groups::Vector{Vector{Int}};
