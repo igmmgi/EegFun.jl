@@ -23,7 +23,7 @@ The goal is to make data **cleaner** without making it **artificial**.
 ### 1. Load Data and Configure Layout
 
 ```julia
-dat = EegFun.create_test_eegfun_data(raw_data, layout)
+dat = EegFun.create_eegfun_data(raw_data, layout)
 EegFun.polar_to_cartesian_xy!(layout)   # For topography plots
 EegFun.polar_to_cartesian_xyz!(layout)  # For spherical spline interpolation
 EegFun.get_neighbours_xy!(layout, 40.0) # Calculate neighbors for repair

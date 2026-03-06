@@ -1,16 +1,54 @@
 """
     signal_example_1()
 
-Interactive Signal Generator
+Interactive Signal Generator — Nyquist Theorem Demo
 
 A Julia/Makie version of the MATLAB signalExample1.m GUI.
-Creates an interactive plot with sliders to control:
-- Signal duration (1.0 to 10.0 seconds)
-- Frequency (1 to 100 Hz)
-- Phase angle (-π to π)
-- Sample rate (0 to 500 Hz)
+Creates an interactive plot with sliders to control signal parameters and two
+optional overlays for comparing reconstruction methods.
 
-The plot shows both the continuous signal (blue line) and sampled points (red circles).
+## Controls
+
+| Control | Range | Description |
+|---------|-------|-------------|
+| Duration | 1–10 s | Length of the displayed signal |
+| Frequency | 1–100 Hz | Frequency of the sine wave |
+| Phase Angle | -π to π | Phase offset of the sine wave |
+| Sample Rate | 1–300 Hz | Number of samples per second |
+| Linear | checkbox | Show linear (join-the-dots) reconstruction (red) |
+| Sinc | checkbox | Show ideal sinc reconstruction (green) |
+
+## Teaching Notes
+
+This demo illustrates the **Nyquist–Shannon sampling theorem**: a signal
+sampled at frequency `fs` can be perfectly reconstructed if `fs ≥ 2f`,
+where `f` is the signal frequency.
+
+### Linear reconstruction (red)
+Joins consecutive sample points with straight lines. This is the simplest
+possible reconstruction and introduces high-frequency artifacts at the corners.
+To look convincingly smooth, linear reconstruction typically requires ≈5–10×
+the signal frequency — well above the Nyquist limit.
+
+### Sinc reconstruction (green)
+Uses the Whittaker–Shannon interpolation formula: each sample is represented
+by a sinc function (`sin(πt)/(πt)`) centred at its sample time, and all
+contributions are summed to recover the original waveform:
+
+```
+x(t) = Σ xₙ · sinc((t - nT) / T)
+```
+
+This is the *ideal* reconstruction implied by the Nyquist theorem. When the
+sample rate is ≥ 2× the signal frequency, the sinc reconstruction overlaps
+the original blue signal almost exactly. The green dots show the sample
+values the reconstruction is built from.
+
+Try setting `Sample Rate = 2 × Frequency` and toggling each checkbox to see
+the difference between linear and ideal reconstruction.
+
+# See Also
+- [Sinc Interpolation for Signal Reconstruction (Wolfram Demonstrations)](https://demonstrations.wolfram.com/SincInterpolationForSignalReconstruction/)
 
 # Example
 ```julia
@@ -65,16 +103,24 @@ function signal_example_1()
         yticklabelsize = tick_font,
     )
 
-    sig_dur = Observable(1.0)
-    freq = Observable(10.0)
-    phase = Observable(0.0)
-    samp_rate = Observable(100.0)
+    sig_dur      = Observable(1.0)
+    freq         = Observable(10.0)
+    phase        = Observable(0.0)
+    samp_rate    = Observable(100.0)
     show_sampled = Observable(false)
+    show_sinc    = Observable(false)
 
-    base_time = Observable(Float64[])
-    samp_time = Observable(Float64[])
-    my_sin1 = Observable(Float64[])
-    my_sin2 = Observable(Float64[])
+    base_time  = Observable(Float64[])
+    samp_time  = Observable(Float64[])
+    recon_time = Observable(Float64[])
+    my_sin1    = Observable(Float64[])
+    my_sin2    = Observable(Float64[])
+    my_sin3    = Observable(Float64[])
+
+    # Sinc (Whittaker-Shannon) reconstruction from discrete samples
+    function sinc_reconstruct(t_samp, y_samp, t_out, dt)
+        return [sum(y_samp .* sinc.((t .- t_samp) ./ dt)) for t in t_out]
+    end
 
     # Function to update the signal data
     function update_signal()
@@ -87,6 +133,12 @@ function signal_example_1()
         samp_time[] = collect(samp_t)
         my_sin1[] = sin.(2 * freq[] * π * base_t .+ phase[])
         my_sin2[] = sin.(2 * freq[] * π * samp_t .+ phase[])
+
+        # Sinc reconstruction on a fixed 2000-point grid
+        t_recon = range(0, sig_dur[], length = 2000)
+        recon_time[] = collect(t_recon)
+        dt = 1.0 / samp_rate[]
+        my_sin3[] = sinc_reconstruct(samp_time[], my_sin2[], t_recon, dt)
 
         # Update axis limits
         xlims!(ax, 0, sig_dur[])
@@ -105,17 +157,31 @@ function signal_example_1()
 
     # Plot the signals
     lines!(ax, base_time, my_sin1, color = :blue, linewidth = 2, label = "Signal")
-    sampled_line = lines!(ax, samp_time, my_sin2, color = :red, linewidth = 2, label = "Sampled Signal", visible = false)
-    sample_points = scatter!(ax, samp_time, my_sin2, color = :red, markersize = 16, label = "Sample Points", visible = false)
+    sampled_line  = lines!(ax, samp_time, my_sin2, color = :red, linewidth = 2, label = "Linear", visible = false)
+    sample_points = scatter!(ax, samp_time, my_sin2, color = :red, markersize = 16, visible = false)
+    sinc_line     = lines!(ax, recon_time, my_sin3, color = :green, linewidth = 2, label = "Sinc", visible = false)
+    sinc_points   = scatter!(ax, samp_time, my_sin2, color = :green, markersize = 16, visible = false)
 
-    # Control visibility of sampled signal
-    on(show_sampled) do val
-        sampled_line.visible = val
+    # Control visibility of sampled signal (linear interpolation)
+    # The checkbox/legend click sets sampled_line.visible; the observer cascades to scatter points
+    on(sampled_line.visible) do val
         sample_points.visible = val
     end
+    on(show_sampled) do val
+        sampled_line.visible = val
+    end
 
-    # Set initial state (sampled signal should be hidden initially)
+    # Control visibility of sinc reconstruction
+    on(sinc_line.visible) do val
+        sinc_points.visible = val
+    end
+    on(show_sinc) do val
+        sinc_line.visible = val
+    end
+
+    # Set initial state
     show_sampled[] = false
+    show_sinc[]    = false
 
     # Add static legend
     axislegend(ax, position = :rt)
@@ -167,9 +233,13 @@ function signal_example_1()
         push!(labels, label)
     end
 
-    # Checkbox for showing sampled signal
-    show_sampled_checkbox = Checkbox(slider_layout[1, 5], checked = false, width = slider_width, height = slider_height)
-    Label(slider_layout[2, 5], text = "Show Sampled Signal", width = slider_width, fontsize = slider_font)
+    # Checkbox for linear interpolation
+    show_sampled_checkbox = Checkbox(slider_layout[1, 5], checked = false, halign = :center)
+    Label(slider_layout[2, 5], text = "Linear", fontsize = slider_font, halign = :center)
+
+    # Checkbox for sinc reconstruction
+    show_sinc_checkbox = Checkbox(slider_layout[1, 6], checked = false, halign = :center)
+    Label(slider_layout[2, 6], text = "Sinc", fontsize = slider_font, halign = :center)
 
     # Connect sliders to observables and labels
     observables = [sig_dur, freq, phase, samp_rate]
@@ -181,9 +251,13 @@ function signal_example_1()
         end
     end
 
-    # Connect checkbox to observable
+    # Connect checkboxes to observables
     on(show_sampled_checkbox.checked) do val
         show_sampled[] = val
+    end
+
+    on(show_sinc_checkbox.checked) do val
+        show_sinc[] = val
     end
 
     # Set row heights: 90% for plot, 10% for sliders

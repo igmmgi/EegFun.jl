@@ -8,9 +8,11 @@ using EegFun
 
 pages = [
     "Home" => "index.md",
+    "Getting Started" => ["tutorials/getting-started.md", "IDE Workflows" => "tutorials/ide-workflows.md"],
     "Tutorials" => [
         "Overview" => "tutorials/index.md",
-        "Getting Started" => ["tutorials/getting-started.md", "IDE Workflows" => "tutorials/ide-workflows.md"],
+        "Data Structures" => "explanations/data-structures.md",
+        "Layouts" => "explanations/layouts.md",
         "Manual Preprocessing" => "tutorials/manual-preprocessing.md",
         "Epoch Selection" => "tutorials/epoch-selection.md",
         "Artifact Handling" => "tutorials/artifact-handling.md",
@@ -18,18 +20,13 @@ pages = [
         "Batch Processing" => "tutorials/batch-processing.md",
         "Selection Patterns" => "tutorials/selection-patterns.md",
         "Plot GUI" => "tutorials/plot-gui.md",
+    ],
+    "How-to Guides" => [
         "Preprocessing Walkthrough" => "demos/workflows/preprocessing_workflow.md",
         "Worked Examples" => [
             "Visual Attention (Posner Cueing)" => "demos/experiments/visual-attention.md",
             "N170 (Face/Body)" => "demos/experiments/n170.md",
         ],
-    ],
-    "Explanations" => [
-        "Overview" => "explanations/index.md",
-        "Data Structures" => "explanations/data-structures.md",
-        "Layouts" => "explanations/layouts.md",
-    ],
-    "Demos" => [
         "Import" => [
             "BioSemi Import" => "demos/import/biosemi_import.md",
             "BrainVision Import" => "demos/import/brainvision_import.md",
@@ -85,6 +82,11 @@ pages = [
             "Plot ERP Filter GUI" => "demos/plotting/plot_erp_filter_gui.md",
             "Plot ERP Measurement GUI" => "demos/plotting/plot_erp_measurement_gui.md",
         ],
+        "Teaching Demos" => [
+            "Signal Example 1 (Nyquist)" => "demos/teaching/signal_example_1.md",
+            "Signal Example 2 (Composition)" => "demos/teaching/signal_example_2.md",
+            "Simulate ERP" => "demos/teaching/simulate_erp.md",
+        ],
         "Specialized Plotting" => [
             "Plot Decoding" => "demos/plotting/plot_decoding.md",
             "Plot RSA" => "demos/plotting/plot_rsa.md",
@@ -105,7 +107,12 @@ pages = [
         ],
     ],
     "Cheatsheet" => "cheatsheet.md",
-    "Reference" => ["Overview" => "reference/index.md", "Types" => "reference/types.md"],
+    "Reference" => [
+        "Overview" => "reference/index.md",
+        "Analysis" => "reference/analysis.md",
+        "Plotting" => "reference/plotting.md",
+        "Types" => "reference/types.md",
+    ],
 ]
 
 makedocs(;

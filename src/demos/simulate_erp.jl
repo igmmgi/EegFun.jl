@@ -20,7 +20,7 @@ function _peak_vec(
     # Apply cosine and mask
     signal = cos.(phase)
     # Mask values outside [-pi/2, pi/2] phase range
-    signal[abs.(phase) .> π/2] .= 0
+    signal[abs.(phase).>π/2] .= 0
 
     # Apply amplitude with jitter
     rand_amp = randn(trials) .* jitter_amp
@@ -64,7 +64,13 @@ function _noise_vec(trials::Int, samples::Int, sample_rate::Int, noise_amp::Floa
     return signal .* noise_amp
 end
 
-function _simulate_my_erp(trials::Int, comps::Matrix{Float64}; samp_freq::Int = 1000, sig_length::Float64 = 1.0, base_length::Float64 = 0.2)
+function _run_erp_simulation(
+    trials::Int,
+    comps::Matrix{Float64};
+    samp_freq::Int = 1000,
+    sig_length::Float64 = 1.0,
+    base_length::Float64 = 0.2,
+)
     n_samples = Int(samp_freq * (sig_length + base_length))
     my_signal = _noise_vec(trials, n_samples, samp_freq, comps[end, 6])
 
@@ -93,9 +99,59 @@ mutable struct Component
     latency::Observable{Float64}
     jitter_amp::Observable{Float64}
     jitter_lat::Observable{Float64}
-    controls::Vector{Any}
 end
 
+"""
+    simulate_erp()
+
+Interactive ERP simulator for teaching signal averaging and component analysis.
+
+Generates synthetic EEG trials from up to 5 independent ERP components and displays
+individual trial waveforms (grey) alongside the trial-average ERP (blue) in real time.
+Demonstrates how signal-to-noise ratio improves as the number of averaged trials increases.
+
+## What it shows
+
+- **Trial waveforms** — individual simulated EEG trials (shown in grey), each
+  with realistic 1/f background noise.
+- **ERP average** — the mean across all trials (shown in blue), which clarifies
+  as trial count increases.
+- **ERP components** — up to 5 independent cosine-shaped components, each with
+  independently controllable frequency, amplitude, latency, and trial-to-trial jitter.
+
+## Teaching tips
+
+- Start with 1 trial and a single active component. The ERP and the trial are identical.
+- Increase noise to bury the component in background activity, then increase the
+  number of trials to show the ERP emerging from the noise.
+- Activate a second component at a different latency to show how multiple ERP
+  components superpose in the waveform.
+- Add amplitude or latency jitter to demonstrate why averaging can attenuate and
+  smear ERP components.
+
+## Controls
+
+| Control | Range | Description |
+|---------|-------|-------------|
+| Number of Trials | 1–500 | How many simulated trials to average |
+| Noise Amplitude | 0–20 | Amplitude of background 1/f EEG noise |
+| Active (toggle, ×5) | on/off | Enable/disable each component |
+| Freq (×5) | 0.1–5.0 Hz | Cosine frequency of the component |
+| Amp (×5) | −10 to 10 μV | Peak amplitude of the component |
+| Latency (×5) | 0–1000 ms | Peak latency of the component |
+| Amp Jitter (×5) | 0–20 | Trial-to-trial amplitude variability |
+| Lat Jitter (×5) | 0–50 ms | Trial-to-trial latency variability |
+
+# Examples
+```julia
+using EegFun
+EegFun.simulate_erp()
+```
+
+# Returns
+- `fig::Figure`: The Makie figure object
+- `ax::Axis`: The main plot axis
+"""
 function simulate_erp()
     # Create the figure with more space for component controls
     fig = Figure(size = (1400, 1000))
@@ -106,9 +162,13 @@ function simulate_erp()
     # Create the main plot axis
     ax = Axis(gl[1, 1:2], xlabel = "Time (ms)", ylabel = "Amplitude (μV)", title = "ERP Simulation Demo")
 
+    # Stimulus onset marker and zero baseline
+    vlines!(ax, [0], color = :black, linestyle = :dash, linewidth = 1.5)
+    hlines!(ax, [0], color = (:black, 0.3), linewidth = 1)
+
     # Component controls layout (right side)
     comp_layout = gl[1:2, 3] = GridLayout()
-    Label(comp_layout[1, 1], "Components", fontsize = 20)
+    Label(comp_layout[1, 1:6], "Components", fontsize = 20)
 
     # Calculate time points based on parameters
     samp_freq = 1000
@@ -116,8 +176,7 @@ function simulate_erp()
     base_length = 0.2
     n_samples = Int(samp_freq * (sig_length + base_length))
 
-    # Create observables for the plot data
-    time = Observable(collect(1:n_samples) .- (samp_freq * base_length))
+    time = collect(1:n_samples) .- (samp_freq * base_length)
 
     # Trials control at the top
     trials = Observable(1)
@@ -145,48 +204,36 @@ function simulate_erp()
         jitter_amp = Observable(0.0)
         jitter_lat = Observable(0.0)
 
-        # Component controls
-        controls = []
+        # (widget references are local — Makie retains them via the scene graph)
 
         # Active toggle - start INACTIVE
         tb = Toggle(parent[row, 1])
         tb.active[] = false
         active[] = false
         connect!(active, tb.active)
-        push!(controls, tb)
 
         # Parameter sliders with value labels
         sl_freq = Slider(parent[row, 2], range = 0.1:0.1:5.0, startvalue = 3.0)
         lbl_freq = Label(parent[row, 2, Bottom()], lift(x -> string(round(x, digits = 1)), freq))
         connect!(freq, sl_freq.value)
-        push!(controls, sl_freq)
-        push!(controls, lbl_freq)
 
         sl_amp = Slider(parent[row, 3], range = -10.0:1.0:10.0, startvalue = 5.0)
         lbl_amp = Label(parent[row, 3, Bottom()], lift(x -> string(round(x, digits = 1)), amp))
         connect!(amp, sl_amp.value)
-        push!(controls, sl_amp)
-        push!(controls, lbl_amp)
 
         sl_latency = Slider(parent[row, 4], range = 0.0:10.0:1000.0, startvalue = 100.0)
-        lbl_latency = Label(parent[row, 4, Bottom()], lift(x -> string(round(x, digits = 0)), latency))
+        lbl_latency = Label(parent[row, 4, Bottom()], lift(x -> string(Int(round(x))), latency))
         connect!(latency, sl_latency.value)
-        push!(controls, sl_latency)
-        push!(controls, lbl_latency)
 
         sl_jitter_amp = Slider(parent[row, 5], range = 0.0:1.0:20.0, startvalue = 0.0)
         lbl_jitter_amp = Label(parent[row, 5, Bottom()], lift(x -> string(round(x, digits = 1)), jitter_amp))
         connect!(jitter_amp, sl_jitter_amp.value)
-        push!(controls, sl_jitter_amp)
-        push!(controls, lbl_jitter_amp)
 
         sl_jitter_lat = Slider(parent[row, 6], range = 0.0:1.0:50.0, startvalue = 0.0)
         lbl_jitter_lat = Label(parent[row, 6, Bottom()], lift(x -> string(round(x, digits = 1)), jitter_lat))
         connect!(jitter_lat, sl_jitter_lat.value)
-        push!(controls, sl_jitter_lat)
-        push!(controls, lbl_jitter_lat)
 
-        Component(active, freq, amp, latency, jitter_amp, jitter_lat, controls)
+        Component(active, freq, amp, latency, jitter_amp, jitter_lat)
     end
 
     # Component parameter labels
@@ -194,6 +241,8 @@ function simulate_erp()
     for (i, label) in enumerate(labels)
         Label(comp_layout[2, i], label)
     end
+    # Fix toggle column width so the layout doesn't shift
+    colsize!(comp_layout, 1, Fixed(50))
 
     # Add initial components - all start INACTIVE
     for i = 1:5
@@ -220,7 +269,7 @@ function simulate_erp()
             active_comps[end, 6] = noise_amp[]
 
             new_erp, new_signals =
-                _simulate_my_erp(trials[], active_comps, samp_freq = samp_freq, sig_length = sig_length, base_length = base_length)
+                _run_erp_simulation(trials[], active_comps, samp_freq = samp_freq, sig_length = sig_length, base_length = base_length)
 
             # Update plot directly without clearing axis
             update_plot(new_signals, new_erp)
@@ -236,24 +285,25 @@ function simulate_erp()
 
     # Plot update function
     function update_plot(new_signals, new_erp)
-        t = time[]
-        n_trials, n_samples = size(new_signals)
+        t = time
+        n_trials, n_smpl = size(new_signals)
 
         if n_trials == 0
             trial_plot_data[] = Point2f[]
             erp_plot_data[] = Point2f[]
+            autolimits!(ax)
             return
         end
 
         # Efficiently prepare trial data with NaN separators
         # We transform the matrix into a single vector of points
-        points = Vector{Point2f}(undef, n_trials * (n_samples + 1))
+        points = Vector{Point2f}(undef, n_trials * (n_smpl + 1))
         for trial = 1:n_trials
-            offset = (trial - 1) * (n_samples + 1)
-            for s = 1:n_samples
+            offset = (trial - 1) * (n_smpl + 1)
+            for s = 1:n_smpl
                 points[offset+s] = Point2f(t[s], new_signals[trial, s])
             end
-            points[offset+n_samples+1] = Point2f(NaN32, NaN32)
+            points[offset+n_smpl+1] = Point2f(NaN32, NaN32)
         end
         trial_plot_data[] = points
 

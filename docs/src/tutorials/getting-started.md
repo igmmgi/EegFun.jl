@@ -61,7 +61,7 @@ dat = EegFun.read_raw_data("participant1.bdf")
 # Attach an electrode layout
 layout = EegFun.read_layout("biosemi72.csv")
 EegFun.polar_to_cartesian_xy!(layout)
-dat = EegFun.create_test_eegfun_data(dat, layout)
+dat = EegFun.create_eegfun_data(dat, layout)
 
 # Browse the raw data interactively
 EegFun.plot_databrowser(dat)
@@ -93,7 +93,7 @@ The package offers a mix of high-level and lower-level functions, including comp
 | Resource | Link |
 | --- | --- |
 | Manual Preprocessing tutorial | [Manual Preprocessing](manual-preprocessing.md) |
-| All demos | [Demos](../demos/import/biosemi_import.md) |
+| All how-to guides | [How-to Guides](../demos/workflows/preprocessing_workflow.md) |
 | Julia learning resources | [julialang.org/learning](https://julialang.org/learning/) |
 | Julia cheat sheet | [cheatsheet.juliadocs.org](https://cheatsheet.juliadocs.org/) |
 | MATLAB–Python–Julia cheat sheet | [cheatsheets.quantecon.org](https://cheatsheets.quantecon.org/) |

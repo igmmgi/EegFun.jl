@@ -53,7 +53,7 @@ dat = EegFun.read_raw_data("your_data.bdf")
 layout = EegFun.read_layout("biosemi64.csv")
 
 # Create Eegfun datatype
-dat = EegFun.create_test_eegfun_data(dat, layout)
+dat = EegFun.create_eegfun_data(dat, layout)
 
 # Basic preprocessing
 EegFun.highpass_filter!(dat, 1)      # High-pass filter at 1 Hz
@@ -96,8 +96,8 @@ EegFun.plot_topography(erps, interval_selection = (0.1, 0.2)) # between 100 and 
 | Section | Description |
 |---------|-------------|
 | [Tutorials](tutorials/getting-started.md) | Step-by-step guides |
-| [Demos](demos/index.md) | Code examples and demonstrations |
-| [Explanations](explanations/index.md) | Core concepts and architecture |
+| [How-to Guides](demos/workflows/preprocessing_workflow.md) | Code examples and demonstrations |
+| [Background](explanations/data-structures.md) | Core concepts and architecture |
 | [API Reference](reference/index.md) | Complete function and type documentation |
 
 ## Getting Help

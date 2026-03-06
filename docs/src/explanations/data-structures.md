@@ -2,21 +2,72 @@
 
 Understanding EegFun.jl's core data structures.
 
+## Julia Types
+
+If you're coming from Python or MATLAB, Julia's type system works a little differently. The full details are in the [Julia documentation](https://docs.julialang.org/en/v1/manual/types/), but the key idea for everyday EegFun.jl use is **multiple dispatch**.
+
+This means a function can have the same name but do different things depending on the *type* of data passed to it.
+
+In Julia function signatures, the `::` notation means *"this argument must be of this type"*:
+
+```julia
+plot_erp(erp::ErpData)         # plots a single ERP
+plot_erp(erp::Vector{ErpData}) # plots multiple ERPs overlaid
+```
+
+Here `erp::ErpData` means "an argument called `erp` of type `ErpData`". Julia automatically selects the right version based on what you pass in — you never need to call a different function name.
+
+More examples from EegFun.jl:
+
+```julia
+# Same function, different input types → different behaviour
+plot_topography(erp::ErpData, ...)          # plots ERP topography
+plot_topography(tf::TimeFreqData, ...)      # plots time-frequency topography
+
+average_epochs(dat::EpochData)              # averages a single condition
+average_epochs(dat::Vector{EpochData})      # averages multiple conditions
+
+extract_epochs(dat::ContinuousData, ...)    # extracts from continuous recording
+```
+
+Both are called `plot_erp` — Julia picks the right version automatically based on what you pass in. You never need to call a different function name.
+
+If you're ever unsure what type a variable is, use `typeof()`:
+
+```julia
+typeof(my_data)   # e.g. EegFun.ContinuousData
+```
+
+This is useful when reading error messages — if Julia says *"no method matching `plot_erp(::ContinuousData)`"* it means you passed the wrong type, and `typeof()` can help you check what you actually have.
+
+### Abstract vs Concrete Types
+
+Julia also distinguishes between **concrete** and **abstract** types:
+
+- **Concrete types** are the actual data structures you create and work with — for example `ContinuousData`, `ErpData`, or `EpochData`. These hold real data.
+- **Abstract types** are categories or groupings — you can never create one directly, but they let functions accept a *family* of related types. For example, `EegData` is abstract; it simply says "any EEG data type".
+
+This matters in practice because a function written for `EegData` will work on *any* concrete EEG type — `ContinuousData`, `ErpData`, etc. — without needing a separate version for each one.
+
+---
+
 ## Type Hierarchy
+
 
 ```
 EegFunData (abstract)
-├── EegData (abstract) - All EEG data types
-│   ├── SingleDataFrameEeg (abstract) - Data in a single DataFrame
-│   │   ├── ContinuousData - Raw continuous recordings
-│   │   ├── ErpData - Averaged event-related potentials
-│   │   ├── TimeFreqData - Time-frequency decomposition
-│   │   └── SpectrumData - Power spectrum
-│   └── MultiDataFrameEeg (abstract) - Data across multiple DataFrames
-│       ├── EpochData - Trial-segmented data
-│       └── TimeFreqEpochData - TF with individual trials
-└── StatsResult (abstract) - Statistical analysis results
+└── EegData (abstract) - All EEG data types
+    ├── SingleDataFrameEeg (abstract) - Data in a single DataFrame
+    │   ├── ContinuousData - Raw continuous recordings
+    │   ├── ErpData - Averaged event-related potentials
+    │   ├── TimeFreqData - Time-frequency decomposition
+    │   └── SpectrumData - Power spectrum
+    └── MultiDataFrameEeg (abstract) - Data across multiple DataFrames
+        ├── EpochData - Trial-segmented data
+        └── TimeFreqEpochData - TF with individual trials
 ```
+
+See the [Types Reference](../reference/types.md) for full field-by-field documentation of each type.
 
 ## ContinuousData
 
@@ -98,18 +149,19 @@ Electrode spatial information and neighbor relationships.
 | Field | Type | Description |
 |-------|------|-------------|
 | `data` | `DataFrame` | Positions with columns: `label`, `x`, `y`, `z` |
-| `neighbours` | `OrderedDict{Symbol,Neighbours}` | Neighbor info per electrode |
-| `criterion` | `Float64` | Distance criterion for neighbors (mm) |
+| `neighbours` | `Union{Nothing, OrderedDict{Symbol,Neighbours}}` | Neighbor info per electrode |
+| `criterion` | `Union{Nothing, Float64}` | Distance criterion used to compute neighbors (mm) |
+| `criterion_type` | `Union{Nothing, Symbol}` | Type of criterion (e.g. `:xy`, `:xyz`) |
 
 ## Data Flow
 
 ```
-Raw BDF/BrainVision File
-    ↓ read_bdf() / read_brainvision()
+Raw EEG File (.bdf, .vhdr, .set, .mat)
+    ↓ read_raw_data()
 ContinuousData
-    ↓ epochs()
+    ↓ extract_epochs()
 EpochData
-    ↓ average()
+    ↓ average_epochs()
 ErpData
 ```
 

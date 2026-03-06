@@ -26,7 +26,7 @@ EegFun.polar_to_cartesian_xy!(layout)
 layout.data # DataFrame with labels and positions
 
 # Create EegFun data structure
-dat = EegFun.create_test_eegfun_data(raw_data, layout)
+dat = EegFun.create_eegfun_data(raw_data, layout)
 
 EegFun.all_data(dat)
 EegFun.meta_data(dat)
