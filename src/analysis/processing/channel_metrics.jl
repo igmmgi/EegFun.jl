@@ -32,7 +32,8 @@ function correlation_matrix(
 )::DataFrame
     selected_channels = EegFun.get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
     isempty(selected_channels) && @minimal_error "No channels selected for correlation matrix"
-    selected_samples = EegFun.get_selected_samples(dat, sample_selection)
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+    selected_samples = EegFun.get_selected_samples(dat, combined_sel)
     return _correlation_matrix(dat.data, selected_samples, selected_channels)
 end
 
@@ -123,7 +124,8 @@ function correlation_matrix_dual_selection(
     isempty(selected_channels2) && @minimal_error "No channels selected for second channel set"
 
     # Get selected samples (same for both channel sets)
-    selected_samples = get_selected_samples(dat, sample_selection)
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+    selected_samples = get_selected_samples(dat, combined_sel)
 
     return _correlation_matrix_dual_selection(dat.data, selected_samples, selected_channels1, selected_channels2)
 end
@@ -524,6 +526,7 @@ function correlation_matrix_eog(
     return correlation_matrix_dual_selection(
         dat;
         sample_selection = sample_selection,
+        interval_selection = interval_selection,
         channel_selection1 = channel_selection,
         channel_selection2 = channels(get_eog_channels(eog_cfg)),
         include_extra_selection1 = include_extra,
@@ -565,7 +568,7 @@ bad_channels = identify_bad_channels(summary_df, joint_prob_df, zvar_criterion =
 function identify_bad_channels(summary_df::DataFrame, joint_prob_df::DataFrame; zvar_criterion::Real = 3.0)::Vector{Symbol}
 
     # Identify bad channels based on z-variance criterion
-    bad_by_zvar = summary_df[abs.(summary_df.zvar) .> zvar_criterion, :channel]
+    bad_by_zvar = summary_df[abs.(summary_df.zvar).>zvar_criterion, :channel]
 
     # Identify bad channels based on joint probability criterion
     bad_by_jp = joint_prob_df[joint_prob_df.rejection, :channel]
@@ -614,7 +617,7 @@ function partition_channels_by_eog_correlation(
 
     eog_related = Symbol[]
     for ch in bad_channels
-        rows = eog_correlation_df[eog_correlation_df.row .== ch, :]
+        rows = eog_correlation_df[eog_correlation_df.row.==ch, :]
         if nrow(rows) > 0
             if any(hasproperty(rows, c) && abs(rows[1, c]) > threshold for c in cols_to_use)
                 push!(eog_related, ch)

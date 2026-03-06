@@ -46,7 +46,6 @@ public IcaPrms
 public InfoIca
 public Interval
 public Layout
-public Marker
 public MultiDataFrameEeg
 public Neighbours
 public NoiseCeiling
@@ -54,7 +53,6 @@ public PermutationDistribution
 public PermutationResult
 public PreprocessConfig
 public Rejection
-public RsaData
 public SingleDataFrameEeg
 public SpectrumData
 public StatisticalData
@@ -84,7 +82,6 @@ public channels
 public conditions
 public extra_data
 public file_name
-public group_by_condition
 public head
 public meta_data
 public n_values
@@ -275,33 +272,12 @@ public tf_stft
 # =====================
 # Decoding / MVPA
 # =====================
-public create_work_arrays
 public decode_libsvm
 public libsvm_classifier
 public prepare_decoding
 public resample_temporal_data
 public test_against_chance
 public test_against_chance_cluster
-
-# =====================
-# RSA
-# =====================
-public add_noise_ceiling
-public add_noise_ceiling!
-public compare_models
-public compute_noise_ceiling
-public create_model_rdms
-public create_rdm_from_categorical
-public create_rdm_from_distances
-public create_rdm_from_matrix
-public create_rdm_from_reaction_times
-public create_rdm_from_similarity_ratings
-public create_rdm_from_timeseries
-public create_rdm_from_vectors
-public create_temporal_model_rdms
-public normalize_rdm
-public rsa
-public rsa_crossvalidated
 
 # =====================
 # Triggers
@@ -359,11 +335,7 @@ public plot_layout_2d!
 public plot_layout_3d
 public plot_layout_3d!
 public plot_line_noise_components
-public plot_model_correlations
 public plot_power_spectrum
-public plot_rdm_heatmap
-public plot_rdm_timecourse
-public plot_rsa
 public plot_spatial_kurtosis_components
 public plot_tf_stats
 public plot_tf
@@ -388,27 +360,6 @@ public get_selected_samples
 # =====================
 public close_logging
 public setup_logging
-
-# =====================
-# Data creation (testing and demos)
-# =====================
-public create_batch_test_erp_data
-public create_eegfun_data
-public create_test_continuous_data
-public create_test_continuous_data_empty_triggers
-public create_test_continuous_data_with_artifacts
-public create_test_continuous_data_with_triggers
-public create_test_epoch_data
-public create_test_epoch_data_vector
-public create_test_epoch_data_with_artifacts
-public create_test_epoch_data_with_rt
-public create_test_erp_data
-public create_test_layout
-public create_test_lrp_data
-public create_test_summary_data
-public create_test_summary_data_with_epochs
-public create_test_tf_data
-public create_test_tf_epoch_data
 
 # =====================
 # Demos

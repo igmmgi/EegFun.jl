@@ -162,7 +162,7 @@ end
         # Create test data files
         @testset "Setup test files" begin
             for participant in [1, 2]
-                erps = EegFun.create_batch_test_erp_data(n_conditions = 2)
+                erps = EegFun.create_test_batch_erp_data(n_conditions = 2)
                 # Use filename format consistent with codebase (numeric participant ID)
                 filename = joinpath(test_dir, "$(participant)_erps.jld2")
                 jldsave(filename; data = erps)
@@ -364,7 +364,7 @@ end
             mkpath(partial_dir)
 
             # Create one valid file
-            erps = EegFun.create_batch_test_erp_data(n_conditions = 2)
+            erps = EegFun.create_test_batch_erp_data(n_conditions = 2)
             jldsave(joinpath(partial_dir, "1_erps.jld2"); data = erps)
 
             # Create one malformed file (invalid data type - String instead of Vector{ErpData})

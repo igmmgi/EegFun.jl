@@ -104,7 +104,7 @@ end
 
         @testset "Setup test files" begin
             for participant in [1, 2]
-                erps = EegFun.create_batch_test_erp_data(n_conditions = 2, n_channels = 7)
+                erps = EegFun.create_test_batch_erp_data(n_conditions = 2, n_channels = 7)
                 filename = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
                 jldsave(filename; data = erps)
                 @test isfile(filename)
@@ -320,7 +320,7 @@ end
             mkpath(partial_dir)
 
             # Create one valid file
-            erps = EegFun.create_batch_test_erp_data(n_conditions = 2, n_channels = 7)
+            erps = EegFun.create_test_batch_erp_data(n_conditions = 2, n_channels = 7)
             jldsave(joinpath(partial_dir, "1_erps_cleaned.jld2"); data = erps)
 
             # Create one malformed file (invalid data type - String instead of Vector{ErpData})
@@ -499,7 +499,7 @@ end
             pattern_dir = joinpath(test_dir, "pattern_test")
             mkpath(pattern_dir)
 
-            erps = EegFun.create_batch_test_erp_data(n_conditions = 2, n_channels = 7)
+            erps = EegFun.create_test_batch_erp_data(n_conditions = 2, n_channels = 7)
             jldsave(joinpath(pattern_dir, "1_erps_original.jld2"); data = erps)
             jldsave(joinpath(pattern_dir, "2_erps_cleaned.jld2"); data = erps)
             jldsave(joinpath(pattern_dir, "3_custom_erps.jld2"); data = erps)
@@ -586,7 +586,7 @@ end
             invalid_dir = joinpath(test_dir, "invalid_channels")
             mkpath(invalid_dir)
 
-            erps = EegFun.create_batch_test_erp_data(n_conditions = 1, n_channels = 7)
+            erps = EegFun.create_test_batch_erp_data(n_conditions = 1, n_channels = 7)
             jldsave(joinpath(invalid_dir, "1_erps.jld2"); data = erps)
 
             output_dir = joinpath(test_dir, "combined_invalid")
@@ -817,7 +817,7 @@ end
             mkpath(empty_dir)
 
             # Create file but select channels that result in empty selection
-            erps = EegFun.create_batch_test_erp_data(n_conditions = 1, n_channels = 7)
+            erps = EegFun.create_test_batch_erp_data(n_conditions = 1, n_channels = 7)
             jldsave(joinpath(empty_dir, "1_erps.jld2"); data = erps)
 
             # Use a predicate that selects nothing

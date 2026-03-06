@@ -17,7 +17,7 @@ dat.data
 dat.header
 
 # Create EegFun data structure
-eeg = EegFun.create_eegfun_data(dat)
+eeg = EegFun.create_test_eegfun_data(dat)
 
 EegFun.all_data(eeg)
 EegFun.meta_data(eeg)
