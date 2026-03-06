@@ -120,17 +120,6 @@ function plot_gfp(dat::ErpData; channel_selection::Function = channels(), normal
     return plot_gfp([dat]; channel_selection = channel_selection, normalize = normalize, kwargs...)
 end
 
-
-"""
-    plot_gfp(datasets::Vector{ErpData};
-             channel_selection::Function = channels(),
-             normalize::Bool = true,
-             kwargs...)
-
-Plot Global Field Power for multiple ERP datasets (e.g., different conditions).
-
-Each dataset is plotted with a different color/line style on the same axes.
-"""
 function plot_gfp(
     datasets::Vector{ErpData};
     condition_selection::Function = conditions(),
@@ -302,31 +291,6 @@ function plot_gfp(
     return fig
 end
 
-
-"""
-    plot_gfp(gfp_data::DataFrame; kwargs...)
-
-Plot GFP from pre-computed GFP data.
-
-This version accepts a DataFrame that was returned by the `gfp()` function,
-allowing you to plot pre-computed results without recalculating.
-
-# Arguments
-- `gfp_data::DataFrame`: DataFrame containing `:time` and `:gfp` columns (from `gfp()` function)
-- `kwargs`: Additional keyword arguments (same as main `plot_gfp`)
-
-# Examples
-```julia
-# Calculate GFP separately
-gfp_result = gfp(erp_data, normalize = true)
-
-# Plot later
-plot_gfp(gfp_result)
-
-# Plot with custom styling
-plot_gfp(gfp_result, color = :red, linewidth = 3)
-```
-"""
 function plot_gfp(gfp_data::DataFrame; kwargs...)
 
     # Merge user kwargs and default kwargs
@@ -440,22 +404,6 @@ function plot_gfp(gfp_data::DataFrame; kwargs...)
     return fig
 end
 
-
-"""
-    plot_gfp(gfp_data::Vector{DataFrame}; kwargs...)
-
-Plot GFP from multiple pre-computed GFP datasets.
-
-# Examples
-```julia
-# Calculate GFP for multiple conditions
-erps = load("participant_1_erps.jld2", "erps")
-gfp_results = gfp.(erps, normalize = true)
-
-# Plot all conditions together
-plot_gfp(gfp_results)
-```
-"""
 function plot_gfp(gfp_data::Vector{DataFrame}; kwargs...)
 
     # Merge user kwargs and default kwargs

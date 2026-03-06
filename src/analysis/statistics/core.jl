@@ -146,28 +146,6 @@ function prepare_stats(
     )
 
 end
-
-"""
-    prepare_stats(file_pattern::String, design::Symbol; input_dir::String = pwd(), participant_selection::Function = participants(), condition_selection::Function = conditions([1, 2]), channel_selection::Function = channels(), interval_selection::Interval = times(), baseline_interval::Interval = times(), analysis_interval::Interval = times())
-
-Prepare ErpData for statistical tests from JLD2 files (convenience wrapper).
-
-Loads ErpData from JLD2 files matching the pattern and prepares them for statistical testing.
-
-# Arguments
-- `file_pattern::String`: Pattern to match JLD2 files (e.g., "erps_cleaned")
-- `design::Symbol`: Design type - `:paired` (same participants in both conditions) or `:independent` (different participants)
-- `input_dir::String`: Directory containing JLD2 files (default: current directory)
-- `participant_selection::Function`: Predicate to filter participants (default: `participants()` - all participants)
-- `condition_selection::Function`: Predicate to select exactly 2 conditions for comparison (default: `conditions([1, 2])`)
-- `channel_selection::Function`: Predicate to filter channels (default: `channels()` - all channels)
-- `interval_selection::Interval`: Time interval as tuple (e.g., (0.0, 1.0)) or interval object for initial data selection (default: nothing - all samples)
-- `baseline_interval::Interval`: Baseline interval as tuple (e.g., (-0.2, 0.0)) or interval object (default: nothing - no baseline)
-- `analysis_interval::Interval`: Analysis interval as tuple (e.g., (0.3, 0.5)) or interval object for statistical testing (default: nothing - use interval_selection)
-
-# Returns
-- `StatisticalData`: Prepared data structure ready for statistical testing
-"""
 function prepare_stats(
     file_pattern::String,
     design::Symbol;

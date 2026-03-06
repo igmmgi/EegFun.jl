@@ -274,52 +274,6 @@ function _process_realign_file(filepath::String, output_path::String, realignmen
     end
 end
 
-
-"""
-    realign(file_pattern::String, realignment_column::Symbol;
-            input_dir::String = pwd(),
-            participant_selection::Function = participants(),
-            output_dir::Union{String, Nothing} = nothing)
-
-Batch realign epoched data from JLD2 files and save to a new directory.
-
-This function processes multiple participant files at once, realigning epoched
-data to a different time point specified by a column in the epoch DataFrames.
-
-# Arguments
-- `file_pattern::String`: Pattern to match files (e.g., "epochs", "epochs_cleaned")
-- `realignment_column::Symbol`: Column name containing realignment times (e.g., `:rt`, `:response_time`)
-- `input_dir::String`: Input directory containing JLD2 files (default: current directory)
-- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
-- `output_dir::Union{String, Nothing}`: Output directory (default: creates subdirectory)
-
-# Examples
-```julia
-# Realign all participants' epochs to response times
-realign("epochs_cleaned", :rt)
-
-# Specific participants only
-realign("epochs_cleaned", :rt, participant_selection = participants([1, 2, 3]))
-
-# Custom output directory
-realign("epochs_cleaned", :rt, output_dir = "/path/to/output")
-
-# Full example workflow
-realign("epochs_cleaned", :rt,
-        input_dir = "/data/study1",
-        participant_selection = participants(1:20))
-```
-
-# Output
-- Creates new directory with realigned epoch data files
-- Each output file contains "data" variable with realigned EpochData
-- Log file saved to output directory
-
-# Notes
-- Input files should contain EpochData with the specified realignment column
-- All trials within each file are realigned and cropped to a common interval
-- Useful for response-locked LRP analysis or other event-locked analyses
-"""
 function realign(
     file_pattern::String,
     realignment_column::Symbol;

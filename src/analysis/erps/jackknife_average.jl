@@ -206,68 +206,6 @@ function jackknife_average(erps::Vector{ErpData}; condition_selection::Function 
     return jackknife_results
 end
 
-
-"""
-    jackknife_average(file_pattern::String;
-                      input_dir::String = pwd(),
-                      participant_selection::Function = participants(),
-                      condition_selection::Function = conditions(),
-                      output_dir::Union{String, Nothing} = nothing,
-                      data_var::String = "lrp")
-
-Batch process ERP/LRP files to create jackknife averages across participants.
-
-This function loads data from multiple participant files, groups by condition,
-and creates jackknife (leave-one-out) averages for each participant and condition.
-
-# Arguments
-- `file_pattern::String`: Pattern to match files (e.g., "lrp", "erps_cleaned")
-- `input_dir::String`: Input directory containing JLD2 files (default: current directory)
-- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
-- `condition_selection::Function`: Condition selection predicate (default: `conditions()` for all)
-- `output_dir::Union{String, Nothing}`: Output directory (default: auto-generated)
-- `data_var::String`: Deprecated parameter kept for backwards compatibility. Data is now loaded using `read_data()` which finds data by type.
-
-# Examples
-```julia
-# Jackknife average all LRP files in current directory
-jackknife_average("lrp")
-
-# Process specific participants and conditions
-jackknife_average("lrp",
-                  input_dir = "/path/to/data",
-                  participants = 1:20,
-                  conditions = [1, 2])
-
-# Process ERP data (data is automatically detected by type)
-jackknife_average("erps_cleaned", input_dir = "/path/to/data")
-
-# Specify custom output directory
-jackknife_average("lrp", output_dir = "/path/to/output")
-```
-
-# Output
-The function creates a new directory containing jackknifed data files:
-- One file per participant
-- Each file contains "data" variable with jackknifed average(s)
-- If multiple conditions exist, each file contains a Vector{ErpData} with one element per condition
-- Log file saved to output directory
-
-# Typical Workflow
-```julia
-# 1. Calculate LRP for all participants
-pairs = [(i, i+1) for i in 1:2:15]
-lrp("erps_cleaned", pairs)
-
-# 2. Create jackknife averages
-jackknife_average("lrp")
-
-# 3. Results are in jackknife_lrp/ directory
-# Load and analyze:
-using JLD2
-participant_1_jackknife = load("jackknife_lrp/1_lrp.jld2", "data")
-```
-"""
 function jackknife_average(
     file_pattern::String;
     input_dir::String = pwd(),

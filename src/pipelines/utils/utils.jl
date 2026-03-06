@@ -565,32 +565,6 @@ function summarize_electrode_repairs(continuous_repairs::Vector{ContinuousRepair
 
     return DataFrame(summary_data)
 end
-
-"""
-    summarize_electrode_repairs(file_pattern::String; input_dir::String = pwd())
-
-Summarize electrode repairs by loading ArtifactInfo files from a directory (continuous level only).
-Uses `_find_batch_files` to match files by pattern.
-
-# Arguments
-- `file_pattern::String`: Pattern to match filenames (e.g., `"_artifact_info"`)
-- `input_dir::String`: Directory containing `_artifact_info.jld2` files (default: current directory)
-
-# Returns
-- `DataFrame`: Per-participant table with columns:
-  - `file::String`: Base filename
-  - `repaired::String`: Comma-separated list of repaired channels (`"none"` if none)
-  - `skipped::String`: Comma-separated list of channels that could not be repaired
-- `DataFrame`: Aggregate table with columns:
-  - `electrode::Symbol`: Electrode name
-  - `n_participants::Int`: Number of participants where this electrode was repaired
-
-# Examples
-```julia
-per_file, summary = summarize_electrode_repairs("_artifact_info")
-per_file, summary = summarize_electrode_repairs("_artifact_info", input_dir="/path/to/output")
-```
-"""
 function summarize_electrode_repairs(file_pattern::String; input_dir::String = pwd())
     files = sort(_find_batch_files(file_pattern, input_dir), by = _natural_sort_key)
 
@@ -720,39 +694,6 @@ function summarize_ica_components(ica_components::Vector{ArtifactComponents})
 
     return per_file_df, avg_df
 end
-
-"""
-    summarize_ica_components(file_pattern::String; input_dir::String = pwd())
-
-Summarize ICA components by loading ArtifactInfo files from a directory.
-Uses `_find_batch_files` to match files by pattern.
-
-# Arguments
-- `file_pattern::String`: Pattern to match filenames (e.g., "_artifact_info")
-- `input_dir::String`: Directory containing `_artifact_info.jld2` files (default: current directory)
-
-# Returns
-- `DataFrame`: Per-file summary table with columns:
-  - `file::String`: Base filename
-  - `total_components::Int`: Total number of ICA components removed
-  - `vEOG::Int`: Number of vEOG components
-  - `hEOG::Int`: Number of hEOG components
-  - `ECG::Int`: Number of ECG components
-  - `line_noise::Int`: Number of line noise components
-  - `channel_noise::Int`: Number of channel noise components
-- `DataFrame`: Average summary with columns:
-  - `component_type::String`: Type of component
-  - `avg_per_participant::Float64`: Average number of components per participant
-
-# Examples
-```julia
-# Load all artifact info files from current directory
-per_file, avg = summarize_ica_components("_artifact_info")
-
-# Load from specific directory
-per_file, avg = summarize_ica_components("_artifact_info", input_dir="/path/to/output")
-```
-"""
 function summarize_ica_components(file_pattern::String; input_dir::String = pwd())
     # Find matching files using _find_batch_files
     files = _find_batch_files(file_pattern, input_dir)

@@ -129,45 +129,6 @@ function prepare_decoding(
 
     return participant_epochs
 end
-
-"""
-    prepare_decoding(file_pattern::String; input_dir, participant_selection, condition_selection, channel_selection, interval_selection)
-
-Load epoch data from JLD2 files and prepare for decoding (convenience wrapper).
-
-Loads data from JLD2 files matching the pattern and prepares them for decoding analysis.
-Works automatically with both EpochData and TimeFreqEpochData files.
-
-# Arguments
-- `file_pattern::String`: Pattern to match JLD2 files (e.g., "epochs_good" or "tf_epochs")
-
-# Keyword Arguments
-- `input_dir::String`: Directory containing JLD2 files (default: current directory)
-- `participant_selection::Function`: Predicate to filter participants (default: `participants()`)
-- `condition_selection::Function`: Predicate to select conditions (default: `conditions()`)
-- `channel_selection::Function`: Predicate to filter channels (default: `channels()`)
-- `interval_selection::Interval`: Time window (default: `times()`)
-
-# Returns
-- `Vector{Vector{T}}`: Vector of participant data (T is automatically detected from files)
-
-# Examples
-```julia
-# ERP decoding
-participant_epochs = prepare_decoding(
-    "epochs_good",
-    input_dir = "/path/to/data",
-    condition_selection = conditions([1, 2]),
-    channel_selection = channels([:Fz, :Cz, :Pz]),
-    interval_selection = (0.0, 1.0))
-
-# TF decoding (same syntax, type detected automatically)
-participant_tf = prepare_decoding(
-    "tf_epochs",
-    input_dir = "/path/to/data",
-    condition_selection = conditions([1, 2]))
-```
-"""
 function prepare_decoding(
     file_pattern::String;
     input_dir::String = pwd(),

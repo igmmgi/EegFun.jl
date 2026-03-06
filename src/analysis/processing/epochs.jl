@@ -715,12 +715,6 @@ function epochs_table(epochs::Vector{EpochData}; print_table::Bool = true, kwarg
 
     return df
 end
-
-"""
-    epochs_table(epochs_original, epochs_cleaned)
-
-Display comparison table between original and cleaned epochs to console and return DataFrame.
-"""
 function epochs_table(epochs_original::Vector{EpochData}, epochs_cleaned::Vector{EpochData}; print_table::Bool = true, kwargs...)
     length(epochs_original) != length(epochs_cleaned) && throw(ArgumentError("epochs_original and epochs_cleaned must have same length"))
 
@@ -818,43 +812,6 @@ end
 #=============================================================================
     MAIN API FUNCTION
 =============================================================================#
-
-"""
-    average_epochs(file_pattern::String; 
-                       input_dir::String = pwd(), 
-                       participant_selection::Function = participants(),
-                       condition_selection::Function = conditions(),
-                       output_dir::Union{String, Nothing} = nothing)
-
-Batch process epoch data files to create averaged ERP data.
-
-This function loads JLD2 files containing epoch data, applies `average_epochs` to each condition,
-and saves the resulting ERP data to a new directory.
-
-# Arguments
-- `file_pattern::String`: Pattern to match JLD2 files (e.g., "epochs_cleaned", "epochs_original")
-- `input_dir::String`: Input directory containing JLD2 files (default: current directory)
-- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
-- `condition_selection::Function`: Condition selection predicate (default: `conditions()` for all)
-- `output_dir::Union{String, Nothing}`: Output directory (default: auto-generated)
-
-# Examples
-```julia
-# Average all epoch files in current directory
-average_epochs("epochs_cleaned")
-
-# Process specific participants and conditions
-average_epochs("epochs_cleaned", 
-              input_dir = "/path/to/data", 
-              participants = [1, 2, 3], 
-              conditions = [1, 2])
-
-# Specify custom output directory
-average_epochs("epochs_cleaned", 
-                   input_dir = "/path/to/data", 
-                   output_dir = "/path/to/output")
-```
-"""
 function average_epochs(
     file_pattern::String;
     input_dir::String = pwd(),

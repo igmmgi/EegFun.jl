@@ -437,43 +437,6 @@ end
 # =============================================================================
 #     BATCH PROCESSING FUNCTIONS
 # =============================================================================
-
-"""
-    tf_multitaper(file_pattern::String;
-                  input_dir::String=pwd(),
-                  output_dir::Union{String,Nothing}=nothing,
-                  participant_selection::Function=participants(),
-                  condition_selection::Function=conditions(),
-                  kwargs...)
-
-Batch multitaper time-frequency analysis on EpochData files.
-
-Loads `.jld2` files containing `EpochData` (one or more conditions per file),
-runs `tf_multitaper` on each condition, and saves the results as `Vector{TimeFreqData}`.
-
-# Arguments
-- `file_pattern::String`: Pattern to match files (e.g., "epochs", "epochs_cleaned")
-- `input_dir::String`: Input directory containing JLD2 files (default: current directory)
-- `output_dir::Union{String, Nothing}`: Output directory (default: creates subdirectory)
-- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
-- `condition_selection::Function`: Condition selection predicate (default: `conditions()` for all)
-- All other keyword arguments are forwarded to `tf_multitaper` (e.g., `frequencies`, `cycles`, `frequency_smoothing`, `time_steps`, `pad`, `filter_edges`)
-
-# Examples
-```julia
-# Run multitaper TF on all epoch files
-tf_multitaper("epochs_cleaned"; cycles=5)
-
-# Custom frequency smoothing and participants
-tf_multitaper("epochs_cleaned";
-              participant_selection=participants([1, 2, 3]),
-              frequencies=logrange(2, 80, length=30),
-              cycles=5, frequency_smoothing=0.4)
-
-# Custom output directory
-tf_multitaper("epochs"; cycles=5, output_dir="/data/tf_results")
-```
-"""
 function tf_multitaper(
     file_pattern::String;
     input_dir::String = pwd(),

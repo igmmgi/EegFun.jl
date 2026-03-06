@@ -1052,12 +1052,6 @@ rejected = get_rejected(info)
 ```
 """
 get_rejected(info::EpochRejectionInfo)::Vector{Rejection} = info.rejected
-
-"""
-    get_rejected(info::Vector{EpochRejectionInfo})::Vector{Vector{Rejection}}
-
-Get the list of rejected channel-epoch pairs for each condition.
-"""
 get_rejected(info::Vector{EpochRejectionInfo})::Vector{Vector{Rejection}} = get_rejected.(info)
 
 

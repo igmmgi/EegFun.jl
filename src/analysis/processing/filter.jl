@@ -313,24 +313,12 @@ end
 # Generate non-mutating versions
 @add_nonmutating lowpass_filter!
 @add_nonmutating highpass_filter!
-
-"""
-    lowpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :lowpass)
-
-Apply lowpass filter to EEG data based on configuration.
-"""
 function lowpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :lowpass)
     sec = getfield(filter_cfg, section)
     if sec.apply
         lowpass_filter!(dat, sec.freq; order = sec.order, filter_method = sec.method, filter_func = sec.func)
     end
 end
-
-"""
-    highpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :highpass)
-
-Apply highpass filter to EEG data based on configuration.
-"""
 function highpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :highpass)
     sec = getfield(filter_cfg, section)
     if sec.apply

@@ -361,30 +361,6 @@ function plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwa
 end
 
 
-
-"""
-    plot_trigger_overview(dat::ContinuousData; kwargs...)
-
-Plot trigger events from ContinuousData object.
-
-# Arguments
-- `dat`: ContinuousData object containing the EEG data
-- `ignore_triggers`: Vector of trigger codes to ignore (optional)
-- Other plotting parameters (window_size, display_plot, etc.)
-
-# Returns
-- `fig`: The Makie Figure object
-- `ax`: The Axis object containing the plot
-
-# Example
-```julia
-# Plot all triggers
-fig, ax = plot_trigger_overview(dat)
-
-# Ignore specific trigger codes
-fig, ax = plot_trigger_overview(dat; ignore_triggers=[1, 255])
-```
-"""
 function plot_trigger_overview(dat::ContinuousData; kwargs...)
     @info "Plotting trigger (cleaned) overview for ContinuousData"
 

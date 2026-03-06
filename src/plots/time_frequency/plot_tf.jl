@@ -23,18 +23,6 @@ function plot_tf(filepath::String; kwargs...)
     end
     return plot_tf(data; kwargs...)
 end
-
-"""
-    plot_tf(tf_data::Vector{TimeFreqData}; kwargs...)
-
-Plot multiple TimeFreqData conditions, each in a separate subplot.
-The first selected channel is shown for each condition.
-
-# Examples
-```julia
-plot_tf(tf_data_vector; channel_selection=channels(:Cz), baseline_interval=(-0.3, 0.0))
-```
-"""
 function plot_tf(
     tf_data::Vector{TimeFreqData};
     channel_selection::Function = channels(),
@@ -136,61 +124,6 @@ function plot_tf(
     return (fig = fig, axes = axes)
 end
 
-
-"""
-    plot_tf(tf_data::TimeFreqData;
-            layout=:single, channel_selection=channels(),
-            baseline_interval=nothing, baseline_method=:db,
-            colormap=:viridis, colorrange=nothing,
-            title=nothing, colorbar=true, ylogscale=false,
-            xlim=nothing)
-
-Plot time-frequency data with configurable layout for single or multi-channel display.
-
-# Arguments
-- `tf_data::TimeFreqData`: Time-frequency data
-
-# Keyword Arguments
-- `layout::Union{Symbol,PlotLayout}`: Layout type - `:single` (default), `:grid`, `:topo`, or a `PlotLayout` object
-  - `:single` — plot first selected channel in a single pane
-  - `:grid` — one heatmap per selected channel in a grid arrangement
-  - `:topo` — channels positioned by their topographic coordinates
-- `channel_selection::Function`: Channel selection predicate (default: all channels)
-  - Example: `channel_selection=channels(:Cz)` for a specific channel
-  - Example: `channel_selection=channels([:Cz, :Pz, :Oz])` for multiple channels
-- `baseline_interval`: Optional baseline interval (start, stop) in seconds
-- `baseline_method`: Baseline method if baseline_interval provided (`:db`, `:percent`, `:relchange`)
-- `colormap`: Colormap (default: `:viridis`)
-- `colorrange`: Color range (default: auto from data)
-- `title`: Plot title (default: auto-generated)
-- `colorbar`: Show colorbar (default: `true`)
-- `ylogscale`: Use logarithmic scale for y-axis (default: `false`)
-- `xlim`: X-axis limits as `(min, max)` tuple
-- `layout_grid_dims`: Grid dimensions as `(rows, cols)` tuple (auto if nothing)
-- `layout_grid_rowgap`: Gap between rows in grid layout (pixels)
-- `layout_grid_colgap`: Gap between columns in grid layout (pixels)
-- `layout_topo_plot_width`: Width of individual topo plots (fraction)
-- `layout_topo_plot_height`: Height of individual topo plots (fraction)
-
-# Returns
-- `NamedTuple (fig, axes)`: Makie figure and vector of axes
-
-# Examples
-```julia
-# Single channel (default)
-plot_tf(tf_data; channel_selection=channels(:Cz), baseline_interval=(-0.3, 0.0))
-
-# Grid layout with multiple channels
-plot_tf(tf_data; layout=:grid, channel_selection=channels([:Fz, :Cz, :Pz, :Oz]))
-
-# Topographic layout
-plot_tf(tf_data; layout=:topo, channel_selection=channels([:Fz, :Cz, :Pz, :Oz]),
-        baseline_interval=(-0.3, 0.0), ylogscale=true)
-
-# Load from file
-plot_tf("tf_morlet_result.jld2"; channel_selection=channels(:Cz))
-```
-"""
 function plot_tf(
     tf_data::TimeFreqData;
     layout::Union{Symbol,PlotLayout} = :single,

@@ -143,41 +143,6 @@ function gfp(dat::ErpData; channel_selection::Function = channels(), normalize::
     return _build_gfp_result_df(dat, :gfp => gfp_values)
 end
 
-
-"""
-    gfp(dat::Vector{ErpData}; 
-        condition_selection::Function = conditions(),
-        channel_selection::Function = channels(),
-        normalize::Bool = false)::Vector{DataFrame}
-
-Calculate Global Field Power for multiple ERP datasets (e.g., multiple conditions).
-
-# Arguments
-- `dat::Vector{ErpData}`: Vector of ERP data structures
-- `condition_selection::Function`: Condition predicate for selecting conditions (default: all conditions)
-- `channel_selection::Function`: Channel predicate for selecting channels (default: all channels)
-- `normalize::Bool`: If true, normalize GFP to 0-100% range (default: false)
-
-# Returns
-- `Vector{DataFrame}`: Vector of DataFrames, each containing GFP for one condition
-
-# Examples
-```julia
-# Load ERP data for multiple conditions
-erps = EegFun.read_data("participant_1_erps.jld2")
-
-# Calculate GFP for all conditions
-gfp_results = gfp(erps)
-
-# Calculate normalized GFP
-gfp_results = gfp(erps, normalize = true)
-
-# Plot GFP for each condition
-for (i, gfp_data) in enumerate(gfp_results)
-    plot(gfp_data.time, gfp_data.gfp, label = "Condition \$i")
-end
-```
-"""
 function gfp(
     dat::Vector{ErpData};
     condition_selection::Function = conditions(),
@@ -252,17 +217,6 @@ function global_dissimilarity(dat::ErpData; channel_selection::Function = channe
     return _build_gfp_result_df(dat, :dissimilarity => gd_values)
 end
 
-
-"""
-    global_dissimilarity(dat::Vector{ErpData};
-                         condition_selection::Function = conditions(),
-                         channel_selection::Function = channels(),
-                         normalize::Bool = false)::Vector{DataFrame}
-
-Calculate Global Dissimilarity for multiple ERP datasets.
-
-See single-dataset version for details.
-"""
 function global_dissimilarity(
     dat::Vector{ErpData};
     condition_selection::Function = conditions(),
@@ -339,26 +293,6 @@ function gfp_and_dissimilarity(dat::ErpData; channel_selection::Function = chann
     return _build_gfp_result_df(dat, :gfp => gfp_values, :dissimilarity => gd_values)
 end
 
-
-"""
-    gfp_and_dissimilarity(dat::Vector{ErpData};
-                          condition_selection::Function = conditions(),
-                          channel_selection::Function = channels(),
-                          normalize::Bool = false)::Vector{DataFrame}
-
-Calculate both GFP and Global Dissimilarity for multiple ERP datasets.
-
-# Arguments
-- `dat::Vector{ErpData}`: Vector of ERP data structures
-- `condition_selection::Function`: Condition predicate for selecting conditions (default: all conditions)
-- `channel_selection::Function`: Channel predicate for selecting channels (default: all channels)
-- `normalize::Bool`: If true, normalize both metrics to 0-100% range (default: false)
-
-# Returns
-- `Vector{DataFrame}`: Vector of DataFrames, each containing GFP and dissimilarity for one condition
-
-See single-dataset version for additional details.
-"""
 function gfp_and_dissimilarity(
     dat::Vector{ErpData};
     condition_selection::Function = conditions(),

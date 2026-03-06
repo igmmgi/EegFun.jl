@@ -133,12 +133,6 @@ function prepare_stats(
 
     return TFStatisticalData([condition1_avg, condition2_avg], TFAnalysisData(design, [data1, data2], frequencies, time_points))
 end
-
-"""
-    prepare_stats(::Type{TimeFreqData}, file_pattern, design; input_dir, participant_selection, kwargs...)
-
-Prepare TF data for statistical tests from JLD2 files (convenience wrapper).
-"""
 function prepare_stats(
     ::Type{TimeFreqData},
     file_pattern::String,

@@ -326,16 +326,6 @@ function plot_artifact_detection(epochs::EpochData, artifacts::EpochRejectionInf
     _set_window_title("Makie")
     return fig
 end
-
-"""
-    plot_artifact_detection(epochs::Vector{EpochData}, artifacts::Vector{EpochRejectionInfo}; channel_selection::Function=channels(), kwargs...)
-
-Convenience method that calls `plot_artifact_detection` for each condition when given vectors
-(as returned by `detect_bad_epochs_automatic`).
-
-# Returns
-- `Vector{Figure}`: One figure per condition
-"""
 function plot_artifact_detection(
     epochs::Vector{EpochData},
     artifacts::Vector{EpochRejectionInfo};

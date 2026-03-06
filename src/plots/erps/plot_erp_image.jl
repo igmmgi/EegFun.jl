@@ -128,17 +128,6 @@ function plot_erp_image(filepath::String; input_dir::String = pwd(), participant
         return results
     end
 end
-
-"""
-    plot_erp_image(dat::EpochData; 
-                   layout::Union{Symbol, PlotLayout} = :single,
-                   channel_selection::Function = channels(),
-                   sample_selection::Function = samples(),
-    interval_selection::Interval = times(),
-                   kwargs...)
-
-Plot ERP image for specified channels and samples with flexible layout options.
-"""
 function plot_erp_image(
     dat::EpochData;
     layout::Union{Symbol,PlotLayout} = :single,
