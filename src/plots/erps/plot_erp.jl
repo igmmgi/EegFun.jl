@@ -90,6 +90,8 @@ pattern to discover and plot all matching files.
 - `sample_selection::Function`: Function that returns boolean vector for sample filtering
 - `kwargs`: Additional keyword arguments
 
+$(_generate_kwargs_doc(PLOT_ERP_KWARGS))
+
 # Examples
 ```julia
 # Load and plot from file

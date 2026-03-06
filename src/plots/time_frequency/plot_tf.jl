@@ -2,18 +2,61 @@
 Time-frequency plotting functions for visualizing TimeFreqData.
 """
 
+# =============================================================================
+# DEFAULT KEYWORD ARGUMENTS
+# =============================================================================
+const PLOT_TF_KWARGS = Dict{Symbol,Tuple{Any,String}}(
+    # Display
+    :display_plot => (true, "Whether to display the plot"),
+
+    # Layout
+    :layout => (:single, "Layout type: :single, :grid, or :topo"),
+
+    # Colormap and color range
+    :colormap => (:viridis, "Colormap for the heatmap"),
+    :colorrange => (nothing, "Color range as (min, max) tuple. If nothing, automatically determined from data"),
+    :colorbar => (true, "Whether to show a colorbar"),
+
+    # Axis
+    :ylogscale => (false, "Whether to use logarithmic scale for the frequency (y) axis"),
+    :xlim => (nothing, "X-axis time limits as (min, max) tuple in seconds. If nothing, shows all time points"),
+    :interpolate => (false, "Whether to interpolate the heatmap for a smoother appearance"),
+    :title => (nothing, "Plot title. If nothing, automatically determined from condition name and channel"),
+
+    # Baseline
+    :baseline_method => (:db, "Baseline correction method: :db, :absolute, :relative, :relchange, :percent, :zscore"),
+
+    # Grid layout parameters
+    :layout_grid_dims => (nothing, "Grid dimensions as (rows, cols) tuple. If nothing, automatically determined"),
+    :layout_grid_rowgap => (10, "Gap between rows in grid layout (pixels)"),
+    :layout_grid_colgap => (10, "Gap between columns in grid layout (pixels)"),
+
+    # Topo layout parameters
+    :layout_topo_plot_width => (0.10, "Width of individual plots in topo layout (fraction of figure width)"),
+    :layout_topo_plot_height => (0.10, "Height of individual plots in topo layout (fraction of figure height)"),
+)
+
+
 """
     plot_tf(filepath::String; kwargs...)
+    plot_tf(tf::TimeFreqData; channel_selection, baseline_interval, kwargs...)
+    plot_tf(tfs::Vector{TimeFreqData}; channel_selection, baseline_interval, kwargs...)
 
-Load time-frequency data from a JLD2 file and plot it.
+Plot time-frequency data as a heatmap (time × frequency). Supports single condition,
+multi-condition grid, and topographic layouts.
 
 # Arguments
-- `filepath::String`: Path to JLD2 file containing TimeFreqData
+- `filepath::String`: Path to a `.jld2` file, or a `TimeFreqData` / `Vector{TimeFreqData}` object
+- `channel_selection::Function`: Channel filter (default: all channels)
+- `baseline_interval`: Baseline window as `(start, stop)` in seconds (default: `nothing`)
+
+$(_generate_kwargs_doc(PLOT_TF_KWARGS))
 
 # Examples
 ```julia
 plot_tf("tf_morlet_result.jld2")
 plot_tf("tf_morlet_result.jld2"; layout=:grid, channel_selection=channels([:Cz, :Pz]))
+plot_tf(tf; colormap=:RdBu, ylogscale=true, baseline_interval=(-0.3, 0.0))
 ```
 """
 function plot_tf(filepath::String; kwargs...)
@@ -27,16 +70,19 @@ function plot_tf(
     tf_data::Vector{TimeFreqData};
     channel_selection::Function = channels(),
     baseline_interval::Union{Nothing,Tuple{Real,Real}} = nothing,
-    baseline_method::Symbol = :db,
-    colormap = :viridis,
-    colorrange::Union{Nothing,Tuple{Real,Real}} = nothing,
-    colorbar::Bool = true,
-    ylogscale::Bool = false,
-    xlim::Union{Nothing,Tuple{Real,Real}} = nothing,
-    interpolate::Bool = false,
-    grid_dims = nothing,
+    kwargs...,
 )
     isempty(tf_data) && error("Empty TimeFreqData vector")
+
+    plot_kwargs = _merge_plot_kwargs(PLOT_TF_KWARGS, kwargs)
+    colormap = plot_kwargs[:colormap]
+    colorrange = plot_kwargs[:colorrange]
+    colorbar = plot_kwargs[:colorbar]
+    ylogscale = plot_kwargs[:ylogscale]
+    xlim = plot_kwargs[:xlim]
+    interpolate = plot_kwargs[:interpolate]
+    baseline_method = plot_kwargs[:baseline_method]
+    grid_dims = plot_kwargs[:layout_grid_dims]
 
     n = length(tf_data)
     rows, cols = isnothing(grid_dims) ? _best_rect(n) : grid_dims
@@ -126,24 +172,26 @@ end
 
 function plot_tf(
     tf_data::TimeFreqData;
-    layout::Union{Symbol,PlotLayout} = :single,
     channel_selection::Function = channels(),
     baseline_interval::Union{Nothing,Tuple{Real,Real}} = nothing,
-    baseline_method::Symbol = :db,
-    colormap = :viridis,
-    colorrange::Union{Nothing,Tuple{Real,Real}} = nothing,
-    title::Union{Nothing,String} = nothing,
-    colorbar::Bool = true,
-    ylogscale::Bool = false,
-    xlim::Union{Nothing,Tuple{Real,Real}} = nothing,
-    interpolate::Bool = false,
-    # Layout kwargs (passed through with layout_ prefix stripped)
-    layout_grid_dims = nothing,
-    layout_grid_rowgap = 10,
-    layout_grid_colgap = 10,
-    layout_topo_plot_width = 0.10,
-    layout_topo_plot_height = 0.10,
+    kwargs...,
 )
+
+    plot_kwargs             = _merge_plot_kwargs(PLOT_TF_KWARGS, kwargs)
+    layout                  = plot_kwargs[:layout]
+    colormap                = plot_kwargs[:colormap]
+    colorrange              = plot_kwargs[:colorrange]
+    title                   = plot_kwargs[:title]
+    colorbar                = plot_kwargs[:colorbar]
+    ylogscale               = plot_kwargs[:ylogscale]
+    xlim                    = plot_kwargs[:xlim]
+    interpolate             = plot_kwargs[:interpolate]
+    baseline_method         = plot_kwargs[:baseline_method]
+    layout_grid_dims        = plot_kwargs[:layout_grid_dims]
+    layout_grid_rowgap      = plot_kwargs[:layout_grid_rowgap]
+    layout_grid_colgap      = plot_kwargs[:layout_grid_colgap]
+    layout_topo_plot_width  = plot_kwargs[:layout_topo_plot_width]
+    layout_topo_plot_height = plot_kwargs[:layout_topo_plot_height]
 
     # Apply baseline if requested, but only if data hasn't already been baselined
     if !isnothing(baseline_interval) && !isnothing(tf_data.baseline)

@@ -313,6 +313,8 @@ Plot trigger events as a scatter plot with vertical lines.
 - `trigger_values`: Vector of trigger values at those times
 - `trigger_count`: OrderedDict mapping trigger values to their counts
 
+$(_generate_kwargs_doc(PLOT_TRIGGERS_KWARGS))
+
 # Returns
 - `fig`: The Makie Figure object
 - `ax`: The Axis object containing the plot
@@ -650,6 +652,8 @@ Plot trigger timing with interactive x-axis sliders for scrolling and window siz
 - `dat::ContinuousData`: The ContinuousData object containing the triggers
 - `ignore_triggers`: Vector of trigger codes to ignore (optional)
 - Other plotting parameters (window_size, display_plot, etc.)
+
+$(_generate_kwargs_doc(PLOT_TRIGGERS_KWARGS))
 
 # Returns
 - `fig::Figure`: The Makie figure object

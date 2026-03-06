@@ -88,6 +88,8 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 Load epoch data and create plots. Accepts either a direct `.jld2` filepath or a pattern
 string to discover and plot all matching files (one plot per file).
 
+$(_generate_kwargs_doc(PLOT_EPOCHS_KWARGS))
+
 # Examples
 ```julia
 plot_epochs("epochs_original.jld2")

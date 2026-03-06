@@ -1,3 +1,7 @@
+```@meta
+CollapsedDocStrings = true
+```
+
 # Core Types
 
 Data structures and type definitions in EegFun.jl.

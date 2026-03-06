@@ -621,6 +621,8 @@ the `file_pattern` form batch-processes JLD2 files and saves a CSV.
 - `"integral"` / `"rectified_area"` / `"positive_area"` / `"negative_area"` — area in µV·s
 - `"fractional_area_latency"` / `"fractional_peak_latency"` — onset/offset-style latencies
 
+$(_generate_kwargs_doc(ERP_MEASUREMENTS_KWARGS))
+
 # Examples
 ```julia
 # In-memory, single ERP

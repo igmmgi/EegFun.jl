@@ -19,7 +19,9 @@ and visualization in one call.
 - `layout::Union{Symbol, PlotLayout}`: Plot layout — :single, :grid, or :topo (default: :single)
 - `channel_selection::Function`: Channel selection predicate (default: all channels)
 - `condition_selection::Function`: Condition selection predicate (default: all conditions)
-- `kwargs...`: Additional arguments passed to `plot_erp`
+- `kwargs...`: Additional arguments passed to `plot_erp` and `erp_measurements`
+
+$(_generate_kwargs_doc(ERP_MEASUREMENTS_KWARGS))
 
 # Overlay Types
 - Peak amplitude → vertical line at peak time, amplitude label
