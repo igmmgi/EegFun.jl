@@ -171,64 +171,6 @@ function plot_erp(
         return results
     end
 end
-
-"""
-    plot_erp(dat::ErpData; 
-             layout::Union{Symbol, PlotLayout} = :single,
-             channel_selection::Function = channels(),
-             sample_selection::Function = samples(),
-             interval_selection::Interval = times(),
-             baseline_interval::Interval = times(),
-             kwargs...)
-
-Create ERP plots with flexible layout options.
-
-# Arguments
-- `dat::ErpData`: ERP data structure
-- `layout`: Layout specification:
-  - `:single` (default): Single plot with all channels
-  - `:grid`: Auto-calculated grid layout
-  - `:topo`: Topographic layout based on channel positions
-  - `PlotLayout`: Custom layout object
-  - `Vector{Int}`: Custom grid dimensions [rows, cols]
-  
-- `channel_selection::Function`: Function that returns boolean vector for channel filtering
-- `sample_selection::Function`: Function that returns boolean vector for sample filtering
-- `baseline_interval::Interval`: Baseline correction interval. Can be `nothing` (no baseline), tuple like `(-0.2, 0.0)`, `nothing` means no baseline correction.
-- `kwargs`: Additional keyword arguments
-
-$(_generate_kwargs_doc(PLOT_ERP_KWARGS))
-
-# Examples
-```julia
-# Single plot with all channels
-plot_erp(dat)
-
-# Grid layout
-plot_erp(dat, layout = :grid)
-
-# Custom grid dimensions
-plot_erp(dat, layout = :grid, layout_grid_dims = (3, 4))
-
-# Topographic layout
-plot_erp(dat, layout = :topo)
-
-# Disable interactivity
-plot_erp(dat, interactive = false)
-```
-
-# Interactive Controls
-When `interactive = true` (default):
-- **Up Arrow**: Zoom in on Y-axis (compress Y limits)
-- **Down Arrow**: Zoom out on Y-axis (expand Y limits)
-- **Left Arrow**: Zoom in on X-axis (compress time range)
-- **Right Arrow**: Zoom out on X-axis (expand time range)
-
-# Mouse Selection
-- **Shift + Left Click + Drag**: Select a time region (blue rectangle)
-- **Right Click on Selection**: Open context menu with plot options
-  - Topoplot 
-"""
 function plot_erp(
     dat::ErpData;
     layout::Union{Symbol,PlotLayout} = :single,
@@ -250,19 +192,6 @@ function plot_erp(
         kwargs...,
     )
 end
-
-"""
-    plot_erp(datasets::Vector{ErpData}; 
-             layout::Union{Symbol, PlotLayout} = :single,
-             condition_selection::Function = conditions(),
-             channel_selection::Function = channels(), 
-             sample_selection::Function = samples(),
-             interval_selection::Interval = times(),
-             baseline_interval::Interval = times(),
-             kwargs...)
-
-Plot multiple ERP datasets on the same axis (e.g., conditions).
-"""
 function plot_erp(
     datasets::Vector{ErpData};
     layout::Union{Symbol,PlotLayout} = :single,
@@ -414,21 +343,6 @@ Plot ERP data on an existing axis, mutating the figure and axis.
 - `ax::Axis`: The axis that was plotted on
 """
 plot_erp!(fig::Figure, ax::Axis, dat::ErpData; kwargs...) = plot_erp!(fig, ax, [dat]; kwargs...)
-
-"""
-    plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
-
-Plot multiple ERP datasets on an existing axis, mutating the figure and axis.
-
-# Arguments
-- `fig::Figure`: The figure to plot on
-- `ax::Axis`: The axis to plot on
-- `datasets::Vector{ErpData}`: The ERP datasets to plot
-- `kwargs...`: Additional plotting arguments (see PLOT_ERP_KWARGS)
-
-# Returns
-- `ax::Axis`: The axis that was plotted on
-"""
 function plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
     # Extract special parameters before validation (like plot_erp does)
     baseline_interval = get(kwargs, :baseline_interval, nothing)

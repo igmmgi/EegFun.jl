@@ -203,29 +203,6 @@ function plot_topography(filepath::String; input_dir::String = pwd(), participan
         return results
     end
 end
-
-"""
-    plot_topography(dat::SingleDataFrameEeg; n_topo=nothing, kwargs...)
-
-Create a topographic plot from single DataFrame EEG data.
-
-# Arguments
-- `dat`: SingleDataFrameEeg object (ContinuousData or ErpData)
-- `n_topo::Union{Int,Nothing}`: Number of topographic panels to display across the selected
-  time range. If `nothing` (default), a single topo is shown with data averaged over the
-  entire selected interval. If an integer > 1, the time range is divided into `n_topo`
-  equal bins and a grid of topoplots is created.
-- `kwargs...`: Additional keyword arguments
-
-# Examples
-```julia
-# Single topo averaged over 300-500ms
-plot_topography(erp, sample_selection = x -> x.time .>= 0.3 .&& x.time .<= 0.5)
-
-# Grid of 10 topos spanning the full epoch
-plot_topography(erp, sample_selection = x -> x.time .>= -0.2 .&& x.time .<= 0.8, n_topo = 10)
-```
-"""
 function plot_topography(
     dat::SingleDataFrameEeg;
     channel_selection::Function = channels(),
@@ -330,16 +307,6 @@ function plot_topography!(
     _plot_topography!(fig, ax, dat_subset.data, dat_subset.layout; plot_kwargs...)
 
 end
-
-"""
-    plot_topography(dat::Vector{<:SingleDataFrameEeg}; kwargs...)
-
-Create topographic plots from a vector of ERP datasets by broadcasting across conditions.
-
-# Arguments
-- `dat`: Vector of ErpData objects (e.g., different conditions)
-- `kwargs...`: Additional keyword arguments passed to plot_topography
-"""
 function plot_topography(
     dat::Vector{<:SingleDataFrameEeg};
     channel_selection::Function = channels(),
@@ -567,26 +534,6 @@ function plot_topography(
     _set_window_title("Makie")
     return fig, axes
 end
-
-"""
-    plot_topography(dat::Vector{EpochData}; kwargs...)
-
-Create topographic subplots from a vector of Epoch datasets by averaging trials within each condition.
-Each subplot shows the averaged topography for one condition.
-
-# Arguments
-- `dat`: Vector of EpochData objects (e.g., different conditions)
-- `kwargs...`: Additional keyword arguments passed to plot_topography
-
-# Examples
-```julia
-# Extract epochs for two conditions
-epochs = extract_epochs(dat, epoch_cfg, (-0.2, 1.0))
-
-# Plot subplots - one per condition (trials averaged)
-plot_topography(epochs)
-```
-"""
 function plot_topography(dat::Vector{EpochData}; kwargs...)
     # Average trials within each condition to create ERPs
     erps = average_epochs.(dat)

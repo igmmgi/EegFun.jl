@@ -333,31 +333,6 @@ end
 # ===================
 # TF PERMUTATION TEST
 # ===================
-
-"""
-    permutation_test(prepared::TFStatisticalData; kwargs...)
-
-Perform cluster-based permutation test on prepared TF data.
-
-# Arguments
-- `prepared::TFStatisticalData`: Prepared data from `prepare_stats`
-- `n_permutations::Int`: Number of permutations (default: 1000)
-- `threshold::Float64`: P-value threshold for cluster-forming (default: 0.05)
-- `threshold_method::Symbol`: Threshold method - `:parametric` (default) or `:nonparametric_common`
-- `cluster_type::Symbol`: Connectivity type - `:temporal`, `:spatial`, `:spectral`, `:spatiotemporal`, `:spectrotemporal`, or `:full` (default)
-- `min_num_neighbors::Int`: Min neighbouring significant channels (default: 0)
-- `tail::Symbol`: Test tail - `:both` (default), `:left`, or `:right`
-- `show_progress::Bool`: Show progress bar (default: true)
-
-# Returns
-- `TFClusterPermutationResult`: Complete results structure
-
-# Examples
-```julia
-prepared = prepare_stats(tfs; design=:paired, frequency_selection=(4.0, 30.0))
-result = permutation_test(prepared; n_permutations=1000, cluster_type=:full)
-```
-"""
 function permutation_test(
     prepared::TFStatisticalData;
     n_permutations::Int = 1000,
@@ -543,27 +518,6 @@ end
 # ===================
 # TF ANALYTIC TEST
 # ===================
-
-"""
-    analytic_test(prepared::TFStatisticalData; kwargs...)
-
-Perform analytic (parametric) t-test on prepared TF data.
-
-# Arguments
-- `prepared::TFStatisticalData`: Prepared data from `prepare_stats`
-- `alpha::Float64`: Significance threshold (default: 0.05)
-- `tail::Symbol`: Test tail - `:both` (default), `:left`, or `:right`
-- `correction_method::Symbol`: Multiple comparison correction - `:no` (default) or `:bonferroni`
-
-# Returns
-- `TFAnalyticResult`: Results structure
-
-# Examples
-```julia
-prepared = prepare_stats(tfs; design=:paired)
-result = analytic_test(prepared, alpha=0.05, correction_method=:bonferroni)
-```
-"""
 function analytic_test(prepared::TFStatisticalData; alpha::Real = 0.05, tail::Symbol = :both, correction_method::Symbol = :no)
     correction_method ∉ (:no, :bonferroni) && @minimal_error "correction_method must be :no or :bonferroni. Got :$correction_method"
     tail ∉ (:both, :left, :right) && @minimal_error "tail must be :both, :left, or :right. Got :$tail"

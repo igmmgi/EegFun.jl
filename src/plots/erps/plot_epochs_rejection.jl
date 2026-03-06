@@ -233,15 +233,6 @@ function detect_bad_epochs_interactive(
 
     return state
 end
-
-"""
-    detect_bad_epochs_interactive(epochs::Vector{EpochData}; channel_selection::Function=channels(), kwargs...)
-
-Convenience method that calls `detect_bad_epochs_interactive` for each condition when given a vector.
-
-# Returns
-- `Vector{EpochRejectionState}`: One state per condition
-"""
 function detect_bad_epochs_interactive(
     epochs::Vector{EpochData};
     channel_selection::Function = channels(),

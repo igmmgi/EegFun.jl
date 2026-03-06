@@ -173,18 +173,6 @@ Get the time vector from EEG data.
 """
 time_vector(dat::SingleDataFrameEeg)::Vector{Float64} = dat.data.time
 time_vector(dat::MultiDataFrameEeg)::Vector{Float64} = dat.data[1].time
-
-"""
-    all_labels(dat::DataFrame) -> Vector{Symbol}
-
-Get all column names from a DataFrame.
-
-# Arguments
-- `dat::DataFrame`: The DataFrame
-
-# Returns
-- `Vector{Symbol}`: All column names
-"""
 all_labels(dat::DataFrame)::Vector{Symbol} = propertynames(dat)
 
 
@@ -547,18 +535,6 @@ function to_data_frame(dat::MultiDataFrameEeg)
     isempty(dat.data) && return DataFrame()
     return vcat(dat.data...)
 end
-
-"""
-    to_data_frame(dat::Vector{EpochData}) -> DataFrame
-
-Convert a vector of EpochData objects to a single DataFrame.
-
-# Arguments
-- `dat::Vector{EpochData}`: Vector of epoch data objects to convert
-
-# Returns
-- `DataFrame`: Single DataFrame with all epochs from all objects concatenated
-"""
 function to_data_frame(dat::Vector{EpochData})
     isempty(dat) && return DataFrame()
     isempty(dat[1].data) && return DataFrame()
@@ -918,17 +894,6 @@ function subset(
     dat_subset = _subset_dataframe(dat.data, selected_channels, selected_samples)
     return _create_subset(dat, dat_subset, layout_subset)
 end
-
-"""
-    subset(dat::TimeFreqData; channel_selection, sample_selection, interval_selection, include_extra)
-
-Create a subset of time-frequency data. Subsets both `data_power` and `data_phase` consistently.
-
-# Examples
-```julia
-sub = subset(tf, channel_selection = channels(:Fz, :Cz))
-```
-"""
 function subset(
     dat::TimeFreqData;
     channel_selection::Function = channels(),
@@ -944,17 +909,6 @@ function subset(
     phase_subset = _subset_dataframe(dat.data_phase, selected_channels, selected_samples)
     return _create_subset(dat, power_subset, phase_subset, layout_subset)
 end
-
-"""
-    subset(dat::MultiDataFrameEeg; channel_selection, sample_selection, interval_selection, epoch_selection, include_extra)
-
-Create a subset of multi-DataFrame EEG data (EpochData).
-
-# Examples
-```julia
-sub = subset(epochs, channel_selection = channels(:Fz), epoch_selection = epochs(1:10))
-```
-"""
 function subset(
     dat::T;
     channel_selection::Function = channels(),
@@ -970,18 +924,6 @@ function subset(
     dat_subset = _subset_dataframes(dat.data, selected_epochs, selected_channels, selected_samples)
     return _create_subset(dat, dat_subset, layout_subset)
 end
-
-"""
-    subset(dat::TimeFreqEpochData; channel_selection, sample_selection, interval_selection, epoch_selection, include_extra)
-
-Create a subset of time-frequency epoch data. Subsets both `data_power` and `data_phase` consistently
-across all trials.
-
-# Examples
-```julia
-sub = subset(tf_epochs, channel_selection = channels(:Fz, :Cz), epoch_selection = epochs(1:10))
-```
-"""
 function subset(
     dat::TimeFreqEpochData;
     channel_selection::Function = channels(),
@@ -999,17 +941,6 @@ function subset(
     phase_subset = _subset_dataframes(dat.data_phase, selected_epochs, selected_channels, selected_samples)
     return _create_subset(dat, power_subset, phase_subset, layout_subset)
 end
-
-"""
-    subset(datasets::Vector{ErpData}; condition_selection, channel_selection, ...)
-
-Subset a vector of ERP conditions. Filters by condition first, then applies channel/sample/interval selection.
-
-# Examples
-```julia
-sub = subset(erps, condition_selection = conditions(1, 2), channel_selection = channels(:Fz))
-```
-"""
 function subset(
     datasets::Vector{ErpData};
     condition_selection::Function = conditions(),
@@ -1031,17 +962,6 @@ function subset(
         include_extra = include_extra,
     )
 end
-
-"""
-    subset(datasets::Vector{EpochData}; condition_selection, channel_selection, ..., epoch_selection)
-
-Subset a vector of epoch conditions. Filters by condition first, then applies channel/sample/interval/epoch selection.
-
-# Examples
-```julia
-sub = subset(epochs_vec, condition_selection = conditions(1), epoch_selection = epochs(1:20))
-```
-"""
 function subset(
     datasets::Vector{EpochData};
     condition_selection::Function = conditions(),
@@ -1065,18 +985,6 @@ function subset(
         include_extra = include_extra,
     )
 end
-
-"""
-    subset(datasets::Vector{TimeFreqData}; condition_selection, channel_selection, ...)
-
-Subset a vector of TF conditions. Filters by condition first, then applies channel/sample/interval selection.
-Both `data_power` and `data_phase` are subset consistently.
-
-# Examples
-```julia
-sub = subset(tfs, condition_selection = conditions(1, 2), channel_selection = channels(:Fz))
-```
-"""
 function subset(
     datasets::Vector{TimeFreqData};
     condition_selection::Function = conditions(),
@@ -1098,18 +1006,6 @@ function subset(
         include_extra = include_extra,
     )
 end
-
-"""
-    subset(datasets::Vector{TimeFreqEpochData}; condition_selection, channel_selection, ..., epoch_selection)
-
-Subset a vector of TF epoch conditions. Filters by condition first, then applies channel/sample/interval/epoch selection.
-Both `data_power` and `data_phase` are subset consistently.
-
-# Examples
-```julia
-sub = subset(tf_epochs_vec, condition_selection = conditions(1, 2), channel_selection = channels(:Fz))
-```
-"""
 function subset(
     datasets::Vector{TimeFreqEpochData};
     condition_selection::Function = conditions(),
@@ -1235,20 +1131,6 @@ Select all time points (default for interval parameters).
 Returns `nothing` which means no time filtering.
 """
 times() = nothing
-
-"""
-    times(start::Real, stop::Real)
-    times((start, stop))
-
-Select a specific time window from start to stop seconds.
-Returns a tuple representing the time interval.
-
-# Examples
-```julia
-times(0.3, 0.5)    # 300-500ms window
-times(-0.2, 0.0)   # -200-0ms baseline window
-```
-"""
 times(start::Real, stop::Real) = (start, stop)
 times(interval::Tuple{Real,Real}) = interval
 

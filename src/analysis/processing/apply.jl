@@ -14,12 +14,6 @@ function apply_analysis_settings!(dat::EegData, settings::AnalysisSettings)
     return nothing
 end
 apply_analysis_settings!(dat::EegData, settings::Observable{AnalysisSettings}) = apply_analysis_settings!(dat, settings[])
-
-"""
-    apply_analysis_settings!(data::EegData, settings::AnalysisSettings, ica::InfoIca)
-
-Apply analysis settings to data in-place, including ICA component removal.
-"""
 function apply_analysis_settings!(dat::EegData, ica::InfoIca, settings::AnalysisSettings)
 
     # Apply base settings (filter, rereference, repair, regions)

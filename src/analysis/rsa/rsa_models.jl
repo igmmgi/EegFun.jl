@@ -573,28 +573,6 @@ function create_rdm_from_timeseries(
     return rdms
 end
 
-
-"""
-    create_rdm_from_timeseries(
-        temporal_vectors::Vector{Vector{Vector{Float64}}},
-        times::Vector{Float64};
-        dissimilarity_measure::Symbol = :correlation,
-    )
-
-Create temporal RDMs from a vector of temporal feature vectors.
-
-# Arguments
-- `temporal_vectors::Vector{Vector{Vector{Float64}}}`: 
-  - Outer vector: one per condition
-  - Middle vector: one per time point
-  - Inner vector: feature values at that time point
-- `times::Vector{Float64}`: Time points in seconds
-- `dissimilarity_measure::Symbol`: Measure to use
-
-# Returns
-- `rdms::Array{Float64, 3}`: Temporal RDMs [time × condition × condition]
-
-"""
 function create_rdm_from_timeseries(
     temporal_vectors::Vector{Vector{Vector{Float64}}},
     times::Vector{Float64};

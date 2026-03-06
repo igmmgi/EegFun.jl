@@ -169,39 +169,6 @@ function plot_channel_summary(dat::DataFrame, col::Symbol; kwargs...)
 end
 
 plot_channel_summary(dat::Vector{DataFrame}, col::Symbol; kwargs...) = plot_channel_summary.(dat, col; kwargs...)
-
-"""
-    plot_channel_summary(dat::DataFrame, col::Vector{Symbol}; kwargs...)
-
-Plot multiple bar charts summarizing different metrics per channel from a DataFrame.
-
-Creates a grid layout with one subplot per column specified in `col`. Each subplot shows
-a bar chart for that specific metric across all channels.
-
-# Arguments
-- `dat::DataFrame`: DataFrame containing channel summary data
-- `col::Vector{Symbol}`: Vector of column symbols to plot, each will get its own subplot
-
-# Keyword Arguments
-$(_generate_kwargs_doc(PLOT_CHANNEL_SUMMARY_KWARGS))
-
-# Returns
-- `fig::Figure` - The created figure object
-
-# Examples
-```julia
-# Plot multiple metrics in a grid
-fig = plot_channel_summary(summary_df, [:kurtosis, :variance, :range])
-
-# Custom grid layout
-fig = plot_channel_summary(summary_df, [:min, :max, :std], dims = (2, 2))
-
-# With averaging and error bars
-fig = plot_channel_summary(summary_df, [:kurtosis, :variance], 
-    average_over = :epoch,
-    sort_values = true)
-```
-"""
 function plot_channel_summary(dat::DataFrame, col::Vector{Symbol}; kwargs...)
     plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
     fig = Figure()

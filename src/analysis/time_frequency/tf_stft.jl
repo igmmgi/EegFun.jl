@@ -382,42 +382,6 @@ end
 # =============================================================================
 #     BATCH PROCESSING FUNCTIONS
 # =============================================================================
-
-"""
-    tf_stft(file_pattern::String;
-            input_dir::String=pwd(),
-            output_dir::Union{String,Nothing}=nothing,
-            participant_selection::Function=participants(),
-            condition_selection::Function=conditions(),
-            kwargs...)
-
-Batch STFT time-frequency analysis on EpochData files.
-
-Loads `.jld2` files containing `EpochData` (one or more conditions per file),
-runs `tf_stft` on each condition, and saves the results as `Vector{TimeFreqData}`.
-
-# Arguments
-- `file_pattern::String`: Pattern to match files (e.g., "epochs", "epochs_cleaned")
-- `input_dir::String`: Input directory containing JLD2 files (default: current directory)
-- `output_dir::Union{String, Nothing}`: Output directory (default: creates subdirectory)
-- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
-- `condition_selection::Function`: Condition selection predicate (default: `conditions()` for all)
-- All other keyword arguments are forwarded to `tf_stft` (e.g., `frequencies`, `window_length`, `cycles`, `time_steps`, `pad`, `filter_edges`)
-
-# Examples
-```julia
-# Run STFT TF on all epoch files with fixed window
-tf_stft("epochs_cleaned"; window_length=0.3)
-
-# Adaptive window with specific participants
-tf_stft("epochs_cleaned";
-        participant_selection=participants([1, 2, 3]),
-        frequencies=2:1:30, cycles=7, time_steps=0.05)
-
-# Custom output directory
-tf_stft("epochs"; window_length=0.5, output_dir="/data/tf_results")
-```
-"""
 function tf_stft(
     file_pattern::String;
     input_dir::String = pwd(),

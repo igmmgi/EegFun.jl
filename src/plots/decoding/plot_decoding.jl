@@ -300,25 +300,6 @@ function plot_decoding(decoded::DecodedData; kwargs...)
 
     return fig, ax
 end
-
-"""
-    plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
-
-Plot multiple decoding results in separate subplots (one per subject).
-
-Creates a grid of subplots using `best_rect` to determine optimal layout,
-with each subject's decoding results in its own subplot.
-
-# Arguments
-- `decoded_list::Vector{DecodedData}`: Vector of DecodedData objects, one per subject
-- `kwargs`: Additional keyword arguments (see PLOT_DECODING_KWARGS)
-
-# Examples
-```julia
-# Plot all subjects in separate subplots
-plot_decoding(all_decoded, title = "Individual Subjects")
-```
-"""
 function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
     if isempty(decoded_list)
         @minimal_error("Cannot plot empty decoded data list")
@@ -410,28 +391,6 @@ function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
 
     return fig
 end
-
-"""
-    plot_decoding(decoded::DecodedData, stats::DecodingStatisticsResult; kwargs...)
-
-Plot decoding accuracy over time with significance markers from statistical test results.
-
-# Arguments
-- `decoded::DecodedData`: DecodedData object containing decoding results
-- `stats::DecodingStatisticsResult`: DecodingStatisticsResult from `test_against_chance` or `test_against_chance_cluster`
-- `kwargs`: Additional keyword arguments (see PLOT_DECODING_KWARGS)
-  - `show_significance::Bool`: Show significance markers (default: true)
-  - `sig_color::ColorType`: Color for significance markers (default: :yellow)
-  - `sig_alpha::Float64`: Transparency for significance markers (default: 0.3)
-  - `sig_bar_position::Union{Float64, Symbol}`: Y-position for significance bars - `:bottom` (default), `:top`, or a Float64 value
-
-# Examples
-```julia
-# Test and plot with significance
-stats = test_against_chance(decoded_list, alpha=0.05, correction_method=:bonferroni)
-plot_decoding(grand_avg, stats, show_significance=true)
-```
-"""
 function plot_decoding(decoded::DecodedData, stats::DecodingStatisticsResult; kwargs...)
     # Merge defaults with user kwargs
     plot_kwargs = _merge_plot_kwargs(PLOT_DECODING_KWARGS, kwargs)

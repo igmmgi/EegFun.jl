@@ -182,23 +182,6 @@ function plot_topography(
 
     return (fig = fig, ax = ax)
 end
-
-"""
-    plot_topography(tfs::Vector{TimeFreqData};
-                     freq_range::Tuple{Real, Real},
-                     interval_selection::Interval = times(),
-                     baseline_interval = nothing,
-                     baseline_method::Symbol = :db,
-                     kwargs...)
-
-Plot topographic maps for multiple TF conditions in a grid.
-
-# Examples
-```julia
-plot_topography([tf_cond1, tf_cond2], freq_range=(8.0, 12.0),
-                interval_selection=times(0.3, 0.5), baseline_interval=(-0.3, 0.0))
-```
-"""
 function plot_topography(
     tfs::Vector{TimeFreqData};
     freq_range::Tuple{Real,Real},

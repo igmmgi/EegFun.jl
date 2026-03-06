@@ -232,20 +232,6 @@ function group_by_condition(erps::Vector{<:ErpData})
     # Sort by condition number
     return OrderedDict(sort(collect(grouped), by = first))
 end
-
-"""
-    group_by_condition(items::Vector{T}) where T
-
-Group EEG data objects by their condition number.
-
-Works with any type that has a `.condition` field (EpochData, TimeFreqData, TimeFreqEpochData, etc.).
-
-# Arguments
-- `items::Vector{T}`: Vector of data objects to group
-
-# Returns
-- `OrderedDict{Int, Vector{T}}`: Data grouped by condition number (sorted)
-"""
 function group_by_condition(items::Vector{T}) where {T}
     grouped = OrderedDict{Int,Vector{T}}()
     for item in items
