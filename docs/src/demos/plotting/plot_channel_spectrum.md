@@ -120,7 +120,7 @@ using EegFun
 
 # read raw data
 dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf");
-dat = EegFun.create_eegfun_data(dat);
+dat = EegFun.create_test_eegfun_data(dat);
 
 # Plots
 EegFun.plot_channel_spectrum(dat)

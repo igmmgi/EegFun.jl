@@ -36,7 +36,7 @@ BrainVision is the data format used by Brain Products GmbH EEG systems (e.g., Br
 
 ### Data Mapping
 
-**EegFun.read_raw_data** loads BrainVision data, then **create_eegfun_data** converts to native EegFun types:
+**EegFun.read_raw_data** loads BrainVision data, then **create_test_eegfun_data** converts to native EegFun types:
 
 - BrainVision → `BrainVisionData` (intermediate) → `ContinuousData` (EegFun)
 - Markers extracted from `.vmrk` file
@@ -94,7 +94,7 @@ This demo shows the complete BrainVision import workflow:
 
 ### Create EegFun Data Structure
 
-- Combine raw data with layout using `create_eegfun_data()`
+- Combine raw data with layout using `create_test_eegfun_data()`
 - Results in `ContinuousData` ready for analysis
 
 
@@ -122,7 +122,7 @@ dat.data
 dat.header
 
 # Create EegFun data structure
-eeg = EegFun.create_eegfun_data(dat)
+eeg = EegFun.create_test_eegfun_data(dat)
 
 EegFun.all_data(eeg)
 EegFun.meta_data(eeg)

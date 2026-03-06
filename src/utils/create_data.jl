@@ -103,11 +103,11 @@ function create_test_erp_data(; participant = 1, condition = 1, fs = 1000, n_cha
 end
 
 """
-    create_batch_test_erp_data(; n_conditions = 2, fs = 1000, n_channels = 3, seed = nothing)
+    create_test_batch_erp_data(; n_conditions = 2, fs = 1000, n_channels = 3, seed = nothing)
 
 Create a vector of ErpData objects for testing batch operations.
 """
-function create_batch_test_erp_data(; n_conditions = 2, fs = 1000, n_channels = 3, seed::Union{Int,Nothing} = nothing)
+function create_test_batch_erp_data(; n_conditions = 2, fs = 1000, n_channels = 3, seed::Union{Int,Nothing} = nothing)
     !isnothing(seed) && Random.seed!(seed)
     return [create_test_erp_data(condition = c, fs = fs, n_channels = n_channels) for c = 1:n_conditions]
 end

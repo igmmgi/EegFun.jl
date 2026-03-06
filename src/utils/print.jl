@@ -43,7 +43,7 @@ function get_package_version(; package_name::String = "EegFun")
             end
         end
         return version
-    catch # Defensive: guards against unusual install layouts or missing Project.toml
+    catch # Something went wrong?
         return "unknown"
     end
 end

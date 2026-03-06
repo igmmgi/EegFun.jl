@@ -229,7 +229,7 @@ end # EegFun testset
         # Create test data files
         @testset "Setup test files" begin
             for participant in [1, 2]
-                erps = EegFun.create_batch_test_erp_data(n_conditions = 2)
+                erps = EegFun.create_test_batch_erp_data(n_conditions = 2)
                 filename = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
                 jldsave(filename; data = erps)
                 @test isfile(filename)
@@ -451,7 +451,7 @@ end # EegFun testset
             mkpath(partial_dir)
 
             # Create one valid file
-            erps = EegFun.create_batch_test_erp_data(n_conditions = 2)
+            erps = EegFun.create_test_batch_erp_data(n_conditions = 2)
             jldsave(joinpath(partial_dir, "1_erps_cleaned.jld2"); data = erps)
 
             # Create one malformed file (invalid data type - String instead of Vector{ErpData})
@@ -574,7 +574,7 @@ end # EegFun testset
             pattern_dir = joinpath(test_dir, "pattern_test")
             mkpath(pattern_dir)
 
-            erps = EegFun.create_batch_test_erp_data(n_conditions = 2)
+            erps = EegFun.create_test_batch_erp_data(n_conditions = 2)
             jldsave(joinpath(pattern_dir, "1_erps_original.jld2"); data = erps)
             jldsave(joinpath(pattern_dir, "2_erps_cleaned.jld2"); data = erps)
             jldsave(joinpath(pattern_dir, "3_custom_erps.jld2"); data = erps)

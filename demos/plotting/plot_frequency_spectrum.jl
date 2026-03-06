@@ -11,7 +11,7 @@ using EegFun
 dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf")
 layout = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv")
 EegFun.polar_to_cartesian_xy!(layout)
-dat = EegFun.create_eegfun_data(dat, layout)
+dat = EegFun.create_test_eegfun_data(dat, layout)
 
 EegFun.highpass_filter!(dat, 0.5)
 

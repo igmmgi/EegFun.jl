@@ -17,7 +17,7 @@ PrecompileTools.@compile_workload begin
         # Reading *.bdf files and opening databrowser
         dat = EegFun.read_raw_data(data_file)
         layout_file = EegFun.read_layout(layout_file_path)
-        dat = EegFun.create_eegfun_data(dat, layout_file)
+        dat = EegFun.create_test_eegfun_data(dat, layout_file)
 
         # Some minimal preprocessing
         EegFun.rereference!(dat, :avg)

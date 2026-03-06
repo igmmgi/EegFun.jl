@@ -61,7 +61,7 @@ dat = EegFun.read_raw_data("participant1.bdf")
 # Attach an electrode layout
 layout = EegFun.read_layout("biosemi72.csv")
 EegFun.polar_to_cartesian_xy!(layout)
-dat = EegFun.create_eegfun_data(dat, layout)
+dat = EegFun.create_test_eegfun_data(dat, layout)
 
 # Browse the raw data interactively
 EegFun.plot_databrowser(dat)

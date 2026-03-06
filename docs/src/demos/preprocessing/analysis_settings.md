@@ -59,7 +59,7 @@ using EegFun
 dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf")
 layout = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv")
 EegFun.polar_to_cartesian_xy!(layout)
-dat = EegFun.create_eegfun_data(dat, layout)
+dat = EegFun.create_test_eegfun_data(dat, layout)
 
 
 #######################################################################
@@ -86,7 +86,7 @@ settings = EegFun.AnalysisSettings(1.0, 30.0, :avg, Symbol[], :none, Tuple{Float
 
 # Apply settings to fresh data (non-mutating — returns a processed copy)
 dat_fresh = EegFun.read_raw_data("./resources/data/bdf/example1.bdf")
-dat_fresh = EegFun.create_eegfun_data(dat_fresh, layout)
+dat_fresh = EegFun.create_test_eegfun_data(dat_fresh, layout)
 
 dat_processed = EegFun.apply_analysis_settings(dat_fresh, settings)
 dat_processed.analysis_info
