@@ -439,6 +439,7 @@ function plot_gui()
         gui_state.plottype[] = selection
     end
 
+
     # Layout dropdown callback
     on(layout_dropdown.selection) do selection
         if !isnothing(selection)
