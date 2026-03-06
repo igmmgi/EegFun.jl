@@ -154,8 +154,8 @@ layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
 EegFun.polar_to_cartesian_xy!(layout_file)
 
 # create EegFun data structure (EegFun.ContinuousData)
-# dat = EegFun.create_test_eegfun_data(dat); # works but no layout info available, thus, no topographic plots
-dat = EegFun.create_test_eegfun_data(dat, layout_file);
+# dat = EegFun.create_eegfun_data(dat); # works but no layout info available, thus, no topographic plots
+dat = EegFun.create_eegfun_data(dat, layout_file);
 
 # Basic databrowser
 EegFun.plot_databrowser(dat);
@@ -174,7 +174,7 @@ EegFun.plot_databrowser(dat_new)
 #######################################################################
 # We can add new columns to our data
 dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf");
-dat = EegFun.create_test_eegfun_data(dat, layout_file);
+dat = EegFun.create_eegfun_data(dat, layout_file);
 
 # Some minimal preprocessing (average reference and highpass filter)
 EegFun.rereference!(dat, :avg)

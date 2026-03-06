@@ -426,7 +426,7 @@ function _plot_one_ica_activation(ica_path::String, comp_sel, layout, gui_dir::S
             read_data(source_path)
         else
             raw = read_raw_data(source_path)
-            d = isnothing(layout) ? create_test_eegfun_data(raw) : create_test_eegfun_data(raw, layout)
+            d = isnothing(layout) ? create_eegfun_data(raw) : create_eegfun_data(raw, layout)
             @info "Applying preprocessing: highpass 0.1 Hz + average rereference"
             highpass_filter!(d, 0.1)
             rereference!(d, :avg)
@@ -502,7 +502,7 @@ function _plot_channel_summary(gui_state)
         try
             dat = if file_ext ∈ (".bdf", ".set", ".vhdr")
                 raw = read_raw_data(fname)
-                d = isnothing(layout) ? create_test_eegfun_data(raw) : create_test_eegfun_data(raw, layout)
+                d = isnothing(layout) ? create_eegfun_data(raw) : create_eegfun_data(raw, layout)
                 @info "Applying preprocessing: highpass 0.1 Hz + average rereference"
                 highpass_filter!(d, 0.1)
                 rereference!(d, :avg)

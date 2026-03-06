@@ -14,7 +14,7 @@ EegFun.channel_labels(layout)
 ```
 
 > [!TIP]
-> When you load data with `create_test_eegfun_data`, the layout is automatically attached to your data object. You can access it via `dat.layout`.
+> When you load data with `create_eegfun_data`, the layout is automatically attached to your data object. You can access it via `dat.layout`.
 
 ## Coordinate Systems
 

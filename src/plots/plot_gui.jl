@@ -631,9 +631,9 @@ function _plot_databrowser(gui_state)
 
             dat = read_raw_data(gui_state.filename[])
             if isnothing(layout)
-                dat = create_test_eegfun_data(dat)
+                dat = create_eegfun_data(dat)
             else
-                dat = create_test_eegfun_data(dat, layout)
+                dat = create_eegfun_data(dat, layout)
             end
 
             # Update electrode menu with actual channel labels from the loaded data

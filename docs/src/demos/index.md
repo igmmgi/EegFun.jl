@@ -72,6 +72,14 @@ Browse interactive code examples demonstrating EegFun.jl's capabilities.
 - [Plot ERP Filter GUI](plotting/plot_erp_filter_gui.md) - Interactive filter exploration
 - [Plot ERP Measurement GUI](plotting/plot_erp_measurement_gui.md) - Interactive measurement GUI
 
+## Teaching Demos
+
+Interactive demonstrations for teaching signal processing and EEG concepts.
+
+- [Signal Example 1 — Nyquist Theorem](teaching/signal_example_1.md) - Sampling, aliasing, and signal reconstruction (linear vs. sinc)
+- [Signal Example 2 — Signal Composition](teaching/signal_example_2.md) - Building complex waveforms from sine waves, noise, and filtering
+- [Simulate ERP](teaching/simulate_erp.md) - Trial averaging, 1/f noise, and ERP component decomposition
+
 ## Specialized Visualization
 
 - [Plot Decoding](plotting/plot_decoding.md) - MVPA decoding results

@@ -11,7 +11,7 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 | Load an EEGLAB file | `EegFun.read_eeglab("file.set")` |
 | Load a FieldTrip .mat file | `EegFun.read_fieldtrip("file.mat")` |
 | Load a channel layout | `EegFun.read_layout("layout.csv")` |
-| Create EegFun data structure | `EegFun.create_test_eegfun_data(raw, layout)` |
+| Create EegFun data structure | `EegFun.create_eegfun_data(raw, layout)` |
 
 ## Data Persistence (JLD2)
 

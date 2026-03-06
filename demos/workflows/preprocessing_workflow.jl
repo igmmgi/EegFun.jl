@@ -33,7 +33,7 @@ EegFun.get_neighbours_xy!(layout, 0.35) # Calculate neighbors (normalized units 
 # EegFun.plot_layout_2d(layout, neighbours = true)
 
 # Create EegFun data structure
-dat = EegFun.create_test_eegfun_data(raw_data, layout)
+dat = EegFun.create_eegfun_data(raw_data, layout)
 
 # Optional: save original continuous data
 # jldsave("continuous_original.jld2"; data = dat)

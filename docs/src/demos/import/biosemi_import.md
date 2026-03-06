@@ -29,7 +29,7 @@ BioSemi is a popular manufacturer of active electrode EEG systems. The BDF (BioS
 
 ### Data Mapping
 
-**EegFun.read_raw_data** loads BioSemi data, then **create_test_eegfun_data** converts to native EegFun types:
+**EegFun.read_raw_data** loads BioSemi data, then **create_eegfun_data** converts to native EegFun types:
 
 - BioSemi BDF → `BiosemiData` (intermediate) → `ContinuousData` (EegFun)
 - Triggers extracted from Status channel
@@ -69,7 +69,7 @@ This demo shows the complete BioSemi import workflow:
 
 ### Create EegFun Data Structure
 
-- Combine raw data with layout using `create_test_eegfun_data()`
+- Combine raw data with layout using `create_eegfun_data()`
 - Results in `ContinuousData` ready for analysis
 
 
@@ -106,7 +106,7 @@ EegFun.polar_to_cartesian_xy!(layout)
 layout.data # DataFrame with labels and positions
 
 # Create EegFun data structure
-dat = EegFun.create_test_eegfun_data(raw_data, layout)
+dat = EegFun.create_eegfun_data(raw_data, layout)
 
 EegFun.all_data(dat)
 EegFun.meta_data(dat)

@@ -13,7 +13,6 @@ EegFun.EegFunData
 EegFun.EegData
 EegFun.SingleDataFrameEeg
 EegFun.MultiDataFrameEeg
-EegFun.StatsResult
 ```
 
 ## Data Container Types
@@ -51,6 +50,7 @@ EegFun.InfoIca
 ## Statistics Types
 
 ```@docs
+EegFun.StatsResult
 EegFun.AnalysisData
 EegFun.StatisticalData
 EegFun.Cluster
@@ -156,4 +156,4 @@ EegFun._LATENCY_MEASUREMENT_TYPES
 
 ## See Also
 
-- [Data structures explanation](../explanations/data-structures.md)
+- [Data structures](../explanations/data-structures.md)
