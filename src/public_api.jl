@@ -422,5 +422,5 @@ public simulate_erp
 # =====================
 # Misc
 # =====================
-public EegFun_version_info
+public version_info
 public get_package_version

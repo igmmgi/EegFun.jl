@@ -97,7 +97,7 @@ function print_config(config, filename::String)
 end
 
 """
-    EegFun_version_info() -> Dict{String,Any}
+    version_info() -> Dict{String,Any}
 
 Get version information for logging purposes.
 
@@ -108,13 +108,13 @@ Returns a dictionary with the keys:
 
 # Examples
 ```julia
-ver_info = EegFun_version_info()
+ver_info = version_info()
 @info "Starting analysis" ver_info...
 
 @info "Running EegFun \$(ver_info["EegFun_version"]) on Julia \$(ver_info["julia_version"])"
 ```
 """
-function EegFun_version_info()
+function version_info()
     return Dict{String,Any}(
         "julia_version" => string(VERSION),
         "EegFun_version" => get_package_version(package_name = "EegFun"),
