@@ -55,9 +55,9 @@ _to_loglevel(level::String) = _to_loglevel(Symbol(lowercase(level)))
 Write version info and start time to a log file.
 """
 function _write_log_header(io::IO, start_time::DateTime)
-    version_info = EegFun_version_info()
-    println(io, "julia version: $(version_info["julia_version"])")
-    println(io, "EegFun version: $(version_info["EegFun_version"])")
+    ver_info = version_info()
+    println(io, "julia version: $(ver_info["julia_version"])")
+    println(io, "EegFun version: $(ver_info["EegFun_version"])")
     println(io, "Start time: ", Dates.format(start_time, "dd-mm-yyyy HH:MM:SS"))
 end
 
