@@ -212,6 +212,8 @@ with optional error bars and chance level reference line.
 - `decoded::DecodedData`: DecodedData object containing decoding results
 - `kwargs`: Additional keyword arguments (see PLOT_DECODING_KWARGS)
 
+$(_generate_kwargs_doc(PLOT_DECODING_KWARGS))
+
 # Examples
 ```julia
 # Basic plot

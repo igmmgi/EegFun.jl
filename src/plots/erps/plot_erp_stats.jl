@@ -45,6 +45,8 @@ Works with both `AnalyticResult` (from `analytic_test`) and `PermutationResult` 
   - `Real` - Custom y-position (e.g., `-5.0` to place at -5 μV)
 - `significance_color`: Color for significance bars (default: `(:gray, 0.6)`). Can be any Makie color specification
 
+$(_generate_kwargs_doc(PLOT_ERP_KWARGS))
+
 # Returns
 - Named tuple `(fig, axes)` 
 

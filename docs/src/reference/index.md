@@ -1,3 +1,7 @@
+```@meta
+CollapsedDocStrings = true
+```
+
 # API Reference
 
 Complete documentation for all public EegFun.jl functions.
@@ -5,6 +9,7 @@ Complete documentation for all public EegFun.jl functions.
 ## Index
 
 ```@index
+Pages = ["index.md"]
 Filter = t -> !startswith(string(t), "_")
 ```
 

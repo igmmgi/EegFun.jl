@@ -26,7 +26,7 @@ Plot a topographic map of average power within a frequency band and time window.
 - `baseline_interval`: Baseline window as `(start, stop)` in seconds (e.g., `(-0.3, 0.0)`). Default: `nothing`
 - `baseline_method::Symbol`: Baseline method (default: `:db`). Options: `:db`, `:absolute`, `:relative`, `:relchange`, `:percent`, `:zscore`
 
-Additional keyword arguments from `PLOT_TOPOGRAPHY_KWARGS` are supported.
+$(_generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
 
 # Returns
 - Named tuple `(fig, ax)`
@@ -368,7 +368,7 @@ within the panel's window meets or exceeds `highlight_threshold`.
   to mark a channel (default: 0.5). `0.0` = any bin, `1.0` = all bins
 - `highlight_color`, `highlight_marker`, `highlight_size`: Marker styling
 
-Additional keyword arguments from `PLOT_TOPOGRAPHY_KWARGS` are supported.
+$(_generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
 
 # Returns
 - Named tuple `(fig, axes, colorbar)`

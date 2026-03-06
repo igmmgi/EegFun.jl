@@ -175,6 +175,8 @@ end
 Load data and create topographic plots. Accepts either a `.jld2` filepath or a pattern
 to discover and plot all matching files (one plot per file).
 
+$(_generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
+
 # Examples
 ```julia
 plot_topography("grand_average_erps_good.jld2")
