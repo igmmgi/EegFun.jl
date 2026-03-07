@@ -216,7 +216,11 @@ function signal_example_2()
             ylims!(ax2, -max_amp, max_amp)
             ylims!(ax3, -max_amp, max_amp)
             ylims!(ax4, -max_amp, max_amp)
-            ylims!(ax5, -maximum(abs.(combined)), maximum(abs.(combined)))
+            # Use a minimum range floor for ax5: near-perfect cancellation produces
+            # float residuals (~1e-14) that cause "No strict ticks" warnings and
+            # misleading zoomed-in noise. Fall back to the shared scale in that case.
+            max_combined = maximum(abs.(combined))
+            ylims!(ax5, -max(max_combined, max_amp * 1e-10), max(max_combined, max_amp * 1e-10))
         end
 
         # Update frequency domain limits
