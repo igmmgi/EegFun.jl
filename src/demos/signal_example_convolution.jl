@@ -4,25 +4,29 @@
 Interactive Convolution Demo — Sliding a Kernel Across a Signal.
 
 Demonstrates discrete convolution by sliding a kernel (filter) step by step
-across a signal, accumulating the output one position at a time. Connects
-the time-domain "sliding kernel" view to frequency-domain filtering.
+across a signal, accumulating the output one position at a time. Three kernel
+types are provided: Gaussian (low-pass filter), Boxcar (running average), and
+Wavelet (Morlet) — which outputs the amplitude envelope at a specific frequency,
+bridging filtering and time-frequency analysis.
 
 ## Plots
 
 | Row | Plot | Description |
 |-----|------|-------------|
-| 1 | Signal + Kernel | The input signal (blue) with the kernel overlaid at the current position (red). The shaded region shows where the kernel overlaps the signal. |
-| 2 | Convolution output | The result at each position, built up as the kernel slides. The output value at position *t* is the weighted sum of the signal samples under the kernel. |
+| 1 | Signal + Kernel | The input signal with the kernel overlaid at the current position. The shaded region shows where the kernel overlaps the signal. |
+| 2 | Output | The convolution result accumulated up to the current position. For the Wavelet kernel this is the amplitude envelope (always ≥ 0, y-axis fixed 0–1.1). |
 
 ## Controls
 
-| Control | Range | Description |
-|---------|-------|-------------|
-| Kernel position | Full range | Scrub the kernel manually across the signal |
-| Kernel type | Gaussian / Boxcar | Choose the kernel shape |
-| Kernel width | 0.01–0.2 s | Width of the kernel (standard deviation for Gaussian, half-width for Boxcar) |
-| Signal Freq | 1–40 Hz | Frequency of the signal's sine component |
-| Noise | 0–1 | Noise standard deviation |
+| Control | Applies to | Range | Description |
+|---------|------------|-------|-------------|
+| Kernel Position | All | 0–2 s | Scrub the kernel across the signal — output builds up as you drag right |
+| Kernel Width | Gaussian / Boxcar | 10–2000 ms | Total span of the kernel (label shows "→ eff. X ms" in Wavelet mode) |
+| Cycles | Wavelet | 1–10 | Number of oscillations in the wavelet kernel |
+| Wavelet Freq | Wavelet | 1–40 Hz | Target frequency to detect |
+| Signal Freq | All | 1–20 Hz | Frequency of the input sine wave |
+| Noise | All | 0–1 | Additive Gaussian noise standard deviation |
+| Kernel type | All | — | Gaussian / Boxcar / Wavelet (Morlet) |
 
 ## Teaching Notes
 
@@ -31,27 +35,20 @@ signal under the kernel:
 
     (x * h)[t] = Σ x[τ] · h[t − τ]
 
-This is exactly how **FIR filters** work: the kernel *h* is the filter's
-impulse response. A Gaussian kernel is a smooth low-pass filter — it keeps
-slow fluctuations and removes fast ones. A narrow rectangular (Boxcar) kernel
-approximates a running average.
+This is how FIR filters work. The kernel *h* is the filter's impulse response:
+- **Gaussian** → smooth low-pass filter (removes noise, preserves slow waves)
+- **Boxcar** → running average (same idea, sharper edges in frequency domain)
+- **Wavelet (Morlet)** → Gaussian × cosine at *f* Hz. Frequency-selective:
+  output is the amplitude envelope "how much of *f* Hz is present right now?"
+  This is one row of a time-frequency spectrogram.
 
-**Key observations to try:**
-1. With a Gaussian kernel, slide it across the signal — the output is a
-   smoothed version of the signal.
-2. Narrow vs. wide kernel: a narrow kernel preserves high frequencies; a wide
-   kernel removes them (stronger low-pass effect).
-3. At a noise-free sine wave: the smoothed output is still a sine wave at the
-   same frequency (just rescaled) because convolution = multiplication in the
-   frequency domain.
-4. With noise added: wide kernel removes noise better than narrow kernel.
-
-The Boxcar kernel shows how averaging consecutive samples suppresses noise —
-the same principle behind running-average filtering.
+The **Kernel Width** label shows "→ eff. X ms" in Wavelet mode — this is the
+equivalent Gaussian width, determined by `cycles / wavelet_freq`. Setting the
+Gaussian Kernel Width slider to that value produces the same Gaussian envelope.
 
 ## See Also
 
-- Cohen, M. X. (2014). *Analyzing Neural Time Series Data*. MIT Press. — Chapter 12
+- Cohen, M. X. (2014). *Analyzing Neural Time Series Data*. MIT Press. — Chapter 11/12
 
 # Examples
 ```julia
