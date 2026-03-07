@@ -688,14 +688,14 @@ _format_electrode(io, :Fp1, neighbours_struct)
 """
 function _format_electrode(io, electrode, neighbours)
     n_neighbours = length(neighbours.channels)
-    avg_distance = round(mean(neighbours.distances), digits = 1)
+    avg_distance = round(mean(neighbours.distances), digits = 2)
 
     println(io, "$(rpad(string(electrode), 6)): $(n_neighbours) neighbours (avg dist: $(avg_distance))")
     if n_neighbours > 0
         neighbour_details = []
         for j = 1:n_neighbours
             neighbour = string(neighbours.channels[j])
-            distance = round(neighbours.distances[j], digits = 1)
+            distance = round(neighbours.distances[j], digits = 2)
             weight = round(neighbours.weights[j], digits = 3)
             push!(neighbour_details, "$(neighbour) ($(distance),$(weight))")
         end
