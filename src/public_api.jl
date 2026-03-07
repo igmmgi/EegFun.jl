@@ -368,6 +368,7 @@ public generate_signal
 public signal_example_composition
 public signal_example_convolution
 public signal_example_dotproduct
+public signal_example_ica
 public signal_example_sampling
 public signal_example_spectrum
 public signal_example_tf

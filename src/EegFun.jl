@@ -198,6 +198,7 @@ include("demos/signal_example_dotproduct.jl")
 include("demos/signal_example_convolution.jl")
 include("demos/signal_example_spectrum.jl")
 include("demos/signal_example_tf.jl")
+include("demos/signal_example_ica.jl")
 include("demos/simulate_erp.jl")
 
 # Precompilation

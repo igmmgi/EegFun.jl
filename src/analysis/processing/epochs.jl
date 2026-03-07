@@ -190,18 +190,21 @@ end
 """
     mark_epoch_intervals!(dat::ContinuousData, triggers_of_interest::Vector{Int}, time_window::Vector{<:Real}; channel_out::Symbol = :epoch_interval)
     mark_epoch_intervals!(dat::ContinuousData, channel_in::Symbol, time_window::Vector{<:Real}; channel_out = Symbol(string(channel_in)*"_window"))
+    mark_epoch_intervals!(dat::ContinuousData, channels_in::Vector{Symbol}, time_window::Vector{<:Real}; channel_out::Symbol = :event_window)
     mark_epoch_intervals!(dat::ContinuousData, epoch_conditions::Vector{EpochCondition}, time_window::Vector{<:Real}; channel_out::Symbol = :epoch_interval)
 
 Mark samples within a time window in-place by adding a boolean column to the data.
 
 - **Trigger form**: marks windows around samples matching any trigger in `triggers_of_interest`
 - **Column form**: marks windows around each `true` sample in a boolean column (e.g., `:is_vEOG`)
+- **Multi-column form**: unions `true` samples across multiple boolean columns and marks windows around all of them
 - **EpochCondition form**: marks windows around trigger sequences defined by `epoch_conditions`
 
 # Examples
 ```julia
 mark_epoch_intervals!(dat, [1, 3, 5], [-1.0, 2.0])
 mark_epoch_intervals!(dat, :is_vEOG, [-0.1, 0.3])
+mark_epoch_intervals!(dat, [:is_vEOG, :is_hEOG], [-0.05, 0.4]; channel_out = :eog_window)
 mark_epoch_intervals!(dat, [condition1, condition2], [-1.0, 2.0])
 ```
 """
@@ -263,6 +266,42 @@ function mark_epoch_intervals!(
     # Mark windows around all found indices
     n_marked = _mark_windows_at_indices!(dat, reference_indices, time_window, channel_out)
     @info "Marked $n_marked samples across $(length(reference_indices)) $(channel_in) events"
+
+    return dat
+end
+
+
+function mark_epoch_intervals!(
+    dat::ContinuousData,
+    channels_in::Vector{Symbol},
+    time_window::Vector{<:Real};
+    channel_out::Symbol = :event_window,
+)
+    # Input validation
+    _validate_epoch_interval_params(dat, time_window)
+    for channel_in in channels_in
+        channel_in ∉ propertynames(dat.data) && @minimal_error("Column $(channel_in) not found in data")
+        eltype(dat.data[!, channel_in]) <: Bool || @minimal_error("Column $(channel_in) must be a Bool column")
+    end
+
+    # Initialize result column
+    dat.data[!, channel_out] .= false
+
+    # Union true indices across all boolean columns
+    reference_indices = Int[]
+    for channel_in in channels_in
+        append!(reference_indices, findall(dat.data[!, channel_in]))
+    end
+    sort!(unique!(reference_indices))
+
+    if isempty(reference_indices)
+        @minimal_warning "No true values found in any of the columns $(channels_in)"
+        return dat
+    end
+
+    # Mark windows around all collected indices
+    n_marked = _mark_windows_at_indices!(dat, reference_indices, time_window, channel_out)
+    @info "Marked $n_marked samples across $(length(reference_indices)) events from $(length(channels_in)) columns"
 
     return dat
 end

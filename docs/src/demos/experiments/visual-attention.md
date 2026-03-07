@@ -77,7 +77,7 @@ EegFun.get_neighbours_xy!(dat, 0.35)
 Plot again with neighbour connections (interactive with mouse hover):
 
 ```julia
-EegFun.plot_layout_2d(dat, show_neighbours = true)
+EegFun.plot_layout_2d(dat, neighbours = true)
 ```
 
 ### 1.3 Inspect Triggers
@@ -172,6 +172,13 @@ EegFun.channel_difference!(
     channel_selection2 = EegFun.channels([:F10]),
     channel_out = :hEOG,
 )
+```
+
+Next, automatically detect EOG onsets and mark the surrounding interval as contaminated. This creates Boolean columns (`:is_vEOG`, `:is_hEOG`) that the databrowser renders as shaded overlays:
+
+```julia
+EegFun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
+EegFun.detect_eog_onsets!(dat, 50, :hEOG, :is_hEOG)
 ```
 
 The new `:vEOG` and `:hEOG` channels appear under the **Extra Channels** tab in the databrowser, so you can scroll through the recording and verify that blinks and saccades are captured correctly.
