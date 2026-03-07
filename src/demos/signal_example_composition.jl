@@ -1,5 +1,5 @@
 """
-    signal_example_2()
+    signal_example_composition()
 
 Interactive multi-signal composer with filtering and frequency-domain analysis.
 
@@ -32,14 +32,14 @@ The x-axes of plots 1–5 are linked: panning or zooming one panel updates all t
 # Examples
 ```julia
 using EegFun
-EegFun.signal_example_2()
+EegFun.signal_example_composition()
 ```
 
 # Returns
 - `fig::Figure`: The Makie figure object containing the interactive GUI
 - `axes::Vector{Axis}`: The six axis objects (rows 1–6)
 """
-function signal_example_2()
+function signal_example_composition()
 
     fig = Figure(size = (1200, 800), title = "Signal Example 2", backgroundcolor = :white)
 

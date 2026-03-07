@@ -16,7 +16,7 @@ Interactive ERP simulator for teaching how trial averaging extracts signals from
 
 The background noise uses a realistic human EEG power spectrum (1/f structure), not white noise — so individual trials look like real EEG epochs rather than random static.
 
-This demo builds directly on [Signal Example 2](signal_example_2.md): the ERP waveform you see in the average is a real-world instance of multiple frequency components summing together, now embedded in realistic noise.
+This demo builds directly on [Signal Example 2](signal_example_composition.md): the ERP waveform you see in the average is a real-world instance of multiple frequency components summing together, now embedded in realistic noise.
 
 ## Things to Try
 
@@ -44,8 +44,8 @@ Each component has its own row of controls in the right panel.
 ## See Also
 
 - Luck, S. J. (2014). *An Introduction to the Event-Related Potential Technique* (2nd ed.). MIT Press. — Chapter 8 (averaging and signal-to-noise ratio)
-- [Signal Example 1 — Nyquist Theorem](signal_example_1.md)
-- [Signal Example 2 — Signal Composition & Filtering](signal_example_2.md)
+- [Signal Example 1 — Nyquist Theorem](signal_example_sampling.md)
+- [Signal Example 2 — Signal Composition & Filtering](signal_example_composition.md)
 
 ## Code
 

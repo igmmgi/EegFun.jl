@@ -365,8 +365,12 @@ public setup_logging
 # Demos
 # =====================
 public generate_signal
-public signal_example_1
-public signal_example_2
+public signal_example_composition
+public signal_example_convolution
+public signal_example_dotproduct
+public signal_example_sampling
+public signal_example_spectrum
+public signal_example_tf
 public signal_to_data
 public simulate_erp
 

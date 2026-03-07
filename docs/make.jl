@@ -83,8 +83,12 @@ pages = [
             "Plot ERP Measurement GUI" => "demos/plotting/plot_erp_measurement_gui.md",
         ],
         "Teaching Demos" => [
-            "Signal Example 1 (Nyquist)" => "demos/teaching/signal_example_1.md",
-            "Signal Example 2 (Composition)" => "demos/teaching/signal_example_2.md",
+            "Signal Example (Sampling)" => "demos/teaching/signal_example_sampling.md",
+            "Signal Example (Composition)" => "demos/teaching/signal_example_composition.md",
+            "Signal Example (Dot Product)" => "demos/teaching/signal_example_dotproduct.md",
+            "Signal Example (Convolution)" => "demos/teaching/signal_example_convolution.md",
+            "Signal Example (Spectrum)" => "demos/teaching/signal_example_spectrum.md",
+            "Signal Example (Time-Frequency)" => "demos/teaching/signal_example_tf.md",
             "Simulate ERP" => "demos/teaching/simulate_erp.md",
         ],
         "Specialized Plotting" => [

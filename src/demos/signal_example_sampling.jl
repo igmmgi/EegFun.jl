@@ -1,5 +1,5 @@
 """
-    signal_example_1()
+    signal_example_sampling()
 
 Interactive Signal Generator — Nyquist Theorem Demo
 
@@ -53,14 +53,14 @@ the difference between linear and ideal reconstruction.
 # Example
 ```julia
 using EegFun
-EegFun.signal_example_1()
+EegFun.signal_example_sampling()
 ```
 
 # Returns
 - `fig::Figure`: The Makie figure object containing the interactive GUI
 - `ax::Axis`: The axis object containing the plots
 """
-function signal_example_1()
+function signal_example_sampling()
     fig = Figure(size = (1000, 800), title = "Signal Example 1")
 
     # Set up adaptive font and UI sizing
