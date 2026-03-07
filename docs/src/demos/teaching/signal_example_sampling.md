@@ -4,7 +4,7 @@ Interactive demonstration of the **Nyquist–Shannon sampling theorem**.
 
 Use this demo to show students how sampling rate affects the faithful reconstruction of a sine wave, and how the two main reconstruction methods compare.
 
-![Signal Example 1](/tutorials/signal_example_1.png)
+![Signal Example 1](/tutorials/signal_example_sampling.png)
 
 ## What it shows
 
@@ -26,7 +26,7 @@ When the sampling rate falls **below** twice the signal frequency, the signal ca
 - Start with a sampling rate well above Nyquist (e.g. 10× the signal frequency) and observe that both methods agree with the original signal.
 - Gradually reduce the sampling rate toward and then below the Nyquist limit (~2× the signal frequency) to show reconstruction breakdown and **aliasing**.
 - Enable both reconstructions simultaneously to highlight the superiority of sinc interpolation near the Nyquist limit.
-- Once you understand single-frequency reconstruction, see [Signal Example 2](signal_example_2.md) to explore how multiple frequencies interact.
+- Once you understand single-frequency reconstruction, see [Signal Example 2](signal_example_composition.md) to explore how multiple frequencies interact.
 
 ## Controls
 
@@ -42,11 +42,11 @@ When the sampling rate falls **below** twice the signal frequency, the signal ca
 
 - Luck, S. J. (2014). *An Introduction to the Event-Related Potential Technique* (2nd ed.). MIT Press. — Chapter 5 (Section: Amplifying, Filtering, and Digitizing the Signal, Figure 5.7)
 - [Sinc Interpolation for Signal Reconstruction (Wolfram Demonstrations)](https://demonstrations.wolfram.com/SincInterpolationForSignalReconstruction/)
-- [Signal Example 2](signal_example_2.md) — multi-signal composition and filtering
+- [Signal Example 2](signal_example_composition.md) — multi-signal composition and filtering
 
 ## Code
 
 ```julia
 using EegFun
-EegFun.signal_example_1()
+EegFun.signal_example_sampling()
 ```

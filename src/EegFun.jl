@@ -192,8 +192,12 @@ include("plots/plot_gui_helpers.jl")
 include("plots/utils/help_system.jl")
 
 # Demos
-include("demos/signal_example_1.jl")
-include("demos/signal_example_2.jl")
+include("demos/signal_example_sampling.jl")
+include("demos/signal_example_composition.jl")
+include("demos/signal_example_dotproduct.jl")
+include("demos/signal_example_convolution.jl")
+include("demos/signal_example_spectrum.jl")
+include("demos/signal_example_tf.jl")
 include("demos/simulate_erp.jl")
 
 # Precompilation
