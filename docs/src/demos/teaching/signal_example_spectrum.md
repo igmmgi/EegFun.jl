@@ -2,6 +2,8 @@
 
 Interactive demo showing how a time-domain signal maps to a power spectrum via the FFT, and illustrating frequency resolution, spectral leakage, and windowing.
 
+![Signal Example 1](/tutorials/signal_example_spectrum.png)
+
 ## What it shows
 
 | Row | Plot | Description |
