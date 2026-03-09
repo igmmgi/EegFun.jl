@@ -27,15 +27,26 @@ See [**IDE Workflows**](ide-workflows.md) for a comparison of VS Code/VSCodium, 
 
 ## Installing EegFun
 
-Julia packages are installed using the built-in package manager. Enter package mode by pressing `]` and typing `add PackageName`, or use `Pkg` directly:
+You can install EegFun.jl through the standard Julia package manager. 
+
+### Standard Installation
+
+From the Julia REPL, enter Pkg mode by pressing `]` and run:
+
+```julia
+add EegFun
+```
+
+Or using `Pkg` in the code:
 
 ```julia
 using Pkg
-Pkg.add("PackageName")
+Pkg.add("EegFun")
 ```
 
-> [!IMPORTANT]
-> EegFun.jl is not currently registered in the Julia General registry and must be installed directly from GitHub.
+### Development Version (vía GitHub)
+
+To install the latest development version directly from GitHub:
 
 ```julia
 using Pkg
@@ -92,6 +103,7 @@ The package offers a mix of high-level and lower-level functions, including comp
 
 | Resource | Link |
 | --- | --- |
+| EegFun.jl GitHub | [github.com/igmmgi/EegFun.jl](https://github.com/igmmgi/EegFun.jl) |
 | Manual Preprocessing tutorial | [Manual Preprocessing](manual-preprocessing.md) |
 | All how-to guides | [How-to Guides](../demos/workflows/preprocessing_workflow.md) |
 | Julia learning resources | [julialang.org/learning](https://julialang.org/learning/) |
