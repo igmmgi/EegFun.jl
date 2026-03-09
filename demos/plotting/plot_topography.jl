@@ -1,6 +1,5 @@
 # Demo: Topographic Maps
 # Shows scalp topography visualization for ERP data and components.
-
 using EegFun
 
 # read raw data
@@ -17,16 +16,29 @@ dat = EegFun.create_eegfun_data(dat, layout_file);
 EegFun.rereference!(dat, :avg)
 EegFun.highpass_filter!(dat, 1)
 
-# visually selected blink like artifact
+# visually selected blink like artifact via interval selection times
+EegFun.plot_topography(dat, interval_selection = EegFun.times(5.973, 6.02), ylim = (-200, 200))
+EegFun.plot_topography(dat, interval_selection = EegFun.times(6), ylim = (-200, 200))
+
+# blink like artifact via sample selection predicate
 EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 5.973 .&& x.time .<= 6.02, ylim = (-200, 200))
 
-# visually selected blink like artifact
-EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 5.5 .&& x.time .<= 6.5, ylim = (-100, 100), n_topo = 5, dims = (1, 5))
+# blink like artifact across multiple time points
+EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 5.5 .&& x.time .<= 6.5, ylim = (-75, 75), n_topo = 5, dims = (1, 5))
+EegFun.plot_topography(
+    dat,
+    sample_selection = x -> x.time .>= 5.5 .&& x.time .<= 6.5,
+    ylim = (-75, 75),
+    n_topo = 5,
+    dims = (1, 5),
+    colorbar_plot_numbers = 5,
+)
 
 # Various combinations
 EegFun.plot_topography(dat, colorbar_plot = false, head_radius = 1.25)
 EegFun.plot_topography(dat, gridscale = 250)
 EegFun.plot_topography(dat, colormap = :inferno)
+EegFun.plot_topography(dat, colormap = :redblue)
 EegFun.plot_topography(dat, title = "Custom Title", title_fontsize = 30)
 EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6)
 EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6, method = :spherical_spline)
