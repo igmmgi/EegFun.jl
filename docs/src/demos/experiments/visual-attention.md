@@ -432,7 +432,7 @@ erps = EegFun.average_epochs(epochs_good)
 EegFun.plot_erp(erps, channel_selection = EegFun.channels([:PO7, :PO8, :O1, :O2]))
 
 # Topography at the N1 time window (peak posterior negativity)
-EegFun.plot_topography(erps, time_selection = EegFun.time(0.17))
+EegFun.plot_topography(erps, interval_selection = EegFun.times(0.17))
 ```
 
 ---
@@ -656,11 +656,11 @@ ga = EegFun.read_data(
 EegFun.plot_erp(ga, channel_selection = EegFun.channels([:PO7, :PO8, :O1, :O2]))
 
 # Topography at P1 and N1 peaks
-EegFun.plot_topography(ga, time_selection = EegFun.time(0.1))    # P1
-EegFun.plot_topography(ga, time_selection = EegFun.time(0.17))   # N1
+EegFun.plot_topography(ga, interval_selection = EegFun.times(0.1))    # P1
+EegFun.plot_topography(ga, interval_selection = EegFun.times(0.17))   # N1
 
 # Topography with ROI channels highlighted
-EegFun.plot_topography(ga, time_selection = EegFun.time(0.17),
+EegFun.plot_topography(ga, interval_selection = EegFun.times(0.17),
     highlight_channels = [:PO7, :PO8, :O1, :O2]
 )
 

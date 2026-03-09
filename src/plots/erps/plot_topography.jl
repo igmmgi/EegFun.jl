@@ -2,7 +2,10 @@
 
 """Format a time range string using the specified time unit (:s or :ms)."""
 function _format_time_range(t_min::Real, t_max::Real, time_unit::Symbol)
-    if time_unit == :ms
+    if t_min == t_max
+        # Single time point
+        return time_unit == :ms ? @sprintf("%.0f ms", t_min * 1000) : @sprintf("%.3f s", t_min)
+    elseif time_unit == :ms
         return @sprintf("%.0f to %.0f ms", t_min * 1000, t_max * 1000)
     else
         return @sprintf("%.3f to %.3f s", t_min, t_max)

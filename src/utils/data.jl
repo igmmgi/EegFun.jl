@@ -812,7 +812,26 @@ function _interval_to_samples(interval::Interval)
             start_time, stop_time = interval
         end
         # Create time predicate directly (don't use samples() for time filtering)
-        return x -> (x[!, :time] .>= start_time) .& (x[!, :time] .<= stop_time)
+        return x -> begin
+            t = x[!, :time]
+            mask = (t .>= start_time) .& (t .<= stop_time)
+            selected_times = t[mask]
+            if !isempty(selected_times)
+                actual_start = round(first(selected_times); digits=4)
+                actual_stop = round(last(selected_times); digits=4)
+                n = length(selected_times)
+                @info "times(): Requested $(start_time)s–$(stop_time)s, actual sample range $(actual_start)s–$(actual_stop)s ($(n) sample$(n > 1 ? "s" : ""))"
+            elseif start_time == stop_time
+                # Single time point with no exact match: snap to nearest sample
+                _, idx = findmin(abs.(t .- start_time))
+                @info "times(): Requested $(start_time)s, snapped to nearest sample at $(round(t[idx]; digits=4))s"
+                mask = fill(false, nrow(x))
+                mask[idx] = true
+            else
+                @warn "times(): No samples found in range $(start_time)s–$(stop_time)s"
+            end
+            mask
+        end
     end
 end
 
@@ -1131,6 +1150,7 @@ Select all time points (default for interval parameters).
 Returns `nothing` which means no time filtering.
 """
 times() = nothing
+times(t::Real) = (t, t)
 times(start::Real, stop::Real) = (start, stop)
 times(interval::Tuple{Real,Real}) = interval
 
