@@ -3,17 +3,23 @@
 
 Interactive Dot Product Demo — How the DFT Detects Frequencies.
 
-Shows the single core idea: multiplying a signal by a test sinusoid and
-summing the result. When the test frequency matches the signal frequency,
-the product is all-positive and the sum (dot product) is large. When
-they do not match, the product alternates and the sum is near zero.
+Shows the single core idea behind the **Discrete Fourier Transform (DFT)**:
+multiplying a signal by a test sinusoid and summing the result. When the test
+frequency matches the signal frequency, the product is all-positive and the
+sum (dot product) is large. When they do not match, the product alternates
+and the sum is near zero.
+
+A **Complex** toggle adds a cosine test sinusoid alongside the sine, showing
+how the DFT achieves phase-independence by computing the magnitude from both
+projections.
 
 ## Plots
 
 | Row | Plot | Description |
 |-----|------|-------------|
-| 1 | Signal + Test sinusoid | The target signal (blue) and the test sinusoid (red) overlaid. |
-| 2 | Element-wise product | Signal × test sinusoid, with the dot product value shown. |
+| 1 | Signal + Test sinusoid(s) | The target signal (blue), sine test (red), and cosine test (green, when Complex is on). |
+| 2 | Sine product | Signal × sine test sinusoid, with dot product value. |
+| 3 | Cosine product | Signal × cosine test sinusoid (visible only when Complex is on). |
 
 ## Controls
 
@@ -24,11 +30,17 @@ they do not match, the product alternates and the sum is near zero.
 | Phase (°) | 0–355° | Signal phase offset |
 | Test Freq | 0.5–60 Hz | Frequency of the test sinusoid (the DFT "probe") |
 | Noise | 0–1 | Noise standard deviation |
+| Complex | toggle | Switch from sine-only to complex (sine + cosine) probing |
 
 ## Teaching Notes
 
-The **Discrete Fourier Transform** answers "how much of frequency *f* is in
-this signal?" using a single operation:
+The **dot product** measures how similar two signals are — multiply them
+point-by-point and sum the results:
+
+    dot product = Σ a[t] × b[t]
+
+The DFT uses exactly this idea to answer "how much of frequency *f* is in
+this signal?" by setting one of the signals to a test sinusoid:
 
     dot product = Σ signal[t] × sin(2πft)
 
@@ -37,8 +49,17 @@ this signal?" using a single operation:
 **Freq mismatch:** product alternates → cancels to near zero.
 
 **Phase mismatch (90°):** product alternates even at matching frequency →
-dot product ≈ 0. This is why the real DFT uses a *complex* sinusoid (sine +
-cosine) to be phase-independent.
+dot product ≈ 0.
+
+**The complex solution:** the sine-only dot product is sensitive to phase.
+The DFT solves this by computing *two* dot products — one with a sine and
+one with a cosine — and combining them:
+
+    magnitude = √(sine_dp² + cosine_dp²)
+
+The magnitude is phase-independent: it captures the signal's power at
+frequency *f* regardless of the signal's phase offset. Toggle **Complex**
+on and drag Phase to see this in action.
 
 **Amplitude:** the test sinusoid is always ±1; the dot product scales directly
 with the signal amplitude.
@@ -58,14 +79,14 @@ EegFun.signal_example_dotproduct()
 
 # Returns
 - `fig::Figure`: The Makie figure object
-- `axes::Tuple`: `(ax_sig, ax_prod)` — the two axis objects
+- `axes::Tuple`: `(ax_sig, ax_prod_sin, ax_prod_cos)` — the three axis objects
 """
 function signal_example_dotproduct()
 
     FS    = 1000.0  # sample rate (Hz) — high enough for smooth rendering up to 40 Hz
     EPOCH = 2.0     # epoch length (s)
 
-    fig = Figure(size = (1300, 600), figure_padding = (8, 8, 8, 8), title = "Dot Product Demo")
+    fig = Figure(size = (1300, 700), figure_padding = (8, 8, 8, 8), title = "Dot Product Demo")
 
     # ── Font sizing ──────────────────────────────────────────────────────────
     lbl_sz   = Observable(17)
@@ -96,9 +117,23 @@ function signal_example_dotproduct()
         ygridvisible   = true,
     )
 
-    ax_prod = Axis(
+    ax_prod_sin = Axis(
         fig[2, 1],
-        title          = "Element-wise product  (signal × test sinusoid)",
+        title          = "Sine product  (signal × sin)",
+        xlabel         = "Time (s)",
+        ylabel         = "",
+        titlesize      = title_sz,
+        xlabelsize     = lbl_sz,
+        ylabelsize     = lbl_sz,
+        xticklabelsize = tick_sz,
+        yticklabelsize = tick_sz,
+        xgridvisible   = true,
+        ygridvisible   = true,
+    )
+
+    ax_prod_cos = Axis(
+        fig[3, 1],
+        title          = "Cosine product  (signal × cos)",
         xlabel         = "Time (s)",
         ylabel         = "",
         titlesize      = title_sz,
@@ -111,18 +146,21 @@ function signal_example_dotproduct()
     )
 
     # ── Observables ──────────────────────────────────────────────────────────
-    sig_freq  = Observable(10.0)
-    sig_amp   = Observable(1.0)
-    sig_phase = Observable(0.0)   # radians
-    noise_lvl = Observable(0.0)
-    test_freq = Observable(10.0)
+    sig_freq    = Observable(10.0)
+    sig_amp     = Observable(1.0)
+    sig_phase   = Observable(0.0)   # radians
+    noise_lvl   = Observable(0.0)
+    test_freq   = Observable(10.0)
+    use_complex = Observable(false)
 
     t_arr = collect(range(0.0, EPOCH - 1.0 / FS, step = 1.0 / FS))
     n     = length(t_arr)
 
-    sig_data  = Observable(zeros(n))
-    test_data = Observable(zeros(n))
-    prod_data = Observable(zeros(n))
+    sig_data      = Observable(zeros(n))
+    test_sin_data = Observable(zeros(n))
+    test_cos_data = Observable(zeros(n))
+    prod_sin_data = Observable(zeros(n))
+    prod_cos_data = Observable(zeros(n))
 
     # ── Update ───────────────────────────────────────────────────────────────
     function update()
@@ -130,24 +168,30 @@ function signal_example_dotproduct()
         if noise_lvl[] > 0.0
             sig .+= noise_lvl[] .* randn(n)
         end
-        test = sin.(2π .* test_freq[] .* t_arr)
-        prod = sig .* test
+        test_sin = sin.(2π .* test_freq[] .* t_arr)
+        test_cos = cos.(2π .* test_freq[] .* t_arr)
+        prod_sin = sig .* test_sin
+        prod_cos = sig .* test_cos
 
-        sig_data[]  = sig
-        test_data[] = test
-        prod_data[] = prod
+        sig_data[]      = sig
+        test_sin_data[] = test_sin
+        test_cos_data[] = test_cos
+        prod_sin_data[] = prod_sin
+        prod_cos_data[] = prod_cos
 
         xlims!(ax_sig, 0.0, EPOCH)
-        xlims!(ax_prod, 0.0, EPOCH)
+        xlims!(ax_prod_sin, 0.0, EPOCH)
+        xlims!(ax_prod_cos, 0.0, EPOCH)
         a = sig_amp[] + noise_lvl[]
         ylims!(ax_sig, -a * 1.1, a * 1.1)
 
-        # Scale product axis to actual data range — avoids empty space when
-        # the product is all-positive (frequencies match) or all-negative.
-        p_min = min(minimum(prod), -0.05)  # always show a sliver of negative axis
-        p_max = max(maximum(prod), 0.05)
-        p_margin = (p_max - p_min) * 0.12
-        ylims!(ax_prod, p_min - p_margin, p_max + p_margin)
+        # Scale product axes to actual data range
+        for (ax, pdata) in ((ax_prod_sin, prod_sin), (ax_prod_cos, prod_cos))
+            p_min = min(minimum(pdata), -0.05)
+            p_max = max(maximum(pdata), 0.05)
+            p_margin = (p_max - p_min) * 0.12
+            ylims!(ax, p_min - p_margin, p_max + p_margin)
+        end
     end
 
     for obs in (sig_freq, sig_amp, sig_phase, noise_lvl, test_freq)
@@ -157,38 +201,112 @@ function signal_example_dotproduct()
     end
     update()
 
+    # ── Visibility management ────────────────────────────────────────────────
+    # Hide/show cosine row and update titles based on Complex toggle
+    on(use_complex) do is_complex
+        ax_prod_cos.blockscene.visible[] = is_complex
+
+        if is_complex
+            rowsize!(fig.layout, 1, Relative(0.28))
+            rowsize!(fig.layout, 2, Relative(0.28))
+            rowsize!(fig.layout, 3, Relative(0.28))
+            rowsize!(fig.layout, 4, Relative(0.16))
+            ax_sig.title = "Signal (blue)  +  Sine test (red)  +  Cosine test (green)"
+        else
+            rowsize!(fig.layout, 1, Relative(0.38))
+            rowsize!(fig.layout, 2, Relative(0.44))
+            rowsize!(fig.layout, 3, Relative(0.0))
+            rowsize!(fig.layout, 4, Relative(0.18))
+            ax_sig.title = "Signal (blue)  +  Test sinusoid (red)"
+        end
+    end
+
     # ── Plots ─────────────────────────────────────────────────────────────────
     lines!(ax_sig, t_arr, sig_data, color = :royalblue, linewidth = 2, label = "Signal")
-    lines!(ax_sig, t_arr, test_data, color = :crimson, linewidth = 2, label = "Test")
+    lines!(ax_sig, t_arr, test_sin_data, color = :crimson, linewidth = 2, label = "Sine test")
+    cos_line = lines!(ax_sig, t_arr, test_cos_data, color = :seagreen, linewidth = 2, label = "Cosine test", visible = false)
     axislegend(ax_sig, position = :rt)
 
-    # Product panel — simple line
-    lines!(ax_prod, t_arr, prod_data, color = :black, linewidth = 2)
-    hlines!(ax_prod, [0.0], color = :black, linewidth = 1.0, linestyle = :dash)
+    # Sine product panel
+    lines!(ax_prod_sin, t_arr, prod_sin_data, color = :black, linewidth = 2)
+    hlines!(ax_prod_sin, [0.0], color = :black, linewidth = 1.0, linestyle = :dash)
 
-    # Dot product value — large, centred
-    dp_text = @lift begin
-        dp          = sum($prod_data) / n * 2.0
+    # Cosine product panel
+    lines!(ax_prod_cos, t_arr, prod_cos_data, color = :black, linewidth = 2)
+    hlines!(ax_prod_cos, [0.0], color = :black, linewidth = 1.0, linestyle = :dash)
+
+    # Dot product annotation — sine panel
+    dp_sin_text = @lift begin
+        dp          = sum($prod_sin_data) / n * 2.0
         freq_match  = abs($sig_freq - $test_freq) < 0.5
         phase_deg   = mod(rad2deg($sig_phase), 360.0)
         phase_match = phase_deg < 10.0 || phase_deg > 350.0
         freq_str    = freq_match ? "Freq: ✓ Match" : "Freq: ✗ Mismatch"
         phase_str   = phase_match ? "Phase: ✓ Match" : "Phase: ✗ Mismatch"
-        "Dot product = $(round(dp, digits=3))     $freq_str     $phase_str"
+        if $use_complex
+            "Sine dp = $(round(dp, digits=3))     $freq_str     $phase_str"
+        else
+            "Dot product = $(round(dp, digits=3))     $freq_str     $phase_str"
+        end
     end
     text!(
-        ax_prod,
+        ax_prod_sin,
         0.5,
         0.97,
-        text = dp_text,
+        text = dp_sin_text,
         space = :relative,
         fontsize = @lift(max(14, round(Int, $lbl_sz * 1.15))),
         color = :black,
         align = (:center, :top),
     )
 
+    # Dot product annotation — cosine panel
+    dp_cos_text = @lift begin
+        dp = sum($prod_cos_data) / n * 2.0
+        "Cosine dp = $(round(dp, digits=3))"
+    end
+    text!(
+        ax_prod_cos,
+        0.5,
+        0.97,
+        text = dp_cos_text,
+        space = :relative,
+        fontsize = @lift(max(14, round(Int, $lbl_sz * 1.15))),
+        color = :black,
+        align = (:center, :top),
+    )
+
+    # Magnitude annotation — shown on sine panel when complex is active
+    mag_text = @lift begin
+        if $use_complex
+            dp_sin = sum($prod_sin_data) / n * 2.0
+            dp_cos = sum($prod_cos_data) / n * 2.0
+            mag    = sqrt(dp_sin^2 + dp_cos^2)
+            "Magnitude = √(sin² + cos²) = $(round(mag, digits=3))"
+        else
+            ""
+        end
+    end
+    text!(
+        ax_prod_sin,
+        0.5,
+        0.03,
+        text = mag_text,
+        space = :relative,
+        fontsize = @lift(max(14, round(Int, $lbl_sz * 1.25))),
+        color = :purple,
+        font = :bold,
+        align = (:center, :bottom),
+    )
+
+    # Toggle cosine test line visibility
+    on(use_complex) do is_complex
+        cos_line.visible = is_complex
+        update()  # recompute to trigger annotation refresh
+    end
+
     # ── Controls ──────────────────────────────────────────────────────────────
-    ctrl = GridLayout(fig[3, 1], colgap = 20)
+    ctrl = GridLayout(fig[4, 1], colgap = 20)
 
     function labelled_slider(parent, col, header, range_vals, startval, fmt)
         Label(parent[1, col], header, fontsize = ctrl_sz, halign = :center)
@@ -202,6 +320,11 @@ function signal_example_dotproduct()
     sl_sp, lbl_sp = labelled_slider(ctrl, 3, "Phase (°)", 0.0:5.0:355.0, 0.0, v -> "$(round(Int, v))°")
     sl_tf, lbl_tf = labelled_slider(ctrl, 4, "Test Freq", 0.5:0.5:60.0, 10.0, v -> "$(round(v, digits=1)) Hz")
     sl_nl, lbl_nl = labelled_slider(ctrl, 5, "Noise", 0.0:0.05:1.0, 0.0, v -> "$(round(v, digits=2))")
+
+    # Complex toggle
+    Label(ctrl[1, 6], "Complex", fontsize = ctrl_sz, halign = :center)
+    tog_complex = Toggle(ctrl[2, 6], active = false, halign = :center)
+    Label(ctrl[3, 6], "", fontsize = ctrl_sz, halign = :center)
 
     on(sl_sf.value) do v
         sig_freq[] = v
@@ -223,18 +346,24 @@ function signal_example_dotproduct()
         noise_lvl[] = v
         lbl_nl.text = "$(round(v, digits=2))"
     end
-
-    # Force control columns to fill the full figure width (avoids the sub-layout
-    # shrinking to slider minimum-width and dragging the plot columns with it).
-    for col = 1:5
-        colsize!(ctrl, col, Relative(1 / 5))
+    on(tog_complex.active) do v
+        use_complex[] = v
     end
 
-    # ── Row sizing ────────────────────────────────────────────────────────────
-    rowsize!(fig.layout, 1, Relative(0.40))
-    rowsize!(fig.layout, 2, Relative(0.46))
-    rowsize!(fig.layout, 3, Relative(0.14))
+    # Force control columns to fill the full figure width
+    for col = 1:6
+        colsize!(ctrl, col, Relative(1 / 6))
+    end
+
+    # ── Row sizing — initial (sine-only, cosine hidden) ───────────────────────
+    rowsize!(fig.layout, 1, Relative(0.38))
+    rowsize!(fig.layout, 2, Relative(0.44))
+    rowsize!(fig.layout, 3, Relative(0.0))
+    rowsize!(fig.layout, 4, Relative(0.18))
+
+    # Hide cosine row initially
+    ax_prod_cos.blockscene.visible[] = false
 
     display(fig)
-    return fig, (ax_sig, ax_prod)
+    return fig, (ax_sig, ax_prod_sin, ax_prod_cos)
 end

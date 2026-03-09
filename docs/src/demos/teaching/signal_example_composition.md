@@ -15,8 +15,6 @@ Interactive multi-signal composer demonstrating how complex waveforms are built 
 
 The x-axes of all five time-domain plots are linked — panning or zooming one panel updates all of them simultaneously. The y-axes of Signal 1–3 are also linked, so amplitude changes remain visually comparable across all three.
 
-This directly mirrors how ERP components sum to produce the observed scalp waveform — and why Fourier-based analysis is central to EEG signal processing.
-
 ## Things to Try
 
 - Start with a single signal (Amp > 0 for Signal 1 only) and observe its clean spectral peak.

@@ -74,7 +74,7 @@ Browse interactive code examples demonstrating EegFun.jl's capabilities.
 
 ## Teaching Demos
 
-Interactive demonstrations for teaching signal processing and EEG concepts.
+Interactive demonstrations for some signal processing and EEG concepts.
 
 - [Signal Example 1 — Nyquist Theorem](teaching/signal_example_sampling.md) - Sampling, aliasing, and signal reconstruction (linear vs. sinc)
 - [Signal Example 2 — Signal Composition](teaching/signal_example_composition.md) - Building complex waveforms from sine waves, noise, and filtering
