@@ -1,4 +1,5 @@
 """
+    plot_erp_measurement_gui(filepath::String; kwargs...)
     plot_erp_measurement_gui(erp::ErpData; kwargs...)
     plot_erp_measurement_gui(erps::Vector{ErpData}; kwargs...)
 
@@ -10,6 +11,7 @@ Useful for:
 - **Visual Validation**: Check measurement intervals before batch processing
 
 # Arguments
+- `filepath::String`: Path to a `.jld2` file containing ERP data
 - `erp::ErpData` or `erps::Vector{ErpData}`: Single ERP or multiple conditions to overlay
 
 # Keyword Arguments
@@ -27,6 +29,9 @@ Useful for:
 
 # Examples
 ```julia
+# Load from file
+plot_erp_measurement_gui("participant_1_erps_good.jld2")
+
 # Single condition
 erp = read_data("participant_1.jld2")
 plot_erp_measurement_gui(erp)
@@ -46,6 +51,17 @@ plot_erp_measurement_gui(erp,
 - For batch measurement extraction, use `erp_measurements()` function
 - This GUI is designed for visual exploration and teaching, not batch processing
 """
+# String filepath - load data and dispatch
+function plot_erp_measurement_gui(
+    filepath::String;
+    kwargs...,
+)
+    data = read_data(filepath)
+    if isnothing(data)
+        @minimal_error "No data found in file: $filepath"
+    end
+    return plot_erp_measurement_gui(data; kwargs...)
+end
 # Single ErpData - dispatch to vector version
 function plot_erp_measurement_gui(
     erp::ErpData;

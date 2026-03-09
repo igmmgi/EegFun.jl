@@ -660,9 +660,7 @@ EegFun.plot_topography(ga, interval_selection = EegFun.times(0.1))    # P1
 EegFun.plot_topography(ga, interval_selection = EegFun.times(0.17))   # N1
 
 # Topography with ROI channels highlighted
-EegFun.plot_topography(ga, interval_selection = EegFun.times(0.17),
-    highlight_channels = [:PO7, :PO8, :O1, :O2]
-)
+EegFun.plot_topography(ga, interval_selection = EegFun.times(0.17))
 
 # Load and plot the difference wave grand average
 ga_diff = EegFun.read_data(
