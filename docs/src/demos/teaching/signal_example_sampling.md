@@ -2,7 +2,7 @@
 
 Interactive demonstration of the **Nyquist–Shannon sampling theorem**.
 
-Use this demo to show students how sampling rate affects the faithful reconstruction of a sine wave, and how the two main reconstruction methods compare.
+This demo shows how sampling rate affects the reconstruction of a sine wave.
 
 ![Signal Example 1](/tutorials/signal_example_sampling.png)
 
@@ -10,7 +10,7 @@ Use this demo to show students how sampling rate affects the faithful reconstruc
 
 | Feature | Description |
 |---------|-------------|
-| Original signal | A continuous sine wave at the chosen frequency |
+| Original signal | A "continuous" sine wave at the chosen frequency |
 | Sampled points | The discrete samples taken at the chosen sampling rate |
 | Linear reconstruction | Straight-line interpolation between samples |
 | Sinc reconstruction | [Whittaker–Shannon](https://en.wikipedia.org/wiki/Whittaker%E2%80%93Shannon_interpolation_formula) (ideal) interpolation |
@@ -26,7 +26,6 @@ When the sampling rate falls **below** twice the signal frequency, the signal ca
 - Start with a sampling rate well above Nyquist (e.g. 10× the signal frequency) and observe that both methods agree with the original signal.
 - Gradually reduce the sampling rate toward and then below the Nyquist limit (~2× the signal frequency) to show reconstruction breakdown and **aliasing**.
 - Enable both reconstructions simultaneously to highlight the superiority of sinc interpolation near the Nyquist limit.
-- Once you understand single-frequency reconstruction, see [Signal Example 2](signal_example_composition.md) to explore how multiple frequencies interact.
 
 ## Controls
 

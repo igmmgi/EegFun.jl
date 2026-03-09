@@ -11,26 +11,6 @@ Interactive demo showing how a time-domain signal maps to a power spectrum via t
 | 1 | Time Domain | The composed signal (up to 2 s displayed). |
 | 2 | Power Spectrum | One-sided FFT power spectrum. Dashed lines mark the true frequencies; the orange band is one frequency-resolution bin (Δf = 1/T). |
 
-## Things to Try
-
-**Leakage vs. clean spectrum**
-
-1. Start with Freq 1 = 10.0 Hz, Epoch = 1 s. The spectrum shows a clean, narrow peak at 10 Hz — because 10 cycles fit perfectly in 1 second.
-2. Move Freq 1 to 10.25 Hz. The peak smears across many bins — this is **spectral leakage**.
-3. Toggle **Hanning** on. Leakage collapses dramatically. Turn on **Log scale** to see the sidelobe suppression clearly.
-
-**Frequency resolution**
-
-4. Set Epoch to 1 s (Δf = 1 Hz). Set Freq 1 = 10 Hz and Freq 2 = 11 Hz, set Amp 2 to 1.0. Can you resolve them?
-5. Increase Epoch to 4 s (Δf = 0.25 Hz). Two separate peaks appear — length buys resolution.
-
-**Noise floor**
-
-6. Add Noise (e.g. 0.5). The spectrum floor rises. Turn on Log scale to see it clearly as a flat baseline. This is the real-world context for EEG: signals of interest must rise above the noise floor.
-
-**Two components**
-
-7. Set Amp 2 to 1.0 and adjust Freq 2 — watch a second spike appear. Compare its height to Freq 1 when their amplitudes differ.
 
 ## Controls
 

@@ -19,7 +19,6 @@ Convolution computes, at each time point *t*, the weighted sum of the signal und
 (x * h)[t] = \sum_{\tau} x[\tau] \cdot h[t - \tau]
 ```
 
-This is how FIR filters work: the kernel *h* is the filter's impulse response.
 
 **Gaussian:** smooth low-pass filter — noise suppressed, slow waves preserved.
 
