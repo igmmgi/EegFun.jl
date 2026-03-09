@@ -23,7 +23,26 @@ The documentation includes:
 
 ## Installation
 
-EegFun.jl is currently unregistered. Install directly from GitHub:
+You can install EegFun.jl through the standard Julia package manager. 
+
+### Standard Installation
+
+From the Julia REPL, enter Pkg mode by pressing `]` and run:
+
+```julia
+add EegFun
+```
+
+Or using `Pkg` in the code:
+
+```julia
+using Pkg
+Pkg.add("EegFun")
+```
+
+### Development Version (vía GitHub)
+
+To install the latest development version directly from GitHub:
 
 ```julia
 using Pkg
@@ -53,7 +72,7 @@ layout_file = EegFun.read_layout("my_layout.csv");
 EegFun.polar_to_cartesian_xy!(layout_file)
 
 # Julia EegFun type
-dat = EegFun.create_test_eegfun_data(dat, layout_file);
+dat = EegFun.create_eegfun_data(dat, layout_file);
 
 EegFun.plot_databrowser(dat);
 ```
@@ -76,7 +95,7 @@ dat = EegFun.read_raw_data("my_raw_file.bdf");
 layout_file = EegFun.read_layout("my_layout.csv");
 EegFun.polar_to_cartesian_xy!(layout_file)
 
-dat = EegFun.create_test_eegfun_data(dat, layout_file);
+dat = EegFun.create_eegfun_data(dat, layout_file);
 
 # rereference data and apply 1Hz high-pass filter for ICA
 EegFun.rereference!(dat, :avg)
