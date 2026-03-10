@@ -98,16 +98,16 @@ function signal_example_decoding()
     # ── Axes ─────────────────────────────────────────────────────────────────
     ax_erp = Axis(
         fig[1, 1],
-        title          = "ERP Waveforms (channel average)",
-        ylabel         = "Amplitude (μV)",
-        titlesize      = title_sz,
-        xlabelsize     = lbl_sz,
-        ylabelsize     = lbl_sz,
+        title = "ERP Waveforms (channel average)",
+        ylabel = "Amplitude (μV)",
+        titlesize = title_sz,
+        xlabelsize = lbl_sz,
+        ylabelsize = lbl_sz,
         xticklabelsize = tick_sz,
         yticklabelsize = tick_sz,
         xticklabelsvisible = false,
-        xgridvisible   = true,
-        ygridvisible   = true,
+        xgridvisible = true,
+        ygridvisible = true,
     )
 
     ax_acc = Axis(
@@ -125,11 +125,11 @@ function signal_example_decoding()
     )
 
     # ── Parameter observables ────────────────────────────────────────────────
-    sig_strength   = Observable(1.0)
-    noise_level    = Observable(1.0)
-    n_trials       = Observable(50)
-    n_channels     = Observable(3)
-    effect_onset   = Observable(0.1)
+    sig_strength = Observable(1.0)
+    noise_level = Observable(1.0)
+    n_trials = Observable(50)
+    n_channels = Observable(3)
+    effect_onset = Observable(0.1)
     effect_duration = Observable(0.4)
 
     # ── Data observables ─────────────────────────────────────────────────────
@@ -140,9 +140,9 @@ function signal_example_decoding()
     erp_b_lo   = Observable(zeros(n_time))
     erp_b_hi   = Observable(zeros(n_time))
 
-    acc_mean   = Observable(fill(0.5, n_time))
-    acc_lo     = Observable(fill(0.5, n_time))
-    acc_hi     = Observable(fill(0.5, n_time))
+    acc_mean = Observable(fill(0.5, n_time))
+    acc_lo   = Observable(fill(0.5, n_time))
+    acc_hi   = Observable(fill(0.5, n_time))
 
     status_text = Observable("Press [Decode!] to classify")
 
@@ -176,13 +176,13 @@ function signal_example_decoding()
         end
 
         # Compute ERPs (channel-averaged across channels, then mean ± SE across trials)
-        erp_a_trials_2d = dropdims(mean(data_a, dims=1), dims=1)  # [time × trials]
-        erp_b_trials_2d = dropdims(mean(data_b, dims=1), dims=1)  # [time × trials]
+        erp_a_trials_2d = dropdims(mean(data_a, dims = 1), dims = 1)  # [time × trials]
+        erp_b_trials_2d = dropdims(mean(data_b, dims = 1), dims = 1)  # [time × trials]
 
-        a_m = vec(mean(erp_a_trials_2d, dims=2))
-        a_se = vec(std(erp_a_trials_2d, dims=2) ./ sqrt(n_tr))
-        b_m = vec(mean(erp_b_trials_2d, dims=2))
-        b_se = vec(std(erp_b_trials_2d, dims=2) ./ sqrt(n_tr))
+        a_m = vec(mean(erp_a_trials_2d, dims = 2))
+        a_se = vec(std(erp_a_trials_2d, dims = 2) ./ sqrt(n_tr))
+        b_m = vec(mean(erp_b_trials_2d, dims = 2))
+        b_se = vec(std(erp_b_trials_2d, dims = 2) ./ sqrt(n_tr))
 
         erp_a_mean[] = a_m
         erp_a_lo[]   = a_m .- a_se
@@ -214,20 +214,20 @@ function signal_example_decoding()
 
         # Pre-compute CV splits once (avoids per-timepoint allocation)
         total_trials = 2 * n_tr
-        cv_splits = Vector{Tuple{Vector{Int}, Vector{Int}}}(undef, n_folds)
+        cv_splits = Vector{Tuple{Vector{Int},Vector{Int}}}(undef, n_folds)
         for fold = 1:n_folds
             test_start_a = (fold - 1) * n_per_fold + 1
-            test_end_a   = fold * n_per_fold
+            test_end_a = fold * n_per_fold
             test_start_b = n_tr + test_start_a
-            test_end_b   = n_tr + test_end_a
-            test_idx  = vcat(test_start_a:test_end_a, test_start_b:test_end_b)
+            test_end_b = n_tr + test_end_a
+            test_idx = vcat(test_start_a:test_end_a, test_start_b:test_end_b)
             train_idx = setdiff(1:total_trials, test_idx)
             cv_splits[fold] = (train_idx, test_idx)
         end
 
         # Preallocate
         accuracies = zeros(n_iterations, n_time)
-        x_all  = Matrix{Float64}(undef, total_trials, n_ch)
+        x_all = Matrix{Float64}(undef, total_trials, n_ch)
         labels = Vector{Int}(undef, total_trials)
 
         for iter = 1:n_iterations
@@ -270,8 +270,8 @@ function signal_example_decoding()
         end
 
         # Mean ± SE across iterations
-        a_m  = vec(mean(accuracies, dims=1))
-        a_se = vec(std(accuracies, dims=1) ./ sqrt(n_iterations))
+        a_m  = vec(mean(accuracies, dims = 1))
+        a_se = vec(std(accuracies, dims = 1) ./ sqrt(n_iterations))
 
         acc_mean[] = a_m
         acc_lo[]   = a_m .- a_se
@@ -284,7 +284,7 @@ function signal_example_decoding()
     end
 
     # ── Initial data + ERP plot ──────────────────────────────────────────────
-    current_data = Ref{Tuple{Array{Float64,3}, Array{Float64,3}}}(generate_data())
+    current_data = Ref{Tuple{Array{Float64,3},Array{Float64,3}}}(generate_data())
 
     # ERP plots
     band!(ax_erp, t_arr, erp_a_lo, erp_a_hi, color = (:royalblue, 0.2))

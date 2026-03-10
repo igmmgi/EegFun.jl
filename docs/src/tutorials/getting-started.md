@@ -27,7 +27,7 @@ See [**IDE Workflows**](ide-workflows.md) for a comparison of VS Code/VSCodium, 
 
 ## Installing EegFun
 
-You can install EegFun.jl through the standard Julia package manager. 
+You can install EegFun.jl through the standard Julia package manager.
 
 ### Standard Installation
 

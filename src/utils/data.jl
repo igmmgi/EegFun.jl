@@ -817,8 +817,8 @@ function _interval_to_samples(interval::Interval)
             mask = (t .>= start_time) .& (t .<= stop_time)
             selected_times = t[mask]
             if !isempty(selected_times)
-                actual_start = round(first(selected_times); digits=4)
-                actual_stop = round(last(selected_times); digits=4)
+                actual_start = round(first(selected_times); digits = 4)
+                actual_stop = round(last(selected_times); digits = 4)
                 n = length(selected_times)
                 @info "times(): Requested $(start_time)s–$(stop_time)s, actual sample range $(actual_start)s–$(actual_stop)s ($(n) sample$(n > 1 ? "s" : ""))"
             elseif start_time == stop_time

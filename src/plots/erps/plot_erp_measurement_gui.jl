@@ -52,10 +52,7 @@ plot_erp_measurement_gui(erp,
 - This GUI is designed for visual exploration and teaching, not batch processing
 """
 # String filepath - load data and dispatch
-function plot_erp_measurement_gui(
-    filepath::String;
-    kwargs...,
-)
+function plot_erp_measurement_gui(filepath::String; kwargs...)
     data = read_data(filepath)
     if isnothing(data)
         @minimal_error "No data found in file: $filepath"

@@ -8,7 +8,7 @@ using EegFun
 
 pages = [
     "Home" => "index.md",
-    "Getting Started" => ["tutorials/getting-started.md", "IDE Workflows" => "tutorials/ide-workflows.md"],
+    "Getting Started" => ["tutorials/getting-started.md", "IDE Workflows" => "tutorials/ide-workflows.md", "Why Julia?" => "tutorials/why-julia.md", "Julia Basics" => "tutorials/julia-basics.md"],
     "Tutorials" => [
         "Overview" => "tutorials/index.md",
         "Data Structures" => "explanations/data-structures.md",
