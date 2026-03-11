@@ -23,14 +23,14 @@ using JLD2
         @test fi_fir isa EegFun.FilterInfo
         @test fi_fir.filter_type == "hp"
         @test fi_fir.filter_method == "fir"
-        @test fi_fir.n_taps |> !isnothing
+        @test !isnothing(fi_fir.n_taps)
         @test fi_fir.n_taps % 2 == 1  # odd taps
         @test fi_fir.n_taps >= 101
 
         # FIR low-pass and tap sizing monotonicity
         fi_lp_wide = EegFun.create_lowpass_filter(40.0, fs; filter_method = "fir", transition_width = 0.2)
         fi_lp_narrow = EegFun.create_lowpass_filter(40.0, fs; filter_method = "fir", transition_width = 0.05)
-        @test fi_lp_wide.n_taps |> !isnothing && fi_lp_narrow.n_taps |> !isnothing
+        @test !isnothing(fi_lp_wide.n_taps) && !isnothing(fi_lp_narrow.n_taps)
         @test fi_lp_narrow.n_taps > fi_lp_wide.n_taps
 
     end
@@ -176,7 +176,7 @@ end
             # Test low-pass filtering
             result = EegFun.lowpass_filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir)
 
-            @test result |> !isnothing
+            @test !isnothing(result)
             @test result.success == 2
             @test result.errors == 0
             @test isdir(output_dir)

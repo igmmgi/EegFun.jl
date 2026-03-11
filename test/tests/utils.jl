@@ -85,7 +85,7 @@ using Logging
         jldsave(erps_file; data = erps)
 
         result = EegFun.read_data(erps_file)
-        @test result |> !isnothing
+        @test !isnothing(result)
         @test length(result) == length(erps)
         @test result[1].data == erps[1].data
 
@@ -94,7 +94,7 @@ using Logging
         jldsave(epochs_file; data = erps)
 
         result = EegFun.read_data(epochs_file)
-        @test result |> !isnothing
+        @test !isnothing(result)
         @test length(result) == length(erps)
         @test result[1].data == erps[1].data
 
@@ -132,7 +132,7 @@ using Logging
         tf_data = [EegFun.create_test_tf_data(condition = 1), EegFun.create_test_tf_data(condition = 2)]
         jldsave(tf_file; data = tf_data)
         result = EegFun.read_data(tf_file)
-        @test result |> !isnothing
+        @test !isnothing(result)
         @test length(result) == 2
         @test result[1] isa EegFun.TimeFreqData
         @test result[2] isa EegFun.TimeFreqData
@@ -142,7 +142,7 @@ using Logging
         single_erp = EegFun.create_test_erp_data()
         jldsave(single_file; data = single_erp)
         result = EegFun.read_data(single_file)
-        @test result |> !isnothing
+        @test !isnothing(result)
         @test result isa EegFun.ErpData
 
         # Dict with multiple keys — some valid, some not
@@ -152,7 +152,7 @@ using Logging
             f["metadata"] = "some metadata string"
         end
         result = EegFun.read_data(multi_key_file)
-        @test result |> !isnothing  # should extract ERP data from the valid key
+        @test !isnothing(result)  # should extract ERP data from the valid key
 
         # Empty vector
         empty_vec_file = joinpath(test_dir, "test_empty_vec.jld2")

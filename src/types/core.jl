@@ -265,12 +265,14 @@ Suitable for averaged TF representations.
 - `condition_name::String`: Name of the condition
 - `data_power::DataFrame`: DataFrame with columns: time, freq, [electrode channels...] containing power values
 - `data_phase::DataFrame`: DataFrame with columns: time, freq, [electrode channels...] containing phase values (radians)
-- `data::DataFrame`: Alias for `data_power` (for backward compatibility)
 - `layout::Layout`: Layout object containing electrode positioning information
 - `sample_rate::Int64`: Sample rate of the original data in Hz
 - `method::Symbol`: Analysis method (`:wavelet`, `:superlet`, `:multitaper`, `:spectrum`, `:hanning_fixed`, `:hanning_adaptive`)
 - `baseline::Union{BaselineInfo,Nothing}`: Baseline correction information (if applied)
 - `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
+
+!!! note
+    Accessing `.data` returns `data_power` via a `getproperty` override for backward compatibility.
 """
 mutable struct TimeFreqData <: SingleDataFrameEeg
     file::String
@@ -305,7 +307,7 @@ function Base.copy(tf_data::TimeFreqData)::TimeFreqData
         tf_data.sample_rate,
         tf_data.method,
         tf_data.baseline,  # BaselineInfo is immutable, can share
-        tf_data.analysis_info,  # AnalysisInfo is small, can share or copy if needed
+        copy(tf_data.analysis_info),
     )
 end
 
@@ -324,12 +326,14 @@ columns for time, frequency, and each electrode channel.
 - `condition_name::String`: Name of the condition (constant across all trials)
 - `data_power::Vector{DataFrame}`: Vector of DataFrames, one per trial (columns: time, freq, [electrodes...]) containing power values
 - `data_phase::Vector{DataFrame}`: Vector of DataFrames, one per trial (columns: time, freq, [electrodes...]) containing phase values (radians)
-- `data::Vector{DataFrame}`: Alias for `data_power` (for backward compatibility)
 - `layout::Layout`: Layout object containing electrode positioning information
 - `sample_rate::Int64`: Sample rate of the original data in Hz
 - `method::Symbol`: Analysis method (`:wavelet`, `:superlet`, `:multitaper`, `:spectrum`, `:hanning_fixed`, `:hanning_adaptive`)
 - `baseline::Union{BaselineInfo,Nothing}`: Baseline correction information (if applied)
 - `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
+
+!!! note
+    Accessing `.data` returns `data_power` via a `getproperty` override for backward compatibility.
 """
 mutable struct TimeFreqEpochData <: MultiDataFrameEeg
     file::String
@@ -392,7 +396,7 @@ function Base.copy(spectrum_data::SpectrumData)::SpectrumData
         copy(spectrum_data.layout),
         spectrum_data.sample_rate,
         spectrum_data.method,
-        spectrum_data.analysis_info,
+        copy(spectrum_data.analysis_info),
     )
 end
 
@@ -467,18 +471,18 @@ specific settings.
 - `degconst::Float64`: Degree constant for spherical coordinates
 - `default_stop::Float64`: Default stopping criterion threshold
 """
-mutable struct IcaPrms
-    l_rate::Float64
-    max_iter::Int
-    w_change::Float64
-    anneal_deg::Float64
-    anneal_step::Float64
-    blowup::Float64
-    blowup_fac::Float64
-    max_weight::Float64
-    restart_factor::Float64
-    degconst::Float64
-    default_stop::Float64
+@kwdef mutable struct IcaPrms
+    l_rate::Float64 = 0.001
+    max_iter::Int = 512
+    w_change::Float64 = 1e-6
+    anneal_deg::Float64 = 60.0
+    anneal_step::Float64 = 0.9
+    blowup::Float64 = 1e15
+    blowup_fac::Float64 = 0.8
+    max_weight::Float64 = 1e8
+    restart_factor::Float64 = 0.9
+    degconst::Float64 = 180.0 / π
+    default_stop::Float64 = 1e-6
 end
 
 """
@@ -491,6 +495,7 @@ the unmixing and mixing matrices, component statistics, and metadata
 about the decomposition process.
 
 # Fields
+- `filename::String`: Filename of the input data file used to generate this ICA result
 - `unmixing::Matrix{Float64}`: Unmixing matrix (sources = unmixing × data)
 - `mixing::Matrix{Float64}`: Mixing matrix (data = mixing × sources)
 - `sphere::Matrix{Float64}`: Sphering matrix for data preprocessing
@@ -498,10 +503,9 @@ about the decomposition process.
 - `scale::Float64`: Scaling factor applied to the data
 - `mean::Vector{Float64}`: Mean vector subtracted from the data
 - `ica_label::Vector{Symbol}`: Component labels (e.g., [:IC1, :IC2, ...])
-- `layout::Layout`: Layout information for the ICA components (contains channel labels)
 - `removed_activations::OrderedDict{Int, Matrix{Float64}}`: Removed component activations by epoch
-- `kurtosis_signs::Vector{Bool}`: Boolean vector indicating if each component is sub-Gaussian (true = sub-Gaussian, false = super-Gaussian). For regular Infomax, all components are super-Gaussian (all false).
-- `filename::String`: Filename of the input data file used to generate this ICA result
+- `layout::Layout`: Layout information for the ICA components (contains channel labels)
+- `is_sub_gaussian::Vector{Bool}`: Boolean vector indicating if each component is sub-Gaussian (true = sub-Gaussian, false = super-Gaussian). For regular Infomax, all components are super-Gaussian (all false).
 """
 struct InfoIca <: EegFunData
     filename::String  # Filename of the input data file
@@ -532,7 +536,7 @@ automatically use the correct parameters.
 - `analysis_interval::Union{Interval,Nothing}`: Analysis interval used
 - `baseline_interval::Union{Interval,Nothing}`: Baseline interval used (if any)
 """
-struct ErpMeasurementsResult
+struct ErpMeasurementsResult <: EegFunData
     data::DataFrame
     analysis_type::String
     analysis_interval::Union{Interval,Nothing}
@@ -677,8 +681,6 @@ filename(dat::EpochData)::String = dat.file
 filename(dat::TimeFreqData)::String = dat.file
 filename(dat::TimeFreqEpochData)::String = dat.file
 filename(dat::SpectrumData)::String = dat.file
-filename(dat::SingleDataFrameEeg)::String = dat.data.file[1]  # Fallback for other SingleDataFrameEeg types
-filename(dat::MultiDataFrameEeg)::String = dat.data[1].file[1]  # Fallback for other MultiDataFrameEeg types
 
 
 

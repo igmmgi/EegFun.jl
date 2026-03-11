@@ -31,7 +31,7 @@ function tf_morlet(
     n_samples_per_epoch = n_samples(dat) # Use full signal for convolution (may be padded)
 
     # Get all time points from processed (possibly padded) data
-    times_all = time(dat)
+    times_all = time_vector(dat)
 
     # Use frequency input directly (ranges and vectors both work)
     num_frex = length(frequencies)
@@ -286,7 +286,8 @@ function tf_morlet(
         @info "Batch tf_morlet started at $(now())"
         @log_call "tf_morlet"
 
-        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+        error_msg = _validate_input_dir(input_dir)
+        if !isnothing(error_msg)
             @minimal_error(error_msg)
         end
 

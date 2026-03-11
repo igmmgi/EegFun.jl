@@ -51,7 +51,7 @@ Find and filter JLD2 files in a directory based on a pattern and participant IDs
 # Returns
 - `Vector{String}`: List of matching filenames.
 """
-# Method for Function predicate
+# Method for function predicate
 function _find_batch_files(pattern::String, dir::String, participant_selection::Function = participants())
 
     # Filter by pattern and extension
@@ -94,12 +94,10 @@ end
 # Convert Vector{Any} to typed vector if all elements are EegFun data
 function _read_data(data::Vector{Any})::Union{Vector{<:EegFunData},Nothing}
     isempty(data) && return nothing
-    # Ensure every element is some kind of EegFun data
     !all(x -> x isa EegFunData, data) && return nothing
-
-    # Use a comprehension to let Julia infer the best (narrowest) type
-    # e.g., Vector{ErpData} if all same, Vector{EegFunData} if mixed
-    return [x for x in data]
+    # Narrow to the tightest common type, e.g. Vector{ErpData} if all ErpData
+    T = typejoin(typeof.(data)...)
+    return T[x for x in data]
 end
 
 # Extract EegFunData from Dict
@@ -144,8 +142,6 @@ end
 
 function _condition_select(data, condition_selection::Vector{Int})
     isempty(data) && return data
-    isnothing(condition_selection) && return data
-    # Ensure we always return a vector, even for single Int selection
     return data[condition_selection]
 end
 
@@ -185,7 +181,7 @@ the same way:
 
 ```julia
 read_data("./derivatives/erps/example1_erps_good.jld2")   # single file
-read_all_data("./derivatives/erps/erps_good")              # all matching files
+read_all_data("./derivatives/erps/erps_good")             # all matching files
 ```
 
 # Arguments
@@ -213,25 +209,16 @@ end
 
 
 """
-    group_by_condition(erps::Vector{<:ErpData})
+    group_by_condition(items::Vector{T}) where {T}
 
-Group ERPs by their condition number.
+Group items by their `.condition` field.
 
 # Arguments
-- `erps::Vector{<:ErpData}`: ERPs to group
+- `items::Vector{T}`: Items to group (must have a `.condition` field, e.g. `ErpData`, `EpochData`)
 
 # Returns
-- `OrderedDict{Int, Vector{ErpData}}`: ERPs grouped by condition number (sorted)
+- `OrderedDict{Int, Vector{T}}`: Items grouped by condition number (sorted)
 """
-function group_by_condition(erps::Vector{<:ErpData})
-    grouped = OrderedDict{Int,Vector{ErpData}}()
-    for erp in erps
-        cond_num = erp.condition
-        push!(get!(grouped, cond_num, ErpData[]), erp)
-    end
-    # Sort by condition number
-    return OrderedDict(sort(collect(grouped), by = first))
-end
 function group_by_condition(items::Vector{T}) where {T}
     grouped = OrderedDict{Int,Vector{T}}()
     for item in items
@@ -244,7 +231,7 @@ end
 
 
 """
-    validate_input_dir(dir::String)
+    _validate_input_dir(dir::String)
 
 Validate input directory exists, returning error message or nothing.
 """
@@ -254,7 +241,7 @@ function _validate_input_dir(dir::String)
 end
 
 """
-    validate_channel_groups(groups::Vector{Vector{Symbol}})
+    _validate_channel_groups(groups::Vector{Vector{Symbol}})
 
 Validate channel groups, returning error message or nothing.
 Issues warnings for groups with < 2 channels.
@@ -271,7 +258,7 @@ function _validate_channel_groups(groups::Vector{Vector{Symbol}})
 end
 
 """
-    validate_condition_groups(groups::Vector{Vector{Int}})
+    _validate_condition_groups(groups::Vector{Vector{Int}})
 
 Validate condition groups, returning error message or nothing.
 Modifies groups in-place to remove duplicates and warns about overlaps.
@@ -308,11 +295,10 @@ function _validate_condition_groups(groups::Vector{Vector{Int}})
 end
 
 """
-    _validate_condition_pairs(pairs)
+    _validate_condition_pairs(pairs::Union{Vector{Tuple{Int,Int}},Vector{Vector{Int}}})
 
 Validate condition pairs, returning error message or nothing.
 Warns about pairs with identical conditions.
-Accepts both `Vector{Tuple{Int, Int}}` and `Vector{Vector{Int}}`.
 """
 function _validate_condition_pairs(pairs::Union{Vector{Tuple{Int,Int}},Vector{Vector{Int}}})
     isempty(pairs) && return "Condition pairs cannot be empty"
@@ -328,9 +314,9 @@ end
 
 
 """
-    run_batch_operation(process_fn::Function, files::Vector{String}, 
-                        input_dir::String, output_dir::String;
-                        operation_name::String = "Processing")
+    _run_batch_operation(process_fn::Function, files::Vector{String}, 
+                         input_dir::String, output_dir::String;
+                         operation_name::String = "Processing")
 
 Execute batch processing with logging and error handling.
 
@@ -376,7 +362,7 @@ function _run_batch_operation(
 end
 
 """
-    log_batch_summary(results::Vector{BatchResult}, output_dir::String)
+    _log_batch_summary(results::Vector{BatchResult}, output_dir::String)
 
 Log summary statistics from batch results.
 
@@ -394,8 +380,10 @@ function _log_batch_summary(results::Vector{BatchResult}, output_dir::String)
 end
 
 """
+    _cleanup_logging(log_file::String, output_dir::Union{String,Nothing})
+
 Cleanup global logging and move log file to output directory.
-If output_dir is nothing, just closes logging without moving the file.
+If `output_dir` is `nothing`, just closes logging without moving the file.
 """
 function _cleanup_logging(log_file::String, output_dir::Union{String,Nothing})
     close_global_logging()

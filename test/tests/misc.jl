@@ -95,7 +95,7 @@ using DataFrames
         @test EegFun._extract_int("test_456") == 456
         @test isnothing(EegFun._extract_int("no_numbers_here"))
         @test isnothing(EegFun._extract_int(""))
-        @test EegFun._extract_int("123abc456") == 123456  # Concatenates all digits
+        @test EegFun._extract_int("123abc456") == 123  # Extracts first integer group
     end
 
     @testset "String parsing" begin
@@ -260,9 +260,9 @@ using DataFrames
         @test continuous_data.data[!, :nor_flags] == [false, false, false]
 
         # Test error handling
-        @test_throws AssertionError EegFun._combine_boolean_columns!(continuous_data, Symbol[], :and)  # Empty columns
-        @test_throws AssertionError EegFun._combine_boolean_columns!(continuous_data, [:nonexistent], :and)  # Non-existent column
-        @test_throws AssertionError EegFun._combine_boolean_columns!(continuous_data, [:is_extreme], :invalid)  # Invalid operation
+        @test_throws EegFun.EegFunError EegFun._combine_boolean_columns!(continuous_data, Symbol[], :and)  # Empty columns
+        @test_throws EegFun.EegFunError EegFun._combine_boolean_columns!(continuous_data, [:nonexistent], :and)  # Non-existent column
+        @test_throws EegFun.EegFunError EegFun._combine_boolean_columns!(continuous_data, [:is_extreme], :invalid)  # Invalid operation
     end
 
     @testset "Documentation generation" begin

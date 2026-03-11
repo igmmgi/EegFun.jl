@@ -123,7 +123,7 @@ function _load_and_group_for_jackknife(files::Vector{String}, input_dir::String,
 
         # Extract participant ID from filename (assumes format like "1_pattern.jld2")
         m = match(r"^(\d+)_", file)
-        participant_id = m |> !isnothing ? parse(Int, m.captures[1]) : i
+        participant_id = !isnothing(m) ? parse(Int, m.captures[1]) : i
         push!(participant_ids, participant_id)
 
         # Read data (using read_data which finds by type)
@@ -195,7 +195,8 @@ function jackknife_average(erps::Vector{ErpData}; condition_selection::Function 
     erps_filtered = erps[get_selected_conditions(erps, condition_selection)]
 
     # Validate inputs
-    if (error_msg = _validate_jackknife_params(erps_filtered)) |> !isnothing
+    error_msg = _validate_jackknife_params(erps_filtered)
+    if !isnothing(error_msg)
         @minimal_error(error_msg)
     end
 
@@ -223,7 +224,8 @@ function jackknife_average(
         @log_call "jackknife_average"
 
         # Validation
-        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+        error_msg = _validate_input_dir(input_dir)
+        if !isnothing(error_msg)
             @minimal_error(error_msg)
         end
 

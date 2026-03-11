@@ -70,7 +70,7 @@ function preprocess_v1(config::String; base_dir::Union{String,Nothing} = nothing
         if !isfile(layout_file_path)
             # Fall back to searching in package layouts directory
             layout_file = find_file(cfg["files"]["input"]["layout_file"], joinpath(@__DIR__, "..", "..", "resources", "layouts"))
-            if layout_file |> !isnothing
+            if !isnothing(layout_file)
                 layout_file_path = layout_file
             end
         end
@@ -410,7 +410,7 @@ function preprocess_v1(config::String; base_dir::Union{String,Nothing} = nothing
                 # Collect all artifact-related info into a single structure
                 @info subsection("Artifact Information")
                 artifact_info = ArtifactInfo(
-                    continuous_repair_info |> !isnothing ? [continuous_repair_info] : ContinuousRepairInfo[],
+                    !isnothing(continuous_repair_info) ? [continuous_repair_info] : ContinuousRepairInfo[],
                     vcat(rejection_info_step1, rejection_info_step2),
                     component_artifacts,  # Save ICA components if ICA was applied, otherwise nothing
                 )

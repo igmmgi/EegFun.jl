@@ -249,7 +249,7 @@ function _run_permutations(
 
     for perm_idx = 1:n_permutations
         # Get t-matrix: either from pre-computed or compute new
-        if permutation_t_matrices |> !isnothing
+        if !isnothing(permutation_t_matrices)
             t_matrix_perm = permutation_t_matrices[:, :, perm_idx]
         else
             # Shuffle and compute t-matrix

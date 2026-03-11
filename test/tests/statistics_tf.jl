@@ -235,13 +235,13 @@ end
 
         # Find the larger cluster (3 pixels)
         big = findfirst(c -> length(c.pixels) == 3, clusters)
-        @test big |> !isnothing
+        @test !isnothing(big)
         @test clusters[big].freq_range == (8.0, 8.0)
         @test length(clusters[big].time_indices) == 3
 
         # The isolated point is its own cluster
         small = findfirst(c -> length(c.pixels) == 1, clusters)
-        @test small |> !isnothing
+        @test !isnothing(small)
     end
 
     @testset "3D BFS clustering - spectral" begin

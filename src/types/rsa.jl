@@ -66,7 +66,7 @@ time point, correlations with model RDMs, and metadata about the analysis.
 - `noise_ceiling::Union{NoiseCeiling, Nothing}`: Noise ceiling estimates, or `nothing`
 - `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
 """
-mutable struct RsaData <: SingleDataFrameEeg
+mutable struct RsaData <: EegFunData
     file::String
     condition_names::Vector{String}
     times::Vector{Float64}

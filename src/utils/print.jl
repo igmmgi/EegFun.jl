@@ -32,7 +32,7 @@ function get_package_version(; package_name::String = "EegFun")
     try
         pkg_path = Base.find_package(package_name)
         version = "unknown"
-        if pkg_path |> !isnothing
+        if !isnothing(pkg_path)
             package_root = dirname(dirname(pkg_path))
             project_file = joinpath(package_root, "Project.toml")
             if isfile(project_file)
@@ -121,4 +121,3 @@ function version_info()
         "timestamp" => string(now()),
     )
 end
-

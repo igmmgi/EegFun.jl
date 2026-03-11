@@ -148,12 +148,12 @@ end
 
 # === LAYOUT I/O FUNCTIONS ===
 """
-    read_layout(layout_file_name::String)
+    read_layout(file::String)
 
 Reads a layout file in CSV format and returns a DataFrame containing the layout information.
 
 # Arguments
-- `layout_file_name::String`: The path to the CSV file containing the layout data.
+- `file::String`: The path to the CSV file containing the layout data.
 
 # Returns
 - `DataFrame`: A DataFrame containing the layout data, with columns for electrode labels, incidence angles, azimuth angles, and calculated Cartesian coordinates (if applicable).
@@ -161,7 +161,7 @@ Reads a layout file in CSV format and returns a DataFrame containing the layout 
 # Throws
 - `SystemError`: If the file does not exist or cannot be accessed.
 """
-function read_layout(file)
+function read_layout(file::String)
     if !isfile(file)
         @minimal_error "Cannot open file: $file"
     end
@@ -404,18 +404,6 @@ Calculates the squared distance between two points in 3D space.
 end
 
 # === NEIGHBOR CALCULATIONS ===
-"""
-    get_neighbours_xy!(layout::Layout, distance_criterion::Real)
-
-Identifies the neighbours of each electrode based on their normalized 2D Cartesian coordinates.
-
-# Arguments
-- `layout::Layout`: A Layout containing the layout information.
-- `distance_criterion::Real`: The maximum distance in normalized units to consider two electrodes as neighbours.
-
-# Modifies
-- The input `layout` is modified in place to update its `neighbours` field and `criterion`.
-"""
 
 """
     _find_neighbours(labels, coords, distance_criterion) -> OrderedDict
@@ -526,10 +514,10 @@ The electrode order from the original OrderedDict is preserved.
 # Example
 ```julia
 layout = read_layout("./layouts/biosemi64.csv")
-neighbours = get_neighbours_xy!(layout, 40)
+get_neighbours_xy!(layout, 40)
 
 # Write to TOML file
-print_neighbours_dict(neighbours, "neighbours.toml")
+print_layout_neighbours(layout.neighbours, "neighbours.toml")
 ```
 """
 function print_layout_neighbours(neighbours_dict::OrderedDict{Symbol,Neighbours}, filename::String)
@@ -551,7 +539,6 @@ end
 function print_layout_neighbours(layout::Layout)
     if isnothing(layout.neighbours)
         @minimal_error "No neighbours to print"
-        return
     end
     nneighbours = average_number_of_neighbours(layout.neighbours)
     toml_data = _format_neighbours_toml(layout.neighbours, nneighbours)
@@ -572,8 +559,8 @@ Calculate the average number of neighbours per electrode from a neighbours dicti
 # Example
 ```julia
 layout = read_layout("./layouts/biosemi64.csv")
-neighbours, _ = get_neighbours_xy!(layout, 40)
-avg_neighbours = average_neighbours_per_electrode(neighbours)
+get_neighbours_xy!(layout, 40)
+avg_neighbours = average_number_of_neighbours(layout.neighbours)
 ```
 """
 function average_number_of_neighbours(neighbours_dict::OrderedDict{Symbol,Neighbours})
@@ -780,7 +767,7 @@ get_neighbours_xyz!(dat::EegFunData, distance_criterion::Real) = get_neighbours_
 
 # === LAYOUT VALIDATION AND MANIPULATION ===
 """
-    rename!(layout::Layout, rename_dict::Dict{Symbol, Symbol})
+    rename_channel!(layout::Layout, rename_dict::Dict{Symbol, Symbol})
 
 Rename channels in a Layout object using a dictionary mapping old names to new names.
 Modifies the layout in place.
@@ -796,10 +783,10 @@ Modifies the layout in place.
 ```julia
 # Rename Fp1 to Fpz and Fp2 to Fpz
 rename_dict = Dict(:Fp1 => :Fpz, :Fp2 => :Fpz)
-rename!(layout, rename_dict)
+rename_channel!(layout, rename_dict)
 
 # Rename a single channel
-rename!(layout, Dict(:Cz => :Cz_new))
+rename_channel!(layout, Dict(:Cz => :Cz_new))
 ```
 
 # Notes
@@ -877,7 +864,7 @@ Create a renamed copy of a Layout object using a dictionary mapping old names to
 ```julia
 # Rename Fp1 to Fpz and Fp2 to Fpz
 rename_dict = Dict(:Fp1 => :Fpz, :Fp2 => :Fpz)
-new_layout = rename(layout, rename_dict)
+new_layout = rename_channel(layout, rename_dict)
 ```
 
 # Notes

@@ -122,7 +122,7 @@ end
                 output_dir = output_dir,
             )
 
-            @test result |> !isnothing
+            @test !isnothing(result)
             @test result.success == 2
             @test result.errors == 0
             @test isdir(output_dir)

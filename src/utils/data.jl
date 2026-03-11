@@ -155,14 +155,18 @@ Get all column names from the complete DataFrame.
 all_labels(dat::SingleDataFrameEeg)::Vector{Symbol} = propertynames(dat.data)
 all_labels(dat::MultiDataFrameEeg)::Vector{Symbol} = propertynames(dat.data[1])
 all_labels(dat::MultiDataFrameEeg, epoch::Int)::Vector{Symbol} = propertynames(dat.data[epoch])
+all_labels(dat::DataFrame)::Vector{Symbol} = propertynames(dat)
 
 """
     time_vector(dat::EegData) -> Vector{Float64}
+    time_vector(dat::EegData, epoch::Int) -> Vector{Float64}
+    time_vector(df::DataFrame) -> Vector{Float64}
 
-Get the time vector from EEG data.
+Get the time column from the EEG data or DataFrame as a vector.
 
 # Arguments
 - `dat::EegData`: The EEG data object
+- `df::DataFrame`: A DataFrame with a `:time` column
 
 # Returns
 - `Vector{Float64}`: Time vector in seconds
@@ -171,9 +175,12 @@ Get the time vector from EEG data.
 - For MultiDataFrameEeg types (EpochData, etc.), returns time from first epoch
 - All epochs are assumed to have identical time vectors
 """
-time_vector(dat::SingleDataFrameEeg)::Vector{Float64} = dat.data.time
-time_vector(dat::MultiDataFrameEeg)::Vector{Float64} = dat.data[1].time
-all_labels(dat::DataFrame)::Vector{Symbol} = propertynames(dat)
+time_vector(dat::SingleDataFrameEeg)::Vector{Float64} = hasproperty(dat.data, :time) ? dat.data[!, :time] : Float64[]
+time_vector(dat::MultiDataFrameEeg)::Vector{Float64} = hasproperty(dat.data[1], :time) ? dat.data[1][!, :time] : Float64[]
+time_vector(dat::MultiDataFrameEeg, epoch::Int)::Vector{Float64} =
+    hasproperty(dat.data[epoch], :time) ? dat.data[epoch][!, :time] : Float64[]
+time_vector(dat::Vector{T}) where {T<:EegData} = isempty(dat) ? Float64[] : time_vector(dat[1])
+time_vector(df::DataFrame)::Vector{Float64} = hasproperty(df, :time) ? df[!, :time] : Float64[]
 
 
 """
@@ -244,24 +251,12 @@ channel_data(dat::MultiDataFrameEeg, channel::Symbol) = reduce(vcat, (trial[!, c
 channel_data(dat::SingleDataFrameEeg, channel::Symbol)::Vector{Float64} = dat.data[!, channel]
 
 """
+    extra_labels(dat::EegData) -> Vector{Symbol}
 
-    extra_data(eeg_data::EegData) -> DataFrame
-
-Get extra/derived columns (EOG, flags, etc.) from the EEG data.
-
-# Arguments
-- `eeg_data::EegData`: The EEG data object
-
-# Returns
-- `DataFrame`: DataFrame containing extra/derived columns
+Get extra/derived column names (EOG, flags, etc.) from the EEG data.
 """
 extra_labels(dat::EegData) = _get_cols_by_group(dat, :extra)
-
-# Handle collections of EEG data
-# TODO: is it possible that all do not have the same channel labels?
 extra_labels(dat::Vector{<:EegData})::Vector{Symbol} = extra_labels(first(dat))
-
-
 
 """
     extra_data(eeg_data::EegData) -> DataFrame
@@ -454,8 +449,8 @@ function _have_same_structure(dat1::EegData, dat2::EegData)::Bool
         return false
     end
     # Check time vectors match (if they exist)
-    time1 = time(dat1)
-    time2 = time(dat2)
+    time1 = time_vector(dat1)
+    time2 = time_vector(dat2)
     if !isempty(time1) && !isempty(time2) && !all(time1 .≈ time2)
         @minimal_error("Time vectors do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
         return false
@@ -474,25 +469,6 @@ function _have_same_structure(dats::Vector{<:EegData})::Bool
     end
     return true
 end
-
-"""
-    time(dat::EegData) -> Vector{Float64}
-    time(df::DataFrame) -> Vector{Float64}
-
-Get the time column from the EEG data or DataFrame as a vector.
-
-# Arguments
-- `dat::EegData`: The EEG data object
-- `df::DataFrame`: A DataFrame with a `:time` column
-
-# Returns
-- `Vector{Float64}`: The time column values
-"""
-time(dat::SingleDataFrameEeg)::Vector{Float64} = hasproperty(dat.data, :time) ? dat.data[!, :time] : Float64[]
-time(dat::MultiDataFrameEeg)::Vector{Float64} = hasproperty(dat.data[1], :time) ? dat.data[1][!, :time] : Float64[]
-time(dat::MultiDataFrameEeg, epoch::Int)::Vector{Float64} = hasproperty(dat.data[epoch], :time) ? dat.data[epoch][!, :time] : Float64[]
-time(dat::Vector{T}) where {T<:EegData} = isempty(dat) ? Float64[] : time(dat[1])
-time(df::DataFrame)::Vector{Float64} = hasproperty(df, :time) ? df[!, :time] : Float64[]
 
 
 """
@@ -1169,11 +1145,7 @@ epochs_not(epoch_number::Int) = x -> .!(x .== epoch_number)
 epochs_not(epoch_numbers::Int...) = epochs_not(collect(epoch_numbers))
 
 # Helper to extract condition number and name (returns tuple)
-condition_info(dat::EpochData) = (dat.condition, dat.condition_name)
-condition_info(dat::ErpData) = (dat.condition, dat.condition_name)
-condition_info(dat::TimeFreqData) = (dat.condition, dat.condition_name)
-condition_info(dat::TimeFreqEpochData) = (dat.condition, dat.condition_name)
-condition_info(dat::SingleDataFrameEeg) =
+condition_info(dat::EegFunData) =
     (hasproperty(dat, :condition) ? dat.condition : 1, hasproperty(dat, :condition_name) ? dat.condition_name : "Continuous")
 
 # Helper function predicates for easier participant filtering (for Vector{Int} of participant IDs)
@@ -1280,11 +1252,11 @@ function get_selected_channels(dat, channel_selection::Function; include_meta::B
     if hasfield(selection_type, :channel_names)
         user_order_names = getfield(channel_selection, :channel_names)
         ordered = _handle_channel_names_order(user_order_names, selectable_cols, selected)
-        ordered |> !isnothing && (selected = ordered)
+        !isnothing(ordered) && (selected = ordered)
     elseif hasfield(selection_type, :channel_numbers)
         user_order_numbers = getfield(channel_selection, :channel_numbers)
         ordered = _handle_channel_numbers_order(user_order_numbers, selectable_cols, selected)
-        ordered |> !isnothing && (selected = ordered)
+        !isnothing(ordered) && (selected = ordered)
     end
 
     return vcat(metadata_cols, selected)
@@ -1318,23 +1290,8 @@ function get_selected_epochs(dat::MultiDataFrameEeg, epoch_selection::Function)
     return findall(epoch_selection(all_epochs))
 end
 
-# Helper to select conditions from Vector{ErpData} based on a predicate
-function get_selected_conditions(datasets::Vector{ErpData}, condition_selection::Function)
-    return findall(condition_selection(datasets))
-end
-
-# Helper to select conditions from Vector{EpochData} based on a predicate
-function get_selected_conditions(datasets::Vector{EpochData}, condition_selection::Function)
-    return findall(condition_selection(datasets))
-end
-
-# Helper to select conditions from Vector{TimeFreqData} based on a predicate
-function get_selected_conditions(datasets::Vector{TimeFreqData}, condition_selection::Function)
-    return findall(condition_selection(datasets))
-end
-
-# Helper to select conditions from Vector{TimeFreqEpochData} based on a predicate
-function get_selected_conditions(datasets::Vector{TimeFreqEpochData}, condition_selection::Function)
+# Helper to select conditions from a vector of EEG data based on a predicate
+function get_selected_conditions(datasets::Vector{<:EegFunData}, condition_selection::Function)
     return findall(condition_selection(datasets))
 end
 
@@ -1342,32 +1299,32 @@ end
 
 
 """
-    convert(dat::MultiDataFrameEeg, epoch_idx::Int) -> SingleDataFrameEeg
+    epoch_to_continuous(dat::MultiDataFrameEeg, epoch_idx::Int) -> ContinuousData
 
-Convert a single epoch from MultiDataFrameEeg to SingleDataFrameEeg.
+Extract a single epoch from multi-epoch EEG data and return it as ContinuousData.
 
 # Arguments
 - `dat::MultiDataFrameEeg`: The multi-DataFrame EEG data
-- `epoch_idx::Int`: Index of the epoch to convert (1-based)
+- `epoch_idx::Int`: Index of the epoch to extract (1-based)
 
 # Returns
-- `SingleDataFrameEeg`: Single DataFrame containing only the specified epoch
+- `ContinuousData`: Single DataFrame containing only the specified epoch
 
 # Examples
 ```julia
-# Convert epoch 3 to single DataFrame
-single_dat = convert(dat, 3)
+# Extract epoch 3 as continuous data
+single_dat = epoch_to_continuous(dat, 3)
 
 # Now you can use single DataFrame functions
 summary = channel_summary(single_dat)
 ```
 """
-function convert(dat::T, epoch_idx::Int)::ContinuousData where {T<:MultiDataFrameEeg}
+function epoch_to_continuous(dat::T, epoch_idx::Int)::ContinuousData where {T<:MultiDataFrameEeg}
     # Validate epoch index
     if epoch_idx < 1 || epoch_idx > length(dat.data)
         @minimal_error "Epoch index $epoch_idx out of range (1:$(length(dat.data)))"
     end
-    return ContinuousData(dat.file, dat.data[epoch_idx], dat.layout, dat.sample_rate, dat.analysis_info) # TODO: should we use SingleDataFrameEeg?
+    return ContinuousData(dat.file, dat.data[epoch_idx], dat.layout, dat.sample_rate, dat.analysis_info)
 end
 
 

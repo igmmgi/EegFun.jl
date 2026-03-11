@@ -14,23 +14,12 @@ A struct to define configuration parameters with type and validation constraints
 - `min::Union{Nothing,T}`: Minimum value for numeric parameters (or nothing)
 - `max::Union{Nothing,T}`: Maximum value for numeric parameters (or nothing)
 """
-struct ConfigParameter{T}
+@kwdef struct ConfigParameter{T}
     description::String
-    default::Union{Nothing,T}
-    allowed::Union{Nothing,Vector{String}}
-    min::Union{Nothing,T}
-    max::Union{Nothing,T}
-end
-
-# Keyword constructor with defaults + helper for parameter definitions
-function ConfigParameter{T}(;
-    description::String,
-    default::Union{Nothing,T} = nothing,
-    allowed::Union{Nothing,Vector{String}} = nothing,
-    min::Union{Nothing,T} = nothing,
-    max::Union{Nothing,T} = nothing,
-) where {T}
-    ConfigParameter{T}(description, default, allowed, min, max)
+    default::Union{Nothing,T} = nothing
+    allowed::Union{Nothing,Vector{String}} = nothing
+    min::Union{Nothing,T} = nothing
+    max::Union{Nothing,T} = nothing
 end
 
 # =============================================================================
@@ -153,7 +142,6 @@ function read_config(config_file::String)
     default_config = TOML.parsefile(joinpath(@__DIR__, "default.toml"))
     if !isfile(config_file)
         @minimal_error "Configuration file not found: $config_file"
-        return nothing
     end
 
     # Load user config
@@ -163,7 +151,6 @@ function read_config(config_file::String)
         user_config = TOML.parsefile(config_file)
     catch e
         @minimal_error "Error parsing TOML file: $e"
-        return nothing
     end
 
     # Merge, convert types, and validate
@@ -175,7 +162,6 @@ function read_config(config_file::String)
     validation_result = _validate_config(config)
     if !validation_result.success
         @minimal_error validation_result.error
-        return nothing
     end
 
     return config
@@ -515,12 +501,12 @@ end
 # =============================================================================
 
 """
-    generate_config_template(filename::String="config_template.toml")
+    generate_config_template(; filename::String="config_template.toml")
 
 Generate and save a template TOML configuration file with all available parameters and their default values.
 
 # Arguments
-- `filename::String`: Name of the template file to create (default: "config_template.toml")
+- `filename::String`: Name of the template file to create (keyword argument, default: "config_template.toml")
 """
 function generate_config_template(; filename::String = "config_template.toml")
     try

@@ -102,7 +102,7 @@ function plot_erp_measurements(
 
     # Default analysis interval to full time range
     if isnothing(analysis_interval)
-        time_data = time(erp_datasets[1])
+        time_data = time_vector(erp_datasets[1])
         analysis_interval = (first(time_data), last(time_data))
     end
 
@@ -142,7 +142,7 @@ function plot_erp_measurements(
     baseline_cache = Dict{Int,Tuple{ErpData,Vector{Float64}}}()
     for (idx, dataset) in enumerate(erp_datasets)
         erp_data = baseline(dataset, baseline_interval)
-        time_data = time(erp_data)
+        time_data = time_vector(erp_data)
         baseline_cache[idx] = (erp_data, time_data)
     end
 

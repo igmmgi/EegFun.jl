@@ -370,7 +370,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
                 # Collect all artifact-related info into a single structure
                 @info subsection("Artifact Information")
                 artifact_info = ArtifactInfo(
-                    continuous_repair_info |> !isnothing ? [continuous_repair_info] : ContinuousRepairInfo[],
+                    !isnothing(continuous_repair_info) ? [continuous_repair_info] : ContinuousRepairInfo[],
                     vcat(rejection_info_step1, rejection_info_step2),
                     component_artifacts,  # Save ICA components if ICA was applied, otherwise nothing
                 )

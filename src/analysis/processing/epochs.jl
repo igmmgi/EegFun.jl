@@ -102,13 +102,14 @@ end
 
 # Helper function to validate epoch interval parameters
 function _validate_epoch_interval_params(dat::ContinuousData, epoch_interval::Vector{<:Real})
-    @assert length(epoch_interval) == 2 "Epoch interval must have exactly 2 elements"
-    @assert epoch_interval[1] <= epoch_interval[2] "Epoch interval start must be less than or equal to end"
-    @assert hasproperty(dat.data, :trigger) "Data must have a trigger column"
-    @assert hasproperty(dat.data, :time) "Data must have a time column"
-    @assert !isempty(dat.data.time) "Time column cannot be empty"
-    @assert !isempty(dat.data.trigger) "Triggers column cannot be empty"
-    @assert issorted(dat.data.time) "Time column must be sorted in ascending order"
+    length(epoch_interval) == 2 || @minimal_error "Epoch interval must have exactly 2 elements"
+    epoch_interval[1] <= epoch_interval[2] || @minimal_error "Epoch interval start must be less than or equal to end"
+    hasproperty(dat.data, :trigger) || @minimal_error "Data must have a trigger column"
+    hasproperty(dat.data, :time) || @minimal_error "Data must have a time column"
+    !isempty(dat.data.time) || @minimal_error "Time column cannot be empty"
+    !isempty(dat.data.trigger) || @minimal_error "Triggers column cannot be empty"
+    issorted(dat.data.time) || @minimal_error "Time column must be sorted in ascending order"
+    return nothing
 end
 
 """
@@ -869,11 +870,13 @@ function average_epochs(
         @log_call "average_epochs"
 
         # Validation (early return on error)
-        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+        error_msg = _validate_input_dir(input_dir)
+        if !isnothing(error_msg)
             @minimal_error(error_msg)
         end
 
-        if (error_msg = _validate_epochs_pattern(file_pattern)) |> !isnothing
+        error_msg = _validate_epochs_pattern(file_pattern)
+        if !isnothing(error_msg)
             @minimal_error(error_msg)
         end
 

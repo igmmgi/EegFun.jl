@@ -271,8 +271,8 @@ _extract_int("no_numbers_here")   # Returns: nothing
 ```
 """
 function _extract_int(s::String)::Union{Int,Nothing}
-    digits_only = filter(isdigit, s)
-    return isempty(digits_only) ? nothing : parse(Int, digits_only)
+    m = match(r"\d+", s)
+    return isnothing(m) ? nothing : parse(Int, m.match)
 end
 
 
@@ -424,17 +424,18 @@ end
 
 # Function to parse component input text into a list of component indices
 """
-    _parse_string_to_ints(text::String, total_components::Int)
+    _parse_string_to_ints(text::String) -> Vector{Int}
+    _parse_string_to_ints(text::String, max_count::Int) -> Vector{Int}
 
-Parses a comma-separated string potentially containing ranges (e.g., "1,3-5,8")
-into a sorted, unique vector of valid component indices.
+Parse a comma/semicolon-separated string potentially containing ranges (e.g., "1,3:5,8")
+into a sorted, unique vector of integers.
 
 # Arguments
-- `text::String`: The input string.
-- `total_components::Int`: The maximum valid component index.
+- `text::String`: The input string (supports `,`, `;`, and `:` for ranges)
+- `max_count::Int`: Optional maximum number of results to return
 
 # Returns
-- `Vector{Int}`: Sorted, unique vector of valid component indices found in the text.
+- `Vector{Int}`: Sorted, unique vector of integers found in the text.
                  Returns an empty vector if input is empty or invalid.
 """
 function _parse_string_to_ints(text::String)
@@ -478,7 +479,11 @@ function _parse_string_to_ints(text::String, max_count::Int)
 end
 
 
-# Helper function to extract just the defaults
+"""
+    _get_defaults(kwargs_dict::Dict{Symbol,Tuple{Any,String}}) -> Dict{Symbol,Any}
+
+Extract default values from a keyword arguments dictionary, discarding descriptions.
+"""
 function _get_defaults(kwargs_dict::Dict{Symbol,Tuple{Any,String}})::Dict{Symbol,Any}
     return Dict(key => value[1] for (key, value) in kwargs_dict)
 end
@@ -560,8 +565,10 @@ end
 # Helper function to generate documentation
 function _generate_kwargs_doc(kwargs_dict::Dict{Symbol,Tuple{Any,String}})::String
     doc_lines = ["# Keyword Arguments"]
-    push!(doc_lines, "All keyword arguments below have sensible defaults defined in `DEFAULT_CHANNEL_SUMMARY_KWARGS`.")
-    push!(doc_lines, "You can override any of these defaults by passing the corresponding keyword argument.")
+    push!(
+        doc_lines,
+        "All keyword arguments below have sensible defaults. You can override any by passing the corresponding keyword argument.",
+    )
     push!(doc_lines, "")
     for (param_name, (default_val, desc)) in kwargs_dict
         type_info = typeof(default_val)
@@ -596,9 +603,10 @@ _combine_boolean_columns!(dat, [:is_extreme_value_100, :is_eog_onset], :or, outp
 """
 function _combine_boolean_columns!(dat::ContinuousData, columns::Vector{Symbol}, operation::Symbol; output_column::Symbol = :combined_flags)
     # Input validation
-    @assert !isempty(columns) "Must specify at least one column to combine"
-    @assert all(col -> hasproperty(dat.data, col), columns) "All specified columns must exist in the data"
-    @assert operation in [:and, :or, :nand, :nor] "Invalid operation. Must be one of: :and, :or, :nand, :nor"
+    isempty(columns) && @minimal_error "Must specify at least one column to combine"
+    missing_cols = filter(col -> !hasproperty(dat.data, col), columns)
+    !isempty(missing_cols) && @minimal_error "Columns not found in data: $(join(missing_cols, ", "))"
+    operation ∉ [:and, :or, :nand, :nor] && @minimal_error "Invalid operation :$operation. Must be one of: :and, :or, :nand, :nor"
 
     # Get the boolean columns
     bool_columns = [dat.data[!, col] for col in columns]

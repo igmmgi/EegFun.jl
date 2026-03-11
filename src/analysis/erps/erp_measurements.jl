@@ -794,10 +794,12 @@ function erp_measurements(
         @log_call "erp_measurements"
 
         # Validation 
-        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+        error_msg = _validate_input_dir(input_dir)
+        if !isnothing(error_msg)
             @minimal_error error_msg
         end
-        if (error_msg = _validate_analysis_type(analysis_type)) |> !isnothing
+        error_msg = _validate_analysis_type(analysis_type)
+        if !isnothing(error_msg)
             @minimal_error error_msg
         end
 

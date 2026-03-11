@@ -303,8 +303,8 @@ using Random
 
         # Test input validation
         dat5 = EegFun.create_test_continuous_data_with_triggers()
-        @test_throws AssertionError EegFun.mark_epoch_intervals!(dat5, [1], [-0.005])  # Wrong window length
-        @test_throws AssertionError EegFun.mark_epoch_intervals!(dat5, [1], [0.005, -0.005])  # Wrong order
+        @test_throws EegFun.EegFunError EegFun.mark_epoch_intervals!(dat5, [1], [-0.005])  # Wrong window length
+        @test_throws EegFun.EegFunError EegFun.mark_epoch_intervals!(dat5, [1], [0.005, -0.005])  # Wrong order
     end
 
     @testset "mark_epoch_intervals! (epoch conditions)" begin
@@ -384,21 +384,21 @@ using Random
         @test isnothing(EegFun._validate_epoch_interval_params(dat, [-0.1, 0.1]))
 
         # Invalid time interval length
-        @test_throws AssertionError EegFun._validate_epoch_interval_params(dat, [-0.1])
-        @test_throws AssertionError EegFun._validate_epoch_interval_params(dat, [-0.1, 0.0, 0.1])
+        @test_throws EegFun.EegFunError EegFun._validate_epoch_interval_params(dat, [-0.1])
+        @test_throws EegFun.EegFunError EegFun._validate_epoch_interval_params(dat, [-0.1, 0.0, 0.1])
 
         # Invalid time interval order
-        @test_throws AssertionError EegFun._validate_epoch_interval_params(dat, [0.1, -0.1])
+        @test_throws EegFun.EegFunError EegFun._validate_epoch_interval_params(dat, [0.1, -0.1])
 
         # Missing required columns
         df_no_triggers = DataFrame(time = [0.0, 0.1], A = [1.0, 2.0])
         layout = EegFun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing, nothing)
         dat_no_triggers = EegFun.ContinuousData("test_data", df_no_triggers, layout, 1000, EegFun.AnalysisInfo())
-        @test_throws AssertionError EegFun._validate_epoch_interval_params(dat_no_triggers, [-0.1, 0.1])
+        @test_throws EegFun.EegFunError EegFun._validate_epoch_interval_params(dat_no_triggers, [-0.1, 0.1])
 
         df_no_time = DataFrame(trigger = [0, 1], A = [1.0, 2.0])
         dat_no_time = EegFun.ContinuousData("test_data", df_no_time, layout, 1000, EegFun.AnalysisInfo())
-        @test_throws AssertionError EegFun._validate_epoch_interval_params(dat_no_time, [-0.1, 0.1])
+        @test_throws EegFun.EegFunError EegFun._validate_epoch_interval_params(dat_no_time, [-0.1, 0.1])
     end
 
     @testset "edge cases and robustness" begin
@@ -455,7 +455,7 @@ using Random
         # Test with unsorted time vector (should fail validation)
         dat_unsorted = EegFun.create_test_continuous_data_with_triggers()
         dat_unsorted.data.time = reverse(dat_unsorted.data.time)
-        @test_throws AssertionError EegFun.mark_epoch_intervals!(dat_unsorted, [1], [-0.01, 0.01])
+        @test_throws EegFun.EegFunError EegFun.mark_epoch_intervals!(dat_unsorted, [1], [-0.01, 0.01])
 
         # Test reject_epochs with non-boolean columns (should work but warn)
         dat_nonbool = EegFun.create_test_continuous_data_with_triggers()
@@ -667,7 +667,7 @@ using Random
                 # Test averaging epochs
                 result = EegFun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir)
 
-                @test result |> !isnothing
+                @test !isnothing(result)
                 @test result.success == 2
                 @test result.errors == 0
                 @test isdir(output_dir)

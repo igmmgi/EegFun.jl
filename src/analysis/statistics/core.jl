@@ -260,7 +260,7 @@ function _compute_t_matrix(
 
         # Compute mean of differences: mean(data1 - data2) = mean(data1) - mean(data2)
         # Use pre-allocated buffers if provided, otherwise allocate
-        if mean1_buffer |> !isnothing
+        if !isnothing(mean1_buffer)
             mean1 = mean1_buffer
             mean2 = mean2_buffer
             mean_diff = mean_diff_buffer
@@ -271,7 +271,7 @@ function _compute_t_matrix(
         end
 
         # Compute means and std of differences in one pass (avoids diff array allocation)
-        if std_diff_buffer |> !isnothing
+        if !isnothing(std_diff_buffer)
             std_diff = std_diff_buffer
         else
             std_diff = Array{Float64,2}(undef, n_electrodes, n_time)
@@ -302,7 +302,7 @@ function _compute_t_matrix(
                 std_diff[e_idx, t_idx] = sqrt(variance * n_participants / (n_participants - 1))
 
                 # Only store mean1/mean2 if buffers were provided
-                if mean1_buffer |> !isnothing
+                if !isnothing(mean1_buffer)
                     mean1[e_idx, t_idx] = mean1_val
                     mean2[e_idx, t_idx] = mean2_val
                 end
@@ -421,7 +421,7 @@ function _compute_p_matrix(
     tail::Symbol,
     p_matrix_buffer::Union{Nothing,Array{Float64,2}} = nothing,
 )
-    if p_matrix_buffer |> !isnothing
+    if !isnothing(p_matrix_buffer)
         p_matrix = p_matrix_buffer
     else
         p_matrix = Array{Float64,2}(undef, size(t_matrix))

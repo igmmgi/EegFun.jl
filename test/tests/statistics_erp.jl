@@ -269,11 +269,11 @@ end
 
         # Find the larger cluster (3 points)
         big = findfirst(c -> length(c.time_indices) == 3, clusters)
-        @test big |> !isnothing
+        @test !isnothing(big)
 
         # The isolated point is its own cluster
         small = findfirst(c -> length(c.time_indices) == 1, clusters)
-        @test small |> !isnothing
+        @test !isnothing(small)
     end
 
     @testset "2D BFS clustering - spatiotemporal" begin

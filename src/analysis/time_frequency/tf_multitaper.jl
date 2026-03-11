@@ -120,7 +120,7 @@ function tf_multitaper(
 
     # Get original data time range (before padding) - these are the time points we want in output
     n_samples_original_unpadded = n_samples(dat)  # Store original unpadded length for edge filtering
-    times_original = time(dat)
+    times_original = time_vector(dat)
 
     # Apply padding if requested (mutating dat directly for consistency with tf_morlet)
     if !isnothing(pad)
@@ -128,7 +128,7 @@ function tf_multitaper(
     end
 
     # Get sample rate and time vector from processed data
-    times_processed = time(dat)
+    times_processed = time_vector(dat)
     n_samples_processed = n_samples(dat)  # Number of samples per epoch (may be padded)
 
     # Handle time_steps parameter - determine which time points to extract from results
@@ -452,7 +452,8 @@ function tf_multitaper(
         @info "Batch tf_multitaper started at $(now())"
         @log_call "tf_multitaper"
 
-        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+        error_msg = _validate_input_dir(input_dir)
+        if !isnothing(error_msg)
             @minimal_error(error_msg)
         end
 
@@ -577,4 +578,3 @@ function freq_spectrum(
     condition_num, condition_name = condition_info(dat)
     return SpectrumData(dat.file, condition_num, condition_name, spectrum_df, dat.layout, dat.sample_rate, :welch, dat.analysis_info)
 end
-

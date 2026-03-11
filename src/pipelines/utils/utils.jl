@@ -110,7 +110,7 @@ function Base.show(io::IO, info::EpochRepairInfo)
     println(io, "  Epochs with repairs: $(length(info.repaired))")
     println(io, "  Total channel repairs: $total_repairs")
     println(io, "  Total channels skipped: $total_skipped")
-    if info.neighbors |> !isnothing && !isempty(info.neighbors)
+    if !isnothing(info.neighbors) && !isempty(info.neighbors)
         println(io, "  Neighbors used:")
         for (ch, neighs) in info.neighbors
             println(io, "    $ch → $(neighs)")
@@ -120,7 +120,7 @@ end
 
 function Base.show(io::IO, info::ChannelRepairInfo)
     println(io, "ChannelRepairInfo:")
-    if info.continuous |> !isnothing
+    if !isnothing(info.continuous)
         println(io, "Continuous level:")
         println(io, info.continuous)
     else
@@ -367,7 +367,7 @@ function create_epoch_repair_info(
     end
 
     neighbors_info = nothing
-    if method == :neighbor_interpolation && neighbors_dict |> !isnothing
+    if method == :neighbor_interpolation && !isnothing(neighbors_dict)
         neighbors_info = Dict{Symbol,Vector{Symbol}}()
         # Collect unique repaired channels and their neighbors
         all_repaired_channels = Set{Symbol}()
@@ -385,7 +385,7 @@ function create_epoch_repair_info(
 end
 
 """
-    _combine_and_average_epoch_counts(all_epoch_counts::Vector{DataFrame})
+    _epoch_and_file_summary(all_epoch_counts::Vector{DataFrame})
 
 Combine epoch counts from all files and create averaged version.
 

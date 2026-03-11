@@ -165,19 +165,19 @@ function _fieldtrip_to_continuousdata(ft::Dict, filepath::String, layout::Layout
         value_idx = findfirst(==("value"), events.names)
         type_idx = findfirst(==("type"), events.names)
 
-        if sample_idx |> !isnothing
+        if !isnothing(sample_idx)
             samples = events.values[sample_idx]
             @info "Extracting $(length(samples)) events from cfg.event"
 
-            values = value_idx |> !isnothing ? events.values[value_idx] : nothing
-            types = type_idx |> !isnothing ? events.values[type_idx] : nothing
+            values = !isnothing(value_idx) ? events.values[value_idx] : nothing
+            types = !isnothing(type_idx) ? events.values[type_idx] : nothing
 
             for i in eachindex(samples)
                 sample = Int(round(samples[i]))
 
                 if 1 <= sample <= n_timepoints
                     # Extract trigger value
-                    if values |> !isnothing && i <= length(values)
+                    if !isnothing(values) && i <= length(values)
                         val = values[i]
                         if val isa AbstractArray
                             !isempty(val) && (trigger_vec[sample] = Int(first(val)))
@@ -187,7 +187,7 @@ function _fieldtrip_to_continuousdata(ft::Dict, filepath::String, layout::Layout
                     end
 
                     # Extract trigger type/info
-                    if types |> !isnothing && i <= length(types)
+                    if !isnothing(types) && i <= length(types)
                         typ = types[i]
                         if typ isa AbstractArray
                             !isempty(typ) && (trigger_info_vec[sample] = string(first(typ)))

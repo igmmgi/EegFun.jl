@@ -82,14 +82,14 @@ function _apply_grid_spacing!(fig::Figure, plot_layout::PlotLayout)
     rows, cols = plot_layout.dims
 
     # Set row gaps for all rows (gaps are between rows, so set for rows 1 to rows-1)
-    if rowgap_val |> !isnothing && rows > 1
+    if !isnothing(rowgap_val) && rows > 1
         for row = 1:(rows-1)
             rowgap!(fig.layout, row, rowgap_val)
         end
     end
 
     # Set column gaps for all columns (gaps are between columns, so set for cols 1 to cols-1)
-    if colgap_val |> !isnothing && cols > 1
+    if !isnothing(colgap_val) && cols > 1
         for col = 1:(cols-1)
             colgap!(fig.layout, col, colgap_val)
         end
@@ -137,7 +137,7 @@ function _create_grid_layout(channels::Vector{Symbol}; kwargs...)
     # Get skip positions if provided
     skip_positions = metadata[:grid_skip_positions]
     skip_count = 0
-    if skip_positions |> !isnothing
+    if !isnothing(skip_positions)
         # Validate skip positions are tuples
         for pos in skip_positions
             if !isa(pos, Tuple) || length(pos) != 2
@@ -154,13 +154,13 @@ function _create_grid_layout(channels::Vector{Symbol}; kwargs...)
     # If grid_dims is specified, validate it has enough space (accounting for skipped positions)
     # If not specified, calculate dimensions for n_channels + skip_count positions
     n_channels = length(channels)
-    if metadata[:grid_dims] |> !isnothing
+    if !isnothing(metadata[:grid_dims])
         # Validate and auto-correct grid dimensions if too small
         # Need enough positions for n_channels + skip_count (skip positions still need to be in grid)
         rows, cols = _validate_dims(metadata[:grid_dims], n_channels + skip_count)
 
         # Validate skip positions are within grid bounds
-        if skip_positions |> !isnothing
+        if !isnothing(skip_positions)
             for (row, col) in skip_positions
                 if row < 1 || row > rows || col < 1 || col > cols
                     throw(ArgumentError("Skip position ($row, $col) is outside grid bounds ($rows×$cols)"))
@@ -182,7 +182,7 @@ function _create_grid_layout(channels::Vector{Symbol}; kwargs...)
         rows, cols = _best_rect(n_channels + skip_count)
 
         # Validate skip positions are within auto-calculated grid bounds
-        if skip_positions |> !isnothing
+        if !isnothing(skip_positions)
             for (row, col) in skip_positions
                 if row < 1 || row > rows || col < 1 || col > cols
                     throw(ArgumentError("Skip position ($row, $col) is outside auto-calculated grid bounds ($rows×$cols)"))
@@ -227,7 +227,7 @@ function _create_topo_layout(layout::Layout, channels::Vector{Symbol}; kwargs...
 
     for channel in channels
         idx = findfirst(==(channel), layout.data.label)
-        if idx |> !isnothing
+        if !isnothing(idx)
             push!(positions, (layout.data.x2[idx], layout.data.y2[idx]))
         else
             @minimal_warning "Channel $channel not found in layout, finding non-overlapping position"
@@ -391,7 +391,7 @@ function _apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
         channel_idx = 1
         for row = 1:rows
             for col = 1:cols
-                is_skipped = skip_positions |> !isnothing && (row, col) in skip_positions
+                is_skipped = !isnothing(skip_positions) && (row, col) in skip_positions
                 has_channel = channel_idx <= length(plot_layout.channels)
                 if has_channel && !is_skipped
                     channel = plot_layout.channels[channel_idx]

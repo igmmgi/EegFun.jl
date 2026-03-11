@@ -223,7 +223,7 @@ function plot_topography(
         # First apply the user's sample_selection to get the selected time range
         dat_selected =
             subset(dat, channel_selection = channel_selection, sample_selection = sample_selection, interval_selection = interval_selection)
-        time_data = time(dat_selected)
+        time_data = time_vector(dat_selected)
         t_min, t_max = extrema(time_data)
 
         # Create evenly-spaced bin edges
@@ -343,7 +343,7 @@ function plot_topography(
                 sample_selection = sample_selection,
                 interval_selection = interval_selection,
             )
-            time_data = time(dat_selected)
+            time_data = time_vector(dat_selected)
             t_min, t_max = extrema(time_data)
             bin_edges = range(t_min, t_max, length = n_topo + 1)
 
@@ -566,7 +566,7 @@ function plot_topography!(
     plot_topography!(
         fig,
         ax,
-        convert(dat, epoch);
+        epoch_to_continuous(dat, epoch);
         channel_selection = channel_selection,
         sample_selection = sample_selection,
         interval_selection = interval_selection,
@@ -591,7 +591,7 @@ function plot_topography(
     plot_topography!(
         fig,
         ax,
-        convert(dat, epoch);
+        epoch_to_continuous(dat, epoch);
         channel_selection = channel_selection,
         sample_selection = sample_selection,
         interval_selection = interval_selection,

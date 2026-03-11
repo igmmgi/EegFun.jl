@@ -118,7 +118,7 @@ function tf_stft(
 
     # Get original data time range (before padding) - these are the time points we want in output
     n_samples_original_unpadded = n_samples(dat)  # Store original unpadded length for edge filtering
-    times_original = time(dat)
+    times_original = time_vector(dat)
 
     # Apply padding if requested (mutating dat directly for consistency with tf_morlet)
     if !isnothing(pad)
@@ -126,7 +126,7 @@ function tf_stft(
     end
 
     # Get sample rate and time vector from processed data
-    times_processed = time(dat)
+    times_processed = time_vector(dat)
 
     # Handle time_steps parameter - determine which time points to extract from results
     # After padding, processed data has extended time range - validate against processed data
@@ -397,7 +397,8 @@ function tf_stft(
         @info "Batch tf_stft started at $(now())"
         @log_call "tf_stft"
 
-        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+        error_msg = _validate_input_dir(input_dir)
+        if !isnothing(error_msg)
             @minimal_error(error_msg)
         end
 
