@@ -145,12 +145,12 @@ using EegFun
 # read raw data
 dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf");
 
-# read and preprate layout file
-layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
-EegFun.polar_to_cartesian_xy!(layout_file)
+# read and prepare layout file
+layout = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
+EegFun.polar_to_cartesian_xy!(layout)
 
 # create EegFun data structure (EegFun.ContinuousData)
-dat = EegFun.create_eegfun_data(dat, layout_file);
+dat = EegFun.create_eegfun_data(dat, layout);
 
 EegFun.sample_rate(dat)      # current sample rate
 EegFun.trigger_count(dat)    # current triggers in file

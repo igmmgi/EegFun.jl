@@ -144,16 +144,19 @@ function condition_combine(
         @log_call "condition_combine"
 
         # Validation (early return on error)
-        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+        error_msg = _validate_input_dir(input_dir)
+        if !isnothing(error_msg)
             @minimal_error(error_msg)
         end
 
-        if (error_msg = _validate_epochs_pattern_combine(file_pattern)) |> !isnothing
+        error_msg = _validate_epochs_pattern_combine(file_pattern)
+        if !isnothing(error_msg)
             @minimal_error(error_msg)
         end
 
         # Validate and clean condition groups (modifies in-place)
-        if (error_msg = _validate_condition_groups(condition_groups)) |> !isnothing
+        error_msg = _validate_condition_groups(condition_groups)
+        if !isnothing(error_msg)
             @minimal_error(error_msg)
         end
 

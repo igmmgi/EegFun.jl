@@ -263,7 +263,8 @@ function channel_summary(
         @log_call "channel_summary"
 
         # Validation (early return on error)
-        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+        error_msg = _validate_input_dir(input_dir)
+        if !isnothing(error_msg)
             @minimal_error(error_msg)
         end
 

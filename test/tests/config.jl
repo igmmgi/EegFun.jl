@@ -143,7 +143,7 @@ using Dates
 
             # Test that logging occurs but doesn't prevent successful loading
             # (We don't test stderr content since @info logging is expected and normal)
-            @test config |> !isnothing
+            @test !isnothing(config)
         end
 
         @testset "Configuration Merging" begin
@@ -367,7 +367,7 @@ using Dates
                 println(io, "epoch_condition_file = \"\"")  # Empty string for optional parameter
             end
             config = EegFun.read_config(optional_config_path)
-            @test config |> !isnothing
+            @test !isnothing(config)
             @test config["files"]["input"]["epoch_condition_file"] == ""
         end
 
@@ -379,7 +379,7 @@ using Dates
                 println(io, "freq = 0.5")
             end
             config = EegFun.read_config(custom_config_path)
-            @test config |> !isnothing
+            @test !isnothing(config)
             @test config["preprocess"]["filter"]["highpass"]["freq"] == 0.5
             @test config["preprocess"]["filter"]["highpass"]["method"] == "iir"  # Default value
             @test config["preprocess"]["filter"]["highpass"]["order"] == 1     # Default value
@@ -392,7 +392,7 @@ using Dates
                 println(io, "raw_data_files = [\"file1.bdf\", \"file2.bdf\"]")
             end
             config = EegFun.read_config(nested_config_path)
-            @test config |> !isnothing
+            @test !isnothing(config)
             @test config["files"]["input"]["directory"] == "/custom/path"
             @test config["files"]["input"]["raw_data_files"] == ["file1.bdf", "file2.bdf"]
         end
@@ -450,8 +450,8 @@ using Dates
         )
         result = EegFun._validate_config(invalid_config)
         @test !result.success
-        @test result.error |> !isnothing
-        @test result.key_path |> !isnothing
+        @test !isnothing(result.error)
+        @test !isnothing(result.key_path)
 
         # Test invalid configuration - out of range
         invalid_config = Dict{String,Any}(
@@ -468,8 +468,8 @@ using Dates
         )
         result = EegFun._validate_config(invalid_config)
         @test !result.success
-        @test result.error |> !isnothing
-        @test result.key_path |> !isnothing
+        @test !isnothing(result.error)
+        @test !isnothing(result.key_path)
 
         # Test invalid configuration - wrong allowed value
         invalid_config = Dict{String,Any}(
@@ -486,8 +486,8 @@ using Dates
         )
         result = EegFun._validate_config(invalid_config)
         @test !result.success
-        @test result.error |> !isnothing
-        @test result.key_path |> !isnothing
+        @test !isnothing(result.error)
+        @test !isnothing(result.key_path)
     end
 
     # =============================================================================

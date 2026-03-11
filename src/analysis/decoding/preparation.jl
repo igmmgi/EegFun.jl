@@ -99,7 +99,7 @@ function prepare_decoding(
     for (cond_idx, condition_epochs) in enumerate(selected_conditions)
         isempty(condition_epochs) && @minimal_error("Condition $(selected_cond_nums[cond_idx]): No data matched the selection criteria!")
         isempty(channel_labels(condition_epochs[1])) && @minimal_error("Channel selection produced no channels")
-        isempty(time(condition_epochs[1])) && @minimal_error("Interval selection produced no time points")
+        isempty(time_vector(condition_epochs[1])) && @minimal_error("Interval selection produced no time points")
     end
 
     # Organize by participant: for each participant, collect their data for all selected conditions
@@ -114,7 +114,7 @@ function prepare_decoding(
             # Find this participant's epoch for this condition
             participant_epoch = findfirst(epoch -> _extract_participant_id(basename(epoch.file)) == participant_id, condition_epochs)
 
-            if participant_epoch |> !isnothing
+            if !isnothing(participant_epoch)
                 push!(participant_data, condition_epochs[participant_epoch])
             else
                 @minimal_error(

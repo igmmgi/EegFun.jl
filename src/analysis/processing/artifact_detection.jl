@@ -808,11 +808,11 @@ Stores information about which epochs were rejected and why, and optionally trac
 - `name::String`: Name/identifier for this rejection info (e.g., "rejection_step1", "rejection_step2")
 - `info::EpochInfo`: Condition metadata (number, name, n_epochs)
 - `n_artifacts::Int`: Total number of artifact detections (channel-epoch pairs)
-- `rejected::Vector{Rejection}`: All rejected epochs
+- `abs_criterion::Real`: Absolute voltage threshold (μV) used for rejection
+- `abs_rejections::Union{Vector{Rejection}, Nothing}`: Rejections due to absolute voltage threshold (Nothing if abs_criterion = 0)
 - `z_criterion::Real`: Z-score criterion used for rejection
 - `z_rejections::Union{ZScoreRejectionInfo, Nothing}`: Z-score based rejection info (Nothing if z_criterion = 0)
-- `abs_rejections::Union{Vector{Rejection}, Nothing}`: Rejections due to absolute voltage threshold (Nothing if abs_criterion = 0)
-- `abs_criterion::Real`: Absolute voltage threshold (μV) used for rejection
+- `rejected::Vector{Rejection}`: All rejected epochs
 - `repaired::Union{OrderedDict{Int, Vector{Symbol}}, Nothing}`: Channels repaired per epoch, ordered by epoch number (populated during repair, Nothing if no repairs)
 - `skipped::Union{OrderedDict{Int, Vector{Symbol}}, Nothing}`: Channels skipped per epoch, ordered by epoch number (populated during repair, Nothing if no repairs)
 """
@@ -1123,7 +1123,7 @@ function Base.show(io::IO, info::EpochRejectionInfo)
     println(io, "  Artifacts total: $(info.n_artifacts)")
     println(io, "  Rejected epochs: $(_print_vector(unique_epochs(info.rejected)))")
 
-    if info.abs_rejections |> !isnothing
+    if !isnothing(info.abs_rejections)
         println(io, "  Rejection breakdown (absolute):")
         println(
             io,
@@ -1131,7 +1131,7 @@ function Base.show(io::IO, info::EpochRejectionInfo)
         )
     end
 
-    if info.z_rejections |> !isnothing
+    if !isnothing(info.z_rejections)
         z_info = info.z_rejections
         # Map measures to fields and labels
         field_map = Dict(

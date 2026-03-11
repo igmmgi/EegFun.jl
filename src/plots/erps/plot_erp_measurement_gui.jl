@@ -96,7 +96,7 @@ function plot_erp_measurement_gui(
     end
 
     # Get time range from first ERP
-    time_data = time(first_erp)
+    time_data = time_vector(first_erp)
     time_min, time_max = extrema(time_data)
 
     # Set default measurement interval if not provided
@@ -538,7 +538,7 @@ function _compute_gui_measurement(
 )
     # Apply baseline correction using existing infrastructure
     erp_data = baseline(erp, baseline_interval)
-    time_data = time(erp_data)
+    time_data = time_vector(erp_data)
     channel_data = erp_data.data[!, channel]
     time_mask = (time_data .>= analysis_interval[1]) .& (time_data .<= analysis_interval[2])
 

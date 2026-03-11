@@ -27,7 +27,7 @@ Returns arrays ready for RSA computation.
 """
 function _prepare_rsa_data(epochs::Vector{EpochData})
     channels = channel_labels(epochs)
-    times = time(epochs)
+    times = time_vector(epochs)
 
     # Prepare data arrays for each condition
     data_arrays = Vector{Array{Float64,3}}()

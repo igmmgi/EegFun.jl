@@ -101,7 +101,7 @@ public find_file
 public get_files
 public read_all_data
 public read_config
-public read_csv
+public read_fieldtrip_csv
 public read_data
 public read_eeglab
 public read_fieldtrip

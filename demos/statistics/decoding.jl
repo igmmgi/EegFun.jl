@@ -8,44 +8,8 @@ using Random
 
 @info EegFun.section("MVPA/DECODING MANUAL TEST")
 
-# Simplified synthetic epoch creation for fast testing
+# Create synthetic data for 10 participants
 # Adjustable difficulty via signal_strength and noise_level
-function create_synthetic_epochs(
-    participant_id,
-    condition_id,
-    condition_name,
-    n_epochs;
-    n_timepoints = 500,
-    channels = [:Fz, :Cz, :Pz],
-    signal_strength = 1.0,
-    noise_level = 0.3,
-)
-    time = range(-0.2, 0.8, length = n_timepoints)
-    layout = EegFun.Layout(DataFrame(label = channels, inc = [90.0, 0.0, -90.0], azi = [0.0, 0.0, 0.0]), nothing, nothing, nothing)
-
-    epochs = DataFrame[]
-    for epoch = 1:n_epochs
-        df = DataFrame(time = collect(time), epoch = fill(epoch, n_timepoints))
-        for ch in channels
-            # Condition-specific signal: positive for cond1, negative for cond2
-            signal = (condition_id == 1 ? signal_strength : -signal_strength) * exp.(-((time .- 0.2) .^ 2) / (2 * 0.05^2))
-            df[!, ch] = signal .+ noise_level * randn(n_timepoints)
-        end
-        push!(epochs, df)
-    end
-
-    return EegFun.EpochData(
-        "participant_$(participant_id)",
-        condition_id,
-        condition_name,
-        epochs,
-        layout,
-        200,
-        EegFun.AnalysisInfo(:none, 0.0, 0.0),
-    )
-end
-
-# Create synthetic data for 3 participants
 difficulty = "hard"
 
 if difficulty == "easy" # maybe a bit extreme! :-)
@@ -59,8 +23,8 @@ end
 println("  Using difficulty: $difficulty (signal=$signal_strength, noise=$noise_level)")
 all_synthetic = [
     [
-        create_synthetic_epochs(p, 1, "Cond1", 100; signal_strength = signal_strength, noise_level = noise_level),
-        create_synthetic_epochs(p, 2, "Cond2", 100; signal_strength = signal_strength, noise_level = noise_level),
+        EegFun.create_synthetic_epochs(p, 1, "Cond1", 100; signal_strength = signal_strength, noise_level = noise_level),
+        EegFun.create_synthetic_epochs(p, 2, "Cond2", 100; signal_strength = signal_strength, noise_level = noise_level),
     ] for p = 1:10
 ]
 EegFun.plot_epochs(all_synthetic[1]) # VP1

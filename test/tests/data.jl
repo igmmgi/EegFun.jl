@@ -394,7 +394,7 @@ using OrderedCollections
         @test selected_samples_df == [1, 3]
     end
 
-    @testset "Convert function" begin
+    @testset "epoch_to_continuous function" begin
         # Create test epoch data
         epoch1 = DataFrame(time = [0.1, 0.2], sample = [1, 2], Fz = [1.0, 2.0], Cz = [3.0, 4.0])
         epoch2 = DataFrame(time = [0.1, 0.2], sample = [1, 2], Fz = [5.0, 6.0], Cz = [7.0, 8.0])
@@ -403,7 +403,7 @@ using OrderedCollections
         epoch_data = EegFun.EpochData("test_data", 1, "condition_1", [epoch1, epoch2], layout, 250, analysis_info)
 
         # Test convert to SingleDataFrameEeg
-        single_data = EegFun.convert(epoch_data, 1)
+        single_data = EegFun.epoch_to_continuous(epoch_data, 1)
         @test single_data isa EegFun.ContinuousData
         @test single_data.data == epoch1
         @test single_data.layout == layout
@@ -413,7 +413,7 @@ using OrderedCollections
         # Test error handling - the function uses @minimal_error which doesn't throw ErrorException
         # Instead, it returns nothing and logs an error, but the return type annotation causes issues
         # Let's just test that the function works for valid inputs
-        @test EegFun.convert(epoch_data, 2) isa EegFun.ContinuousData
+        @test EegFun.epoch_to_continuous(epoch_data, 2) isa EegFun.ContinuousData
     end
 
     @testset "Channel renaming" begin

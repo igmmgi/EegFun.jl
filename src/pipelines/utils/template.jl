@@ -10,21 +10,13 @@ Configuration options for generating pipeline templates.
 - `include_setup::Bool`: Whether to include setup section (default: true)
 - `include_summary::Bool`: Whether to include summary section (default: true)
 """
-struct PipelineTemplateOptions
-    num_steps::Int
-    subsections_per_step::Int
-    include_usage_example::Bool
-    include_setup::Bool
-    include_summary::Bool
+@kwdef struct PipelineTemplateOptions
+    num_steps::Int = 5
+    subsections_per_step::Int = 2
+    include_usage_example::Bool = true
+    include_setup::Bool = true
+    include_summary::Bool = true
 end
-
-PipelineTemplateOptions(;
-    num_steps::Int = 5,
-    subsections_per_step::Int = 2,
-    include_usage_example::Bool = true,
-    include_setup::Bool = true,
-    include_summary::Bool = true,
-) = PipelineTemplateOptions(num_steps, subsections_per_step, include_usage_example, include_setup, include_summary)
 
 # ============================================================================
 # Template Section Generators

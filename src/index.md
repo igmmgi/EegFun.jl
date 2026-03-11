@@ -1,10 +1,10 @@
 # EeggFun.jl Documentation
 
-Welcome to EegFun.jl, a comprehensive Julia package for EEG data analysis and processing.
+EegFun.jl is a Julia package for EEG data analysis and processing.
 
 ## Overview
 
-EegFun.jl provides a complete toolkit for analyzing electroencephalogram (EEG) data, including:
+EegFun.jl provides a toolkit for analyzing electroencephalogram (EEG) data, including:
 
 - **Data Loading**: Support for various EEG file formats
 - **Preprocessing**: Filtering, referencing, artifact removal
@@ -14,7 +14,7 @@ EegFun.jl provides a complete toolkit for analyzing electroencephalogram (EEG) d
 
 ## Example Plots
 
-Here's a simple example of what you can create with EegFun.jl:
+Here are some examples of what can be created with EegFun.jl:
 
 ![Simple Plot Example](assets/images/simple_plot.png)
 

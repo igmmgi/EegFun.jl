@@ -109,10 +109,10 @@ function _trigger_count_impl(
         # Return empty DataFrame with correct structure
         empty_cols = [Int[]]  # trigger column
         append!(empty_cols, [Int[] for _ in column_names])  # count columns
-        if trigger_info |> !isnothing
+        if !isnothing(trigger_info)
             insert!(empty_cols, 2, String[])  # trigger_info column
         end
-        column_symbols = [:trigger; trigger_info |> !isnothing ? [:trigger_info] : []; Symbol.(column_names)]
+        column_symbols = [:trigger; !isnothing(trigger_info) ? [:trigger_info] : []; Symbol.(column_names)]
         result_df = DataFrame([col => data for (col, data) in zip(column_symbols, empty_cols)]...)
         return TriggerInfo(result_df)
     end
@@ -136,7 +136,7 @@ function _trigger_count_impl(
     result_df = DataFrame([col => data for (col, data) in zip(column_symbols, result_data)]...)
 
     # Add trigger_info column if provided
-    if trigger_info |> !isnothing
+    if !isnothing(trigger_info)
         trigger_info_map = Dict{Int,String}()
         for (trigger, info) in zip(trigger_datasets[1], trigger_info)
             if trigger != 0 && !haskey(trigger_info_map, trigger)
@@ -352,4 +352,3 @@ _matches_expected(actual::Real, expected::Real) = actual == expected
 _matches_expected(actual::Real, expected::Symbol) = expected == :any  # Wildcard matches anything
 _matches_expected(actual::Real, expected::UnitRange) = actual in expected
 _matches_expected(actual, expected) = error("Unsupported sequence type: $expected")
-

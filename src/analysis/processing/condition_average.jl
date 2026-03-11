@@ -191,12 +191,14 @@ function condition_average(
         @log_call "condition_average"
 
         # Validation (early return on error)
-        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+        error_msg = _validate_input_dir(input_dir)
+        if !isnothing(error_msg)
             @minimal_error(error_msg)
         end
 
 
-        if (error_msg = _validate_condition_groups(condition_groups)) |> !isnothing
+        error_msg = _validate_condition_groups(condition_groups)
+        if !isnothing(error_msg)
             @minimal_error(error_msg)
         end
 

@@ -17,7 +17,7 @@ function _prepare_decoding_data(epochs::Vector{EpochData})
 
     channels = channel_labels(epochs)
     n_channels = length(channels)
-    n_times = length(time(epochs))
+    n_times = length(time_vector(epochs))
 
     # Prepare data arrays for each condition
     data_arrays = Vector{Array{Float64,3}}(undef, length(epochs))
@@ -661,11 +661,11 @@ function decode_libsvm(
     # Subset epochs by channel and interval selection
     epochs = subset(epochs; channel_selection = channel_selection, interval_selection = interval_selection, include_extra = false)
     isempty(channel_labels(epochs[1])) && @minimal_error("Channel selection produced no channels")
-    isempty(time(epochs[1])) && @minimal_error("Interval selection produced no time points")
+    isempty(time_vector(epochs[1])) && @minimal_error("Interval selection produced no time points")
 
     # Prepare data from subsetted epochs
     data_arrays, n_trials_per_condition = _prepare_decoding_data(epochs)
-    time_points = time(epochs)
+    time_points = time_vector(epochs)
 
     # Log decoding parameters
     @info "Starting decoding analysis" file = epochs[1].file n_conditions = length(epochs) n_channels = length(channel_labels(epochs)) n_timepoints =

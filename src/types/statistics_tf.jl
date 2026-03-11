@@ -4,6 +4,13 @@ Time-Frequency Statistical Types for EEG/ERP data analysis.
 Separated from main statistics types to handle 3D data (Electrodes × Frequencies × Time).
 """
 
+"""
+    TFStatsResult
+
+Abstract supertype for TF statistical results, used for dispatch in plotting functions.
+"""
+abstract type TFStatsResult <: StatsResult end
+
 # ==============
 # DATA PREPARATION TYPES
 # ==============
@@ -160,7 +167,7 @@ Stores complete results from a TF cluster-based permutation test.
 - `frequencies::Vector{Float64}`: Frequencies
 - `time_points::Vector{Float64}`: Time points
 """
-struct TFClusterPermutationResult <: EegFunData
+struct TFClusterPermutationResult <: TFStatsResult
     test_info::TestInfo
     data::Vector{TimeFreqData}
     stat_matrix::TFStatMatrix
@@ -254,7 +261,7 @@ Stores results from an analytic (parametric) t-test on TF data.
 - `time_points::Vector{Float64}`: Time points in seconds
 - `critical_t::Float64`: Critical t-value for significance
 """
-struct TFAnalyticResult <: EegFunData
+struct TFAnalyticResult <: TFStatsResult
     test_info::TestInfo
     data::Vector{TimeFreqData}
     stat_matrix::TFStatMatrix
@@ -287,9 +294,4 @@ function Base.show(io::IO, result::TFAnalyticResult)
     println(io, "└─ Significant points: $n_sig_pos positive, $n_sig_neg negative")
 end
 
-"""
-    TFStatsResult
 
-Union type for TF statistical results, used for dispatch in plotting functions.
-"""
-const TFStatsResult = Union{TFClusterPermutationResult,TFAnalyticResult}

@@ -49,7 +49,7 @@ function _build_connectivity_matrix(electrodes::Vector{Symbol}, layout::Layout, 
                 for neighbour in neighbours.channels
                     # Find index of neighbour in electrodes list
                     n_idx = findfirst(==(neighbour), electrodes)
-                    if n_idx |> !isnothing
+                    if !isnothing(n_idx)
                         push!(I, e_idx)
                         push!(J, n_idx)
                         # Also add reverse
@@ -180,7 +180,7 @@ Create new Cluster objects with the specified polarity, copying all other fields
 - `Vector{Cluster}`: New clusters with updated polarity
 """
 function _set_cluster_polarity(clusters::Vector{Cluster}, polarity::Symbol)
-    @assert polarity in (:positive, :negative) "polarity must be :positive or :negative"
+    polarity in (:positive, :negative) || @minimal_error "polarity must be :positive or :negative"
     return [
         Cluster(c.id, c.electrodes, c.time_indices, c.time_range, c.cluster_stat, c.p_value, c.is_significant, polarity) for c in clusters
     ]
@@ -634,7 +634,7 @@ end
 Create new TFCluster objects with the specified polarity.
 """
 function _set_cluster_polarity_tf(clusters::Vector{TFCluster}, polarity::Symbol)
-    @assert polarity in (:positive, :negative) "polarity must be :positive or :negative"
+    polarity in (:positive, :negative) || @minimal_error "polarity must be :positive or :negative"
     return [
         TFCluster(
             c.id,

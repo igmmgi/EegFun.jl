@@ -230,7 +230,8 @@ function rereference(
         @log_call "rereference"
 
         # Validation
-        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+        error_msg = _validate_input_dir(input_dir)
+        if !isnothing(error_msg)
             @minimal_error(error_msg)
         end
 

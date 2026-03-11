@@ -46,7 +46,6 @@ using LIBSVM
 # using Base.Threads
 
 # Public API declarations
-# Marks names as public without exporting into the user's namespace.
 include("public_api.jl")
 
 # Core types
@@ -67,7 +66,7 @@ include("utils/logging.jl")
 include("utils/misc.jl")
 include("utils/viewer.jl")
 include("utils/print.jl")
-include("utils/extern/read_csv.jl")
+include("utils/extern/read_fieldtrip_csv.jl")
 
 # Layout handling
 include("layouts/layout.jl")

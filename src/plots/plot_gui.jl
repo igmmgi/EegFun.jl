@@ -377,7 +377,7 @@ function plot_gui()
     on(file_select_button.clicks) do _
         default_path = gui_state.directory[] != "" ? gui_state.directory[] : pwd()
         filename = pick_file(default_path)
-        if filename |> !isnothing && filename != ""
+        if !isnothing(filename) && filename != ""
             # Clear first to reset Makie's internal scroll offset, then set value
             file_pattern_input.displayed_string[] = ""
             file_pattern_input.displayed_string[] = basename(filename)
@@ -457,7 +457,7 @@ function plot_gui()
     on(layout_select_button.clicks) do _
         default_path = gui_state.directory[] != "" ? gui_state.directory[] : pwd()
         filename = pick_file(default_path)
-        if filename |> !isnothing && filename != ""
+        if !isnothing(filename) && filename != ""
             basename_only = basename(filename)
             gui_state.layout_file[] = filename
             gui_state.layout[] = basename_only
@@ -573,7 +573,7 @@ function plot_gui()
     on(directory_select_button.clicks) do _
         default_path = gui_state.directory[] != "" ? gui_state.directory[] : pwd()
         dir_path = pick_folder(default_path)
-        if dir_path |> !isnothing && dir_path != ""
+        if !isnothing(dir_path) && dir_path != ""
             gui_state.directory[] = dir_path
             directory_label_text[] = "." * _truncate_path(String(strip(dir_path)))
         end
@@ -769,7 +769,7 @@ function _plot_erp(gui_state)
             layout_sym = Symbol(gui_state.layout_type[])
             try
                 baseline = nothing
-                if gui_state.baseline_start[] |> !isnothing && gui_state.baseline_end[] |> !isnothing
+                if !isnothing(gui_state.baseline_start[]) && !isnothing(gui_state.baseline_end[])
                     baseline = (gui_state.baseline_start[], gui_state.baseline_end[])
                 end
                 plot_erp(
@@ -804,7 +804,7 @@ function _plot_erp(gui_state)
         selected_channels = isempty(gui_state.electrodes[]) ? channels() : channels(Symbol.(gui_state.electrodes[]))
 
         baseline = nothing
-        if gui_state.baseline_start[] |> !isnothing && gui_state.baseline_end[] |> !isnothing
+        if !isnothing(gui_state.baseline_start[]) && !isnothing(gui_state.baseline_end[])
             baseline = (gui_state.baseline_start[], gui_state.baseline_end[])
         end
 

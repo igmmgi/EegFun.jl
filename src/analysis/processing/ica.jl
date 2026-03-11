@@ -216,21 +216,8 @@ end
 
 run_ica(epoched_data::EpochData; kwargs...) = run_ica([epoched_data]; kwargs...)
 
-function IcaPrms(;
-    l_rate = 0.001,
-    max_iter = 512,
-    w_change = 1e-6,
-    anneal_deg = 60.0,
-    anneal_step = 0.9,
-    blowup = 1e15,
-    blowup_fac = 0.8,
-    max_weight = 1e8,
-    restart_factor = 0.9,
-    degconst = 180.0 / π,
-    default_stop = 1e-6,
-)
-    IcaPrms(l_rate, max_iter, w_change, anneal_deg, anneal_step, blowup, blowup_fac, max_weight, restart_factor, degconst, default_stop)
-end
+
+
 
 function _create_ica_data_matrix(dat::DataFrame, channels, samples)
     # Filter to only existing channels (matching original behavior)

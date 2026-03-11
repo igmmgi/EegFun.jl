@@ -73,9 +73,9 @@ function show_coverage_summary()
         total_covered = 0
         total_uncovered = 0
         for c in coverage
-            if c.coverage |> !isnothing
-                covered = count(x -> x |> !isnothing && x > 0, c.coverage)
-                uncovered = count(x -> x |> !isnothing && x == 0, c.coverage)
+            if !isnothing(c.coverage)
+                covered = count(x -> !isnothing(x) && x > 0, c.coverage)
+                uncovered = count(x -> !isnothing(x) && x == 0, c.coverage)
                 total = covered + uncovered
                 if total > 0
                     percentage = round(covered / total * 100, digits = 2)
@@ -104,9 +104,9 @@ function show_detailed_analysis()
         coverage = process_folder("src")
 
         for c in coverage
-            if c.coverage |> !isnothing
-                covered_lines = count(x -> x |> !isnothing && x > 0, c.coverage)
-                uncovered_lines = count(x -> x |> !isnothing && x == 0, c.coverage)
+            if !isnothing(c.coverage)
+                covered_lines = count(x -> !isnothing(x) && x > 0, c.coverage)
+                uncovered_lines = count(x -> !isnothing(x) && x == 0, c.coverage)
                 not_executable = count(x -> isnothing(x), c.coverage)
                 total_lines = length(c.coverage)
 
@@ -124,7 +124,7 @@ function show_detailed_analysis()
                     # Show uncovered line numbers (first 20)
                     uncovered_lines_list = Int[]
                     for (i, cov) in enumerate(c.coverage)
-                        if cov |> !isnothing && cov == 0
+                        if !isnothing(cov) && cov == 0
                             push!(uncovered_lines_list, i)
                         end
                     end
@@ -160,8 +160,8 @@ function analyze_specific_file(target_file::String)
         end
 
         c = data_coverage[1]
-        covered_lines = count(x -> x |> !isnothing && x > 0, c.coverage)
-        uncovered_lines = count(x -> x |> !isnothing && x == 0, c.coverage)
+        covered_lines = count(x -> !isnothing(x) && x > 0, c.coverage)
+        uncovered_lines = count(x -> !isnothing(x) && x == 0, c.coverage)
         not_executable = count(x -> isnothing(x), c.coverage)
         total_lines = length(c.coverage)
 
@@ -179,7 +179,7 @@ function analyze_specific_file(target_file::String)
         # Show uncovered line numbers
         uncovered_lines_list = Int[]
         for (i, cov) in enumerate(c.coverage)
-            if cov |> !isnothing && cov == 0
+            if !isnothing(cov) && cov == 0
                 push!(uncovered_lines_list, i)
             end
         end
@@ -220,7 +220,7 @@ function show_missed_branches(target_file::String)
             # Show uncovered lines with context
             uncovered_count = 0
             for (i, cov) in enumerate(c.coverage)
-                if cov |> !isnothing && cov == 0 && uncovered_count < 30
+                if !isnothing(cov) && cov == 0 && uncovered_count < 30
                     uncovered_count += 1
                     line_num = i
                     if line_num <= length(lines)

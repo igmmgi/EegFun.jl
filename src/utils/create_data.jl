@@ -73,7 +73,15 @@ end
 
 Create a `Vector{EpochData}` across multiple conditions.
 """
-function create_test_epoch_data_vector(; conditions = 1:2, n_epochs = 10, n_channels = 3, fs = 1000, n = 2000)
+function create_test_epoch_data_vector(;
+    conditions = 1:2,
+    n_epochs = 10,
+    n_channels = 3,
+    fs = 1000,
+    n = 2000,
+    seed::Union{Int,Nothing} = nothing,
+)
+    !isnothing(seed) && Random.seed!(seed)
     return [create_test_epoch_data(condition = c, n_epochs = n_epochs, n_channels = n_channels, fs = fs, n = n) for c in conditions]
 end
 
@@ -128,7 +136,9 @@ function create_test_epoch_data_with_rt(;
     epoch_start = -0.2,
     epoch_end = 0.8,
     rt_range = (0.2, 0.6),
+    seed::Union{Int,Nothing} = nothing,
 )
+    !isnothing(seed) && Random.seed!(seed)
     time = collect(range(epoch_start, epoch_end, length = n_timepoints))
     channel_labels = _generate_channel_labels(n_channels)
 
@@ -136,6 +146,7 @@ function create_test_epoch_data_with_rt(;
     for epoch = 1:n_epochs
         df = DataFrame(
             time = time,
+            sample = 1:n_timepoints,
             condition = fill(condition, n_timepoints),
             condition_name = fill("condition_$condition", n_timepoints),
             participant = fill(participant, n_timepoints),
@@ -178,6 +189,11 @@ function create_test_continuous_data_with_triggers(; n = 1000, fs = 1000, seed::
 end
 
 
+"""
+    create_test_continuous_data_with_artifacts(; n=1000, fs=1000)
+
+Create `ContinuousData` with two channels: one clean and one containing large-amplitude artifacts.
+"""
 function create_test_continuous_data_with_artifacts(; n::Int = 1000, fs::Int = 1000)
 
     t = collect(0:(n-1)) ./ fs
@@ -193,10 +209,7 @@ function create_test_continuous_data_with_artifacts(; n::Int = 1000, fs::Int = 1
     df = DataFrame(:time => t, :trigger => zeros(Int, n), :Ch1 => clean_signal, :Ch2 => artifact_signal)
     layout = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
 
-    dat = EegFun.ContinuousData("test_data", df, layout, fs, EegFun.AnalysisInfo())
-
-    return dat
-
+    return EegFun.ContinuousData("test_data", df, layout, fs, EegFun.AnalysisInfo())
 end
 
 
@@ -264,8 +277,13 @@ end
 
 
 
+"""
+    create_test_layout(; n_channels=4, layout_type=:grid)
+
+Create a test `Layout`. Supports `:grid` (auto-positioned) and `:topo` (fixed 6-channel topographic) types.
+"""
 function create_test_layout(; n_channels::Int = 4, layout_type::Symbol = :grid)
-    if layout_type == :grid # Create grid positions
+    if layout_type == :grid
         rows = ceil(Int, sqrt(n_channels))
         cols = ceil(Int, n_channels / rows)
         positions = []
@@ -276,7 +294,6 @@ function create_test_layout(; n_channels::Int = 4, layout_type::Symbol = :grid)
             y = (row - 1) / max(1, rows - 1)
             push!(positions, (x, y))
         end
-        # Create DataFrame with proper structure
         layout_data = DataFrame(
             :label => _generate_channel_labels(n_channels),
             :inc => zeros(n_channels),
@@ -284,7 +301,8 @@ function create_test_layout(; n_channels::Int = 4, layout_type::Symbol = :grid)
             :x2 => [pos[1] for pos in positions],
             :y2 => [pos[2] for pos in positions],
         )
-    elseif layout_type == :topo # Create a topographic layout for 6 channels
+        return EegFun.Layout(layout_data, nothing, nothing, nothing)
+    elseif layout_type == :topo
         layout_data = DataFrame(
             label = [:Fp1, :Fp2, :Cz, :Pz, :O1, :O2],
             inc = zeros(6),
@@ -295,13 +313,17 @@ function create_test_layout(; n_channels::Int = 4, layout_type::Symbol = :grid)
             y3 = [1.0, 1.0, 0.0, -1.0, -1.0, -1.0],
             z3 = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         )
+        return EegFun.Layout(layout_data, nothing, nothing, nothing)
     else
         error("Unknown layout_type: $layout_type")
     end
-
-    return EegFun.Layout(layout_data, nothing, nothing, nothing)
 end
 
+"""
+    create_test_summary_data()
+
+Create a `DataFrame` of per-channel summary statistics for testing artifact detection displays.
+"""
 function create_test_summary_data()
     return DataFrame(
         channel = [:Ch1, :Ch2, :Ch3, :Ch4, :Ch5],
@@ -314,6 +336,11 @@ function create_test_summary_data()
     )
 end
 
+"""
+    create_test_summary_data_with_epochs()
+
+Create a `DataFrame` of per-channel, per-epoch summary statistics for testing epoch-wise artifact displays.
+"""
 function create_test_summary_data_with_epochs()
     return DataFrame(
         channel = repeat([:Ch1, :Ch2, :Ch3], 3),
@@ -351,6 +378,7 @@ function create_test_epoch_data_with_artifacts(;
     for epoch = 1:n_epochs
         df = DataFrame(
             time = time,
+            sample = 1:n_timepoints,
             epoch = fill(epoch, n_timepoints),
             participant = fill(participant, n_timepoints),
             condition = fill(condition, n_timepoints),
@@ -623,4 +651,62 @@ function create_test_tf_epoch_data(;
     end
 
     return TimeFreqEpochData(file, condition, condition_name, power_dfs, phase_dfs, layout, fs, :wavelet, nothing, AnalysisInfo())
+end
+
+"""
+    create_synthetic_epochs(participant_id, condition_id, condition_name, n_epochs;
+                            n_timepoints=500, channels=[:Fz, :Cz, :Pz],
+                            signal_strength=1.0, noise_level=0.3) -> EpochData
+
+Create synthetic `EpochData` with Gaussian-shaped condition-specific signals for MVPA/decoding testing.
+
+Condition 1 gets a positive Gaussian bump at ~200 ms, condition 2 gets a negative bump,
+making the two conditions separable by a classifier.
+
+# Arguments
+- `participant_id`: Participant identifier (used in filename)
+- `condition_id`: Condition number (1 or 2)
+- `condition_name`: Condition label string
+- `n_epochs`: Number of epochs to generate
+
+# Keyword Arguments
+- `n_timepoints::Int=500`: Samples per epoch
+- `channels::Vector{Symbol}=[:Fz, :Cz, :Pz]`: Channel labels
+- `signal_strength::Float64=1.0`: Amplitude of the Gaussian signal
+- `noise_level::Float64=0.3`: Amplitude of additive Gaussian noise
+- `seed::Union{Int,Nothing}=nothing`: Random seed for reproducibility
+
+# Example
+```julia
+epochs_c1 = create_synthetic_epochs(1, 1, "Cond1", 100; signal_strength=1.0, noise_level=0.3)
+epochs_c2 = create_synthetic_epochs(1, 2, "Cond2", 100; signal_strength=1.0, noise_level=0.3)
+```
+"""
+function create_synthetic_epochs(
+    participant_id,
+    condition_id,
+    condition_name,
+    n_epochs;
+    n_timepoints = 500,
+    channels = [:Fz, :Cz, :Pz],
+    signal_strength = 1.0,
+    noise_level = 0.3,
+    seed::Union{Int,Nothing} = nothing,
+)
+    !isnothing(seed) && Random.seed!(seed)
+    time = range(-0.2, 0.8, length = n_timepoints)
+    layout = Layout(DataFrame(label = channels, inc = [90.0, 0.0, -90.0], azi = [0.0, 0.0, 0.0]), nothing, nothing, nothing)
+
+    epochs = DataFrame[]
+    for epoch = 1:n_epochs
+        df = DataFrame(time = collect(time), sample = 1:n_timepoints, epoch = fill(epoch, n_timepoints))
+        for ch in channels
+            # Condition-specific signal: positive for cond1, negative for cond2
+            signal = (condition_id == 1 ? signal_strength : -signal_strength) * exp.(-((time .- 0.2) .^ 2) / (2 * 0.05^2))
+            df[!, ch] = signal .+ noise_level * randn(n_timepoints)
+        end
+        push!(epochs, df)
+    end
+
+    return EpochData("participant_$(participant_id)", condition_id, condition_name, epochs, layout, 200, AnalysisInfo(:none, 0.0, 0.0))
 end

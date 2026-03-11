@@ -311,7 +311,8 @@ function baseline(
         @log_call "baseline"
 
         # Validation
-        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+        error_msg = _validate_input_dir(input_dir)
+        if !isnothing(error_msg)
             @minimal_error(error_msg)
         end
 
@@ -343,7 +344,3 @@ function baseline(
         _cleanup_logging(log_file, output_dir)
     end
 end
-
-
-
-

@@ -46,7 +46,7 @@ and metadata about the analysis parameters.
 - `confusion_matrix::Union{Array{Float64, 3}, Nothing}`: Confusion matrices [time × true_class × predicted_class], or `nothing`
 - `raw_predictions::Union{Array{Float64, 4}, Nothing}`: Raw predictions [iteration × fold × time × class], or `nothing`
 """
-mutable struct DecodedData <: SingleDataFrameEeg
+mutable struct DecodedData <: EegFunData
     file::String
     condition_names::Vector{String}
     times::Vector{Float64}

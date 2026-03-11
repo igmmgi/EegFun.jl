@@ -1378,7 +1378,7 @@ function _subset_selected_data(state::EpochedDataBrowserState, clicked_region_id
         return nothing
     end
 
-    return convert(epoch_data, 1)
+    return epoch_to_continuous(epoch_data, 1)
 end
 
 

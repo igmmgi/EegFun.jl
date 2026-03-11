@@ -179,13 +179,15 @@ function condition_difference(
         @log_call "condition_difference"
 
         # Validation (early return on error)
-        if (error_msg = _validate_input_dir(input_dir)) |> !isnothing
+        error_msg = _validate_input_dir(input_dir)
+        if !isnothing(error_msg)
             @minimal_error(error_msg)
         end
 
 
 
-        if (error_msg = _validate_condition_pairs(condition_pairs)) |> !isnothing
+        error_msg = _validate_condition_pairs(condition_pairs)
+        if !isnothing(error_msg)
             @minimal_error(error_msg)
         end
 

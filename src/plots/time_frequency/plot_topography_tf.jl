@@ -50,7 +50,7 @@ function plot_topography(
     kwargs...,
 )
     # Apply baseline correction if requested
-    if !isnothing(baseline_interval) && tf.baseline |> !isnothing
+    if !isnothing(baseline_interval) && !isnothing(tf.baseline)
         @warn "Data has already been baselined (method: $(tf.baseline.method)). " * "Ignoring baseline_interval parameter."
         tf_plot = tf
     elseif !isnothing(baseline_interval)
@@ -104,7 +104,7 @@ function plot_topography(
     # Map channel data onto layout order
     layout_labels = layout.data.label
     layout_values = Float64[let ch_idx = findfirst(==(lbl), channels_list)
-        ch_idx |> !isnothing ? channel_data[ch_idx] : 0.0
+        !isnothing(ch_idx) ? channel_data[ch_idx] : 0.0
     end for lbl in layout_labels]
 
     # Merge user kwargs with shared topography defaults
@@ -195,7 +195,7 @@ function plot_topography(
     # Apply baseline correction
     if !isnothing(baseline_interval)
         tf_plots = map(tfs) do tf
-            if tf.baseline |> !isnothing
+            if !isnothing(tf.baseline)
                 @warn "$(tf.condition_name) already baselined, skipping."
                 tf
             else
@@ -261,7 +261,7 @@ function plot_topography(
             push!(channel_data, isempty(vals) ? 0.0 : mean(vals))
         end
         layout_values = Float64[let ch_idx = findfirst(==(lbl), channels_list)
-            ch_idx |> !isnothing ? channel_data[ch_idx] : 0.0
+            !isnothing(ch_idx) ? channel_data[ch_idx] : 0.0
         end for lbl in layout_labels]
         all_layout_values[idx] = layout_values
         global_min = min(global_min, minimum(layout_values))
@@ -540,7 +540,7 @@ function plot_topo_stats(
         # Map electrode values to layout order
         channel_data = topo_values[i]
         layout_values = Float64[let ch_idx = findfirst(==(lbl), electrodes)
-            v = ch_idx |> !isnothing ? channel_data[ch_idx] : 0.0
+            v = !isnothing(ch_idx) ? channel_data[ch_idx] : 0.0
             isfinite(v) ? v : 0.0
         end for lbl in layout_labels]
 
@@ -565,7 +565,7 @@ function plot_topo_stats(
             for ch_idx in sig_channel_indices
                 ch_sym = electrodes[ch_idx]
                 layout_idx = findfirst(==(ch_sym), layout_labels)
-                if layout_idx |> !isnothing
+                if !isnothing(layout_idx)
                     push!(sig_x, layout.data.x2[layout_idx])
                     push!(sig_y, layout.data.y2[layout_idx])
                 end

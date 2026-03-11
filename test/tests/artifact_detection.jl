@@ -371,7 +371,7 @@ using EegFun
         @test rejection_info.abs_criterion == 150.0
         @test rejection_info.z_criterion == 0
         @test isnothing(rejection_info.z_rejections)
-        @test rejection_info.abs_rejections |> !isnothing
+        @test !isnothing(rejection_info.abs_rejections)
         @test length(rejection_info.rejected) > 0
 
         # Test with z-score criterion only
@@ -384,7 +384,7 @@ using EegFun
         @test rejection_info2.z_criterion == 2.0
         @test rejection_info2.abs_criterion == 0
         @test isnothing(rejection_info2.abs_rejections)
-        @test rejection_info2.z_rejections |> !isnothing
+        @test !isnothing(rejection_info2.z_rejections)
 
         # Test with both criteria
         epochs3 = EegFun.create_test_epoch_data(n_epochs = 15, n_channels = 3)
@@ -394,8 +394,8 @@ using EegFun
 
         @test rejection_info3.z_criterion == 3.0
         @test rejection_info3.abs_criterion == 150.0
-        @test rejection_info3.z_rejections |> !isnothing
-        @test rejection_info3.abs_rejections |> !isnothing
+        @test !isnothing(rejection_info3.z_rejections)
+        @test !isnothing(rejection_info3.abs_rejections)
 
         # Test with custom z_measures
         rejection_info4 = EegFun.detect_bad_epochs_automatic(epochs3, z_criterion = 2.0, abs_criterion = 0, z_measures = [:variance, :max])
@@ -525,8 +525,8 @@ using EegFun
         # Test channel_repairable!
         EegFun.channel_repairable!(rejection_info, layout)
 
-        @test rejection_info.repaired |> !isnothing
-        @test rejection_info.skipped |> !isnothing
+        @test !isnothing(rejection_info.repaired)
+        @test !isnothing(rejection_info.skipped)
 
         # Test with Vector{EpochRejectionInfo}
         epochs_list = [EegFun.create_test_epoch_data(n_epochs = 3, n_channels = 4) for _ = 1:2]
@@ -538,7 +538,7 @@ using EegFun
         rejection_list = EegFun.detect_bad_epochs_automatic(epochs_list, abs_criterion = 150.0, z_criterion = 0)
         EegFun.channel_repairable!(rejection_list, layout)
 
-        @test all(info -> info.repaired |> !isnothing, rejection_list)
+        @test all(info -> !isnothing(info.repaired), rejection_list)
     end
 
     @testset "repair_artifacts! and repair_artifacts" begin
@@ -620,7 +620,7 @@ using EegFun
         @test isnothing(rejection_info4.repaired)
         # This should work because repair_artifacts! calls channel_repairable! automatically
         EegFun.repair_artifacts!(epochs4, rejection_info4, method = :neighbor_interpolation)
-        @test rejection_info4.repaired |> !isnothing  # Should be populated now
+        @test !isnothing(rejection_info4.repaired)  # Should be populated now
 
         # Test error handling - unknown method
         epochs5 = EegFun.create_test_epoch_data(n_epochs = 3, n_channels = 3)

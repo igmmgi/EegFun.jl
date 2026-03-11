@@ -6,12 +6,12 @@ using EegFun
 # read raw data
 dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf");
 
-# read and preprate layout file
-layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
-EegFun.polar_to_cartesian_xy!(layout_file)
+# read and prepare layout file
+layout = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
+EegFun.polar_to_cartesian_xy!(layout)
 
 # create EegFun data structure (EegFun.ContinuousData)
-dat = EegFun.create_eegfun_data(dat, layout_file);
+dat = EegFun.create_eegfun_data(dat, layout);
 
 # Some minimal preprocessing (average reference and highpass filter)
 EegFun.rereference!(dat, :avg)
@@ -51,4 +51,4 @@ EegFun.plot_correlation_heatmap(cm_eog, title = "EEG-EOG Correlations", xlabel =
 
 # Display channel correlations in layout
 cm = EegFun.correlation_matrix(dat)
-EegFun.plot_layout_2d(layout_file, correlation_matrix = cm)
+EegFun.plot_layout_2d(layout, correlation_matrix = cm)

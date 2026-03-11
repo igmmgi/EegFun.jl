@@ -26,7 +26,7 @@ using Statistics
             # Combine conditions 1,2 into group 1 and 3,4 into group 2
             result = EegFun.condition_combine("epochs_cleaned", [[1, 2], [3, 4]], input_dir = test_dir, output_dir = output_dir)
 
-            @test result |> !isnothing
+            @test !isnothing(result)
             @test result.success == 3
             @test result.errors == 0
             @test isdir(output_dir)
