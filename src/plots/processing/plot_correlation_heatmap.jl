@@ -182,5 +182,5 @@ function plot_correlation_heatmap(corr_df::DataFrame; kwargs...)
         _display_figure(fig)
     end
 
-    return fig, ax
+    return (fig = fig, axes = [ax])
 end

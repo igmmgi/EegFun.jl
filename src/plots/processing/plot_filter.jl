@@ -211,5 +211,5 @@ function plot_filter_response(
     plot_kwargs[:display_plot] && _display_figure(fig)
     _set_window_title("Makie")
 
-    return fig, (ax_db, ax_imp)
+    return (fig = fig, axes = [ax_db, ax_imp])
 end

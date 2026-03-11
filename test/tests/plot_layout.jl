@@ -18,18 +18,18 @@ using Makie
 
     @testset "plot_layout_2d basic functionality" begin
         # Test basic functionality
-        fig, ax = EegFun.plot_layout_2d(layout, display_plot = false)
-        @test fig isa Figure
-        @test ax isa Axis
+        result = EegFun.plot_layout_2d(layout, display_plot = false)
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis
 
         # Test with neighbours
-        fig, ax = EegFun.plot_layout_2d(layout, neighbours = true, display_plot = false)
-        @test fig isa Figure
-        @test ax isa Axis
+        result = EegFun.plot_layout_2d(layout, neighbours = true, display_plot = false)
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis
     end
 
     @testset "plot_layout_2d with prefixed kwargs" begin
-        fig, ax = EegFun.plot_layout_2d(
+        result = EegFun.plot_layout_2d(
             layout,
             display_plot = false,
             head_color = :red,
@@ -44,8 +44,8 @@ using Makie
             label_xoffset = 2,
             label_yoffset = 2,
         )
-        @test fig isa Figure
-        @test ax isa Axis
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis
     end
 
     @testset "plot_layout_3d! basic functionality" begin
@@ -61,18 +61,18 @@ using Makie
 
     @testset "plot_layout_3d basic functionality" begin
         # Test basic functionality
-        fig, ax = EegFun.plot_layout_3d(layout, display_plot = false)
-        @test fig isa Figure
-        @test ax isa Axis3
+        result = EegFun.plot_layout_3d(layout, display_plot = false)
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis3
 
         # Test with neighbours
-        fig, ax = EegFun.plot_layout_3d(layout, neighbours = true, display_plot = false)
-        @test fig isa Figure
-        @test ax isa Axis3
+        result = EegFun.plot_layout_3d(layout, neighbours = true, display_plot = false)
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis3
     end
 
     @testset "plot_layout_3d with prefixed kwargs" begin
-        fig, ax = EegFun.plot_layout_3d(
+        result = EegFun.plot_layout_3d(
             layout,
             display_plot = false,
             head_color = :red,
@@ -88,12 +88,13 @@ using Makie
             label_yoffset = 2,
             label_zoffset = 2,
         )
-        @test fig isa Figure
-        @test ax isa Axis3
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis3
     end
 
     @testset "add_topo_rois! basic functionality" begin
-        fig, ax = EegFun.plot_layout_2d(layout, display_plot = false)
+        result = EegFun.plot_layout_2d(layout, display_plot = false)
+        ax = first(result.axes)
 
         # Test basic ROI
         @test isnothing(EegFun.add_topo_rois!(ax, layout, [[:Fp1, :Fp2]], topo_border_size = 10))
@@ -103,7 +104,8 @@ using Makie
     end
 
     @testset "add_topo_rois! with prefixed kwargs" begin
-        fig, ax = EegFun.plot_layout_2d(layout, display_plot = false)
+        result = EegFun.plot_layout_2d(layout, display_plot = false)
+        ax = first(result.axes)
 
         # Test with custom ROI styling
         @test isnothing(
@@ -122,7 +124,8 @@ using Makie
     end
 
     @testset "add_topo_rois! with multiple ROIs and different styles" begin
-        fig, ax = EegFun.plot_layout_2d(layout, display_plot = false)
+        result = EegFun.plot_layout_2d(layout, display_plot = false)
+        ax = first(result.axes)
 
         # Test multiple ROIs with different styles
         @test isnothing(
@@ -141,7 +144,8 @@ using Makie
     end
 
     @testset "add_topo_rois! error handling" begin
-        fig, ax = EegFun.plot_layout_2d(layout, display_plot = false)
+        result = EegFun.plot_layout_2d(layout, display_plot = false)
+        ax = first(result.axes)
 
         # Test with non-existent electrodes (should warn but not fail)
         @test isnothing(EegFun.add_topo_rois!(ax, layout, [[:NonExistent]], roi_border_size = 10))
@@ -158,27 +162,27 @@ using Makie
 
     @testset "kwargs validation" begin
         # Test that invalid parameters are handled gracefully
-        fig, ax = EegFun.plot_layout_2d(
+        result = EegFun.plot_layout_2d(
             layout,
             display_plot = false,
             invalid_param = :test,  # Should be ignored
             head_color = :red,       # Should work
         )
-        @test fig isa Figure
-        @test ax isa Axis
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis
     end
 
     @testset "display_plot parameter" begin
         # Test display_plot = false (should not throw)
-        fig, ax = EegFun.plot_layout_2d(layout, display_plot = false)
-        @test fig isa Figure
-        @test ax isa Axis
+        result = EegFun.plot_layout_2d(layout, display_plot = false)
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis
 
         # Test display_plot = true (might throw in headless environment)
         try
-            fig, ax = EegFun.plot_layout_2d(layout, display_plot = true)
-            @test fig isa Figure
-            @test ax isa Axis
+            result = EegFun.plot_layout_2d(layout, display_plot = true)
+            @test result.fig isa Figure
+            @test first(result.axes) isa Axis
         catch e
             # Expected in headless test environment
             @test e isa MethodError
@@ -190,20 +194,21 @@ using Makie
         empty_df = DataFrame(label = Symbol[], x2 = Float64[], y2 = Float64[], x3 = Float64[], y3 = Float64[], z3 = Float64[])
         empty_layout = EegFun.Layout(empty_df, nothing, nothing, nothing)
 
-        fig, ax = EegFun.plot_layout_2d(empty_layout, display_plot = false)
-        @test fig isa Figure
-        @test ax isa Axis
+        result = EegFun.plot_layout_2d(empty_layout, display_plot = false)
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis
 
         # Test with single electrode
         single_df = DataFrame(label = [:Cz], x2 = [0.0], y2 = [0.0], x3 = [0.0], y3 = [0.0], z3 = [0.0])
         single_layout = EegFun.Layout(single_df, nothing, nothing, nothing)
 
-        fig, ax = EegFun.plot_layout_2d(single_layout, display_plot = false)
-        @test fig isa Figure
-        @test ax isa Axis
+        result = EegFun.plot_layout_2d(single_layout, display_plot = false)
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis
 
         # Test with very large border_size
-        fig, ax = EegFun.plot_layout_2d(layout, display_plot = false)
+        result = EegFun.plot_layout_2d(layout, display_plot = false)
+        ax = first(result.axes)
         @test isnothing(EegFun.add_topo_rois!(ax, layout, [[:Fp1, :Fp2]], roi_border_size = 1000))
 
         # Test with zero border_size
@@ -215,68 +220,69 @@ using Makie
 
     @testset "component control parameters" begin
         # Test with all components disabled
-        fig, ax = EegFun.plot_layout_2d(layout, display_plot = false, point_plot = false, label_plot = false)
-        @test fig isa Figure
-        @test ax isa Axis
+        result = EegFun.plot_layout_2d(layout, display_plot = false, point_plot = false, label_plot = false)
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis
 
         # Test with only points, no labels
-        fig, ax = EegFun.plot_layout_2d(layout, display_plot = false, point_plot = true, label_plot = false)
-        @test fig isa Figure
-        @test ax isa Axis
+        result = EegFun.plot_layout_2d(layout, display_plot = false, point_plot = true, label_plot = false)
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis
 
         # Test with only labels, no points
-        fig, ax = EegFun.plot_layout_2d(layout, display_plot = false, point_plot = false, label_plot = true)
-        @test fig isa Figure
-        @test ax isa Axis
+        result = EegFun.plot_layout_2d(layout, display_plot = false, point_plot = false, label_plot = true)
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis
     end
 
     @testset "extreme parameter values" begin
         # Test with extreme font sizes
-        fig, ax = EegFun.plot_layout_2d(
+        result = EegFun.plot_layout_2d(
             layout,
             display_plot = false,
             label_fontsize = 1,  # Very small
             label_plot = true,
         )
-        @test fig isa Figure
-        @test ax isa Axis
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis
 
-        fig, ax = EegFun.plot_layout_2d(
+        result = EegFun.plot_layout_2d(
             layout,
             display_plot = false,
             label_fontsize = 100,  # Very large
             label_plot = true,
         )
-        @test fig isa Figure
-        @test ax isa Axis
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis
 
         # Test with extreme marker sizes
-        fig, ax = EegFun.plot_layout_2d(
+        result = EegFun.plot_layout_2d(
             layout,
             display_plot = false,
             point_markersize = 1,  # Very small
             point_plot = true,
         )
-        @test fig isa Figure
-        @test ax isa Axis
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis
 
-        fig, ax = EegFun.plot_layout_2d(
+        result = EegFun.plot_layout_2d(
             layout,
             display_plot = false,
             point_markersize = 100,  # Very large
             point_plot = true,
         )
-        @test fig isa Figure
-        @test ax isa Axis
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis
 
         # Test with extreme offsets
-        fig, ax = EegFun.plot_layout_2d(layout, display_plot = false, label_xoffset = 1000, label_yoffset = -1000, label_plot = true)
-        @test fig isa Figure
-        @test ax isa Axis
+        result = EegFun.plot_layout_2d(layout, display_plot = false, label_xoffset = 1000, label_yoffset = -1000, label_plot = true)
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis
     end
 
     @testset "ROI edge cases" begin
-        fig, ax = EegFun.plot_layout_2d(layout, display_plot = false)
+        result = EegFun.plot_layout_2d(layout, display_plot = false)
+        ax = first(result.axes)
 
         # Test with empty ROI list
         @test isnothing(EegFun.add_topo_rois!(ax, layout, Vector{Symbol}[], roi_border_size = 10))

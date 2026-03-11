@@ -160,5 +160,5 @@ function plot_joint_probability(dat::DataFrame; kwargs...)
     end
     _set_window_title("Makie")
 
-    return fig, ax
+    return (fig = fig, axes = [ax])
 end

@@ -80,18 +80,18 @@ using Makie
         df = EegFun.create_test_summary_data()
 
         # Test basic plotting (non-mutating version)
-        fig, ax = EegFun.plot_channel_summary(df, :std, display_plot = false)
+        result = EegFun.plot_channel_summary(df, :std, display_plot = false)
 
-        @test fig isa Figure
-        @test ax isa Axis
-        @test ax.ylabel[] == "std"
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis
+        @test first(result.axes).ylabel[] == "std"
     end
 
     @testset "plot_channel_summary with custom kwargs" begin
         df = EegFun.create_test_summary_data()
 
         # Test with custom parameters
-        fig, ax = EegFun.plot_channel_summary(
+        result = EegFun.plot_channel_summary(
             df,
             :range,
             title = "Test Title",
@@ -100,51 +100,51 @@ using Makie
             display_plot = false,  # Don't display during testing
         )
 
-        @test fig isa Figure
-        @test ax isa Axis
-        @test ax.title[] == "Test Title"
-        @test ax.ylabel[] == "range"
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis
+        @test first(result.axes).title[] == "Test Title"
+        @test first(result.axes).ylabel[] == "range"
     end
 
     @testset "plot_channel_summary with averaging" begin
         df = EegFun.create_test_summary_data_with_epochs()
 
         # Test with averaging
-        fig, ax = EegFun.plot_channel_summary(df, :var, average_over = :epoch, error_color = :red, display_plot = false)
+        result = EegFun.plot_channel_summary(df, :var, average_over = :epoch, error_color = :red, display_plot = false)
 
-        @test fig isa Figure
-        @test ax isa Axis
-        @test ax.ylabel[] == "var (± 95% CI n=3)"
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis
+        @test first(result.axes).ylabel[] == "var (± 95% CI n=3)"
     end
 
     @testset "plot_channel_summary sorting functionality" begin
         df = EegFun.create_test_summary_data()
 
         # Test sorting by values
-        fig, ax = EegFun.plot_channel_summary(df, :std, sort_values = true, display_plot = false)
+        result = EegFun.plot_channel_summary(df, :std, sort_values = true, display_plot = false)
 
-        @test fig isa Figure
-        @test ax isa Axis
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis
 
         # Test without sorting
-        fig2, ax2 = EegFun.plot_channel_summary(df, :std, sort_values = false, display_plot = false)
+        result2 = EegFun.plot_channel_summary(df, :std, sort_values = false, display_plot = false)
 
-        @test fig2 isa Figure
-        @test ax2 isa Axis
+        @test result2.fig isa Figure
+        @test first(result2.axes) isa Axis
     end
 
     @testset "plot_channel_summary display control" begin
         df = EegFun.create_test_summary_data()
 
         # Test with display_plot = false
-        fig, ax = EegFun.plot_channel_summary(df, :std, display_plot = false)
-        @test fig isa Figure
-        @test ax isa Axis
+        result = EegFun.plot_channel_summary(df, :std, display_plot = false)
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis
 
         # Test with display_plot = true (should work since GLMakie is available)
-        fig, ax = EegFun.plot_channel_summary(df, :std, display_plot = true)
-        @test fig isa Figure
-        @test ax isa Axis
+        result = EegFun.plot_channel_summary(df, :std, display_plot = true)
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis
     end
 
     @testset "plot_channel_summary different columns" begin
@@ -154,10 +154,10 @@ using Makie
         columns_to_test = [:min, :max, :std, :var, :range, :zvar]
 
         for col in columns_to_test
-            fig, ax = EegFun.plot_channel_summary(df, col, display_plot = false)
-            @test fig isa Figure
-            @test ax isa Axis
-            @test ax.ylabel[] == string(col)
+            result = EegFun.plot_channel_summary(df, col, display_plot = false)
+            @test result.fig isa Figure
+            @test first(result.axes) isa Axis
+            @test first(result.axes).ylabel[] == string(col)
         end
     end
 
@@ -165,10 +165,10 @@ using Makie
         # Test with single channel
         df_single = DataFrame(channel = [:Fp1], min = [-1.0], max = [1.0], std = [0.5], var = [0.25], range = [2.0], zvar = [0.0])
 
-        fig, ax = EegFun.plot_channel_summary(df_single, :std, display_plot = false)
-        @test fig isa Figure
-        @test ax isa Axis
-        @test ax.ylabel[] == "std"
+        result = EegFun.plot_channel_summary(df_single, :std, display_plot = false)
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis
+        @test first(result.axes).ylabel[] == "std"
 
         # Test with two channels
         df_two = DataFrame(
@@ -181,25 +181,25 @@ using Makie
             zvar = [0.0, -0.5],
         )
 
-        fig, ax = EegFun.plot_channel_summary(df_two, :var, display_plot = false)
-        @test fig isa Figure
-        @test ax isa Axis
+        result = EegFun.plot_channel_summary(df_two, :var, display_plot = false)
+        @test result.fig isa Figure
+        @test first(result.axes) isa Axis
     end
 
     @testset "plot_channel_summary consistency between versions" begin
         df = EegFun.create_test_summary_data()
 
         # Test that both versions produce the same visual result
-        fig1, ax1 = EegFun.plot_channel_summary(df, :std, display_plot = false)
+        result1 = EegFun.plot_channel_summary(df, :std, display_plot = false)
 
         fig2 = Figure()
         ax2 = Axis(fig2[1, 1])
         EegFun.plot_channel_summary!(fig2, ax2, df, :std)
 
         # Both should have the same ylabel
-        @test ax1.ylabel[] == ax2.ylabel[]
-        @test ax1.title[] == ax2.title[]
-        @test ax1.xlabel[] == ax2.xlabel[]
+        @test first(result1.axes).ylabel[] == ax2.ylabel[]
+        @test first(result1.axes).title[] == ax2.title[]
+        @test first(result1.axes).xlabel[] == ax2.xlabel[]
     end
 
     @testset "DEFAULT_CHANNEL_SUMMARY_KWARGS" begin
