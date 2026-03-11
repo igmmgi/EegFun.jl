@@ -380,9 +380,12 @@ function rsa(
     average_trials::Bool = true,
     normalize_method::Symbol = :none,
 )
+    # Combine interval and sample selection (consistent with subset() pattern)
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+
     # Prepare and validate data using shared helper
     data_arrays, times, n_trials_per_condition, condition_names, selected_channels, first_epoch =
-        _prepare_and_validate_rsa(epochs, channel_selection, sample_selection)
+        _prepare_and_validate_rsa(epochs, channel_selection, combined_sel)
 
     n_conditions = length(condition_names)
     n_timepoints = length(times)

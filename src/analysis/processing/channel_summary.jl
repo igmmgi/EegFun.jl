@@ -108,7 +108,10 @@ function channel_summary(
     nrow(dat.data) == 0 && @minimal_error("Cannot compute channel summary: data is empty")
 
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = include_meta, include_extra = include_extra)
-    selected_samples = get_selected_samples(dat, sample_selection)
+
+    # Combine interval and sample selection (consistent with subset() pattern)
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+    selected_samples = get_selected_samples(dat, combined_sel)
 
     return _channel_summary_impl(dat.data, selected_samples, selected_channels)
 end
@@ -149,6 +152,7 @@ function channel_summary(
         epoch_summary = channel_summary(
             single_dat;
             sample_selection = sample_selection,
+            interval_selection = interval_selection,
             channel_selection = channel_selection,
             include_meta = include_meta,
             include_extra = include_extra,
@@ -195,6 +199,7 @@ function _process_channel_summary_file(
     filepath::String,
     condition_selection::Function,
     sample_selection::Function,
+    interval_selection::Interval,
     channel_selection::Function,
     include_extra::Bool,
 )
@@ -223,7 +228,7 @@ function _process_channel_summary_file(
 
         # Compute channel summary
         summary_df =
-            channel_summary(data; sample_selection = sample_selection, channel_selection = channel_selection, include_extra = include_extra)
+            channel_summary(data; sample_selection = sample_selection, interval_selection = interval_selection, channel_selection = channel_selection, include_extra = include_extra)
 
         # Add metadata columns
         insertcols!(summary_df, 1, :file => splitext(filename)[1])
@@ -293,7 +298,7 @@ function channel_summary(
             input_path = joinpath(input_dir, file)
 
             result, summary_dfs = try
-                _process_channel_summary_file(input_path, condition_selection, sample_selection, channel_selection, include_extra)
+                _process_channel_summary_file(input_path, condition_selection, sample_selection, interval_selection, channel_selection, include_extra)
             catch e
                 @error "Error processing $file" exception = (e, catch_backtrace())
                 (BatchResult(false, file, "Exception: $(sprint(showerror, e))"), DataFrame[])

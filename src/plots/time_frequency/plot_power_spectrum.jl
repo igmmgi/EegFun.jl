@@ -586,8 +586,11 @@ function plot_ica_component_spectrum(
 
     # Debug: verify selected components
     @debug "plot_ica_component_spectrum: selected_components = $selected_components"
-    # Apply sample selection
-    selected_samples = get_selected_samples(dat, sample_selection)
+    # Combine interval and sample selection (consistent with subset() pattern)
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+
+    # Apply combined selection
+    selected_samples = get_selected_samples(dat, combined_sel)
 
     # Prepare data matrix for selected samples only
     relevant_cols = vcat(ica_result.layout.data.label)

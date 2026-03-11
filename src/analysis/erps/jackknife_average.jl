@@ -112,7 +112,7 @@ end
 Load ERP/LRP data from multiple files and organize by condition.
 Returns Dict{Int, Vector{ErpData}} mapping condition number to ERPs from all participants.
 """
-function _load_and_group_for_jackknife(files::Vector{String}, input_dir::String, condition_selection::Function, data_var::String)
+function _load_and_group_for_jackknife(files::Vector{String}, input_dir::String, condition_selection::Function)
     # data_var parameter kept for backwards compatibility but not used - read_data() finds by type
     all_erps_by_condition = Dict{Int,Vector{ErpData}}()
     participant_ids = Int[]
@@ -249,7 +249,7 @@ function jackknife_average(
         @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
 
         # Load and group data by condition (data_var parameter kept for backwards compatibility but not used)
-        erps_by_condition, participant_ids = _load_and_group_for_jackknife(files, input_dir, condition_selection, data_var)
+        erps_by_condition, participant_ids = _load_and_group_for_jackknife(files, input_dir, condition_selection)
 
         if isempty(erps_by_condition)
             @minimal_warning "No valid data found in any files"

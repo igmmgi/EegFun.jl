@@ -137,7 +137,6 @@ function permutation_test(
     permutation_max_positive, permutation_max_negative = _run_permutations(
         prepared,
         n_permutations,
-        threshold,
         threshold_for_permutations,
         spatial_connectivity,
         cluster_type,

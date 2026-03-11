@@ -40,7 +40,7 @@ Install EegFun.jl from the Julia REPL:
 
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/igmmgi/EegFun.jl")
+Pkg.add("EegFun")
 ```
 
 Read and preprocess EEG data:

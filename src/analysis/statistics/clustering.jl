@@ -696,12 +696,7 @@ end
 Compute cluster-level statistics (maxsum) for TF clusters.
 Sums t-values at each cluster's exact pixel locations.
 """
-function _compute_cluster_statistics_tf(
-    clusters::Vector{TFCluster},
-    t_matrix::Array{Float64,3},
-    electrode_to_idx::Dict{Symbol,Int};
-    return_clusters::Bool = true,
-)
+function _compute_cluster_statistics_tf(clusters::Vector{TFCluster}, t_matrix::Array{Float64,3}, return_clusters::Bool = true)
     if isempty(clusters)
         return return_clusters ? (TFCluster[], Float64[]) : Float64[]
     end
@@ -743,6 +738,5 @@ function _compute_cluster_statistics_tf(
 end
 
 function _compute_cluster_statistics_tf(clusters::Vector{TFCluster}, t_matrix::Array{Float64,3}, electrodes::Vector{Symbol})
-    electrode_to_idx = Dict(e => i for (i, e) in enumerate(electrodes))
-    return _compute_cluster_statistics_tf(clusters, t_matrix, electrode_to_idx, return_clusters = true)
+    return _compute_cluster_statistics_tf(clusters, t_matrix, true)
 end

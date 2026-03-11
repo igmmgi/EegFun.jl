@@ -241,11 +241,11 @@ end
 # =============================================================================
 
 """
-    _start_figure_channel_selection!(fig::Figure, selection_state::SharedSelectionState, plot_layout, data, channel_selection_active)
+    _start_figure_channel_selection!(fig::Figure, selection_state::SharedSelectionState, plot_layout, channel_selection_active)
 
 Start channel selection with Ctrl + drag.
 """
-function _start_figure_channel_selection!(fig::Figure, selection_state::SharedSelectionState, plot_layout, data, channel_selection_active)
+function _start_figure_channel_selection!(fig::Figure, selection_state::SharedSelectionState, plot_layout, channel_selection_active)
     if plot_layout.type != :topo && plot_layout.type != :grid
         return
     end
@@ -260,7 +260,7 @@ end
 
 Update channel selection rectangle while dragging.
 """
-function _update_figure_channel_selection!(fig::Figure, selection_state::SharedSelectionState, plot_layout, data)
+function _update_figure_channel_selection!(fig::Figure, selection_state::SharedSelectionState, plot_layout)
     if plot_layout.type != :topo && plot_layout.type != :grid
         return
     end
@@ -294,7 +294,6 @@ function _finish_figure_channel_selection!(
     fig::Figure,
     selection_state::SharedSelectionState,
     plot_layout,
-    data,
     channel_selection_active,
     axes::Vector{Axis},
 )
@@ -537,7 +536,7 @@ function _handle_mouse_movement(fig::Figure, axes::Vector{Axis}, selection_state
 end
 
 """
-    _setup_unified_selection!(fig::Figure, axes::Vector{Axis}, selection_state::SharedSelectionState, data, plot_layout, right_click_handler=nothing)
+    _setup_unified_selection!(fig::Figure, axes::Vector{Axis}, selection_state::SharedSelectionState, data, right_click_handler=nothing)
 
 Set up unified mouse selection that works across all layouts.
 Uses figure-level events to avoid conflicts with multiple axis handlers.
@@ -547,10 +546,9 @@ function _setup_unified_selection!(
     axes::Vector{Axis},
     selection_state::SharedSelectionState,
     data,
-    plot_layout,
     right_click_handler = nothing,
 )
-    shift_pressed, ctrl_pressed = _setup_keyboard_tracking(fig)
+    shift_pressed, _ = _setup_keyboard_tracking(fig)
     _handle_mouse_button_events(fig, axes, selection_state, data, right_click_handler, shift_pressed)
     _handle_mouse_movement(fig, axes, selection_state)
 end
@@ -560,7 +558,7 @@ end
 # =============================================================================
 
 """
-    _setup_channel_selection_events!(fig::Figure, selection_state::SharedSelectionState, plot_layout, data, axes::Vector{Axis}, layout_type::Symbol)
+    _setup_channel_selection_events!(fig::Figure, selection_state::SharedSelectionState, plot_layout, data, axes::Vector{Axis}; channel_right_click_handler=nothing)
 
 Set up figure-level event handlers for channel selection in topo and grid layouts.
 """
@@ -569,8 +567,8 @@ function _setup_channel_selection_events!(
     selection_state::SharedSelectionState,
     plot_layout,
     data,
-    axes::Vector{Axis},
-    layout_type::Symbol,
+    axes::Vector{Axis};
+    channel_right_click_handler = nothing,
 )
     channel_selection_active = Ref(false)
     shift_pressed = Ref(false)
@@ -600,6 +598,16 @@ function _setup_channel_selection_events!(
 
         if event.button == Mouse.left && event.action == Mouse.press && !ctrl_pressed[] && !shift_pressed[]
             _clear_all_shared_channel_selections!(fig, selection_state)
+        end
+
+        # Right-click on channel selection → context menu
+        if event.button == Mouse.right && event.action == Mouse.press
+            if !isnothing(channel_right_click_handler) && !isempty(selection_state.selection_bounds)
+                selected_chs = _resolve_selected_channels(selection_state, plot_layout, axes, fig)
+                if !isempty(selected_chs)
+                    channel_right_click_handler(selected_chs, data)
+                end
+            end
         end
 
     end
@@ -691,4 +699,24 @@ function _rectangles_overlap(rect1, rect2)
     x1_min, y1_min, x1_max, y1_max = rect1
     x2_min, y2_min, x2_max, y2_max = rect2
     return !(x1_max < x2_min || x2_max < x1_min || y1_max < y2_min || y2_max < y1_min)
+end
+
+"""
+    _resolve_selected_channels(selection_state::SharedSelectionState, plot_layout, axes::Vector{Axis})
+
+Resolve which channels are currently selected from the channel selection bounds.
+Uses the existing `_get_axes_rectangles` and `_rectangles_overlap` utilities.
+Returns a Vector{Symbol} of unique selected channel names.
+"""
+function _resolve_selected_channels(selection_state::SharedSelectionState, plot_layout, axes::Vector{Axis}, fig::Figure)
+    channels_list = isa(plot_layout, PlotLayout) ? plot_layout.channels : get(plot_layout, :channels, Symbol[])
+    isempty(channels_list) && return Symbol[]
+    axes_rects = _get_axes_rectangles(axes, channels_list, fig)
+    selected = Symbol[]
+    for bounds in selection_state.selection_bounds
+        for (axis_rect, chs) in axes_rects
+            _rectangles_overlap(bounds, axis_rect) && append!(selected, chs)
+        end
+    end
+    return unique(selected)
 end

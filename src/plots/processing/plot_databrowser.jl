@@ -844,14 +844,14 @@ function _create_sliders(fig, state::ContinuousDataBrowserState, dat)
     slider_x = Slider(fig[2, 1], range = 1:50:nrow(state.data.current[].data), startvalue = 1, snap = true)
 
     on(slider_range.value) do x
-        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x+slider_x.value.val)
+        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x + slider_x.value.val)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
     end
 
     on(slider_x.value) do x
-        new_range = x:min(nrow(state.data.current[].data), (x+slider_range.value.val)-1)
+        new_range = x:min(nrow(state.data.current[].data), (x + slider_range.value.val) - 1)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
@@ -930,17 +930,17 @@ function _handle_navigation!(ax, state::DataBrowserState{<:AbstractDataState}, a
     elseif action == :down
         _yless!(ax, state)
     elseif action == :left
-        _handle_left_navigation(ax, state, state.data)
+        _handle_left_navigation(ax, state)
     elseif action == :right
-        _handle_right_navigation(ax, state, state.data)
+        _handle_right_navigation(ax, state)
     end
 end
 
 # Type-specific left/right navigation
-_handle_left_navigation(ax, state, data::ContinuousDataState) = _xback!(ax, state)
-_handle_left_navigation(ax, state, data::EpochedDataState) = _step_epoch_backward(ax, state)
-_handle_right_navigation(ax, state, data::ContinuousDataState) = _xforward!(ax, state)
-_handle_right_navigation(ax, state, data::EpochedDataState) = _step_epoch_forward(ax, state)
+_handle_left_navigation(ax, state::ContinuousDataBrowserState) = _xback!(ax, state)
+_handle_left_navigation(ax, state::EpochedDataBrowserState) = _step_epoch_backward(ax, state)
+_handle_right_navigation(ax, state::ContinuousDataBrowserState) = _xforward!(ax, state)
+_handle_right_navigation(ax, state::EpochedDataBrowserState) = _step_epoch_forward(ax, state)
 
 function _xback!(ax, state::ContinuousDataBrowserState)
     state.view.xrange.val[1] - 200 < 1 && return

@@ -322,11 +322,12 @@ function plot_erp(
             (selection_state, mouse_x, data) -> _handle_erp_right_click!(selection_state, mouse_x, data, condition_checked_ref)
 
         # Set up selection system that works for all layouts
-        _setup_unified_selection!(fig, axes, selection_state, dat_subset, plot_layout, right_click_handler)
+        _setup_unified_selection!(fig, axes, selection_state, dat_subset, right_click_handler)
 
         # Set up channel selection events for topo and grid layouts
         if plot_layout.type in (:topo, :grid)
-            _setup_channel_selection_events!(fig, selection_state, plot_layout, dat_subset, axes, plot_layout.type)
+            channel_rc_handler = (selected_chs, data) -> _show_channel_average_menu!(selected_chs, data, condition_checked_ref)
+            _setup_channel_selection_events!(fig, selection_state, plot_layout, dat_subset, axes; channel_right_click_handler = channel_rc_handler)
         end
 
     end
@@ -672,6 +673,30 @@ end
 Single ErpData case - just return it.
 """
 _average_conditions(erp::ErpData) = erp
+
+"""
+    _show_channel_average_menu!(selected_channels, data, condition_checked_ref)
+
+Show a popup context menu for channel selection right-click.
+Offers "Plot Average of Selected" which opens a new ERP plot averaging the selected channels.
+"""
+function _show_channel_average_menu!(selected_channels, data, condition_checked_ref)
+    _set_window_title("Channel Selection Menu")
+    menu_fig = Figure(size = (300, 150))
+
+    data_to_plot = _filter_visible_conditions(data, condition_checked_ref)
+
+    btn = Button(menu_fig[1, 1], label = "Plot Average of Selected ($(length(selected_channels)) ch)")
+    on(btn.clicks) do _
+        plot_erp(data_to_plot;
+            channel_selection = channels(selected_channels),
+            average_channels = true,
+        )
+    end
+
+    new_screen = GLMakie.Screen(size = (300, 150))
+    display(new_screen, menu_fig)
+end
 
 
 """

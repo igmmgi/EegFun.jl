@@ -387,11 +387,11 @@ function plot_epochs(
             (selection_state, mouse_x, data) -> _handle_epochs_right_click!(selection_state, mouse_x, data, condition_checked_ref)
 
         # Set up selection system that works for all layouts
-        _setup_unified_selection!(fig, axes, selection_state, dat_subset, plot_layout, right_click_handler)
+        _setup_unified_selection!(fig, axes, selection_state, dat_subset, right_click_handler)
 
         # Set up channel selection events for topo and grid layouts
         if plot_layout.type in (:topo, :grid)
-            _setup_channel_selection_events!(fig, selection_state, plot_layout, dat_subset, axes, plot_layout.type)
+            _setup_channel_selection_events!(fig, selection_state, plot_layout, dat_subset, axes)
         end
     end
 
