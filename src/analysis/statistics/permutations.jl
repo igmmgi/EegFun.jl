@@ -69,9 +69,9 @@ function _shuffle_labels!(
         # We use views to avoid copying during indexing
         function get_trial(idx)
             if idx <= n_A
-                return view(data1,idx,:,:)
+                return view(data1, idx, :, :)
             else
-                return view(data2,(idx-n_A),:,:)
+                return view(data2, (idx - n_A), :, :)
             end
         end
 
@@ -164,7 +164,7 @@ end
 
 
 """
-    _run_permutations(prepared, n_permutations, threshold, critical_t_values, spatial_connectivity, cluster_type, tail, min_num_neighbors, show_progress; permutation_t_matrices)
+    _run_permutations(prepared, n_permutations, critical_t_values, spatial_connectivity, cluster_type, tail, min_num_neighbors, show_progress; permutation_t_matrices)
 
 Run permutation loop to generate distribution of maximum cluster statistics (maxsum).
 
@@ -199,7 +199,6 @@ perm_pos, perm_neg = _run_permutations(prepared, 1000, 0.05, critical_t, conn,
 function _run_permutations(
     prepared::StatisticalData,
     n_permutations::Int,
-    threshold::Float64,
     critical_t_values,
     spatial_connectivity::SparseMatrixCSC{Bool},
     cluster_type::Symbol,
@@ -359,7 +358,7 @@ function _shuffle_labels_tf!(
 
         shuffled_indices = randperm(n_total)
 
-        get_trial(idx) = idx <= n_A ? view(data1,idx,:,:,:) : view(data2,(idx-n_A),:,:,:)
+        get_trial(idx) = idx <= n_A ? view(data1, idx, :, :, :) : view(data2, (idx - n_A), :, :, :)
 
         for i = 1:n_A
             src_idx = shuffled_indices[i]
@@ -453,7 +452,7 @@ function _run_permutations_tf(
 
         # Get max cluster stat (positive)
         if !isempty(pos_clusters_perm)
-            pos_stats = _compute_cluster_statistics_tf(pos_clusters_perm, t_matrix_perm, electrode_to_idx, return_clusters = false)
+            pos_stats = _compute_cluster_statistics_tf(pos_clusters_perm, t_matrix_perm, false)
             max_pos = isempty(pos_stats) ? 0.0 : maximum(pos_stats)
         else
             max_pos = 0.0
@@ -461,7 +460,7 @@ function _run_permutations_tf(
 
         # Get max cluster stat (negative)
         if !isempty(neg_clusters_perm)
-            neg_stats = _compute_cluster_statistics_tf(neg_clusters_perm, t_matrix_perm, electrode_to_idx, return_clusters = false)
+            neg_stats = _compute_cluster_statistics_tf(neg_clusters_perm, t_matrix_perm, false)
             max_neg = isempty(neg_stats) ? 0.0 : minimum(neg_stats)
         else
             max_neg = 0.0

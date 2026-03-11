@@ -62,12 +62,12 @@ function _write_log_header(io::IO, start_time::DateTime)
 end
 
 """
-    _open_log_file(handle_field::Union{Nothing,IO}, start_time_field::Union{Nothing,DateTime}, filename::String) -> Tuple{IO, DateTime}
+    _open_log_file(handle_field::Union{Nothing,IO}, filename::String) -> Tuple{IO, DateTime}
 
 Open a log file, closing any existing one, and record the start time.
 Returns the opened file handle and start time.
 """
-function _open_log_file(handle_field::Union{Nothing,IO}, start_time_field::Union{Nothing,DateTime}, filename::String)
+function _open_log_file(handle_field::Union{Nothing,IO}, filename::String)
     !isnothing(handle_field) && close(handle_field)
 
     handle = open(filename, "w")
@@ -146,7 +146,7 @@ function setup_logging(log_file::String; log_level::Symbol = :info, is_global::B
     end
 
     # Open log file (closes existing if necessary)
-    handle, start_time = _open_log_file(getproperty(LOG_STATE, h_field), getproperty(LOG_STATE, t_field), log_file)
+    handle, start_time = _open_log_file(getproperty(LOG_STATE, h_field), log_file)
 
     # Update state
     setproperty!(LOG_STATE, h_field, handle)

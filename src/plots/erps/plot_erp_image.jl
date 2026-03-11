@@ -140,7 +140,7 @@ function plot_erp_image(
     plot_kwargs = _merge_plot_kwargs(PLOT_ERP_IMAGE_KWARGS, kwargs)
 
     # Use subset to get the data we want to plot (same pattern as other functions)
-    dat_subset = subset(dat; channel_selection = channel_selection, sample_selection = sample_selection)
+    dat_subset = subset(dat; channel_selection = channel_selection, sample_selection = sample_selection, interval_selection = interval_selection)
 
     # Generate window title from dataset
     title_str = _generate_window_title(dat_subset)
@@ -492,13 +492,11 @@ function plot_erp_image(
 
         # Set up selection system (rectangles created AFTER heatmaps)
         selection_state = SharedSelectionState(axes)
-        _setup_unified_selection!(fig, axes, selection_state, dat_subset, plot_layout)
+        _setup_unified_selection!(fig, axes, selection_state, dat_subset)
 
         # Set up channel selection events for topo and grid layouts
-        if plot_layout.type == :topo
-            _setup_channel_selection_events!(fig, selection_state, plot_layout, dat_subset, axes, :topo)
-        elseif plot_layout.type == :grid
-            _setup_channel_selection_events!(fig, selection_state, plot_layout, dat_subset, axes, :grid)
+        if plot_layout.type in (:topo, :grid)
+            _setup_channel_selection_events!(fig, selection_state, plot_layout, dat_subset, axes)
         end
     end
 

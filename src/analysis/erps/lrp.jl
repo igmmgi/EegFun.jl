@@ -193,7 +193,7 @@ function _validate_lrp_params(condition_pairs::Vector{Tuple{Int,Int}})
 end
 
 """Generate default output directory name for LRP operation."""
-function _default_lrp_output_dir(input_dir::String, pattern::String, condition_pairs::Vector{Tuple{Int,Int}})
+function _default_lrp_output_dir(input_dir::String, condition_pairs::Vector{Tuple{Int,Int}})
     pairs_str = join(["$(l)-$(r)" for (l, r) in condition_pairs], "_")
     joinpath(input_dir, "lrp_$(pairs_str)")
 end
@@ -272,7 +272,7 @@ function lrp(
         end
 
         # Setup directories
-        output_dir = something(output_dir, _default_lrp_output_dir(input_dir, file_pattern, condition_pairs))
+        output_dir = something(output_dir, _default_lrp_output_dir(input_dir, condition_pairs))
         mkpath(output_dir)
 
         # Find files

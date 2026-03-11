@@ -52,8 +52,11 @@ function run_ica(
     selected_channels = get_selected_channels(dat_ica, channel_selection; include_meta = false, include_extra = include_extra)
     isempty(selected_channels) && error("No channels available after applying channel filter")
 
+    # Combine interval and sample selection (consistent with subset() pattern)
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+
     # Get samples to use using predicate
-    sample_indices = get_selected_samples(dat_ica, sample_selection)
+    sample_indices = get_selected_samples(dat_ica, combined_sel)
     isempty(sample_indices) && error("No samples available after applying sample filter")
 
     # Set n_components if not specified
@@ -121,7 +124,10 @@ function run_ica(
     concatenated_df = all_data(epoched_data)
     _check_epoched_data_uniqueness!(concatenated_df; remove_duplicates = remove_duplicates)
 
-    sample_indices = get_selected_samples(concatenated_df, sample_selection)
+    # Combine interval and sample selection (consistent with subset() pattern)
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+
+    sample_indices = get_selected_samples(concatenated_df, combined_sel)
     isempty(sample_indices) && error("No samples available after applying sample filter to epoched data")
 
     # Create data matrix for ICA

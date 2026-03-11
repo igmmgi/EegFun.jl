@@ -70,7 +70,7 @@ function read_eeglab(filepath::String; preserve_radial_distance::Bool = true)
         ch_names = _extract_channel_names(eeg["chanlocs"])
         layout = _parse_channel_locations(eeg["chanlocs"], ch_names)
         polar_to_cartesian_xy!(layout, preserve_radial_distance = preserve_radial_distance)
-        ica_data = _extract_ica_info(eeg, filepath, ch_names, layout)
+        ica_data = _extract_ica_info(eeg, filepath, layout)
         return eeg_data, ica_data
     else
         return eeg_data
@@ -463,13 +463,13 @@ function _parse_channel_locations(chanlocs, ch_names::Vector{Symbol})
 end
 
 """
-    _extract_ica_info(eeg::Dict, filepath::String, ch_names::Vector{Symbol}, layout::Layout) → InfoIca
+    _extract_ica_info(eeg::Dict, filepath::String, layout::Layout) → InfoIca
 
 Extract ICA information from EEGLAB structure.
 
 Converts EEGLAB ICA matrices to EegFun InfoIca format.
 """
-function _extract_ica_info(eeg::Dict, filepath::String, ch_names::Vector{Symbol}, layout::Layout)
+function _extract_ica_info(eeg::Dict, filepath::String, layout::Layout)
     # Extract ICA matrices
     unmixing = Matrix{Float64}(eeg["icaweights"])  # Unmixing matrix
     sphere = Matrix{Float64}(eeg["icasphere"])     # Sphering matrix
