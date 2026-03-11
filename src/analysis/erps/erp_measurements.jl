@@ -518,6 +518,7 @@ function _process_measurements_file(
     analysis_interval::Interval,
     analysis_type::String,
     baseline_interval::Interval,
+    average_channels::Bool,
     condition_selection::Function,
     channel_selection::Function,
     measurement_kwargs::Dict{Symbol,Any},
@@ -552,6 +553,7 @@ function _process_measurements_file(
         analysis_interval = analysis_interval,
         baseline_interval = baseline_interval,
         channel_selection = channel_selection,
+        average_channels = average_channels,
         participant = participant,
         measurement_kwargs...,
     )
@@ -600,6 +602,21 @@ function _apply_baseline_correction!(dfs::Vector{DataFrame}, baseline_interval::
 end
 
 """
+Average channel measurement columns into a single `:mean_channels` column.
+Preserves all metadata columns and replaces individual channel columns with their mean.
+"""
+function _average_channel_columns(row::NamedTuple, selected_channels::Vector{Symbol})
+    # Separate metadata from channel data
+    channel_values = [Float64(row[ch]) for ch in selected_channels]
+    avg_value = mean(channel_values)
+
+    # Build new NamedTuple with metadata + single averaged column
+    metadata_keys = filter(k -> k ∉ selected_channels, keys(row))
+    metadata = NamedTuple{Tuple(metadata_keys)}(Tuple(row[k] for k in metadata_keys))
+    return merge(metadata, (; dv_channels = avg_value))
+end
+
+"""
     erp_measurements!(dat::ErpData, analysis_type::String; analysis_interval = times(), baseline_interval = times(), channel_selection = channels(), participant = 0, kwargs...)
     erp_measurements!(dat::EpochData, analysis_type::String; kwargs...)
     erp_measurements!(data::Vector{<:Union{ErpData,EpochData}}, analysis_type::String; kwargs...)
@@ -643,6 +660,7 @@ function erp_measurements!(
     baseline_interval::Interval = times(),
     channel_selection::Function = channels(),
     participant::Int = 0,
+    average_channels::Bool = false,
     kwargs...,
 )
     # Merge measurement kwargs with defaults
@@ -673,7 +691,7 @@ function erp_measurements!(
     end
 
     # Process the single ERP DataFrame
-    return _process_dataframe_measurements(
+    result = _process_dataframe_measurements(
         df,
         selected_channels,
         analysis_interval,
@@ -683,6 +701,13 @@ function erp_measurements!(
         participant,
         measurement_kwargs,
     )
+
+    # Average channels if requested
+    if average_channels && !isnothing(result)
+        result = _average_channel_columns(result, selected_channels)
+    end
+
+    return result
 end
 
 
@@ -693,6 +718,7 @@ function erp_measurements!(
     baseline_interval::Interval = times(),
     channel_selection::Function = channels(),
     participant::Int = 0,
+    average_channels::Bool = false,
     kwargs...,
 )
     # Merge measurement kwargs with defaults
@@ -738,6 +764,9 @@ function erp_measurements!(
         )
 
         if !isnothing(row_data)
+            if average_channels
+                row_data = _average_channel_columns(row_data, selected_channels)
+            end
             push!(results, row_data)
         end
     end
@@ -746,11 +775,11 @@ function erp_measurements!(
 end
 
 
-function erp_measurements!(data::Vector{<:Union{ErpData,EpochData}}, analysis_type::String; kwargs...)
+function erp_measurements!(data::Vector{<:Union{ErpData,EpochData}}, analysis_type::String; average_channels::Bool = false, kwargs...)
     all_results = Vector{Any}()
 
     for dat in data
-        result = erp_measurements!(dat, analysis_type; kwargs...)
+        result = erp_measurements!(dat, analysis_type; average_channels = average_channels, kwargs...)
 
         if !isnothing(result)
             # ErpData returns single NamedTuple, EpochData returns Vector{NamedTuple}
@@ -778,6 +807,7 @@ function erp_measurements(
     participant_selection::Function = participants(),
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
+    average_channels::Bool = false,
     input_dir::String = pwd(),
     output_dir::Union{String,Nothing} = nothing,
     output_file::String = "erp_measurements",
@@ -869,6 +899,7 @@ function erp_measurements(
                     analysis_interval,
                     analysis_type,
                     baseline_interval,
+                    average_channels,
                     condition_selection,
                     channel_selection,
                     measurement_kwargs,

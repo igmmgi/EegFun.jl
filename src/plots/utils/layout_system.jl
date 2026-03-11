@@ -509,10 +509,23 @@ function _apply_axis_properties!(ax::Axis; kwargs...)
     ax.xlabel = kwargs[:xlabel]
     ax.ylabel = kwargs[:ylabel]
 
+    # Time unit display: when :ms, format x-axis ticks in milliseconds and update xlabel
+    if haskey(kwargs, :time_unit) && kwargs[:time_unit] == :ms
+        ax.xtickformat = values -> [string(round(Int, v * 1000)) for v in values]
+        # Auto-update xlabel if user hasn't customized it (still the default "Time (s)")
+        if kwargs[:xlabel] == "Time (s)"
+            ax.xlabel = "Time (ms)"
+        end
+    end
+
     # Axis limits and y +ve/ve inversions
     !isnothing(kwargs[:xlim]) && xlims!(ax, kwargs[:xlim])
     !isnothing(kwargs[:ylim]) && ylims!(ax, kwargs[:ylim])
     ax.yreversed = kwargs[:yreversed]
+
+    # Apply tick positions if specified
+    haskey(kwargs, :xticks) && !isnothing(kwargs[:xticks]) && (ax.xticks = kwargs[:xticks])
+    haskey(kwargs, :yticks) && !isnothing(kwargs[:yticks]) && (ax.yticks = kwargs[:yticks])
 
     # Apply grid settings
     ax.xgridvisible = kwargs[:xgrid]

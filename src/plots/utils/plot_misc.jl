@@ -87,7 +87,7 @@ function _create_figure_with_axis(data; title_suffix::String = "", figure_kwargs
     _set_window_title(title)
     fig = Figure(; figure_kwargs...)
     ax = Axis(fig[1, 1])
-    return fig, ax
+    return (fig = fig, axes = [ax])
 end
 
 """

@@ -300,7 +300,7 @@ function plot_decoding(decoded::DecodedData; kwargs...)
     end
     _set_window_title("Makie")
 
-    return fig, ax
+    return (fig = fig, axes = [ax])
 end
 function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
     if isempty(decoded_list)
@@ -410,7 +410,9 @@ function plot_decoding(decoded::DecodedData, stats::DecodingStatisticsResult; kw
 
     # Create base plot (without displaying yet)
     display_plot_orig = plot_kwargs[:display_plot]
-    fig, ax = plot_decoding(decoded; kwargs..., display_plot = false)
+    result = plot_decoding(decoded; kwargs..., display_plot = false)
+    fig = result.fig
+    ax = result.axes[1]
 
     # Compute y-limits from data for significance bar positioning
     accuracy = decoded.average_score

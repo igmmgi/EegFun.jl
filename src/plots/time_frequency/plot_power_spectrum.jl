@@ -503,7 +503,7 @@ function plot_channel_spectrum(
     end
 
     _set_window_title("Makie")
-    return fig, ax
+    return (fig = fig, axes = [ax])
 
 end
 
@@ -638,5 +638,5 @@ function plot_ica_component_spectrum(
         _display_figure(fig)
     end
 
-    return fig, ax
+    return (fig = fig, axes = [ax])
 end

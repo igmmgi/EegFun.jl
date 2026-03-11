@@ -148,6 +148,9 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
     colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
     colorbar_plot = pop!(plot_kwargs, :colorbar_plot)
 
+    # Extract highlight_channels before passing remaining kwargs
+    highlight_channels = pop!(plot_kwargs, :highlight_channels, nothing)
+
     # Render surface using shared helper
     co, _, _ = _render_topo_surface!(
         fig,
@@ -162,13 +165,74 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
         plot_kwargs...,
     )
 
+    # Highlight channels if requested
+    if !isnothing(highlight_channels)
+        _draw_highlight_channels!(ax, highlight_channels, layout)
+    end
+
     # colorbar
     if colorbar_plot
         Colorbar(fig[colorbar_position...], co; colorbar_kwargs...)
     end
 
-    return fig, ax
+    return (fig = fig, axes = [ax])
 
+end
+
+
+"""
+    _draw_highlight_channels!(ax::Axis, groups, layout::Layout)
+
+Draw highlighted channel markers on a topography plot.
+Accepts a single NamedTuple or a Vector of NamedTuples.
+Each group requires `channels` (Vector of Symbols) and supports optional
+`color` (default :white), `size` (default 8), `marker` (default :circle).
+"""
+function _draw_highlight_channels!(ax::Axis, groups, layout::Layout)
+    group_list = groups isa AbstractVector ? groups : [groups]
+
+    for group in group_list
+        ch_syms = group.channels
+        color = get(group, :color, :white)
+        sz = get(group, :size, 8)
+        marker = get(group, :marker, :circle)
+        show_label = get(group, :label, true)
+        label_fontsize = get(group, :fontsize, 10)
+
+        xs = Float64[]
+        ys = Float64[]
+        labels = Symbol[]
+        for ch in ch_syms
+            idx = findfirst(==(ch), layout.data.label)
+            if !isnothing(idx)
+                push!(xs, layout.data.x2[idx])
+                push!(ys, layout.data.y2[idx])
+                push!(labels, ch)
+            end
+        end
+
+        if !isempty(xs)
+            scatter!(ax, xs, ys,
+                color = color,
+                marker = marker,
+                markersize = sz,
+                strokewidth = 1,
+                strokecolor = :black,
+            )
+
+            if show_label
+                for (x, y, lbl) in zip(xs, ys, labels)
+                    text!(ax, x, y,
+                        text = string(lbl),
+                        align = (:center, :bottom),
+                        fontsize = label_fontsize,
+                        color = color,
+                        offset = (0, sz/2 + 2),
+                    )
+                end
+            end
+        end
+    end
 end
 
 
@@ -213,11 +277,16 @@ function plot_topography(
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     interval_selection::Interval = times(),
+    baseline_interval::Interval = times(),
     n_topo::Union{Int,Nothing} = nothing,
     display_plot = true,
     interactive = true,
     kwargs...,
 )
+    # Apply baseline correction if requested
+    if !isnothing(baseline_interval)
+        dat = baseline(dat, baseline_interval)
+    end
     # If n_topo is requested, split time range into bins and use the Vector method
     if !isnothing(n_topo) && n_topo > 1
         # First apply the user's sample_selection to get the selected time range
@@ -292,7 +361,7 @@ function plot_topography(
     display_plot && _display_figure(fig)
 
     _set_window_title("Makie")
-    return fig, ax
+    return (fig = fig, axes = [ax])
 end
 
 function plot_topography!(
@@ -317,10 +386,15 @@ function plot_topography(
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     interval_selection::Interval = times(),
+    baseline_interval::Interval = times(),
     display_plot = true,
     interactive = true,
     kwargs...,
 )
+    # Apply baseline correction if requested
+    if !isnothing(baseline_interval)
+        dat = baseline.(dat, Ref(baseline_interval))
+    end
 
     n_datasets = length(dat)
     n_datasets == 0 && @minimal_error "Cannot plot empty vector of datasets"
@@ -537,7 +611,7 @@ function plot_topography(
     display_plot && _display_figure(fig)
 
     _set_window_title("Makie")
-    return fig, axes
+    return (fig = fig, axes = axes)
 end
 function plot_topography(dat::Vector{EpochData}; kwargs...)
     # Average trials within each condition to create ERPs
@@ -601,7 +675,7 @@ function plot_topography(
     display_plot && _display_figure(fig)
 
     _set_window_title("Makie")
-    return fig, ax
+    return (fig = fig, axes = [ax])
 
 end
 

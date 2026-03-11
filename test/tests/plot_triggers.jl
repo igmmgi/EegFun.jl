@@ -166,10 +166,10 @@ using Makie
             trigger_values = [1, 2, 1, 3]
             trigger_count = OrderedDict(1 => 2, 2 => 1, 3 => 1)
 
-            fig, ax = EegFun.plot_trigger_overview(trigger_times, trigger_values, trigger_count; display_plot = false)
+            result = EegFun.plot_trigger_overview(trigger_times, trigger_values, trigger_count; display_plot = false)
 
-            @test fig isa Figure
-            @test ax isa Axis
+            @test result.fig isa Figure
+            @test first(result.axes) isa Axis
         end
 
         @testset "empty trigger data" begin
@@ -177,47 +177,47 @@ using Makie
             trigger_values = Int[]
             trigger_count = OrderedDict{Int,Int}()
 
-            fig, ax = EegFun.plot_trigger_overview(trigger_times, trigger_values, trigger_count; display_plot = false)
+            result = EegFun.plot_trigger_overview(trigger_times, trigger_values, trigger_count; display_plot = false)
 
-            @test fig isa Figure
-            @test ax isa Axis
+            @test result.fig isa Figure
+            @test first(result.axes) isa Axis
         end
 
         @testset "ContinuousData input" begin
             dat = EegFun.create_test_continuous_data_with_triggers()
 
-            fig, ax = EegFun.plot_trigger_overview(dat; display_plot = false)
+            result = EegFun.plot_trigger_overview(dat; display_plot = false)
 
-            @test fig isa Figure
-            @test ax isa Axis
+            @test result.fig isa Figure
+            @test first(result.axes) isa Axis
         end
 
         @testset "ContinuousData with ignore_triggers" begin
             dat = EegFun.create_test_continuous_data_with_triggers()
 
-            fig, ax = EegFun.plot_trigger_overview(dat; ignore_triggers = [2, 3], display_plot = false)
+            result = EegFun.plot_trigger_overview(dat; ignore_triggers = [2, 3], display_plot = false)
 
-            @test fig isa Figure
-            @test ax isa Axis
+            @test result.fig isa Figure
+            @test first(result.axes) isa Axis
         end
 
         @testset "empty ContinuousData" begin
             dat = EegFun.create_test_continuous_data_empty_triggers()
 
-            fig, ax = EegFun.plot_trigger_overview(dat; display_plot = false)
+            result = EegFun.plot_trigger_overview(dat; display_plot = false)
 
-            @test fig isa Figure
-            @test ax isa Axis
+            @test result.fig isa Figure
+            @test first(result.axes) isa Axis
         end
 
         @testset "parameter passing" begin
             dat = EegFun.create_test_continuous_data_with_triggers()
 
             # Test that custom parameters are passed through
-            fig, ax = EegFun.plot_trigger_overview(dat; window_size = 15.0, display_plot = false, ignore_triggers = [1])
+            result = EegFun.plot_trigger_overview(dat; window_size = 15.0, display_plot = false, ignore_triggers = [1])
 
-            @test fig isa Figure
-            @test ax isa Axis
+            @test result.fig isa Figure
+            @test first(result.axes) isa Axis
         end
     end
 
@@ -226,39 +226,39 @@ using Makie
         @testset "ContinuousData input" begin
             dat = EegFun.create_test_continuous_data_with_triggers()
 
-            fig, ax = EegFun.plot_trigger_timing(dat; display_plot = false)
+            result = EegFun.plot_trigger_timing(dat; display_plot = false)
 
-            @test fig isa Figure
-            @test ax isa Axis
+            @test result.fig isa Figure
+            @test first(result.axes) isa Axis
         end
 
         @testset "ContinuousData with ignore_triggers" begin
             dat = EegFun.create_test_continuous_data_with_triggers()
 
-            fig, ax = EegFun.plot_trigger_timing(dat; ignore_triggers = [2, 3], display_plot = false)
+            result = EegFun.plot_trigger_timing(dat; ignore_triggers = [2, 3], display_plot = false)
 
-            @test fig isa Figure
-            @test ax isa Axis
+            @test result.fig isa Figure
+            @test first(result.axes) isa Axis
         end
 
         @testset "empty ContinuousData" begin
             dat = EegFun.create_test_continuous_data_empty_triggers()
 
-            fig, ax = EegFun.plot_trigger_timing(dat; display_plot = false)
+            result = EegFun.plot_trigger_timing(dat; display_plot = false)
 
-            @test fig isa Figure
-            @test ax isa Axis
+            @test result.fig isa Figure
+            @test first(result.axes) isa Axis
         end
 
         @testset "parameter passing" begin
             dat = EegFun.create_test_continuous_data_with_triggers()
 
             # Test that custom parameters are passed through
-            fig, ax =
+            result =
                 EegFun.plot_trigger_timing(dat; window_size = 20.0, initial_position = -5.0, display_plot = false, ignore_triggers = [1])
 
-            @test fig isa Figure
-            @test ax isa Axis
+            @test result.fig isa Figure
+            @test first(result.axes) isa Axis
         end
     end
 
@@ -272,23 +272,23 @@ using Makie
             dat = EegFun.create_test_continuous_data_with_triggers()
 
             # Test overview plot
-            fig1, ax1 = EegFun.plot_trigger_overview(dat; display_plot = false)
-            @test fig1 isa Figure
-            @test ax1 isa Axis
+            result1 = EegFun.plot_trigger_overview(dat; display_plot = false)
+            @test result1.fig isa Figure
+            @test first(result1.axes) isa Axis
 
             # Test timing plot
-            fig2, ax2 = EegFun.plot_trigger_timing(dat; display_plot = false)
-            @test fig2 isa Figure
-            @test ax2 isa Axis
+            result2 = EegFun.plot_trigger_timing(dat; display_plot = false)
+            @test result2.fig isa Figure
+            @test first(result2.axes) isa Axis
 
             # Test with filtering
-            fig3, ax3 = EegFun.plot_trigger_overview(dat; ignore_triggers = [1], display_plot = false)
-            @test fig3 isa Figure
-            @test ax3 isa Axis
+            result3 = EegFun.plot_trigger_overview(dat; ignore_triggers = [1], display_plot = false)
+            @test result3.fig isa Figure
+            @test first(result3.axes) isa Axis
 
-            fig4, ax4 = EegFun.plot_trigger_timing(dat; ignore_triggers = [1], display_plot = false)
-            @test fig4 isa Figure
-            @test ax4 isa Axis
+            result4 = EegFun.plot_trigger_timing(dat; ignore_triggers = [1], display_plot = false)
+            @test result4.fig isa Figure
+            @test first(result4.axes) isa Axis
         end
 
         @testset "parameter consistency" begin
@@ -297,22 +297,22 @@ using Makie
             # Test that same parameters work across all functions
             common_params = (ignore_triggers = [1], display_plot = false)
 
-            fig1, ax1 = EegFun.plot_trigger_overview(dat; common_params...)
-            fig2, ax2 = EegFun.plot_trigger_timing(dat; common_params...)
+            result1 = EegFun.plot_trigger_overview(dat; common_params...)
+            result2 = EegFun.plot_trigger_timing(dat; common_params...)
 
-            @test fig1 isa Figure && fig2 isa Figure
-            @test ax1 isa Axis && ax2 isa Axis
+            @test result1.fig isa Figure && result2.fig isa Figure
+            @test first(result1.axes) isa Axis && first(result2.axes) isa Axis
         end
 
         @testset "return value consistency" begin
             dat = EegFun.create_test_continuous_data_with_triggers()
 
-            # All functions should return (fig, ax) tuple
-            fig1, ax1 = EegFun.plot_trigger_overview(dat; display_plot = false)
-            fig2, ax2 = EegFun.plot_trigger_timing(dat; display_plot = false)
+            # All functions should return NamedTuple with fig and axes
+            result1 = EegFun.plot_trigger_overview(dat; display_plot = false)
+            result2 = EegFun.plot_trigger_timing(dat; display_plot = false)
 
-            @test isa(fig1, Figure) && isa(fig2, Figure)
-            @test isa(ax1, Axis) && isa(ax2, Axis)
+            @test result1.fig isa Figure && result2.fig isa Figure
+            @test first(result1.axes) isa Axis && first(result2.axes) isa Axis
         end
     end
 
@@ -391,26 +391,25 @@ using Makie
 
             # These should not throw errors but may not work as expected
             # The functions should handle type conversion internally
-            fig, ax = EegFun.plot_trigger_overview(dat; ignore_triggers = [1.0, 2.0], display_plot = false)
-            @test fig isa Figure
-            @test ax isa Axis
+            result = EegFun.plot_trigger_overview(dat; ignore_triggers = [1.0, 2.0], display_plot = false)
+            @test result.fig isa Figure
+            @test first(result.axes) isa Axis
         end
 
         @testset "extreme parameter values" begin
             dat = EegFun.create_test_continuous_data_with_triggers()
 
             # Test with extreme parameter values
-            fig, ax = EegFun.plot_trigger_timing(
+            result = EegFun.plot_trigger_timing(
                 dat;
                 window_size = 0.01,  # Very small window
                 initial_position = -1000.0,  # Very negative position
                 display_plot = false,
             )
 
-            @test fig isa Figure
-            @test ax isa Axis
+            @test result.fig isa Figure
+            @test first(result.axes) isa Axis
         end
     end
 
 end
-

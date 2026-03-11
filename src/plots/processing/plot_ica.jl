@@ -59,6 +59,9 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :colorbar_label => ("μV", "Label for the colorbar"),
     :colorbar_plot_numbers => ([], "Plot indices for which to show colorbars. Empty list shows colorbars for all plots."),
 
+    # Channel highlighting
+    :highlight_channels => (nothing, "Highlight channel groups as a NamedTuple or Vector of NamedTuples. Each group: (channels=[:Cz, :Pz], color=:white, size=8, marker=:circle)"),
+
     # ICA-specific parameters (ignored for standard topography plots)
     :use_global_scale => (false, "Do multiple ICA topoplots share the same color scale based on min/max across all components?"),
     :component_selection => (components(), "Function that returns boolean vector for component filtering"),

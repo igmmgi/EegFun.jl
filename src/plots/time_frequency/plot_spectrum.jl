@@ -184,6 +184,6 @@ function plot_frequency_spectrum(
         _display_figure(fig)
     end
     _set_window_title("Makie")
-    return fig, ax
+    return (fig = fig, axes = [ax])
 end
 

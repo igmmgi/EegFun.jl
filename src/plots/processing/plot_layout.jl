@@ -222,7 +222,7 @@ function plot_layout_2d(
     if display_plot
         _display_figure(fig)
     end
-    return fig, ax
+    return (fig = fig, axes = [ax])
 end
 
 plot_layout_2d(dat::EegFunData; kwargs...) = plot_layout_2d(dat.layout; kwargs...)
@@ -479,7 +479,7 @@ function plot_layout_3d(layout::Layout; neighbours::Bool = false, display_plot::
         _display_figure(fig)
     end
 
-    return fig, ax
+    return (fig = fig, axes = [ax])
 
 end
 

@@ -165,7 +165,7 @@ function plot_channel_summary(dat::DataFrame, col::Symbol; kwargs...)
         _set_window_title("Channel Summary")
         _display_figure(fig)
     end
-    return fig, ax
+    return (fig = fig, axes = [ax])
 end
 
 plot_channel_summary(dat::Vector{DataFrame}, col::Symbol; kwargs...) = plot_channel_summary.(dat, col; kwargs...)

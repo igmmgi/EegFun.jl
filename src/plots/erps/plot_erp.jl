@@ -13,6 +13,9 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :xlabel => ("Time (s)", "Label for x-axis"),
     :ylabel => ("μV", "Label for y-axis"),
     :yreversed => (false, "Whether to reverse the y-axis"),
+    :xticks => (nothing, "X-axis tick positions (e.g., -0.1:0.1:0.8 or [0, 0.2, 0.4]). If nothing, automatically determined"),
+    :yticks => (nothing, "Y-axis tick positions (e.g., -4:2:4 or [-2, 0, 2]). If nothing, automatically determined"),
+    :time_unit => (:s, "Time unit for x-axis display (:s or :ms). Only affects axis labels and tick formatting — all intervals remain in seconds."),
 
     # Title
     :title => ("", "Plot title"),
@@ -63,6 +66,9 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # General layout parameters
     :figure_padding => ((10, 10, 10, 10), "Padding around entire figure as (left, right, top, bottom) tuple (in pixels)"),
+
+    # Highlight regions
+    :highlight_regions => (nothing, "Highlight regions as a NamedTuple or Vector of NamedTuples. Each region: (x1, x2, y1=-Inf, y2=Inf, color=:gray, alpha=0.3)"),
 )
 
 """
@@ -278,6 +284,13 @@ function plot_erp(
         )
         if plot_kwargs[:interactive] && !isnothing(legend_refs)
             legend_refs[ax_idx] = leg
+        end
+    end
+
+    # Draw highlight regions on all axes (before axis properties so they render behind)
+    if !isnothing(plot_kwargs[:highlight_regions])
+        for ax in axes
+            _draw_highlight_regions!(ax, plot_kwargs[:highlight_regions])
         end
     end
 
@@ -659,6 +672,45 @@ end
 Single ErpData case - just return it.
 """
 _average_conditions(erp::ErpData) = erp
+
+
+"""
+    _draw_highlight_regions!(ax::Axis, regions)
+
+Draw shaded rectangular highlight regions on an axis.
+Accepts a single NamedTuple or a Vector of NamedTuples.
+Each region supports: x1, x2 (required), y1 (default -Inf), y2 (default Inf),
+color (default :gray), alpha (default 0.3).
+"""
+function _draw_highlight_regions!(ax::Axis, regions)
+    # Normalize single region to vector
+    region_list = regions isa AbstractVector ? regions : [regions]
+
+    for region in region_list
+        x1 = region.x1
+        x2 = region.x2
+        color = get(region, :color, :gray)
+        alpha = get(region, :alpha, 0.3)
+        has_y1 = haskey(region, :y1)
+        has_y2 = haskey(region, :y2)
+
+        if has_y1 || has_y2
+            # Explicit y bounds — use poly! for a bounded rectangle
+            y1 = get(region, :y1, -1e10)
+            y2 = get(region, :y2, 1e10)
+            rect = [
+                Point2f(x1, y1),
+                Point2f(x2, y1),
+                Point2f(x2, y2),
+                Point2f(x1, y2),
+            ]
+            poly!(ax, rect, color = (color, alpha), strokewidth = 0)
+        else
+            # No y bounds — use vspan! which spans full axis height without affecting ylim
+            vspan!(ax, x1, x2, color = (color, alpha))
+        end
+    end
+end
 
 """
     _compute_dataset_colors(color_val, n_datasets, n_channels, colormap, color_explicitly_set)

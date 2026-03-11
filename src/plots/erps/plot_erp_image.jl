@@ -563,7 +563,7 @@ function plot_erp_image(
     end
 
     _set_window_title("Makie")
-    return fig, axes
+    return (fig = fig, axes = axes)
 end
 
 """
