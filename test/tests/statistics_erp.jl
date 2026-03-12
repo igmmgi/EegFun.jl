@@ -326,12 +326,13 @@ end
             1.0,                   # p_value (placeholder)
             false,                 # is_significant
             :positive,             # polarity
+            [(1, 1), (1, 2), (1, 3)],  # members: Ch1 at t=1,2,3
         )
 
         updated, stats = EegFun._compute_cluster_statistics([cluster], t_matrix, [:Ch1, :Ch2])
 
         @test length(stats) == 1
-        @test stats[1] ≈ 6.0   # 3 time points × 2.0
+        @test stats[1] ≈ 6.0   # 3 member points × 2.0
         @test updated[1].cluster_stat ≈ 6.0
     end
 
@@ -366,7 +367,7 @@ end
     # 5. Inference helpers
     # ────────────────────────────────────────────────────────────
     @testset "_compute_cluster_pvalues" begin
-        cluster = EegFun.Cluster(1, [:Ch1], [1, 2], (0.0, 0.1), 5.0, 1.0, false, :positive)
+        cluster = EegFun.Cluster(1, [:Ch1], [1, 2], (0.0, 0.1), 5.0, 1.0, false, :positive, [(1, 1), (1, 2)])
         # With permutation max values all < 5.0, p should be very small
         perm_max = [1.0, 2.0, 3.0, 4.0, 2.5]
 

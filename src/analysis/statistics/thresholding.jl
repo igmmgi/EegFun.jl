@@ -161,8 +161,10 @@ function _compute_nonparametric_threshold_common(permutation_t_matrices::Array{F
             error("No valid t-values found in permutation distribution")
         end
 
-        # Compute (1 - alpha/2) percentile for two-tailed
-        percentile_level = 1.0 - (alpha / 2.0)
+        # Compute (1 - alpha) percentile for two-tailed on absolute values
+        # Since |t| is always positive, the (1-alpha) percentile of |t|
+        # corresponds to the (1-alpha/2) percentile of t (FieldTrip convention)
+        percentile_level = 1.0 - alpha
         threshold = quantile(all_t_values, percentile_level)
 
         return threshold, threshold
@@ -224,8 +226,9 @@ function _compute_nonparametric_threshold_individual(permutation_t_matrices::Arr
     thresholds_negative = Array{Float64,2}(undef, n_electrodes, n_time)
 
     if tail == :both
-        # Two-tailed: for each point, compute (1 - alpha/2) percentile
-        percentile_level = 1.0 - (alpha / 2.0)
+        # Two-tailed: for each point, compute (1 - alpha) percentile of |t|
+        # Since |t| is always positive, 1-alpha of |t| = 1-alpha/2 of raw t
+        percentile_level = 1.0 - alpha
 
         for i = 1:n_electrodes
             for j = 1:n_time

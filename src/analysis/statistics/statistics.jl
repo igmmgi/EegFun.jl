@@ -166,14 +166,9 @@ function permutation_test(
 
     for cluster in positive_clusters
         if cluster.is_significant
-            for electrode in cluster.electrodes
-                e_idx = findfirst(==(electrode), electrodes)
-                if !isnothing(e_idx)
-                    for t_idx in cluster.time_indices
-                        if 1 <= t_idx <= size(significant_mask_positive, 2)
-                            significant_mask_positive[e_idx, t_idx] = true
-                        end
-                    end
+            for (e_idx, t_idx) in cluster.members
+                if 1 <= e_idx <= size(significant_mask_positive, 1) && 1 <= t_idx <= size(significant_mask_positive, 2)
+                    significant_mask_positive[e_idx, t_idx] = true
                 end
             end
         end
@@ -181,14 +176,9 @@ function permutation_test(
 
     for cluster in negative_clusters
         if cluster.is_significant
-            for electrode in cluster.electrodes
-                e_idx = findfirst(==(electrode), electrodes)
-                if !isnothing(e_idx)
-                    for t_idx in cluster.time_indices
-                        if 1 <= t_idx <= size(significant_mask_negative, 2)
-                            significant_mask_negative[e_idx, t_idx] = true
-                        end
-                    end
+            for (e_idx, t_idx) in cluster.members
+                if 1 <= e_idx <= size(significant_mask_negative, 1) && 1 <= t_idx <= size(significant_mask_negative, 2)
+                    significant_mask_negative[e_idx, t_idx] = true
                 end
             end
         end
@@ -197,7 +187,7 @@ function permutation_test(
     # Assemble nested structs
     cluster_info = ClusterInfo(threshold_method, cluster_type, n_permutations)
 
-    test_info = TestInfo(prepared.analysis.design, df, threshold, :both, :cluster_permutation, cluster_info)
+    test_info = TestInfo(prepared.analysis.design, df, threshold, tail, :cluster_permutation, cluster_info)
 
     stat_matrix = StatMatrix(t_matrix, nothing)
     masks = Masks(significant_mask_positive, significant_mask_negative)

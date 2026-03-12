@@ -227,8 +227,13 @@ function _process_channel_summary_file(
         condition = condition_numbers[cond_idx]
 
         # Compute channel summary
-        summary_df =
-            channel_summary(data; sample_selection = sample_selection, interval_selection = interval_selection, channel_selection = channel_selection, include_extra = include_extra)
+        summary_df = channel_summary(
+            data;
+            sample_selection = sample_selection,
+            interval_selection = interval_selection,
+            channel_selection = channel_selection,
+            include_extra = include_extra,
+        )
 
         # Add metadata columns
         insertcols!(summary_df, 1, :file => splitext(filename)[1])
@@ -298,7 +303,14 @@ function channel_summary(
             input_path = joinpath(input_dir, file)
 
             result, summary_dfs = try
-                _process_channel_summary_file(input_path, condition_selection, sample_selection, interval_selection, channel_selection, include_extra)
+                _process_channel_summary_file(
+                    input_path,
+                    condition_selection,
+                    sample_selection,
+                    interval_selection,
+                    channel_selection,
+                    include_extra,
+                )
             catch e
                 @error "Error processing $file" exception = (e, catch_backtrace())
                 (BatchResult(false, file, "Exception: $(sprint(showerror, e))"), DataFrame[])

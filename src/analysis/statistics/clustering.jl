@@ -182,7 +182,8 @@ Create new Cluster objects with the specified polarity, copying all other fields
 function _set_cluster_polarity(clusters::Vector{Cluster}, polarity::Symbol)
     polarity in (:positive, :negative) || @minimal_error "polarity must be :positive or :negative"
     return [
-        Cluster(c.id, c.electrodes, c.time_indices, c.time_range, c.cluster_stat, c.p_value, c.is_significant, polarity) for c in clusters
+        Cluster(c.id, c.electrodes, c.time_indices, c.time_range, c.cluster_stat, c.p_value, c.is_significant, polarity, c.members) for
+        c in clusters
     ]
 end
 
@@ -263,12 +264,14 @@ function _find_clusters_connected_components(
             current_cluster_id += 1
             cluster_electrodes = Set{Symbol}()
             cluster_time_indices = Set{Int}()
+            cluster_members = Tuple{Int,Int}[]  # exact (electrode_idx, time_idx) pairs
 
             # BFS queue
             queue = [(e_idx, t_idx)]
             cluster_labels[e_idx, t_idx] = current_cluster_id
             push!(cluster_electrodes, electrodes[e_idx])
             push!(cluster_time_indices, t_idx)
+            push!(cluster_members, (e_idx, t_idx))
 
             # BFS traversal
             while !isempty(queue)
@@ -284,6 +287,7 @@ function _find_clusters_connected_components(
                         push!(queue, (n_e, n_t))
                         push!(cluster_electrodes, electrodes[n_e])
                         push!(cluster_time_indices, n_t)
+                        push!(cluster_members, (n_e, n_t))
                     end
                 end
             end
@@ -304,6 +308,7 @@ function _find_clusters_connected_components(
                 1.0,  # p_value - will be computed later
                 false,  # is_significant - will be set by caller (temporary)
                 :positive,  # polarity - will be set by caller (temporary)
+                cluster_members,
             )
             push!(clusters, cluster)
         end
@@ -398,14 +403,11 @@ function _compute_cluster_statistics(
     for cluster in clusters
         cluster_stat = 0.0
 
-        # Sum of t-values within cluster (this is what FieldTrip calls maxsum)
-        for electrode in cluster.electrodes
-            e_idx = electrode_to_idx[electrode]
-            for t_idx in cluster.time_indices
-                t_val = t_matrix[e_idx, t_idx]
-                if !isnan(t_val) && !isinf(t_val)
-                    cluster_stat += t_val
-                end
+        # Sum of t-values only at exact member points (FieldTrip maxsum)
+        for (e_idx, t_idx) in cluster.members
+            t_val = t_matrix[e_idx, t_idx]
+            if !isnan(t_val) && !isinf(t_val)
+                cluster_stat += t_val
             end
         end
 
@@ -422,6 +424,7 @@ function _compute_cluster_statistics(
                 cluster.p_value,
                 cluster.is_significant,
                 cluster.polarity,
+                cluster.members,
             )
             push!(updated_clusters, updated_cluster)
         end
