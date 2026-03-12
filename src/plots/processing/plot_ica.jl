@@ -196,6 +196,10 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
 
     # Get selected components using the helper function
     comps = get_selected_components(ica, component_selection)
+    if isempty(comps)
+        @minimal_warning "No components selected for topography plot"
+        return (fig = Figure(),)
+    end
 
     # Get colorbar settings to adjust grid if needed
     colorbar_plot = pop!(plot_kwargs, :colorbar_plot)
@@ -1969,10 +1973,11 @@ function plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df
     min_peak_ratio = 0.7  # Default if no components found
     max_std = 0.12        # Default if no components found
 
-    if any(ecg_df.is_ecg_artifact)
-        # Get actual values from data
-        min_peak_ratio = minimum(ecg_df.peak_ratio[ecg_df.is_ecg_artifact])
-        max_std = maximum(ecg_df.std_ibi_s[ecg_df.is_ecg_artifact])
+    if !isempty(identified_comps)
+        # Get actual values from identified components
+        ecg_identified = ecg_df[in.(ecg_df.Component, Ref(identified_comps)), :]
+        min_peak_ratio = minimum(ecg_identified.peak_ratio)
+        max_std = maximum(ecg_identified.std_ibi_s)
     end
 
     # Add threshold lines

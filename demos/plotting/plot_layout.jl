@@ -3,6 +3,9 @@
 
 using EegFun
 
+const DEMO_OUTPUT = "./demos/output/"
+mkpath(DEMO_OUTPUT)
+
 layout = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
 EegFun.polar_to_cartesian_xy!(layout, preserve_radial_distance = true);
 
@@ -18,11 +21,11 @@ EegFun.plot_layout_2d(layout; point_color = :red)
 EegFun.plot_layout_2d(layout; label_fontsize = 20, label_color = :grey)
 
 # Annotating plots with ROIs
-fig, ax = EegFun.plot_layout_2d(layout)
-EegFun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], roi_border_size = 0.05)
-EegFun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], roi_border_size = 0.1)
+result = EegFun.plot_layout_2d(layout)
+EegFun.add_topo_rois!(result.axes[1], layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], roi_border_size = 0.05)
+EegFun.add_topo_rois!(result.axes[1], layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], roi_border_size = 0.1)
 EegFun.add_topo_rois!(
-    ax,
+    result.axes[1],
     layout,
     [[:Fp1]],
     roi_border_size = 0.10,
@@ -32,7 +35,7 @@ EegFun.add_topo_rois!(
     roi_fillalpha = [0.2],
 )
 EegFun.add_topo_rois!(
-    ax,
+    result.axes[1],
     layout,
     [[:CPz, :C2, :FCz, :C1]],
     roi_border_size = 0.15,
@@ -49,8 +52,8 @@ EegFun.plot_layout_2d(layout, neighbours = true)
 
 # Print neighbours while 2D neighbours are still computed
 # (the 3D coordinate conversion below clears cached neighbours)
-EegFun.print_layout_neighbours(layout, "electrode_neighbours_1.toml")
-EegFun.print_layout_neighbours(layout.neighbours, "electrode_neighbours_2.toml")
+EegFun.print_layout_neighbours(layout, joinpath(DEMO_OUTPUT, "electrode_neighbours_1.toml"))
+EegFun.print_layout_neighbours(layout.neighbours, joinpath(DEMO_OUTPUT, "electrode_neighbours_2.toml"))
 
 # 3D layout with neighbours
 EegFun.get_neighbours_xyz!(layout, 0.5);
@@ -58,4 +61,4 @@ EegFun.plot_layout_3d(layout, neighbours = true)
 
 # save a basic figure
 # NB. for vector graphics, use CairoMakie
-# save("topo_roi.png", fig)
+# save("topo_roi.png", result.fig)

@@ -3,7 +3,7 @@
 > [!TIP]
 > Working in a good editor significantly improves the Julia experience. Choose whichever option fits your existing workflow best.
 
-While the Julia REPL is powerful on its own, most users pair it with an IDE that provides syntax highlighting, inline documentation, and — most importantly — tight REPL integration so that code can be sent from a script to a live Julia session with a single keypress.
+While the Julia REPL is powerful on its own, most users pair it with an IDE that provides syntax highlighting, inline documentation, and — most importantly — tight REPL integration so that code can be sent from a script to a live Julia session with a single keypress combination.
 
 ## VS Code/VSCodium
 
@@ -18,6 +18,25 @@ Install the **[Julia extension](https://marketplace.visualstudio.com/items?itemN
 - Workspace variable explorer and data viewer
 
 The extension can be installed from within the IDE via the **Extensions panel** (`Ctrl+Shift+X`) by searching for `Julia`.
+
+:::tip Windows users — shell mode fix
+If Julia's shell mode (`;` in the REPL) doesn't work inside VS Code, installing [Git Bash](https://git-scm.com/install/) and adding the following to your VS Code `settings.json` (open via `Ctrl+Shift+P` → *Preferences: Open User Settings (JSON)*) has been reported to fix the issue. This was found via trial and error and may not be the only/best solution:
+
+```json
+{
+    "terminal.integrated.env.windows": {
+        "SHELL": "C:\\Program Files\\Git\\bin\\bash.exe",
+        "Path": "${env:Path};C:\\Program Files\\Git\\usr\\bin"
+    },
+    "terminal.integrated.profiles.windows": {
+        "Git Bash": {
+            "path": "C:\\Program Files\\Git\\bin\\bash.exe"
+        }
+    },
+    "terminal.integrated.defaultProfile.windows": "Git Bash"
+}
+```
+:::
 
 ## Positron
 

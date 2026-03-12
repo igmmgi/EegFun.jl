@@ -143,7 +143,7 @@ EegFun.plot_erp_image(epochs, channel_selection = EegFun.channels([:Fp1]), plot_
 
 EegFun.plot_erp_image(epochs, layout = :single)
 
-fig, axes = EegFun.plot_erp_image(
+(; fig, axes) = EegFun.plot_erp_image(
     epochs,
     channel_selection = EegFun.channels([:PO7, :PO8]),
     layout = :single,
@@ -151,7 +151,7 @@ fig, axes = EegFun.plot_erp_image(
     colorrange = (-50, 50),
 )
 
-fig, axes = EegFun.plot_erp_image(epochs, layout = :topo, boxcar_average = 20, colorrange = (-50, 50))
+(; fig, axes) = EegFun.plot_erp_image(epochs, layout = :topo, boxcar_average = 20, colorrange = (-50, 50))
 ```
 
 :::

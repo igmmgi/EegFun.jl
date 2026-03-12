@@ -195,7 +195,14 @@ function read_all_data(path_pattern::String, participant_selection::Function = p
     end
     pattern   = basename(path_pattern)
     files     = _find_batch_files(pattern, input_dir, participant_selection)
-    return _read_all_data_core(EegData, files, input_dir)
+    data      = _read_all_data_core(EegData, files, input_dir)
+    # Narrow to concrete subtype if all elements share the same type
+    isempty(data) && return data
+    T = typeof(data[1])
+    if all(x -> x isa T, data)
+        return T[x for x in data]
+    end
+    return data
 end
 
 function read_all_data(::Type{T}, path_pattern::String, participant_selection::Function = participants()) where {T}
