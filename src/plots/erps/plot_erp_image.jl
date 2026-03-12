@@ -140,7 +140,8 @@ function plot_erp_image(
     plot_kwargs = _merge_plot_kwargs(PLOT_ERP_IMAGE_KWARGS, kwargs)
 
     # Use subset to get the data we want to plot (same pattern as other functions)
-    dat_subset = subset(dat; channel_selection = channel_selection, sample_selection = sample_selection, interval_selection = interval_selection)
+    dat_subset =
+        subset(dat; channel_selection = channel_selection, sample_selection = sample_selection, interval_selection = interval_selection)
 
     # Generate window title from dataset
     title_str = _generate_window_title(dat_subset)

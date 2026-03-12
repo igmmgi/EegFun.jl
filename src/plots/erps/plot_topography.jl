@@ -212,17 +212,14 @@ function _draw_highlight_channels!(ax::Axis, groups, layout::Layout)
         end
 
         if !isempty(xs)
-            scatter!(ax, xs, ys,
-                color = color,
-                marker = marker,
-                markersize = sz,
-                strokewidth = 1,
-                strokecolor = :black,
-            )
+            scatter!(ax, xs, ys, color = color, marker = marker, markersize = sz, strokewidth = 1, strokecolor = :black)
 
             if show_label
                 for (x, y, lbl) in zip(xs, ys, labels)
-                    text!(ax, x, y,
+                    text!(
+                        ax,
+                        x,
+                        y,
                         text = string(lbl),
                         align = (:center, :bottom),
                         fontsize = label_fontsize,

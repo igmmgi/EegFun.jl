@@ -654,6 +654,15 @@ function clear_neighbours!(layout::Layout)
     layout.criterion_type = nothing
 end
 
+"""Filter a Neighbours struct to only include channels in `keep_set`, recomputing IDW weights."""
+function _subset_neighbours(nb::Neighbours, keep_set::Set{Symbol})
+    keep = [i for i in eachindex(nb.channels) if nb.channels[i] in keep_set]
+    isempty(keep) && return Neighbours(Symbol[], Float64[], Float64[])
+    d = nb.distances[keep]
+    inv_d = 1.0 ./ max.(d, 1e-6)
+    return Neighbours(nb.channels[keep], d, inv_d ./ sum(inv_d))
+end
+
 """
     _format_electrode(io, electrode, neighbours)
 
@@ -927,13 +936,18 @@ function subset_layout!(layout::Layout; channel_selection = channels())
     # Filter the layout data to keep only selected channels
     layout.data = DataFrames.filter(:label => in(selected_channels), layout.data)
 
-    # Clear any cached neighbour information since channels have changed
-    if has_neighbours(layout)
-        @info "subset_layout!: Clearing neighbours since channels have changed"
-        clear_neighbours!(layout)
+    n_channels_after = length(selected_channels)
+
+    # Subset neighbour information to remaining channels (no-op when all kept)
+    if has_neighbours(layout) && n_channels_after < n_channels_before
+        remaining = Set(selected_channels)
+        layout.neighbours = OrderedDict{Symbol,Neighbours}(
+            ch => _subset_neighbours(get(layout.neighbours, ch, Neighbours(Symbol[], Float64[], Float64[])), remaining) for
+            ch in selected_channels
+        )
     end
 
-    @info "subset_layout!: Subset layout from $(n_channels_before) to $(length(selected_channels)) channels"
+    @info "subset_layout!: Subset layout from $n_channels_before to $n_channels_after channels"
 end
 
 """
@@ -949,8 +963,8 @@ Create a subset copy of a Layout object using channel selection predicates.
 - `Layout`: A new subset layout object
 """
 function subset_layout(layout::Layout; channel_selection = channels())
-    # Create a copy of the layout and apply subsetting
-    subset_layout = Layout(copy(layout.data), nothing, nothing, nothing)
-    subset_layout!(subset_layout, channel_selection = channel_selection)
-    return subset_layout
+    # Create a copy of the layout preserving neighbours and criterion
+    new_layout = copy(layout)
+    subset_layout!(new_layout, channel_selection = channel_selection)
+    return new_layout
 end

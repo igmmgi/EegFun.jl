@@ -103,6 +103,7 @@ Stores information about a single cluster found in the thresholded data.
 - `p_value::Float64`: P-value from permutation test
 - `is_significant::Bool`: Whether cluster is significant (p < alpha)
 - `polarity::Symbol`: `:positive` or `:negative`
+- `members::Vector{Tuple{Int,Int}}`: Exact (electrode_index, time_index) pairs in this cluster
 """
 struct Cluster
     id::Int
@@ -113,6 +114,7 @@ struct Cluster
     p_value::Float64
     is_significant::Bool
     polarity::Symbol
+    members::Vector{Tuple{Int,Int}}  # (electrode_idx, time_idx) pairs
 end
 
 """

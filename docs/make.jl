@@ -89,6 +89,7 @@ pages = [
             "Signal Example (Convolution)" => "demos/teaching/signal_example_convolution.md",
             "Signal Example (Spectrum)" => "demos/teaching/signal_example_spectrum.md",
             "Signal Example (Time-Frequency)" => "demos/teaching/signal_example_tf.md",
+            "Signal Example (Decoding)" => "demos/teaching/signal_example_decoding.md",
             "Simulate ERP" => "demos/teaching/simulate_erp.md",
         ],
         "Specialized Plotting" => [

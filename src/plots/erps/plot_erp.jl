@@ -15,7 +15,10 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :yreversed => (false, "Whether to reverse the y-axis"),
     :xticks => (nothing, "X-axis tick positions (e.g., -0.1:0.1:0.8 or [0, 0.2, 0.4]). If nothing, automatically determined"),
     :yticks => (nothing, "Y-axis tick positions (e.g., -4:2:4 or [-2, 0, 2]). If nothing, automatically determined"),
-    :time_unit => (:s, "Time unit for x-axis display (:s or :ms). Only affects axis labels and tick formatting — all intervals remain in seconds."),
+    :time_unit => (
+        :s,
+        "Time unit for x-axis display (:s or :ms). Only affects axis labels and tick formatting — all intervals remain in seconds.",
+    ),
 
     # Title
     :title => ("", "Plot title"),
@@ -68,7 +71,10 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :figure_padding => ((10, 10, 10, 10), "Padding around entire figure as (left, right, top, bottom) tuple (in pixels)"),
 
     # Highlight regions
-    :highlight_regions => (nothing, "Highlight regions as a NamedTuple or Vector of NamedTuples. Each region: (x1, x2, y1=-Inf, y2=Inf, color=:gray, alpha=0.3)"),
+    :highlight_regions => (
+        nothing,
+        "Highlight regions as a NamedTuple or Vector of NamedTuples. Each region: (x1, x2, y1=-Inf, y2=Inf, color=:gray, alpha=0.3)",
+    ),
 )
 
 """
@@ -327,7 +333,14 @@ function plot_erp(
         # Set up channel selection events for topo and grid layouts
         if plot_layout.type in (:topo, :grid)
             channel_rc_handler = (selected_chs, data) -> _show_channel_average_menu!(selected_chs, data, condition_checked_ref)
-            _setup_channel_selection_events!(fig, selection_state, plot_layout, dat_subset, axes; channel_right_click_handler = channel_rc_handler)
+            _setup_channel_selection_events!(
+                fig,
+                selection_state,
+                plot_layout,
+                dat_subset,
+                axes;
+                channel_right_click_handler = channel_rc_handler,
+            )
         end
 
     end
@@ -688,10 +701,7 @@ function _show_channel_average_menu!(selected_channels, data, condition_checked_
 
     btn = Button(menu_fig[1, 1], label = "Plot Average of Selected ($(length(selected_channels)) ch)")
     on(btn.clicks) do _
-        plot_erp(data_to_plot;
-            channel_selection = channels(selected_channels),
-            average_channels = true,
-        )
+        plot_erp(data_to_plot; channel_selection = channels(selected_channels), average_channels = true)
     end
 
     new_screen = GLMakie.Screen(size = (300, 150))
@@ -723,12 +733,7 @@ function _draw_highlight_regions!(ax::Axis, regions)
             # Explicit y bounds — use poly! for a bounded rectangle
             y1 = get(region, :y1, -1e10)
             y2 = get(region, :y2, 1e10)
-            rect = [
-                Point2f(x1, y1),
-                Point2f(x2, y1),
-                Point2f(x2, y2),
-                Point2f(x1, y2),
-            ]
+            rect = [Point2f(x1, y1), Point2f(x2, y1), Point2f(x2, y2), Point2f(x1, y2)]
             poly!(ax, rect, color = (color, alpha), strokewidth = 0)
         else
             # No y bounds — use vspan! which spans full axis height without affecting ylim

@@ -60,6 +60,7 @@ function _compute_cluster_pvalues(
             p_value,
             is_significant,
             cluster.polarity,
+            cluster.members,
         )
         push!(updated_clusters, updated_cluster)
     end
