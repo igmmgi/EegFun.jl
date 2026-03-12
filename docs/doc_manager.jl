@@ -156,33 +156,35 @@ function check_doc_coverage(project_root::String; skip_build_check::Bool = false
                 content = read(file, String)
                 lines = split(content, '\n')
 
-                # Count functions and docstrings
-                file_functions = 0
-                file_documented = 0
-                file_doc_chars = 0
+                # Track functions by name: name => (has_docstring, doc_chars)
+                # This groups multiple-dispatch methods so a function is counted
+                # as documented if ANY of its methods has a docstring.
+                file_func_names = Dict{String,@NamedTuple{has_doc::Bool, doc_chars::Int}}()
 
                 i = 1
                 while i <= length(lines)
                     line = strip(lines[i])
 
-                    # Look for function definitions
-                    if occursin(r"^function\s+\w+", line) || occursin(r"^\w+\(.*\)\s*=", line)
-                        file_functions += 1
-                        total_functions += 1
+                    # Extract function name from definitions
+                    fname_match = match(r"^function\s+(\w+)", line)
+                    if fname_match === nothing
+                        fname_match = match(r"^(\w+)\(.*\)\s*=", line)
+                    end
+
+                    if fname_match !== nothing
+                        fname = fname_match.captures[1]
 
                         # Check if there's a docstring above (look back up to 3 lines)
+                        this_doc_chars = 0
                         docstring_found = false
                         for j = max(1, i - 3):i-1
                             if j <= length(lines)
                                 prev_line = strip(lines[j])
                                 if startswith(prev_line, "\"\"\"") || (startswith(prev_line, "\"") && !endswith(prev_line, "\""))
-                                    file_documented += 1
-                                    documented_functions += 1
                                     docstring_found = true
 
                                     # Count docstring characters
                                     if startswith(prev_line, "\"\"\"")
-                                        # Multi-line docstring
                                         doc_start = j
                                         doc_end = j
                                         for k = j+1:length(lines)
@@ -192,21 +194,38 @@ function check_doc_coverage(project_root::String; skip_build_check::Bool = false
                                             end
                                         end
                                         for k = doc_start:doc_end
-                                            file_doc_chars += length(strip(lines[k]))
+                                            this_doc_chars += length(strip(lines[k]))
                                         end
                                     else
-                                        # Single line docstring
-                                        file_doc_chars += length(prev_line)
+                                        this_doc_chars += length(prev_line)
                                     end
                                     break
                                 end
                             end
                         end
+
+                        # Update: a function is documented if ANY method has a docstring
+                        if haskey(file_func_names, fname)
+                            prev = file_func_names[fname]
+                            file_func_names[fname] = (
+                                has_doc = prev.has_doc || docstring_found,
+                                doc_chars = prev.doc_chars + this_doc_chars,
+                            )
+                        else
+                            file_func_names[fname] = (has_doc = docstring_found, doc_chars = this_doc_chars)
+                        end
                     end
                     i += 1
                 end
 
-                if file_documented > 0
+                file_functions = length(file_func_names)
+                file_documented = count(v -> v.has_doc, values(file_func_names))
+                file_doc_chars = sum(v -> v.doc_chars, values(file_func_names); init = 0)
+
+                total_functions += file_functions
+                documented_functions += file_documented
+
+                if file_functions > 0
                     files_with_docs += 1
                     total_docstring_chars += file_doc_chars
                     println("  $(basename(file)): $file_documented/$file_functions functions documented")

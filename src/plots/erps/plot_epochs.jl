@@ -426,6 +426,7 @@ function plot_epochs(
     return (fig = result.fig, axes = result.axes)
 end
 
+"""Plot single-channel epoch traces (NaN-separated trials) onto an axis."""
 function _plot_epochs!(ax, dat, channels, plot_kwargs; label::Union{String,Nothing} = nothing, line_refs = nothing)::Tuple{Lines,Observable}
 
     @info "plot_epochs: $(_print_vector(channels))"
@@ -469,6 +470,7 @@ function _plot_epochs!(ax, dat, channels, plot_kwargs; label::Union{String,Nothi
 end
 
 
+"""Overlay the trial-averaged ERP waveform on an existing axis."""
 function _plot_erp_average!(
     ax,
     erp_dat::ErpData,
@@ -812,7 +814,7 @@ function _store_avg_line_ref!(ax_line_refs, cond_idx, ch, avg_line, y_obs)
     ax_line_refs[cond_idx][ch][:average] = (avg_line, y_obs)
 end
 
-# Helper to concatenate trials with NaN separators
+"""Concatenate trial data for one channel into a single NaN-separated vector."""
 function _concatenate_trials(trials, ch, time_vec)
     m = length(trials)
     n = length(time_vec)
@@ -1073,12 +1075,14 @@ end
 # RIGHT-CLICK HANDLERS FOR EPOCHS
 # =============================================================================
 
+"""Dispatch right-click to the epochs context menu if inside the selection."""
 function _handle_epochs_right_click!(selection_state, mouse_x, data, condition_checked_ref)
     if selection_state.visible[] && _is_within_selection(selection_state, mouse_x)
         _show_epochs_context_menu!(selection_state, data, condition_checked_ref)
     end
 end
 
+"""Show a context menu with topoplot options for the current epoch selection."""
 function _show_epochs_context_menu!(selection_state, data, condition_checked_ref)
 
     menu_fig = Figure()

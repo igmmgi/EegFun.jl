@@ -133,6 +133,7 @@ function signal_example_ica()
     #
     # sig_freq controls the oscillation frequency inside the S1 Gabor envelopes.
     #
+    """Generate three synthetic source signals: oscillatory bursts, blink artifacts, and muscle burst."""
     function make_sources(freq, noise)
         # S1: short oscillatory bursts (Gabor: sinusoid × Gaussian envelope)
         s1 = zeros(n)
@@ -173,6 +174,7 @@ function signal_example_ica()
     # Unmixing: R₁₂ᵀ(φ) · R₁₃ᵀ(ψ) · R₂₃ᵀ(χ) · M
     # When φ=α, ψ=β, χ=γ → perfect recovery.
     #
+    """Apply 3D mixing rotation R₂₃(γ) · R₁₃(β) · R₁₂(α) to three source signals."""
     function apply_rotation_3d(x, y, z, α_deg, β_deg, γ_deg)
         α, β, γ = deg2rad(α_deg), deg2rad(β_deg), deg2rad(γ_deg)
         x1 = cos(α) .* x .- sin(α) .* y
@@ -187,6 +189,7 @@ function signal_example_ica()
         return x3, y3, z3
     end
 
+    """Apply inverse 3D rotation to recover source signals from mixtures."""
     function apply_unmixing_3d(x, y, z, φ_deg, ψ_deg, χ_deg)
         φ, ψ, χ = deg2rad(φ_deg), deg2rad(ψ_deg), deg2rad(χ_deg)
         x1 = x
@@ -202,6 +205,7 @@ function signal_example_ica()
     end
 
     # ── Excess kurtosis ────────────────────────────────────────────────────────
+    """Compute excess kurtosis (0 for Gaussian, >0 for super-Gaussian signals)."""
     function kurtosis_excess(x)
         μ = mean(x)
         σ = std(x)
@@ -220,6 +224,7 @@ function signal_example_ica()
     rec_title     = Observable("Recovered Components  ·  φ=25°  ψ=15°  χ=20°")
 
     # ── Main update ────────────────────────────────────────────────────────────
+    """Recompute sources, mixtures, and recovered signals from current parameter values."""
     function update()
         s1, s2, s3 = make_sources(sig_freq[], noise_lvl[])
         m1, m2, m3 = apply_rotation_3d(s1, s2, s3, mix_α[], mix_β[], mix_γ[])
@@ -266,6 +271,7 @@ function signal_example_ica()
     col_c = RGBf(0.18, 0.63, 0.34)   # green — S3/M3/C3
 
     # ── Axis helpers ───────────────────────────────────────────────────────────
+    """Create a time-series Axis in the specified row."""
     function signal_axis(row, title_obs)
         Axis(
             fig[row, 1];
@@ -280,6 +286,7 @@ function signal_example_ica()
         )
     end
 
+    """Create a scatter-plot Axis for pairwise joint distributions."""
     function scatter_axis(row, col, title_str, xl, yl)
         Axis(
             fig[row, col];
@@ -360,6 +367,7 @@ function signal_example_ica()
     # ── Controls ───────────────────────────────────────────────────────────────
     ctrl = GridLayout(fig[4, 1:4]; colgap = 12)
 
+    """Create a slider with a header label above and a value label below."""
     function labelled_slider(parent, col, header, range_vals, startval, fmt)
         Label(parent[1, col], header; fontsize = ctrl_sz, halign = :center)
         sl  = Slider(parent[2, col]; range = range_vals, startvalue = startval)
@@ -421,6 +429,7 @@ function signal_example_ica()
     # After running Infomax/Extended, a kurtosis grid search finds the nearest
     # rotation angles so the sliders give visual feedback. The displayed signals
     # still use the Infomax W matrix (stored in ica_rec[]) not the rotation.
+    """Run Infomax ICA, store the unmixing result, and find closest rotation angles for slider feedback."""
     function _run_ica_and_apply(ica_fn)
         dat_mat      = vcat(mix1[]', mix2[]', mix3[]')   # 3 × n
         dummy_df     = DataFrame(label = [:M1, :M2, :M3], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0])
@@ -439,6 +448,7 @@ function signal_example_ica()
         # These are shown on the sliders as visual feedback — the actual
         # recovery uses the Infomax W matrix stored in ica_rec[].
         m1v, m2v, m3v = mix1[], mix2[], mix3[]
+        """Sum of absolute excess kurtosis across three unmixed signals for a given rotation."""
         function kurtosis_score(α, β, γ)
             c1t, c2t, c3t = apply_unmixing_3d(m1v, m2v, m3v, α, β, γ)
             return abs(kurtosis_excess(c1t)) + abs(kurtosis_excess(c2t)) + abs(kurtosis_excess(c3t))

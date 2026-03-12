@@ -310,7 +310,7 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
 end
 
 
-# Create a state structure to hold the visualization state
+"""Mutable state for the interactive ICA component activation viewer."""
 mutable struct IcaComponentState
     # Data
     dat::ContinuousData
@@ -701,8 +701,7 @@ function _plot_topo_on_axis!(
 
 end
 
-# Create a simpler override specifically for the component viewer
-# Internal function for viewer integration
+"""Plot a single ICA topoplot inside the component activation viewer."""
 function _plot_ica_topo_in_viewer!(
     fig,
     topo_ax,
@@ -775,6 +774,7 @@ function _plot_ica_topo_in_viewer!(
     return co
 end
 
+"""Create time-series and topoplot axes for each visible component."""
 function _create_component_activation_plots!(fig, state)
 
     # Number of plots
@@ -919,7 +919,7 @@ function _create_component_activation_plots!(fig, state)
     end
 end
 
-# Update add_navigation_controls! to include the global scale checkbox
+"""Add navigation buttons, component textbox, and scale checkboxes."""
 function _add_navigation_controls!(fig, state)
 
     # Add navigation buttons below topo plots in column 1
@@ -999,7 +999,7 @@ end
 
 
 
-# Update add_navigation_sliders! to match new layout
+"""Add a position slider for x-axis scrolling."""
 function _add_navigation_sliders!(fig, state)
     # Create new row for position slider below the navigation buttons
     slider_row = state.n_visible_components + 3  # Move slider to a new row
@@ -1022,7 +1022,7 @@ function _add_navigation_sliders!(fig, state)
     end
 end
 
-# Helper function to update view range (similar to plot_databrowser style)
+"""Update `xrange` and all axis x-limits from a new start position."""
 function _update_view_range!(state, start_pos)
     # Ensure we stay within data bounds
     if start_pos + state.window_size > length(state.dat.data.time)
@@ -1074,7 +1074,7 @@ function _update_view_range!(state, start_pos)
     end
 end
 
-# Update _add_channel_menu! to match new layout
+"""Add a channel-overlay dropdown menu to the viewer."""
 function _add_channel_menu!(fig, state)
     # Create a menu layout in column 2
     menu_row = state.n_visible_components + 2  # Keep menu in its own row
@@ -1093,7 +1093,7 @@ function _add_channel_menu!(fig, state)
     return menu_layout
 end
 
-# Helper function to update channel selection (matches databrowser pattern)
+"""Set the channel overlay to the selected column (line or boolean)."""
 function _update_channel_selection!(state, selected)
     # Clear previous channel visualizations from all axes
     for i = 1:state.n_visible_components
@@ -1121,7 +1121,7 @@ function _update_channel_selection!(state, selected)
     end
 end
 
-# Helper function to add boolean indicators (matching databrowser pattern)
+"""Draw vertical red lines at boolean-true samples on each component axis."""
 function _add_boolean_indicators!(state, channel_sym)
     # For each component axis, create a vertical line at each true position
     for i = 1:state.n_visible_components
@@ -1225,7 +1225,7 @@ function _update_artifact_textbox!(state)
 end
 
 
-# Setup keyboard interactions
+"""Register keyboard shortcuts for scrolling, zooming, and paging."""
 function _setup_keyboard_interactions!(fig, state)
 
     on(events(fig).keyboardbutton) do event
@@ -1315,7 +1315,7 @@ function _setup_keyboard_interactions!(fig, state)
     end
 end
 
-# Update component data when navigating
+"""Refresh time-series and topoplot data after component navigation or scale change."""
 function _update_components!(state)
     if length(state.components) == size(state.component_data, 1)
         num_plots = state.n_visible_components
@@ -1407,7 +1407,7 @@ end
 
 
 
-# Internal function to prepare ICA topoplot data (interpolation only)
+"""Interpolate ICA mixing weights onto a 2-D grid for topographic display."""
 function _prepare_ica_topo_data(ica::InfoIca, comp_idx::Int, method::Symbol, gridscale::Int)
     supported_methods =
         [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
@@ -1428,7 +1428,7 @@ function _prepare_ica_topo_data(ica::InfoIca, comp_idx::Int, method::Symbol, gri
     end
 end
 
-# Internal function to calculate ICA topoplot levels (global or local)
+"""Calculate contour levels — global across all components or local per component."""
 function _calculate_ica_topo_levels(
     all_data::Vector{Matrix{Float64}},
     use_global_scale::Bool,
@@ -1459,7 +1459,7 @@ function _calculate_ica_topo_levels(
     end
 end
 
-# Helper function to get component index based on state
+"""Map plot-row index `i` to the actual component number."""
 function _get_component_index(state, i::Int)
     if length(state.components) == size(state.component_data, 1)
         return state.comp_start[] + i - 1

@@ -54,17 +54,14 @@ fast machine code on first use — but in Julia the compilation applies to the
 entire language rather than individual decorated functions. This "compilation
 latency" has improved substantially in recent Julia versions (1.9+ introduced
 package images, and 1.12 brings further improvements), but it remains more
-noticeable than starting a MATLAB or Python session. In practice, most users
+noticeable than starting a Python or R session. In practice, most users
 start a Julia session once and keep it running.
 
 **Smaller ecosystem.**
 The Julia ecosystem for EEG is young compared to MATLAB and
 Python. Packages like EEGLAB (2004), FieldTrip (2011), and MNE-Python (2014)
 have over a decade of development, thousands of users, and extensive
-functionality that EegFun.jl does not yet match. There are also fewer Stack
-Overflow answers and fewer colleagues down the hall who can help debug your
-code. This is improving steadily (and is part of the motivation for
-EegFun.jl), but it is an honest limitation.
+functionality that EegFun.jl does not yet match.
 
 **Tooling is still maturing.**
 IDE support, debugging, and profiling tools exist (VS Code with the Julia
@@ -80,6 +77,4 @@ is a one-off cost. Subsequent `using EegFun` calls in new sessions are
 considerably faster, but still slower than `import mne` in Python.
 
 > [!TIP]
-> If you are coming from MATLAB or Python, the
-> [MATLAB–Python–Julia cheat sheet](https://cheatsheets.quantecon.org/) is a
-> helpful reference for translating familiar idioms.
+> If you are coming from MATLAB or Python, the [MATLAB-Python-Julia cheat sheet](https://cheatsheets.quantecon.org/) is a helpful reference for translating familiar idioms.

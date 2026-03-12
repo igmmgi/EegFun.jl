@@ -106,6 +106,7 @@ function _render_topo_surface!(
     return co, x_bounds, y_bounds
 end
 
+"""Internal topography renderer: validates layout, subsets data, and calls `_render_topo_surface!`."""
 function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout; kwargs...)
 
     # Validate that layout has non-zero coordinates for spatial interpolation
@@ -269,6 +270,7 @@ function plot_topography(filepath::String; input_dir::String = pwd(), participan
         return results
     end
 end
+"""Create a topographic plot for a single `SingleDataFrameEeg`; supports `n_topo` time bins."""
 function plot_topography(
     dat::SingleDataFrameEeg;
     channel_selection::Function = channels(),
@@ -361,6 +363,7 @@ function plot_topography(
     return (fig = fig, axes = [ax])
 end
 
+"""In-place topographic plot: subset data and render onto an existing figure/axis."""
 function plot_topography!(
     fig,
     ax,
@@ -378,6 +381,7 @@ function plot_topography!(
     _plot_topography!(fig, ax, dat_subset.data, dat_subset.layout; plot_kwargs...)
 
 end
+"""Create a multi-panel topographic plot for a vector of datasets, one subplot per condition."""
 function plot_topography(
     dat::Vector{<:SingleDataFrameEeg};
     channel_selection::Function = channels(),
@@ -610,6 +614,7 @@ function plot_topography(
     _set_window_title("Makie")
     return (fig = fig, axes = axes)
 end
+"""Average epochs per condition, then delegate to the `Vector{ErpData}` topography method."""
 function plot_topography(dat::Vector{EpochData}; kwargs...)
     # Average trials within each condition to create ERPs
     erps = average_epochs.(dat)
@@ -617,6 +622,7 @@ function plot_topography(dat::Vector{EpochData}; kwargs...)
     return plot_topography(erps; kwargs...)
 end
 
+"""Plot a single epoch from each `EpochData` in the vector."""
 function plot_topography(dat::Vector{EpochData}, epoch::Int; kwargs...)
     @info "Plotting epoch $(epoch) for each dataset in the vector"
     plot_topography.(dat, Ref(epoch))
@@ -624,6 +630,7 @@ end
 
 
 
+"""In-place topographic plot for a specific epoch of multi-epoch data."""
 function plot_topography!(
     fig,
     ax,
@@ -645,6 +652,7 @@ function plot_topography!(
     )
 end
 
+"""Create a topographic plot for a specific epoch of `MultiDataFrameEeg` data."""
 function plot_topography(
     dat::MultiDataFrameEeg,
     epoch::Int;
@@ -1038,8 +1046,8 @@ end
 # Pre-computed factors for m=4, cached to avoid recomputation
 const _G_FACTORS_CACHE = Dict{Int,Vector{Float64}}()
 
+"""Get pre-computed Legendre factors for g-function calculation (cached)."""
 function _get_g_factors(n_legendre_terms::Int = 15)
-    """Get pre-computed factors for g-function calculation (cached)."""
     if !haskey(_G_FACTORS_CACHE, n_legendre_terms)
         factors = [(2 * n + 1) / (n^4 * (n + 1)^4 * 4 * π) for n = 1:n_legendre_terms]
         _G_FACTORS_CACHE[n_legendre_terms] = [0.0; factors]  # Prepend 0.0 for n=0
@@ -1048,12 +1056,8 @@ function _get_g_factors(n_legendre_terms::Int = 15)
 end
 
 
-# MNE-Python's exact G matrix calculation for EEG topography (m=4)
+"""Calculate spherical spline G matrix between points on a sphere (m=4, MNE-Python-compatible)."""
 function _calc_g_matrix(cosang::Matrix{Float64}, n_legendre_terms::Int = 15)
-    """Calculate spherical spline G matrix between points on a sphere.
-
-    This is the exact implementation from MNE-Python, optimized for EEG topography (m=4).
-    """
     factors = _get_g_factors(n_legendre_terms)
 
     # Use Legendre polynomial evaluation for the entire matrix
@@ -1119,6 +1123,7 @@ mutable struct TopoSelectionState
     axes::Vector{Axis}  # All axes that share this selection state
     time_interval::Interval  # Time interval/window that the topography represents
 
+    """Construct a `TopoSelectionState` for the given axes."""
     function TopoSelectionState(axes::Vector{Axis}, time_interval::Interval = times())
         n_axes = length(axes)
         # Initialize with empty lists for multiple selections

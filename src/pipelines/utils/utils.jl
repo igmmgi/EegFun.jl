@@ -1,7 +1,7 @@
-# Helper functions used during preprocess to make logging easier/prettier
+"""Build a Symbol like `:is_extreme_value_100` from a base string and criterion."""
 _flag_symbol(base::AbstractString, criterion) = Symbol("$(base)_$(criterion)")
 
-# Check that a list of file paths all exist, warning for any that don't.
+"""Return `true` if all paths in `files` exist, warning for each missing file."""
 function check_files_exist(files::Vector{String})
     all_files_exist = true
     for fname in files
@@ -14,6 +14,7 @@ function check_files_exist(files::Vector{String})
 end
 
 
+"""Center a title between dashes for log formatting."""
 function _center_title(title::String, width::Int)
     total_dashes = width - length(title) - 2  # 2 spaces around title
     left_dashes = div(total_dashes, 2)
@@ -21,13 +22,16 @@ function _center_title(title::String, width::Int)
     return "-"^left_dashes * " $title " * "-"^right_dashes
 end
 
+"""Return a triple-line section header with `title` centered between dashes."""
 function section(title::String; width::Int = 80)
     dash_line = "-"^width
     middle_line = _center_title(title, width)
     return "\n$dash_line\n$middle_line\n$dash_line"
 end
 
+"""Return a single-line sub-section header."""
 subsection(title::String; width::Int = 80) = "\n" * _center_title(title, width)
+"""Return a `# Title` sub-sub-section header."""
 subsubsection(title::String) = "\n# " * title
 
 # =============================================================================
@@ -91,9 +95,10 @@ struct ChannelRepairInfo
     epochs::Vector{EpochRepairInfo}
 end
 
-# Convenience constructors
+"""Create an empty `ChannelRepairInfo` with no repairs."""
 ChannelRepairInfo() = ChannelRepairInfo(nothing, EpochRepairInfo[])
 
+"""Pretty-print continuous-level channel repair info."""
 function Base.show(io::IO, info::ContinuousRepairInfo)
     println(io, "ContinuousRepairInfo: $(info.name)")
     println(io, "  Method: $(info.method)")
@@ -101,6 +106,7 @@ function Base.show(io::IO, info::ContinuousRepairInfo)
     println(io, "  Channels skipped: $(length(info.skipped)) - $(info.skipped)")
 end
 
+"""Pretty-print epoch-level channel repair info."""
 function Base.show(io::IO, info::EpochRepairInfo)
     println(io, "EpochRepairInfo:")
     println(io, "  Condition: $(info.condition) ($(info.condition_name))")
@@ -118,6 +124,7 @@ function Base.show(io::IO, info::EpochRepairInfo)
     end
 end
 
+"""Pretty-print combined channel repair info (continuous + epoch)."""
 function Base.show(io::IO, info::ChannelRepairInfo)
     println(io, "ChannelRepairInfo:")
     if !isnothing(info.continuous)
@@ -153,8 +160,10 @@ struct ArtifactInfo <: EegFunData
     ica_components::Union{ArtifactComponents,Nothing}
 end
 
+"""Create an empty `ArtifactInfo` with no repairs, rejections, or ICA."""
 ArtifactInfo() = ArtifactInfo(ContinuousRepairInfo[], EpochRejectionInfo[], nothing)
 
+"""Pretty-print artifact info summary (repairs, rejections, ICA components)."""
 function Base.show(io::IO, info::ArtifactInfo)
     println(io, "ArtifactInfo:")
     println(io, "  Continuous repairs: $(length(info.continuous_repairs))")

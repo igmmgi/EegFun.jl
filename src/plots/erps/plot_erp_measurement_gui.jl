@@ -183,6 +183,7 @@ function plot_erp_measurement_gui(
     analysis_band_plots = AbstractPlot[]
     baseline_band_plots = AbstractPlot[]
 
+    """Draw a colored interval band (poly + dashed vlines) on the axis."""
     function _draw_interval_band!(plots_list, interval, band_color, edge_color)
         for p in plots_list
             delete!(ax, p)
@@ -203,11 +204,14 @@ function plot_erp_measurement_gui(
         push!(plots_list, p_band, p_left, p_right)
     end
 
+    """Redraw the analysis (blue) interval band."""
     update_analysis_band!(mw) = _draw_interval_band!(analysis_band_plots, mw, :blue, :blue)
+    """Redraw the baseline (gray) interval band."""
     update_baseline_band!(bw) = _draw_interval_band!(baseline_band_plots, bw, :gray, :gray)
 
     # Result markers visualization (vertical for latencies, horizontal for amplitudes)
     marker_plots = AbstractPlot[]
+    """Add / clear marker lines (latency → vlines, amplitude → hlines) on the axis."""
     function update_result_markers!(results, show)
         # Clear existing markers
         for p in marker_plots
@@ -280,6 +284,7 @@ function plot_erp_measurement_gui(
     drag_offset = Ref(0.0)  # offset from mouse to interval start (for middle drag)
 
     # Hit detection: find which drag target (if any) is at the mouse x position
+    """Hit-test the mouse x position against interval edges and bands."""
     function _find_drag_target(mouse_x)
         time_range = time_max - time_min
         tolerance = 0.02 * time_range  # 2% of time range

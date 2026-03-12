@@ -147,6 +147,7 @@ function signal_example_decoding()
     status_text = Observable("Press [Decode!] to classify")
 
     # ── Generate synthetic data ──────────────────────────────────────────────
+    """Generate synthetic multi-channel EEG trials for conditions A and B and update ERP plots."""
     function generate_data()
         n_ch  = n_channels[]
         n_tr  = n_trials[]
@@ -202,6 +203,7 @@ function signal_example_decoding()
     # ── Lightweight decoding ─────────────────────────────────────────────────
     is_decoding = Ref(false)  # guard against overlapping runs
 
+    """Run time-resolved SVM classification with k-fold cross-validation across iterations."""
     function run_decoding(data_a, data_b)
         n_ch   = size(data_a, 1)
         n_tr_a = size(data_a, 3)
@@ -321,6 +323,7 @@ function signal_example_decoding()
     # ── Controls ─────────────────────────────────────────────────────────────
     ctrl = GridLayout(fig[3, 1], colgap = 16)
 
+    """Create a slider with a header label above and a value label below."""
     function labelled_slider(parent, col, header, range_vals, startval, fmt)
         Label(parent[1, col], header, fontsize = ctrl_sz, halign = :center)
         sl  = Slider(parent[2, col], range = range_vals, startvalue = startval)

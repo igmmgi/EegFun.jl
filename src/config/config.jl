@@ -26,18 +26,23 @@ end
 # PARAMETER CONSTRUCTOR HELPERS
 # =============================================================================
 
-# Helper to create ConfigParameter with common defaults
+"""Create a `ConfigParameter{T}` with common defaults."""
 function _param(::Type{T}, desc, default = nothing; allowed = nothing, min = nothing, max = nothing) where {T}
     ConfigParameter{T}(description = desc, default = default, allowed = allowed, min = min, max = max)
 end
 
+"""Create a string (or string-vector) parameter."""
 string_param(desc, default = ""; allowed = nothing) = _param(Union{Vector{String},String}, desc, default, allowed = allowed)
+"""Create a simple `String` parameter."""
 simple_string_param(desc, default = ""; allowed = nothing) = _param(String, desc, default, allowed = allowed)
+"""Create a `Bool` parameter."""
 bool_param(desc, default = false) = _param(Bool, desc, default)
+"""Create a numeric parameter with optional min/max bounds."""
 number_param(desc, default, min = nothing, max = nothing) = _param(Real, desc, default, min = min, max = max)
+"""Create a channel-groups parameter (`Vector{Vector{String}}`)."""
 channel_groups_param(desc, default) = _param(Vector{Vector{String}}, desc, default)
 
-# Helper function to create filter parameter specifications
+"""Generate the standard set of filter parameters (apply, type, method, func, freq, order) for a given prefix."""
 function _filter_param_spec(prefix, apply, type, freq, min_freq, max_freq, order, min_order, max_order)
     Dict(
         "$prefix.apply"  => bool_param("Apply: true/false", apply),
@@ -241,6 +246,7 @@ function _merge_configs(default_config::Dict, user_config::Dict)
     return result
 end
 
+"""Recursively merge `source` into `target`, overwriting leaf values."""
 function _merge_nested!(target::Dict, source::Dict)
     for (key, value) in source
         if !haskey(target, key)
@@ -308,6 +314,7 @@ function _validate_parameter(value, parameter_spec::ConfigParameter, parameter_n
     param_type = typeof(parameter_spec).parameters[1]
 
     # Helper function for creating validation errors
+    """Create a failed `ValidationResult` for this parameter."""
     function validation_error(msg)
         ValidationResult(success = false, error = msg, key_path = parameter_name)
     end
@@ -357,6 +364,7 @@ function show_parameter_info(; parameter_name::String = "")
     isempty(parameter_name) ? _show_all_parameters() : _show_specific_parameter(parameter_name)
 end
 
+"""Print an overview of every configuration parameter, grouped by section."""
 function _show_all_parameters()
     @info "Available Configuration Parameters:"
     @info "==================================="
@@ -372,6 +380,7 @@ function _show_all_parameters()
     @info "Use show_parameter_info(\"section.parameter\") for specific parameter details"
 end
 
+"""Print all parameters in one top-level section."""
 function _display_section(section, section_data)
     @info "[$section]"
     @info "-"^(length(section) + 2)
@@ -383,6 +392,7 @@ function _display_section(section, section_data)
     end
 end
 
+"""Print all parameters in one subsection."""
 function _display_subsection(subsection, params)
     !isempty(subsection) && @info "  [$subsection]"
 
@@ -394,6 +404,7 @@ function _display_subsection(subsection, params)
     end
 end
 
+"""Show details or section overview for a specific parameter name."""
 function _show_specific_parameter(parameter_name)
     if haskey(PARAMETERS, parameter_name)
         _show_parameter_details(parameter_name)
@@ -457,6 +468,7 @@ function _show_section_overview(section_name::String, matching_params::Vector{St
     @info "Use show_parameter_info(\"$section_name.parameter_name\") for detailed information about a specific parameter"
 end
 
+"""Group matching parameters into a dict keyed by subsection name."""
 function _group_params_by_subsection(section_name::String, matching_params::Vector{String})
     sections = Dict{String,Vector{Tuple{String,ConfigParameter}}}()
 
@@ -469,6 +481,7 @@ function _group_params_by_subsection(section_name::String, matching_params::Vect
     return sections
 end
 
+"""Extract the subsection portion of a parameter path relative to the section prefix."""
 function _extract_subsection(section_name::String, param_path::String)
     section_prefix = section_name * "."
     if !startswith(param_path, section_prefix)
@@ -481,6 +494,7 @@ function _extract_subsection(section_name::String, param_path::String)
     return length(subsection_parts) > 1 ? join(subsection_parts[1:(end-1)], ".") : ""
 end
 
+"""Print parameters grouped by subsection."""
 function _display_grouped_params(grouped_params::Dict{String,Vector{Tuple{String,ConfigParameter}}})
     sorted_subsections = sort(collect(keys(grouped_params)))
 
@@ -521,6 +535,7 @@ function generate_config_template(; filename::String = "config_template.toml")
     end
 end
 
+"""Write the TOML template file header comment block."""
 function _write_template_header(io::IO)
     println(io, "# EEG Processing Configuration Template")
     println(io, "# Generated on ", Dates.format(now(), "yyyy-mm-dd HH:MM:SS"))
@@ -531,6 +546,7 @@ function _write_template_header(io::IO)
     println(io)
 end
 
+"""Write all parameter sections to the TOML template file."""
 function _write_template_sections(io::IO)
     sections = _group_parameters_by_section()
     sorted_sections = sort(collect(keys(sections)))
@@ -540,6 +556,7 @@ function _write_template_sections(io::IO)
     end
 end
 
+"""Write a single top-level section and its subsections to the TOML template."""
 function _write_section(io::IO, section::String, section_data::Dict{String,Vector{Tuple{String,ConfigParameter}}})
     println(io, "\n# $section Settings")
     println(io, "[$section]")
@@ -551,6 +568,7 @@ function _write_section(io::IO, section::String, section_data::Dict{String,Vecto
     end
 end
 
+"""Write a subsection header and its parameter entries to the TOML template."""
 function _write_subsection(io::IO, section::String, subsection::String, params::Vector{Tuple{String,ConfigParameter}})
     if !isempty(subsection)
         println(io, "\n# $subsection Settings")

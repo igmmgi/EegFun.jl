@@ -215,6 +215,7 @@ function _apply_filter!(dat::Vector{DataFrame}, channels::Vector{Symbol}, filter
     return nothing
 end
 
+"""Update the data object's `analysis_info` HP/LP filter field from a `FilterInfo`."""
 function _update_filter_info!(dat::EegData, filter_info::FilterInfo)::Nothing
     if filter_info.filter_type == "hp"
         dat.analysis_info.hp_filter = filter_info.cutoff_freq
@@ -313,12 +314,14 @@ end
 # Generate non-mutating versions
 @add_nonmutating lowpass_filter!
 @add_nonmutating highpass_filter!
+"""Apply lowpass filter using settings from a `FilterConfig` section."""
 function lowpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :lowpass)
     sec = getfield(filter_cfg, section)
     if sec.apply
         lowpass_filter!(dat, sec.freq; order = sec.order, filter_method = sec.method, filter_func = sec.func)
     end
 end
+"""Apply highpass filter using settings from a `FilterConfig` section."""
 function highpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :highpass)
     sec = getfield(filter_cfg, section)
     if sec.apply
@@ -553,7 +556,7 @@ function highpass_filter(
     )
 end
 
-# Internal common batch runner
+"""Shared batch runner for lowpass/highpass filtering across JLD2 files."""
 function _run_filter_batch(
     file_pattern::String,
     cutoff_freq::Real,

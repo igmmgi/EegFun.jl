@@ -140,6 +140,7 @@ function signal_example_convolution()
 
     # Returns (k_real, k_imag, τ). k_imag is nothing for non-wavelet types.
     # width_s = TOTAL span (edge to edge): half = width_s/2, σ = width_s/6 → ±3σ = ±half.
+    """Construct a Gaussian, Boxcar, or Morlet wavelet kernel and return `(k_real, k_imag, τ)`."""
     function build_kernel(type, width_s, wfreq, ncycles)
         if type === :wavelet
             width_s = ncycles / wfreq   # total span = ncycles/freq → exactly ncycles visible
@@ -166,6 +167,7 @@ function signal_example_convolution()
     end
 
     # ── Full convolution helper ───────────────────────────────────────────────
+    """Linear convolution with same-length (centred) output."""
     function full_conv(sig, k)
         # Simple linear convolution, same-length output (centred)
         out = zeros(length(sig))
@@ -184,6 +186,7 @@ function signal_example_convolution()
     end
 
     # ── Update function ──────────────────────────────────────────────────────
+    """Recompute signal, kernel overlay, and convolution output from current slider values."""
     function update()
         # Build signal
         sig = sin.(2π .* sig_freq[] .* t_vec)
@@ -292,6 +295,7 @@ function signal_example_convolution()
 
     inner = GridLayout(ctrl[4, 1:4], colgap = 16)
 
+    """Create a slider with a header label above and a value label below."""
     function labelled_slider(parent, col, header, range_vals, startval, fmt)
         Label(parent[1, col], header, fontsize = ctrl_sz, halign = :center)
         sl  = Slider(parent[2, col], range = range_vals, startvalue = startval)
@@ -311,6 +315,7 @@ function signal_example_convolution()
     Label(inner[3, 6], "", fontsize = ctrl_sz, halign = :center)
 
     # Helper: keep the Kernel Width label linked to effective width in all modes
+    """Update the kernel-width label to show effective width in wavelet mode."""
     function update_kw_label()
         if kernel_type[] === :wavelet
             eff_ms = round(Int, wavelet_cycles[] / wavelet_freq[] * 1000)

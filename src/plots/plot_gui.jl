@@ -2,7 +2,7 @@
 const BASE_FONTS = (label = 20, button = 18, textbox = 16)
 const BASE_SIZES = (input_width = 160, input_height = 30)
 
-# UI styling parameters struct with defaults
+"""Font sizes and widget dimensions for the interactive GUI."""
 struct UIStyle
     label_font::Int
     button_font::Int
@@ -13,7 +13,7 @@ struct UIStyle
     UIStyle() = new(BASE_FONTS.label, BASE_FONTS.button, BASE_FONTS.textbox, BASE_SIZES.input_width, BASE_SIZES.input_height)
 end
 
-# Helper functions to reduce code repetition
+"""Create a styled button for GUI selection actions."""
 function _create_select_button(parent, label, style::UIStyle)
     Button(
         parent,
@@ -27,6 +27,7 @@ function _create_select_button(parent, label, style::UIStyle)
     )
 end
 
+"""Create a styled textbox for GUI text input."""
 function _create_textbox(parent, style::UIStyle; width = nothing, placeholder = "", boxcolor_obs = nothing, halign = :center)
     bc = isnothing(boxcolor_obs) ? Observable(:white) : boxcolor_obs
     Textbox(
@@ -41,6 +42,7 @@ function _create_textbox(parent, style::UIStyle; width = nothing, placeholder = 
     )
 end
 
+"""Create a styled dropdown menu for GUI option selection."""
 function _create_menu(parent, style::UIStyle; options = ["Select"], width = nothing, height = nothing)
     Menu(
         parent,
@@ -51,6 +53,7 @@ function _create_menu(parent, style::UIStyle; options = ["Select"], width = noth
     )
 end
 
+"""Create a styled label for the GUI."""
 function _create_label(parent, text, style::UIStyle; fontsize = nothing, color = :black)
     fontsize_val = isnothing(fontsize) ? style.label_font : fontsize
     Label(parent, text, fontsize = fontsize_val, color = color)
@@ -592,6 +595,7 @@ end
 
 
 
+"""GUI bridge: load data and open the databrowser."""
 function _plot_databrowser(gui_state)
 
     # Check if we have the required files
@@ -649,6 +653,7 @@ function _plot_databrowser(gui_state)
     end
 end
 
+"""GUI bridge: load epoch data and call `plot_epochs`."""
 function _plot_epochs(gui_state)
     isnothing(_validate_file(gui_state)) && return
 
@@ -735,6 +740,7 @@ function _plot_epochs(gui_state)
     end
 end
 
+"""GUI bridge: load ERP data and call `plot_erp`."""
 function _plot_erp(gui_state)
     isnothing(_validate_file(gui_state)) && return
 
@@ -831,6 +837,7 @@ function _plot_erp(gui_state)
     end
 end
 
+"""GUI bridge: load data and call `plot_topography`."""
 function _plot_topography(gui_state)
     isnothing(_validate_file(gui_state)) && return
 

@@ -12,7 +12,7 @@ t-test results, cluster permutation test results, and analytic t-test results.
 # this seems a bit lighter than a full struct
 const TTestResult = NamedTuple{(:df, :t, :p),Tuple{Float64,Float64,Float64}}
 
-# Format t-value and p-value for display
+"""Format a `TTestResult` for display showing t-value, p-value, and df."""
 function Base.show(io::IO, result::TTestResult)
     t_str = isnan(result.t) ? "NaN" : (isinf(result.t) ? (result.t > 0 ? "Inf" : "-Inf") : Printf.@sprintf("%.4f", result.t))
     p_str = isnan(result.p) ? "NaN" : Printf.@sprintf("%.4f", result.p)
@@ -61,6 +61,7 @@ struct StatisticalData
     se_diff::Array{Float64,2}
 end
 
+"""Pretty-print `StatisticalData` showing design, conditions, and dimensions."""
 function Base.show(io::IO, data::StatisticalData)
     time_range_str(times) = isempty(times) ? "N/A" : "$(first(times)) to $(last(times)) s"
 
@@ -379,6 +380,7 @@ struct AnalyticResult <: StatsResult
     se_diff::Array{Float64,2}
 end
 
+"""Pretty-print `AnalyticResult` showing test info, dimensions, and significant points."""
 function Base.show(io::IO, result::AnalyticResult)
     n_electrodes = length(result.electrodes)
     n_time_points = length(result.time_points)
