@@ -47,18 +47,15 @@ using EegFun
 println("Basic RSA analysis...")
 
 # Create test data for multiple participants
-all_participant_epochs = Vector{Vector{EegFun.EpochData}}()
-for p = 1:5
-    # Use built-in test data creation function
-    participant_epochs = EegFun.create_test_epoch_data_vector(
+all_participant_epochs = [
+    EegFun.create_test_epoch_data_vector(
         conditions = 1:3,
         n_epochs = 100,
         n_channels = 3,
         fs = 250,
         n = 250,  # 1 second of data at 250 Hz
-    )
-    push!(all_participant_epochs, participant_epochs)
-end
+    ) for _ = 1:5
+]
 
 # Perform RSA for each participant using batch method
 all_rsa_results = EegFun.rsa(all_participant_epochs; dissimilarity_measure = :correlation, average_trials = true)

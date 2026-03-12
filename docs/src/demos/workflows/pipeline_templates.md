@@ -77,7 +77,7 @@ EegFun.generate_pipeline_template(
 #######################################################################
 
 # Generate a TOML configuration template with all available settings
-EegFun.generate_config_template("my_config.toml")
+EegFun.generate_config_template(filename = "my_config.toml")
 
 # The generated config includes sections for:
 # - files (input/output paths)

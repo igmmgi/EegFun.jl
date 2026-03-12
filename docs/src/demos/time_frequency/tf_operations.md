@@ -55,7 +55,6 @@ This demo shows how to perform common operations on time-frequency data: baselin
 
 using EegFun
 
-
 #######################################################################
 # CREATE EXAMPLE TF DATA
 #######################################################################

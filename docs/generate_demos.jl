@@ -79,6 +79,7 @@ demos = [
     ("plotting", "plot_tf", "Plot Time-Frequency"),
     ("plotting", "plot_topography", "Plot Topography"),
     ("plotting", "plot_triggers", "Plot Triggers"),
+    ("plotting", "save_figures", "Saving Figures"),
 
     # Workflows
     ("workflows", "preprocessing_workflow", "Preprocessing Workflow"),

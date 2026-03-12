@@ -207,37 +207,6 @@ EegFun.plot_decoding(grand_avg_synthetic, stats_bonf, title = "Synthetic Data: B
 stats_cluster = EegFun.test_against_chance_cluster(decoded_synthetic, alpha = 0.05)
 EegFun.plot_decoding(grand_avg_synthetic, stats_cluster, title = "Synthetic Data: Cluster-based")
 
-# ============================================================================
-# OPTION 2: REAL DATA TEST
-# ============================================================================
-@info EegFun.section("Real Data Test")
-
-# Prepare decoding data using prepare_decoding (like prepare_stats for statistics)
-println("Preparing data...")
-participant_epochs = EegFun.prepare_decoding(
-    "epochs_good",
-    input_dir = "./resources/data/julia/erps",
-    participant_selection = EegFun.participants(),
-    condition_selection = EegFun.conditions([1, 2]),  # Compare conditions 1 and 2
-    channel_selection = EegFun.channels(),            # All channels
-    interval_selection = EegFun.times((-0.2, 1.5)),   # Time interval
-)
-
-# Decode all participants (batch method)
-all_decoded = EegFun.decode_libsvm(participant_epochs; n_iterations = 5, n_folds = 3, equalize_trials = true)
-
-# Grand average
-grand_avg_decoded = EegFun.grand_average(all_decoded)
-
-# Test and plot with different methods
-stats_none = EegFun.test_against_chance(all_decoded, alpha = 0.05, correction_method = :none)
-EegFun.plot_decoding(grand_avg_decoded, stats_none, title = "Real Data: No Correction")
-
-stats_bonf = EegFun.test_against_chance(all_decoded, alpha = 0.05, correction_method = :bonferroni)
-EegFun.plot_decoding(grand_avg_decoded, stats_bonf, title = "Real Data: Bonferroni")
-
-stats_cluster = EegFun.test_against_chance_cluster(all_decoded, alpha = 0.05)
-EegFun.plot_decoding(grand_avg_decoded, stats_cluster, title = "Real Data: Cluster-based")
 ```
 
 :::
