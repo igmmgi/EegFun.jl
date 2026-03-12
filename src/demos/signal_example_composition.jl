@@ -44,6 +44,7 @@ function signal_example_composition()
     fig = Figure(size = (1200, 800), title = "Signal Example 2", backgroundcolor = :white)
 
     # Set up adaptive font and UI sizing
+    """Scale font sizes and UI element dimensions when the figure is resized."""
     function setup_adaptive_sizing(fig)
         # Create observables for different font sizes and UI elements
         title_font = Observable(24)
@@ -143,6 +144,7 @@ function signal_example_composition()
     freq_axis = Observable(Float64[])
 
     # Function to update all signals
+    """Recompute all signal, noise, filter, and FFT data from current slider values."""
     function update_signals()
         is_filtering = (low_pass_filter[] && filter_freq[] > 0) || (high_pass_filter[] && hp_filter_freq[] > 0)
 
@@ -239,6 +241,7 @@ function signal_example_composition()
         end
     end
 
+    """Apply a 4th-order Butterworth low-pass filter at the given cutoff."""
     function apply_lowpass_filter(signal, fs, cutoff)
         if cutoff <= 0 || cutoff >= fs / 2
             return signal
@@ -248,6 +251,7 @@ function signal_example_composition()
     end
 
     # Simple high-pass filter implementation
+    """Apply a 4th-order Butterworth high-pass filter at the given cutoff."""
     function apply_highpass_filter(signal, fs, cutoff)
         if cutoff <= 0 || cutoff >= fs / 2
             return signal

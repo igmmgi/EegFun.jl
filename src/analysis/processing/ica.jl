@@ -225,6 +225,7 @@ run_ica(epoched_data::EpochData; kwargs...) = run_ica([epoched_data]; kwargs...)
 
 
 
+"""Extract selected channels and samples from a DataFrame into a (channels × samples) matrix."""
 function _create_ica_data_matrix(dat::DataFrame, channels, samples)
     # Filter to only existing channels (matching original behavior)
     existing_channels = intersect(propertynames(dat), channels)
@@ -271,6 +272,7 @@ function _select_subsample!(data_matrix::Matrix{Float64}, percentage::Real)
 end
 
 
+"""Pre-allocated work arrays for the Infomax ICA iteration loop."""
 mutable struct WorkArrays
     weights::Matrix{Float64}
     BI::Matrix{Float64}
@@ -286,6 +288,7 @@ mutable struct WorkArrays
     olddelta::Matrix{Float64}
 end
 
+"""Allocate and initialise `WorkArrays` for `n_components` and a given block size."""
 function create_work_arrays(n_components::Int, block_size::Int)
     weights = Matrix{Float64}(I, n_components, n_components)  # Initialize as identity matrix
     return WorkArrays(
@@ -344,6 +347,7 @@ end
 # INFOMAX ICA IMPLEMENTATION
 # =============================================================================
 
+"""Standard Infomax ICA implementation (super-Gaussian sources only)."""
 function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String; n_components::Int, params::IcaPrms = IcaPrms())
 
     # Store original mean before removing it
@@ -1034,6 +1038,7 @@ function identify_eog_components(
     end
 
     # Function to calculate initial EOG-component correlations 
+    """Compute absolute correlation of each ICA component with the given EOG signal."""
     function calculate_correlations(eog_signal)
         corrs = zeros(n_components)
         for comp_idx = 1:n_components
@@ -1043,6 +1048,7 @@ function identify_eog_components(
     end
 
     # Function to calculate spatial correlations between identified vEOG/hEOG components and remaining components (used in Step2)
+    """Compute spatial (topography) correlations between remaining and primary EOG components."""
     function calculate_spatial_correlations(remaining_components, primary_components, mixing_matrix, min_corr_threshold)
 
         spatial_corrs = fill(NaN, n_components)
@@ -1074,6 +1080,7 @@ function identify_eog_components(
     end
 
     # Function to calculate lagged correlations between components
+    """Compute maximum absolute lagged cross-correlation between remaining and primary components."""
     function calculate_lagged_correlations(remaining_components, primary_components, comp_matrix, max_lag_samples, lag_step)
 
         lagged_corrs = fill(NaN, n_components)
@@ -1140,6 +1147,7 @@ function identify_eog_components(
     hEOG_temporal_corr = calculate_lagged_correlations(remaining_hEOG, primary_hEOG, components, max_lag_samples, lag_step)
 
     # Helper function to compute z-scores only for remaining components
+    """Z-score a correlation vector using only the values at `remaining_indices`."""
     function zscore_for_remaining(corr_vector, remaining_indices)
         z = fill(NaN, length(corr_vector))
         if length(remaining_indices) >= 2
@@ -1158,6 +1166,7 @@ function identify_eog_components(
     hEOG_temporal_corr_z = zscore_for_remaining(hEOG_temporal_corr, remaining_hEOG)
 
     # Identify secondary components: require BOTH correlation > min_correlation AND z-score > z_threshold
+    """Return indices of remaining components exceeding both correlation and z-score thresholds."""
     function identify_secondary_components(remaining_components, corr_vector, corr_z_vector, min_corr_threshold, z_threshold)
         isempty(remaining_components) && return Int[]
         corr_mask = corr_vector[remaining_components] .> min_corr_threshold

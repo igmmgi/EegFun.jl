@@ -153,6 +153,7 @@ function signal_example_tf()
     Colorbar(fig[2, 2], hm, label = colorbar_label)
 
     # ── Helper: label string for the colorbar based on baseline method ────────
+    """Return a descriptive colorbar label string for the given baseline method."""
     function _colorbar_label(m::Symbol)
         m == :db && return "Power (dB re baseline)"
         m == :percent && return "Power (% change)"
@@ -165,6 +166,7 @@ function signal_example_tf()
     end
 
     # ── Helper: apply tf_baseline if method is not :none ─────────────────────
+    """Apply baseline correction to TF data if the current method is not `:none`."""
     function _maybe_baseline(tf_dat::TimeFreqData)
         m  = baseline_method_val[]
         iv = baseline_interval_val[]
@@ -175,6 +177,7 @@ function signal_example_tf()
     end
 
     # ── Helper: (n_t × n_f) matrix from STFT/MT TF result ────────────────────
+    """Extract a (n_t × n_f) power matrix and time vector from an STFT/Multitaper TF result."""
     function _extract_power(tf_dat, n_f)
         pwr_vec      = tf_dat.data[!, :Ch1]
         times_unique = unique(tf_dat.data.time)
@@ -184,6 +187,7 @@ function signal_example_tf()
     end
 
     # ── Simulation ────────────────────────────────────────────────────────────
+    """Generate synthetic signal, run TF decomposition, and update heatmap."""
     function run_simulation()
 
         freqs_list = Float64[]
@@ -377,6 +381,7 @@ function signal_example_tf()
     Label(comp_grid[1, 5:6], "Interval (s)"; fontsize = fsize - 2, font = :bold, halign = :center)
 
     # ── Helper: one component row inside comp_grid ──────────────────────────
+    """Create a row of component controls (toggle, freq, amp, interval sliders) inside the grid."""
     function make_comp_row(grid_row, label, active_obs, freq_obs, amp_obs, interval_obs, init_active, init_freq, init_amp, init_interval)
 
         Label(comp_grid[grid_row, 1], label; fontsize = fsize, halign = :right)

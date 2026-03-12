@@ -1,3 +1,4 @@
+"""Generate a cosine-shaped ERP peak across trials with amplitude and latency jitter."""
 function _peak_vec(
     trials::Int,
     samples::Int,
@@ -29,6 +30,7 @@ function _peak_vec(
     return signal
 end
 
+"""Generate 1/f-shaped background EEG noise across trials."""
 function _noise_vec(trials::Int, samples::Int, sample_rate::Int, noise_amp::Float64)
 
     noise_amp == 0 && return zeros(trials, samples)
@@ -64,6 +66,7 @@ function _noise_vec(trials::Int, samples::Int, sample_rate::Int, noise_amp::Floa
     return signal .* noise_amp
 end
 
+"""Simulate a multi-component ERP with noise; return the average and individual trials."""
 function _run_erp_simulation(
     trials::Int,
     comps::Matrix{Float64};
@@ -195,6 +198,7 @@ function simulate_erp()
     # List to store components
     components = Component[]
 
+    """Create sliders and toggle for one ERP component and return a `Component` struct."""
     function create_component(parent, row)
         # Initialize all observables - start INACTIVE
         active = Observable(false)
@@ -251,6 +255,7 @@ function simulate_erp()
     end
 
     # Update function
+    """Collect active component parameters and re-run the ERP simulation."""
     function update_simulation()
         # Count active components
         n_active = count(c -> c.active[], components)
@@ -284,6 +289,7 @@ function simulate_erp()
     lines!(ax, erp_plot_data, color = :blue, linewidth = 3)
 
     # Plot update function
+    """Update trial and ERP line plot data from new simulation results."""
     function update_plot(new_signals, new_erp)
         t = time
         n_trials, n_smpl = size(new_signals)

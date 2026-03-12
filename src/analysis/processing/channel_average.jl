@@ -94,12 +94,13 @@ function channel_average!(
         labels = Symbol.(output_labels)
     end
 
-    # Internal helpers (single DataFrame vs vector of DataFrames)
+    """Add a column of channel means to a single DataFrame."""
     function _add_avg!(df::DataFrame, cols::Vector{Symbol}, outlbl::Symbol)
         df[!, outlbl] = _colmeans(df, cols)
         return nothing
     end
 
+    """Broadcast `_add_avg!` across a vector of DataFrames."""
     function _add_avg!(dfs::Vector{DataFrame}, cols::Vector{Symbol}, outlbl::Symbol)
         _add_avg!.(dfs, Ref(cols), Ref(outlbl))
         return nothing
@@ -313,7 +314,7 @@ function channel_average(
 end
 
 
-# Internal: create a reduced DataFrame(s) with only meta + averaged columns
+"""Create a reduced DataFrame containing only metadata and averaged channel columns."""
 function _build_reduced_df(dat::SingleDataFrameEeg, channel_groups::Vector{Vector{Symbol}}, labels::Vector{Symbol})
     meta_cols = meta_labels(dat)
     new_df = isempty(meta_cols) ? DataFrame() : dat.data[:, meta_cols]
@@ -323,6 +324,7 @@ function _build_reduced_df(dat::SingleDataFrameEeg, channel_groups::Vector{Vecto
     return new_df
 end
 
+"""Create reduced DataFrames (one per epoch) containing only metadata and averaged channel columns."""
 function _build_reduced_df(dat::MultiDataFrameEeg, channel_groups::Vector{Vector{Symbol}}, labels::Vector{Symbol})
     meta_cols = meta_labels(dat)
     new_epochs = Vector{DataFrame}(undef, length(dat.data))
@@ -338,7 +340,7 @@ end
 
 
 
-# Internal: build a layout with one row per averaged group
+"""Build a layout with one row per averaged channel group, using mean coordinates."""
 function _layout_from_groups(layout::Layout, channel_groups::Vector{Vector{Symbol}}, labels::Vector{Symbol})::Layout
     df = layout.data
     isempty(df) && return Layout(DataFrame(), nothing, nothing, nothing)
@@ -371,14 +373,14 @@ function _layout_from_groups(layout::Layout, channel_groups::Vector{Vector{Symbo
     return new_layout
 end
 
-# Helper: ensure both 3D and 2D coordinates
+"""Ensure the layout has both 3D and 2D coordinate columns."""
 function _ensure_all_coordinates!(layout::Layout)
     _ensure_coordinates_3d!(layout)
     _ensure_coordinates_2d!(layout)
     return nothing
 end
 
-# Helper: average 3D coordinates and convert to polar
+"""Average 3D Cartesian coordinates across rows and convert to polar (inc, azi)."""
 function _average_coordinates(coord_df)
 
     # Average 3D Cartesian coordinates first 
@@ -392,7 +394,7 @@ function _average_coordinates(coord_df)
     return (inc = inc_deg, azi = azi_deg)
 end
 
-# Helper: create a layout row with averaged coordinates
+"""Create a single-row layout DataFrame from a label and polar coordinates."""
 function _create_layout_row(template_df, label, coords)
     new_df = DataFrame()
     if :label in propertynames(template_df)
@@ -407,7 +409,7 @@ function _create_layout_row(template_df, label, coords)
     return new_df
 end
 
-# Internal: append averaged channels to existing layout
+"""Append averaged channel rows to an existing layout."""
 function _append_layouts(base_layout::Layout, avg_layout::Layout)::Layout
     # Ensure both layouts have coordinates
     base_copy = copy(base_layout)

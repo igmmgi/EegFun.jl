@@ -37,15 +37,14 @@ end
 Standardized error handling for plot functions.
 """
 function _handle_plot_error(e, plot_type::String)
-    if e isa EegFunError
-        # Already logged by @minimal_error inside the plot function — don't repeat it
+    if e isa EegFunError # Already logged by @minimal_error inside the plot function — don't repeat it
         return
     end
     # Unexpected exception: one clean line, no stacktrace
     @minimal_warning "Unexpected error creating $plot_type plot: $(sprint(showerror, e))"
 end
 
-# Convert a (lo, hi) GUI observable pair to Union{Nothing,Tuple{Real,Real}}
+"""Convert a `(lo, hi)` GUI observable pair to `Union{Nothing, Tuple{Real,Real}}`."""
 _gui_lim(tup) = (!isnothing(tup[1]) && !isnothing(tup[2])) ? (tup[1], tup[2]) : nothing
 
 """
@@ -140,6 +139,7 @@ function _apply_gui_filters(dat, gui_state)
     return dat
 end
 
+"""GUI bridge: load data and call `plot_erp_image`."""
 function _plot_erp_image(gui_state)
     isnothing(_validate_file(gui_state)) && return
 
@@ -186,6 +186,7 @@ function _plot_erp_image(gui_state)
 end
 
 
+"""GUI bridge: load time-frequency data and call `plot_tf`."""
 function _plot_time_frequency(gui_state)
     isnothing(_validate_file(gui_state, ".jld2")) && return
 
@@ -295,6 +296,7 @@ function _plot_time_frequency(gui_state)
 end
 
 
+"""GUI bridge: load ICA and call `plot_topography` for component maps."""
 function _plot_ica(gui_state)
     fname      = gui_state.filename[]
     input_dir  = gui_state.directory[] == "" ? pwd() : gui_state.directory[]
@@ -444,6 +446,7 @@ function _plot_one_ica_activation(ica_path::String, comp_sel, layout, gui_dir::S
     end
 end
 
+"""GUI bridge: load ICA + source data and call `plot_ica_component_activation`."""
 function _plot_ica_activation(gui_state)
     fname      = gui_state.filename[]
     input_dir  = gui_state.directory[] == "" ? pwd() : gui_state.directory[]
@@ -488,6 +491,7 @@ function _plot_ica_activation(gui_state)
 end
 
 
+"""GUI bridge: load data and call `channel_summary` + `plot_channel_summary`."""
 function _plot_channel_summary(gui_state)
     fname = gui_state.filename[]
     if fname == ""
@@ -528,12 +532,12 @@ end
 
 _plot_erp_measurement_gui(gui_state) = _simple_jld2_plot(gui_state, plot_erp_measurement_gui, "ERP Measurement GUI")
 
+"""GUI bridge: load layout and call `plot_layout_2d`."""
 function _plot_layout(gui_state)
     if gui_state.layout_file[] == ""
         @minimal_warning "Requested plot settings incompatible: recheck!"
         return
     end
-
     try
         layout = read_layout(gui_state.layout_file[])
         @async begin

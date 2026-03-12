@@ -47,6 +47,7 @@ struct TFStatisticalData
     analysis::TFAnalysisData
 end
 
+"""Pretty-print `TFStatisticalData` showing design, conditions, and array dimensions."""
 function Base.show(io::IO, data::TFStatisticalData)
     time_range_str(times) = isempty(times) ? "N/A" : "$(first(times)) to $(last(times)) s"
     freq_range_str(freqs) = isempty(freqs) ? "N/A" : "$(first(freqs)) to $(last(freqs)) Hz"
@@ -179,6 +180,7 @@ struct TFClusterPermutationResult <: TFStatsResult
     time_points::Vector{Float64}
 end
 
+"""Pretty-print `TFClusterPermutationResult` showing clusters and significance."""
 function Base.show(io::IO, result::TFClusterPermutationResult)
     n_electrodes = length(result.electrodes)
     n_freqs = length(result.frequencies)
@@ -272,6 +274,7 @@ struct TFAnalyticResult <: TFStatsResult
     critical_t::Float64
 end
 
+"""Pretty-print `TFAnalyticResult` showing test info, dimensions, and significant points."""
 function Base.show(io::IO, result::TFAnalyticResult)
     n_electrodes = length(result.electrodes)
     n_freqs = length(result.frequencies)

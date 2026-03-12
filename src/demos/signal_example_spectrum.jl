@@ -118,6 +118,7 @@ function signal_example_spectrum()
     rayleigh_end = Observable(0.5)  # = 1/epoch_len, right edge of resolution band
 
     # ── Update function ──────────────────────────────────────────────────────
+    """Recompute time-domain signal and power spectrum from current parameter values."""
     function update()
         T = epoch_len[]
         t = range(0.0, T - 1.0 / FS, step = 1.0 / FS)
@@ -193,6 +194,7 @@ function signal_example_spectrum()
     # ── Controls ─────────────────────────────────────────────────────────────
     ctrl = GridLayout(fig[3, 1], colgap = 16)
 
+    """Create a slider with a header label above and a value label below."""
     function labelled_slider(parent, col, header, range_vals, startval, fmt)
         Label(parent[1, col], header, fontsize = ctrl_sz, halign = :center)
         sl  = Slider(parent[2, col], range = range_vals, startvalue = startval)

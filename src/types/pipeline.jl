@@ -125,7 +125,7 @@ end
 
 # === CONSTRUCTORS ===
 
-# Constructor from dictionary
+"""Construct `EogConfig` from a configuration dictionary."""
 function EogConfig(cfg::Dict)
     return EogConfig(
         vEOG_criterion = cfg["vEOG_criterion"],
@@ -135,6 +135,7 @@ function EogConfig(cfg::Dict)
     )
 end
 
+"""Construct `FilterSection` from a configuration dictionary."""
 function FilterSection(cfg::Dict)
     return FilterSection(
         apply = cfg["apply"],
@@ -146,6 +147,7 @@ function FilterSection(cfg::Dict)
     )
 end
 
+"""Construct `FilterConfig` from a configuration dictionary."""
 function FilterConfig(cfg::Dict)
     return FilterConfig(
         highpass = FilterSection(cfg["highpass"]),
@@ -155,6 +157,7 @@ function FilterConfig(cfg::Dict)
     )
 end
 
+"""Construct `EegConfig` from a configuration dictionary."""
 function EegConfig(cfg::Dict)
     return EegConfig(
         artifact_value_abs_criterion = Int(cfg["artifact_value_abs_criterion"]),
@@ -162,10 +165,12 @@ function EegConfig(cfg::Dict)
     )
 end
 
+"""Construct `IcaConfig` from a configuration dictionary."""
 function IcaConfig(cfg::Dict)
     return IcaConfig(apply = cfg["apply"], percentage_of_data = cfg["percentage_of_data"])
 end
 
+"""Construct `PreprocessConfig` from a configuration dictionary."""
 function PreprocessConfig(cfg::Dict)
     return PreprocessConfig(
         reference_channel = Symbol(cfg["reference_channel"]),

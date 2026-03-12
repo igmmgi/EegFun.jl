@@ -163,6 +163,7 @@ function signal_example_dotproduct()
     prod_cos_data = Observable(zeros(n))
 
     # ── Update ───────────────────────────────────────────────────────────────
+    """Recompute signal, test sinusoids, and dot products from current parameter values."""
     function update()
         sig = sig_amp[] .* sin.(2π .* sig_freq[] .* t_arr .+ sig_phase[])
         if noise_lvl[] > 0.0
@@ -308,6 +309,7 @@ function signal_example_dotproduct()
     # ── Controls ──────────────────────────────────────────────────────────────
     ctrl = GridLayout(fig[4, 1], colgap = 20)
 
+    """Create a slider with a header label above and a value label below."""
     function labelled_slider(parent, col, header, range_vals, startval, fmt)
         Label(parent[1, col], header, fontsize = ctrl_sz, halign = :center)
         sl  = Slider(parent[2, col], range = range_vals, startvalue = startval)

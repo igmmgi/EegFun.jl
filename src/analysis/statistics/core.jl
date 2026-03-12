@@ -146,6 +146,8 @@ function prepare_stats(
     )
 
 end
+
+"""Load ERP/TF files by pattern and call the typed `prepare_stats` method."""
 function prepare_stats(
     file_pattern::String,
     design::Symbol;
@@ -240,8 +242,7 @@ t_matrix, df, p_matrix = compute_t_matrix(prepared, tail=:both)
 ```
 """
 # Optimized version that accepts raw arrays (for permutation loop - avoids StatisticalData creation)
-# Vectorized computation to avoid function call overhead and allocations
-# Can accept pre-allocated buffers to avoid allocations
+"""Compute paired or independent t-statistics across all electrode × time points (raw-array optimised path)."""
 function _compute_t_matrix(
     data1::Array{Float64,3},
     data2::Array{Float64,3},
@@ -354,6 +355,7 @@ function _compute_t_matrix(
     return t_matrix, df, p_matrix, se_matrix
 end
 
+"""Convenience wrapper: extract arrays from `StatisticalData` and call the raw-array `_compute_t_matrix`."""
 function _compute_t_matrix(prepared::StatisticalData; tail::Symbol = :both)
     t_matrix, df, p_matrix, se_matrix =
         _compute_t_matrix(prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design, tail = tail)

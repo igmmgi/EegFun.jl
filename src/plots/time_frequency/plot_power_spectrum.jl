@@ -226,7 +226,7 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
         push!(line_plots, (line_plot, psd_obs))
     end
 
-    # Function to get current power data (converted based on unit)
+    """Return power data converted to the given unit (`:linear` or `:dB`)."""
     function get_current_power_data(current_unit)
         if current_unit == :dB
             return [10.0 .* log10.(max.(psd_raw, 1e-10)) for psd_raw in power_raw_data]
@@ -297,7 +297,7 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
     end
 
     # Add reactive updates for axis scales
-    # Function to update x-axis scale
+    """Switch x-axis between linear and log10 scale."""
     function update_x_scale(scale)
         if scale == :log10
             xlims!(ax, (0.1, max_freq))
@@ -314,7 +314,7 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
         end
     end
 
-    # Function to update unit
+    """Re-convert power data and update line plots when the unit changes."""
     function update_unit(new_unit)
         # Convert power data
         converted_power_data = get_current_power_data(new_unit)
@@ -360,7 +360,7 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
         end
     end
 
-    # Function to update y-axis scale
+    """Recalculate y-axis limits when switching between linear and log10."""
     function update_y_scale(scale)
         current_unit = unit_obs[]
         current_power_data = get_current_power_data(current_unit)

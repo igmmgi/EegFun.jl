@@ -64,6 +64,7 @@ function signal_example_sampling()
     fig = Figure(size = (1000, 800), title = "Signal Example 1")
 
     # Set up adaptive font and UI sizing
+    """Scale font sizes and UI element dimensions when the figure is resized."""
     function setup_adaptive_sizing(fig)
         # Create observables for different font sizes and UI elements
         title_font = Observable(24)
@@ -118,11 +119,13 @@ function signal_example_sampling()
     my_sin3    = Observable(Float64[])
 
     # Sinc (Whittaker-Shannon) reconstruction from discrete samples
+    """Whittaker–Shannon sinc interpolation: reconstruct continuous signal from discrete samples."""
     function sinc_reconstruct(t_samp, y_samp, t_out, dt)
         return [sum(y_samp .* sinc.((t .- t_samp) ./ dt)) for t in t_out]
     end
 
     # Function to update the signal data
+    """Recompute base signal, sampled signal, and sinc reconstruction from current slider values."""
     function update_signal()
         # Generate time vectors
         base_t = 0:0.0001:sig_dur[]

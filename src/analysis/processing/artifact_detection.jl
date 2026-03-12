@@ -535,7 +535,7 @@ function n_step_value(
     end
 end
 
-# Helper function to detect extreme values for selected channels
+"""Detect extreme values for selected channels and return a `Dict{Symbol, Vector{Bool}}`."""
 function _detect_extreme_values(
     dat::SingleDataFrameEeg,
     threshold::Real;
@@ -737,11 +737,13 @@ struct Rejection
     epoch::Int
 end
 
+"""Pretty-print a `Rejection`, showing channel and epoch."""
 Base.show(io::IO, r::Rejection) = print(io, "Rejection(:$(r.channel), $(r.epoch))")
 
-# Are two Rejections equal?
+"""Check whether two `Rejection` objects refer to the same channel and epoch."""
 is_equal_rejection(a::Rejection, b::Rejection) = a.channel == b.channel && a.epoch == b.epoch
 
+"""De-duplicate a vector of `Rejection`s by `(channel, epoch)`."""
 function unique_rejections(rejections::Vector{Rejection})
     seen = Set{Tuple{Symbol,Int}}()
     out = Rejection[]
@@ -755,7 +757,9 @@ function unique_rejections(rejections::Vector{Rejection})
     return out
 end
 
+"""Return the distinct channel symbols across a vector of rejections."""
 unique_channels(rejections::Vector{Rejection}) = unique(map(x -> x.channel, rejections))
+"""Return the distinct epoch indices across a vector of rejections."""
 unique_epochs(rejections::Vector{Rejection}) = unique(map(x -> x.epoch, rejections))
 
 
@@ -829,8 +833,9 @@ mutable struct EpochRejectionInfo
     skipped::Union{OrderedDict{Int,Vector{Symbol}},Nothing}
 end
 
-# Methods depending on EpochRejectionInfo must be defined after the struct
+"""Return unique rejections from an `EpochRejectionInfo`."""
 unique_rejections(info::EpochRejectionInfo) = unique_rejections(info.rejected)
+"""Return unique rejections for each `EpochRejectionInfo` in a vector."""
 function unique_rejections(infos::Vector{EpochRejectionInfo})
     results = Vector{Rejection}[]
     for info in infos
@@ -839,12 +844,15 @@ function unique_rejections(infos::Vector{EpochRejectionInfo})
     return results
 end
 
+"""Return unique channels from an `EpochRejectionInfo` or vector thereof."""
 unique_channels(rejections::EpochRejectionInfo) = unique_channels(rejections.rejected)
 unique_channels(info::Vector{EpochRejectionInfo}) = unique_channels.(info)
 
+"""Return unique epochs from an `EpochRejectionInfo` or vector thereof."""
 unique_epochs(rejections::EpochRejectionInfo) = unique_epochs(rejections.rejected)
 unique_epochs(info::Vector{EpochRejectionInfo}) = unique_epochs.(info)
 
+"""Flatten all rejection data (abs + z-score) into a single DataFrame with reason tags."""
 function all_data(info::EpochRejectionInfo)::DataFrame
     rows = NamedTuple{(:condition_number, :condition_name, :epoch, :channel, :reason),Tuple{Int,String,Int,Symbol,Symbol}}[]
     cnum = info.info.number
@@ -1114,6 +1122,7 @@ end
 # REPORTING FUNCTIONS
 # ===================
 
+"""Pretty-print an `EpochRejectionInfo` summary with criterion, counts, and breakdowns."""
 function Base.show(io::IO, info::EpochRejectionInfo)
     println(io, "EpochRejectionInfo: $(info.name)")
     println(io, "Condition: $(info.info.number): $(info.info.name)")
@@ -1162,6 +1171,7 @@ function Base.show(io::IO, info::EpochRejectionInfo)
 
 end
 
+"""Show each `EpochRejectionInfo` in a vector."""
 Base.show(io::IO, infos::Vector{EpochRejectionInfo}) = Base.show.(Ref(io), infos)
 
 

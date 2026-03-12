@@ -196,7 +196,7 @@ Get metadata column names from the EEG data.
 """
 meta_labels(dat::EegData) = _get_cols_by_group(dat, :metadata)
 
-# Internal helper for grouped column access
+"""Return a DataFrame of just the columns in `group` (`:metadata`, `:channels`, `:extra`)."""
 function _get_cols_data(dat::SingleDataFrameEeg, group::Symbol)
     cols = _get_cols_by_group(dat, group)
     return isempty(cols) ? DataFrame() : dat.data[:, cols]
@@ -827,7 +827,7 @@ function _combine_interval_sample(interval::Interval, sample_selection::Function
     end
 end
 
-# Helper constructors for subsetting
+"""Construct a new data object of the same type with subsetted data and layout."""
 _create_subset(dat::ContinuousData, ds, ls) = ContinuousData(dat.file, ds, ls, dat.sample_rate, dat.analysis_info)
 _create_subset(dat::ErpData, ds, ls) =
     ErpData(dat.file, dat.condition, dat.condition_name, ds, ls, dat.sample_rate, dat.analysis_info, dat.n_epochs)
@@ -1082,7 +1082,7 @@ function log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
 end
 
 
-# Helper function predicates for easier channel filtering
+"""Predicate generators for channel selection. `channels()` selects all; variants filter by name, number, or range."""
 channels() = x -> fill(true, length(x))  # Default: select all channels given
 channels(channel_names::Vector{Symbol}) = x -> x .∈ Ref(channel_names)
 channels(channel_name::Symbol) = x -> x .== channel_name
@@ -1091,26 +1091,29 @@ channels(channel_number::Int) = channels([channel_number])
 channels(channel_numbers::Union{Vector{Int},UnitRange}) = x -> [i in channel_numbers for i = 1:length(x)]
 channels(channel_ranges::Vector{UnitRange{Int}}) = x -> [i in union(channel_ranges...) for i = 1:length(x)]
 channels(predicate::Function) = predicate  # Allow custom function predicates
+"""Predicate generators that exclude the specified channels."""
 channels_not(channel_names::Vector{Symbol}) = x -> .!(x .∈ Ref(channel_names))
 channels_not(channel_name::Symbol) = x -> .!(x .== channel_name)
 channels_not(channel_names::Symbol...) = channels_not(collect(channel_names))
 channels_not(channel_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in channel_numbers for i = 1:length(x)])
 
-# Helper function predicates for easier component filtering
+"""Predicate generators for ICA component selection."""
 components() = x -> fill(true, length(x))  # Default: select all components given
 components(component_numbers::Union{Vector{Int},UnitRange}) = x -> [i in component_numbers for i = 1:length(x)]
 components(component_number::Int) = x -> x .== component_number
 components(component_numbers::Int...) = components(collect(component_numbers))
 components(predicate::Function) = predicate  # Allow custom function predicates
+"""Predicate generators that exclude the specified components."""
 components_not(component_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in component_numbers for i = 1:length(x)])
 components_not(component_number::Int) = x -> .!(x .== component_number)
 components_not(component_numbers::Int...) = components_not(collect(component_numbers))
 
-# Helper function predicates for easier sample filtering
+"""Predicate generators for sample (row) selection."""
 samples() = x -> fill(true, nrow(x))
 samples(column::Symbol) = x -> x[!, column]
 # Allow custom function predicates
 samples(predicate::Function) = predicate
+"""Combine or negate sample predicates across boolean columns."""
 samples_or(columns::Vector{Symbol}) = x -> any(x[!, col] for col in columns)
 samples_and(columns::Vector{Symbol}) = x -> all(x[!, col] for col in columns)
 samples_not(column::Symbol) = x -> .!(x[!, column])
@@ -1134,31 +1137,33 @@ times(interval::Tuple{Real,Real}) = interval
 
 
 
-# Helper function predicates for easier epoch filtering
+"""Predicate generators for epoch selection."""
 epochs() = x -> fill(true, length(x))  # Default: select all epochs given
 epochs(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> [i in epoch_numbers for i in x]
 epochs(epoch_number::Int) = x -> x .== epoch_number
 epochs(epoch_numbers::Int...) = epochs(collect(epoch_numbers))
 epochs(predicate::Function) = predicate  # Allow custom function predicates
+"""Predicate generators that exclude the specified epochs."""
 epochs_not(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in epoch_numbers for i in x])
 epochs_not(epoch_number::Int) = x -> .!(x .== epoch_number)
 epochs_not(epoch_numbers::Int...) = epochs_not(collect(epoch_numbers))
 
-# Helper to extract condition number and name (returns tuple)
+"""Return `(condition_number, condition_name)` for any EegFunData object."""
 condition_info(dat::EegFunData) =
     (hasproperty(dat, :condition) ? dat.condition : 1, hasproperty(dat, :condition_name) ? dat.condition_name : "Continuous")
 
-# Helper function predicates for easier participant filtering (for Vector{Int} of participant IDs)
+"""Predicate generators for participant ID selection."""
 participants() = x -> fill(true, length(x))  # Default: select all participants given
 participants(participant_ids::Union{Vector{Int},UnitRange}) = x -> [id in participant_ids for id in x]
 participants(participant_id::Int) = x -> x .== participant_id
 participants(participant_ids::Int...) = participants(collect(participant_ids))
 participants(predicate::Function) = predicate  # Allow custom function predicates
+"""Predicate generators that exclude the specified participant IDs."""
 participants_not(participant_ids::Union{Vector{Int},UnitRange}) = x -> .!([id in participant_ids for id in x])
 participants_not(participant_id::Int) = x -> .!(x .== participant_id)
 participants_not(participant_ids::Int...) = participants_not(collect(participant_ids))
 
-# Helper function predicates for easier condition filtering (for Vector{ErpData} and Vector{EpochData})
+"""Predicate generators for condition selection by index or name."""
 conditions() = x -> fill(true, length(x))  # Default: select all conditions given
 conditions(condition_indices::Union{Vector{Int},UnitRange}) = x -> [i in condition_indices for i = 1:length(x)]
 conditions(condition_index::Int) = x -> [i == condition_index for i = 1:length(x)]
@@ -1166,6 +1171,7 @@ conditions(condition_indices::Int...) = conditions(collect(condition_indices))
 conditions(condition_names::Vector{String}) = x -> [_get_condition_name(dat) in condition_names for dat in x]
 conditions(condition_name::String) = x -> [_get_condition_name(dat) == condition_name for dat in x]
 conditions(predicate::Function) = predicate  # Allow custom function predicates
+"""Predicate generators that exclude the specified conditions."""
 conditions_not(condition_indices::Union{Vector{Int},UnitRange}) = x -> .!([i in condition_indices for i = 1:length(x)])
 conditions_not(condition_index::Int) = x -> .!([i == condition_index for i = 1:length(x)])
 conditions_not(condition_indices::Int...) = conditions_not(collect(condition_indices))
@@ -1173,7 +1179,7 @@ conditions_not(condition_names::Vector{String}) = x -> .!([_get_condition_name(d
 conditions_not(condition_name::String) = x -> .!([_get_condition_name(dat) == condition_name for dat in x])
 conditions_not(condition_names::String...) = conditions_not(collect(condition_names))
 
-# Internal helper to validate and preserve order for channel names
+"""Preserve user-specified channel name ordering if all names are in the selection."""
 function _handle_channel_names_order(user_order::Vector{Symbol}, selectable_cols::Vector{Symbol}, selected::Vector{Symbol})
     # Validate: check for missing channels and duplicates
     seen = Set{Symbol}()
@@ -1205,7 +1211,7 @@ function _handle_channel_names_order(user_order::Vector{Symbol}, selectable_cols
     return nothing  # Use default order
 end
 
-# Internal helper to validate and preserve order for channel numbers
+"""Preserve user-specified channel number ordering if all indices are in the selection."""
 function _handle_channel_numbers_order(user_order_numbers, selectable_cols::Vector{Symbol}, selected::Vector{Symbol})
     # Validate: check for invalid indices and duplicates
     seen = Set{Int}()
@@ -1237,7 +1243,7 @@ function _handle_channel_numbers_order(user_order_numbers, selectable_cols::Vect
     return nothing  # Use default order
 end
 
-# Helper to select channels/columns based on a predicate (+ which to include)
+"""Apply a channel predicate to data and return the matching column names (with optional metadata/extra)."""
 function get_selected_channels(dat, channel_selection::Function; include_meta::Bool = true, include_extra::Bool = true)
     # Columns/channels in dataframe to include
     metadata_cols = include_meta ? meta_labels(dat) : Symbol[]
@@ -1263,13 +1269,13 @@ function get_selected_channels(dat, channel_selection::Function; include_meta::B
 end
 
 
-# Helper to select components based on a predicate
+"""Apply a component predicate and return matching indices."""
 function get_selected_components(ica_result::InfoIca, component_selection::Function)
     all_components = 1:length(ica_result.ica_label)
     return all_components[component_selection(all_components)]
 end
 
-# Helper to select samples based on a predicate
+"""Apply a sample predicate and return matching row indices."""
 function get_selected_samples(dat::SingleDataFrameEeg, sample_selection::Function)
     return findall(sample_selection(dat.data))
 end
@@ -1284,13 +1290,13 @@ function get_selected_samples(dat::DataFrame, sample_selection::Function)
     return findall(sample_selection(dat))
 end
 
-# Helper to select epochs based on a predicate
+"""Apply an epoch predicate and return matching epoch indices."""
 function get_selected_epochs(dat::MultiDataFrameEeg, epoch_selection::Function)
     all_epochs = 1:length(dat.data)
     return findall(epoch_selection(all_epochs))
 end
 
-# Helper to select conditions from a vector of EEG data based on a predicate
+"""Apply a condition predicate and return matching dataset indices."""
 function get_selected_conditions(datasets::Vector{<:EegFunData}, condition_selection::Function)
     return findall(condition_selection(datasets))
 end
@@ -1383,7 +1389,7 @@ function rename_channel!(dat::EegData, rename_dict::Dict{Symbol,Symbol})
     return nothing
 end
 
-# Multiple dispatch for different EEG data types
+"""Rename DataFrame columns using a two-phase swap-safe approach."""
 function _rename_data_columns!(df::DataFrame, rename_dict::Dict{Symbol,Symbol}, existing_channels::Set{Symbol})
     # Check for potential duplicate names before applying any renames
     final_names = Symbol[]
@@ -1509,7 +1515,7 @@ function _create_layout_from_labels(labels::Vector{Symbol})::Layout
     return Layout(df, nothing, nothing, nothing)
 end
 
-# Internal helper: Creates a DataFrame from BiosemiData (used by public create_eegfun_data)
+"""Create a time+sample+trigger+channel DataFrame from raw BiosemiData."""
 function _create_eegfun_dataframe(dat::BiosemiDataFormat.BiosemiData)::DataFrame
     @info "Creating EEG DataFrame"
     df = hcat(
@@ -1537,7 +1543,7 @@ function create_eegfun_data(dat::BiosemiDataFormat.BiosemiData)
     return create_eegfun_data(dat, layout)
 end
 
-# Internal helper: Creates a DataFrame from BrainVisionData (used by public create_eegfun_data)
+"""Create a time+sample+trigger+channel DataFrame from raw BrainVision data."""
 function _create_eegfun_dataframe(dat::BrainVisionDataFormat.BrainVisionData)::DataFrame
     @info " Creating EEG DataFrame from BrainVision data"
 
