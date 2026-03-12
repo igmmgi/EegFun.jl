@@ -65,6 +65,7 @@ Browse interactive code examples demonstrating EegFun.jl's capabilities.
 - [Plot Layout](plotting/plot_layout.md) - Electrode layouts
 - [Plot Topography](plotting/plot_topography.md) - Topographic maps
 - [Plot Triggers](plotting/plot_triggers.md) - Event markers
+- [Saving Figures](plotting/save_figures.md) - Exporting figures (PNG, SVG, PDF)
 
 ## Interactive / GUI
 
