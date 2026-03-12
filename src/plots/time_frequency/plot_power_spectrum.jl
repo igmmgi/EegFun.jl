@@ -579,9 +579,10 @@ function plot_ica_component_spectrum(
     # Get selected components using the predicate
     selected_components = get_selected_components(ica_result, component_selection)
 
-    # If empty vector, use all components
+    # If empty, warn and return early
     if isempty(selected_components)
-        selected_components = 1:size(ica_result.unmixing, 1)
+        @minimal_warning "No components selected for ICA spectrum plot"
+        return (fig = Figure(), axes = Axis[])
     end
 
     # Debug: verify selected components

@@ -1,8 +1,8 @@
 julia version: 1.12.5
-EegFun version: 0.1.0
-Start time: 05-03-2026 07:32:42
-ERP measurement analysis started at 2026-03-05T07:32:42.331
-Function call: EegFun.viewer(diff_waves)
+EegFun version: 0.1.1
+Start time: 12-03-2026 14:45:46
+ERP measurement analysis started at 2026-03-12T14:45:46.150
+Function call: test
 Analysis type: max_peak_latency
 Found 12 JLD2 files
 Processing: example10_erps_good.jld2 (1/12)

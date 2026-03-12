@@ -669,4 +669,7 @@ function _apply_boxcar_average(data::Matrix, window_size::Int)
 end
 
 # Vector dispatch: plot each condition separately
-plot_erp_image(data::Vector{EpochData}; kwargs...) = plot_erp_image.(data; kwargs...)
+function plot_erp_image(data::Vector{EpochData}; kwargs...)
+    results = plot_erp_image.(data; kwargs...)
+    return length(results) == 1 ? only(results) : results
+end

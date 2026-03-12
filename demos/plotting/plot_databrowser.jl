@@ -5,6 +5,9 @@
 using EegFun
 using JLD2
 
+const DEMO_OUTPUT = "./demos/output/"
+mkpath(DEMO_OUTPUT)
+
 # read raw data
 dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf");
 
@@ -76,12 +79,12 @@ EegFun.plot_databrowser(epochs[1], ica_result)
 
 # We can save our EegFun data to a file and pass a file name to plot_databrowser 
 # plot_databrowser epochs from file
-jldsave("dat.jld2", data = dat)
-jldsave("epochs.jld2", data = epochs)
-jldsave("ica.jld2", data = ica_result)
+jldsave(joinpath(DEMO_OUTPUT, "dat.jld2"), data = dat)
+jldsave(joinpath(DEMO_OUTPUT, "epochs.jld2"), data = epochs)
+jldsave(joinpath(DEMO_OUTPUT, "ica.jld2"), data = ica_result)
 
 # Plot by loading from file
-EegFun.plot_databrowser("dat.jld2")
-EegFun.plot_databrowser("epochs.jld2")
-EegFun.plot_databrowser("dat.jld2", "ica.jld2")
-EegFun.plot_databrowser("epochs.jld2", "ica.jld2")
+EegFun.plot_databrowser(joinpath(DEMO_OUTPUT, "dat.jld2"))
+EegFun.plot_databrowser(joinpath(DEMO_OUTPUT, "epochs.jld2"))
+EegFun.plot_databrowser(joinpath(DEMO_OUTPUT, "dat.jld2"), joinpath(DEMO_OUTPUT, "ica.jld2"))
+EegFun.plot_databrowser(joinpath(DEMO_OUTPUT, "epochs.jld2"), joinpath(DEMO_OUTPUT, "ica.jld2"))

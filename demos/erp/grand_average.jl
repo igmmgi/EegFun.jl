@@ -4,6 +4,9 @@
 
 using EegFun
 
+const DEMO_OUTPUT = "./demos/output/"
+mkpath(DEMO_OUTPUT)
+
 
 #######################################################################
 # LOAD MULTI-PARTICIPANT ERP DATA
@@ -45,8 +48,8 @@ EegFun.plot_erp(grand_avgs, condition_selection = EegFun.conditions([1]), channe
 #######################################################################
 
 # Averages all JLD2 files whose name contains "erps_good" in the given directory.
-# Saves the result to derivatives/grand_average/grand_average_erps_good.jld2
-EegFun.grand_average("erps_good", input_dir  = "./resources/data/julia/erps/", output_dir = "./derivatives/grand_average/")
+# Saves the result to demos/output/grand_average_erps_good.jld2
+EegFun.grand_average("erps_good", input_dir  = "./resources/data/julia/erps/", output_dir = DEMO_OUTPUT)
 
 # With participant and condition filtering
 EegFun.grand_average(
@@ -54,7 +57,7 @@ EegFun.grand_average(
     input_dir = "./resources/data/julia/erps/",
     participant_selection = EegFun.participants(1:10),
     condition_selection = EegFun.conditions([1, 2]),
-    output_dir = "./derivatives/grand_average/",
+    output_dir = DEMO_OUTPUT,
 )
 
 
@@ -62,5 +65,5 @@ EegFun.grand_average(
 # LOAD AND PLOT BATCH RESULT
 #######################################################################
 
-ga = EegFun.read_data("./derivatives/grand_average/grand_average_erps_good.jld2")
+ga = EegFun.read_data(joinpath(DEMO_OUTPUT, "grand_average_erps_good.jld2"))
 EegFun.plot_erp(ga, channel_selection = EegFun.channels([:Cz, :Pz]))

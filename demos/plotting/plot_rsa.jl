@@ -16,7 +16,11 @@ dat = EegFun.create_eegfun_data(dat, layout)
 EegFun.highpass_filter!(dat, 0.1)
 EegFun.lowpass_filter!(dat, 30.0)
 
-epochs = EegFun.epoch_data(dat, [:trigger1, :trigger2], (-0.2, 0.8))
+epoch_cfg = [
+    EegFun.EpochCondition(name = "Condition1", trigger_sequences = [[1]]),
+    EegFun.EpochCondition(name = "Condition2", trigger_sequences = [[2]]),
+]
+epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.2, 0.8))
 EegFun.baseline!(epochs, (-0.2, 0.0))
 
 # compute RSA
@@ -47,7 +51,7 @@ EegFun.plot_rdm_heatmap(rsa_result, time_point = 50)
 EegFun.plot_rdm_timecourse(rsa_result)
 
 # only specific pairs
-EegFun.plot_rdm_timecourse(rsa_result, condition_pairs = [(1, 2), (1, 3)])
+EegFun.plot_rdm_timecourse(rsa_result, condition_pairs = [(1, 2)])
 
 #######################################################################
 # MODEL CORRELATIONS

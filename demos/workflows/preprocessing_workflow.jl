@@ -5,6 +5,9 @@
 using EegFun
 using JLD2
 
+const DEMO_OUTPUT = "./demos/output/"
+mkpath(DEMO_OUTPUT)
+
 #######################################################################
 #
 # PHASE 1: BASIC SETUP AND INITIAL PREPROCESSING
@@ -36,7 +39,7 @@ EegFun.get_neighbours_xy!(layout, 0.35) # Calculate neighbors (normalized units 
 dat = EegFun.create_eegfun_data(raw_data, layout)
 
 # Optional: save original continuous data
-# jldsave("continuous_original.jld2"; data = dat)
+# jldsave(joinpath(DEMO_OUTPUT, "continuous_original.jld2"); data = dat)
 
 
 #######################################################################
@@ -138,8 +141,8 @@ epochs_original = EegFun.extract_epochs(dat, epoch_cfg, (-0.2, 1.0))
 erps_original = EegFun.average_epochs(epochs_original)
 
 # Optional: save for comparison
-# jldsave("epochs_original.jld2"; data = epochs_original)
-# jldsave("erps_original.jld2"; data = erps_original)
+# jldsave(joinpath(DEMO_OUTPUT, "epochs_original.jld2"); data = epochs_original)
+# jldsave(joinpath(DEMO_OUTPUT, "erps_original.jld2"); data = erps_original)
 
 
 #######################################################################
@@ -286,7 +289,7 @@ all_removed_components = EegFun.get_all_ica_components(component_artifacts)
 EegFun.remove_ica_components!(dat, ica_result, component_selection = EegFun.components(all_removed_components))
 
 # Optional: save ICA decomposition
-# jldsave("ica.jld2"; data = ica_result)
+# jldsave(joinpath(DEMO_OUTPUT, "ica.jld2"); data = ica_result)
 
 
 #######################################################################
@@ -332,7 +335,7 @@ EegFun.channel_difference!(
 EegFun.is_extreme_value!(dat, 75.0, channel_out = :is_artifact_value_75_final)
 
 # Optional: save cleaned continuous data
-# jldsave("continuous_cleaned.jld2"; data = dat)
+# jldsave(joinpath(DEMO_OUTPUT, "continuous_cleaned.jld2"); data = dat)
 
 
 #######################################################################
@@ -389,7 +392,7 @@ EegFun.channel_repairable!(rejection_info_step1, epochs[1].layout)
 EegFun.repair_artifacts!(epochs, rejection_info_step1)
 
 # Optional: save epochs with repairs
-# jldsave("epochs_cleaned.jld2"; data = epochs)
+# jldsave(joinpath(DEMO_OUTPUT, "epochs_cleaned.jld2"); data = epochs)
 
 
 #######################################################################
@@ -416,7 +419,7 @@ artifact_info = EegFun.ArtifactInfo(
     vcat(rejection_info_step1, rejection_info_step2),
     component_artifacts,
 )
-# jldsave("artifact_info.jld2"; data = artifact_info)
+# jldsave(joinpath(DEMO_OUTPUT, "artifact_info.jld2"); data = artifact_info)
 
 
 #######################################################################
@@ -441,7 +444,7 @@ epochs_good = EegFun.reject_epochs(epochs, rejection_info_step2)
 # SAVE GOOD EPOCH DATA
 #######################################################################
 
-jldsave("epochs_good.jld2"; data = epochs_good)
+# jldsave(joinpath(DEMO_OUTPUT, "epochs_good.jld2"); data = epochs_good)
 
 
 #######################################################################
@@ -449,7 +452,7 @@ jldsave("epochs_good.jld2"; data = epochs_good)
 #######################################################################
 
 erps_good = EegFun.average_epochs(epochs_good)
-jldsave("erps_good.jld2"; data = erps_good)
+# jldsave(joinpath(DEMO_OUTPUT, "erps_good.jld2"); data = erps_good)
 
 
 #######################################################################
