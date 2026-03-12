@@ -5,6 +5,9 @@ import{_ as i,o as a,c as n,aA as h}from"./chunks/framework.BzaFumFl.js";const g
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">using</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> EegFun</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">using</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> JLD2</span></span>
 <span class="line"></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">const</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> DEMO_OUTPUT </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">=</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;"> &quot;./demos/output/&quot;</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">mkpath</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(DEMO_OUTPUT)</span></span>
+<span class="line"></span>
 <span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;">#######################################################################</span></span>
 <span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;">#</span></span>
 <span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># PHASE 1: BASIC SETUP AND INITIAL PREPROCESSING</span></span>
@@ -36,7 +39,7 @@ import{_ as i,o as a,c as n,aA as h}from"./chunks/framework.BzaFumFl.js";const g
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">dat </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> EegFun</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">.</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">create_eegfun_data</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(raw_data, layout)</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># Optional: save original continuous data</span></span>
-<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># jldsave(&quot;continuous_original.jld2&quot;; data = dat)</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># jldsave(joinpath(DEMO_OUTPUT, &quot;continuous_original.jld2&quot;); data = dat)</span></span>
 <span class="line"></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;">#######################################################################</span></span>
@@ -138,8 +141,8 @@ import{_ as i,o as a,c as n,aA as h}from"./chunks/framework.BzaFumFl.js";const g
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">erps_original </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> EegFun</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">.</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">average_epochs</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(epochs_original)</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># Optional: save for comparison</span></span>
-<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># jldsave(&quot;epochs_original.jld2&quot;; data = epochs_original)</span></span>
-<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># jldsave(&quot;erps_original.jld2&quot;; data = erps_original)</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># jldsave(joinpath(DEMO_OUTPUT, &quot;epochs_original.jld2&quot;); data = epochs_original)</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># jldsave(joinpath(DEMO_OUTPUT, &quot;erps_original.jld2&quot;); data = erps_original)</span></span>
 <span class="line"></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;">#######################################################################</span></span>
@@ -286,7 +289,7 @@ import{_ as i,o as a,c as n,aA as h}from"./chunks/framework.BzaFumFl.js";const g
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">EegFun</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">.</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">remove_ica_components!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(dat, ica_result, component_selection </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> EegFun</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">.</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">components</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(all_removed_components))</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># Optional: save ICA decomposition</span></span>
-<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># jldsave(&quot;ica.jld2&quot;; data = ica_result)</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># jldsave(joinpath(DEMO_OUTPUT, &quot;ica.jld2&quot;); data = ica_result)</span></span>
 <span class="line"></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;">#######################################################################</span></span>
@@ -332,7 +335,7 @@ import{_ as i,o as a,c as n,aA as h}from"./chunks/framework.BzaFumFl.js";const g
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">EegFun</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">.</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">is_extreme_value!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(dat, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">75.0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">, channel_out </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> :is_artifact_value_75_final</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">)</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># Optional: save cleaned continuous data</span></span>
-<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># jldsave(&quot;continuous_cleaned.jld2&quot;; data = dat)</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># jldsave(joinpath(DEMO_OUTPUT, &quot;continuous_cleaned.jld2&quot;); data = dat)</span></span>
 <span class="line"></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;">#######################################################################</span></span>
@@ -389,7 +392,7 @@ import{_ as i,o as a,c as n,aA as h}from"./chunks/framework.BzaFumFl.js";const g
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">EegFun</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">.</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">repair_artifacts!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(epochs, rejection_info_step1)</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># Optional: save epochs with repairs</span></span>
-<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># jldsave(&quot;epochs_cleaned.jld2&quot;; data = epochs)</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># jldsave(joinpath(DEMO_OUTPUT, &quot;epochs_cleaned.jld2&quot;); data = epochs)</span></span>
 <span class="line"></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;">#######################################################################</span></span>
@@ -416,7 +419,7 @@ import{_ as i,o as a,c as n,aA as h}from"./chunks/framework.BzaFumFl.js";const g
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">    vcat</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(rejection_info_step1, rejection_info_step2),</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">    component_artifacts,</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">)</span></span>
-<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># jldsave(&quot;artifact_info.jld2&quot;; data = artifact_info)</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># jldsave(joinpath(DEMO_OUTPUT, &quot;artifact_info.jld2&quot;); data = artifact_info)</span></span>
 <span class="line"></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;">#######################################################################</span></span>
@@ -441,7 +444,7 @@ import{_ as i,o as a,c as n,aA as h}from"./chunks/framework.BzaFumFl.js";const g
 <span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># SAVE GOOD EPOCH DATA</span></span>
 <span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;">#######################################################################</span></span>
 <span class="line"></span>
-<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">jldsave</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&quot;epochs_good.jld2&quot;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">; data </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> epochs_good)</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># jldsave(joinpath(DEMO_OUTPUT, &quot;epochs_good.jld2&quot;); data = epochs_good)</span></span>
 <span class="line"></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;">#######################################################################</span></span>
@@ -449,7 +452,7 @@ import{_ as i,o as a,c as n,aA as h}from"./chunks/framework.BzaFumFl.js";const g
 <span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;">#######################################################################</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">erps_good </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> EegFun</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">.</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">average_epochs</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(epochs_good)</span></span>
-<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">jldsave</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF;">&quot;erps_good.jld2&quot;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">; data </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> erps_good)</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># jldsave(joinpath(DEMO_OUTPUT, &quot;erps_good.jld2&quot;); data = erps_good)</span></span>
 <span class="line"></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;">#######################################################################</span></span>
