@@ -157,8 +157,6 @@ The raw recording includes four EOG electrodes (IO1, IO2, F9, F10) placed around
 
 ```julia
 # Vertical EOG: average of upper channels minus average of lower channels
-EegFun.rereference!(dat, :avg)
-EegFun.highpass_filter!(dat, 0.1)
 EegFun.channel_difference!(
     dat,
     channel_selection1 = EegFun.channels([:Fp1, :Fp2]),
@@ -194,8 +192,6 @@ EegFun.mark_epoch_intervals!(dat, [5], [-0.5, 1.0])
 # Browse again — the epoch regions now appear as shaded overlays
 EegFun.plot_databrowser(dat)
 ```
-
-<!-- TODO: Add screenshot of epoch regions on databrowser -->
 
 The highlighted regions let you quickly check whether epoch boundaries overlap, whether any epochs contain obvious artifacts, and whether the trigger timing looks correct.
 
