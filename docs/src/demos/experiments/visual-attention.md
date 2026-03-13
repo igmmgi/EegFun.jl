@@ -491,7 +491,6 @@ The most commonly adjusted parameters are shown below. The full configuration (w
 | | `epoch_end` | 1 s | Epoch end relative to trigger |
 | **Reference** | `reference_channel` | `avg` | Reference type (avg, mastoid, etc.) |
 | **Highpass** | `filter.highpass.freq` | 0.1 Hz | Main highpass cutoff |
-| | `filter.highpass.order` | 1 | Filter order |
 | **Lowpass** | `filter.lowpass.apply` | `false` | Lowpass off by default |
 | | `filter.lowpass.freq` | 30 Hz | Lowpass cutoff (if enabled) |
 | **ICA** | `ica.apply` | `false` | ICA off by default |
@@ -501,9 +500,10 @@ The most commonly adjusted parameters are shown below. The full configuration (w
 | | `eeg.artifact_value_abs_criterion` | 100 μV | Artifact threshold (epoch rejection) |
 | **EOG** | `eog.vEOG_channels` | Fp1/Fp2 − IO1/IO2 | Vertical EOG electrode pairs |
 | | `eog.hEOG_channels` | F9 − F10 | Horizontal EOG electrode pairs |
-| **Layout** | `layout.neighbour_criterion` | 0.25 | Distance for neighbour definition |
+| **Layout** | `layout.neighbour_criterion` | 0.35 | Distance for neighbour definition |
 
 <details>
+
 <summary>Full default configuration (click to expand)</summary>
 
 ```toml
@@ -598,14 +598,21 @@ neighbour_criterion = 0.25
 Apply a low-pass filter to the saved ERP files (e.g., 30 Hz for clean plotting):
 
 ```julia
-EegFun.lowpass_filter("erps_good", 30.0, input_dir = "output_data")
+EegFun.lowpass_filter("erps_good", 30.0)
 ```
 
 The interactive filter GUI lets you preview the effect of different filter settings before applying them in batch:
 
+```julia
+EegFun.plot_erp_filter_gui("example1_erps_good.jld2")
+```
+
 ![Filter GUI](/demos/experiments/visual-attention/filter_gui.png)
 
-This creates a new directory `output_data/filtered_erps_good_lp_30.0hz/` with filtered copies of each participant's ERPs.
+This creates a new directory `filtered_erps_good_lp_30.0hz/` with filtered copies of each participant's ERPs.
+
+> [!TIP]
+/folder name> Batch functions like `lowpass_filter`, `condition_average`, `condition_difference`, and `grand_average` automatically create an output directory named after the operation and its parameters (e.g., `filtered_erps_good_lp_30.0hz/`, `averages_erps_good_1-3_2-4/`). To save to a different location/folder name, pass the `output_dir` keyword argument.
 
 ### 2.3 Create Condition Averages
 
@@ -614,7 +621,7 @@ Collapse across target side to create **Valid** and **Invalid** conditions:
 ```julia
 # Average conditions: [1,3] = Valid (left+right), [2,4] = Invalid (left+right)
 EegFun.condition_average("erps_good", [[1, 3], [2, 4]],
-    input_dir = "output_data/filtered_erps_good_lp_30.0hz"
+    input_dir = "filtered_erps_good_lp_30.0hz"
 )
 ```
 
@@ -625,7 +632,7 @@ Compute the **Invalid − Valid** difference wave for each participant:
 ```julia
 # In the averaged data, condition 1 = Valid, condition 2 = Invalid
 EegFun.condition_difference("erps_good", [(2, 1)],
-    input_dir = "output_data/filtered_erps_good_lp_30.0hz/averages_erps_good_1-3_2-4"
+    input_dir = "filtered_erps_good_lp_30.0hz/averages_erps_good_1-3_2-4"
 )
 ```
 
@@ -636,7 +643,7 @@ Compute the grand average across all participants:
 ```julia
 # Grand average of the condition-averaged ERPs
 EegFun.grand_average("erps_good",
-    input_dir = "output_data/filtered_erps_good_lp_30.0hz/averages_erps_good_1-3_2-4"
+    input_dir = "filtered_erps_good_lp_30.0hz/averages_erps_good_1-3_2-4"
 )
 ```
 
@@ -645,7 +652,7 @@ EegFun.grand_average("erps_good",
 ```julia
 # Load the grand average
 ga = EegFun.read_data(
-    "output_data/filtered_erps_good_lp_30.0hz/averages_erps_good_1-3_2-4/grand_average_erps_good/grand_average_erps_good.jld2"
+    "filtered_erps_good_lp_30.0hz/averages_erps_good_1-3_2-4/grand_average_erps_good/grand_average_erps_good.jld2"
 )
 
 # ERP waveforms at posterior ROI
@@ -660,7 +667,7 @@ EegFun.plot_topography(ga, interval_selection = EegFun.times(0.17))
 
 # Load and plot the difference wave grand average
 ga_diff = EegFun.read_data(
-    "output_data/filtered_erps_good_lp_30.0hz/averages_erps_good_1-3_2-4/differences_erps_good_2-1/grand_average_erps_good/grand_average_erps_good.jld2"
+    "filtered_erps_good_lp_30.0hz/averages_erps_good_1-3_2-4/differences_erps_good_2-1/grand_average_erps_good/grand_average_erps_good.jld2"
 )
 EegFun.plot_erp(ga_diff, channel_selection = EegFun.channels([:PO7, :PO8, :O1, :O2]))
 ```
@@ -691,7 +698,7 @@ Before extracting measurements in batch, use the interactive GUI to explore wher
 
 ```julia
 # Load a single participant's ERPs
-erps = EegFun.read_data("output_data/example1_erps_good.jld2")
+erps = EegFun.read_data("example1_erps_good.jld2")
 
 # Open the measurement GUI
 EegFun.plot_erp_measurement_gui(erps)
@@ -785,7 +792,7 @@ EegFun.plot_erp_stats(
 ```
 
 > [!NOTE]
-> The permutation test can also be run with non-parametric thresholding via `threshold_method = :nonparametric_common` or `:nonparametric_individual`. See the [Statistics demo](../statistics/statistics.md) for full details.
+> The permutation test can also be run with non-parametric thresholding via `threshold_method = :nonparametric_common` or `:nonparametric_individual`. See the [Statistics demo](../../demos/statistics/statistics.md) for full details.
 
 ---
 
@@ -817,3 +824,234 @@ Compare left-target vs. right-target conditions at contralateral posterior sites
 
 - Mangun, G. R., & Hillyard, S. A. (1991). Modulations of sensory-evoked brain potentials indicate changes in perceptual processing during visual-spatial priming. *Journal of Experimental Psychology: Human Perception and Performance*, *17*(4), 1057–1074. [doi:10.1037/0096-1523.17.4.1057](https://doi.org/10.1037/0096-1523.17.4.1057)
 - Posner, M. I. (1980). Orienting of attention. *Quarterly Journal of Experimental Psychology*, *32*(1), 3–25. [doi:10.1080/00335558008248231](https://doi.org/10.1080/00335558008248231)
+
+---
+
+## The Whole Code
+
+All code from this tutorial combined for easy copy-paste.
+
+<details>
+
+<summary>Part 1: Single Participant Exploration (click to expand)</summary>
+
+```julia
+using EegFun
+
+# ── 1.1 Load Raw Data ──
+dat = EegFun.read_raw_data("example1.bdf")
+layout = EegFun.read_layout("biosemi72.csv")
+dat = EegFun.create_eegfun_data(dat, layout)
+
+# ── 1.2 Channel Layout and Neighbours ──
+EegFun.plot_layout_2d(dat)
+EegFun.get_neighbours_xy!(dat, 0.35)
+EegFun.plot_layout_2d(dat, neighbours = true)
+
+# ── 1.3 Inspect Triggers ──
+EegFun.trigger_count(dat)
+EegFun.plot_trigger_overview(dat)
+EegFun.plot_trigger_timing(dat)
+
+# ── 1.4 Browse the Raw Data ──
+EegFun.plot_databrowser(dat)
+EegFun.highpass_filter!(dat, 0.1)
+EegFun.rereference!(dat, :avg)
+EegFun.plot_databrowser(dat)
+
+# ── 1.5 Derive EOG Channels ──
+EegFun.channel_difference!(dat,
+    channel_selection1 = EegFun.channels([:Fp1, :Fp2]),
+    channel_selection2 = EegFun.channels([:IO1, :IO2]),
+    channel_out = :vEOG,
+)
+EegFun.channel_difference!(dat,
+    channel_selection1 = EegFun.channels([:F9]),
+    channel_selection2 = EegFun.channels([:F10]),
+    channel_out = :hEOG,
+)
+EegFun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
+EegFun.detect_eog_onsets!(dat, 50, :hEOG, :is_hEOG)
+
+# ── 1.6 Visualise Epoch Regions ──
+EegFun.mark_epoch_intervals!(dat, [5], [-0.5, 1.0])
+EegFun.plot_databrowser(dat)
+
+# ── 1.7 Channel Quality and Extreme Values ──
+cs = EegFun.channel_summary(dat)
+cs_epoch = EegFun.channel_summary(dat,
+    sample_selection = EegFun.samples(:epoch_interval)
+)
+EegFun.plot_channel_summary(cs, :range)
+EegFun.plot_channel_summary(cs, [:range, :min, :max, :var])
+EegFun.plot_channel_summary(cs_epoch, :range)
+EegFun.is_extreme_value!(dat, 200)
+EegFun.plot_databrowser(dat)
+
+# ── 1.8 Detect and Repair Bad Channels ──
+cs = EegFun.channel_summary(dat,
+    sample_selection = EegFun.samples(:epoch_interval)
+)
+jp = EegFun.channel_joint_probability(dat,
+    sample_selection = EegFun.samples(:epoch_interval)
+)
+bad_channels = EegFun.identify_bad_channels(cs, jp)
+EegFun.plot_databrowser(dat)  # Press R to open repair menu
+
+# ── 1.9 ICA ──
+EegFun.is_extreme_value!(dat, 250)
+dat_ica = copy(dat)
+EegFun.highpass_filter!(dat_ica, 1.0)
+ica_result = EegFun.run_ica(dat_ica,
+    sample_selection = EegFun.samples_not(:is_extreme_value_250)
+)
+EegFun.plot_topography(ica_result, component_selection = EegFun.components(1:10))
+EegFun.plot_ica_component_activation(dat, ica_result)
+EegFun.plot_databrowser(dat, ica_result)
+component_artifacts, component_metrics = EegFun.identify_components(dat, ica_result,
+    sample_selection = EegFun.samples_not(:is_extreme_value_250)
+)
+EegFun.plot_ica_component_activation(dat, ica_result, artifacts = component_artifacts)
+all_removed = EegFun.get_all_ica_components(component_artifacts)
+EegFun.remove_ica_components!(dat, ica_result,
+    component_selection = EegFun.components(all_removed)
+)
+
+# ── 1.10 Define Epoch Conditions ──
+epoch_conditions = [
+    EegFun.EpochCondition(name = "valid_left",   trigger_sequences = [[1, 5]], reference_index = 2),
+    EegFun.EpochCondition(name = "invalid_left",  trigger_sequences = [[2, 5]], reference_index = 2),
+    EegFun.EpochCondition(name = "valid_right",  trigger_sequences = [[3, 5]], reference_index = 2),
+    EegFun.EpochCondition(name = "invalid_right", trigger_sequences = [[4, 5]], reference_index = 2),
+]
+
+# ── 1.11 Extract Epochs ──
+epochs = EegFun.extract_epochs(dat, epoch_conditions, (-1.0, 1.0))
+EegFun.baseline!(epochs, (-0.2, 0.0))
+EegFun.plot_epochs(epochs, condition_selection = EegFun.conditions(1), channel_selection = EegFun.channels(:PO7))
+EegFun.plot_epochs(epochs, condition_selection = EegFun.conditions(1), layout = :grid)
+EegFun.plot_epochs(epochs, condition_selection = EegFun.conditions(2), layout = :topo)
+
+# ── 1.12 Reject Artifacts ──
+rejection_info = EegFun.detect_bad_epochs_automatic(epochs, abs_criterion = 100.0, z_criterion = 0.0)
+EegFun.plot_artifact_detection(epochs[1], rejection_info[1])
+EegFun.plot_artifact_detection(epochs[2], rejection_info[2])
+EegFun.channel_repairable!(rejection_info, epochs[1].layout)
+EegFun.repair_artifacts!(epochs, rejection_info)
+rejection_info2 = EegFun.detect_bad_epochs_automatic(epochs, abs_criterion = 100.0)
+EegFun.detect_bad_epochs_interactive(epochs[1], artifact_info = rejection_info2[1], dims = (3, 3)))
+epochs_good = EegFun.reject_epochs(epochs, rejection_info2)
+
+# ── 1.13 Average and Plot Single-Participant ERPs ──
+erps = EegFun.average_epochs(epochs_good)
+EegFun.plot_erp(erps, channel_selection = EegFun.channels([:PO7, :PO8, :O1, :O2]))
+EegFun.plot_topography(erps, interval_selection = EegFun.times(0.17))
+```
+
+</details>
+
+<details>
+
+<summary>Part 2: Batch Processing and Group Analysis (click to expand)</summary>
+
+```julia
+using EegFun
+
+# ── 2.1 Batch Preprocessing ──
+EegFun.preprocess("pipeline.toml")
+
+# ── 2.2 Batch Filter ERPs ──
+EegFun.lowpass_filter("erps_good", 30.0)
+
+# ── 2.3 Create Condition Averages ──
+EegFun.condition_average("erps_good", [[1, 3], [2, 4]],
+    input_dir = "filtered_erps_good_lp_30.0hz"
+)
+
+# ── 2.4 Create Difference Waves ──
+EegFun.condition_difference("erps_good", [(2, 1)],
+    input_dir = "filtered_erps_good_lp_30.0hz/averages_erps_good_1-3_2-4"
+)
+
+# ── 2.5 Grand Average ──
+EegFun.grand_average("erps_good",
+    input_dir = "filtered_erps_good_lp_30.0hz/averages_erps_good_1-3_2-4"
+)
+
+# ── 2.6 Publication-Quality Plots ──
+ga = EegFun.read_data(
+    "filtered_erps_good_lp_30.0hz/averages_erps_good_1-3_2-4/grand_average_erps_good/grand_average_erps_good.jld2"
+)
+EegFun.plot_erp(ga, channel_selection = EegFun.channels([:PO7, :PO8, :O1, :O2]))
+EegFun.plot_topography(ga, interval_selection = EegFun.times(0.1))    # P1
+EegFun.plot_topography(ga, interval_selection = EegFun.times(0.17))   # N1
+
+ga_diff = EegFun.read_data(
+    "filtered_erps_good_lp_30.0hz/averages_erps_good_1-3_2-4/differences_erps_good_2-1/grand_average_erps_good/grand_average_erps_good.jld2"
+)
+EegFun.plot_erp(ga_diff, channel_selection = EegFun.channels([:PO7, :PO8, :O1, :O2]))
+```
+
+</details>
+
+<details>
+
+<summary>Part 3: Statistical Analysis (click to expand)</summary>
+
+```julia
+using EegFun, AnovaFun
+
+# ── 3.1 ERP Measurement GUI ──
+erps = EegFun.read_data("example1_erps_good.jld2")
+EegFun.plot_erp_measurement_gui(erps)
+
+# ── 3.2 Extract ERP Measurements ──
+mean_amp = EegFun.erp_measurements(
+    "erps_good",
+    "mean_amplitude",
+    input_dir = "output_data",
+    condition_selection = EegFun.conditions([1, 2, 3, 4]),
+    channel_selection = EegFun.channels([:PO7, :PO8, :O1, :O2]),
+    analysis_interval = (0.15, 0.2),
+    baseline_interval = (-0.2, 0.0),
+)
+
+# ── 3.3 Traditional Statistics ──
+df = mean_amp.data
+valid_po7   = (df[df.condition .== 1, :PO7] .+ df[df.condition .== 3, :PO7]) ./ 2
+invalid_po7 = (df[df.condition .== 2, :PO7] .+ df[df.condition .== 4, :PO7]) ./ 2
+
+result = paired_ttest(valid_po7, invalid_po7)
+result.t   # t-statistic
+result.p   # p-value
+
+# ── 3.4 Permutation-Based Statistics ──
+stat_data = EegFun.prepare_stats(
+    "erps_good",
+    :paired;
+    input_dir = "output_data",
+    condition_selection = EegFun.conditions([1, 2]),
+    channel_selection = EegFun.channels(1:72),
+    baseline_interval = EegFun.times((-0.2, 0.0)),
+    analysis_interval = EegFun.times((0.0, 1.0)),
+)
+
+result_perm = EegFun.permutation_test(
+    stat_data,
+    n_permutations = 1000,
+    threshold_method = :parametric,
+    cluster_type = :spatiotemporal,
+    min_num_neighbors = 3,
+    show_progress = true,
+)
+
+EegFun.plot_erp_stats(
+    result_perm,
+    channel_selection = EegFun.channels(:PO7),
+    plot_erp = true,
+    plot_significance = true,
+    plot_critical_t = true,
+)
+```
+
+</details>
