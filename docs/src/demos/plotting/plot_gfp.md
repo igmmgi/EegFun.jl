@@ -43,13 +43,16 @@ This demo shows how to visualise Global Field Power (GFP) and Global Dissimilari
 # across conditions, with optional ERP trace overlay.
 
 using EegFun
+# Note: EegFun.example_path() resolves bundled example data paths.
+# When using your own data, simply pass the file path directly, e.g.:
+# dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 #######################################################################
 # LOAD DATA AND CREATE ERPS
 #######################################################################
 
-dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf")
-layout = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv")
+dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"))
+layout = EegFun.read_layout(EegFun.example_path("layouts/biosemi/biosemi72.csv"))
 EegFun.polar_to_cartesian_xy!(layout)
 dat = EegFun.create_eegfun_data(dat, layout)
 

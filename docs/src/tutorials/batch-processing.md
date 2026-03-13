@@ -8,7 +8,7 @@ EegFun.jl provides automated pipelines that process an entire cohort of EEG reco
 using EegFun
 
 # Run the v1 pipeline
-EegFun.preprocess_v1("config.toml")
+EegFun.preprocess("config.toml")
 
 # Or the v2 pipeline (applies filters differently, uses EOG autodetection)
 EegFun.preprocess_v2("config.toml")

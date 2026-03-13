@@ -222,7 +222,6 @@ function _crop_epochs_to_window!(dat::EpochData, window::Tuple{Float64,Float64})
 
     # Third pass: Regenerate uniform time vector for all epochs
     # This ensures all epochs have identical time vectors
-    dt = 1.0 / dat.sample_rate
     uniform_time = range(start_time, stop = end_time, length = n_samples)
 
     for epoch in dat.data

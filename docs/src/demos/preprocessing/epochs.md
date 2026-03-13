@@ -31,12 +31,15 @@ Epoching is the process of extracting specific time intervals around events (e.g
 # Shows how to extract epochs from continuous data using trigger sequences.
 
 using EegFun
+# Note: EegFun.example_path() resolves bundled example data paths.
+# When using your own data, simply pass the file path directly, e.g.:
+# dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 # Read raw data
-dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf");
+dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"));
 
 # Read and prepare layout file
-layout = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
+layout = EegFun.read_layout(EegFun.example_path("layouts/biosemi/biosemi72.csv"));
 EegFun.polar_to_cartesian_xy!(layout)
 
 # Create EegFun data structure (EegFun.ContinuousData)

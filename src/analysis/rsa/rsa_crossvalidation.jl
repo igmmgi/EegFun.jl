@@ -115,9 +115,6 @@ function rsa_crossvalidated(
         @minimal_error("K-fold CV requires at least $n_folds trials per condition, got $min_trials")
     end
 
-    # Preallocate RDM array
-    rdms = zeros(Float64, n_timepoints, n_conditions, n_conditions)
-
     # Compute cross-validated RDMs based on method
     if cv_method == :splithalf
         rdms = _cv_splithalf(data_arrays, n_timepoints, n_conditions, selected_channels, dissimilarity_measure, n_iterations)

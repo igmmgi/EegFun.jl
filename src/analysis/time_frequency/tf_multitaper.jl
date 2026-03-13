@@ -129,7 +129,7 @@ function tf_multitaper(
 
     # Get sample rate and time vector from processed data
     times_processed = time_vector(dat)
-    n_samples_processed = n_samples(dat)  # Number of samples per epoch (may be padded)
+    n_samples_per_epoch = n_samples(dat)  # Number of samples per epoch (may be padded)
 
     # Handle time_steps parameter - determine which time points to extract from results
     # After padding, processed data has extended time range - validate against processed data
@@ -142,12 +142,8 @@ function tf_multitaper(
         error("No valid time points found with step size $time_steps in range ($time_min to $time_max seconds)")
     end
 
-    # Use processed data dimensions
-    n_samples_original = n_samples_processed
-
     # Get number of trials/epochs
     n_trials = n_epochs(dat)
-    n_samples_per_epoch = n_samples_original
 
     # Use frequencies directly (convert to vector if needed for indexing)
     freqs = collect(frequencies)
@@ -284,7 +280,6 @@ function tf_multitaper(
     # Process each selected channel
     for channel in selected_channels
         # Pre-extract all trial data for this channel into a matrix (n_samples × n_trials) for better cache locality
-        trial_signals_matrix = Matrix{Float64}(undef, n_samples_per_epoch, n_trials)
         for trial_idx = 1:n_trials
             col = dat.data[trial_idx][!, channel]
             # Copy directly without intermediate Vector allocation
@@ -294,13 +289,8 @@ function tf_multitaper(
         end
 
         # Clear/initialize output buffers for this channel
-        if return_trials
-            fill!(eegpower, 0.0)
-            fill!(eegconv, 0.0im)
-        else
-            fill!(eegpower, 0.0)
-            fill!(eegconv, 0.0im)
-        end
+        fill!(eegpower, 0.0)
+        fill!(eegconv, 0.0im)
 
         # FieldTrip frequency-domain convolution approach for multitaper
         # FFT entire data once, then multiply by tapered wavelet FFTs and IFFT

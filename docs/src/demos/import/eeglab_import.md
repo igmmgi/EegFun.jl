@@ -44,14 +44,17 @@ The `.set` format is a MATLAB-based file that contains a header structure with a
 # Once loaded, all EegFun functions work as expected.
 
 using EegFun
+# Note: EegFun.example_path() resolves bundled example data paths.
+# When using your own data, simply pass the file path directly, e.g.:
+# dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 # this seems to be a raw continuous data file without and ICA info
-dat = EegFun.read_eeglab("./resources/data/eeglab/eeglab_data.set")
+dat = EegFun.read_eeglab(EegFun.example_path("data/eeglab/eeglab_data.set"))
 EegFun.plot_databrowser(dat)
 EegFun.trigger_count(dat)
 
 # this seems to be a epoched data file with ica info
-dat, ica = EegFun.read_eeglab("./resources/data/eeglab/epochs.set")
+dat, ica = EegFun.read_eeglab(EegFun.example_path("data/eeglab/epochs.set"))
 EegFun.plot_databrowser(dat)
 
 # We can plot the ICA activations 

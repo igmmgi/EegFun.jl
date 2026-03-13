@@ -91,6 +91,9 @@ Cohen, M. X. (2014). *Analyzing Neural Time Series Data: Theory and Practice*. C
 # and real data, demonstrating different cycle counts and frequency resolution.
 
 using EegFun
+# Note: EegFun.example_path() resolves bundled example data paths.
+# When using your own data, simply pass the file path directly, e.g.:
+# dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 #######################################################################
 @info EegFun.section("TEST 1: Synthetic Signal with Known Frequencies")
@@ -135,7 +138,7 @@ EegFun.plot_tf(tf_data, ylogscale = true)
 @info EegFun.section("TEST 2: Cohen Data Chapter 13")
 #######################################################################
 # This is some data that was presented in Cohen: Analyzin Neural Time Series Data
-data_cohen = EegFun.read_data("./resources/data/julia/tf/tf_test_epochs.jld2");
+data_cohen = EegFun.read_data(EegFun.example_path("data/julia/tf/tf_test_epochs.jld2"));
 
 # Figure 13.11 A)
 tf_data = EegFun.tf_morlet(data_cohen, frequencies = logrange(2, 80, length = 80), cycles = (3, 7), filter_edges = false)

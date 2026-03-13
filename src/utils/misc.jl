@@ -627,3 +627,33 @@ function _combine_boolean_columns!(dat::ContinuousData, columns::Vector{Symbol},
 
     @info "_combine_boolean_columns!: Combined $(length(columns)) columns using :$operation operation into column :$output_column"
 end
+
+
+"""
+    example_path(relative_path::String) -> String
+
+Return the absolute path to a bundled example resource file.
+
+This resolves paths relative to the package's `resources/` directory using `pkgdir`,
+so it works regardless of the current working directory.
+
+# Arguments
+- `relative_path::String`: Path relative to the `resources/` directory
+
+# Returns
+- `String`: Absolute path to the resource file
+
+# Examples
+```julia
+# Load example BDF data
+dat = read_raw_data(EegFun.example_path("data/bdf/example1.bdf"))
+
+# Load a layout
+layout = read_layout(EegFun.example_path("layouts/biosemi/biosemi72.csv"))
+```
+"""
+function example_path(relative_path::String)
+    path = joinpath(pkgdir(EegFun), "resources", relative_path)
+    isfile(path) || isdir(path) || error("Example resource not found: $relative_path\nExpected at: $path")
+    return path
+end

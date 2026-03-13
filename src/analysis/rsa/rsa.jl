@@ -74,7 +74,6 @@ which provides a robust estimate of the noise covariance structure.
 - Regularization is applied if matrix is near-singular
 """
 function _compute_pooled_covariance(data_arrays::Vector{Array{Float64,3}}, time_idx::Int)
-    n_conditions = length(data_arrays)
     n_features = size(data_arrays[1], 1)  # Number of channels
 
     # Collect all trials across conditions at this time point
@@ -399,9 +398,6 @@ function rsa(
         @minimal_error("One or more conditions have zero trials: $(join(empty_conditions, ", "))")
     end
 
-    # Preallocate RDM array: [time × condition × condition]
-    rdms = zeros(Float64, n_timepoints, n_conditions, n_conditions)
-
     # Compute RDMs: different approaches based on whether to average trials
     if average_trials
         # Average trials first, then compute RDM at each time point
@@ -410,6 +406,8 @@ function rsa(
     else
         # Compute RDM for each trial separately, then average RDMs
         # This approach is more robust to noise and outliers
+        # Preallocate RDM array: [time × condition × condition]
+        rdms = zeros(Float64, n_timepoints, n_conditions, n_conditions)
         for t = 1:n_timepoints
             # Compute pooled covariance if using Mahalanobis distance
             pooled_cov = nothing

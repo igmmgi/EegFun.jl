@@ -76,14 +76,13 @@ function test_against_chance(decoded_list::Vector{DecodedData}; alpha::Real = 0.
 
     # validate some inputs
     isempty(decoded_list) && @minimal_error("Cannot test empty decoded data list")
-    correction_method ∈ (:none, :bonferroni) || @minimal_error("correction_method must be :none or :bonferroni, got :$correction_method")
+    correction_method ∉ (:none, :bonferroni) && @minimal_error("correction_method must be :none or :bonferroni, got :$correction_method")
 
     # Validate all inputs have same structure
     first_decoded = decoded_list[1]
     first_times = first_decoded.times
     first_params = first_decoded.parameters
     chance_level = first_params.chance_level
-
     for decoded in decoded_list[2:end]
         decoded.times != first_times && @minimal_error("DecodedData inputs have inconsistent time vectors")
         decoded.parameters.chance_level != chance_level && @minimal_warning "DecodedData objects have different chance_level"
@@ -93,7 +92,6 @@ function test_against_chance(decoded_list::Vector{DecodedData}; alpha::Real = 0.
     n_participants = length(decoded_list)
     n_timepoints = length(first_times)
     accuracies = Matrix{Float64}(undef, n_participants, n_timepoints)
-
     for (p_idx, decoded) in enumerate(decoded_list)
         accuracies[p_idx, :] = decoded.average_score
     end
@@ -105,11 +103,9 @@ function test_against_chance(decoded_list::Vector{DecodedData}; alpha::Real = 0.
     p_values = Vector{Float64}(undef, n_timepoints)
     chance_vector = fill(chance_level, n_participants)
     df = Float64(n_participants - 1)  # df for one-sample t-test
-
     for t_idx = 1:n_timepoints
         # Extract accuracies for this timepoint across all participants
         accuracies_at_t = accuracies[:, t_idx]
-
         # Use paired_ttest to compare accuracies against chance level
         # This is equivalent to a one-sample t-test: H0: mean(accuracies) = chance_level
         # One-tailed test (right tail): tests if accuracy > chance
@@ -202,18 +198,8 @@ function _find_temporal_clusters(mask::BitVector, times::Vector{Float64})
     general_clusters = _find_clusters_connected_components(mask_2d, dummy_electrode, times, dummy_connectivity, :temporal)
 
     # Convert general Cluster objects to TemporalCluster objects
-    temporal_clusters = TemporalCluster[]
-    for cluster in general_clusters
-        temp_cluster = TemporalCluster(
-            cluster.id,
-            cluster.time_indices,
-            cluster.time_range,
-            cluster.cluster_stat,
-            cluster.p_value,
-            cluster.is_significant,
-        )
-        push!(temporal_clusters, temp_cluster)
-    end
+    temporal_clusters =
+        [TemporalCluster(c.id, c.time_indices, c.time_range, c.cluster_stat, c.p_value, c.is_significant) for c in general_clusters]
 
     return temporal_clusters
 end
@@ -345,11 +331,7 @@ function test_against_chance_cluster(
     observed_clusters = _find_temporal_clusters(mask_observed, first_times)
 
     # Compute observed cluster statistics
-    if !isempty(observed_clusters)
-        cluster_stats_observed = _compute_cluster_statistics(observed_clusters, t_statistics, cluster_statistic)
-    else
-        cluster_stats_observed = Float64[]
-    end
+    cluster_stats_observed = _compute_cluster_statistics(observed_clusters, t_statistics, cluster_statistic)
 
     # Run permutations
     permutation_max = Float64[]

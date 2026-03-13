@@ -292,7 +292,7 @@ public apply_analysis_settings
 public apply_analysis_settings!
 public generate_config_template
 public generate_pipeline_template
-public preprocess_v1
+public preprocess
 public preprocess_v2
 public print_config
 public show_parameter_info
@@ -379,5 +379,6 @@ public signal_example_decoding
 # =====================
 # Misc
 # =====================
+public example_path
 public version_info
 public get_package_version

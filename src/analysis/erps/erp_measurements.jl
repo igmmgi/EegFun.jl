@@ -835,10 +835,7 @@ function erp_measurements(
 
         # Validate analysis_interval
         if !isnothing(analysis_interval)
-            interval = analysis_interval
-            if interval isa AbstractRange
-                interval = (first(interval), last(interval))
-            end
+            interval = _normalize_interval(analysis_interval)
             if interval[1] > interval[2]
                 @minimal_error "Analysis interval start must be <= stop. Got: ($(interval[1]), $(interval[2]))"
             end
@@ -952,23 +949,6 @@ function erp_measurements(
 
         @info "Saved $(nrow(results_df)) measurement(s) to: $output_csv"
         @info "Analysis complete! Processed $processed_count files successfully, $error_count errors"
-
-        # Generate interval descriptions for result metadata
-        if isnothing(analysis_interval)
-            analysis_interval_desc = "all samples"
-        elseif analysis_interval isa Tuple
-            analysis_interval_desc = "$(analysis_interval[1]):$(analysis_interval[2]) S"
-        else  # Tuple or range
-            analysis_interval_desc = "$(analysis_interval[1]):$(analysis_interval[2])"
-        end
-
-        if isnothing(baseline_interval)
-            baseline_interval_desc = "none"
-        elseif baseline_interval isa Tuple
-            baseline_interval_desc = "$(baseline_interval[1]):$(baseline_interval[2]) S"
-        else  # Tuple or range
-            baseline_interval_desc = "$(baseline_interval[1]):$(baseline_interval[2])"
-        end
 
         # Return as ErpMeasurementsResult with metadata
         return ErpMeasurementsResult(results_df, analysis_type, analysis_interval, baseline_interval)

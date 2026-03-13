@@ -129,6 +129,7 @@ function prepare_decoding(
 
     return participant_epochs
 end
+
 function prepare_decoding(
     file_pattern::String;
     input_dir::String = pwd(),

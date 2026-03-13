@@ -3,10 +3,13 @@
 # with layouts, and get the triggers/events.
 
 using EegFun
+# Note: EegFun.example_path() resolves bundled example data paths.
+# When using your own data, simply pass the file path directly, e.g.:
+# dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 # Load raw BDF data
 # read_raw_data automatically detects the .bdf extension
-raw_data = EegFun.read_raw_data("./resources/data/bdf/example1.bdf")
+raw_data = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"))
 
 # EegFun uses the Julia package: BiosemiDataFormat.jl
 # https://github.com/igmmgi/BiosemiDataFormat.jl
@@ -20,7 +23,7 @@ raw_data.triggers
 
 # Load and prepare electrode layout
 # BioSemi systems typically use their standard cap configurations
-layout = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv")
+layout = EegFun.read_layout(EegFun.example_path("layouts/biosemi/biosemi72.csv"))
 EegFun.polar_to_cartesian_xy!(layout)
 
 layout.data # DataFrame with labels and positions

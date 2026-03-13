@@ -3,6 +3,9 @@
 # This mirrors the steps and order used in pipeline_v1.jl
 
 using EegFun
+# Note: EegFun.example_path() resolves bundled example data paths.
+# When using your own data, simply pass the file path directly, e.g.:
+# dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 using JLD2
 
 const DEMO_OUTPUT = "./demos/output/"
@@ -24,10 +27,10 @@ mkpath(DEMO_OUTPUT)
 @info EegFun.section("Raw Data")
 
 # Read raw data file
-raw_data = EegFun.read_raw_data("./resources/data/bdf/example1.bdf")
+raw_data = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"))
 
 # Load electrode layout and configure all coordinate systems
-layout = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv")
+layout = EegFun.read_layout(EegFun.example_path("layouts/biosemi/biosemi72.csv"))
 EegFun.polar_to_cartesian_xy!(layout)   # For 2D topography plots
 EegFun.polar_to_cartesian_xyz!(layout)  # For 3D interpolation (spherical spline)
 EegFun.get_neighbours_xy!(layout, 0.35) # Calculate neighbors (normalized units for this layout)
@@ -503,4 +506,4 @@ EegFun.plot_erp(erps_good, channel_selection = EegFun.channels([:Cz, :Pz]))
 #   - Visualize comparison
 #
 # For automated batch processing of multiple participants,
-# see the preprocess_v1() function and the batch-processing tutorial.
+# see the preprocess() function and the batch-processing tutorial.

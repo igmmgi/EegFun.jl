@@ -19,25 +19,24 @@ PrecompileTools.@compile_workload begin
         layout_file = EegFun.read_layout(layout_file_path)
         dat = EegFun.create_eegfun_data(dat, layout_file)
 
-        # Some minimal preprocessing
+        # 2. Common preprocessing pipeline
         EegFun.rereference!(dat, :avg)
         EegFun.highpass_filter!(dat, 0.5)
         EegFun.lowpass_filter!(dat, 50)
 
-        # Artifact detection
+        # 3. Artifact detection
         EegFun.is_extreme_value!(dat, 100)
 
-        # Epoch extraction & ERP workflow
+        # 4. Epoch extraction & ERP workflow
         epoch_cfg = [EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
-        local epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.5, 1.0))
-        local erp = EegFun.average_epochs(epochs)
+        epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.5, 1.0))
+        erp = EegFun.average_epochs(epochs)
 
-        # Key plot types
-        EegFun.plot_databrowser(dat)
-        EegFun.plot_epochs(epochs[1])
-        EegFun.plot_erp(erp)
-        EegFun.plot_topography(erp)
-        EegFun.plot_gui()
+        # 5. Key plot types (headless — display_plot = false prevents window creation)
+        EegFun.plot_databrowser(dat; display_plot = false)
+        EegFun.plot_epochs(epochs[1]; display_plot = false)
+        EegFun.plot_erp(erp; display_plot = false)
+        EegFun.plot_topography(erp; display_plot = false)
 
         println("Precompilation complete!")
     else
