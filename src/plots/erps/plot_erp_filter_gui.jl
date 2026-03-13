@@ -1,4 +1,5 @@
 """
+    plot_erp_filter_gui(filepath::String; kwargs...)
     plot_erp_filter_gui(erp::ErpData; kwargs...)
     plot_erp_filter_gui(erps::Vector{ErpData}; kwargs...)
 
@@ -10,6 +11,7 @@ Perfect for:
 - **Visual Validation**: Compare original vs filtered waveforms before batch processing
 
 # Arguments
+- `filepath::String`: Path to a `.jld2` file containing ERP data
 - `erp::ErpData` or `erps::Vector{ErpData}`: Single ERP or multiple conditions
 
 # Keyword Arguments
@@ -26,6 +28,15 @@ Perfect for:
 - Both filters disabled by default
 - For batch filtering, use `lowpass_filter` or `highpass_filter` functions
 """
+# String filepath - load data and dispatch
+function plot_erp_filter_gui(filepath::String; kwargs...)
+    data = read_data(filepath)
+    if isnothing(data)
+        @minimal_error "No data found in file: $filepath"
+    end
+    return plot_erp_filter_gui(data; kwargs...)
+end
+
 # Single ErpData - dispatch to vector version
 function plot_erp_filter_gui(erp::ErpData; channel::Union{Symbol,Nothing} = nothing)
     return plot_erp_filter_gui([erp]; channel)
