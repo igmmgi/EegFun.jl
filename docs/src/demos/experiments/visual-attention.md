@@ -502,9 +502,7 @@ The most commonly adjusted parameters are shown below. The full configuration (w
 | | `eog.hEOG_channels` | F9 − F10 | Horizontal EOG electrode pairs |
 | **Layout** | `layout.neighbour_criterion` | 0.35 | Distance for neighbour definition |
 
-<details>
-
-<summary>Full default configuration (click to expand)</summary>
+::: details Full default configuration (click to expand)
 
 ```toml
 # ──── Files ────
@@ -591,7 +589,7 @@ percentage_of_data = 100.0
 neighbour_criterion = 0.25
 ```
 
-</details>
+:::
 
 ### 2.2 Batch Filter ERPs
 
@@ -831,9 +829,7 @@ Compare left-target vs. right-target conditions at contralateral posterior sites
 
 All code from this tutorial combined for easy copy-paste.
 
-<details>
-
-<summary>Part 1: Single Participant Exploration (click to expand)</summary>
+::: details Part 1: Single Participant Exploration (click to expand)
 
 ```julia
 using EegFun
@@ -948,11 +944,9 @@ EegFun.plot_erp(erps, channel_selection = EegFun.channels([:PO7, :PO8, :O1, :O2]
 EegFun.plot_topography(erps, interval_selection = EegFun.times(0.17))
 ```
 
-</details>
+:::
 
-<details>
-
-<summary>Part 2: Batch Processing and Group Analysis (click to expand)</summary>
+::: details Part 2: Batch Processing and Group Analysis (click to expand)
 
 ```julia
 using EegFun
@@ -992,11 +986,9 @@ ga_diff = EegFun.read_data(
 EegFun.plot_erp(ga_diff, channel_selection = EegFun.channels([:PO7, :PO8, :O1, :O2]))
 ```
 
-</details>
+:::
 
-<details>
-
-<summary>Part 3: Statistical Analysis (click to expand)</summary>
+::: details Part 3: Statistical Analysis (click to expand)
 
 ```julia
 using EegFun, AnovaFun
@@ -1054,4 +1046,4 @@ EegFun.plot_erp_stats(
 )
 ```
 
-</details>
+:::
