@@ -47,6 +47,9 @@ This demo shows how to extract quantitative measurements from ERPs and analyse t
 # analyse them using AnovaFun for traditional t-tests and ANOVA.
 
 using EegFun
+# Note: EegFun.example_path() resolves bundled example data paths.
+# When using your own data, simply pass the file path directly, e.g.:
+# dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 using AnovaFun
 
 
@@ -57,7 +60,7 @@ using AnovaFun
 # This batch function loads all participant ERP files, extracts 
 # measurements, and saves results to a CSV file.
 
-input_dir = "./resources/data/julia/erps"
+input_dir = EegFun.example_path("data/julia/erps")
 file_pattern = "erps_good"
 
 # Mean amplitude in the P300 window
@@ -105,7 +108,7 @@ mean_amp.data  # DataFrame with: participant, condition, channel, measurement
 #######################################################################
 
 # GUI for exploring measurements interactively before batch extraction
-dat = EegFun.read_data("./resources/data/julia/erps/example1_erps_good.jld2")
+dat = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps_good.jld2"))
 EegFun.plot_erp_measurement_gui(dat)     # all conditions
 # EegFun.plot_erp_measurement_gui(dat[1]) # first condition only
 

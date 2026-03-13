@@ -31,6 +31,9 @@ const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :show_scale_indicator => (true, "Show scale indicator bar"),
     :scale_indicator_value => (100.0, "Scale indicator value in μV"),
     :scale_indicator_position => ((0.92, 0.96), "Scale indicator position as (x, y) in axis coordinates (0-1)"),
+
+    # Display
+    :display_plot => (true, "Whether to display the plot"),
 )
 
 # Base type for data states
@@ -1892,10 +1895,12 @@ function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs.
     end
 
     # Display on the provided screen if given, otherwise use default display
-    if !isnothing(screen)
-        display(screen, fig)
-    else
-        display(fig)
+    if plot_kwargs[:display_plot]
+        if !isnothing(screen)
+            display(screen, fig)
+        else
+            display(fig)
+        end
     end
 
     _set_window_title("Makie")

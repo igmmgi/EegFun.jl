@@ -1,4 +1,4 @@
-This demo walks through a complete manual preprocessing pipeline from raw BioSemi data to cleaned ERPs. It mirrors the steps and order used in `EegFun.preprocess_v1`, making it a useful reference for understanding what the automated pipeline does or for building a custom workflow.
+This demo walks through a complete manual preprocessing pipeline from raw BioSemi data to cleaned ERPs. It mirrors the steps and order used in `EegFun.preprocess`, making it a useful reference for understanding what the automated pipeline does or for building a custom workflow.
 
 ### When to Use This
 

@@ -453,14 +453,14 @@ AttentionExp/
 The walk-through in Part 1 gave you the general idea of a single-participant analysis pipeline — loading data, filtering, ICA, epoch extraction, artifact rejection, and ERP averaging. In practice, we want to run these steps automatically across all participants so that every file receives the same analysis in a consistent, reproducible way. Visual inspection of the raw data and of the individual-level outputs remains important, but the automated pipeline ensures a uniform setup that is easy to document and log.
 
 > [!NOTE]
-> The pipeline below uses `preprocess_v1`, which provides sensible defaults for a standard ERP analysis. If you need a different set of steps or parameters, you can generate a fully customisable pipeline scaffold with `EegFun.generate_pipeline_template("my_pipeline.jl", "my_preprocess")` and a matching configuration file with `EegFun.generate_config_template("my_config.toml")`. The template provides all the boilerplate — logging, configuration loading, file iteration, and error handling — so you can focus on combining the lower-level functions from Part 1 (filtering, ICA, epoching, artifact rejection, etc.) into your own processing sequence.
+> The pipeline below uses `preprocess`, which provides sensible defaults for a standard ERP analysis. If you need a different set of steps or parameters, you can generate a fully customisable pipeline scaffold with `EegFun.generate_pipeline_template("my_pipeline.jl", "my_preprocess")` and a matching configuration file with `EegFun.generate_config_template("my_config.toml")`. The template provides all the boilerplate — logging, configuration loading, file iteration, and error handling — so you can focus on combining the lower-level functions from Part 1 (filtering, ICA, epoching, artifact rejection, etc.) into your own processing sequence.
 
 ### 2.1 Batch Preprocessing
 
-The `preprocess_v1` pipeline automates all single-participant steps across every BDF file:
+The `preprocess` pipeline automates all single-participant steps across every BDF file:
 
 ```julia
-EegFun.preprocess_v1("pipeline.toml")
+EegFun.preprocess("pipeline.toml")
 ```
 
 For each participant, the pipeline runs through the following stages:
@@ -811,7 +811,7 @@ Compare left-target vs. right-target conditions at contralateral posterior sites
 ## Further Reading
 
 - [Manual Preprocessing](../../tutorials/manual-preprocessing.md) — Rationale behind each preprocessing step
-- [Batch Processing](../../tutorials/batch-processing.md) — `preprocess_v1()` configuration
+- [Batch Processing](../../tutorials/batch-processing.md) — `preprocess()` configuration
 - [Selection Patterns](../../tutorials/selection-patterns.md) — The selector API
 - [Artifact Handling](../../tutorials/artifact-handling.md) — Strategies for trial rescue
 

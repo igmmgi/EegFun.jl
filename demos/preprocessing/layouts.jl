@@ -3,13 +3,16 @@
 # and their spatial neighbour relationships.
 
 using EegFun
+# Note: EegFun.example_path() resolves bundled example data paths.
+# When using your own data, simply pass the file path directly, e.g.:
+# dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 #######################################################################
 # LOADING AND INSPECTING LAYOUTS
 #######################################################################
 
 # Load a layout file (CSV with polar coordinates)
-layout = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv")
+layout = EegFun.read_layout(EegFun.example_path("layouts/biosemi/biosemi72.csv"))
 layout  # show summary
 
 # Convert polar to Cartesian coordinates for 2D plotting

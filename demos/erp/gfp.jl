@@ -3,12 +3,15 @@
 # and topographic change from ERP data.
 
 using EegFun
+# Note: EegFun.example_path() resolves bundled example data paths.
+# When using your own data, simply pass the file path directly, e.g.:
+# dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 #######################################################################
 # LOAD ERP DATA
 #######################################################################
 
-dat = EegFun.read_data("./resources/data/julia/erps/example1_erps_good.jld2")
+dat = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps_good.jld2"))
 
 
 #######################################################################

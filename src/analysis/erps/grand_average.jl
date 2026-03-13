@@ -11,10 +11,6 @@ function _default_grand_average_output_dir(input_dir::String, pattern::String)
     joinpath(input_dir, "grand_average_$(pattern)")
 end
 
-#=============================================================================
-    GRANDAVERAGE-SPECIFIC HELPERS
-=============================================================================#
-
 """
 Create a grand average by averaging ERP data across participants for a specific condition.
 """

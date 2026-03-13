@@ -211,9 +211,6 @@ function _process_channel_summary_file(
         return (BatchResult(false, filename, "No recognized data variable"), DataFrame[])
     end
 
-    # Get condition count before selection
-    n_conditions = length(data_var)
-
     # Select conditions
     data_var = _condition_select(data_var, condition_selection)
 

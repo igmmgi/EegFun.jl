@@ -689,7 +689,6 @@ function summarize_ica_components(ica_components::Vector{ArtifactComponents})
     per_file_df = DataFrame(per_file_data)
 
     # Average summary
-    n_participants = length(ica_components)
     avg_data = [
         (component_type = "vEOG", avg_per_participant = round(mean(per_file_df.vEOG), digits = 2)),
         (component_type = "hEOG", avg_per_participant = round(mean(per_file_df.hEOG), digits = 2)),

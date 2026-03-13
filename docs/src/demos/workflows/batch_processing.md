@@ -46,8 +46,11 @@ This demo covers:
 # and compute grand averages.
 
 using EegFun
+# Note: EegFun.example_path() resolves bundled example data paths.
+# When using your own data, simply pass the file path directly, e.g.:
+# dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
-const ERP_DIR = "./resources/data/julia/erps/"
+const ERP_DIR = EegFun.example_path("data/julia/erps/")
 
 
 #######################################################################
@@ -75,7 +78,7 @@ grand_avgs = EegFun.grand_average(erps_all)
 grand_avgs_12 = EegFun.grand_average(erps_all, condition_selection = EegFun.conditions([1, 2]))
 
 # From disk directly — saves to output_dir automatically
-# EegFun.grand_average("erps_good", input_dir = ERP_DIR, output_dir = "./resources/data/julia/grand_average/")
+# EegFun.grand_average("erps_good", input_dir = ERP_DIR, output_dir = EegFun.example_path("data/julia/grand_average/"))
 
 
 #######################################################################
@@ -83,13 +86,13 @@ grand_avgs_12 = EegFun.grand_average(erps_all, condition_selection = EegFun.cond
 #######################################################################
 
 # List all .bdf files in a directory (regex pattern)
-bdf_files = EegFun.get_files("./resources/data/bdf", "\\.bdf")
+bdf_files = EegFun.get_files(EegFun.example_path("data/bdf"), "\\.bdf")
 
 # Verify all files exist before starting a long pipeline run
 EegFun.check_files_exist(bdf_files)
 
 # Find a single file by searching recursively
-layout_path = EegFun.find_file("biosemi72.csv", "./resources/layouts")
+layout_path = EegFun.find_file("biosemi72.csv", EegFun.example_path("layouts"))
 ```
 
 :::

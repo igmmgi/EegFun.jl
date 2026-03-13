@@ -1,5 +1,5 @@
 """
-    preprocess_v1(config::String; base_dir::Union{String,Nothing} = nothing, log_level::Symbol = :info)
+    preprocess(config::String; base_dir::Union{String,Nothing} = nothing, log_level::Symbol = :info)
 
 Preprocess EEG data according to the specified configuration file.
 
@@ -17,7 +17,7 @@ Preprocess EEG data according to the specified configuration file.
 - This allows you to use relative paths in your TOML files that work regardless of where
   you run the script from, as long as the config file is in the same directory as your analysis script
 """
-function preprocess_v1(config::String; base_dir::Union{String,Nothing} = nothing, log_level::Symbol = :info)
+function preprocess(config::String; base_dir::Union{String,Nothing} = nothing, log_level::Symbol = :info)
 
     # Use config file's directory as base_dir if not provided
     # This makes relative paths in TOML work relative to the analysis script location
@@ -268,7 +268,7 @@ function preprocess_v1(config::String; base_dir::Union{String,Nothing} = nothing
 
                     if !isnothing(continuous_repair_info) && !isempty(continuous_repair_info.repaired)
                         @info subsection("Removing repairable bad channels for ICA")
-                        dat_ica = subset(dat_ica, channel_selection = channels_not(continuous_repair_info.repaired), include_extra = true)
+                        dat_ica = subset(dat_ica, channel_selection = channels_not(continuous_repair_info.repaired))
                         @info "Removed $(length(continuous_repair_info.repaired)) repairable channels for ICA: $(continuous_repair_info.repaired)"
                     end
 

@@ -289,16 +289,13 @@ function _compute_confusion_matrices(
 
         for iter = 1:n_iterations
             for fold = 1:n_folds
-                if n_test <= size(all_targets, 4)
-                    true_t = @view all_targets[iter, fold, t, 1:n_test]
-                    pred_t = @view all_predictions[iter, fold, t, 1:n_test]
-                    # Filter out zeros (sentinel values) and copy valid ones
-                    for i = 1:n_test
-                        if true_t[i] != 0 && pred_t[i] != 0
-                            valid_count += 1
-                            all_true_t[valid_count] = Int(true_t[i])
-                            all_pred_t[valid_count] = Int(pred_t[i])
-                        end
+                true_t = @view all_targets[iter, fold, t, 1:n_test]
+                pred_t = @view all_predictions[iter, fold, t, 1:n_test]
+                for i = 1:n_test
+                    if true_t[i] != 0 && pred_t[i] != 0
+                        valid_count += 1
+                        all_true_t[valid_count] = Int(true_t[i])
+                        all_pred_t[valid_count] = Int(pred_t[i])
                     end
                 end
             end
@@ -567,15 +564,8 @@ function _decode_core(
                 accuracy = n_correct / length(y_test)
                 all_accuracies[iter, fold, t] = accuracy
 
-                n_test = length(y_test)
-                if n_test <= size(all_predictions, 4)
-                    all_predictions[iter, fold, t, 1:n_test] = y_pred
-                    all_targets[iter, fold, t, 1:n_test] = y_test
-                    if n_test < size(all_predictions, 4)
-                        all_predictions[iter, fold, t, (n_test+1):end] .= 0
-                        all_targets[iter, fold, t, (n_test+1):end] .= 0
-                    end
-                end
+                all_predictions[iter, fold, t, :] = y_pred
+                all_targets[iter, fold, t, :] = y_test
             end
 
             if show_progress

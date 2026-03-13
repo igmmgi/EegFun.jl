@@ -109,12 +109,15 @@ This demo shows the complete BrainVision import workflow:
 # and get the triggers/events.
 
 using EegFun
+# Note: EegFun.example_path() resolves bundled example data paths.
+# When using your own data, simply pass the file path directly, e.g.:
+# dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 # Load raw BrainVision data
 # read_raw_data automatically detects BrainVision files (.vhdr, .eeg, or .vmrk)
 # You can specify any of the three files; it will find the others, assuming 
 # they are in the same directory
-dat = EegFun.read_raw_data("./resources/data/brainvision/example1.vhdr")
+dat = EegFun.read_raw_data(EegFun.example_path("data/brainvision/example1.vhdr"))
 
 # EegFun uses the Julia package: BrainVisionDataFormat.jl
 # https://github.com/igmmgi/BrainVisionDataFormat.jl

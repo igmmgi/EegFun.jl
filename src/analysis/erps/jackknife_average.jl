@@ -213,7 +213,6 @@ function jackknife_average(
     participant_selection::Function = participants(),
     condition_selection::Function = conditions(),
     output_dir::Union{String,Nothing} = nothing,
-    data_var::String = "lrp",
 )
     # Setup logging
     log_file = "jackknife.log"
@@ -248,7 +247,7 @@ function jackknife_average(
 
         @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
 
-        # Load and group data by condition (data_var parameter kept for backwards compatibility but not used)
+        # Load and group data by condition
         erps_by_condition, participant_ids = _load_and_group_for_jackknife(files, input_dir, condition_selection)
 
         if isempty(erps_by_condition)

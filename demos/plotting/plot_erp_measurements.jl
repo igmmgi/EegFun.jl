@@ -2,8 +2,11 @@
 # Computes and visualizes ERP measurements in a single call.
 
 using EegFun
+# Note: EegFun.example_path() resolves bundled example data paths.
+# When using your own data, simply pass the file path directly, e.g.:
+# dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
-dat = EegFun.read_data("./resources/data/julia/erps/example1_erps_good.jld2")
+dat = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps_good.jld2"))
 
 # Mean amplitude
 # EegFun.plot_erp_measurements(dat, "mean_amplitude", analysis_interval = (0.3, 0.5), baseline_interval = (-0.2, 0.0)) # not really useful as too crowded!
@@ -22,7 +25,7 @@ EegFun.plot_erp_measurements(dat, "max_peak_amplitude", analysis_interval = (0.0
 
 # Load from file path
 EegFun.plot_erp_measurements(
-    "./resources/data/julia/erps/example1_erps_good.jld2",
+    EegFun.example_path("data/julia/erps/example1_erps_good.jld2"),
     "max_peak_amplitude",
     analysis_interval = (0.0, 1.0),
     baseline_interval = (-0.2, 0.0),

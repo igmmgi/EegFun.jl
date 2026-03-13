@@ -56,6 +56,9 @@ plot_erp(ga_results, labels = ["Standard", "Target"])
 # in-memory ERP data and from saved JLD2 files on disk.
 
 using EegFun
+# Note: EegFun.example_path() resolves bundled example data paths.
+# When using your own data, simply pass the file path directly, e.g.:
+# dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 const DEMO_OUTPUT = "./demos/output/"
 mkpath(DEMO_OUTPUT)
@@ -66,9 +69,9 @@ mkpath(DEMO_OUTPUT)
 #######################################################################
 
 # Each file is one participant's averaged ERPs (saved by batch_erp or manually)
-erps_p1 = EegFun.read_data("./resources/data/julia/erps/example1_erps_good.jld2")
-erps_p2 = EegFun.read_data("./resources/data/julia/erps/example2_erps_good.jld2")
-erps_p3 = EegFun.read_data("./resources/data/julia/erps/example3_erps_good.jld2")
+erps_p1 = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps_good.jld2"))
+erps_p2 = EegFun.read_data(EegFun.example_path("data/julia/erps/example2_erps_good.jld2"))
+erps_p3 = EegFun.read_data(EegFun.example_path("data/julia/erps/example3_erps_good.jld2"))
 
 # Flatten into a single list — one ErpData per participant per condition
 all_erps = vcat(erps_p1, erps_p2, erps_p3)
@@ -102,12 +105,12 @@ EegFun.plot_erp(grand_avgs, condition_selection = EegFun.conditions([1]), channe
 
 # Averages all JLD2 files whose name contains "erps_good" in the given directory.
 # Saves the result to demos/output/grand_average_erps_good.jld2
-EegFun.grand_average("erps_good", input_dir  = "./resources/data/julia/erps/", output_dir = DEMO_OUTPUT)
+EegFun.grand_average("erps_good", input_dir  = EegFun.example_path("data/julia/erps/"), output_dir = DEMO_OUTPUT)
 
 # With participant and condition filtering
 EegFun.grand_average(
     "erps_good",
-    input_dir = "./resources/data/julia/erps/",
+    input_dir = EegFun.example_path("data/julia/erps/"),
     participant_selection = EegFun.participants(1:10),
     condition_selection = EegFun.conditions([1, 2]),
     output_dir = DEMO_OUTPUT,

@@ -264,7 +264,7 @@ using DataFrames
             output_dir = joinpath(test_dir, "jackknife_erps")
 
             # Test with different data variable name
-            result = EegFun.jackknife_average("erps", input_dir = test_dir, output_dir = output_dir, data_var = "erps")
+            result = EegFun.jackknife_average("erps", input_dir = test_dir, output_dir = output_dir)
 
             @test isdir(output_dir)
 
