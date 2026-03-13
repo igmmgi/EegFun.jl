@@ -590,9 +590,9 @@ function _setup_channel_selection_events!(
     on(events(fig).mousebutton) do event
         if event.button == Mouse.left && ctrl_pressed[]
             if event.action == Mouse.press
-                _start_figure_channel_selection!(fig, selection_state, plot_layout, data, channel_selection_active)
+                _start_figure_channel_selection!(fig, selection_state, plot_layout, channel_selection_active)
             elseif event.action == Mouse.release && channel_selection_active[]
-                _finish_figure_channel_selection!(fig, selection_state, plot_layout, data, channel_selection_active, axes)
+                _finish_figure_channel_selection!(fig, selection_state, plot_layout, channel_selection_active, axes)
             end
         end
 
@@ -615,7 +615,7 @@ function _setup_channel_selection_events!(
     # Mouse movement
     on(events(fig).mouseposition) do _
         if channel_selection_active[]
-            _update_figure_channel_selection!(fig, selection_state, plot_layout, data)
+            _update_figure_channel_selection!(fig, selection_state, plot_layout)
         end
     end
 end
