@@ -19,6 +19,7 @@ pages = [
         "Layouts and Neighbors" => "tutorials/layouts-neighbors.md",
         "Batch Processing" => "tutorials/batch-processing.md",
         "Selection Patterns" => "tutorials/selection-patterns.md",
+        "TOML Format" => "tutorials/toml-format.md",
         "Plot GUI" => "tutorials/plot-gui.md",
     ],
     "How-to Guides" => [

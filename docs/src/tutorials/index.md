@@ -14,6 +14,7 @@ Step-by-step guides for learning EegFun.jl, from installation through to advance
 
 ## Data & Configuration
 
+- [TOML Format](toml-format.md) - Quick reference for the TOML configuration format
 - [Layouts and Neighbors](layouts-neighbors.md) - Working with electrode layouts and neighbour structures
 - [Selection Patterns](selection-patterns.md) - Channel, time, and epoch selection patterns
 
