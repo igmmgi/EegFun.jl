@@ -268,7 +268,7 @@ function preprocess(config::String; base_dir::Union{String,Nothing} = nothing, l
 
                     if !isnothing(continuous_repair_info) && !isempty(continuous_repair_info.repaired)
                         @info subsection("Removing repairable bad channels for ICA")
-                        dat_ica = subset(dat_ica, channel_selection = channels_not(continuous_repair_info.repaired))
+                        dat_ica = subset(dat_ica, channel_selection = channels_not(continuous_repair_info.repaired), include_extra = true)
                         @info "Removed $(length(continuous_repair_info.repaired)) repairable channels for ICA: $(continuous_repair_info.repaired)"
                     end
 
