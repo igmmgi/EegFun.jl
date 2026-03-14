@@ -38,7 +38,6 @@ function _compute_cluster_pvalues(
 
         # For positive clusters: count permutations with max >= observed
         # For negative clusters: count permutations with max <= observed (more extreme negative)
-        # FieldTrip approach: compare observed to permutation distribution
         if cluster.polarity == :positive
             # Positive clusters: larger is more extreme
             count_exceed = sum(permutation_max .>= cluster_stat) + 1

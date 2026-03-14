@@ -31,12 +31,12 @@ Uses multiple orthogonal tapers (Slepian sequences) to reduce variance in spectr
   - For logarithmic spacing: `frequencies=logrange(1, 40, length=30)`
   - Default: `range(1, 40, length=40)` (40 linearly-spaced frequencies from 1 to 40 Hz)
 - `cycles::Real`: Number of cycles per frequency. Window length = cycles / frequency (in seconds).
-  - Example: `cycles=5` uses 5 cycles for all frequencies (FieldTrip: `cfg.t_ftimwin = 5./cfg.foi`)
+  - Example: `cycles=5` uses 5 cycles for all frequencies 
   - Lower frequencies will have longer windows, higher frequencies will have shorter windows
-- `frequency_smoothing::Union{Nothing,Real}=nothing`: Frequency smoothing parameter (FieldTrip's `tapsmofrq`).
-  - If `nothing`, uses `frequency_smoothing = 0.4 * frequency` (FieldTrip default: `cfg.tapsmofrq = 0.4 * cfg.foi`)
+- `frequency_smoothing::Union{Nothing,Real}=nothing`: Frequency smoothing parameter 
+  - If `nothing`, uses `frequency_smoothing = 0.4 * frequency` 
   - If a number, uses that value multiplied by frequency: `tapsmofrq = frequency_smoothing * frequency`
-  - Example: `frequency_smoothing=0.4` matches FieldTrip's default
+  - Example: `frequency_smoothing=0.4` 
   - Controls time-bandwidth product: `NW = tapsmofrq * window_length / 2`
   - Number of tapers used: `K = 2*NW - 1` (rounded down)
 - `time_steps::Real=0.05`: Step size for extracting time points in seconds.
@@ -51,7 +51,6 @@ Uses multiple orthogonal tapers (Slepian sequences) to reduce variance in spectr
 - `return_trials::Bool=false`: If `true`, returns `TimeFreqEpochData` with individual trials preserved.
   - If `false` (default), returns `TimeFreqData` with trials averaged.
 - `filter_edges::Bool=true`: If `true` (default), filters out edge regions where the window extends beyond the data
-  (FieldTrip's "cone of influence" - marks edges as NaN). If `false`, uses all convolution results including edges.
 
 # Returns
 - `TimeFreqData` (if `return_trials=false`): Time-frequency data with trials averaged
@@ -66,7 +65,6 @@ tf_data = tf_multitaper(epochs; cycles=5)
 tf_data = tf_multitaper(epochs; frequencies=logrange(2, 80, length=30), cycles=5)
 
 # Custom frequency smoothing
-# FieldTrip equivalent: cfg.t_ftimwin = 5./cfg.foi, cfg.tapsmofrq = 0.4 * cfg.foi
 tf_data = tf_multitaper(epochs; frequencies=1:2:30, cycles=5, frequency_smoothing=0.4)
 ```
 """
@@ -110,7 +108,7 @@ function tf_multitaper(
         error("`cycles` must be positive, got $cycles")
     end
 
-    # Default frequency smoothing (FieldTrip: cfg.tapsmofrq = 0.4 * cfg.foi)
+    # Default frequency smoothing 
     if isnothing(frequency_smoothing)
         frequency_smoothing = 0.4
     end
@@ -148,7 +146,7 @@ function tf_multitaper(
     # Use frequencies directly (convert to vector if needed for indexing)
     freqs = collect(frequencies)
 
-    # Adaptive window mode: window length = cycles / frequency (FieldTrip: cfg.t_ftimwin = cycles./cfg.foi)
+    # Adaptive window mode: window length = cycles / frequency 
     cycles_vec = fill(Float64(cycles), num_frex)
     window_lengths_sec = cycles_vec ./ freqs  # Window length in seconds
 
@@ -186,7 +184,7 @@ function tf_multitaper(
         n_window_samples = n_window_samples_per_freq[fi]
         window_length_sec = window_lengths_sec[fi]
 
-        # Calculate frequency smoothing (FieldTrip: cfg.tapsmofrq = frequency_smoothing * cfg.foi)
+        # Calculate frequency smoothing 
         tapsmofrq = frequency_smoothing * freq  # Frequency smoothing in Hz
 
         # Time-bandwidth product: NW = tapsmofrq * window_length / 2
@@ -292,9 +290,6 @@ function tf_multitaper(
         fill!(eegpower, 0.0)
         fill!(eegconv, 0.0im)
 
-        # FieldTrip frequency-domain convolution approach for multitaper
-        # FFT entire data once, then multiply by tapered wavelet FFTs and IFFT
-
         # Pad data to n_samples_padded (zero-padding at the end)
         fill!(data_padded, 0.0)
         data_padded[1:n_samples_per_epoch, :] = trial_signals_matrix
@@ -334,18 +329,15 @@ function tf_multitaper(
                     end
                 end
 
-                # Apply FieldTrip normalization: sqrt(2 ./ timwinsample)
-                norm_factor = sqrt(2.0 / n_window_samples)  # FieldTrip: sqrt(2 ./ timwinsample)
+                norm_factor = sqrt(2.0 / n_window_samples)
                 @inbounds @simd for i in eachindex(conv_result)
                     conv_result[i] *= norm_factor
                 end
 
                 # Extract requested time points and accumulate across tapers
-                # Shift by half window length to account for FieldTrip's fftshift centering
                 half_window = n_window_samples ÷ 2
                 @inbounds for ti_idx = 1:n_times
                     sample_idx = time_indices[ti_idx]
-                    # Adjust for shift: FieldTrip centers the result with fftshift
                     adjusted_idx = sample_idx + half_window
                     # Clamp to valid range
                     if adjusted_idx < 1
@@ -379,13 +371,9 @@ function tf_multitaper(
             end
         end
 
-        # Apply edge filtering if requested (FieldTrip's "cone of influence")
         if filter_edges
             # Compute exact window lengths in samples (floating point) for edge filtering
-            # FieldTrip uses: nsamplefreqoi = timwin(ifreqoi) .* fsample (exact floating point)
-            # For multitaper: timwin = cycles / foi (adaptive window)
             window_lengths_samples_exact = [(cycles / freqs[fi]) * dat.sample_rate for fi = 1:num_frex]
-            # Use unpadded data length for edge filtering (FieldTrip uses ndatsample = size(dat, 2), unpadded)
             _filter_edges!(eegpower, eegconv, num_frex, time_indices, window_lengths_samples_exact, n_samples_per_epoch)
         end
 

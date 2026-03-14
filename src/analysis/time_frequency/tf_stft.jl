@@ -10,7 +10,7 @@
             return_trials::Bool=false,
             filter_edges::Bool=true)
 
-Short-Time Fourier Transform (STFT) time-frequency analysis using a sliding Hanning window (equivalent to FieldTrip's 'mtmconvol' method).
+Short-Time Fourier Transform (STFT) time-frequency analysis using a sliding Hanning window 
 
 Supports both fixed-length windows (consistent time resolution) and adaptive windows (constant cycles per frequency).
 
@@ -48,7 +48,6 @@ Supports both fixed-length windows (consistent time resolution) and adaptive win
 - `return_trials::Bool=false`: If `true`, returns `TimeFreqEpochData` with individual trials preserved.
   - If `false` (default), returns `TimeFreqData` with trials averaged.
 - `filter_edges::Bool=true`: If `true` (default), filters out edge regions where the interval extends beyond the data
-  (FieldTrip's "cone of influence" - marks edges as NaN). If `false`, uses all convolution results including edges.
 
 # Returns
 - `TimeFreqData` (if `return_trials=false`): Time-frequency data with trials averaged
@@ -62,7 +61,7 @@ tf_data = tf_stft(epochs; window_length=0.3)
 # Log-spaced frequencies with fixed window
 tf_data = tf_stft(epochs; frequencies=logrange(2, 80, length=30), window_length=0.3)
 
-# Adaptive window: 7 cycles per frequency (FieldTrip equivalent)
+# Adaptive window: 7 cycles per frequency 
 tf_data = tf_stft(epochs; frequencies=2:1:30, cycles=7, sample_selection=samples((-0.5, 1.5)), time_steps=0.05)
 ```
 """
@@ -156,9 +155,9 @@ function tf_stft(
         n_window_samples_per_freq = fill(n_window_samples, num_frex)
         is_fixed = true
     else
-        # Adaptive window mode: window length = cycles / frequency (FieldTrip: cfg.t_ftimwin = cycles./cfg.foi)
+        # Adaptive window mode: window length = cycles / frequency 
         cycles_vec = fill(Float64(cycles), num_frex)
-        window_lengths_sec = cycles_vec ./ freqs  # Window length in seconds (matches FieldTrip: t_ftimwin = cycles./foi)
+        window_lengths_sec = cycles_vec ./ freqs  # Window length in seconds 
         n_window_samples_per_freq = [Int(round(wl * dat.sample_rate)) for wl in window_lengths_sec]
         if any(n -> n < 2, n_window_samples_per_freq)
             min_samples = minimum(n_window_samples_per_freq)
@@ -170,8 +169,6 @@ function tf_stft(
     n_times = length(times_out)
 
     # Pre-compute Hanning windows for each frequency
-    # FieldTrip normalizes Hanning window by Frobenius norm: tap = tap./norm(tap, 'fro')
-    # For fixed window, all frequencies use the same window, so create it once
     if is_fixed
         n_win = n_window_samples_per_freq[1]  # All the same for fixed window
         hanning_window_normalized = DSP.hanning(n_win) ./ norm(DSP.hanning(n_win), 2)  # L2 norm for vector = Frobenius norm
@@ -185,7 +182,6 @@ function tf_stft(
         end
     end
 
-    # Use frequency-domain convolution (FieldTrip approach)
     # Determine padding length: pad to at least the data length and largest window
     # (FFTW is efficient for many sizes, not just powers of 2)
     max_window_samples = maximum(n_window_samples_per_freq)
@@ -199,16 +195,12 @@ function tf_stft(
         freq = freqs[fi]
         hanning_window = hanning_windows[fi]
 
-        # Create complex wavelet: Hanning * (cos + i*sin) at frequency
-        # Phase: center of wavelet has angle = 0 (FieldTrip convention)
         angle_in =
             range(-(n_window_samples - 1) / 2, (n_window_samples - 1) / 2, length = n_window_samples) .* (2π * freq / dat.sample_rate)
         cos_wav = hanning_window .* cos.(angle_in)
         sin_wav = hanning_window .* sin.(angle_in)
         wavelet = cos_wav .+ im .* sin_wav
 
-        # Pad wavelet to match data FFT length and compute FFT
-        # Place wavelet at the beginning (not centered) - centering happens through convolution
         wavelet_padded = zeros(ComplexF64, n_samples_padded)
         wavelet_padded[1:n_window_samples] = wavelet
         wavelet_ffts[fi] = fft(wavelet_padded)
@@ -237,10 +229,6 @@ function tf_stft(
         phase_df = DataFrame(time = time_col, freq = freq_col, copycols = false)
     end
 
-    # For adaptive window: time_indices are already sample indices in processed data
-    # Since we pad at the end, these indices work directly for the first n_samples_per_epoch samples
-
-    # Pre-allocate reusable output buffers (reused across all channels)
     if return_trials
         eegpower = zeros(Float64, num_frex, n_times, n_trials)
         eegconv = zeros(ComplexF64, num_frex, n_times, n_trials)
@@ -268,9 +256,6 @@ function tf_stft(
         fill!(eegpower, 0.0)
         fill!(eegconv, 0.0im)
 
-        # FieldTrip frequency-domain convolution approach (works for both fixed and adaptive windows)
-        # FFT entire data once, then multiply by wavelet FFTs and IFFT
-
         # Pad data to n_samples_padded (zero-padding at the end)
         fill!(data_padded, 0.0)
         data_padded[1:n_samples_per_epoch, :] = trial_signals_matrix
@@ -297,18 +282,15 @@ function tf_stft(
                 end
             end
 
-            # Apply FieldTrip normalization: sqrt(2 ./ timwinsample)
-            norm_factor = sqrt(2.0 / n_window_samples)  # FieldTrip: sqrt(2 ./ timwinsample)
+            norm_factor = sqrt(2.0 / n_window_samples)
             @inbounds @simd for i in eachindex(conv_result)
                 conv_result[i] *= norm_factor
             end
 
             # Extract requested time points (time_indices are sample indices in processed data)
-            # Shift by half window length to account for FieldTrip's fftshift centering
             half_window = n_window_samples ÷ 2
             @inbounds for ti_idx = 1:n_times
                 sample_idx = time_indices[ti_idx]
-                # Adjust for shift: FieldTrip centers the result with fftshift
                 adjusted_idx = sample_idx + half_window
                 # Clamp to valid range
                 if adjusted_idx < 1
@@ -327,11 +309,8 @@ function tf_stft(
             end
         end
 
-        # Apply edge filtering if requested (FieldTrip's "cone of influence")
         if filter_edges
             # Compute exact window lengths in samples (floating point) for edge filtering
-            # FieldTrip uses: nsamplefreqoi = timwin(ifreqoi) .* fsample (exact floating point)
-            # We need to recompute from window_lengths_sec to get exact values, not rounded integers
             if is_fixed
                 # Fixed window: same for all frequencies
                 window_lengths_samples_exact = fill(Float64(window_length * dat.sample_rate), num_frex)
@@ -339,7 +318,6 @@ function tf_stft(
                 # Adaptive window: cycles / frequency
                 window_lengths_samples_exact = [(cycles / freqs[fi]) * dat.sample_rate for fi = 1:num_frex]
             end
-            # Use unpadded data length for edge filtering (FieldTrip uses ndatsample = size(dat, 2), unpadded)
             # Padding is only for FFT efficiency, but edge filtering should be based on actual data length
             _filter_edges!(eegpower, eegconv, num_frex, time_indices, window_lengths_samples_exact, n_samples_per_epoch)
         end

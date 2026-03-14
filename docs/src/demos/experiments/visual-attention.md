@@ -1,6 +1,6 @@
 # Example Experiment: Visual Attention (Posner Cueing)
 
-This tutorial uses a complete example dataset to walk through the EegFun.jl analysis pipeline from raw data exploration through to publication-ready plots and statistical analyses. 
+This tutorial uses a complete example dataset to walk through the EegFun.jl analysis pipeline from raw data exploration through to publication-ready plots and statistical analyses.
 
 ## The Experiment
 
@@ -125,7 +125,6 @@ EegFun.plot_databrowser(dat)
 
 ![Data browser](/demos/experiments/visual-attention/databrowser.png)
 
-
 Before going further, remove the DC offset with a high-pass filter and rereference to the average — this makes the traces much easier to read:
 
 ```julia
@@ -143,13 +142,10 @@ EegFun.plot_databrowser(dat)
 
 > [!TIP]
 > Look for obvious artifacts: flat channels, excessive drift, large muscle movements. This gives you a feel for data quality before automated processing.
-
 > [!IMPORTANT]
 > Preprocessing is not magic. While some artifacts can be repaired, there is no substitute for collecting clean data. Careful data collection is one of the most important steps in any EEG study.
 
 The databrowser also supports interactive topographic maps and channel spectra — click on any time point to see the scalp topography, or select a channel to view its power spectrum.
-
-
 
 ### 1.5 Derive EOG Channels
 
@@ -172,7 +168,7 @@ EegFun.channel_difference!(
 )
 ```
 
-Next, automatically detect EOG onsets and mark the surrounding interval as contaminated. This creates Boolean columns (`:is_vEOG`, `:is_hEOG`) that the databrowser renders as shaded overlays:
+Next, automatically detect EOG onsets and mark the surrounding interval as contaminated. This creates Boolean columns (`:is_vEOG`, `:is_hEOG`) that the databrowser draws as vertical markers/shaded regions:
 
 ```julia
 EegFun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
@@ -217,7 +213,6 @@ EegFun.plot_channel_summary(cs_epoch, :range)
 
 ![Channel summary (range)](/demos/experiments/visual-attention/channel_summary.png)
 
-
 Next, flag every sample where **any** channel exceeds ±200 μV. This creates a Boolean column (`:is_extreme_value_200`) that the databrowser renders as shaded overlays:
 
 ```julia
@@ -260,7 +255,6 @@ EegFun.plot_databrowser(dat)
 
 ![Channel repair interface](/demos/experiments/visual-attention/channel_repair.png)
 
-
 ### 1.9 ICA
 
 First, mark extreme values on the main data — these will be excluded from ICA training and component identification:
@@ -289,7 +283,6 @@ ica_result = EegFun.run_ica(dat_ica,
 # )
 ```
 
-
 Inspect the component topographies and time-course activations:
 
 ```julia
@@ -301,7 +294,6 @@ EegFun.plot_ica_component_activation(dat, ica_result)
 ![ICA component topographies](/demos/experiments/visual-attention/ica_topography.png)
 ![ICA component activation](/demos/experiments/visual-attention/ica_activation.png)
 
-
 Components are ordered by the percentage of total variance they explain — the first few typically capture the most prominent signals or artifacts. In most EEG recordings, the largest components are **vertical EOG activity** (eye blinks, showing a frontal topography) and **horizontal eye movements** (lateral frontal pattern). Standard ERP analyses use ICA primarily to remove these ocular components so that the cleaned data better reflects neural activity.
 
 You can immediately browse the data with ICA components overlaid — this lets you see each component's contribution to the signal and toggle removal interactively:
@@ -311,7 +303,6 @@ EegFun.plot_databrowser(dat, ica_result)
 ```
 
 ![Databrowser with ICA components](/demos/experiments/visual-attention/ica_databrowser.png)
-
 
 Automatically identify artifact components via EOG correlation and spatial kurtosis:
 
@@ -325,7 +316,6 @@ component_artifacts, component_metrics = EegFun.identify_components(dat, ica_res
 EegFun.plot_ica_component_activation(dat, ica_result, artifacts = component_artifacts)
 ```
 
-
 Remove the identified components and verify the cleaned data in the databrowser:
 
 ```julia
@@ -336,16 +326,15 @@ EegFun.remove_ica_components!(dat, ica_result,
 )
 ```
 
-
 ### 1.10 Define Epoch Conditions
 
 Define the epoch conditions directly in Julia. Each condition maps a cue trigger to a descriptive label — we will epoch around trigger 5 (target onset = 0), with the cue identity telling us which condition each trial belongs to:
 
 ```julia
 epoch_conditions = [
-    EegFun.EpochCondition(name = "valid_left",   trigger_sequences = [[1, 5]], reference_index = 2),
+    EegFun.EpochCondition(name = "valid_left",    trigger_sequences = [[1, 5]], reference_index = 2),
     EegFun.EpochCondition(name = "invalid_left",  trigger_sequences = [[2, 5]], reference_index = 2),
-    EegFun.EpochCondition(name = "valid_right",  trigger_sequences = [[3, 5]], reference_index = 2),
+    EegFun.EpochCondition(name = "valid_right",   trigger_sequences = [[3, 5]], reference_index = 2),
     EegFun.EpochCondition(name = "invalid_right", trigger_sequences = [[4, 5]], reference_index = 2),
 ]
 ```
@@ -372,6 +361,7 @@ EegFun.baseline!(epochs, (-0.2, 0.0))
 Before running artifact rejection, inspect the single-trial data. `plot_epochs` offers several layouts — a single channel overlay, a grid of all channels, or a topographic arrangement:
 
 ```julia
+# Example plots with epoched data
 # Single-trial waveforms at one channel
 EegFun.plot_epochs(epochs, condition_selection = EegFun.conditions(1), channel_selection = EegFun.channels(:PO7))
 
@@ -381,7 +371,6 @@ EegFun.plot_epochs(epochs, condition_selection = EegFun.conditions(1), layout = 
 # Topographic layout
 EegFun.plot_epochs(epochs, condition_selection = EegFun.conditions(2), layout = :topo)
 ```
-
 
 ### 1.12 Reject Artifacts
 
@@ -397,7 +386,6 @@ EegFun.plot_artifact_detection(epochs[2], rejection_info[2]) # Condition 2
 
 ![Artifact detection](/demos/experiments/visual-attention/artifact_detection.png)
 
-
 ```julia
 # Repair channels that can be interpolated
 EegFun.channel_repairable!(rejection_info, epochs[1].layout)
@@ -412,12 +400,10 @@ EegFun.detect_bad_epochs_interactive(epochs[1], artifact_info = rejection_info2[
 
 ![Interactive epoch rejection grid](/demos/experiments/visual-attention/epoch_rejection_grid.png)
 
-
 ```julia
 # Accept the rejection and keep only good epochs
 epochs_good = EegFun.reject_epochs(epochs, rejection_info2)
 ```
-
 
 ### 1.13 Average and Plot Single-Participant ERPs
 
@@ -427,8 +413,8 @@ erps = EegFun.average_epochs(epochs_good)
 # Plot all conditions at posterior sites
 EegFun.plot_erp(erps, channel_selection = EegFun.channels([:PO7, :PO8, :O1, :O2]))
 
-# Topography at the N1 time window (peak posterior negativity)
-EegFun.plot_topography(erps, interval_selection = EegFun.times(0.17))
+# Topography at the P1 time window (peak posterior negativity)
+EegFun.plot_topography(erps, interval_selection = EegFun.times(0.10))
 ```
 
 ---
@@ -462,7 +448,6 @@ EegFun.preprocess("pipeline.toml")
 For each participant, the pipeline runs through the following stages:
 
 ![Pipeline flowchart](/demos/experiments/visual-attention/pipeline_flowchart.svg)
-
 *↻ Repeated for each participant file*
 
 | # | Stage | Description |
@@ -607,71 +592,108 @@ EegFun.plot_erp_filter_gui("example1_erps_good.jld2")
 
 ![Filter GUI](/demos/experiments/visual-attention/filter_gui.png)
 
-This creates a new directory `filtered_erps_good_lp_30.0hz/` with filtered copies of each participant's ERPs.
+This creates a new directory `filtered_erps_good_lp_30hz/` with filtered copies of each participant's ERPs.
 
 > [!TIP]
-/folder name> Batch functions like `lowpass_filter`, `condition_average`, `condition_difference`, and `grand_average` automatically create an output directory named after the operation and its parameters (e.g., `filtered_erps_good_lp_30.0hz/`, `averages_erps_good_1-3_2-4/`). To save to a different location/folder name, pass the `output_dir` keyword argument.
+> Batch functions like `lowpass_filter`, `condition_average`, `condition_difference`, and `grand_average` automatically create an output directory named after the operation and its parameters (e.g., `filtered_erps_good_lp_30hz/`, `averages_erps_good_1-3_2-4/`). To save to a different location/folder name, pass the `output_dir` keyword argument.
 
-### 2.3 Create Condition Averages
-
-Collapse across target side to create **Valid** and **Invalid** conditions:
-
-```julia
-# Average conditions: [1,3] = Valid (left+right), [2,4] = Invalid (left+right)
-EegFun.condition_average("erps_good", [[1, 3], [2, 4]])
-```
-
-### 2.4 Create Difference Waves
-
-Compute the **Invalid − Valid** difference wave for each participant:
-
-```julia
-# In the averaged data, condition 1 = Valid, condition 2 = Invalid
-EegFun.condition_difference("erps_good", [(1, 2)])
-```
-
-### 2.5 Grand Average
+### 2.3 Grand Average
 
 Compute the grand average across all participants:
 
 ```julia
-# Grand average of the condition-averaged ERPs
 EegFun.grand_average("erps_good")
-```
 
-### 2.6 Plots
 
-```julia
-# Load the grand average
-ga = EegFun.read_data("grand_average_erps_good.jld2")
+# Plotting the grandaverage across parietal/occipital electrodes
+EegFun.plot_erp("grand_average_erps_good.jld2", channel_selection = EegFun.channels([:PO7, :PO8]))
 
-# ERP waveforms at posterior ROI
-EegFun.plot_erp(ga, channel_selection = EegFun.channels([:PO7, :PO8, :O1, :O2]))
+# but we want to baseline the data
+EegFun.plot_erp("grand_average_erps_good.jld2", channel_selection = EegFun.channels([:PO7, :PO8]), baseline_interval = (-0.2, 0))
 
-# Topography at P1 and N1 peaks
-EegFun.plot_topography(ga, interval_selection = EegFun.times(0.1))    # P1
-EegFun.plot_topography(ga, interval_selection = EegFun.times(0.17))   # N1
+# and lets make separate plot for each channel
+EegFun.plot_erp("grand_average_erps_good.jld2", channel_selection = EegFun.channels([:PO7, :PO8]), baseline_interval = (-0.2, 0), layout = :grid, layout_grid_dims = (1,2))
 ```
 
 ![Grand average ERP waveforms at PO7 and PO8](/demos/experiments/visual-attention/erp_plot1.png)
 
 ![P1 topography (113–117 ms)](/demos/experiments/visual-attention/p1_topo.png)
 
-After collapsing across target side (Section 2.3), the condition-averaged ERPs show the validity effect more clearly:
+### 2.4 Combining Conditions
+
+Sometimes we want to average ERP comditions. For example, we might just want to look at a basic valid vs. invalid comparison.
+
+```julia
+# Average conditions: [1,3] = Valid (left+right), [2,4] = Invalid (left+right)
+# We will do this here on the individual participant ERP files, then create a grand average.
+EegFun.condition_average("erps_good", [[1, 3], [2, 4]])
+
+# Plotting the grandaverage across parietal/occipital electrodes
+EegFun.grand_average("erps_good")
+
+# and lets make plot averaging across channels
+EegFun.plot_erp("grand_average_erps_good.jld2", channel_selection = EegFun.channels([:PO7, :PO8]), baseline_interval = (-0.2, 0), average_channels = true) 
+
+# topography plot for P1 
+EegFun.plot_topography("grand_average_erps_good.jld2", baseline_interval = (-0.2, 0), interval_selection = (0.1, 0.1), dims = (1,2), ylim = (-3, 3), 
+label_plot = false) 
+```
 
 ![Condition-averaged ERP (Valid vs Invalid)](/demos/experiments/visual-attention/erp_plot2.png)
+![Condition-averaged Topography P1 (Valid vs Invalid)](/demos/experiments/visual-attention/topo_plot2.png)
 
-Custom publication-quality plots can highlight specific time windows:
+### 2.5 Create Difference Waves
 
-![Publication-quality ERP with P1 and N1 component labels](/demos/experiments/visual-attention/erp_plot1_custom.png)
+Sometimes we want to plot the diifference between ERP comditions. For example, we might just want to look at the validity effect by computing
+the **Invalid − Valid** difference wave:
 
-The difference wave (Invalid − Valid) isolates the attention effect:
+```julia
+# For a basic plot, we can just do this on the averaged data; condition 1 = Valid, condition 2 = Invalid
+EegFun.condition_difference("erps_good", [(1, 2)])
 
-![Difference wave (Invalid − Valid)](/demos/experiments/visual-attention/erp_diff.png)
+# And plot (We now have a single difference wavee)
+fig = EegFun.plot_erp("grand_average_erps_good.jld2", channel_selection = EegFun.channels([:PO7, :PO8]), baseline_interval = (-0.2, 0), average_channels = true) 
+```
+
+### 2.6 Plot Customisation
+
+Several options are available for plot customisation. As an example, we can change line colour, style, legend labels, and highlight components with the following:
+
+```julia
+fig = EegFun.plot_erp("grand_average_erps_good.jld2",
+    channel_selection = EegFun.channels([:PO7, :PO8]),
+    baseline_interval = (-0.2, 0),
+    average_channels = true,
+    color = [:black, :grey],
+    linestyle = [:solid, :dash],
+    legend_labels = ["Valid", "Invalid"],
+    highlight_regions = [
+        (x1 = 0.09, x2 = 0.14, color = :lightgrey, alpha = 0.25),   # P1 window
+        (x1 = 0.15, x2 = 0.20, color = :lightgrey, alpha = 0.25),   # N1 window
+    ],
+    ylim = (-4, 6),
+    xlim = (-0.25, 0.65),
+    xticks = -0.2:0.1:0.6,
+    time_unit = :ms, 
+    title = "Validity Effect (Avg: PO7/PO8)",
+)
+
+# and save the figure
+save("erp_plot1_custom.png", fig.fig)
+
+# or apply further customisation via Makie
+fig.axes[1].titlecolor = :red
+fig.axes[1].yticklabelsize = 30
+# and so on ...
+```
+
+![Publication-quality ERP with highlighted components](/demos/experiments/visual-attention/erp_plot1_custom.png)
 
 ---
 
 ## Part 3: Statistical Analysis
+
+To test our hypotheses statistically, we need to extract numerical summaries from each participant's ERP waveforms. Standard ERP measurements fall into two families: **amplitude** measures (e.g., mean amplitude, peak amplitude, area under the curve) that quantify *how large* a component is, and **latency** measures (e.g., peak latency, fractional area latency) that quantify *when* a component occurs.
 
 ### 3.1 ERP Measurement GUI
 
@@ -683,24 +705,29 @@ erps = EegFun.read_data("example1_erps_good.jld2")
 
 # Open the measurement GUI
 EegFun.plot_erp_measurement_gui(erps)
+# or directly with a file name
+EegFun.plot_erp_measurement_gui("grand_average_erps_good.jld2")
 ```
 
 ![ERP measurement GUI](/demos/experiments/visual-attention/erp_measurment_gui.png)
 
 The GUI lets you select channels, time windows, and measurement types interactively to determine optimal parameters before running batch extraction.
 
+> [!WARNING]
+> The purpose of this step is to **verify** that your measurement window and type capture the component you intend to measure — not to search for channels or intervals where a difference happens to be significant. Choosing parameters based on observed effects inflates false-positive rates. Define your measurement strategy based on prior literature or orthogonal data, then use the GUI to confirm the settings look sensible.
+
 ### 3.2 Extract ERP Measurements
 
-Extract mean amplitude in the N1 window at posterior sites across all participants:
+Extract mean amplitude in the P1 window at posterior-occipital sites across all participants:
 
 ```julia
 mean_amp = EegFun.erp_measurements(
     "erps_good",
     "mean_amplitude",
-    condition_selection = EegFun.conditions([1, 2, 3, 4]),
-    channel_selection = EegFun.channels([:PO7, :PO8, :O1, :O2]),
+    channel_selection = EegFun.channels([:PO7, :PO8]),
     analysis_interval = (0.08, 0.12),
     baseline_interval = (-0.2, 0.0),
+    average_channels = true
 )
 
 # Result is an ErpMeasurementsResult containing a DataFrame
@@ -708,52 +735,38 @@ mean_amp = EegFun.erp_measurements(
 mean_amp.data
 ```
 
-![P1 mean amplitude by validity condition](/demos/experiments/visual-attention/p1_amp.png)
-
 ### 3.3 Traditional Statistics with AnovaFun
 
 ```julia
 using AnovaFun
 
-df = mean_amp.data
+df = mean_amp.data # our DataFrame
 
-# --- Simple comparison: Valid vs. Invalid at PO7 ---
-# Collapse across target side first:
-# conditions 1 & 3 = Valid, conditions 2 & 4 = Invalid
-valid_po7   = (df[df.condition .== 1, :PO7] .+ df[df.condition .== 3, :PO7]) ./ 2
-invalid_po7 = (df[df.condition .== 2, :PO7] .+ df[df.condition .== 4, :PO7]) ./ 2
+# --- Simple comparison (Valid vs. Invalid) via paired t-test/anova at dv_channels (avg of PO7/PO8)
+t_result = paired_ttest(df, :dv_channels, by = :condition)
+anova_result = anova(df, :dv_channels, :participant, within = [:condition])
 
-result = paired_ttest(valid_po7, invalid_po7)
-result.t   # t-statistic
-result.p   # p-value
+plot_anova(anova_result, x_grouping = :condition)
+# or with more customisation
+plot_anova(anova_result, x_grouping = :condition, individual_data = :connected_points, theme = Theme(palette = (color = [:black],)), 
+axis_xlabel = "Validity", axis_ylabel = "Mean P1 Amplitude [μV]", axis_xticklabels = ["Valid", "Invalid"])
 
-# --- 2 × 2 Repeated Measures ANOVA ---
-# For a Validity × Target Side ANOVA
-df.mean_amp = (df.PO7 .+ df.PO8 .+ df.O1 .+ df.O2) ./ 4
-df.validity = ifelse.(df.condition .∈ Ref([1, 3]), "Valid", "Invalid")
-df.target_side = ifelse.(df.condition .∈ Ref([1, 2]), "Left", "Right")
-
-result = anova(df, :mean_amp, :participant, within = [:validity, :target_side])
-
-anova_table(result)
-emmeans(result, :validity)
-pairwise(result, :validity)
-```
+![P1 mean amplitude by validity condition](/demos/experiments/visual-attention/p1_amp.png)
 
 ### 3.4 Permutation-Based Statistics
 
 Cluster-based permutation tests address the multiple comparisons problem across channels and time points:
 
 ```julia
+
 # Prepare data for statistical testing
 stat_data = EegFun.prepare_stats(
     "erps_good",
     :paired;
-    input_dir = "output_data",
     condition_selection = EegFun.conditions([1, 2]),   # Valid left vs. Invalid left
     channel_selection = EegFun.channels(1:72),
     baseline_interval = EegFun.times((-0.2, 0.0)),
-    analysis_interval = EegFun.times((0.0, 1.0)),
+    analysis_interval = EegFun.times((0.0, 0.3)),
 )
 
 # Run cluster-based permutation test
@@ -772,8 +785,14 @@ EegFun.plot_erp_stats(
     channel_selection = EegFun.channels(:PO7),
     plot_erp = true,
     plot_significance = true,
-    plot_critical_t = true,
 )
+
+EegFun.plot_topography_stats(result_perm)
+
+EegFun.plot_
+
+
+
 ```
 
 > [!NOTE]
@@ -944,22 +963,25 @@ EegFun.preprocess("pipeline.toml")
 # ── 2.2 Batch Filter ERPs ──
 EegFun.lowpass_filter("erps_good", 30.0)
 
-# ── 2.3 Create Condition Averages ──
+# ── 2.3 Grand Average ──
+EegFun.grand_average("erps_good")
+
+# ── 2.4 Create Condition Averages ──
 EegFun.condition_average("erps_good", [[1, 3], [2, 4]],
     input_dir = "filtered_erps_good_lp_30.0hz"
 )
 
-# ── 2.4 Create Difference Waves ──
+# ── 2.5 Create Difference Waves ──
 EegFun.condition_difference("erps_good", [(2, 1)],
     input_dir = "filtered_erps_good_lp_30.0hz/averages_erps_good_1-3_2-4"
 )
 
-# ── 2.5 Grand Average ──
+# ── 2.6 Grand Average (Condition-Averaged) ──
 EegFun.grand_average("erps_good",
     input_dir = "filtered_erps_good_lp_30.0hz/averages_erps_good_1-3_2-4"
 )
 
-# ── 2.6 Publication-Quality Plots ──
+# ── 2.7 Publication-Quality Plots ──
 ga = EegFun.read_data(
     "filtered_erps_good_lp_30.0hz/averages_erps_good_1-3_2-4/grand_average_erps_good/grand_average_erps_good.jld2"
 )

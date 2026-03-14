@@ -11,7 +11,7 @@ This demo shows statistical testing and topography visualization for time-freque
 | `plot_tf` | Plot TF power for a single channel |
 | `plot_tf_stats` | Per-channel TF heatmap with significance |
 | `plot_topography` | TF topography for a frequency/time window |
-| `plot_topo_stats` | Topography with statistical significance overlay |
+| `plot_topography_stats` | Topography with statistical significance overlay |
 
 ## Workflow Summary
 
@@ -34,4 +34,4 @@ This demo shows statistical testing and topography visualization for time-freque
 ### Statistical Visualization
 
 - `plot_tf_stats` shows per-channel significance as contours
-- `plot_topo_stats` shows scalp topography with significance highlighting for specific frequency bands
+- `plot_topography_stats` shows scalp topography with significance highlighting for specific frequency bands

@@ -341,7 +341,7 @@ public plot_tf_stats
 public plot_tf
 public plot_topography
 public plot_topography!
-public plot_topo_stats
+public plot_topography_stats
 public plot_trigger_overview
 public plot_trigger_timing
 

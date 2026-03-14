@@ -42,8 +42,6 @@ function _build_connectivity_matrix(electrodes::Vector{Symbol}, layout::Layout, 
 
         for (e_idx, electrode) in enumerate(electrodes)
             # Get neighbours from layout
-            # Note: No self-connections - FieldTrip doesn't include them in clustering
-            # Self-connections are only used for pre-filtering (minNumChannels)
             if haskey(layout.neighbours, electrode)
                 neighbours = layout.neighbours[electrode]
                 for neighbour in neighbours.channels
@@ -79,11 +77,11 @@ end
 """
     _prefilter_mask_by_neighbors!(mask, spatial_connectivity, min_num_neighbors)
 
-In-place version: Pre-filter mask to remove isolated points (FieldTrip's minNumChannels approach).
+In-place version: Pre-filter mask to remove isolated points 
 
-For each significant point, count how many neighboring significant channels it has.
-If a point has fewer than `min_num_neighbors` neighbors, remove it.
-This is done iteratively until no more points are removed.
+For each significant point, count how many *neighbouring* significant channels it has
+(not counting itself). If a point has fewer than `min_num_neighbors` significant
+neighbours, remove it. This is a single-pass filter
 
 # Arguments
 - `mask::BitArray{2}`: Significant points mask [electrodes × time]
@@ -97,46 +95,41 @@ function _prefilter_mask_by_neighbors!(mask::BitArray{2}, spatial_connectivity::
 
     n_electrodes, n_time = size(mask)
 
-    # Make spatial connectivity symmetric (as FieldTrip does)
+    # Make spatial connectivity symmetric
     spatial_conn_sym = spatial_connectivity .| spatial_connectivity'
 
-    # Iterative removal until no more points are removed
-    n_removed = 1
-    while n_removed > 0
-        n_removed = 0
+    # Single-pass removal 
+    to_remove = falses(n_electrodes, n_time)
 
-        # For each time point
-        for t_idx = 1:n_time
-            # Count neighbors for each electrode at this time point
-            for e_idx = 1:n_electrodes
-                if !mask[e_idx, t_idx]
-                    continue  # Skip non-significant points
-                end
+    for t_idx = 1:n_time
+        for e_idx = 1:n_electrodes
+            if !mask[e_idx, t_idx]
+                continue  # Skip non-significant points
+            end
 
-                # Count how many neighboring significant channels this point has
-                # Note: spatial_conn_sym does NOT include self-connections (removed for clustering)
-                # So we need to explicitly count self
-                neighbor_count = mask[e_idx, t_idx] ? 1 : 0  # Count self if significant
-                for n_e_idx = 1:n_electrodes
-                    if e_idx != n_e_idx && spatial_conn_sym[e_idx, n_e_idx] && mask[n_e_idx, t_idx]
-                        neighbor_count += 1
-                    end
+            # Count significant spatial neighbours (NOT counting self)
+            neighbor_count = 0
+            for n_e_idx = 1:n_electrodes
+                if e_idx != n_e_idx && spatial_conn_sym[e_idx, n_e_idx] && mask[n_e_idx, t_idx]
+                    neighbor_count += 1
                 end
+            end
 
-                # Remove point if total neighbor count is less than min_num_neighbors
-                if neighbor_count < min_num_neighbors
-                    mask[e_idx, t_idx] = false
-                    n_removed += 1
-                end
+            # Mark for removal if fewer than min_num_neighbors
+            if neighbor_count < min_num_neighbors
+                to_remove[e_idx, t_idx] = true
             end
         end
     end
+
+    # Apply removals
+    mask[to_remove] .= false
 end
 
 """
     _prefilter_mask_by_neighbors(mask, spatial_connectivity, min_num_neighbors)
 
-Pre-filter mask to remove isolated points (FieldTrip's minNumChannels approach).
+Pre-filter mask to remove isolated points 
 
 Creates a copy of the mask and calls the in-place version.
 
@@ -403,7 +396,7 @@ function _compute_cluster_statistics(
     for cluster in clusters
         cluster_stat = 0.0
 
-        # Sum of t-values only at exact member points (FieldTrip maxsum)
+        # Sum of t-values only at exact member points 
         for (e_idx, t_idx) in cluster.members
             t_val = t_matrix[e_idx, t_idx]
             if !isnan(t_val) && !isinf(t_val)
@@ -453,7 +446,6 @@ end
     _prefilter_mask_by_neighbors_tf!(mask, spatial_connectivity, min_num_neighbors)
 
 In-place pre-filtering of 3D mask to remove spatially isolated points.
-Iterates until stable.
 """
 function _prefilter_mask_by_neighbors_tf!(mask::BitArray{3}, spatial_connectivity::SparseMatrixCSC{Bool}, min_num_neighbors::Int)
     if min_num_neighbors <= 0
@@ -463,30 +455,31 @@ function _prefilter_mask_by_neighbors_tf!(mask::BitArray{3}, spatial_connectivit
     n_electrodes, n_freqs, n_time = size(mask)
     spatial_conn_sym = spatial_connectivity .| spatial_connectivity'
 
-    n_removed = 1
-    while n_removed > 0
-        n_removed = 0
-        for t_idx = 1:n_time
-            for f_idx = 1:n_freqs
-                for e_idx = 1:n_electrodes
-                    if !mask[e_idx, f_idx, t_idx]
-                        continue
+    # Single-pass removal 
+    to_remove = falses(n_electrodes, n_freqs, n_time)
+
+    for t_idx = 1:n_time
+        for f_idx = 1:n_freqs
+            for e_idx = 1:n_electrodes
+                if !mask[e_idx, f_idx, t_idx]
+                    continue
+                end
+                # Count significant spatial neighbours (NOT counting self)
+                neighbor_count = 0
+                for n_e_idx = 1:n_electrodes
+                    if e_idx != n_e_idx && spatial_conn_sym[e_idx, n_e_idx] && mask[n_e_idx, f_idx, t_idx]
+                        neighbor_count += 1
                     end
-                    # Count neighbours at same (f, t) that are significant
-                    neighbor_count = 1  # count self
-                    for n_e_idx = 1:n_electrodes
-                        if e_idx != n_e_idx && spatial_conn_sym[e_idx, n_e_idx] && mask[n_e_idx, f_idx, t_idx]
-                            neighbor_count += 1
-                        end
-                    end
-                    if neighbor_count < min_num_neighbors
-                        mask[e_idx, f_idx, t_idx] = false
-                        n_removed += 1
-                    end
+                end
+                if neighbor_count < min_num_neighbors
+                    to_remove[e_idx, f_idx, t_idx] = true
                 end
             end
         end
     end
+
+    # Apply removals
+    mask[to_remove] .= false
 end
 
 
