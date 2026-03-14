@@ -84,6 +84,7 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
              layout::Union{Symbol, PlotLayout} = :single,
              condition_selection::Function = conditions(),
              channel_selection::Function = channels(),
+             channel_plot_order::Union{Nothing, Vector{Symbol}} = nothing,
              sample_selection::Function = samples(),
              interval_selection::Interval = times(),
              baseline_interval::Interval = times(),
@@ -126,6 +127,7 @@ function plot_erp(
     layout::Union{Symbol,PlotLayout} = :single,
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
+    channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
     sample_selection::Function = samples(),
     interval_selection::Interval = times(),
     baseline_interval::Interval = times(),
@@ -145,6 +147,7 @@ function plot_erp(
             layout = layout,
             condition_selection = condition_selection,
             channel_selection = channel_selection,
+            channel_plot_order = channel_plot_order,
             sample_selection = sample_selection,
             interval_selection = interval_selection,
             baseline_interval = baseline_interval,
@@ -189,6 +192,7 @@ function plot_erp(
     dat::ErpData;
     layout::Union{Symbol,PlotLayout} = :single,
     channel_selection::Function = channels(),
+    channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
     sample_selection::Function = samples(),
     interval_selection::Interval = times(),
     baseline_interval::Interval = times(),
@@ -200,6 +204,7 @@ function plot_erp(
         layout = layout,
         condition_selection = conditions(),  # Always select all (just the one condition)
         channel_selection = channel_selection,
+        channel_plot_order = channel_plot_order,
         sample_selection = sample_selection,
         interval_selection = interval_selection,
         baseline_interval = baseline_interval,
@@ -211,6 +216,7 @@ function plot_erp(
     layout::Union{Symbol,PlotLayout} = :single,
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
+    channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
     sample_selection::Function = samples(),
     interval_selection::Interval = times(),
     baseline_interval::Interval = times(),
@@ -234,6 +240,14 @@ function plot_erp(
     selected_channels = get_selected_channels(first(dat_subset), channel_selection_func; include_meta = false, include_extra = true)
     # Preserve order from selected_channels (user's channel_selection order)
     all_plot_channels = [ch for ch in selected_channels if ch in all_channels]
+
+    # Apply user-specified plotting order if provided
+    if !isnothing(channel_plot_order)
+        ordered = Symbol[ch for ch in channel_plot_order if ch in all_plot_channels]
+        if !isempty(ordered)
+            all_plot_channels = ordered
+        end
+    end
 
     # Check if any channels remain after filtering
     if isempty(all_plot_channels)

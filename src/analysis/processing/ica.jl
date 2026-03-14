@@ -308,9 +308,6 @@ function create_work_arrays(n_components::Int, block_size::Int)
 end
 
 
-# TODO: What do we really want to add here?
-# Currently, just a potential placeholder
-# Always just used fieldtrip (via eeglab)'s implementation for infomax.
 """
     _run_ica_algorithm(dat_ica, layout; n_components, algorithm, params)
 

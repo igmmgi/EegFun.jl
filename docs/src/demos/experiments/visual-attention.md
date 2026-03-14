@@ -702,9 +702,9 @@ Before extracting measurements in batch, use the interactive GUI to explore wher
 ```julia
 # Load a single participant's ERPs
 erps = EegFun.read_data("example1_erps_good.jld2")
-
 # Open the measurement GUI
 EegFun.plot_erp_measurement_gui(erps)
+
 # or directly with a file name
 EegFun.plot_erp_measurement_gui("grand_average_erps_good.jld2")
 ```
@@ -750,6 +750,7 @@ plot_anova(anova_result, x_grouping = :condition)
 # or with more customisation
 plot_anova(anova_result, x_grouping = :condition, individual_data = :connected_points, theme = Theme(palette = (color = [:black],)), 
 axis_xlabel = "Validity", axis_ylabel = "Mean P1 Amplitude [μV]", axis_xticklabels = ["Valid", "Invalid"])
+```
 
 ![P1 mean amplitude by validity condition](/demos/experiments/visual-attention/p1_amp.png)
 
@@ -773,22 +774,33 @@ stat_data = EegFun.prepare_stats(
 result_perm = EegFun.permutation_test(
     stat_data,
     n_permutations = 1000,
-    threshold_method = :parametric,
     cluster_type = :spatiotemporal,
-    min_num_neighbors = 3,
     show_progress = true,
 )
 
-# Visualise results with significance shading
+# ERP waveforms with significance 
 EegFun.plot_erp_stats(
     result_perm,
-    channel_selection = EegFun.channels(:PO7),
+    channel_selection = EegFun.channels([:PO7, :PO8, :O1, :O2]),
     plot_erp = true,
     plot_significance = true,
+    plot_se = true,
+    layout = :grid,
+    channel_plot_order = [:O1, :O2, :PO7, :PO8],
+    xlim = (-0.2, 0.5),
+    ylim = (-6, 6),
+    legend_labels = ["Valid", "Invalid"],
+    xticks = -0.2:0.2:0.6,
+    time_unit = :ms, 
+    legend_framevisible = false
 )
 
-EegFun.plot_topography_stats(result_perm)
+# Topographies with significance
+EegFun.plot_topography_stats(result_perm, interval_selection = EegFun.times(0.05, 0.2), n_topos = 10, dims = (2, 5), highlight_threshold = 1)
 ```
+
+![ERP cluster-based permutation test results](/demos/experiments/visual-attention/erp_cluster_stats.png)
+![ERP cluster-based permutation test results](/demos/experiments/visual-attention/topo_cluster_stats.png)
 
 ## Further Reading
 
@@ -1005,29 +1017,38 @@ result.p   # p-value
 stat_data = EegFun.prepare_stats(
     "erps_good",
     :paired;
-    input_dir = "output_data",
     condition_selection = EegFun.conditions([1, 2]),
     channel_selection = EegFun.channels(1:72),
     baseline_interval = EegFun.times((-0.2, 0.0)),
-    analysis_interval = EegFun.times((0.0, 1.0)),
+    analysis_interval = EegFun.times((0.0, 0.3)),
 )
 
 result_perm = EegFun.permutation_test(
     stat_data,
     n_permutations = 1000,
-    threshold_method = :parametric,
     cluster_type = :spatiotemporal,
-    min_num_neighbors = 3,
     show_progress = true,
 )
 
+# ERP waveforms with significance
 EegFun.plot_erp_stats(
     result_perm,
-    channel_selection = EegFun.channels(:PO7),
+    channel_selection = EegFun.channels([:PO7, :PO8, :O1, :O2]),
     plot_erp = true,
     plot_significance = true,
-    plot_critical_t = true,
+    plot_se = true,
+    layout = :grid,
+    channel_plot_order = [:O1, :O2, :PO7, :PO8],
+    xlim = (-0.2, 0.5),
+    ylim = (-6, 6),
+    legend_labels = ["Valid", "Invalid"],
+    xticks = -0.2:0.2:0.6,
+    time_unit = :ms,
+    legend_framevisible = false
 )
+
+# Topographies with significance
+EegFun.plot_topography_stats(result_perm, interval_selection = EegFun.times(0.05, 0.2), n_topos = 10, dims = (2, 5), highlight_threshold = 1)
 ```
 
 :::
