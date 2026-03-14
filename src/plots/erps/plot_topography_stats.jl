@@ -8,7 +8,7 @@ with significant channels highlighted — inspired by FieldTrip's ft_clusterplot
 """
     plot_topography_stats(result::StatsResult;
                      n_topos::Int = 10,
-                     time_range::Union{Nothing, Tuple{Real, Real}} = nothing,
+                     interval_selection::Interval = times(),
                      topo_data::Symbol = :tvalues,
                      highlight_significant::Bool = true,
                      highlight_color = :white,
@@ -25,8 +25,7 @@ averaged within a time window, with significant channels highlighted as markers.
 # Arguments
 - `result::StatsResult`: Results from `analytic_test` or `permutation_test`
 - `n_topos::Int`: Number of topographic panels (default: 10)
-- `time_range::Union{Nothing, Tuple{Real, Real}}`: Time window to display in seconds.
-  If `nothing`, uses the full time range from the result
+- `interval_selection::Interval`: Time window to display (default: full range). Use `times(start, stop)` to specify
 - `topo_data::Symbol`: What to display on the topographic maps:
   - `:tvalues` (default) — t-statistics from the statistical test
   - `:difference` — difference wave amplitude (condition A − condition B)
@@ -55,7 +54,7 @@ plot_topography_stats(result)
 plot_topography_stats(result, topo_data=:difference)
 
 # Focus on a specific time window with more panels
-plot_topography_stats(result, time_range=(0.1, 0.4), n_topos=15)
+plot_topography_stats(result, interval_selection=times(0.1, 0.4), n_topos=15)
 
 # Custom marker style for significant channels
 plot_topography_stats(result, highlight_marker=:star5, highlight_color=:yellow, highlight_size=12)
@@ -64,7 +63,7 @@ plot_topography_stats(result, highlight_marker=:star5, highlight_color=:yellow, 
 function plot_topography_stats(
     result::StatsResult;
     n_topos::Int = 10,
-    time_range::Union{Nothing,Tuple{Real,Real}} = nothing,
+    interval_selection::Interval = times(),
     topo_data::Symbol = :tvalues,
     highlight_significant::Bool = true,
     highlight_color = :white,
@@ -100,10 +99,10 @@ function plot_topography_stats(
 
     # Get time points and determine range
     all_time_points = result.time_points
-    if isnothing(time_range)
+    if isnothing(interval_selection)
         t_start, t_end = first(all_time_points), last(all_time_points)
     else
-        t_start, t_end = time_range
+        t_start, t_end = interval_selection
     end
 
     # Find indices within the time range

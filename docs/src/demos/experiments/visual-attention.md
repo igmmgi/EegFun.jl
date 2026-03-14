@@ -788,32 +788,7 @@ EegFun.plot_erp_stats(
 )
 
 EegFun.plot_topography_stats(result_perm)
-
-EegFun.plot_
-
-
-
 ```
-
-> [!NOTE]
-> The permutation test can also be run with non-parametric thresholding via `threshold_method = :nonparametric_common` or `:nonparametric_individual`. See the [Statistics demo](../../demos/statistics/statistics.md) for full details.
-
----
-
-## What to Look For
-
-### The Validity Effect
-
-At **posterior channels** (PO7, PO8, O1, O2):
-
-- **P1 component** (~100 ms): Larger for valid trials — early sensory gain at the attended location
-- **N1 component** (~170 ms): Larger for valid trials — enhanced perceptual processing of the target
-
-### Lateralisation
-
-Compare left-target vs. right-target conditions at contralateral posterior sites (e.g., PO7 for right targets, PO8 for left targets) to observe attention-related lateralised activity.
-
----
 
 ## Further Reading
 

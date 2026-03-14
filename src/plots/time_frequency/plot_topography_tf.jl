@@ -339,7 +339,7 @@ end
     plot_topography_stats(result::TFStatsResult;
                      freq_range::Tuple{Real, Real},
                      n_topos::Int = 10,
-                     time_range::Union{Nothing, Tuple{Real, Real}} = nothing,
+                     interval_selection::Interval = times(),
                      topo_data::Symbol = :tvalues,
                      highlight_significant::Bool = true,
                      highlight_color = :white,
@@ -361,7 +361,7 @@ within the panel's window meets or exceeds `highlight_threshold`.
 - `result::TFStatsResult`: TF statistical result (from `permutation_test` or `analytic_test`)
 - `freq_range::Tuple{Real, Real}`: Frequency range to average over (e.g., `(8.0, 12.0)`)
 - `n_topos::Int`: Number of topographic panels (default: 10)
-- `time_range`: Time window in seconds, or `nothing` for full range
+- `interval_selection::Interval`: Time window to display (default: full range). Use `times(start, stop)` to specify
 - `topo_data::Symbol`: `:tvalues` (default) or `:difference`
 - `highlight_significant::Bool`: Overlay markers on significant channels (default: true)
 - `highlight_threshold::Real`: Proportion of time×freq bins that must be significant
@@ -382,14 +382,14 @@ plot_topography_stats(result, freq_range=(8.0, 12.0))
 plot_topography_stats(result, freq_range=(4.0, 7.0), n_topos=15, highlight_threshold=0.3)
 
 # Specific time window
-plot_topography_stats(result, freq_range=(8.0, 12.0), time_range=(0.1, 0.5))
+plot_topography_stats(result, freq_range=(8.0, 12.0), interval_selection=times(0.1, 0.5))
 ```
 """
 function plot_topography_stats(
     result::TFStatsResult;
     freq_range::Tuple{Real,Real},
     n_topos::Int = 10,
-    time_range::Union{Nothing,Tuple{Real,Real}} = nothing,
+    interval_selection::Interval = times(),
     topo_data::Symbol = :tvalues,
     highlight_significant::Bool = true,
     highlight_color = :white,
@@ -433,10 +433,10 @@ function plot_topography_stats(
         error("No frequencies found in range $(freq_range). Data range: $(first(all_frequencies)) to $(last(all_frequencies)) Hz")
 
     # Find time indices in the selected range
-    if isnothing(time_range)
+    if isnothing(interval_selection)
         t_start, t_end = first(all_time_points), last(all_time_points)
     else
-        t_start, t_end = time_range
+        t_start, t_end = interval_selection
     end
     time_mask = t_start .<= all_time_points .<= t_end
     time_indices = findall(time_mask)
