@@ -89,7 +89,13 @@ using CairoMakie
 
     @testset "plot_topography_stats - data modes" begin
         for mode in (:tvalues, :difference)
-            out = EegFun.plot_topography_stats(tf_analytic_result, freq_range = (8.0, 13.0), n_topos = 3, topo_data = mode, display_plot = false)
+            out = EegFun.plot_topography_stats(
+                tf_analytic_result,
+                freq_range = (8.0, 13.0),
+                n_topos = 3,
+                topo_data = mode,
+                display_plot = false,
+            )
             @test out.fig isa Figure
         end
 

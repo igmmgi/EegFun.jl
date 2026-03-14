@@ -11,7 +11,7 @@ Perform cluster-based permutation test on prepared ERP data.
 - `threshold::Float64`: P-value threshold (default: 0.05)
 - `threshold_method::Symbol`: Threshold method - `:parametric` (default), `:nonparametric_individual`, or `:nonparametric_common`
 - `cluster_type::Symbol`: Type of clustering - `:spatial`, `:temporal`, or `:spatiotemporal` (default)
-- `min_num_neighbors::Int`: Minimum number of *neighbouring* significant channels required to keep a point (default: 0). 
+- `min_num_neighbors::Int`: Minimum number of *neighbouring* significant channels required to keep a point (default: 2). 
 - `tail::Symbol`: Test tail - `:both` (default), `:left`, or `:right`
 - `show_progress::Bool`: Whether to show progress bar (default: true)
 
@@ -28,7 +28,7 @@ function permutation_test(
     threshold::Float64 = 0.05,
     threshold_method::Symbol = :parametric,
     cluster_type::Symbol = :spatiotemporal,
-    min_num_neighbors::Int = 0,
+    min_num_neighbors::Int = 2,
     tail::Symbol = :both,
     show_progress::Bool = true,
 )
@@ -327,7 +327,7 @@ function permutation_test(
     threshold::Float64 = 0.05,
     threshold_method::Symbol = :parametric,
     cluster_type::Symbol = :full,
-    min_num_neighbors::Int = 0,
+    min_num_neighbors::Int = 2,
     tail::Symbol = :both,
     show_progress::Bool = true,
 )

@@ -7,6 +7,7 @@ Plotting functions for statistical test results (analytic and permutation tests)
     plot_erp_stats(result::StatsResult;
                     layout::Union{Symbol, PlotLayout} = :single,
                     channel_selection::Function = channels(),
+                    channel_plot_order::Union{Nothing, Vector{Symbol}} = nothing,
                     plot_erp::Bool = true,
                     plot_difference::Bool = false,
                     plot_tvalues::Bool = false,
@@ -31,6 +32,8 @@ Works with both `AnalyticResult` (from `analytic_test`) and `PermutationResult` 
   - `:topo`: Topographic layout based on channel positions
   - `PlotLayout`: Custom layout object
 - `channel_selection::Function`: Predicate to select channels (default: `channels()` - all channels)
+- `channel_plot_order::Union{Nothing, Vector{Symbol}}`: Override the plotting order of selected channels (default: `nothing` — data order).
+  When provided, channels are plotted in the specified order. Only channels present in both `channel_plot_order` and the selection are plotted
 - `plot_erp::Bool`: Whether to plot ERP waveforms (condition averages) (default: true)
 - `plot_difference::Bool`: Whether to plot difference wave (A-B) (default: false)
 - `plot_tvalues::Bool`: Whether to plot t-statistics (default: false)
@@ -71,6 +74,7 @@ function plot_erp_stats(
     result::StatsResult;
     layout::Union{Symbol,PlotLayout} = :single,
     channel_selection::Function = channels(),
+    channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
     plot_erp::Bool = true,
     plot_difference::Bool = false,
     plot_tvalues::Bool = false,
@@ -114,6 +118,17 @@ function plot_erp_stats(
 
     if isempty(selected_channels)
         error("No channels matched the selection. Available channels: $(all_electrodes)")
+    end
+
+    # Apply user-specified plotting order if provided
+    if !isnothing(channel_plot_order)
+        ordered = Symbol[ch for ch in channel_plot_order if ch in selected_channels]
+        if isempty(ordered)
+            error(
+                "No channels in channel_plot_order matched the selection. Selected: $(selected_channels), Requested order: $(channel_plot_order)",
+            )
+        end
+        selected_channels = ordered
     end
 
     # Set default title
@@ -176,6 +191,7 @@ function plot_erp_stats(
                 significance_position = significance_position,
                 significance_color = significance_color,
                 linewidth = plot_kwargs[:linewidth],
+                legend_labels = plot_kwargs[:legend_labels],
             )
         end
     end
@@ -203,7 +219,7 @@ function plot_erp_stats(
 
     # Add a single legend (on the first axis)
     if !isempty(axes)
-        axislegend(axes[1], position = plot_kwargs[:legend_position])
+        axislegend(axes[1], position = plot_kwargs[:legend_position], framevisible = plot_kwargs[:legend_framevisible])
     end
 
     if plot_kwargs[:display_plot]
@@ -236,6 +252,7 @@ function _plot_erp_stats_channel!(
     significance_position::Union{Symbol,Real} = :auto,
     significance_color = (:gray, 0.6),
     linewidth::Int = 2,
+    legend_labels::Vector = [],
 )
     time_points = result.time_points
     t_values = result.stat_matrix.t[channel_idx, :]
@@ -264,8 +281,8 @@ function _plot_erp_stats_channel!(
 
     # Plot condition averages (ERP waveforms) with optional SE bands
     if plot_erp
-        cond_A_name = result.data[1].condition_name
-        cond_B_name = result.data[2].condition_name
+        cond_A_name = isempty(legend_labels) ? result.data[1].condition_name : legend_labels[1]
+        cond_B_name = length(legend_labels) >= 2 ? legend_labels[2] : result.data[2].condition_name
         lines!(ax, erp_time_points, cond_A_avg, color = colors[1], linewidth = linewidth, label = cond_A_name)
         lines!(ax, erp_time_points, cond_B_avg, color = colors[2], linewidth = linewidth, label = cond_B_name)
 

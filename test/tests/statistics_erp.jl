@@ -353,11 +353,11 @@ end
         # Ch1-Ch2 connected, Ch3 isolated
         spatial_conn = sparse([1, 2], [2, 1], true, 3, 3)
 
-        filtered = EegFun._prefilter_mask_by_neighbors(mask, spatial_conn, 2)
+        filtered = EegFun._prefilter_mask_by_neighbors(mask, spatial_conn, 1)
 
         # Ch3 has no spatial neighbours → removed
         @test all(filtered[3, :] .== false)
-        # Ch1 and Ch2 should survive
+        # Ch1 and Ch2 each have 1 neighbour → survive (>= 1)
         @test all(filtered[1, :] .== true)
         @test all(filtered[2, :] .== true)
     end

@@ -163,7 +163,6 @@ function _compute_nonparametric_threshold_common(permutation_t_matrices::Array{F
 
         # Compute (1 - alpha) percentile for two-tailed on absolute values
         # Since |t| is always positive, the (1-alpha) percentile of |t|
-        # corresponds to the (1-alpha/2) percentile of t (FieldTrip convention)
         percentile_level = 1.0 - alpha
         threshold = quantile(all_t_values, percentile_level)
 

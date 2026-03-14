@@ -63,6 +63,7 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     plot_erp_image(dat::EpochData; 
                    layout::Union{Symbol, PlotLayout} = :single,
                    channel_selection::Function = channels(),
+                   channel_plot_order::Union{Nothing, Vector{Symbol}} = nothing,
                    sample_selection::Function = samples(),
     interval_selection::Interval = times(),
                    kwargs...)
@@ -132,6 +133,7 @@ function plot_erp_image(
     dat::EpochData;
     layout::Union{Symbol,PlotLayout} = :single,
     channel_selection::Function = channels(),
+    channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
     sample_selection::Function = samples(),
     interval_selection::Interval = times(),
     kwargs...,
@@ -151,6 +153,14 @@ function plot_erp_image(
     selected_channels = channel_labels(dat_subset)  # Gets EEG channels from layout
     extra_channels = extra_labels(dat_subset)       # Gets extra channels (EOG, etc.)
     all_plot_channels = unique(vcat(selected_channels, extra_channels))
+
+    # Apply user-specified plotting order if provided
+    if !isnothing(channel_plot_order)
+        ordered = Symbol[ch for ch in channel_plot_order if ch in all_plot_channels]
+        if !isempty(ordered)
+            all_plot_channels = ordered
+        end
+    end
 
     # Validate we have channels to plot
     if isempty(all_plot_channels)

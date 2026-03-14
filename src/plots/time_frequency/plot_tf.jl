@@ -173,6 +173,7 @@ end
 function plot_tf(
     tf_data::TimeFreqData;
     channel_selection::Function = channels(),
+    channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
     baseline_interval::Union{Nothing,Tuple{Real,Real}} = nothing,
     kwargs...,
 )
@@ -209,6 +210,14 @@ function plot_tf(
     selected_mask = channel_selection(all_channels)
     selected_channels = all_channels[selected_mask]
     isempty(selected_channels) && error("No channels matched. Available: $(all_channels)")
+
+    # Apply user-specified plotting order if provided
+    if !isnothing(channel_plot_order)
+        ordered = Symbol[ch for ch in channel_plot_order if ch in selected_channels]
+        if !isempty(ordered)
+            selected_channels = ordered
+        end
+    end
 
     # For :single layout, take only the first channel
     plot_channels = layout === :single ? [first(selected_channels)] : selected_channels

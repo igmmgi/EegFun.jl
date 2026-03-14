@@ -65,7 +65,7 @@ println("\nLoading ERP data...")
 erp_data = EegFun.read_fieldtrip(EegFun.example_path("data/fieldtrip/erp.mat"), layout)
 
 # Biologische Psychologie Labor Tübingen Custom mat files
-# Essentially slightly strippeepd down FieldTrip structures
+# Essentially slightly stripped down FieldTrip structures
 println("\nLoading ERP data...")
 epoch_data = EegFun.read_fieldtrip(EegFun.example_path("data/fieldtrip/custom_epochs.mat"), layout)
 

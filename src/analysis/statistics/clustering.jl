@@ -98,32 +98,31 @@ function _prefilter_mask_by_neighbors!(mask::BitArray{2}, spatial_connectivity::
     # Make spatial connectivity symmetric
     spatial_conn_sym = spatial_connectivity .| spatial_connectivity'
 
-    # Single-pass removal 
-    to_remove = falses(n_electrodes, n_time)
-
-    for t_idx = 1:n_time
-        for e_idx = 1:n_electrodes
-            if !mask[e_idx, t_idx]
-                continue  # Skip non-significant points
-            end
-
-            # Count significant spatial neighbours (NOT counting self)
-            neighbor_count = 0
-            for n_e_idx = 1:n_electrodes
-                if e_idx != n_e_idx && spatial_conn_sym[e_idx, n_e_idx] && mask[n_e_idx, t_idx]
-                    neighbor_count += 1
+    # removing a channel may cause its neighbors to now have too few neighbors
+    nremoved = 1
+    while nremoved > 0
+        nremoved = 0
+        for t_idx = 1:n_time
+            for e_idx = 1:n_electrodes
+                if !mask[e_idx, t_idx]
+                    continue
                 end
-            end
 
-            # Mark for removal if fewer than min_num_neighbors
-            if neighbor_count < min_num_neighbors
-                to_remove[e_idx, t_idx] = true
+                # Count significant spatial neighbours (NOT counting self)
+                neighbor_count = 0
+                for n_e_idx = 1:n_electrodes
+                    if e_idx != n_e_idx && spatial_conn_sym[e_idx, n_e_idx] && mask[n_e_idx, t_idx]
+                        neighbor_count += 1
+                    end
+                end
+
+                if neighbor_count < min_num_neighbors
+                    mask[e_idx, t_idx] = false
+                    nremoved += 1
+                end
             end
         end
     end
-
-    # Apply removals
-    mask[to_remove] .= false
 end
 
 """
@@ -455,31 +454,30 @@ function _prefilter_mask_by_neighbors_tf!(mask::BitArray{3}, spatial_connectivit
     n_electrodes, n_freqs, n_time = size(mask)
     spatial_conn_sym = spatial_connectivity .| spatial_connectivity'
 
-    # Single-pass removal 
-    to_remove = falses(n_electrodes, n_freqs, n_time)
-
-    for t_idx = 1:n_time
-        for f_idx = 1:n_freqs
-            for e_idx = 1:n_electrodes
-                if !mask[e_idx, f_idx, t_idx]
-                    continue
-                end
-                # Count significant spatial neighbours (NOT counting self)
-                neighbor_count = 0
-                for n_e_idx = 1:n_electrodes
-                    if e_idx != n_e_idx && spatial_conn_sym[e_idx, n_e_idx] && mask[n_e_idx, f_idx, t_idx]
-                        neighbor_count += 1
+    nremoved = 1
+    while nremoved > 0
+        nremoved = 0
+        for t_idx = 1:n_time
+            for f_idx = 1:n_freqs
+                for e_idx = 1:n_electrodes
+                    if !mask[e_idx, f_idx, t_idx]
+                        continue
                     end
-                end
-                if neighbor_count < min_num_neighbors
-                    to_remove[e_idx, f_idx, t_idx] = true
+                    # Count significant spatial neighbours (NOT counting self)
+                    neighbor_count = 0
+                    for n_e_idx = 1:n_electrodes
+                        if e_idx != n_e_idx && spatial_conn_sym[e_idx, n_e_idx] && mask[n_e_idx, f_idx, t_idx]
+                            neighbor_count += 1
+                        end
+                    end
+                    if neighbor_count < min_num_neighbors
+                        mask[e_idx, f_idx, t_idx] = false
+                        nremoved += 1
+                    end
                 end
             end
         end
     end
-
-    # Apply removals
-    mask[to_remove] .= false
 end
 
 

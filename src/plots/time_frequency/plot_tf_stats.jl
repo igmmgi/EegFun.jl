@@ -8,6 +8,7 @@ with configurable significance overlays.
 """
     plot_tf_stats(result::TFStatsResult;
                   channel_selection::Function = channels(),
+                  channel_plot_order::Union{Nothing, Vector{Symbol}} = nothing,
                   content::Symbol = :tvalues,
                   significance::Symbol = :contour,
                   colormap = :RdBu,
@@ -73,6 +74,7 @@ plot_tf_stats(result_analytic, significance=:opacity, colormap=:viridis)
 function plot_tf_stats(
     result::TFStatsResult;
     channel_selection::Function = channels(),
+    channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
     content::Symbol = :tvalues,
     significance::Symbol = :contour,
     colormap = :RdBu,
@@ -97,6 +99,14 @@ function plot_tf_stats(
     selected_mask = channel_selection(all_electrodes)
     selected_channels = all_electrodes[selected_mask]
     isempty(selected_channels) && error("No channels matched. Available: $(all_electrodes)")
+
+    # Apply user-specified plotting order if provided
+    if !isnothing(channel_plot_order)
+        ordered = Symbol[ch for ch in channel_plot_order if ch in selected_channels]
+        if !isempty(ordered)
+            selected_channels = ordered
+        end
+    end
 
     n_channels = length(selected_channels)
     frequencies = result.frequencies
