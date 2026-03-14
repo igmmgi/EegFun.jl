@@ -1,6 +1,6 @@
 # Demo: Time-Frequency Statistics & Topography Plots
 # Shows TF topography plotting, statistical tests, and
-# visualization using plot_topo_stats for TF data.
+# visualization using plot_topography_stats for TF data.
 
 using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
@@ -105,12 +105,12 @@ EegFun.plot_tf_stats(result_analytic, channel_selection = EegFun.channels(:Cz), 
 # ==============================================================================
 println("\n--- Plotting TF topo stats (alpha band) ---")
 
-EegFun.plot_topo_stats(result_analytic, freq_range = (8.0, 12.0), n_topos = 10, highlight_threshold = 0.5)
+EegFun.plot_topography_stats(result_analytic, freq_range = (8.0, 12.0), n_topos = 10, highlight_threshold = 0.5)
 
 # Theta band
 println("\n--- Plotting TF topo stats (theta band) ---")
 
-EegFun.plot_topo_stats(result_analytic, freq_range = (4.0, 7.0), n_topos = 8, highlight_threshold = 0.3, topo_data = :difference)
+EegFun.plot_topography_stats(result_analytic, freq_range = (4.0, 7.0), n_topos = 8, highlight_threshold = 0.3, topo_data = :difference)
 
 # ==============================================================================
 # Cluster permutation test (slower but more robust)
@@ -132,6 +132,6 @@ println(result_perm)
 # ==============================================================================
 println("\n--- Plotting permutation TF topo stats ---")
 
-EegFun.plot_topo_stats(result_perm, freq_range = (8.0, 12.0), n_topos = 10, highlight_threshold = 0.5)
+EegFun.plot_topography_stats(result_perm, freq_range = (8.0, 12.0), n_topos = 10, highlight_threshold = 0.5)
 
 println("\n✓ All TF stats tests completed!")

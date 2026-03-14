@@ -6,7 +6,7 @@ with significant channels highlighted — inspired by FieldTrip's ft_clusterplot
 
 
 """
-    plot_topo_stats(result::StatsResult;
+    plot_topography_stats(result::StatsResult;
                      n_topos::Int = 10,
                      time_range::Union{Nothing, Tuple{Real, Real}} = nothing,
                      topo_data::Symbol = :tvalues,
@@ -49,19 +49,19 @@ $(_generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
 ```julia
 # Basic usage with analytic test
 result = analytic_test(prepared, correction_method=:no)
-plot_topo_stats(result)
+plot_topography_stats(result)
 
 # Show difference wave amplitudes instead of t-values
-plot_topo_stats(result, topo_data=:difference)
+plot_topography_stats(result, topo_data=:difference)
 
 # Focus on a specific time window with more panels
-plot_topo_stats(result, time_range=(0.1, 0.4), n_topos=15)
+plot_topography_stats(result, time_range=(0.1, 0.4), n_topos=15)
 
 # Custom marker style for significant channels
-plot_topo_stats(result, highlight_marker=:star5, highlight_color=:yellow, highlight_size=12)
+plot_topography_stats(result, highlight_marker=:star5, highlight_color=:yellow, highlight_size=12)
 ```
 """
-function plot_topo_stats(
+function plot_topography_stats(
     result::StatsResult;
     n_topos::Int = 10,
     time_range::Union{Nothing,Tuple{Real,Real}} = nothing,

@@ -2,7 +2,7 @@
 Topographic visualizations for Time-Frequency data.
 
 `plot_topography` for `TimeFreqData` — single topo of average power in a time-freq window.
-`plot_topo_stats` for `TFStatsResult` — grid of topos across time for a selected frequency band.
+`plot_topography_stats` for `TFStatsResult` — grid of topos across time for a selected frequency band.
 """
 
 
@@ -336,7 +336,7 @@ end
 #  TOPO STATS FOR TF STATISTICAL RESULTS
 # =========================================
 """
-    plot_topo_stats(result::TFStatsResult;
+    plot_topography_stats(result::TFStatsResult;
                      freq_range::Tuple{Real, Real},
                      n_topos::Int = 10,
                      time_range::Union{Nothing, Tuple{Real, Real}} = nothing,
@@ -376,16 +376,16 @@ $(_generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
 # Examples
 ```julia
 # Alpha-band statistics
-plot_topo_stats(result, freq_range=(8.0, 12.0))
+plot_topography_stats(result, freq_range=(8.0, 12.0))
 
 # Theta-band with more panels and lower threshold
-plot_topo_stats(result, freq_range=(4.0, 7.0), n_topos=15, highlight_threshold=0.3)
+plot_topography_stats(result, freq_range=(4.0, 7.0), n_topos=15, highlight_threshold=0.3)
 
 # Specific time window
-plot_topo_stats(result, freq_range=(8.0, 12.0), time_range=(0.1, 0.5))
+plot_topography_stats(result, freq_range=(8.0, 12.0), time_range=(0.1, 0.5))
 ```
 """
-function plot_topo_stats(
+function plot_topography_stats(
     result::TFStatsResult;
     freq_range::Tuple{Real,Real},
     n_topos::Int = 10,

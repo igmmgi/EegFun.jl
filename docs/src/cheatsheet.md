@@ -122,7 +122,7 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 | Plot ERP statistics | `EegFun.plot_erp_stats(result, channel_selection=channels(:Pz))` |
 | Plot TF power | `EegFun.plot_tf(tf, channel_selection=channels(:Cz))` |
 | Plot TF statistics | `EegFun.plot_tf_stats(result, channel_selection=channels(:Cz))` |
-| Plot TF topography stats | `EegFun.plot_topo_stats(result, freq_range=(8.0, 12.0))` |
+| Plot TF topography stats | `EegFun.plot_topography_stats(result, freq_range=(8.0, 12.0))` |
 | Plot ICA components | `EegFun.plot_topography(ica)` |
 | Plot epochs grid | `EegFun.plot_epochs(epochs)` |
 | Plot ERP image | `EegFun.plot_erp_image(epochs, channel_selection=channels(:Pz))` |

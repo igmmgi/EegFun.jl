@@ -11,7 +11,7 @@ Perform cluster-based permutation test on prepared ERP data.
 - `threshold::Float64`: P-value threshold (default: 0.05)
 - `threshold_method::Symbol`: Threshold method - `:parametric` (default), `:nonparametric_individual`, or `:nonparametric_common`
 - `cluster_type::Symbol`: Type of clustering - `:spatial`, `:temporal`, or `:spatiotemporal` (default)
-- `min_num_neighbors::Int`: Minimum number of neighboring significant channels required (FieldTrip's minNumChannels, default: 0). Points with fewer neighbors are removed before clustering.
+- `min_num_neighbors::Int`: Minimum number of *neighbouring* significant channels required to keep a point (default: 0). 
 - `tail::Symbol`: Test tail - `:both` (default), `:left`, or `:right`
 - `show_progress::Bool`: Whether to show progress bar (default: true)
 
@@ -102,7 +102,6 @@ function permutation_test(
     @info "Building connectivity matrix..."
     spatial_connectivity = _build_connectivity_matrix(electrodes, layout, cluster_type)
 
-    # Pre-filter masks to remove isolated points (FieldTrip's minNumChannels approach)
     if min_num_neighbors > 0
         @info "Pre-filtering masks (min_num_neighbors=$min_num_neighbors)..."
         mask_positive = _prefilter_mask_by_neighbors(mask_positive, spatial_connectivity, min_num_neighbors)
@@ -224,7 +223,7 @@ end
                   tail::Symbol = :both,
                   correction_method::Symbol = :no)
 
-Perform analytic (parametric) t-test without permutation (FieldTrip's 'analytic' method).
+Perform analytic (parametric) t-test without permutation 
 
 # Arguments
 - `prepared::StatisticalData`: Prepared data from `prepare_stats`

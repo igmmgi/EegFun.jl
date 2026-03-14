@@ -75,26 +75,26 @@ using CairoMakie
     end
 
     # ────────────────────────────────────────────────────────────
-    # 3. plot_topo_stats (TF)
+    # 3. plot_topography_stats (TF)
     # ────────────────────────────────────────────────────────────
     # Prepare stats once for all topo_stats tests
     prepared_tf_stats = EegFun.prepare_stats(tf_all; design = :paired)
     tf_analytic_result = EegFun.analytic_test(prepared_tf_stats)
 
-    @testset "plot_topo_stats - analytic result" begin
-        out = EegFun.plot_topo_stats(tf_analytic_result, freq_range = (8.0, 13.0), n_topos = 4, display_plot = false)
+    @testset "plot_topography_stats - analytic result" begin
+        out = EegFun.plot_topography_stats(tf_analytic_result, freq_range = (8.0, 13.0), n_topos = 4, display_plot = false)
         @test out.fig isa Figure
         @test length(out.axes) == 4
     end
 
-    @testset "plot_topo_stats - data modes" begin
+    @testset "plot_topography_stats - data modes" begin
         for mode in (:tvalues, :difference)
-            out = EegFun.plot_topo_stats(tf_analytic_result, freq_range = (8.0, 13.0), n_topos = 3, topo_data = mode, display_plot = false)
+            out = EegFun.plot_topography_stats(tf_analytic_result, freq_range = (8.0, 13.0), n_topos = 3, topo_data = mode, display_plot = false)
             @test out.fig isa Figure
         end
 
         # Invalid mode
-        @test_throws Exception EegFun.plot_topo_stats(
+        @test_throws Exception EegFun.plot_topography_stats(
             tf_analytic_result,
             freq_range = (8.0, 13.0),
             topo_data = :invalid,
@@ -102,8 +102,8 @@ using CairoMakie
         )
     end
 
-    @testset "plot_topo_stats - invalid freq range" begin
-        @test_throws Exception EegFun.plot_topo_stats(tf_analytic_result, freq_range = (100.0, 200.0), display_plot = false)
+    @testset "plot_topography_stats - invalid freq range" begin
+        @test_throws Exception EegFun.plot_topography_stats(tf_analytic_result, freq_range = (100.0, 200.0), display_plot = false)
     end
 
 end # @testset "TF Plots"
