@@ -303,8 +303,8 @@ type = "lp"
 
 # Independent Component Analysis (ICA) true/false.
 # Type: Bool
-# Default: false
-apply = false
+# Default: true
+apply = true
 
 # Percentage of data to use for ICA (0-100).
 # Type: Real
