@@ -492,7 +492,7 @@ end
 # UTILITY HELPERS
 # =============================================================================
 
-"""Classify a channel label as EEG, EOG, or MISC for BIDS channels.tsv."""
+"""Classify a channel label as EEG, EOG, EMG, ECG, or TRIG for BIDS channels.tsv."""
 function _bids_classify_channel(label::Symbol)::String
     s = uppercase(string(label))
 
@@ -519,6 +519,7 @@ end
 function _bids_write_json(path::String, data::OrderedDict)
     open(path, "w") do io
         _json_print(io, data, 0)
+        println(io)  # trailing newline
     end
 end
 
@@ -561,7 +562,10 @@ function _json_print(io::IO, data::AbstractVector, indent::Int)
     end
 end
 
-_json_print(io::IO, data::AbstractString, _::Int) = print(io, "\"", replace(data, "\"" => "\\\""), "\"")
+function _json_print(io::IO, data::AbstractString, _::Int)
+    escaped = replace(data, "\\" => "\\\\", "\"" => "\\\"", "\n" => "\\n", "\t" => "\\t", "\r" => "\\r")
+    print(io, "\"", escaped, "\"")
+end
 _json_print(io::IO, data::Bool, _::Int) = print(io, data ? "true" : "false")
 _json_print(io::IO, data::Number, _::Int) = print(io, data)
 _json_print(io::IO, data::Symbol, _::Int) = print(io, "\"", data, "\"")
