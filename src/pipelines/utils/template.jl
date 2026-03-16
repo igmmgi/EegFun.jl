@@ -96,7 +96,7 @@ function _generate_setup_section()
         preprocess_cfg = PreprocessConfig(cfg["preprocess"])
         
         # Check if all requested raw data files exist
-        raw_data_files = get_files(cfg["files"]["input"]["directory"], cfg["files"]["input"]["raw_data_files"])
+        raw_data_files = get_files(cfg["files"]["input"]["directory"], cfg["files"]["input"]["raw_data_files"]; recursive = get(cfg["files"]["input"], "recursive", false))
         raw_data_files_exist = check_files_exist(raw_data_files)
         !raw_data_files_exist && @minimal_error "Missing raw data files requested within TOML file!"
         @info "Found \$(length(raw_data_files)) files: \$(join(raw_data_files, ", "))"

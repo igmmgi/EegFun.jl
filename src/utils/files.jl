@@ -1,9 +1,21 @@
-function get_files(directory::String, files::String)
-    # replace common wildcard with regex syntax
-    matching_files = filter(f -> occursin(Regex(files), f), readdir(directory))
-    # Natural order: "file_10" comes after "file_3"
-    sorted_files = sort(matching_files, by = x -> (_natural_sort_key(x), x))
-    return [joinpath(directory, file) for file in sorted_files]
+function get_files(directory::String, files::String; recursive::Bool = false)
+    if recursive
+        # Walk subdirectories (e.g., BIDS sub-XX/eeg/ structure)
+        matching_files = String[]
+        for (root, _, filenames) in walkdir(directory)
+            for f in filenames
+                if occursin(Regex(files), f)
+                    push!(matching_files, joinpath(root, f))
+                end
+            end
+        end
+        return sort(matching_files, by = x -> (_natural_sort_key(basename(x)), x))
+    else
+        # Original flat directory search
+        matching_files = filter(f -> occursin(Regex(files), f), readdir(directory))
+        sorted_files = sort(matching_files, by = x -> (_natural_sort_key(x), x))
+        return [joinpath(directory, file) for file in sorted_files]
+    end
 end
 
 function get_files(directory::String, files::Vector{String})

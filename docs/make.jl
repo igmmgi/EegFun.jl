@@ -35,6 +35,7 @@ pages = [
             "FieldTrip Import" => "demos/import/fieldtrip_import.md",
             "Data" => "demos/import/data.md",
             "Data Persistence (JLD2)" => "demos/import/jld2.md",
+            "BIDS Export" => "demos/import/bids_export.md",
         ],
         "Preprocessing" => [
             "Filter" => "demos/preprocessing/filter.md",
