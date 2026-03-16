@@ -523,6 +523,9 @@ Generate and save a template TOML configuration file with all available paramete
 - `filename::String`: Name of the template file to create (keyword argument, default: "config_template.toml")
 """
 function generate_config_template(; filename::String = "config_template.toml")
+    if !endswith(filename, ".toml")
+        filename = filename * ".toml"
+    end
     try
         @info "Starting config template generation"
         open(filename, "w") do io
