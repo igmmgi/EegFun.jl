@@ -94,7 +94,7 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "preprocess.eeg.artifact_value_z_criterion"   => number_param("Value (z) for defining data section (or epoch) as an artifact value (NB. various statistics with 0 being off!).", 0),
 
     # ICA settings
-    "preprocess.ica.apply"              => bool_param("Independent Component Analysis (ICA) true/false."),
+    "preprocess.ica.apply"              => bool_param("Independent Component Analysis (ICA) true/false.", true),
     "preprocess.ica.percentage_of_data" => number_param("Percentage of data to use for ICA (0-100).", 100.0, 0.0, 100.0),
 
     # Filtering settings - using helper function
