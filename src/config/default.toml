@@ -32,6 +32,12 @@ layout_file = "biosemi72.csv"
 # Default: \.bdf
 raw_data_files = "\\.bdf"
 
+# Search subdirectories recursively for raw data files.
+# Useful for BIDS directory structures (e.g., sub-XX/eeg/*.bdf).
+# Type: Bool
+# Default: false
+recursive = false
+
 # output Settings
 [files.output]
 

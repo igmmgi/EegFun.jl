@@ -65,6 +65,7 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     # File paths and settings
     "files.input.directory"            => simple_string_param("Directory containing raw data files.", "."),
     "files.input.raw_data_files"       => string_param("Pattern (regex or explicit list) for raw data files to process.", "\\.bdf"),
+    "files.input.recursive"            => bool_param("Search subdirectories recursively for raw data files (e.g., BIDS).", false),
     "files.input.layout_file"          => simple_string_param("Electrode layout file name (\"*.csv\")", "biosemi72.csv"),
     "files.input.epoch_condition_file" => simple_string_param("TOML file that defines the condition epochs.", ""),
     "files.output.directory"           => simple_string_param("Directory for processed output files", "./preprocessed_files"),

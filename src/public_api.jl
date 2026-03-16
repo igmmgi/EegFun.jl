@@ -291,6 +291,7 @@ public trigger_count
 public apply_analysis_settings
 public apply_analysis_settings!
 public generate_config_template
+public export_bids
 public generate_pipeline_template
 public preprocess
 public preprocess_v2
