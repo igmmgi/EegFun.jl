@@ -356,7 +356,6 @@ function _bids_write_events_tsv(dir::String, prefix::String, dat::ContinuousData
 
     triggers = df.trigger
     time_col = df.time
-    sr = dat.sample_rate
 
     path = joinpath(dir, "$(prefix)_events.tsv")
     open(path, "w") do io
