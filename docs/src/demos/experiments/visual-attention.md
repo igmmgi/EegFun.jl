@@ -38,6 +38,10 @@ The design is a **2 × 2 within-subjects factorial**:
 | **Sample Rate**  | 256 Hz        |
 | **Trials**       | 400 per participant        |
 
+The data files are available on Zenodo:
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19045958.svg)](https://doi.org/10.5281/zenodo.19045958)
+
 ---
 
 ## Part 1: Single Participant Exploration
@@ -478,7 +482,7 @@ The most commonly adjusted parameters are shown below. The full configuration (w
 | **Highpass** | `filter.highpass.freq` | 0.1 Hz | Main highpass cutoff |
 | **Lowpass** | `filter.lowpass.apply` | `false` | Lowpass off by default |
 | | `filter.lowpass.freq` | 30 Hz | Lowpass cutoff (if enabled) |
-| **ICA** | `ica.apply` | `false` | ICA off by default |
+| **ICA** | `ica.apply` | `true` | ICA on by default |
 | | `filter.ica_highpass.freq` | 1.0 Hz | Stricter highpass for ICA |
 | | `ica.percentage_of_data` | 100% | Proportion of data used for ICA |
 | **Artifacts** | `eeg.extreme_value_abs_criterion` | 500 μV | Extreme value threshold (continuous) |
@@ -565,7 +569,7 @@ type = "lp"
 # ──── ICA ────
 
 [preprocess.ica]
-apply = false
+apply = true
 percentage_of_data = 100.0
 
 # ──── Layout ────
