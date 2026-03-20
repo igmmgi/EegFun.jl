@@ -115,9 +115,7 @@ Only interpret time points that survive statistical testing with appropriate cor
 
 ### Demo Structure
 
-**
-
-Synthetic data**:
+**Synthetic data**:
 
 Creates artificial data with controllable signal-to-noise ratio to validate the pipeline.
 

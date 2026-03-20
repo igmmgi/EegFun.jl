@@ -1,4 +1,4 @@
-Grand averaging is the process of averaging ERP data across multiple participants to isolate reliable experimental effects and reduce individual noise. `EegFun.jl` provides two primary ways to calculate grand averages: using in-memory data or processing files directly from disk.
+Grand averaging is the process of averaging ERP data across multiple participants. `EegFun.jl` provides two primary ways to calculate grand averages: using in-memory data or processing files directly from disk.
 
 ## In-Memory Grand Averaging
 
@@ -37,8 +37,3 @@ Once calculated, grand averages can be visualized using the same tools as indivi
 # Plot with standard error shading (if n > 1)
 plot_erp(ga_results, labels = ["Standard", "Target"])
 ```
-
----
-
-> [!TIP]
-> Always ensure your individual ERPs are baseline-corrected and filtered before grand averaging.

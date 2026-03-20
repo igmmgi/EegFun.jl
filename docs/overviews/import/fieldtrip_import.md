@@ -6,11 +6,13 @@ FieldTrip stores data in MATLAB structures (generic `.mat` files).
 EegFun.jl uses `MAT.jl` to parse them and map them onto EegFun types.
 
 **Key features**:
+
 - Supports raw, epoched, and averaged (timelock) data
 
 ### Import Capabilities
 
 **Data loading**:
+
 - Import of continuous `raw` data
 - Import of segmented `epochs` data
 - Import of averaged `timelock` (ERP) data
@@ -18,8 +20,9 @@ EegFun.jl uses `MAT.jl` to parse them and map them onto EegFun types.
 ### Data Mapping
 
 **EegFun.read_fieldtrip** maps MATLAB structures to EegFun:
-- FieldTrip `raw` / `epochs` → `ContinuousData` / `EpochedData`
-- FieldTrip `timelock` → `ERPData`
+
+- FieldTrip `raw` / `epochs` → `ContinuousData` / `EpochData`
+- FieldTrip `timelock` → `ErpData`
 - Sample rates and time axes are automatically reconstructed
 
 ## Workflow Summary

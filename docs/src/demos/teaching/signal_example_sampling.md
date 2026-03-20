@@ -1,4 +1,4 @@
-# Signal Example 1 — Sampling & Reconstruction
+# Signal Example — Sampling & Reconstruction
 
 Interactive demonstration of the **Nyquist–Shannon sampling theorem**.
 
@@ -31,9 +31,10 @@ When the sampling rate falls **below** twice the signal frequency, the signal ca
 
 | Control | Range | Description |
 |---------|-------|-------------|
+| Duration | 1–10 s | Length of the displayed signal |
 | Signal Frequency | 1–100 Hz | Frequency of the underlying sine wave |
-| Sampling Rate | 2–200 Hz | Number of samples per second |
-| ☐ Show Original | — | Toggle the continuous reference signal |
+| Phase Angle | −π to π | Phase offset of the sine wave |
+| Sampling Rate | 1–300 Hz | Number of samples per second |
 | ☐ Linear | — | Toggle linear interpolation overlay |
 | ☐ Sinc | — | Toggle sinc reconstruction overlay |
 
@@ -41,7 +42,9 @@ When the sampling rate falls **below** twice the signal frequency, the signal ca
 
 - Luck, S. J. (2014). *An Introduction to the Event-Related Potential Technique* (2nd ed.). MIT Press. — Chapter 5 (Section: Amplifying, Filtering, and Digitizing the Signal, Figure 5.7)
 - [Sinc Interpolation for Signal Reconstruction (Wolfram Demonstrations)](https://demonstrations.wolfram.com/SincInterpolationForSignalReconstruction/)
-- [Signal Example 2](signal_example_composition.md) — multi-signal composition and filtering
+- [Signal Example — Composition](signal_example_composition.md) — multi-signal composition and filtering
+- [Signal Example — Dot Product](signal_example_dotproduct.md) — how the DFT detects frequencies
+- [Signal Example — Spectrum](signal_example_spectrum.md) — the full FFT power spectrum
 
 ## Code
 

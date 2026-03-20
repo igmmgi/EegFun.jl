@@ -1,6 +1,6 @@
 # Data
 
-This demo demonstrates understanding the core data structures in EegFun.jl and how to access and subset data.
+This demo demonstrates the core data structures in EegFun.jl and how to access and subset data.
 
 ### Core Data Structures
 
@@ -8,7 +8,7 @@ This demo demonstrates understanding the core data structures in EegFun.jl and h
 
 - Raw EEG time series from continuous recording
 - Contains electrode data, triggers, sampling rate, metadata
-- Used for preprocessing, filtering, artifact detection
+- Single DataFrame
 
 **EpochData**:
 
@@ -19,8 +19,7 @@ This demo demonstrates understanding the core data structures in EegFun.jl and h
 **ErpData**:
 
 - Averaged event-related potentials
-- One waveform per condition
-- Used for statistical analysis and plotting
+- Single DataFrame
 
 ### Data Access Functions
 

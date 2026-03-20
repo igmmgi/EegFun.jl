@@ -2,7 +2,6 @@ This demo demonstrates importing BrainVision format files into EegFun.jl.
 
 ### What is BrainVision Format?
 
-
 BrainVision is the data format used by Brain Products GmbH EEG systems (e.g., BrainAmp, actiCHamp, LiveAmp). It's a flexible, text-header based format widely used in research.
 
 **The format consists of three files**:
@@ -59,7 +58,7 @@ You can specify any of the three files to `read_raw_data()` - it will automatica
 
 BrainVision doesn't embed 3D electrode positions, so you must provide a matching layout. Depending on your cap manufacturer:
 
-**Brain Products actiCap**: Check `resources/layouts/brainproducts_acticap/`  
+**Brain Products actiCap**: Check `resources/layouts/acticap/`  
 **EasyCap**: Check `resources/layouts/easycap/`  
 
 Choose the layout matching your recording configuration.
