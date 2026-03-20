@@ -88,7 +88,7 @@ The function uses Welch's method for PSD estimation:
 - **Low-pass**: Anti-aliasing already applied during acquisition
 - **Notch filtering**: Consider before spectrum if you want to see line noise
 
-**Selecting channels**:a
+**Selecting channels**:
 
 - **Single channel**: For targeted analysis (e.g., Oz for alpha)
 - **Regional selection**: Compare frontal vs posterior, left vs right

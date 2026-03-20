@@ -1,4 +1,4 @@
-# Signal Example 2 — Signal Composition & Filtering
+# Signal Example — Signal Composition & Filtering
 
 Interactive multi-signal composer demonstrating how complex waveforms are built from simple sine waves, how noise affects a signal, and how filters shape the frequency content.
 
@@ -39,7 +39,9 @@ Each signal row has its own frequency, amplitude, and phase controls in the left
 ## See Also
 
 - Luck, S. J. (2014). *An Introduction to the Event-Related Potential Technique* (2nd ed.). MIT Press. — Chapter 1 (Figure 1.6)
-- [Signal Example 1](signal_example_sampling.md) — Nyquist theorem and signal reconstruction
+- [Signal Example — Sampling](signal_example_sampling.md) — Nyquist theorem and signal reconstruction
+- [Signal Example — Dot Product](signal_example_dotproduct.md) — how the DFT detects individual frequencies
+- [Signal Example — Spectrum](signal_example_spectrum.md) — the full FFT power spectrum
 
 ## Code
 

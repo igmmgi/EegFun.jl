@@ -11,7 +11,7 @@ EegFun uses predicate-generator functions that create selection criteria:
 
 ### How They Work
 
-Selection helpers return functions (predicates) that are passed to `subset()`, `plot_erp()`, and other functions via keyword arguments:
+Selection helpers return functions (predicates) that are passed to `subset()`, and other functions via keyword arguments:
 
 ```julia
 # channels(:Cz, :Pz) returns a function that selects those channels

@@ -7,6 +7,7 @@ This demo explores the core functionality of segmenting continuous data into epo
 Epoching is the process of extracting specific time intervals around events (e.g., stimuli or responses) from a continuous recording. This allows for epoch-based analysis and averaging to reveal Event-Related Potentials (ERPs).
 
 **Key features of EegFun's epoching**:
+
 - Time-relative segmentation
 - Multi-condition definition via trigger sequences
 
@@ -19,7 +20,7 @@ Epoching is the process of extracting specific time intervals around events (e.g
 
 1. **Data Preparation**: Load continuous data, apply layout, and perform basic preprocessing (filtering, re-referencing).
 2. **Define Conditions**: Use `EpochCondition` to specify which triggers belong to which experimental condition.
-3. **Extraction**: Use `extract_epochs()` to create segments. This returns a collection of `EpochedData` objects.
+3. **Extraction**: Use `extract_epochs()` to create segments. This returns a collection of `EpochData` objects.
 
 
 ## Code Examples

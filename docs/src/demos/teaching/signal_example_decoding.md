@@ -46,6 +46,8 @@ Interactive demo showing time-resolved multivariate pattern classification (MVPA
 ## See Also
 
 - [Simulate ERP](simulate_erp.md) — how trial averaging extracts signals from noise
+- [Signal Example — Composition](signal_example_composition.md) — signal composition and filtering
+- [Signal Example — Time-Frequency](signal_example_tf.md) — time-frequency analysis methods
 - Grootswagers, T., Wardle, S. G., & Carlson, T. A. (2017). Decoding dynamic brain patterns from evoked responses: a tutorial on multivariate pattern analysis applied to time series neuroimaging data. *Journal of Cognitive Neuroscience*, 29(4), 677–697.
 
 ## Code

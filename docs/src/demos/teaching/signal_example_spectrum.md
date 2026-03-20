@@ -37,8 +37,9 @@ Both resolution and leakage matter in EEG: alpha (8–12 Hz) and beta (13–30 H
 
 ## See Also
 
-- [Signal Example (Composition)](signal_example_composition.md) — building signals from sine waves
-- [Signal Example (Time-Frequency)](signal_example_tf.md) — TF analysis using FFT, Morlet, and multitaper
+- [Signal Example — Composition](signal_example_composition.md) — building signals from sine waves
+- [Signal Example — Dot Product](signal_example_dotproduct.md) — the core mechanism behind each FFT bin
+- [Signal Example — Time-Frequency](signal_example_tf.md) — TF analysis using FFT, Morlet, and multitaper
 - Cohen, M. X. (2014). *Analyzing Neural Time Series Data*. MIT Press. — Chapters 10–11
 
 ## Code

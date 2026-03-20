@@ -6,16 +6,10 @@ CollapsedDocStrings = true
 
 All public analysis and processing functions in EegFun.jl.
 
-## Index
-
-```@index
-Pages = ["analysis.md"]
-```
-
 ## Functions
 
 ```@autodocs
 Modules = [EegFun]
 Order = [:function, :macro]
-Filter = t -> !startswith(string(t), "_") && !startswith(string(t), "plot_")
+Filter = t -> let s = string(t); !startswith(s, "_") && !startswith(s, "plot_") && !startswith(s, "Base.") && !endswith(s, ".show") && !endswith(s, ".copy") && !endswith(s, ".convert") && !endswith(s, ".getproperty") end
 ```

@@ -1,4 +1,4 @@
-# Signal Example 3 — Time-Frequency Analysis
+# Signal Example — Time-Frequency Analysis
 
 Interactive demo comparing three time-frequency analysis methods on a synthetic multi-component signal, with controls for baseline normalization and frequency-axis scaling.
 
@@ -87,8 +87,10 @@ Enable the Log toggle. Low frequencies are spread out — revealing fine structu
 
 - Cohen, M. X. (2014). *Analyzing Neural Time Series Data*. MIT Press.
 - Section III: Frequency and Time-Frequency Domains Analyses
-- [Signal Example 1](signal_example_sampling.md) — Nyquist theorem and sampling
-- [Signal Example 2](signal_example_composition.md) — signal composition and filtering
+- [Signal Example — Sampling](signal_example_sampling.md) — Nyquist theorem and sampling
+- [Signal Example — Composition](signal_example_composition.md) — signal composition and filtering
+- [Signal Example — Spectrum](signal_example_spectrum.md) — the full FFT power spectrum
+- [Signal Example — Convolution](signal_example_convolution.md) — sliding kernels including Morlet wavelets
 
 ## Code
 

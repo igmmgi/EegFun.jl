@@ -10,7 +10,7 @@ Use `plot_tf` to visualise the output of `tf_morlet`, `tf_multitaper`, or `tf_st
 | --- | --- | --- |
 | `channel` | First channel | Which channel to plot |
 | `baseline_interval` | `nothing` | Pre-stimulus interval for on-the-fly baseline correction |
-| `baseline_method` | `:db` | `:db`, `:percent`, or `:relchange` |
+| `baseline_method` | `:db` | `:db`, `:percent`, `:relchange`, `:absolute`, `:relative`, or `:zscore` |
 | `colormap` | `:viridis` | Colour map for the heatmap |
 | `colorrange` | auto | Explicit `(min, max)` colour range |
 | `ylogscale` | `false` | Log-scale the frequency axis |

@@ -10,7 +10,7 @@ Interactive ERP simulator for teaching how trial averaging extracts signals from
 |---------|-------------|
 | Grey lines | Individual simulated EEG trials with realistic 1/f background noise |
 | Blue line | Trial-average ERP — clarifies as more trials are added |
-| Components | Up to 5 independent cosine-shaped ERP components |
+| Components | Up to 5 independent ERP components, each shaped as a single cosine lobe (the central peak of a cosine wave, masked to ±π/2) to produce a smooth, bell-like waveform |
 
 **The core insight:** The signal-to-noise ratio of the ERP average scales with √N (where N is the number of trials). Doubling the number of trials improves SNR by ~41%; to *halve* the noise, you need 4× as many trials.
 
@@ -44,8 +44,9 @@ Each component has its own row of controls in the right panel.
 ## See Also
 
 - Luck, S. J. (2014). *An Introduction to the Event-Related Potential Technique* (2nd ed.). MIT Press. — Chapter 8 (averaging and signal-to-noise ratio)
-- [Signal Example 1 — Nyquist Theorem](signal_example_sampling.md)
-- [Signal Example 2 — Signal Composition & Filtering](signal_example_composition.md)
+- [Signal Example — Sampling](signal_example_sampling.md) — Nyquist theorem and signal reconstruction
+- [Signal Example — Composition](signal_example_composition.md) — signal composition and filtering
+- [Simulate Decoding](signal_example_decoding.md) — multivariate pattern classification on synthetic EEG
 
 ## Code
 

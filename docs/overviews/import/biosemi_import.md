@@ -8,7 +8,7 @@ BioSemi is a popular manufacturer of active electrode EEG systems. The BDF (BioS
 
 - 24-bit resolution for high-precision recordings
 - Continuous raw data storage
-- Trigger channel for event markers
+- Trigger channel for event markers (last channel)
 - Standard format widely supported across analysis tools
 
 ### Import Capabilities

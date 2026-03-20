@@ -1,4 +1,4 @@
-This demo is a comprehensive walkthrough of artifact handling in EegFun: continuous-data artifact detection, EOG channels, epoched artifact detection, interactive review, artifact repair, and epoch rejection.
+This demo offers a walkthrough of artifact handling in EegFun: continuous-data artifact detection, EOG channels, epoched artifact detection, interactive review, artifact repair, and epoch rejection.
 
 ### Key Functions
 
@@ -20,13 +20,13 @@ This demo is a comprehensive walkthrough of artifact handling in EegFun: continu
 
 ### EOG Channel Creation
 
-- Derive vertical and horizontal EOG from frontal and periocular channels using `channel_difference!`
+- Derive vertical and horizontal EOG from frontal (e.g., IO1/IO2, Fp1/Fp2) and lateral (e.g., F9/F10) channels using `channel_difference!`
 - Detect blink/saccade onsets with `detect_eog_onsets!` and mark affected intervals with `mark_epoch_intervals!`
 
 ### Continuous-Data Artifact Detection
 
 - `is_extreme_value!` — marks samples exceeding an absolute threshold (e.g., ±100 μV)
-- `is_step_value!` — marks sudden jumps that extreme value detection might miss (e.g., cable disconnections)
+- `is_step_value!` — marks sudden voltage jumps (e.g., cable disconnections)
 - Both support `channel_selection` and `sample_selection` for targeted detection
 - Use `n_extreme_value` / `n_step_value` to count detections (combined or per-channel with `mode = :separate`)
 
@@ -35,7 +35,7 @@ This demo is a comprehensive walkthrough of artifact handling in EegFun: continu
 - **`z_criterion`** (default: 3.0) — epochs with z-scores above this are rejected. Set to 0 to disable.
 - **`abs_criterion`** (default: 100 μV) — epochs exceeding this absolute voltage are rejected. Set to 0 to disable.
 - **`z_measures`** — which metrics to use for z-score: `[:variance, :max, :min, :abs, :range, :kurtosis]`
-- Use `channel_selection` for region-specific detection (e.g., frontal channels only)
+- Use `channel_selection` for channel-specific detection (e.g., frontal channels only)
 
 ### Inspect and Review
 
