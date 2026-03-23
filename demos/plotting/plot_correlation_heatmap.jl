@@ -39,7 +39,7 @@ EegFun.channel_difference!(
     channel_selection1 = EegFun.channels([:F9]),
     channel_selection2 = EegFun.channels([:F10]),
     channel_out = :hEOG,
-); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+); # horizontal EOG = F9 - F10
 
 # Calculate correlations between all channels and EOG channels
 cm_eog = EegFun.correlation_matrix_dual_selection(

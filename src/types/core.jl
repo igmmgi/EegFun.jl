@@ -543,7 +543,33 @@ struct ErpMeasurementsResult <: EegFunData
     baseline_interval::Union{Interval,Nothing}
 end
 
-# Make it show as a DataFrame for convenience
+"""
+    Base.show(io::IO, result::ErpMeasurementsResult)
+    Base.show(io::IO, cond::EpochCondition)
+    Base.show(io::IO, layout::Layout)
+    Base.show(io::IO, ::MIME"text/plain", layout::Layout)
+    Base.show(io::IO, neighbours_dict::OrderedDict{Symbol,Neighbours})
+    Base.show(io::IO, ::MIME"text/plain", neighbours_dict::OrderedDict{Symbol,Neighbours})
+    Base.show(io::IO, dat::MultiDataFrameEeg)
+    Base.show(io::IO, dat::ContinuousData)
+    Base.show(io::IO, dat::SingleDataFrameEeg)
+    Base.show(io::IO, dat::AnalysisInfo)
+    Base.show(io::IO, ica::InfoIca)
+    Base.show(io::IO, ::MIME"text/plain", ica::InfoIca)
+    Base.show(io::IO, result::TTestResult)
+    Base.show(io::IO, data::StatisticalData)
+    Base.show(io::IO, result::PermutationResult)
+    Base.show(io::IO, result::AnalyticResult)
+    Base.show(io::IO, data::TFStatisticalData)
+    Base.show(io::IO, result::TFClusterPermutationResult)
+    Base.show(io::IO, result::TFAnalyticResult)
+    Base.show(io::IO, decoded::DecodedData)
+    Base.show(io::IO, nc::NoiseCeiling)
+    Base.show(io::IO, rsa::RsaData)
+
+Custom display methods for EegFun data types. Each type prints a structured
+summary including key fields, dimensions, and metadata.
+"""
 function Base.show(io::IO, result::ErpMeasurementsResult)
     println(io, "ErpMeasurementsResult")
     println(io, "  Analysis type: $(getfield(result, :analysis_type))")

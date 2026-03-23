@@ -2,11 +2,9 @@ This demo shows how to change the sampling rate of EEG data through resampling.
 
 ### What is Resampling?
 
-Resampling changes the number of samples per second in your data:
+Resampling changes the number of samples per second in your data. EegFun's `resample` function supports **downsampling** — reducing the sampling rate by an integer factor (e.g., 2048 Hz → 512 Hz with factor 2).
 
-- **Downsampling**: Reduce sampling rate (e.g., 2048 Hz → 512 Hz)
-- **Upsampling**: Increase sampling rate (e.g., 250 Hz → 500 Hz)
-- **Resample by factor**: Divide or multiply by an integer factor
+> **Note**: Upsampling (increasing the sampling rate) is not currently supported.
 
 ### Why Resample?
 
@@ -17,14 +15,6 @@ Resampling changes the number of samples per second in your data:
 - **Match dataset requirements**: Some analyses expect specific rates
 - **Remove unnecessary detail**: Most ERP information is below 50 Hz
 
-**Upsampling use cases**:
-
-- **Match sampling rates**: Combine datasets with different rates
-- **Synchronization**: Align with external recordings
-- **Interpolation**: Create smoother visualizations
-
-> **Note**: Upsampling cannot add information that wasn't in the original signal - it only interpolates between existing samples.
-
 ### The Nyquist Theorem
 
 The sampling rate must be **at least 2× the highest frequency** in your signal:
@@ -34,6 +24,7 @@ The sampling rate must be **at least 2× the highest frequency** in your signal:
 - **1000 Hz sampling** → Can represent frequencies up to 500 Hz
 
 **For ERP research**:
+
 - Most ERP components are below 30-50 Hz
 - **250-500 Hz** sampling is typically adequate
 - Higher rates needed for high-frequency oscillations (gamma: 30-100 Hz)
@@ -55,7 +46,7 @@ lowpass_filter!(dat, 200)
 dat_new = resample(dat, 4)  # Now safe to downsample
 ```
 
-EegFun's `resample` function applies anti-aliasing automatically, but it's still good practice to filter first if you have specific frequency requirements.
+EegFun's `resample` function uses simple decimation (keeping every `factor`-th sample) — it does **not** apply anti-aliasing automatically. Always lowpass filter before downsampling to prevent aliasing artifacts.
 
 ### Downsampling Factors
 

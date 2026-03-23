@@ -20,7 +20,7 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 | Save data to JLD2 | `jldsave("file.jld2"; data = dat)` |
 | Load data from JLD2 | `load("file.jld2", "data")` |
 | Smart-load EegFun data | `EegFun.read_data("file.jld2")` |
-| Batch load all matching files | `EegFun.read_all_data("pattern", "dir/")` |
+| Batch load all matching files | `EegFun.read_all_data("dir/pattern")` |
 | Group loaded data by condition | `EegFun.group_by_condition(data)` |
 
 ## Preprocessing
@@ -39,7 +39,7 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 | Delete channels | `EegFun.channel_delete!(dat, channels([:M1, :M2]))` |
 | Mark extreme values | `EegFun.is_extreme_value!(dat, 100)` |
 | View trigger counts | `EegFun.trigger_count(dat)` |
-| Search trigger sequences | `EegFun.trigger_search(dat, [1, 2])` |
+| Search trigger sequences | `EegFun.search_sequence(dat.data.trigger, [1, 2])` |
 
 ## ICA
 
@@ -49,8 +49,8 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 | Identify EOG components | `EegFun.identify_eog_components(dat, ica)` |
 | Identify ECG components | `EegFun.identify_ecg_components(dat, ica)` |
 | Identify line noise components | `EegFun.identify_line_noise_components(dat, ica)` |
-| Remove components | `EegFun.remove_components!(dat, ica, [1, 3])` |
-| Restore components | `EegFun.restore_components!(dat, ica, [1])` |
+| Remove components | `EegFun.remove_ica_components!(dat, ica, component_selection=components([1, 3]))` |
+| Restore components | `EegFun.restore_ica_components!(dat, ica, component_selection=components([1]))` |
 
 ## Epoching
 
@@ -127,10 +127,10 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 | Plot epochs grid | `EegFun.plot_epochs(epochs)` |
 | Plot ERP image | `EegFun.plot_erp_image(epochs, channel_selection=channels(:Pz))` |
 | Plot GFP | `EegFun.plot_gfp(erps)` |
-| Plot channel layout | `EegFun.plot_layout(layout)` |
+| Plot channel layout | `EegFun.plot_layout_2d(layout)` |
 | Plot artifact detection | `EegFun.plot_artifact_detection(epochs)` |
 | Plot frequency spectrum | `EegFun.plot_frequency_spectrum(dat)` |
-| Plot filter response | `EegFun.plot_filter(dat)` |
+| Plot filter response | `EegFun.plot_filter_response(dat)` |
 | Plot decoding results | `EegFun.plot_decoding(decoded)` |
 | Plot RSA results | `EegFun.plot_rsa(rsa_result)` |
 

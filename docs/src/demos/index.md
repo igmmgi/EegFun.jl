@@ -77,9 +77,14 @@ Browse interactive code examples demonstrating EegFun.jl's capabilities.
 
 Interactive demonstrations for some signal processing and EEG concepts.
 
-- [Signal Example 1 — Nyquist Theorem](teaching/signal_example_sampling.md) - Sampling, aliasing, and signal reconstruction (linear vs. sinc)
-- [Signal Example 2 — Signal Composition](teaching/signal_example_composition.md) - Building complex waveforms from sine waves, noise, and filtering
+- [Nyquist Theorem](teaching/signal_example_sampling.md) - Sampling, aliasing, and signal reconstruction (linear vs. sinc)
+- [Signal Composition](teaching/signal_example_composition.md) - Building complex waveforms from sine waves, noise, and filtering
+- [Dot Product](teaching/signal_example_dotproduct.md) - How the DFT detects frequencies via dot products
+- [Convolution](teaching/signal_example_convolution.md) - Sliding kernels including Morlet wavelets
+- [Power Spectrum](teaching/signal_example_spectrum.md) - FFT power spectrum, frequency resolution, and spectral leakage
+- [Time-Frequency](teaching/signal_example_tf.md) - Comparing Morlet, STFT, and multitaper TF methods
 - [Simulate ERP](teaching/simulate_erp.md) - Trial averaging, 1/f noise, and ERP component decomposition
+- [Simulate Decoding](teaching/signal_example_decoding.md) - MVPA/SVM classification on synthetic EEG
 
 ## Specialized Visualization
 

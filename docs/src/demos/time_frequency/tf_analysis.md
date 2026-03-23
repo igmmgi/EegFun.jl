@@ -69,8 +69,8 @@ using EegFun
 #######################################################################
 
 # Load and preprocess data
-dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf")
-layout = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv")
+dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"))
+layout = EegFun.read_layout(EegFun.example_path("layouts/biosemi/biosemi72.csv"))
 EegFun.polar_to_cartesian_xy!(layout)
 dat = EegFun.create_eegfun_data(dat, layout)
 EegFun.rereference!(dat, :avg)
@@ -136,7 +136,7 @@ EegFun.plot_tf(
 # Average across frontal channels
 tf_frontal = EegFun.channel_average(
     tfs[1],
-    channel_groups = [[:Fz, :F3, :F4]],
+    channel_selections = [EegFun.channels([:Fz, :F3, :F4])],
     output_labels = [:Frontal],
     reduce = true,
 )
@@ -151,8 +151,8 @@ EegFun.plot_tf(
 # Channel difference (laterality)
 tf_lat = EegFun.channel_difference(
     tfs[1],
-    channels_in1 = [:C3],
-    channels_in2 = [:C4],
+    channel_selection1 = EegFun.channels([:C3]),
+    channel_selection2 = EegFun.channels([:C4]),
     channel_out = :Laterality,
 )
 
