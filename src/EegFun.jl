@@ -199,6 +199,7 @@ include("demos/signal_example_convolution.jl")
 include("demos/signal_example_spectrum.jl")
 include("demos/signal_example_tf.jl")
 include("demos/signal_example_ica.jl")
+include("demos/signal_example_mixing.jl")
 include("demos/simulate_erp.jl")
 include("demos/signal_example_decoding.jl")
 

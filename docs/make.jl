@@ -93,6 +93,8 @@ pages = [
             "Signal Example (Time-Frequency)" => "demos/teaching/signal_example_tf.md",
             "Signal Example (Decoding)" => "demos/teaching/signal_example_decoding.md",
             "Simulate ERP" => "demos/teaching/simulate_erp.md",
+            "Signal Example (ICA)" => "demos/teaching/signal_example_ica.md",
+            "Signal Example (Mixing)" => "demos/teaching/signal_example_mixing.md",
         ],
         "Specialized Plotting" => [
             "Plot Decoding" => "demos/plotting/plot_decoding.md",
