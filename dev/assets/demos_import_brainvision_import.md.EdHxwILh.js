@@ -8,7 +8,7 @@ import{_ as i,o as s,c as e,aA as n}from"./chunks/framework.BzaFumFl.js";const c
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">using</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> EegFun</span></span>
 <span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># Note: EegFun.example_path() resolves bundled example data paths.</span></span>
 <span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># When using your own data, simply pass the file path directly, e.g.:</span></span>
-<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># dat = EegFun.read_raw_data(&quot;/path/to/your/data.bdf&quot;)</span></span>
+<span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># dat = EegFun.read_raw_data(&quot;/path/to/your/data.vhdr&quot;)</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># Load raw BrainVision data</span></span>
 <span class="line"><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D;"># read_raw_data automatically detects BrainVision files (.vhdr, .eeg, or .vmrk)</span></span>
