@@ -106,7 +106,7 @@ EegFun.channel_difference!(
     channel_selection1 = EegFun.channels([:F9]),
     channel_selection2 = EegFun.channels([:F10]),
     channel_out = :hEOG,
-); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+); # horizontal EOG = F9 - F10
 
 EegFun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 EegFun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)

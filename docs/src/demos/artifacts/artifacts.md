@@ -121,10 +121,10 @@ This demo demonstrates some features available in EegFun for artifact detection 
 using EegFun
 
 # read raw data
-dat = EegFun.read_raw_data("./resources/data/bdf/example1.bdf");
+dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"));
 
-# read and preprate layout file
-layout_file = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv");
+# read and prepare layout file
+layout_file = EegFun.read_layout(EegFun.example_path("layouts/biosemi/biosemi72.csv"));
 EegFun.polar_to_cartesian_xy!(layout_file)
 
 # create EegFun data structure (EegFun.ContinuousData)
@@ -162,7 +162,7 @@ EegFun.channel_difference!(
     channel_selection1 = EegFun.channels([:F9]),
     channel_selection2 = EegFun.channels([:F10]),
     channel_out = :hEOG,
-); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+); # horizontal EOG = F9 - F10
 
 # Automatically detect EOG onsets
 EegFun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)

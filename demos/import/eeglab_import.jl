@@ -5,9 +5,9 @@
 using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
-# dat = EegFun.read_raw_data("/path/to/your/data.bdf")
+# dat = EegFun.read_eeglab("/path/to/your/data.set")
 
-# this seems to be a raw continuous data file without and ICA info
+# this seems to be a raw continuous data file without any ICA info
 dat = EegFun.read_eeglab(EegFun.example_path("data/eeglab/eeglab_data.set"))
 EegFun.plot_databrowser(dat)
 EegFun.trigger_count(dat)

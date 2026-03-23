@@ -46,7 +46,7 @@ EegFun.jl uses `MAT.jl` to parse them and map them onto EegFun types.
 using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
-# dat = EegFun.read_raw_data("/path/to/your/data.bdf")
+# dat = EegFun.read_fieldtrip("/path/to/your/data.mat", layout)
 
 # Load layout (FieldTrip doesn't store layout with data)
 layout = EegFun.read_layout(EegFun.example_path("layouts/biosemi/biosemi72.csv"))
