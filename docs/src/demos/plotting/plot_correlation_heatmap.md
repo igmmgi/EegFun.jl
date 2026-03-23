@@ -158,7 +158,7 @@ EegFun.channel_difference!(
     channel_selection1 = EegFun.channels([:Fp1, :Fp2]),
     channel_selection2 = EegFun.channels([:IO1, :IO2]),
     channel_out = :vEOG,
-); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, IO2)
+); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
 EegFun.channel_difference!(
     dat,
     channel_selection1 = EegFun.channels([:F9]),
