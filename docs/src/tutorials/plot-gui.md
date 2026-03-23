@@ -58,7 +58,7 @@ The window is divided into three columns.
 
 ### 1. Pick a directory
 
-Click **Browse** next to the directory label to set the working directory.
+Click **Select Directory** to set the working directory.
 
 For **batch mode** (pattern input) this is essential — it tells the GUI where to search for matching files. If left unset, the GUI falls back to `pwd()`, which is the directory Julia was launched from and is rarely where your data lives.
 

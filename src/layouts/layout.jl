@@ -61,8 +61,7 @@ positions_3D(layout::Layout)::DataFrame = layout.data[:, [:x3, :y3, :z3]]
 Validate that a layout contains all required columns and data.
 
 This function checks that the layout DataFrame contains the minimum required
-columns for EEG layout operations. It validates both column presence and
-data type requirements.
+columns for EEG layout operations.
 
 # Arguments
 - `layout::Layout`: The layout object to validate
@@ -159,7 +158,7 @@ Reads a layout file in CSV format and returns a DataFrame containing the layout 
 - `DataFrame`: A DataFrame containing the layout data, with columns for electrode labels, incidence angles, azimuth angles, and calculated Cartesian coordinates (if applicable).
 
 # Throws
-- `SystemError`: If the file does not exist or cannot be accessed.
+- `EegFunError`: If the file does not exist or cannot be accessed.
 """
 function read_layout(file::String)
     if !isfile(file)
@@ -227,8 +226,11 @@ Converts polar coordinates (incidence and azimuth angles) from a layout into Car
 
 # Arguments
 - `layout::Layout`: A Layout containing the layout information with columns for incidence angles (`:inc`) and azimuth angles (`:azi`).
-- `normalization_radius::Float64`: Maximum radius for electrode positions (default: 1.0). Only used when `preserve_radial_distance=false`.
+- `normalization_radius::Real`: Maximum radius for electrode positions (default: 1.0). Only used when `preserve_radial_distance=false`.
 - `preserve_radial_distance::Bool`: If true, preserves true radial distances from polar coordinates, allowing electrodes with inc>90° to appear outside the unit circle (default: true). When false, normalizes all electrodes to fit within normalization_radius.
+
+# Throws
+- `ArgumentError`: If required `:inc` and `:azi` columns are missing or contain non-numeric values.
 
 # Modifies
 - The input `layout` is modified in place to include new columns `x2` and `y2`, which represent the Cartesian coordinates calculated from the polar coordinates.
@@ -294,6 +296,9 @@ Converts polar coordinates (incidence and azimuth angles) from a layout into Car
 
 # Arguments
 - `layout::Layout`: A Layout containing the layout information with columns for incidence angles (`:inc`) and azimuth angles (`:azi`).
+
+# Throws
+- `ArgumentError`: If required `:inc` and `:azi` columns are missing or contain non-numeric values.
 
 # Modifies
 - The input `layout` is modified in place to include new columns `x3`, `y3`, and `z3`, which represent the Cartesian coordinates calculated from the polar coordinates.
@@ -514,7 +519,7 @@ The electrode order from the original OrderedDict is preserved.
 # Example
 ```julia
 layout = read_layout("./layouts/biosemi64.csv")
-get_neighbours_xy!(layout, 40)
+get_neighbours_xy!(layout, 0.4)
 
 # Write to TOML file
 print_layout_neighbours(layout.neighbours, "neighbours.toml")
@@ -559,7 +564,7 @@ Calculate the average number of neighbours per electrode from a neighbours dicti
 # Example
 ```julia
 layout = read_layout("./layouts/biosemi64.csv")
-get_neighbours_xy!(layout, 40)
+get_neighbours_xy!(layout, 0.4)
 avg_neighbours = average_number_of_neighbours(layout.neighbours)
 ```
 """
@@ -601,7 +606,7 @@ Get the distance criterion used for neighbor calculations.
 - `layout::Layout`: The layout object
 
 # Returns
-- `Union{Nothing, Float64}`: The distance criterion in mm, or nothing if not calculated
+- `Union{Nothing, Float64}`: The distance criterion in normalized coordinate units, or nothing if not calculated
 
 # Examples
 ```julia
@@ -712,14 +717,14 @@ if the distance criterion has changed. It caches the results for efficiency.
 
 # Arguments
 - `layout::Layout`: The layout object
-- `distance_criterion::Real`: The distance criterion for neighbors in mm
+- `distance_criterion::Real`: The distance criterion for neighbors in normalized coordinate units (e.g., 0.3–0.5; where 1.0 = the scalp equator at 90° incidence). Think of this as a fraction of the head radius: a value of 0.4 means “neighbours within 40% of the head radius.”
 
 # Modifies
 - `layout`: Updates neighbor information and criterion
 
 # Examples
 ```julia
-get_neighbours_xy!(layout, 40.0)
+get_neighbours_xy!(layout, 0.4)
 ```
 """
 function get_neighbours_xy!(layout::Layout, distance_criterion::Real)
@@ -752,7 +757,7 @@ if the distance criterion has changed. It caches the results for efficiency.
 
 # Arguments
 - `layout::Layout`: The layout object
-- `distance_criterion::Real`: The distance criterion for neighbors in mm
+- `distance_criterion::Real`: The distance criterion for neighbors in normalized coordinate units (e.g., 0.3–0.5; where 1.0 = the scalp equator at 90° incidence). Think of this as a fraction of the head radius: a value of 0.4 means “neighbours within 40% of the head radius.”
 """
 function get_neighbours_xyz!(layout::Layout, distance_criterion::Real)
     if !has_neighbours(layout) || layout.criterion != distance_criterion || layout.criterion_type != :xyz
@@ -798,9 +803,11 @@ rename_channel!(layout, rename_dict)
 rename_channel!(layout, Dict(:Cz => :Cz_new))
 ```
 
+# Throws
+- `EegFunError`: If multiple channels would be renamed to the same name (duplicate prevention)
+
 # Notes
 - Only channels that exist in the layout will be renamed
-- If multiple channels would be renamed to the same name, an error is thrown to prevent duplicates
 - Clears any cached neighbour information since channel names have changed
 """
 function rename_channel!(layout::Layout, rename_dict::Dict{Symbol,Symbol})
@@ -876,9 +883,11 @@ rename_dict = Dict(:Fp1 => :Fpz, :Fp2 => :Fpz)
 new_layout = rename_channel(layout, rename_dict)
 ```
 
+# Throws
+- `EegFunError`: If multiple channels would be renamed to the same name (duplicate prevention)
+
 # Notes
 - Only channels that exist in the layout will be renamed
-- If multiple channels would be renamed to the same name, an error is thrown to prevent duplicates
 - The original layout is not modified
 """
 function rename_channel(layout::Layout, rename_dict::Dict{Symbol,Symbol})

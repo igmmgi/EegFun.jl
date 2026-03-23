@@ -4,7 +4,7 @@
 
 EegFun.jl requires [Julia](https://julialang.org/) 1.12.
 
-The recommended way to install and manage Julia versions is with **[juliaup](https://github.com/JuliaLang/juliaup)**, the official Julia version manager.
+The recommended way to install and manage Julia versions is with **[juliaup](https://github.com/JuliaLang/juliaup)**.
 Alternatively, download an installer directly from the [Julia Downloads page](https://julialang.org/downloads/).
 
 ## The Julia REPL
@@ -22,7 +22,7 @@ Press `Backspace` to return to Julia mode from any other mode.
 
 ## IDE Workflows
 
-Most users pair the REPL with an editor that adds syntax highlighting and — most importantly — lets you send code directly into the live Julia session.
+Most users pair the REPL with an editor that adds syntax highlighting and — most importantly — lets you send code directly into the live Julia REPL session.
 See [**IDE Workflows**](ide-workflows.md) for a comparison of VS Code/VSCodium, Positron, JetBrains, and the Neovim + Iron.nvim terminal workflow.
 
 ## Installing EegFun
@@ -53,7 +53,7 @@ using Pkg
 Pkg.add(url="https://github.com/igmmgi/EegFun.jl")
 ```
 
-Then load the package in any Julia session:
+Then load the package in any Julia REPL session:
 
 ```julia
 using EegFun
@@ -61,7 +61,7 @@ using EegFun
 
 ## First Steps
 
-All EegFun functions are called with the `EegFun.` prefix. A minimal session looks like:
+All EegFun functions are called with the `EegFun.` prefix. A minimal session could look something like this:
 
 ```julia
 using EegFun
@@ -83,9 +83,9 @@ EegFun.plot_databrowser(dat)
 
 ## EegFun Philosophy
 
-EegFun.jl is designed with ease-of-use as a core principle, making it accessible even for those without extensive programming experience. While EegFun provides many interactive GUIs for data visualization and exploration, it is not a full GUI application — the package emphasises a code-based workflow that is intended to be simple and intuitive.
+EegFun.jl is designed with ease-of-use as a core principle, making it accessible even for those without extensive programming experience. However, whilst EegFun provides many interactive GUIs for data visualization and exploration, it is not a full GUI application — the package emphasises a code-based workflow that is intended to be simple and intuitive.
 
-The package offers a mix of high-level and lower-level functions, including complete analysis pipelines that take you from raw data through to ERP analyses, while still allowing fine-grained control when needed. In practice, a complete EEG analysis can be accomplished with little to zero traditional "coding" — simply typing commands in the Julia REPL and/or combining them into small, readable scripts.
+The package offers a mix of high-level and lower-level functions, including complete analysis pipelines that take you from raw data through to ERP analyses, while still allowing fine-grained control when needed. In practice, a complete EEG analysis can be accomplished with little to zero traditional "coding" — simply typing commands in the Julia REPL and/or combining them into small, readable/runnable scripts.
 
 ## Supported Data Formats
 

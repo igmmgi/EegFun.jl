@@ -1,6 +1,6 @@
 # Epoch Selection
 
-`EegFun.jl` provides a system for selecting epochs from continuous data. This includes experimental paradigms that use simple single triggers or complex sequences of events with timing constraints. 
+`EegFun.jl` provides a system for selecting epochs from continuous data. This includes experimental paradigms that use simple single triggers or complex sequences of events with timing constraints.
 
 This tutorial covers the various ways you can define epochs, from the simplest single-trigger approach to advanced pattern matching.
 
@@ -56,7 +56,7 @@ To match any of multiple trigger values for a single condition (OR logic), provi
 # Match trigger 1 OR trigger 2
 condition = EegFun.EpochCondition(
     name = "Condition1", 
-    trigger_sequences = [[1], [2]] # matchs either trigger 1 or trigger 2
+    trigger_sequences = [[1], [2]] # matches either trigger 1 or trigger 2
 )
 
 # Extract epoch (-200ms to 1000ms around the trigger)
@@ -165,6 +165,9 @@ condition = EegFun.EpochCondition(
     before = 88
 )
 ```
+
+> [!NOTE]
+> You cannot specify both `after` and `before` on the same condition — use separate conditions if needed.
 
 ## External TOML Configuration
 

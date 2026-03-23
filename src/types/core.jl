@@ -99,7 +99,7 @@ positions in 2D or 3D space.
 
 # Fields
 - `channels::Vector{Symbol}`: List of neighboring channel labels
-- `distances::Vector{Float64}`: Distances to each neighbor in mm
+- `distances::Vector{Float64}`: Distances to each neighbor in normalized coordinate units
 - `weights::Vector{Float64}`: Interpolation weights for each neighbor
 """
 struct Neighbours
@@ -120,7 +120,7 @@ electrode positions in various coordinate systems (polar, 2D Cartesian,
 # Fields
 - `data::DataFrame`: DataFrame containing layout information with metadata groups
 - `neighbours::Union{Nothing, OrderedDict{Symbol, Neighbours}}`: Dictionary of neighbours for each electrode
-- `criterion::Union{Nothing, Float64}`: Distance criterion for neighbour calculation in mm
+- `criterion::Union{Nothing, Float64}`: Distance criterion for neighbour calculation in normalized coordinate units
 - `criterion_type::Union{Nothing, Symbol}`: Type of neighbour calculation (`:xy` or `:xyz`)
 """
 mutable struct Layout

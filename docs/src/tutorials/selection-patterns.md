@@ -106,7 +106,7 @@ Used for filtering rows of continuous data by metadata columns (e.g. artifact fl
 | `samples_not(:is_extreme)` | Samples where the flag is `false` |
 | `samples_and([:is_epoch, :is_clean])` | Samples where **all** flags are `true` |
 | `samples_or([:is_extreme, :is_muscle])` | Samples where **any** flag is `true` |
-| `samples_and_not([:is_extreme, :is_step])` | Samples where **not all** flags are `true` |
+| `samples_and_not([:is_extreme, :is_step])` | Samples where **at least one** flag is `false` |
 | `samples_or_not([:is_extreme, :is_step])` | Samples where **none** of the flags are `true` |
 
 ```julia
@@ -194,6 +194,8 @@ EegFun.remove_ica_components!(dat, ica, component_selection = components([1, 3, 
 | **Time** | `times(...)` | — | — |
 | **Epochs** | `epochs(...)` | `epochs_not(...)` | — |
 | **Components** | `components(...)` | `components_not(...)` | — |
+| **Conditions** | `conditions(...)` | `conditions_not(...)` | — |
+| **Participants** | `participants(...)` | `participants_not(...)` | — |
 | **Files** | regex / list | — | — |
 
 ## Next Steps
