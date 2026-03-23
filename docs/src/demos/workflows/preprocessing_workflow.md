@@ -24,10 +24,10 @@ The workflow follows three phases:
 ### Phase 2: Artifact Detection and Cleaning (Continuous Level)
 
 - Compute channel summary statistics and joint probability
-- Detect extreme values at two thresholds (e.g., 250 μV for ICA exclusion, 75 μV for artifact rejection)
+- Detect extreme values at two thresholds (250 μV for ICA exclusion, 75 μV for artifact rejection)
 - Identify and partition bad channels (EOG-related vs. non-EOG-related)
 - Run ICA on a separate 1 Hz high-pass filtered copy, identify and remove artifact components
-- Repair bad channels (either via neighbour interpolation or spherical spline interpolation)
+- Repair bad channels via neighbour interpolation
 - Recalculate EOG channels after ICA and repair
 
 ### Phase 3: Epoch Extraction and Epoch-Level Processing
@@ -41,6 +41,7 @@ The workflow follows three phases:
 ### Key Takeaway
 
 The demo produces both "original" (lightly preprocessed) and "good" (fully cleaned) ERPs so you can visually assess the effect of the entire pipeline.
+
 
 ## Code Examples
 

@@ -26,7 +26,7 @@ The `.set` format is a MATLAB-based file that contains a header structure with a
 **EegFun.read_eeglab** handles mapping of EEGLAB structures to native EegFun types:
 
 - EEGLAB Dataset → `ContinuousData`, `EpochData`, or `ErpData`
-- ICA info → `InfoIca` structure
+- ICA info → `ICA` structure
 - Event labels → Available in `:trigger_info` column
 
 ## Workflow Summary
