@@ -9,6 +9,8 @@ Browse interactive code examples demonstrating EegFun.jl's capabilities.
 - [EEGLAB Import](import/eeglab_import.md) - Loading EEGLAB .set files
 - [FieldTrip Import](import/fieldtrip_import.md) - Loading FieldTrip .mat files
 - [Data Persistence](import/jld2.md) - Saving and loading with JLD2
+- [BIDS Export](import/bids_export.md) - Exporting to BIDS-compliant directory structure
+- [Data Structures](import/data.md) - Core data types and access functions
 
 ## Working with Data
 
@@ -35,6 +37,7 @@ Browse interactive code examples demonstrating EegFun.jl's capabilities.
 
 ## Artifact Detection & Correction
 
+- [Artifacts Overview](artifacts/artifacts.md) - Artifact types, detection, repair, and rejection strategies
 - [Artifact Detection](artifacts/artifact_detection.md) - Automatic epoch rejection
 
 ## ERP Analysis
@@ -85,6 +88,8 @@ Interactive demonstrations for some signal processing and EEG concepts.
 - [Time-Frequency](teaching/signal_example_tf.md) - Comparing Morlet, STFT, and multitaper TF methods
 - [Simulate ERP](teaching/simulate_erp.md) - Trial averaging, 1/f noise, and ERP component decomposition
 - [Simulate Decoding](teaching/signal_example_decoding.md) - MVPA/SVM classification on synthetic EEG
+- [Mixing & Unmixing (Beginner ICA)](teaching/signal_example_mixing.md) - The cocktail party problem: how electrodes mix signals and ICA separates them
+- [ICA (Blind Source Separation)](teaching/signal_example_ica.md) - Advanced: 3-source rotation geometry, scatter plots, and kurtosis
 
 ## Specialized Visualization
 
@@ -112,3 +117,8 @@ Interactive demonstrations for some signal processing and EEG concepts.
 - [TF Statistics](statistics/tf_stats_test.md) - Time-frequency statistical testing
 - [Decoding](statistics/decoding.md) - Multivariate pattern analysis (MVPA)
 - [RSA](statistics/rsa.md) - Representational Similarity Analysis
+
+## Example Experiments
+
+- [N170 (Face/Body)](experiments/n170.md) - Complete walkthrough: face-sensitive N170 component
+- [Visual Attention (Posner Cueing)](experiments/visual-attention.md) - Complete walkthrough: endogenous attention with cluster statistics

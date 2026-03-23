@@ -96,7 +96,7 @@ function signal_example_ica()
     ctrl_sz  = Observable(13)
 
     on(fig.scene.viewport) do area
-        sf         = area.widths[1] / 3600
+        sf         = area.widths[1] / 2100
         lbl_sz[]   = max(10, round(Int, 13 * sf))
         tick_sz[]  = max(8, round(Int, 11 * sf))
         title_sz[] = max(11, round(Int, 14 * sf))
@@ -105,6 +105,11 @@ function signal_example_ica()
 
     t_arr = collect(range(0.0, T - 1.0 / FS, step = 1.0 / FS))
     n     = length(t_arr)
+
+    # Stable noise buffers — only re-drawn when the Noise slider moves
+    noise1_buf = randn(n)
+    noise2_buf = randn(n)
+    noise3_buf = randn(n)
 
     # ── Observables ────────────────────────────────────────────────────────────
     mix_α    = Observable(25.0)   # S1-S2 plane
@@ -160,9 +165,9 @@ function signal_example_ica()
         s3           = 2.5 .* sin.(2π .* burst_freq .* (t_arr .- burst_center)) .* exp.(.-((t_arr .- burst_center) .^ 2) ./ (2 .* burst_σ^2))
 
         if noise > 0.0
-            s1 .+= noise .* randn(n)
-            s2 .+= noise .* 0.35 .* randn(n)
-            s3 .+= noise .* 0.5 .* randn(n)
+            s1 .+= noise .* noise1_buf
+            s2 .+= noise .* 0.35 .* noise2_buf
+            s3 .+= noise .* 0.5 .* noise3_buf
         end
 
         return s1, s2, s3
@@ -423,6 +428,9 @@ function signal_example_ica()
     on(sl_noise.value) do v
         noise_lvl[] = v
         lbl_noise.text = "$(round(v; digits = 2))"
+        randn!(noise1_buf)
+        randn!(noise2_buf)
+        randn!(noise3_buf)
     end
 
     # ── Auto-ICA ──────────────────────────────────────────────────────────────
