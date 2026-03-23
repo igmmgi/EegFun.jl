@@ -10,8 +10,6 @@ using EegFun
 # Run the v1 pipeline
 EegFun.preprocess("config.toml")
 
-# Or the v2 pipeline (applies filters differently, uses EOG autodetection)
-EegFun.preprocess_v2("config.toml")
 ```
 
 Relative paths in the TOML file are resolved relative to the config file's directory, so you can keep the config alongside your analysis script.
@@ -50,6 +48,7 @@ reference_channel = "avg"
 | `[preprocess.filter.highpass]` | High-pass filter (cutoff, order, method) |
 | `[preprocess.filter.lowpass]` | Low-pass filter (cutoff, order, method) |
 | `[preprocess.filter.ica_highpass]` | Separate high-pass for the ICA copy (typically 1 Hz) |
+| `[preprocess.filter.ica_lowpass]` | Optional low-pass for the ICA copy |
 | `[preprocess.ica]` | Whether to apply ICA, percentage of data to use |
 | `[preprocess.layout]` | Neighbour distance criterion for channel repair |
 
@@ -137,6 +136,7 @@ The pipeline saves intermediate and final outputs as JLD2 files (controlled by `
 | `_epochs_good` | Epochs after rejection (final clean data) |
 | `_erps_original` / `_erps_cleaned` / `_erps_good` | Averaged ERPs at each stage |
 | `_ica` | ICA decomposition results |
+| `_artifact_info` | Artifact tracking (repaired channels, rejected epochs, ICA components) |
 
 ## Custom Pipelines
 

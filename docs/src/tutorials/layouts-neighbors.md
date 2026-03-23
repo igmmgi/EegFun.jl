@@ -84,7 +84,7 @@ EegFun.get_neighbours_xyz!(layout, 0.5)
 ```
 
 > [!IMPORTANT]
-> The **distance criterion** determines how many neighbours each electrode has. After computing neighbours, check the average count to ensure the value makes sense for your cap density:
+> The **distance criterion** is in normalised coordinate units where 1.0 = the scalp equator (ear level). Think of it as a fraction of the head radius: 0.5 means "neighbours within 50% of the head radius." After computing neighbours, check the average count to ensure the value makes sense for your cap density:
 >
 > ```julia
 > avg = EegFun.average_number_of_neighbours(layout.neighbours)

@@ -1,6 +1,6 @@
 # Electrode Layouts
 
-EegFun.jl includes a comprehensive collection of electrode layout files that define the spatial positions of EEG electrodes for various montage systems. These layouts are essential for topographic plotting, channel interpolation, and spatial analyses.
+EegFun.jl includes a comprehensive collection of electrode layout files that define the spatial positions of EEG channels for various montage systems. These layouts are essential for topographic plotting, channel interpolation, and spatial analyses.
 
 ## Overview
 
@@ -238,7 +238,7 @@ BrainProducts electrode caps organized by product line:
 ![LC-64 layout](/layouts/acticap/LiveCap_LC/LiveCap_for_LiveAmp_64/LC-64.png)
 :::
 
-::: details LC-SL-32_Ch1-24 (32 channels) - LiveCap sleep (24 + 8)
+::: details `LC-SL-32_Ch1-24` (32 channels) - LiveCap sleep (24 + 8)
 ![LC-SL-32_Ch1-24 layout](/layouts/acticap/LiveCap_LC-SL/LiveCAP_sleep_24_+_8/LC-SL-32_Ch1-24.png)
 :::
 

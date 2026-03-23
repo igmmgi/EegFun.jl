@@ -162,76 +162,6 @@ julia> data[1, :]        # first row (e.g. first channel)
  3.0
 ```
 
-## Broadcasting (The Dot Syntax)
-
-Adding a dot (`.`) before an operator or after a function name applies it
-element-wise to each value in an array:
-
-```julia-repl
-julia> a = [1, 2, 3, 4]
-
-julia> sin.(a)            # apply sin to each element
-4-element Vector{Float64}:
- 0.8414709848078965
- 0.9092974268256817
- 0.1411200080598672
- -0.7568024953079282
-
-```
-
-## Functions
-
-### Standard Form
-
-Functions are defined with the `function ... end` block:
-
-```julia-repl
-julia> function add(a, b)
-           return a + b
-       end
-add (generic function with 1 method)
-
-julia> add(3, 5)
-8
-```
-
-### Short Form
-
-For simple one-liners, the same function can be written more concisely:
-
-```julia-repl
-julia> add(a, b) = a + b
-add (generic function with 1 method)
-
-julia> add(3, 5)
-8
-```
-
-### Anonymous Functions
-
-Short throwaway functions use the `->` syntax. These are common with `map` and
-`filter`:
-
-```julia-repl
-julia> map(x -> x^2, [1, 2, 3])
-3-element Vector{Int64}:
- 1
- 4
- 9
-```
-
-### Mutating Functions
-
-By convention, functions that modify their input end with `!`:
-
-```julia
-lowpass_filter!(data, 30.0)   # modifies data in-place
-lowpass_filter(data, 30.0)    # returns a new copy, data is unchanged
-```
-
-This is a naming convention, not enforced by the language, but Julia packages
-(including EegFun.jl) follow it consistently.
-
 ## Control Flow
 
 ### if-else
@@ -350,6 +280,76 @@ julia> participant[:group]
 
 Named tuples are immutable like regular tuples. They are commonly used for
 passing groups of options or returning multiple values from a function.
+
+## Functions
+
+### Standard Form
+
+Functions are defined with the `function ... end` block:
+
+```julia-repl
+julia> function add(a, b)
+           return a + b
+       end
+add (generic function with 1 method)
+
+julia> add(3, 5)
+8
+```
+
+### Short Form
+
+For simple one-liners, the same function can be written more concisely:
+
+```julia-repl
+julia> add(a, b) = a + b
+add (generic function with 1 method)
+
+julia> add(3, 5)
+8
+```
+
+### Anonymous Functions
+
+Short throwaway functions use the `->` syntax. These are common with `map` and
+`filter`:
+
+```julia-repl
+julia> map(x -> x^2, [1, 2, 3])
+3-element Vector{Int64}:
+ 1
+ 4
+ 9
+```
+
+### Mutating Functions
+
+By convention, functions that modify their input end with `!`:
+
+```julia
+lowpass_filter!(data, 30.0)   # modifies data in-place
+lowpass_filter(data, 30.0)    # returns a new copy, data is unchanged
+```
+
+This is a naming convention, not enforced by the language, but Julia packages
+(including EegFun.jl) follow it consistently.
+
+### Broadcasting (The Dot Syntax)
+
+Adding a dot (`.`) before an operator or after a function name applies it
+element-wise to each value in an array:
+
+```julia-repl
+julia> a = [1, 2, 3, 4]
+
+julia> sin.(a)            # apply sin to each element
+4-element Vector{Float64}:
+ 0.8414709848078965
+ 0.9092974268256817
+ 0.1411200080598672
+ -0.7568024953079282
+
+```
 
 ## Using Packages
 

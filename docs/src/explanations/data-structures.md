@@ -15,7 +15,7 @@ plot_erp(erp::ErpData)         # plots a single ERP
 plot_erp(erp::Vector{ErpData}) # plots multiple ERPs overlaid
 ```
 
-Here `erp::ErpData` means "an argument called `erp` of type `ErpData`". Julia automatically selects the right version based on what you pass in — you never need to call a different function name.
+Here `erp::ErpData` means "an argument called `erp` of type `ErpData`". Julia automatically selects the right function version based on what you pass in — you never need to call a different function name.
 
 More examples from EegFun.jl:
 
@@ -30,7 +30,7 @@ average_epochs(dat::Vector{EpochData})      # averages multiple conditions
 extract_epochs(dat::ContinuousData, ...)    # extracts from continuous recording
 ```
 
-Both are called `plot_erp` — Julia picks the right version automatically based on what you pass in. You never need to call a different function name.
+Both are called `plot_erp` — Julia picks the right function version automatically based on what you pass in. You never need to call a different function name.
 
 If you're ever unsure what type a variable is, use `typeof()`:
 

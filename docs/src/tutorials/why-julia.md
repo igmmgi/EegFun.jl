@@ -31,13 +31,13 @@ you read is the code that runs.
 Julia's JIT compiler generates machine code specialised to the types you
 actually use. For numerically intensive EEG workflows — filtering, time-
 frequency decomposition, permutation statistics — this often matches C/Fortran
-performance without manual memory management or type annotations.
+performance.
 
 **Multiple dispatch for clean extensibility.**
 Julia's type system and multiple dispatch make it straightforward to extend
 existing functions to new data types. In EegFun.jl this means, for example,
 the same `lowpass_filter!` function works on continuous data, epoched data, and ERP
-averages with no wrapper boilerplate.
+averages.
 
 **Built-in package manager and reproducibility.**
 Every Julia project records its exact dependency versions in `Manifest.toml`.
@@ -50,7 +50,7 @@ call, without conda environments or Docker containers.
 Julia compiles code the first time it runs in a session, which means the first
 call to a function can take noticeably longer than subsequent calls. Python
 users familiar with Numba will recognise this pattern — both compile code to
-fast machine code on first use — but in Julia the compilation applies to the
+fast machine code on first use — but in Julia, the compilation applies to the
 entire language rather than individual decorated functions. This "compilation
 latency" has improved substantially in recent Julia versions (1.9+ introduced
 package images, and 1.12 brings further improvements), but it remains more

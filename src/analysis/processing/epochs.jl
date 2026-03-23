@@ -422,7 +422,7 @@ trigger ranges, wildcard sequences, and multiple sequences.
 # Examples
 ```julia
 # Single sequence
-condition = EpochCondition(name="single", trigger_sequence=[1, 2, 3], reference_index=2)
+condition = EpochCondition(name="single", trigger_sequences=[[1, 2, 3]], reference_index=2)
 epochs = extract_epochs(dat, 1, condition, (-0.2, 1.0))  # -200ms to 1000ms
 
 # Multiple sequences (OR logic)
@@ -436,7 +436,7 @@ epochs = extract_epochs(dat, 1, condition, (-0.5, 2.0))
 # Wildcard sequence
 condition = EpochCondition(
     name="wildcard", 
-    trigger_sequence=[1, :any, 3],  # :any matches any trigger value
+    trigger_sequences=[[1, :any, 3]],  # :any matches any trigger value
     reference_index=2
 )
 epochs = extract_epochs(dat, 1, condition, (-0.2, 1.0))
@@ -444,7 +444,7 @@ epochs = extract_epochs(dat, 1, condition, (-0.2, 1.0))
 # Trigger ranges
 condition = EpochCondition(
     name="ranges", 
-    trigger_ranges=[1:5, 10:15],  # Match triggers 1-5 or 10-15
+    trigger_sequences=[[1:5, 10]],  # First element matches triggers 1-5, then 10
     reference_index=1
 )
 epochs = extract_epochs(dat, 1, condition, (-0.2, 1.0))

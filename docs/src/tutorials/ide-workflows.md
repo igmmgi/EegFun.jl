@@ -3,12 +3,12 @@
 > [!TIP]
 > Working in a good editor significantly improves the Julia experience. Choose whichever option fits your existing workflow best.
 
-While the Julia REPL is powerful on its own, most users pair it with an IDE that provides syntax highlighting, inline documentation, and — most importantly — tight REPL integration so that code can be sent from a script to a live Julia session with a single keypress combination.
+While the Julia REPL is powerful on its own, most users pair it with an IDE that provides syntax highlighting, inline documentation, and — most importantly — tight REPL integration so that code can be sent from a script to a live Julia REPL session with a single keypress combination.
 
 ## VS Code/VSCodium
 
 [Visual Studio Code](https://code.visualstudio.com/) is probably the most widely used editor for Julia development.
-[VSCodium](https://vscodium.com/) is a fully open-source build of VS Code without Microsoft telemetry, and is compatible with the same extensions.
+[VSCodium](https://vscodium.com/) is a fully open-source build of VS Code without Microsoft telemetry, and is compatible with the same Julia extensions.
 
 Install the **[Julia extension](https://marketplace.visualstudio.com/items?itemName=julialang.language-julia)** (`julialang.language-julia`) to unlock:
 
@@ -36,6 +36,7 @@ If Julia's shell mode (`;` in the REPL) doesn't work inside VS Code, installing 
     "terminal.integrated.defaultProfile.windows": "Git Bash"
 }
 ```
+
 :::
 
 ## Positron
@@ -57,7 +58,7 @@ There is also a dedicated **[positron-julia extension](https://open-vsx.org/exte
 
 ## Neovim + Iron.nvim
 
-For terminal-focused workflows, [Neovim](https://neovim.io/) combined with **[Iron.nvim](https://github.com/Vigemus/iron.nvim)** provides a lightweight but highly capable environment:
+For more terminal-focused workflows, [Neovim](https://neovim.io/) combined with **[Iron.nvim](https://github.com/Vigemus/iron.nvim)** provides a lightweight but highly capable environment:
 
 - `iron.nvim` opens a Julia REPL split and lets you send lines, visual selections, or entire files with configurable keymaps
 - Pair with **[nvim-lspconfig](https://github.com/neovim/nvim-lspconfig)** + the Julia language server (`julials`) for completion and diagnostics
