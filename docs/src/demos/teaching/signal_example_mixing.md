@@ -1,6 +1,6 @@
 # Signal Example — Mixing & Unmixing (Beginner ICA)
 
-Interactive demonstration of **signal mixing and ICA unmixing** — the simplest possible introduction to how ICA works in EEG.
+Interactive demonstration of **signal mixing and ICA unmixing**.
 
 ## The Cocktail Party Problem
 
@@ -8,13 +8,13 @@ Imagine you're at a party with two people talking. You have two microphones, but
 
 That's exactly what happens with EEG:
 
-- Your **brain** generates an oscillating electrical signal
-- Your **eyes** produce sharp electrical spikes every time you blink
+- Your **brain** generates an electrical signal
+- Your **eyes** produce large signal changes every time you blink
 - Each **electrode** on your scalp picks up a *mixture* of both
 
 The result? Every electrode's recording is a jumbled combination of brain activity and blink artifacts. You never see the clean sources directly.
 
-**ICA** (Independent Component Analysis) is the clever algorithm that untangles the mixture back into the original sources — like being able to isolate each person's voice from the party recording.
+**ICA** (Independent Component Analysis) is the algorithm that untangles the mixture back into the original sources — like being able to isolate each person's voice from the party recording.
 
 ## What This Demo Shows
 
@@ -22,7 +22,7 @@ The result? Every electrode's recording is a jumbled combination of brain activi
 | :--- | :--- |
 | **Left — "What's really happening"** | The two true source signals: a brain oscillation and eye blink artifacts |
 | **Middle — "What electrodes record"** | The mixed signals, with the mixing equation shown in the title (e.g. `E1 = 1.00 × Brain + 0.50 × Blink`) |
-| **Right — "What ICA recovers"** | The unmixed signals, with **Shape** and **Amplitude** match scores showing how close each recovery is to the original |
+| **Right — "What ICA recovers"** | The unmixed signals recovered by ICA |
 
 Below the plots, three panels show the **Matrix Equations**:
 
@@ -64,20 +64,20 @@ Below the plots, three panels show the **Matrix Equations**:
 
 ## Why Does ICA Work?
 
-ICA relies on one key insight: **independent signals that take turns being active are easy to separate**.
+ICA relies on one key insight: **brain signals and eye blinks are statistically independent** — knowing the state of one tells you nothing about the state of the other.
 
-- Brain oscillations and eye blinks rarely happen at exactly the same moment.
-- When you mix them, this "taking turns" pattern gets blurred into a more "Gaussian" (random-looking) signal.
-- ICA reverses the blurring by finding the unmixing matrix that makes the outputs as statistically independent (non-Gaussian) as possible.
+The Central Limit Theorem says that mixing independent, non-Gaussian sources always produces something *more* Gaussian (more random-looking) than either source alone. ICA exploits this in reverse: it searches for the unmixing matrix that makes the outputs *as non-Gaussian as possible* — which turns out to be equivalent to making them statistically independent.
 
 > [!TIP]
-> This demo shows that unmixing is just **Matrix Inversion**. For the full mathematical story — rotation matrices, scatter plots, kurtosis, and the Central Limit Theorem — see the [advanced ICA demo](signal_example_ica.md).
+> This demo shows that unmixing is just **Matrix Inversion** — see also the [ICA (Blind Source Separation) demo](signal_example_ica.md).
 
 ## See Also
 
-- [ICA (Blind Source Separation)](signal_example_ica.md) — Advanced 3-source version with rotation geometry and scatter plots
+- [ICA (Blind Source Separation)](signal_example_ica.md) — 3-source version with rotation geometry and scatter plots
 - [ICA Demo](../preprocessing/ica.md) — Full ICA workflow on real EEG data
 - [Signal Example — Composition](../teaching/signal_example_composition.md) — Building complex waveforms from sine waves
+- [EEGLAB: Running ICA](https://eeglab.org/tutorials/06_RejectArtifacts/RunICA.html) — Practical guide to ICA in EEGLAB
+- [ICA for Dummies](https://arnauddelorme.com/ica_for_dummies/) — Arnaud Delorme's accessible introduction to ICA
 
 ## Code
 
