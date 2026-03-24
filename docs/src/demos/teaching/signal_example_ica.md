@@ -1,6 +1,6 @@
 # Signal Example — ICA (Blind Source Separation)
 
-Interactive demonstration of **Independent Component Analysis (ICA)** — the advanced version with 3 sources, rotation geometry, and scatter plots.
+Interactive demonstration of **Independent Component Analysis (ICA)** — 3 sources, rotation geometry, and scatter plots.
 
 > [!TIP]
 > New to ICA? Start with the [beginner Mixing & Unmixing demo](signal_example_mixing.md) first — it covers the core idea with just 2 sources and one button.
@@ -9,16 +9,17 @@ Interactive demonstration of **Independent Component Analysis (ICA)** — the ad
 
 | Feature | Description |
 |---------|-------------|
-| True Sources (Row 1) | Three independent signals: alpha oscillatory bursts (S1), blink artifacts (S2), and a muscle burst (S3) |
+| True Sources (Row 1) | Three independent signals: S1 (oscillatory bursts, Gabor-shaped), S2 (blink artifacts), S3 (muscle burst) |
 | EEG Recordings (Row 2) | The mixed signals as they would appear at electrodes — each is a weighted combination of all sources |
 | Recovered Components (Row 3) | The unmixed signals, either via manual rotation sliders or the Auto-ICA (Infomax) algorithm |
-| Scatter Plots | Pairwise joint distributions — see below |
+| Scatter Plots | Three pairwise joint distributions (S1 vs S2, S1 vs S3, S2 vs S3) — see below |
 | Excess Kurtosis | Displayed for sources and recovered components |
 
 ### The Scatter Plots
 
 The scatter plots are the most informative panel:
-- **Independent, non-Gaussian signals** → distinctive **cross or T-shape** (they take turns being active)
+
+- **Independent, non-Gaussian signals** → distinctive **cross or T-shape** (the signals are statistically independent)
 - **Mixed signals** → correlated **blob** (everything jumbled together)
 - **Correctly unmixed** → cross shape restored
 
@@ -71,10 +72,12 @@ The Infomax algorithm (Bell & Sejnowski, 1995) used in EegFun maximises the tota
 
 ## See Also
 
-- [Mixing & Unmixing (Beginner)](signal_example_mixing.md) — Start here if the 3-source version feels overwhelming
+- [Mixing & Unmixing](signal_example_mixing.md) — 2-source introduction to ICA
+- [ICA Demo](../preprocessing/ica.md) — Full ICA workflow on real EEG data
+- [EEGLAB: Running ICA](https://eeglab.org/tutorials/06_RejectArtifacts/RunICA.html) — Practical guide to ICA in EEGLAB
+- [ICA for Dummies](https://arnauddelorme.com/ica_for_dummies/) — Arnaud Delorme's accessible introduction to ICA
 - Bell, A. J., & Sejnowski, T. J. (1995). An information-maximization approach to blind separation. *Neural Computation*, *7*(6), 1129–1159.
 - Hyvärinen, A., & Oja, E. (2000). Independent component analysis: algorithms and applications. *Neural Networks*, *13*(4-5), 411–430.
-- [ICA Demo](../preprocessing/ica.md) — Full ICA workflow on real EEG data
 
 ## Code
 
