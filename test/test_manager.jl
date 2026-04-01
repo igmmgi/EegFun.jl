@@ -1,5 +1,5 @@
 """
-Test Runner and Coverage Analysis Tool for EegFun
+Test Runner and Coverage Analysis Tool for EyeFun
 
 - Running tests with coverage
 - Coverage analysis and reporting
@@ -30,30 +30,28 @@ Run from root directory with: julia --project=. test/test_manager.jl
 using Printf
 using Pkg
 # activate temp env and add packages needed for coverage
-Pkg.activate(; temp = true)
+Pkg.activate(; temp=true)
 Pkg.add(["Coverage", "CoverageTools"])
 using Coverage
 using CoverageTools
 
 # Colours for output
-const RED = "\033[0;31m"
-const GREEN = "\033[0;32m"
-const YELLOW = "\033[1;33m"
-const BLUE = "\033[0;34m"
-const NC = "\033[0m" # No Color
+const RED = :red
+const GREEN = :green
+const YELLOW = :yellow
+const BLUE = :blue
 
-print_colored(color::String, message::String) = println("$color$message$NC")
+print_colored(color::Symbol, message::String) = printstyled(message * "\n"; color=color)
 
 function print_header()
-    print_colored(BLUE, "=== EegFun Test Runner and Coverage Analysis ===")
+    print_colored(BLUE, "=== EyeFun Test Runner and Coverage Analysis ===")
     println()
 end
 
 function run_tests_with_coverage()
     clean_coverage_files() # ensure fresh coverage data
     print_colored(YELLOW, "Step 1: Running tests with coverage...")
-    try
-        # Run tests with coverage=true
+    try # Run tests with coverage=true
         run(`julia --project=. -e "using Pkg; Pkg.test(coverage=true)"`)
         print_colored(GREEN, "✓ Tests completed successfully")
     catch e
@@ -62,34 +60,67 @@ function run_tests_with_coverage()
     println()
 end
 
+function get_coverage_stats(c)
+    if isnothing(c.coverage)
+        return (; covered=0, uncovered=0, not_executable=0, total_lines=0, percentage=0.0)
+    end
+    covered = count(x -> !isnothing(x) && x > 0, c.coverage)
+    uncovered = count(x -> !isnothing(x) && x == 0, c.coverage)
+    not_executable = count(x -> isnothing(x), c.coverage)
+    total_lines = length(c.coverage)
+    executable = covered + uncovered
+    percentage = executable > 0 ? round(covered / executable * 100, digits=2) : 0.0
+    return (; covered, uncovered, not_executable, total_lines, percentage)
+end
+
+function print_file_analysis(c, stats, max_uncovered=50)
+    filename = replace(c.filename, "src/" => "")
+    println("\n--- $filename ---")
+    println("Total lines: $(stats.total_lines)")
+    println("Covered lines: $(stats.covered)")
+    println("Uncovered lines: $(stats.uncovered)")
+    println("Not executable lines: $(stats.not_executable)")
+    if stats.covered + stats.uncovered > 0
+        println("Coverage percentage: $(stats.percentage)%")
+    end
+
+    uncovered_lines_list = findall(x -> !isnothing(x) && x == 0, c.coverage)
+    if !isempty(uncovered_lines_list)
+        if length(uncovered_lines_list) <= max_uncovered
+            println("Uncovered lines: $(join(uncovered_lines_list, ", "))")
+        else
+            println(
+                "Uncovered lines: $(join(uncovered_lines_list[1:max_uncovered], ", ")) ... (and $(length(uncovered_lines_list) - max_uncovered) more)",
+            )
+        end
+    end
+end
+
 function show_coverage_summary()
     print_colored(YELLOW, "Step 2: Coverage Summary")
     try
         coverage = process_folder("src")
-
         println("Coverage Summary:")
         println("=================")
 
         total_covered = 0
         total_uncovered = 0
         for c in coverage
-            if !isnothing(c.coverage)
-                covered = count(x -> !isnothing(x) && x > 0, c.coverage)
-                uncovered = count(x -> !isnothing(x) && x == 0, c.coverage)
-                total = covered + uncovered
-                if total > 0
-                    percentage = round(covered / total * 100, digits = 2)
-                    filename = replace(c.filename, "src/" => "")
-                    println("$filename: $percentage% ($covered/$total lines)")
-                    total_covered += covered
-                    total_uncovered += uncovered
-                end
+            stats = get_coverage_stats(c)
+            if stats.covered + stats.uncovered > 0
+                filename = replace(c.filename, "src/" => "")
+                println("$filename: $(stats.percentage)% ($(stats.covered)/$(stats.covered + stats.uncovered) lines)")
+                total_covered += stats.covered
+                total_uncovered += stats.uncovered
             end
         end
 
         if total_covered + total_uncovered > 0
-            overall_percentage = round(total_covered / (total_covered + total_uncovered) * 100, digits = 2)
-            println("\nOverall Coverage: $overall_percentage% ($total_covered/$(total_covered + total_uncovered) lines)")
+            overall_percentage =
+                round(total_covered / (total_covered + total_uncovered) * 100, digits=2)
+            println(
+                "\nOverall Coverage: $overall_percentage% ($total_covered/$(total_covered + total_uncovered) lines)",
+            )
         end
 
     catch e
@@ -104,41 +135,9 @@ function show_detailed_analysis()
         coverage = process_folder("src")
 
         for c in coverage
-            if !isnothing(c.coverage)
-                covered_lines = count(x -> !isnothing(x) && x > 0, c.coverage)
-                uncovered_lines = count(x -> !isnothing(x) && x == 0, c.coverage)
-                not_executable = count(x -> isnothing(x), c.coverage)
-                total_lines = length(c.coverage)
-
-                if covered_lines + uncovered_lines > 0
-                    percentage = round(covered_lines / (covered_lines + uncovered_lines) * 100, digits = 2)
-                    filename = replace(c.filename, "src/" => "")
-
-                    println("\n--- $filename ---")
-                    println("Total lines: $total_lines")
-                    println("Covered lines: $covered_lines")
-                    println("Uncovered lines: $uncovered_lines")
-                    println("Not executable lines: $not_executable")
-                    println("Coverage percentage: $percentage%")
-
-                    # Show uncovered line numbers (first 20)
-                    uncovered_lines_list = Int[]
-                    for (i, cov) in enumerate(c.coverage)
-                        if !isnothing(cov) && cov == 0
-                            push!(uncovered_lines_list, i)
-                        end
-                    end
-
-                    if !isempty(uncovered_lines_list)
-                        if length(uncovered_lines_list) <= 20
-                            println("Uncovered lines: $(join(uncovered_lines_list, ", "))")
-                        else
-                            println(
-                                "Uncovered lines: $(join(uncovered_lines_list[1:20], ", ")) ... (and $(length(uncovered_lines_list) - 20) more)",
-                            )
-                        end
-                    end
-                end
+            stats = get_coverage_stats(c)
+            if stats.covered + stats.uncovered > 0
+                print_file_analysis(c, stats, 20)
             end
         end
 
@@ -160,38 +159,8 @@ function analyze_specific_file(target_file::String)
         end
 
         c = data_coverage[1]
-        covered_lines = count(x -> !isnothing(x) && x > 0, c.coverage)
-        uncovered_lines = count(x -> !isnothing(x) && x == 0, c.coverage)
-        not_executable = count(x -> isnothing(x), c.coverage)
-        total_lines = length(c.coverage)
-
-        println("File: $(c.filename)")
-        println("Total lines: $total_lines")
-        println("Covered lines: $covered_lines")
-        println("Uncovered lines: $uncovered_lines")
-        println("Not executable lines: $not_executable")
-
-        if covered_lines + uncovered_lines > 0
-            percentage = round(covered_lines / (covered_lines + uncovered_lines) * 100, digits = 2)
-            println("Coverage percentage: $percentage%")
-        end
-
-        # Show uncovered line numbers
-        uncovered_lines_list = Int[]
-        for (i, cov) in enumerate(c.coverage)
-            if !isnothing(cov) && cov == 0
-                push!(uncovered_lines_list, i)
-            end
-        end
-
-        if !isempty(uncovered_lines_list)
-            println("\nUncovered line numbers:")
-            if length(uncovered_lines_list) <= 50
-                println(join(uncovered_lines_list, ", "))
-            else
-                println(join(uncovered_lines_list[1:50], ", "), " ... (and $(length(uncovered_lines_list) - 50) more)")
-            end
-        end
+        stats = get_coverage_stats(c)
+        print_file_analysis(c, stats, 50)
 
     catch e
         print_colored(RED, "Error: $e")
@@ -282,45 +251,20 @@ end
 function clean_coverage_files()
     print_colored(YELLOW, "Cleaning up .cov files...")
 
-    # Find .cov files in current directory and test subdirectory
-    cov_files = String[]
-
-    # Search current directory recursively
-    for (root, dirs, files) in walkdir(".")
-        for file in files
-            if endswith(file, ".cov")
-                push!(cov_files, joinpath(root, file))
-            end
-        end
-    end
-
-    if isempty(cov_files)
-        print_colored(GREEN, "No .cov files found to clean")
-        return
-    end
-
-    println("Found $(length(cov_files)) .cov file(s) to remove:")
-    for file in cov_files
-        println("  - $file")
-    end
-
-    # Remove files
-    for file in cov_files
-        rm(file, force = true)
-    end
-    print_colored(GREEN, "✓ Successfully removed $(length(cov_files)) .cov file(s)")
+    CoverageTools.clean_folder(".")
+    print_colored(GREEN, "✓ Cleaned .cov files")
 
     # Also remove secondary artifacts
     lcov_file = "test/coverage.lcov"
     if isfile(lcov_file)
         println("Removing $lcov_file...")
-        rm(lcov_file, force = true)
+        rm(lcov_file, force=true)
     end
 
     html_dir = "test/coverage_html"
     if isdir(html_dir)
         println("Removing $html_dir/ directory...")
-        rm(html_dir, recursive = true, force = true)
+        rm(html_dir, recursive=true, force=true)
     end
 
     println()
@@ -357,13 +301,15 @@ function show_interactive_menu()
         elseif choice == "3"
             show_detailed_analysis()
         elseif choice == "4"
-            print("Enter filename to analyze (e.g., utils/data.jl): ")
+            print("Enter filename to analyze (e.g., eyelink_edf/ascii_exporter.jl): ")
             filename = readline()
             if !isempty(filename)
                 analyze_specific_file(filename)
             end
         elseif choice == "5"
-            print("Enter filename to show missed branches (e.g., utils/data.jl): ")
+            print(
+                "Enter filename to show missed branches (e.g., eyelink_edf/ascii_exporter.jl): ",
+            )
             filename = readline()
             if !isempty(filename)
                 show_missed_branches(filename)
@@ -394,14 +340,18 @@ function main()
     elseif command == "file"
         if isempty(filename)
             print_colored(RED, "Error: Please specify a filename")
-            println("Usage: julia --project=. test/test_manager.jl file utils/data.jl")
+            println(
+                "Usage: julia --project=. test/test_manager.jl file eyelink_edf/ascii_exporter.jl",
+            )
         else
             analyze_specific_file(filename)
         end
     elseif command == "missed"
         if isempty(filename)
             print_colored(RED, "Error: Please specify a filename")
-            println("Usage: julia --project=. test/test_manager.jl missed utils/data.jl")
+            println(
+                "Usage: julia --project=. test/test_manager.jl missed eyelink_edf/ascii_exporter.jl",
+            )
         else
             show_missed_branches(filename)
         end
