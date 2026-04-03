@@ -126,3 +126,33 @@ using DataFrames
         @test epochs_copy2 isa EegFun.EpochData
     end
 end
+
+@testset "EEGLAB ERP Import" begin
+
+    n_channels = 3
+    n_timepoints = 100
+    sample_rate = 250
+
+    # Build a minimal EEGLAB-like dict
+    mock_eeg = Dict{String,Any}(
+        "nbchan" => n_channels,
+        "pnts" => n_timepoints,
+        "srate" => sample_rate,
+        "trials" => 1,
+        "xmin" => -0.2,
+        "setname" => "test_erp",
+        "data" => randn(Float32, n_channels, n_timepoints),
+        "chanlocs" => Dict{String,Any}("labels" => ["Fz", "Cz", "Pz"], "theta" => [0.0, 0.0, 0.0], "radius" => [0.5, 0.3, 0.1]),
+        "times" => collect(range(-200.0, step = 1000.0 / sample_rate, length = n_timepoints)),  # in ms
+    )
+
+    # This should NOT throw MethodError (the bug was missing n_epochs)
+    erp = EegFun._eeglab_to_erpdata(mock_eeg, "test.set", true)
+
+    @test erp isa EegFun.ErpData
+    @test erp.n_epochs == 1
+    @test erp.sample_rate == sample_rate
+    @test nrow(erp.data) == n_timepoints
+    @test length(EegFun.channel_labels(erp)) == n_channels
+    @test erp.condition_name == "test_erp"
+end
