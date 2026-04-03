@@ -23,10 +23,10 @@ function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Sy
     @info "Detecting EOG onsets in channel $(channel_in) with stepsize criterion $(criterion) μV"
     channel_in ∉ propertynames(dat.data) && @minimal_error("channel $(channel_in) not found in data")
 
-    step_size = div(dat.sample_rate, step_size)
-    eog_diff = diff(dat.data[1:step_size:end, channel_in])
+    step_samples = div(dat.sample_rate, step_size)
+    eog_diff = diff(dat.data[1:step_samples:end, channel_in])
     eog_idx = findall(x -> abs(x) >= criterion, eog_diff)
-    eog_idx = [idx for (i, idx) in enumerate(eog_idx) if i == 1 || (idx - eog_idx[i-1] > 2)] .* step_size
+    eog_idx = [idx for (i, idx) in enumerate(eog_idx) if i == 1 || (idx - eog_idx[i-1] > 2)] .* step_samples
     dat.data[!, channel_out] .= false
     dat.data[eog_idx, channel_out] .= true
     return nothing
