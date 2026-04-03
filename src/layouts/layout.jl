@@ -268,7 +268,9 @@ function polar_to_cartesian_xy!(layout::Layout; normalization_radius::Real = 1.0
 
     if !preserve_radial_distance
         # Normalize to fit all electrodes within normalization_radius (traditional behavior)
-        max_r = maximum(sqrt.(x2 .^ 2 .+ y2 .^ 2))
+        radii = sqrt.(x2 .^ 2 .+ y2 .^ 2)
+        valid_idx = .!isnan.(radii)
+        max_r = any(valid_idx) ? maximum(radii[valid_idx]) : 0.0
         if max_r > 0
             scale = normalization_radius / max_r
             df[!, :x2] = x2 .* scale

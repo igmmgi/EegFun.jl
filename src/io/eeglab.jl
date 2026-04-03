@@ -69,7 +69,12 @@ function read_eeglab(filepath::String; preserve_radial_distance::Bool = true)
         @info "ICA decomposition detected, loading ICA data"
         ch_names = _extract_channel_names(eeg["chanlocs"])
         layout = _parse_channel_locations(eeg["chanlocs"], ch_names)
-        polar_to_cartesian_xy!(layout, preserve_radial_distance = preserve_radial_distance)
+        if isnothing(layout)
+            @warn "No valid coordinate system found for ICA. Layout will contain only channel names."
+            layout = Layout(DataFrame(label=ch_names), nothing, nothing, nothing)
+        else
+            polar_to_cartesian_xy!(layout, preserve_radial_distance = preserve_radial_distance)
+        end
         ica_data = _extract_ica_info(eeg, filepath, layout)
         return eeg_data, ica_data
     else
@@ -103,7 +108,12 @@ function _load_common_eeglab_components(eeg::Dict, filepath::String, preserve_ra
     end
 
     layout = _parse_channel_locations(eeg["chanlocs"], ch_names)
-    polar_to_cartesian_xy!(layout, preserve_radial_distance = preserve_radial_distance)
+    if isnothing(layout)
+        @warn "No complete coordinate system found. Layout will contain only channel names."
+        layout = Layout(DataFrame(label=ch_names), nothing, nothing, nothing)
+    else
+        polar_to_cartesian_xy!(layout, preserve_radial_distance = preserve_radial_distance)
+    end
 
     return n_timepoints, sample_rate, ch_names, data, times, layout
 end
@@ -419,13 +429,14 @@ function _parse_channel_locations(chanlocs, ch_names::Vector{Symbol})
     has_polar = haskey(chanlocs, "theta") && haskey(chanlocs, "radius")
     if has_polar && !isempty(chanlocs["theta"])
 
-        theta = vec(chanlocs["theta"])
-        radius = vec(chanlocs["radius"])
+        # Vector extraction mapping empty matrices to NaN
+        theta = map(x -> x isa Number ? Float64(x) : NaN, vec(chanlocs["theta"]))
+        radius = map(x -> x isa Number ? Float64(x) : NaN, vec(chanlocs["radius"]))
 
         # Check for valid polar coordinates
         valid_polar = .!isnan.(theta) .& .!isnan.(radius)
 
-        if all(valid_polar) # convert to EegFun spherical coordinates
+        if any(valid_polar) # convert to EegFun spherical coordinates
             azi = 90.0 .- theta
             inc = radius .* 180.0
             azi = mod.(azi, 360.0)
@@ -438,14 +449,15 @@ function _parse_channel_locations(chanlocs, ch_names::Vector{Symbol})
     # Do we also need this if no theta/radius?
     has_spherical = haskey(chanlocs, "sph_theta") && haskey(chanlocs, "sph_phi") && haskey(chanlocs, "sph_radius")
     if has_spherical && !isempty(chanlocs["sph_theta"])
-        sph_theta = vec(chanlocs["sph_theta"])
-        sph_phi = vec(chanlocs["sph_phi"])
-        sph_radius = vec(chanlocs["sph_radius"])
+        # Vector extraction mapping empty matrices to NaN
+        sph_theta = map(x -> x isa Number ? Float64(x) : NaN, vec(chanlocs["sph_theta"]))
+        sph_phi = map(x -> x isa Number ? Float64(x) : NaN, vec(chanlocs["sph_phi"]))
+        sph_radius = map(x -> x isa Number ? Float64(x) : NaN, vec(chanlocs["sph_radius"]))
 
         # Check for valid spherical coordinates (all three components)
         valid_spherical = .!isnan.(sph_theta) .& .!isnan.(sph_phi) .& .!isnan.(sph_radius) .& (sph_radius .> 0)
 
-        if all(valid_spherical) # Convert to EegFun spherical coordinates
+        if any(valid_spherical) # Convert to EegFun spherical coordinates
             inc = 90.0 .- sph_phi
             azi = 90.0 .+ sph_theta
             azi = mod.(azi, 360.0)
