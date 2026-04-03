@@ -796,11 +796,11 @@ function _interval_to_samples(interval::Interval)
                 actual_start = round(first(selected_times); digits = 4)
                 actual_stop = round(last(selected_times); digits = 4)
                 n = length(selected_times)
-                @info "times(): Requested $(start_time)s–$(stop_time)s, actual sample range $(actual_start)s–$(actual_stop)s ($(n) sample$(n > 1 ? "s" : ""))"
+                @debug "times(): Requested $(start_time)s–$(stop_time)s, actual sample range $(actual_start)s–$(actual_stop)s ($(n) sample$(n > 1 ? "s" : ""))"
             elseif start_time == stop_time
                 # Single time point with no exact match: snap to nearest sample
                 _, idx = findmin(abs.(t .- start_time))
-                @info "times(): Requested $(start_time)s, snapped to nearest sample at $(round(t[idx]; digits=4))s"
+                @debug "times(): Requested $(start_time)s, snapped to nearest sample at $(round(t[idx]; digits=4))s"
                 mask = fill(false, nrow(x))
                 mask[idx] = true
             else
@@ -1645,18 +1645,18 @@ function _extract_triggers_from_markers(
     trigger = zeros(Int, n_samples)
     trigger_info = fill("", n_samples)
 
-    @info "Processing $(length(markers)) markers for $n_samples samples"
+    @debug "Processing $(length(markers)) markers for $n_samples samples"
 
     # Debug: Show first few marker sample indices
     if length(markers) > 0
         first_few_samples = [marker.sample for marker in markers[1:min(5, length(markers))]]
-        @info "First few marker sample indices: $first_few_samples"
+        @debug "First few marker sample indices: $first_few_samples"
     end
 
     # First pass: extract all unique trigger values (including empty strings for system markers)
     # Check if markers are 0-based or 1-based by looking at the first marker
     is_zero_based = length(markers) > 0 && markers[1].sample == 0
-    @info "Detected $(is_zero_based ? "0-based" : "1-based") indexing for marker samples"
+    @debug "Detected $(is_zero_based ? "0-based" : "1-based") indexing for marker samples"
 
     unique_values = Set{String}()
     valid_markers = 0
@@ -1673,7 +1673,7 @@ function _extract_triggers_from_markers(
         end
     end
 
-    @info "Found $valid_markers valid markers with $(length(unique_values)) unique values: $(collect(unique_values))"
+    @debug "Found $valid_markers valid markers with $(length(unique_values)) unique values: $(collect(unique_values))"
 
     # Create mapping from original values to sequential integers (1, 2, 3, ...)
     value_to_trigger = Dict{String,Int}()
@@ -1695,7 +1695,7 @@ function _extract_triggers_from_markers(
 
     non_zero_triggers = count(x -> x != 0, trigger)
     non_empty_strings = count(x -> x != "", trigger_info)
-    @info "Created trigger with $non_zero_triggers non-zero values and $non_empty_strings non-empty marker strings"
+    @debug "Created trigger with $non_zero_triggers non-zero values and $non_empty_strings non-empty marker strings"
 
     return trigger, trigger_info
 end
