@@ -1168,15 +1168,15 @@ conditions() = x -> fill(true, length(x))  # Default: select all conditions give
 conditions(condition_indices::Union{Vector{Int},UnitRange}) = x -> [i in condition_indices for i = 1:length(x)]
 conditions(condition_index::Int) = x -> [i == condition_index for i = 1:length(x)]
 conditions(condition_indices::Int...) = conditions(collect(condition_indices))
-conditions(condition_names::Vector{String}) = x -> [_get_condition_name(dat) in condition_names for dat in x]
-conditions(condition_name::String) = x -> [_get_condition_name(dat) == condition_name for dat in x]
+conditions(condition_names::Vector{String}) = x -> [condition_name(dat) in condition_names for dat in x]
+conditions(cond_name::String) = x -> [condition_name(dat) == cond_name for dat in x]
 conditions(predicate::Function) = predicate  # Allow custom function predicates
 """Predicate generators that exclude the specified conditions."""
 conditions_not(condition_indices::Union{Vector{Int},UnitRange}) = x -> .!([i in condition_indices for i = 1:length(x)])
 conditions_not(condition_index::Int) = x -> .!([i == condition_index for i = 1:length(x)])
 conditions_not(condition_indices::Int...) = conditions_not(collect(condition_indices))
-conditions_not(condition_names::Vector{String}) = x -> .!([_get_condition_name(dat) in condition_names for dat in x])
-conditions_not(condition_name::String) = x -> .!([_get_condition_name(dat) == condition_name for dat in x])
+conditions_not(condition_names::Vector{String}) = x -> .!([condition_name(dat) in condition_names for dat in x])
+conditions_not(cond_name::String) = x -> .!([condition_name(dat) == cond_name for dat in x])
 conditions_not(condition_names::String...) = conditions_not(collect(condition_names))
 
 """Preserve user-specified channel name ordering if all names are in the selection."""
