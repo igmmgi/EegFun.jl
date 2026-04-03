@@ -526,7 +526,7 @@ function freq_spectrum(
     isempty(selected_channels) && error("No channels selected. Available channels: $(channel_labels(dat))")
 
     # Validate overlap
-    overlap < 0 || overlap >= 1 && error("`overlap` must be in range [0, 1), got $overlap")
+    (overlap < 0 || overlap >= 1) && error("`overlap` must be in range [0, 1), got $overlap")
 
     noverlap = Int(round(window_size * overlap))
 

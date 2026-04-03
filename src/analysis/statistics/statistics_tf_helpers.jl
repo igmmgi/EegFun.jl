@@ -81,7 +81,7 @@ function prepare_stats(
     if design == :paired
         vps1 != vps2 && @minimal_error "Paired design requires same participants in both conditions"
     elseif design == :independent
-        length(vps1) < 2 || length(vps2) < 2 && @minimal_error "Independent design requires at least 2 participants per group"
+        (length(vps1) < 2 || length(vps2) < 2) && @minimal_error "Independent design requires at least 2 participants per group"
     end
 
     # Validate all TF data have same structure (same channels, same frequencies, same time points)

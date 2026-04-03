@@ -56,7 +56,7 @@ function prepare_stats(
     if design == :paired # Paired design: same participants in both conditions, in the same order
         vps1 != vps2 && @minimal_error "Paired design requires same participants in both conditions"
     elseif design == :independent # Independent design: different participants (or allow overlap)
-        length(vps1) < 2 || length(vps2) < 2 && @minimal_error "Independent design requires at least 2 participants per group"
+        (length(vps1) < 2 || length(vps2) < 2) && @minimal_error "Independent design requires at least 2 participants per group"
     end
 
     # Validate all ERPs have same structure within each condition
@@ -195,7 +195,7 @@ function _validate_permutation_inputs(
 )
     # Some basic validations 
     n_permutations < 1 && @minimal_error "n_permutations must be >= 1, got $n_permutations"
-    threshold <= 0.0 || threshold >= 1.0 && @minimal_error "threshold must be between 0 and 1, got $threshold"
+    (threshold <= 0.0 || threshold >= 1.0) && @minimal_error "threshold must be between 0 and 1, got $threshold"
     cluster_type ∉ (:spatial, :temporal, :spatiotemporal) &&
         @minimal_error "cluster_type must be :spatial, :temporal, or :spatiotemporal, got :$cluster_type"
     tail ∉ (:both, :left, :right) && @minimal_error "tail must be :both, :left, or :right, got :$tail"

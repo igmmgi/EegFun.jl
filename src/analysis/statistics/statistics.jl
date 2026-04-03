@@ -333,7 +333,7 @@ function permutation_test(
 )
     # Validate inputs
     n_permutations < 1 && @minimal_error "n_permutations must be >= 1, got $n_permutations"
-    threshold <= 0.0 || threshold >= 1.0 && @minimal_error "threshold must be between 0 and 1, got $threshold"
+    (threshold <= 0.0 || threshold >= 1.0) && @minimal_error "threshold must be between 0 and 1, got $threshold"
     cluster_type ∉ (:temporal, :spatial, :spectral, :spatiotemporal, :spectrotemporal, :full) &&
         @minimal_error "cluster_type must be :temporal, :spatial, :spectral, :spatiotemporal, :spectrotemporal, or :full, got :$cluster_type"
     tail ∉ (:both, :left, :right) && @minimal_error "tail must be :both, :left, or :right, got :$tail"

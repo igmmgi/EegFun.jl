@@ -257,7 +257,7 @@ Modifies the matrix in place by returning a subsampled view.
 - `Matrix{Float64}`: Subsampled matrix with fewer columns
 """
 function _select_subsample!(data_matrix::Matrix{Float64}, percentage::Real)
-    percentage <= 0 || percentage > 100 && error("percentage_of_data must be between 0 and 100, got $percentage")
+    (percentage <= 0 || percentage > 100) && error("percentage_of_data must be between 0 and 100, got $percentage")
 
     n_original_samples = size(data_matrix, 2)
     n_target_samples = round(Int, n_original_samples * percentage / 100)
