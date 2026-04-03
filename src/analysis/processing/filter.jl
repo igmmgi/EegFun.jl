@@ -203,9 +203,9 @@ Modifies the data in place.
 - `filter_func::String`: Filtering function to use (default: "filtfilt" for two-pass filtering, or "filt" for one-pass filtering)
 """
 function _apply_filter!(dat::DataFrame, channels::Vector{Symbol}, filter::FilterInfo; filter_func::String = "filtfilt")::Nothing
-    filter_func = filter_func == "filtfilt" ? filtfilt : filt
+    apply_fn = filter_func == "filtfilt" ? filtfilt : filt
     @inbounds for channel in channels
-        @views dat[:, channel] .= filter_func(filter.filter_object, dat[:, channel])
+        @views dat[:, channel] .= apply_fn(filter.filter_object, dat[:, channel])
     end
     return nothing
 end
