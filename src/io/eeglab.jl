@@ -269,7 +269,7 @@ function _eeglab_to_erpdata(eeg::Dict, filepath::String, preserve_radial_distanc
 
     # Create ErpData
     # TODO: We should probably think about the condition number
-    erp_data = ErpData(filepath, 1, condition_name, df, layout, sample_rate, analysis_info)
+    erp_data = ErpData(filepath, 1, condition_name, df, layout, sample_rate, analysis_info, 1)  # n_epochs unknown for EEGLAB averaged ERP
 
     @info "Successfully converted to ErpData"
     return erp_data
