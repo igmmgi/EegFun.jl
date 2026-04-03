@@ -214,7 +214,7 @@ function plot_layout_2d(
     kwargs...,
 )
     fig = Figure()
-    ax = Axis(fig[1, 1])
+    ax = Axis(fig[1, 1], aspect = DataAspect())
 
     plot_layout_2d!(fig, ax, layout; neighbours = neighbours, correlation_matrix = correlation_matrix, kwargs...)
 
