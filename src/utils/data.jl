@@ -1148,10 +1148,6 @@ epochs_not(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in epoch_nu
 epochs_not(epoch_number::Int) = x -> .!(x .== epoch_number)
 epochs_not(epoch_numbers::Int...) = epochs_not(collect(epoch_numbers))
 
-"""Return `(condition_number, condition_name)` for any EegFunData object."""
-condition_info(dat::EegFunData) =
-    (hasproperty(dat, :condition) ? dat.condition : 1, hasproperty(dat, :condition_name) ? dat.condition_name : "Continuous")
-
 """Predicate generators for participant ID selection."""
 participants() = x -> fill(true, length(x))  # Default: select all participants given
 participants(participant_ids::Union{Vector{Int},UnitRange}) = x -> [id in participant_ids for id in x]
