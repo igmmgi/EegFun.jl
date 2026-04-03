@@ -196,24 +196,21 @@ function _extract_legend_kwargs(plot_kwargs::Dict{Symbol,Any}; exclude_positioni
     legend_attrs = propertynames(Legend)
 
     for attr in legend_attrs
-        # attr in positioning_attrs && continue  # Skip positioning attributes if requested
         legend_key = Symbol("legend_$(attr)")
         if haskey(plot_kwargs, legend_key)
-            value = plot_kwargs[legend_key]  # Read from plot_kwargs
-            if value in [:legend_halign, :legend_valign, :legend_alignmode]
-                println("Skipping positioning attribute: $attr")
-                continue
-            end
-            if !isnothing(value)  # Only add if not the default nothing
-                legend_kwargs[attr] = value  # Store in new dict without "legend_" prefix
+            value = plot_kwargs[legend_key]
+            if !isnothing(value)
+                legend_kwargs[attr] = value
             end
         end
     end
 
-    # TODO: I do not know why this is needed? Bug here? Bug Makie axislegend?
-    # Without it legend_position is ignored!
-    # Remove positioning attributes that conflict with explicit position parameter
-    [pop!(legend_kwargs, attr, nothing) for attr in [:halign, :valign, :alignmode]]
+    # axislegend() uses its own `position` parameter for placement. If halign/valign/alignmode
+    # are also present, they conflict and `position` is silently ignored. Remove them so that
+    # legend_position works as expected.
+    for attr in (:halign, :valign, :alignmode)
+        pop!(legend_kwargs, attr, nothing)
+    end
 
     return legend_kwargs
 end
