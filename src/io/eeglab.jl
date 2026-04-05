@@ -71,7 +71,7 @@ function read_eeglab(filepath::String; preserve_radial_distance::Bool = true)
         layout = _parse_channel_locations(eeg["chanlocs"], ch_names)
         if isnothing(layout)
             @warn "No valid coordinate system found for ICA. Layout will contain only channel names."
-            layout = Layout(DataFrame(label=ch_names), nothing, nothing, nothing)
+            layout = Layout(DataFrame(label = ch_names), nothing, nothing, nothing)
         else
             polar_to_cartesian_xy!(layout, preserve_radial_distance = preserve_radial_distance)
         end
@@ -110,7 +110,7 @@ function _load_common_eeglab_components(eeg::Dict, filepath::String, preserve_ra
     layout = _parse_channel_locations(eeg["chanlocs"], ch_names)
     if isnothing(layout)
         @warn "No complete coordinate system found. Layout will contain only channel names."
-        layout = Layout(DataFrame(label=ch_names), nothing, nothing, nothing)
+        layout = Layout(DataFrame(label = ch_names), nothing, nothing, nothing)
     else
         polar_to_cartesian_xy!(layout, preserve_radial_distance = preserve_radial_distance)
     end

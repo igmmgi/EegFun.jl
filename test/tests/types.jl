@@ -155,8 +155,8 @@ using OrderedCollections
         @test isnothing(condition.timing_pairs)
         @test isnothing(condition.min_interval)
         @test isnothing(condition.max_interval)
-        @test isnothing(condition.after)
-        @test isnothing(condition.before)
+        @test isnothing(condition.mask_after_trigger)
+        @test isnothing(condition.mask_before_trigger)
 
         # Test with all parameters
         condition = EegFun.EpochCondition(
@@ -166,8 +166,8 @@ using OrderedCollections
             timing_pairs = [(1, 2)],
             min_interval = 0.1,
             max_interval = 1.0,
-            after = 10,
-            before = 20,
+            mask_after_trigger = 10,
+            mask_before_trigger = 20,
         )
         @test condition.name == "complex_condition"
         @test condition.trigger_sequences == [[1, :any, 3], [1:5]]
@@ -175,8 +175,8 @@ using OrderedCollections
         @test condition.timing_pairs == [(1, 2)]
         @test condition.min_interval == 0.1
         @test condition.max_interval == 1.0
-        @test condition.after == 10
-        @test condition.before == 20
+        @test condition.mask_after_trigger == 10
+        @test condition.mask_before_trigger == 20
     end
 
     @testset "Index tuples" begin

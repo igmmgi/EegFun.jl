@@ -369,7 +369,7 @@ function _apply_trigger_mask(triggers::Vector, condition::EpochCondition)
                 if !isempty(e_idx_cand)
                     e_idx = first(e_idx_cand)
                     # Hide from the start index up to the element right before the end index
-                    hidden[s_idx:e_idx-1] .= true
+                    hidden[s_idx:(e_idx-1)] .= true
                 else
                     # If no end trigger is found, hide to the end of the recording
                     hidden[s_idx:end] .= true
@@ -841,6 +841,11 @@ function epochs_count(dat::ContinuousData, toml_file::String; print_table::Bool 
     return epochs_count(dat, conditions; print_table = print_table)
 end
 
+"""
+    epochs_count(dat::ContinuousData, conditions::Vector{EpochCondition}; print_table::Bool = true)
+
+Dry-run using a pre-constructed `Vector{EpochCondition}`. See the primary method for full details.
+"""
 function epochs_count(dat::ContinuousData, conditions::Vector{EpochCondition}; print_table::Bool = true)
     counts = Int[]
     names = String[]
@@ -888,6 +893,13 @@ function epochs_table(epochs::Vector{EpochData}; print_table::Bool = true, kwarg
 
     return df
 end
+"""
+    epochs_table(epochs_original::Vector{EpochData}, epochs_cleaned::Vector{EpochData}; print_table::Bool = true, kwargs...)
+
+Display a before/after comparison table of epoch counts — `epochs_original` versus
+`epochs_cleaned` — for each condition. Returns the DataFrame.
+Typically called after artifact rejection to log how many epochs were removed per condition.
+"""
 function epochs_table(epochs_original::Vector{EpochData}, epochs_cleaned::Vector{EpochData}; print_table::Bool = true, kwargs...)
     length(epochs_original) != length(epochs_cleaned) && throw(ArgumentError("epochs_original and epochs_cleaned must have same length"))
 

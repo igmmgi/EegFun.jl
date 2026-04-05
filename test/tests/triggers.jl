@@ -438,8 +438,7 @@ using OrderedCollections
             @test sort(first.(matches4)) == [2]
 
             # Realistic 8-element EEG sequence: [prev_stim_set, :any, :any, 201, curr, key, side, 201]
-            trigger5 = [0, 101, 111, 127, 201, 101, 111, 127, 201,
-                           103, 111, 127, 201, 101, 111, 127, 201, 0]
+            trigger5 = [0, 101, 111, 127, 201, 101, 111, 127, 201, 103, 111, 127, 201, 101, 111, 127, 201, 0]
             matches5 = EegFun.search_sequence(trigger5, [Int[101, 103], :any, :any, 201, 101, 111, 127, 201])
             @test length(matches5) == 2  # prev_stim of 101 (pos 1) and 103 (pos 10) both match
         end
@@ -796,27 +795,15 @@ using OrderedCollections
     @testset "trigger_info" begin
         # Create mock epoch data
         layout = EegFun.Layout(DataFrame(label = [:A]), nothing, nothing, nothing)
-        
+
         # Epoch 1: Sequence [101, 114], t0 is 101
-        df1 = DataFrame(
-            time = [-0.1, 0.0, 0.1, 0.2, 0.3],
-            trigger = [0, 101, 0, 114, 0],
-            A = zeros(5)
-        )
-        
+        df1 = DataFrame(time = [-0.1, 0.0, 0.1, 0.2, 0.3], trigger = [0, 101, 0, 114, 0], A = zeros(5))
+
         # Epoch 2: Sequence [101, 114, 201], t0 is 101 
-        df2 = DataFrame(
-            time = [-0.1, 0.0, 0.1, 0.2, 0.3],
-            trigger = [0, 101, 0, 114, 201],
-            A = zeros(5)
-        )
-        
+        df2 = DataFrame(time = [-0.1, 0.0, 0.1, 0.2, 0.3], trigger = [0, 101, 0, 114, 201], A = zeros(5))
+
         # Epoch 3: Sequence [101, 114], t0 is 101 (Duplicate of Epoch 1 to test uniqueness)
-        df3 = DataFrame(
-            time = [-0.1, 0.0, 0.1, 0.2, 0.3],
-            trigger = [0, 101, 0, 114, 0],
-            A = zeros(5)
-        )
+        df3 = DataFrame(time = [-0.1, 0.0, 0.1, 0.2, 0.3], trigger = [0, 101, 0, 114, 0], A = zeros(5))
 
         dat1 = EegFun.EpochData("test", 1, "Cond1", [df1, df2, df3], layout, 100, EegFun.AnalysisInfo())
 
@@ -826,7 +813,7 @@ using OrderedCollections
 
             @test res[1].sequence == [101, 114]
             @test res[1].t0 == 101
-            
+
             @test res[2].sequence == [101, 114, 201]
             @test res[2].t0 == 101
         end
@@ -836,28 +823,25 @@ using OrderedCollections
             df4 = DataFrame(
                 time = [-0.2, -0.1, 0.0, 0.1, 0.2],
                 trigger = [102, 0, 239, 0, 201], # t0 should map to 239 here
-                A = zeros(5)
+                A = zeros(5),
             )
             dat2 = EegFun.EpochData("test", 2, "Cond2", [df4], layout, 100, EegFun.AnalysisInfo())
-            
+
             res_dict = EegFun.trigger_info([dat1, dat2])
             @test isa(res_dict, Dict)
             @test haskey(res_dict, "Cond1")
             @test haskey(res_dict, "Cond2")
-            
+
             @test length(res_dict["Cond1"]) == 2
-            
+
             cond2_res = res_dict["Cond2"]
             @test length(cond2_res) == 1
             @test cond2_res[1].sequence == [102, 239, 201]
             @test cond2_res[1].t0 == 239
         end
-        
+
         @testset "Missing trigger column handling" begin
-            df_notrig = DataFrame(
-                time = [-0.1, 0.0, 0.1],
-                A = zeros(3)
-            )
+            df_notrig = DataFrame(time = [-0.1, 0.0, 0.1], A = zeros(3))
             dat3 = EegFun.EpochData("test", 3, "NoTrig", [df_notrig], layout, 100, EegFun.AnalysisInfo())
             # Should safely return an empty array, no crash
             @test isempty(EegFun.trigger_info(dat3))
