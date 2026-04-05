@@ -1,22 +1,24 @@
 """
     condition_parse_epoch(config::Dict) -> Vector{EpochCondition}
+    condition_parse_epoch(toml_file::String) -> Vector{EpochCondition}
 
-Parse epoch condition configurations from a TOML-based configuration dictionary.
+Parse epoch condition configurations from a TOML file path or a pre-parsed dictionary.
 
-This function is primarily used by the built-in preprocessing pipelines to parse epoch 
-conditions from TOML files. If you're creating a custom pipeline and want to use the 
-same TOML configuration format, you can use this function. Otherwise, you can create 
-`EpochCondition` objects directly.
+Passing a file path is the recommended approach — TOML loading is handled internally:
 
-# TOML Format
-See the pipeline documentation for the expected TOML structure.
-
-# Example
 ```julia
-config = TOML.parsefile("epoch_conditions.toml")
-conditions = condition_parse_epoch(config)
+epoch_cfg = condition_parse_epoch("/path/to/epochs.toml")
+```
+
+Alternatively, pass a pre-parsed dictionary:
+
+```julia
+config = TOML.parsefile("epochs.toml")
+epoch_cfg = condition_parse_epoch(config)
 ```
 """
+condition_parse_epoch(toml_file::String) = condition_parse_epoch(TOML.parsefile(toml_file))
+
 function condition_parse_epoch(config::Dict)
     epochs_section = get(config, "epochs", Dict())
 
@@ -33,11 +35,16 @@ function condition_parse_epoch(config::Dict)
         end
 
         # Parse trigger sequences - convert from TOML arrays to proper types
-        trigger_sequences = Vector{Vector{Union{Int,Symbol,UnitRange{Int}}}}()
+        trigger_sequences = Vector{Vector{Union{Int,Symbol,UnitRange{Int},Vector{Int}}}}()
         for sequence in trigger_sequences_raw
             # Normalize: wrap non-vectors (e.g., UnitRange) in a vector
             seq_vec = sequence isa Vector ? sequence : [sequence]
-            push!(trigger_sequences, collect(Union{Int,Symbol,UnitRange{Int}}, seq_vec))
+            # TOML has no symbol type, so "any" wildcards arrive as Strings — convert them to Symbols.
+            # Nested arrays (e.g., [101, 103]) arrive as Vector and become set-match elements: Vector{Int}.
+            seq_vec = map(seq_vec) do x
+                x isa String ? Symbol(x) : x isa Vector ? Vector{Int}(x) : x
+            end
+            push!(trigger_sequences, collect(Union{Int,Symbol,UnitRange{Int},Vector{Int}}, seq_vec))
         end
 
         # Parse reference index (single index) - default to 1
@@ -62,9 +69,19 @@ function condition_parse_epoch(config::Dict)
             end
         end
 
-        # Parse after/before constraints (optional)
-        after = get(condition_config, "after", nothing)
-        before = get(condition_config, "before", nothing)
+        # Parse boundary masks (optional)
+        mask_after_trigger = get(condition_config, "mask_after_trigger", nothing)
+        mask_before_trigger = get(condition_config, "mask_before_trigger", nothing)
+
+        # Parse mask constraints (optional)
+        mask_triggers = get(condition_config, "mask_triggers", nothing)
+
+        mask_between_raw = get(condition_config, "mask_between_triggers", nothing)
+        if !isnothing(mask_between_raw)
+            mask_between_triggers = [(m[1], m[2]) for m in mask_between_raw]
+        else
+            mask_between_triggers = nothing
+        end
 
         # Validation - cache sequence length for efficiency
         seq_length = length(trigger_sequences[1])
@@ -90,11 +107,25 @@ function condition_parse_epoch(config::Dict)
         end
 
         # Validate after/before constraints
-        if !isnothing(after) && !isnothing(before)
-            @minimal_error("Cannot specify both 'after' and 'before' constraints for condition '$name'")
+        if !isnothing(mask_after_trigger) && !isnothing(mask_before_trigger)
+            @minimal_error("Cannot specify both 'mask_after_trigger' and 'mask_before_trigger' constraints for condition '$name'")
         end
 
-        push!(conditions, EpochCondition(name, trigger_sequences, reference_index, timing_pairs, min_interval, max_interval, after, before))
+        push!(
+            conditions,
+            EpochCondition(
+                name,
+                trigger_sequences,
+                reference_index,
+                timing_pairs,
+                min_interval,
+                max_interval,
+                mask_before_trigger,
+                mask_after_trigger,
+                mask_triggers,
+                mask_between_triggers,
+            ),
+        )
     end
 
     return conditions
@@ -308,25 +339,78 @@ function mark_epoch_intervals!(
 end
 
 """
+    _apply_trigger_mask(triggers::Vector, condition::EpochCondition) -> Tuple{Vector, Vector{Int}}
+
+Applies mask_triggers and mask_between_triggers to hide invalid triggers before sequence matching.
+Returns the filtered triggers array and the original indices mapping.
+"""
+function _apply_trigger_mask(triggers::Vector, condition::EpochCondition)
+    if isnothing(condition.mask_triggers) && isnothing(condition.mask_between_triggers)
+        return triggers, collect(1:length(triggers))
+    end
+
+    hidden = falses(length(triggers))
+
+    # Apply individual masks
+    if !isnothing(condition.mask_triggers)
+        for t in condition.mask_triggers
+            hidden .|= (triggers .== t)
+        end
+    end
+
+    # Apply between masks
+    if !isnothing(condition.mask_between_triggers)
+        for (start_t, end_t) in condition.mask_between_triggers
+            start_indices = findall(==(start_t), triggers)
+            end_indices = findall(==(end_t), triggers)
+
+            for s_idx in start_indices
+                e_idx_cand = filter(e -> e > s_idx, end_indices)
+                if !isempty(e_idx_cand)
+                    e_idx = first(e_idx_cand)
+                    # Hide from the start index up to the element right before the end index
+                    hidden[s_idx:e_idx-1] .= true
+                else
+                    # If no end trigger is found, hide to the end of the recording
+                    hidden[s_idx:end] .= true
+                end
+            end
+        end
+    end
+
+    # Apply before mask
+    if !isnothing(condition.mask_before_trigger)
+        idx = findfirst(==(condition.mask_before_trigger), triggers)
+        if !isnothing(idx)
+            hidden[1:idx] .= true
+        else
+            hidden .= true
+        end
+    end
+
+    # Apply after mask
+    if !isnothing(condition.mask_after_trigger)
+        idx = findlast(==(condition.mask_after_trigger), triggers)
+        if !isnothing(idx)
+            hidden[idx:end] .= true
+        else
+            hidden .= true
+        end
+    end
+
+    valid_indices = findall(.!hidden)
+    filtered_triggers = triggers[valid_indices]
+
+    return filtered_triggers, valid_indices
+end
+
+"""
     _filter_matches(matches, condition, triggers, time_data) -> Vector{Vector{Int}}
 
 Filter sequence matches by after/before position constraints and timing pair constraints.
 Used by both `extract_epochs` and `mark_epoch_intervals!`.
 """
 function _filter_matches(matches::Vector{Vector{Int}}, condition::EpochCondition, triggers, time_data)
-    # Apply after/before filtering
-    if !isnothing(condition.after) || !isnothing(condition.before)
-        matches = filter(matches) do m
-            if !isnothing(condition.after)
-                any(triggers[1:(m[1]-1)] .== condition.after) || return false
-            end
-            if !isnothing(condition.before)
-                any(triggers[(m[end]+1):end] .== condition.before) || return false
-            end
-            return true
-        end
-    end
-
     # Apply timing constraints
     if !isnothing(condition.timing_pairs) && !isnothing(condition.min_interval) && !isnothing(condition.max_interval)
         matches = filter(matches) do m
@@ -361,8 +445,13 @@ function mark_epoch_intervals!(
     # For each epoch condition
     for condition in epoch_conditions
 
-        # Find all occurrences of the trigger sequences — each match is [pos1, pos2, ...]
-        matches = search_sequence(dat.data.trigger, condition.trigger_sequences)
+        # Apply mask
+        filtered_triggers, valid_indices = _apply_trigger_mask(dat.data.trigger, condition)
+
+        # Find all occurrences of the trigger sequences
+        raw_matches = search_sequence(filtered_triggers, condition.trigger_sequences)
+        matches = [[valid_indices[i] for i in m] for m in raw_matches]
+
         if isempty(matches)
             @minimal_warning "No triggers found for condition '$(condition.name)'"
             continue
@@ -371,9 +460,7 @@ function mark_epoch_intervals!(
         # Apply position and timing constraints
         matches = _filter_matches(matches, condition, dat.data.trigger, dat.data.time)
         if isempty(matches)
-            after_msg = !isnothing(condition.after) ? " after trigger $(condition.after)" : ""
-            before_msg = !isnothing(condition.before) ? " before trigger $(condition.before)" : ""
-            @minimal_warning "No trigger sequences found that meet constraints$(after_msg)$(before_msg) for condition '$(condition.name)'"
+            @minimal_warning "No trigger sequences found that meet timing constraints for condition '$(condition.name)'"
             continue
         end
 
@@ -454,16 +541,19 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
     # Extract start and end times from tuple
     start_time, end_time = epoch_interval
 
-    # Find matched positions for trigger sequences — each match is [pos1, pos2, ...]
-    matches = search_sequence(dat.data.trigger, epoch_condition.trigger_sequences)
+    # Apply mask
+    filtered_triggers, valid_indices = _apply_trigger_mask(dat.data.trigger, epoch_condition)
+
+    # Find matched positions for trigger sequences
+    raw_matches = search_sequence(filtered_triggers, epoch_condition.trigger_sequences)
+    matches = [[valid_indices[i] for i in m] for m in raw_matches]
+
     isempty(matches) && @minimal_error("None of the trigger sequences $(epoch_condition.trigger_sequences) found!")
 
     # Apply position and timing constraints
     matches = _filter_matches(matches, epoch_condition, dat.data.trigger, dat.data.time)
     if isempty(matches)
-        after_msg = !isnothing(epoch_condition.after) ? " after trigger $(epoch_condition.after)" : ""
-        before_msg = !isnothing(epoch_condition.before) ? " before trigger $(epoch_condition.before)" : ""
-        @minimal_error("No trigger sequences found that meet constraints$(after_msg)$(before_msg) for condition '$(epoch_condition.name)'",)
+        @minimal_error("No trigger sequences found that meet timing constraints for condition '$(epoch_condition.name)'",)
     end
 
     # Extract t==0 positions using reference_index (filter out matches where reference_index exceeds match length)
@@ -735,7 +825,50 @@ reject_epochs(dat::Vector{EpochData}, bad_columns::Vector{Symbol}) = reject_epoc
 
 
 # ============================================================================ #
-#                           EPOCH TABLE FUNCTIONS                             #
+#                           EPOCH DRY RUN / COUNTING                           #
+# ============================================================================ #
+
+"""
+    epochs_count(dat::ContinuousData, toml_file::String; print_table::Bool = true)
+    epochs_count(dat::ContinuousData, conditions::Vector{EpochCondition}; print_table::Bool = true)
+
+Perform a quick "dry run" to count how many epochs are found for each condition defined in a TOML file 
+or `EpochCondition` vector, without extracting the actual epoch data. Returns a DataFrame with the summary.
+"""
+function epochs_count(dat::ContinuousData, toml_file::String; print_table::Bool = true)
+    config = TOML.parsefile(toml_file)
+    conditions = condition_parse_epoch(config)
+    return epochs_count(dat, conditions; print_table = print_table)
+end
+
+function epochs_count(dat::ContinuousData, conditions::Vector{EpochCondition}; print_table::Bool = true)
+    counts = Int[]
+    names = String[]
+
+    for condition in conditions
+        push!(names, condition.name)
+
+        filtered_triggers, valid_indices = _apply_trigger_mask(dat.data.trigger, condition)
+        raw_matches = search_sequence(filtered_triggers, condition.trigger_sequences)
+        matches = [[valid_indices[i] for i in m] for m in raw_matches]
+
+        matches = _filter_matches(matches, condition, dat.data.trigger, dat.data.time)
+        matches = filter(m -> condition.reference_index <= length(m), matches)
+
+        push!(counts, length(matches))
+    end
+
+    df = DataFrame(condition = 1:length(conditions), condition_name = names, n_epochs = counts)
+
+    if print_table
+        pretty_table(stdout, df; alignment = [:l, :l, :r], title = "Dry Run: Epoch Counts")
+    end
+
+    return df
+end
+
+# ============================================================================ #
+#                           EPOCH TABLE FUNCTIONS                              #
 # ============================================================================ #
 
 """

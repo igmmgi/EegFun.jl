@@ -141,7 +141,10 @@ public find_times
 public get_filter_characteristics
 public highpass_filter
 public highpass_filter!
+public epochs_table
+public epochs_count
 public log_epochs_table
+
 public lowpass_filter
 public lowpass_filter!
 public mark_epoch_intervals
@@ -240,6 +243,8 @@ public summarize_ica_components
 # =====================
 # ERP analysis
 # =====================
+public calculate_trigger_interval
+public calculate_trigger_interval!
 public erp_measurements
 public erp_measurements!
 public gfp
@@ -284,6 +289,7 @@ public test_against_chance_cluster
 # =====================
 public search_sequence
 public trigger_count
+public trigger_info
 
 # =====================
 # Pipelines and config
