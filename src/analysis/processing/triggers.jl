@@ -317,6 +317,9 @@ _search_single_trigger(array, trigger::Integer, ignore_values::Vector{Int} = [0]
     search_sequence(array, trigger; ignore_values = ignore_values)
 _search_single_trigger(array, trigger::UnitRange, ignore_values::Vector{Int} = [0]) = search_sequence(array, [trigger])
 _search_single_trigger(array, trigger::Symbol, ignore_values::Vector{Int} = [0]) = error("Single wildcard sequences not supported")
+# Set match: find onset positions of ANY value in the vector (e.g., [101, 103])
+_search_single_trigger(array, trigger::Vector{<:Integer}, ignore_values::Vector{Int} = [0]) =
+    sort(vcat([search_sequence(array, Int(v); ignore_values = ignore_values) for v in trigger]...))
 
 # Helper function to collect the actual sample positions for a matched sequence
 """
@@ -351,4 +354,105 @@ _matches_expected(actual::Integer, expected::Real) = actual == expected
 _matches_expected(actual::Real, expected::Real) = actual == expected
 _matches_expected(actual::Real, expected::Symbol) = expected == :any  # Wildcard matches anything
 _matches_expected(actual::Real, expected::UnitRange) = actual in expected
+_matches_expected(actual::Real, expected::Vector{<:Integer}) = actual in expected  # Set match: [101, 103]
 _matches_expected(actual, expected) = error("Unsupported sequence type: $expected")
+
+#=============================================================================
+    EPOChed TRIGGER SEQ DISCOVERY
+=============================================================================#
+
+"""
+    trigger_info(dat::Union{EpochData, Vector{EpochData}})
+
+Analyze an epoched dataset and return the unique sequences of triggers found within each condition.
+
+For a single `EpochData`, it returns a `Vector{NamedTuple}` with `sequence` and `t0_trigger` fields, 
+representing the unique orderings of non-zero triggers and explicitly identifying which trigger
+was active seamlessly at `time == 0.0`.
+
+# Examples
+```julia
+info = trigger_info(epochs_good)
+# Output example: (sequence = [101, 114, 239, 201], t0 = 101)
+```
+"""
+function trigger_info(dat::EpochData)
+    unique_seqs = NamedTuple{(:sequence, :t0), Tuple{Vector{Int}, Int}}[]
+    for epoch in dat.data
+        if hasproperty(epoch, :trigger) && hasproperty(epoch, :time)
+            # Find the active trigger right at time = 0
+            zero_idx = argmin(abs.(epoch.time))
+            t0_trigger = epoch.trigger[zero_idx]
+
+            # Extract sequence, ignoring continuous zeros
+            seq = filter(x -> x != 0, epoch.trigger)
+            
+            nt = (sequence = seq, t0 = t0_trigger)
+            if !(nt in unique_seqs)
+                push!(unique_seqs, nt)
+            end
+        end
+    end
+    return unique_seqs
+end
+
+function trigger_info(dat_vec::Vector{EpochData})
+    info = Dict{String, Vector{NamedTuple{(:sequence, :t0), Tuple{Vector{Int}, Int}}}}()
+    for dat in dat_vec
+        info[dat.condition_name] = trigger_info(dat)
+    end
+    return info
+end
+
+"""
+    trigger_info(file_pattern::String; input_dir::String = pwd(), participant_selection = participants())
+
+Run `trigger_info` across all `.jld2` files matching the `file_pattern`. 
+This allows you to either pass a direct filename or a generic batch string like `"epochs_good"`.
+Returns a merged dictionary of all unique trigger sequences across the entire experiment.
+"""
+function trigger_info(file_pattern::String; input_dir::String = pwd(), participant_selection::Function = participants())
+    
+    # Check if exact file
+    if isfile(file_pattern) && endswith(file_pattern, ".jld2")
+        dat = read_data(file_pattern)
+        return isnothing(dat) ? nothing : trigger_info(dat isa Vector ? dat : [dat])
+    elseif isfile(joinpath(input_dir, file_pattern)) && endswith(file_pattern, ".jld2")
+        dat = read_data(joinpath(input_dir, file_pattern))
+        return isnothing(dat) ? nothing : trigger_info(dat isa Vector ? dat : [dat])
+    end
+
+    # Handle as batch pattern
+    files = _find_batch_files(file_pattern, input_dir, participant_selection)
+    if isempty(files)
+        @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
+        return nothing
+    end
+
+    @info "Scanning $(length(files)) files for unique trigger sequences..."
+    
+    merged_info = Dict{String, Vector{NamedTuple{(:sequence, :t0), Tuple{Vector{Int}, Int}}}}()
+    
+    for file in files
+        input_path = joinpath(input_dir, file)
+        dat = read_data(input_path)
+        if !isnothing(dat)
+            vec_dat = dat isa EpochData ? [dat] : dat
+            info = trigger_info(vec_dat)
+            for (cond, seqs) in info
+                if !haskey(merged_info, cond)
+                    merged_info[cond] = seqs
+                else
+                    # Merge uniqueness
+                    for seq in seqs
+                        if !(seq in merged_info[cond])
+                            push!(merged_info[cond], seq)
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    return merged_info
+end

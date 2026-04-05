@@ -414,6 +414,37 @@ using OrderedCollections
             @test sort(first.(matches)) == [2, 6, 10]  # Three matches at positions 2, 6, 10
         end
 
+        @testset "set element matching (Vector{Int} as sequence element)" begin
+            # [101, 103] as a set: match either 101 or 103 at that position
+            trigger = [0, 101, 2, 3, 0, 103, 2, 3, 0, 102, 2, 3, 0]
+
+            # Set as first element — matches 101 and 103, but not 102
+            matches = EegFun.search_sequence(trigger, [Int[101, 103], 2, 3])
+            @test sort(first.(matches)) == [2, 6]
+
+            # Set element in the middle
+            trigger2 = [0, 1, 101, 3, 0, 1, 103, 3, 0, 1, 102, 3, 0]
+            matches2 = EegFun.search_sequence(trigger2, [1, Int[101, 103], 3])
+            @test sort(first.(matches2)) == [2, 6]
+
+            # Set combined with :any wildcard
+            trigger3 = [0, 101, 5, 3, 0, 103, 9, 3, 0, 102, 7, 3, 0]
+            matches3 = EegFun.search_sequence(trigger3, [Int[101, 103], :any, 3])
+            @test sort(first.(matches3)) == [2, 6]
+
+            # Single-element set behaves like exact match
+            trigger4 = [0, 1, 2, 3, 0, 1, 4, 3, 0]
+            matches4 = EegFun.search_sequence(trigger4, [1, Int[2], 3])
+            @test sort(first.(matches4)) == [2]
+
+            # Realistic 8-element EEG sequence: [prev_stim_set, :any, :any, 201, curr, key, side, 201]
+            trigger5 = [0, 101, 111, 127, 201, 101, 111, 127, 201,
+                           103, 111, 127, 201, 101, 111, 127, 201, 0]
+            matches5 = EegFun.search_sequence(trigger5, [Int[101, 103], :any, :any, 201, 101, 111, 127, 201])
+            @test length(matches5) == 2  # prev_stim of 101 (pos 1) and 103 (pos 10) both match
+        end
+
+
         @testset "overlapping sequences" begin
             trigger = [1, 2, 3, 4, 5]
 
@@ -759,6 +790,77 @@ using OrderedCollections
 
             # Empty ranges in sequences
             @test first.(EegFun.search_sequence([1, 2, 3], [1:0, 2:3])) == [2, 3]
+        end
+    end
+
+    @testset "trigger_info" begin
+        # Create mock epoch data
+        layout = EegFun.Layout(DataFrame(label = [:A]), nothing, nothing, nothing)
+        
+        # Epoch 1: Sequence [101, 114], t0 is 101
+        df1 = DataFrame(
+            time = [-0.1, 0.0, 0.1, 0.2, 0.3],
+            trigger = [0, 101, 0, 114, 0],
+            A = zeros(5)
+        )
+        
+        # Epoch 2: Sequence [101, 114, 201], t0 is 101 
+        df2 = DataFrame(
+            time = [-0.1, 0.0, 0.1, 0.2, 0.3],
+            trigger = [0, 101, 0, 114, 201],
+            A = zeros(5)
+        )
+        
+        # Epoch 3: Sequence [101, 114], t0 is 101 (Duplicate of Epoch 1 to test uniqueness)
+        df3 = DataFrame(
+            time = [-0.1, 0.0, 0.1, 0.2, 0.3],
+            trigger = [0, 101, 0, 114, 0],
+            A = zeros(5)
+        )
+
+        dat1 = EegFun.EpochData("test", 1, "Cond1", [df1, df2, df3], layout, 100, EegFun.AnalysisInfo())
+
+        @testset "Single EpochData" begin
+            res = EegFun.trigger_info(dat1)
+            @test length(res) == 2 # Two unique sequences
+
+            @test res[1].sequence == [101, 114]
+            @test res[1].t0 == 101
+            
+            @test res[2].sequence == [101, 114, 201]
+            @test res[2].t0 == 101
+        end
+
+        @testset "Vector of EpochData" begin
+            # Cond 2: sequence with t0 shifted
+            df4 = DataFrame(
+                time = [-0.2, -0.1, 0.0, 0.1, 0.2],
+                trigger = [102, 0, 239, 0, 201], # t0 should map to 239 here
+                A = zeros(5)
+            )
+            dat2 = EegFun.EpochData("test", 2, "Cond2", [df4], layout, 100, EegFun.AnalysisInfo())
+            
+            res_dict = EegFun.trigger_info([dat1, dat2])
+            @test isa(res_dict, Dict)
+            @test haskey(res_dict, "Cond1")
+            @test haskey(res_dict, "Cond2")
+            
+            @test length(res_dict["Cond1"]) == 2
+            
+            cond2_res = res_dict["Cond2"]
+            @test length(cond2_res) == 1
+            @test cond2_res[1].sequence == [102, 239, 201]
+            @test cond2_res[1].t0 == 239
+        end
+        
+        @testset "Missing trigger column handling" begin
+            df_notrig = DataFrame(
+                time = [-0.1, 0.0, 0.1],
+                A = zeros(3)
+            )
+            dat3 = EegFun.EpochData("test", 3, "NoTrig", [df_notrig], layout, 100, EegFun.AnalysisInfo())
+            # Should safely return an empty array, no crash
+            @test isempty(EegFun.trigger_info(dat3))
         end
     end
 end

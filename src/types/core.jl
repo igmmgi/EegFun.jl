@@ -428,7 +428,7 @@ It supports complex trigger patterns and timing relationships between events.
 
 # Fields
 - `name::String`: Descriptive condition name for identification
-- `trigger_sequences::Vector{Vector{Union{Int,Symbol,UnitRange{Int}}}}`: Trigger sequences to match (e.g., [[1, 2, 3]], [[1, :any, 3]], [[1:5], [10:15]])
+- `trigger_sequences::Vector{Vector{Union{Int,Symbol,UnitRange{Int},Vector{Int}}}}`: Trigger sequences to match. Each element can be an `Int` (exact), `:any` (wildcard), `UnitRange{Int}` (range), or `Vector{Int}` (set — any of these values matches)
 - `reference_index::Int`: Which trigger position is t=0 (1-based, default: 1)
 - `timing_pairs::Union{Nothing,Vector{Tuple{Int,Int}}}`: Which trigger pairs to apply min/max intervals to (optional, default: nothing)
 - `min_interval::Union{Nothing,Float64}`: Minimum time between specified trigger pairs in seconds (optional, default: nothing)
@@ -438,13 +438,15 @@ It supports complex trigger patterns and timing relationships between events.
 """
 @kwdef struct EpochCondition
     name::String
-    trigger_sequences::Vector{Vector{Union{Int,Symbol,UnitRange{Int}}}}
+    trigger_sequences::Vector{Vector{Union{Int,Symbol,UnitRange{Int},Vector{Int}}}}
     reference_index::Int = 1
     timing_pairs::Union{Nothing,Vector{Tuple{Int,Int}}} = nothing
     min_interval::Union{Nothing,Float64} = nothing
     max_interval::Union{Nothing,Float64} = nothing
-    after::Union{Nothing,Int} = nothing
-    before::Union{Nothing,Int} = nothing
+    mask_before_trigger::Union{Nothing,Int} = nothing
+    mask_after_trigger::Union{Nothing,Int} = nothing
+    mask_triggers::Union{Nothing,Vector{Int}} = nothing
+    mask_between_triggers::Union{Nothing,Vector{Tuple{Int,Int}}} = nothing
 end
 
 
@@ -617,16 +619,16 @@ function Base.show(io::IO, cond::EpochCondition)
     end
 
     # Show search boundaries if present
-    has_boundaries = !isnothing(cond.after) || !isnothing(cond.before)
+    has_boundaries = !isnothing(cond.mask_after_trigger) || !isnothing(cond.mask_before_trigger)
     if has_boundaries
         boundary_symbol = has_timing ? "└─" : "├─"
         println(io, "$boundary_symbol Search boundaries:")
-        if !isnothing(cond.after)
-            after_symbol = isnothing(cond.before) ? "└─" : "├─"
-            println(io, "   $after_symbol After trigger: $(cond.after)")
+        if !isnothing(cond.mask_after_trigger)
+            after_symbol = isnothing(cond.mask_before_trigger) ? "└─" : "├─"
+            println(io, "   $after_symbol After trigger: $(cond.mask_after_trigger)")
         end
-        if !isnothing(cond.before)
-            println(io, "   └─ Before trigger: $(cond.before)")
+        if !isnothing(cond.mask_before_trigger)
+            println(io, "   └─ Before trigger: $(cond.mask_before_trigger)")
         end
     end
 end
