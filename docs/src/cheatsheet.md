@@ -57,11 +57,14 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 | I want to... | Function |
 | --- | --- |
 | Define epoch conditions | `cfg = [EegFun.EpochCondition(name="Cond1", trigger_sequences=[[1]])]` |
+| Dry-run epoch count | `EegFun.epochs_count(dat, cfg, (-0.2, 1.0))` |
 | Extract epochs | `EegFun.extract_epochs(dat, cfg, (-0.2, 1.0))` |
+| Print epoch count table | `EegFun.epochs_table(epochs)` |
 | Baseline correct epochs | `EegFun.baseline!(epochs, (-0.2, 0.0))` |
 | Detect bad epochs automatically | `EegFun.detect_bad_epochs_automatic(epochs)` |
 | Detect bad epochs interactively | `EegFun.detect_bad_epochs_interactive(epochs)` |
 | Reject marked epochs | `EegFun.reject_epochs(epochs)` |
+| Log before/after rejection table | `EegFun.log_epochs_table(before, after)` |
 | Repair artifacts (interpolation) | `EegFun.repair_artifacts(epochs)` |
 
 ## ERP Operations
@@ -75,7 +78,7 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 | Compute grand average | `EegFun.grand_average(all_erps)` |
 | Jackknife average | `EegFun.jackknife_average(all_erps)` |
 | Compute GFP | `EegFun.gfp(erps)` |
-| Realign ERPs | `EegFun.realign(erps, :peak)` |
+| Realign epochs to response trigger | `EegFun.realign!(epochs, [201])` |
 | Compute LRP | `EegFun.lrp(erps, channel_selection1=channels([:C3]), channel_selection2=channels([:C4]))` |
 
 ## ERP Measurements & Export

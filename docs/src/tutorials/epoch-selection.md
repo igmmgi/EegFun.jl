@@ -7,7 +7,7 @@ This tutorial covers the various ways you can define epochs, from the simplest s
 ## Quick Reference
 
 | Feature | Field(s) | Example |
-|---------|----------|---------|
+| --- | --- | --- |
 | Single trigger | `trigger_sequences = [[1]]` | Epoch around trigger 1 |
 | Multiple triggers (OR) | `trigger_sequences = [[1], [2]]` | Either trigger 1 or 2 |
 | Trigger sequence | `trigger_sequences = [[1, 10]]` | Trigger 1 followed by 10 |
@@ -15,8 +15,10 @@ This tutorial covers the various ways you can define epochs, from the simplest s
 | Range | `trigger_sequences = [[1:5, 10]]` | Any of 1–5, then 10 |
 | t=0 reference | `reference_index = 2` | Align to 2nd trigger in sequence |
 | Timing constraint | `timing_pairs`, `min_interval`, `max_interval` | Only if triggers 200–800ms apart |
-| Position: after | `after = 99` | Only after marker trigger 99 |
-| Position: before | `before = 88` | Only before marker trigger 88 |
+| Position: after trigger | `mask_before_trigger = 99` | Only after marker trigger 99 |
+| Position: before trigger | `mask_after_trigger = 88` | Only before marker trigger 88 |
+| Hide stray triggers | `mask_triggers = [50]` | Ignore trigger 50 when matching sequences |
+| Hide a practice block | `mask_between_triggers = [(15, 16)]` | Ignore all triggers between 15 and 16 |
 
 ## The `EpochCondition` Structure
 
@@ -30,8 +32,10 @@ At the heart of epoch selection is the `EpochCondition` structure. It allows you
     timing_pairs::Union{Nothing,Vector{Tuple{Int,Int}}} = nothing
     min_interval::Union{Nothing,Float64} = nothing
     max_interval::Union{Nothing,Float64} = nothing
-    after::Union{Nothing,Int} = nothing
-    before::Union{Nothing,Int} = nothing
+    mask_before_trigger::Union{Nothing,Int} = nothing   # only keep epochs AFTER this trigger
+    mask_after_trigger::Union{Nothing,Int} = nothing    # only keep epochs BEFORE this trigger
+    mask_triggers::Union{Nothing,Vector{Int}} = nothing # hide stray triggers before matching
+    mask_between_triggers::Union{Nothing,Vector{Tuple{Int,Int}}} = nothing # hide whole blocks
 end
 ```
 
@@ -151,23 +155,59 @@ condition = EegFun.EpochCondition(
 You can also filter sequences based on whether they occur before or after certain "marker" triggers.
 
 ```julia
-# Only find sequences that occur AFTER trigger 99 (e.g., start of a experimental block)
+# Only find sequences that occur AFTER trigger 99 (e.g., start of an experimental block)
 condition = EegFun.EpochCondition(
     name = "Block2",
     trigger_sequences = [[1, 2]],
-    after = 99
+    mask_before_trigger = 99   # discard any sequence that comes before trigger 99
 )
 
 # Only find sequences that occur BEFORE trigger 88 (e.g., end of first half)
 condition = EegFun.EpochCondition(
     name = "Phase1",
     trigger_sequences = [[1, 2]],
-    before = 88
+    mask_after_trigger = 88    # discard any sequence that comes after trigger 88
 )
 ```
 
 > [!NOTE]
-> You cannot specify both `after` and `before` on the same condition — use separate conditions if needed.
+> You cannot specify both `mask_before_trigger` and `mask_after_trigger` on the same condition — use separate conditions if needed.
+
+## Hiding Stray or Practice Triggers
+
+Sometimes your trigger stream contains extra triggers that would break sequence matching — stray button presses, practice blocks, or inter-block markers. Two masking options cover these cases.
+
+### `mask_triggers` — hide individual trigger values
+
+Adds a pre-processing step that temporarily removes specific trigger values **before** sequence matching runs. The surrounding sequence is unchanged; the masked trigger simply disappears.
+
+```julia
+# The stream is: 101, 50, 111, 127
+# We want [101, 111, 127] — but trigger 50 is a stray button press that gets in the way.
+condition = EegFun.EpochCondition(
+    name = "target_response",
+    trigger_sequences = [[101, 111, 127]],
+    reference_index = 1,
+    mask_triggers = [50]   # hide trigger 50 before matching
+)
+```
+
+### `mask_between_triggers` — hide entire blocks
+
+Marks all triggers that fall **between** a pair of boundary markers as invisible before matching. This is ideal for excluding complete practice blocks.
+
+```julia
+# Practice block is bounded by triggers 15 (start) and 16 (end).
+# Any sequence inside that range should be ignored.
+condition = EegFun.EpochCondition(
+    name = "experimental_trials",
+    trigger_sequences = [[101, 111, 127]],
+    reference_index = 1,
+    mask_between_triggers = [(15, 16)]  # hide everything between 15 and 16
+)
+```
+
+Both options can be combined with each other and with all other constraints.
 
 ## External TOML Configuration
 

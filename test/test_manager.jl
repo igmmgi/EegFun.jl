@@ -30,7 +30,7 @@ Run from root directory with: julia --project=. test/test_manager.jl
 using Printf
 using Pkg
 # activate temp env and add packages needed for coverage
-Pkg.activate(; temp=true)
+Pkg.activate(; temp = true)
 Pkg.add(["Coverage", "CoverageTools"])
 using Coverage
 using CoverageTools
@@ -41,7 +41,7 @@ const GREEN = :green
 const YELLOW = :yellow
 const BLUE = :blue
 
-print_colored(color::Symbol, message::String) = printstyled(message * "\n"; color=color)
+print_colored(color::Symbol, message::String) = printstyled(message * "\n"; color = color)
 
 function print_header()
     print_colored(BLUE, "=== EyeFun Test Runner and Coverage Analysis ===")
@@ -62,18 +62,18 @@ end
 
 function get_coverage_stats(c)
     if isnothing(c.coverage)
-        return (; covered=0, uncovered=0, not_executable=0, total_lines=0, percentage=0.0)
+        return (; covered = 0, uncovered = 0, not_executable = 0, total_lines = 0, percentage = 0.0)
     end
     covered = count(x -> !isnothing(x) && x > 0, c.coverage)
     uncovered = count(x -> !isnothing(x) && x == 0, c.coverage)
     not_executable = count(x -> isnothing(x), c.coverage)
     total_lines = length(c.coverage)
     executable = covered + uncovered
-    percentage = executable > 0 ? round(covered / executable * 100, digits=2) : 0.0
+    percentage = executable > 0 ? round(covered / executable * 100, digits = 2) : 0.0
     return (; covered, uncovered, not_executable, total_lines, percentage)
 end
 
-function print_file_analysis(c, stats, max_uncovered=50)
+function print_file_analysis(c, stats, max_uncovered = 50)
     filename = replace(c.filename, "src/" => "")
     println("\n--- $filename ---")
     println("Total lines: $(stats.total_lines)")
@@ -116,11 +116,8 @@ function show_coverage_summary()
         end
 
         if total_covered + total_uncovered > 0
-            overall_percentage =
-                round(total_covered / (total_covered + total_uncovered) * 100, digits=2)
-            println(
-                "\nOverall Coverage: $overall_percentage% ($total_covered/$(total_covered + total_uncovered) lines)",
-            )
+            overall_percentage = round(total_covered / (total_covered + total_uncovered) * 100, digits = 2)
+            println("\nOverall Coverage: $overall_percentage% ($total_covered/$(total_covered + total_uncovered) lines)")
         end
 
     catch e
@@ -258,13 +255,13 @@ function clean_coverage_files()
     lcov_file = "test/coverage.lcov"
     if isfile(lcov_file)
         println("Removing $lcov_file...")
-        rm(lcov_file, force=true)
+        rm(lcov_file, force = true)
     end
 
     html_dir = "test/coverage_html"
     if isdir(html_dir)
         println("Removing $html_dir/ directory...")
-        rm(html_dir, recursive=true, force=true)
+        rm(html_dir, recursive = true, force = true)
     end
 
     println()
@@ -307,9 +304,7 @@ function show_interactive_menu()
                 analyze_specific_file(filename)
             end
         elseif choice == "5"
-            print(
-                "Enter filename to show missed branches (e.g., eyelink_edf/ascii_exporter.jl): ",
-            )
+            print("Enter filename to show missed branches (e.g., eyelink_edf/ascii_exporter.jl): ")
             filename = readline()
             if !isempty(filename)
                 show_missed_branches(filename)
@@ -340,18 +335,14 @@ function main()
     elseif command == "file"
         if isempty(filename)
             print_colored(RED, "Error: Please specify a filename")
-            println(
-                "Usage: julia --project=. test/test_manager.jl file eyelink_edf/ascii_exporter.jl",
-            )
+            println("Usage: julia --project=. test/test_manager.jl file eyelink_edf/ascii_exporter.jl")
         else
             analyze_specific_file(filename)
         end
     elseif command == "missed"
         if isempty(filename)
             print_colored(RED, "Error: Please specify a filename")
-            println(
-                "Usage: julia --project=. test/test_manager.jl missed eyelink_edf/ascii_exporter.jl",
-            )
+            println("Usage: julia --project=. test/test_manager.jl missed eyelink_edf/ascii_exporter.jl")
         else
             show_missed_branches(filename)
         end

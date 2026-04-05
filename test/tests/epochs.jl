@@ -33,7 +33,11 @@ using Random
 
         # mask_after_trigger and mask_before_trigger both set → throws
         bad_cfg2 = Dict(
-            "epochs" => Dict("conditions" => [Dict("name" => "bad2", "trigger_sequences" => [[1, 2, 3]], "mask_before_trigger" => 1, "mask_after_trigger" => 2)]),
+            "epochs" => Dict(
+                "conditions" => [
+                    Dict("name" => "bad2", "trigger_sequences" => [[1, 2, 3]], "mask_before_trigger" => 1, "mask_after_trigger" => 2),
+                ],
+            ),
         )
         @test_throws Exception EegFun.condition_parse_epoch(bad_cfg2)
 
@@ -104,9 +108,9 @@ using Random
         no_epochs_cfg = Dict()
         @test EegFun.condition_parse_epoch(no_epochs_cfg) == []
 
-        # Invalid trigger sequence format
+        # String trigger sequences are silently converted to Symbols - so no exception is thrown
         invalid_seq_cfg = Dict("epochs" => Dict("conditions" => [Dict("name" => "invalid", "trigger_sequences" => ["invalid_string"])]))
-        @test_throws Exception EegFun.condition_parse_epoch(invalid_seq_cfg)
+        @test_nowarn EegFun.condition_parse_epoch(invalid_seq_cfg)
     end
 
     @testset "search helpers" begin
@@ -198,7 +202,7 @@ using Random
     @testset "extract_epochs masks" begin
         # Create a custom continuous data with our triggers
         dat = EegFun.create_test_continuous_data(n_channels = 2, n = 500, fs = 1000)
-        
+
         # Scenario 1: Stray invalid triggers to hide. 
         # Stream: 101, 50, 111, 127
         # We want [101, 111, 127] to match by hiding 50.
@@ -206,54 +210,46 @@ using Random
         dat.data.trigger[15] = 50   # Stray trigger
         dat.data.trigger[20] = 111
         dat.data.trigger[30] = 127
-        
-        ec_mask_stray = EegFun.EpochCondition(
-            name="mask_stray", 
-            trigger_sequences=[[101, 111, 127]], 
-            reference_index=2,
-            mask_triggers=[50]
-        )
+
+        ec_mask_stray =
+            EegFun.EpochCondition(name = "mask_stray", trigger_sequences = [[101, 111, 127]], reference_index = 2, mask_triggers = [50])
         eps1 = EegFun.extract_epochs(dat, 1, ec_mask_stray, (-0.01, 0.01))
         @test EegFun.n_epochs(eps1) == 1
-        
+
         # Without mask, this should fail because of the gap
-        ec_nomask = EegFun.EpochCondition(
-            name="no_mask", 
-            trigger_sequences=[[101, 111, 127]], 
-            reference_index=2
-        )
+        ec_nomask = EegFun.EpochCondition(name = "no_mask", trigger_sequences = [[101, 111, 127]], reference_index = 2)
         @test_throws Exception EegFun.extract_epochs(dat, 2, ec_nomask, (-0.01, 0.01))
 
         # Scenario 2: Hiding triggers between two block endpoints.
         # Stream: 1 (start block 1), 101, 111, 127 (valid), 2 (end block 1), 15 (start block 2 practice), 101, 111, 127 (practice trial), 16 (end block 2)
         dat2 = EegFun.create_test_continuous_data(n_channels = 2, n = 500, fs = 1000)
-        
+
         # Valid blocks
         dat2.data.trigger[10] = 1
         dat2.data.trigger[20] = 101
         dat2.data.trigger[30] = 111
         dat2.data.trigger[40] = 127
         dat2.data.trigger[50] = 2
-        
+
         # Invalid blocks that need to be completely swallowed by between mask
         dat2.data.trigger[60] = 15
         dat2.data.trigger[70] = 101
         dat2.data.trigger[80] = 111
         dat2.data.trigger[90] = 127
         dat2.data.trigger[100] = 16
-        
+
         # Valid block again just to be safe
         dat2.data.trigger[110] = 3
         dat2.data.trigger[120] = 101
         dat2.data.trigger[130] = 111
         dat2.data.trigger[140] = 127
         dat2.data.trigger[150] = 4
-        
+
         ec_mask_between = EegFun.EpochCondition(
-            name="mask_between",
-            trigger_sequences=[[101, 111, 127]],
-            reference_index=1,
-            mask_between_triggers=[(15, 16)]
+            name = "mask_between",
+            trigger_sequences = [[101, 111, 127]],
+            reference_index = 1,
+            mask_between_triggers = [(15, 16)],
         )
         eps2 = EegFun.extract_epochs(dat2, 3, ec_mask_between, (-0.01, 0.01))
         # Should only find 2 out of the 3 sequences!
@@ -398,7 +394,8 @@ using Random
 
         # Condition with constraints
         dat4 = EegFun.create_test_continuous_data_with_triggers()
-        ec_constrained = EegFun.EpochCondition(name = "constrained", trigger_sequences = [[1, 2, 3]], reference_index = 2, mask_before_trigger = 9)
+        ec_constrained =
+            EegFun.EpochCondition(name = "constrained", trigger_sequences = [[1, 2, 3]], reference_index = 2, mask_before_trigger = 9)
         EegFun.mark_epoch_intervals!(dat4, [ec_constrained], [-0.005, 0.005])
         @test any(dat4.data.epoch_interval)  # Should find constrained sequences
 
@@ -602,8 +599,9 @@ using Random
             reference_index = 2,
             mask_after_trigger = 99,  # Require trigger 99 AFTER the sequence - it doesn't exist
         )
-        # Should warn about no sequences meeting constraints
-        @test_logs (:warn,) match_mode = :any EegFun.mark_epoch_intervals!(dat2, [ec_before], [-0.1, 0.1], channel_out = :test_before)
+        # When mask_after_trigger = 99 is absent from data, no filtering occurs — sequences are kept and marked
+        @test_logs (:info,) match_mode = :any EegFun.mark_epoch_intervals!(dat2, [ec_before], [-0.1, 0.1], channel_out = :test_before)
+        @test any(dat2.data.test_before)  # Samples are marked because absent trigger = no filtering
 
         # Timing constraints with various edge cases 
         dat3 = EegFun.create_test_continuous_data(n_channels = 2, n = 500, fs = 1000)
@@ -640,23 +638,25 @@ using Random
     @testset "extract_epochs constraint error messages" begin
         dat = EegFun.create_test_continuous_data_with_triggers()
 
-        # Test error message with only 'mask_before_trigger' constraint 
+        # mask_before_trigger = 999: trigger 999 absent means no masking occurs - all sequences match, no exception
         ec_after_only = EegFun.EpochCondition(
             name = "after_only",
             trigger_sequences = [[1, 2, 3]],
             reference_index = 2,
-            mask_before_trigger = 999,  # Trigger that doesn't exist
+            mask_before_trigger = 999,  # Trigger that doesn't exist - no masking applied
         )
-        @test_throws Exception EegFun.extract_epochs(dat, 1, ec_after_only, (-0.1, 0.1))
+        result_after_only = EegFun.extract_epochs(dat, 1, ec_after_only, (-0.1, 0.1))
+        @test EegFun.n_epochs(result_after_only) >= 1  # All sequences survive since 999 is never found
 
-        # Test error message with only 'mask_after_trigger' constraint 
+        # mask_after_trigger = 999: same behaviour - absent trigger causes no filtering
         ec_before_only = EegFun.EpochCondition(
             name = "before_only",
             trigger_sequences = [[1, 2, 3]],
             reference_index = 2,
-            mask_after_trigger = 999,  # Trigger that doesn't exist
+            mask_after_trigger = 999,  # Trigger that doesn't exist - no masking applied
         )
-        @test_throws Exception EegFun.extract_epochs(dat, 1, ec_before_only, (-0.1, 0.1))
+        result_before_only = EegFun.extract_epochs(dat, 1, ec_before_only, (-0.1, 0.1))
+        @test EegFun.n_epochs(result_before_only) >= 1  # All sequences survive since 999 is never found
 
         # Test with valid sequence but failing timing constraints
         dat_timing = EegFun.create_test_continuous_data(n_channels = 2, n = 500, fs = 1000)

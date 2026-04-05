@@ -32,7 +32,12 @@ If either the start trigger or end trigger is missing in an epoch, the interval 
 calculate_trigger_interval!(epochs, [101, 103], [111, 112])
 ```
 """
-function calculate_trigger_interval!(dat::EpochData, start_triggers::Vector{Int}, end_triggers::Vector{Int}; column_name::Symbol = :interval)::Nothing
+function calculate_trigger_interval!(
+    dat::EpochData,
+    start_triggers::Vector{Int},
+    end_triggers::Vector{Int};
+    column_name::Symbol = :interval,
+)::Nothing
     @info "Calculating trigger intervals for EpochData (condition: $(dat.condition_name))"
 
     n_missing = 0
@@ -57,7 +62,17 @@ function calculate_trigger_interval!(dat::EpochData, start_triggers::Vector{Int}
     return nothing
 end
 
-function calculate_trigger_interval!(dat_vec::Vector{EpochData}, start_triggers::Vector{Int}, end_triggers::Vector{Int}; column_name::Symbol = :interval)::Nothing
+"""
+    calculate_trigger_interval!(dat_vec::Vector{EpochData}, start_triggers, end_triggers; column_name = :interval)
+
+Apply `calculate_trigger_interval!` to every condition in a `Vector{EpochData}` in-place.
+"""
+function calculate_trigger_interval!(
+    dat_vec::Vector{EpochData},
+    start_triggers::Vector{Int},
+    end_triggers::Vector{Int};
+    column_name::Symbol = :interval,
+)::Nothing
     for dat in dat_vec
         calculate_trigger_interval!(dat, start_triggers, end_triggers; column_name = column_name)
     end
@@ -69,7 +84,12 @@ end
 
 Non-mutating version of `calculate_trigger_interval!`.
 """
-function calculate_trigger_interval(dat::EpochData, start_triggers::Vector{Int}, end_triggers::Vector{Int}; column_name::Symbol = :interval)::EpochData
+function calculate_trigger_interval(
+    dat::EpochData,
+    start_triggers::Vector{Int},
+    end_triggers::Vector{Int};
+    column_name::Symbol = :interval,
+)::EpochData
     dat_copy = EpochData(
         dat.file,
         dat.condition,
@@ -77,13 +97,23 @@ function calculate_trigger_interval(dat::EpochData, start_triggers::Vector{Int},
         [copy(epoch, copycols = true) for epoch in dat.data],
         copy(dat.layout),
         dat.sample_rate,
-        copy(dat.analysis_info)
+        copy(dat.analysis_info),
     )
     calculate_trigger_interval!(dat_copy, start_triggers, end_triggers; column_name = column_name)
     return dat_copy
 end
 
-function calculate_trigger_interval(dat_vec::Vector{EpochData}, start_triggers::Vector{Int}, end_triggers::Vector{Int}; column_name::Symbol = :interval)::Vector{EpochData}
+"""
+    calculate_trigger_interval(dat_vec::Vector{EpochData}, start_triggers, end_triggers; column_name = :interval)
+
+Non-mutating `Vector{EpochData}` overload. Returns a new `Vector{EpochData}` with the interval column added.
+"""
+function calculate_trigger_interval(
+    dat_vec::Vector{EpochData},
+    start_triggers::Vector{Int},
+    end_triggers::Vector{Int};
+    column_name::Symbol = :interval,
+)::Vector{EpochData}
     return [calculate_trigger_interval(dat, start_triggers, end_triggers; column_name = column_name) for dat in dat_vec]
 end
 
@@ -145,7 +175,7 @@ function realign!(dat::EpochData, realignment_triggers::Vector{Int})::Nothing
     # Step 2: Find common time interval across all realigned epochs
     @info "Step 2/3: Finding common time interval"
     common_interval = _find_common_time_window(dat)
-    
+
     # Calculate n_samples to strictly avoid off-by-one errors within this single condition
     all_n_samples = Int[]
     for epoch in dat.data
@@ -189,7 +219,19 @@ function realign(dat::EpochData, realignment_triggers::Vector{Int})::EpochData
     return dat_copy
 end
 
-function realign!(dat_vec::Vector{EpochData}, realignment_triggers::Vector{Int}; global_interval::Union{Tuple{Float64,Float64},Nothing}=nothing, global_n_samples::Union{Int,Nothing}=nothing)::Nothing
+"""
+    realign!(dat_vec::Vector{EpochData}, realignment_triggers; global_interval = nothing, global_n_samples = nothing)
+
+In-place realignment for a `Vector{EpochData}`. All conditions are realigned to a **shared
+global time window** so that every condition ends up with an identical sample count — a
+strict requirement for LRP averaging across conditions.
+"""
+function realign!(
+    dat_vec::Vector{EpochData},
+    realignment_triggers::Vector{Int};
+    global_interval::Union{Tuple{Float64,Float64},Nothing} = nothing,
+    global_n_samples::Union{Int,Nothing} = nothing,
+)::Nothing
     @info "Realigning $(length(dat_vec)) conditions in Vector{EpochData}..."
 
     # Step 1: Validate and realign all epochs individually
@@ -212,12 +254,12 @@ function realign!(dat_vec::Vector{EpochData}, realignment_triggers::Vector{Int};
         end
 
         if isempty(common_starts)
-           @info "No data to realign."
-           return nothing 
+            @info "No data to realign."
+            return nothing
         end
 
         global_interval = (maximum(common_starts), minimum(common_ends))
-        
+
         # Pre-calculate global strict n_samples
         all_n_samples = Int[]
         for dat in dat_vec
@@ -238,7 +280,7 @@ function realign!(dat_vec::Vector{EpochData}, realignment_triggers::Vector{Int};
             _crop_epochs_to_window!(dat, global_interval, global_n_samples)
         end
     end
-    
+
     # Just grab an epoch length to print (assume first cond with data)
     for dat in dat_vec
         if !isempty(dat.data)
@@ -250,7 +292,17 @@ function realign!(dat_vec::Vector{EpochData}, realignment_triggers::Vector{Int};
     return nothing
 end
 
-function realign(dat_vec::Vector{EpochData}, realignment_triggers::Vector{Int}; global_interval::Union{Tuple{Float64,Float64},Nothing}=nothing, global_n_samples::Union{Int,Nothing}=nothing)::Vector{EpochData}
+"""
+    realign(dat_vec::Vector{EpochData}, realignment_triggers; global_interval = nothing, global_n_samples = nothing)
+
+Non-mutating `Vector{EpochData}` overload of `realign!`. Returns a deep-copied, globally realigned vector.
+"""
+function realign(
+    dat_vec::Vector{EpochData},
+    realignment_triggers::Vector{Int};
+    global_interval::Union{Tuple{Float64,Float64},Nothing} = nothing,
+    global_n_samples::Union{Int,Nothing} = nothing,
+)::Vector{EpochData}
     dat_vec_copy = [
         EpochData(
             dat.file,
@@ -259,10 +311,10 @@ function realign(dat_vec::Vector{EpochData}, realignment_triggers::Vector{Int}; 
             [copy(epoch, copycols = true) for epoch in dat.data],
             copy(dat.layout),
             dat.sample_rate,
-            copy(dat.analysis_info)
+            copy(dat.analysis_info),
         ) for dat in dat_vec
     ]
-    realign!(dat_vec_copy, realignment_triggers; global_interval=global_interval, global_n_samples=global_n_samples)
+    realign!(dat_vec_copy, realignment_triggers; global_interval = global_interval, global_n_samples = global_n_samples)
     return dat_vec_copy
 end
 
@@ -351,7 +403,7 @@ function _crop_epochs_to_window!(dat::EpochData, window::Tuple{Float64,Float64},
     # Find the minimum valid range across all epochs
     # (some epochs might have fewer samples due to varying RTs)
     n_samples = minimum([end_idx - start_idx + 1 for (start_idx, end_idx) in indices])
-    
+
     # Enforce global length mathematically if requested
     if !isnothing(global_n_samples)
         n_samples = global_n_samples
@@ -399,7 +451,13 @@ end
 Process a single epoch file through realignment pipeline.
 Returns BatchResult with success/failure info.
 """
-function _process_realign_file(filepath::String, output_path::String, realignment_triggers::Vector{Int}, global_interval::Tuple{Float64,Float64}, global_n_samples::Int)
+function _process_realign_file(
+    filepath::String,
+    output_path::String,
+    realignment_triggers::Vector{Int},
+    global_interval::Tuple{Float64,Float64},
+    global_n_samples::Int,
+)
     filename = basename(filepath)
 
     # Read data using read_data (handles single variable files automatically)
@@ -426,7 +484,8 @@ function _process_realign_file(filepath::String, output_path::String, realignmen
             _crop_epochs_to_window!(epochs_data, global_interval, global_n_samples)
             realigned_epochs = epochs_data
         else
-            realigned_epochs = realign(epochs_data, realignment_triggers; global_interval=global_interval, global_n_samples=global_n_samples)
+            realigned_epochs =
+                realign(epochs_data, realignment_triggers; global_interval = global_interval, global_n_samples = global_n_samples)
         end
 
         # Save results
@@ -480,12 +539,12 @@ function realign(
         end
 
         @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
-        
+
         # --- PASS 1: SCAN GLOBAL BOUNDS ---
         @info "Pass 1/3: Global timeline scanning across ($(length(files))) files..."
         grand_starts = Float64[]
         grand_ends = Float64[]
-        
+
         for file in files
             input_path = joinpath(input_dir, file)
             epochs_data = read_data(input_path)
@@ -534,9 +593,11 @@ function realign(
 
         # --- PASS 3: REALIGN & RECORD ---
         @info "Pass 3/3: Realigning to disk..."
-        
+
         # Create processing function with captured parameters
-        process_fn = (input_path, output_path) -> _process_realign_file(input_path, output_path, realignment_triggers, global_interval, global_n_samples)
+        process_fn =
+            (input_path, output_path) ->
+                _process_realign_file(input_path, output_path, realignment_triggers, global_interval, global_n_samples)
 
         # Execute batch operation
         results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Realigning epochs")
@@ -549,11 +610,7 @@ function realign(
 end
 
 # Alias for string pattern since users often write realign!("pattern", ...) intuitively wanting to batch process
-function realign!(
-    file_pattern::String,
-    realignment_triggers::Vector{Int};
-    kwargs...
-)
+function realign!(file_pattern::String, realignment_triggers::Vector{Int}; kwargs...)
     realign(file_pattern, realignment_triggers; kwargs...)
 end
 
@@ -571,7 +628,13 @@ end
 Process a single epoch file through calculate_trigger_interval pipeline.
 Returns BatchResult with success/failure info.
 """
-function _process_calculate_trigger_interval_file(filepath::String, output_path::String, start_triggers::Vector{Int}, end_triggers::Vector{Int}, column_name::Symbol)
+function _process_calculate_trigger_interval_file(
+    filepath::String,
+    output_path::String,
+    start_triggers::Vector{Int},
+    end_triggers::Vector{Int},
+    column_name::Symbol,
+)
     filename = basename(filepath)
 
     # Read data
@@ -618,7 +681,7 @@ function calculate_trigger_interval(
     input_dir::String = pwd(),
     participant_selection::Function = participants(),
     output_dir::Union{String,Nothing} = nothing,
-    column_name::Symbol = :interval
+    column_name::Symbol = :interval,
 )
     # Setup logging
     log_file = "calculate_trigger_interval.log"
@@ -650,7 +713,9 @@ function calculate_trigger_interval(
         @info "Looking for start triggers $(start_triggers) and end triggers $(end_triggers)"
 
         # Create processing function with captured parameters
-        process_fn = (input_path, output_path) -> _process_calculate_trigger_interval_file(input_path, output_path, start_triggers, end_triggers, column_name)
+        process_fn =
+            (input_path, output_path) ->
+                _process_calculate_trigger_interval_file(input_path, output_path, start_triggers, end_triggers, column_name)
 
         # Execute batch operation
         results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Calculating trigger intervals")
@@ -663,12 +728,6 @@ function calculate_trigger_interval(
 end
 
 # Alias for string pattern
-function calculate_trigger_interval!(
-    file_pattern::String,
-    start_triggers::Vector{Int},
-    end_triggers::Vector{Int};
-    kwargs...
-)
+function calculate_trigger_interval!(file_pattern::String, start_triggers::Vector{Int}, end_triggers::Vector{Int}; kwargs...)
     calculate_trigger_interval(file_pattern, start_triggers, end_triggers; kwargs...)
 end
-

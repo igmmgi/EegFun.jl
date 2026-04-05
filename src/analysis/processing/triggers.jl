@@ -377,7 +377,7 @@ info = trigger_info(epochs_good)
 ```
 """
 function trigger_info(dat::EpochData)
-    unique_seqs = NamedTuple{(:sequence, :t0), Tuple{Vector{Int}, Int}}[]
+    unique_seqs = NamedTuple{(:sequence, :t0),Tuple{Vector{Int},Int}}[]
     for epoch in dat.data
         if hasproperty(epoch, :trigger) && hasproperty(epoch, :time)
             # Find the active trigger right at time = 0
@@ -386,7 +386,7 @@ function trigger_info(dat::EpochData)
 
             # Extract sequence, ignoring continuous zeros
             seq = filter(x -> x != 0, epoch.trigger)
-            
+
             nt = (sequence = seq, t0 = t0_trigger)
             if !(nt in unique_seqs)
                 push!(unique_seqs, nt)
@@ -396,8 +396,15 @@ function trigger_info(dat::EpochData)
     return unique_seqs
 end
 
+"""
+    trigger_info(dat_vec::Vector{EpochData})
+
+Run `trigger_info` across all conditions in a `Vector{EpochData}`.
+Returns a `Dict{String, ...}` mapping each `condition_name` to its list of unique
+trigger sequences. See the `EpochData` method for details on the individual entries.
+"""
 function trigger_info(dat_vec::Vector{EpochData})
-    info = Dict{String, Vector{NamedTuple{(:sequence, :t0), Tuple{Vector{Int}, Int}}}}()
+    info = Dict{String,Vector{NamedTuple{(:sequence, :t0),Tuple{Vector{Int},Int}}}}()
     for dat in dat_vec
         info[dat.condition_name] = trigger_info(dat)
     end
@@ -412,7 +419,7 @@ This allows you to either pass a direct filename or a generic batch string like 
 Returns a merged dictionary of all unique trigger sequences across the entire experiment.
 """
 function trigger_info(file_pattern::String; input_dir::String = pwd(), participant_selection::Function = participants())
-    
+
     # Check if exact file
     if isfile(file_pattern) && endswith(file_pattern, ".jld2")
         dat = read_data(file_pattern)
@@ -430,9 +437,9 @@ function trigger_info(file_pattern::String; input_dir::String = pwd(), participa
     end
 
     @info "Scanning $(length(files)) files for unique trigger sequences..."
-    
-    merged_info = Dict{String, Vector{NamedTuple{(:sequence, :t0), Tuple{Vector{Int}, Int}}}}()
-    
+
+    merged_info = Dict{String,Vector{NamedTuple{(:sequence, :t0),Tuple{Vector{Int},Int}}}}()
+
     for file in files
         input_path = joinpath(input_dir, file)
         dat = read_data(input_path)
@@ -453,6 +460,6 @@ function trigger_info(file_pattern::String; input_dir::String = pwd(), participa
             end
         end
     end
-    
+
     return merged_info
 end

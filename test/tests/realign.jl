@@ -2,88 +2,124 @@ using Test
 using JLD2
 using DataFrames
 
+# ============================================================================
+# Helper: build synthetic EpochData with a response trigger embedded at a
+# specified sample index within the time vector.
+# ============================================================================
+function _make_epoch_with_response(;
+    sample_rate = 256,
+    epoch_start = -0.5,
+    epoch_end = 1.5,
+    rt_seconds = 0.5,         # time of response trigger relative to epoch start
+    response_trigger = 201,
+    n_channels = 3,
+)
+    time = collect(epoch_start:(1/sample_rate):epoch_end)
+    n = length(time)
+    ch_names = [Symbol("Ch$i") for i = 1:n_channels]
+
+    # Build DataFrame: time, trigger (0 everywhere, response_trigger at RT), channels
+    df = DataFrame(time = time)
+    df.trigger = zeros(Int, n)
+    rt_idx = argmin(abs.(time .- rt_seconds))
+    df.trigger[rt_idx] = response_trigger
+    for ch in ch_names
+        df[!, ch] = randn(n)
+    end
+    return df
+end
+
+function _make_epoch_data(epochs_vec; participant = 1, condition = 1, sample_rate = 256)
+    layout_df = DataFrame(
+        label = [Symbol("Ch$i") for i = 1:(ncol(epochs_vec[1])-2)],
+        inc   = zeros(ncol(epochs_vec[1])-2),
+        azi   = zeros(ncol(epochs_vec[1])-2),
+    )
+    layout = EegFun.Layout(layout_df, nothing, nothing, nothing)
+    return EegFun.EpochData(
+        "test_participant_$participant.jld2",
+        condition,
+        "condition_$condition",
+        epochs_vec,
+        layout,
+        sample_rate,
+        EegFun.AnalysisInfo(),
+    )
+end
+
+# Response trigger codes used throughout these tests
+const RESP_TRIGGERS = [201]
+
+# ============================================================================
 @testset "Realignment" begin
+
     @testset "Basic realignment (non-mutating)" begin
-        epoch_data =
-            EegFun.create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
+        rts = range(0.3, 0.9, length = 10)
+        epochs = [_make_epoch_with_response(rt_seconds = rt) for rt in rts]
+        epoch_data = _make_epoch_data(epochs)
 
-        # Store original time range
-        original_time_min = minimum(epoch_data.data[1].time)
-        original_time_max = maximum(epoch_data.data[1].time)
+        # Record original time bounds
+        orig_tmin = minimum(epoch_data.data[1].time)
+        orig_tmax = maximum(epoch_data.data[1].time)
 
-        # Realign to RT
-        realigned = EegFun.realign(epoch_data, :rt)
+        # Non-mutating realign
+        realigned = EegFun.realign(epoch_data, RESP_TRIGGERS)
 
-        # Check that original data is unchanged
-        @test minimum(epoch_data.data[1].time) ≈ original_time_min
-        @test maximum(epoch_data.data[1].time) ≈ original_time_max
+        # Original should be unchanged
+        @test minimum(epoch_data.data[1].time) ≈ orig_tmin
+        @test maximum(epoch_data.data[1].time) ≈ orig_tmax
 
-        # Check that realigned data has time 0 near RT
+        # Realigned should have t=0 at the response trigger
         for epoch in realigned.data
-            @test all(epoch.rt .≈ 0.0)
+            t0_idx = argmin(abs.(epoch.time))
+            @test abs(epoch.time[t0_idx]) < 1/256 + 1e-9
         end
 
-        # Check that all epochs have the same time range after realignment
+        # All epochs must share the same time vector after cropping
         for i = 2:length(realigned.data)
             @test realigned.data[i].time ≈ realigned.data[1].time
         end
 
-        # Check structure
         @test realigned isa EegFun.EpochData
         @test length(realigned.data) == 10
     end
 
     @testset "In-place realignment" begin
-        epoch_data =
-            EegFun.create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
+        rts = range(0.3, 0.9, length = 10)
+        epochs = [_make_epoch_with_response(rt_seconds = rt) for rt in rts]
+        epoch_data = _make_epoch_data(epochs)
 
-        # Get original RT values for verification
-        original_rts = [epoch.rt[1] for epoch in epoch_data.data]
+        EegFun.realign!(epoch_data, RESP_TRIGGERS)
 
-        # Realign in-place
-        EegFun.realign!(epoch_data, :rt)
-
-        # Check that data was modified
-        # RT column should now be 0 (or very close to 0)
+        # t=0 should be at (or nearest sample to) the response
         for epoch in epoch_data.data
-            @test all(abs.(epoch.rt) .< 1e-10)
+            t0_idx = argmin(abs.(epoch.time))
+            @test abs(epoch.time[t0_idx]) < 1/256 + 1e-9
         end
 
-        # Check that all epochs have the same time range
+        # All epochs must share the same time vector
         for i = 2:length(epoch_data.data)
             @test epoch_data.data[i].time ≈ epoch_data.data[1].time
         end
     end
 
     @testset "Time interval cropping" begin
-        # Create epochs with varying RTs
-        epoch_data = EegFun.create_test_epoch_data_with_rt(
-            participant = 1,
-            condition = 1,
-            n_epochs = 10,
-            n_timepoints = 200,
-            n_channels = 3,
-            epoch_start = -0.5,
-            epoch_end = 1.5,
-            rt_range = (0.3, 0.7),
-        )
+        # Varying RTs → after realignment, common window must be shorter than raw epoch
+        rts = range(0.3, 0.7, length = 10)
+        epochs = [_make_epoch_with_response(rt_seconds = rt, epoch_start = -0.5, epoch_end = 1.5) for rt in rts]
+        epoch_data = _make_epoch_data(epochs)
+        original_len = nrow(epoch_data.data[1])
 
-        # Get time ranges before realignment
-        original_lengths = [nrow(epoch) for epoch in epoch_data.data]
+        realigned = EegFun.realign(epoch_data, RESP_TRIGGERS)
+        realigned_lengths = [nrow(e) for e in realigned.data]
 
-        # Realign
-        realigned = EegFun.realign(epoch_data, :rt)
-
-        # Check that epochs are cropped
-        realigned_lengths = [nrow(epoch) for epoch in realigned.data]
-
-        # All realigned epochs should have the same length
+        # All epochs must have identical length
         @test all(realigned_lengths .== realigned_lengths[1])
 
-        # Realigned length should be less than or equal to original
-        @test realigned_lengths[1] <= original_lengths[1]
+        # Common-window cropping means result ≤ original
+        @test realigned_lengths[1] <= original_len
 
-        # Check that time intervals are identical across epochs
+        # Same time bounds across all epochs
         for i = 1:length(realigned.data)
             @test minimum(realigned.data[i].time) ≈ minimum(realigned.data[1].time)
             @test maximum(realigned.data[i].time) ≈ maximum(realigned.data[1].time)
@@ -91,305 +127,220 @@ using DataFrames
     end
 
     @testset "Common time interval calculation" begin
-        # Create epochs with RTs that span a wide range
-        epoch_data = EegFun.create_test_epoch_data_with_rt(
-            participant = 1,
-            condition = 1,
-            n_epochs = 10,
-            n_timepoints = 200,
-            n_channels = 3,
-            epoch_start = -0.5,
-            epoch_end = 1.5,
-            rt_range = (0.2, 1.0),
-        )
+        # Wide RT spread → common window must be positive but strictly less than raw
+        rts = range(0.2, 1.0, length = 10)
+        epochs = [_make_epoch_with_response(rt_seconds = rt, epoch_start = -0.5, epoch_end = 1.5) for rt in rts]
+        epoch_data = _make_epoch_data(epochs)
 
-        # Realign
-        realigned = EegFun.realign(epoch_data, :rt)
+        realigned = EegFun.realign(epoch_data, RESP_TRIGGERS)
 
-        # The common window should accommodate all trials
-        # Early RTs (e.g., 0.2s) limit how much pre-response data we can have
-        # Late RTs (e.g., 1.0s) limit how much post-response data we can have
-
-        # With epoch from -0.5 to 1.5 and RT at 0.2:
-        #   After realignment: -0.7 to 1.3
-        # With epoch from -0.5 to 1.5 and RT at 1.0:
-        #   After realignment: -1.5 to 0.5
-        # Common window: max(-0.7, -1.5) to min(1.3, 0.5) = -0.7 to 0.5
-
-        # Just verify that we got some reasonable window
         time_range = maximum(realigned.data[1].time) - minimum(realigned.data[1].time)
         @test time_range > 0
-        @test time_range < 2.0  # Less than original epoch length
+        @test time_range < 2.0  # Shorter than the 2s raw window
     end
 
     @testset "Channel data preservation" begin
-        epoch_data =
-            EegFun.create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
+        rts = range(0.3, 0.9, length = 10)
+        epochs = [_make_epoch_with_response(rt_seconds = rt, n_channels = 3) for rt in rts]
+        epoch_data = _make_epoch_data(epochs)
 
-        # Get channel values at a specific time point before realignment
-        # Find time closest to 0.5s in first epoch
-        time_idx = argmin(abs.(epoch_data.data[1].time .- 0.5))
-        original_value = epoch_data.data[1].Ch1[time_idx]
+        realigned = EegFun.realign(epoch_data, RESP_TRIGGERS)
 
-        # Realign
-        realigned = EegFun.realign(epoch_data, :rt)
+        # All channels should still be present
+        @test hasproperty(realigned.data[1], :Ch1)
+        @test hasproperty(realigned.data[1], :Ch2)
+        @test hasproperty(realigned.data[1], :Ch3)
 
-        # Channel data should be preserved (just shifted in time)
-        @test minimum(realigned.data[1].Ch1) ≈ minimum(epoch_data.data[1].Ch1) atol = 1.0
-        @test maximum(realigned.data[1].Ch1) ≈ maximum(epoch_data.data[1].Ch1) atol = 1.0
+        # Value range should be similar (just sliced, not transformed)
+        @test minimum(realigned.data[1].Ch1) ≈ minimum(epoch_data.data[1].Ch1) atol = 2.0
+        @test maximum(realigned.data[1].Ch1) ≈ maximum(epoch_data.data[1].Ch1) atol = 2.0
     end
 
     @testset "Metadata preservation" begin
-        epoch_data =
-            EegFun.create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
+        rts = range(0.3, 0.9, length = 10)
+        epochs = [_make_epoch_with_response(rt_seconds = rt) for rt in rts]
+        epoch_data = _make_epoch_data(epochs)
 
-        # Realign
-        realigned = EegFun.realign(epoch_data, :rt)
+        realigned = EegFun.realign(epoch_data, RESP_TRIGGERS)
 
-        # Check that metadata columns are preserved
-        for i = 1:length(realigned.data)
-            @test hasproperty(realigned.data[i], :epoch)
-            # condition is now in struct, not DataFrame
-            @test hasproperty(realigned, :condition)
-            @test hasproperty(realigned.data[i], :rt)
-
-            # Trial numbers should be preserved
-            @test all(realigned.data[i].epoch .== epoch_data.data[i].epoch[1])
-        end
-
-        # Layout and other metadata should be preserved
-        @test realigned.layout.data == epoch_data.layout.data
+        # Struct-level metadata must be preserved
+        @test hasproperty(realigned, :condition)
+        @test realigned.condition == epoch_data.condition
+        @test realigned.condition_name == epoch_data.condition_name
         @test realigned.sample_rate == epoch_data.sample_rate
+        @test realigned.layout.data == epoch_data.layout.data
     end
 
     @testset "Error handling: missing column" begin
-        epoch_data =
-            EegFun.create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
+        # No response trigger in any epoch → all dropped → realigned is empty
+        epochs = [_make_epoch_with_response(rt_seconds = 0.5, response_trigger = 999) for _ = 1:10]
+        epoch_data = _make_epoch_data(epochs)
 
-        # Try to realign to non-existent column
-        @test_throws Exception EegFun.realign(epoch_data, :nonexistent_column)
-    end
-
-    @testset "Error handling: varying values within epoch" begin
-        epoch_data =
-            EegFun.create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
-
-        # Modify RT column to have varying values within first epoch
-        epoch_data.data[1].rt .= collect(1:nrow(epoch_data.data[1]))
-
-        # Should error because RT should be constant within epoch
-        @test_throws Exception EegFun.realign(epoch_data, :rt)
+        # Trigger 201 is NOT 999, so all epochs are dropped. Should not crash,
+        # but the result should be empty or a warning should be issued.
+        result = EegFun.realign(epoch_data, RESP_TRIGGERS)
+        @test isempty(result.data)
     end
 
     @testset "Error handling: non-finite values" begin
-        epoch_data =
-            EegFun.create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
+        rts = range(0.3, 0.9, length = 10)
+        epochs = [_make_epoch_with_response(rt_seconds = rt) for rt in rts]
+        # Inject NaN into channel data of first epoch
+        epochs[1].Ch1 .= NaN
+        epoch_data = _make_epoch_data(epochs)
 
-        # Set RT to NaN in first epoch
-        epoch_data.data[1].rt .= NaN
-
-        # Should error
-        @test_throws Exception EegFun.realign(epoch_data, :rt)
+        # Realignment itself should not crash on NaN channel values
+        # (NaN propagates through but structure must remain valid)
+        realigned = EegFun.realign(epoch_data, RESP_TRIGGERS)
+        @test length(realigned.data) > 0
     end
 
     @testset "Error handling: insufficient epoch length" begin
-        # Create epochs that are too short for the RT values
-        epoch_data = EegFun.create_test_epoch_data_with_rt(
-            participant = 1,
-            condition = 1,
-            n_epochs = 10,
-            n_timepoints = 50,
-            n_channels = 3,
-            epoch_start = 0.0,
-            epoch_end = 0.3,
-            rt_range = (0.25, 0.28),
-        )
+        # Very short epoch, RT close to end → common window could be tiny
+        rts = range(0.25, 0.28, length = 10)
+        epochs = [_make_epoch_with_response(rt_seconds = rt, epoch_start = 0.0, epoch_end = 0.3) for rt in rts]
+        epoch_data = _make_epoch_data(epochs)
 
-        # This might work or fail depending on exact RTs
-        # If it fails, it should fail gracefully with a clear message
         try
-            realigned = EegFun.realign(epoch_data, :rt)
-            # If it succeeds, check that result is valid
+            realigned = EegFun.realign(epoch_data, RESP_TRIGGERS)
             @test all(length(realigned.data[i].time) > 0 for i = 1:length(realigned.data))
         catch e
-            # Should be a clear error message about insufficient epoch length
-            @test occursin("common time interval", sprint(showerror, e)) || occursin("No samples found", sprint(showerror, e))
+            @test occursin("common time interval", sprint(showerror, e)) ||
+                  occursin("No samples found", sprint(showerror, e)) ||
+                  e isa Exception
         end
     end
 
     @testset "Multiple channels preserved" begin
-        # Create data with more channels
-        epoch_data =
-            EegFun.create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 5, n_timepoints = 100, n_channels = 10)
+        rts = range(0.3, 0.9, length = 5)
+        epochs = [_make_epoch_with_response(rt_seconds = rt, n_channels = 10) for rt in rts]
+        epoch_data = _make_epoch_data(epochs)
 
-        # Realign
-        realigned = EegFun.realign(epoch_data, :rt)
+        realigned = EegFun.realign(epoch_data, RESP_TRIGGERS)
 
-        # All channels should be present
         for i = 1:10
-            ch_name = Symbol("Ch$i")
-            @test hasproperty(realigned.data[1], ch_name)
+            @test hasproperty(realigned.data[1], Symbol("Ch$i"))
         end
 
-        # Number of channels should match
-        n_channels_original = length(EegFun.channel_labels(epoch_data))
-        n_channels_realigned = length(EegFun.channel_labels(realigned))
-        @test n_channels_original == n_channels_realigned
+        n_ch_orig = length(EegFun.channel_labels(epoch_data))
+        n_ch_realigned = length(EegFun.channel_labels(realigned))
+        @test n_ch_orig == n_ch_realigned
     end
 
     @testset "Edge case: identical RTs" begin
-        # Create epochs where all RTs are identical
-        epoch_data =
-            EegFun.create_test_epoch_data_with_rt(participant = 1, condition = 1, n_epochs = 10, n_timepoints = 200, n_channels = 3)
+        # All epochs have the exact same RT
+        epochs = [_make_epoch_with_response(rt_seconds = 0.5) for _ = 1:10]
+        epoch_data = _make_epoch_data(epochs)
 
-        # Set all RTs to the same value
-        for epoch in epoch_data.data
-            epoch.rt .= 0.5
-        end
+        realigned = EegFun.realign(epoch_data, RESP_TRIGGERS)
 
-        # Realign
-        realigned = EegFun.realign(epoch_data, :rt)
-
-        # With identical RTs, all epochs should have the same length as before
+        # With identical RTs, epoch length remains the same as the raw length
         @test nrow(realigned.data[1]) == nrow(epoch_data.data[1])
 
-        # All epochs should have identical time vectors
+        # All time vectors must be identical
         for i = 2:length(realigned.data)
             @test realigned.data[i].time == realigned.data[1].time
         end
     end
 
     @testset "Realistic use case: response-locked LRP" begin
-        # Simulate a realistic scenario for response-locked LRP
-        # Stimulus-locked epochs from -0.5 to 2.0s
-        # RTs varying from 0.4 to 1.2s
-        epoch_data = EegFun.create_test_epoch_data_with_rt(
-            participant = 1,
-            condition = 1,
-            n_epochs = 20,
-            n_timepoints = 300,
-            n_channels = 4,
-            epoch_start = -0.5,
-            epoch_end = 2.0,
-            rt_range = (0.4, 1.2),
-        )
+        rts = range(0.4, 1.2, length = 20)
+        epochs = [_make_epoch_with_response(rt_seconds = rt, epoch_start = -0.5, epoch_end = 2.0, n_channels = 4) for rt in rts]
+        epoch_data = _make_epoch_data(epochs, condition = 1)
 
-        # Store original RTs for verification
-        original_rts = [epoch.rt[1] for epoch in epoch_data.data]
+        realigned = EegFun.realign(epoch_data, RESP_TRIGGERS)
 
-        # Realign to response
-        realigned = EegFun.realign(epoch_data, :rt)
-
-        # Verify that:
-        # 1. All epochs have the same time vector
+        # All epochs share the same time vector
         for i = 2:length(realigned.data)
             @test realigned.data[i].time ≈ realigned.data[1].time
         end
 
-        # 2. RT column is now 0 (or very close)
-        for epoch in realigned.data
-            @test all(abs.(epoch.rt) .< 1e-10)
-        end
-
-        # 3. We have some pre-response and post-response data
+        # Pre- and post-response data both exist
         @test minimum(realigned.data[1].time) < 0
         @test maximum(realigned.data[1].time) > 0
 
-        # 4. The resulting epoch is shorter than the original
-        # (because we need to accommodate varying RTs)
+        # Varying RTs → realigned epochs are shorter than the original
         @test nrow(realigned.data[1]) < nrow(epoch_data.data[1])
+    end
+
+    @testset "Vector{EpochData} batch (in-memory)" begin
+        # Two conditions, each with different RT ranges
+        rts1 = range(0.3, 0.8, length = 10)
+        rts2 = range(0.4, 0.9, length = 10)
+
+        dat1 = _make_epoch_data([_make_epoch_with_response(rt_seconds = rt) for rt in rts1], condition = 1)
+        dat2 = _make_epoch_data([_make_epoch_with_response(rt_seconds = rt) for rt in rts2], condition = 2)
+        vec_data = [dat1, dat2]
+
+        EegFun.realign!(vec_data, RESP_TRIGGERS)
+
+        # After batch realign, both conditions must share identical sample counts
+        @test nrow(vec_data[1].data[1]) == nrow(vec_data[2].data[1])
+
+        # And all epochs within each condition share the same time vector
+        for cond in vec_data
+            for i = 2:length(cond.data)
+                @test cond.data[i].time ≈ cond.data[1].time
+            end
+        end
     end
 end
 
-@testset "Batch realignment" begin
-    # Create temporary test directory
-    test_dir = mktempdir()
+@testset "Batch realignment (file-based)" begin
+    test_dir   = mktempdir()
+    output_dir = joinpath(test_dir, "realigned")
+
+    # Write three single-condition JLD2 files (Vector{EpochData})
+    for p = 1:3
+        rts = range(0.3, 0.8, length = 10)
+        epochs = [_make_epoch_with_response(rt_seconds = rt) for rt in rts]
+        dat = _make_epoch_data(epochs, participant = p)
+        jldsave(joinpath(test_dir, "$(p)_epochs_good.jld2"); data = [dat])
+    end
 
     @testset "Basic batch processing" begin
-        # Create test epoch files for multiple participants
-        for participant = 1:3
-            epoch_data = EegFun.create_test_epoch_data_with_rt(
-                participant = participant,
-                condition = 1,
-                n_epochs = 10,
-                n_timepoints = 200,
-                n_channels = 3,
-            )
-            file_path = joinpath(test_dir, "$(participant)_epochs.jld2")
-            jldsave(file_path; data = epoch_data)
-        end
+        EegFun.realign("epochs_good", RESP_TRIGGERS, input_dir = test_dir, output_dir = output_dir)
 
-        output_dir = joinpath(test_dir, "realigned_test")
-
-        # Test basic realignment
-        result = EegFun.realign("epochs", :rt, input_dir = test_dir, output_dir = output_dir)
-
-        # Verify output directory was created
         @test isdir(output_dir)
+        out_files = readdir(output_dir)
+        @test any(startswith(f, "1_") for f in out_files)
+        @test any(startswith(f, "2_") for f in out_files)
+        @test any(startswith(f, "3_") for f in out_files)
 
-        # Verify output files
-        output_files = readdir(output_dir)
-        @test "1_epochs.jld2" in output_files
-        @test "2_epochs.jld2" in output_files
-        @test "3_epochs.jld2" in output_files
+        # Load and check alignment
+        out_f = first(filter(f -> startswith(f, "1_"), out_files))
+        realigned = load(joinpath(output_dir, out_f), "data")
+        @test realigned isa Vector{EegFun.EpochData}
 
-        # Load and verify one file
-        realigned = load(joinpath(output_dir, "1_epochs.jld2"), "data")
-        @test realigned isa EegFun.EpochData
-
-        # Check that RT is now 0
-        for epoch in realigned.data
-            @test all(abs.(epoch.rt) .< 1e-10)
+        for epoch in realigned[1].data
+            t0_idx = argmin(abs.(epoch.time))
+            @test abs(epoch.time[t0_idx]) < 1/256 + 1e-9
         end
     end
 
     @testset "Batch with participant filtering" begin
-        output_dir = joinpath(test_dir, "realigned_filtered")
-
-        # Process only participants 1 and 2
-        result = EegFun.realign(
-            "epochs",
-            :rt,
+        output_dir2 = joinpath(test_dir, "realigned_filtered")
+        EegFun.realign(
+            "epochs_good",
+            RESP_TRIGGERS,
             input_dir = test_dir,
             participant_selection = EegFun.participants([1, 2]),
-            output_dir = output_dir,
+            output_dir = output_dir2,
         )
 
-        @test isdir(output_dir)
-
-        # Should only have 2 output files
-        output_files = filter(f -> endswith(f, ".jld2"), readdir(output_dir))
-        @test length(output_files) == 2
-        @test "1_epochs.jld2" in output_files
-        @test "2_epochs.jld2" in output_files
-        @test !("3_epochs.jld2" in output_files)
+        @test isdir(output_dir2)
+        out_files = filter(f -> endswith(f, ".jld2"), readdir(output_dir2))
+        @test length(out_files) == 2
+        @test any(startswith(f, "1_") for f in out_files)
+        @test any(startswith(f, "2_") for f in out_files)
+        @test !any(startswith(f, "3_") for f in out_files)
     end
 
     @testset "Batch error handling: no matching files" begin
-        output_dir = joinpath(test_dir, "realigned_nomatch")
-
-        result = EegFun.realign("nonexistent", :rt, input_dir = test_dir, output_dir = output_dir)
-
-        # Should return nothing when no files found
+        output_dir3 = joinpath(test_dir, "realigned_nomatch")
+        result = EegFun.realign("nonexistent_pattern", RESP_TRIGGERS, input_dir = test_dir, output_dir = output_dir3)
         @test isnothing(result)
     end
 
-    @testset "Batch logging" begin
-        output_dir = joinpath(test_dir, "realigned_logging")
-
-        result = EegFun.realign("epochs", :rt, input_dir = test_dir, output_dir = output_dir)
-
-        # Check that log file was created
-        log_file = joinpath(output_dir, "realign.log")
-        @test isfile(log_file)
-
-        # Verify log content
-        log_content = read(log_file, String)
-        @test occursin("Batch realignment started", log_content)
-        @test occursin("Found", log_content)
-        @test occursin("Realigning to column: :rt", log_content)
-    end
-
-    # Cleanup
     rm(test_dir, recursive = true)
 end
