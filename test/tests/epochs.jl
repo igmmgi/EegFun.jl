@@ -416,9 +416,9 @@ using Random
         # Test with simple function that selects all epochs
         all_selector = x -> trues(length(x))
         selected_all = EegFun.get_selected_epochs(eps, all_selector)
-        @test selected_all == [1, 2, 3]  # Should have 2 epochs
+        @test selected_all == [1, 2, 3]  # Should have 3 epochs
 
-        # Test with function that selects first epoch only
+        # Test with function that selects first epoch only (by supplying a booleans array of the same length)
         first_only = x -> [true, false, false]
         selected_first = EegFun.get_selected_epochs(eps, first_only)
         @test selected_first == [1]
@@ -428,15 +428,15 @@ using Random
         selected_none = EegFun.get_selected_epochs(eps, none_selector)
         @test isempty(selected_none)
 
-        # Test with function that selects specific epochs by index
-        specific_selector = x -> [i in [1] for i in x]
-        selected_specific = EegFun.get_selected_epochs(eps, specific_selector)
-        @test selected_specific == [1]
+        # Test with DataFrame predicate: only keep epochs with positive time max
+        df_selector = x -> [maximum(df.time) > 0 for df in x]
+        selected_specific = EegFun.get_selected_epochs(eps, df_selector)
+        @test selected_specific == [1, 2, 3]
 
-        # Test with realistic selector (odd epochs)
-        odd_selector = x -> isodd.(x)
-        selected_odd = EegFun.get_selected_epochs(eps, odd_selector)
-        @test selected_odd == [1, 3]  # Only epoch 1 is odd
+        # Test with DataFrame predicate: only keep epochs where time is > 999 (false)
+        impossible_selector = x -> [maximum(df.time) > 999 for df in x]
+        selected_impossible = EegFun.get_selected_epochs(eps, impossible_selector)
+        @test isempty(selected_impossible)
     end
 
     @testset "_validate_epoch_interval_params" begin

@@ -108,6 +108,21 @@ using DataFrames
                 @test result isa EegFun.EpochData
                 @test all(df -> all(df.time .>= 0.1) && all(df.time .< 0.5), result.data)
             end
+
+            @testset "Epoch selection" begin
+                # Index-based selection
+                result_idx = EegFun.subset(epochs, epoch_selection = EegFun.epochs([1]))
+                @test length(result_idx.data) == 1
+
+                # Predicate-based selection over DataFrames
+                # Suppose we want to only keep epochs that actually have rows
+                result_pred = EegFun.subset(epochs, epoch_selection = EegFun.epochs(df -> nrow(df) > 0))
+                @test length(result_pred.data) == length(epochs.data)
+                
+                # Predicate that removes all
+                result_pred_empty = EegFun.subset(epochs, epoch_selection = EegFun.epochs(df -> nrow(df) > 100000))
+                @test length(result_pred_empty.data) == 0
+            end
         end
 
         @testset "ContinuousData" begin
