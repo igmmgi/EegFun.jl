@@ -1027,6 +1027,93 @@ end
 
 
 
+# === BATCH PROCESSING ===
+
+function _default_subset_output_dir(input_dir::String, pattern::String)
+    joinpath(input_dir, "subset_$(pattern)")
+end
+
+function _process_subset_file(
+    filepath::String,
+    output_path::String;
+    kwargs...
+)
+    filename = basename(filepath)
+    dat = read_data(filepath)
+    
+    if isnothing(dat)
+        return BatchResult(false, filename, "No data found in file")
+    end
+    
+    try
+        subset_data = subset(dat; kwargs...)
+        jldsave(output_path; data = subset_data)
+        
+        # Determine stats for logging
+        if subset_data isa Vector && !isempty(subset_data) && hasproperty(subset_data[1], :data)
+            n_items = sum(length(cond.data) for cond in subset_data)
+            return BatchResult(true, filename, "Processed subset. Elements remaining: $(n_items)")
+        elseif hasproperty(subset_data, :data) && subset_data.data isa Vector
+            n_items = length(subset_data.data)
+            return BatchResult(true, filename, "Processed subset. Elements remaining: $(n_items)")
+        else
+            return BatchResult(true, filename, "Processed subset.")
+        end
+    catch e
+        return BatchResult(false, filename, "Error: $(sprint(showerror, e))")
+    end
+end
+
+"""
+    subset(file_pattern::String; kwargs...)
+
+Batch process JLD2 files that match `file_pattern`, applying the `subset` operation.
+Supports all `subset` kwargs (`epoch_selection`, `channel_selection`, `sample_selection`, `interval_selection`).
+"""
+function subset(
+    file_pattern::String;
+    input_dir::String = pwd(),
+    participant_selection::Function = participants(),
+    output_dir::Union{String,Nothing} = nothing,
+    kwargs...
+)
+    log_file = "subset.log"
+    setup_global_logging(log_file)
+
+    try
+        @info "Batch subset started at $(now())"
+
+        error_msg = _validate_input_dir(input_dir)
+        if !isnothing(error_msg)
+            @minimal_error(error_msg)
+        end
+
+        output_dir = something(output_dir, _default_subset_output_dir(input_dir, file_pattern))
+        mkpath(output_dir)
+
+        files = _find_batch_files(file_pattern, input_dir, participant_selection)
+
+        if isempty(files)
+            @minimal_warning "No JLD2 files found matching pattern '$(file_pattern)' in $(input_dir)"
+            return nothing
+        end
+
+        @info "Found $(length(files)) JLD2 files matching pattern '$(file_pattern)'"
+
+        process_fn = (input_path, output_path) -> _process_subset_file(input_path, output_path; kwargs...)
+
+        results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Subsetting parameters")
+
+        _log_batch_summary(results, output_dir)
+
+    finally
+        _cleanup_logging(log_file, output_dir)
+    end
+end
+
+
+
+
 """
     log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
 
@@ -1139,13 +1226,13 @@ times(interval::Tuple{Real,Real}) = interval
 
 """Predicate generators for epoch selection."""
 epochs() = x -> fill(true, length(x))  # Default: select all epochs given
-epochs(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> [i in epoch_numbers for i in x]
-epochs(epoch_number::Int) = x -> x .== epoch_number
+epochs(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> [i in epoch_numbers for i = 1:length(x)]
+epochs(epoch_number::Int) = x -> [i == epoch_number for i = 1:length(x)]
 epochs(epoch_numbers::Int...) = epochs(collect(epoch_numbers))
-epochs(predicate::Function) = predicate  # Allow custom function predicates
+epochs(predicate::Function) = x -> map(predicate, x)  # Allow custom function predicates over dataframes
 """Predicate generators that exclude the specified epochs."""
-epochs_not(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in epoch_numbers for i in x])
-epochs_not(epoch_number::Int) = x -> .!(x .== epoch_number)
+epochs_not(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in epoch_numbers for i = 1:length(x)])
+epochs_not(epoch_number::Int) = x -> .!([i == epoch_number for i = 1:length(x)])
 epochs_not(epoch_numbers::Int...) = epochs_not(collect(epoch_numbers))
 
 """Predicate generators for participant ID selection."""
@@ -1288,8 +1375,8 @@ end
 
 """Apply an epoch predicate and return matching epoch indices."""
 function get_selected_epochs(dat::MultiDataFrameEeg, epoch_selection::Function)
-    all_epochs = 1:length(dat.data)
-    return findall(epoch_selection(all_epochs))
+    # The dat.data accessor maps to data_power for TimeFreqEpochData
+    return findall(epoch_selection(dat.data))
 end
 
 """Apply a condition predicate and return matching dataset indices."""

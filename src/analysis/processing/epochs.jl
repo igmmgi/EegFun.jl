@@ -168,7 +168,7 @@ selected = get_selected_epochs(dat, epochs([1, 3, 5]))
 ```
 """
 function get_selected_epochs(dat::EpochData, epoch_selection::Function)
-    return findall(epoch_selection(1:length(dat.data)))
+    return findall(epoch_selection(dat.data))
 end
 
 
