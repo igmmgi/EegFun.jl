@@ -889,6 +889,7 @@ function subset(
     dat_subset = _subset_dataframe(dat.data, selected_channels, selected_samples)
     return _create_subset(dat, dat_subset, layout_subset)
 end
+
 function subset(
     dat::TimeFreqData;
     channel_selection::Function = channels(),
@@ -904,6 +905,25 @@ function subset(
     phase_subset = _subset_dataframe(dat.data_phase, selected_channels, selected_samples)
     return _create_subset(dat, power_subset, phase_subset, layout_subset)
 end
+
+"""
+    subset(dat::MultiDataFrameEeg; channel_selection, sample_selection, interval_selection, epoch_selection, include_extra)
+
+Create a subset of epoched EEG data (e.g., `EpochData`). 
+
+# Arguments
+- `epoch_selection::Function`: Epoch predicate. You can supply numerical indices using `epochs(1:5)` or a custom DataFrame predicate via `epochs(df -> nrow(df) > 100)` to efficiently filter trials by their contents (default: `epochs()` for all).
+- `channel_selection::Function`: Channel predicate (default: `channels()` for all)
+- `sample_selection::Function`: Sample predicate (default: `samples()` for all)
+- `interval_selection::Interval`: Time interval (default: `times()` for all)
+- `include_extra::Bool`: Include extra columns (default: `false`)
+
+# Examples
+```julia
+# Drop trial outliers by examining the interval channel inside the epoch
+cleaned_epochs = subset(epochs_data, epoch_selection = epochs(df -> 0.2 < df.interval[1] < 1.0))
+```
+"""
 function subset(
     dat::T;
     channel_selection::Function = channels(),
@@ -919,6 +939,12 @@ function subset(
     dat_subset = _subset_dataframes(dat.data, selected_epochs, selected_channels, selected_samples)
     return _create_subset(dat, dat_subset, layout_subset)
 end
+
+"""
+    subset(dat::TimeFreqEpochData; channel_selection, sample_selection, interval_selection, epoch_selection, include_extra)
+
+Create a subset of time-frequency epoched data. Accepts the same arguments as epoched data, including functional `epoch_selection`.
+"""
 function subset(
     dat::TimeFreqEpochData;
     channel_selection::Function = channels(),
@@ -936,6 +962,7 @@ function subset(
     phase_subset = _subset_dataframes(dat.data_phase, selected_epochs, selected_channels, selected_samples)
     return _create_subset(dat, power_subset, phase_subset, layout_subset)
 end
+
 function subset(
     datasets::Vector{ErpData};
     condition_selection::Function = conditions(),
@@ -957,6 +984,7 @@ function subset(
         include_extra = include_extra,
     )
 end
+
 function subset(
     datasets::Vector{EpochData};
     condition_selection::Function = conditions(),
@@ -980,6 +1008,7 @@ function subset(
         include_extra = include_extra,
     )
 end
+
 function subset(
     datasets::Vector{TimeFreqData};
     condition_selection::Function = conditions(),
@@ -1001,6 +1030,7 @@ function subset(
         include_extra = include_extra,
     )
 end
+
 function subset(
     datasets::Vector{TimeFreqEpochData};
     condition_selection::Function = conditions(),
@@ -1033,22 +1063,18 @@ function _default_subset_output_dir(input_dir::String, pattern::String)
     joinpath(input_dir, "subset_$(pattern)")
 end
 
-function _process_subset_file(
-    filepath::String,
-    output_path::String;
-    kwargs...
-)
+function _process_subset_file(filepath::String, output_path::String; kwargs...)
     filename = basename(filepath)
     dat = read_data(filepath)
-    
+
     if isnothing(dat)
         return BatchResult(false, filename, "No data found in file")
     end
-    
+
     try
         subset_data = subset(dat; kwargs...)
         jldsave(output_path; data = subset_data)
-        
+
         # Determine stats for logging
         if subset_data isa Vector && !isempty(subset_data) && hasproperty(subset_data[1], :data)
             n_items = sum(length(cond.data) for cond in subset_data)
@@ -1075,7 +1101,7 @@ function subset(
     input_dir::String = pwd(),
     participant_selection::Function = participants(),
     output_dir::Union{String,Nothing} = nothing,
-    kwargs...
+    kwargs...,
 )
     log_file = "subset.log"
     setup_global_logging(log_file)
@@ -1224,13 +1250,32 @@ times(interval::Tuple{Real,Real}) = interval
 
 
 
-"""Predicate generators for epoch selection."""
+"""
+    epochs()
+    epochs(epoch_numbers...)
+    epochs(predicate::Function)
+
+Predicate generators for epoch selection in subsetting operations.
+
+# Examples
+```julia
+epochs(1:5)                       # Select first 5 epochs by numerical index
+epochs(2, 4, 6)                   # Select epochs 2, 4, and 6
+epochs(df -> nrow(df) > 100)      # Keep epochs where the recording has >100 samples
+epochs(df -> df.is_bad[1] == 0)   # Keep epochs marked as not bad
+```
+"""
 epochs() = x -> fill(true, length(x))  # Default: select all epochs given
 epochs(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> [i in epoch_numbers for i = 1:length(x)]
 epochs(epoch_number::Int) = x -> [i == epoch_number for i = 1:length(x)]
 epochs(epoch_numbers::Int...) = epochs(collect(epoch_numbers))
 epochs(predicate::Function) = x -> map(predicate, x)  # Allow custom function predicates over dataframes
-"""Predicate generators that exclude the specified epochs."""
+
+"""
+    epochs_not(...)
+
+Predicate generators that exclude the specified epochs. Operates inversely to `epochs`.
+"""
 epochs_not(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in epoch_numbers for i = 1:length(x)])
 epochs_not(epoch_number::Int) = x -> .!([i == epoch_number for i = 1:length(x)])
 epochs_not(epoch_numbers::Int...) = epochs_not(collect(epoch_numbers))
