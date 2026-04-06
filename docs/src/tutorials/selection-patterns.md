@@ -146,7 +146,7 @@ EegFun.subset(dat, interval_selection = times(-0.2, 0.0))
 
 ## Epoch Selection
 
-Used in `subset` and `reject_epochs` to filter by epoch index.
+Used in `subset` and `reject_epochs` to filter by epoch index or by epoch content.
 
 | Predicate | Selects |
 | --- | --- |
@@ -162,11 +162,14 @@ EegFun.subset(epochs_data, epoch_selection = epochs(1:50))
 
 ### Custom Epoch Selection
 
-Pass a function that receives a range of epoch indices:
+Pass a function that receives a `DataFrame` (the epoch's data) and returns a `Bool`. The predicate is mapped over all epochs, so each epoch is evaluated independently.
 
 ```julia
-# Select only even-numbered epochs
-EegFun.subset(epochs_data, epoch_selection = epochs(x -> x .% 2 .== 0))
+# Keep only epochs that have more than 100 samples
+EegFun.subset(epochs_data, epoch_selection = epochs(df -> nrow(df) > 100))
+
+# Drop RT outlier trials (requires calculate_trigger_interval! to have added an :interval column)
+EegFun.subset(epochs_data, epoch_selection = epochs(df -> 0.2 < df.interval[1] < 1.0))
 ```
 
 ## Component Selection
