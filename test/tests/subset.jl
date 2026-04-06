@@ -118,7 +118,7 @@ using DataFrames
                 # Suppose we want to only keep epochs that actually have rows
                 result_pred = EegFun.subset(epochs, epoch_selection = EegFun.epochs(df -> nrow(df) > 0))
                 @test length(result_pred.data) == length(epochs.data)
-                
+
                 # Predicate that removes all
                 result_pred_empty = EegFun.subset(epochs, epoch_selection = EegFun.epochs(df -> nrow(df) > 100000))
                 @test length(result_pred_empty.data) == 0
