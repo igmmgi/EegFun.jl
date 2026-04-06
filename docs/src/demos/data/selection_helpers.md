@@ -8,7 +8,7 @@ EegFun uses predicate-generator functions that create selection criteria:
 
 - **`channels()`**: Select channels by name, vector, or regex pattern
 - **`times()`**: Select time windows by start/end in seconds
-- **`epochs()`**: Select epochs by index or range
+- **`epochs()`**: Select epochs by index, range, or custom DataFrame predicate
 - **`samples()`**: Select samples using custom predicates on metadata columns
 
 ### How They Work
@@ -116,6 +116,13 @@ EegFun.all_data(epochs, epoch_selection = EegFun.epochs(1:5))
 
 # Subset epochs from an EpochData object
 EegFun.subset(epochs[1], epoch_selection = EegFun.epochs(1:3))
+
+# Content-based filtering: pass a function that receives a DataFrame and returns a Bool
+# Keep only epochs with more than 100 samples
+EegFun.subset(epochs[1], epoch_selection = EegFun.epochs(df -> nrow(df) > 100))
+
+# Drop RT outlier trials (after adding an :interval column with calculate_trigger_interval!)
+# EegFun.subset(epochs[1], epoch_selection = EegFun.epochs(df -> 0.2 < df.interval[1] < 1.0))
 
 
 #######################################################################
