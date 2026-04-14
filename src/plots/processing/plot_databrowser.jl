@@ -165,6 +165,18 @@ mutable struct ExtraChannelInfo
 end
 
 
+"""Visual state tracker for dynamic Independent Component Analysis (ICA) artifact removal."""
+mutable struct IcaVisualState
+    original::Union{Nothing,InfoIca}
+    current::Union{Nothing,InfoIca}
+    removed_components::Vector{Int}
+    is_active::Bool
+    
+    function IcaVisualState(ica::Union{Nothing,InfoIca})
+        new(ica, isnothing(ica) ? nothing : copy(ica), Int[], !isnothing(ica))
+    end
+end
+
 """Top-level composite state for the interactive data browser."""
 mutable struct DataBrowserState{T<:AbstractDataState}
     view::ViewState
@@ -172,12 +184,10 @@ mutable struct DataBrowserState{T<:AbstractDataState}
     data::T
     selection::SelectionState
     markers::Vector{Marker}
-    ica_original::Union{Nothing,InfoIca}
-    ica_current::Union{Nothing,InfoIca}
+    ica::IcaVisualState
     extra_channel::ExtraChannelInfo
     reference_state::Symbol
     channel_repair_history::Vector{Tuple{Vector{Symbol},Symbol,Matrix{Float64}}}  # (channels, method, original_data) - stack for multiple undos
-    removed_ica_components::Vector{Int}  # Track removed ICA components
     analysis_settings::Observable{AnalysisSettings}  # Observable analysis settings
     plot_kwargs::Dict{Symbol,Any}
 
@@ -197,12 +207,10 @@ mutable struct DataBrowserState{T<:AbstractDataState}
             data,
             selection,
             Marker[],
-            ica_original,
-            isnothing(ica_original) ? nothing : copy(ica_original),
+            IcaVisualState(ica_original),
             extra_channel,
             data.original.analysis_info.reference,
             [],  # empty repair history
-            Int[],  # empty removed ICA components
             Observable(AnalysisSettings()),  # Initialize with empty settings
             plot_kwargs,
         )
@@ -243,7 +251,7 @@ function _update_analysis_settings!(state::DataBrowserState)
         repaired_channels,
         repair_method,
         selected_regions,
-        state.removed_ica_components,
+        state.ica.removed_components,
     )
 end
 
@@ -343,7 +351,7 @@ function _setup_ui_base(fig, ax, state, dat, ica = nothing)
 
     # Create optional menus (ica/extra channels)
     ica_menu = nothing
-    if !isnothing(ica) && !isnothing(state.ica_original)
+    if !isnothing(ica) && state.ica.is_active
         ica_menu = _create_ica_menu(fig, ax, state, ica)
     end
 
@@ -502,6 +510,28 @@ function _create_reference_menu(fig, state, dat)
 end
 
 
+"""Toggle an ICA component for removal and apply subtraction algebra to the dataset."""
+function _toggle_ica_component!(state, component_id::Union{Nothing,Int})
+    if isnothing(component_id)
+        empty!(state.ica.removed_components)
+    else
+        if component_id in state.ica.removed_components
+            filter!(x -> x != component_id, state.ica.removed_components)
+        else
+            push!(state.ica.removed_components, component_id)
+        end
+    end
+
+    # Always reset to original data first
+    state.ica.current = copy(state.ica.original)
+    _reset_to_original!(state.data)
+
+    # Then powerfully apply dynamically updated removed_components vector
+    if !isempty(state.ica.removed_components)
+        _apply_ica_removal!(state.data, state.ica.current, state.ica.removed_components)
+    end
+end
+
 """Create the ICA component removal menu with toggle and undo support."""
 function _create_ica_menu(fig, ax, state, ica)
 
@@ -524,11 +554,11 @@ function _create_ica_menu(fig, ax, state, ica)
     # Function to update the removed components display
     """Refresh the removed-components label text."""
     function update_removed_display()
-        if isempty(state.removed_ica_components)
+        if isempty(state.ica.removed_components)
             removed_components_text[] = ""
         else
             # Sort components for consistent display
-            sorted_components = sort(state.removed_ica_components)
+            sorted_components = sort(state.ica.removed_components)
             components_str = join(string.(sorted_components), ", ")
             removed_components_text[] = components_str
         end
@@ -544,40 +574,13 @@ function _create_ica_menu(fig, ax, state, ica)
             [state.channels.data_lines, state.channels.data_labels, state.channels.original_lines, state.channels.subtracted_lines],
         )
 
-        # Check explicitly for "None" first
+        # Apply structural data edits through modular helper
         if s == "None"
-            # Selected "None" - clear all removals and restore original data
-            # Clear removed ICA components first
-            empty!(state.removed_ica_components)
-
-            # Reset to original ICA state
-            state.ica_current = copy(state.ica_original)
-
-            # Reset data to original (no components removed)
-            _reset_to_original!(state.data)
+            _toggle_ica_component!(state, nothing)
         else
-            # Extract component number from selection string
             component_to_toggle_int = _extract_int(String(s))
-
             if !isnothing(component_to_toggle_int)
-                # Toggle component: if already removed, restore it; if not removed, remove it
-                if component_to_toggle_int in state.removed_ica_components
-                    # Restore component - remove from list
-                    filter!(x -> x != component_to_toggle_int, state.removed_ica_components)
-                else
-                    # Remove component - add to list
-                    push!(state.removed_ica_components, component_to_toggle_int)
-                end
-
-                # Always reset to original data first
-                state.ica_current = copy(state.ica_original)
-                _reset_to_original!(state.data)
-
-                # Then apply all currently removed components
-                if !isempty(state.removed_ica_components)
-                    _apply_ica_removal!(state.data, state.ica_current, state.removed_ica_components)
-                end
-
+                _toggle_ica_component!(state, component_to_toggle_int)
             end
         end
 
@@ -1732,7 +1735,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
             channel_data_with_offset = @lift($(channel_data_obs) .* $(state.view.amplitude_scale) .+ state.view.offset[idx])
 
             # Ghost lines data
-            if !isnothing(state.ica_original)
+            if state.ica.is_active
                 original_data_with_offset = @lift(if $(state.view.show_original_ica)
                     original_raw = get_data(state.data.original, $(state.view.xrange), $col)
                     original_raw .* $(state.view.amplitude_scale) .+ state.view.offset[idx]
@@ -1793,7 +1796,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                 # Normal channels
                 line_color = @lift(abs.($(channel_data_obs)) .>= $(state.view.crit_val))
 
-                if isnothing(state.ica_original)
+                if !state.ica.is_active
                     line_colormap = [state.plot_kwargs[:unselected_channel_color], state.plot_kwargs[:unselected_channel_color], :red]
                 else
                     base_color = state.plot_kwargs[:unselected_channel_color]
