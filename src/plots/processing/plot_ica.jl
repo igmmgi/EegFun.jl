@@ -374,8 +374,9 @@ mutable struct IcaComponentState
         use_global_scale = Observable(false)
         invert_scale = Observable(false)
 
-        # Find index closest to time 0 to center the initial view
-        time_zero_idx = findmin(abs.(dat.data.time))[2]
+        # Find index closest to time 0 to center the initial view 
+        time_zero_idx = searchsortedfirst(dat.data.time, 0.0)
+        time_zero_idx = clamp(time_zero_idx, 1, length(dat.data.time))
         half_window = div(window_size, 2)
         start_idx = max(1, time_zero_idx - half_window)
         end_idx = min(size(component_data, 2), start_idx + window_size - 1)
@@ -1138,9 +1139,9 @@ function _add_boolean_indicators!(state, channel_sym)
                 # Create vertical lines at each true position
                 # Only create lines within the current view range
                 current_range = state.xrange[]
-                visible_times = true_times[true_times .>= state.dat.data.time[first(
+                visible_times = true_times[true_times.>=state.dat.data.time[first(
                     current_range,
-                )].&&true_times .<= state.dat.data.time[last(current_range)]]
+                )].&&true_times.<=state.dat.data.time[last(current_range)]]
 
                 if !isempty(visible_times)
                     lines = vlines!(ax_channel, visible_times, color = :red, linewidth = 1)
@@ -1792,7 +1793,7 @@ function plot_line_noise_components(line_noise_comps::Vector{Int}, metrics_df::D
 
         # Add component numbers as labels
         for (i, comp) in enumerate(line_noise_comps)
-            row = metrics_df[metrics_df.Component .== comp, :]
+            row = metrics_df[metrics_df.Component.==comp, :]
             text!(
                 ax1,
                 comp,
