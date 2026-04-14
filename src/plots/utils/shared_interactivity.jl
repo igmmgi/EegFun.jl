@@ -657,7 +657,7 @@ function _find_closest_channel(mouse_time, mouse_amp, current_epoch, selected_ch
     time_points = current_epoch.time
     isempty(time_points) && return nothing, Inf
 
-    closest_time_idx = argmin(abs.(time_points .- mouse_time))
+    closest_time_idx = find_closest_time_index(time_points , mouse_time)
     min_distance = Inf
     closest_channel = nothing
 

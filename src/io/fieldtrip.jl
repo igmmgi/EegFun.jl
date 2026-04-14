@@ -246,7 +246,7 @@ function _fieldtrip_to_epochdata(ft::Dict, filepath::String, layout::Layout, sam
         # Create trigger vectors with trigger at time=0 (stimulus onset)
         trigger_vec, trigger_info_vec = _create_trigger_columns(n_timepoints)
 
-        time_zero_idx = argmin(abs.(times))
+        time_zero_idx = find_closest_time_index(times, 0.0)
 
         # Set trigger at time=0
         if trial_idx <= length(trial_triggers)

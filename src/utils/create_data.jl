@@ -454,7 +454,7 @@ function generate_signal(
 
     # Find time 0 in the time array (same for all trials and frequencies)
     # signal_times are relative to time 0 (event/stimulus time), not time_window[1]
-    time_zero_idx = argmin(abs.(x_time))
+    time_zero_idx = find_closest_time_index(x_time, 0.0)
     time_zero = x_time[time_zero_idx]
 
     # Add frequency components to all trials

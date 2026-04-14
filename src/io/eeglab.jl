@@ -150,7 +150,7 @@ function _eeglab_to_epochdata(eeg::Dict, filepath::String, preserve_radial_dista
 
         # Add trigger columns (mark trigger only at time=0)
         # Find index closest to time=0
-        zero_idx = argmin(abs.(times))
+        zero_idx = find_closest_time_index(times, 0.0)
 
         # Create trigger vectors (0 everywhere except at t=0)
         trigger_vec = zeros(Int, n_timepoints)
