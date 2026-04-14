@@ -179,8 +179,8 @@ function realign!(dat::EpochData, realignment_triggers::Vector{Int})::Nothing
     # Calculate n_samples to strictly avoid off-by-one errors within this single condition
     all_n_samples = Int[]
     for epoch in dat.data
-        s_idx = argmin(abs.(epoch.time .- common_interval[1]))
-        e_idx = argmin(abs.(epoch.time .- common_interval[2]))
+        s_idx = find_closest_time_index(epoch.time , common_interval[1])
+        e_idx = find_closest_time_index(epoch.time , common_interval[2])
         push!(all_n_samples, e_idx - s_idx + 1)
     end
     n_samples = minimum(all_n_samples)
@@ -264,8 +264,8 @@ function realign!(
         all_n_samples = Int[]
         for dat in dat_vec
             for epoch in dat.data
-                s_idx = argmin(abs.(epoch.time .- global_interval[1]))
-                e_idx = argmin(abs.(epoch.time .- global_interval[2]))
+                s_idx = find_closest_time_index(epoch.time , global_interval[1])
+                e_idx = find_closest_time_index(epoch.time , global_interval[2])
                 push!(all_n_samples, e_idx - s_idx + 1)
             end
         end
@@ -395,8 +395,8 @@ function _crop_epochs_to_window!(dat::EpochData, window::Tuple{Float64,Float64},
     # First pass: find start and end indices for each epoch
     indices = []
     for epoch in dat.data
-        start_idx = argmin(abs.(epoch.time .- start_time))
-        end_idx = argmin(abs.(epoch.time .- end_time))
+        start_idx = find_closest_time_index(epoch.time , start_time)
+        end_idx = find_closest_time_index(epoch.time , end_time)
         push!(indices, (start_idx, end_idx))
     end
 
@@ -580,8 +580,8 @@ function realign(
                 for dat in vec_data
                     _realign_epochs!(dat, realignment_triggers)
                     for epoch in dat.data
-                        s_idx = argmin(abs.(epoch.time .- global_interval[1]))
-                        e_idx = argmin(abs.(epoch.time .- global_interval[2]))
+                        s_idx = find_closest_time_index(epoch.time , global_interval[1])
+                        e_idx = find_closest_time_index(epoch.time , global_interval[2])
                         push!(grand_n_samples, e_idx - s_idx + 1)
                     end
                 end

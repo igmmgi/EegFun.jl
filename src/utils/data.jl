@@ -518,6 +518,21 @@ function to_data_frame(dat::Vector{EpochData})
 end
 
 # === MATHEMATICAL UTILITIES ===
+"""
+    find_closest_time_index(times::AbstractVector{<:Real}, target::Real) -> Int
+
+Find the index in a strictly sorted time vector that is closest to `target`.
+"""
+function find_closest_time_index(times::AbstractVector{<:Real}, target::Real)
+    idx = searchsortedfirst(times, target)
+    if idx == 1
+        return 1
+    elseif idx > length(times)
+        return length(times)
+    else
+        return abs(times[idx] - target) < abs(times[idx-1] - target) ? idx : idx - 1
+    end
+end
 
 """
     _datarange(x::AbstractVector) -> Float64

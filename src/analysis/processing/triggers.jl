@@ -381,7 +381,7 @@ function trigger_info(dat::EpochData)
     for epoch in dat.data
         if hasproperty(epoch, :trigger) && hasproperty(epoch, :time)
             # Find the active trigger right at time = 0
-            zero_idx = argmin(abs.(epoch.time))
+            zero_idx = find_closest_time_index(epoch.time, 0.0)
             t0_trigger = epoch.trigger[zero_idx]
 
             # Extract sequence, ignoring continuous zeros
