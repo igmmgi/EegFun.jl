@@ -82,7 +82,7 @@ function _compute_pooled_covariance(data_arrays::Vector{Array{Float64,3}}, time_
     for cond_data in data_arrays
         n_trials = size(cond_data, 3)
         # Extract [features × trials] at time_idx
-        timepoint_data = cond_data[:, time_idx, :]  # [channels × trials]
+        timepoint_data = @view cond_data[:, time_idx, :]  # [channels × trials]
         push!(all_trials, timepoint_data)
     end
 
@@ -424,7 +424,7 @@ function rsa(
                 for cond_data in data_arrays
                     if trial_idx <= size(cond_data, 3)
                         # Extract [channels] at time t, trial trial_idx
-                        pattern = vec(cond_data[:, t, trial_idx])
+                        pattern = vec(@view cond_data[:, t, trial_idx])
                         push!(condition_patterns, reshape(pattern, length(selected_channels), 1))
                     end
                 end
@@ -887,7 +887,7 @@ function _compute_rdms_from_data(
         condition_patterns = Matrix{Float64}[]
         for cond_data in data_arrays
             # Extract [channels × trials] at time t
-            timepoint_data = cond_data[:, t, :]  # [channels × trials]
+            timepoint_data = @view cond_data[:, t, :]  # [channels × trials]
             # Average across trials: [channels]
             avg_pattern = vec(mean(timepoint_data, dims = 2))
             push!(condition_patterns, reshape(avg_pattern, length(selected_channels), 1))
