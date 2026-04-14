@@ -324,8 +324,8 @@ function tf_stft(
 
         if return_trials # Store each trial separately
             for trial_idx = 1:n_trials
-                power_df[trial_idx][!, channel] = vec(eegpower[:, :, trial_idx])
-                phase_df[trial_idx][!, channel] = vec(angle.(eegconv[:, :, trial_idx]))
+                power_df[trial_idx][!, channel] = vec(@view eegpower[:, :, trial_idx])
+                phase_df[trial_idx][!, channel] = vec(angle.(@view eegconv[:, :, trial_idx]))
             end
         else
             eegpower ./= n_trials

@@ -557,7 +557,7 @@ function create_rdm_from_timeseries(
     # Compute RDM at each time point
     for t = 1:n_timepoints
         # Extract data at time t: [conditions × features]
-        timepoint_data = temporal_data[:, :, t]
+        timepoint_data = @view temporal_data[:, :, t]
 
         # Compute RDM for this time point
         condition_patterns = Matrix{Float64}[]
