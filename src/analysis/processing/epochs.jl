@@ -596,7 +596,7 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
         push!(epochs, epoch_df)
     end
 
-    return EpochData(dat.file, condition, epoch_condition.name, epochs, dat.layout, dat.sample_rate, dat.analysis_info)
+    return EpochData(dat.file, condition, epoch_condition.name, epochs, copy(dat.layout), dat.sample_rate, copy(dat.analysis_info))
 end
 
 function extract_epochs(dat::ContinuousData, epoch_conditions::Vector{EpochCondition}, epoch_interval::Tuple{Real,Real})
