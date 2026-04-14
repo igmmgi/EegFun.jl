@@ -690,7 +690,7 @@ function average_epochs(dat::EpochData)
         # Count epochs
         n_epochs = length(dat.data)
 
-        return ErpData(dat.file, dat.condition, dat.condition_name, erp, dat.layout, dat.sample_rate, dat.analysis_info, n_epochs)
+        return ErpData(dat.file, dat.condition, dat.condition_name, erp, copy(dat.layout), dat.sample_rate, copy(dat.analysis_info), n_epochs)
     catch e
         @minimal_error("Failed to average epochs: $(e)")
     end
@@ -818,7 +818,7 @@ function reject_epochs(dat::EpochData, bad_columns::Vector{Symbol})
     end
 
     # Return new EpochData with only good epochs (preserve struct fields)
-    return EpochData(dat.file, dat.condition, dat.condition_name, good_epochs, dat.layout, dat.sample_rate, dat.analysis_info)
+    return EpochData(dat.file, dat.condition, dat.condition_name, good_epochs, copy(dat.layout), dat.sample_rate, copy(dat.analysis_info))
 end
 
 reject_epochs(dat::EpochData, bad_column::Symbol) = reject_epochs(dat, [bad_column])

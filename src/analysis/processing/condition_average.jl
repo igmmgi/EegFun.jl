@@ -60,9 +60,9 @@ function _create_average_wave(erps::Vector{<:ErpData}, conditions::Vector{Int}, 
         avg_cond,
         avg_condition_name,
         avg_data,
-        erps[1].layout,
+        copy(erps[1].layout),
         erps[1].sample_rate,
-        erps[1].analysis_info,
+        copy(erps[1].analysis_info),
         total_epochs,
     )
 end

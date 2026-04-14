@@ -843,10 +843,10 @@ function _combine_interval_sample(interval::Interval, sample_selection::Function
 end
 
 """Construct a new data object of the same type with subsetted data and layout."""
-_create_subset(dat::ContinuousData, ds, ls) = ContinuousData(dat.file, ds, ls, dat.sample_rate, dat.analysis_info)
+_create_subset(dat::ContinuousData, ds, ls) = ContinuousData(dat.file, ds, ls, dat.sample_rate, copy(dat.analysis_info))
 _create_subset(dat::ErpData, ds, ls) =
-    ErpData(dat.file, dat.condition, dat.condition_name, ds, ls, dat.sample_rate, dat.analysis_info, dat.n_epochs)
-_create_subset(dat::EpochData, ds, ls) = EpochData(dat.file, dat.condition, dat.condition_name, ds, ls, dat.sample_rate, dat.analysis_info)
+    ErpData(dat.file, dat.condition, dat.condition_name, ds, ls, dat.sample_rate, copy(dat.analysis_info), dat.n_epochs)
+_create_subset(dat::EpochData, ds, ls) = EpochData(dat.file, dat.condition, dat.condition_name, ds, ls, dat.sample_rate, copy(dat.analysis_info))
 _create_subset(dat::TimeFreqData, ds_power::DataFrame, ds_phase::DataFrame, ls) = TimeFreqData(
     dat.file,
     dat.condition,
@@ -857,7 +857,7 @@ _create_subset(dat::TimeFreqData, ds_power::DataFrame, ds_phase::DataFrame, ls) 
     dat.sample_rate,
     dat.method,
     dat.baseline,
-    dat.analysis_info,
+    copy(dat.analysis_info),
 )
 _create_subset(dat::TimeFreqEpochData, ds_power::Vector{DataFrame}, ds_phase::Vector{DataFrame}, ls) = TimeFreqEpochData(
     dat.file,
@@ -869,7 +869,7 @@ _create_subset(dat::TimeFreqEpochData, ds_power::Vector{DataFrame}, ds_phase::Ve
     dat.sample_rate,
     dat.method,
     dat.baseline,
-    dat.analysis_info,
+    copy(dat.analysis_info),
 )
 
 # === SUBSET IMPLEMENTATIONS ===

@@ -95,7 +95,7 @@ function _create_jackknife_averages(erps::Vector{ErpData})::Vector{ErpData}
             condition,
             jackknife_cond_name,
             jackknife_data,
-            first_erp.layout,
+            copy(first_erp.layout),
             first_erp.sample_rate,
             copy(first_erp.analysis_info),
             total_epochs,
