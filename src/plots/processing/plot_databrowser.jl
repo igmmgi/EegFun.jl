@@ -16,9 +16,12 @@ const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :selected_channel_color => (:black, "Color for selected channels"),
     :unselected_channel_color => (:darkgrey, "Color for unselected channels"),
 
-    # TODO: could this be done better?
     :channel_offset_scale => (1500, "Scale factor for channel vertical offset"),
     :channel_offset_margin => (0.9, "Margin factor for channel offset range"),
+
+    # Navigation
+    :scroll_step => (200, "Number of samples to scroll per arrow key press"),
+    :zoom_step => (100, "Y-axis zoom increment per arrow key press"),
 
     # Selection styling
     :selection_color => ((:blue, 0.1), "Color and transparency for selection rectangle"),
@@ -168,12 +171,11 @@ end
 """Visual state tracker for dynamic Independent Component Analysis (ICA) artifact removal."""
 mutable struct IcaVisualState
     original::Union{Nothing,InfoIca}
-    current::Union{Nothing,InfoIca}
     removed_components::Vector{Int}
     is_active::Bool
     
     function IcaVisualState(ica::Union{Nothing,InfoIca})
-        new(ica, isnothing(ica) ? nothing : copy(ica), Int[], !isnothing(ica))
+        new(ica, Int[], !isnothing(ica))
     end
 end
 
@@ -478,10 +480,7 @@ function _create_labels_menu(fig, ax, state)
             updating_menu[] = false
         end
 
-        _clear_axes!(
-            ax,
-            [state.channels.data_lines, state.channels.data_labels, state.channels.original_lines, state.channels.subtracted_lines],
-        )
+        _clear_axes!(ax, _all_line_dicts(state))
         _update_channel_offsets!(state)
         _draw(ax, state)
 
@@ -515,8 +514,8 @@ function _toggle_ica_component!(state, component_id::Union{Nothing,Int})
     if isnothing(component_id)
         # Fast path reset
         empty!(state.ica.removed_components)
-        state.ica.current = copy(state.ica.original)
         _reset_to_original!(state.data)
+        _reapply_active_filters!(state)
         return
     end
 
@@ -531,7 +530,24 @@ function _toggle_ica_component!(state, component_id::Union{Nothing,Int})
 
     # Apply O(1) memory linear subtraction incrementally 
     _apply_incremental_ica_update!(state.data, state.ica.original, component_id, is_removing)
-    state.ica.current = copy(state.ica.original)
+end
+
+"""Re-apply all currently removed ICA components to the dataset."""
+function _reapply_all_ica_removals!(state)
+    if state.ica.is_active && !isempty(state.ica.removed_components)
+        for comp in state.ica.removed_components
+            _apply_incremental_ica_update!(state.data, state.ica.original, comp, true)
+        end
+    end
+end
+
+"""Re-apply active filters without resetting data (used after ICA reset to preserve filter state)."""
+function _reapply_active_filters!(state)
+    for (filter_type, freq) in zip([:hp, :lp], [state.data.filter_state.hp_freq[], state.data.filter_state.lp_freq[]])
+        if state.data.filter_state.active[][filter_type]
+            _apply_filter!(state, filter_type, freq)
+        end
+    end
 end
 
 """Apply the isolated artifact of a single ICA component linearly to a Continuous dataset."""
@@ -626,10 +642,7 @@ function _create_ica_menu(fig, ax, state, ica)
 
     on(menu[1].selection) do s
 
-        _clear_axes!(
-            ax,
-            [state.channels.data_lines, state.channels.data_labels, state.channels.original_lines, state.channels.subtracted_lines],
-        )
+        _clear_axes!(ax, _all_line_dicts(state))
 
         # Apply structural data edits through modular helper
         if s == "None"
@@ -697,10 +710,7 @@ function _create_epoch_menu(fig, ax, state)
     # Handle slider input
     on(slider_epoch.value) do epoch_num
         if !updating_from_keyboard[]
-            _clear_axes!(
-                ax,
-                [state.channels.data_lines, state.channels.data_labels, state.channels.original_lines, state.channels.subtracted_lines],
-            )
+            _clear_axes!(ax, _all_line_dicts(state))
             state.data.current_epoch[] = epoch_num
             ax.title = "Epoch $(epoch_num)/$(n_epochs(state.data.original))"
             _update_markers!(ax, state)
@@ -783,14 +793,7 @@ function _channel_repair_menu(state, selected_channels, ax)
         row = ((i - 1) ÷ cols) + 1
         col = ((i - 1) % cols) + 1
 
-        # Check if channel has been repaired
-        is_repaired = false
-        for (repaired_channels, _, _) in state.channel_repair_history
-            if ch in repaired_channels
-                is_repaired = true
-                break
-            end
-        end
+        is_repaired = _is_channel_repaired(state, ch)
 
         # Create a horizontal layout for checkbox and label
         channel_cell = scroll_area[row, col] = GridLayout()
@@ -893,10 +896,7 @@ function _repair_selected_channels!(state, selected_channels, method, ax)
     _update_analysis_settings!(state)
 
     # Clear and redraw the plot
-    _clear_axes!(
-        ax,
-        [state.channels.data_lines, state.channels.data_labels, state.channels.original_lines, state.channels.subtracted_lines],
-    )
+    _clear_axes!(ax, _all_line_dicts(state))
     _draw(ax, state)
 
     total_repairs = length(state.channel_repair_history)
@@ -922,10 +922,7 @@ function _undo_last_repair!(state, ax)
     _notify_data_update(state.data)
 
     # Clear and redraw the plot
-    _clear_axes!(
-        ax,
-        [state.channels.data_lines, state.channels.data_labels, state.channels.original_lines, state.channels.subtracted_lines],
-    )
+    _clear_axes!(ax, _all_line_dicts(state))
     _draw(ax, state)
 
     remaining_repairs = length(state.channel_repair_history)
@@ -1093,17 +1090,19 @@ _handle_left_navigation(ax, state::EpochedDataBrowserState) = _step_epoch_backwa
 _handle_right_navigation(ax, state::ContinuousDataBrowserState) = _xforward!(ax, state)
 _handle_right_navigation(ax, state::EpochedDataBrowserState) = _step_epoch_forward(ax, state)
 
-"""Scroll the x-range backward by 200 samples."""
+"""Scroll the x-range backward."""
 function _xback!(ax, state::ContinuousDataBrowserState)
-    state.view.xrange.val[1] - 200 < 1 && return
-    state.view.xrange[] = state.view.xrange.val .- 200
+    step = state.plot_kwargs[:scroll_step]
+    state.view.xrange.val[1] - step < 1 && return
+    state.view.xrange[] = state.view.xrange.val .- step
     xlims!(ax, state.data.current[].data.time[state.view.xrange.val[1]], state.data.current[].data.time[state.view.xrange.val[end]])
 end
 
-"""Scroll the x-range forward by 200 samples."""
+"""Scroll the x-range forward."""
 function _xforward!(ax, state::ContinuousDataBrowserState)
-    state.view.xrange.val[1] + 200 > nrow(state.data.current[].data) && return
-    state.view.xrange[] = state.view.xrange.val .+ 200
+    step = state.plot_kwargs[:scroll_step]
+    state.view.xrange.val[1] + step > nrow(state.data.current[].data) && return
+    state.view.xrange[] = state.view.xrange.val .+ step
     xlims!(ax, state.data.current[].data.time[state.view.xrange.val[1]], state.data.current[].data.time[state.view.xrange.val[end]])
 end
 
@@ -1113,10 +1112,7 @@ _step_epoch_forward(ax, state::EpochedDataBrowserState) = _step_epoch!(ax, state
 
 """Change the current epoch by `direction` (+1 or -1) and redraw."""
 function _step_epoch!(ax, state::EpochedDataBrowserState, direction::Int)
-    _clear_axes!(
-        ax,
-        [state.channels.data_lines, state.channels.data_labels, state.channels.original_lines, state.channels.subtracted_lines],
-    )
+    _clear_axes!(ax, _all_line_dicts(state))
     current = state.data.current_epoch[]
     total = n_epochs(state.data.original)
     state.data.current_epoch[] = clamp(current + direction, 1, total)
@@ -1132,14 +1128,15 @@ _ymore!(ax, state) = _yzoom!(ax, state, 0.8)
 
 """Scale the y-range or amplitude by `factor`."""
 function _yzoom!(ax, state, factor::Float64)
+    zoom_step = state.plot_kwargs[:zoom_step]
     if state.view.butterfly[]
         # In butterfly mode: adjust y-range
         y_min, y_max = state.view.yrange.val[1], state.view.yrange.val[end]
         if factor > 1.0  # Zoom in (yless)
-            (y_min + 100 >= 0 || y_max - 100 <= 0) && return
-            state.view.yrange[] = (y_min+100):(y_max-100)
+            (y_min + zoom_step >= 0 || y_max - zoom_step <= 0) && return
+            state.view.yrange[] = (y_min+zoom_step):(y_max-zoom_step)
         else  # Zoom out (ymore)
-            state.view.yrange[] = (y_min-100):(y_max+100)
+            state.view.yrange[] = (y_min-zoom_step):(y_max+zoom_step)
         end
         ylims!(ax, state.view.yrange.val[1], state.view.yrange.val[end])
     else # In non-butterfly mode: adjust amplitude scale
@@ -1339,10 +1336,7 @@ function _toggle_channel_visibility!(ax, state, channel_idx)
     state.channels.selected[channel_idx] = !state.channels.selected[channel_idx]
 
     # Immediate redraw for responsive feedback
-    _clear_axes!(
-        ax,
-        [state.channels.data_lines, state.channels.data_labels, state.channels.original_lines, state.channels.subtracted_lines],
-    )
+    _clear_axes!(ax, _all_line_dicts(state))
     _draw(ax, state)
 end
 
@@ -1577,12 +1571,13 @@ function _apply_filter!(state::DataBrowserState{T}, filter_type, freq) where {T<
     state.data.current[] = current_data  # Explicitly update the observable
 end
 
-"""Reset to original, re-reference, then re-apply all active filters."""
+"""Reset to original, re-reference, then re-apply all active filters and ICA removals."""
 function _apply_filters!(state)
     # Reset to original if no filters active
     if !state.data.filter_state.active[].hp && !state.data.filter_state.active[].lp
         _reset_to_original!(state.data)
         _rereference!(state.data, state.reference_state)
+        _reapply_all_ica_removals!(state)
         _notify_data_update(state.data)
         return
     end
@@ -1592,11 +1587,10 @@ function _apply_filters!(state)
     _rereference!(state.data, state.reference_state)
 
     # Apply active filters
-    for (filter_type, freq) in zip([:hp, :lp], [state.data.filter_state.hp_freq[], state.data.filter_state.lp_freq[]])
-        if state.data.filter_state.active[][filter_type]
-            _apply_filter!(state, filter_type, freq)
-        end
-    end
+    _reapply_active_filters!(state)
+
+    # Re-apply ICA removals that were wiped by _reset_to_original!
+    _reapply_all_ica_removals!(state)
 
     _notify_data_update(state.data)
 
@@ -1631,23 +1625,7 @@ function _rereference!(state::AbstractDataState, ref)
     _notify_data_update(state)  # Notify that data has been updated
 end
 
-########################
-# ICA Component Application Helpers
-########################
 
-"""Remove ICA components from continuous data in-place."""
-function _apply_ica_removal!(state::ContinuousDataState, ica::InfoIca, components_to_remove::Vector{Int})
-    remove_ica_components!(state.current[].data, ica, component_selection = components(components_to_remove))
-    return nothing  # Activations are now stored in ica.removed_activations
-end
-
-"""Remove ICA components from each epoch DataFrame in-place."""
-function _apply_ica_removal!(state::EpochedDataState, ica::InfoIca, components_to_remove::Vector{Int})
-    for epoch_df in state.current[].data
-        remove_ica_components!(epoch_df, ica, component_selection = components(components_to_remove))
-    end
-    return nothing  # Activations are now stored in ica.removed_activations
-end
 
 
 ########################
@@ -1688,12 +1666,19 @@ function _add_marker!(markers, ax, data, col; label = nothing, trial = nothing, 
     )
 end
 
+"""Return the four line/label dict collections for clearing."""
+_all_line_dicts(state) = [state.channels.data_lines, state.channels.data_labels, state.channels.original_lines, state.channels.subtracted_lines]
+
+"""Check whether a channel has been repaired in the current session."""
+_is_channel_repaired(state, col) = any(col in chs for (chs, _, _) in state.channel_repair_history)
+
 """Recompute channel vertical offsets for the current visible channels."""
 function _update_channel_offsets!(state)
     nchannels = count(state.channels.visible)
+    margin = state.plot_kwargs[:channel_offset_margin]
     if nchannels > 1 && !state.view.butterfly[]
-        y_max = state.view.yrange[][end] * 0.9
-        y_min = state.view.yrange[][1] * 0.9
+        y_max = state.view.yrange[][end] * margin
+        y_min = state.view.yrange[][1] * margin
         step = (y_min - y_max) / (nchannels - 1)
         visible_indices = findall(state.channels.visible)
         for (i, idx) in enumerate(visible_indices)
@@ -1765,7 +1750,7 @@ function _butterfly_plot!(ax, state)
     state.view.butterfly[] = !state.view.butterfly[]
     _clear_axes!(
         ax,
-        [state.channels.data_lines, state.channels.data_labels, state.channels.original_lines, state.channels.subtracted_lines],
+        _all_line_dicts(state),
     )
     _update_channel_offsets!(state)
     _draw(ax, state)
@@ -1782,7 +1767,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
     time_start_obs = @lift(get_time($(state.data.current), $(state.view.xrange)[1:1])[1])
 
 
-    @sync for (idx, visible) in enumerate(state.channels.visible)
+    for (idx, visible) in enumerate(state.channels.visible)
         col = state.channels.labels[idx]
         if visible
             is_selected = state.channels.selected[idx]
@@ -1794,15 +1779,40 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
             # Ghost lines data
             if state.ica.is_active
                 original_data_with_offset = @lift(if $(state.view.show_original_ica)
-                    original_raw = get_data(state.data.original, $(state.view.xrange), $col)
+                    current_raw = get_data($(state.data.current), $(state.view.xrange), $col)
+                    # Re-add removed ICA artifacts to show pre-ICA (but post-filter) signal
+                    original_raw = copy(current_raw)
+                    for comp in state.ica.removed_components
+                        unmix_vec = state.ica.original.unmixing[comp, :]
+                        mix_weight = state.ica.original.mixing[findfirst(==(col), state.ica.original.layout.data.label), comp]
+                        orig_slice = get_data(state.data.original, $(state.view.xrange), $col)
+                        activation = zeros(Float64, length($(state.view.xrange)))
+                        for (ci, col_sym) in enumerate(state.ica.original.layout.data.label)
+                            norm_ch = (get_data(state.data.original, $(state.view.xrange), col_sym) .- state.ica.original.mean[ci]) ./ state.ica.original.scale
+                            activation .+= unmix_vec[ci] .* norm_ch
+                        end
+                        original_raw .+= mix_weight .* state.ica.original.scale .* activation
+                    end
                     original_raw .* $(state.view.amplitude_scale) .+ state.view.offset[idx]
                 else
                     fill(NaN, length($(state.view.xrange)))
                 end)
 
                 subtracted_data_obs = @lift(if $(state.view.show_subtracted_ica)
-                    original_raw = get_data(state.data.original, $(state.view.xrange), $col)
-                    (original_raw .- $(channel_data_obs)) .* $(state.view.amplitude_scale) .+ state.view.offset[idx]
+                    current_raw = get_data($(state.data.current), $(state.view.xrange), $col)
+                    # Re-add removed ICA artifacts to get pre-ICA signal, then subtract current
+                    original_raw = copy(current_raw)
+                    for comp in state.ica.removed_components
+                        unmix_vec = state.ica.original.unmixing[comp, :]
+                        mix_weight = state.ica.original.mixing[findfirst(==(col), state.ica.original.layout.data.label), comp]
+                        activation = zeros(Float64, length($(state.view.xrange)))
+                        for (ci, col_sym) in enumerate(state.ica.original.layout.data.label)
+                            norm_ch = (get_data(state.data.original, $(state.view.xrange), col_sym) .- state.ica.original.mean[ci]) ./ state.ica.original.scale
+                            activation .+= unmix_vec[ci] .* norm_ch
+                        end
+                        original_raw .+= mix_weight .* state.ica.original.scale .* activation
+                    end
+                    (original_raw .- current_raw) .* $(state.view.amplitude_scale) .+ state.view.offset[idx]
                 else
                     fill(NaN, length($(state.view.xrange)))
                 end)
@@ -1834,14 +1844,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                 )
             end
 
-            # Check if channel is repaired
-            is_repaired = false
-            for (repaired_channels, _, _) in state.channel_repair_history
-                if col in repaired_channels
-                    is_repaired = true
-                    break
-                end
-            end
+            is_repaired = _is_channel_repaired(state, col)
 
             # Line properties (reuse channel_data_obs for efficiency)
             if is_repaired || is_selected
