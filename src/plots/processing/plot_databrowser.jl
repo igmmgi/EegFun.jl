@@ -15,7 +15,6 @@ const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :channel_line_alpha => (1, "Transparency for channel lines"),
     :selected_channel_color => (:black, "Color for selected channels"),
     :unselected_channel_color => (:darkgrey, "Color for unselected channels"),
-
     :channel_offset_scale => (1500, "Scale factor for channel vertical offset"),
     :channel_offset_margin => (0.9, "Margin factor for channel offset range"),
 
@@ -167,13 +166,12 @@ mutable struct ExtraChannelInfo
     ExtraChannelInfo() = new(nothing, false, Dict(), Dict())
 end
 
-
 """Visual state tracker for dynamic Independent Component Analysis (ICA) artifact removal."""
 mutable struct IcaVisualState
     original::Union{Nothing,InfoIca}
     removed_components::Vector{Int}
     is_active::Bool
-    
+
     function IcaVisualState(ica::Union{Nothing,InfoIca})
         new(ica, Int[], !isnothing(ica))
     end
@@ -257,7 +255,6 @@ function _update_analysis_settings!(state::DataBrowserState)
     )
 end
 
-
 """
     _add_selected_regions!(data::EegData, selected_regions::Vector{Tuple{Float64,Float64}})
 
@@ -288,9 +285,6 @@ function _add_selected_regions!(dat::EpochData, selected_regions::Vector{Tuple{F
     end
     return nothing
 end
-
-
-
 
 # Data browser state creation
 """Construct a `DataBrowserState` from data, layout, axis, and optional ICA."""
@@ -338,7 +332,7 @@ _reset_to_original!(state::AbstractDataState) = state.current[] = copy(state.ori
 """Create core UI widgets (toggles, menus, markers) shared by all data types."""
 function _setup_ui_base(fig, ax, state, dat, ica = nothing)
 
-    deregister_interaction!(ax, :rectanglezoom) # need to turn this off!
+    deregister_interaction!(ax, :rectanglezoom)
     _set_axes!(ax, state)
 
     # Mouse and keyboard events
@@ -480,7 +474,7 @@ function _create_labels_menu(fig, ax, state)
             updating_menu[] = false
         end
 
-        _clear_axes!(ax, _all_line_dicts(state))
+        _clear_and_save_limits!(ax, state)
         _update_channel_offsets!(state)
         _draw(ax, state)
 
@@ -488,8 +482,6 @@ function _create_labels_menu(fig, ax, state)
 
     return menu
 end
-
-
 
 """Create the re-reference dropdown menu."""
 function _create_reference_menu(fig, state, dat)
@@ -508,7 +500,6 @@ function _create_reference_menu(fig, state, dat)
     return menu
 end
 
-
 """Toggle an ICA component for removal and apply subtraction algebra to the dataset."""
 function _toggle_ica_component!(state, component_id::Union{Nothing,Int})
     if isnothing(component_id)
@@ -521,14 +512,13 @@ function _toggle_ica_component!(state, component_id::Union{Nothing,Int})
 
     # Determine direction of toggle
     is_removing = !(component_id in state.ica.removed_components)
-    
+
     if is_removing
         push!(state.ica.removed_components, component_id)
     else
         filter!(x -> x != component_id, state.ica.removed_components)
     end
 
-    # Apply O(1) memory linear subtraction incrementally 
     _apply_incremental_ica_update!(state.data, state.ica.original, component_id, is_removing)
 end
 
@@ -554,18 +544,18 @@ end
 function _apply_incremental_ica_update!(state::ContinuousDataState, ica::InfoIca, comp::Int, subtract::Bool)
     dat = state.current[].data
     cols = ica.layout.data.label
-    
+
     unmix_vec = ica.unmixing[comp, :]
     mix_vec = ica.mixing[:, comp]
     n_samples = nrow(dat)
-    
+
     # Calculate 1D activation series for the component
     activation = zeros(Float64, n_samples)
     for (i, col_sym) in enumerate(cols)
         norm_ch = (state.original.data[!, col_sym] .- ica.mean[i]) ./ ica.scale
         activation .+= unmix_vec[i] .* norm_ch
     end
-    
+
     # Dynamically inject the isolated footprint back into current sensor space
     for (i, col_sym) in enumerate(cols)
         artifact_ch = mix_vec[i] .* ica.scale .* activation
@@ -582,18 +572,18 @@ function _apply_incremental_ica_update!(state::EpochedDataState, ica::InfoIca, c
     cols = ica.layout.data.label
     unmix_vec = ica.unmixing[comp, :]
     mix_vec = ica.mixing[:, comp]
-    
-    for ep in 1:length(state.current[].data)
+
+    for ep = 1:length(state.current[].data)
         dat_ep = state.current[].data[ep]
         orig_ep = state.original.data[ep]
         n_samples = nrow(dat_ep)
-        
+
         activation = zeros(Float64, n_samples)
         for (i, col_sym) in enumerate(cols)
             norm_ch = (orig_ep[!, col_sym] .- ica.mean[i]) ./ ica.scale
             activation .+= unmix_vec[i] .* norm_ch
         end
-        
+
         for (i, col_sym) in enumerate(cols)
             artifact_ch = mix_vec[i] .* ica.scale .* activation
             if subtract
@@ -642,7 +632,7 @@ function _create_ica_menu(fig, ax, state, ica)
 
     on(menu[1].selection) do s
 
-        _clear_axes!(ax, _all_line_dicts(state))
+        _clear_and_save_limits!(ax, state)
 
         # Apply structural data edits through modular helper
         if s == "None"
@@ -710,7 +700,7 @@ function _create_epoch_menu(fig, ax, state)
     # Handle slider input
     on(slider_epoch.value) do epoch_num
         if !updating_from_keyboard[]
-            _clear_axes!(ax, _all_line_dicts(state))
+            _clear_and_save_limits!(ax, state)
             state.data.current_epoch[] = epoch_num
             ax.title = "Epoch $(epoch_num)/$(n_epochs(state.data.original))"
             _update_markers!(ax, state)
@@ -896,7 +886,7 @@ function _repair_selected_channels!(state, selected_channels, method, ax)
     _update_analysis_settings!(state)
 
     # Clear and redraw the plot
-    _clear_axes!(ax, _all_line_dicts(state))
+    _clear_and_save_limits!(ax, state)
     _draw(ax, state)
 
     total_repairs = length(state.channel_repair_history)
@@ -922,7 +912,7 @@ function _undo_last_repair!(state, ax)
     _notify_data_update(state.data)
 
     # Clear and redraw the plot
-    _clear_axes!(ax, _all_line_dicts(state))
+    _clear_and_save_limits!(ax, state)
     _draw(ax, state)
 
     remaining_repairs = length(state.channel_repair_history)
@@ -1095,7 +1085,7 @@ function _xback!(ax, state::ContinuousDataBrowserState)
     step = state.plot_kwargs[:scroll_step]
     state.view.xrange.val[1] - step < 1 && return
     state.view.xrange[] = state.view.xrange.val .- step
-    xlims!(ax, state.data.current[].data.time[state.view.xrange.val[1]], state.data.current[].data.time[state.view.xrange.val[end]])
+    _restore_axis_limits!(ax, state)
 end
 
 """Scroll the x-range forward."""
@@ -1103,7 +1093,7 @@ function _xforward!(ax, state::ContinuousDataBrowserState)
     step = state.plot_kwargs[:scroll_step]
     state.view.xrange.val[1] + step > nrow(state.data.current[].data) && return
     state.view.xrange[] = state.view.xrange.val .+ step
-    xlims!(ax, state.data.current[].data.time[state.view.xrange.val[1]], state.data.current[].data.time[state.view.xrange.val[end]])
+    _restore_axis_limits!(ax, state)
 end
 
 """Step one epoch backward / forward."""
@@ -1112,7 +1102,7 @@ _step_epoch_forward(ax, state::EpochedDataBrowserState) = _step_epoch!(ax, state
 
 """Change the current epoch by `direction` (+1 or -1) and redraw."""
 function _step_epoch!(ax, state::EpochedDataBrowserState, direction::Int)
-    _clear_axes!(ax, _all_line_dicts(state))
+    _clear_and_save_limits!(ax, state)
     current = state.data.current_epoch[]
     total = n_epochs(state.data.original)
     state.data.current_epoch[] = clamp(current + direction, 1, total)
@@ -1304,13 +1294,17 @@ function _find_closest_browser_channel(ax, state, mouse_x, mouse_y)
     min_distance = Inf
     closest_channel = nothing
 
+    # Find the data point closest to the clicked x position 
+    time_data = current_data.time
+    x_idx = searchsortedfirst(time_data, mouse_x)
+    if x_idx > 1 && x_idx <= length(time_data) && abs(time_data[x_idx-1] - mouse_x) < abs(time_data[x_idx] - mouse_x)
+        x_idx -= 1
+    end
+    x_idx = clamp(x_idx, 1, length(time_data))
+
     for (idx, visible) in enumerate(state.channels.visible)
         if visible
             col = state.channels.labels[idx]
-
-            # Find the data point closest to the clicked x position
-            time_data = current_data.time
-            x_idx = argmin(abs.(time_data .- mouse_x))
 
             # Calculate the y position of this channel at the clicked x position
             channel_y = current_data[x_idx, col] + state.view.offset[idx]
@@ -1336,7 +1330,7 @@ function _toggle_channel_visibility!(ax, state, channel_idx)
     state.channels.selected[channel_idx] = !state.channels.selected[channel_idx]
 
     # Immediate redraw for responsive feedback
-    _clear_axes!(ax, _all_line_dicts(state))
+    _clear_and_save_limits!(ax, state)
     _draw(ax, state)
 end
 
@@ -1461,9 +1455,9 @@ function _get_selected_regions_bool(state::DataBrowserState)
     bool_vector = falses(total_samples)
 
     for (start_time, end_time) in state.selection.selected_regions[]
-        # Find the closest sample indices
-        start_idx = argmin(abs.(time_data .- start_time))
-        end_idx = argmin(abs.(time_data .- end_time))
+        # Find the bounding sample indices in O(log N) without allocations
+        start_idx = searchsortedfirst(time_data, start_time)
+        end_idx = searchsortedlast(time_data, end_time)
 
         # Ensure indices are within bounds and start <= end
         start_idx = max(1, min(start_idx, total_samples))
@@ -1614,8 +1608,6 @@ function _apply_lp_filter!(state)
     _update_analysis_settings!(state)
 end
 
-
-
 ########################
 # Reference
 ########################
@@ -1624,9 +1616,6 @@ function _rereference!(state::AbstractDataState, ref)
     rereference!(state.current[], ref, channels())
     _notify_data_update(state)  # Notify that data has been updated
 end
-
-
-
 
 ########################
 # Drawing
@@ -1667,7 +1656,8 @@ function _add_marker!(markers, ax, data, col; label = nothing, trial = nothing, 
 end
 
 """Return the four line/label dict collections for clearing."""
-_all_line_dicts(state) = [state.channels.data_lines, state.channels.data_labels, state.channels.original_lines, state.channels.subtracted_lines]
+_all_line_dicts(state) =
+    [state.channels.data_lines, state.channels.data_labels, state.channels.original_lines, state.channels.subtracted_lines]
 
 """Check whether a channel has been repaired in the current session."""
 _is_channel_repaired(state, col) = any(col in chs for (chs, _, _) in state.channel_repair_history)
@@ -1692,7 +1682,7 @@ end
 """Delete all plotted lines/labels from the given dict collections."""
 function _clear_axes!(ax, datas)
     for data in datas
-        for (key, value) in data
+        for value in values(data)
             delete!(ax, value)
         end
         empty!(data)
@@ -1707,7 +1697,7 @@ end
 
 """Bind x-limits to the continuous data time range."""
 function _set_x_limits!(ax, state, data::ContinuousDataState)
-    @lift xlims!(ax, $(data.current).data.time[$(state.view.xrange)[1]], $(data.current).data.time[$(state.view.xrange)[end]])
+    @lift xlims!(ax, data.current[].data.time[$(state.view.xrange)[1]], data.current[].data.time[$(state.view.xrange)[end]])
 end
 
 """Bind x-limits to the epoch time range."""
@@ -1748,10 +1738,7 @@ end
 """Toggle butterfly mode on/off and redraw channels."""
 function _butterfly_plot!(ax, state)
     state.view.butterfly[] = !state.view.butterfly[]
-    _clear_axes!(
-        ax,
-        _all_line_dicts(state),
-    )
+    _clear_and_save_limits!(ax, state)
     _update_channel_offsets!(state)
     _draw(ax, state)
 end
@@ -1766,7 +1753,6 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
     visible_time_obs = @lift(get_time($(state.data.current), $(state.view.xrange)))
     time_start_obs = @lift(get_time($(state.data.current), $(state.view.xrange)[1:1])[1])
 
-
     for (idx, visible) in enumerate(state.channels.visible)
         col = state.channels.labels[idx]
         if visible
@@ -1778,44 +1764,51 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
 
             # Ghost lines data
             if state.ica.is_active
-                original_data_with_offset = @lift(if $(state.view.show_original_ica)
-                    current_raw = get_data($(state.data.current), $(state.view.xrange), $col)
-                    # Re-add removed ICA artifacts to show pre-ICA (but post-filter) signal
-                    original_raw = copy(current_raw)
-                    for comp in state.ica.removed_components
-                        unmix_vec = state.ica.original.unmixing[comp, :]
-                        mix_weight = state.ica.original.mixing[findfirst(==(col), state.ica.original.layout.data.label), comp]
-                        orig_slice = get_data(state.data.original, $(state.view.xrange), $col)
-                        activation = zeros(Float64, length($(state.view.xrange)))
-                        for (ci, col_sym) in enumerate(state.ica.original.layout.data.label)
-                            norm_ch = (get_data(state.data.original, $(state.view.xrange), col_sym) .- state.ica.original.mean[ci]) ./ state.ica.original.scale
-                            activation .+= unmix_vec[ci] .* norm_ch
+                original_data_with_offset = @lift(
+                    if $(state.view.show_original_ica)
+                        current_raw = get_data($(state.data.current), $(state.view.xrange), $col)
+                        # Re-add removed ICA artifacts to show pre-ICA (but post-filter) signal
+                        original_raw = copy(current_raw)
+                        for comp in state.ica.removed_components
+                            unmix_vec = state.ica.original.unmixing[comp, :]
+                            mix_weight = state.ica.original.mixing[findfirst(==(col), state.ica.original.layout.data.label), comp]
+                            activation = zeros(Float64, length($(state.view.xrange)))
+                            for (ci, col_sym) in enumerate(state.ica.original.layout.data.label)
+                                norm_ch =
+                                    (get_data(state.data.original, $(state.view.xrange), col_sym) .- state.ica.original.mean[ci]) ./
+                                    state.ica.original.scale
+                                activation .+= unmix_vec[ci] .* norm_ch
+                            end
+                            original_raw .+= mix_weight .* state.ica.original.scale .* activation
                         end
-                        original_raw .+= mix_weight .* state.ica.original.scale .* activation
+                        original_raw .* $(state.view.amplitude_scale) .+ state.view.offset[idx]
+                    else
+                        fill(NaN, length($(state.view.xrange)))
                     end
-                    original_raw .* $(state.view.amplitude_scale) .+ state.view.offset[idx]
-                else
-                    fill(NaN, length($(state.view.xrange)))
-                end)
+                )
 
-                subtracted_data_obs = @lift(if $(state.view.show_subtracted_ica)
-                    current_raw = get_data($(state.data.current), $(state.view.xrange), $col)
-                    # Re-add removed ICA artifacts to get pre-ICA signal, then subtract current
-                    original_raw = copy(current_raw)
-                    for comp in state.ica.removed_components
-                        unmix_vec = state.ica.original.unmixing[comp, :]
-                        mix_weight = state.ica.original.mixing[findfirst(==(col), state.ica.original.layout.data.label), comp]
-                        activation = zeros(Float64, length($(state.view.xrange)))
-                        for (ci, col_sym) in enumerate(state.ica.original.layout.data.label)
-                            norm_ch = (get_data(state.data.original, $(state.view.xrange), col_sym) .- state.ica.original.mean[ci]) ./ state.ica.original.scale
-                            activation .+= unmix_vec[ci] .* norm_ch
+                subtracted_data_obs = @lift(
+                    if $(state.view.show_subtracted_ica)
+                        current_raw = get_data($(state.data.current), $(state.view.xrange), $col)
+                        # Re-add removed ICA artifacts to get pre-ICA signal, then subtract current
+                        original_raw = copy(current_raw)
+                        for comp in state.ica.removed_components
+                            unmix_vec = state.ica.original.unmixing[comp, :]
+                            mix_weight = state.ica.original.mixing[findfirst(==(col), state.ica.original.layout.data.label), comp]
+                            activation = zeros(Float64, length($(state.view.xrange)))
+                            for (ci, col_sym) in enumerate(state.ica.original.layout.data.label)
+                                norm_ch =
+                                    (get_data(state.data.original, $(state.view.xrange), col_sym) .- state.ica.original.mean[ci]) ./
+                                    state.ica.original.scale
+                                activation .+= unmix_vec[ci] .* norm_ch
+                            end
+                            original_raw .+= mix_weight .* state.ica.original.scale .* activation
                         end
-                        original_raw .+= mix_weight .* state.ica.original.scale .* activation
+                        (original_raw .- current_raw) .* $(state.view.amplitude_scale) .+ state.view.offset[idx]
+                    else
+                        fill(NaN, length($(state.view.xrange)))
                     end
-                    (original_raw .- current_raw) .* $(state.view.amplitude_scale) .+ state.view.offset[idx]
-                else
-                    fill(NaN, length($(state.view.xrange)))
-                end)
+                )
 
                 _create_line!(
                     state.channels.original_lines,
@@ -1890,6 +1883,24 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
         else
             _hide_channel_objects!(state.channels, col)
         end
+    end
+
+    # Restore axis limits after clearing and redrawing (prevents Makie auto-limits from resetting zoom)
+    _restore_axis_limits!(ax, state)
+end
+
+"""Save current axis limits and clear all channel lines/labels."""
+function _clear_and_save_limits!(ax, state)
+    state.plot_kwargs[:_saved_xlims] = ax.xaxis.attributes.limits[]
+    state.plot_kwargs[:_saved_ylims] = ax.yaxis.attributes.limits[]
+    _clear_axes!(ax, _all_line_dicts(state))
+end
+
+"""Restore axis limits from saved values (preserves user zoom across redraws)."""
+function _restore_axis_limits!(ax, state)
+    if haskey(state.plot_kwargs, :_saved_xlims)
+        xlims!(ax, state.plot_kwargs[:_saved_xlims]...)
+        ylims!(ax, state.plot_kwargs[:_saved_ylims]...)
     end
 end
 
