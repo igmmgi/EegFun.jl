@@ -1,6 +1,6 @@
 # TODO: colorbar_position seems a bit awkward 
-# Currently I have (hacky?), settings with :right, :below, :same for colorbar_position
-# or offset positions (e.g., 1,2). Actually, the whole colorbar stuff feels a bit off!
+# Currently I have settings with :right, :below, :same for colorbar_position
+# or offset positions (e.g., 1, 2). Actually, the whole colorbar stuff feels a bit off!
 # MUST BE BETTER WAY TO HANDLE THIS!!!
 
 # Single shared kwargs for all topography plots (both ICA and standard)
@@ -69,8 +69,6 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :use_global_scale => (false, "Do multiple ICA topoplots share the same color scale based on min/max across all components?"),
     :component_selection => (components(), "Function that returns boolean vector for component filtering"),
 )
-
-
 
 
 """
@@ -988,11 +986,7 @@ function _add_navigation_controls!(fig, state)
             comps = _parse_string_to_ints(text_value, size(state.component_data, 1))
             if !isempty(comps)
                 @info "Creating new plot with components: $comps"
-                current_channel = state.channel_data[]
-                show_channel = state.show_channel[]
-                use_global = state.use_global_scale[]
-                invert = state.invert_scale[]
-                new_fig = plot_ica_component_activation(state.dat, state.ica, component_selection = components(comps))
+                plot_ica_component_activation(state.dat, state.ica, component_selection = components(comps))
             end
         end
     end
