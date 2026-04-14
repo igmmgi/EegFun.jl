@@ -201,7 +201,6 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
 
     # Get colorbar settings to adjust grid if needed
     colorbar_plot = pop!(plot_kwargs, :colorbar_plot)
-    colorbar_position = get(plot_kwargs, :colorbar_position, (1, 2))
 
     # Create figure
     fig = Figure()
@@ -992,8 +991,6 @@ function _add_navigation_controls!(fig, state)
     end
 end
 
-
-
 """Add a position slider for x-axis scrolling."""
 function _add_navigation_sliders!(fig, state)
     # Create new row for position slider below the navigation buttons
@@ -1464,16 +1461,7 @@ function _get_component_index(state, i::Int)
 end
 
 
-
-
-
-
-
 ################################################################################
-
-
-
-
 # Default parameters for ICA quality assessment plots with descriptions
 const PLOT_ICA_QUALITY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
