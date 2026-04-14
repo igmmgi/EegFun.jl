@@ -55,7 +55,7 @@ function _create_difference_wave(erp1::ErpData, erp2::ErpData, cond1::Int, cond2
     min_epochs = min(erp1.n_epochs, erp2.n_epochs)
     diff_condition_name = "difference_$(cond1)_$(cond2)"
 
-    return ErpData(erp1.file, diff_cond, diff_condition_name, diff_data, erp1.layout, erp1.sample_rate, erp1.analysis_info, min_epochs)
+    return ErpData(erp1.file, diff_cond, diff_condition_name, diff_data, copy(erp1.layout), erp1.sample_rate, copy(erp1.analysis_info), min_epochs)
 end
 
 """

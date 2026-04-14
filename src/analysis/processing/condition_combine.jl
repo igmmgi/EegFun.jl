@@ -102,15 +102,14 @@ function condition_combine(data::Vector{<:EpochData}, condition_groups::Vector{V
         # Create combined condition name
         combined_condition_name = join([cond.condition_name for cond in condition_data], "_")
 
-        # Create new EpochData
         combined_epochs = EpochData(
             condition_data[1].file,
             group_idx,
             combined_condition_name,
             combined_data_frames,
-            condition_data[1].layout,
+            copy(condition_data[1].layout),
             condition_data[1].sample_rate,
-            condition_data[1].analysis_info,
+            copy(condition_data[1].analysis_info),
         )
 
         push!(combined_data, combined_epochs)
