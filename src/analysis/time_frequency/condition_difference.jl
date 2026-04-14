@@ -39,11 +39,11 @@ function _create_tf_difference_wave(tf1::TimeFreqData, tf2::TimeFreqData, cond1:
         diff_condition_name,
         diff_power,
         diff_phase,
-        tf1.layout,
+        copy(tf1.layout),
         tf1.sample_rate,
         tf1.method,
         tf1.baseline,
-        tf1.analysis_info,
+        copy(tf1.analysis_info),
     )
 end
 

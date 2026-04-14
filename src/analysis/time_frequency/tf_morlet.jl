@@ -217,11 +217,11 @@ function tf_morlet(
         dat.condition_name,
         power_df,
         phase_df,
-        dat.layout,
+        copy(dat.layout),
         dat.sample_rate,
         :wavelet,
         nothing,  # baseline
-        dat.analysis_info,
+        copy(dat.analysis_info),
     )
 end
 

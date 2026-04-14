@@ -43,11 +43,11 @@ function _create_tf_average_wave(tfs::Vector{TimeFreqData}, conditions::Vector{I
         avg_condition_name,
         avg_power,
         avg_phase,
-        tfs[1].layout,
+        copy(tfs[1].layout),
         tfs[1].sample_rate,
         tfs[1].method,
         tfs[1].baseline,
-        tfs[1].analysis_info,
+        copy(tfs[1].analysis_info),
     )
 end
 

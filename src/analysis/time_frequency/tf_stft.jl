@@ -343,11 +343,11 @@ function tf_stft(
         dat.condition_name,
         power_df,
         phase_df,
-        dat.layout,
+        copy(dat.layout),
         dat.sample_rate,
         is_fixed ? :taper_fixed : :taper_adaptive,
         nothing,  # baseline
-        dat.analysis_info,
+        copy(dat.analysis_info),
     )
 end
 
