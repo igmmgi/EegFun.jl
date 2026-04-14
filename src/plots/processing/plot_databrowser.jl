@@ -513,22 +513,79 @@ end
 """Toggle an ICA component for removal and apply subtraction algebra to the dataset."""
 function _toggle_ica_component!(state, component_id::Union{Nothing,Int})
     if isnothing(component_id)
+        # Fast path reset
         empty!(state.ica.removed_components)
-    else
-        if component_id in state.ica.removed_components
-            filter!(x -> x != component_id, state.ica.removed_components)
-        else
-            push!(state.ica.removed_components, component_id)
-        end
+        state.ica.current = copy(state.ica.original)
+        _reset_to_original!(state.data)
+        return
     end
 
-    # Always reset to original data first
-    state.ica.current = copy(state.ica.original)
-    _reset_to_original!(state.data)
+    # Determine direction of toggle
+    is_removing = !(component_id in state.ica.removed_components)
+    
+    if is_removing
+        push!(state.ica.removed_components, component_id)
+    else
+        filter!(x -> x != component_id, state.ica.removed_components)
+    end
 
-    # Then powerfully apply dynamically updated removed_components vector
-    if !isempty(state.ica.removed_components)
-        _apply_ica_removal!(state.data, state.ica.current, state.ica.removed_components)
+    # Apply O(1) memory linear subtraction incrementally 
+    _apply_incremental_ica_update!(state.data, state.ica.original, component_id, is_removing)
+    state.ica.current = copy(state.ica.original)
+end
+
+"""Apply the isolated artifact of a single ICA component linearly to a Continuous dataset."""
+function _apply_incremental_ica_update!(state::ContinuousDataState, ica::InfoIca, comp::Int, subtract::Bool)
+    dat = state.current[].data
+    cols = ica.layout.data.label
+    
+    unmix_vec = ica.unmixing[comp, :]
+    mix_vec = ica.mixing[:, comp]
+    n_samples = nrow(dat)
+    
+    # Calculate 1D activation series for the component
+    activation = zeros(Float64, n_samples)
+    for (i, col_sym) in enumerate(cols)
+        norm_ch = (state.original.data[!, col_sym] .- ica.mean[i]) ./ ica.scale
+        activation .+= unmix_vec[i] .* norm_ch
+    end
+    
+    # Dynamically inject the isolated footprint back into current sensor space
+    for (i, col_sym) in enumerate(cols)
+        artifact_ch = mix_vec[i] .* ica.scale .* activation
+        if subtract
+            dat[!, col_sym] .-= artifact_ch
+        else
+            dat[!, col_sym] .+= artifact_ch
+        end
+    end
+end
+
+"""Apply the isolated artifact of a single ICA component linearly to an Epoched dataset."""
+function _apply_incremental_ica_update!(state::EpochedDataState, ica::InfoIca, comp::Int, subtract::Bool)
+    cols = ica.layout.data.label
+    unmix_vec = ica.unmixing[comp, :]
+    mix_vec = ica.mixing[:, comp]
+    
+    for ep in 1:length(state.current[].data)
+        dat_ep = state.current[].data[ep]
+        orig_ep = state.original.data[ep]
+        n_samples = nrow(dat_ep)
+        
+        activation = zeros(Float64, n_samples)
+        for (i, col_sym) in enumerate(cols)
+            norm_ch = (orig_ep[!, col_sym] .- ica.mean[i]) ./ ica.scale
+            activation .+= unmix_vec[i] .* norm_ch
+        end
+        
+        for (i, col_sym) in enumerate(cols)
+            artifact_ch = mix_vec[i] .* ica.scale .* activation
+            if subtract
+                dat_ep[!, col_sym] .-= artifact_ch
+            else
+                dat_ep[!, col_sym] .+= artifact_ch
+            end
+        end
     end
 end
 
