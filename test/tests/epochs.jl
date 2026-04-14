@@ -135,9 +135,8 @@ using Random
         ec1 = EegFun.EpochCondition(name = "seq123", trigger_sequences = [[1, 2, 3]], reference_index = 2)
         ep1 = EegFun.extract_epochs(dat, 1, ec1, win)
         @test EegFun.n_epochs(ep1) == 3  # three [1,2,3] sequences present
-        # Integrity preserved
         @test ep1.sample_rate == dat.sample_rate
-        @test ep1.layout === dat.layout
+        @test ep1.layout !== dat.layout
         @test all(abs.(ep1.data[1].time) .<= maximum(abs.(ep1.data[1].time)))
         @test 0.0 in ep1.data[1].time
         # condition and condition_name are now in struct, not DataFrame
@@ -342,7 +341,7 @@ using Random
         # Check that some samples near each trigger are marked
         for idx in trigger_1_indices
             # Look for marked samples in a small neighborhood 
-            neighborhood = max(1, idx-5):min(length(dat.data.epoch_interval), idx+5)
+            neighborhood = max(1, idx - 5):min(length(dat.data.epoch_interval), idx + 5)
             @test any(dat.data.epoch_interval[neighborhood])
         end
 
