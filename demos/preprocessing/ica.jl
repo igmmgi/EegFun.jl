@@ -2,12 +2,11 @@
 # Shows ICA decomposition on continuous and epoched data, component identification
 # (EOG, ECG, line noise, channel noise), component removal/restoration, and visualization.
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
-# read raw data
+using EegFun
 dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"));
 
 # read and prepare layout file
@@ -40,6 +39,9 @@ EegFun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
 # ICA on continuous data excluding extreme samples
 ica_result_infomax = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_200))
+
+# Databrowser (here we can turn on/off component removal's)
+EegFun.plot_databrowser(dat, ica_result_infomax)
 
 
 # ICA type plots

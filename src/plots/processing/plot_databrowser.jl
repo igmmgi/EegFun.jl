@@ -88,13 +88,24 @@ mutable struct ViewState
     crit_val::Observable{Float64}
     butterfly::Observable{Bool}
     amplitude_scale::Observable{Float64}
+    show_original_ica::Observable{Bool}
+    show_subtracted_ica::Observable{Bool}
     function ViewState(n_channels::Int, n_samples::Int, plot_kwargs)
         offset_scale = plot_kwargs[:channel_offset_scale]
         offset_margin = plot_kwargs[:channel_offset_margin]
         offset =
             n_channels > 1 ? LinRange(offset_scale * offset_margin, -offset_scale * offset_margin, n_channels + 2)[2:(end-1)] :
             zeros(n_channels)
-        new(Observable(1:n_samples), Observable(-1500:1500), offset, Observable(0.0), Observable(false), Observable(1.0))
+        new(
+            Observable(1:n_samples),
+            Observable(-1500:1500),
+            offset,
+            Observable(0.0),
+            Observable(false),
+            Observable(1.0),
+            Observable(false),
+            Observable(false),
+        )
     end
 end
 
@@ -106,6 +117,8 @@ mutable struct ChannelState
     individually_selected::Vector{Symbol}  # Track individually selected electrodes
     data_labels::Dict{Symbol,Makie.Text}
     data_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}
+    original_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}
+    subtracted_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}
     function ChannelState(channel_labels::Vector{Symbol})
         new(
             channel_labels,
@@ -113,6 +126,8 @@ mutable struct ChannelState
             fill(false, length(channel_labels)),
             Symbol[],  # Start with empty list
             Dict{Symbol,Makie.Text}(),
+            Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}(),
+            Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}(),
             Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}(),
         )
     end
@@ -455,7 +470,10 @@ function _create_labels_menu(fig, ax, state)
             updating_menu[] = false
         end
 
-        _clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+        _clear_axes!(
+            ax,
+            [state.channels.data_lines, state.channels.data_labels, state.channels.original_lines, state.channels.subtracted_lines],
+        )
         _update_channel_offsets!(state)
         _draw(ax, state)
 
@@ -521,7 +539,10 @@ function _create_ica_menu(fig, ax, state, ica)
 
     on(menu[1].selection) do s
 
-        _clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+        _clear_axes!(
+            ax,
+            [state.channels.data_lines, state.channels.data_labels, state.channels.original_lines, state.channels.subtracted_lines],
+        )
 
         # Check explicitly for "None" first
         if s == "None"
@@ -568,8 +589,34 @@ function _create_ica_menu(fig, ax, state, ica)
         _update_analysis_settings!(state)
     end
 
-    # Return menu and removed components label in a vertical stack
-    return vcat(menu, hcat(removed_label, Label(fig, "", fontsize = 16, tellwidth = false)))
+    if !haskey(state.plot_kwargs, :show_cleaned_ica)
+        state.plot_kwargs[:show_cleaned_ica] = Observable(false)
+        state.view.show_original_ica[] = true
+    end
+
+    # Create checkboxes for ghost traces
+    show_cleaned_cb = Checkbox(fig, checked = state.plot_kwargs[:show_cleaned_ica][])
+    show_orig_cb = Checkbox(fig, checked = state.view.show_original_ica[])
+    show_sub_cb = Checkbox(fig, checked = state.view.show_subtracted_ica[])
+
+    on(show_cleaned_cb.checked) do active
+        state.plot_kwargs[:show_cleaned_ica][] = active
+    end
+
+    on(show_orig_cb.checked) do active
+        state.view.show_original_ica[] = active
+    end
+
+    on(show_sub_cb.checked) do active
+        state.view.show_subtracted_ica[] = active
+    end
+
+    cb_row1 = hcat(show_orig_cb, Label(fig, "Data", fontsize = 16, halign = :left, tellwidth = false))
+    cb_row2 = hcat(show_cleaned_cb, Label(fig, "Data - ICA", fontsize = 16, halign = :left, tellwidth = false))
+    cb_row3 = hcat(show_sub_cb, Label(fig, "ICA Activation", fontsize = 16, halign = :left, tellwidth = false))
+
+    # Return menu, checkboxes, and removed components label in a vertical stack
+    return vcat(menu, cb_row1, cb_row2, cb_row3, hcat(removed_label, Label(fig, "", fontsize = 16, tellwidth = false)))
 
 end
 
@@ -590,7 +637,10 @@ function _create_epoch_menu(fig, ax, state)
     # Handle slider input
     on(slider_epoch.value) do epoch_num
         if !updating_from_keyboard[]
-            _clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+            _clear_axes!(
+                ax,
+                [state.channels.data_lines, state.channels.data_labels, state.channels.original_lines, state.channels.subtracted_lines],
+            )
             state.data.current_epoch[] = epoch_num
             ax.title = "Epoch $(epoch_num)/$(n_epochs(state.data.original))"
             _update_markers!(ax, state)
@@ -783,7 +833,10 @@ function _repair_selected_channels!(state, selected_channels, method, ax)
     _update_analysis_settings!(state)
 
     # Clear and redraw the plot
-    _clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+    _clear_axes!(
+        ax,
+        [state.channels.data_lines, state.channels.data_labels, state.channels.original_lines, state.channels.subtracted_lines],
+    )
     _draw(ax, state)
 
     total_repairs = length(state.channel_repair_history)
@@ -809,7 +862,10 @@ function _undo_last_repair!(state, ax)
     _notify_data_update(state.data)
 
     # Clear and redraw the plot
-    _clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+    _clear_axes!(
+        ax,
+        [state.channels.data_lines, state.channels.data_labels, state.channels.original_lines, state.channels.subtracted_lines],
+    )
     _draw(ax, state)
 
     remaining_repairs = length(state.channel_repair_history)
@@ -876,14 +932,14 @@ function _create_sliders(fig, state::ContinuousDataBrowserState, dat)
     slider_x = Slider(fig[2, 1], range = 1:50:nrow(state.data.current[].data), startvalue = 1, snap = true)
 
     on(slider_range.value) do x
-        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x+slider_x.value.val)
+        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x + slider_x.value.val)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
     end
 
     on(slider_x.value) do x
-        new_range = x:min(nrow(state.data.current[].data), (x+slider_range.value.val)-1)
+        new_range = x:min(nrow(state.data.current[].data), (x + slider_range.value.val) - 1)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
@@ -997,7 +1053,10 @@ _step_epoch_forward(ax, state::EpochedDataBrowserState) = _step_epoch!(ax, state
 
 """Change the current epoch by `direction` (+1 or -1) and redraw."""
 function _step_epoch!(ax, state::EpochedDataBrowserState, direction::Int)
-    _clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+    _clear_axes!(
+        ax,
+        [state.channels.data_lines, state.channels.data_labels, state.channels.original_lines, state.channels.subtracted_lines],
+    )
     current = state.data.current_epoch[]
     total = n_epochs(state.data.original)
     state.data.current_epoch[] = clamp(current + direction, 1, total)
@@ -1220,7 +1279,10 @@ function _toggle_channel_visibility!(ax, state, channel_idx)
     state.channels.selected[channel_idx] = !state.channels.selected[channel_idx]
 
     # Immediate redraw for responsive feedback
-    _clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+    _clear_axes!(
+        ax,
+        [state.channels.data_lines, state.channels.data_labels, state.channels.original_lines, state.channels.subtracted_lines],
+    )
     _draw(ax, state)
 end
 
@@ -1641,7 +1703,10 @@ end
 """Toggle butterfly mode on/off and redraw channels."""
 function _butterfly_plot!(ax, state)
     state.view.butterfly[] = !state.view.butterfly[]
-    _clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+    _clear_axes!(
+        ax,
+        [state.channels.data_lines, state.channels.data_labels, state.channels.original_lines, state.channels.subtracted_lines],
+    )
     _update_channel_offsets!(state)
     _draw(ax, state)
 end
@@ -1656,6 +1721,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
     visible_time_obs = @lift(get_time($(state.data.current), $(state.view.xrange)))
     time_start_obs = @lift(get_time($(state.data.current), $(state.view.xrange)[1:1])[1])
 
+
     @sync for (idx, visible) in enumerate(state.channels.visible)
         col = state.channels.labels[idx]
         if visible
@@ -1664,6 +1730,49 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
             # Channel data (compute once)
             channel_data_obs = @lift(get_data($(state.data.current), $(state.view.xrange), $col))
             channel_data_with_offset = @lift($(channel_data_obs) .* $(state.view.amplitude_scale) .+ state.view.offset[idx])
+
+            # Ghost lines data
+            if !isnothing(state.ica_original)
+                original_data_with_offset = @lift(if $(state.view.show_original_ica)
+                    original_raw = get_data(state.data.original, $(state.view.xrange), $col)
+                    original_raw .* $(state.view.amplitude_scale) .+ state.view.offset[idx]
+                else
+                    fill(NaN, length($(state.view.xrange)))
+                end)
+
+                subtracted_data_obs = @lift(if $(state.view.show_subtracted_ica)
+                    original_raw = get_data(state.data.original, $(state.view.xrange), $col)
+                    (original_raw .- $(channel_data_obs)) .* $(state.view.amplitude_scale) .+ state.view.offset[idx]
+                else
+                    fill(NaN, length($(state.view.xrange)))
+                end)
+
+                _create_line!(
+                    state.channels.original_lines,
+                    col,
+                    ax,
+                    visible_time_obs,
+                    original_data_with_offset,
+                    :grey,
+                    [:grey],
+                    1, # linewidth
+                    0.5, # clear alpha
+                    visible = state.view.show_original_ica,
+                )
+
+                _create_line!(
+                    state.channels.subtracted_lines,
+                    col,
+                    ax,
+                    visible_time_obs,
+                    subtracted_data_obs,
+                    :red,
+                    [:red],
+                    1, # linewidth
+                    0.5, # clear alpha
+                    visible = state.view.show_subtracted_ica,
+                )
+            end
 
             # Check if channel is repaired
             is_repaired = false
@@ -1683,7 +1792,14 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
             else
                 # Normal channels
                 line_color = @lift(abs.($(channel_data_obs)) .>= $(state.view.crit_val))
-                line_colormap = [state.plot_kwargs[:unselected_channel_color], state.plot_kwargs[:unselected_channel_color], :red]
+
+                if isnothing(state.ica_original)
+                    line_colormap = [state.plot_kwargs[:unselected_channel_color], state.plot_kwargs[:unselected_channel_color], :red]
+                else
+                    base_color = state.plot_kwargs[:unselected_channel_color]
+                    line_colormap = @lift($(state.view.show_original_ica) ? [:green, :green, :red] : [base_color, base_color, :red])
+                end
+
                 line_width = state.plot_kwargs[:channel_line_width]
             end
 
@@ -1697,7 +1813,8 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                 line_color,
                 line_colormap,
                 line_width,
-                state.plot_kwargs[:channel_line_alpha],
+                state.plot_kwargs[:channel_line_alpha];
+                visible = get(state.plot_kwargs, :show_cleaned_ica, Observable(true)),
             )
 
             # Handle labels
@@ -1731,8 +1848,8 @@ function _get_data_accessors(state::EpochedDataState)
 end
 
 """Plot a channel line on the axis and store it."""
-function _create_line!(data_lines, col, ax, x_obs, y_obs, color, colormap, linewidth, alpha)
-    data_lines[col] = lines!(ax, x_obs, y_obs, color = color, colormap = colormap, linewidth = linewidth, alpha = alpha)
+function _create_line!(data_lines, col, ax, x_obs, y_obs, color, colormap, linewidth, alpha; visible = true)
+    data_lines[col] = lines!(ax, x_obs, y_obs, color = color, colormap = colormap, linewidth = linewidth, alpha = alpha, visible = visible)
 end
 
 """Add a channel-name text label on the axis."""
@@ -1750,6 +1867,8 @@ end
 function _hide_channel_objects!(channels, col)
     haskey(channels.data_lines, col) && hide!(channels.data_lines[col])
     haskey(channels.data_labels, col) && hide!(channels.data_labels[col])
+    haskey(channels.original_lines, col) && hide!(channels.original_lines[col])
+    haskey(channels.subtracted_lines, col) && hide!(channels.subtracted_lines[col])
 end
 
 # Single function with data access abstraction
