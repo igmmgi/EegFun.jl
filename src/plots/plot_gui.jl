@@ -310,8 +310,15 @@ function plot_gui()
 
     # Helper function for numeric input validation with visual feedback
     function setup_numeric_callback(input, bc_obs::Observable, field_name::String, update_fn::Function; range_check = nothing)
+        last_validated = Ref{String}("__uninit__")
+
         function validate(value)
             stripped = strip(value)
+            if stripped == last_validated[]
+                return
+            end
+            last_validated[] = stripped
+
             if isempty(stripped)
                 bc_obs[] = :white
                 update_fn(nothing)
@@ -391,52 +398,68 @@ function plot_gui()
     # Textbox drives gui_state.filename[] for direct typing.
     # Guard: if the textbox value is just the basename of the already-stored full path
     # (set there by Browse), don't replace the full path with the basename.
-    on(file_pattern_input.stored_string) do value
+    last_validated_file = Ref{String}("__uninit__")
+
+    function validate_file_input(value)
         val = strip(value)
+        if val == last_validated_file[]
+            return
+        end
+        last_validated_file[] = val
+
         if !isempty(val) && val != basename(gui_state.filename[])
             gui_state.filename[] = val
         end
     end
 
+    on(file_pattern_input.stored_string) do value
+        validate_file_input(value)
+    end
+
     on(file_pattern_input.focused) do is_focused
         if !is_focused
-            val = strip(file_pattern_input.displayed_string[])
-            if !isempty(val) && val != basename(gui_state.filename[])
-                gui_state.filename[] = val
-            end
+            validate_file_input(file_pattern_input.displayed_string[])
         end
     end
+
+    updating_submenu = Ref{Bool}(false)
 
     on(plottype_dropdown.selection) do selection
         if selection == "Select" || selection == "─────────────────"
             return
-        elseif selection == "ICA >"
-            submenu_dropdown.options = ["Select", "Components", "Activation"]
-            gui_state.submenu_active[] = true
-            gui_state.submenu_type[] = "ica"
-            component_bc[] = :white
-        elseif selection == "ERP Analysis >"
-            submenu_dropdown.options = ["Select", "ERP GUI"]
-            gui_state.submenu_active[] = true
-            gui_state.submenu_type[] = "erp_analysis"
-            component_bc[] = :lightgrey
-        elseif selection == "Diagnostic Plots >"
-            submenu_dropdown.options = ["Select", "Channel Summary", "Layout View"]
-            gui_state.submenu_active[] = true
-            gui_state.submenu_type[] = "diagnostic"
-            component_bc[] = :lightgrey
-        else
-            # Direct plot type (Data Browser, Epochs, ERP, etc.)
-            gui_state.plottype[] = selection
-            gui_state.submenu_active[] = false
-            component_bc[] = :lightgrey
+        end
+
+        updating_submenu[] = true
+        try
+            if selection == "ICA >"
+                submenu_dropdown.options = ["Select", "Components", "Activation"]
+                gui_state.submenu_active[] = true
+                gui_state.submenu_type[] = "ica"
+                component_bc[] = :white
+            elseif selection == "ERP Analysis >"
+                submenu_dropdown.options = ["Select", "ERP GUI"]
+                gui_state.submenu_active[] = true
+                gui_state.submenu_type[] = "erp_analysis"
+                component_bc[] = :lightgrey
+            elseif selection == "Diagnostic Plots >"
+                submenu_dropdown.options = ["Select", "Channel Summary", "Layout View"]
+                gui_state.submenu_active[] = true
+                gui_state.submenu_type[] = "diagnostic"
+                component_bc[] = :lightgrey
+            else
+                # Direct plot type (Data Browser, Epochs, ERP, etc.)
+                gui_state.plottype[] = selection
+                gui_state.submenu_active[] = false
+                component_bc[] = :lightgrey
+            end
+        finally
+            updating_submenu[] = false
         end
     end
 
     # Submenu dropdown callback — missing until now
     on(submenu_dropdown.selection) do selection
-        isnothing(selection) && return
-        if selection == "Select"
+        if updating_submenu[] || isnothing(selection) || selection == "Select"
             return
         end
         gui_state.plottype[] = selection
@@ -507,8 +530,15 @@ function plot_gui()
 
     # Multi-number validation helper (accepts space/comma-separated integers)
     function setup_multi_int_callback(input, bc_obs::Observable, field_name::String, state_obs::Observable)
+        last_validated = Ref{String}("__uninit__")
+
         function validate(value)
             stripped = strip(value)
+            if stripped == last_validated[]
+                return
+            end
+            last_validated[] = stripped
+
             if isempty(stripped)
                 bc_obs[] = :white
                 state_obs[] = ""
@@ -550,12 +580,24 @@ function plot_gui()
     setup_multi_int_callback(epoch_input, epoch_bc, "Epoch", gui_state.epoch)
 
     # Component input callback (used by ICA bridges via gui_state.ica_components)
-    on(component_input.stored_string) do value
-        gui_state.ica_components[] = strip(value)
+    last_validated_component = Ref{String}("__uninit__")
+
+    function validate_component_input(value)
+        val = strip(value)
+        if val == last_validated_component[]
+            return
+        end
+        last_validated_component[] = val
+        gui_state.ica_components[] = val
     end
+
+    on(component_input.stored_string) do value
+        validate_component_input(value)
+    end
+
     on(component_input.focused) do is_focused
         if !is_focused
-            gui_state.ica_components[] = strip(component_input.displayed_string[])
+            validate_component_input(component_input.displayed_string[])
         end
     end
 
