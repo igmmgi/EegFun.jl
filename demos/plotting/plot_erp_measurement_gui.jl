@@ -18,7 +18,7 @@ dat = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps_good.j
 
 # Select some specific initial settings
 EegFun.plot_erp_measurement_gui(
-    dat[1],
+    dat,
     channel = :Cz,
     analysis_type = "mean_amplitude",
     analysis_interval = (0.3, 0.5),
