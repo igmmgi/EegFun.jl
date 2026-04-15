@@ -554,5 +554,14 @@ function freq_spectrum(
 
     # Return SpectrumData type (dispatch handles condition info)
     condition_num, condition_name = condition_info(dat)
-    return SpectrumData(dat.file, condition_num, condition_name, spectrum_df, copy(dat.layout), dat.sample_rate, :welch, copy(dat.analysis_info))
+    return SpectrumData(
+        dat.file,
+        condition_num,
+        condition_name,
+        spectrum_df,
+        copy(dat.layout),
+        dat.sample_rate,
+        :welch,
+        copy(dat.analysis_info),
+    )
 end

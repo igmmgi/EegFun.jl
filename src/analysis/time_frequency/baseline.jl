@@ -42,8 +42,8 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}
 
     # Find baseline time indices (MATLAB: dsearchn finds nearest time points)
     # Find the nearest time points to the baseline interval boundaries
-    baseline_start_idx = find_closest_time_index(times , baseline_interval[1])
-    baseline_end_idx = find_closest_time_index(times , baseline_interval[2])
+    baseline_start_idx = find_closest_time_index(times, baseline_interval[1])
+    baseline_end_idx = find_closest_time_index(times, baseline_interval[2])
 
     # Create mask for baseline time points
     base_mask = falses(n_times)

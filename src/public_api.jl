@@ -354,7 +354,6 @@ public plot_layout_2d!
 public plot_layout_3d
 public plot_layout_3d!
 public plot_line_noise_components
-public plot_power_spectrum
 public plot_spatial_kurtosis_components
 public plot_tf_stats
 public plot_tf
@@ -387,7 +386,14 @@ public generate_signal
 public signal_example_composition
 public signal_example_convolution
 public signal_example_dotproduct
-public signal_example_ica
+public signal_example_ica_0
+public signal_example_ica_1
+public signal_example_ica_2
+public signal_example_ica_3
+public signal_example_ica_clt
+public signal_example_ica_4
+public signal_example_ica_5
+public signal_example_ica_infomax
 public signal_example_sampling
 public signal_example_spectrum
 public signal_example_tf

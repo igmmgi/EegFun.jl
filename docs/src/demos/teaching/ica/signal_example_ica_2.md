@@ -1,4 +1,4 @@
-# Signal Example — Mixing & Unmixing (Beginner ICA)
+# Signal Example — ICA 2: Mixing & Unmixing
 
 Interactive demonstration of **signal mixing and ICA unmixing**.
 
@@ -69,11 +69,15 @@ ICA relies on one key insight: **brain signals and eye blinks are statistically 
 The Central Limit Theorem says that mixing independent, non-Gaussian sources always produces something *more* Gaussian (more random-looking) than either source alone. ICA exploits this in reverse: it searches for the unmixing matrix that makes the outputs *as non-Gaussian as possible* — which turns out to be equivalent to making them statistically independent.
 
 > [!TIP]
-> This demo shows that unmixing is just **Matrix Inversion** — see also the [ICA (Blind Source Separation) demo](signal_example_ica.md).
+> This demo shows that unmixing is just **Matrix Inversion** — see also [Part 3: ICA with Scatter Geometry](signal_example_ica_3.md).
 
 ## See Also
 
-- [ICA (Blind Source Separation)](signal_example_ica.md) — 3-source version with rotation geometry and scatter plots
+- [Part 0: Matrix Math Basics](signal_example_ica_0.md) — Fundamental math prerequisites
+- [Part 1: What Is a Mixture?](signal_example_ica_1.md) — Start here if you've never seen ICA
+- [Part 3: 3 Sources & Scatter Geometry](signal_example_ica_3.md) — Advanced: rotation geometry, scatter plots, kurtosis
+- [Part 4: Sphering (Whitening)](signal_example_ica_4.md) — Why ICA optimization is just finding an angle
+- [Part 5: Inside the Black Box](signal_example_ica_5.md) — How the algorithm actually finds the sources
 - [ICA Demo](../preprocessing/ica.md) — Full ICA workflow on real EEG data
 - [Signal Example — Composition](../teaching/signal_example_composition.md) — Building complex waveforms from sine waves
 - [EEGLAB: Running ICA](https://eeglab.org/tutorials/06_RejectArtifacts/RunICA.html) — Practical guide to ICA in EEGLAB
@@ -83,5 +87,5 @@ The Central Limit Theorem says that mixing independent, non-Gaussian sources alw
 
 ```julia
 using EegFun
-EegFun.signal_example_mixing()
+EegFun.signal_example_ica_2()
 ```

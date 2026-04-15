@@ -1,9 +1,9 @@
-# Signal Example — ICA (Blind Source Separation)
+# Signal Example — ICA 3: Blind Source Separation
 
 Interactive demonstration of **Independent Component Analysis (ICA)** — 3 sources, rotation geometry, and scatter plots.
 
 > [!TIP]
-> New to ICA? Start with the [beginner Mixing & Unmixing demo](signal_example_mixing.md) first — it covers the core idea with just 2 sources and one button.
+> This is **Part 3** of the ICA series. Start with [Part 1: What Is a Mixture?](signal_example_ica_1.md) or [Part 2: Mixing & Unmixing](signal_example_ica_2.md) first.
 
 ## What it shows
 
@@ -72,7 +72,12 @@ The Infomax algorithm (Bell & Sejnowski, 1995) used in EegFun maximises the tota
 
 ## See Also
 
-- [Mixing & Unmixing](signal_example_mixing.md) — 2-source introduction to ICA
+- [Part 0: Matrix Math Basics](signal_example_ica_0.md) — What is an Unmixing Matrix?
+- [Part 1: What Is a Mixture?](signal_example_ica_1.md) — Simplest introduction to the problem
+- [Part 2: Mixing & Unmixing](signal_example_ica_2.md) — 2-source introduction to ICA
+- [ICA: Central Limit Theorem](signal_example_ica_clt.md) — Deep Dive: Why mixing creates Gaussian blobs
+- [Part 4: Sphering (Whitening)](signal_example_ica_4.md) — Why ICA optimization is just finding an angle
+- [Part 5: Inside the Black Box](signal_example_ica_5.md) — The optimization landscape and gradient ascent
 - [ICA Demo](../preprocessing/ica.md) — Full ICA workflow on real EEG data
 - [EEGLAB: Running ICA](https://eeglab.org/tutorials/06_RejectArtifacts/RunICA.html) — Practical guide to ICA in EEGLAB
 - [ICA for Dummies](https://arnauddelorme.com/ica_for_dummies/) — Arnaud Delorme's accessible introduction to ICA
@@ -83,5 +88,5 @@ The Infomax algorithm (Bell & Sejnowski, 1995) used in EegFun maximises the tota
 
 ```julia
 using EegFun
-EegFun.signal_example_ica()
+EegFun.signal_example_ica_3()
 ```

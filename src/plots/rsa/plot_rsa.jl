@@ -91,7 +91,7 @@ function plot_rdm_heatmap(rsa_data::RsaData; time_point::Union{Float64,Int,Nothi
         time_label = "$(round(rsa_data.times[time_point], digits=3)) s"
     else
         # Find closest time point
-        time_idx = find_closest_time_index(rsa_data.times , time_point)
+        time_idx = find_closest_time_index(rsa_data.times, time_point)
         rdm_to_plot = rsa_data.rdm[time_idx, :, :]
         time_label = "$(round(rsa_data.times[time_idx], digits=3)) s"
     end
@@ -478,4 +478,3 @@ function plot_rsa(rsa_data::RsaData; kwargs...)
         @minimal_error("Unknown plot_type: $plot_type. Use :rdm or :correlations")
     end
 end
-

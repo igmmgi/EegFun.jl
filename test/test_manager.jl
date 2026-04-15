@@ -1,5 +1,5 @@
 """
-Test Runner and Coverage Analysis Tool for EyeFun
+Test Runner and Coverage Analysis Tool for EegFun
 
 - Running tests with coverage
 - Coverage analysis and reporting
@@ -44,7 +44,7 @@ const BLUE = :blue
 print_colored(color::Symbol, message::String) = printstyled(message * "\n"; color = color)
 
 function print_header()
-    print_colored(BLUE, "=== EyeFun Test Runner and Coverage Analysis ===")
+    print_colored(BLUE, "=== EegFun Test Runner and Coverage Analysis ===")
     println()
 end
 

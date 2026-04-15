@@ -799,4 +799,3 @@ function grand_average(dat::Vector{DecodedData})
 
     return grand_avg
 end
-
