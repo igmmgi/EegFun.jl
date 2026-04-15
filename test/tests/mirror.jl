@@ -381,7 +381,6 @@ using DataFrames
 
         # Test symmetry - the mirrored sections should be symmetric around the original data
         n_orig = 5
-        n_mirrored = length(epochs.data[1].Cz)
         mid_start = n_orig  # Start of original data in mirrored array (1-indexed)
         mid_end = mid_start + n_orig - 1  # End of original data
 

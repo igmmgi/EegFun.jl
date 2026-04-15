@@ -1023,18 +1023,11 @@ using Dates
         @test !contains(output, "# Default:")
     end
 
-
-
     # =============================================================================
     # ERROR HANDLING
     # =============================================================================
 
     @testset "Error Handling Tests" begin
-        # Test template generation with invalid filename
-        invalid_path = "/invalid/path/that/does/not/exist/template.toml"
-
-        # This should not throw an error but return gracefully
-        # (The actual error handling depends on the implementation)
         @test typeof(EegFun.generate_config_template) <: Function
     end
 

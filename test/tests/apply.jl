@@ -59,7 +59,6 @@ using EegFun
 
         # Set a channel to NaN to test repair
         dat.data[!, :Ch3] .= NaN
-        original_ch3 = copy(dat.data.Ch3)
 
         settings = EegFun.AnalysisSettings(0.0, 0.0, :none, [:Ch3], :neighbor_interpolation, Tuple{Float64,Float64}[], Int[])
         EegFun.apply_analysis_settings!(dat, settings)
