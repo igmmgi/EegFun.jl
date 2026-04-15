@@ -41,11 +41,16 @@ function signal_example_ica_mixture()
     ctrl_sz  = Observable(16)
 
     ax_args = (
-        xgridvisible = false, ygridvisible = false,
-        topspinevisible = false, rightspinevisible = false,
-        bottomspinevisible = false, leftspinevisible = false,
-        xticklabelsvisible = false, yticklabelsvisible = false,
-        xticksvisible = false, yticksvisible = false,
+        xgridvisible = false,
+        ygridvisible = false,
+        topspinevisible = false,
+        rightspinevisible = false,
+        bottomspinevisible = false,
+        leftspinevisible = false,
+        xticklabelsvisible = false,
+        yticklabelsvisible = false,
+        xticksvisible = false,
+        yticksvisible = false,
         titlesize = title_sz,
     )
 
@@ -59,10 +64,10 @@ function signal_example_ica_mixture()
 
     # Isolated blink shape
     blink_raw = 5.0 .* exp.(-((t_arr .- 2π) .^ 2) ./ 0.2)
-    
+
     # ── Observables ───────────────────────────────────────────────────────────
     mix_obs = Observable(1.0)
-    
+
     eeg_obs = Observable(zeros(n))
 
     function update!(mix_w)
@@ -89,9 +94,9 @@ function signal_example_ica_mixture()
 
     # ── Controls ──────────────────────────────────────────────────────────────
     ctrl = GridLayout(fig[4, 1]; colgap = 40)
-    Label(ctrl[1, 1], "Mix Balance (100% Brain ↔ 100% Artifact):", fontsize=ctrl_sz, font=:bold)
-    sl_mix = Slider(ctrl[1, 2], range=0.0:0.01:1.0, startvalue=0.5, width=500)
-    Label(ctrl[1, 3], @lift(string(round($(sl_mix.value); digits=2))), fontsize=ctrl_sz, font=:bold, color=col_mix)
+    Label(ctrl[1, 1], "Mix Balance (100% Brain ↔ 100% Artifact):", fontsize = ctrl_sz, font = :bold)
+    sl_mix = Slider(ctrl[1, 2], range = 0.0:0.01:1.0, startvalue = 0.5, width = 500)
+    Label(ctrl[1, 3], @lift(string(round($(sl_mix.value); digits = 2))), fontsize = ctrl_sz, font = :bold, color = col_mix)
 
     on(sl_mix.value) do mix_w
         update!(mix_w)
