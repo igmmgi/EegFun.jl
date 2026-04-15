@@ -78,8 +78,8 @@ The Central Limit Theorem says that mixing independent, non-Gaussian sources alw
 - [Part 3: 3 Sources & Scatter Geometry](signal_example_ica_geometry.md) — Advanced: rotation geometry, scatter plots, kurtosis
 - [Part 4: Sphering (Whitening)](signal_example_ica_sphering.md) — Why ICA optimization is just finding an angle
 - [Part 5: Inside the Black Box](signal_example_ica_optimization.md) — How the algorithm actually finds the sources
-- [ICA Demo](../preprocessing/ica.md) — Full ICA workflow on real EEG data
-- [Signal Example — Composition](../teaching/signal_example_composition.md) — Building complex waveforms from sine waves
+- [ICA Demo](../../preprocessing/ica.md) — Full ICA workflow on real EEG data
+- [Signal Example — Composition](../signal_processing/signal_example_composition.md) — Building complex waveforms from sine waves
 - [EEGLAB: Running ICA](https://eeglab.org/tutorials/06_RejectArtifacts/RunICA.html) — Practical guide to ICA in EEGLAB
 - [ICA for Dummies](https://arnauddelorme.com/ica_for_dummies/) — Arnaud Delorme's accessible introduction to ICA
 

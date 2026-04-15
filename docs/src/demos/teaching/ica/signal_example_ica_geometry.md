@@ -78,7 +78,7 @@ The Infomax algorithm (Bell & Sejnowski, 1995) used in EegFun maximises the tota
 - [ICA: Central Limit Theorem](signal_example_ica_clt.md) — Deep Dive: Why mixing creates Gaussian blobs
 - [Part 4: Sphering (Whitening)](signal_example_ica_sphering.md) — Why ICA optimization is just finding an angle
 - [Part 5: Inside the Black Box](signal_example_ica_optimization.md) — The optimization landscape and gradient ascent
-- [ICA Demo](../preprocessing/ica.md) — Full ICA workflow on real EEG data
+- [ICA Demo](../../preprocessing/ica.md) — Full ICA workflow on real EEG data
 - [EEGLAB: Running ICA](https://eeglab.org/tutorials/06_RejectArtifacts/RunICA.html) — Practical guide to ICA in EEGLAB
 - [ICA for Dummies](https://arnauddelorme.com/ica_for_dummies/) — Arnaud Delorme's accessible introduction to ICA
 - Bell, A. J., & Sejnowski, T. J. (1995). An information-maximization approach to blind separation. *Neural Computation*, *7*(6), 1129–1159.
