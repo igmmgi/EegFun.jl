@@ -86,7 +86,7 @@ function signal_example_dotproduct()
     FS    = 1000.0  # sample rate (Hz) — high enough for smooth rendering up to 40 Hz
     EPOCH = 2.0     # epoch length (s)
 
-    fig = Figure(size = (1300, 700), figure_padding = (8, 8, 8, 8), title = "Dot Product Demo")
+    fig = Figure(size = (1300, 850), figure_padding = (8, 8, 8, 8), title = "Dot Product Demo")
 
     # ── Font sizing ──────────────────────────────────────────────────────────
     lbl_sz   = Observable(17)
@@ -161,6 +161,7 @@ function signal_example_dotproduct()
     test_cos_data = Observable(zeros(n))
     prod_sin_data = Observable(zeros(n))
     prod_cos_data = Observable(zeros(n))
+    zero_data     = Observable(zeros(n))
 
     # ── Update ───────────────────────────────────────────────────────────────
     """Recompute signal, test sinusoids, and dot products from current parameter values."""
@@ -208,16 +209,18 @@ function signal_example_dotproduct()
         ax_prod_cos.blockscene.visible[] = is_complex
 
         if is_complex
-            rowsize!(fig.layout, 1, Relative(0.28))
-            rowsize!(fig.layout, 2, Relative(0.28))
-            rowsize!(fig.layout, 3, Relative(0.28))
-            rowsize!(fig.layout, 4, Relative(0.16))
+            rowsize!(fig.layout, 1, Relative(0.26))
+            rowsize!(fig.layout, 2, Relative(0.26))
+            rowsize!(fig.layout, 3, Relative(0.26))
+            rowsize!(fig.layout, 4, Relative(0.15))
+            rowsize!(fig.layout, 5, Relative(0.07))
             ax_sig.title = "Signal (blue)  +  Sine test (red)  +  Cosine test (green)"
         else
-            rowsize!(fig.layout, 1, Relative(0.38))
-            rowsize!(fig.layout, 2, Relative(0.44))
+            rowsize!(fig.layout, 1, Relative(0.35))
+            rowsize!(fig.layout, 2, Relative(0.40))
             rowsize!(fig.layout, 3, Relative(0.0))
             rowsize!(fig.layout, 4, Relative(0.18))
+            rowsize!(fig.layout, 5, Relative(0.07))
             ax_sig.title = "Signal (blue)  +  Test sinusoid (red)"
         end
     end
@@ -229,10 +232,12 @@ function signal_example_dotproduct()
     axislegend(ax_sig, position = :rt)
 
     # Sine product panel
+    band!(ax_prod_sin, t_arr, zero_data, prod_sin_data, color = (:gray, 0.4))
     lines!(ax_prod_sin, t_arr, prod_sin_data, color = :black, linewidth = 2)
     hlines!(ax_prod_sin, [0.0], color = :black, linewidth = 1.0, linestyle = :dash)
 
     # Cosine product panel
+    band!(ax_prod_cos, t_arr, zero_data, prod_cos_data, color = (:gray, 0.4))
     lines!(ax_prod_cos, t_arr, prod_cos_data, color = :black, linewidth = 2)
     hlines!(ax_prod_cos, [0.0], color = :black, linewidth = 1.0, linestyle = :dash)
 
@@ -295,7 +300,7 @@ function signal_example_dotproduct()
         text = mag_text,
         space = :relative,
         fontsize = @lift(max(14, round(Int, $lbl_sz * 1.25))),
-        color = :purple,
+        color = :black,
         font = :bold,
         align = (:center, :bottom),
     )
@@ -317,10 +322,10 @@ function signal_example_dotproduct()
         return sl, lbl
     end
 
-    sl_sf, lbl_sf = labelled_slider(ctrl, 1, "Signal Freq", 1.0:1.0:40.0, 10.0, v -> "$(round(Int, v)) Hz")
+    sl_sf, lbl_sf = labelled_slider(ctrl, 1, "Signal Freq", 1.0:0.1:40.0, 10.0, v -> "$(round(v, digits=1)) Hz")
     sl_sa, lbl_sa = labelled_slider(ctrl, 2, "Amplitude", 0.1:0.1:2.0, 1.0, v -> "$(round(v, digits=1))")
     sl_sp, lbl_sp = labelled_slider(ctrl, 3, "Phase (°)", 0.0:5.0:355.0, 0.0, v -> "$(round(Int, v))°")
-    sl_tf, lbl_tf = labelled_slider(ctrl, 4, "Test Freq", 0.5:0.5:60.0, 10.0, v -> "$(round(v, digits=1)) Hz")
+    sl_tf, lbl_tf = labelled_slider(ctrl, 4, "Test Freq", 0.5:0.1:60.0, 10.0, v -> "$(round(v, digits=1)) Hz")
     sl_nl, lbl_nl = labelled_slider(ctrl, 5, "Noise", 0.0:0.05:1.0, 0.0, v -> "$(round(v, digits=2))")
 
     # Complex toggle
@@ -357,11 +362,43 @@ function signal_example_dotproduct()
         colsize!(ctrl, col, Relative(1 / 6))
     end
 
+    # ── Presets ──────────────────────────────────────────────────────────────
+    preset_grid = GridLayout(fig[5, 1], tellwidth = false, colgap = 10, padding = (10, 10, 10, 10))
+    Label(preset_grid[1, 1], "Presets:", fontsize = ctrl_sz, font = :bold, halign = :right)
+    btn_perfect = Button(preset_grid[1, 2], label = "Perfect Match", width = 150)
+    btn_leakage = Button(preset_grid[1, 3], label = "Spectral Leakage", width = 150)
+    btn_ortho = Button(preset_grid[1, 4], label = "Phase Orthogonality (90°)", width = 220)
+
+    # Wire pedagogical presets
+    on(btn_perfect.clicks) do _
+        set_close_to!(sl_sf, 10.0)
+        set_close_to!(sl_tf, 10.0)
+        set_close_to!(sl_sp, 0.0)
+        set_close_to!(sl_nl, 0.0)
+        tog_complex.active[] = false
+    end
+
+    on(btn_leakage.clicks) do _
+        set_close_to!(sl_sf, 10.0)
+        set_close_to!(sl_tf, 10.25)
+        set_close_to!(sl_sp, 0.0)
+        set_close_to!(sl_nl, 0.0)
+        tog_complex.active[] = false
+    end
+
+    on(btn_ortho.clicks) do _
+        set_close_to!(sl_sf, 10.0)
+        set_close_to!(sl_tf, 10.0)
+        set_close_to!(sl_sp, 90.0)
+        set_close_to!(sl_nl, 0.0)
+    end
+
     # ── Row sizing — initial (sine-only, cosine hidden) ───────────────────────
-    rowsize!(fig.layout, 1, Relative(0.38))
-    rowsize!(fig.layout, 2, Relative(0.44))
+    rowsize!(fig.layout, 1, Relative(0.35))
+    rowsize!(fig.layout, 2, Relative(0.40))
     rowsize!(fig.layout, 3, Relative(0.0))
     rowsize!(fig.layout, 4, Relative(0.18))
+    rowsize!(fig.layout, 5, Relative(0.07))
 
     # Hide cosine row initially
     ax_prod_cos.blockscene.visible[] = false

@@ -44,7 +44,6 @@ When the sampling rate falls **below** twice the signal frequency, the signal ca
 - [Sinc Interpolation for Signal Reconstruction (Wolfram Demonstrations)](https://demonstrations.wolfram.com/SincInterpolationForSignalReconstruction/)
 - [Signal Example — Composition](signal_example_composition.md) — multi-signal composition and filtering
 - [Signal Example — Dot Product](signal_example_dotproduct.md) — how the DFT detects frequencies
-- [Signal Example — Spectrum](signal_example_spectrum.md) — the full FFT power spectrum
 
 ## Code
 

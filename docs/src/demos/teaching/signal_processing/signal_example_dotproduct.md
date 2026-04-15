@@ -66,7 +66,6 @@ The sine captures the "how much matches my phase" part. The cosine captures the 
 
 - [Signal Example — Composition](signal_example_composition.md) — building signals from sine waves
 - [Signal Example — Convolution](signal_example_convolution.md) — sliding the dot product across time
-- [Signal Example — Spectrum](signal_example_spectrum.md) — the full FFT runs this for every frequency simultaneously
 - Cohen, M. X. (2014). *Analyzing Neural Time Series Data*. MIT Press. — Chapter 11
 
 ## Code

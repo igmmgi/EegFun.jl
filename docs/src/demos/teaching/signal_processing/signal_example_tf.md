@@ -89,7 +89,6 @@ Enable the Log toggle. Low frequencies are spread out — revealing fine structu
 - Section III: Frequency and Time-Frequency Domains Analyses
 - [Signal Example — Sampling](signal_example_sampling.md) — Nyquist theorem and sampling
 - [Signal Example — Composition](signal_example_composition.md) — signal composition and filtering
-- [Signal Example — Spectrum](signal_example_spectrum.md) — the full FFT power spectrum
 - [Signal Example — Convolution](signal_example_convolution.md) — sliding kernels including Morlet wavelets
 
 ## Code

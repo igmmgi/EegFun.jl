@@ -84,7 +84,7 @@ function signal_example_convolution()
     # ── Axes ─────────────────────────────────────────────────────────────────
     ax_sig = Axis(
         fig[1, 1],
-        title          = "Signal (blue) + Kernel at current position (red)",
+        title          = "Signal + Kernel at current position",
         xlabel         = "Time (s)",
         ylabel         = "Amplitude",
         titlesize      = title_sz,
@@ -97,7 +97,7 @@ function signal_example_convolution()
     )
     ax_out = Axis(
         fig[2, 1],
-        title          = "Convolution Output (built up as kernel slides)",
+        title          = "Convolution Output",
         xlabel         = "Time (s)",
         ylabel         = "Output",
         titlesize      = title_sz,
@@ -128,6 +128,9 @@ function signal_example_convolution()
     t_vec = range(0.0, EPOCH - 1.0 / FS, step = 1.0 / FS)
     t_arr = collect(t_vec)
     n     = length(t_arr)
+
+    # Fixed base noise 
+    base_noise = randn(n)
 
     # Data observables
     sig_data  = Observable(Float64[])
@@ -191,7 +194,7 @@ function signal_example_convolution()
         # Build signal
         sig = sin.(2π .* sig_freq[] .* t_vec)
         if noise_lvl[] > 0.0
-            sig .+= noise_lvl[] .* randn(n)
+            sig .+= noise_lvl[] .* base_noise
         end
 
         # Build kernel
@@ -364,10 +367,49 @@ function signal_example_convolution()
         colsize!(inner, col, Relative(1 / 6))
     end
 
+    # ── Presets ──────────────────────────────────────────────────────────────
+    preset_grid = GridLayout(fig[4, 1], tellwidth = false, colgap = 10, padding = (10, 10, 10, 10))
+    Label(preset_grid[1, 1], "Presets", fontsize = ctrl_sz, font = :bold, halign = :right)
+    btn_play = Button(preset_grid[1, 2], label = "▶ Play Animation", width = 180)
+    btn_denoise = Button(preset_grid[1, 3], label = "Smooth Denoise (Gaussian)", width = 240)
+    btn_wavelet = Button(preset_grid[1, 4], label = "Amplitude Envelope (Wavelet)", width = 260)
+
+    on(btn_play.clicks) do _
+        @async begin
+            for p = 0.0:0.01:1.0
+                set_close_to!(sl_pos, p)
+                sleep(0.05)   # 5 seconds total
+            end
+        end
+    end
+
+    on(btn_denoise.clicks) do _
+        idx = findfirst(x -> x == "Gaussian", kernel_options)
+        if !isnothing(idx)
+            menu_kt.i_selected[] = idx
+        end
+        set_close_to!(sl_kw, 0.15)
+        set_close_to!(sl_sf, 4.0)
+        set_close_to!(sl_nl, 0.5)
+        set_close_to!(sl_pos, 0.0)
+    end
+
+    on(btn_wavelet.clicks) do _
+        idx = findfirst(x -> x == "Wavelet (Morlet)", kernel_options)
+        if !isnothing(idx)
+            menu_kt.i_selected[] = idx
+        end
+        set_close_to!(sl_wf, 8.0)
+        set_close_to!(sl_sf, 8.0)
+        set_close_to!(sl_nl, 0.0)
+        set_close_to!(sl_pos, 0.0)
+    end
+
     # ── Row sizing ────────────────────────────────────────────────────────────
-    rowsize!(fig.layout, 1, Relative(0.41))   # signal + kernel
-    rowsize!(fig.layout, 2, Relative(0.41))   # output
+    rowsize!(fig.layout, 1, Relative(0.38))   # signal + kernel
+    rowsize!(fig.layout, 2, Relative(0.38))   # output
     rowsize!(fig.layout, 3, Relative(0.18))   # controls
+    rowsize!(fig.layout, 4, Relative(0.06))   # presets
 
     display(fig)
     return fig, (ax_sig, ax_out)

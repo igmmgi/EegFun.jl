@@ -1,5 +1,5 @@
 """
-    signal_example_ica_2()
+    signal_example_ica_separation()
 
 Interactive Demo — Signal Mixing & ICA Unmixing.
 
@@ -50,22 +50,22 @@ In EEG terms:
 - ICA is the clever algorithm that untangles them
 
 ## See Also
-
-- [`signal_example_ica_1`](@ref) — simpler: "What is a mixture?" with just signal + weight
-- [`signal_example_ica_3`](@ref) — more advanced 3-source version with rotation geometry and scatter plots
-- [`signal_example_ica_4`](@ref) — sphering: morphing data into perfect spheres
-- [`signal_example_ica_5`](@ref) — inside the black box: optimization landscape and gradient ascent
+- [`signal_example_ica_mixture`](@ref) — simpler: "What is a mixture?" with just signal + weight
+- [`signal_example_ica_geometry`](@ref) — more advanced 3-source version with rotation geometry and scatter plots
+- [`signal_example_ica_clt`](@ref) — background: why mixtures become Gaussian
+- [`signal_example_ica_sphering`](@ref) — sphering: morphing data into perfect spheres
+- [`signal_example_ica_optimization`](@ref) — inside the black box: optimization landscape and gradient ascent
 
 # Examples
 ```julia
 using EegFun
-EegFun.signal_example_ica_2()
+    signal_example_ica_separation()
 ```
 
 # Returns
 - `fig::Figure`: The Makie figure object
 """
-function signal_example_ica_2()
+function signal_example_ica_separation()
     # ── 1. Setup & Constants ──────────────────────────────────────────────────
     FS    = 256.0
     T     = 4.0

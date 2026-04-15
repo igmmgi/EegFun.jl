@@ -22,16 +22,16 @@ This demo lets you physically drag the data through these three exact mathematic
 ## Why Do We Do This?
 Because once the data is transformed into a perfect sphere, the algorithm's job is over functionally: the only property left to search is **Rotation**. 
 
-By dragging the "Morph" slider all the way to 3.0 (Sphered), you are setting up the perfect circular search space. This directly leads into [Part 5: Inside the Black Box](signal_example_ica_5.md), where we will simply rotate a line through this sphered data to locate the independent components!
+By dragging the "Morph" slider all the way to 3.0 (Sphered), you are setting up the perfect circular search space. This directly leads into [Part 5: Inside the Black Box](signal_example_ica_optimization.md), where we will simply rotate a line through this sphered data to locate the independent components!
 
 ## Code
 
 ```julia
 using EegFun
-EegFun.signal_example_ica_4()
+EegFun.signal_example_ica_sphering()
 ```
 
 ## See Also
-- [Part 3: 3 Sources & Geometry](signal_example_ica_3.md) — Scatter plots and correlation blobs
+- [Part 3: 3 Sources & Geometry](signal_example_ica_geometry.md) — Scatter plots and correlation blobs
 - [ICA: Central Limit Theorem](signal_example_ica_clt.md) — Why mixed blobs become Gaussian
-- [Part 5: Inside the Black Box](signal_example_ica_5.md) — Gradient ascent rotation
+- [Part 5: Inside the Black Box](signal_example_ica_optimization.md) — Gradient ascent rotation

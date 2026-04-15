@@ -84,19 +84,9 @@ Interactive demonstrations for some signal processing and EEG concepts.
 - [Signal Composition](teaching/signal_processing/signal_example_composition.md) - Building complex waveforms from sine waves, noise, and filtering
 - [Dot Product](teaching/signal_processing/signal_example_dotproduct.md) - How the DFT detects frequencies via dot products
 - [Convolution](teaching/signal_processing/signal_example_convolution.md) - Sliding kernels including Morlet wavelets
-- [Power Spectrum](teaching/signal_processing/signal_example_spectrum.md) - FFT power spectrum, frequency resolution, and spectral leakage
 - [Time-Frequency](teaching/signal_processing/signal_example_tf.md) - Comparing Morlet, STFT, and multitaper TF methods
 - [Simulate ERP](teaching/erp/simulate_erp.md) - Trial averaging, 1/f noise, and ERP component decomposition
 - [Simulate Decoding](teaching/machine_learning/signal_example_decoding.md) - MVPA/SVM classification on synthetic EEG
-- [ICA 0: Matrix Math (U = WX)](teaching/ica/signal_example_ica_0.md) - The fundamental equation underlying component analysis
-- [ICA 1: What Is a Mixture?](teaching/ica/signal_example_ica_1.md) - Why EEG needs ICA: electrodes record weighted sums
-- [ICA 2: Mixing & Unmixing](teaching/ica/signal_example_ica_2.md) - The cocktail party problem: mixing matrices and ICA separation
-- [ICA 3: Blind Source Separation](teaching/ica/signal_example_ica_3.md) - Advanced: 3-source rotation geometry, scatter plots, and kurtosis
-- [ICA: The Central Limit Theorem](teaching/ica/signal_example_ica_clt.md) - Deep Dive: Why mixing creates Gaussian blobs, and how to unmix them
-- [ICA 4: Sphering (Whitening)](teaching/ica/signal_example_ica_4.md) - Preprocessing: morphing correlated blobs into perfect spheres
-- [ICA 5: Inside the Black Box](teaching/ica/signal_example_ica_5.md) - The optimization landscape: how gradient ascent recovers the sources
-- [ICA 6: Infomax (Information Theory)](teaching/ica/signal_example_ica_infomax.md) - The math of EEGLAB: how a neural network unpacks Gaussians into Maximum Entropy
-
 
 ## Specialized Visualization
 
