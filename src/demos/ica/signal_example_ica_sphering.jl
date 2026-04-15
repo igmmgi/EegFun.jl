@@ -1,5 +1,5 @@
 """
-    signal_example_ica_4()
+    signal_example_ica_sphering()
 
 Interactive Demo — Preprocessing: Sphering and Whitening.
 
@@ -13,16 +13,16 @@ a perfectly round, uncorrelated circle proves *why* ICA can use simple rotationa
 algorithms to find the sources.
 
 ## See Also
-- [`signal_example_ica_3`](@ref) — Part 3: 3 Sources & Scatter Geometry
-- [`signal_example_ica_5`](@ref) — Part 5: Inside the Black Box (Optimization)
+- [`signal_example_ica_geometry`](@ref) — Part 3: 3 Sources & Scatter Geometry
+- [`signal_example_ica_optimization`](@ref) — Part 5: Inside the Black Box (Optimization)
 
 # Examples
 ```julia
 using EegFun
-EegFun.signal_example_ica_4()
+    signal_example_ica_sphering()
 ```
 """
-function signal_example_ica_4()
+function signal_example_ica_sphering()
     N = 2500
     Random.seed!(101) # Stable random numbers
 

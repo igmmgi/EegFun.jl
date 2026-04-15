@@ -1,5 +1,5 @@
 """
-    signal_example_ica_3()
+    signal_example_ica_geometry()
 
 Interactive ICA Demo — Blind Source Separation.
 
@@ -67,11 +67,11 @@ used by `run_ica` in EegFun — to find the unmixing matrix W directly.
    finds a general unmixing matrix, not just a rotation.
 
 ## See Also
-
-- [`signal_example_ica_1`](@ref) — Part 1: What Is a Mixture?
-- [`signal_example_ica_2`](@ref) — Part 2: Mixing & Unmixing
-- [`signal_example_ica_4`](@ref) — Part 4: Sphering (Whitening): morphing data into perfect spheres
-- [`signal_example_ica_5`](@ref) — Part 5: Inside the black box: optimization landscape and gradient ascent
+- [`signal_example_ica_mixture`](@ref) — Part 1: What Is a Mixture?
+- [`signal_example_ica_separation`](@ref) — Part 2: Mixing & Unmixing
+- [`signal_example_ica_clt`](@ref) — background: why mixtures become Gaussian
+- [`signal_example_ica_sphering`](@ref) — Part 4: Sphering (Whitening): morphing data into perfect spheres
+- [`signal_example_ica_optimization`](@ref) — Part 5: Inside the black box: optimization landscape and gradient ascent
 - Bell, A. J., & Sejnowski, T. J. (1995). An information-maximization approach
   to blind separation. *Neural Computation*, *7*(6), 1129–1159.
 - Hyvärinen, A., & Oja, E. (2000). Independent component analysis: algorithms and
@@ -80,13 +80,13 @@ used by `run_ica` in EegFun — to find the unmixing matrix W directly.
 # Examples
 ```julia
 using EegFun
-EegFun.signal_example_ica_3()
+    signal_example_ica_geometry()
 ```
 
 # Returns
 - `fig::Figure`: The Makie figure object
 """
-function signal_example_ica_3()
+function signal_example_ica_geometry()
 
     FS = 512.0
     T  = 3.0

@@ -32,5 +32,5 @@ This demo removes time entirely and just looks at the distribution of the mixed 
 
 ```julia
 using EegFun
-EegFun.signal_example_ica_5()
+EegFun.signal_example_ica_optimization()
 ```

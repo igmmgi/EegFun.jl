@@ -21,12 +21,12 @@ You can adjust the **Mix Balance** slider to smoothly sweep from seeing 100% pur
 
 ```julia
 using EegFun
-EegFun.signal_example_ica_1()
+EegFun.signal_example_ica_mixture()
 ```
 
 ## See Also
 - [Part 0: Matrix Math Basics](signal_example_ica_0.md) — What is an Unmixing Matrix?
-- [Part 2: Mixing & Unmixing](signal_example_ica_2.md) — Two electrodes, mixing matrices, and the ICA algorithm
-- [Part 3: 3 Sources & Scatter Geometry](signal_example_ica_3.md) — Advanced: rotation geometry, scatter plots, kurtosis
-- [Part 4: Sphering (Whitening)](signal_example_ica_4.md) — Why ICA optimization is just finding an angle
-- [Part 5: Inside the Black Box](signal_example_ica_5.md) — How the Gradient Ascent math actually loops
+- [Part 2: Mixing & Unmixing](signal_example_ica_separation.md) — Two electrodes, mixing matrices, and the ICA algorithm
+- [Part 3: 3 Sources & Scatter Geometry](signal_example_ica_geometry.md) — Advanced: rotation geometry, scatter plots, kurtosis
+- [Part 4: Sphering (Whitening)](signal_example_ica_sphering.md) — Why ICA optimization is just finding an angle
+- [Part 5: Inside the Black Box](signal_example_ica_optimization.md) — How the Gradient Ascent math actually loops

@@ -51,7 +51,6 @@ Convolution computes, at each time point *t*, the weighted sum of the signal und
 
 - [Signal Example — Composition](signal_example_composition.md) — building signals from sine waves
 - [Signal Example — Dot Product](signal_example_dotproduct.md) — the core dot product mechanism
-- [Signal Example — Spectrum](signal_example_spectrum.md) — the full FFT spectrum
 - [Signal Example — Time-Frequency](signal_example_tf.md) — running Morlet convolution at every frequency
 - Cohen, M. X. (2014). *Analyzing Neural Time Series Data*. MIT Press. — Chapter 11/12
 

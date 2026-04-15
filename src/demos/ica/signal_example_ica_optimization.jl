@@ -1,5 +1,5 @@
 """
-    signal_example_ica_5()
+    signal_example_ica_optimization()
 
 Interactive Demo — Inside the ICA Black Box (Optimization).
 
@@ -23,22 +23,21 @@ sources correspond to angles where the histogram is most "peaky" (non-Gaussian).
 The algorithm simply calculates the local gradient slope and steps uphill.
 
 ## See Also
-
-- [`signal_example_ica_1`](@ref) — Part 1: What Is a Mixture?
-- [`signal_example_ica_2`](@ref) — Part 2: Mixing & Unmixing
-- [`signal_example_ica_3`](@ref) — Part 3: 3 Sources & Scatter Geometry
-- [`signal_example_ica_4`](@ref) — Part 4: Sphering (Whitening)
+- [`signal_example_ica_mixture`](@ref) — Part 1: What Is a Mixture?
+- [`signal_example_ica_separation`](@ref) — Part 2: Mixing & Unmixing
+- [`signal_example_ica_geometry`](@ref) — Part 3: 3 Sources & Scatter Geometry
+- [`signal_example_ica_sphering`](@ref) — Part 4: Sphering (Whitening)
 
 # Examples
 ```julia
 using EegFun
-EegFun.signal_example_ica_5()
+    signal_example_ica_optimization()
 ```
 
 # Returns
 - `fig::Figure`: The Makie figure object
 """
-function signal_example_ica_5()
+function signal_example_ica_optimization()
     # ── Constants ─────────────────────────────────────────────────────────────
     N = 4000
     Random.seed!(42) # For stable shapes across resets

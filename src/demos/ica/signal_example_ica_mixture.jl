@@ -1,5 +1,5 @@
 """
-    signal_example_ica_1()
+    signal_example_ica_mixture()
 
 Interactive Demo — Part 1: What is a Mixture?
 
@@ -12,19 +12,19 @@ Shows that an electrode does not record a "pure" signal. It records
 `1.0 * Brain + W * Blink`. This establishes the forward mixing problem.
 
 ## See Also
-- [`signal_example_ica_0`](@ref) — part 0: matrix math basics and U=WX algebra
-- [`signal_example_ica_2`](@ref) — next step: 2 electrodes, mixing matrices, and the ICA algorithm
-- [`signal_example_ica_3`](@ref) — advanced: 3 sources, rotation geometry, scatter plots
-- [`signal_example_ica_4`](@ref) — sphering: morphing data into perfect spheres
-- [`signal_example_ica_5`](@ref) — infomax: gradient ascent optimization
+- [`signal_example_ica_separation`](@ref) — next step: 2 electrodes, mixing matrices, and the ICA algorithm
+- [`signal_example_ica_geometry`](@ref) — advanced: 3 sources, rotation geometry, scatter plots
+- [`signal_example_ica_clt`](@ref) — background: why mixtures become Gaussian
+- [`signal_example_ica_sphering`](@ref) — sphering: morphing data into perfect spheres
+- [`signal_example_ica_optimization`](@ref) — optimization: gradient ascent on non-Gaussianity
 
 # Examples
 ```julia
 using EegFun
-EegFun.signal_example_ica_1()
+signal_example_ica_mixture()
 ```
 """
-function signal_example_ica_1()
+function signal_example_ica_mixture()
     n = 1000
     Random.seed!(42)
 
