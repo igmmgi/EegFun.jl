@@ -292,12 +292,15 @@ function plot_erp_measurement_gui(
             c = (colors[idx], 0.8)
 
             if haskey(result, :point)
-                p = scatter!(ax, [result.point]; color = c, marker = :cross, markersize = 25)
+                if _is_latency_measurement(selected_type[])
+                    p = vlines!(ax, result.point[1]; color = c, linewidth = 2)
+                else
+                    p = hlines!(ax, result.point[2]; color = c, linewidth = 2)
+                end
                 push!(marker_plots, p)
             elseif haskey(result, :points)
-                p1 = scatter!(ax, result.points; color = c, marker = :cross, markersize = 20)
-                p2 = lines!(ax, [Point2f(pt) for pt in result.points]; color = (colors[idx], 0.4), linestyle = :dash, linewidth = 2)
-                push!(marker_plots, p1, p2)
+                p = lines!(ax, [Point2f(pt) for pt in result.points]; color = c, linestyle = :dash, linewidth = 2)
+                push!(marker_plots, p)
             elseif haskey(result, :span)
                 p = lines!(ax, [Point2f(result.span[1], result.value), Point2f(result.span[2], result.value)]; color = c, linewidth = 4)
                 push!(marker_plots, p)
@@ -327,20 +330,48 @@ function plot_erp_measurement_gui(
         end
     end
 
+    # State for stable y-limits
+    cached_ylims = Ref{Tuple{Float64, Float64}}((0.0, 1.0))
+    cached_ch = Ref{Symbol}(:none)
+
     # Plot ERPs using plot_erp! to add to existing axis
     function update_erp_plot!()
         empty!(ax)  # Clear existing plot
+
+        ch = selected_channel[]
+        bi = baseline_interval_obs[]
+
+        # Compute mathematically guaranteed limits the first time a channel is selected
+        if ch != cached_ch[]
+            max_range = 0.0
+            for erp in erp_vec
+                raw_data = erp.data[!, ch]
+                r_min = minimum(raw_data)
+                r_max = maximum(raw_data)
+                max_range = max(max_range, r_max - r_min)
+            end
+            
+            # The baselined signal will mathematically ALWAYS be within ±(max_raw - min_raw)
+            # no matter what baseline interval is dragged! Add a 5% margin.
+            if max_range == 0.0; max_range = 1.0; end
+            
+            cached_ylims[] = (-1.05 * max_range, 1.05 * max_range)
+            cached_ch[] = ch
+        end
 
         # Plot using plot_erp!
         plot_erp!(
             fig,
             ax,
             erp_vec,
-            channel_selection = channels(selected_channel[]),
-            baseline_interval = baseline_interval_obs[],
+            channel_selection = channels(ch),
+            baseline_interval = bi,
             legend = false,  # Disable auto-legend to prevent redrawing
             legend_position = :rt,
         )
+        
+        # Apply stable limits
+        ylims!(ax, cached_ylims[][1], cached_ylims[][2])
 
         # Redraw band overlays (empty! cleared them)
         update_analysis_band!(analysis_interval_obs[])
