@@ -66,8 +66,9 @@ function plot_erp_measurement_gui(
     analysis_type::String = "mean_amplitude",
     analysis_interval::Union{Tuple{Real,Real},Nothing} = nothing,
     baseline_interval::Union{Tuple{Real,Real},Nothing} = nothing,
+    display_plot::Bool = true,
 )
-    return plot_erp_measurement_gui([erp]; channel, analysis_type, analysis_interval, baseline_interval)
+    return plot_erp_measurement_gui([erp]; channel, analysis_type, analysis_interval, baseline_interval, display_plot)
 end
 
 # Vector of ErpData - main implementation
@@ -161,13 +162,71 @@ function plot_erp_measurement_gui(
     baseline_interval_slider = IntervalSlider(controls_grid[10, 1], range = time_min:0.005:time_max, startvalues = baseline_interval)
     baseline_interval_label = Label(controls_grid[11, 1], @sprintf("%.3f s - %.3f s", baseline_interval...), halign = :left)
 
-    # Show markers toggle
-    Label(controls_grid[12, 1], "Show Result Markers:", halign = :left)
-    show_markers_toggle = Toggle(controls_grid[13, 1], active = false)  # Off by default
+    peak_lbl1 = Label(controls_grid[12, 1], "Peak Local Window:", halign = :left)
+    local_interval_slider = Slider(controls_grid[13, 1], range = 1:15, startvalue = 3)
+    peak_lbl2 = Label(controls_grid[14, 1], lift(v -> "$v samples", local_interval_slider.value), halign = :left)
 
-    # Result display
-    Label(controls_grid[14, 1], "Result:", fontsize = 14, font = :bold, halign = :left)
-    result_label = Label(controls_grid[15, 1], "—", fontsize = 16, halign = :left)
+    frac_lbl1 = Label(controls_grid[15, 1], "Fraction:", halign = :left)
+    fraction_slider = Slider(controls_grid[16, 1], range = 0.05:0.05:0.95, startvalue = 0.5)
+    frac_lbl2 = Label(controls_grid[17, 1], lift(v -> @sprintf("%.2f", v), fraction_slider.value), halign = :left)
+
+    function update_param_sliders_visibility!(atype)
+        is_peak = atype in ["max_peak_amplitude", "min_peak_amplitude", "max_peak_latency", "min_peak_latency", "peak_to_peak_amplitude", "peak_to_peak_latency", "fractional_peak_latency"]
+        is_frac = atype in ["fractional_area_latency", "fractional_peak_latency"]
+        
+        peak_lbl1.blockscene.visible[] = is_peak
+        local_interval_slider.blockscene.visible[] = is_peak
+        peak_lbl2.blockscene.visible[] = is_peak
+        
+        frac_lbl1.blockscene.visible[] = is_frac
+        fraction_slider.blockscene.visible[] = is_frac
+        frac_lbl2.blockscene.visible[] = is_frac
+    end
+    update_param_sliders_visibility!("mean_amplitude")
+
+    Label(controls_grid[18, 1], "Show Result Markers:", halign = :left)
+    show_markers_toggle = Toggle(controls_grid[19, 1], active = false)
+
+    Label(controls_grid[20, 1], "Result:", fontsize = 14, font = :bold, halign = :left)
+    result_label = Label(controls_grid[21, 1], "—", fontsize = 16, halign = :left, word_wrap = true)
+
+    ax_topo = Axis(controls_grid[22, 1], aspect = DataAspect())
+    plot_layout_2d!(fig, ax_topo, first_erp.layout, point_plot=true, label_plot=false, head_linewidth=1)
+    
+    # Hide axis borders
+    hidedecorations!(ax_topo)
+    hidespines!(ax_topo)
+    
+    # Interactive channel click
+    # The positions are in `first_erp.layout.data.x2` and `y2`
+    on(events(ax_topo).mousebutton) do event
+        if event.button == Mouse.left && event.action == Mouse.press
+            mouse_pos = mouseposition(ax_topo)
+            layout_df = first_erp.layout.data
+            dists = (layout_df.x2 .- mouse_pos[1]).^2 .+ (layout_df.y2 .- mouse_pos[2]).^2
+            min_dist, min_idx = findmin(dists)
+            
+            if min_dist < 0.2^2 
+                closest_ch = Symbol(layout_df.label[min_idx])
+                if closest_ch in all_channels
+                    selected_channel[] = closest_ch
+                    channel_menu.selection[] = closest_ch
+                end
+                return Consume(true)
+            end
+        end
+        return Consume(false)
+    end
+    
+    # Highlight selected channel with red dot
+    active_pos = lift(selected_channel) do ch
+        idx = findfirst(==(Symbol(ch)), first_erp.layout.data.label)
+        if !isnothing(idx)
+            return [Point2f(first_erp.layout.data.x2[idx], first_erp.layout.data.y2[idx])]
+        end
+        return Point2f[]
+    end
+    scatter!(ax_topo, active_pos, color=:red, markersize=14)
 
     # Set row gaps
     rowgap!(controls_grid, 10)
@@ -223,23 +282,48 @@ function plot_erp_measurement_gui(
             return
         end
 
-        # Determine if this is a latency or amplitude measurement
-        is_latency = _is_latency_measurement(selected_type[])
-
-        # Draw markers for each condition
         colors = length(erp_vec) > 1 ? Makie.cgrad(:jet, length(erp_vec), categorical = true) : [:black]
 
         for (idx, result) in enumerate(results)
-            if haskey(result, :error) || isnothing(result.value) || isnan(result.value)
+            if haskey(result, :error) || !haskey(result, :value) || isnothing(result.value) || isnan(result.value)
                 continue
             end
+            
+            c = (colors[idx], 0.8)
 
-            if is_latency # Vertical line at latency time point
-                p = vlines!(ax, result.value, color = (colors[idx], 0.8), linestyle = :dot, linewidth = 2)
-            else # Horizontal line at amplitude value
-                p = hlines!(ax, result.value, color = (colors[idx], 0.8), linestyle = :dot, linewidth = 2)
+            if haskey(result, :point)
+                p = scatter!(ax, [result.point]; color = c, marker = :cross, markersize = 25)
+                push!(marker_plots, p)
+            elseif haskey(result, :points)
+                p1 = scatter!(ax, result.points; color = c, marker = :cross, markersize = 20)
+                p2 = lines!(ax, [Point2f(pt) for pt in result.points]; color = (colors[idx], 0.4), linestyle = :dash, linewidth = 2)
+                push!(marker_plots, p1, p2)
+            elseif haskey(result, :span)
+                p = lines!(ax, [Point2f(result.span[1], result.value), Point2f(result.span[2], result.value)]; color = c, linewidth = 4)
+                push!(marker_plots, p)
+            elseif haskey(result, :curve)
+                y_band = result.curve
+                y_baseline = zeros(length(y_band))
+                y_upper = y_band
+                y_lower = y_baseline
+                if selected_type[] == "positive_area"
+                    y_lower = y_baseline
+                    y_upper = max.(y_band, 0.0)
+                elseif selected_type[] == "negative_area"
+                    y_upper = y_baseline
+                    y_lower = min.(y_band, 0.0)
+                end
+                
+                p = band!(ax, result.x, y_lower, y_upper; color = (colors[idx], 0.3))
+                push!(marker_plots, p)
+            else
+                if _is_latency_measurement(selected_type[]) 
+                    p = vlines!(ax, result.value, color = c, linestyle = :dot, linewidth = 2)
+                else 
+                    p = hlines!(ax, result.value, color = c, linestyle = :dot, linewidth = 2)
+                end
+                push!(marker_plots, p)
             end
-            push!(marker_plots, p)
         end
     end
 
@@ -424,6 +508,7 @@ function plot_erp_measurement_gui(
         type_str = type_pair isa Pair ? type_pair[2] : type_pair
         selected_type[] = type_str
         ax.title = "$(_print_vector([selected_channel[]])): $(type_str)"
+        update_param_sliders_visibility!(type_str)
     end
 
     on(meas_window_slider.interval) do interval
@@ -452,12 +537,18 @@ function plot_erp_measurement_gui(
     end
 
     # Computed observable for measurement values (one per condition)
-    measurement_results = lift(selected_channel, selected_type, analysis_interval_obs, baseline_interval_obs) do ch, type_str, mw, bw
+    measurement_results = lift(selected_channel, selected_type, analysis_interval_obs, baseline_interval_obs, local_interval_slider.value, fraction_slider.value) do ch, type_str, mw, bw, li, frac
         # Compute for all conditions (baseline always enabled)
         results = NamedTuple[]
+        
+        measurement_kwargs = Dict{Symbol,Any}(k => v[1] for (k, v) in ERP_MEASUREMENTS_KWARGS)
+        measurement_kwargs[:local_interval] = li
+        measurement_kwargs[:fractional_area_fraction] = frac
+        measurement_kwargs[:fractional_peak_fraction] = frac
+        
         for erp in erp_vec
             try
-                result = _compute_gui_measurement(erp, ch, type_str, mw, bw)
+                result = _compute_gui_measurement(erp, ch, type_str, mw, bw, measurement_kwargs)
                 push!(results, (condition = erp.condition_name, result...))
             catch e
                 push!(results, (condition = erp.condition_name, value = NaN, error = string(e)))
@@ -532,14 +623,15 @@ end
 
 """
 Helper function to compute measurements for GUI.
-Returns NamedTuple with :value field (and optionally :error field if failed).
+Returns NamedTuple with :value field and geometric objects for marker plotting.
 """
 function _compute_gui_measurement(
     erp::ErpData,
-    channel::Symbol,
-    analysis_type::String,
-    analysis_interval::Tuple{Real,Real},
-    baseline_interval::Union{Tuple{Real,Real},Nothing},
+    channel,
+    analysis_type,
+    analysis_interval,
+    baseline_interval,
+    measurement_kwargs,
 )
     # Apply baseline correction using existing infrastructure
     erp_data = baseline(erp, baseline_interval)
@@ -554,9 +646,36 @@ function _compute_gui_measurement(
     selected_data = channel_data[time_mask]
     selected_times = time_data[time_mask]
 
-    # Compute measurement using existing internal function logic
-    measurement_kwargs = Dict{Symbol,Any}(k => v[1] for (k, v) in ERP_MEASUREMENTS_KWARGS)
-
     value = _compute_measurement(selected_data, selected_times, analysis_type, measurement_kwargs, channel)
-    return isnothing(value) ? (value = NaN,) : (value = value,)
+    if isnothing(value)
+        return (value = NaN,)
+    end
+
+    result = Dict{Symbol,Any}(:value => value)
+
+    if analysis_type == "mean_amplitude"
+        result[:span] = (analysis_interval[1], analysis_interval[2])
+    elseif analysis_type in ["max_peak_amplitude", "min_peak_amplitude", "max_peak_latency", "min_peak_latency"]
+        peak_type = startswith(analysis_type, "max") ? :max : :min
+        local_interval = measurement_kwargs[:local_interval]
+        peak_val, peak_idx = _compute_peak_measurement(selected_data, peak_type, local_interval, channel)
+        if !isnothing(peak_val) && !isnothing(peak_idx)
+            result[:point] = (selected_times[peak_idx], peak_val)
+        end
+    elseif analysis_type in ["peak_to_peak_amplitude", "peak_to_peak_latency"]
+        local_interval = measurement_kwargs[:local_interval]
+        max_val, max_idx = _compute_peak_measurement(selected_data, :max, local_interval, channel)
+        min_val, min_idx = _compute_peak_measurement(selected_data, :min, local_interval, channel)
+        if !isnothing(max_val) && !isnothing(min_val)
+            result[:points] = [(selected_times[max_idx], max_val), (selected_times[min_idx], min_val)]
+        end
+    elseif analysis_type in ["rectified_area", "integral", "positive_area", "negative_area"]
+        result[:curve] = selected_data
+        result[:x] = selected_times
+    elseif analysis_type in ["fractional_area_latency", "fractional_peak_latency"]
+        idx = argmin(abs.(time_data .- value))
+        result[:point] = (value, channel_data[idx])
+    end
+
+    return (; result...)
 end
