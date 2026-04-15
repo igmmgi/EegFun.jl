@@ -92,51 +92,6 @@ end
 
 
 
-"""
-    _get_channel_indices(dat::DataFrame, channel_labels::AbstractVector{<:AbstractString}) -> Vector{Int}
-
-Get column indices for specified channel labels.
-
-# Arguments
-- `dat::DataFrame`: Data containing channels
-- `channel_labels::AbstractVector{<:AbstractString}`: Channel labels to find
-
-# Returns
-- `Vector{Int}`: Column indices for requested channels
-
-# Throws
-- `ArgumentError`: If no matching channels found
-"""
-function _get_channel_indices(dat::DataFrame, channel_labels::AbstractVector{<:AbstractString})::Vector{Int}
-    isempty(channel_labels) && @minimal_error "channel_labels cannot be empty"
-
-    # Use Set for O(1) membership check during search
-    labels_set = Set(channel_labels)
-    channel_indices = findall(col -> col in labels_set, names(dat))
-
-    isempty(channel_indices) && @minimal_error "No matching channel_labels found in the data frame"
-
-    return channel_indices
-end
-
-
-
-
-
-"""
-    _find_idx_range(time::AbstractVector, start_time::Real, end_time::Real) -> UnitRange{Int}
-    _find_idx_range(time::AbstractVector, limits::AbstractVector) -> UnitRange{Int}
-
-Find index range corresponding to time interval.
-Assumes time vector is sorted in ascending order.
-
-# Returns
-- `UnitRange{Int}`: Range of indices
-"""
-_find_idx_range(time::AbstractVector, start_time::Real, end_time::Real) =
-    searchsortedfirst(time, start_time):searchsortedlast(time, end_time)
-_find_idx_range(time::AbstractVector, limits::AbstractVector) = _find_idx_range(time, limits[1], limits[end])
-
 
 """
     _find_idx_start_end(time::AbstractVector, start_time::Real, end_time::Real) -> Tuple{Int,Int}
@@ -309,7 +264,7 @@ Create non-mutating versions of all methods of a function that ends with !.
 Preserves method signatures and documentation.
 
 Example:
-@add_nonmutating filter_data!
+@add_nonmutating baseline!
 """
 macro add_nonmutating(func)
 

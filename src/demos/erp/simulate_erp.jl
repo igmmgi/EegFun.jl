@@ -21,7 +21,7 @@ function _peak_vec(
     # Apply cosine and mask
     signal = cos.(phase)
     # Mask values outside [-pi/2, pi/2] phase range
-    signal[abs.(phase) .> π/2] .= 0
+    signal[abs.(phase).>π/2] .= 0
 
     # Apply amplitude with jitter
     rand_amp = randn(trials) .* jitter_amp
@@ -139,11 +139,11 @@ Demonstrates how signal-to-noise ratio improves as the number of averaged trials
 | Number of Trials | 1–500 | How many simulated trials to average |
 | Noise Amplitude | 0–20 | Amplitude of background 1/f EEG noise |
 | Active (toggle, ×5) | on/off | Enable/disable each component |
-| Freq (×5) | 0.1–5.0 Hz | Cosine frequency of the component |
-| Amp (×5) | −10 to 10 μV | Peak amplitude of the component |
+| Freq (×5) | 0.1–20.0 Hz | Cosine frequency of the component |
+| Amp (×5) | −20 to 20 μV | Peak amplitude of the component |
 | Latency (×5) | 0–1000 ms | Peak latency of the component |
 | Amp Jitter (×5) | 0–20 | Trial-to-trial amplitude variability |
-| Lat Jitter (×5) | 0–50 ms | Trial-to-trial latency variability |
+| Lat Jitter (×5) | 0–150 ms | Trial-to-trial latency variability |
 
 # Examples
 ```julia
@@ -181,19 +181,30 @@ function simulate_erp()
 
     time = collect(1:n_samples) .- (samp_freq * base_length)
 
-    # Trials control at the top
+    # Control layout at the bottom
+    ctrl_layout = gl[2, 1:2] = GridLayout()
+
     trials = Observable(1)
-    sl_trials = Slider(gl[2, 1], range = 1:1:500, startvalue = 1)
-    Label(gl[2, 1, Top()], "Number of Trials")
-    Label(gl[2, 1, Bottom()], lift(x -> string(Int(x)), trials))
+    sl_trials = Slider(ctrl_layout[1, 1], range = 1:1:500, startvalue = 1)
+    Label(ctrl_layout[1, 1, Top()], "Number of Trials")
+    Label(ctrl_layout[1, 1, Bottom()], lift(x -> string(Int(x)), trials))
     connect!(trials, sl_trials.value)
 
     # Noise control
     noise_amp = Observable(0.0)
-    sl_noise = Slider(gl[2, 2], range = 0.0:1:20.0, startvalue = 0.0)
-    Label(gl[2, 2, Top()], "Noise Amplitude")
-    Label(gl[2, 2, Bottom()], lift(x -> string(round(x, digits = 1)), noise_amp))
+    sl_noise = Slider(ctrl_layout[1, 2], range = 0.0:1:20.0, startvalue = 0.0)
+    Label(ctrl_layout[1, 2, Top()], "Noise Amplitude")
+    Label(ctrl_layout[1, 2, Bottom()], lift(x -> string(round(x, digits = 1)), noise_amp))
     connect!(noise_amp, sl_noise.value)
+
+    # Regenerate Button
+    btn_regen = Button(ctrl_layout[1, 3], label = "Regenerate", width = 200)
+
+    # Toggle for CI vs Trials
+    tb_ci = Toggle(ctrl_layout[1, 4])
+    tb_ci.active[] = false
+    Label(ctrl_layout[1, 5], "Confidence Interval", halign = :left)
+    show_ci = tb_ci.active
 
     # List to store components
     components = Component[]
@@ -217,11 +228,11 @@ function simulate_erp()
         connect!(active, tb.active)
 
         # Parameter sliders with value labels
-        sl_freq = Slider(parent[row, 2], range = 0.1:0.1:5.0, startvalue = 3.0)
+        sl_freq = Slider(parent[row, 2], range = 0.1:0.1:20.0, startvalue = 3.0)
         lbl_freq = Label(parent[row, 2, Bottom()], lift(x -> string(round(x, digits = 1)), freq))
         connect!(freq, sl_freq.value)
 
-        sl_amp = Slider(parent[row, 3], range = -10.0:1.0:10.0, startvalue = 5.0)
+        sl_amp = Slider(parent[row, 3], range = -20.0:1.0:20.0, startvalue = 5.0)
         lbl_amp = Label(parent[row, 3, Bottom()], lift(x -> string(round(x, digits = 1)), amp))
         connect!(amp, sl_amp.value)
 
@@ -233,7 +244,7 @@ function simulate_erp()
         lbl_jitter_amp = Label(parent[row, 5, Bottom()], lift(x -> string(round(x, digits = 1)), jitter_amp))
         connect!(jitter_amp, sl_jitter_amp.value)
 
-        sl_jitter_lat = Slider(parent[row, 6], range = 0.0:1.0:50.0, startvalue = 0.0)
+        sl_jitter_lat = Slider(parent[row, 6], range = 0.0:1.0:150.0, startvalue = 0.0)
         lbl_jitter_lat = Label(parent[row, 6, Bottom()], lift(x -> string(round(x, digits = 1)), jitter_lat))
         connect!(jitter_lat, sl_jitter_lat.value)
 
@@ -285,8 +296,17 @@ function simulate_erp()
     trial_plot_data = Observable(Point2f[])
     erp_plot_data = Observable(Point2f[])
 
-    lines!(ax, trial_plot_data, color = (:gray, 0.2))
-    lines!(ax, erp_plot_data, color = :blue, linewidth = 3)
+    time_obs = Observable(Float64[])
+    lower_obs = Observable(Float64[])
+    upper_obs = Observable(Float64[])
+
+    show_trials = @lift(!$show_ci)
+
+    # 95% Confidence Interval Band (rendered beneath the lines)
+    band!(ax, time_obs, lower_obs, upper_obs; color = (:blue, 0.2), visible = show_ci)
+
+    lines!(ax, trial_plot_data, color = (:gray, 0.15), visible = show_trials)
+    lines!(ax, erp_plot_data, color = :blue, linewidth = 3, label = "Empirical Average")
 
     # Plot update function
     """Update trial and ERP line plot data from new simulation results."""
@@ -297,14 +317,30 @@ function simulate_erp()
         if n_trials == 0
             trial_plot_data[] = Point2f[]
             erp_plot_data[] = Point2f[]
+            time_obs[] = Float64[]
+            lower_obs[] = Float64[]
+            upper_obs[] = Float64[]
             autolimits!(ax)
             return
         end
 
+        # Calculate 95% Confidence interval
+        if n_trials > 1
+            stds = vec(std(new_signals, dims = 1))
+            ci_margin = 1.96 .* stds ./ sqrt(n_trials)
+            lower_obs[] = new_erp .- ci_margin
+            upper_obs[] = new_erp .+ ci_margin
+        else
+            lower_obs[] = new_erp
+            upper_obs[] = new_erp
+        end
+        time_obs[] = t
+
         # Efficiently prepare trial data with NaN separators
-        # We transform the matrix into a single vector of points
-        points = Vector{Point2f}(undef, n_trials * (n_smpl + 1))
-        for trial = 1:n_trials
+        # Capped at 50 drawn trials to prevent visual spaghetti
+        max_drawn_trials = min(n_trials, 50)
+        points = Vector{Point2f}(undef, max_drawn_trials * (n_smpl + 1))
+        for trial = 1:max_drawn_trials
             offset = (trial - 1) * (n_smpl + 1)
             for s = 1:n_smpl
                 points[offset+s] = Point2f(t[s], new_signals[trial, s])
@@ -341,6 +377,12 @@ function simulate_erp()
     end
 
     on(noise_amp) do _
+        if any(c -> c.active[], components)
+            update_simulation()
+        end
+    end
+
+    on(btn_regen.clicks) do _
         if any(c -> c.active[], components)
             update_simulation()
         end

@@ -897,4 +897,3 @@ function _compute_rdms_from_data(
 
     return rdms
 end
-

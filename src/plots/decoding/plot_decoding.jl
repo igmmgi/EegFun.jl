@@ -515,7 +515,7 @@ function plot_confusion_matrix(decoded::DecodedData; time_point::Union{Float64,I
         title_text = "Average Confusion Matrix"
     elseif time_point isa Float64
         # Find closest time point
-        time_idx = find_closest_time_index(decoded.times , time_point)
+        time_idx = find_closest_time_index(decoded.times, time_point)
         confusion = decoded.confusion_matrix[time_idx, :, :]
         title_text = "Confusion Matrix at $(round(time_point, digits=3)) s"
     else
@@ -557,4 +557,3 @@ function plot_confusion_matrix(decoded::DecodedData; time_point::Union{Float64,I
     _set_window_title("Makie")
     return fig
 end
-

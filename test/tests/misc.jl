@@ -54,22 +54,8 @@ using DataFrames
         @test start_idx == [1]
         @test end_idx == [5]
     end
-
     @testset "Time and index utilities" begin
-        # Test _find_idx_range
         time = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
-
-        # Test with start and end times
-        range1 = EegFun._find_idx_range(time, 0.2, 0.8)
-        @test range1 == 3:9  # searchsortedlast includes the last matching element
-
-        # Test with vector limits
-        range2 = EegFun._find_idx_range(time, [0.1, 0.9])
-        @test range2 == 2:10
-
-        # Test edge cases
-        range3 = EegFun._find_idx_range(time, 0.0, 1.0)
-        @test range3 == 1:11
 
         # Test _find_idx_start_end
         start_idx, end_idx = EegFun._find_idx_start_end(time, 0.2, 0.8)
@@ -80,6 +66,7 @@ using DataFrames
         @test start_idx == 2
         @test end_idx == 10
     end
+
 
     @testset "Data manipulation" begin
         # Test detrend function
@@ -119,18 +106,6 @@ using DataFrames
         @test result == [1, 3]
     end
 
-    @testset "DataFrame utilities" begin
-        # Create test DataFrame
-        df = DataFrame(time = [0.1, 0.2, 0.3], Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0], Pz = [7.0, 8.0, 9.0], vEOG = [0.1, 0.2, 0.3])
-
-        # Test _get_channel_indices
-        indices = EegFun._get_channel_indices(df, ["Fz", "Cz"])
-        @test indices == [2, 3]  # Fz is column 2, Cz is column 3
-
-        indices = EegFun._get_channel_indices(df, ["Fz", "Pz", "vEOG"])
-        @test indices == [2, 4, 5]
-
-    end
 
     @testset "Baseline interval validation" begin
         time = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]

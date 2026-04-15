@@ -1,5 +1,5 @@
 """
-    signal_example_mixing()
+    signal_example_ica_2()
 
 Interactive Demo — Signal Mixing & ICA Unmixing.
 
@@ -51,18 +51,21 @@ In EEG terms:
 
 ## See Also
 
-- [`signal_example_ica`](@ref) — more advanced 3-source version with rotation geometry and scatter plots
+- [`signal_example_ica_1`](@ref) — simpler: "What is a mixture?" with just signal + weight
+- [`signal_example_ica_3`](@ref) — more advanced 3-source version with rotation geometry and scatter plots
+- [`signal_example_ica_4`](@ref) — sphering: morphing data into perfect spheres
+- [`signal_example_ica_5`](@ref) — inside the black box: optimization landscape and gradient ascent
 
 # Examples
 ```julia
 using EegFun
-EegFun.signal_example_mixing()
+EegFun.signal_example_ica_2()
 ```
 
 # Returns
 - `fig::Figure`: The Makie figure object
 """
-function signal_example_mixing()
+function signal_example_ica_2()
     # ── 1. Setup & Constants ──────────────────────────────────────────────────
     FS    = 256.0
     T     = 4.0

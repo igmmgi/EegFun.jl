@@ -41,7 +41,7 @@ EegFun.signal_example_composition()
 """
 function signal_example_composition()
 
-    fig = Figure(size = (1200, 800), title = "Signal Example 2", backgroundcolor = :white)
+    fig = Figure(size = (1200, 1000), title = "Signal Example 2", backgroundcolor = :white)
 
     # Set up adaptive font and UI sizing
     """Scale font sizes and UI element dimensions when the figure is resized."""
@@ -347,7 +347,7 @@ function signal_example_composition()
         push!(freq_sliders, freq_slider)
 
         amp_label  = Label(layout[2, 1], "Amp: 1.0", fontsize = slider_font, halign = :right, width = 78)
-        amp_slider = Slider(layout[2, 2], range = 0.0:1.0:10.0, startvalue = 1.0, height = slider_height)
+        amp_slider = Slider(layout[2, 2], range = 0.0:0.1:10.0, startvalue = 1.0, height = slider_height)
         push!(amp_labels, amp_label)
         push!(amp_sliders, amp_slider)
 
@@ -376,6 +376,13 @@ function signal_example_composition()
     Label(filter_outer_layout[3, 2], "HP Filter", fontsize = slider_font, font = :bold, halign = :left)
     hp_filter_label  = Label(filter_outer_layout[4, 1], "0.0 Hz", fontsize = slider_font, halign = :right, width = 78)
     hp_filter_slider = Slider(filter_outer_layout[4, 2], range = 0.0:0.1:2.0, startvalue = 0.0, height = slider_height)
+
+    # Presets (row 6)
+    preset_layout = GridLayout(fig[6, 1:2], tellheight = false, valign = :center, padding = (4, 4, 4, 4), rowgap = 4, colgap = 6)
+    Label(preset_layout[1, 1:2], "Presets", fontsize = slider_font, font = :bold)
+    btn_square = Button(preset_layout[2, 1], label = "Square Wave", width = 120)
+    btn_saw = Button(preset_layout[2, 2], label = "Sawtooth", width = 120)
+    btn_scramble = Button(preset_layout[3, 1:2], label = "Scramble Phase (Keep Power)", width = 240)
 
     # Connect sliders to observables
     # Signal controls (freq, amp, phase for each of 3 signals)
@@ -423,6 +430,51 @@ function signal_example_composition()
     end
     on(hp_filter_checkbox.checked) do val
         high_pass_filter[] = val
+    end
+
+    # Pedagogical Button Wiring
+    on(btn_square.clicks) do _
+        # Square Wave: sum(sin(n*x)/n) for odd n
+        set_close_to!(freq_sliders[1], 5.0)
+        set_close_to!(amp_sliders[1], 5.0)
+        set_close_to!(phase_sliders[1], 0.0)
+
+        set_close_to!(freq_sliders[2], 15.0)
+        set_close_to!(amp_sliders[2], 5.0 / 3.0)
+        set_close_to!(phase_sliders[2], 0.0)
+
+        set_close_to!(freq_sliders[3], 25.0)
+        set_close_to!(amp_sliders[3], 5.0 / 5.0)
+        set_close_to!(phase_sliders[3], 0.0)
+
+        set_close_to!(noise_slider, 0.0)
+        filter_checkbox.checked[] = false
+    end
+
+    on(btn_saw.clicks) do _
+        # Sawtooth: sum((-1)^(n-1) * sin(n*x)/n) for all n
+        set_close_to!(freq_sliders[1], 5.0)
+        set_close_to!(amp_sliders[1], 5.0)
+        set_close_to!(phase_sliders[1], 0.0)
+
+        set_close_to!(freq_sliders[2], 10.0)
+        set_close_to!(amp_sliders[2], 5.0 / 2.0)
+        set_close_to!(phase_sliders[2], π) # (-1) shift
+
+        set_close_to!(freq_sliders[3], 15.0)
+        set_close_to!(amp_sliders[3], 5.0 / 3.0)
+        set_close_to!(phase_sliders[3], 0.0)
+
+        set_close_to!(noise_slider, 0.0)
+        filter_checkbox.checked[] = false
+    end
+
+    on(btn_scramble.clicks) do _
+        # Demonstrates that Phase completely changes the time domain 
+        # but leaves the frequency (Power Spectrum) completely untouched!
+        set_close_to!(phase_sliders[1], rand() * 2π - π)
+        set_close_to!(phase_sliders[2], rand() * 2π - π)
+        set_close_to!(phase_sliders[3], rand() * 2π - π)
     end
 
     display(fig)

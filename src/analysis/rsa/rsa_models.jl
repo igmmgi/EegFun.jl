@@ -463,7 +463,7 @@ function resample_temporal_data(
                         resampled_data[cond_idx, feat_idx, t_idx] = original_series[end]
                     else
                         # Find nearest timepoint
-                        nearest_idx = find_closest_time_index(original_times , t_target)
+                        nearest_idx = find_closest_time_index(original_times, t_target)
                         resampled_data[cond_idx, feat_idx, t_idx] = original_series[nearest_idx]
                     end
                 end
@@ -776,4 +776,3 @@ function create_model_rdms(model_data::Dict{String,Any})
 
     return model_rdms, model_names
 end
-
