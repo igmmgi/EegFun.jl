@@ -266,8 +266,6 @@ using EegFun
         epochs.data[1][!, :Ch1] .+= 200.0  # Extreme value in first epoch
         epochs.data[3][!, :Ch2] .+= -200.0  # Extreme value in third epoch
 
-        original_cols_epoch1 = names(epochs.data[1])
-
         # Test combined mode
         EegFun.is_extreme_value!(epochs, 100, mode = :combined)
 
@@ -557,8 +555,7 @@ using EegFun
         epochs = EegFun.create_test_epoch_data(n_epochs = 5, n_channels = 3)
         epochs.layout = layout
 
-        # Store original values
-        original_value = epochs.data[2][1, :Ch1]
+        # Add artificial artifact for testing
         epochs.data[2][!, :Ch1] .= 200.0  # Artifact
 
         # Detect and prepare for repair

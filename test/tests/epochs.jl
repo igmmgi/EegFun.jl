@@ -924,11 +924,8 @@ using Random
             @testset "Data integrity - averaging reduces variance" begin
                 output_dir = joinpath(test_dir, "averaged_integrity")
 
-                # Get original epoch data statistics
+                # Get original epoch data
                 original_epochs = load(joinpath(test_dir, "1_epochs_cleaned.jld2"), "data")
-                # Get variance across epochs for first time point, first condition
-                first_epoch_values = [df[1, :Fz] for df in original_epochs[1].data]
-                epoch_variance = var(first_epoch_values)
 
                 # Average epochs
                 EegFun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir)

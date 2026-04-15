@@ -647,7 +647,6 @@ using CSV
 
         # Verify column ordering (metadata first, then channels)
         metadata_cols = [:file, :participant, :condition, :condition_name]
-        channel_cols = [:Ch1, :Ch2, :Ch3]
 
         for (i, col) in enumerate(metadata_cols)
             if hasproperty(result.data, col)
