@@ -957,7 +957,3 @@ function erp_measurements(
         _cleanup_logging(log_file, output_dir)
     end
 end
-
-
-
-
