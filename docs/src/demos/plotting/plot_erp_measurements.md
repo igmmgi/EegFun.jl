@@ -81,6 +81,7 @@ EegFun.plot_erp_measurements(
     baseline_interval = (-0.2, 0.0),
     condition_selection = EegFun.conditions([1]),
     channel_selection = EegFun.channels([:Cz, :Pz]),
+    average_channels = true,
 )
 ```
 

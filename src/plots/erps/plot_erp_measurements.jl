@@ -109,7 +109,7 @@ function plot_erp_measurements(
     end
 
     kwargs_dict = Dict{Symbol,Any}(kwargs)
-    
+
     # Extract measurement kwargs and remove them from Plot kwargs to prevent Makie keyword errors
     measurement_kwargs = Dict{Symbol,Any}()
     for (k, v) in ERP_MEASUREMENTS_KWARGS
@@ -157,7 +157,7 @@ function plot_erp_measurements(
     for (idx, dataset) in enumerate(erp_datasets)
         erp_data = baseline(dataset, baseline_interval)
         if average_channels
-            channel_average!(erp_data; channel_selections=[channels(selected_channels)], output_labels=[:avg], reduce=false)
+            channel_average!(erp_data; channel_selections = [channels(selected_channels)], output_labels = [:avg], reduce = false)
         end
         time_data = time_vector(erp_data)
         baseline_cache[idx] = (erp_data, time_data)

@@ -106,8 +106,8 @@ using Logging
         # read_data only returns EegData, InfoIca, or Nothing - other types return nothing
         @test isnothing(result)
 
-        # Test with non-existent file (jldopen throws SystemError, not ArgumentError)
-        @test_throws SystemError EegFun.read_data("/nonexistent/file.jld2")
+        # Test with non-existent file (now intercepted gracefully)
+        @test isnothing(EegFun.read_data("/nonexistent/file.jld2"))
     end
 
     @testset "read_data - edge cases" begin
