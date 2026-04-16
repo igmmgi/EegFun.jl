@@ -139,6 +139,136 @@ function _apply_gui_filters(dat, gui_state)
     return dat
 end
 
+"""
+    _resolve_batch_files_helper(gui_state) -> Union{Nothing, Tuple{Vector{String}, Any, String}}
+
+Resolves batch file selection, parsed participant list, and input directory.
+Returns `(files, part_sel, input_dir)` or `nothing` if validation fails.
+Warns if requested IDs are not found in the directory.
+"""
+function _resolve_batch_files_helper(gui_state)
+    fname = gui_state.filename[]
+    input_dir = gui_state.directory[] == "" ? pwd() : gui_state.directory[]
+    
+    part_list = _parse_gui_int_field(gui_state.participant[])
+    if isnothing(part_list)
+        @minimal_warning "Requested plot settings incompatible: recheck!"
+        return nothing
+    end
+    
+    part_sel = isempty(part_list) ? participants() : participants(part_list)
+    
+    if !isempty(part_list)
+        all_files   = _find_batch_files(fname, input_dir)
+        avail_ids   = sort(unique(_extract_participant_id.(all_files)))
+        missing_ids = filter(id -> id ∉ avail_ids, part_list)
+        if !isempty(missing_ids)
+            @minimal_warning "Participant ID(s) $missing_ids not found in '$fname'. Available IDs: $avail_ids"
+        end
+    end
+    
+    files = _find_batch_files(fname, input_dir, part_sel)
+    return isempty(files) ? nothing : (files, part_sel, input_dir)
+end
+
+# Multi-number validation helper (accepts space/comma-separated integers)
+function setup_multi_int_callback(input, bc_obs::Observable, field_name::String, state_obs::Observable)
+    last_validated = Ref{String}("__uninit__")
+
+    function validate(value)
+        stripped = strip(value)
+        if stripped == last_validated[]
+            return
+        end
+        last_validated[] = stripped
+
+        if isempty(stripped)
+            bc_obs[] = :white
+            state_obs[] = ""
+        else
+            # Split on spaces/commas; each token may be an integer or a n:m range
+            tokens = filter(!isempty, split(stripped, r"[\s,]+"))
+            valid = all(tokens) do t
+                if occursin(':', t)
+                    parts = split(t, ':')
+                    length(parts) == 2 && !isnothing(tryparse(Int, parts[1])) && !isnothing(tryparse(Int, parts[2]))
+                else
+                    !isnothing(tryparse(Int, t))
+                end
+            end
+            if !valid
+                bc_obs[] = :lightcoral
+                state_obs[] = "__INVALID__"
+                @minimal_warning "Invalid $field_name value: \"$stripped\" (must be integers or ranges, e.g. 1 2 3 or 1:50)"
+            else
+                bc_obs[] = :white
+                state_obs[] = stripped
+            end
+        end
+    end
+
+    on(input.stored_string) do value
+        validate(value)
+    end
+
+    on(input.focused) do is_focused
+        if !is_focused
+            validate(input.displayed_string[])
+        end
+    end
+end
+
+# Helper function for numeric input validation with visual feedback
+function setup_numeric_callback(input, bc_obs::Observable, field_name::String, update_fn::Function; range_check = nothing)
+    last_validated = Ref{String}("__uninit__")
+
+    function validate(value)
+        stripped = strip(value)
+        if stripped == last_validated[]
+            return
+        end
+        last_validated[] = stripped
+
+        if isempty(stripped)
+            bc_obs[] = :white
+            update_fn(nothing)
+        else
+            parsed = tryparse(Float64, stripped)
+            if isnothing(parsed)
+                bc_obs[] = :lightcoral
+                @minimal_warning "Invalid $field_name value: \"$stripped\" (must be a number)"
+            else
+                bc_obs[] = :white
+                update_fn(parsed)
+            end
+        end
+        # Run range check after updating value
+        !isnothing(range_check) && range_check()
+    end
+
+    # Validate on Enter
+    on(input.stored_string) do value
+        validate(value)
+    end
+
+    # Validate on defocus (clicking away)
+    on(input.focused) do is_focused
+        if !is_focused
+            validate(input.displayed_string[])
+        end
+    end
+end
+
+# Range validation: if both values are set and min >= max, both boxes turn red
+function check_range(limit_obs, min_bc, max_bc, label)
+    lo, hi = limit_obs[]
+    if !isnothing(lo) && !isnothing(hi) && lo > hi
+        min_bc[] = :lightcoral
+        max_bc[] = :lightcoral
+        @minimal_warning "Invalid $label range: min ($lo) must be less than or equal to max ($hi)"
+    end
+end
+
 """GUI bridge: load data and call `plot_erp_image`."""
 function _plot_erp_image(gui_state)
     isnothing(_validate_file(gui_state)) && return
@@ -221,25 +351,9 @@ function _plot_time_frequency(gui_state)
     end
 
     if is_pattern
-        part_list = _parse_gui_int_field(gui_state.participant[])
-        if isnothing(part_list)
-            @minimal_warning "Requested plot settings incompatible: recheck!"
-            return
-        end
-        part_sel = isempty(part_list) ? participants() : participants(part_list)
-
-        # Warn about missing participant IDs
-        if !isempty(part_list)
-            all_files   = _find_batch_files(fname, input_dir)
-            avail_ids   = sort(unique(_extract_participant_id.(all_files)))
-            missing_ids = filter(id -> id ∉ avail_ids, part_list)
-            if !isempty(missing_ids)
-                @minimal_warning "Participant ID(s) $missing_ids not found in '$fname'. Available IDs: $avail_ids"
-            end
-        end
-
-        files = _find_batch_files(fname, input_dir, part_sel)
-        isempty(files) && return
+        res = _resolve_batch_files_helper(gui_state)
+        isnothing(res) && return
+        files, _, input_dir = res
 
         @async begin
             try
@@ -312,25 +426,9 @@ function _plot_ica(gui_state)
 
     if is_pattern
         # ── Batch / pattern mode ──────────────────────────────────────────────
-        part_list = _parse_gui_int_field(gui_state.participant[])
-        if isnothing(part_list)
-            @minimal_warning "Requested plot settings incompatible: recheck!"
-            return
-        end
-        part_sel = isempty(part_list) ? participants() : participants(part_list)
-
-        # Warn about missing participant IDs
-        if !isempty(part_list)
-            all_files   = _find_batch_files(fname, input_dir)
-            avail_ids   = sort(unique(_extract_participant_id.(all_files)))
-            missing_ids = filter(id -> id ∉ avail_ids, part_list)
-            if !isempty(missing_ids)
-                @minimal_warning "Participant ID(s) $missing_ids not found in '$fname'. Available IDs: $avail_ids"
-            end
-        end
-
-        files = _find_batch_files(fname, input_dir, part_sel)
-        isempty(files) && return
+        res = _resolve_batch_files_helper(gui_state)
+        isnothing(res) && return
+        files, part_sel, input_dir = res
 
         @async begin
             for file in sort(files, by = _natural_sort_key)
@@ -461,22 +559,9 @@ function _plot_ica_activation(gui_state)
     comp_sel = isempty(comp_list) ? components() : components(comp_list)
 
     if is_pattern
-        part_list = _parse_gui_int_field(gui_state.participant[])
-        if isnothing(part_list)
-            @minimal_warning "Requested plot settings incompatible: recheck!"
-            return
-        end
-        part_sel = isempty(part_list) ? participants() : participants(part_list)
-
-        if !isempty(part_list)
-            all_files   = _find_batch_files(fname, input_dir)
-            avail_ids   = sort(unique(_extract_participant_id.(all_files)))
-            missing_ids = filter(id -> id ∉ avail_ids, part_list)
-            isempty(missing_ids) || @minimal_warning "Participant ID(s) $missing_ids not found. Available: $avail_ids"
-        end
-
-        files = _find_batch_files(fname, input_dir, part_sel)
-        isempty(files) && return
+        res = _resolve_batch_files_helper(gui_state)
+        isnothing(res) && return
+        files, part_sel, input_dir = res
 
         @async begin
             for file in sort(files, by = _natural_sort_key)
