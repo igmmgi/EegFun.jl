@@ -19,6 +19,7 @@ and visualization in one call.
 - `layout::Union{Symbol, PlotLayout}`: Plot layout — :single, :grid, or :topo (default: :single)
 - `channel_selection::Function`: Channel selection predicate (default: all channels)
 - `condition_selection::Function`: Condition selection predicate (default: all conditions)
+- `average_channels::Bool`: Evaluate measurement across a spatially pooled ROI waveform instead of discrete individual channels (default: false).
 - `kwargs...`: Additional arguments passed to `plot_erp` and `erp_measurements`
 
 $(_generate_kwargs_doc(ERP_MEASUREMENTS_KWARGS))
@@ -91,6 +92,7 @@ function plot_erp_measurements(
     layout::Union{Symbol,PlotLayout} = :single,
     channel_selection::Function = channels(),
     condition_selection::Function = conditions(),
+    average_channels::Bool = false,
     kwargs...,
 )
 
@@ -106,11 +108,25 @@ function plot_erp_measurements(
         analysis_interval = (first(time_data), last(time_data))
     end
 
-    # Create the base ERP plot (force interactive for marker linking)
     kwargs_dict = Dict{Symbol,Any}(kwargs)
+    
+    # Extract measurement kwargs and remove them from Plot kwargs to prevent Makie keyword errors
+    measurement_kwargs = Dict{Symbol,Any}()
+    for (k, v) in ERP_MEASUREMENTS_KWARGS
+        if haskey(kwargs_dict, k)
+            measurement_kwargs[k] = pop!(kwargs_dict, k)
+        else
+            measurement_kwargs[k] = v[1]
+        end
+    end
+
+    # Create the base ERP plot (force interactive for marker linking)
     kwargs_dict[:interactive] = true
     if !isnothing(baseline_interval)
         kwargs_dict[:baseline_interval] = baseline_interval
+    end
+    if average_channels
+        kwargs_dict[:average_channels] = true
     end
 
     result = plot_erp(
@@ -130,18 +146,19 @@ function plot_erp_measurements(
     metadata_cols = meta_labels(first_data)
     all_channels = setdiff(propertynames(first_data.data), metadata_cols)
     selected_channels = all_channels[channel_selection(all_channels)]
+    plot_channels = average_channels ? [:avg] : selected_channels
 
     # Build plot_line lookup from line_refs
     plot_lines = _build_plot_line_lookup(line_refs, axes)
-
-    # Measurement kwargs (defaults from canonical kwargs)
-    measurement_kwargs = Dict{Symbol,Any}(k => v[1] for (k, v) in ERP_MEASUREMENTS_KWARGS)
 
     # Compute measurements and overlay for each dataset/channel
     # Pre-compute baseline-corrected data per dataset (avoid redundant copies per channel)
     baseline_cache = Dict{Int,Tuple{ErpData,Vector{Float64}}}()
     for (idx, dataset) in enumerate(erp_datasets)
         erp_data = baseline(dataset, baseline_interval)
+        if average_channels
+            channel_average!(erp_data; channel_selections=[channels(selected_channels)], output_labels=[:avg], reduce=false)
+        end
         time_data = time_vector(erp_data)
         baseline_cache[idx] = (erp_data, time_data)
     end
@@ -149,7 +166,7 @@ function plot_erp_measurements(
     if layout == :single
         for dataset_idx in eachindex(erp_datasets)
             erp_data, time_data = baseline_cache[dataset_idx]
-            for channel in selected_channels
+            for channel in plot_channels
                 plot_line = get(plot_lines[1], (dataset_idx, channel), nothing)
                 _compute_and_overlay!(
                     axes[1],
@@ -165,7 +182,7 @@ function plot_erp_measurements(
         end
     else
         # One channel per axis (grid or topo layout)
-        for (ax_idx, channel) in enumerate(selected_channels)
+        for (ax_idx, channel) in enumerate(plot_channels)
             if ax_idx <= length(axes)
                 for dataset_idx in eachindex(erp_datasets)
                     erp_data, time_data = baseline_cache[dataset_idx]

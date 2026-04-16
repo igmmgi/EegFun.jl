@@ -82,6 +82,10 @@ Read data from JLD2 file, returning the data directly, a Dict of all variables, 
 - If file is empty: returns `nothing`
 """
 function read_data(filepath::String)::Union{EegFunData,Vector{<:EegFunData},Nothing}
+    if !isfile(filepath)
+        @minimal_warning "File does not exist: $filepath"
+        return nothing
+    end
     jldopen(filepath, "r") do file
         keys_list = collect(keys(file))
         isempty(keys_list) && return nothing

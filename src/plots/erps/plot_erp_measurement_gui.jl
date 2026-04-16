@@ -62,7 +62,7 @@ end
 # Single ErpData - dispatch to vector version
 function plot_erp_measurement_gui(
     erp::ErpData;
-    channel::Union{Symbol,Nothing} = nothing,
+    channel::Union{Symbol,Vector{Symbol},Nothing} = nothing,
     analysis_type::String = "mean_amplitude",
     analysis_interval::Union{Tuple{Real,Real},Nothing} = nothing,
     baseline_interval::Union{Tuple{Real,Real},Nothing} = nothing,
@@ -74,7 +74,7 @@ end
 # Vector of ErpData - main implementation
 function plot_erp_measurement_gui(
     erp_vec::Vector{ErpData};
-    channel::Union{Symbol,Nothing} = nothing,
+    channel::Union{Symbol,Vector{Symbol},Nothing} = nothing,
     analysis_type::String = "mean_amplitude",
     analysis_interval::Union{Tuple{Real,Real},Nothing} = nothing,
     baseline_interval::Union{Tuple{Real,Real},Nothing} = nothing,
@@ -91,9 +91,11 @@ function plot_erp_measurement_gui(
     end
 
     # Set initial channel
-    initial_channel = isnothing(channel) ? all_channels[1] : channel
-    if !(initial_channel in all_channels)
-        @minimal_error "Channel $initial_channel not found in data. Available: $(all_channels)"
+    initial_channels = isnothing(channel) ? [all_channels[1]] : (channel isa Symbol ? [channel] : channel)
+    for ch in initial_channels
+        if !(ch in all_channels)
+            @minimal_error "Channel $ch not found in data. Available: $(all_channels)"
+        end
     end
 
     # Get time range from first ERP
@@ -111,7 +113,7 @@ function plot_erp_measurement_gui(
     end
 
     # ===== OBSERVABLES FOR REACTIVE UPDATES =====
-    selected_channel = Observable(initial_channel)
+    selected_channels = Observable{Vector{Symbol}}(initial_channels)
     selected_type = Observable(analysis_type)
     analysis_interval_obs = Observable(analysis_interval)
     baseline_interval_obs = Observable(baseline_interval)
@@ -119,7 +121,7 @@ function plot_erp_measurement_gui(
 
     # Use plot_erp to create the ERP plot
     # We need to handle baseline reactively, so we'll recreate the plot when baseline changes
-    fig = Figure(size = (1280, 960)) # TODO: appropriate figure sizes?
+    fig = Figure(size = (1280, 960))
     _set_window_title("ERP Measurement Tool")
 
     # Create main grid: controls on left (25%), plot area on right (75%)
@@ -141,7 +143,7 @@ function plot_erp_measurement_gui(
 
     # Channel selection
     Label(controls_grid[2, 1], "Channel:", halign = :left)
-    channel_menu = Menu(controls_grid[3, 1], options = zip(string.(all_channels), all_channels), default = string(initial_channel))
+    channel_menu = Menu(controls_grid[3, 1], options = zip(string.(all_channels), all_channels), default = string(initial_channels[1]))
 
     # Measurement type selection
     Label(controls_grid[4, 1], "Measurement Type:", halign = :left)
@@ -171,13 +173,21 @@ function plot_erp_measurement_gui(
     frac_lbl2 = Label(controls_grid[17, 1], lift(v -> @sprintf("%.2f", v), fraction_slider.value), halign = :left)
 
     function update_param_sliders_visibility!(atype)
-        is_peak = atype in ["max_peak_amplitude", "min_peak_amplitude", "max_peak_latency", "min_peak_latency", "peak_to_peak_amplitude", "peak_to_peak_latency", "fractional_peak_latency"]
+        is_peak = atype in [
+            "max_peak_amplitude",
+            "min_peak_amplitude",
+            "max_peak_latency",
+            "min_peak_latency",
+            "peak_to_peak_amplitude",
+            "peak_to_peak_latency",
+            "fractional_peak_latency",
+        ]
         is_frac = atype in ["fractional_area_latency", "fractional_peak_latency"]
-        
+
         peak_lbl1.blockscene.visible[] = is_peak
         local_interval_slider.blockscene.visible[] = is_peak
         peak_lbl2.blockscene.visible[] = is_peak
-        
+
         frac_lbl1.blockscene.visible[] = is_frac
         fraction_slider.blockscene.visible[] = is_frac
         frac_lbl2.blockscene.visible[] = is_frac
@@ -187,46 +197,143 @@ function plot_erp_measurement_gui(
     Label(controls_grid[18, 1], "Show Result Markers:", halign = :left)
     show_markers_toggle = Toggle(controls_grid[19, 1], active = false)
 
-    Label(controls_grid[20, 1], "Result:", fontsize = 14, font = :bold, halign = :left)
-    result_label = Label(controls_grid[21, 1], "—", fontsize = 16, halign = :left, word_wrap = true)
+    Label(controls_grid[20, 1], "Result:", fontsize = 14, font = :bold, halign = :right, justification = :right)
+    result_label = Label(controls_grid[21, 1], "—", fontsize = 16, halign = :right, justification = :right)
 
     ax_topo = Axis(controls_grid[22, 1], aspect = DataAspect())
-    plot_layout_2d!(fig, ax_topo, first_erp.layout, point_plot=true, label_plot=false, head_linewidth=1)
-    
+    plot_layout_2d!(fig, ax_topo, first_erp.layout, point_plot = true, label_plot = false, head_linewidth = 1)
+
     # Hide axis borders
     hidedecorations!(ax_topo)
     hidespines!(ax_topo)
-    
-    # Interactive channel click
-    # The positions are in `first_erp.layout.data.x2` and `y2`
-    on(events(ax_topo).mousebutton) do event
-        if event.button == Mouse.left && event.action == Mouse.press
-            mouse_pos = mouseposition(ax_topo)
-            layout_df = first_erp.layout.data
-            dists = (layout_df.x2 .- mouse_pos[1]).^2 .+ (layout_df.y2 .- mouse_pos[2]).^2
-            min_dist, min_idx = findmin(dists)
-            
-            if min_dist < 0.2^2 
-                closest_ch = Symbol(layout_df.label[min_idx])
-                if closest_ch in all_channels
-                    selected_channel[] = closest_ch
-                    channel_menu.selection[] = closest_ch
+    deregister_interaction!(ax_topo, :rectanglezoom)
+    deregister_interaction!(ax_topo, :scrollzoom)
+
+    # Drag state for channel selection
+    ch_selection_active = Ref(false)
+    ch_selection_start = Ref(Point2f(0, 0))
+    ch_selection_rect = poly!(ax_topo, Point2f[(0, 0), (0, 0), (0, 0), (0, 0)], color = (:blue, 0.3), strokecolor = :blue, visible = false)
+
+    # Interactive channel drag / click
+    on(events(ax_topo).mousebutton, priority = 50) do event
+        if event.button == Mouse.left
+            if event.action == Mouse.press
+                # Check if mouse is actually inside the topography axis
+                ax_pos = ax_topo.scene.viewport[]
+                mouse_pos = events(fig).mouseposition[]
+                is_inside =
+                    mouse_pos[1] >= ax_pos.origin[1] &&
+                    mouse_pos[1] <= ax_pos.origin[1] + ax_pos.widths[1] &&
+                    mouse_pos[2] >= ax_pos.origin[2] &&
+                    mouse_pos[2] <= ax_pos.origin[2] + ax_pos.widths[2]
+
+                if !is_inside
+                    return Consume(false)
                 end
+
+                # Start selection box
+                ch_selection_active[] = true
+                ch_selection_start[] = mouseposition(ax_topo)
+                ch_selection_rect[1] = [ch_selection_start[], ch_selection_start[], ch_selection_start[], ch_selection_start[]]
+                ch_selection_rect.visible[] = true
+                return Consume(true)
+            elseif event.action == Mouse.release && ch_selection_active[]
+                # End selection box
+                ch_selection_active[] = false
+                current_pos = mouseposition(ax_topo)
+                ch_selection_rect.visible[] = false
+
+                # compute bounding box and select channels
+                x1, x2 = minmax(ch_selection_start[][1], current_pos[1])
+                y1, y2 = minmax(ch_selection_start[][2], current_pos[2])
+
+                layout_df = first_erp.layout.data
+                selected_this_time = Symbol[]
+                for row in eachrow(layout_df)
+                    if x1 <= row.x2 <= x2 && y1 <= row.y2 <= y2
+                        closest_ch = Symbol(row.label)
+                        if closest_ch in all_channels
+                            push!(selected_this_time, closest_ch)
+                        end
+                    end
+                end
+
+                # Fallback to nearest point if area was too small (simple click)
+                if isempty(selected_this_time) && abs(x2 - x1) < 0.05 && abs(y2 - y1) < 0.05
+                    dists = (layout_df.x2 .- current_pos[1]) .^ 2 .+ (layout_df.y2 .- current_pos[2]) .^ 2
+                    min_dist, min_idx = findmin(dists)
+                    if min_dist < 0.2^2
+                        closest_ch = Symbol(layout_df.label[min_idx])
+                        if closest_ch in all_channels
+                            push!(selected_this_time, closest_ch)
+                        end
+                    end
+                end
+
+                if !isempty(selected_this_time)
+                    is_shift_held =
+                        Makie.Keyboard.left_shift in events(fig).keyboardstate || Makie.Keyboard.right_shift in events(fig).keyboardstate
+                    is_ctrl_held =
+                        Makie.Keyboard.left_control in events(fig).keyboardstate ||
+                        Makie.Keyboard.right_control in events(fig).keyboardstate
+
+                    if is_shift_held || is_ctrl_held
+                        # Toggle behavior
+                        new_sel = copy(selected_channels[])
+                        for c in selected_this_time
+                            if c in new_sel
+                                filter!(x -> x != c, new_sel)
+                            else
+                                push!(new_sel, c)
+                            end
+                        end
+
+                        if isempty(new_sel)
+                            new_sel = [all_channels[1]]
+                        end
+                        selected_channels[] = new_sel
+                    else
+                        selected_channels[] = selected_this_time
+                    end
+
+                    if length(selected_channels[]) == 1
+                        channel_menu.selection[] = string(selected_channels[][1])
+                    else
+                        channel_menu.selection[] = nothing
+                    end
+                end
+
                 return Consume(true)
             end
         end
         return Consume(false)
     end
-    
-    # Highlight selected channel with red dot
-    active_pos = lift(selected_channel) do ch
-        idx = findfirst(==(Symbol(ch)), first_erp.layout.data.label)
-        if !isnothing(idx)
-            return [Point2f(first_erp.layout.data.x2[idx], first_erp.layout.data.y2[idx])]
+
+    on(events(ax_topo).mouseposition) do pos
+        if ch_selection_active[]
+            current_pos = mouseposition(ax_topo)
+            start_pos = ch_selection_start[]
+            ch_selection_rect[1] = Point2f[
+                Point2f(start_pos[1], start_pos[2]),
+                Point2f(current_pos[1], start_pos[2]),
+                Point2f(current_pos[1], current_pos[2]),
+                Point2f(start_pos[1], current_pos[2]),
+            ]
         end
-        return Point2f[]
     end
-    scatter!(ax_topo, active_pos, color=:red, markersize=14)
+
+    # Highlight selected channels with red dots
+    active_pos = lift(selected_channels) do chs
+        pts = Point2f[]
+        for ch in chs
+            idx = findfirst(==(Symbol(ch)), first_erp.layout.data.label)
+            if !isnothing(idx)
+                push!(pts, Point2f(first_erp.layout.data.x2[idx], first_erp.layout.data.y2[idx]))
+            end
+        end
+        return pts
+    end
+    scatter!(ax_topo, active_pos, color = :red, markersize = 14)
 
     # Set row gaps
     rowgap!(controls_grid, 10)
@@ -234,7 +341,16 @@ function plot_erp_measurement_gui(
     # ===== CREATE ERP PLOT USING plot_erp =====
 
     # Create axis in plot area
-    ax = Axis(plot_area_grid[1, 1], xlabel = "Time (s)", ylabel = "μV", title = "ERP: $(initial_channel)")
+    ax = Axis(
+        plot_area_grid[1, 1],
+        xlabel = "Time (s)",
+        ylabel = "μV",
+        title = "ERP: $(_print_vector(initial_channels))",
+        xgridvisible = false,
+        ygridvisible = false,
+        xminorgridvisible = false,
+        yminorgridvisible = false,
+    )
 
     # ===== INTERVAL BAND VISUALIZATION (thin band near y=0 + edge vlines for dragging) =====
 
@@ -288,7 +404,7 @@ function plot_erp_measurement_gui(
             if haskey(result, :error) || !haskey(result, :value) || isnothing(result.value) || isnan(result.value)
                 continue
             end
-            
+
             c = (colors[idx], 0.8)
 
             if haskey(result, :point)
@@ -316,13 +432,13 @@ function plot_erp_measurement_gui(
                     y_upper = y_baseline
                     y_lower = min.(y_band, 0.0)
                 end
-                
+
                 p = band!(ax, result.x, y_lower, y_upper; color = (colors[idx], 0.3))
                 push!(marker_plots, p)
             else
-                if _is_latency_measurement(selected_type[]) 
+                if _is_latency_measurement(selected_type[])
                     p = vlines!(ax, result.value, color = c, linestyle = :dot, linewidth = 2)
-                else 
+                else
                     p = hlines!(ax, result.value, color = c, linestyle = :dot, linewidth = 2)
                 end
                 push!(marker_plots, p)
@@ -331,45 +447,57 @@ function plot_erp_measurement_gui(
     end
 
     # State for stable y-limits
-    cached_ylims = Ref{Tuple{Float64, Float64}}((0.0, 1.0))
-    cached_ch = Ref{Symbol}(:none)
+    cached_ylims = Ref{Tuple{Float64,Float64}}((0.0, 1.0))
+    cached_ch = Ref{Vector{Symbol}}(Symbol[])
 
     # Plot ERPs using plot_erp! to add to existing axis
     function update_erp_plot!()
         empty!(ax)  # Clear existing plot
 
-        ch = selected_channel[]
+        chs = selected_channels[]
         bi = baseline_interval_obs[]
 
         # Compute mathematically guaranteed limits the first time a channel is selected
-        if ch != cached_ch[]
+        if chs != cached_ch[]
             max_range = 0.0
             for erp in erp_vec
-                raw_data = erp.data[!, ch]
+                channels_df = erp.data[!, chs]
+                raw_data = length(chs) == 1 ? channels_df[!, 1] : vec(sum(Matrix(channels_df), dims = 2) ./ length(chs))
                 r_min = minimum(raw_data)
                 r_max = maximum(raw_data)
                 max_range = max(max_range, r_max - r_min)
             end
-            
+
             # The baselined signal will mathematically ALWAYS be within ±(max_raw - min_raw)
             # no matter what baseline interval is dragged! Add a 5% margin.
-            if max_range == 0.0; max_range = 1.0; end
-            
+            if max_range == 0.0
+                max_range = 1.0
+            end
+
             cached_ylims[] = (-1.05 * max_range, 1.05 * max_range)
-            cached_ch[] = ch
+            cached_ch[] = chs
+        end
+
+        if length(chs) > 1
+            lbl_sym = Symbol("ROI_$(length(chs))_channels")
+            plot_vec = channel_average(erp_vec, channel_selections = [channels(chs)], output_labels = [lbl_sym], reduce = true)
+            plot_ch_selection = channels([lbl_sym])
+        else
+            plot_vec = erp_vec
+            plot_ch_selection = channels(chs)
         end
 
         # Plot using plot_erp!
         plot_erp!(
             fig,
             ax,
-            erp_vec,
-            channel_selection = channels(ch),
+            plot_vec,
+            channel_selection = plot_ch_selection,
             baseline_interval = bi,
             legend = false,  # Disable auto-legend to prevent redrawing
             legend_position = :rt,
         )
-        
+
         # Apply stable limits
         ylims!(ax, cached_ylims[][1], cached_ylims[][2])
 
@@ -526,9 +654,18 @@ function plot_erp_measurement_gui(
 
     # Connect menu/slider changes to observables
     on(channel_menu.selection) do ch
-        selected_channel[] = ch
+        if !isnothing(ch)
+            sym_ch = Symbol(ch)
+            if length(selected_channels[]) > 1 || selected_channels[][1] != sym_ch
+                selected_channels[] = [sym_ch]
+            end
+        end
+    end
+
+    # Plot update triggered by channel selection change
+    on(selected_channels) do chs
         update_erp_plot!()
-        ax.title = "$(_print_vector([ch])): $(selected_type[])"
+        ax.title = "$(_print_vector(chs)): $(selected_type[])"
         # Redraw markers after plot update
         yield()
         update_result_markers!(measurement_results[], show_markers_obs[])
@@ -538,7 +675,7 @@ function plot_erp_measurement_gui(
         # Menu returns a Pair (display_name => analysis_type), extract the VALUE
         type_str = type_pair isa Pair ? type_pair[2] : type_pair
         selected_type[] = type_str
-        ax.title = "$(_print_vector([selected_channel[]])): $(type_str)"
+        ax.title = "$(_print_vector(selected_channels[])): $(type_str)"
         update_param_sliders_visibility!(type_str)
     end
 
@@ -568,18 +705,25 @@ function plot_erp_measurement_gui(
     end
 
     # Computed observable for measurement values (one per condition)
-    measurement_results = lift(selected_channel, selected_type, analysis_interval_obs, baseline_interval_obs, local_interval_slider.value, fraction_slider.value) do ch, type_str, mw, bw, li, frac
+    measurement_results = lift(
+        selected_channels,
+        selected_type,
+        analysis_interval_obs,
+        baseline_interval_obs,
+        local_interval_slider.value,
+        fraction_slider.value,
+    ) do chs, type_str, mw, bw, li, frac
         # Compute for all conditions (baseline always enabled)
         results = NamedTuple[]
-        
+
         measurement_kwargs = Dict{Symbol,Any}(k => v[1] for (k, v) in ERP_MEASUREMENTS_KWARGS)
         measurement_kwargs[:local_interval] = li
         measurement_kwargs[:fractional_area_fraction] = frac
         measurement_kwargs[:fractional_peak_fraction] = frac
-        
+
         for erp in erp_vec
             try
-                result = _compute_gui_measurement(erp, ch, type_str, mw, bw, measurement_kwargs)
+                result = _compute_gui_measurement(erp, chs, type_str, mw, bw, measurement_kwargs)
                 push!(results, (condition = erp.condition_name, result...))
             catch e
                 push!(results, (condition = erp.condition_name, value = NaN, error = string(e)))
@@ -598,19 +742,17 @@ function plot_erp_measurement_gui(
         # Format based on measurement type
         function format_value(val)
             if isnothing(val) || isnan(val)
-                return "N/A"
+                return "   N/A  "
             elseif _is_latency_measurement(selected_type[])
-                return @sprintf("%.4f s", val)
+                return @sprintf("% .3f s", val)
             elseif selected_type[] in ["rectified_area", "integral", "positive_area", "negative_area"]
-                return @sprintf("%.4f μV·s", val)
+                return @sprintf("% .3f μV·s", val)
             else  # Amplitudes
-                return @sprintf("%.4f μV", val)
+                return @sprintf("% .3f μV", val)
             end
         end
 
-        # Build multi-line text for multiple conditions
         if length(results) == 1
-            # Single condition - simple display
             result = results[1]
             if haskey(result, :error)
                 result_label.text = "Error: $(result.error)"
@@ -618,11 +760,9 @@ function plot_erp_measurement_gui(
                 result_label.text = format_value(result.value)
             end
         else
-            # Multiple conditions - show each with label
             lines = String[]
             for result in results
                 if haskey(result, :error)
-                    # Show actual error for debugging
                     push!(lines, "$(result.condition): $(result.error)")
                 else
                     push!(lines, "$(result.condition): $(format_value(result.value))")
@@ -658,7 +798,7 @@ Returns NamedTuple with :value field and geometric objects for marker plotting.
 """
 function _compute_gui_measurement(
     erp::ErpData,
-    channel,
+    channels::Vector{Symbol},
     analysis_type,
     analysis_interval,
     baseline_interval,
@@ -667,7 +807,10 @@ function _compute_gui_measurement(
     # Apply baseline correction using existing infrastructure
     erp_data = baseline(erp, baseline_interval)
     time_data = time_vector(erp_data)
-    channel_data = erp_data.data[!, channel]
+
+    channels_df = erp_data.data[!, channels]
+    channel_data = length(channels) == 1 ? channels_df[!, 1] : vec(sum(Matrix(channels_df), dims = 2) ./ length(channels))
+
     time_mask = (time_data .>= analysis_interval[1]) .& (time_data .<= analysis_interval[2])
 
     if !any(time_mask)
@@ -677,7 +820,8 @@ function _compute_gui_measurement(
     selected_data = channel_data[time_mask]
     selected_times = time_data[time_mask]
 
-    value = _compute_measurement(selected_data, selected_times, analysis_type, measurement_kwargs, channel)
+    dummy_channel_sym = length(channels) == 1 ? channels[1] : Symbol("ROI_$(length(channels))_channels")
+    value = _compute_measurement(selected_data, selected_times, analysis_type, measurement_kwargs, dummy_channel_sym)
     if isnothing(value)
         return (value = NaN,)
     end
@@ -689,14 +833,14 @@ function _compute_gui_measurement(
     elseif analysis_type in ["max_peak_amplitude", "min_peak_amplitude", "max_peak_latency", "min_peak_latency"]
         peak_type = startswith(analysis_type, "max") ? :max : :min
         local_interval = measurement_kwargs[:local_interval]
-        peak_val, peak_idx = _compute_peak_measurement(selected_data, peak_type, local_interval, channel)
+        peak_val, peak_idx = _compute_peak_measurement(selected_data, peak_type, local_interval, dummy_channel_sym)
         if !isnothing(peak_val) && !isnothing(peak_idx)
             result[:point] = (selected_times[peak_idx], peak_val)
         end
     elseif analysis_type in ["peak_to_peak_amplitude", "peak_to_peak_latency"]
         local_interval = measurement_kwargs[:local_interval]
-        max_val, max_idx = _compute_peak_measurement(selected_data, :max, local_interval, channel)
-        min_val, min_idx = _compute_peak_measurement(selected_data, :min, local_interval, channel)
+        max_val, max_idx = _compute_peak_measurement(selected_data, :max, local_interval, dummy_channel_sym)
+        min_val, min_idx = _compute_peak_measurement(selected_data, :min, local_interval, dummy_channel_sym)
         if !isnothing(max_val) && !isnothing(min_val)
             result[:points] = [(selected_times[max_idx], max_val), (selected_times[min_idx], min_val)]
         end
