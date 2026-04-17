@@ -216,7 +216,8 @@ function _get_last_history_line()::Union{String,Nothing}
                     return line
                 end
             end
-        catch
+        catch e
+            @debug "Failed to read REPL history" exception = e
             return nothing
         end
     end

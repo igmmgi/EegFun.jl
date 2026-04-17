@@ -1211,7 +1211,31 @@ function log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
 end
 
 
-"""Predicate generators for channel selection. `channels()` selects all; variants filter by name, number, or range."""
+"""
+    channels()
+    channels(name::Symbol)
+    channels(names::Symbol...)
+    channels(names::Vector{Symbol})
+    channels(index::Int)
+    channels(indices::Union{Vector{Int}, UnitRange})
+    channels(ranges::Vector{UnitRange{Int}})
+    channels(predicate::Function)
+
+Predicate generators for channel selection in subsetting and plotting operations.
+
+Returns a function that, given a vector of channel labels, produces a boolean mask
+selecting the matching channels. Used with the `channel_selection` keyword argument.
+
+# Examples
+```julia
+channels()                          # Select all channels (default)
+channels(:Cz)                       # Select a single channel by name
+channels(:Fz, :Cz, :Pz)            # Select multiple channels by name
+channels([:Fz, :Cz, :Pz])          # Same, from a Vector
+channels(1:10)                      # Select first 10 channels by index
+channels(x -> startswith.(string.(x), "F"))  # Custom predicate
+```
+"""
 channels() = x -> fill(true, length(x))  # Default: select all channels given
 channels(channel_names::Vector{Symbol}) = x -> x .∈ Ref(channel_names)
 channels(channel_name::Symbol) = x -> x .== channel_name
@@ -1220,29 +1244,100 @@ channels(channel_number::Int) = channels([channel_number])
 channels(channel_numbers::Union{Vector{Int},UnitRange}) = x -> [i in channel_numbers for i = 1:length(x)]
 channels(channel_ranges::Vector{UnitRange{Int}}) = x -> [i in union(channel_ranges...) for i = 1:length(x)]
 channels(predicate::Function) = predicate  # Allow custom function predicates
-"""Predicate generators that exclude the specified channels."""
+"""
+    channels_not(name::Symbol)
+    channels_not(names::Symbol...)
+    channels_not(names::Vector{Symbol})
+    channels_not(indices::Union{Vector{Int}, UnitRange})
+
+Predicate generators that **exclude** the specified channels.
+Inverse of `channels(...)`.
+
+# Examples
+```julia
+channels_not(:Fp1, :Fp2)           # Exclude two frontal channels
+channels_not(1:4)                   # Exclude first 4 channels by index
+```
+"""
 channels_not(channel_names::Vector{Symbol}) = x -> .!(x .∈ Ref(channel_names))
 channels_not(channel_name::Symbol) = x -> .!(x .== channel_name)
 channels_not(channel_names::Symbol...) = channels_not(collect(channel_names))
 channels_not(channel_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in channel_numbers for i = 1:length(x)])
 
-"""Predicate generators for ICA component selection."""
+"""
+    components()
+    components(index::Int)
+    components(indices::Int...)
+    components(indices::Union{Vector{Int}, UnitRange})
+    components(predicate::Function)
+
+Predicate generators for ICA component selection.
+
+# Examples
+```julia
+components()                        # Select all components (default)
+components(1, 2, 3)                 # Select components 1, 2, and 3
+components(1:5)                     # Select first 5 components
+```
+"""
 components() = x -> fill(true, length(x))  # Default: select all components given
 components(component_numbers::Union{Vector{Int},UnitRange}) = x -> [i in component_numbers for i = 1:length(x)]
 components(component_number::Int) = x -> x .== component_number
 components(component_numbers::Int...) = components(collect(component_numbers))
 components(predicate::Function) = predicate  # Allow custom function predicates
-"""Predicate generators that exclude the specified components."""
+"""
+    components_not(index::Int)
+    components_not(indices::Int...)
+    components_not(indices::Union{Vector{Int}, UnitRange})
+
+Predicate generators that **exclude** the specified ICA components.
+
+# Examples
+```julia
+components_not(1)                   # Exclude component 1
+components_not(1:3)                 # Exclude first 3 components
+```
+"""
 components_not(component_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in component_numbers for i = 1:length(x)])
 components_not(component_number::Int) = x -> .!(x .== component_number)
 components_not(component_numbers::Int...) = components_not(collect(component_numbers))
 
-"""Predicate generators for sample (row) selection."""
+"""
+    samples()
+    samples(column::Symbol)
+    samples(predicate::Function)
+
+Predicate generators for sample (row) selection. Returns a function that,
+given a DataFrame, produces a boolean mask over rows.
+
+# Examples
+```julia
+samples()                           # Select all samples (default)
+samples(:is_clean)                  # Select rows where :is_clean is true
+samples(df -> df.time .> 0)         # Custom predicate on the DataFrame
+```
+"""
 samples() = x -> fill(true, nrow(x))
 samples(column::Symbol) = x -> x[!, column]
 # Allow custom function predicates
 samples(predicate::Function) = predicate
-"""Combine or negate sample predicates across boolean columns."""
+"""
+    samples_or(columns::Vector{Symbol})
+    samples_and(columns::Vector{Symbol})
+    samples_not(column::Symbol)
+    samples_or_not(columns::Vector{Symbol})
+    samples_and_not(columns::Vector{Symbol})
+
+Combine or negate sample predicates across boolean columns.
+
+# Examples
+```julia
+samples_or([:is_extreme, :is_drift])    # Rows where ANY flag is true
+samples_and([:is_clean, :is_valid])     # Rows where ALL flags are true
+samples_not(:is_bad)                    # Rows where :is_bad is false
+samples_or_not([:is_extreme, :is_bad])  # Rows where NO flag is true
+```
+"""
 samples_or(columns::Vector{Symbol}) = x -> any(x[!, col] for col in columns)
 samples_and(columns::Vector{Symbol}) = x -> all(x[!, col] for col in columns)
 samples_not(column::Symbol) = x -> .!(x[!, column])
@@ -1253,9 +1348,21 @@ samples_and_not(columns::Vector{Symbol}) = x -> .!(all(x[!, col] for col in colu
 # These return Interval values (tuples, ranges, or nothing), not predicates
 """
     times()
+    times(t::Real)
+    times(start::Real, stop::Real)
+    times(interval::Tuple{Real,Real})
 
-Select all time points (default for interval parameters).
-Returns `nothing` which means no time filtering.
+Create time interval values for the `interval_selection` keyword argument.
+Unlike other predicate generators, `times()` returns an `Interval` value
+(a `Tuple` or `nothing`), not a predicate function.
+
+# Examples
+```julia
+times()                             # Select all time points (default, returns nothing)
+times(0.3)                          # Select single time point (snaps to nearest sample)
+times(-0.2, 0.5)                    # Select time window from -200ms to 500ms
+times((-0.2, 0.5))                  # Same, from a Tuple
+```
 """
 times() = nothing
 times(t::Real) = (t, t)
@@ -1265,20 +1372,23 @@ times(interval::Tuple{Real,Real}) = interval
 
 
 
-
 """
     epochs()
-    epochs(epoch_numbers...)
+    epochs(index::Int)
+    epochs(indices::Int...)
+    epochs(indices::Union{Vector{Int}, UnitRange})
     epochs(predicate::Function)
 
 Predicate generators for epoch selection in subsetting operations.
+The `predicate` variant receives individual epoch DataFrames and should return `Bool`.
 
 # Examples
 ```julia
-epochs(1:5)                       # Select first 5 epochs by numerical index
-epochs(2, 4, 6)                   # Select epochs 2, 4, and 6
-epochs(df -> nrow(df) > 100)      # Keep epochs where the recording has >100 samples
-epochs(df -> df.is_bad[1] == 0)   # Keep epochs marked as not bad
+epochs()                              # Select all epochs (default)
+epochs(1:5)                           # Select first 5 epochs by numerical index
+epochs(2, 4, 6)                       # Select epochs 2, 4, and 6
+epochs(df -> nrow(df) > 100)          # Keep epochs with >100 samples
+epochs(df -> df.interval[1] < 1.0)    # Keep epochs by metadata value
 ```
 """
 epochs() = x -> fill(true, length(x))  # Default: select all epochs given
@@ -1288,26 +1398,81 @@ epochs(epoch_numbers::Int...) = epochs(collect(epoch_numbers))
 epochs(predicate::Function) = x -> map(predicate, x)  # Allow custom function predicates over dataframes
 
 """
-    epochs_not(...)
+    epochs_not(index::Int)
+    epochs_not(indices::Int...)
+    epochs_not(indices::Union{Vector{Int}, UnitRange})
 
-Predicate generators that exclude the specified epochs. Operates inversely to `epochs`.
+Predicate generators that **exclude** the specified epochs. Operates inversely to `epochs`.
+
+# Examples
+```julia
+epochs_not(1)                         # Exclude epoch 1
+epochs_not(1:10)                      # Exclude first 10 epochs
+```
 """
 epochs_not(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in epoch_numbers for i = 1:length(x)])
 epochs_not(epoch_number::Int) = x -> .!([i == epoch_number for i = 1:length(x)])
 epochs_not(epoch_numbers::Int...) = epochs_not(collect(epoch_numbers))
 
-"""Predicate generators for participant ID selection."""
+"""
+    participants()
+    participants(id::Int)
+    participants(ids::Int...)
+    participants(ids::Union{Vector{Int}, UnitRange})
+    participants(predicate::Function)
+
+Predicate generators for participant ID selection in batch operations.
+
+# Examples
+```julia
+participants()                        # Select all participants (default)
+participants(1, 2, 3)                 # Select participants 1, 2, and 3
+participants(1:10)                    # Select participants 1 through 10
+```
+"""
 participants() = x -> fill(true, length(x))  # Default: select all participants given
 participants(participant_ids::Union{Vector{Int},UnitRange}) = x -> [id in participant_ids for id in x]
 participants(participant_id::Int) = x -> x .== participant_id
 participants(participant_ids::Int...) = participants(collect(participant_ids))
 participants(predicate::Function) = predicate  # Allow custom function predicates
-"""Predicate generators that exclude the specified participant IDs."""
+"""
+    participants_not(id::Int)
+    participants_not(ids::Int...)
+    participants_not(ids::Union{Vector{Int}, UnitRange})
+
+Predicate generators that **exclude** the specified participant IDs.
+
+# Examples
+```julia
+participants_not(5)                   # Exclude participant 5
+participants_not(1:3)                 # Exclude participants 1, 2, and 3
+```
+"""
 participants_not(participant_ids::Union{Vector{Int},UnitRange}) = x -> .!([id in participant_ids for id in x])
 participants_not(participant_id::Int) = x -> .!(x .== participant_id)
 participants_not(participant_ids::Int...) = participants_not(collect(participant_ids))
 
-"""Predicate generators for condition selection by index or name."""
+"""
+    conditions()
+    conditions(index::Int)
+    conditions(indices::Int...)
+    conditions(indices::Union{Vector{Int}, UnitRange})
+    conditions(name::String)
+    conditions(names::Vector{String})
+    conditions(predicate::Function)
+
+Predicate generators for condition selection by index or name.
+Used with the `condition_selection` keyword argument on `Vector{ErpData}`,
+`Vector{EpochData}`, and similar multi-condition containers.
+
+# Examples
+```julia
+conditions()                          # Select all conditions (default)
+conditions(1, 3)                      # Select conditions 1 and 3 by index
+conditions("congruent")               # Select condition by name
+conditions(["congruent", "neutral"])   # Select multiple conditions by name
+```
+"""
 conditions() = x -> fill(true, length(x))  # Default: select all conditions given
 conditions(condition_indices::Union{Vector{Int},UnitRange}) = x -> [i in condition_indices for i = 1:length(x)]
 conditions(condition_index::Int) = x -> [i == condition_index for i = 1:length(x)]
@@ -1315,7 +1480,22 @@ conditions(condition_indices::Int...) = conditions(collect(condition_indices))
 conditions(condition_names::Vector{String}) = x -> [condition_name(dat) in condition_names for dat in x]
 conditions(cond_name::String) = x -> [condition_name(dat) == cond_name for dat in x]
 conditions(predicate::Function) = predicate  # Allow custom function predicates
-"""Predicate generators that exclude the specified conditions."""
+"""
+    conditions_not(index::Int)
+    conditions_not(indices::Int...)
+    conditions_not(indices::Union{Vector{Int}, UnitRange})
+    conditions_not(name::String)
+    conditions_not(names::String...)
+    conditions_not(names::Vector{String})
+
+Predicate generators that **exclude** the specified conditions.
+
+# Examples
+```julia
+conditions_not(1)                     # Exclude condition 1
+conditions_not("incongruent")         # Exclude condition by name
+```
+"""
 conditions_not(condition_indices::Union{Vector{Int},UnitRange}) = x -> .!([i in condition_indices for i = 1:length(x)])
 conditions_not(condition_index::Int) = x -> .!([i == condition_index for i = 1:length(x)])
 conditions_not(condition_indices::Int...) = conditions_not(collect(condition_indices))
