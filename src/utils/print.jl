@@ -43,7 +43,8 @@ function get_package_version(; package_name::String = "EegFun")
             end
         end
         return version
-    catch # Something went wrong?
+    catch e
+        @debug "get_package_version failed" exception = e
         return "unknown"
     end
 end

@@ -22,7 +22,7 @@ Base.@kwdef mutable struct GUIState
     plottype::Observable{String} = Observable("select")
     layout::Observable{String} = Observable("select")
     layout_file::Observable{String} = Observable("")
-    layout_object::Observable{Any} = Observable{Any}(nothing)
+    layout_object::Observable{Union{Nothing,Layout}} = Observable{Union{Nothing,Layout}}(nothing)
     electrodes::Observable{Vector{String}} = Observable(String[])
     xlim::Observable{Tuple{Union{Nothing,Float64},Union{Nothing,Float64}}} =
         Observable{Tuple{Union{Nothing,Float64},Union{Nothing,Float64}}}((nothing, nothing))
@@ -752,7 +752,8 @@ function _plot_topography(gui_state)
             epoch_num = try
                 epoch_str = strip(gui_state.epoch[])
                 isempty(epoch_str) ? 1 : parse(Int, epoch_str)
-            catch
+            catch e
+                @debug "Failed to parse epoch number, defaulting to 1" exception = e
                 1
             end
             plot_topography(data, epoch_num; channel_selection = selected_channels, interval_selection = interval_sel, extra_kwargs...)

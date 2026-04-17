@@ -357,6 +357,21 @@ function Base.getproperty(tf_data::TimeFreqEpochData, name::Symbol)
     end
 end
 
+function Base.copy(tf_data::TimeFreqEpochData)::TimeFreqEpochData
+    return TimeFreqEpochData(
+        tf_data.file,
+        tf_data.condition,
+        tf_data.condition_name,
+        [copy(df, copycols = true) for df in tf_data.data_power],
+        [copy(df, copycols = true) for df in tf_data.data_phase],
+        copy(tf_data.layout),
+        tf_data.sample_rate,
+        tf_data.method,
+        tf_data.baseline,  # BaselineInfo is immutable, can share
+        copy(tf_data.analysis_info),
+    )
+end
+
 """
     SpectrumData
 
@@ -433,8 +448,10 @@ It supports complex trigger patterns and timing relationships between events.
 - `timing_pairs::Union{Nothing,Vector{Tuple{Int,Int}}}`: Which trigger pairs to apply min/max intervals to (optional, default: nothing)
 - `min_interval::Union{Nothing,Float64}`: Minimum time between specified trigger pairs in seconds (optional, default: nothing)
 - `max_interval::Union{Nothing,Float64}`: Maximum time between specified trigger pairs in seconds (optional, default: nothing)
-- `after::Union{Nothing,Int}`: Only search for sequences after this trigger value (optional, default: nothing)
-- `before::Union{Nothing,Int}`: Only search for sequences before this trigger value (optional, default: nothing)
+- `mask_before_trigger::Union{Nothing,Int}`: Only search for sequences before this trigger value (optional, default: nothing)
+- `mask_after_trigger::Union{Nothing,Int}`: Only search for sequences after this trigger value (optional, default: nothing)
+- `mask_triggers::Union{Nothing,Vector{Int}}`: Specific trigger values to use as search boundaries (optional, default: nothing)
+- `mask_between_triggers::Union{Nothing,Vector{Tuple{Int,Int}}}`: Pairs of trigger values defining search regions (optional, default: nothing)
 """
 @kwdef struct EpochCondition
     name::String

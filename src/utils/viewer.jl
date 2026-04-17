@@ -16,7 +16,8 @@ function viewer(dat)
     if isdefined(Main, :vscodedisplay)
         try
             Main.vscodedisplay(target)
-        catch
+        catch e
+            @debug "vscodedisplay failed, falling back to display()" exception = e
             display(target)
         end
     else
