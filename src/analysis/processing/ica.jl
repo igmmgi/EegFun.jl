@@ -75,7 +75,7 @@ function run_ica(
     # Create data matrix and run ICA
     dat_for_ica = _create_ica_data_matrix(dat_ica.data, selected_channels, sample_indices)
 
-    # Suubset data if requested
+    # Subset data if requested
     if percentage_of_data !== 100
         dat_for_ica = _select_subsample!(dat_for_ica, percentage_of_data)
     end

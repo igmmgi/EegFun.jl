@@ -212,6 +212,10 @@ function _eeglab_to_continuousdata(eeg::Dict, filepath::String, preserve_radial_
             types = events.values[type_idx]
             positions = !isnothing(pos_idx) ? events.values[pos_idx] : nothing
 
+            if isnothing(positions)
+                @warn "No 'position' field found in EEGLAB events. Integer trigger codes will be 0; trigger type strings are preserved in :trigger_info."
+            end
+
             @info "Extracted $(length(latencies)) events"
 
             for i in eachindex(latencies)

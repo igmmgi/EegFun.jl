@@ -541,13 +541,11 @@ function _detect_extreme_values(
     threshold::Real;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    interval_selection::Interval = times(),
 )
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
     isempty(selected_channels) && @minimal_error("No channels selected for extreme value detection")
 
-    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
-    selected_samples = get_selected_samples(dat, combined_sel)
+    selected_samples = get_selected_samples(dat, sample_selection)
     isempty(selected_samples) && @minimal_error("No samples selected for extreme value detection")
 
     results = Dict{Symbol,Vector{Bool}}()

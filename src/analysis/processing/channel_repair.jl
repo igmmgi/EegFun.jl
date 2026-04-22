@@ -516,23 +516,7 @@ function _make_interpolation_matrix(
     return interpolation
 end
 
-"""
-    _spherical_spline_weights(bad_coords, other_coords, m, lambda)
 
-Calculate spherical spline interpolation weights (DEPRECATED - use _make_interpolation_matrix).
-
-This function is kept for backward compatibility but should not be used directly.
-"""
-function _spherical_spline_weights(bad_coords, other_coords, m, lambda)
-    # Convert to matrix format
-    pos_from = reshape(other_coords, :, 3)
-    pos_to = reshape(bad_coords, 1, 3)
-
-    # Use proper interpolation matrix calculation
-    interp_matrix = _make_interpolation_matrix(pos_from, pos_to; m = m, lambda = lambda)
-
-    return vec(interp_matrix)
-end
 
 # =============================================================================
 # PER-EPOCH CHANNEL REPAIR

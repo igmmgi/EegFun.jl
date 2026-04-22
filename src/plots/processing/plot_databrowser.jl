@@ -1613,7 +1613,7 @@ end
 ########################
 """Re-reference the current data to the given reference."""
 function _rereference!(state::AbstractDataState, ref)
-    rereference!(state.current[], ref, channels())
+    rereference!(state.current[], ref)
     _notify_data_update(state)  # Notify that data has been updated
 end
 
