@@ -77,7 +77,7 @@ function _get_reference_channels(dat::EegData, reference_channel::Symbol)
 end
 
 # Single method for all EEG data types
-function rereference!(dat::EegData, reference_selection::Union{Symbol,Vector{Symbol}}, channel_selection::Function = channels())
+function rereference!(dat::EegData, reference_selection::Union{Symbol,Vector{Symbol}}; channel_selection::Function = channels())
 
     reference_channels = _get_reference_channels(dat, reference_selection)
 
@@ -107,14 +107,14 @@ function rereference!(dat::EegData, reference_selection::Union{Symbol,Vector{Sym
 end
 
 
-function rereference!(dat::Vector{EpochData}, reference_selection::Union{Symbol,Vector{Symbol}}, channel_selection::Function = channels())
-    rereference!.(dat, Ref(reference_selection), channel_selection)
+function rereference!(dat::Vector{EpochData}, reference_selection::Union{Symbol,Vector{Symbol}}; channel_selection::Function = channels())
+    rereference!.(dat, Ref(reference_selection); channel_selection = channel_selection)
     return nothing
 end
 
 
-function rereference!(dat::Vector{ErpData}, reference_selection::Union{Symbol,Vector{Symbol}}, channel_selection::Function = channels())
-    rereference!.(dat, Ref(reference_selection), channel_selection)
+function rereference!(dat::Vector{ErpData}, reference_selection::Union{Symbol,Vector{Symbol}}; channel_selection::Function = channels())
+    rereference!.(dat, Ref(reference_selection); channel_selection = channel_selection)
     return nothing
 end
 
@@ -244,7 +244,6 @@ function rereference(
 
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-            result = (success = 0, errors = 0)
         else
             ref_str = reference_selection isa Symbol ? string(reference_selection) : join(reference_selection, ", ")
             @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"

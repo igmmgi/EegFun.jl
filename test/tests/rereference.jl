@@ -40,12 +40,12 @@ using Statistics
 
     # 7) Channel included in both reference and selection becomes zero
     dat = EegFun.create_test_epoch_data(n_epochs = 2, n_channels = 2, condition = 1)
-    EegFun.rereference!(dat, [:Ch1], EegFun.channels([:Ch1]))
+    EegFun.rereference!(dat, [:Ch1]; channel_selection = EegFun.channels([:Ch1]))
     @test all(dat.data[1].Ch1 .== 0.0)
 
     # 9) Missing reference channel should throw
     dat = EegFun.create_test_epoch_data(n_epochs = 2, n_channels = 2, condition = 1)
-    @test_throws Any EegFun.rereference!(copy(dat), [:Z], EegFun.channels([:A]))
+    @test_throws Any EegFun.rereference!(copy(dat), [:Z]; channel_selection = EegFun.channels([:A]))
 
 end
 
