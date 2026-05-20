@@ -88,10 +88,10 @@ using EegFun
         erp = EegFun.create_test_erp_data(participant = 1, condition = 1, fs = 1000, n_channels = 3)
         original_data = copy(erp.data)
 
-        # Test with high-pass filter
-        settings = EegFun.AnalysisSettings(0.1, 0.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], Int[])
+        # Test with low-pass filter
+        settings = EegFun.AnalysisSettings(0.0, 40.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], Int[])
         EegFun.apply_analysis_settings!(erp, settings)
-        @test erp.analysis_info.hp_filter == 0.1
+        @test erp.analysis_info.lp_filter == 40.0
 
         # Test with rereference
         erp = EegFun.create_test_erp_data(participant = 1, condition = 1, fs = 1000, n_channels = 3)
@@ -111,10 +111,10 @@ using EegFun
         epochs = EegFun.create_test_epoch_data(n = 500, fs = 1000, n_channels = 3, n_epochs = 3)
         original_data = copy(epochs.data)
 
-        # Test with high-pass filter
-        settings = EegFun.AnalysisSettings(0.1, 0.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], Int[])
+        # Test with low-pass filter
+        settings = EegFun.AnalysisSettings(0.0, 40.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], Int[])
         EegFun.apply_analysis_settings!(epochs, settings)
-        @test epochs.analysis_info.hp_filter == 0.1
+        @test epochs.analysis_info.lp_filter == 40.0
 
         # Test with rereference
         epochs = EegFun.create_test_epoch_data(n = 500, fs = 1000, n_channels = 3, n_epochs = 3)
