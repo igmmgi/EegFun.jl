@@ -2,10 +2,11 @@
 # Shows how to save and load processed EEG data using JLD2 format,
 # including EegFun's built-in loading utilities and file organization.
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
+
+using EegFun
 using JLD2
 
 const DEMO_OUTPUT = "./demos/output/"

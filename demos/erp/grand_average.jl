@@ -2,14 +2,14 @@
 # Shows how to compute grand averages across participants, both from
 # in-memory ERP data and from saved JLD2 files on disk.
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
+using EegFun
+
 const DEMO_OUTPUT = "./demos/output/"
 mkpath(DEMO_OUTPUT)
-
 
 #######################################################################
 # LOAD MULTI-PARTICIPANT ERP DATA

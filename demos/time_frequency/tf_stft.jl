@@ -1,10 +1,11 @@
 # Demo: Time-Frequency Analysis - STFT
 # Shows Short-Time Fourier Transform for time-frequency analysis.
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
+
+using EegFun
 
 #######################################################################
 @info EegFun.section("TEST 1: Synthetic Signal with Known Frequencies")

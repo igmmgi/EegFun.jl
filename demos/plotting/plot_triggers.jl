@@ -1,10 +1,11 @@
 # Demo: Trigger Visualization
 # Shows trigger/event marker visualization in continuous data.
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
+
+using EegFun
 
 # read raw data
 dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"));

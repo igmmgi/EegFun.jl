@@ -3,10 +3,11 @@
 # create EegFun data structures, apply basic preprocessing,
 # and get the triggers/events.
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_raw_data("/path/to/your/data.vhdr")
+
+using EegFun
 
 # Load raw BrainVision data
 # read_raw_data automatically detects BrainVision files (.vhdr, .eeg, or .vmrk)

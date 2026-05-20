@@ -2,10 +2,11 @@
 # Shows how to visualise MVPA decoding accuracy over time,
 # compare individual subjects, and overlay statistical significance.
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
+
+using EegFun
 
 # LOAD DATA AND PREPARE FOR DECODING
 dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"))

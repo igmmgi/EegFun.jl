@@ -75,8 +75,12 @@ stats = test_against_chance(decoded_list, alpha=0.05, correction_method=:bonferr
 function test_against_chance(decoded_list::Vector{DecodedData}; alpha::Real = 0.05, correction_method::Symbol = :none)
 
     # validate some inputs
-    isempty(decoded_list) && @minimal_error("Cannot test empty decoded data list")
-    correction_method ∉ (:none, :bonferroni) && @minimal_error("correction_method must be :none or :bonferroni, got :$correction_method")
+    if isempty(decoded_list) 
+      @minimal_error("Cannot test empty decoded data list")
+    end
+    if correction_method ∉ (:none, :bonferroni) 
+      @minimal_error("correction_method must be :none or :bonferroni, got :$correction_method")
+    end
 
     # Validate all inputs have same structure
     first_decoded = decoded_list[1]
@@ -84,8 +88,12 @@ function test_against_chance(decoded_list::Vector{DecodedData}; alpha::Real = 0.
     first_params = first_decoded.parameters
     chance_level = first_params.chance_level
     for decoded in decoded_list[2:end]
-        decoded.times != first_times && @minimal_error("DecodedData inputs have inconsistent time vectors")
-        decoded.parameters.chance_level != chance_level && @minimal_warning "DecodedData objects have different chance_level"
+      if decoded.times != first_times 
+        @minimal_error("DecodedData inputs have inconsistent time vectors")
+      end
+      if decoded.parameters.chance_level != chance_level 
+        @minimal_warning "DecodedData objects have different chance_level"
+      end 
     end
 
     # Extract accuracies: [participants × timepoints]
@@ -204,6 +212,7 @@ function _find_temporal_clusters(mask::BitVector, times::Vector{Float64})
     return temporal_clusters
 end
 
+
 """
     _compute_cluster_statistics(clusters::Vector{TemporalCluster}, t_statistics::Vector{Float64}, statistic_type::Symbol = :sum)
 
@@ -238,6 +247,7 @@ function _compute_cluster_statistics(clusters::Vector{TemporalCluster}, t_statis
 
     return cluster_stats
 end
+
 
 """
     test_against_chance_cluster(decoded_list::Vector{DecodedData};

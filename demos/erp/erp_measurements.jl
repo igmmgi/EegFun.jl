@@ -2,12 +2,12 @@
 # Shows how to extract ERP measurements (amplitudes, latencies) and 
 # analyse them using AnovaFun for traditional t-tests and ANOVA.
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
-using AnovaFun
 
+using EegFun
+using AnovaFun
 
 #######################################################################
 # EXTRACT ERP MEASUREMENTS

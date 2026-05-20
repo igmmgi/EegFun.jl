@@ -2,10 +2,11 @@
 # Shows how to load, inspect, modify, and manage electrode layouts
 # and their spatial neighbour relationships.
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
+
+using EegFun
 
 #######################################################################
 # LOADING AND INSPECTING LAYOUTS

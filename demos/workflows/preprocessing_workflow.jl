@@ -2,10 +2,11 @@
 # Shows a complete manual preprocessing pipeline from raw data to ERPs.
 # This mirrors the steps and order used in pipeline_v1.jl
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
+
+using EegFun
 using JLD2
 
 const DEMO_OUTPUT = "./demos/output/"

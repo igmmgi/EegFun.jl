@@ -1,10 +1,11 @@
 # Demo: Triggers
 # Shows how to inspect, count, and search for trigger sequences in EEG data.
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
+
+using EegFun
 
 #######################################################################
 # LOAD DATA

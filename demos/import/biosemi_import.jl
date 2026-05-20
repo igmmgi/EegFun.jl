@@ -2,10 +2,11 @@
 # Shows how to load BioSemi .bdf files, create EegFun data structures
 # with layouts, and get the triggers/events.
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
+
+using EegFun
 
 # Load raw BDF data
 # read_raw_data automatically detects the .bdf extension

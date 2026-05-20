@@ -3,11 +3,11 @@
 
 Prepare epoch data for decoding analysis.
 
-Extracts data from multiple EpochData conditions (already subsetted).
+Extracts data from multiple EpochData conditions.
 Returns arrays ready for classification.
 
 # Arguments
-- `epochs::Vector{EpochData}`: Vector of EpochData, one per condition (already subsetted)
+- `epochs::Vector{EpochData}`: Vector of EpochData, one per condition 
 
 # Returns
 - `data_arrays::Vector{Array{Float64, 3}}`: One array per condition [channels × time × trials]
@@ -48,11 +48,11 @@ end
 
 Prepare time-frequency epoch data for decoding analysis.
 
-Extracts data from multiple TimeFreqEpochData conditions (already subsetted).
+Extracts data from multiple TimeFreqEpochData conditions.
 At each time point, channel × frequency pairs are used as features for classification.
 
 # Arguments
-- `epochs::Vector{TimeFreqEpochData}`: Vector of TimeFreqEpochData, one per condition (already subsetted)
+- `epochs::Vector{TimeFreqEpochData}`: Vector of TimeFreqEpochData, one per condition 
 
 # Returns
 - `data_arrays::Vector{Array{Float64, 3}}`: One array per condition [(channels×frequencies) × time × trials]
@@ -115,7 +115,6 @@ end
     _equalize_trials(data_arrays::Vector{Array{Float64, 3}}, n_trials_per_condition::Vector{Int})
 
 Equalize the number of trials across conditions by randomly downsampling to the minimum.
-
 This ensures balanced classification by preventing bias toward conditions with more trials.
 
 # Arguments
@@ -138,9 +137,6 @@ function _equalize_trials(data_arrays::Vector{Array{Float64,3}}, n_trials_per_co
     return data_arrays, n_trials_per_condition
 end
 
-# ==============================================================================
-#   HELPER FUNCTIONS FOR DECODING
-# ==============================================================================
 
 """
     _shuffle_trials(data_arrays::Vector{Array{Float64, 3}})
@@ -161,6 +157,7 @@ function _shuffle_trials(data_arrays::Vector{Array{Float64,3}})
     end
     return shuffled_indices
 end
+
 
 """
     _extract_timepoint_data!(x_all::Matrix{Float64}, labels::Vector{Int}, 
@@ -197,6 +194,7 @@ function _extract_timepoint_data!(
         end
     end
 end
+
 
 """
     _precompute_cv_splits(n_trials_per_condition::Vector{Int}, n_folds::Int)
@@ -248,6 +246,7 @@ function _precompute_cv_splits(n_trials_per_condition::Vector{Int}, n_folds::Int
 
     return splits
 end
+
 
 """
     _compute_confusion_matrices(all_targets::Array{Float64, 4}, all_predictions::Array{Float64, 4}, 
@@ -602,12 +601,12 @@ end
 # ===========================
 """
     decode_libsvm(epochs::Vector{EpochData}; channel_selection = channels(),
-    interval_selection = times(), n_iterations::Int = 100, n_folds::Int = 3,
-    equalize_trials::Bool = true, cost::Float64 = 1.0, show_progress::Bool = true)
-    decode_libsvm(epochs::Vector{TimeFreqEpochData}; channel_selection = channels(),
-    interval_selection = times(), n_iterations::Int = 100, n_folds::Int = 3,
-    equalize_trials::Bool = true, cost::Float64 = 1.0, show_progress::Bool = true)
-    decode_libsvm(participant_epochs::Vector{Vector{T}}; kwargs...) where {T<:MultiDataFrameEeg}
+                  interval_selection = times(), n_iterations::Int = 100, n_folds::Int = 3,
+                  equalize_trials::Bool = true, cost::Float64 = 1.0, show_progress::Bool = true)
+                  decode_libsvm(epochs::Vector{TimeFreqEpochData}; channel_selection = channels(),
+                  interval_selection = times(), n_iterations::Int = 100, n_folds::Int = 3,
+                  equalize_trials::Bool = true, cost::Float64 = 1.0, show_progress::Bool = true)
+                  decode_libsvm(participant_epochs::Vector{Vector{T}}; kwargs...) where {T<:MultiDataFrameEeg}
 
 Perform multivariate pattern classification (decoding) using LIBSVM.
 
@@ -753,7 +752,6 @@ function grand_average(dat::Vector{DecodedData})
     first_condition_names = first_decoded.condition_names
     first_channels = first_decoded.channels
     first_params = first_decoded.parameters
-
 
     for decoded in dat[2:end]
         decoded.times != first_times && @minimal_error("DecodedData objects have inconsistent time vectors")

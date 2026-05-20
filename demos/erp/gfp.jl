@@ -2,17 +2,16 @@
 # Shows how to compute reference-independent measures of response strength
 # and topographic change from ERP data.
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
+using EegFun
+
 #######################################################################
 # LOAD ERP DATA
 #######################################################################
-
 dat = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps_good.jld2"))
-
 
 #######################################################################
 # GLOBAL FIELD POWER (GFP)
