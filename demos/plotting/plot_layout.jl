@@ -1,10 +1,11 @@
 # Demo: Layout Visualization
 # Shows electrode layout plotting and manipulation.
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
+
+using EegFun
 
 const DEMO_OUTPUT = "./demos/output/"
 mkpath(DEMO_OUTPUT)

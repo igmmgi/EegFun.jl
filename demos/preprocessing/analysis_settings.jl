@@ -2,10 +2,11 @@
 # Shows how to save and replay preprocessing settings
 # (filter, rereference, ICA) using AnalysisSettings.
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
+
+using EegFun
 
 #######################################################################
 # SETUP

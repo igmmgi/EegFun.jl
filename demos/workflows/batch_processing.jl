@@ -2,13 +2,13 @@
 # Shows how to load multi-participant ERP data, group by condition,
 # and compute grand averages.
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
-const ERP_DIR = EegFun.example_path("data/julia/erps/")
+using EegFun
 
+const ERP_DIR = EegFun.example_path("data/julia/erps/")
 
 #######################################################################
 # LOAD PROCESSED DATA

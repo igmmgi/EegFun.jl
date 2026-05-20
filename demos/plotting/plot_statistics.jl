@@ -2,10 +2,11 @@
 # Shows how to visualise analytic and permutation test results with
 # ERP waveforms, difference waves, t-values, and significance markers.
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
+
+using EegFun
 
 #######################################################################
 # PREPARE DATA (requires pre-saved per-participant ERPs)

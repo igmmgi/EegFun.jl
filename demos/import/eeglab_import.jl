@@ -2,10 +2,11 @@
 # Note: trigger/event strings are hashed for :triggers, but available in :trigger_info.
 # Once loaded, all EegFun functions work as expected.
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_eeglab("/path/to/your/data.set")
+
+using EegFun
 
 # this seems to be a raw continuous data file without any ICA info
 dat = EegFun.read_eeglab(EegFun.example_path("data/eeglab/eeglab_data.set"))

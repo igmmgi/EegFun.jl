@@ -2,10 +2,11 @@
 # Shows how to plot time-frequency decomposition results as heatmaps,
 # with options for baseline correction, colour maps, and log-scaled axes.
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
+
+using EegFun
 
 #######################################################################
 # LOAD DATA AND RUN TF DECOMPOSITION

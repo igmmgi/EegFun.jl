@@ -2,10 +2,11 @@
 # Shows how to apply high-pass and low-pass filters to EEG data,
 # compare IIR and FIR methods, and visualize filter characteristics.
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
+
+using EegFun
 
 #######################################################################
 # LOAD DATA

@@ -2,10 +2,11 @@
 # Shows how to launch the interactive filter exploration tool
 # to compare the effect of different filter settings on ERP waveforms.
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
+
+using EegFun
 
 #######################################################################
 # LOAD DATA AND CREATE ERPS

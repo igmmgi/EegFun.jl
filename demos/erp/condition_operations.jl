@@ -3,15 +3,15 @@
 # and create condition average waves.
 # Covers condition_combine, condition_difference, and condition_average.
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
+using EegFun
+
 #######################################################################
 # CREATE EXAMPLE DATA
 #######################################################################
-
 # Load raw data and do minimal preprocessing
 dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"))
 layout = EegFun.read_layout(EegFun.example_path("layouts/biosemi/biosemi72.csv"))

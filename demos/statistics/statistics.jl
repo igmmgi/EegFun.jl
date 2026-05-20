@@ -2,10 +2,11 @@
 # Shows how to run permutation tests on ERP data using different
 # thresholding and cluster correction approaches.
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
+
+using EegFun
 
 input_dir = EegFun.example_path("data/julia/erps")
 file_pattern = "erps_good"

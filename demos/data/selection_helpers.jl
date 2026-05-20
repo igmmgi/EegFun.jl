@@ -2,15 +2,15 @@
 # Shows how to use EegFun's selection helper functions (channels, conditions,
 # participants, epochs, times, samples) for filtering and subsetting data.
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
+using EegFun
+
 #######################################################################
 # SETUP
 #######################################################################
-
 dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"))
 layout = EegFun.read_layout(EegFun.example_path("layouts/biosemi/biosemi72.csv"))
 EegFun.polar_to_cartesian_xy!(layout)

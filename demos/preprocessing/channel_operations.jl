@@ -2,10 +2,11 @@
 # Shows how to average, delete, and compute differences between channels.
 # Covers channel_average!, channel_delete!, and channel_difference!.
 
-using EegFun
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
+
+using EegFun
 
 #######################################################################
 # LOAD DATA
