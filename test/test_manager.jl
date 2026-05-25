@@ -29,6 +29,7 @@ Run from root directory with: julia --project=. test/test_manager.jl
 
 using Printf
 using Pkg
+#
 # activate temp env and add packages needed for coverage
 Pkg.activate(; temp = true)
 Pkg.add(["Coverage", "CoverageTools"])

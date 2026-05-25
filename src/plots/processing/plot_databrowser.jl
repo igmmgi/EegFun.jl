@@ -157,13 +157,12 @@ mutable struct EpochedDataState <: AbstractDataState
     end
 end
 
-"""Track an optional extra channel overlay (e.g. EOG, EMG)."""
+"""Track optional extra channel overlays (e.g. EOG, EMG)."""
 mutable struct ExtraChannelInfo
-    channel::Union{Nothing,Symbol}
-    visible::Bool
+    channels::Vector{Symbol}
     data_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}
     data_labels::Dict{Symbol,Makie.Text}
-    ExtraChannelInfo() = new(nothing, false, Dict(), Dict())
+    ExtraChannelInfo() = new(Symbol[], Dict(), Dict())
 end
 
 """Visual state tracker for dynamic Independent Component Analysis (ICA) artifact removal."""
@@ -424,80 +423,194 @@ function _create_menu(fig, options, default, label; kwargs...)
     return hcat(menu, Label(fig, label, fontsize = 22, halign = :left, tellwidth = false))
 end
 
-"""Create the channel-label selection menu (All / Left / Right / Central / individual)."""
+"""Create the channel-label selection menu (popup window)."""
 function _create_labels_menu(fig, ax, state)
-    options = vcat(["All", "Left", "Right", "Central"], state.channels.labels)
-    menu = _create_menu(fig, options, "All", "Labels")
+    btn = Button(fig, label = "Labels", width = Auto(), fontsize = 18)
+    on(btn.clicks) do _
+        _show_labels_menu(state, ax)
+    end
+    return hcat(btn, Label(fig, "", tellwidth = false))
+end
 
-    # Flag to prevent recursive updates when programmatically setting menu selection
-    updating_menu = Ref(false)
+function _show_labels_menu(state, ax)
+    all_channels = state.channels.labels
+    cols = 7
+    menu_fig = Figure(size = (700, 800))
+    Label(menu_fig[1, 1], "Select Channels to Display", fontsize = 18, halign = :center)
+    
+    scroll_area = menu_fig[2, 1] = GridLayout()
+    channel_checkboxes = Checkbox[]
+    
+    for (i, ch) in enumerate(all_channels)
+        row = ((i - 1) ÷ cols) + 1
+        col = ((i - 1) % cols) + 1
+        
+        channel_cell = scroll_area[row, col] = GridLayout()
+        
+        is_visible = state.channels.visible[i]
+        
+        checkbox = Checkbox(channel_cell[1, 1], checked = is_visible, width = 20, height = 20)
+        push!(channel_checkboxes, checkbox)
+        
+        Label(channel_cell[1, 2], string(ch), fontsize = 12, halign = :left)
+    end
 
-    on(menu[1].selection) do s
-        # Skip if we're programmatically updating the menu
-        if updating_menu[]
-            return
+    group_area = menu_fig[3, 1] = GridLayout()
+    btn_all = Button(group_area[1, 1], label = "All")
+    btn_none = Button(group_area[1, 2], label = "None")
+    btn_left = Button(group_area[1, 3], label = "Left")
+    btn_right = Button(group_area[1, 4], label = "Right")
+    btn_central = Button(group_area[1, 5], label = "Central")
+
+    action_area = menu_fig[4, 1] = GridLayout()
+    btn_apply = Button(action_area[1, 1], label = "Apply", width = 200)
+
+    on(btn_all.clicks) do _
+        for cb in channel_checkboxes cb.checked[] = true end
+    end
+    on(btn_none.clicks) do _
+        for cb in channel_checkboxes cb.checked[] = false end
+    end
+    on(btn_left.clicks) do _
+        for (i, ch) in enumerate(all_channels)
+            channel_checkboxes[i].checked[] = occursin(r"\d*[13579]$", String(ch))
         end
-        # Group selections clear individual selections
-        if s == "All"
-            state.channels.individually_selected = Symbol[]
-            state.channels.visible .= true
-        elseif s == "Left"
-            state.channels.individually_selected = Symbol[]
-            state.channels.visible .= occursin.(r"\d*[13579]$", String.(state.channels.labels))
-        elseif s == "Right"
-            state.channels.individually_selected = Symbol[]
-            state.channels.visible .= occursin.(r"\d*[24680]$", String.(state.channels.labels))
-        elseif s == "Central"
-            state.channels.individually_selected = Symbol[]
-            state.channels.visible .= occursin.(r"z$", String.(state.channels.labels))
-        else
-            # Individual electrode selection - toggle selection
-            selected_sym = Symbol(s)
-            if selected_sym in state.channels.individually_selected
-                # Deselect if already selected
-                filter!(x -> x != selected_sym, state.channels.individually_selected)
-            else
-                # Select if not already selected
-                push!(state.channels.individually_selected, selected_sym)
-            end
-            # Update visibility to show only individually selected electrodes
-            if isempty(state.channels.individually_selected)
-                # If no individual selections, show all channels
-                state.channels.visible .= true
-            else
-                state.channels.visible .= (state.channels.labels .∈ Ref(state.channels.individually_selected))
-            end
-            # Always reset menu to "All" after toggling any individual channel
-            # This ensures clicking any channel (including the same one) will always trigger the callback
-            updating_menu[] = true
-            menu[1].selection[] = "All"
-            updating_menu[] = false
+    end
+    on(btn_right.clicks) do _
+        for (i, ch) in enumerate(all_channels)
+            channel_checkboxes[i].checked[] = occursin(r"\d*[24680]$", String(ch))
         end
+    end
+    on(btn_central.clicks) do _
+        for (i, ch) in enumerate(all_channels)
+            channel_checkboxes[i].checked[] = occursin(r"z$", String(ch))
+        end
+    end
 
+    on(btn_apply.clicks) do _
+        state.channels.individually_selected = Symbol[] 
+        for (i, cb) in enumerate(channel_checkboxes)
+            state.channels.visible[i] = cb.checked[]
+        end
         _clear_and_save_limits!(ax, state)
         _update_channel_offsets!(state)
         _draw(ax, state)
-
     end
 
-    return menu
+    display(GLMakie.Screen(), menu_fig)
 end
 
-"""Create the re-reference dropdown menu."""
+"""Create the re-reference dropdown menu (popup window)."""
 function _create_reference_menu(fig, state, dat)
-    options = vcat([:none, :avg, :mastoid], state.channels.labels)
-    menu = _create_menu(fig, options, String(dat.analysis_info.reference), "Reference")
+    btn = Button(fig, label = "Reference", width = Auto(), fontsize = 18)
+    
+    on(btn.clicks) do _
+        _show_reference_menu(state, dat)
+    end
+    
+    return hcat(btn, Label(fig, "", tellwidth = false))
+end
 
-    on(menu[1].selection) do s
-        state.reference_state = s
+function _show_reference_menu(state, dat)
+    all_channels = state.channels.labels
+    cols = 7
+    menu_fig = Figure(size = (700, 800))
+    Label(menu_fig[1, 1], "Select Reference Channels", fontsize = 18, halign = :center)
+    
+    scroll_area = menu_fig[2, 1] = GridLayout()
+    channel_checkboxes = Checkbox[]
+    
+    # Parse currently selected reference channels
+    current_syms = Symbol.(split(string(state.reference_state), "_"))
+    if state.reference_state == :mastoid
+        current_syms = [:M1, :M2]
+    elseif state.reference_state == :avg || state.reference_state == :none
+        current_syms = Symbol[]
+    end
+    
+    for (i, ch) in enumerate(all_channels)
+        row = ((i - 1) ÷ cols) + 1
+        col = ((i - 1) % cols) + 1
+        
+        channel_cell = scroll_area[row, col] = GridLayout()
+        
+        is_checked = ch in current_syms || state.reference_state == :avg
+        checkbox = Checkbox(channel_cell[1, 1], checked = is_checked, width = 20, height = 20)
+        push!(channel_checkboxes, checkbox)
+        
+        Label(channel_cell[1, 2], string(ch), fontsize = 12, halign = :left)
+    end
+    
+    # Group selection buttons
+    group_area = menu_fig[3, 1] = GridLayout()
+    btn_all = Button(group_area[1, 1], label = "All (Avg)")
+    btn_none = Button(group_area[1, 2], label = "None")
+    btn_left = Button(group_area[1, 3], label = "Left")
+    btn_right = Button(group_area[1, 4], label = "Right")
+    btn_central = Button(group_area[1, 5], label = "Central")
+    btn_mastoids = Button(group_area[1, 6], label = "Mastoids")
+    
+    action_area = menu_fig[4, 1] = GridLayout()
+    btn_apply = Button(action_area[1, 1], label = "Apply", width = 200)
 
-        s == :none && return
-        _rereference!(state.data, s)
-        _notify_data_update(state.data)
-        _update_analysis_settings!(state)
+    on(btn_all.clicks) do _
+        for cb in channel_checkboxes cb.checked[] = true end
+    end
+    on(btn_none.clicks) do _
+        for cb in channel_checkboxes cb.checked[] = false end
+    end
+    on(btn_left.clicks) do _
+        for (i, ch) in enumerate(all_channels)
+            channel_checkboxes[i].checked[] = occursin(r"\d*[13579]$", String(ch))
+        end
+    end
+    on(btn_right.clicks) do _
+        for (i, ch) in enumerate(all_channels)
+            channel_checkboxes[i].checked[] = occursin(r"\d*[24680]$", String(ch))
+        end
+    end
+    on(btn_central.clicks) do _
+        for (i, ch) in enumerate(all_channels)
+            channel_checkboxes[i].checked[] = occursin(r"z$", String(ch))
+        end
+    end
+    on(btn_mastoids.clicks) do _
+        for (i, ch) in enumerate(all_channels)
+            channel_checkboxes[i].checked[] = (ch == :M1 || ch == :M2)
+        end
     end
 
-    return menu
+    on(btn_apply.clicks) do _
+        selected_channels = Symbol[]
+        for (i, cb) in enumerate(channel_checkboxes)
+            if cb.checked[]
+                push!(selected_channels, all_channels[i])
+            end
+        end
+        
+        # Determine the reference option to apply
+        if isempty(selected_channels)
+            opt = :none
+        elseif length(selected_channels) == length(all_channels)
+            opt = :avg
+        elseif length(selected_channels) == 2 && :M1 in selected_channels && :M2 in selected_channels
+            opt = :mastoid
+        else
+            opt = selected_channels
+        end
+        
+        # We save the state as a Symbol to avoid modifying DataBrowserState struct
+        opt_str = opt isa Symbol ? string(opt) : join(opt, "_")
+        state.reference_state = Symbol(opt_str)
+        
+        if opt != :none
+            _rereference!(state.data, opt)
+            _notify_data_update(state.data)
+            _update_analysis_settings!(state)
+        end
+    end
+    
+    display(GLMakie.Screen(), menu_fig)
 end
 
 """Toggle an ICA component for removal and apply subtraction algebra to the dataset."""
@@ -595,61 +708,13 @@ function _apply_incremental_ica_update!(state::EpochedDataState, ica::InfoIca, c
     end
 end
 
-"""Create the ICA component removal menu with toggle and undo support."""
+"""Create the ICA component removal menu with toggle and undo support (popup window)."""
 function _create_ica_menu(fig, ax, state, ica)
 
-    options = vcat(["None"], ica.ica_label)
-    menu = _create_menu(fig, options, "None", "ICA Components")
+    btn = Button(fig, label = "ICA Components", width = Auto(), fontsize = 18)
 
-    # Create observable for removed components display
-    removed_components_text = Observable("")
-
-    # Create label to display removed components
-    removed_label = Label(
-        fig,
-        @lift(isempty($removed_components_text) ? "" : "Removed: $($removed_components_text)"),
-        fontsize = 16,
-        halign = :left,
-        color = :red,
-        tellwidth = false,
-    )
-
-    # Function to update the removed components display
-    """Refresh the removed-components label text."""
-    function update_removed_display()
-        if isempty(state.ica.removed_components)
-            removed_components_text[] = ""
-        else
-            # Sort components for consistent display
-            sorted_components = sort(state.ica.removed_components)
-            components_str = join(string.(sorted_components), ", ")
-            removed_components_text[] = components_str
-        end
-    end
-
-    # Initialize display
-    update_removed_display()
-
-    on(menu[1].selection) do s
-
-        _clear_and_save_limits!(ax, state)
-
-        # Apply structural data edits through modular helper
-        if s == "None"
-            _toggle_ica_component!(state, nothing)
-        else
-            component_to_toggle_int = _extract_int(String(s))
-            if !isnothing(component_to_toggle_int)
-                _toggle_ica_component!(state, component_to_toggle_int)
-            end
-        end
-
-        # Update the removed components display
-        update_removed_display()
-
-        _notify_data_update(state.data)
-        _draw(ax, state)
-        _update_analysis_settings!(state)
+    on(btn.clicks) do _
+        _show_ica_menu(state, ax, ica)
     end
 
     if !haskey(state.plot_kwargs, :show_cleaned_ica)
@@ -657,30 +722,84 @@ function _create_ica_menu(fig, ax, state, ica)
         state.view.show_original_ica[] = true
     end
 
-    # Create checkboxes for ghost traces
-    show_cleaned_cb = Checkbox(fig, checked = state.plot_kwargs[:show_cleaned_ica][])
-    show_orig_cb = Checkbox(fig, checked = state.view.show_original_ica[])
-    show_sub_cb = Checkbox(fig, checked = state.view.show_subtracted_ica[])
+    # Return button and a dummy label to match layout constraints
+    return hcat(btn, Label(fig, "", tellwidth = false))
 
-    on(show_cleaned_cb.checked) do active
-        state.plot_kwargs[:show_cleaned_ica][] = active
+end
+
+function _show_ica_menu(state, ax, ica)
+    menu_fig = Figure(size = (600, 700))
+    Label(menu_fig[1, 1], "Select ICA Components to Remove", fontsize = 18, halign = :center)
+    
+    scroll_area = menu_fig[2, 1] = GridLayout()
+    checkboxes = Checkbox[]
+    
+    all_components = ica.ica_label
+    cols = 5
+    
+    for (i, comp) in enumerate(all_components)
+        row = ((i - 1) ÷ cols) + 1
+        col = ((i - 1) % cols) + 1
+        
+        comp_cell = scroll_area[row, col] = GridLayout()
+        
+        comp_int = _extract_int(String(comp))
+        is_removed = !isnothing(comp_int) && comp_int in state.ica.removed_components
+        
+        checkbox = Checkbox(comp_cell[1, 1], checked = is_removed, width = 20, height = 20)
+        push!(checkboxes, checkbox)
+        
+        Label(comp_cell[1, 2], string(comp), fontsize = 12, halign = :left)
+    end
+    
+    group_area = menu_fig[3, 1] = GridLayout()
+    btn_none = Button(group_area[1, 1], label = "None (Reset)")
+    
+    action_area = menu_fig[4, 1] = GridLayout()
+    btn_apply = Button(action_area[1, 1], label = "Apply", width = 200)
+
+    on(btn_none.clicks) do _
+        for cb in checkboxes cb.checked[] = false end
+    end
+    
+    on(btn_apply.clicks) do _
+        _clear_and_save_limits!(ax, state)
+        
+        # Reset all components first
+        _toggle_ica_component!(state, nothing)
+        
+        # Toggle selected components
+        for (i, cb) in enumerate(checkboxes)
+            if cb.checked[]
+                comp_int = _extract_int(String(all_components[i]))
+                if !isnothing(comp_int)
+                    _toggle_ica_component!(state, comp_int)
+                end
+            end
+        end
+        
+        _notify_data_update(state.data)
+        _draw(ax, state)
+        _update_analysis_settings!(state)
     end
 
-    on(show_orig_cb.checked) do active
-        state.view.show_original_ica[] = active
-    end
+    # Add display checkboxes in the popup
+    display_area = menu_fig[5, 1] = GridLayout()
+    Label(display_area[1, 1:2], "Display Options", fontsize = 16, halign = :center)
+    
+    cb_orig = Checkbox(display_area[2, 1], checked = state.view.show_original_ica[])
+    Label(display_area[2, 2], "Data", halign = :left)
+    on(cb_orig.checked) do active state.view.show_original_ica[] = active end
+    
+    cb_clean = Checkbox(display_area[3, 1], checked = state.plot_kwargs[:show_cleaned_ica][])
+    Label(display_area[3, 2], "Data - ICA", halign = :left)
+    on(cb_clean.checked) do active state.plot_kwargs[:show_cleaned_ica][] = active end
+    
+    cb_sub = Checkbox(display_area[4, 1], checked = state.view.show_subtracted_ica[])
+    Label(display_area[4, 2], "ICA Activation", halign = :left)
+    on(cb_sub.checked) do active state.view.show_subtracted_ica[] = active end
 
-    on(show_sub_cb.checked) do active
-        state.view.show_subtracted_ica[] = active
-    end
-
-    cb_row1 = hcat(show_orig_cb, Label(fig, "Data", fontsize = 16, halign = :left, tellwidth = false))
-    cb_row2 = hcat(show_cleaned_cb, Label(fig, "Data - ICA", fontsize = 16, halign = :left, tellwidth = false))
-    cb_row3 = hcat(show_sub_cb, Label(fig, "ICA Activation", fontsize = 16, halign = :left, tellwidth = false))
-
-    # Return menu, checkboxes, and removed components label in a vertical stack
-    return vcat(menu, cb_row1, cb_row2, cb_row3, hcat(removed_label, Label(fig, "", fontsize = 16, tellwidth = false)))
-
+    display(GLMakie.Screen(), menu_fig)
 end
 
 """Create the epoch navigation slider and label."""
@@ -1000,18 +1119,48 @@ function _create_sliders(fig, state::EpochedDataBrowserState, dat)
     return _create_common_sliders(fig, state, dat)
 end
 
-"""Create the extra-channel overlay dropdown menu."""
+"""Create the extra-channel overlay dropdown menu (popup window)."""
 function _create_extra_channel_menu(fig, ax, state, dat)
-    menu = Menu(fig, options = [:none; extra_labels(dat)], default = "none", direction = :down, fontsize = 18, width = 200)
+    btn = Button(fig, label = "Extra Channels", width = Auto(), fontsize = 18)
+    on(btn.clicks) do _
+        _show_extra_channel_menu(state, ax, dat)
+    end
+    return hcat(btn, Label(fig, "", tellwidth = false))
+end
 
-    on(menu.selection) do s
-        state.extra_channel.channel = s == :none ? nothing : s
-        state.extra_channel.visible = s != :none
+function _show_extra_channel_menu(state, ax, dat)
+    all_extras = extra_labels(dat)
+    if isnothing(all_extras) || isempty(all_extras)
+        return
+    end
+
+    menu_fig = Figure(size = (300, 400))
+    Label(menu_fig[1, 1], "Select Extra Channels", fontsize = 18, halign = :center)
+
+    scroll_area = menu_fig[2, 1] = GridLayout()
+    checkboxes = Checkbox[]
+
+    for (i, ch) in enumerate(all_extras)
+        channel_cell = scroll_area[i, 1] = GridLayout()
+        checkbox = Checkbox(channel_cell[1, 1], checked = ch in state.extra_channel.channels)
+        push!(checkboxes, checkbox)
+        Label(channel_cell[1, 2], string(ch), fontsize = 14, halign = :left)
+    end
+
+    action_area = menu_fig[3, 1] = GridLayout()
+    btn_apply = Button(action_area[1, 1], label = "Apply", width = 150)
+
+    on(btn_apply.clicks) do _
+        empty!(state.extra_channel.channels)
+        for (i, cb) in enumerate(checkboxes)
+            if cb.checked[]
+                push!(state.extra_channel.channels, all_extras[i])
+            end
+        end
         _draw_extra_channel!(ax, state)
     end
 
-    return hcat(menu, Label(fig, "Extra Channels", fontsize = 22, halign = :left))
-
+    display(GLMakie.Screen(), menu_fig)
 end
 
 """Lay out all control widgets into the right-hand grid."""
@@ -1950,50 +2099,66 @@ end
 function _draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
     _clear_axes!(ax, [state.extra_channel.data_lines, state.extra_channel.data_labels])
 
-    if state.extra_channel.visible && !isnothing(state.extra_channel.channel)
+    if !isempty(state.extra_channel.channels)
         if length(state.view.offset) > 1
             current_offset = state.view.offset[end] + (state.view.offset[end] - state.view.offset[end-1])
         else
             current_offset = state.view.offset[end] + 100.0  # Default spacing
         end
-        channel = state.extra_channel.channel
 
         # Get data access functions based on type
         get_data, get_time, get_label_y = _get_data_accessors(state.data)
+        
+        colors = Makie.wong_colors()
 
-        if eltype(get_data(state.data.current[], 1:1, channel)) == Bool # Boolean data - create highlights
-            highlight_data = @views _splitgroups(findall(get_data(state.data.current[], :, channel)))
-            # Widen single-sample regions so they're visible (per-region, not global)
-            end_indices = copy(highlight_data[2])
-            for i in eachindex(end_indices)
-                if end_indices[i] == highlight_data[1][i]
-                    end_indices[i] += 5
-                end
+        for (idx, channel) in enumerate(state.extra_channel.channels)
+            # Calculate specific offset for this channel to prevent overlapping
+            channel_offset = current_offset
+            if length(state.view.offset) > 1
+                channel_offset = state.view.offset[end] + idx * (state.view.offset[end] - state.view.offset[end-1])
+            else
+                channel_offset = state.view.offset[end] + idx * 100.0
             end
-            state.extra_channel.data_lines[channel] = vspan!(
-                ax,
-                get_time(state.data.current[], highlight_data[1]),
-                get_time(state.data.current[], end_indices),
-                color = :red,
-                alpha = 0.5,
-                visible = true,
-            )
-        else # Regular data - create line and label
-            state.extra_channel.data_lines[channel] = lines!(
-                ax,
-                @lift(get_time($(state.data.current), :)),
-                @lift(get_data($(state.data.current), :, $channel) .* $(state.view.amplitude_scale) .+ $current_offset),
-                color = :black,
-                linewidth = 2,
-            )
-            state.extra_channel.data_labels[channel] = text!(
-                ax,
-                @lift(get_time($(state.data.current), $(state.view.xrange)[1:1])[1]),
-                @lift(get_label_y($(state.data.current), $channel, $current_offset)),
-                text = String(channel),
-                align = (:left, :center),
-                fontsize = 18,
-            )
+            
+            line_color = colors[mod1(idx, length(colors))]
+
+            if eltype(get_data(state.data.current[], 1:1, channel)) == Bool # Boolean data - create highlights
+                highlight_data = @views _splitgroups(findall(get_data(state.data.current[], :, channel)))
+                if !isempty(highlight_data[1])
+                    # Widen single-sample regions so they're visible (per-region, not global)
+                    end_indices = copy(highlight_data[2])
+                    for i in eachindex(end_indices)
+                        if end_indices[i] == highlight_data[1][i]
+                            end_indices[i] += 5
+                        end
+                    end
+                    state.extra_channel.data_lines[channel] = vspan!(
+                        ax,
+                        get_time(state.data.current[], highlight_data[1]),
+                        get_time(state.data.current[], end_indices),
+                        color = line_color,
+                        alpha = 0.5,
+                        visible = true,
+                    )
+                end
+            else # Regular data - create line and label
+                state.extra_channel.data_lines[channel] = lines!(
+                    ax,
+                    @lift(get_time($(state.data.current), :)),
+                    @lift(get_data($(state.data.current), :, $channel) .* $(state.view.amplitude_scale) .+ $channel_offset),
+                    color = line_color,
+                    linewidth = 2,
+                )
+                state.extra_channel.data_labels[channel] = text!(
+                    ax,
+                    @lift(get_time($(state.data.current), $(state.view.xrange)[1:1])[1]),
+                    @lift(get_label_y($(state.data.current), $channel, $channel_offset)),
+                    text = String(channel),
+                    align = (:left, :center),
+                    color = line_color,
+                    fontsize = 18,
+                )
+            end
         end
     end
 end
