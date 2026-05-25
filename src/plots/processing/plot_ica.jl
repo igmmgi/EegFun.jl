@@ -1066,23 +1066,45 @@ function _update_view_range!(state, start_pos)
     end
 end
 
-"""Add a channel-overlay dropdown menu to the viewer."""
-function _add_channel_menu!(fig, state)
-    # Create a menu layout in column 2
-    menu_row = state.n_visible_components + 2  # Keep menu in its own row
+"""Open a popup window with a checkbox grid for selecting an additional channel overlay."""
+function _show_channel_popup(state)
+    all_channels = Symbol.(names(state.dat.data))
 
-    # Create a simple grid layout
-    menu_layout = GridLayout(fig[menu_row, 2], tellheight = false)
+    menu_fig = Figure(size = (900, 700))
+    Label(menu_fig[1, 1], "Select Additional Channel", fontsize = 18, halign = :center)
 
-    # Create a simple label and menu
-    Label(menu_layout[1, 1], "Additional Channel:", fontsize = 18, tellheight = false, width = 150)  # Fixed width for label
-    channel_menu = Menu(menu_layout[1, 2], options = ["None"; names(state.dat.data)], default = "None", tellheight = false)
+    scroll_area = menu_fig[2, 1] = GridLayout()
+    cbs = _build_checkbox_grid!(scroll_area, all_channels, 9,
+        (ch, _) -> false)  # nothing pre-selected
 
-    on(channel_menu.selection) do selected
-        _update_channel_selection!(state, selected)
+    _add_group_buttons!(menu_fig, 3, cbs, all_channels,
+        [("None (Clear)", _ -> false)])
+
+    action_area = menu_fig[4, 1] = GridLayout()
+    btn_apply = Button(action_area[1, 1], label = "Apply", width = 150)
+    on(btn_apply.clicks) do _
+        selected = all_channels[findall(cb -> cb.checked[], cbs)]
+        if isempty(selected)
+            _update_channel_selection!(state, "None")
+        else
+            if length(selected) > 1
+                @warn "Only one additional channel is supported — using first selected ($(selected[1]))."
+            end
+            _update_channel_selection!(state, string(selected[1]))
+        end
     end
 
-    return menu_layout
+    display(GLMakie.Screen(), menu_fig)
+end
+
+"""Add a button that opens the channel-overlay popup window."""
+function _add_channel_menu!(fig, state)
+    menu_row = state.n_visible_components + 3
+    btn = Button(fig[menu_row, 1], label = "Additional Channels", fontsize = 18, tellheight = false)
+    on(btn.clicks) do _
+        _show_channel_popup(state)
+    end
+    return btn
 end
 
 """Set the channel overlay to the selected column (line or boolean)."""

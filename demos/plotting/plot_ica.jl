@@ -1,6 +1,7 @@
-# Demo: Plotting ICA Component Topographies
-# Shows how to visualise ICA component scalp maps as topographic plots,
-# select specific components, and adjust display options.
+# Demo: ICA Visualisation
+# Shows how to visualise ICA component topographies, browse continuous data
+# with ICA overlays in the databrowser, and inspect component activations
+# (time courses) with the interactive component activation viewer.
 
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
@@ -59,3 +60,37 @@ EegFun.plot_topography(ica, component_selection = EegFun.components(1:10), use_g
 
 # adjust colour map
 EegFun.plot_topography(ica, component_selection = EegFun.components(1:6), colormap = :RdBu)
+
+#######################################################################
+# DATABROWSER WITH ICA
+#######################################################################
+
+# browse continuous data with ICA components overlaid
+# (toggle individual components on/off for interactive artifact removal)
+EegFun.plot_databrowser(dat, ica)
+
+#######################################################################
+# ICA COMPONENT ACTIVATION (TIME COURSES)
+#######################################################################
+
+# interactive viewer: topography + time-series for every component
+EegFun.plot_ica_component_activation(dat, ica)
+
+# show only the first 10 components
+EegFun.plot_ica_component_activation(dat, ica, component_selection = EegFun.components(1:10))
+
+# show specific components of interest
+EegFun.plot_ica_component_activation(dat, ica, component_selection = EegFun.components([1, 2, 3, 4]))
+
+#######################################################################
+# ICA COMPONENT ACTIVATION WITH ARTIFACT LABELS
+#######################################################################
+
+# identify artifact components automatically
+component_artifacts, _ = EegFun.identify_components(
+    dat, ica, sample_selection = EegFun.samples_not(:is_extreme_value_200),
+)
+
+# activation viewer with artifact category checkboxes
+# (components are labelled by type: EOG, ECG, line noise, channel noise)
+EegFun.plot_ica_component_activation(dat, ica, artifacts = component_artifacts)
