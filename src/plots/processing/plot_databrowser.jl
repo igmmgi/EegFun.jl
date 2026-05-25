@@ -423,83 +423,70 @@ function _create_menu(fig, options, default, label; kwargs...)
     return hcat(menu, Label(fig, label, fontsize = 22, halign = :left, tellwidth = false))
 end
 
-"""Create the channel-label selection menu (popup window)."""
-function _create_labels_menu(fig, ax, state)
-    btn = Button(fig, label = "Labels", width = Auto(), fontsize = 18)
-    on(btn.clicks) do _
-        _show_labels_menu(state, ax)
-    end
-    return hcat(btn, Label(fig, "", tellwidth = false))
-end
-
-function _show_labels_menu(state, ax)
-    all_channels = state.channels.labels
-    cols = 9
-    menu_fig = Figure(size = (900, 700))
-    Label(menu_fig[1, 1], "Select Channels to Display", fontsize = 18, halign = :center)
-    
-    scroll_area = menu_fig[2, 1] = GridLayout()
-    channel_checkboxes = Checkbox[]
-    
-    for (i, ch) in enumerate(all_channels)
+"""Build a labelled checkbox grid into `grid`. Returns `Vector{Checkbox}`."""
+function _build_checkbox_grid!(grid, items, cols, checked_fn; fontsize = 14)
+    checkboxes = Checkbox[]
+    for (i, item) in enumerate(items)
         row = ((i - 1) ÷ cols) + 1
         col = ((i - 1) % cols) + 1
-        
         col_base = (col - 1) * 2
-        is_visible = state.channels.visible[i]
-        
-        checkbox = Checkbox(scroll_area[row, col_base + 1], checked = is_visible, width = 16, height = 16)
-        push!(channel_checkboxes, checkbox)
-        
-        Label(scroll_area[row, col_base + 2], string(ch), fontsize = 14, halign = :left)
+        cb = Checkbox(grid[row, col_base + 1], checked = checked_fn(item, i), width = 16, height = 16)
+        push!(checkboxes, cb)
+        Label(grid[row, col_base + 2], string(item), fontsize = fontsize, halign = :left)
     end
-    
-    # Apply column gaps after grid is populated
-    actual_cols = min(cols, length(all_channels))
+    actual_cols = min(cols, length(items))
     for c in 1:actual_cols
         col_base = (c - 1) * 2
-        colgap!(scroll_area, col_base + 1, 5)
-        if c < actual_cols
-            colgap!(scroll_area, col_base + 2, 20)
+        colgap!(grid, col_base + 1, 5)
+        c < actual_cols && colgap!(grid, col_base + 2, 20)
+    end
+    rowgap!(grid, 5)
+    return checkboxes
+end
+
+"""Return a Button that opens `popup_fn` on click. Used to build the right-hand control panel."""
+function _popup_button(fig, label, popup_fn)
+    btn = Button(fig, label = label, width = Auto(), fontsize = 18)
+    on(btn.clicks) do _ popup_fn() end
+    return btn
+end
+
+"""Add a row of group-selection buttons that set checkboxes to match `predicate`."""
+function _add_group_buttons!(fig, grid_row, cbs, items, groups)
+    area = fig[grid_row, 1] = GridLayout()
+    for (j, (lbl, pred)) in enumerate(groups)
+        btn = Button(area[1, j], label = lbl)
+        on(btn.clicks) do _
+            for (i, cb) in enumerate(cbs)
+                cb.checked[] = pred(items[i])
+            end
         end
     end
-    rowgap!(scroll_area, 5)
+end
 
-    group_area = menu_fig[3, 1] = GridLayout()
-    btn_all = Button(group_area[1, 1], label = "All")
-    btn_none = Button(group_area[1, 2], label = "None")
-    btn_left = Button(group_area[1, 3], label = "Left")
-    btn_right = Button(group_area[1, 4], label = "Right")
-    btn_central = Button(group_area[1, 5], label = "Central")
+"""Popup: select which channels are visible."""
+function _show_labels_menu(state, ax)
+    all_channels = state.channels.labels
+    menu_fig = Figure(size = (900, 700))
+    Label(menu_fig[1, 1], "Select Channels to Display", fontsize = 18, halign = :center)
+    scroll_area = menu_fig[2, 1] = GridLayout()
+    cbs = _build_checkbox_grid!(scroll_area, all_channels, 9,
+        (ch, i) -> state.channels.visible[i])
+
+    groups = [
+        ("All",     ch -> true),
+        ("None",    ch -> false),
+        ("Left",    ch -> occursin(r"\d*[13579]$", String(ch))),
+        ("Right",   ch -> occursin(r"\d*[24680]$", String(ch))),
+        ("Central", ch -> occursin(r"z$",          String(ch))),
+    ]
+    _add_group_buttons!(menu_fig, 3, cbs, all_channels, groups)
 
     action_area = menu_fig[4, 1] = GridLayout()
     btn_apply = Button(action_area[1, 1], label = "Apply", width = 200)
-
-    on(btn_all.clicks) do _
-        for cb in channel_checkboxes cb.checked[] = true end
-    end
-    on(btn_none.clicks) do _
-        for cb in channel_checkboxes cb.checked[] = false end
-    end
-    on(btn_left.clicks) do _
-        for (i, ch) in enumerate(all_channels)
-            channel_checkboxes[i].checked[] = occursin(r"\d*[13579]$", String(ch))
-        end
-    end
-    on(btn_right.clicks) do _
-        for (i, ch) in enumerate(all_channels)
-            channel_checkboxes[i].checked[] = occursin(r"\d*[24680]$", String(ch))
-        end
-    end
-    on(btn_central.clicks) do _
-        for (i, ch) in enumerate(all_channels)
-            channel_checkboxes[i].checked[] = occursin(r"z$", String(ch))
-        end
-    end
-
     on(btn_apply.clicks) do _
-        state.channels.individually_selected = Symbol[] 
-        for (i, cb) in enumerate(channel_checkboxes)
+        state.channels.individually_selected = Symbol[]
+        for (i, cb) in enumerate(cbs)
             state.channels.visible[i] = cb.checked[]
         end
         _clear_and_save_limits!(ax, state)
@@ -510,128 +497,68 @@ function _show_labels_menu(state, ax)
     display(GLMakie.Screen(), menu_fig)
 end
 
-"""Create the re-reference dropdown menu (popup window)."""
-function _create_reference_menu(fig, state, dat)
-    btn = Button(fig, label = "Reference", width = Auto(), fontsize = 18)
-    
-    on(btn.clicks) do _
-        _show_reference_menu(state, dat)
-    end
-    
-    return hcat(btn, Label(fig, "", tellwidth = false))
-end
+"""Create the channel-label selection button for the control panel."""
+_create_labels_menu(fig, ax, state) =
+    _popup_button(fig, "Labels", () -> _show_labels_menu(state, ax))
 
+"""Popup: select reference channels and apply re-referencing."""
 function _show_reference_menu(state, dat)
     all_channels = state.channels.labels
-    cols = 9
     menu_fig = Figure(size = (900, 700))
     Label(menu_fig[1, 1], "Select Reference Channels", fontsize = 18, halign = :center)
-    
+
+    # Determine currently-checked channels from stored state
+    current_syms = if state.reference_state == :avg
+        all_channels  # all checked when avg
+    elseif state.reference_state == :mastoid
+        [:M1, :M2]
+    elseif state.reference_state == :none
+        Symbol[]
+    else
+        Symbol.(split(string(state.reference_state), "_"))
+    end
+
     scroll_area = menu_fig[2, 1] = GridLayout()
-    channel_checkboxes = Checkbox[]
-    
-    # Parse currently selected reference channels
-    current_syms = Symbol.(split(string(state.reference_state), "_"))
-    if state.reference_state == :mastoid
-        current_syms = [:M1, :M2]
-    elseif state.reference_state == :avg || state.reference_state == :none
-        current_syms = Symbol[]
-    end
-    
-    for (i, ch) in enumerate(all_channels)
-        row = ((i - 1) ÷ cols) + 1
-        col = ((i - 1) % cols) + 1
-        
-        col_base = (col - 1) * 2
-        is_checked = ch in current_syms || state.reference_state == :avg
-        
-        checkbox = Checkbox(scroll_area[row, col_base + 1], checked = is_checked, width = 16, height = 16)
-        push!(channel_checkboxes, checkbox)
-        
-        Label(scroll_area[row, col_base + 2], string(ch), fontsize = 14, halign = :left)
-    end
-    
-    actual_cols = min(cols, length(all_channels))
-    for c in 1:actual_cols
-        col_base = (c - 1) * 2
-        colgap!(scroll_area, col_base + 1, 5)
-        if c < actual_cols
-            colgap!(scroll_area, col_base + 2, 20)
-        end
-    end
-    rowgap!(scroll_area, 5)
-    
-    # Group selection buttons
-    group_area = menu_fig[3, 1] = GridLayout()
-    btn_all = Button(group_area[1, 1], label = "All (Avg)")
-    btn_none = Button(group_area[1, 2], label = "None")
-    btn_left = Button(group_area[1, 3], label = "Left")
-    btn_right = Button(group_area[1, 4], label = "Right")
-    btn_central = Button(group_area[1, 5], label = "Central")
-    btn_mastoids = Button(group_area[1, 6], label = "Mastoids")
-    
+    cbs = _build_checkbox_grid!(scroll_area, all_channels, 9,
+        (ch, _) -> ch in current_syms)
+
+    groups = [
+        ("All (Avg)", ch -> true),
+        ("None",      ch -> false),
+        ("Left",      ch -> occursin(r"\d*[13579]$", String(ch))),
+        ("Right",     ch -> occursin(r"\d*[24680]$", String(ch))),
+        ("Central",   ch -> occursin(r"z$",          String(ch))),
+        ("Mastoids",  ch -> ch == :M1 || ch == :M2),
+    ]
+    _add_group_buttons!(menu_fig, 3, cbs, all_channels, groups)
+
     action_area = menu_fig[4, 1] = GridLayout()
     btn_apply = Button(action_area[1, 1], label = "Apply", width = 200)
-
-    on(btn_all.clicks) do _
-        for cb in channel_checkboxes cb.checked[] = true end
-    end
-    on(btn_none.clicks) do _
-        for cb in channel_checkboxes cb.checked[] = false end
-    end
-    on(btn_left.clicks) do _
-        for (i, ch) in enumerate(all_channels)
-            channel_checkboxes[i].checked[] = occursin(r"\d*[13579]$", String(ch))
-        end
-    end
-    on(btn_right.clicks) do _
-        for (i, ch) in enumerate(all_channels)
-            channel_checkboxes[i].checked[] = occursin(r"\d*[24680]$", String(ch))
-        end
-    end
-    on(btn_central.clicks) do _
-        for (i, ch) in enumerate(all_channels)
-            channel_checkboxes[i].checked[] = occursin(r"z$", String(ch))
-        end
-    end
-    on(btn_mastoids.clicks) do _
-        for (i, ch) in enumerate(all_channels)
-            channel_checkboxes[i].checked[] = (ch == :M1 || ch == :M2)
-        end
-    end
-
     on(btn_apply.clicks) do _
-        selected_channels = Symbol[]
-        for (i, cb) in enumerate(channel_checkboxes)
-            if cb.checked[]
-                push!(selected_channels, all_channels[i])
-            end
-        end
-        
-        # Determine the reference option to apply
-        if isempty(selected_channels)
-            opt = :none
-        elseif length(selected_channels) == length(all_channels)
-            opt = :avg
-        elseif length(selected_channels) == 2 && :M1 in selected_channels && :M2 in selected_channels
-            opt = :mastoid
+        selected = [all_channels[i] for (i, cb) in enumerate(cbs) if cb.checked[]]
+        opt = if isempty(selected)
+            :none
+        elseif length(selected) == length(all_channels)
+            :avg
+        elseif length(selected) == 2 && :M1 in selected && :M2 in selected
+            :mastoid
         else
-            opt = selected_channels
+            selected
         end
-        
-        # We save the state as a Symbol to avoid modifying DataBrowserState struct
-        opt_str = opt isa Symbol ? string(opt) : join(opt, "_")
-        state.reference_state = Symbol(opt_str)
-        
+        state.reference_state = Symbol(opt isa Symbol ? string(opt) : join(opt, "_"))
         if opt != :none
             _rereference!(state.data, opt)
             _notify_data_update(state.data)
             _update_analysis_settings!(state)
         end
     end
-    
+
     display(GLMakie.Screen(), menu_fig)
 end
+
+"""Create the re-reference button for the control panel."""
+_create_reference_menu(fig, state, dat) =
+    _popup_button(fig, "Reference", () -> _show_reference_menu(state, dat))
 
 """Toggle an ICA component for removal and apply subtraction algebra to the dataset."""
 function _toggle_ica_component!(state, component_id::Union{Nothing,Int})
@@ -728,113 +655,65 @@ function _apply_incremental_ica_update!(state::EpochedDataState, ica::InfoIca, c
     end
 end
 
-"""Create the ICA component removal menu with toggle and undo support (popup window)."""
-function _create_ica_menu(fig, ax, state, ica)
-
-    btn = Button(fig, label = "ICA Components", width = Auto(), fontsize = 18)
-
-    on(btn.clicks) do _
-        _show_ica_menu(state, ax, ica)
-    end
-
-    if !haskey(state.plot_kwargs, :show_cleaned_ica)
-        state.plot_kwargs[:show_cleaned_ica] = Observable(false)
-        state.view.show_original_ica[] = true
-    end
-
-    # Return button and a dummy label to match layout constraints
-    return hcat(btn, Label(fig, "", tellwidth = false))
-
-end
-
+"""Popup: toggle ICA component removals and display options."""
 function _show_ica_menu(state, ax, ica)
+    all_components = ica.ica_label
     menu_fig = Figure(size = (800, 600))
     Label(menu_fig[1, 1], "Select ICA Components to Remove", fontsize = 18, halign = :center)
-    
+
     scroll_area = menu_fig[2, 1] = GridLayout()
-    checkboxes = Checkbox[]
-    
-    all_components = ica.ica_label
-    cols = 9
-    
-    for (i, comp) in enumerate(all_components)
-        row = ((i - 1) ÷ cols) + 1
-        col = ((i - 1) % cols) + 1
-        
-        col_base = (col - 1) * 2
-        comp_int = _extract_int(String(comp))
-        is_removed = !isnothing(comp_int) && comp_int in state.ica.removed_components
-        
-        checkbox = Checkbox(scroll_area[row, col_base + 1], checked = is_removed, width = 16, height = 16)
-        push!(checkboxes, checkbox)
-        
-        Label(scroll_area[row, col_base + 2], string(comp), fontsize = 14, halign = :left)
-    end
-    
-    actual_cols = min(cols, length(all_components))
-    for c in 1:actual_cols
-        col_base = (c - 1) * 2
-        colgap!(scroll_area, col_base + 1, 5)
-        if c < actual_cols
-            colgap!(scroll_area, col_base + 2, 20)
-        end
-    end
-    rowgap!(scroll_area, 5)
-    
-    group_area = menu_fig[3, 1] = GridLayout()
-    btn_none = Button(group_area[1, 1], label = "None (Reset)")
-    
+    cbs = _build_checkbox_grid!(scroll_area, all_components, 9,
+        (comp, _) -> begin
+            n = _extract_int(String(comp))
+            !isnothing(n) && n in state.ica.removed_components
+        end)
+
+    _add_group_buttons!(menu_fig, 3, cbs, all_components,
+        [("None (Reset)", _ -> false)])
+
     action_area = menu_fig[4, 1] = GridLayout()
     btn_apply = Button(action_area[1, 1], label = "Apply", width = 200)
-
-    on(btn_none.clicks) do _
-        for cb in checkboxes cb.checked[] = false end
-    end
-    
     on(btn_apply.clicks) do _
         _clear_and_save_limits!(ax, state)
-        
-        # Reset all components first
-        _toggle_ica_component!(state, nothing)
-        
-        # Toggle selected components
-        for (i, cb) in enumerate(checkboxes)
+        _toggle_ica_component!(state, nothing)  # reset
+        for (i, cb) in enumerate(cbs)
             if cb.checked[]
-                comp_int = _extract_int(String(all_components[i]))
-                if !isnothing(comp_int)
-                    _toggle_ica_component!(state, comp_int)
-                end
+                n = _extract_int(String(all_components[i]))
+                !isnothing(n) && _toggle_ica_component!(state, n)
             end
         end
-        
         _notify_data_update(state.data)
         _draw(ax, state)
         _update_analysis_settings!(state)
     end
 
-    # Add display checkboxes in the popup
+    # Display options row
     display_area = menu_fig[5, 1] = GridLayout()
     Label(display_area[1, 1:6], "Display Options", fontsize = 16, halign = :center)
-    
-    cb_orig = Checkbox(display_area[2, 1], checked = state.view.show_original_ica[], width = 16, height = 16)
-    Label(display_area[2, 2], "Data", halign = :left)
-    on(cb_orig.checked) do active state.view.show_original_ica[] = active end
-    
-    cb_clean = Checkbox(display_area[2, 3], checked = state.plot_kwargs[:show_cleaned_ica][], width = 16, height = 16)
-    Label(display_area[2, 4], "Data - ICA", halign = :left)
-    on(cb_clean.checked) do active state.plot_kwargs[:show_cleaned_ica][] = active end
-    
-    cb_sub = Checkbox(display_area[2, 5], checked = state.view.show_subtracted_ica[], width = 16, height = 16)
-    Label(display_area[2, 6], "ICA Activation", halign = :left)
-    on(cb_sub.checked) do active state.view.show_subtracted_ica[] = active end
-
-    colgap!(display_area, 1, 5)
-    colgap!(display_area, 2, 30)
-    colgap!(display_area, 3, 5)
-    colgap!(display_area, 4, 30)
-    colgap!(display_area, 5, 5)
+    display_items = [
+        (state.view.show_original_ica,             "Data"),
+        (state.plot_kwargs[:show_cleaned_ica],      "Data - ICA"),
+        (state.view.show_subtracted_ica,            "ICA Activation"),
+    ]
+    for (j, (obs, lbl)) in enumerate(display_items)
+        col = (j - 1) * 2 + 1
+        cb = Checkbox(display_area[2, col], checked = obs[], width = 16, height = 16)
+        Label(display_area[2, col + 1], lbl, halign = :left)
+        on(cb.checked) do active obs[] = active end
+        colgap!(display_area, col, 5)
+        j < length(display_items) && colgap!(display_area, col + 1, 30)
+    end
 
     display(GLMakie.Screen(), menu_fig)
+end
+
+"""Create the ICA components button for the control panel."""
+function _create_ica_menu(fig, ax, state, ica)
+    if !haskey(state.plot_kwargs, :show_cleaned_ica)
+        state.plot_kwargs[:show_cleaned_ica] = Observable(false)
+        state.view.show_original_ica[] = true
+    end
+    return _popup_button(fig, "ICA Components", () -> _show_ica_menu(state, ax, ica))
 end
 
 """Create the epoch navigation slider and label."""
@@ -1154,58 +1033,24 @@ function _create_sliders(fig, state::EpochedDataBrowserState, dat)
     return _create_common_sliders(fig, state, dat)
 end
 
-"""Create the extra-channel overlay dropdown menu (popup window)."""
-function _create_extra_channel_menu(fig, ax, state, dat)
-    btn = Button(fig, label = "Extra Channels", width = Auto(), fontsize = 18)
-    on(btn.clicks) do _
-        _show_extra_channel_menu(state, ax, dat)
-    end
-    return hcat(btn, Label(fig, "", tellwidth = false))
-end
-
+"""Popup: select which extra channels to overlay."""
 function _show_extra_channel_menu(state, ax, dat)
     all_extras = extra_labels(dat)
-    if isnothing(all_extras) || isempty(all_extras)
-        return
-    end
+    isnothing(all_extras) || isempty(all_extras) && return
 
-    cols = 9
     menu_fig = Figure(size = (900, 700))
     Label(menu_fig[1, 1], "Select Extra Channels", fontsize = 18, halign = :center)
 
     scroll_area = menu_fig[2, 1] = GridLayout()
-    checkboxes = Checkbox[]
-
-    for (i, ch) in enumerate(all_extras)
-        row = ((i - 1) ÷ cols) + 1
-        col = ((i - 1) % cols) + 1
-        
-        col_base = (col - 1) * 2
-        checkbox = Checkbox(scroll_area[row, col_base + 1], checked = ch in state.extra_channel.channels, width = 16, height = 16)
-        push!(checkboxes, checkbox)
-        
-        Label(scroll_area[row, col_base + 2], string(ch), fontsize = 14, halign = :left)
-    end
-    
-    actual_cols = min(cols, length(all_extras))
-    for c in 1:actual_cols
-        col_base = (c - 1) * 2
-        colgap!(scroll_area, col_base + 1, 5)
-        if c < actual_cols
-            colgap!(scroll_area, col_base + 2, 20)
-        end
-    end
-    rowgap!(scroll_area, 5)
+    cbs = _build_checkbox_grid!(scroll_area, all_extras, 9,
+        (ch, _) -> ch in state.extra_channel.channels)
 
     action_area = menu_fig[3, 1] = GridLayout()
     btn_apply = Button(action_area[1, 1], label = "Apply", width = 150)
-
     on(btn_apply.clicks) do _
         empty!(state.extra_channel.channels)
-        for (i, cb) in enumerate(checkboxes)
-            if cb.checked[]
-                push!(state.extra_channel.channels, all_extras[i])
-            end
+        for (i, cb) in enumerate(cbs)
+            cb.checked[] && push!(state.extra_channel.channels, all_extras[i])
         end
         _draw_extra_channel!(ax, state)
     end
@@ -1213,7 +1058,14 @@ function _show_extra_channel_menu(state, ax, dat)
     display(GLMakie.Screen(), menu_fig)
 end
 
-"""Lay out all control widgets into the right-hand grid."""
+"""Create the extra-channels button for the control panel."""
+_create_extra_channel_menu(fig, ax, state, dat) =
+    _popup_button(fig, "Extra Channels", () -> _show_extra_channel_menu(state, ax, dat))
+
+"""Wrap a widget so it can be stacked with `vcat` in `grid!`."""
+_as_grid_row(fig, w::Button) = hcat(w, Label(fig, "", tellwidth = false))
+_as_grid_row(_, w) = w  # already a matrix (toggles, sliders, hcat menus)
+
 function _build_grid_components!(
     fig,
     dat,
@@ -1225,27 +1077,20 @@ function _build_grid_components!(
     extra_menu = nothing,
     epoch_menu = nothing,
 )
-    # Start with common components
-    grid_components = Matrix{Any}[]  # Explicitly type as Matrix{Any}
+    grid_components = Matrix{Any}[]
     push!(grid_components, toggles[:, 1:2])
 
-    # Add common controls that exist
     append!(grid_components, _create_sliders(fig, state, dat))
-    push!(grid_components, labels_menu)
-    push!(grid_components, reference_menu)
+    push!(grid_components, _as_grid_row(fig, labels_menu))
+    push!(grid_components, _as_grid_row(fig, reference_menu))
 
-    # Only add optional menus if they exist
-    !isnothing(ica_menu) && push!(grid_components, ica_menu)
-    !isnothing(extra_menu) && push!(grid_components, extra_menu)
-    !isnothing(epoch_menu) && push!(grid_components, epoch_menu)
+    !isnothing(ica_menu)   && push!(grid_components, _as_grid_row(fig, ica_menu))
+    !isnothing(extra_menu) && push!(grid_components, _as_grid_row(fig, extra_menu))
+    !isnothing(epoch_menu) && push!(grid_components, _as_grid_row(fig, epoch_menu))
 
-    # Use a Grid with auto-sizing for better responsiveness
     control_panel = grid!(vcat(grid_components...), tellheight = false)
-
-    # Make control panel responsive with automatic sizing
     fig[1, 2] = control_panel
 
-    # Use relative sizing for the control panel column
     colsize!(fig.layout, 2, Relative(0.25))
     rowsize!(fig.layout, 1, Relative(1.0))
 
