@@ -1,5 +1,12 @@
 # Utility functions for plot_gui helper functions
 
+"""Check if a filename implies a pattern match (non-.jld2 extension)."""
+_is_pattern(fname) = lowercase(splitext(fname)[2]) != ".jld2"
+
+"""Get the input directory from GUI state, falling back to pwd() if empty."""
+_gui_dir(gui_state) = _gui_dir(gui_state)
+# Utility functions for plot_gui helper functions
+
 """
     _validate_file(gui_state, required_ext::String)
 
@@ -129,9 +136,7 @@ function _apply_gui_filters(dat, gui_state)
     end
 
     if !isempty(epoch_list)
-        if dat isa EpochData
-            dat = subset(dat; epoch_selection = epochs(epoch_list))
-        elseif dat isa Vector && eltype(dat) <: EpochData
+        if dat isa Union{EpochData, Vector{<:EpochData}}
             dat = subset(dat; epoch_selection = epochs(epoch_list))
         end
     end
@@ -148,7 +153,7 @@ Warns if requested IDs are not found in the directory.
 """
 function _resolve_batch_files_helper(gui_state)
     fname = gui_state.filename[]
-    input_dir = gui_state.directory[] == "" ? pwd() : gui_state.directory[]
+    input_dir = _gui_dir(gui_state)
     
     part_list = _parse_gui_int_field(gui_state.participant[])
     if isnothing(part_list)
@@ -186,17 +191,8 @@ function setup_multi_int_callback(input, bc_obs::Observable, field_name::String,
             bc_obs[] = :white
             state_obs[] = ""
         else
-            # Split on spaces/commas; each token may be an integer or a n:m range
-            tokens = filter(!isempty, split(stripped, r"[\s,]+"))
-            valid = all(tokens) do t
-                if occursin(':', t)
-                    parts = split(t, ':')
-                    length(parts) == 2 && !isnothing(tryparse(Int, parts[1])) && !isnothing(tryparse(Int, parts[2]))
-                else
-                    !isnothing(tryparse(Int, t))
-                end
-            end
-            if !valid
+            parsed = _parse_gui_int_field(stripped)
+            if isnothing(parsed)
                 bc_obs[] = :lightcoral
                 state_obs[] = "__INVALID__"
                 @minimal_warning "Invalid $field_name value: \"$stripped\" (must be integers or ranges, e.g. 1 2 3 or 1:50)"
@@ -274,7 +270,7 @@ function _plot_erp_image(gui_state)
     isnothing(_validate_file(gui_state)) && return
 
     fname = gui_state.filename[]
-    is_pattern = lowercase(splitext(fname)[2]) != ".jld2"
+    is_pattern = _is_pattern(fname)
     selected_channels = _gui_selected_channels(gui_state)
 
     @async begin
@@ -287,7 +283,7 @@ function _plot_erp_image(gui_state)
                 # Pattern mode — delegate directly; batch discovery handled by string dispatch
                 plot_erp_image(
                     fname;
-                    input_dir = gui_state.directory[] == "" ? pwd() : gui_state.directory[],
+                    input_dir = _gui_dir(gui_state),
                     layout = layout_sym,
                     channel_selection = selected_channels,
                     xlim = gui_state.xlim[],
@@ -321,8 +317,8 @@ function _plot_time_frequency(gui_state)
     isnothing(_validate_file(gui_state, ".jld2")) && return
 
     fname = gui_state.filename[]
-    input_dir = gui_state.directory[] == "" ? pwd() : gui_state.directory[]
-    is_pattern = lowercase(splitext(fname)[2]) != ".jld2"
+    input_dir = _gui_dir(gui_state)
+    is_pattern = _is_pattern(fname)
 
     # Shared plot kwargs
     selected_channels = _gui_selected_channels(gui_state)
@@ -413,8 +409,8 @@ end
 """GUI bridge: load ICA and call `plot_topography` for component maps."""
 function _plot_ica(gui_state)
     fname      = gui_state.filename[]
-    input_dir  = gui_state.directory[] == "" ? pwd() : gui_state.directory[]
-    is_pattern = lowercase(splitext(fname)[2]) != ".jld2"
+    input_dir  = _gui_dir(gui_state)
+    is_pattern = _is_pattern(fname)
 
     # Parse component selection from the component textbox (shared by both modes)
     comp_list = _parse_gui_int_field(gui_state.ica_components[])
@@ -547,8 +543,8 @@ end
 """GUI bridge: load ICA + source data and call `plot_ica_component_activation`."""
 function _plot_ica_activation(gui_state)
     fname      = gui_state.filename[]
-    input_dir  = gui_state.directory[] == "" ? pwd() : gui_state.directory[]
-    is_pattern = lowercase(splitext(fname)[2]) != ".jld2"
+    input_dir  = _gui_dir(gui_state)
+    is_pattern = _is_pattern(fname)
     layout     = gui_state.layout_object[]
 
     comp_list = _parse_gui_int_field(gui_state.ica_components[])
