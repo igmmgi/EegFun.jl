@@ -434,8 +434,8 @@ end
 
 function _show_labels_menu(state, ax)
     all_channels = state.channels.labels
-    cols = 7
-    menu_fig = Figure(size = (700, 800))
+    cols = 9
+    menu_fig = Figure(size = (900, 700))
     Label(menu_fig[1, 1], "Select Channels to Display", fontsize = 18, halign = :center)
     
     scroll_area = menu_fig[2, 1] = GridLayout()
@@ -445,15 +445,25 @@ function _show_labels_menu(state, ax)
         row = ((i - 1) ÷ cols) + 1
         col = ((i - 1) % cols) + 1
         
-        channel_cell = scroll_area[row, col] = GridLayout()
-        
+        col_base = (col - 1) * 2
         is_visible = state.channels.visible[i]
         
-        checkbox = Checkbox(channel_cell[1, 1], checked = is_visible, width = 20, height = 20)
+        checkbox = Checkbox(scroll_area[row, col_base + 1], checked = is_visible, width = 16, height = 16)
         push!(channel_checkboxes, checkbox)
         
-        Label(channel_cell[1, 2], string(ch), fontsize = 12, halign = :left)
+        Label(scroll_area[row, col_base + 2], string(ch), fontsize = 14, halign = :left)
     end
+    
+    # Apply column gaps after grid is populated
+    actual_cols = min(cols, length(all_channels))
+    for c in 1:actual_cols
+        col_base = (c - 1) * 2
+        colgap!(scroll_area, col_base + 1, 5)
+        if c < actual_cols
+            colgap!(scroll_area, col_base + 2, 20)
+        end
+    end
+    rowgap!(scroll_area, 5)
 
     group_area = menu_fig[3, 1] = GridLayout()
     btn_all = Button(group_area[1, 1], label = "All")
@@ -513,8 +523,8 @@ end
 
 function _show_reference_menu(state, dat)
     all_channels = state.channels.labels
-    cols = 7
-    menu_fig = Figure(size = (700, 800))
+    cols = 9
+    menu_fig = Figure(size = (900, 700))
     Label(menu_fig[1, 1], "Select Reference Channels", fontsize = 18, halign = :center)
     
     scroll_area = menu_fig[2, 1] = GridLayout()
@@ -532,14 +542,24 @@ function _show_reference_menu(state, dat)
         row = ((i - 1) ÷ cols) + 1
         col = ((i - 1) % cols) + 1
         
-        channel_cell = scroll_area[row, col] = GridLayout()
-        
+        col_base = (col - 1) * 2
         is_checked = ch in current_syms || state.reference_state == :avg
-        checkbox = Checkbox(channel_cell[1, 1], checked = is_checked, width = 20, height = 20)
+        
+        checkbox = Checkbox(scroll_area[row, col_base + 1], checked = is_checked, width = 16, height = 16)
         push!(channel_checkboxes, checkbox)
         
-        Label(channel_cell[1, 2], string(ch), fontsize = 12, halign = :left)
+        Label(scroll_area[row, col_base + 2], string(ch), fontsize = 14, halign = :left)
     end
+    
+    actual_cols = min(cols, length(all_channels))
+    for c in 1:actual_cols
+        col_base = (c - 1) * 2
+        colgap!(scroll_area, col_base + 1, 5)
+        if c < actual_cols
+            colgap!(scroll_area, col_base + 2, 20)
+        end
+    end
+    rowgap!(scroll_area, 5)
     
     # Group selection buttons
     group_area = menu_fig[3, 1] = GridLayout()
@@ -728,29 +748,38 @@ function _create_ica_menu(fig, ax, state, ica)
 end
 
 function _show_ica_menu(state, ax, ica)
-    menu_fig = Figure(size = (600, 700))
+    menu_fig = Figure(size = (800, 600))
     Label(menu_fig[1, 1], "Select ICA Components to Remove", fontsize = 18, halign = :center)
     
     scroll_area = menu_fig[2, 1] = GridLayout()
     checkboxes = Checkbox[]
     
     all_components = ica.ica_label
-    cols = 5
+    cols = 9
     
     for (i, comp) in enumerate(all_components)
         row = ((i - 1) ÷ cols) + 1
         col = ((i - 1) % cols) + 1
         
-        comp_cell = scroll_area[row, col] = GridLayout()
-        
+        col_base = (col - 1) * 2
         comp_int = _extract_int(String(comp))
         is_removed = !isnothing(comp_int) && comp_int in state.ica.removed_components
         
-        checkbox = Checkbox(comp_cell[1, 1], checked = is_removed, width = 20, height = 20)
+        checkbox = Checkbox(scroll_area[row, col_base + 1], checked = is_removed, width = 16, height = 16)
         push!(checkboxes, checkbox)
         
-        Label(comp_cell[1, 2], string(comp), fontsize = 12, halign = :left)
+        Label(scroll_area[row, col_base + 2], string(comp), fontsize = 14, halign = :left)
     end
+    
+    actual_cols = min(cols, length(all_components))
+    for c in 1:actual_cols
+        col_base = (c - 1) * 2
+        colgap!(scroll_area, col_base + 1, 5)
+        if c < actual_cols
+            colgap!(scroll_area, col_base + 2, 20)
+        end
+    end
+    rowgap!(scroll_area, 5)
     
     group_area = menu_fig[3, 1] = GridLayout()
     btn_none = Button(group_area[1, 1], label = "None (Reset)")
@@ -785,19 +814,25 @@ function _show_ica_menu(state, ax, ica)
 
     # Add display checkboxes in the popup
     display_area = menu_fig[5, 1] = GridLayout()
-    Label(display_area[1, 1:2], "Display Options", fontsize = 16, halign = :center)
+    Label(display_area[1, 1:6], "Display Options", fontsize = 16, halign = :center)
     
-    cb_orig = Checkbox(display_area[2, 1], checked = state.view.show_original_ica[])
+    cb_orig = Checkbox(display_area[2, 1], checked = state.view.show_original_ica[], width = 16, height = 16)
     Label(display_area[2, 2], "Data", halign = :left)
     on(cb_orig.checked) do active state.view.show_original_ica[] = active end
     
-    cb_clean = Checkbox(display_area[3, 1], checked = state.plot_kwargs[:show_cleaned_ica][])
-    Label(display_area[3, 2], "Data - ICA", halign = :left)
+    cb_clean = Checkbox(display_area[2, 3], checked = state.plot_kwargs[:show_cleaned_ica][], width = 16, height = 16)
+    Label(display_area[2, 4], "Data - ICA", halign = :left)
     on(cb_clean.checked) do active state.plot_kwargs[:show_cleaned_ica][] = active end
     
-    cb_sub = Checkbox(display_area[4, 1], checked = state.view.show_subtracted_ica[])
-    Label(display_area[4, 2], "ICA Activation", halign = :left)
+    cb_sub = Checkbox(display_area[2, 5], checked = state.view.show_subtracted_ica[], width = 16, height = 16)
+    Label(display_area[2, 6], "ICA Activation", halign = :left)
     on(cb_sub.checked) do active state.view.show_subtracted_ica[] = active end
+
+    colgap!(display_area, 1, 5)
+    colgap!(display_area, 2, 30)
+    colgap!(display_area, 3, 5)
+    colgap!(display_area, 4, 30)
+    colgap!(display_area, 5, 5)
 
     display(GLMakie.Screen(), menu_fig)
 end
@@ -1134,18 +1169,33 @@ function _show_extra_channel_menu(state, ax, dat)
         return
     end
 
-    menu_fig = Figure(size = (300, 400))
+    cols = 9
+    menu_fig = Figure(size = (900, 700))
     Label(menu_fig[1, 1], "Select Extra Channels", fontsize = 18, halign = :center)
 
     scroll_area = menu_fig[2, 1] = GridLayout()
     checkboxes = Checkbox[]
 
     for (i, ch) in enumerate(all_extras)
-        channel_cell = scroll_area[i, 1] = GridLayout()
-        checkbox = Checkbox(channel_cell[1, 1], checked = ch in state.extra_channel.channels)
+        row = ((i - 1) ÷ cols) + 1
+        col = ((i - 1) % cols) + 1
+        
+        col_base = (col - 1) * 2
+        checkbox = Checkbox(scroll_area[row, col_base + 1], checked = ch in state.extra_channel.channels, width = 16, height = 16)
         push!(checkboxes, checkbox)
-        Label(channel_cell[1, 2], string(ch), fontsize = 14, halign = :left)
+        
+        Label(scroll_area[row, col_base + 2], string(ch), fontsize = 14, halign = :left)
     end
+    
+    actual_cols = min(cols, length(all_extras))
+    for c in 1:actual_cols
+        col_base = (c - 1) * 2
+        colgap!(scroll_area, col_base + 1, 5)
+        if c < actual_cols
+            colgap!(scroll_area, col_base + 2, 20)
+        end
+    end
+    rowgap!(scroll_area, 5)
 
     action_area = menu_fig[3, 1] = GridLayout()
     btn_apply = Button(action_area[1, 1], label = "Apply", width = 150)
