@@ -1,17 +1,11 @@
-# Base UI styling values
-const BASE_FONTS = (label = 20, button = 18, textbox = 16)
-const BASE_SIZES = (input_width = 160, input_height = 30)
-
-"""Font sizes and widget dimensions for the interactive GUI."""
-struct UIStyle
-    label_font::Int
-    button_font::Int
-    textbox_font::Int
-    input_width::Int
-    input_height::Int
-
-    UIStyle() = new(BASE_FONTS.label, BASE_FONTS.button, BASE_FONTS.textbox, BASE_SIZES.input_width, BASE_SIZES.input_height)
-end
+"""Shared font sizes and widget dimensions for the interactive GUI."""
+const UI_STYLE = (
+    label_font   = 20,
+    button_font  = 18,
+    textbox_font = 16,
+    input_width  = 160,
+    input_height = 30,
+)
 
 Base.@kwdef mutable struct GUIState
     directory::Observable{String} = Observable("")
@@ -38,18 +32,18 @@ Base.@kwdef mutable struct GUIState
     invert_y::Observable{Bool} = Observable(false)
     submenu_active::Observable{Bool} = Observable(false)
     submenu_type::Observable{String} = Observable("")
-    channel_menu::Any = nothing
+    channel_menu::Union{Nothing,Menu} = nothing
     ica_components::Observable{String} = Observable("")
 end
 
 """Create a styled button for GUI selection actions."""
-function _create_select_button(parent, label, style::UIStyle)
+function _create_select_button(parent, label)
     Button(
         parent,
         label = label,
-        fontsize = style.button_font,
-        width = style.input_width,
-        height = style.input_height,
+        fontsize = UI_STYLE.button_font,
+        width = UI_STYLE.input_width,
+        height = UI_STYLE.input_height,
         buttoncolor = :lightgrey,
         buttoncolor_hover = :grey,
         buttoncolor_active = :green,
@@ -57,14 +51,14 @@ function _create_select_button(parent, label, style::UIStyle)
 end
 
 """Create a styled textbox for GUI text input."""
-function _create_textbox(parent, style::UIStyle; width = nothing, placeholder = "", boxcolor_obs = nothing, halign = :center)
+function _create_textbox(parent; width = nothing, placeholder = "", boxcolor_obs = nothing, halign = :center)
     bc = isnothing(boxcolor_obs) ? Observable(:white) : boxcolor_obs
     Textbox(
         parent,
         placeholder = placeholder,
-        fontsize = style.textbox_font,
-        width = isnothing(width) ? style.input_width : width,
-        height = style.input_height,
+        fontsize = UI_STYLE.textbox_font,
+        width = isnothing(width) ? UI_STYLE.input_width : width,
+        height = UI_STYLE.input_height,
         halign = halign,
         boxcolor = bc,
         cornerradius = 0,
@@ -72,20 +66,19 @@ function _create_textbox(parent, style::UIStyle; width = nothing, placeholder = 
 end
 
 """Create a styled dropdown menu for GUI option selection."""
-function _create_menu(parent, style::UIStyle; options = ["Select"], width = nothing, height = nothing)
+function _create_menu(parent; options = ["Select"], width = nothing, height = nothing)
     Menu(
         parent,
         options = options,
-        width = isnothing(width) ? style.input_width : width,
-        height = isnothing(height) ? style.input_height : height,
-        fontsize = style.textbox_font,
+        width = isnothing(width) ? UI_STYLE.input_width : width,
+        height = isnothing(height) ? UI_STYLE.input_height : height,
+        fontsize = UI_STYLE.textbox_font,
     )
 end
 
 """Create a styled label for the GUI."""
-function _create_label(parent, text, style::UIStyle; fontsize = nothing, color = :black)
-    fontsize_val = isnothing(fontsize) ? style.label_font : fontsize
-    Label(parent, text, fontsize = fontsize_val, color = color)
+function _create_label(parent, text; fontsize = UI_STYLE.label_font, color = :black)
+    Label(parent, text, fontsize = fontsize, color = color)
 end
 
 """Truncate a path string to a maximum length, showing the end with '...' prefix."""
@@ -145,19 +138,19 @@ function plot_gui()
     # Dynamic sizing using Auto() rather than strict Fixed everywhere
     gui_fig = Figure(size = (700, 600), title = "Plot GUI", backgroundcolor = :lightgrey, figure_padding = (20, 20, 20, 20))
     main_layout = GridLayout(gui_fig[1, 1:3], rowgap = 2, colgap = 4)
-    ui_style = UIStyle()
+
 
     # Pre-emptively create the channel_menu so it can live in GUIState
-    channel_menu = _create_menu(main_layout[10, 2], ui_style, options = ["Select"])
+    channel_menu = _create_menu(main_layout[10, 2], options = ["Select"])
 
     gui_state = GUIState(; channel_menu = channel_menu)
 
-    _build_file_column!(main_layout, ui_style, gui_state)
-    _build_filter_column!(main_layout, ui_style, gui_state)
-    _build_axis_column!(main_layout, ui_style, gui_state)
+    _build_file_column!(main_layout, gui_state)
+    _build_filter_column!(main_layout, gui_state)
+    _build_axis_column!(main_layout, gui_state)
 
     # Set columns sizes
-    colsize!(main_layout, 1, Fixed(ui_style.input_width))  # pin col 1 so widgets don't drift on resize
+    colsize!(main_layout, 1, Fixed(UI_STYLE.input_width))  # pin col 1 so widgets don't drift on resize
     colsize!(main_layout, 2, Auto())
     colsize!(main_layout, 3, Auto())
 
@@ -167,23 +160,23 @@ function plot_gui()
     return nothing
 end
 
-function _build_file_column!(main_layout, ui_style, gui_state)
+function _build_file_column!(main_layout, gui_state)
     # Select Directory Section
-    directory_select_button = _create_select_button(main_layout[1, 1], "Select Directory", ui_style)
+    directory_select_button = _create_select_button(main_layout[1, 1], "Select Directory")
     directory_label_text = Observable("Dir:")
-    _create_label(main_layout[2, 1], directory_label_text, ui_style, fontsize = ui_style.textbox_font, color = :gray)
+    _create_label(main_layout[2, 1], directory_label_text, fontsize = UI_STYLE.textbox_font, color = :gray)
 
     # Select File Section
-    file_select_button = _create_select_button(main_layout[3, 1], "Select File", ui_style)
-    file_pattern_input = _create_textbox(main_layout[4, 1], ui_style, placeholder = "", halign = :left)
+    file_select_button = _create_select_button(main_layout[3, 1], "Select File")
+    file_pattern_input = _create_textbox(main_layout[4, 1], placeholder = "", halign = :left)
 
     # Layout Section
-    layout_select_button = _create_select_button(main_layout[5, 1], "Select Layout", ui_style)
+    layout_select_button = _create_select_button(main_layout[5, 1], "Select Layout")
     layout_label_text = Observable("File:")
-    _create_label(main_layout[6, 1], layout_label_text, ui_style, fontsize = ui_style.textbox_font, color = :gray)
+    _create_label(main_layout[6, 1], layout_label_text, fontsize = UI_STYLE.textbox_font, color = :gray)
 
     # Plot Type Section
-    _create_label(main_layout[7, 1], "Plot Type", ui_style)
+    _create_label(main_layout[7, 1], "Plot Type")
     plottype_options = [
         "Select",
         "Data Browser",
@@ -197,13 +190,13 @@ function _build_file_column!(main_layout, ui_style, gui_state)
         "ERP Analysis >",
         "Diagnostic Plots >",
     ]
-    plottype_dropdown = _create_menu(main_layout[8, 1], ui_style, options = plottype_options)
+    plottype_dropdown = _create_menu(main_layout[8, 1], options = plottype_options)
 
     # Submenu dropdown
-    submenu_dropdown = _create_menu(main_layout[9, 1], ui_style, options = ["---"])
+    submenu_dropdown = _create_menu(main_layout[9, 1], options = ["---"])
 
     component_bc = Observable(:lightgrey)
-    component_input = _create_textbox(main_layout[10, 1], ui_style, placeholder = "", boxcolor_obs = component_bc)
+    component_input = _create_textbox(main_layout[10, 1], placeholder = "", boxcolor_obs = component_bc)
 
     # Events
     on(directory_select_button.clicks) do _
@@ -323,26 +316,26 @@ function _build_file_column!(main_layout, ui_style, gui_state)
     end
 end
 
-function _build_filter_column!(main_layout, ui_style, gui_state)
+function _build_filter_column!(main_layout, gui_state)
     participant_bc = Observable(:white)
     condition_bc = Observable(:white)
     epoch_bc = Observable(:white)
 
-    _create_label(main_layout[1, 2], "Participant", ui_style)
-    participant_input = _create_textbox(main_layout[2, 2], ui_style, boxcolor_obs = participant_bc)
-    _create_label(main_layout[3, 2], "Condition", ui_style)
-    condition_input = _create_textbox(main_layout[4, 2], ui_style, boxcolor_obs = condition_bc)
-    _create_label(main_layout[5, 2], "Epoch", ui_style)
-    epoch_input = _create_textbox(main_layout[6, 2], ui_style, boxcolor_obs = epoch_bc)
+    _create_label(main_layout[1, 2], "Participant")
+    participant_input = _create_textbox(main_layout[2, 2], boxcolor_obs = participant_bc)
+    _create_label(main_layout[3, 2], "Condition")
+    condition_input = _create_textbox(main_layout[4, 2], boxcolor_obs = condition_bc)
+    _create_label(main_layout[5, 2], "Epoch")
+    epoch_input = _create_textbox(main_layout[6, 2], boxcolor_obs = epoch_bc)
 
-    _create_label(main_layout[7, 2], "Layout", ui_style)
-    layout_dropdown = _create_menu(main_layout[8, 2], ui_style, options = ["Single", "Single Avg", "Grid", "Topo"])
+    _create_label(main_layout[7, 2], "Layout")
+    layout_dropdown = _create_menu(main_layout[8, 2], options = ["Single", "Single Avg", "Grid", "Topo"])
 
-    _create_label(main_layout[9, 2], "Channel(s)", ui_style)
+    _create_label(main_layout[9, 2], "Channel(s)")
     # channel_menu is already in layout at [10, 2] by plot_gui setup
 
     selected_channels_text = Observable("Channels: ")
-    _create_label(main_layout[11, 2], selected_channels_text, ui_style, fontsize = ui_style.textbox_font, color = :gray)
+    _create_label(main_layout[11, 2], selected_channels_text, fontsize = UI_STYLE.textbox_font, color = :gray)
 
     # Connections
     setup_multi_int_callback(participant_input, participant_bc, "Participant", gui_state.participant)
@@ -379,7 +372,7 @@ function _build_filter_column!(main_layout, ui_style, gui_state)
     end
 end
 
-function _build_axis_column!(main_layout, ui_style, gui_state)
+function _build_axis_column!(main_layout, gui_state)
     xmin_bc = Observable(:white)
     xmax_bc = Observable(:white)
     ymin_bc = Observable(:white)
@@ -389,41 +382,40 @@ function _build_axis_column!(main_layout, ui_style, gui_state)
     bl_start_bc = Observable(:white)
     bl_end_bc = Observable(:white)
 
-    _create_label(main_layout[1, 3], "X Limits", ui_style, fontsize = ui_style.textbox_font)
+    _create_label(main_layout[1, 3], "X Limits", fontsize = UI_STYLE.textbox_font)
     x_limits_layout = GridLayout(main_layout[2, 3], tellwidth = false, colgap = 8)
-    xmin_input = _create_textbox(x_limits_layout[1, 1], ui_style, width = 80, boxcolor_obs = xmin_bc)
-    xmax_input = _create_textbox(x_limits_layout[1, 2], ui_style, width = 80, boxcolor_obs = xmax_bc)
+    xmin_input = _create_textbox(x_limits_layout[1, 1], width = 80, boxcolor_obs = xmin_bc)
+    xmax_input = _create_textbox(x_limits_layout[1, 2], width = 80, boxcolor_obs = xmax_bc)
 
-    _create_label(main_layout[3, 3], "Y Limits", ui_style, fontsize = ui_style.textbox_font)
+    _create_label(main_layout[3, 3], "Y Limits", fontsize = UI_STYLE.textbox_font)
     y_limits_layout = GridLayout(main_layout[4, 3], tellwidth = false, colgap = 8)
-    ymin_input = _create_textbox(y_limits_layout[1, 1], ui_style, width = 80, boxcolor_obs = ymin_bc)
-    ymax_input = _create_textbox(y_limits_layout[1, 2], ui_style, width = 80, boxcolor_obs = ymax_bc)
+    ymin_input = _create_textbox(y_limits_layout[1, 1], width = 80, boxcolor_obs = ymin_bc)
+    ymax_input = _create_textbox(y_limits_layout[1, 2], width = 80, boxcolor_obs = ymax_bc)
 
-    _create_label(main_layout[5, 3], "Z Limits", ui_style, fontsize = ui_style.textbox_font)
+    _create_label(main_layout[5, 3], "Z Limits", fontsize = UI_STYLE.textbox_font)
     z_limits_layout = GridLayout(main_layout[6, 3], tellwidth = false, colgap = 8)
-    zmin_input = _create_textbox(z_limits_layout[1, 1], ui_style, width = 80, boxcolor_obs = zmin_bc)
-    zmax_input = _create_textbox(z_limits_layout[1, 2], ui_style, width = 80, boxcolor_obs = zmax_bc)
+    zmin_input = _create_textbox(z_limits_layout[1, 1], width = 80, boxcolor_obs = zmin_bc)
+    zmax_input = _create_textbox(z_limits_layout[1, 2], width = 80, boxcolor_obs = zmax_bc)
 
-    _create_label(main_layout[7, 3], "Baseline", ui_style, fontsize = ui_style.textbox_font)
+    _create_label(main_layout[7, 3], "Baseline", fontsize = UI_STYLE.textbox_font)
     baseline_layout = GridLayout(main_layout[8, 3], tellwidth = false, colgap = 8)
-    baseline_start = _create_textbox(baseline_layout[1, 1], ui_style, width = 80, boxcolor_obs = bl_start_bc)
-    baseline_end = _create_textbox(baseline_layout[1, 2], ui_style, width = 80, boxcolor_obs = bl_end_bc)
+    baseline_start = _create_textbox(baseline_layout[1, 1], width = 80, boxcolor_obs = bl_start_bc)
+    baseline_end = _create_textbox(baseline_layout[1, 2], width = 80, boxcolor_obs = bl_end_bc)
 
-    _create_label(main_layout[9, 3], "Baseline Type TF", ui_style, fontsize = ui_style.textbox_font)
+    _create_label(main_layout[9, 3], "Baseline Type TF", fontsize = UI_STYLE.textbox_font)
     baseline_type = _create_menu(
         main_layout[10, 3],
-        ui_style,
         options = ["Select", "db", "absolute", "relative", "relchange", "percent", "zscore", "normchange"],
     )
 
     invert_y_layout = GridLayout(main_layout[11, 3], tellwidth = false, colgap = 8)
-    _create_label(invert_y_layout[1, 1], "Invert Y axis", ui_style, fontsize = ui_style.textbox_font)
+    _create_label(invert_y_layout[1, 1], "Invert Y axis", fontsize = UI_STYLE.textbox_font)
     invert_y_checkbox = Checkbox(invert_y_layout[1, 2], checked = false)
 
     plot_button = Button(
         main_layout[13, 3],
         label = "PLOT",
-        fontsize = ui_style.button_font,
+        fontsize = UI_STYLE.button_font,
         buttoncolor = :darkgrey,
         buttoncolor_hover = :grey,
         buttoncolor_active = :green,
@@ -557,7 +549,7 @@ function _plot_epochs(gui_state)
     isnothing(_validate_file(gui_state)) && return
 
     fname = gui_state.filename[]
-    is_pattern = lowercase(splitext(fname)[2]) != ".jld2"
+    is_pattern = _is_pattern(fname)
 
     if is_pattern
         # Pattern mode — parse participant/condition filters and forward to plot_epochs
@@ -578,7 +570,7 @@ function _plot_epochs(gui_state)
             try
                 plot_epochs(
                     fname;
-                    input_dir             = gui_state.directory[] == "" ? pwd() : gui_state.directory[],
+                    input_dir             = _gui_dir(gui_state),
                     participant_selection = part_sel,
                     condition_selection   = cond_sel,
                     channel_selection     = selected_channels,
@@ -635,8 +627,8 @@ function _plot_erp(gui_state)
     isnothing(_validate_file(gui_state)) && return
 
     fname = gui_state.filename[]
-    input_dir = gui_state.directory[] == "" ? pwd() : gui_state.directory[]
-    is_pattern = lowercase(splitext(fname)[2]) != ".jld2"
+    input_dir = _gui_dir(gui_state)
+    is_pattern = _is_pattern(fname)
 
     if is_pattern
         # Pattern mode — parse all relevant GUI filters and forward to plot_erp
@@ -723,8 +715,8 @@ function _plot_topography(gui_state)
     isnothing(_validate_file(gui_state)) && return
 
     fname = gui_state.filename[]
-    input_dir = gui_state.directory[] == "" ? pwd() : gui_state.directory[]
-    is_pattern = lowercase(splitext(fname)[2]) != ".jld2"
+    input_dir = _gui_dir(gui_state)
+    is_pattern = _is_pattern(fname)
 
     # Shared setup
     selected_channels = isempty(gui_state.electrodes[]) ? channels() : channels(Symbol.(gui_state.electrodes[]))

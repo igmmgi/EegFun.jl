@@ -69,11 +69,12 @@ end
 
 """Observable high-pass / low-pass filter toggle state."""
 mutable struct FilterState
-    active::Observable{NamedTuple{(:hp, :lp),Tuple{Bool,Bool}}}
+    hp_active::Observable{Bool}
+    lp_active::Observable{Bool}
     hp_freq::Observable{Float64}
     lp_freq::Observable{Float64}
     FilterState(plot_kwargs) =
-        new(Observable((hp = false, lp = false)), Observable(plot_kwargs[:default_hp_freq]), Observable(plot_kwargs[:default_lp_freq]))
+        new(Observable(false), Observable(false), Observable(plot_kwargs[:default_hp_freq]), Observable(plot_kwargs[:default_lp_freq]))
 end
 
 """Label + action pair for a databrowser toggle button."""
@@ -116,20 +117,16 @@ mutable struct ChannelState
     labels::Vector{Symbol}
     visible::Vector{Bool}
     selected::Vector{Bool}
-    individually_selected::Vector{Symbol}  # Track individually selected electrodes
+    individually_selected::Vector{Symbol}
     data_labels::Dict{Symbol,Makie.Text}
     data_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}
-    original_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}
-    subtracted_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}
     function ChannelState(channel_labels::Vector{Symbol})
         new(
             channel_labels,
             fill(true, length(channel_labels)),
             fill(false, length(channel_labels)),
-            Symbol[],  # Start with empty list
+            Symbol[],
             Dict{Symbol,Makie.Text}(),
-            Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}(),
-            Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}(),
             Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}(),
         )
     end
@@ -228,16 +225,16 @@ Update the analysis settings observable with current state.
 """
 function _update_analysis_settings!(state::DataBrowserState)
     # Get current filter settings
-    hp_freq = state.data.filter_state.active[].hp ? state.data.filter_state.hp_freq[] : 0.0
-    lp_freq = state.data.filter_state.active[].lp ? state.data.filter_state.lp_freq[] : 0.0
+    hp_freq = state.data.filter_state.hp_active[] ? state.data.filter_state.hp_freq[] : 0.0
+    lp_freq = state.data.filter_state.lp_active[] ? state.data.filter_state.lp_freq[] : 0.0
 
     # Get repaired channels and their method
     repaired_channels = Symbol[]
-    repair_method = :none
-    for (channels, method, _) in state.channel_repair_history
+    for (channels, _, _) in state.channel_repair_history
         append!(repaired_channels, channels)
-        repair_method = method  # TODO: should we check that same repair method was applied for all channel repairs?
     end
+    # If multiple repairs occurred, record the most recently applied method
+    repair_method = isempty(state.channel_repair_history) ? :none : last(state.channel_repair_history)[2]
 
     # Get selected regions
     selected_regions = state.selection.selected_regions[]
@@ -254,35 +251,21 @@ function _update_analysis_settings!(state::DataBrowserState)
     )
 end
 
-"""
-    _add_selected_regions!(data::EegData, selected_regions::Vector{Tuple{Float64,Float64}})
-
-Add a boolean column :selected_region to the data indicating which time points are in selected regions.
-"""
-function _add_selected_regions!(dat::EegData, selected_regions::Vector{Tuple{Float64,Float64}})
-
-    # Create boolean vector and mark where true
-    selected_mask = falses(n_samples(dat))
-    for (start_time, end_time) in selected_regions
-        region_mask = (dat.data.time .>= start_time) .& (dat.data.time .<= end_time)
-        selected_mask .|= region_mask
+"""Mark rows in `df` whose `:time` falls within any of `selected_regions`."""
+function _mark_regions!(df::DataFrame, selected_regions::Vector{Tuple{Float64,Float64}})
+    mask = falses(nrow(df))
+    for (t0, t1) in selected_regions
+        mask .|= (df.time .>= t0) .& (df.time .<= t1)
     end
-    dat.data[!, :selected_region] = selected_mask
-
+    df[!, :selected_region] = mask
 end
 
-# EpochData version - apply to each epoch DataFrame
-function _add_selected_regions!(dat::EpochData, selected_regions::Vector{Tuple{Float64,Float64}})
-    for epoch_df in dat.data
-        # Create boolean vector for this epoch
-        selected_mask = falses(nrow(epoch_df))
-        for (start_time, end_time) in selected_regions
-            region_mask = (epoch_df.time .>= start_time) .& (epoch_df.time .<= end_time)
-            selected_mask .|= region_mask
-        end
-        epoch_df[!, :selected_region] = selected_mask
-    end
-    return nothing
+"""Add a boolean `:selected_region` column marking user-selected time regions."""
+_add_selected_regions!(dat::EegData, regions::Vector{Tuple{Float64,Float64}}) =
+    _mark_regions!(dat.data, regions)
+
+function _add_selected_regions!(dat::EpochData, regions::Vector{Tuple{Float64,Float64}})
+    foreach(df -> _mark_regions!(df, regions), dat.data)
 end
 
 # Data browser state creation
@@ -424,7 +407,7 @@ function _create_menu(fig, options, default, label; kwargs...)
 end
 
 """Build a labelled checkbox grid into `grid`. Returns `Vector{Checkbox}`."""
-function _build_checkbox_grid!(grid, items, cols, checked_fn; fontsize = 14)
+function _build_checkbox_grid!(grid, items, cols, checked_fn; fontsize = 14, label_fn = string)
     checkboxes = Checkbox[]
     for (i, item) in enumerate(items)
         row = ((i - 1) ÷ cols) + 1
@@ -432,7 +415,7 @@ function _build_checkbox_grid!(grid, items, cols, checked_fn; fontsize = 14)
         col_base = (col - 1) * 2
         cb = Checkbox(grid[row, col_base + 1], checked = checked_fn(item, i), width = 16, height = 16)
         push!(checkboxes, cb)
-        Label(grid[row, col_base + 2], string(item), fontsize = fontsize, halign = :left)
+        Label(grid[row, col_base + 2], label_fn(item), fontsize = fontsize, halign = :left)
     end
     actual_cols = min(cols, length(items))
     for c in 1:actual_cols
@@ -593,11 +576,9 @@ end
 
 """Re-apply active filters without resetting data (used after ICA reset to preserve filter state)."""
 function _reapply_active_filters!(state)
-    for (filter_type, freq) in zip([:hp, :lp], [state.data.filter_state.hp_freq[], state.data.filter_state.lp_freq[]])
-        if state.data.filter_state.active[][filter_type]
-            _apply_filter!(state, filter_type, freq)
-        end
-    end
+    fs = state.data.filter_state
+    fs.hp_active[] && _apply_filter!(state, :hp, fs.hp_freq[])
+    fs.lp_active[] && _apply_filter!(state, :lp, fs.lp_freq[])
 end
 
 """Apply the isolated artifact of a single ICA component linearly to a Continuous dataset."""
@@ -789,48 +770,20 @@ end
 
 """Open the interactive channel repair window with checkboxes and method selection."""
 function _channel_repair_menu(state, selected_channels, ax)
-    # Get all available channels
     all_channels = state.channels.labels
-    n_channels = length(all_channels)
 
-    # TODO: this looks ok for my typical 70/72 channel setup but could be improved for other setups
+    menu_fig = Figure(size = (900, 700))
+    Label(menu_fig[1, 1], "Channel Repair Interface", fontsize = 18, halign = :center)
 
-    cols = 7  # 7 columns
-
-    # Create the repair menu figure
-    menu_fig = Figure(size = (700, 800))
-
-    # Add title
-    title_text = "Channel Repair Interface"
-    Label(menu_fig[1, 1], title_text, fontsize = 18, halign = :center)
-
-    # Create a scrollable area for channels
     scroll_area = menu_fig[2, 1] = GridLayout()
-
-    # Create checkboxes and labels arrays
-    channel_checkboxes = Checkbox[]
-    channel_labels = Label[]
-
-    # Add all channels in 7-column layout
-    for (i, ch) in enumerate(all_channels)
-        row = ((i - 1) ÷ cols) + 1
-        col = ((i - 1) % cols) + 1
-
-        is_repaired = _is_channel_repaired(state, ch)
-
-        # Create a horizontal layout for checkbox and label
-        channel_cell = scroll_area[row, col] = GridLayout()
-
-        # Create checkbox
-        checkbox = Checkbox(channel_cell[1, 1], checked = ch in selected_channels, width = 20, height = 20)
-        push!(channel_checkboxes, checkbox)
-
-        # Create label with repair status
-        label_text = is_repaired ? "$(string(ch)) ✓" : string(ch)
-        label_color = is_repaired ? :green : :black
-        label = Label(channel_cell[1, 2], label_text, fontsize = 12, color = label_color, halign = :left)
-        push!(channel_labels, label)
-    end
+    channel_checkboxes = _build_checkbox_grid!(scroll_area, all_channels, 9,
+        (ch, _) -> begin
+            is_repaired = _is_channel_repaired(state, ch)
+            # Pre-select channels passed in, show repair status via label colour
+            ch in selected_channels
+        end;
+        fontsize = 14,
+        label_fn = ch -> _is_channel_repaired(state, ch) ? "$(ch) ✓" : string(ch))
 
     # Add repair method selection
     Label(menu_fig[3, 1], "Repair Method:", fontsize = 14)
@@ -845,23 +798,10 @@ function _channel_repair_menu(state, selected_channels, ax)
     action_buttons =
         [Button(action_area[1, 1], label = "Apply Repair", width = 200), Button(action_area[1, 2], label = "Undo Last Repair", width = 200)]
 
-    # Method selection (radio button behavior)
+    # Method selection via shared radio-button helper
     selected_method = Observable(:neighbor_interpolation)
-
-    on(method_buttons[1].clicks) do n
-        selected_method[] = :neighbor_interpolation
-        method_buttons[1].buttoncolor[] = :lightblue
-        method_buttons[2].buttoncolor[] = :white
-    end
-
-    on(method_buttons[2].clicks) do n
-        selected_method[] = :spherical_spline
-        method_buttons[1].buttoncolor[] = :white
-        method_buttons[2].buttoncolor[] = :lightblue
-    end
-
-    # Initialize with neighbor interpolation selected as default
-    selected_method[] = :neighbor_interpolation
+    _radio_buttons!(method_buttons, selected_method,
+        [:neighbor_interpolation, :spherical_spline])
 
     # Apply repair
     on(action_buttons[1].clicks) do n
@@ -953,48 +893,47 @@ function _undo_last_repair!(state, ax)
     @info "Remaining repairs in history: $remaining_repairs"
 end
 
-"""Extract a matrix of selected channel columns from the data."""
-function _get_channel_data_matrix(data, channels)
-    if hasfield(typeof(data), :data) && hasfield(typeof(data), :layout)
-        channel_data = data.data[:, channels]
-        return Matrix(channel_data)
-    else
-        throw(ArgumentError("Unsupported data type for channel repair"))
+"""Wire buttons as a radio group: clicking one sets `selected_obs` and highlights it."""
+function _radio_buttons!(btns::Vector, selected_obs::Observable, values::Vector)
+    for (btn, val) in zip(btns, values)
+        on(btn.clicks) do _
+            selected_obs[] = val
+            for (b, v) in zip(btns, values)
+                b.buttoncolor[] = v == val ? :lightblue : :white
+            end
+        end
+    end
+    # Highlight the current default
+    for (b, v) in zip(btns, values)
+        b.buttoncolor[] = v == selected_obs[] ? :lightblue : :white
     end
 end
+
+"""Extract a matrix of selected channel columns from EEG data."""
+_get_channel_data_matrix(data::EegData, channels) = Matrix(data.data[:, channels])
 
 """Write previously saved channel data back into the dataset."""
-function _restore_channel_data!(data, channels, original_data)
-    if hasfield(typeof(data), :data) && hasfield(typeof(data), :layout)
-        data.data[:, channels] = original_data
-    else
-        throw(ArgumentError("Unsupported data type for channel repair"))
-    end
-end
+_restore_channel_data!(data::EegData, channels, original_data) =
+    data.data[:, channels] = original_data
 
 
-"""Create extreme-value, HP/LP filter, and (for continuous data) navigation sliders."""
+"""Create extreme-value, HP/LP filter sliders. Returns a list of `hcat` rows for stacking."""
 function _create_common_sliders(fig, state, dat)
     sliders = []
 
-    # Extreme value slider
-    slider_extreme = Slider(fig[1, 2], range = 0:5:100, startvalue = 0, width = 100)
+    slider_extreme = Slider(fig, range = 0:5:100, startvalue = 0, width = 100)
     on(slider_extreme.value) do x
         state.view.crit_val[] = x
     end
     push!(sliders, hcat(slider_extreme, Label(fig, @lift("Extreme: $($(slider_extreme.value)) μV"), fontsize = 22)))
 
-    # Define filter slider configurations
     filter_configs = [(:hp_filter, :hp_freq, 0.1:0.1:2, 0.5, "HP-Filter"), (:lp_filter, :lp_freq, 5:5:60, 20, "LP-Filter")]
-
-    # Create filter sliders based on configuration
     for (filter_field, freq_field, range, startval, label) in filter_configs
         if getfield(dat.analysis_info, filter_field) == 0.0
-            slider = Slider(fig[1, 2], range = range, startvalue = startval, width = 100)
+            slider = Slider(fig, range = range, startvalue = startval, width = 100)
             on(slider.value) do val
                 getfield(state.data.filter_state, freq_field)[] = val
             end
-            # Initialize filter state with slider default value
             getfield(state.data.filter_state, freq_field)[] = startval
             push!(sliders, hcat(slider, Label(fig, @lift("$label: $($(slider.value)) Hz"), fontsize = 22)))
         end
@@ -1612,7 +1551,7 @@ end
 """Reset to original, re-reference, then re-apply all active filters and ICA removals."""
 function _apply_filters!(state)
     # Reset to original if no filters active
-    if !state.data.filter_state.active[].hp && !state.data.filter_state.active[].lp
+    if !state.data.filter_state.hp_active[] && !state.data.filter_state.lp_active[]
         _reset_to_original!(state.data)
         _rereference!(state.data, state.reference_state)
         _reapply_all_ica_removals!(state)
@@ -1636,18 +1575,14 @@ end
 
 """Toggle the high-pass filter on/off and reapply."""
 function _apply_hp_filter!(state)
-    current_state = state.data.filter_state.active[]
-    new_state = (hp = !current_state.hp, lp = current_state.lp)
-    state.data.filter_state.active[] = new_state
+    state.data.filter_state.hp_active[] = !state.data.filter_state.hp_active[]
     _apply_filters!(state)
     _update_analysis_settings!(state)
 end
 
 """Toggle the low-pass filter on/off and reapply."""
 function _apply_lp_filter!(state)
-    current_state = state.data.filter_state.active[]
-    new_state = (hp = current_state.hp, lp = !current_state.lp)
-    state.data.filter_state.active[] = new_state
+    state.data.filter_state.lp_active[] = !state.data.filter_state.lp_active[]
     _apply_filters!(state)
     _update_analysis_settings!(state)
 end
