@@ -340,8 +340,9 @@ mutable struct IcaComponentState
     topo_axs::Vector{Axis}
     lines_obs::Vector{Observable{Vector{Float64}}}
 
-    # New field for boolean indicators
-    channel_bool_indicators::Dict{Int,Any}
+    # Channel overlay tracking (multi-channel support)
+    channel_overlay_names::Vector{Symbol}
+    channel_overlay_plots::Vector{Vector{Any}}
 
     # Artifact categorization (optional)
     artifacts::Union{Nothing,ArtifactComponents}
@@ -415,7 +416,8 @@ mutable struct IcaComponentState
         channel_axs = Vector{Union{Axis,Nothing}}()
         topo_axs = Vector{Axis}()
         lines_obs = Vector{Observable{Vector{Float64}}}()
-        channel_bool_indicators = Dict{Int,Any}()
+        channel_overlay_names = Vector{Symbol}()
+        channel_overlay_plots = Vector{Vector{Any}}()
 
         new(
             dat,
@@ -437,7 +439,8 @@ mutable struct IcaComponentState
             channel_axs,
             topo_axs,
             lines_obs,
-            channel_bool_indicators,
+            channel_overlay_names,
+            channel_overlay_plots,
             nothing,  # artifacts
             nothing,  # artifact_toggles
             nothing,  # component_textbox
@@ -843,27 +846,11 @@ function _create_component_activation_plots!(fig, state)
             leftspinevisible = false,
         )
         push!(state.channel_axs, ax_channel)
+        push!(state.channel_overlay_plots, Any[])  # empty overlay list for this axis
 
         linkaxes!(ax, ax_channel)
 
-        # Channel overlay plot
-        lines!(
-            ax_channel,
-            @lift(state.dat.data.time[$(state.xrange)]),
-            @lift(if $(state.show_channel)
-                xrange = $(state.xrange)
-                if first(xrange) >= 1 && last(xrange) <= length($(state.channel_data))
-                    $(state.channel_data)[xrange] .* $(state.channel_yscale)
-                else
-                    zeros(Float64, length(xrange))
-                end
-            else
-                zeros(Float64, length($(state.xrange)))
-            end),
-            color = :grey,
-        )
-
-        # Set initial x-axis limits
+        # Set initial x-axis limits (overlay lines are added dynamically via _update_channel_overlays!)
         xlims!(ax_channel, (state.dat.data.time[first(state.xrange[])], state.dat.data.time[last(state.xrange[])]))
 
         # Observable creation for component plot
@@ -1040,42 +1027,24 @@ function _update_view_range!(state, start_pos)
         end
     end
 
-    # If we have a boolean channel selected, update its indicators
-    if state.show_channel[] && !isempty(state.channel_bool_indicators)
-        # Clear existing indicators
-        for (i, indicator) in state.channel_bool_indicators
-            if !isnothing(indicator)
-                delete!(state.channel_axs[i], indicator)
-            end
-        end
-        empty!(state.channel_bool_indicators)
-
-        # Find the current channel
-        current_channel = nothing
-        for col in names(state.dat.data)
-            if state.dat.data[!, col] == state.channel_data[]
-                current_channel = Symbol(col)
-                break
-            end
-        end
-
-        # If we found a boolean channel, redraw its indicators
-        if !isnothing(current_channel) && eltype(state.dat.data[!, current_channel]) == Bool
-            _add_boolean_indicators!(state, current_channel)
-        end
-    end
 end
 
-"""Open a popup window with a checkbox grid for selecting an additional channel overlay."""
+# Colour palette for channel overlays — cycles when more channels are selected.
+const _CHANNEL_OVERLAY_COLORS = [
+    :grey, :dodgerblue, :darkorange, :mediumpurple,
+    :forestgreen, :crimson, :goldenrod, :deeppink,
+]
+
+"""Open a popup window with a checkbox grid for selecting additional channel overlays."""
 function _show_channel_popup(state)
     all_channels = Symbol.(names(state.dat.data))
 
     menu_fig = Figure(size = (900, 700))
-    Label(menu_fig[1, 1], "Select Additional Channel", fontsize = 18, halign = :center)
+    Label(menu_fig[1, 1], "Select Additional Channels", fontsize = 18, halign = :center)
 
     scroll_area = menu_fig[2, 1] = GridLayout()
     cbs = _build_checkbox_grid!(scroll_area, all_channels, 9,
-        (ch, _) -> false)  # nothing pre-selected
+        (ch, _) -> ch in state.channel_overlay_names)  # pre-select active channels
 
     _add_group_buttons!(menu_fig, 3, cbs, all_channels,
         [("None (Clear)", _ -> false)])
@@ -1084,14 +1053,7 @@ function _show_channel_popup(state)
     btn_apply = Button(action_area[1, 1], label = "Apply", width = 150)
     on(btn_apply.clicks) do _
         selected = all_channels[findall(cb -> cb.checked[], cbs)]
-        if isempty(selected)
-            _update_channel_selection!(state, "None")
-        else
-            if length(selected) > 1
-                @warn "Only one additional channel is supported — using first selected ($(selected[1]))."
-            end
-            _update_channel_selection!(state, string(selected[1]))
-        end
+        _update_channel_overlays!(state, selected)
     end
 
     display(GLMakie.Screen(), menu_fig)
@@ -1107,61 +1069,53 @@ function _add_channel_menu!(fig, state)
     return btn
 end
 
-"""Set the channel overlay to the selected column (line or boolean)."""
-function _update_channel_selection!(state, selected)
-    # Clear previous channel visualizations from all axes
-    for i = 1:state.n_visible_components
-        if i <= length(state.channel_axs) && haskey(state.channel_bool_indicators, i) && !isnothing(state.channel_bool_indicators[i])
-            delete!(state.channel_axs[i], state.channel_bool_indicators[i])
-            state.channel_bool_indicators[i] = nothing
+"""Remove all channel overlay plots from every component axis."""
+function _clear_channel_overlays!(state)
+    for i in eachindex(state.channel_overlay_plots)
+        ax_ch = state.channel_axs[i]
+        if !isnothing(ax_ch)
+            for p in state.channel_overlay_plots[i]
+                delete!(ax_ch, p)
+            end
         end
+        empty!(state.channel_overlay_plots[i])
     end
-    empty!(state.channel_bool_indicators)
-
-    if selected == "None"
-        state.show_channel[] = false
-        state.channel_data[] = zeros(Float64, size(state.dat.data, 1))
-    else
-        selected_sym = Symbol(selected)
-        state.channel_data[] = state.dat.data[!, selected_sym]
-
-        # Only show overlay plot for non-Boolean channels
-        if eltype(state.dat.data[!, selected_sym]) == Bool
-            state.show_channel[] = false
-            _add_boolean_indicators!(state, selected_sym)
-        else
-            state.show_channel[] = true
-        end
-    end
+    empty!(state.channel_overlay_names)
 end
 
-"""Draw vertical red lines at boolean-true samples on each component axis."""
-function _add_boolean_indicators!(state, channel_sym)
-    # For each component axis, create a vertical line at each true position
-    for i = 1:state.n_visible_components
-        if i <= length(state.channel_axs)
-            ax_channel = state.channel_axs[i]
+"""Apply a list of channel overlays — each channel gets a distinct colour."""
+function _update_channel_overlays!(state, selected_channels::Vector{Symbol})
+    _clear_channel_overlays!(state)
 
-            # Find all time points where the boolean is true
-            true_indices = findall(state.dat.data[!, channel_sym])
+    # Store names for re-opening popup with pre-selected state
+    append!(state.channel_overlay_names, selected_channels)
 
-            if !isempty(true_indices)
-                # Get the time values for the true positions
-                true_times = state.dat.data.time[true_indices]
+    for (ch_idx, ch_name) in enumerate(selected_channels)
+        color = _CHANNEL_OVERLAY_COLORS[mod1(ch_idx, length(_CHANNEL_OVERLAY_COLORS))]
+        col_data = state.dat.data[!, ch_name]
+        is_bool = eltype(col_data) == Bool
 
-                # Create vertical lines at each true position
-                # Only create lines within the current view range
-                current_range = state.xrange[]
-                visible_times = true_times[true_times .>= state.dat.data.time[first(
-                    current_range,
-                )].&&true_times .<= state.dat.data.time[last(current_range)]]
+        for i in 1:min(state.n_visible_components, length(state.channel_axs))
+            ax_ch = state.channel_axs[i]
+            isnothing(ax_ch) && continue
 
-                if !isempty(visible_times)
-                    lines = vlines!(ax_channel, visible_times, color = :red, linewidth = 1)
-
-                    # Store the reference to the lines
-                    state.channel_bool_indicators[i] = lines
+            if is_bool
+                # Boolean channel → vertical lines at all true positions
+                true_times = state.dat.data.time[findall(col_data)]
+                if !isempty(true_times)
+                    p = vlines!(ax_ch, true_times, color = (color, 0.5), linewidth = 1)
+                    push!(state.channel_overlay_plots[i], p)
                 end
+            else
+                # Numeric channel → reactive line that follows xrange scrolling
+                ch_vec = Vector{Float64}(col_data)
+                p = lines!(
+                    ax_ch,
+                    @lift(state.dat.data.time[$(state.xrange)]),
+                    @lift(ch_vec[$(state.xrange)] .* $(state.channel_yscale)),
+                    color = color,
+                )
+                push!(state.channel_overlay_plots[i], p)
             end
         end
     end
