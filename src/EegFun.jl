@@ -149,6 +149,7 @@ include("pipelines/pipeline_v2.jl")
 
 # Plotting functions
 include("plots/utils/plot_misc.jl")
+include("plots/utils/plot_ui_utils.jl")
 
 # Layout system (must be included before other plotting functions)
 include("plots/utils/layout_system.jl")
@@ -161,6 +162,7 @@ include("plots/processing/plot_channel_summary.jl")
 include("plots/processing/plot_correlation_heatmap.jl")
 include("plots/processing/plot_databrowser.jl")
 include("plots/processing/plot_ica.jl")
+include("plots/processing/plot_ica_artifacts.jl")
 include("plots/processing/plot_joint_probability.jl")
 include("plots/processing/plot_layout.jl")
 include("plots/processing/plot_triggers.jl")
