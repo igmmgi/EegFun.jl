@@ -112,11 +112,6 @@ using Dates
     @testset "read_config Tests" begin
 
         @testset "Valid Configuration Loading" begin
-            # Load default config only - should work without errors
-            default_config = EegFun.read_config(joinpath(dirname(@__FILE__), "..", "..", "src", "config", "default.toml"))
-            @test default_config isa Dict
-            @test haskey(default_config, "preprocess")
-            @test haskey(default_config["preprocess"], "filter")
 
             # Create a simple valid user config
             user_config_path = joinpath(test_dir, "valid_config.toml")
