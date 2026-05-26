@@ -552,12 +552,14 @@ function freq_spectrum(
         spectrum_df = spectrum_df[mask, :]
     end
 
-    # Return SpectrumData type (dispatch handles condition info)
-    condition_num, condition_name = condition_info(dat)
+    # Return SpectrumData type
+    cond_num = hasproperty(dat, :condition) ? dat.condition : 0
+    cond_name = condition_name(dat)
+    
     return SpectrumData(
         dat.file,
-        condition_num,
-        condition_name,
+        cond_num,
+        cond_name,
         spectrum_df,
         copy(dat.layout),
         dat.sample_rate,

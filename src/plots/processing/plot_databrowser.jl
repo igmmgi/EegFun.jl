@@ -267,8 +267,7 @@ function _mark_regions!(df::DataFrame, selected_regions::Vector{Tuple{Float64,Fl
 end
 
 """Add a boolean `:selected_region` column marking user-selected time regions."""
-_add_selected_regions!(dat::EegData, regions::Vector{Tuple{Float64,Float64}}) =
-    _mark_regions!(dat.data, regions)
+_add_selected_regions!(dat::EegData, regions::Vector{Tuple{Float64,Float64}}) = _mark_regions!(dat.data, regions)
 
 function _add_selected_regions!(dat::EpochData, regions::Vector{Tuple{Float64,Float64}})
     foreach(df -> _mark_regions!(df, regions), dat.data)
@@ -414,15 +413,14 @@ function _show_labels_menu(state, ax)
     menu_fig = Figure(size = (900, 700))
     Label(menu_fig[1, 1], "Select Channels to Display", fontsize = 18, halign = :center)
     scroll_area = menu_fig[2, 1] = GridLayout()
-    cbs = _build_checkbox_grid!(scroll_area, all_channels, 9,
-        (ch, i) -> state.channels.visible[i])
+    cbs = _build_checkbox_grid!(scroll_area, all_channels, 9, (ch, i) -> state.channels.visible[i])
 
     groups = [
-        ("All",     ch -> true),
-        ("None",    ch -> false),
-        ("Left",    ch -> occursin(r"\d*[13579]$", String(ch))),
-        ("Right",   ch -> occursin(r"\d*[24680]$", String(ch))),
-        ("Central", ch -> occursin(r"z$",          String(ch))),
+        ("All", ch -> true),
+        ("None", ch -> false),
+        ("Left", ch -> occursin(r"\d*[13579]$", String(ch))),
+        ("Right", ch -> occursin(r"\d*[24680]$", String(ch))),
+        ("Central", ch -> occursin(r"z$", String(ch))),
     ]
     _add_group_buttons!(menu_fig, 3, cbs, all_channels, groups)
 
@@ -442,8 +440,7 @@ function _show_labels_menu(state, ax)
 end
 
 """Create the channel-label selection button for the control panel."""
-_create_labels_menu(fig, ax, state) =
-    _popup_button(fig, "Labels", () -> _show_labels_menu(state, ax))
+_create_labels_menu(fig, ax, state) = _popup_button(fig, "Labels", () -> _show_labels_menu(state, ax))
 
 """Popup: select reference channels and apply re-referencing."""
 function _show_reference_menu(state, dat)
@@ -463,16 +460,15 @@ function _show_reference_menu(state, dat)
     end
 
     scroll_area = menu_fig[2, 1] = GridLayout()
-    cbs = _build_checkbox_grid!(scroll_area, all_channels, 9,
-        (ch, _) -> ch in current_syms)
+    cbs = _build_checkbox_grid!(scroll_area, all_channels, 9, (ch, _) -> ch in current_syms)
 
     groups = [
         ("All (Avg)", ch -> true),
-        ("None",      ch -> false),
-        ("Left",      ch -> occursin(r"\d*[13579]$", String(ch))),
-        ("Right",     ch -> occursin(r"\d*[24680]$", String(ch))),
-        ("Central",   ch -> occursin(r"z$",          String(ch))),
-        ("Mastoids",  ch -> ch == :M1 || ch == :M2),
+        ("None", ch -> false),
+        ("Left", ch -> occursin(r"\d*[13579]$", String(ch))),
+        ("Right", ch -> occursin(r"\d*[24680]$", String(ch))),
+        ("Central", ch -> occursin(r"z$", String(ch))),
+        ("Mastoids", ch -> ch == :M1 || ch == :M2),
     ]
     _add_group_buttons!(menu_fig, 3, cbs, all_channels, groups)
 
@@ -501,8 +497,7 @@ function _show_reference_menu(state, dat)
 end
 
 """Create the re-reference button for the control panel."""
-_create_reference_menu(fig, state, dat) =
-    _popup_button(fig, "Reference", () -> _show_reference_menu(state, dat))
+_create_reference_menu(fig, state, dat) = _popup_button(fig, "Reference", () -> _show_reference_menu(state, dat))
 
 """Toggle an ICA component for removal and apply subtraction algebra to the dataset."""
 function _toggle_ica_component!(state, component_id::Union{Nothing,Int})
@@ -604,14 +599,12 @@ function _show_ica_menu(state, ax, ica)
     Label(menu_fig[1, 1], "Select ICA Components to Remove", fontsize = 18, halign = :center)
 
     scroll_area = menu_fig[2, 1] = GridLayout()
-    cbs = _build_checkbox_grid!(scroll_area, all_components, 9,
-        (comp, _) -> begin
-            n = _extract_int(String(comp))
-            !isnothing(n) && n in state.ica.removed_components
-        end)
+    cbs = _build_checkbox_grid!(scroll_area, all_components, 9, (comp, _) -> begin
+        n = _extract_int(String(comp))
+        !isnothing(n) && n in state.ica.removed_components
+    end)
 
-    _add_group_buttons!(menu_fig, 3, cbs, all_components,
-        [("None (Reset)", _ -> false)])
+    _add_group_buttons!(menu_fig, 3, cbs, all_components, [("None (Reset)", _ -> false)])
 
     action_area = menu_fig[4, 1] = GridLayout()
     btn_apply = Button(action_area[1, 1], label = "Apply", width = 200)
@@ -633,15 +626,17 @@ function _show_ica_menu(state, ax, ica)
     display_area = menu_fig[5, 1] = GridLayout()
     Label(display_area[1, 1:6], "Display Options", fontsize = 16, halign = :center)
     display_items = [
-        (state.view.show_original_ica,             "Data"),
-        (state.plot_kwargs[:show_cleaned_ica],      "Data - ICA"),
-        (state.view.show_subtracted_ica,            "ICA Activation"),
+        (state.view.show_original_ica, "Data"),
+        (state.plot_kwargs[:show_cleaned_ica], "Data - ICA"),
+        (state.view.show_subtracted_ica, "ICA Activation"),
     ]
     for (j, (obs, lbl)) in enumerate(display_items)
         col = (j - 1) * 2 + 1
         cb = Checkbox(display_area[2, col], checked = obs[], width = 16, height = 16)
-        Label(display_area[2, col + 1], lbl, halign = :left)
-        on(cb.checked) do active obs[] = active end
+        Label(display_area[2, col+1], lbl, halign = :left)
+        on(cb.checked) do active
+            obs[] = active
+        end
         colgap!(display_area, col, 5)
         j < length(display_items) && colgap!(display_area, col + 1, 30)
     end
@@ -737,14 +732,18 @@ function _channel_repair_menu(state, selected_channels, ax)
     Label(menu_fig[1, 1], "Channel Repair Interface", fontsize = 18, halign = :center)
 
     scroll_area = menu_fig[2, 1] = GridLayout()
-    channel_checkboxes = _build_checkbox_grid!(scroll_area, all_channels, 9,
+    channel_checkboxes = _build_checkbox_grid!(
+        scroll_area,
+        all_channels,
+        9,
         (ch, _) -> begin
             is_repaired = _is_channel_repaired(state, ch)
             # Pre-select channels passed in, show repair status via label colour
             ch in selected_channels
         end;
         fontsize = 14,
-        label_fn = ch -> _is_channel_repaired(state, ch) ? "$(ch) ✓" : string(ch))
+        label_fn = ch -> _is_channel_repaired(state, ch) ? "$(ch) ✓" : string(ch),
+    )
 
     # Add repair method selection
     Label(menu_fig[3, 1], "Repair Method:", fontsize = 14)
@@ -761,8 +760,7 @@ function _channel_repair_menu(state, selected_channels, ax)
 
     # Method selection via shared radio-button helper
     selected_method = Observable(:neighbor_interpolation)
-    _radio_buttons!(method_buttons, selected_method,
-        [:neighbor_interpolation, :spherical_spline])
+    _radio_buttons!(method_buttons, selected_method, [:neighbor_interpolation, :spherical_spline])
 
     # Apply repair
     on(action_buttons[1].clicks) do n
@@ -859,8 +857,7 @@ end
 _get_channel_data_matrix(data::EegData, channels) = Matrix(data.data[:, channels])
 
 """Write previously saved channel data back into the dataset."""
-_restore_channel_data!(data::EegData, channels, original_data) =
-    data.data[:, channels] = original_data
+_restore_channel_data!(data::EegData, channels, original_data) = data.data[:, channels] = original_data
 
 
 """Create extreme-value, HP/LP filter sliders. Returns a list of `hcat` rows for stacking."""
@@ -897,14 +894,14 @@ function _create_sliders(fig, state::ContinuousDataBrowserState, dat)
     slider_x = Slider(fig[2, 1], range = 1:50:nrow(state.data.current[].data), startvalue = 1, snap = true)
 
     on(slider_range.value) do x
-        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x+slider_x.value.val)
+        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x + slider_x.value.val)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
     end
 
     on(slider_x.value) do x
-        new_range = x:min(nrow(state.data.current[].data), (x+slider_range.value.val)-1)
+        new_range = x:min(nrow(state.data.current[].data), (x + slider_range.value.val) - 1)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
@@ -927,8 +924,7 @@ function _show_extra_channel_menu(state, ax, dat)
     Label(menu_fig[1, 1], "Select Extra Channels", fontsize = 18, halign = :center)
 
     scroll_area = menu_fig[2, 1] = GridLayout()
-    cbs = _build_checkbox_grid!(scroll_area, all_extras, 9,
-        (ch, _) -> ch in state.extra_channel.channels)
+    cbs = _build_checkbox_grid!(scroll_area, all_extras, 9, (ch, _) -> ch in state.extra_channel.channels)
 
     action_area = menu_fig[3, 1] = GridLayout()
     btn_apply = Button(action_area[1, 1], label = "Apply", width = 150)
@@ -944,8 +940,7 @@ function _show_extra_channel_menu(state, ax, dat)
 end
 
 """Create the extra-channels button for the control panel."""
-_create_extra_channel_menu(fig, ax, state, dat) =
-    _popup_button(fig, "Extra Channels", () -> _show_extra_channel_menu(state, ax, dat))
+_create_extra_channel_menu(fig, ax, state, dat) = _popup_button(fig, "Extra Channels", () -> _show_extra_channel_menu(state, ax, dat))
 
 """Wrap a widget so it can be stacked with `vcat` in `grid!`."""
 _as_grid_row(fig, w::Button) = hcat(w, Label(fig, "", tellwidth = false))
@@ -969,7 +964,7 @@ function _build_grid_components!(
     push!(grid_components, _as_grid_row(fig, labels_menu))
     push!(grid_components, _as_grid_row(fig, reference_menu))
 
-    !isnothing(ica_menu)   && push!(grid_components, _as_grid_row(fig, ica_menu))
+    !isnothing(ica_menu) && push!(grid_components, _as_grid_row(fig, ica_menu))
     !isnothing(extra_menu) && push!(grid_components, _as_grid_row(fig, extra_menu))
     !isnothing(epoch_menu) && push!(grid_components, _as_grid_row(fig, epoch_menu))
 
@@ -1676,7 +1671,32 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
 
     # Pre-compute shared observables
     visible_time_obs = @lift(get_time($(state.data.current), $(state.view.xrange)))
-    time_start_obs = @lift(get_time($(state.data.current), $(state.view.xrange)[1:1])[1])
+    time_start_obs   = @lift($(visible_time_obs)[1])  # Fix 6: derived from visible_time_obs
+
+    ch_idx_map = state.ica.is_active ? Dict(lbl => i for (i, lbl) in enumerate(state.ica.original.layout.data.label)) : Dict{Symbol,Int}()
+
+    ica_activations_obs = if state.ica.is_active
+        @lift begin
+            win   = $(state.view.xrange)
+            comps = state.ica.removed_components
+            n_win = length(win)
+            if isempty(comps)
+                zeros(Float64, 0, n_win)
+            else
+                acts = zeros(Float64, length(comps), n_win)
+                for (k, comp) in enumerate(comps)
+                    unmix_vec = state.ica.original.unmixing[comp, :]
+                    for (ci, col_sym) in enumerate(state.ica.original.layout.data.label)
+                        norm_ch = (get_data(state.data.original, win, col_sym) .- state.ica.original.mean[ci]) ./ state.ica.original.scale
+                        @views acts[k, :] .+= unmix_vec[ci] .* norm_ch
+                    end
+                end
+                acts
+            end
+        end
+    else
+        Observable(zeros(Float64, 0, 0))
+    end
 
     for (idx, visible) in enumerate(state.channels.visible)
         col = state.channels.labels[idx]
@@ -1684,56 +1704,46 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
             is_selected = state.channels.selected[idx]
 
             # Channel data (compute once)
-            channel_data_obs = @lift(get_data($(state.data.current), $(state.view.xrange), $col))
+            channel_data_obs = @lift(get_data($(state.data.current), $(state.view.xrange), col))
             channel_data_with_offset = @lift($(channel_data_obs) .* $(state.view.amplitude_scale) .+ state.view.offset[idx])
 
             # Ghost lines data
             if state.ica.is_active
-                original_data_with_offset = @lift(
-                    if $(state.view.show_original_ica)
-                        current_raw = get_data($(state.data.current), $(state.view.xrange), $col)
-                        # Re-add removed ICA artifacts to show pre-ICA (but post-filter) signal
-                        original_raw = copy(current_raw)
-                        for comp in state.ica.removed_components
-                            unmix_vec = state.ica.original.unmixing[comp, :]
-                            mix_weight = state.ica.original.mixing[findfirst(==(col), state.ica.original.layout.data.label), comp]
-                            activation = zeros(Float64, length($(state.view.xrange)))
-                            for (ci, col_sym) in enumerate(state.ica.original.layout.data.label)
-                                norm_ch =
-                                    (get_data(state.data.original, $(state.view.xrange), col_sym) .- state.ica.original.mean[ci]) ./
-                                    state.ica.original.scale
-                                activation .+= unmix_vec[ci] .* norm_ch
-                            end
-                            original_raw .+= mix_weight .* state.ica.original.scale .* activation
-                        end
-                        original_raw .* $(state.view.amplitude_scale) .+ state.view.offset[idx]
-                    else
-                        fill(NaN, length($(state.view.xrange)))
-                    end
-                )
+                ch_row = ch_idx_map[col]
 
-                subtracted_data_obs = @lift(
-                    if $(state.view.show_subtracted_ica)
-                        current_raw = get_data($(state.data.current), $(state.view.xrange), $col)
-                        # Re-add removed ICA artifacts to get pre-ICA signal, then subtract current
-                        original_raw = copy(current_raw)
-                        for comp in state.ica.removed_components
-                            unmix_vec = state.ica.original.unmixing[comp, :]
-                            mix_weight = state.ica.original.mixing[findfirst(==(col), state.ica.original.layout.data.label), comp]
-                            activation = zeros(Float64, length($(state.view.xrange)))
-                            for (ci, col_sym) in enumerate(state.ica.original.layout.data.label)
-                                norm_ch =
-                                    (get_data(state.data.original, $(state.view.xrange), col_sym) .- state.ica.original.mean[ci]) ./
-                                    state.ica.original.scale
-                                activation .+= unmix_vec[ci] .* norm_ch
+                original_data_with_offset = @lift(if $(state.view.show_original_ica)
+                    current_raw  = get_data($(state.data.current), $(state.view.xrange), col)
+                    original_raw = copy(current_raw)
+                    acts         = $(ica_activations_obs)
+                    if size(acts, 2) == length(current_raw)
+                        for (k, comp) in enumerate(state.ica.removed_components)
+                            if k <= size(acts, 1)
+                                mix_weight = state.ica.original.mixing[ch_row, comp]
+                                @views original_raw .+= mix_weight .* state.ica.original.scale .* acts[k, :]
                             end
-                            original_raw .+= mix_weight .* state.ica.original.scale .* activation
                         end
-                        (original_raw .- current_raw) .* $(state.view.amplitude_scale) .+ state.view.offset[idx]
-                    else
-                        fill(NaN, length($(state.view.xrange)))
                     end
-                )
+                    original_raw .* $(state.view.amplitude_scale) .+ state.view.offset[idx]
+                else
+                    fill(NaN, length($(state.view.xrange)))
+                end)
+
+                subtracted_data_obs = @lift(if $(state.view.show_subtracted_ica)
+                    current_raw  = get_data($(state.data.current), $(state.view.xrange), col)
+                    original_raw = copy(current_raw)
+                    acts         = $(ica_activations_obs)
+                    if size(acts, 2) == length(current_raw)
+                        for (k, comp) in enumerate(state.ica.removed_components)
+                            if k <= size(acts, 1)
+                                mix_weight = state.ica.original.mixing[ch_row, comp]
+                                @views original_raw .+= mix_weight .* state.ica.original.scale .* acts[k, :]
+                            end
+                        end
+                    end
+                    (original_raw .- current_raw) .* $(state.view.amplitude_scale) .+ state.view.offset[idx]
+                else
+                    fill(NaN, length($(state.view.xrange)))
+                end)
 
                 _create_line!(
                     state.channels.original_lines,
@@ -1963,8 +1973,8 @@ function _draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
                 halign = :right,
                 valign = :bottom,
                 framevisible = true,
-                padding = (8f0, 8f0, 8f0, 8f0),
-                margin = (4f0, 4f0, 4f0, 4f0),
+                padding = (8.0f0, 8.0f0, 8.0f0, 8.0f0),
+                margin = (4.0f0, 4.0f0, 4.0f0, 4.0f0),
             )
         end
     end

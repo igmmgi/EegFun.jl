@@ -83,7 +83,32 @@ fig, ax = plot_channel_spectrum(dat;
     grid_visible = false)
 ```
 """
+
 function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{Symbol}, fs::Real; kwargs...)
+    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
+    window_size = plot_kwargs[:window_size]
+    overlap = plot_kwargs[:overlap]
+    window_function = plot_kwargs[:window_function]
+
+    n_samples = nrow(df)
+    effective_window_size = min(window_size, n_samples)
+    effective_window_size = max(4, effective_window_size)
+    noverlap = Int(round(effective_window_size * overlap))
+
+    freq_data = Vector{Vector{Float64}}()
+    power_raw_data = Vector{Vector{Float64}}()
+
+    @views for ch in channels_to_plot
+        signal = df[!, ch]
+        pgram = DSP.welch_pgram(signal, effective_window_size, noverlap; fs = fs, window = window_function)
+        push!(freq_data, DSP.freq(pgram))
+        push!(power_raw_data, DSP.power(pgram))
+    end
+
+    _plot_power_spectrum_data!(fig, ax, freq_data, power_raw_data, channels_to_plot; kwargs...)
+end
+
+function _plot_power_spectrum_data!(fig, ax, freq_data::Vector{<:AbstractVector}, power_raw_data::Vector{<:AbstractVector}, channels_to_plot::Vector{Symbol}; kwargs...)
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
 
@@ -185,43 +210,20 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
         xlims!(ax, (0, max_freq))
     end
 
-    # Calculate and plot spectra for all channels in a single loop
-    # Adjust window_size if signal is shorter than window_size
-    n_samples = nrow(df)
-    effective_window_size = min(window_size, n_samples)
-    # Ensure window_size is at least 4 samples for meaningful FFT
-    effective_window_size = max(4, effective_window_size)
-
-    noverlap = Int(round(effective_window_size * overlap))
-
-    # Store frequency and raw power data for reactive updates
-    freq_data = []
-    power_raw_data = []
     line_plots = []
 
-    @views for ch in channels_to_plot
-        signal = df[!, ch]
-        # Use effective_window_size instead of window_size
-        pgram = DSP.welch_pgram(signal, effective_window_size, noverlap; fs = fs, window = window_function)
-        freqs, psd_raw = DSP.freq(pgram), DSP.power(pgram)
+    for (i, ch) in enumerate(channels_to_plot)
+        freqs = freq_data[i]
+        psd_raw = power_raw_data[i]
 
         # Convert power to requested unit
         if unit == :dB
-            # Convert to dB: 10 * log10(power / reference)
-            # Reference is 1 μV²/Hz (standard in EEG)
-            psd = 10.0 .* log10.(max.(psd_raw, 1e-10))  # Avoid log(0) with small threshold
+            psd = 10.0 .* log10.(max.(psd_raw, 1e-10))
         else
             psd = psd_raw
         end
 
-        # Store raw data for reactive updates
-        push!(freq_data, freqs)
-        push!(power_raw_data, psd_raw)
-
-        # Create observable for power data
         psd_obs = Observable(psd)
-
-        # Plot this channel's spectrum with observable
         line_plot = lines!(ax, freqs, psd_obs, label = string(ch), linewidth = plot_kwargs[:linewidth], alpha = plot_kwargs[:line_alpha])
         push!(line_plots, (line_plot, psd_obs))
     end
@@ -642,5 +644,55 @@ function plot_ica_component_spectrum(
         _display_figure(fig)
     end
 
+    return (fig = fig, axes = [ax])
+end
+
+
+"""
+    plot_channel_spectrum(dat::SpectrumData; kwargs...)
+
+Plot a pre-computed power spectrum with interactive controls.
+"""
+function plot_channel_spectrum(
+    dat::SpectrumData;
+    channel_selection::Function = channels(),
+    kwargs...,
+)
+    title_str = _generate_window_title(dat)
+    _set_window_title(title_str)
+
+    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
+    
+    # Filter to only channels that actually exist in the spectrum data
+    all_names = propertynames(dat.data)
+    available_channels = [ch for ch in all_names if ch != :freq]
+    valid_channels = [ch for ch in selected_channels if ch in available_channels]
+    
+    if isempty(valid_channels)
+        @minimal_error "No valid channels found in spectrum data."
+    end
+    
+    # Pre-extract vectors
+    freq_data = Vector{Vector{Float64}}([Float64.(dat.data.freq) for _ in valid_channels])
+    power_raw_data = Vector{Vector{Float64}}([Float64.(dat.data[!, ch]) for ch in valid_channels])
+
+    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
+    
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+
+    _plot_power_spectrum_data!(fig, ax, freq_data, power_raw_data, valid_channels; kwargs...)
+
+    if plot_kwargs[:show_legend]
+        n_channels = length(valid_channels)
+        n_cols = n_channels > 10 ? cld(n_channels, 20) : 1
+        axislegend(ax, nbanks = n_cols)
+    end
+
+    if plot_kwargs[:display_plot]
+        _display_figure(fig)
+    end
+
+    _set_window_title("Makie")
     return (fig = fig, axes = [ax])
 end
