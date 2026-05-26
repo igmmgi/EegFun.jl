@@ -142,16 +142,33 @@ Load and merge configuration from a TOML file with defaults.
 # Returns
 - `Union{Dict,Nothing}`: The loaded configuration or nothing if loading failed
 """
-function read_config(config_file::String)
+function _generate_default_config()
+    config = Dict{String, Any}()
+    for (path, param) in PARAMETERS
+        isnothing(param.default) && continue
+        
+        parts = split(path, ".")
+        current = config
+        for i in 1:(length(parts)-1)
+            key = String(parts[i])
+            if !haskey(current, key)
+                current[key] = Dict{String, Any}()
+            end
+            current = current[key]
+        end
+        current[String(parts[end])] = param.default
+    end
+    return config
+end
 
-    # Load default config
-    default_config = TOML.parsefile(joinpath(@__DIR__, "default.toml"))
+function read_config(config_file::String)
+    default_config = _generate_default_config()
+
     if !isfile(config_file)
         @minimal_error "Configuration file not found: $config_file"
     end
 
-    # Load user config
-    user_config = Dict()
+    user_config = Dict{String, Any}()
     @info "Loading config file: $config_file"
     try
         user_config = TOML.parsefile(config_file)
@@ -310,9 +327,8 @@ Helper function to validate a single parameter value against its specification.
 # Returns
 - `ValidationResult`: Result of the validation
 """
-function _validate_parameter(value, parameter_spec::ConfigParameter, parameter_name::String)
-    # Get the type from the type parameter
-    param_type = typeof(parameter_spec).parameters[1]
+function _validate_parameter(value, parameter_spec::ConfigParameter{T}, parameter_name::String) where {T}
+    param_type = T
 
     # Helper function for creating validation errors
     """Create a failed `ValidationResult` for this parameter."""
@@ -429,11 +445,14 @@ end
 Show detailed information about a specific parameter.
 """
 function _show_parameter_details(parameter_name::String)
-    parameter_spec = PARAMETERS[parameter_name]
+    _show_parameter_details(parameter_name, PARAMETERS[parameter_name])
+end
+
+function _show_parameter_details(parameter_name::String, parameter_spec::ConfigParameter{T}) where {T}
     @info "Parameter: $parameter_name"
     @info "="^(length(parameter_name) + 11)
     @info "Description: $(parameter_spec.description)"
-    @info "Type: $(typeof(parameter_spec).parameters[1])"
+    @info "Type: $T"
 
     if !isnothing(parameter_spec.min) || !isnothing(parameter_spec.max)
         min_str = isnothing(parameter_spec.min) ? "" : "$(parameter_spec.min) ≤ "
@@ -620,9 +639,9 @@ end
 
 Write parameter documentation to the given IO stream.
 """
-function _write_parameter_docs(io::IO, parameter_spec::ConfigParameter)
+function _write_parameter_docs(io::IO, parameter_spec::ConfigParameter{T}) where {T}
     println(io, "\n# $(parameter_spec.description)")
-    println(io, "# Type: $(typeof(parameter_spec).parameters[1])")
+    println(io, "# Type: $T")
 
     if !isnothing(parameter_spec.min) || !isnothing(parameter_spec.max)
         min_str = isnothing(parameter_spec.min) ? "" : "$(parameter_spec.min) ≤ "
