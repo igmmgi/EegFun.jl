@@ -120,6 +120,8 @@ mutable struct ChannelState
     individually_selected::Vector{Symbol}
     data_labels::Dict{Symbol,Makie.Text}
     data_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}
+    original_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}    # ICA ghost: pre-removal signal
+    subtracted_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}  # ICA ghost: removed artefact
     function ChannelState(channel_labels::Vector{Symbol})
         new(
             channel_labels,
@@ -127,6 +129,8 @@ mutable struct ChannelState
             fill(false, length(channel_labels)),
             Symbol[],
             Dict{Symbol,Makie.Text}(),
+            Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}(),
+            Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}(),
             Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}(),
         )
     end
@@ -1822,6 +1826,8 @@ function _restore_axis_limits!(ax, state)
     if haskey(state.plot_kwargs, :_saved_xlims)
         xlims!(ax, state.plot_kwargs[:_saved_xlims]...)
         ylims!(ax, state.plot_kwargs[:_saved_ylims]...)
+        delete!(state.plot_kwargs, :_saved_xlims)
+        delete!(state.plot_kwargs, :_saved_ylims)
     end
 end
 
