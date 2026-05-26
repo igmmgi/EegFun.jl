@@ -159,7 +159,9 @@ mutable struct ExtraChannelInfo
     channels::Vector{Symbol}
     data_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}
     data_labels::Dict{Symbol,Makie.Text}
-    ExtraChannelInfo() = new(Symbol[], Dict(), Dict())
+    fig::Union{Nothing,Figure}          # owning figure for legend placement
+    legend::Union{Nothing,Any}          # current Legend object (replaced on redraw)
+    ExtraChannelInfo() = new(Symbol[], Dict(), Dict(), nothing, nothing)
 end
 
 """Visual state tracker for dynamic Independent Component Analysis (ICA) artifact removal."""
@@ -1869,6 +1871,12 @@ end
 function _draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
     _clear_axes!(ax, [state.extra_channel.data_lines, state.extra_channel.data_labels])
 
+    # Remove old legend if present
+    if !isnothing(state.extra_channel.legend)
+        delete!(state.extra_channel.legend)
+        state.extra_channel.legend = nothing
+    end
+
     if !isempty(state.extra_channel.channels)
         if length(state.view.offset) > 1
             current_offset = state.view.offset[end] + (state.view.offset[end] - state.view.offset[end-1])
@@ -1878,8 +1886,12 @@ function _draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
 
         # Get data access functions based on type
         get_data, get_time, get_label_y = _get_data_accessors(state.data)
-        
+
         colors = Makie.wong_colors()
+
+        # Accumulators for the legend
+        legend_elements = Any[]
+        legend_labels   = String[]
 
         for (idx, channel) in enumerate(state.extra_channel.channels)
             # Calculate specific offset for this channel to prevent overlapping
@@ -1889,10 +1901,10 @@ function _draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
             else
                 channel_offset = state.view.offset[end] + idx * 100.0
             end
-            
+
             line_color = colors[mod1(idx, length(colors))]
 
-            if eltype(get_data(state.data.current[], 1:1, channel)) == Bool # Boolean data - create highlights
+            if eltype(get_data(state.data.current[], 1:1, channel)) == Bool # Boolean data - vspan + legend entry only
                 highlight_data = @views _splitgroups(findall(get_data(state.data.current[], :, channel)))
                 if !isempty(highlight_data[1])
                     # Widen single-sample regions so they're visible (per-region, not global)
@@ -1911,7 +1923,10 @@ function _draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
                         visible = true,
                     )
                 end
-            else # Regular data - create line and label
+                # Boolean channels identified via the legend only — no in-plot text
+                push!(legend_elements, PolyElement(color = (line_color, 0.5), strokecolor = :transparent))
+                push!(legend_labels, String(channel))
+            else # Regular channel - in-plot label is sufficient, skip legend
                 state.extra_channel.data_lines[channel] = lines!(
                     ax,
                     @lift(get_time($(state.data.current), :)),
@@ -1929,6 +1944,22 @@ function _draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
                     fontsize = 18,
                 )
             end
+        end
+
+        # Build / rebuild the legend in the figure if we have a figure reference
+        if !isnothing(state.extra_channel.fig) && !isempty(legend_labels)
+            state.extra_channel.legend = Legend(
+                state.extra_channel.fig[1, 1],
+                legend_elements,
+                legend_labels;
+                tellwidth = false,
+                tellheight = false,
+                halign = :right,
+                valign = :bottom,
+                framevisible = true,
+                padding = (8f0, 8f0, 8f0, 8f0),
+                margin = (4f0, 4f0, 4f0, 4f0),
+            )
         end
     end
 end
@@ -2012,6 +2043,7 @@ function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs.
     ax = Axis(fig[1, 1], xlabel = plot_kwargs[:xlabel], ylabel = plot_kwargs[:ylabel], title = _get_title(dat))
 
     state = _create_browser_state(dat, dat.layout.data.label, ax, ica, plot_kwargs)
+    state.extra_channel.fig = fig  # store figure reference for legend placement
     _setup_ui(fig, ax, state, dat, ica, plot_kwargs)
 
     _draw(ax, state)
