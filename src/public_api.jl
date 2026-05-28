@@ -120,6 +120,7 @@ public read_eeglab
 public read_fieldtrip
 public read_layout
 public read_raw_data
+public read_xdf
 
 # =====================
 # Layout
@@ -309,6 +310,7 @@ public trigger_info
 public apply_analysis_settings
 public apply_analysis_settings!
 public generate_config_template
+public read_bids
 public export_bids
 public generate_pipeline_template
 public preprocess

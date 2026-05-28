@@ -1007,16 +1007,21 @@ _handle_right_navigation(ax, state::EpochedDataBrowserState) = _step_epoch_forwa
 """Scroll the x-range backward."""
 function _xback!(ax, state::ContinuousDataBrowserState)
     step = state.plot_kwargs[:scroll_step]
-    state.view.xrange.val[1] - step < 1 && return
-    state.view.xrange[] = state.view.xrange.val .- step
+    current_range = state.view.xrange.val
+    current_range[1] <= 1 && return
+    shift = min(step, current_range[1] - 1)
+    state.view.xrange[] = current_range .- shift
     _restore_axis_limits!(ax, state)
 end
 
 """Scroll the x-range forward."""
 function _xforward!(ax, state::ContinuousDataBrowserState)
     step = state.plot_kwargs[:scroll_step]
-    state.view.xrange.val[1] + step > nrow(state.data.current[].data) && return
-    state.view.xrange[] = state.view.xrange.val .+ step
+    current_range = state.view.xrange.val
+    max_idx = nrow(state.data.current[].data)
+    current_range[end] >= max_idx && return
+    shift = min(step, max_idx - current_range[end])
+    state.view.xrange[] = current_range .+ shift
     _restore_axis_limits!(ax, state)
 end
 

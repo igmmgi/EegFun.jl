@@ -720,6 +720,10 @@ function Base.show(io::IO, neighbours_dict::OrderedDict{Symbol,Neighbours})
 end
 
 filename(dat::BiosemiDataFormat.BiosemiData)::String = basename_without_ext(dat.filename)
+filename(dat::EuropeanDataFormat.EdfData)::String = basename_without_ext(dat.filename)
+filename(dat::BrainVisionDataFormat.BrainVisionData)::String = basename_without_ext(dat.filename)
+filename(dat::FunctionalImageFormat.FifData)::String = basename_without_ext(dat.filename)
+filename(dat::ExtensibleDataFormat.XdfData)::String = basename_without_ext(dat.filename)
 filename(dat::ContinuousData)::String = dat.file
 filename(dat::ErpData)::String = dat.file
 filename(dat::EpochData)::String = dat.file

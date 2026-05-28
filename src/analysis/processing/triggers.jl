@@ -194,6 +194,63 @@ function trigger_count(dat::BiosemiDataFormat.BiosemiData)::TriggerInfo
     return _trigger_count_impl([dat.triggers.raw, cleaned_triggers], ["raw_count", "cleaned_count"])
 end
 
+function trigger_count(dat::EuropeanDataFormat.EdfData)::TriggerInfo
+    # EDF triggers are already annotations/onsets, no raw vs cleaned distinction needed natively
+    # but we will extract them into a synthetic array just like we did for creating dataframes
+    n_samples = size(dat.data, 1)
+    sample_rate = dat.header.sample_rate[1]
+    trigger = zeros(Int, n_samples)
+    trigger_info = fill("", n_samples)
+    
+    if !isnothing(dat.triggers) && length(dat.triggers.onset) > 0
+        unique_annotations = sort(unique(dat.triggers.annotation))
+        value_to_trigger = Dict(ann => i for (i, ann) in enumerate(unique_annotations))
+        for i in 1:length(dat.triggers.onset)
+            sample_idx = round(Int, dat.triggers.onset[i] * sample_rate) + 1
+            if 1 <= sample_idx <= n_samples
+                trigger[sample_idx] = value_to_trigger[dat.triggers.annotation[i]]
+                trigger_info[sample_idx] = dat.triggers.annotation[i]
+            end
+        end
+    end
+    
+    return _trigger_count_impl([trigger], ["count"]; trigger_info=trigger_info)
+end
+
+function trigger_count(dat::BrainVisionDataFormat.BrainVisionData)::TriggerInfo
+    if isnothing(dat.markers) || isempty(dat.markers)
+        return _trigger_count_impl([Int[]], ["count"])
+    end
+    n_samples = size(dat.data, 1)
+    trigger, trigger_info = _extract_triggers_from_markers(dat.markers, n_samples)
+    return _trigger_count_impl([trigger], ["count"]; trigger_info=trigger_info)
+end
+
+function trigger_count(dat::ExtensibleDataFormat.XdfData)::TriggerInfo
+    eeg_streams = [s for s in values(dat.streams) if s.header.type == "EEG"]
+    if isempty(eeg_streams)
+        return _trigger_count_impl([Int[]], ["count"])
+    end
+    eeg_stream = eeg_streams[1]
+    n_samples = size(eeg_stream.time_series, 1)
+    trigger = zeros(Int, n_samples)
+    trigger_info = fill("", n_samples)
+    
+    marker_streams = [s for s in values(dat.streams) if s.header.type == "Markers"]
+    if !isempty(marker_streams)
+        marker_stream = marker_streams[1]
+        for (i, t) in enumerate(marker_stream.timestamps)
+            idx = find_closest_time_index(eeg_stream.timestamps, t)
+            marker_val = marker_stream.time_series[i, 1]
+            int_val = tryparse(Int, string(marker_val))
+            trigger[idx] = int_val !== nothing ? int_val : 1
+            trigger_info[idx] = string(marker_val)
+        end
+    end
+    
+    return _trigger_count_impl([trigger], ["count"]; trigger_info=trigger_info)
+end
+
 # =============================================================================
 # TRIGGER SEQUENCE SEARCH FUNCTIONS
 # =============================================================================
