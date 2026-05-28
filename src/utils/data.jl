@@ -108,6 +108,10 @@ end
 
 all_data(dat::Layout)::DataFrame = dat.data
 all_data(dat::BiosemiDataFormat.BiosemiData)::DataFrame = _create_eegfun_dataframe(dat)
+all_data(dat::EuropeanDataFormat.EdfData)::DataFrame = _create_eegfun_dataframe(dat)
+all_data(dat::BrainVisionDataFormat.BrainVisionData)::DataFrame = _create_eegfun_dataframe(dat)
+all_data(dat::FunctionalImageFormat.FifData)::DataFrame = _create_eegfun_dataframe(dat)
+all_data(dat::ExtensibleDataFormat.XdfData)::DataFrame = _create_eegfun_dataframe(dat)
 all_data(dat::ErpMeasurementsResult)::DataFrame = dat.data
 all_data(dat::TriggerInfo)::DataFrame = dat.data
 
@@ -1841,7 +1845,6 @@ end
 
 """Create a time+sample+trigger+channel DataFrame from raw BiosemiData."""
 function _create_eegfun_dataframe(dat::BiosemiDataFormat.BiosemiData)::DataFrame
-    @info "Creating EEG DataFrame"
     df = hcat(
         DataFrame(time = dat.time, sample = 1:length(dat.time), trigger = _clean_triggers(dat.triggers.raw)),
         DataFrame(Float64.(dat.data), Symbol.(dat.header.channel_labels[1:(end-1)])),  # assumes last channel is trigger
@@ -1851,6 +1854,7 @@ end
 
 
 function create_eegfun_data(dat::BiosemiDataFormat.BiosemiData, layout::Layout)::ContinuousData
+    @info "Creating EEG DataFrame from Biosemi data"
     file_name = filename(dat)
     df = _create_eegfun_dataframe(dat)
     return ContinuousData(file_name, df, layout, dat.header.sample_rate[1], AnalysisInfo())
@@ -1858,18 +1862,57 @@ end
 
 # Optional Layout variant for quick databrowser visualization
 function create_eegfun_data(dat::BiosemiDataFormat.BiosemiData)
+    channel_labels = Symbol.(dat.header.channel_labels[1:(end-1)])
+    layout = _create_layout_from_labels(channel_labels)
+    return create_eegfun_data(dat, layout)
+end
+
+"""Create a time+sample+trigger+channel DataFrame from raw EdfData."""
+function _create_eegfun_dataframe(dat::EuropeanDataFormat.EdfData)::DataFrame
+
+    n_samples = size(dat.data, 1)
+    n_channels = size(dat.data, 2)
+    sample_rate = dat.header.sample_rate[1]
+
+    time = collect(0:(n_samples-1)) ./ sample_rate
+    sample = 1:n_samples
+
+    trigger = zeros(Int, n_samples)
+    trigger_info = fill("", n_samples)
+
+    if !isnothing(dat.triggers) && length(dat.triggers.idx) > 0
+        for i = 1:length(dat.triggers.idx)
+            sample_idx = dat.triggers.idx[i]
+            if 1 <= sample_idx <= n_samples
+                trigger[sample_idx] = dat.triggers.val[i]
+                trigger_info[sample_idx] = string(dat.triggers.val[i])
+            end
+        end
+    end
+
+    df = hcat(
+        DataFrame(time = time, sample = sample, trigger = trigger, trigger_info = trigger_info),
+        DataFrame(Float64.(dat.data), Symbol.(dat.header.channel_labels[1:size(dat.data, 2)])),
+    )
+    return df
+end
+
+function create_eegfun_data(dat::EuropeanDataFormat.EdfData, layout::Layout)::ContinuousData
+    @info "Creating EEG DataFrame (*.edf)"
+    file_name = basename_without_ext(dat.filename)
     df = _create_eegfun_dataframe(dat)
-    # Extract channel labels from DataFrame (exclude metadata columns)
-    all_cols = Symbol.(names(df))
-    metadata_cols = [:time, :sample, :trigger, :trigger_info]
-    channel_labels = [col for col in all_cols if !(col in metadata_cols)]
+    return ContinuousData(file_name, df, layout, dat.header.sample_rate[1], AnalysisInfo())
+end
+
+# Optional Layout variant for quick databrowser visualization
+function create_eegfun_data(dat::EuropeanDataFormat.EdfData)
+    channel_labels = Symbol.(dat.header.channel_labels[1:size(dat.data, 2)])
     layout = _create_layout_from_labels(channel_labels)
     return create_eegfun_data(dat, layout)
 end
 
 """Create a time+sample+trigger+channel DataFrame from raw BrainVision data."""
 function _create_eegfun_dataframe(dat::BrainVisionDataFormat.BrainVisionData)::DataFrame
-    @info " Creating EEG DataFrame from BrainVision data"
 
     # Check if data is available
     if isnothing(dat.data)
@@ -1938,6 +1981,7 @@ eeg_data = create_eegfun_data(brainvision_data)
 ```
 """
 function create_eegfun_data(dat::BrainVisionDataFormat.BrainVisionData, layout::Layout)::ContinuousData
+    @info "Creating EEG DataFrame (*.vhdr/*.vmrk/*.eeg)"
     file_name = basename_without_ext(dat.filename)
     df = _create_eegfun_dataframe(dat)
     return ContinuousData(file_name, df, layout, dat.header.Fs, AnalysisInfo())
@@ -1945,11 +1989,7 @@ end
 
 # Optional Layout variant for quick databrowser visualization
 function create_eegfun_data(dat::BrainVisionDataFormat.BrainVisionData)
-    df = _create_eegfun_dataframe(dat)
-    # Extract channel labels from DataFrame (exclude metadata columns)
-    all_cols = Symbol.(names(df))
-    metadata_cols = [:time, :sample, :trigger, :trigger_info]
-    channel_labels = [col for col in all_cols if !(col in metadata_cols)]
+    channel_labels = Symbol.(dat.header.label[1:size(dat.data, 2)])
     layout = _create_layout_from_labels(channel_labels)
     return create_eegfun_data(dat, layout)
 end
@@ -2026,4 +2066,252 @@ function _extract_triggers_from_markers(
     @debug "Created trigger with $non_zero_triggers non-zero values and $non_empty_strings non-empty marker strings"
 
     return trigger, trigger_info
+end
+
+_is_stim_channel(ch) = ch.kind == 3 || startswith(uppercase(ch.ch_name), "STI") || uppercase(ch.ch_name) == "STATUS"
+
+"""Create a time+sample+trigger+channel DataFrame from raw FifData."""
+function _create_eegfun_dataframe(dat::FunctionalImageFormat.FifData)::DataFrame
+    _, n_samples = size(dat.data)
+    sample_rate = Float64(dat.header.sfreq)
+    
+    time = collect(0:(n_samples-1)) ./ sample_rate
+    sample = 1:n_samples
+    
+    trigger = zeros(Int, n_samples)
+    trigger_info = fill("", n_samples)
+    
+    if !isnothing(dat.triggers) && length(dat.triggers.idx) > 0
+        for i = 1:length(dat.triggers.idx)
+            sample_idx = dat.triggers.idx[i]
+            if 1 <= sample_idx <= n_samples
+                trigger[sample_idx] = dat.triggers.val[i]
+                trigger_info[sample_idx] = string(dat.triggers.val[i])
+            end
+        end
+    end
+    
+    # Filter out stimulus channels (kind == 3 or named Status/STI)
+    data_ch_indices = Int[]
+    scales = Float64[]
+    channel_labels = Symbol[]
+    
+    for (i, ch) in enumerate(dat.header.ch_info)
+        if !_is_stim_channel(ch)
+            push!(data_ch_indices, i)
+            push!(channel_labels, Symbol(ch.ch_name))
+            if ch.unit == 107 # Volts -> Microvolts
+                push!(scales, 1e6)
+            else
+                push!(scales, 1.0)
+            end
+        end
+    end
+    
+    scaled_data = Float64.(dat.data[data_ch_indices, :]') .* scales'
+    
+    df = hcat(
+        DataFrame(time = time, sample = sample, trigger = trigger, trigger_info = trigger_info),
+        DataFrame(scaled_data, channel_labels)
+    )
+    return df
+end
+
+function create_eegfun_data(dat::FunctionalImageFormat.FifData, layout::Layout)::ContinuousData
+    @info "Creating EEG DataFrame (*.fif)"
+    file_name = basename_without_ext(dat.filename)
+    df = _create_eegfun_dataframe(dat)
+    return ContinuousData(file_name, df, layout, Int(round(dat.header.sfreq)), AnalysisInfo())
+end
+
+# Optional Layout variant for quick databrowser visualization
+function create_eegfun_data(dat::FunctionalImageFormat.FifData)
+    channel_labels = Symbol.([ch.ch_name for ch in dat.header.ch_info if !_is_stim_channel(ch)])
+    layout = _create_layout_from_labels(channel_labels)
+    return create_eegfun_data(dat, layout)
+end
+
+"""Create a time+sample+trigger+channel DataFrame from raw XdfData."""
+function _create_eegfun_dataframe(dat::ExtensibleDataFormat.XdfData)::DataFrame
+    eeg_streams = [s for s in values(dat.streams) if s.header.type == "EEG"]
+    if isempty(eeg_streams)
+        @minimal_error "No EEG stream found in XDF data"
+    end
+    eeg_stream = eeg_streams[1]
+    
+    n_samples = size(eeg_stream.time_series, 1)
+    n_channels = eeg_stream.header.channel_count
+    
+    srate = eeg_stream.header.nominal_srate > 0 ? eeg_stream.header.nominal_srate : 
+           (eeg_stream.header.effective_srate > 0 ? eeg_stream.header.effective_srate : 1.0)
+    
+    # Enforce uniform time array for ContinuousData (required for DSP filters)
+    time = collect((0:n_samples-1) ./ srate)
+    sample = 1:n_samples
+    
+    channel_labels = String[]
+    if haskey(eeg_stream.header.info, "desc") && haskey(eeg_stream.header.info["desc"], "channels") && haskey(eeg_stream.header.info["desc"]["channels"], "channel")
+        channels_info = eeg_stream.header.info["desc"]["channels"]["channel"]
+        if channels_info isa Vector
+            for ch in channels_info
+                push!(channel_labels, get(ch, "label", "Unknown"))
+            end
+        elseif channels_info isa Dict
+            push!(channel_labels, get(channels_info, "label", "Unknown"))
+        end
+    end
+    
+    if length(channel_labels) != n_channels
+        channel_labels = ["ch$i" for i in 1:n_channels]
+    end
+    
+    trigger = zeros(Int, n_samples)
+    trigger_info = fill("", n_samples)
+    
+    marker_streams = [s for s in values(dat.streams) if s.header.type == "Markers"]
+    if !isempty(marker_streams)
+        marker_stream = marker_streams[1]
+        for (i, t) in enumerate(marker_stream.timestamps)
+            idx = find_closest_time_index(eeg_stream.timestamps, t)
+            marker_val = marker_stream.time_series[i, 1]
+            int_val = tryparse(Int, string(marker_val))
+            trigger[idx] = int_val !== nothing ? int_val : 1
+            trigger_info[idx] = string(marker_val)
+        end
+    end
+    
+    df = hcat(
+        DataFrame(time = time, sample = sample, trigger = trigger, trigger_info = trigger_info),
+        DataFrame(Float64.(eeg_stream.time_series), Symbol.(channel_labels[1:n_channels]))
+    )
+    return df
+end
+
+function create_eegfun_data(dat::ExtensibleDataFormat.XdfData, layout::Layout)::ContinuousData
+    @info "Creating EEG DataFrame (*.xdf)"
+    file_name = basename_without_ext(dat.filename)
+    df = _create_eegfun_dataframe(dat)
+    
+    eeg_streams = [s for s in values(dat.streams) if s.header.type == "EEG"]
+    sample_rate = !isempty(eeg_streams) ? eeg_streams[1].header.nominal_srate : 1.0
+    
+    return ContinuousData(file_name, df, layout, Int(round(sample_rate)), AnalysisInfo())
+end
+
+function create_eegfun_data(dat::ExtensibleDataFormat.XdfData)
+    eeg_streams = [s for s in values(dat.streams) if s.header.type == "EEG"]
+    if isempty(eeg_streams)
+        @minimal_error "No EEG stream found in XDF data"
+    end
+    eeg_stream = eeg_streams[1]
+    n_channels = eeg_stream.header.channel_count
+    
+    channel_labels = String[]
+    if haskey(eeg_stream.header.info, "desc") && haskey(eeg_stream.header.info["desc"], "channels") && haskey(eeg_stream.header.info["desc"]["channels"], "channel")
+        channels_info = eeg_stream.header.info["desc"]["channels"]["channel"]
+        if channels_info isa Vector
+            for ch in channels_info
+                push!(channel_labels, get(ch, "label", "Unknown"))
+            end
+        elseif channels_info isa Dict
+            push!(channel_labels, get(channels_info, "label", "Unknown"))
+        end
+    end
+    if length(channel_labels) != n_channels
+        channel_labels = ["ch$i" for i in 1:n_channels]
+    end
+    
+    layout = _create_layout_from_labels(Symbol.(channel_labels))
+    return create_eegfun_data(dat, layout)
+end
+
+function _create_eegfun_epoch_dataframes(dat::FunctionalImageFormat.FifEpochs)::Vector{DataFrame}
+    _, n_samples, n_epochs = size(dat.data)
+    sample_rate = Float64(dat.header.sfreq)
+    
+    # Filter out stimulus channels
+    data_ch_indices = Int[]
+    scales = Float64[]
+    channel_labels = Symbol[]
+    
+    stim_idx = nothing
+    stim_info = nothing
+    
+    for (i, ch) in enumerate(dat.header.ch_info)
+        if _is_stim_channel(ch) && stim_idx === nothing
+            stim_idx = i
+            stim_info = ch
+        end
+        if !_is_stim_channel(ch)
+            push!(data_ch_indices, i)
+            push!(channel_labels, Symbol(ch.ch_name))
+            if ch.unit == 107 # Volts -> Microvolts
+                push!(scales, 1e6)
+            else
+                push!(scales, 1.0)
+            end
+        end
+    end
+    
+    dfs = Vector{DataFrame}(undef, n_epochs)
+    
+    for e in 1:n_epochs
+        first_samp = 0
+        if !isempty(dat.first_sample)
+            first_samp = length(dat.first_sample) >= e ? dat.first_sample[e] : dat.first_sample[1]
+        end
+        time = collect(first_samp:(first_samp + n_samples - 1)) ./ sample_rate
+        sample = 1:n_samples
+        epoch_col = fill(e, n_samples)
+        
+        trigger = zeros(Int, n_samples)
+        trigger_info = fill("", n_samples)
+        
+        if stim_idx !== nothing
+            raw_float = @views dat.data[stim_idx, :, e] ./ (stim_info.range * stim_info.cal)
+            raw = Int32.(round.(raw_float))
+            
+            if raw[1] > 0
+                trigger[1] = raw[1]
+                trigger_info[1] = string(raw[1])
+            end
+            for i in 2:n_samples
+                if raw[i] != raw[i-1] && raw[i] > 0
+                    trigger[i] = raw[i]
+                    trigger_info[i] = string(raw[i])
+                end
+            end
+        end
+        
+        scaled_data = Float64.(dat.data[data_ch_indices, :, e]') .* scales'
+        
+        dfs[e] = hcat(
+            DataFrame(time = time, sample = sample, epoch = epoch_col, trigger = trigger, trigger_info = trigger_info),
+            DataFrame(scaled_data, channel_labels)
+        )
+    end
+    
+    return dfs
+end
+
+function create_eegfun_data(dat::FunctionalImageFormat.FifEpochs, layout::Layout)::Union{EpochData, ErpData}
+    file_name = basename_without_ext(dat.filename)
+    dfs = _create_eegfun_epoch_dataframes(dat)
+    
+    condition_name = isempty(dat.comments) ? "FIF Epochs" : dat.comments[1]
+    
+    if length(dfs) == 1 && !isempty(dat.nave) && dat.nave[1] > 1
+        @info "Creating EEG DataFrame (*.fif evoked)"
+        return ErpData(file_name, 1, condition_name, dfs[1], layout, Int(round(dat.header.sfreq)), AnalysisInfo(), Int(dat.nave[1]))
+    else
+        @info "Creating EEG DataFrame (*.fif epochs)"
+        return EpochData(file_name, 1, condition_name, dfs, layout, Int(round(dat.header.sfreq)), AnalysisInfo())
+    end
+end
+
+# Optional Layout variant for quick databrowser visualization
+function create_eegfun_data(dat::FunctionalImageFormat.FifEpochs)
+    channel_labels = Symbol.([ch.ch_name for ch in dat.header.ch_info if !_is_stim_channel(ch)])
+    layout = _create_layout_from_labels(channel_labels)
+    return create_eegfun_data(dat, layout)
 end

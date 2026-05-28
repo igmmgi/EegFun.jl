@@ -5,6 +5,9 @@ module EegFun
 # Core dependencies
 using BiosemiDataFormat
 using BrainVisionDataFormat
+using EuropeanDataFormat
+using ExtensibleDataFormat
+using FunctionalImageFormat
 using CSV
 using DataFrames
 using JLD2
@@ -75,6 +78,7 @@ include("layouts/layout.jl")
 include("io/eeglab.jl")
 include("io/fieldtrip.jl")
 include("io/bids_export.jl")
+include("io/bids_import.jl")
 
 # Configuration system
 include("config/config.jl")
