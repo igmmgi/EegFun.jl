@@ -48,25 +48,31 @@ This script demonstrates a completely realistic, full-scale pipeline from raw da
 2. Re-references to the average and applies high-pass filtering (automatically distributed across CPU threads).
 3. Identifies and flags extreme artifacts.
 4. Executes Extended Infomax Independent Component Analysis (ICA).
+    - *Note on ICA:* In this automated script, we simply remove the single largest variance component (IC1) without manual review. While IC1 is highly likely to reflect an eye blink, no care is taken to verify this. This pipeline is strictly designed as a **timing benchmark** for computational throughput, and to provide a rough comparison of the resulting visual attention effect across parietal-occipital electrodes.
 5. Extracts specific epoch conditions and applies baseline correction.
 6. Averages the trials into Event-Related Potentials (ERPs).
 7. Computes a Grand Average across multiple subjects.
-8. Generates final publication-ready figures.
+8. Generates final comparison figures.
 
 ### Running the Benchmarks
 
 All benchmark scripts (Julia, Python, and MATLAB) require you to pass the absolute path to the downloaded dataset. They also accept optional arguments to control the execution length and whether to run Independent Component Analysis (ICA).
 
 **Arguments:**
+
 1. `data_dir` *(Required)*: Absolute path to the folder containing the downloaded Zenodo `.bdf` files.
 2. `n_files` *(Optional, Default: `0`)*: Number of files to process. `0` means process all files in the directory.
 3. `run_ica` *(Optional, Default: `true`)*: Boolean flag to enable or disable the ICA step. Disabling ICA is highly recommended for isolating raw I/O and mathematical filtering throughput.
 
 **Julia Execution:**
 We highly recommend launching Julia with multi-threading enabled (`--threads=auto`) to accurately measure the pipeline's concurrent performance characteristics.
+
 ```bash
-# Example: Process 3 files and disable ICA
+# Example 1: Process 3 files and disable ICA
 julia --threads=auto --project=. benchmark/julia/eegfun_benchmark.jl /path/to/downloaded/AttentionExp 3 false
+
+# Example 2: Process ALL files (0) and disable ICA
+julia --threads=auto --project=. benchmark/julia/eegfun_benchmark.jl /path/to/downloaded/AttentionExp 0 false
 ```
 
 **Python (MNE) Execution:**
@@ -75,14 +81,23 @@ python benchmark/python/mne_benchmark.py /path/to/downloaded/AttentionExp 3 fals
 ```
 
 **MATLAB (EEGLAB) Execution:**
-Because MATLAB handles command-line arguments poorly, you must run the benchmark function directly from your MATLAB command window:
+Because MATLAB handles command-line arguments poorly, you must run the benchmark function directly from your MATLAB command window. Make sure you first add EEGLAB and the benchmark script folder to your MATLAB path!
+
 ```matlab
+% 1. Add EEGLAB to path and initialize it
+addpath('/path/to/eeglab');
+eeglab;
+
+% 2. Add the benchmark script folder to path
+addpath('/path/to/EegFun.jl/benchmark/matlab');
+
+% 3. Run the benchmark function
 eeglab_benchmark('/path/to/downloaded/AttentionExp', 3, false)
 ```
 
 ### Plotting the Results
 
-Once you have run the benchmarks for the different toolboxes, they will automatically save their execution times (`.txt`) and exported ERP arrays (`.csv`) directly into your dataset directory. 
+Once you have run the benchmarks for the different toolboxes, they will automatically save their execution times (`.txt`) and exported ERP arrays (`.csv`) directly into your dataset directory.
 
 You can then run the Julia comparison script to generate a single, unified plot that overlays the resulting ERP waveforms and automatically embeds the total execution times directly into the legend!
 

@@ -2,6 +2,7 @@ import mne
 import glob
 import time
 import os
+import sys
 import numpy as np
 import matplotlib
 matplotlib.use('Agg') # Non-interactive plotting
