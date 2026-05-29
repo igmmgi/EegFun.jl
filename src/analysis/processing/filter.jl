@@ -204,8 +204,13 @@ Modifies the data in place.
 """
 function _apply_filter!(dat::DataFrame, channels::Vector{Symbol}, filter::FilterInfo; filter_func::String = "filtfilt")::Nothing
     apply_fn = filter_func == "filtfilt" ? filtfilt : filt
-    @inbounds for channel in channels
-        @views dat[:, channel] .= apply_fn(filter.filter_object, dat[:, channel])
+    Threads.@threads for channel in channels
+        col = dat[!, channel]
+        if col isa Vector{Float64}
+            col .= apply_fn(filter.filter_object, col)
+        else
+            dat[!, channel] .= apply_fn(filter.filter_object, dat[!, channel])
+        end
     end
     return nothing
 end

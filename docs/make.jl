@@ -21,6 +21,7 @@ pages = [
         "Selection Patterns" => "tutorials/selection-patterns.md",
         "TOML Format" => "tutorials/toml-format.md",
         "Plot GUI" => "tutorials/plot-gui.md",
+        "Benchmark" => "tutorials/benchmark.md",
     ],
     "How-to Guides" => [
         "Preprocessing Walkthrough" => "demos/workflows/preprocessing_workflow.md",
