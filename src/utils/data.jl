@@ -1845,10 +1845,14 @@ end
 
 """Create a time+sample+trigger+channel DataFrame from raw BiosemiData."""
 function _create_eegfun_dataframe(dat::BiosemiDataFormat.BiosemiData)::DataFrame
-    df = hcat(
-        DataFrame(time = dat.time, sample = 1:length(dat.time), trigger = _clean_triggers(dat.triggers.raw)),
-        DataFrame(Float64.(dat.data), Symbol.(dat.header.channel_labels[1:(end-1)])),  # assumes last channel is trigger
-    )
+    df = DataFrame(time = dat.time, sample = 1:length(dat.time), trigger = _clean_triggers(dat.triggers.raw))
+    
+    channels = Symbol.(dat.header.channel_labels[1:(end-1)])
+    for (i, ch) in enumerate(channels)
+        # Allocate Float64 vector directly into the DataFrame column
+        df[!, ch] = Float64.(@view dat.data[:, i])
+    end
+    
     return df
 end
 

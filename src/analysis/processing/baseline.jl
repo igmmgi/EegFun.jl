@@ -16,7 +16,12 @@ function _apply_baseline!(dat::DataFrame, channels::Vector{Symbol}, baseline_int
     # Compute mean baseline interval and apply to each channel
     baseline_means = mean.(eachcol(dat[baseline_interval[1]:baseline_interval[2], channels]))
     for (channel, mean_val) in zip(channels, baseline_means)
-        dat[!, channel] .-= mean_val
+        col = dat[!, channel]
+        if col isa Vector{Float64}
+            col .-= mean_val
+        else
+            dat[!, channel] .-= mean_val
+        end
     end
 end
 

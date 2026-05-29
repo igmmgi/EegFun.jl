@@ -680,11 +680,19 @@ function average_epochs(dat::EpochData)
         end
 
         # Average EEG channels across epochs by row index
+        n_epochs = length(dat.data)
         for ch in eeg_channels
-            # Stack all epochs for this channel: n_epochs × n_timepoints
-            channel_matrix = hcat([epoch[!, ch] for epoch in dat.data]...)
-            # Average across epochs (mean of each row = each timepoint)
-            erp[!, ch] = vec(mean(channel_matrix, dims = 2))
+            avg_col = zeros(Float64, n_timepoints)
+            for epoch in dat.data
+                col = epoch[!, ch]
+                if col isa Vector{Float64}
+                    avg_col .+= col
+                else
+                    avg_col .+= col
+                end
+            end
+            avg_col ./= n_epochs
+            erp[!, ch] = avg_col
         end
 
         # Count epochs

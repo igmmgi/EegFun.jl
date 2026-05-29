@@ -10,7 +10,14 @@ Internal function that applies rereferencing to specified channels in a DataFram
 """
 function _apply_rereference!(dat::DataFrame, channel_selection::Vector{Symbol}, reference_selection::Vector{Symbol})
     reference = _calculate_reference(dat, reference_selection)
-    @views dat[!, channel_selection] .-= reference
+    for ch in channel_selection
+        col = dat[!, ch]
+        if col isa Vector{Float64}
+            col .-= reference
+        else
+            dat[!, ch] .-= reference
+        end
+    end
     return nothing
 end
 
@@ -39,9 +46,15 @@ Calculate reference signal from specified channels.
 function _calculate_reference(dat::DataFrame, reference_channels)
     reference = zeros(n_samples(dat))
     @inbounds for channel in reference_channels
-        @views reference .+= dat[!, channel]
+        col = dat[!, channel]
+        if col isa Vector{Float64}
+            reference .+= col
+        else
+            reference .+= col
+        end
     end
-    return reference ./ length(reference_channels)
+    reference ./= length(reference_channels)
+    return reference
 end
 
 
