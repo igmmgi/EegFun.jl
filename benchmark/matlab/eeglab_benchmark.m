@@ -1,9 +1,10 @@
 function eeglab_benchmark(data_dir, n_files_to_process, run_ica_flag)
+
     % EEGLAB benchmark script for ERP pipeline
     % Ensure EEGLAB is in your MATLAB path before running.
     
     if nargin < 1
-        error('Please provide the data directory as an argument (e.g., eeglab_benchmark(''/path/to/data''))');
+        error('data directory required as an argument (e.g., eeglab_benchmark(''/path/to/data''))');
     end
     
     if nargin < 2
@@ -21,7 +22,7 @@ function eeglab_benchmark(data_dir, n_files_to_process, run_ica_flag)
     fprintf('Benchmarking EEGLAB pipeline...\n');
     t_start = tic;
 
-    % Initialize EEGLAB paths and headless mode
+    % Start EEGLAB
     eeglab nogui;
     
     % Get the absolute path of the directory containing this script
@@ -39,26 +40,22 @@ function eeglab_benchmark(data_dir, n_files_to_process, run_ica_flag)
     end
 
     for i = 1:length(test_files)
-        % 1. Read
-        EEG = pop_biosig(test_files{i});
 
-        % Load the pre-compiled native EEGLAB 3D coordinate file
+        % 1. Read data and load channel coordinates
+        EEG = pop_biosig(test_files{i});
         layout_file = fullfile(script_dir, 'biosemi72.sfp');
         EEG = pop_chanedit(EEG, 'load', {layout_file, 'filetype', 'sfp'});
 
-        % 2. Rereference
+        % 2. Basic preprocessing: Rereference and HP filter
         EEG = pop_reref(EEG, []);
-
-        % 3. High-pass filter
         EEG = pop_eegfiltnew(EEG, 'locutoff', 0.1);
 
         if run_ica_flag
-            % 4. ICA (Apply 1Hz Rule and remove extreme samples)
-            % Create copy for ICA and apply 1Hz high-pass
+
+            % 3. ICA (Apply 1Hz to data for ICA)
             EEG_ica = pop_eegfiltnew(EEG, 'locutoff', 1.0);
-            
-            % In EEGLAB, we must physically slice out bad continuous segments before ICA
-            % (matches EegFun.jl's sample_selection logic - calculated on 0.1Hz data)
+
+            % TODO: better way of doing this in EEGLAB? 
             bad_mask = any(abs(EEG.data) > 250, 1);
             bad_diff = diff([0, bad_mask, 0]);
             start_idx = find(bad_diff == 1);
@@ -69,7 +66,6 @@ function eeglab_benchmark(data_dir, n_files_to_process, run_ica_flag)
             end
             
             % Run extended ICA on the cleaned 1Hz filtered data
-            % (Using 1e-5 to match the stringency of Julia's sum-of-squares 1e-6 stopping metric)
             EEG_ica = pop_runica(EEG_ica, 'extended', 1, 'interupt', 'off', 'pca', EEG_ica.nbchan - 1, 'stop', 1e-5);
             
             % Copy ICA weights back to the 0.1Hz filtered dataset
@@ -86,13 +82,13 @@ function eeglab_benchmark(data_dir, n_files_to_process, run_ica_flag)
                 close(f_ica);
             end
             
-            % 5. Artifact Removal
-            % Remove component 1
+            % 4. Artifact Removal
             EEG = pop_subcomp(EEG, 1, 0);
+
         end
 
-        % 6. Sequence-based Trigger Processing
-        % Convert numeric event types to strings so we can rename them to text labels safely
+        % 5. Sequence-based Trigger Processing
+        % TODO: better way of doing sequential trigger selection in EEGLAB?
         for e = 1:length(EEG.event)
             if isnumeric(EEG.event(e).type)
                 EEG.event(e).type = num2str(EEG.event(e).type);
@@ -103,7 +99,6 @@ function eeglab_benchmark(data_dir, n_files_to_process, run_ica_flag)
         for e = 2:length(EEG.event)
             curr_type = EEG.event(e).type;
             prev_type = EEG.event(e-1).type;
-
             if strcmp(curr_type, '5')
                 if strcmp(prev_type, '1') || strcmp(prev_type, '3')
                     EEG.event(e).type = 'valid_target';
@@ -113,8 +108,7 @@ function eeglab_benchmark(data_dir, n_files_to_process, run_ica_flag)
             end
         end
 
-        % 7. Epoch and Baseline
-        % Apply 30Hz lowpass filter before epoching to avoid edge artifacts (matches EegFun.jl smoothing)
+        % 6. Epoch and Baseline
         EEG = pop_eegfiltnew(EEG, 'hicutoff', 30.0);
         events = {'valid_target', 'invalid_target'};
         EEG = pop_epoch(EEG, events, [-0.5 1.0], 'newname', 'epochs', 'epochinfo', 'yes');
@@ -130,11 +124,11 @@ function eeglab_benchmark(data_dir, n_files_to_process, run_ica_flag)
         all_erps_invalid(:, :, i) = mean(EEG_invalid.data, 3);
     end
 
-    % 8. Grand Average
+    % 7. Grand Average
     grand_avg_valid = mean(all_erps_valid, 3);
     grand_avg_invalid = mean(all_erps_invalid, 3);
 
-    % 10. Plot result (PO7 and PO8 average)
+    % 8. Plot result (PO7 and PO8 average)
     po7_idx = find(strcmp({EEG.chanlocs.labels}, 'PO7'));
     po8_idx = find(strcmp({EEG.chanlocs.labels}, 'PO8'));
 
