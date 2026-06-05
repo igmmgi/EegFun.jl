@@ -10,6 +10,9 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :display_plot => (true, "Whether to display the plot"),
     :figure_title => ("Topography Plot", "Title for the plot window"),
     :interactive => (true, "Whether to enable interactive features"),
+    :theme_fontsize => (24, "Font size for theme"),
+    :zoom_step => (0.2, "Fractional zoom step for arrow keys (e.g. 0.2 means 20% zoom in/out)"),
+    :figure_padding => ((10, 10, 10, 10), "Padding around entire figure as (left, right, top, bottom) tuple (in pixels)"),
 
     # Topography parameters
     :method => (
@@ -196,14 +199,15 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
     comps = get_selected_components(ica, component_selection)
     if isempty(comps)
         @minimal_warning "No components selected for topography plot"
-        return (fig = Figure(),)
+        return (fig = Figure(figure_padding = plot_kwargs[:figure_padding]),)
     end
 
     # Get colorbar settings to adjust grid if needed
     colorbar_plot = pop!(plot_kwargs, :colorbar_plot)
 
     # Create figure
-    fig = Figure()
+    set_theme!(fontsize = plot_kwargs[:theme_fontsize])
+    fig = Figure(figure_padding = plot_kwargs[:figure_padding])
 
     # Deal with plot dimensions
     isnothing(dims) && (dims = _best_rect(length(comps)))
@@ -290,9 +294,9 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
         if event.action == Keyboard.press && event.key in (Keyboard.up, Keyboard.down)
             axes = filter(ax -> ax isa Axis, fig.content)
             if event.key == Keyboard.up
-                _topo_scale_up!.(axes)
+                _topo_scale_up!.(axes, plot_kwargs[:zoom_step])
             else
-                _topo_scale_down!.(axes)
+                _topo_scale_down!.(axes, plot_kwargs[:zoom_step])
             end
         end
     end
@@ -519,7 +523,7 @@ function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; artifa
     )
 
     # Create figure and UI
-    fig = Figure()
+    fig = Figure(figure_padding = plot_kwargs[:figure_padding])
     _create_component_activation_plots!(fig, state)
     _add_navigation_controls!(fig, state)
     _add_navigation_sliders!(fig, state)
@@ -1232,10 +1236,11 @@ function _setup_keyboard_interactions!(fig, state)
                 shift_pressed = (Keyboard.left_shift in events(fig).keyboardstate) || (Keyboard.right_shift in events(fig).keyboardstate)
 
                 if !shift_pressed
+                    zoom_step = get(state.plot_kwargs, :zoom_step, 0.2)
                     if event.key == Keyboard.up
-                        _ymore!.(state.axs)
+                        _ymore!.(state.axs, zoom_step)
                     else
-                        _yless!.(state.axs)
+                        _yless!.(state.axs, zoom_step)
                     end
                     state.ylims[] = state.axs[1].yaxis.attributes.limits[]
 

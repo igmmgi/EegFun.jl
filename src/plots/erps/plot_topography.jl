@@ -333,7 +333,10 @@ function plot_topography(
     end
 
     _set_window_title(_generate_window_title(dat))
-    fig = Figure()
+    
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+    set_theme!(fontsize = plot_kwargs[:theme_fontsize])
+    fig = Figure(figure_padding = plot_kwargs[:figure_padding])
     ax = Axis(fig[1, 1], aspect = DataAspect())
 
     plot_topography!(
@@ -349,7 +352,7 @@ function plot_topography(
     # Keyboard interactivity (scaling, help) works for all data types
     if interactive
         deregister_interaction!(ax, :rectanglezoom)
-        _setup_topo_keyboard_handlers!(fig, ax)
+        _setup_topo_keyboard_handlers!(fig, ax; zoom_step = plot_kwargs[:zoom_step])
     end
 
     # Channel selection and context menu only for ErpData and EpochData
@@ -515,7 +518,9 @@ function plot_topography(
 
     # Create single figure with subplots
     _set_window_title(_generate_window_title(dat))
-    fig = Figure()
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+    set_theme!(fontsize = plot_kwargs[:theme_fontsize])
+    fig = Figure(figure_padding = plot_kwargs[:figure_padding])
     axes = Axis[]
 
     # Plot each dataset in its own subplot
@@ -600,7 +605,7 @@ function plot_topography(
     # Keyboard interactivity (scaling, help) works for all data types
     if interactive
         deregister_interaction!.(axes, :rectanglezoom)
-        _setup_topo_keyboard_handlers!(fig, axes)
+        _setup_topo_keyboard_handlers!(fig, axes; zoom_step = plot_kwargs[:zoom_step])
     end
 
     # Channel selection and context menu only for ErpData and EpochData
@@ -664,7 +669,9 @@ function plot_topography(
 )
 
     _set_window_title(_generate_window_title(dat) * " - Epoch $epoch")
-    fig = Figure()
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+    set_theme!(fontsize = plot_kwargs[:theme_fontsize])
+    fig = Figure(figure_padding = plot_kwargs[:figure_padding])
     ax = Axis(fig[1, 1], aspect = DataAspect())
 
     plot_topography!(
@@ -1078,15 +1085,15 @@ end
 Set up keyboard event handlers for topographic plots.
 Handles both single axis and multiple axes.
 """
-function _setup_topo_keyboard_handlers!(fig::Figure, axes::Union{Axis,Vector{Axis}})
+function _setup_topo_keyboard_handlers!(fig::Figure, axes::Union{Axis,Vector{Axis}}; zoom_step::Float64 = 0.2)
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press
             if event.key == Keyboard.i
                 _show_plot_help(:topography)
             elseif event.key == Keyboard.up
-                axes isa Vector ? _topo_scale_up!.(axes) : _topo_scale_up!(axes)
+                axes isa Vector ? _topo_scale_up!.(axes, zoom_step) : _topo_scale_up!(axes, zoom_step)
             elseif event.key == Keyboard.down
-                axes isa Vector ? _topo_scale_down!.(axes) : _topo_scale_down!(axes)
+                axes isa Vector ? _topo_scale_down!.(axes, zoom_step) : _topo_scale_down!(axes, zoom_step)
             end
         end
     end
@@ -1097,9 +1104,9 @@ end
 
 Set up keyboard interactivity for topographic plots.
 """
-function _setup_topo_interactivity!(fig::Figure, ax::Axis, original_data = nothing, time_interval::Interval = times())
+function _setup_topo_interactivity!(fig::Figure, ax::Axis, original_data = nothing, time_interval::Interval = times(); zoom_step::Float64 = 0.2)
     deregister_interaction!(ax, :rectanglezoom)
-    _setup_topo_keyboard_handlers!(fig, ax)
+    _setup_topo_keyboard_handlers!(fig, ax; zoom_step = zoom_step)
     _setup_topo_selection!(fig, ax, original_data, time_interval)
 end
 
@@ -1146,9 +1153,9 @@ end
 
 Set up shared interactivity for multiple topographic plots.
 """
-function _setup_shared_topo_interactivity!(fig::Figure, axes::Vector{Axis}, datasets::Vector, shared_selection_state::TopoSelectionState)
+function _setup_shared_topo_interactivity!(fig::Figure, axes::Vector{Axis}, datasets::Vector, shared_selection_state::TopoSelectionState; zoom_step::Float64 = 0.2)
     deregister_interaction!.(axes, :rectanglezoom)
-    _setup_topo_keyboard_handlers!(fig, axes)
+    _setup_topo_keyboard_handlers!(fig, axes; zoom_step = zoom_step)
     _setup_shared_topo_selection!(fig, datasets, shared_selection_state)
 end
 
@@ -1186,14 +1193,14 @@ end
 
 Increase the scale of the topographic plot (zoom in on color range).
 """
-_topo_scale_up!(ax::Axis) = _scale_topo_levels!(ax, 0.8)  # Compress range by 20%
+_topo_scale_up!(ax::Axis, zoom_step::Float64=0.2) = _scale_topo_levels!(ax, 1.0 - zoom_step)
 
 """
     _topo_scale_down!(ax::Axis)
 
 Decrease the scale of the topographic plot (zoom out from color range).
 """
-_topo_scale_down!(ax::Axis) = _scale_topo_levels!(ax, 1.25)  # Expand range by 25%
+_topo_scale_down!(ax::Axis, zoom_step::Float64=0.2) = _scale_topo_levels!(ax, 1.0 / (1.0 - zoom_step))
 
 # =============================================================================
 # REGION SELECTION FOR TOPO PLOTS

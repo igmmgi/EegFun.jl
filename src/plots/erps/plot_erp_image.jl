@@ -7,6 +7,9 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :display_plot => (true, "Display the plot (true/false)"),
     :figure_title => ("ERP Image Plot", "Title for the plot window"),
     :interactive => (true, "Enable interactive features (true/false)"),
+    :zoom_step => (0.2, "Fractional zoom step for arrow keys (e.g. 0.2 means 20% zoom in/out)"),
+    :selection_color => (:blue, "Color for interactive selection rectangles"),
+    :selection_alpha => (0.3, "Alpha (transparency) for interactive selection rectangles"),
 
     # Axis limits and labels
     :xlim => (nothing, "X-axis limits as (min, max) tuple. If nothing, automatically determined"),
@@ -499,10 +502,14 @@ function plot_erp_image(
     # Set up interactivity AFTER heatmaps to ensure rectangles are drawn on top
     if plot_kwargs[:interactive]
         # Set up custom interactivity for ERP images (left/right keys only)
-        _setup_erp_image_interactivity!(fig, axes, heatmaps)
+        _setup_erp_image_interactivity!(fig, axes, heatmaps; zoom_step = plot_kwargs[:zoom_step])
 
         # Set up selection system (rectangles created AFTER heatmaps)
-        selection_state = SharedSelectionState(axes)
+        selection_state = SharedSelectionState(
+            axes;
+            selection_color = plot_kwargs[:selection_color],
+            selection_alpha = plot_kwargs[:selection_alpha]
+        )
         _setup_unified_selection!(fig, axes, selection_state, dat_subset)
 
         # Set up channel selection events for topo and grid layouts
@@ -580,7 +587,7 @@ end
 
 Set up custom interactivity for ERP images with context-aware key controls based on mouse position.
 """
-function _setup_erp_image_interactivity!(fig::Figure, axes::Vector{Axis}, heatmaps::Vector)
+function _setup_erp_image_interactivity!(fig::Figure, axes::Vector{Axis}, heatmaps::Vector; zoom_step::Float64 = 0.2)
     _setup_keyboard_tracking(fig)
 
     # Track mouse position to determine active axis
@@ -609,7 +616,7 @@ function _setup_erp_image_interactivity!(fig::Figure, axes::Vector{Axis}, heatma
             _show_plot_help(:erp_image)
         elseif event.action in (Keyboard.press, Keyboard.repeat) && haskey(keyboard_actions, event.key)
             action = keyboard_actions[event.key]
-            _handle_erp_image_navigation!(axes, heatmaps, action, active_axis[])
+            _handle_erp_image_navigation!(axes, heatmaps, action, active_axis[], zoom_step)
         end
     end
 end
@@ -619,21 +626,21 @@ end
 
 Handle navigation actions for ERP images.
 """
-function _handle_erp_image_navigation!(axes::Vector{Axis}, heatmaps::Vector, action::Symbol, active_axis::Axis)
+function _handle_erp_image_navigation!(axes::Vector{Axis}, heatmaps::Vector, action::Symbol, active_axis::Axis, zoom_step::Float64)
     if action in (:x_less, :x_more) # Adjust time axis
         func = action == :x_less ? _xless! : _xmore!
-        func(active_axis)
+        func(active_axis, zoom_step)
     elseif action in (:y_less, :y_more) # Adjust y-axis based on active plot
         if active_axis == axes[1] # ERP image axis
             # For ERP image, adjust color scale instead of y-axis
-            factor = action == :y_more ? 1.25 : 0.8
+            factor = action == :y_more ? (1.0 / (1.0 - zoom_step)) : (1.0 - zoom_step)
             for hm in heatmaps
                 hm.colorrange[] = hm.colorrange[] .* factor
             end
         else # ERP waveform axis
             # For ERP waveform, adjust y-axis limits
             func = action == :y_more ? _ymore! : _yless!
-            func(active_axis)
+            func(active_axis, zoom_step)
         end
     end
 end

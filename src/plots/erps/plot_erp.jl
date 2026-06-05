@@ -6,6 +6,10 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :display_plot => (true, "Display the plot (true/false)"),
     :figure_title => ("ERP Plot", "Title for the plot window"),
     :interactive => (true, "Enable interactive features (true/false)"),
+    :zoom_step => (0.2, "Fractional zoom step for arrow keys (e.g. 0.2 means 20% zoom in/out)"),
+    :selection_color => (:blue, "Color for interactive selection rectangles"),
+    :selection_alpha => (0.3, "Alpha (transparency) for interactive selection rectangles"),
+    :theme_fontsize => (24, "Font size for theme"),
 
     # Axis limits and labels
     :xlim => (nothing, "X-axis limits as (min, max) tuple. If nothing, automatically determined"),
@@ -52,8 +56,11 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :xminorgrid => (false, "Show x-axis minor grid (true/false)"),
     :yminorgrid => (false, "Show y-axis minor grid (true/false)"),
 
-    # Origin lines
+    # Origin lines and scale indicator
     :add_xy_origin => (true, "Add origin lines at x=0 and y=0 (true/false)"),
+    :axis_type => (:standard, "Type of axis to draw (:standard or :origin)"),
+    :scale_x_value => (nothing, "X-axis scale value/step size (e.g. 0.1 for 100 ms)"),
+    :scale_y_value => (nothing, "Y-axis scale value/step size (e.g. 5.0 for 5 μV)"),
 
     # Layout parameters (for topo and other layouts)
     :layout_topo_plot_width => (0.05, "Width of individual plots (fraction of figure width)"),
@@ -271,6 +278,7 @@ function plot_erp(
     layout_kwargs = _extract_layout_kwargs(plot_kwargs)
 
     # Create figure and apply layout system
+    set_theme!(fontsize = plot_kwargs[:theme_fontsize])
     fig = Figure(title = plot_kwargs[:figure_title], figure_padding = plot_kwargs[:figure_padding])
 
     plot_layout = create_layout(layout, all_plot_channels, first(dat_subset).layout; layout_kwargs...)
@@ -323,7 +331,7 @@ function plot_erp(
 
     # Add keyboard interactivity if enabled
     if plot_kwargs[:interactive]
-        _setup_shared_interactivity!(fig, axes, :erp)
+        _setup_shared_interactivity!(fig, axes, :erp; zoom_step = plot_kwargs[:zoom_step])
 
         # Disable default interactions that conflict with our custom selection (all axes)
         for ax in axes
@@ -331,7 +339,11 @@ function plot_erp(
         end
 
         # Set up selection system for all axes (will work with linked axes)
-        selection_state = SharedSelectionState(axes)
+        selection_state = SharedSelectionState(
+            axes;
+            selection_color = plot_kwargs[:selection_color],
+            selection_alpha = plot_kwargs[:selection_alpha]
+        )
 
         # Set up control panel (press 'c' to open) - must be before selection to capture condition_checked
         condition_checked_ref = Ref{Union{Vector{Observable{Bool}},Nothing}}(nothing)
@@ -488,7 +500,32 @@ function _plot_erp!(
         end
     end
 
+    _set_axis_properties!(
+        ax;
+        xlim = plot_kwargs[:xlim],
+        ylim = plot_kwargs[:ylim],
+        xlabel = plot_kwargs[:xlabel],
+        ylabel = plot_kwargs[:ylabel],
+        yreversed = plot_kwargs[:yreversed],
+        scale_x_value = plot_kwargs[:scale_x_value],
+        scale_y_value = plot_kwargs[:scale_y_value],
+    )
+    _set_axis_grid!(
+        ax;
+        xgrid = plot_kwargs[:xgrid],
+        ygrid = plot_kwargs[:ygrid],
+        xminorgrid = plot_kwargs[:xminorgrid],
+        yminorgrid = plot_kwargs[:yminorgrid],
+    )
     _set_origin_lines!(ax; add_xy_origin = plot_kwargs[:add_xy_origin])
+    _add_origin_scale_indicator!(
+        ax;
+        axis_type = plot_kwargs[:axis_type],
+        scale_x_value = plot_kwargs[:scale_x_value],
+        scale_y_value = plot_kwargs[:scale_y_value],
+        xlabel = plot_kwargs[:xlabel],
+        ylabel = plot_kwargs[:ylabel],
+    )
     leg = _add_legend!(ax, channels, datasets, plot_kwargs)
 
     return leg

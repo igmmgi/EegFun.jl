@@ -51,9 +51,15 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Origin lines
     :add_xy_origin => (true, "Whether to add origin lines at x=0 and y=0"),
+    :axis_type => (:standard, "Type of axis to draw (:standard or :origin)"),
+    :scale_x_value => (nothing, "X-axis scale value/step size (e.g. 0.1 for 100 ms)"),
+    :scale_y_value => (nothing, "Y-axis scale value/step size (e.g. 50.0 for 50 μV)"),
 
     # Interactive features
     :interactive => (true, "Whether to enable interactive features"),
+    :zoom_step => (0.2, "Fractional zoom step for arrow keys (e.g. 0.2 means 20% zoom in/out)"),
+    :selection_color => (:blue, "Color for interactive selection rectangles"),
+    :selection_alpha => (0.3, "Alpha (transparency) for interactive selection rectangles"),
 
     # Legend parameters - get all Legend attributes with their actual defaults
     # This allows users to control any Legend parameter
@@ -274,7 +280,6 @@ function plot_epochs(
         else
             ax.title = "Avg: $(_print_vector(all_plot_channels, max_length = 8, n_ends = 3))"
         end
-
         _set_axis_properties!(
             ax;
             xlim = plot_kwargs[:xlim],
@@ -282,6 +287,8 @@ function plot_epochs(
             xlabel = plot_kwargs[:xlabel],
             ylabel = plot_kwargs[:ylabel],
             yreversed = plot_kwargs[:yreversed],
+            scale_x_value = plot_kwargs[:scale_x_value],
+            scale_y_value = plot_kwargs[:scale_y_value],
         )
         _set_axis_grid!(
             ax;
@@ -291,6 +298,14 @@ function plot_epochs(
             yminorgrid = plot_kwargs[:yminorgrid],
         )
         _set_origin_lines!(ax; add_xy_origin = plot_kwargs[:add_xy_origin])
+        _add_origin_scale_indicator!(
+            ax;
+            axis_type = plot_kwargs[:axis_type],
+            scale_x_value = plot_kwargs[:scale_x_value],
+            scale_y_value = plot_kwargs[:scale_y_value],
+            xlabel = plot_kwargs[:xlabel],
+            ylabel = plot_kwargs[:ylabel],
+        )
 
     else # Multi-channel layout (single, grid, topo)
 
@@ -338,6 +353,8 @@ function plot_epochs(
                 xlabel = plot_kwargs[:xlabel],
                 ylabel = plot_kwargs[:ylabel],
                 yreversed = plot_kwargs[:yreversed],
+                scale_x_value = plot_kwargs[:scale_x_value],
+                scale_y_value = plot_kwargs[:scale_y_value],
             )
             _set_axis_grid!(
                 ax;
@@ -347,6 +364,14 @@ function plot_epochs(
                 yminorgrid = plot_kwargs[:yminorgrid],
             )
             _set_origin_lines!(ax; add_xy_origin = plot_kwargs[:add_xy_origin])
+            _add_origin_scale_indicator!(
+                ax;
+                axis_type = plot_kwargs[:axis_type],
+                scale_x_value = plot_kwargs[:scale_x_value],
+                scale_y_value = plot_kwargs[:scale_y_value],
+                xlabel = plot_kwargs[:xlabel],
+                ylabel = plot_kwargs[:ylabel],
+            )
 
         elseif layout == :grid
             # Use layout_grid_dims if provided, otherwise calculate best rectangle
@@ -360,7 +385,7 @@ function plot_epochs(
 
     # Setup interactivity if requested
     if plot_kwargs[:interactive]
-        _setup_shared_interactivity!(fig, axes, :epochs)
+        _setup_shared_interactivity!(fig, axes, :epochs; zoom_step = plot_kwargs[:zoom_step])
 
         # Disable default interactions that conflict with our custom selection (all axes)
         for ax in axes
@@ -368,7 +393,11 @@ function plot_epochs(
         end
 
         # Set up selection system for all axes (will work with linked axes)
-        selection_state = SharedSelectionState(axes)
+        selection_state = SharedSelectionState(
+            axes;
+            selection_color = plot_kwargs[:selection_color],
+            selection_alpha = plot_kwargs[:selection_alpha]
+        )
 
         # Set up control panel (press 'c' to open) - must be before selection to capture condition_checked
         condition_checked_ref = Ref{Union{Vector{Observable{Bool}},Nothing}}(nothing)
@@ -571,6 +600,8 @@ function _plot_epochs_grid_multi!(
             xlabel = axis_kwargs[:xlabel],
             ylabel = axis_kwargs[:ylabel],
             yreversed = axis_kwargs[:yreversed],
+            scale_x_value = axis_kwargs[:scale_x_value],
+            scale_y_value = axis_kwargs[:scale_y_value],
         )
         _set_axis_grid!(
             ax;
@@ -580,6 +611,14 @@ function _plot_epochs_grid_multi!(
             yminorgrid = axis_kwargs[:yminorgrid],
         )
         _set_origin_lines!(ax; add_xy_origin = axis_kwargs[:add_xy_origin])
+        _add_origin_scale_indicator!(
+            ax;
+            axis_type = axis_kwargs[:axis_type],
+            scale_x_value = axis_kwargs[:scale_x_value],
+            scale_y_value = axis_kwargs[:scale_y_value],
+            xlabel = axis_kwargs[:xlabel],
+            ylabel = axis_kwargs[:ylabel],
+        )
     end
 
     # Link axes for synchronized zooming
@@ -684,6 +723,8 @@ function _plot_epochs_topo_multi!(
             xlabel = axis_kwargs[:xlabel],
             ylabel = axis_kwargs[:ylabel],
             yreversed = axis_kwargs[:yreversed],
+            scale_x_value = axis_kwargs[:scale_x_value],
+            scale_y_value = axis_kwargs[:scale_y_value],
         )
         _set_axis_grid!(
             ax;
@@ -693,6 +734,14 @@ function _plot_epochs_topo_multi!(
             yminorgrid = axis_kwargs[:yminorgrid],
         )
         _set_origin_lines!(ax; add_xy_origin = axis_kwargs[:add_xy_origin])
+        _add_origin_scale_indicator!(
+            ax;
+            axis_type = axis_kwargs[:axis_type],
+            scale_x_value = axis_kwargs[:scale_x_value],
+            scale_y_value = axis_kwargs[:scale_y_value],
+            xlabel = axis_kwargs[:xlabel],
+            ylabel = axis_kwargs[:ylabel],
+        )
         ax.xticklabelsvisible = false
         ax.yticklabelsvisible = false
         ax.xticksvisible = false

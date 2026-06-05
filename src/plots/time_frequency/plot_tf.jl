@@ -8,9 +8,11 @@ Time-frequency plotting functions for visualizing TimeFreqData.
 const PLOT_TF_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display
     :display_plot => (true, "Whether to display the plot"),
+    :theme_fontsize => (24, "Font size for theme"),
 
     # Layout
     :layout => (:single, "Layout type: :single, :grid, or :topo"),
+    :figure_padding => ((10, 10, 10, 10), "Padding around entire figure as (left, right, top, bottom) tuple (in pixels)"),
 
     # Colormap and color range
     :colormap => (:viridis, "Colormap for the heatmap"),
@@ -86,7 +88,8 @@ function plot_tf(
 
     n = length(tf_data)
     rows, cols = isnothing(grid_dims) ? _best_rect(n) : grid_dims
-    fig = Figure(size = (max(600, cols * 400), max(400, rows * 350)))
+    set_theme!(fontsize = plot_kwargs[:theme_fontsize])
+    fig = Figure(size = (max(600, cols * 400), max(400, rows * 350)), figure_padding = plot_kwargs[:figure_padding])
     _set_window_title("$(basename(first(tf_data).file)) — Time-Frequency ($(n) conditions)")
 
     # Apply baseline to all conditions
@@ -247,7 +250,8 @@ function plot_tf(
     end
 
     _set_window_title("$(basename(tf_data.file)) — $(tf_data.condition_name) — Time-Frequency")
-    fig = Figure(size = fig_size)
+    set_theme!(fontsize = plot_kwargs[:theme_fontsize])
+    fig = Figure(size = fig_size, figure_padding = plot_kwargs[:figure_padding])
 
     eeg_layout = hasproperty(tf_data, :layout) ? tf_data.layout : nothing
     plot_layout = create_layout(layout, plot_channels, eeg_layout; layout_kwargs...)
