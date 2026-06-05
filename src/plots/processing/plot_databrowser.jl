@@ -73,8 +73,19 @@ mutable struct FilterState
     lp_active::Observable{Bool}
     hp_freq::Observable{Float64}
     lp_freq::Observable{Float64}
-    FilterState(plot_kwargs) =
-        new(Observable(false), Observable(false), Observable(plot_kwargs[:default_hp_freq]), Observable(plot_kwargs[:default_lp_freq]))
+    hp_method::Observable{String}
+    lp_method::Observable{String}
+    hp_order::Observable{Int}
+    lp_order::Observable{Int}
+    hp_func::Observable{String}
+    lp_func::Observable{String}
+    FilterState(plot_kwargs) = new(
+        Observable(false), Observable(false),
+        Observable(plot_kwargs[:default_hp_freq]), Observable(plot_kwargs[:default_lp_freq]),
+        Observable("iir"), Observable("iir"),
+        Observable(2), Observable(2),
+        Observable("filtfilt"), Observable("filtfilt")
+    )
 end
 
 """Label + action pair for a databrowser toggle button."""
@@ -328,7 +339,7 @@ function _setup_ui_base(fig, ax, state, dat, ica = nothing)
 
     # Create toggles/markers/menus
     state.markers = _init_markers(ax, state)
-    toggles = _create_toggles(fig, ax, state)
+    toggles = _create_toggles(fig, ax, state, dat)
     labels_menu = _create_labels_menu(fig, ax, state)
     reference_menu = _create_reference_menu(fig, state, dat)
 
@@ -367,7 +378,7 @@ function _setup_ui(fig, ax, state::DataBrowserState{<:AbstractDataState}, dat, i
 end
 
 """Build toggle buttons for butterfly, markers, and filter controls."""
-function _create_toggles(fig, ax, state)
+function _create_toggles(fig, ax, state, dat)
     configs = [ToggleConfig("Butterfly Plot", (active) -> _butterfly_plot!(ax, state))]
 
     # Add marker toggles based on configuration
@@ -384,10 +395,10 @@ function _create_toggles(fig, ax, state)
 
     # Add filter toggles if available
     if state.data.original.analysis_info.hp_filter == 0.0
-        push!(configs, ToggleConfig("HP-Filter On/Off", (_) -> _apply_hp_filter!(state)))
+        push!(configs, ToggleConfig("HP-Filter", (_) -> _apply_hp_filter!(state)))
     end
     if state.data.original.analysis_info.lp_filter == 0.0
-        push!(configs, ToggleConfig("LP-Filter On/Off", (_) -> _apply_lp_filter!(state)))
+        push!(configs, ToggleConfig("LP-Filter", (_) -> _apply_lp_filter!(state)))
     end
 
     # Create toggles
@@ -402,6 +413,13 @@ function _create_toggles(fig, ax, state)
             btn = Button(fig, label="Trigger", halign=:left)
             on(btn.clicks) do _
                 _show_trigger_menu(state, ax, :trigger)
+            end
+            push!(toggles_grid, [tog, btn])
+        elseif config.label == "HP-Filter" || config.label == "LP-Filter"
+            btn = Button(fig, label=config.label, halign=:left)
+            filter_type = config.label == "HP-Filter" ? :hp : :lp
+            on(btn.clicks) do _
+                _show_single_filter_menu(state, dat, filter_type)
             end
             push!(toggles_grid, [tog, btn])
         else
@@ -459,7 +477,74 @@ function _show_trigger_menu(state, ax, marker_symbol)
 
     display(GLMakie.Screen(), menu_fig)
 end
+"""Popup: select filter cutoff frequency for a specific filter."""
+function _show_single_filter_menu(state, dat, filter_type::Symbol)
+    menu_fig = Figure(size = (450, 350))
+    
+    title_str = filter_type == :hp ? "Highpass Filter Settings" : "Lowpass Filter Settings"
+    Label(menu_fig[1, 1], title_str, fontsize = 18, halign = :center, font=:bold)
 
+    grid = menu_fig[2, 1] = GridLayout(valign=:top)
+    row = 1
+    
+    if filter_type == :hp
+        range_freq = 0.1:0.1:2
+        freq_field = :hp_freq; method_field = :hp_method; order_field = :hp_order; func_field = :hp_func
+        default_val = 0.5
+    else
+        range_freq = 5:5:60
+        freq_field = :lp_freq; method_field = :lp_method; order_field = :lp_order; func_field = :lp_func
+        default_val = 20.0
+    end
+    
+    fs = state.data.filter_state
+    if getfield(fs, freq_field)[] == 0.0
+        getfield(fs, freq_field)[] = default_val
+    end
+
+    # Cutoff
+    Label(grid[row, 1], "Cutoff (Hz):", halign = :left)
+    slider_freq = Slider(grid[row, 2], range = range_freq, startvalue = getfield(fs, freq_field)[])
+    Label(grid[row, 3], @lift(string(round($(slider_freq.value), digits=1))), halign = :left)
+    on(slider_freq.value) do val; getfield(fs, freq_field)[] = val; end
+    row += 1
+
+    # Order
+    Label(grid[row, 1], "Order:", halign = :left)
+    slider_order = Slider(grid[row, 2], range = 1:10, startvalue = getfield(fs, order_field)[])
+    Label(grid[row, 3], @lift(string($(slider_order.value))), halign = :left)
+    on(slider_order.value) do val; getfield(fs, order_field)[] = val; end
+    row += 1
+
+    # Method
+    Label(grid[row, 1], "Method:", halign = :left)
+    method_labels = ["Butterworth (IIR)", "FIR (Hamming)"]
+    method_values = ["iir", "fir"]
+    current_method = getfield(fs, method_field)[]
+    menu_method = Menu(grid[row, 2], options = zip(method_labels, method_values), default = current_method == "iir" ? "Butterworth (IIR)" : "FIR (Hamming)", width = 220)
+    on(menu_method.selection) do val; getfield(fs, method_field)[] = val; end
+    row += 1
+
+    # Function
+    Label(grid[row, 1], "Function:", halign = :left)
+    func_labels = ["filtfilt (zero-phase)", "filt (one-pass)"]
+    func_values = ["filtfilt", "filt"]
+    current_func = getfield(fs, func_field)[]
+    menu_func = Menu(grid[row, 2], options = zip(func_labels, func_values), default = current_func == "filtfilt" ? "filtfilt (zero-phase)" : "filt (one-pass)", width = 220)
+    on(menu_func.selection) do val; getfield(fs, func_field)[] = val; end
+    row += 1
+
+    rowgap!(grid, 10)
+    colgap!(grid, 15)
+
+    action_area = menu_fig[3, 1] = GridLayout()
+    btn_apply = Button(action_area[1, 1], label = "Apply", width = 150)
+    on(btn_apply.clicks) do _
+        _apply_filters!(state)
+    end
+
+    display(GLMakie.Screen(), menu_fig)
+end
 
 
 """Popup: select which channels are visible."""
@@ -588,8 +673,8 @@ end
 """Re-apply active filters without resetting data (used after ICA reset to preserve filter state)."""
 function _reapply_active_filters!(state)
     fs = state.data.filter_state
-    fs.hp_active[] && _apply_filter!(state, :hp, fs.hp_freq[])
-    fs.lp_active[] && _apply_filter!(state, :lp, fs.lp_freq[])
+    fs.hp_active[] && _apply_filter!(state, :hp, fs.hp_freq[], fs.hp_method[], fs.hp_order[], fs.hp_func[])
+    fs.lp_active[] && _apply_filter!(state, :lp, fs.lp_freq[], fs.lp_method[], fs.lp_order[], fs.lp_func[])
 end
 
 """Apply the isolated artifact of a single ICA component linearly to a Continuous dataset."""
@@ -915,21 +1000,19 @@ _get_channel_data_matrix(data::EegData, channels) = Matrix(data.data[:, channels
 _restore_channel_data!(data::EegData, channels, original_data) = data.data[:, channels] = original_data
 
 
-"""Create extreme-value, HP/LP filter sliders. Returns a list of `hcat` rows for stacking."""
+"""Create extreme-value slider. Returns a list of `hcat` rows for stacking."""
 function _create_common_sliders(fig, state, dat)
-    sliders = []
-
-    filter_configs = [(:hp_filter, :hp_freq, 0.1:0.1:2, 0.5, "HP-Filter"), (:lp_filter, :lp_freq, 5:5:60, 20, "LP-Filter")]
-    for (filter_field, freq_field, range, startval, label) in filter_configs
+    # Ensure default filter frequencies are set if not already
+    filter_configs = [(:hp_filter, :hp_freq, 0.5), (:lp_filter, :lp_freq, 20.0)]
+    for (filter_field, freq_field, default_val) in filter_configs
         if getfield(dat.analysis_info, filter_field) == 0.0
-            slider = Slider(fig, range = range, startvalue = startval, width = 100)
-            on(slider.value) do val
-                getfield(state.data.filter_state, freq_field)[] = val
+            if getfield(state.data.filter_state, freq_field)[] == 0.0
+                getfield(state.data.filter_state, freq_field)[] = default_val
             end
-            getfield(state.data.filter_state, freq_field)[] = startval
-            push!(sliders, hcat(slider, Label(fig, @lift("$label: $($(slider.value)) Hz"), fontsize = 22)))
         end
     end
+
+    sliders = []
 
     slider_extreme = Slider(fig, range = 0:5:100, startvalue = 0, width = 100)
     on(slider_extreme.value) do x
@@ -1538,13 +1621,13 @@ end
 # Filtering
 ############
 """Apply a single HP or LP filter to the current data in-place."""
-function _apply_filter!(state::DataBrowserState{T}, filter_type, freq) where {T<:AbstractDataState}
+function _apply_filter!(state::DataBrowserState{T}, filter_type, freq, method, order, func) where {T<:AbstractDataState}
     # Get the current data, apply filter, then update the observable
     current_data = state.data.current[]
     if filter_type == :hp
-        highpass_filter!(current_data, freq)
+        highpass_filter!(current_data, freq; filter_method=method, order=order, filter_func=func)
     elseif filter_type == :lp
-        lowpass_filter!(current_data, freq)
+        lowpass_filter!(current_data, freq; filter_method=method, order=order, filter_func=func)
     end
     state.data.current[] = current_data  # Explicitly update the observable
 end
