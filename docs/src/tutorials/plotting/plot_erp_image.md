@@ -1,0 +1,165 @@
+# Plot ERP Image
+
+This demo shows how to create ERP image plots for visualizing single-trial EEG activity.
+
+### What is an ERP Image?
+
+An ERP image displays single-trial data as a 2D heatmap:
+
+- **Y-axis**: Individual trials/epochs
+- **X-axis**: Time points
+- **Color**: Amplitude at each time-trial coordinate
+
+This reveals trial-to-trial variability that is hidden when viewing only averaged ERPs.
+
+### Why Use ERP Images?
+
+**See variability beyond the average**:
+
+Traditional ERPs show the average across trials, but ERP images show:
+- Trial-to-trial amplitude fluctuations
+- Temporal jitter in component latency
+- Phase consistency vs. phase resetting
+
+**Quality control**:
+
+Quickly spot:
+- Artifact-contaminated trials (bright/dark streaks)
+- Drift across the experiment
+- Individual outlier trials
+
+**Understand components**:
+
+Distinguish between:
+- **Time-locked** activity: Consistent latency across trials (vertical bands)
+- **Phase-locked** activity: Consistent phase but variable amplitude
+- **Induced** activity: Not phase-locked to stimulus
+
+### Layout Options
+
+The demo shows three layout modes:
+
+| Layout | Description |
+|--------|-------------|
+| **:single** | All selected channels in one column |
+| **:grid** | Channels arranged in a grid |
+| **:topo** | Channels positioned by scalp location |
+
+### Visualization Features
+
+**Boxcar averaging**:
+
+Smooth the image by averaging across neighboring trials:
+```julia
+plot_erp_image(epochs, boxcar_average = 20)
+```
+
+Reduces noise while preserving overall patterns.
+
+**Colorbar control**:
+
+```julia
+plot_erp_image(epochs, colorbar_plot = false)  # Hide colorbar
+plot_erp_image(epochs, colorrange = (-50, 50))  # Custom range
+```
+
+**Optional ERP overlay**:
+
+```julia
+plot_erp_image(epochs, plot_erp = false)  # Hide the averaged ERP
+```
+
+By default, the averaged ERP is plotted above the image for reference.
+
+### Interpretation
+
+**Vertical bands**:
+
+Strong vertical alignment indicates time-locked activity with consistent latency across trials.
+
+**Gradual color changes**:
+
+Smooth transitions suggest sustained activity or slow baseline drift.
+
+**Random speckles**:
+
+High-frequency noise or lack of consistent time-locked activity.
+
+**Outlier rows**:
+
+Trials with extreme values may indicate artifacts (blinks, movements, poor contact).
+
+### Workflow Summary
+
+This demo demonstrates:
+
+1. **Load and preprocess** data (rereferencing, filtering)
+2. **Extract epochs** (-2 to 4 seconds)
+3. **Plot ERP images** with different layouts
+4. **Apply boxcar averaging** to smooth trial-to-trial noise
+5. **Customize visualization** with colorbars and color ranges
+
+ERP images are a powerful complement to traditional ERP plots, revealing the underlying trial structure that averages can obscure.
+
+
+## Code Examples
+
+::: details Show Code
+
+```julia
+# Demo: ERP Image Plots
+# Shows trial-by-trial ERP activity as image/heatmap plots.
+
+# Note: EegFun.example_path() resolves bundled example data paths.
+# When using your own data, simply pass the file path directly, e.g.:
+# dat = EegFun.read_raw_data("/path/to/your/data.bdf")
+
+using EegFun
+
+# read raw data
+dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"));
+
+# read and prepare layout file
+layout = EegFun.read_layout(EegFun.example_path("layouts/biosemi/biosemi72.csv"));
+EegFun.polar_to_cartesian_xy!(layout)
+
+dat = EegFun.create_eegfun_data(dat, layout)
+
+# minimal preprocessing
+EegFun.rereference!(dat, :avg)
+EegFun.highpass_filter!(dat, 1)
+
+# EPOCHS
+epoch_cfg = EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])
+epochs = EegFun.extract_epochs(dat, epoch_cfg, (-2, 4))
+
+EegFun.plot_erp_image(epochs, layout = :single)  # average of all channels
+EegFun.plot_erp_image(epochs, layout = :single, channel_selection = EegFun.channels([:PO7, :PO8]))
+EegFun.plot_erp_image(epochs, layout = :single, channel_selection = EegFun.channels([:PO7, :PO8]), interpolate = true)
+
+EegFun.plot_erp_image(epochs, layout = :grid, colorbar_plot = false)
+EegFun.plot_erp_image(epochs, layout = :grid, colorbar_plot = true)
+
+EegFun.plot_erp_image(epochs, layout = :topo)
+EegFun.plot_erp_image(epochs, channel_selection = EegFun.channels([:PO7]))
+EegFun.plot_erp_image(epochs, channel_selection = EegFun.channels([:Fp1]), plot_erp = false)
+
+
+EegFun.plot_erp_image(epochs, layout = :single)
+
+EegFun.plot_erp_image(
+    epochs,
+    channel_selection = EegFun.channels([:PO7, :PO8]),
+    layout = :single,
+    boxcar_average = 2,
+    colorrange = (-50, 50),
+)
+
+EegFun.plot_erp_image(epochs, layout = :topo, boxcar_average = 20, colorrange = (-50, 50))
+```
+
+:::
+
+## See Also
+
+- [API Reference](../../reference/index.md)

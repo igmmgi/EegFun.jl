@@ -116,4 +116,4 @@ inside the `epochs` table.
 ## Further Reading
 
 - [TOML homepage](https://toml.io/en/) — introduction and full language reference
-- [Pipeline configuration](../demos/workflows/pipeline_templates.md) — using TOML with EegFun.jl's preprocessing pipeline
+- [Pipeline configuration](../tutorials/workflows/pipeline_templates.md) — using TOML with EegFun.jl's preprocessing pipeline

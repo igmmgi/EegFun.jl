@@ -105,7 +105,7 @@ The package offers a mix of high-level and lower-level functions, including comp
 | --- | --- |
 | EegFun.jl GitHub | [github.com/igmmgi/EegFun.jl](https://github.com/igmmgi/EegFun.jl) |
 | Manual Preprocessing tutorial | [Manual Preprocessing](manual-preprocessing.md) |
-| All how-to guides | [How-to Guides](../demos/workflows/preprocessing_workflow.md) |
+| All how-to guides | [How-to Guides](../tutorials/workflows/preprocessing_workflow.md) |
 | Julia learning resources | [julialang.org/learning](https://julialang.org/learning/) |
 | Julia cheat sheet | [cheatsheet.juliadocs.org](https://cheatsheet.juliadocs.org/) |
 | MATLAB–Python–Julia cheat sheet | [cheatsheets.quantecon.org](https://cheatsheets.quantecon.org/) |
