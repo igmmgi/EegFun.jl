@@ -8,7 +8,7 @@ const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :ylabel => ("Amplitude (μV)", "Y-axis label"),
 
     # UI styling
-    :ui_fontsize => (18, "Font size for UI elements"),
+    :theme_fontsize => (18, "Font size for theme and UI elements"),
 
     # Line styling
     :channel_line_width => (1, "Line width for channel lines"),
@@ -23,7 +23,8 @@ const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :zoom_step => (100, "Y-axis zoom increment per arrow key press"),
 
     # Selection styling
-    :selection_color => ((:blue, 0.1), "Color and transparency for selection rectangle"),
+    :selection_color => (:blue, "Color for selection rectangle"),
+    :selection_alpha => (0.1, "Transparency for selection rectangle"),
 
     # Filter parameters
     :default_hp_freq => (0.1, "Default high-pass filter frequency in Hz"),
@@ -62,7 +63,7 @@ mutable struct SelectionState
     selected_regions::Observable{Vector{Tuple{Float64,Float64}}}  # Store multiple regions
     region_plots::Vector{Makie.Poly}  # Store plot objects for each region
     function SelectionState(ax, plot_kwargs)
-        poly_element = poly!(ax, [Point2f(0.0, 0.0)], color = plot_kwargs[:selection_color], visible = false)
+        poly_element = poly!(ax, [Point2f(0.0, 0.0)], color = (plot_kwargs[:selection_color], plot_kwargs[:selection_alpha]), visible = false)
         new(Observable(false), Observable((0.0, 0.0)), Observable(false), poly_element, Observable([]), [])
     end
 end
@@ -371,7 +372,7 @@ function _setup_ui(fig, ax, state::DataBrowserState{<:AbstractDataState}, dat, i
     _build_grid_components!(fig, dat, state, toggles, labels_menu, reference_menu, ica_menu, extra_menu, epoch_menu)
 
     # Apply theme
-    update_theme!(Theme(fontsize = plot_kwargs[:ui_fontsize]))
+    update_theme!(Theme(fontsize = plot_kwargs[:theme_fontsize]))
     hideydecorations!(ax, label = true)
 
     return state
@@ -1465,7 +1466,7 @@ function _add_region_to_selection!(ax, state, x1, x2)
         Point2f(Float64(x2), Float64(ylims[2])),
         Point2f(Float64(x1), Float64(ylims[2])),
     ]
-    region_plot = poly!(ax, region_points, color = state.plot_kwargs[:selection_color], strokecolor = :transparent)
+    region_plot = poly!(ax, region_points, color = (state.plot_kwargs[:selection_color], state.plot_kwargs[:selection_alpha]), strokecolor = :transparent)
     push!(state.selection.region_plots, region_plot)
 
     # Update analysis settings

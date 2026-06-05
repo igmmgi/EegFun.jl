@@ -20,15 +20,17 @@ mutable struct SharedSelectionState
     selection_rectangles::Vector{Makie.Poly}
     selection_bounds::Vector{Tuple{Float64,Float64,Float64,Float64}}
     current_selection_idx::Union{Int,Nothing}
+    selection_color::Symbol
+    selection_alpha::Float64
 
-    function SharedSelectionState(axes::Vector{Axis})
+    function SharedSelectionState(axes::Vector{Axis}; selection_color::Symbol = :blue, selection_alpha::Float64 = 0.3)
         # Create time selection rectangles for each axis
         rectangles = [
             poly!(
                 ax,
                 [Point2f(0.0, 0.0)],
-                color = (:blue, 0.3),
-                strokecolor = :darkblue,
+                color = (selection_color, selection_alpha),
+                strokecolor = selection_color,
                 strokewidth = 1,
                 visible = false,
                 overdraw = true,
@@ -45,6 +47,8 @@ mutable struct SharedSelectionState
             Makie.Poly[],
             Tuple{Float64,Float64,Float64,Float64}[],
             nothing,
+            selection_color,
+            selection_alpha,
         )
     end
 end
@@ -57,11 +61,11 @@ end
 
 Set up keyboard interactivity for plots.
 """
-function _setup_shared_interactivity!(fig::Figure, axes::Vector{Axis}, keyboard_actions::Dict = SHARED_KEYBOARD_ACTIONS)
+function _setup_shared_interactivity!(fig::Figure, axes::Vector{Axis}, keyboard_actions::Dict = SHARED_KEYBOARD_ACTIONS; zoom_step::Float64 = 0.2)
     on(events(fig).keyboardbutton) do event
         if event.action in (Keyboard.press, Keyboard.repeat) && haskey(keyboard_actions, event.key)
             action = keyboard_actions[event.key]
-            _handle_shared_navigation!(axes, action)
+            _handle_shared_navigation!(axes, action, zoom_step)
         end
     end
 end
@@ -71,9 +75,9 @@ end
 
 Set up keyboard interactivity for plots with help system.
 """
-function _setup_shared_interactivity!(fig::Figure, axes::Vector{Axis}, plot_type::Symbol, keyboard_actions::Dict = SHARED_KEYBOARD_ACTIONS)
+function _setup_shared_interactivity!(fig::Figure, axes::Vector{Axis}, plot_type::Symbol, keyboard_actions::Dict = SHARED_KEYBOARD_ACTIONS; zoom_step::Float64 = 0.2)
     # Set up basic navigation
-    _setup_shared_interactivity!(fig, axes, keyboard_actions)
+    _setup_shared_interactivity!(fig, axes, keyboard_actions; zoom_step = zoom_step)
 
     # Set up help system
     _setup_help_interaction!(fig, plot_type)
@@ -84,17 +88,17 @@ end
 
 Handle navigation actions for plots using arrow keys.
 """
-function _handle_shared_navigation!(axes::Vector{Axis}, action::Symbol)
+function _handle_shared_navigation!(axes::Vector{Axis}, action::Symbol, zoom_step::Float64)
     # Only zoom the first axis - the linkaxes! will handle synchronizing all others
     ax = first(axes)
     if action == :up
-        _ymore!(ax)
+        _ymore!(ax, zoom_step)
     elseif action == :down
-        _yless!(ax)
+        _yless!(ax, zoom_step)
     elseif action == :left
-        _xless!(ax)
+        _xless!(ax, zoom_step)
     elseif action == :right
-        _xmore!(ax)
+        _xmore!(ax, zoom_step)
     end
 end
 
@@ -103,8 +107,8 @@ end
 
 Zoom in on Y-axis by compressing the limits (zoom in on waveforms).
 """
-function _ymore!(ax::Axis)
-    ylims!(ax, ax.yaxis.attributes.limits[] .* 0.8)
+function _ymore!(ax::Axis, zoom_step::Float64)
+    ylims!(ax, ax.yaxis.attributes.limits[] .* (1.0 - zoom_step))
 end
 
 """
@@ -112,8 +116,8 @@ end
 
 Zoom out on Y-axis by expanding the limits (zoom out from waveforms).
 """
-function _yless!(ax::Axis)
-    ylims!(ax, ax.yaxis.attributes.limits[] .* 1.25)
+function _yless!(ax::Axis, zoom_step::Float64)
+    ylims!(ax, ax.yaxis.attributes.limits[] .* (1.0 / (1.0 - zoom_step)))
 end
 
 """
@@ -121,8 +125,8 @@ end
 
 Zoom in on X-axis by compressing the limits (zoom in on time range).
 """
-function _xmore!(ax::Axis)
-    xlims!(ax, ax.xaxis.attributes.limits[] .* 0.8)
+function _xmore!(ax::Axis, zoom_step::Float64)
+    xlims!(ax, ax.xaxis.attributes.limits[] .* (1.0 - zoom_step))
 end
 
 """
@@ -130,8 +134,8 @@ end
 
 Zoom out on X-axis by expanding the limits (zoom out from time range).
 """
-function _xless!(ax::Axis)
-    xlims!(ax, ax.xaxis.attributes.limits[] .* 1.25)
+function _xless!(ax::Axis, zoom_step::Float64)
+    xlims!(ax, ax.xaxis.attributes.limits[] .* (1.0 / (1.0 - zoom_step)))
 end
 
 # =============================================================================
@@ -274,7 +278,7 @@ function _update_figure_channel_selection!(fig::Figure, selection_state::SharedS
     current_idx = selection_state.current_selection_idx
     if isnothing(current_idx) || current_idx > length(selection_state.selection_rectangles)
         rect_points = [Point2f(x1, y1), Point2f(x2, y1), Point2f(x2, y2), Point2f(x1, y2)]
-        rect = poly!(fig.scene, rect_points, color = (:blue, 0.3), strokecolor = :red, strokewidth = 2, overdraw = true, space = :relative)
+        rect = poly!(fig.scene, rect_points, color = (selection_state.selection_color, selection_state.selection_alpha), strokecolor = :red, strokewidth = 2, overdraw = true, space = :relative)
         push!(selection_state.selection_rectangles, rect)
         push!(selection_state.selection_bounds, (x1, y1, x2, y2))
     else
@@ -339,7 +343,7 @@ function _finish_figure_channel_selection!(
         empty!(selection_state.channel_rectangles)
     end
     if !isempty(all_overlapping_axes_rects)
-        new_rectangles = _draw_channel_rectangles!(fig, all_overlapping_axes_rects)
+        new_rectangles = _draw_channel_rectangles!(fig, all_overlapping_axes_rects, selection_state.selection_color, selection_state.selection_alpha)
         append!(selection_state.channel_rectangles, new_rectangles)
     end
     if !isempty(unique_channels)
@@ -374,7 +378,7 @@ end
 
 Draw highlight rectangles for selected channels.
 """
-function _draw_channel_rectangles!(fig::Figure, all_overlapping_axes_rects)
+function _draw_channel_rectangles!(fig::Figure, all_overlapping_axes_rects, selection_color::Symbol = :blue, selection_alpha::Float64 = 0.6)
     rectangles = []
     for (axis_rect, channels) in all_overlapping_axes_rects
         rect = poly!(
@@ -385,8 +389,8 @@ function _draw_channel_rectangles!(fig::Figure, all_overlapping_axes_rects)
                 Point2f(axis_rect[3], axis_rect[4]),
                 Point2f(axis_rect[1], axis_rect[4]),
             ],
-            color = (:blue, 0.6),
-            strokecolor = :darkblue,
+            color = (selection_color, selection_alpha * 2.0 > 1.0 ? 1.0 : selection_alpha * 2.0), # slightly more opaque for channels
+            strokecolor = selection_color,
             strokewidth = 2,
             overdraw = true,
             space = :relative,

@@ -290,12 +290,33 @@ Apply axis limits, labels, and direction to the axis.
 - `ylabel`: Label for y-axis (default: empty string)
 - `yreversed`: Whether to reverse the y-axis (default: false)
 """
-function _set_axis_properties!(ax; xlim = nothing, ylim = nothing, xlabel = "", ylabel = "", yreversed = false)
+function _set_axis_properties!(ax; xlim = nothing, ylim = nothing, xlabel = "", ylabel = "", yreversed = false, scale_x_value = nothing, scale_y_value = nothing)
 
     # Set axis labels
     ax.xlabel = xlabel
     ax.ylabel = ylabel
     ax.yreversed = yreversed
+
+    # Set exact tick spacing if provided by the user
+    if !isnothing(scale_x_value)
+        ax.xticks = (vmin, vmax) -> begin
+            start_x = ceil(vmin / scale_x_value) * scale_x_value
+            end_x = floor(vmax / scale_x_value) * scale_x_value
+            ticks = collect(start_x:scale_x_value:(end_x + 1e-9))
+            labels = string.(round.(ticks, sigdigits=4))
+            return ticks, labels
+        end
+    end
+    
+    if !isnothing(scale_y_value)
+        ax.yticks = (vmin, vmax) -> begin
+            start_y = ceil(vmin / scale_y_value) * scale_y_value
+            end_y = floor(vmax / scale_y_value) * scale_y_value
+            ticks = collect(start_y:scale_y_value:(end_y + 1e-9))
+            labels = string.(round.(ticks, sigdigits=4))
+            return ticks, labels
+        end
+    end
 
     # Set axis limits
     !isnothing(xlim) && xlims!(ax, xlim[1], xlim[2])
@@ -321,6 +342,88 @@ function _set_origin_lines!(ax; add_xy_origin = true, color = :gray, linewidth =
     if add_xy_origin
         hlines!(ax, 0, color = color, linewidth = linewidth, alpha = alpha)
         vlines!(ax, 0, color = color, linewidth = linewidth, alpha = alpha)
+    end
+end
+
+"""
+    _add_origin_scale_indicator!(ax; show_scale_indicator = false, scale_x_value = 0.1, scale_y_value = 10.0, scale_x_label = "s", scale_y_label = "μV")
+
+Replace outer spines and ticks with crosshair axes passing through the origin.
+"""
+function _add_origin_scale_indicator!(
+    ax;
+    axis_type = :standard,
+    scale_x_value = nothing,
+    scale_y_value = nothing,
+    xlabel = "s",
+    ylabel = "μV",
+)
+    if axis_type == :origin
+        # Hide standard spines and decorations
+        hidedecorations!(ax)
+        hidespines!(ax)
+
+        # Draw the thick scale bars starting from (0,0)?
+        # No, for crosshair axes, the origin lines themselves ARE the axes.
+        # We can just keep the hlines! and vlines! from _set_origin_lines! (which are already drawn)
+        # But we'll add our own thick crosshair lines if we want them to stand out
+        hlines!(ax, 0, color = :black, linewidth = 1, overdraw = true)
+        vlines!(ax, 0, color = :black, linewidth = 1, overdraw = true)
+
+        # Compute tick positions dynamically based on scale_x_value and scale_y_value
+        x_ticks_obs = lift(ax.finallimits) do lims
+            min_x, max_x = lims.origin[1], lims.origin[1] + lims.widths[1]
+            start_x = ceil(min_x / scale_x_value) * scale_x_value
+            end_x = floor(max_x / scale_x_value) * scale_x_value
+            # Floating point issues can make range collection problematic, so we use a small epsilon
+            collect(start_x:scale_x_value:(end_x + 1e-9))
+        end
+
+        y_ticks_obs = lift(ax.finallimits) do lims
+            min_y, max_y = lims.origin[2], lims.origin[2] + lims.widths[2]
+            start_y = ceil(min_y / scale_y_value) * scale_y_value
+            end_y = floor(max_y / scale_y_value) * scale_y_value
+            collect(start_y:scale_y_value:(end_y + 1e-9))
+        end
+
+        # Format labels
+        x_labels_obs = lift(x_ticks_obs) do ticks
+            [string(round(t, sigdigits=3)) for t in ticks]
+        end
+        y_labels_obs = lift(y_ticks_obs) do ticks
+            [string(round(t, sigdigits=3)) for t in ticks]
+        end
+
+        # Tick markers (small lines crossing the axes)
+        x_pts_obs = lift(x_ticks_obs) do ticks
+            [Point2f(t, 0.0) for t in ticks if abs(t) > 1e-9]
+        end
+        y_pts_obs = lift(y_ticks_obs) do ticks
+            [Point2f(0.0, t) for t in ticks if abs(t) > 1e-9]
+        end
+        scatter!(ax, x_pts_obs, marker='|', markersize=10, color=:black, overdraw=true, xautolimits=false, yautolimits=false)
+        scatter!(ax, y_pts_obs, marker='-', markersize=10, color=:black, overdraw=true, xautolimits=false, yautolimits=false)
+
+        # Text labels
+        x_lbls = lift(x_labels_obs, x_ticks_obs) do labels, ticks
+            [l for (l, t) in zip(labels, ticks) if abs(t) > 1e-9]
+        end
+        y_lbls = lift(y_labels_obs, y_ticks_obs) do labels, ticks
+            [l for (l, t) in zip(labels, ticks) if abs(t) > 1e-9]
+        end
+        text!(ax, x_pts_obs, text=x_lbls, align=(:center, :top), offset=(0, -8), color=:black, fontsize=12, overdraw=true, xautolimits=false, yautolimits=false)
+        text!(ax, y_pts_obs, text=y_lbls, align=(:right, :center), offset=(-8, 0), color=:black, fontsize=12, overdraw=true, xautolimits=false, yautolimits=false)
+        
+        # Axis labels (Time and Amplitude)
+        # Place them at the end of the axes
+        x_axis_label_pos = lift(ax.finallimits) do lims
+            Point2f(lims.origin[1] + lims.widths[1], 0.0)
+        end
+        y_axis_label_pos = lift(ax.finallimits) do lims
+            Point2f(0.0, lims.origin[2] + lims.widths[2])
+        end
+        text!(ax, x_axis_label_pos, text=string(" ", xlabel), align=(:left, :center), color=:black, fontsize=14, overdraw=true, xautolimits=false, yautolimits=false)
+        text!(ax, y_axis_label_pos, text=string(ylabel, " "), align=(:center, :bottom), color=:black, fontsize=14, overdraw=true, xautolimits=false, yautolimits=false)
     end
 end
 

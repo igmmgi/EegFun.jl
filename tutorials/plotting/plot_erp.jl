@@ -45,7 +45,19 @@ EegFun.plot_erp(
     layout_grid_skip_positions = [(2, 1)],
 )
 
-EegFun.plot_erp(erps, channel_selection = EegFun.channels([:Cz, :PO7, :PO8, :Fp1, :Fp2, :F3]), layout = :grid, layout_grid_dims = (2, 3))
+EegFun.plot_erp(
+    erps,
+    channel_selection = EegFun.channels([:Cz, :PO7, :PO8, :Fp1, :Fp2, :F3]),
+    layout = :grid,
+    layout_grid_dims = (2, 3),
+    axis_type = :origin,
+    scale_x_value = 0.5,
+    scale_y_value = 5.0,
+    xlabel = "s",
+    ylabel = "μV",
+)
+
+
 
 EegFun.plot_erp(
     erps,
