@@ -1001,31 +1001,17 @@ _restore_channel_data!(data::EegData, channels, original_data) = data.data[:, ch
 
 
 """Create extreme-value slider. Returns a list of `hcat` rows for stacking."""
-function _create_common_sliders(fig, state, dat)
-    # Ensure default filter frequencies are set if not already
-    filter_configs = [(:hp_filter, :hp_freq, 0.5), (:lp_filter, :lp_freq, 20.0)]
-    for (filter_field, freq_field, default_val) in filter_configs
-        if getfield(dat.analysis_info, filter_field) == 0.0
-            if getfield(state.data.filter_state, freq_field)[] == 0.0
-                getfield(state.data.filter_state, freq_field)[] = default_val
-            end
-        end
-    end
-
-    sliders = []
-
+function _create_extreme_slider(fig, state)
     slider_extreme = Slider(fig, range = 0:5:100, startvalue = 0, width = 100)
     on(slider_extreme.value) do x
         state.view.crit_val[] = x
     end
-    push!(sliders, hcat(slider_extreme, Label(fig, @lift("Extreme: $($(slider_extreme.value)) μV"), fontsize = 22)))
-
-    return sliders
+    return [hcat(slider_extreme, Label(fig, @lift(string("Extreme: ", $(slider_extreme.value), " μV")), fontsize = 22))]
 end
 
 """Create sliders for continuous data — includes x-range and position."""
 function _create_sliders(fig, state::ContinuousDataBrowserState, dat)
-    sliders = _create_common_sliders(fig, state, dat)
+    sliders = _create_extreme_slider(fig, state)
 
     # Add navigation sliders specific to continuous data
     slider_range = Slider(fig[3, 1], range = 100:50:30000, startvalue = state.view.xrange[][end], snap = true)
@@ -1048,9 +1034,9 @@ function _create_sliders(fig, state::ContinuousDataBrowserState, dat)
     return sliders
 end
 
-"""Create sliders for epoched data (common sliders only)."""
+"""Create sliders for epoched data (extreme slider only)."""
 function _create_sliders(fig, state::EpochedDataBrowserState, dat)
-    return _create_common_sliders(fig, state, dat)
+    return _create_extreme_slider(fig, state)
 end
 
 """Popup: select which extra channels to overlay."""
