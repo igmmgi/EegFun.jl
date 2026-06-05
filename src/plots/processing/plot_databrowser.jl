@@ -391,18 +391,73 @@ function _create_toggles(fig, ax, state)
     end
 
     # Create toggles
-    toggles = [(config.label, Toggle(fig), config.action) for config in configs]
-
-    # Setup observers for toggle actions
-    for toggle in toggles
-        on(toggle[2].active) do active
-            toggle[3](active)
+    toggles_grid = []
+    for config in configs
+        tog = Toggle(fig)
+        on(tog.active) do active
+            config.action(active)
+        end
+        
+        if config.label == "Trigger"
+            btn = Button(fig, label="Trigger", halign=:left)
+            on(btn.clicks) do _
+                _show_trigger_menu(state, ax, :trigger)
+            end
+            push!(toggles_grid, [tog, btn])
+        else
+            lbl = Label(fig, config.label, fontsize = 22, halign = :left)
+            push!(toggles_grid, [tog, lbl])
         end
     end
 
     # Return as grid layout
-    return permutedims(reduce(hcat, [[t[2], Label(fig, t[1], fontsize = 22, halign = :left)] for t in toggles]))
+    return permutedims(reduce(hcat, toggles_grid))
 
+end
+
+"""Popup: select which triggers to display."""
+function _show_trigger_menu(state, ax, marker_symbol)
+    trigger_col = if state.data isa ContinuousDataState
+        state.data.original.data[!, marker_symbol]
+    else
+        vcat([df[!, marker_symbol] for df in state.data.original.data]...)
+    end
+    unique_triggers = sort(unique(filter(!iszero, trigger_col)))
+
+    if !haskey(state.plot_kwargs, :active_triggers)
+        state.plot_kwargs[:active_triggers] = Set(unique_triggers)
+    end
+    active_set = state.plot_kwargs[:active_triggers]
+
+    menu_fig = Figure(size = (600, 600))
+    Label(menu_fig[1, 1], "Select Triggers to Display", fontsize=18, halign=:center)
+
+    scroll_area = menu_fig[2, 1] = GridLayout()
+    cbs = _build_checkbox_grid!(scroll_area, string.(unique_triggers), 5, (trig, _) -> (parse(Float64, trig) in active_set))
+
+    groups = [
+        ("All", ch -> true),
+        ("None", ch -> false),
+    ]
+    _add_group_buttons!(menu_fig, 3, cbs, string.(unique_triggers), groups)
+
+    action_area = menu_fig[4, 1] = GridLayout()
+    btn_apply = Button(action_area[1, 1], label="Apply", width=200)
+    on(btn_apply.clicks) do _
+        empty!(active_set)
+        for (i, cb) in enumerate(cbs)
+            if cb.checked[]
+                push!(active_set, unique_triggers[i])
+            end
+        end
+        # Force redraw with new selected triggers
+        _update_markers!(ax, state)
+        
+        # Ensure the toggle matches the new state (if any triggers are selected, turn the main toggle ON)
+        # Note: In the future, we could sync the main Toggle UI state, but for now just updating markers works.
+    end
+
+    display(GLMakie.Screen(), menu_fig)
 end
 
 
@@ -1546,13 +1601,19 @@ end
 # Drawing
 ########################
 """Add a vertical marker (trigger/EOG) to the marker list."""
-function _add_marker!(markers, ax, data, col; label = nothing, trial = nothing, visible = false)
+function _add_marker!(markers, ax, data, col; label = nothing, trial = nothing, visible = false, active_values = nothing)
     if isnothing(trial)
         # More efficient: filter directly without findall
         mask = data[!, col] .!= 0
+        if !isnothing(active_values)
+            mask .&= map(v -> v in active_values, data[!, col])
+        end
         marker_data = data[mask, [:time, col]]
     else
         mask = data[trial][!, col] .!= 0
+        if !isnothing(active_values)
+            mask .&= map(v -> v in active_values, data[trial][!, col])
+        end
         marker_data = data[trial][mask, [:time, col]]
     end
 
@@ -1565,8 +1626,9 @@ function _add_marker!(markers, ax, data, col; label = nothing, trial = nothing, 
         markers,
         Marker(
             marker_data,
-            vlines!(marker_data.time, color = :grey, linewidth = 1, visible = visible),
+            vlines!(ax, marker_data.time, color = :grey, linewidth = 1, visible = visible),
             text!(
+                ax,
                 label,
                 position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in marker_data.time],
                 space = :data,
@@ -1641,7 +1703,8 @@ function _init_markers(ax, state; marker_visible = Dict{Symbol,Bool}())
     # Add markers based on configuration
     for (symbol, label) in marker_configs
         if _has_column(state.data, symbol)
-            _add_marker!(markers, ax, data, symbol, label = label, visible = get(marker_visible, symbol, false))
+            active_vals = symbol == :trigger ? get(state.plot_kwargs, :active_triggers, nothing) : nothing
+            _add_marker!(markers, ax, data, symbol, label = label, visible = get(marker_visible, symbol, false), active_values = active_vals)
         end
     end
 
