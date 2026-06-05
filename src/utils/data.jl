@@ -1949,11 +1949,9 @@ function _create_eegfun_dataframe(dat::BrainVisionDataFormat.BrainVisionData)::D
 
     # Create trigger and marker strings columns from markers
     if isnothing(dat.markers) || isempty(dat.markers)
-        @info "_create_eegfun_dataframe: No markers found, creating empty trigger columns"
         trigger = zeros(Int, n_samples)
         trigger_info = fill("", n_samples)
     else
-        @info "_create_eegfun_dataframe: Found $(length(dat.markers)) markers"
         trigger, trigger_info = _extract_triggers_from_markers(dat.markers, n_samples)
     end
 

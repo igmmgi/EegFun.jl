@@ -15,6 +15,13 @@ raw_xdf = EegFun.read_raw_data(EegFun.example_path("data/xdf/test1.xdf"))
 # Using the fallback auto-generated layout
 dat = EegFun.create_eegfun_data(raw_xdf)
 
+EegFun.all_data(dat)
+EegFun.meta_data(dat)
+EegFun.all_labels(dat)
+EegFun.channel_labels(dat)
+EegFun.meta_labels(dat)
+EegFun.extra_labels(dat) # empty
+
 # Basic preprocessing
 EegFun.highpass_filter!(dat, 1.0) # 1 Hz high-pass filter
 EegFun.rereference!(dat, :avg)    # Average reference
@@ -23,4 +30,4 @@ println("\nTrigger summary:")
 EegFun.trigger_count(dat)
 
 # Open interactive databrowser
-# EegFun.plot_databrowser(dat);
+EegFun.plot_databrowser(dat);
