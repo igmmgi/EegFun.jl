@@ -864,12 +864,6 @@ _restore_channel_data!(data::EegData, channels, original_data) = data.data[:, ch
 function _create_common_sliders(fig, state, dat)
     sliders = []
 
-    slider_extreme = Slider(fig, range = 0:5:100, startvalue = 0, width = 100)
-    on(slider_extreme.value) do x
-        state.view.crit_val[] = x
-    end
-    push!(sliders, hcat(slider_extreme, Label(fig, @lift("Extreme: $($(slider_extreme.value)) μV"), fontsize = 22)))
-
     filter_configs = [(:hp_filter, :hp_freq, 0.1:0.1:2, 0.5, "HP-Filter"), (:lp_filter, :lp_freq, 5:5:60, 20, "LP-Filter")]
     for (filter_field, freq_field, range, startval, label) in filter_configs
         if getfield(dat.analysis_info, filter_field) == 0.0
@@ -881,6 +875,12 @@ function _create_common_sliders(fig, state, dat)
             push!(sliders, hcat(slider, Label(fig, @lift("$label: $($(slider.value)) Hz"), fontsize = 22)))
         end
     end
+
+    slider_extreme = Slider(fig, range = 0:5:100, startvalue = 0, width = 100)
+    on(slider_extreme.value) do x
+        state.view.crit_val[] = x
+    end
+    push!(sliders, hcat(slider_extreme, Label(fig, @lift("Extreme: $($(slider_extreme.value)) μV"), fontsize = 22)))
 
     return sliders
 end

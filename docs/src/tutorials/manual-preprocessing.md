@@ -3,7 +3,7 @@
 While `EegFun.jl` provides the automated `preprocess()` pipeline for batch processing, you may want to manually control each step of preprocessing for exploration, customization, or teaching purposes. This tutorial explains the **why** and **when** behind each preprocessing step.
 
 > [!TIP]
-> See the [preprocessing_workflow demo](../demos/workflows/preprocessing_workflow.md) for a complete working example.
+> See the [preprocessing_workflow demo](../tutorials/workflows/preprocessing_workflow.md) for a complete working example.
 > The automated equivalent of this workflow is documented in [Batch Processing](batch-processing.md).
 
 ## The Preprocessing Philosophy
@@ -402,4 +402,4 @@ graph TD
 - **Artifact detection** — [Artifact Handling](artifact-handling.md) for detecting and repairing bad channels and epochs
 - **Automating this workflow** — [Batch Processing](batch-processing.md) for running `preprocess`/`preprocess_v2` across a full cohort
 - **Selection syntax** — [Selection Patterns](selection-patterns.md) for channel, sample, and epoch filters used throughout preprocessing
-- **Working example** — [Preprocessing Workflow demo](../demos/workflows/preprocessing_workflow.md)
+- **Working example** — [Preprocessing Workflow demo](../tutorials/workflows/preprocessing_workflow.md)

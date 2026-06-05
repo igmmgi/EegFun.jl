@@ -96,7 +96,7 @@ EegFun.plot_topography(erps, interval_selection = (0.1, 0.2)) # between 100 and 
 | Section | Description |
 |---------|-------------|
 | [Tutorials](tutorials/getting-started.md) | Step-by-step guides |
-| [How-to Guides](demos/workflows/preprocessing_workflow.md) | Code examples and demonstrations |
+| [How-to Guides](tutorials/workflows/preprocessing_workflow.md) | Code examples and demonstrations |
 | [Background](explanations/data-structures.md) | Core concepts and architecture |
 | [API Reference](reference/index.md) | Complete function and type documentation |
 

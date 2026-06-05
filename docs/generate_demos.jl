@@ -6,6 +6,9 @@ demos = [
     # Import
     ("import", "biosemi_import", "BioSemi Import"),
     ("import", "brainvision_import", "BrainVision Import"),
+    ("import", "edf_import", "EDF Import"),
+    ("import", "fif_import", "FIF Import"),
+    ("import", "xdf_import", "XDF Import"),
     ("import", "eeglab_import", "EEGLAB Import"),
     ("import", "fieldtrip_import", "FieldTrip Import"),
     ("import", "jld2", "Data Persistence (JLD2)"),
@@ -91,8 +94,8 @@ demos = [
 for demo_info in demos
     subfolder, filename, title = demo_info
 
-    source_file = "demos/$(subfolder)/$(filename).jl"
-    output_file = "docs/src/demos/$(subfolder)/$(filename).md"
+    source_file = "tutorials/$(subfolder)/$(filename).jl"
+    output_file = "docs/src/tutorials/$(subfolder)/$(filename).md"
     overview_file = "docs/overviews/$(subfolder)/$(filename).md"
 
     if !isfile(source_file)
