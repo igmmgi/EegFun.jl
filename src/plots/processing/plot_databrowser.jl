@@ -201,7 +201,7 @@ mutable struct DataBrowserState{T<:AbstractDataState}
     ica::IcaVisualState
     extra_channel::ExtraChannelInfo
     reference_state::Symbol
-    channel_repair_history::Vector{Tuple{Vector{Symbol},Symbol,Matrix{Float64}}}  # (channels, method, original_data) - stack for multiple undos
+    channel_repair_history::Vector{Tuple{Vector{Symbol},Symbol,Any}}  # (channels, method, original_data) - stack for multiple undos
     analysis_settings::Observable{AnalysisSettings}  # Observable analysis settings
     plot_kwargs::Dict{Symbol,Any}
 
@@ -995,10 +995,16 @@ end
 
 
 """Extract a matrix of selected channel columns from EEG data."""
-_get_channel_data_matrix(data::EegData, channels) = Matrix(data.data[:, channels])
+_get_channel_data_matrix(data::SingleDataFrameEeg, channels) = Matrix(data.data[:, channels])
+_get_channel_data_matrix(data::MultiDataFrameEeg, channels) = [Matrix(epoch[:, channels]) for epoch in data.data]
 
 """Write previously saved channel data back into the dataset."""
-_restore_channel_data!(data::EegData, channels, original_data) = data.data[:, channels] = original_data
+_restore_channel_data!(data::SingleDataFrameEeg, channels, original_data) = data.data[:, channels] = original_data
+function _restore_channel_data!(data::MultiDataFrameEeg, channels, original_data)
+    for (i, epoch) in enumerate(data.data)
+        epoch[:, channels] = original_data[i]
+    end
+end
 
 
 """Create extreme-value slider. Returns a list of `hcat` rows for stacking."""
@@ -2009,15 +2015,15 @@ end
 
 """Hide a single channel label."""
 function _hide_channel_label!(data_labels, col)
-    haskey(data_labels, col) && hide!(data_labels[col])
+    haskey(data_labels, col) && (data_labels[col].visible = false)
 end
 
 """Hide both line and label for a channel."""
 function _hide_channel_objects!(channels, col)
-    haskey(channels.data_lines, col) && hide!(channels.data_lines[col])
-    haskey(channels.data_labels, col) && hide!(channels.data_labels[col])
-    haskey(channels.original_lines, col) && hide!(channels.original_lines[col])
-    haskey(channels.subtracted_lines, col) && hide!(channels.subtracted_lines[col])
+    haskey(channels.data_lines, col) && (channels.data_lines[col].visible = false)
+    haskey(channels.data_labels, col) && (channels.data_labels[col].visible = false)
+    haskey(channels.original_lines, col) && (channels.original_lines[col].visible = false)
+    haskey(channels.subtracted_lines, col) && (channels.subtracted_lines[col].visible = false)
 end
 
 # Single function with data access abstraction
