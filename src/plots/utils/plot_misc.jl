@@ -41,32 +41,250 @@ function _find_continuous_regions(mask::BitVector, time_points::Vector{Float64})
     return regions
 end
 
+function _open_save_settings_dialog(fig)
+    fig_settings = Figure(size = (550, 350), figure_padding = 20)
+    rowgap!(fig_settings.layout, 12)
+    colgap!(fig_settings.layout, 15)
+
+    Label(fig_settings[1, 1:2], "Export Figure Settings", fontsize = 18, halign = :center, font = :bold)
+
+    Label(fig_settings[2, 1], "Format:", halign = :left, font = :bold)
+    format_menu = Menu(fig_settings[2, 2], options = ["PNG", "PDF", "SVG", "JPG"], default = "PNG", halign = :left, width = 220)
+
+    Label(fig_settings[3, 1], "Resolution (DPI):", halign = :left, font = :bold)
+    scale_menu = Menu(fig_settings[3, 2], options = ["72 DPI", "150 DPI", "300 DPI", "600 DPI"], default = "72 DPI", halign = :left, width = 220)
+    scale_na_label = Label(fig_settings[3, 2], "N/A (Vector Graphics are resolution-independent)", halign = :left, font = :italic)
+    scale_na_label.blockscene.visible[] = false
+
+    Label(fig_settings[4, 1], "Output Size (W × H):", halign = :left, font = :bold)
+    size_grid = GridLayout(fig_settings[4, 2], halign = :left)
+    w_orig, h_orig = size(fig.scene)
+    w_orig_cm = round(w_orig * 2.54 / 72.0, digits = 2)
+    h_orig_cm = round(h_orig * 2.54 / 72.0, digits = 2)
+
+    w_box = Textbox(size_grid[1, 1], validator = Float64, width = 80)
+    Label(size_grid[1, 2], "×", font = :bold)
+    h_box = Textbox(size_grid[1, 3], validator = Float64, width = 80)
+    Label(size_grid[1, 4], "cm", font = :bold)
+
+    lock_toggle = Toggle(size_grid[1, 5], active = true, halign = :left)
+    Label(size_grid[1, 6], "Lock Aspect", font = :bold)
+    colgap!(size_grid, 6)
+
+    # Initial values
+    w_box.displayed_string[] = string(w_orig_cm)
+    w_box.stored_string[] = string(w_orig_cm)
+    h_box.displayed_string[] = string(h_orig_cm)
+    h_box.stored_string[] = string(h_orig_cm)
+
+    Label(fig_settings[5, 1], "Output Pixels:", halign = :left, font = :bold)
+    pixel_label = Label(fig_settings[5, 2], "", halign = :left)
+
+    Label(fig_settings[6, 1], "Transparent Background:", halign = :left, font = :bold)
+    transparent_toggle = Toggle(fig_settings[6, 2], active = false, halign = :left)
+
+    export_button = Button(fig_settings[7, 1:2], label = "Select File & Save...", font = :bold)
+
+    function update_pixel_display()
+        fmt = format_menu.selection[]
+        if fmt in ("PDF", "SVG")
+            pixel_label.text[] = "N/A (Vector Format)"
+            return
+        end
+
+        w_cm = tryparse(Float64, w_box.displayed_string[])
+        if isnothing(w_cm) || w_cm <= 0.0
+            w_cm = tryparse(Float64, w_box.stored_string[])
+        end
+        if isnothing(w_cm) || w_cm <= 0.0
+            w_cm = w_orig_cm
+        end
+
+        h_cm = tryparse(Float64, h_box.displayed_string[])
+        if isnothing(h_cm) || h_cm <= 0.0
+            h_cm = tryparse(Float64, h_box.stored_string[])
+        end
+        if isnothing(h_cm) || h_cm <= 0.0
+            h_cm = h_orig_cm
+        end
+
+        scale_str = scale_menu.selection[]
+        dpi_val = 72
+        if !isnothing(scale_str)
+            parsed_dpi = tryparse(Int, first(split(scale_str)))
+            if !isnothing(parsed_dpi)
+                dpi_val = parsed_dpi
+            end
+        end
+
+        w_px = round(Int, (w_cm / 2.54) * dpi_val)
+        h_px = round(Int, (h_cm / 2.54) * dpi_val)
+
+        pixel_label.text[] = "$(w_px) × $(h_px) px"
+    end
+
+    on(scale_menu.selection) do _
+        update_pixel_display()
+    end
+
+    on(format_menu.selection) do fmt
+        is_vector = fmt in ("PDF", "SVG")
+        scale_menu.blockscene.visible[] = !is_vector
+        scale_na_label.blockscene.visible[] = is_vector
+        update_pixel_display()
+    end
+
+    on(w_box.stored_string) do val_str
+        w_val = tryparse(Float64, val_str)
+        if !isnothing(w_val) && w_val > 0.0
+            if lock_toggle.active[]
+                h_curr = tryparse(Float64, h_box.stored_string[])
+                h_new = round(w_val * (h_orig / w_orig), digits = 2)
+                if isnothing(h_curr) || abs(h_curr - h_new) > 0.01
+                    h_box.displayed_string[] = string(h_new)
+                    h_box.stored_string[] = string(h_new)
+                end
+            end
+            update_pixel_display()
+        end
+    end
+
+    on(h_box.stored_string) do val_str
+        h_val = tryparse(Float64, val_str)
+        if !isnothing(h_val) && h_val > 0.0
+            if lock_toggle.active[]
+                w_curr = tryparse(Float64, w_box.stored_string[])
+                w_new = round(h_val * (w_orig / h_orig), digits = 2)
+                if isnothing(w_curr) || abs(w_curr - w_new) > 0.01
+                    w_box.displayed_string[] = string(w_new)
+                    w_box.stored_string[] = string(w_new)
+                end
+            end
+            update_pixel_display()
+        end
+    end
+
+    on(lock_toggle.active) do locked
+        if locked
+            w_val = tryparse(Float64, w_box.stored_string[])
+            if !isnothing(w_val) && w_val > 0.0
+                h_new = round(w_val * (h_orig / w_orig), digits = 2)
+                h_box.displayed_string[] = string(h_new)
+                h_box.stored_string[] = string(h_new)
+                update_pixel_display()
+            end
+        end
+    end
+
+    update_pixel_display()
+
+    on(export_button.clicks) do _
+        fmt = format_menu.selection[]
+        trans = transparent_toggle.active[]
+
+        # Determine dimensions in cm
+        w_str = w_box.displayed_string[]
+        w_cm = tryparse(Float64, w_str)
+        if isnothing(w_cm) || w_cm <= 0.0
+            w_cm = tryparse(Float64, w_box.stored_string[])
+        end
+        if isnothing(w_cm) || w_cm <= 0.0
+            w_cm = w_orig_cm
+        end
+
+        h_str = h_box.displayed_string[]
+        h_cm = tryparse(Float64, h_str)
+        if isnothing(h_cm) || h_cm <= 0.0
+            h_cm = tryparse(Float64, h_box.stored_string[])
+        end
+        if isnothing(h_cm) || h_cm <= 0.0
+            h_cm = h_orig_cm
+        end
+
+        scale_str = scale_menu.selection[]
+        dpi_val = 72
+        if !isnothing(scale_str)
+            parsed_dpi = tryparse(Int, first(split(scale_str)))
+            if !isnothing(parsed_dpi)
+                dpi_val = parsed_dpi
+            end
+        end
+
+        # Calculate final size in points
+        w_target_pt = (w_cm / 2.54) * 72.0
+        h_target_pt = (h_cm / 2.54) * 72.0
+
+        ext_map = Dict("PNG" => ".png", "PDF" => ".pdf", "SVG" => ".svg", "JPG" => ".jpg")
+        filter_ext = ext_map[fmt]
+
+        @async begin
+            try
+                # Close settings window
+                screen = Makie.getscreen(fig_settings.scene)
+                if !isnothing(screen)
+                    close(screen)
+                end
+
+                # Open save file dialog with specific filter
+                path = NativeFileDialog.save_file(pwd(); filterlist = lowercase(fmt))
+                if !isempty(path)
+                    # Append correct extension if missing
+                    if !endswith(lowercase(path), filter_ext)
+                        path = path * filter_ext
+                    end
+
+                    # Handle transparency
+                    orig_bg = fig.scene.backgroundcolor[]
+                    orig_content_bgs = Dict()
+                    if trans
+                        fig.scene.backgroundcolor[] = RGBAf(0, 0, 0, 0)
+                        for content in fig.content
+                            if hasproperty(content, :backgroundcolor) && content.backgroundcolor isa Observable
+                                orig_content_bgs[content] = content.backgroundcolor[]
+                                content.backgroundcolor[] = RGBAf(0, 0, 0, 0)
+                            end
+                        end
+                    end
+
+                    # Store original size and resize figure temporarily
+                    w_orig_sz, h_orig_sz = size(fig.scene)
+                    resize!(fig.scene, (w_target_pt, h_target_pt))
+
+                    try
+                        if filter_ext in (".pdf", ".svg")
+                            Makie.save(path, fig; backend = CairoMakie, pt_per_unit = 1.0)
+                        else
+                            Makie.save(path, fig; px_per_unit = dpi_val / 72.0)
+                        end
+                        @info "Figure saved to: $path"
+                    finally
+                        # Restore original figure size
+                        resize!(fig.scene, (w_orig_sz, h_orig_sz))
+
+                        if trans
+                            fig.scene.backgroundcolor[] = orig_bg
+                            for (content, bg) in orig_content_bgs
+                                content.backgroundcolor[] = bg
+                            end
+                        end
+                    end
+                end
+            catch err
+                @warn "Failed to save figure: $err"
+            end
+        end
+    end
+
+    display(fig_settings)
+end
+
+
+
 function _display_figure(fig)
     # Register keyboard shortcut for saving the figure
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press && event.key == Keyboard.s
-            @async begin
-                try
-                    # Use NativeFileDialog to choose the save path
-                    path = NativeFileDialog.save_file(pwd(); filterlist = "png,pdf,svg,jpg")
-                    if !isempty(path)
-                        # Append .png if no extension is provided
-                        ext = lowercase(splitext(path)[2])
-                        if isempty(ext)
-                            path = path * ".png"
-                            ext = ".png"
-                        end
-                        if ext in (".pdf", ".svg")
-                            Makie.save(path, fig; backend = CairoMakie)
-                        else
-                            Makie.save(path, fig)
-                        end
-                        @info "Figure saved to: $path"
-                    end
-                catch err
-                    @warn "Failed to save figure: $err"
-                end
-            end
+            _open_save_settings_dialog(fig)
         end
     end
 
