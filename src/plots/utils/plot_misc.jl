@@ -42,6 +42,34 @@ function _find_continuous_regions(mask::BitVector, time_points::Vector{Float64})
 end
 
 function _display_figure(fig)
+    # Register keyboard shortcut for saving the figure
+    on(events(fig).keyboardbutton) do event
+        if event.action == Keyboard.press && event.key == Keyboard.s
+            @async begin
+                try
+                    # Use NativeFileDialog to choose the save path
+                    path = NativeFileDialog.save_file(pwd(); filterlist = "png,pdf,svg,jpg")
+                    if !isempty(path)
+                        # Append .png if no extension is provided
+                        ext = lowercase(splitext(path)[2])
+                        if isempty(ext)
+                            path = path * ".png"
+                            ext = ".png"
+                        end
+                        if ext in (".pdf", ".svg")
+                            Makie.save(path, fig; backend = CairoMakie)
+                        else
+                            Makie.save(path, fig)
+                        end
+                        @info "Figure saved to: $path"
+                    end
+                catch err
+                    @warn "Failed to save figure: $err"
+                end
+            end
+        end
+    end
+
     backend = Makie.current_backend()
     screen = if backend == GLMakie
         GLMakie.Screen()
