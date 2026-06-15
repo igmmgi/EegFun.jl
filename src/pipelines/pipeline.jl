@@ -1,5 +1,5 @@
 """
-    preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing, log_level::Symbol = :info)
+    preprocess(config::String; base_dir::Union{String,Nothing} = nothing, log_level::Symbol = :info)
 
 Preprocess EEG data according to the specified configuration file.
 
@@ -14,10 +14,11 @@ Preprocess EEG data according to the specified configuration file.
 - Relative paths in the TOML config file are resolved relative to `base_dir`
 - If `base_dir` is not provided, it defaults to the directory containing the config file
 - Absolute paths in the TOML are used as-is
-- This allows you to use relative paths in your TOML files that work regardless of where
-  you run the script from, as long as the config file is in the same directory as your analysis script
+- Set `reference_channel = "none"` in the TOML to skip rereferencing (e.g., for data
+  recorded with an implicit reference that has already been handled)
+- Filter sections with `apply = false` are skipped automatically
 """
-function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing, log_level::Symbol = :info)
+function preprocess(config::String; base_dir::Union{String,Nothing} = nothing, log_level::Symbol = :info)
 
     # Use config file's directory as base_dir if not provided
     # This makes relative paths in TOML work relative to the analysis script location
@@ -37,6 +38,9 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
 
     try
 
+        # Setup for all analyses files:
+        # This involves loading the end-user config file, merging it with the default config, 
+        # and creating the PreprocessConfig struct.
         @info section("Setup")
         @info "Configuration Files:"
         !isfile(config) && @minimal_error "Config file does not exist: $config"
@@ -48,7 +52,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
         isnothing(default_config) && @minimal_error "Failed to load default configuration"
         cfg = _merge_configs(default_config, cfg)
 
-        # Resolve relative/absolute paths
+        # Resolve relative paths in config relative to base_dir
         resolve_path(path::String) = isabspath(path) ? path : joinpath(base_dir, path)
 
         # Resolve input directory
@@ -58,6 +62,18 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
         # Resolve output directory
         output_directory = resolve_path(cfg["files"]["output"]["directory"])
         !isdir(output_directory) && mkpath(output_directory)
+
+        # Resolve layout file path - try resolved path first, then fall back to package layouts
+        layout_file_path = resolve_path(cfg["files"]["input"]["layout_file"])
+        if !isfile(layout_file_path)
+            # Fall back to searching in package layouts directory
+            layout_file = find_file(cfg["files"]["input"]["layout_file"], joinpath(@__DIR__, "..", "..", "resources", "layouts"))
+            if !isnothing(layout_file)
+                layout_file_path = layout_file
+            end
+        end
+        !isfile(layout_file_path) && @minimal_error "Layout file not found: $layout_file_path"
+        layout = read_layout(layout_file_path)
 
         # Resolve epoch condition file path
         epoch_condition_file = resolve_path(cfg["files"]["input"]["epoch_condition_file"])
@@ -74,7 +90,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
             @minimal_error "No files found in '$input_directory' matching pattern '$(cfg["files"]["input"]["raw_data_files"])'. Check the 'directory' and 'raw_data_files' settings in your pipeline.toml."
         @info "Found $(length(raw_data_files)) files: $(_print_vector(basename.(raw_data_files)))"
 
-        # Read the epoch conditions defined within the toml file (See XXX for examples)
+        # Read the epoch conditions defined within the toml file
         !isfile(epoch_condition_file) && @minimal_error "File missing: $epoch_condition_file"
         epoch_cfgs = condition_parse_epoch(TOML.parsefile(epoch_condition_file))
         @info "Loading/parsing epoch file: $epoch_condition_file"
@@ -85,16 +101,21 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
         # print config to output directory
         print_config(cfg, joinpath(output_directory, "config.toml"))
 
+        # Layout coordinates and calculation of channel neighbours (2D/3D)
+        polar_to_cartesian_xy!(layout)
+        polar_to_cartesian_xyz!(layout)
+        get_neighbours_xy!(layout, preprocess_cfg.neighbour_criterion)
+        print_layout_neighbours(layout, joinpath(output_directory, "neighbours.toml"))
+
         # Actual start of preprocessing pipeline!
         # This is the main loop that processes each raw data file.
-        # TODO: embarrasingly parallel? use Threads.@threads?
         # Track processing results
         processed_files = 0
         failed_files = String[]
 
-
         for (file_idx, data_file) in enumerate(raw_data_files)
             @info "Processing file $file_idx/$(length(raw_data_files)): $(basename(data_file))"
+
             try
 
                 # Individual file processing
@@ -106,13 +127,33 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
 
                 ################### LOAD RAW DATA FILE ###################
                 @info section("Raw Data")
-                dat = read_data(data_file)
+                dat = create_eegfun_data(read_raw_data(data_file), layout)
+
+                # Save the original data in Julia format
+                if cfg["files"]["output"]["save_continuous_data_original"]
+                    @info "Saving continuous data (original)"
+                    jldsave(_make_output_filename(output_directory, data_file, "_continuous_original"); data = dat)
+                end
 
                 # Mark epoch intervals
                 # This is useful for x (time/sample) subsetting within the preprocessing pipeline
                 @info section("Marking epoch intervals")
                 @info "Epoch intervals: $([preprocess_cfg.epoch_start, preprocess_cfg.epoch_end])"
                 mark_epoch_intervals!(dat, epoch_cfgs, [preprocess_cfg.epoch_start, preprocess_cfg.epoch_end])
+
+                ################### REREFERENCE DATA ###################
+                if preprocess_cfg.reference_channel != :none
+                    @info section("Rereference")
+                    rereference!(dat, preprocess_cfg.reference_channel)
+                else
+                    @info section("Rereference")
+                    @info "Skipping rereferencing (reference_channel = none)"
+                end
+
+                ################### APPLY INITIAL FILTERS ###################
+                @info section("Initial Filters")
+                highpass_filter!(dat, preprocess_cfg.filter)
+                lowpass_filter!(dat, preprocess_cfg.filter)
 
                 #################### CALCULATE EOG CHANNELS ###################
                 @info section("EOG")
@@ -250,7 +291,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
                     # Identify all artifact components 
                     @info subsection("Component Identification")
                     component_artifacts, component_metrics = identify_components(
-                        dat, # dat_ica vs. dat makes a difference here! TODO: what is going on?
+                        dat,
                         ica,
                         sample_selection = samples_not(_flag_symbol("is_extreme_value", preprocess_cfg.eeg.extreme_value_abs_criterion)),
                     )
@@ -296,6 +337,12 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
                     channel_out = Symbol("is_artifact_value" * "_" * string(preprocess_cfg.eeg.artifact_value_abs_criterion)),
                 )
 
+                # Save the cleaned continuous data in Julia format
+                if cfg["files"]["output"]["save_continuous_data_cleaned"]
+                    @info "Saving continuous data"
+                    jldsave(_make_output_filename(output_directory, data_file, "_continuous_cleaned"); data = dat)
+                end
+
                 #################### EPOCH EXTRACTION ###################
                 @info section("Extracting cleaned epoched data")
                 epochs = extract_epochs(dat, epoch_cfgs, (preprocess_cfg.epoch_start, preprocess_cfg.epoch_end))
@@ -303,7 +350,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
                 # Check if any epochs have empty data
                 empty_epochs = [i for (i, ep) in enumerate(epochs) if isempty(ep.data)]
                 if !isempty(empty_epochs)
-                    EegFun.@minimal_error "Epoch extraction resulted in empty epochs for conditions: $(join([epochs[i].condition_name for i in empty_epochs], ", ")). Check epoch interval parameters and trigger locations."
+                    @minimal_error "Epoch extraction resulted in empty epochs for conditions: $(join([epochs[i].condition_name for i in empty_epochs], ", ")). Check epoch interval parameters and trigger locations."
                 end
 
                 #################### BASELINE WHOLE EPOCHS ##############
@@ -351,12 +398,6 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
                 @info subsection("Rejection Step Comparison (before vs after repair)")
                 rejection_comparison = compare_rejections(rejection_info_step1, rejection_info_step2)
                 log_pretty_table(rejection_comparison; title = "Rejection Step Comparison: Effectiveness of Channel Repair")
-
-                #################### SAVE EPOCH DATA ###################
-                if cfg["files"]["output"]["save_epoch_data_cleaned"]
-                    @info "Saving epoch data (cleaned)"
-                    jldsave(_make_output_filename(output_directory, data_file, "_epochs_cleaned"); data = epochs)
-                end
 
                 #################### SAVE ERP DATA ###################
                 if cfg["files"]["output"]["save_erp_data_cleaned"]
@@ -451,7 +492,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
                 title = "Average percentage per condition (averaged across conditions):",
                 alignment = [:l, :r],
             )
-            @info "Mean percentage (averaged across all conditions and files): $(round(Statistics.mean(merged_file_summary.percentage), digits = 1)) %"
+            @info "Mean percentage (averaged across all conditions and files): $(round(mean(merged_file_summary.percentage), digits = 1)) %"
             jldsave(joinpath(output_directory, "epoch_summary.jld2"); data = merged_epoch_summary)
             jldsave(joinpath(output_directory, "file_summary.jld2"); data = merged_file_summary)
         end
