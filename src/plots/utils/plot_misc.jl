@@ -308,7 +308,7 @@ function _set_window_title(title::String)
     if Makie.current_backend() == GLMakie
         Makie.current_backend().activate!(title = title)
     end
-    # TODO: CairoMakie doesn't support window titles?
+    # Note: CairoMakie doesn't support window titles.
 end
 
 """
@@ -411,7 +411,7 @@ function _extract_colorbar_kwargs!(plot_kwargs::Dict{Symbol,Any})
         end
     end
 
-    # TODO: what did I need to add this?
+    # Note: These attributes conflict with internal Makie colorbar creation if passed directly.
     # These cannot be passed to colorbar kwargs
     pop!(colorbar_kwargs, :colormap, nothing)
     pop!(colorbar_kwargs, :limits, nothing)
