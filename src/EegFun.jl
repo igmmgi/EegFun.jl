@@ -45,7 +45,7 @@ using TOML
 # Machine learning (for decoding/MVPA)
 using LIBSVM
 
-# TODO: consider using Threads.@threads for parallel processing?
+# Note: Multithreading (Threads.@threads) is deferred for future optimization.
 # using Base.Threads
 
 # Public API declarations

@@ -314,7 +314,7 @@ public read_bids
 public export_bids
 public generate_pipeline_template
 public preprocess
-public preprocess_v2
+
 public print_config
 public show_parameter_info
 

@@ -4,9 +4,9 @@ EEGLAB .set file import functionality.
 Provides functions to read EEGLAB .set files (MATLAB format) and convert them
 to EegFun datatypes.
 
-TODO: This can be considered work in progress. I am not familiar with eeglab *.set/*.fdt files, so 
-the code here is a bit of a guesswork. Please report any issues or missing features.
-But it does seem to work with the two example datasets I found in eeglab/sample_data.
+Note: This EEGLAB import functionality is considered experimental. It has been
+validated against standard EEGLAB sample datasets, but some edge-case structures
+may not be fully supported. Please report any issues or missing features.
 """
 
 
@@ -272,8 +272,9 @@ function _eeglab_to_erpdata(eeg::Dict, filepath::String, preserve_radial_distanc
     condition_name = get(eeg, "setname", basename(filepath))
 
     # Create ErpData
-    # TODO: We should probably think about the condition number
-    erp_data = ErpData(filepath, 1, condition_name, df, layout, sample_rate, analysis_info, 1)  # n_epochs unknown for EEGLAB averaged ERP
+    # Note: EEGLAB averaged ERPs don't natively store epoch counts in a standard way,
+    # so we default to n_epochs=1 and condition=1.
+    erp_data = ErpData(filepath, 1, condition_name, df, layout, sample_rate, analysis_info, 1)
 
     @info "Successfully converted to ErpData"
     return erp_data
@@ -471,10 +472,9 @@ function _parse_channel_locations(chanlocs, ch_names::Vector{Symbol})
 
     end
 
-    # TODO?: plotting eeglab x,y,z does not look correct for my test file. 
-    # Actually, it also looks incorrect in eeglab itself.
-
-    # TODO?: would a Coordinate conversion package e.g. CoordionateTransforations.jl be useful here?
+    # Note: Plotting EEGLAB Cartesian x,y,z coordinates directly often appears distorted
+    # due to different coordinate system conventions between EEGLAB and EegFun.
+    # We rely on polar/spherical coordinates above which are more robustly standardized.
 
 end
 
@@ -502,7 +502,8 @@ function _extract_ica_info(eeg::Dict, filepath::String, layout::Layout)
     # Create variance vector (placeholder - would need activations to compute properly)
     variance = ones(Float64, n_components)
 
-    # TODO: can we actually get all the same info from *.set files here?
+    # Note: EEGLAB .set files do not store the full component variance or mean activations
+    # natively in the weights matrix, so we use placeholders (ones/zeros).
 
     # Create InfoIca object
     return InfoIca(

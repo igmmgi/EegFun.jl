@@ -142,9 +142,9 @@ function tf_morlet(
         eegconv = zeros(ComplexF64, num_frex, n_times_out)
     end
 
-    # TODO: initial testing shows this is just as fast as concatenating 
-    # all trials and/or channels into a single matrix and then processing that
-    # but it still seems too slow!!!
+    # Note: Initial testing shows the current trial-by-trial processing is just as fast as
+    # concatenating all trials and/or channels into a single matrix and processing that.
+    # However, this remains a potential performance bottleneck for very large datasets.
 
     # Process each selected channel and each trial separately
     for channel in channel_labels(dat)
@@ -165,7 +165,9 @@ function tf_morlet(
             # Loop through frequencies - reuse pre-computed wavelet FFTs
             for fi = 1:num_frex
 
-                # TODO: here is the problem!!! But need to test again concat option(s)
+                # Note: This element-wise multiplication is a hot inner loop and a primary
+                # performance bottleneck. Matrix-level concatenation options could be 
+                # re-evaluated in the future for potential vectorization gains.
                 @inbounds @simd for i = 1:n_conv_pow2
                     conv_buffer[i] = wavelet_ffts[fi][i] * eegfft[i]
                 end
