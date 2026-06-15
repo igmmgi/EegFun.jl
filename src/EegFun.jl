@@ -77,6 +77,7 @@ include("layouts/layout.jl")
 # Data import/export
 include("io/eeglab.jl")
 include("io/fieldtrip.jl")
+include("io/xdf.jl")
 include("io/bids_export.jl")
 include("io/bids_import.jl")
 
