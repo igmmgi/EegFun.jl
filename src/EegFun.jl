@@ -149,8 +149,7 @@ include("analysis/rsa/rsa_crossvalidation.jl")
 # analysis pipelines
 include("pipelines/utils/utils.jl")
 include("pipelines/utils/template.jl")
-include("pipelines/pipeline_v1.jl")
-include("pipelines/pipeline_v2.jl")
+include("pipelines/pipeline.jl")
 
 # Plotting functions
 include("plots/utils/plot_misc.jl")
