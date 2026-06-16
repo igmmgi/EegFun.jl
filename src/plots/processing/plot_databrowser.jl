@@ -1018,7 +1018,7 @@ end
 
 """Create sliders for continuous data — includes x-range and position."""
 function _create_sliders(fig, state::ContinuousDataBrowserState, dat)
-    sliders = _create_extreme_slider(fig, state)
+    sliders = state.ica.is_active ? [] : _create_extreme_slider(fig, state)
 
     # Add navigation sliders specific to continuous data
     slider_range = Slider(fig[3, 1], range = 100:50:30000, startvalue = state.view.xrange[][end], snap = true)
@@ -1043,7 +1043,7 @@ end
 
 """Create sliders for epoched data (extreme slider only)."""
 function _create_sliders(fig, state::EpochedDataBrowserState, dat)
-    return _create_extreme_slider(fig, state)
+    return state.ica.is_active ? [] : _create_extreme_slider(fig, state)
 end
 
 """Popup: select which extra channels to overlay."""
@@ -1926,7 +1926,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                 line_width = state.plot_kwargs[:channel_line_width] * 2  # Make repaired channels thicker
             else
                 # Normal channels
-                line_color = @lift(abs.($(channel_data_obs)) .>= $(state.view.crit_val))
+                line_color = @lift(($(state.view.crit_val) > 0.0) ? (abs.($(channel_data_obs)) .>= $(state.view.crit_val)) : fill(false, length($(channel_data_obs))))
 
                 if !state.ica.is_active
                     line_colormap = [state.plot_kwargs[:unselected_channel_color], state.plot_kwargs[:unselected_channel_color], :red]
@@ -2004,7 +2004,7 @@ end
 
 """Plot a channel line on the axis and store it."""
 function _create_line!(data_lines, col, ax, x_obs, y_obs, color, colormap, linewidth, alpha; visible = true)
-    data_lines[col] = lines!(ax, x_obs, y_obs, color = color, colormap = colormap, linewidth = linewidth, alpha = alpha, visible = visible)
+    data_lines[col] = lines!(ax, x_obs, y_obs, color = color, colormap = colormap, linewidth = linewidth, alpha = alpha, visible = visible, colorrange = (0, 1))
 end
 
 """Add a channel-name text label on the axis."""
@@ -2062,7 +2062,7 @@ function _draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
                 channel_offset = state.view.offset[end] + idx * 100.0
             end
 
-            line_color = colors[mod1(idx, length(colors))]
+            line_color = :black
 
             if eltype(get_data(state.data.current[], 1:1, channel)) == Bool # Boolean data - vspan + legend entry only
                 highlight_data = @views _splitgroups(findall(get_data(state.data.current[], :, channel)))
@@ -2091,7 +2091,7 @@ function _draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
                     ax,
                     @lift(get_time($(state.data.current), :)),
                     @lift(get_data($(state.data.current), :, $channel) .* $(state.view.amplitude_scale) .+ $channel_offset),
-                    color = line_color,
+                    color = :black,
                     linewidth = 2,
                 )
                 state.extra_channel.data_labels[channel] = text!(
@@ -2100,7 +2100,7 @@ function _draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
                     @lift(get_label_y($(state.data.current), $channel, $channel_offset)),
                     text = String(channel),
                     align = (:left, :center),
-                    color = line_color,
+                    color = :black,
                     fontsize = 18,
                 )
             end
@@ -2145,17 +2145,20 @@ Add a scale indicator bar to the plot showing the amplitude scale.
 function _add_scale_indicator!(ax, state, plot_kwargs)
 
     scale_value = plot_kwargs[:scale_indicator_value]
-    pos = plot_kwargs[:scale_indicator_position]
+    
+    # Use an observable for position so it can be updated by dragging
+    if !(plot_kwargs[:scale_indicator_position] isa Observable)
+        plot_kwargs[:scale_indicator_position] = Observable{Tuple{Float64, Float64}}(Float64.(plot_kwargs[:scale_indicator_position]))
+    end
+    pos_obs = plot_kwargs[:scale_indicator_position]
 
-    # Get axis limits observables (they're already observables)
+    # Get axis limits observables
     xlims_obs = ax.xaxis.attributes.limits
     ylims_obs = ax.yaxis.attributes.limits
 
     # Calculate position in data coordinates
-    # pos[1] is x position (0 = left, 1 = right), pos[2] is y position (0 = bottom, 1 = top)
-    x_pos = @lift($xlims_obs[1] + ($xlims_obs[2] - $xlims_obs[1]) * pos[1])
-    # Position scale bar at the top of the plot
-    y_top = @lift($ylims_obs[1] + ($ylims_obs[2] - $ylims_obs[1]) * pos[2])
+    x_pos = @lift($xlims_obs[1] + ($xlims_obs[2] - $xlims_obs[1]) * $pos_obs[1])
+    y_top = @lift($ylims_obs[1] + ($ylims_obs[2] - $ylims_obs[1]) * $pos_obs[2])
     y_bottom = @lift($y_top - scale_value * $(state.view.amplitude_scale))
 
     # Draw vertical line
@@ -2180,6 +2183,40 @@ function _add_scale_indicator!(ax, state, plot_kwargs)
         space = :data,
     )
 
+    # Enable mouse dragging
+    is_dragging = Observable(false)
+
+    on(events(ax).mousebutton, priority=10) do event
+        if event.button == Mouse.left
+            if event.action == Mouse.press
+                mpos = mouseposition(ax)
+                # Check if mouse is near the scale indicator (hit box)
+                x_tol = (xlims_obs[][2] - xlims_obs[][1]) * 0.05
+                y_tol = (ylims_obs[][2] - ylims_obs[][1]) * 0.05
+                if abs(mpos[1] - x_pos[]) < x_tol && mpos[2] >= (y_bottom[] - y_tol) && mpos[2] <= (y_top[] + y_tol)
+                    is_dragging[] = true
+                    return Consume(true)
+                end
+            elseif event.action == Mouse.release
+                if is_dragging[]
+                    is_dragging[] = false
+                    return Consume(true)
+                end
+            end
+        end
+        return Consume(false)
+    end
+
+    on(events(ax).mouseposition, priority=10) do _
+        if is_dragging[]
+            mpos = mouseposition(ax)
+            new_rel_x = (mpos[1] - xlims_obs[][1]) / (xlims_obs[][2] - xlims_obs[][1])
+            new_rel_y = (mpos[2] - ylims_obs[][1]) / (ylims_obs[][2] - ylims_obs[][1])
+            pos_obs[] = (clamp(new_rel_x, 0.0, 1.0), clamp(new_rel_y, 0.0, 1.0))
+            return Consume(true)
+        end
+        return Consume(false)
+    end
 end
 
 

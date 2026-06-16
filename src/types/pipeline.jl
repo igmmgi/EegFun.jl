@@ -88,10 +88,15 @@ Configuration for Independent Component Analysis.
 # Fields
 - `apply::Bool`: Whether to apply ICA
 - `percentage_of_data::Float64`: Percentage of data to use for ICA (0-100)
+- `component_method::Symbol`: Method for identifying artifact components.
+  - `:correlation` (default): Correlation-based detection (EOG, ECG, line noise, spatial kurtosis)
+
+
 """
 @kwdef struct IcaConfig
     apply::Bool
     percentage_of_data::Float64
+    component_method::Symbol = :correlation
 end
 
 """
@@ -167,7 +172,11 @@ end
 
 """Construct `IcaConfig` from a configuration dictionary."""
 function IcaConfig(cfg::Dict)
-    return IcaConfig(apply = cfg["apply"], percentage_of_data = cfg["percentage_of_data"])
+    return IcaConfig(
+        apply = cfg["apply"],
+        percentage_of_data = cfg["percentage_of_data"],
+        component_method = Symbol(get(cfg, "component_method", "correlation")),
+    )
 end
 
 """Construct `PreprocessConfig` from a configuration dictionary."""
