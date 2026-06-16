@@ -7,7 +7,8 @@
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
-dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"));
+# dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"));
+dat = EegFun.read_raw_data("/run/media/ian/SSD2/Projects/flankerConflict/ControlAttentionTask/EEG/BDFs/Flank_C_3.bdf");
 
 # read and prepare layout file
 layout = EegFun.read_layout(EegFun.example_path("layouts/biosemi/biosemi72.csv"));
@@ -41,7 +42,13 @@ EegFun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 ica_result_infomax = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_200))
 
 # Databrowser (here we can turn on/off component removal's)
+EegFun.plot_databrowser(dat)
+
+
+# Databrowser (here we can turn on/off component removal's)
 EegFun.plot_databrowser(dat, ica_result_infomax)
+
+
 
 
 # ICA type plots
@@ -53,6 +60,10 @@ EegFun.plot_ica_component_spectrum(dat, ica_result_infomax, component_selection 
 
 # Component data/activation
 EegFun.plot_ica_component_activation(dat, ica_result_infomax)
+
+# Databrowser (here we can turn on/off component removal's)
+EegFun.plot_databrowser(dat)
+
 
 # Databrowser (here we can turn on/off component removal's)
 EegFun.plot_databrowser(dat, ica_result_infomax)
@@ -80,9 +91,18 @@ EegFun.plot_ica_component_activation(dat, ica_result_infomax_extended)
 EegFun.plot_databrowser(dat, ica_result_infomax_extended)
 
 
-# identify components
+# identify components (default correlation method)
 component_artifacts, component_metrics =
     EegFun.identify_components(dat, ica_result_infomax, sample_selection = EegFun.samples_not(:is_extreme_value_200));
+
+# identify components (ICLabel neural network method)
+component_artifacts_icl, component_metrics_icl = EegFun.identify_components(dat, ica_result_infomax, method = :iclabel);
+
+display(component_metrics_icl[:iclabel_probabilities])
+
+# identify components (Combined method: union of correlation and ICLabel)
+component_artifacts_comb, component_metrics_comb =
+    EegFun.identify_components(dat, ica_result_infomax, method = :combined, sample_selection = EegFun.samples_not(:is_extreme_value_200));
 
 # or individually
 eog_comps, eog_comps_metrics_df =

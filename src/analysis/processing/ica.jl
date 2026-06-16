@@ -1670,14 +1670,18 @@ end
 
 
 """
-    identify_components(dat::ContinuousData, ica::InfoIca; sample_selection::Function = samples(),
-    interval_selection::Interval = times(), kwargs...)
+    identify_components(dat::ContinuousData, ica::InfoIca; method = :correlation,
+    sample_selection::Function = samples(), interval_selection::Interval = times(), kwargs...)
 
 Identify all types of artifact components in one unified call.
 
 # Arguments
 - `dat::ContinuousData`: The continuous data
 - `ica::InfoIca`: The ICA result object
+- `method::Symbol`: Component identification method:
+  - `:correlation` (default): Correlation-based detection (EOG, ECG, line noise, spatial kurtosis).
+    The original EegFun approach using z-scored correlations with EOG/ECG channels,
+    spectral analysis for line noise, and spatial kurtosis for channel noise.
 - `sample_selection::Function`: Sample selection function (default: samples())
 - `kwargs...`: Additional keyword arguments passed to individual identification functions
 
@@ -1691,19 +1695,38 @@ Identify all types of artifact components in one unified call.
 
 # Examples
 ```julia
-# Basic usage
+# Default correlation-based identification
 artifacts, metrics = identify_components(dat, ica_result)
 
 # With custom sample selection
 artifacts, metrics = identify_components(dat, ica_result, 
     sample_selection = samples_not(:is_extreme_value_100))
-
-# Access specific metrics
-eog_metrics = metrics[:eog_metrics]
-ecg_metrics = metrics[:ecg_metrics]
 ```
 """
 function identify_components(
+    dat::ContinuousData,
+    ica::InfoIca;
+    method::Symbol = :correlation,
+    sample_selection::Function = samples(),
+    interval_selection::Interval = times(),
+    kwargs...,
+)
+    if method == :correlation
+        return _identify_components_correlation(dat, ica;
+            sample_selection=sample_selection, interval_selection=interval_selection, kwargs...)
+    else
+        error("Unknown component identification method: :$method. " *
+              "Supported methods: :correlation")
+    end
+end
+
+"""
+    _identify_components_correlation(dat, ica; kwargs...) -> (ArtifactComponents, Dict)
+
+The original correlation-based component identification method.
+This is the internal implementation dispatched by `identify_components(method = :correlation)`.
+"""
+function _identify_components_correlation(
     dat::ContinuousData,
     ica::InfoIca;
     sample_selection::Function = samples(),

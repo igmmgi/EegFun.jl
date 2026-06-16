@@ -100,6 +100,7 @@ include("analysis/processing/condition_average.jl")
 include("analysis/processing/epochs.jl")
 include("analysis/processing/filter.jl")
 include("analysis/processing/ica.jl")
+
 include("analysis/processing/mirror.jl")
 include("analysis/processing/rereference.jl")
 include("analysis/processing/resample.jl")
