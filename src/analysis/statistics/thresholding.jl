@@ -115,18 +115,13 @@ Reduces code duplication in nonparametric threshold computation.
 - `all_t_values::Vector{Float64}`: Collected valid t-values
 """
 function _collect_valid_t_values(permutation_t_matrices::Array{Float64,3}, predicate::Function, transform::Function)
-    n_electrodes, n_time, n_permutations = size(permutation_t_matrices)
     all_t_values = Float64[]
-    sizehint!(all_t_values, n_electrodes * n_time * n_permutations)
+    sizehint!(all_t_values, length(permutation_t_matrices))
 
-    for perm_idx = 1:n_permutations
-        for i = 1:n_electrodes
-            for j = 1:n_time
-                t_val = permutation_t_matrices[i, j, perm_idx]
-                if !isnan(t_val) && !isinf(t_val) && predicate(t_val)
-                    push!(all_t_values, transform(t_val))
-                end
-            end
+    @inbounds for i in eachindex(permutation_t_matrices)
+        t_val = permutation_t_matrices[i]
+        if !isnan(t_val) && !isinf(t_val) && predicate(t_val)
+            push!(all_t_values, transform(t_val))
         end
     end
 
@@ -223,88 +218,78 @@ function _compute_nonparametric_threshold_individual(permutation_t_matrices::Arr
 
     thresholds_positive = Array{Float64,2}(undef, n_electrodes, n_time)
     thresholds_negative = Array{Float64,2}(undef, n_electrodes, n_time)
+    
+    t_values_grid = [Float64[] for _ in 1:n_electrodes, _ in 1:n_time]
+    for j in 1:n_time, i in 1:n_electrodes
+        sizehint!(t_values_grid[i, j], n_permutations)
+    end
+    
+    percentile_level = 1.0 - alpha
 
     if tail == :both
-        # Two-tailed: for each point, compute (1 - alpha) percentile of |t|
-        # Since |t| is always positive, 1-alpha of |t| = 1-alpha/2 of raw t
-        percentile_level = 1.0 - alpha
-
-        for i = 1:n_electrodes
-            for j = 1:n_time
-                # Collect t-values at this point across all permutations
-                t_values = Float64[]
-                sizehint!(t_values, n_permutations)
-
-                for perm_idx = 1:n_permutations
+        @inbounds for perm_idx in 1:n_permutations
+            for j in 1:n_time
+                for i in 1:n_electrodes
                     t_val = permutation_t_matrices[i, j, perm_idx]
                     if !isnan(t_val) && !isinf(t_val)
-                        push!(t_values, abs(t_val))
+                        push!(t_values_grid[i, j], abs(t_val))
                     end
                 end
+            end
+        end
 
-                if isempty(t_values)
-                    thresholds_positive[i, j] = NaN
-                    thresholds_negative[i, j] = NaN
-                else
-                    threshold = quantile(t_values, percentile_level)
-                    thresholds_positive[i, j] = threshold
-                    thresholds_negative[i, j] = threshold
-                end
+        for j in 1:n_time, i in 1:n_electrodes
+            if isempty(t_values_grid[i, j])
+                thresholds_positive[i, j] = NaN
+                thresholds_negative[i, j] = NaN
+            else
+                threshold = quantile(t_values_grid[i, j], percentile_level)
+                thresholds_positive[i, j] = threshold
+                thresholds_negative[i, j] = threshold
             end
         end
 
     elseif tail == :right
-        # One-tailed right: for each point, compute (1 - alpha) percentile of positive values
-        percentile_level = 1.0 - alpha
-
-        for i = 1:n_electrodes
-            for j = 1:n_time
-                # Collect positive t-values at this point
-                t_values = Float64[]
-                sizehint!(t_values, n_permutations)
-
-                for perm_idx = 1:n_permutations
+        @inbounds for perm_idx in 1:n_permutations
+            for j in 1:n_time
+                for i in 1:n_electrodes
                     t_val = permutation_t_matrices[i, j, perm_idx]
                     if !isnan(t_val) && !isinf(t_val) && t_val > 0
-                        push!(t_values, t_val)
+                        push!(t_values_grid[i, j], t_val)
                     end
                 end
-
-                if isempty(t_values)
-                    thresholds_positive[i, j] = NaN
-                else
-                    thresholds_positive[i, j] = quantile(t_values, percentile_level)
-                end
-                thresholds_negative[i, j] = NaN
             end
+        end
+
+        for j in 1:n_time, i in 1:n_electrodes
+            if isempty(t_values_grid[i, j])
+                thresholds_positive[i, j] = NaN
+            else
+                thresholds_positive[i, j] = quantile(t_values_grid[i, j], percentile_level)
+            end
+            thresholds_negative[i, j] = NaN
         end
 
     elseif tail == :left
-        # One-tailed left: for each point, compute (1 - alpha) percentile of negative values (absolute)
-        percentile_level = 1.0 - alpha
-
-        for i = 1:n_electrodes
-            for j = 1:n_time
-                # Collect negative t-values at this point (absolute values)
-                t_values = Float64[]
-                sizehint!(t_values, n_permutations)
-
-                for perm_idx = 1:n_permutations
+        @inbounds for perm_idx in 1:n_permutations
+            for j in 1:n_time
+                for i in 1:n_electrodes
                     t_val = permutation_t_matrices[i, j, perm_idx]
                     if !isnan(t_val) && !isinf(t_val) && t_val < 0
-                        push!(t_values, abs(t_val))
+                        push!(t_values_grid[i, j], abs(t_val))
                     end
-                end
-
-                thresholds_positive[i, j] = NaN
-                if isempty(t_values)
-                    thresholds_negative[i, j] = NaN
-                else
-                    thresholds_negative[i, j] = quantile(t_values, percentile_level)
                 end
             end
         end
 
+        for j in 1:n_time, i in 1:n_electrodes
+            thresholds_positive[i, j] = NaN
+            if isempty(t_values_grid[i, j])
+                thresholds_negative[i, j] = NaN
+            else
+                thresholds_negative[i, j] = quantile(t_values_grid[i, j], percentile_level)
+            end
+        end
     else
         error("tail must be :both, :left, or :right, got :$tail")
     end

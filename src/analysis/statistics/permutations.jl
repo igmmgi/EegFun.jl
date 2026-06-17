@@ -47,11 +47,12 @@ function _shuffle_labels!(
         copyto!(shuffled_B, data2)
 
         n_participants, n_electrodes, n_time = size(data1)
-        for p_idx = 1:n_participants
-            if rand(Bool)
-                # Swap conditions for this participant element-wise to avoid allocations
-                for e_idx in 1:n_electrodes
-                    for t_idx in 1:n_time
+        swaps = rand(Bool, n_participants)
+        
+        for t_idx in 1:n_time
+            for e_idx in 1:n_electrodes
+                @inbounds @simd for p_idx = 1:n_participants
+                    if swaps[p_idx]
                         temp = shuffled_A[p_idx, e_idx, t_idx]
                         shuffled_A[p_idx, e_idx, t_idx] = shuffled_B[p_idx, e_idx, t_idx]
                         shuffled_B[p_idx, e_idx, t_idx] = temp
@@ -350,12 +351,13 @@ function _shuffle_labels_tf!(
         copyto!(shuffled_B, data2)
 
         n_participants, n_electrodes, n_freqs, n_time = size(data1)
-        for p_idx = 1:n_participants
-            if rand(Bool)
-                # Swap conditions for this participant element-wise
+        swaps = rand(Bool, n_participants)
+        
+        for t_idx in 1:n_time
+            for f_idx in 1:n_freqs
                 for e_idx in 1:n_electrodes
-                    for f_idx in 1:n_freqs
-                        for t_idx in 1:n_time
+                    @inbounds @simd for p_idx = 1:n_participants
+                        if swaps[p_idx]
                             temp = shuffled_A[p_idx, e_idx, f_idx, t_idx]
                             shuffled_A[p_idx, e_idx, f_idx, t_idx] = shuffled_B[p_idx, e_idx, f_idx, t_idx]
                             shuffled_B[p_idx, e_idx, f_idx, t_idx] = temp
