@@ -527,11 +527,8 @@ function _decode_core(
     # Pre-compute all CV splits once (reused for all iterations/timepoints)
     cv_splits = _precompute_cv_splits(n_trials_per_condition, n_folds)
 
-    # Pre-allocate reusable arrays
     total_trials = sum(n_trials_per_condition)
     n_features = size(data_arrays[1], 1)
-    X_all = Matrix{Float64}(undef, total_trials, n_features)
-    labels = Vector{Int}(undef, total_trials)
 
     # Initialize progress bar
     total_steps = n_iterations * n_timepoints
@@ -540,7 +537,11 @@ function _decode_core(
     end
 
     # Main decoding loop
-    for iter = 1:n_iterations
+    Threads.@threads for iter = 1:n_iterations
+        # Thread-local buffers
+        X_all = Matrix{Float64}(undef, total_trials, n_features)
+        labels = Vector{Int}(undef, total_trials)
+        
         shuffled_indices = _shuffle_trials(data_arrays)
 
         for t = 1:n_timepoints

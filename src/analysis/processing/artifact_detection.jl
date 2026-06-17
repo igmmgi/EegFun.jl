@@ -192,7 +192,7 @@ function is_extreme_value!(
     channel_out = something(channel_out, Symbol("is_extreme_value_$(threshold)"))
 
     # Process each selected epoch
-    for epoch_idx in selected_epochs
+    Threads.@threads for epoch_idx in selected_epochs
         epoch_df = dat.data[epoch_idx]
 
         # Get selected samples for this epoch (combining interval and sample selection)
@@ -363,7 +363,7 @@ function is_step_value!(
     channel_out = something(channel_out, Symbol("is_step_value_$(threshold)"))
 
     # Process each selected epoch
-    for epoch_idx in selected_epochs
+    Threads.@threads for epoch_idx in selected_epochs
         epoch_df = dat.data[epoch_idx]
 
         # Get selected samples for this epoch (combining interval and sample selection)
@@ -1080,14 +1080,14 @@ function _calculate_epoch_metrics(
     metrics = Dict(k => Dict(ch => Int[] for ch in selected_channels) for k in metric_keys)
 
     num_epochs = n_epochs(dat)
-    for ch in selected_channels
+    Threads.@threads for ch in selected_channels
         channel_data_all = Vector{Vector{Float64}}(undef, num_epochs)
         for (i, epoch) in enumerate(dat.data)
             channel_data_all[i] = epoch[!, ch]
         end
 
         if abs_criterion > 0
-            abs_threshold_violations = findall(epoch_data -> maximum(abs.(epoch_data)) > abs_criterion, channel_data_all)
+            abs_threshold_violations = findall(epoch_data -> maximum(abs, epoch_data) > abs_criterion, channel_data_all)
             append!(metrics[:absolute_threshold][ch], abs_threshold_violations)
         end
 
