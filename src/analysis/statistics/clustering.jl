@@ -110,8 +110,10 @@ function _prefilter_mask_by_neighbors!(mask::BitArray{2}, spatial_connectivity::
 
                 # Count significant spatial neighbours (NOT counting self)
                 neighbor_count = 0
-                for n_e_idx = 1:n_electrodes
-                    if e_idx != n_e_idx && spatial_conn_sym[e_idx, n_e_idx] && mask[n_e_idx, t_idx]
+                rv = rowvals(spatial_conn_sym)
+                for ptr in nzrange(spatial_conn_sym, e_idx)
+                    n_e_idx = rv[ptr]
+                    if e_idx != n_e_idx && mask[n_e_idx, t_idx]
                         neighbor_count += 1
                     end
                 end
@@ -248,10 +250,11 @@ function _find_clusters_connected_components(
 
                 # Spatial connectivity
                 if cluster_type in (:spatial, :spatiotemporal)
-                    # Use nzrange if it's a standard CSC matrix
                     # EegFun's spatial connectivity is symmetric, so we can iterate rows
-                    for n_e = 1:n_electrodes
-                        if spatial_connectivity[current_e, n_e] && mask[n_e, current_t] && cluster_labels[n_e, current_t] == 0
+                    rv = rowvals(spatial_connectivity)
+                    for ptr in nzrange(spatial_connectivity, current_e)
+                        n_e = rv[ptr]
+                        if mask[n_e, current_t] && cluster_labels[n_e, current_t] == 0
                             cluster_labels[n_e, current_t] = current_cluster_id
                             push!(queue, (n_e, current_t))
                             push!(cluster_electrodes, electrodes[n_e])
@@ -461,8 +464,10 @@ function _prefilter_mask_by_neighbors_tf!(mask::BitArray{3}, spatial_connectivit
                     end
                     # Count significant spatial neighbours (NOT counting self)
                     neighbor_count = 0
-                    for n_e_idx = 1:n_electrodes
-                        if e_idx != n_e_idx && spatial_conn_sym[e_idx, n_e_idx] && mask[n_e_idx, f_idx, t_idx]
+                    rv = rowvals(spatial_conn_sym)
+                    for ptr in nzrange(spatial_conn_sym, e_idx)
+                        n_e_idx = rv[ptr]
+                        if e_idx != n_e_idx && mask[n_e_idx, f_idx, t_idx]
                             neighbor_count += 1
                         end
                     end
@@ -552,8 +557,10 @@ function _find_clusters_connected_components_tf(
 
                     # Spatial connectivity (same freq, same time)
                     if use_spatial
-                        for n_e = 1:n_electrodes
-                            if spatial_connectivity[current_e, n_e] && mask[n_e, current_f, current_t] && cluster_labels[n_e, current_f, current_t] == 0
+                        rv = rowvals(spatial_connectivity)
+                        for ptr in nzrange(spatial_connectivity, current_e)
+                            n_e = rv[ptr]
+                            if mask[n_e, current_f, current_t] && cluster_labels[n_e, current_f, current_t] == 0
                                 cluster_labels[n_e, current_f, current_t] = current_cluster_id
                                 push!(queue, (n_e, current_f, current_t))
                                 push!(cluster_electrodes, electrodes[n_e])
