@@ -218,31 +218,6 @@ function _find_clusters_connected_components(
     cluster_labels = zeros(Int, n_electrodes, n_time)
     current_cluster_id = 0
 
-    # Helper function to get neighbors of a point
-    function get_neighbors(e_idx::Int, t_idx::Int)
-        neighbors = Tuple{Int,Int}[]
-
-        # Spatial connectivity (for :spatial and :spatiotemporal)
-        if cluster_type in (:spatial, :spatiotemporal)
-            for n_e_idx = 1:n_electrodes
-                if spatial_connectivity[e_idx, n_e_idx] && mask[n_e_idx, t_idx]
-                    push!(neighbors, (n_e_idx, t_idx))
-                end
-            end
-        end
-
-        # Temporal connectivity (for :temporal and :spatiotemporal)
-        if cluster_type in (:temporal, :spatiotemporal)
-            if t_idx > 1 && mask[e_idx, t_idx-1]
-                push!(neighbors, (e_idx, t_idx - 1))
-            end
-            if t_idx < n_time && mask[e_idx, t_idx+1]
-                push!(neighbors, (e_idx, t_idx + 1))
-            end
-        end
-
-        return neighbors
-    end
 
     # BFS to find connected components
     for e_idx = 1:n_electrodes
@@ -260,26 +235,47 @@ function _find_clusters_connected_components(
 
             # BFS queue
             queue = [(e_idx, t_idx)]
+            queue_head = 1
             cluster_labels[e_idx, t_idx] = current_cluster_id
             push!(cluster_electrodes, electrodes[e_idx])
             push!(cluster_time_indices, t_idx)
             push!(cluster_members, (e_idx, t_idx))
 
             # BFS traversal
-            while !isempty(queue)
-                current_e, current_t = popfirst!(queue)
+            while queue_head <= length(queue)
+                current_e, current_t = queue[queue_head]
+                queue_head += 1
 
-                # Get neighbors
-                neighbors = get_neighbors(current_e, current_t)
+                # Spatial connectivity
+                if cluster_type in (:spatial, :spatiotemporal)
+                    # Use nzrange if it's a standard CSC matrix
+                    # EegFun's spatial connectivity is symmetric, so we can iterate rows
+                    for n_e = 1:n_electrodes
+                        if spatial_connectivity[current_e, n_e] && mask[n_e, current_t] && cluster_labels[n_e, current_t] == 0
+                            cluster_labels[n_e, current_t] = current_cluster_id
+                            push!(queue, (n_e, current_t))
+                            push!(cluster_electrodes, electrodes[n_e])
+                            push!(cluster_time_indices, current_t)
+                            push!(cluster_members, (n_e, current_t))
+                        end
+                    end
+                end
 
-                for (n_e, n_t) in neighbors
-                    if cluster_labels[n_e, n_t] == 0
-                        # Not yet visited
-                        cluster_labels[n_e, n_t] = current_cluster_id
-                        push!(queue, (n_e, n_t))
-                        push!(cluster_electrodes, electrodes[n_e])
-                        push!(cluster_time_indices, n_t)
-                        push!(cluster_members, (n_e, n_t))
+                # Temporal connectivity
+                if cluster_type in (:temporal, :spatiotemporal)
+                    if current_t > 1 && mask[current_e, current_t-1] && cluster_labels[current_e, current_t-1] == 0
+                        cluster_labels[current_e, current_t-1] = current_cluster_id
+                        push!(queue, (current_e, current_t-1))
+                        push!(cluster_electrodes, electrodes[current_e])
+                        push!(cluster_time_indices, current_t-1)
+                        push!(cluster_members, (current_e, current_t-1))
+                    end
+                    if current_t < n_time && mask[current_e, current_t+1] && cluster_labels[current_e, current_t+1] == 0
+                        cluster_labels[current_e, current_t+1] = current_cluster_id
+                        push!(queue, (current_e, current_t+1))
+                        push!(cluster_electrodes, electrodes[current_e])
+                        push!(cluster_time_indices, current_t+1)
+                        push!(cluster_members, (current_e, current_t+1))
                     end
                 end
             end
@@ -521,40 +517,7 @@ function _find_clusters_connected_components_tf(
     use_spectral = cluster_type in (:spectral, :spectrotemporal, :full)
     use_temporal = cluster_type in (:temporal, :spatiotemporal, :spectrotemporal, :full)
 
-    function get_neighbors(e_idx::Int, f_idx::Int, t_idx::Int)
-        neighbors = Tuple{Int,Int,Int}[]
 
-        # Spatial connectivity (same freq, same time)
-        if use_spatial
-            for n_e_idx = 1:n_electrodes
-                if spatial_connectivity[e_idx, n_e_idx] && mask[n_e_idx, f_idx, t_idx]
-                    push!(neighbors, (n_e_idx, f_idx, t_idx))
-                end
-            end
-        end
-
-        # Spectral connectivity (same electrode, same time, adjacent freq)
-        if use_spectral
-            if f_idx > 1 && mask[e_idx, f_idx-1, t_idx]
-                push!(neighbors, (e_idx, f_idx - 1, t_idx))
-            end
-            if f_idx < n_freqs && mask[e_idx, f_idx+1, t_idx]
-                push!(neighbors, (e_idx, f_idx + 1, t_idx))
-            end
-        end
-
-        # Temporal connectivity (same electrode, same freq, adjacent time)
-        if use_temporal
-            if t_idx > 1 && mask[e_idx, f_idx, t_idx-1]
-                push!(neighbors, (e_idx, f_idx, t_idx - 1))
-            end
-            if t_idx < n_time && mask[e_idx, f_idx, t_idx+1]
-                push!(neighbors, (e_idx, f_idx, t_idx + 1))
-            end
-        end
-
-        return neighbors
-    end
 
     # BFS to find connected components
     for e_idx = 1:n_electrodes
@@ -570,26 +533,79 @@ function _find_clusters_connected_components_tf(
                 cluster_freq_indices = Set{Int}()
                 cluster_time_indices = Set{Int}()
                 cluster_pixels = CartesianIndex{3}[]
+                cluster_members = Tuple{Int,Int,Int}[]
 
+                # BFS queue
                 queue = [(e_idx, f_idx, t_idx)]
+                queue_head = 1
                 cluster_labels[e_idx, f_idx, t_idx] = current_cluster_id
                 push!(cluster_electrodes, electrodes[e_idx])
                 push!(cluster_freq_indices, f_idx)
                 push!(cluster_time_indices, t_idx)
                 push!(cluster_pixels, CartesianIndex(e_idx, f_idx, t_idx))
+                push!(cluster_members, (e_idx, f_idx, t_idx))
 
-                while !isempty(queue)
-                    current_e, current_f, current_t = popfirst!(queue)
-                    neighbors = get_neighbors(current_e, current_f, current_t)
+                # BFS traversal
+                while queue_head <= length(queue)
+                    current_e, current_f, current_t = queue[queue_head]
+                    queue_head += 1
 
-                    for (n_e, n_f, n_t) in neighbors
-                        if cluster_labels[n_e, n_f, n_t] == 0
-                            cluster_labels[n_e, n_f, n_t] = current_cluster_id
-                            push!(queue, (n_e, n_f, n_t))
-                            push!(cluster_electrodes, electrodes[n_e])
-                            push!(cluster_freq_indices, n_f)
-                            push!(cluster_time_indices, n_t)
-                            push!(cluster_pixels, CartesianIndex(n_e, n_f, n_t))
+                    # Spatial connectivity (same freq, same time)
+                    if use_spatial
+                        for n_e = 1:n_electrodes
+                            if spatial_connectivity[current_e, n_e] && mask[n_e, current_f, current_t] && cluster_labels[n_e, current_f, current_t] == 0
+                                cluster_labels[n_e, current_f, current_t] = current_cluster_id
+                                push!(queue, (n_e, current_f, current_t))
+                                push!(cluster_electrodes, electrodes[n_e])
+                                push!(cluster_freq_indices, current_f)
+                                push!(cluster_time_indices, current_t)
+                                push!(cluster_pixels, CartesianIndex(n_e, current_f, current_t))
+                                push!(cluster_members, (n_e, current_f, current_t))
+                            end
+                        end
+                    end
+
+                    # Spectral connectivity (same electrode, same time, adjacent freq)
+                    if use_spectral
+                        if current_f > 1 && mask[current_e, current_f-1, current_t] && cluster_labels[current_e, current_f-1, current_t] == 0
+                            cluster_labels[current_e, current_f-1, current_t] = current_cluster_id
+                            push!(queue, (current_e, current_f-1, current_t))
+                            push!(cluster_electrodes, electrodes[current_e])
+                            push!(cluster_freq_indices, current_f-1)
+                            push!(cluster_time_indices, current_t)
+                            push!(cluster_pixels, CartesianIndex(current_e, current_f-1, current_t))
+                            push!(cluster_members, (current_e, current_f-1, current_t))
+                        end
+                        if current_f < n_freqs && mask[current_e, current_f+1, current_t] && cluster_labels[current_e, current_f+1, current_t] == 0
+                            cluster_labels[current_e, current_f+1, current_t] = current_cluster_id
+                            push!(queue, (current_e, current_f+1, current_t))
+                            push!(cluster_electrodes, electrodes[current_e])
+                            push!(cluster_freq_indices, current_f+1)
+                            push!(cluster_time_indices, current_t)
+                            push!(cluster_pixels, CartesianIndex(current_e, current_f+1, current_t))
+                            push!(cluster_members, (current_e, current_f+1, current_t))
+                        end
+                    end
+
+                    # Temporal connectivity (same electrode, same freq, adjacent time)
+                    if use_temporal
+                        if current_t > 1 && mask[current_e, current_f, current_t-1] && cluster_labels[current_e, current_f, current_t-1] == 0
+                            cluster_labels[current_e, current_f, current_t-1] = current_cluster_id
+                            push!(queue, (current_e, current_f, current_t-1))
+                            push!(cluster_electrodes, electrodes[current_e])
+                            push!(cluster_freq_indices, current_f)
+                            push!(cluster_time_indices, current_t-1)
+                            push!(cluster_pixels, CartesianIndex(current_e, current_f, current_t-1))
+                            push!(cluster_members, (current_e, current_f, current_t-1))
+                        end
+                        if current_t < n_time && mask[current_e, current_f, current_t+1] && cluster_labels[current_e, current_f, current_t+1] == 0
+                            cluster_labels[current_e, current_f, current_t+1] = current_cluster_id
+                            push!(queue, (current_e, current_f, current_t+1))
+                            push!(cluster_electrodes, electrodes[current_e])
+                            push!(cluster_freq_indices, current_f)
+                            push!(cluster_time_indices, current_t+1)
+                            push!(cluster_pixels, CartesianIndex(current_e, current_f, current_t+1))
+                            push!(cluster_members, (current_e, current_f, current_t+1))
                         end
                     end
                 end
