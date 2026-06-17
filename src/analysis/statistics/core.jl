@@ -278,8 +278,8 @@ function _compute_t_matrix(
             std_diff = Array{Float64,2}(undef, n_electrodes, n_time)
         end
 
-        @inbounds for e_idx = 1:n_electrodes
-            @inbounds for t_idx = 1:n_time
+        @inbounds for t_idx = 1:n_time
+            @inbounds for e_idx = 1:n_electrodes
                 sum1 = 0.0
                 sum2 = 0.0
                 sum_diff = 0.0
@@ -300,30 +300,26 @@ function _compute_t_matrix(
 
                 # Compute variance: var = mean(x^2) - mean(x)^2, then std = sqrt(var * n/(n-1))
                 variance = (sum_diff_sq / n_participants) - (mean_diff_val * mean_diff_val)
-                std_diff[e_idx, t_idx] = sqrt(variance * n_participants / (n_participants - 1))
+                std_diff_val = sqrt(variance * n_participants / (n_participants - 1))
+                std_diff[e_idx, t_idx] = std_diff_val
 
                 # Only store mean1/mean2 if buffers were provided
                 if !isnothing(mean1_buffer)
                     mean1[e_idx, t_idx] = mean1_val
                     mean2[e_idx, t_idx] = mean2_val
                 end
+                
+                # Compute SE and t-statistic directly in loop (avoids multiple allocations)
+                if std_diff_val == 0.0
+                    t_matrix[e_idx, t_idx] = mean_diff_val == 0.0 ? NaN : Inf
+                else
+                    t_matrix[e_idx, t_idx] = mean_diff_val / (std_diff_val / sqrt(n_participants))
+                end
             end
         end
 
-        # Compute SE: se = std_diff / sqrt(n)
+        # Compute SE for returned array
         se_matrix = std_diff ./ sqrt(n_participants)
-
-        # Compute t-statistics: t = mean_diff / se
-        # Use in-place assignment to fill pre-allocated t_matrix
-        # Handle division by zero
-        zero_std_mask = std_diff .== 0.0
-        zero_mean_mask = mean_diff .== 0.0
-
-        # Fill pre-allocated t_matrix in-place
-        t_matrix .= mean_diff ./ se_matrix
-        # Where std is zero: NaN if mean is also zero, Inf otherwise
-        t_matrix[zero_std_mask .& zero_mean_mask] .= NaN
-        t_matrix[zero_std_mask .& .!zero_mean_mask] .= Inf
 
         # Degrees of freedom (same for all points in paired design)
         df = Float64(n_participants - 1)
@@ -336,8 +332,8 @@ function _compute_t_matrix(
         # Independent design: need to loop (but df is constant across all points)
         se_matrix = Array{Float64,2}(undef, n_electrodes, n_time)
         result = nothing
-        @inbounds for e_idx = 1:n_electrodes
-            @inbounds for t_idx = 1:n_time
+        @inbounds for t_idx = 1:n_time
+            @inbounds for e_idx = 1:n_electrodes
                 data_A = view(data1, :, e_idx, t_idx)
                 data_B = view(data2, :, e_idx, t_idx)
                 result = independent_ttest(data_A, data_B, tail = tail)
