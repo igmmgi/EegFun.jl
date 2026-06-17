@@ -72,27 +72,26 @@ function _shuffle_labels!(
         shuffled_indices = collect(1:n_total)
         shuffle!(shuffled_indices)
 
-        # Helper to get data from either data1 or data2 based on index
-        # We use views to avoid copying during indexing
-        function get_trial(idx)
-            if idx <= n_A
-                return view(data1,idx,:,:)
-            else
-                return view(data2,(idx-n_A),:,:)
+        @inbounds for t_idx in 1:n_time
+            for e_idx in 1:n_electrodes
+                @simd for i = 1:n_A
+                    src_idx = shuffled_indices[i]
+                    if src_idx <= n_A
+                        shuffled_A[i, e_idx, t_idx] = data1[src_idx, e_idx, t_idx]
+                    else
+                        shuffled_A[i, e_idx, t_idx] = data2[src_idx - n_A, e_idx, t_idx]
+                    end
+                end
+                
+                @simd for i = 1:n_B
+                    src_idx = shuffled_indices[n_A + i]
+                    if src_idx <= n_A
+                        shuffled_B[i, e_idx, t_idx] = data1[src_idx, e_idx, t_idx]
+                    else
+                        shuffled_B[i, e_idx, t_idx] = data2[src_idx - n_A, e_idx, t_idx]
+                    end
+                end
             end
-        end
-
-        # Copy shuffled data to output arrays using indices
-        # We iterate through the first n_A indices for shuffled_A
-        for i = 1:n_A
-            src_idx = shuffled_indices[i]
-            shuffled_A[i, :, :] = get_trial(src_idx)
-        end
-
-        # And the remaining n_B indices for shuffled_B
-        for i = 1:n_B
-            src_idx = shuffled_indices[n_A+i]
-            shuffled_B[i, :, :] = get_trial(src_idx)
         end
     end
     return shuffled_A, shuffled_B
@@ -374,15 +373,31 @@ function _shuffle_labels_tf!(
 
         shuffled_indices = randperm(n_total)
 
-        get_trial(idx) = idx <= n_A ? view(data1,idx,:,:,:) : view(data2,(idx-n_A),:,:,:)
+        n_electrodes = size(data1, 2)
+        n_freqs = size(data1, 3)
+        n_time = size(data1, 4)
 
-        for i = 1:n_A
-            src_idx = shuffled_indices[i]
-            shuffled_A[i, :, :, :] = get_trial(src_idx)
-        end
-        for i = 1:n_B
-            src_idx = shuffled_indices[n_A+i]
-            shuffled_B[i, :, :, :] = get_trial(src_idx)
+        @inbounds for t_idx in 1:n_time
+            for f_idx in 1:n_freqs
+                for e_idx in 1:n_electrodes
+                    @simd for i = 1:n_A
+                        src_idx = shuffled_indices[i]
+                        if src_idx <= n_A
+                            shuffled_A[i, e_idx, f_idx, t_idx] = data1[src_idx, e_idx, f_idx, t_idx]
+                        else
+                            shuffled_A[i, e_idx, f_idx, t_idx] = data2[src_idx - n_A, e_idx, f_idx, t_idx]
+                        end
+                    end
+                    @simd for i = 1:n_B
+                        src_idx = shuffled_indices[n_A+i]
+                        if src_idx <= n_A
+                            shuffled_B[i, e_idx, f_idx, t_idx] = data1[src_idx, e_idx, f_idx, t_idx]
+                        else
+                            shuffled_B[i, e_idx, f_idx, t_idx] = data2[src_idx - n_A, e_idx, f_idx, t_idx]
+                        end
+                    end
+                end
+            end
         end
     end
     return shuffled_A, shuffled_B

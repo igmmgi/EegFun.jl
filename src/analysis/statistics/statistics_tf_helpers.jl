@@ -275,9 +275,9 @@ function _compute_t_matrix_tf(data1::Array{Float64,4}, data2::Array{Float64,4}, 
     p_matrix = Array{Float64,3}(undef, n_electrodes, n_freqs, n_time)
 
     if design == :paired
-        @inbounds for e_idx = 1:n_electrodes
+        @inbounds for t_idx = 1:n_time
             for f_idx = 1:n_freqs
-                for t_idx = 1:n_time
+                for e_idx = 1:n_electrodes
                     sum_diff = 0.0
                     sum_diff_sq = 0.0
                     for p_idx = 1:n_participants
@@ -304,9 +304,9 @@ function _compute_t_matrix_tf(data1::Array{Float64,4}, data2::Array{Float64,4}, 
     else
         # Independent design
         result = nothing
-        @inbounds for e_idx = 1:n_electrodes
+        @inbounds for t_idx = 1:n_time
             for f_idx = 1:n_freqs
-                for t_idx = 1:n_time
+                for e_idx = 1:n_electrodes
                     data_A = view(data1, :, e_idx, f_idx, t_idx)
                     data_B = view(data2, :, e_idx, f_idx, t_idx)
                     result = independent_ttest(data_A, data_B, tail = tail)
