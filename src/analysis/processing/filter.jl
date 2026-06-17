@@ -216,7 +216,17 @@ function _apply_filter!(dat::DataFrame, channels::Vector{Symbol}, filter::Filter
 end
 
 function _apply_filter!(dat::Vector{DataFrame}, channels::Vector{Symbol}, filter::FilterInfo; filter_func::String = "filtfilt")::Nothing
-    _apply_filter!.(dat, Ref(channels), Ref(filter); filter_func = filter_func)
+    apply_fn = filter_func == "filtfilt" ? filtfilt : filt
+    Threads.@threads for epoch in dat
+        for channel in channels
+            col = epoch[!, channel]
+            if col isa Vector{Float64}
+                col .= apply_fn(filter.filter_object, col)
+            else
+                epoch[!, channel] .= apply_fn(filter.filter_object, epoch[!, channel])
+            end
+        end
+    end
     return nothing
 end
 
