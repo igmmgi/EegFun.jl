@@ -343,6 +343,7 @@ public plot_erp_image
 public plot_erp_measurement_gui
 public plot_erp_measurements
 public plot_erp_stats
+public plot_stat_heatmap
 public plot_filter_response
 public plot_frequency_spectrum
 public plot_gfp

@@ -467,3 +467,49 @@ function _get_amp_max(plot_erp, plot_difference, cond_A_avg, cond_B_avg, diff_wa
         0.0
     end
 end
+
+"""
+    plot_stat_heatmap(result::StatsResult; kwargs...)
+
+Plots a 2D heatmap of the t-statistics (Channels x Time).
+"""
+function plot_stat_heatmap(
+    result::StatsResult;
+    kwargs...,
+)
+    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs)
+    plot_kwargs[:figure_title] = get(kwargs, :figure_title, "T-Statistic Heatmap")
+    plot_kwargs[:xlabel] = get(kwargs, :xlabel, "Time (s)")
+    plot_kwargs[:ylabel] = get(kwargs, :ylabel, "Channels")
+    
+    time_points = result.time_points
+    electrodes = result.electrodes
+    t_values = result.stat_matrix.t
+    
+    fig = Figure(size = (800, 600), title = plot_kwargs[:figure_title], figure_padding = plot_kwargs[:figure_padding])
+    
+    if length(electrodes) > 40
+        yticks = (1:5:length(electrodes), String.(electrodes)[1:5:end])
+    else
+        yticks = (1:length(electrodes), String.(electrodes))
+    end
+    
+    ax = Axis(fig[1, 1], yticks = yticks)
+    
+    max_t = maximum(abs.(t_values))
+    
+    hm = heatmap!(ax, time_points, 1:length(electrodes), transpose(t_values), 
+                  colormap = get(kwargs, :colormap, :RdBu_r), 
+                  colorrange = get(kwargs, :colorrange, (-max_t, max_t)))
+                  
+    Colorbar(fig[1, 2], hm, label = "t-value")
+    
+    _apply_axis_properties!(ax; plot_kwargs...)
+    
+    if plot_kwargs[:display_plot]
+        _display_figure(fig)
+    end
+    
+    return (fig = fig, axes = [ax])
+end
+
