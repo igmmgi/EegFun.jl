@@ -892,6 +892,13 @@ function restore_ica_components!(dat::ContinuousData, ica::InfoIca; component_se
 end
 
 
+# Function barrier forces Julia to compile a fast inner loop for the concrete type of `src`
+function _copy_col_to_matrix!(dst::Matrix{Float64}, col_idx::Int, src::AbstractVector, selected_samples::Vector{Int})
+    @inbounds for (j, sample_idx) in enumerate(selected_samples)
+        dst[col_idx, j] = src[sample_idx]
+    end
+end
+
 """
     _prepare_ica_data_matrix(dat::ContinuousData, ica::InfoIca, selected_samples::Vector{Int})
 
@@ -911,8 +918,16 @@ scales by ICA scale factor, and applies the unmixing matrix to compute component
 """
 function _prepare_ica_data_matrix(dat::ContinuousData, ica::InfoIca, selected_samples::Vector{Int})
     relevant_cols = ica.layout.data.label
-    data_subset_df = dat.data[selected_samples, relevant_cols]
-    dat_matrix = permutedims(Matrix(data_subset_df))
+    n_samples = length(selected_samples)
+    n_channels = length(relevant_cols)
+    
+    # Pre-allocate to avoid huge DataFrame indexing and permutedims overhead
+    dat_matrix = Matrix{Float64}(undef, n_channels, n_samples)
+    for (i, col) in enumerate(relevant_cols)
+        data_col = dat.data[!, col]
+        _copy_col_to_matrix!(dat_matrix, i, data_col, selected_samples)
+    end
+    
     dat_matrix .-= mean(dat_matrix, dims = 2)
     dat_matrix ./= ica.scale
 
@@ -1038,8 +1053,10 @@ function identify_eog_components(
     """Compute absolute correlation of each ICA component with the given EOG signal."""
     function calculate_correlations(eog_signal)
         corrs = zeros(n_components)
+        comp_buf = Vector{Float64}(undef, size(components, 2))
         for comp_idx = 1:n_components
-            corrs[comp_idx] = abs(cor(components[comp_idx, :], eog_signal))
+            comp_buf .= @view components[comp_idx, :]
+            corrs[comp_idx] = abs(cor(comp_buf, eog_signal))
         end
         return corrs
     end
@@ -1076,23 +1093,46 @@ function identify_eog_components(
         return spatial_corrs, secondary_components
     end
 
-    # Function to calculate lagged correlations between components
+    # Function to calculate lagged correlations between components without huge crosscor allocations
     """Compute maximum absolute lagged cross-correlation between remaining and primary components."""
     function calculate_lagged_correlations(remaining_components, primary_components, comp_matrix, max_lag_samples, lag_step)
-
         lagged_corrs = fill(NaN, n_components)
         if isempty(remaining_components) || isempty(primary_components)
             return lagged_corrs
         end
 
+        lags = (-max_lag_samples):lag_step:max_lag_samples
+        n_s = size(comp_matrix, 2)
+        
+        # Pre-allocate contiguous buffers to eliminate cache misses from row-major stride
+        comp_buf = Vector{Float64}(undef, n_s)
+        eog_buf = Vector{Float64}(undef, n_s)
+        
         for comp_idx in remaining_components
-            comp_ts = @view comp_matrix[comp_idx, :]
+            comp_buf .= @view comp_matrix[comp_idx, :]
+            m_c = mean(comp_buf)
+            s_c = std(comp_buf, corrected=false)
 
             max_corr = 0.0
             for eog_comp_idx in primary_components
-                eog_comp_ts = @view comp_matrix[eog_comp_idx, :]
-                corrs = crosscor(eog_comp_ts, comp_ts, (-max_lag_samples):lag_step:max_lag_samples)
-                max_corr_val = maximum(abs.(corrs))
+                eog_buf .= @view comp_matrix[eog_comp_idx, :]
+                m_e = mean(eog_buf)
+                s_e = std(eog_buf, corrected=false)
+                denom = n_s * s_c * s_e
+                
+                # Manual zero-allocation cross correlation for the few specific lags
+                max_corr_val = 0.0
+                for lag in lags
+                    sum_xy = 0.0
+                    @inbounds @simd for i in max(1, 1 - lag):min(n_s, n_s - lag)
+                        sum_xy += (eog_buf[i] - m_e) * (comp_buf[i + lag] - m_c)
+                    end
+                    c = abs(sum_xy / denom)
+                    if c > max_corr_val
+                        max_corr_val = c
+                    end
+                end
+                
                 if max_corr_val > max_corr
                     max_corr = max_corr_val
                 end
@@ -1314,11 +1354,17 @@ function identify_ecg_components(
     metrics = []
     identified_ecg = Int[]
 
+    # Pre-allocate buffer for z-scoring
+    n_samples = size(components_subset, 2)
+    ts_zscored = Vector{Float64}(undef, n_samples)
+
     for comp_idx = 1:n_components
         component_ts = @view components_subset[comp_idx, :]
 
         # Z-score the time series for consistent peak detection across components
-        ts_zscored = (component_ts .- mean(component_ts)) ./ std(component_ts)
+        m = mean(component_ts)
+        s = std(component_ts)
+        ts_zscored .= (component_ts .- m) ./ s
 
         # Find prominent peaks 
         peak_indices = _find_peaks(ts_zscored; min_prominence_std = min_prominence_std)
@@ -1529,28 +1575,32 @@ function identify_line_noise_components(
     end
 
     # Calculate power spectrum for each component
-    # Use a reasonable FFT size (power of 2, but not too large)
+    # Use a reasonable FFT size (power of 2, capped at 2^16 points for performance)
     n_samples = size(components, 2)
-    nfft = nextpow(2, n_samples)  # Cap at 2^16 points
+    nfft = min(nextpow(2, n_samples), 65536)  # Properly cap at 2^16 points
     freqs = FFTW.rfftfreq(nfft, dat.sample_rate)
     n_freqs = length(freqs)
     psd = zeros(n_freqs, n_components)
 
+    # Pre-allocate FFT buffer and plan FFT
+    signal_fft = zeros(Float64, nfft)
+    fft_plan = FFTW.plan_rfft(signal_fft)
+
     for i = 1:n_components
-        signal = components[i, :]
+        signal = @view components[i, :]
 
         # Prepare signal for FFT: truncate or zero-pad to nfft points
-        if length(signal) > nfft
-            signal_fft = signal[1:nfft]
-        elseif length(signal) < nfft
-            signal_fft = zeros(nfft)
-            signal_fft[1:length(signal)] = signal
+        if n_samples > nfft
+            signal_fft .= @view signal[1:nfft]
+        elseif n_samples < nfft
+            signal_fft[1:n_samples] .= signal
+            signal_fft[n_samples+1:end] .= 0.0
         else
-            signal_fft = signal
+            signal_fft .= signal
         end
 
         # Calculate power spectral density
-        psd[:, i] = abs2.(FFTW.rfft(signal_fft))
+        psd[:, i] .= abs2.(fft_plan * signal_fft)
     end
 
     # Define frequency bands

@@ -1,0 +1,888 @@
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Error: Error: Statistical tests require exactly 2 conditions, got 1: [1]. Use condition_selection to select exactly 2 conditions.
+[ Info: subset_layout!: Subset layout from 5 to 2 channels
+[ Info: subset_layout!: Subset layout from 5 to 2 channels
+[ Info: subset_layout!: Subset layout from 5 to 2 channels
+[ Info: subset_layout!: Subset layout from 5 to 2 channels
+[ Info: subset_layout!: Subset layout from 5 to 2 channels
+[ Info: subset_layout!: Subset layout from 5 to 2 channels
+[ Info: subset_layout!: Subset layout from 5 to 2 channels
+[ Info: subset_layout!: Subset layout from 5 to 2 channels
+[ Info: subset_layout!: Subset layout from 5 to 2 channels
+[ Info: subset_layout!: Subset layout from 5 to 2 channels
+[ Info: subset_layout!: Subset layout from 5 to 2 channels
+[ Info: subset_layout!: Subset layout from 5 to 2 channels
+[ Info: Applying baseline correction to 2 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 2 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 2 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 2 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 2 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 2 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 2 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 2 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 2 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 2 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 2 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 2 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: subset_layout!: Subset layout from 2 to 2 channels
+[ Info: subset_layout!: Subset layout from 2 to 2 channels
+[ Info: subset_layout!: Subset layout from 2 to 2 channels
+[ Info: subset_layout!: Subset layout from 2 to 2 channels
+[ Info: subset_layout!: Subset layout from 2 to 2 channels
+[ Info: subset_layout!: Subset layout from 2 to 2 channels
+[ Info: subset_layout!: Subset layout from 2 to 2 channels
+[ Info: subset_layout!: Subset layout from 2 to 2 channels
+[ Info: subset_layout!: Subset layout from 2 to 2 channels
+[ Info: subset_layout!: Subset layout from 2 to 2 channels
+[ Info: subset_layout!: Subset layout from 2 to 2 channels
+[ Info: subset_layout!: Subset layout from 2 to 2 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: Analytic test complete: 377 +ve, 377 -ve significant points.
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: Analytic test complete: 377 +ve, 377 -ve significant points.
+[ Info: Bonferroni correction: n_comparisons=771, bonferroni_alpha=6.485084306095979e-5, uncorrected_sig=754, bonferroni_sig=714
+[ Info: Analytic test complete: 355 +ve, 359 -ve significant points.
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: Analytic test complete: 377 +ve, 0 -ve significant points.
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: Analytic test complete: 0 +ve, 377 -ve significant points.
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Error: Error: correction_method must be :no or :bonferroni. Got :invalid
+[ Error: Error: tail must be :both, :left, or :right. Got :invalid
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: Computing t-statistics...
+[ Info: Computing parametric critical t-values...
+[ Info: Thresholding observed data (parametric)...
+[ Info: Building connectivity matrix...
+[ Info: Pre-filtering masks (min_num_neighbors=2)...
+[ Info: Finding observed clusters...
+[ Info: Running 50 permutations for cluster-level inference...
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Warning: Layout.neighbours is not set. Computing with default distance criterion (0.25).
+[ Info: Calculating 2D neighbours with distance criterion 0.25
+[ Info: Calculating 2D neighbours with distance criterion 0.25
+[ Info: Computing t-statistics...
+[ Info: Computing parametric critical t-values...
+[ Info: Thresholding observed data (parametric)...
+[ Info: Building connectivity matrix...
+[ Info: Pre-filtering masks (min_num_neighbors=2)...
+[ Info: Finding observed clusters...
+[ Info: Running 30 permutations for cluster-level inference...
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: Computing t-statistics...
+[ Info: Computing parametric critical t-values...
+[ Info: Thresholding observed data (parametric)...
+[ Info: Building connectivity matrix...
+[ Info: Pre-filtering masks (min_num_neighbors=2)...
+[ Info: Finding observed clusters...
+[ Info: Running 30 permutations for cluster-level inference...
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: Computing t-statistics...
+[ Info: Collecting permutation t-matrices for non-parametric common thresholding...
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: Computing t-statistics...
+[ Info: Computing parametric critical t-values...
+[ Info: Thresholding observed data (parametric)...
+[ Info: Building connectivity matrix...
+[ Info: Pre-filtering masks (min_num_neighbors=2)...
+[ Info: Finding observed clusters...
+[ Info: Running 20 permutations for cluster-level inference...
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: Applying baseline correction to 3 channels over interval 1:257 (-0.2 to 0.8 s)
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: subset_layout!: Subset layout from 3 to 3 channels
+[ Info: Analytic test complete: 372 +ve, 374 -ve significant points.
+ERROR: LoadError: Some tests did not pass: 105 passed, 0 failed, 5 errored, 0 broken.
+in expression starting at /home/ian/Documents/Julia/EegFun.jl/test/runtests.jl:7
+Running EegFun.jl Test Suite
+========================================
+permutation_test - basic: Error During Test at /home/ian/Documents/Julia/EegFun.jl/test/tests/statistics_erp.jl:529
+  Got exception outside of a @test
+  TaskFailedException
+  
+      nested task error: BoundsError: attempt to access 1-element Vector{Array{Float64, 3}} at index [2]
+      Stacktrace:
+       [1] throw_boundserror(A::Vector{Array{Float64, 3}}, I::Tuple{Int64})
+         @ Base ./essentials.jl:15
+       [2] getindex
+         @ ./essentials.jl:919 [inlined]
+       [3] macro expansion
+         @ ~/Documents/Julia/EegFun.jl/src/analysis/statistics/permutations.jl:283 [inlined]
+       [4] (::EegFun.var"#910#911"{EegFun.var"#912#913"{Nothing, EegFun.StatisticalData, Matrix{Float64}, SparseMatrixCSC{Bool, Int64}, Symbol, Symbol, Int64, Bool, Dict{Symbol, Int64}, Vector{Float64}, Vector{Symbol}, Vector{BitMatrix}, Vector{BitMatrix}, Vector{Array{Float64, 3}}, Vector{Array{Float64, 3}}, Vector{Float64}, Vector{Float64}, Bool, Bool, Bool, UnitRange{Int64}}})(tid::Int64; onethread::Bool)
+         @ EegFun ./threadingconstructs.jl:279
+       [5] #910
+         @ ./threadingconstructs.jl:246 [inlined]
+       [6] (::Base.Threads.var"#threading_run##0#threading_run##1"{EegFun.var"#910#911"{EegFun.var"#912#913"{Nothing, EegFun.StatisticalData, Matrix{Float64}, SparseMatrixCSC{Bool, Int64}, Symbol, Symbol, Int64, Bool, Dict{Symbol, Int64}, Vector{Float64}, Vector{Symbol}, Vector{BitMatrix}, Vector{BitMatrix}, Vector{Array{Float64, 3}}, Vector{Array{Float64, 3}}, Vector{Float64}, Vector{Float64}, Bool, Bool, Bool, UnitRange{Int64}}}, Int64})()
+         @ Base.Threads ./threadingconstructs.jl:178
+  Stacktrace:
+    [1] threading_run(fun::EegFun.var"#910#911"{EegFun.var"#912#913"{Nothing, EegFun.StatisticalData, Matrix{Float64}, SparseMatrixCSC{Bool, Int64}, Symbol, Symbol, Int64, Bool, Dict{Symbol, Int64}, Vector{Float64}, Vector{Symbol}, Vector{BitMatrix}, Vector{BitMatrix}, Vector{Array{Float64, 3}}, Vector{Array{Float64, 3}}, Vector{Float64}, Vector{Float64}, Bool, Bool, Bool, UnitRange{Int64}}}, static::Bool)
+      @ Base.Threads ./threadingconstructs.jl:199
+    [2] macro expansion
+      @ ./threadingconstructs.jl:216 [inlined]
+    [3] _run_permutations(prepared::EegFun.StatisticalData, n_permutations::Int64, critical_t_values::Matrix{Float64}, spatial_connectivity::SparseMatrixCSC{Bool, Int64}, cluster_type::Symbol, tail::Symbol, min_num_neighbors::Int64, show_progress::Bool; permutation_t_matrices::Nothing)
+      @ EegFun ~/Documents/Julia/EegFun.jl/src/analysis/statistics/permutations.jl:279
+    [4] _run_permutations
+      @ ~/Documents/Julia/EegFun.jl/src/analysis/statistics/permutations.jl:228 [inlined]
+    [5] permutation_test(prepared::EegFun.StatisticalData; n_permutations::Int64, threshold::Float64, threshold_method::Symbol, cluster_type::Symbol, min_num_neighbors::Int64, tail::Symbol, show_progress::Bool)
+      @ EegFun ~/Documents/Julia/EegFun.jl/src/analysis/statistics/statistics.jl:136
+    [6] top-level scope
+      @ ~/Documents/Julia/EegFun.jl/test/tests/statistics_erp.jl:57
+    [7] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.6+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+    [8] macro expansion
+      @ ~/Documents/Julia/EegFun.jl/test/tests/statistics_erp.jl:530 [inlined]
+    [9] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.6+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+   [10] macro expansion
+      @ ~/Documents/Julia/EegFun.jl/test/tests/statistics_erp.jl:534 [inlined]
+   [11] include(mapexpr::Function, mod::Module, _path::String)
+      @ Base ./Base.jl:307
+   [12] top-level scope
+      @ ~/Documents/Julia/EegFun.jl/test/runtests.jl:48
+   [13] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.6+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+   [14] macro expansion
+      @ ~/Documents/Julia/EegFun.jl/test/runtests.jl:48 [inlined]
+   [15] include(mod::Module, _path::String)
+      @ Base ./Base.jl:306
+   [16] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:317
+   [17] _start()
+      @ Base ./client.jl:550
+permutation_test - spatiotemporal: Error During Test at /home/ian/Documents/Julia/EegFun.jl/test/tests/statistics_erp.jl:562
+  Got exception outside of a @test
+  TaskFailedException
+  
+      nested task error: BoundsError: attempt to access 1-element Vector{Array{Float64, 3}} at index [2]
+      Stacktrace:
+       [1] throw_boundserror(A::Vector{Array{Float64, 3}}, I::Tuple{Int64})
+         @ Base ./essentials.jl:15
+       [2] getindex
+         @ ./essentials.jl:919 [inlined]
+       [3] macro expansion
+         @ ~/Documents/Julia/EegFun.jl/src/analysis/statistics/permutations.jl:283 [inlined]
+       [4] (::EegFun.var"#910#911"{EegFun.var"#912#913"{Nothing, EegFun.StatisticalData, Matrix{Float64}, SparseMatrixCSC{Bool, Int64}, Symbol, Symbol, Int64, Bool, Dict{Symbol, Int64}, Vector{Float64}, Vector{Symbol}, Vector{BitMatrix}, Vector{BitMatrix}, Vector{Array{Float64, 3}}, Vector{Array{Float64, 3}}, Vector{Float64}, Vector{Float64}, Bool, Bool, Bool, UnitRange{Int64}}})(tid::Int64; onethread::Bool)
+         @ EegFun ./threadingconstructs.jl:279
+       [5] #910
+         @ ./threadingconstructs.jl:246 [inlined]
+       [6] (::Base.Threads.var"#threading_run##0#threading_run##1"{EegFun.var"#910#911"{EegFun.var"#912#913"{Nothing, EegFun.StatisticalData, Matrix{Float64}, SparseMatrixCSC{Bool, Int64}, Symbol, Symbol, Int64, Bool, Dict{Symbol, Int64}, Vector{Float64}, Vector{Symbol}, Vector{BitMatrix}, Vector{BitMatrix}, Vector{Array{Float64, 3}}, Vector{Array{Float64, 3}}, Vector{Float64}, Vector{Float64}, Bool, Bool, Bool, UnitRange{Int64}}}, Int64})()
+         @ Base.Threads ./threadingconstructs.jl:178
+  Stacktrace:
+    [1] threading_run(fun::EegFun.var"#910#911"{EegFun.var"#912#913"{Nothing, EegFun.StatisticalData, Matrix{Float64}, SparseMatrixCSC{Bool, Int64}, Symbol, Symbol, Int64, Bool, Dict{Symbol, Int64}, Vector{Float64}, Vector{Symbol}, Vector{BitMatrix}, Vector{BitMatrix}, Vector{Array{Float64, 3}}, Vector{Array{Float64, 3}}, Vector{Float64}, Vector{Float64}, Bool, Bool, Bool, UnitRange{Int64}}}, static::Bool)
+      @ Base.Threads ./threadingconstructs.jl:199
+    [2] macro expansion
+      @ ./threadingconstructs.jl:216 [inlined]
+    [3] _run_permutations(prepared::EegFun.StatisticalData, n_permutations::Int64, critical_t_values::Matrix{Float64}, spatial_connectivity::SparseMatrixCSC{Bool, Int64}, cluster_type::Symbol, tail::Symbol, min_num_neighbors::Int64, show_progress::Bool; permutation_t_matrices::Nothing)
+      @ EegFun ~/Documents/Julia/EegFun.jl/src/analysis/statistics/permutations.jl:279
+    [4] _run_permutations
+      @ ~/Documents/Julia/EegFun.jl/src/analysis/statistics/permutations.jl:228 [inlined]
+    [5] permutation_test(prepared::EegFun.StatisticalData; n_permutations::Int64, threshold::Float64, threshold_method::Symbol, cluster_type::Symbol, min_num_neighbors::Int64, tail::Symbol, show_progress::Bool)
+      @ EegFun ~/Documents/Julia/EegFun.jl/src/analysis/statistics/statistics.jl:136
+    [6] top-level scope
+      @ ~/Documents/Julia/EegFun.jl/test/tests/statistics_erp.jl:57
+    [7] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.6+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+    [8] macro expansion
+      @ ~/Documents/Julia/EegFun.jl/test/tests/statistics_erp.jl:563 [inlined]
+    [9] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.6+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+   [10] macro expansion
+      @ ~/Documents/Julia/EegFun.jl/test/tests/statistics_erp.jl:567 [inlined]
+   [11] include(mapexpr::Function, mod::Module, _path::String)
+      @ Base ./Base.jl:307
+   [12] top-level scope
+      @ ~/Documents/Julia/EegFun.jl/test/runtests.jl:48
+   [13] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.6+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+   [14] macro expansion
+      @ ~/Documents/Julia/EegFun.jl/test/runtests.jl:48 [inlined]
+   [15] include(mod::Module, _path::String)
+      @ Base ./Base.jl:306
+   [16] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:317
+   [17] _start()
+      @ Base ./client.jl:550
+permutation_test - no effect: Error During Test at /home/ian/Documents/Julia/EegFun.jl/test/tests/statistics_erp.jl:573
+  Got exception outside of a @test
+  TaskFailedException
+  
+      nested task error: BoundsError: attempt to access 1-element Vector{Array{Float64, 3}} at index [2]
+      Stacktrace:
+       [1] throw_boundserror(A::Vector{Array{Float64, 3}}, I::Tuple{Int64})
+         @ Base ./essentials.jl:15
+       [2] getindex
+         @ ./essentials.jl:919 [inlined]
+       [3] macro expansion
+         @ ~/Documents/Julia/EegFun.jl/src/analysis/statistics/permutations.jl:283 [inlined]
+       [4] (::EegFun.var"#910#911"{EegFun.var"#912#913"{Nothing, EegFun.StatisticalData, Matrix{Float64}, SparseMatrixCSC{Bool, Int64}, Symbol, Symbol, Int64, Bool, Dict{Symbol, Int64}, Vector{Float64}, Vector{Symbol}, Vector{BitMatrix}, Vector{BitMatrix}, Vector{Array{Float64, 3}}, Vector{Array{Float64, 3}}, Vector{Float64}, Vector{Float64}, Bool, Bool, Bool, UnitRange{Int64}}})(tid::Int64; onethread::Bool)
+         @ EegFun ./threadingconstructs.jl:279
+       [5] #910
+         @ ./threadingconstructs.jl:246 [inlined]
+       [6] (::Base.Threads.var"#threading_run##0#threading_run##1"{EegFun.var"#910#911"{EegFun.var"#912#913"{Nothing, EegFun.StatisticalData, Matrix{Float64}, SparseMatrixCSC{Bool, Int64}, Symbol, Symbol, Int64, Bool, Dict{Symbol, Int64}, Vector{Float64}, Vector{Symbol}, Vector{BitMatrix}, Vector{BitMatrix}, Vector{Array{Float64, 3}}, Vector{Array{Float64, 3}}, Vector{Float64}, Vector{Float64}, Bool, Bool, Bool, UnitRange{Int64}}}, Int64})()
+         @ Base.Threads ./threadingconstructs.jl:178
+  Stacktrace:
+    [1] threading_run(fun::EegFun.var"#910#911"{EegFun.var"#912#913"{Nothing, EegFun.StatisticalData, Matrix{Float64}, SparseMatrixCSC{Bool, Int64}, Symbol, Symbol, Int64, Bool, Dict{Symbol, Int64}, Vector{Float64}, Vector{Symbol}, Vector{BitMatrix}, Vector{BitMatrix}, Vector{Array{Float64, 3}}, Vector{Array{Float64, 3}}, Vector{Float64}, Vector{Float64}, Bool, Bool, Bool, UnitRange{Int64}}}, static::Bool)
+      @ Base.Threads ./threadingconstructs.jl:199
+    [2] macro expansion
+      @ ./threadingconstructs.jl:216 [inlined]
+    [3] _run_permutations(prepared::EegFun.StatisticalData, n_permutations::Int64, critical_t_values::Matrix{Float64}, spatial_connectivity::SparseMatrixCSC{Bool, Int64}, cluster_type::Symbol, tail::Symbol, min_num_neighbors::Int64, show_progress::Bool; permutation_t_matrices::Nothing)
+      @ EegFun ~/Documents/Julia/EegFun.jl/src/analysis/statistics/permutations.jl:279
+    [4] _run_permutations
+      @ ~/Documents/Julia/EegFun.jl/src/analysis/statistics/permutations.jl:228 [inlined]
+    [5] permutation_test(prepared::EegFun.StatisticalData; n_permutations::Int64, threshold::Float64, threshold_method::Symbol, cluster_type::Symbol, min_num_neighbors::Int64, tail::Symbol, show_progress::Bool)
+      @ EegFun ~/Documents/Julia/EegFun.jl/src/analysis/statistics/statistics.jl:136
+    [6] top-level scope
+      @ ~/Documents/Julia/EegFun.jl/test/tests/statistics_erp.jl:57
+    [7] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.6+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+    [8] macro expansion
+      @ ~/Documents/Julia/EegFun.jl/test/tests/statistics_erp.jl:574 [inlined]
+    [9] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.6+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+   [10] macro expansion
+      @ ~/Documents/Julia/EegFun.jl/test/tests/statistics_erp.jl:579 [inlined]
+   [11] include(mapexpr::Function, mod::Module, _path::String)
+      @ Base ./Base.jl:307
+   [12] top-level scope
+      @ ~/Documents/Julia/EegFun.jl/test/runtests.jl:48
+   [13] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.6+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+   [14] macro expansion
+      @ ~/Documents/Julia/EegFun.jl/test/runtests.jl:48 [inlined]
+   [15] include(mod::Module, _path::String)
+      @ Base ./Base.jl:306
+   [16] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:317
+   [17] _start()
+      @ Base ./client.jl:550
+permutation_test - nonparametric common: Error During Test at /home/ian/Documents/Julia/EegFun.jl/test/tests/statistics_erp.jl:587
+  Got exception outside of a @test
+  TaskFailedException
+  
+      nested task error: BoundsError: attempt to access 1-element Vector{Array{Float64, 3}} at index [2]
+      Stacktrace:
+       [1] throw_boundserror(A::Vector{Array{Float64, 3}}, I::Tuple{Int64})
+         @ Base ./essentials.jl:15
+       [2] getindex
+         @ ./essentials.jl:919 [inlined]
+       [3] macro expansion
+         @ ~/Documents/Julia/EegFun.jl/src/analysis/statistics/permutations.jl:157 [inlined]
+       [4] (::EegFun.var"#_collect_permutation_t_matrices##12#_collect_permutation_t_matrices##13"{EegFun.var"#_collect_permutation_t_matrices##14#_collect_permutation_t_matrices##15"{EegFun.StatisticalData, Bool, Vector{Matrix{Float64}}, Vector{Matrix{Float64}}, Vector{Matrix{Float64}}, Vector{Matrix{Float64}}, Vector{Array{Float64, 3}}, Vector{Array{Float64, 3}}, Array{Float64, 3}, UnitRange{Int64}}})(tid::Int64; onethread::Bool)
+         @ EegFun ./threadingconstructs.jl:279
+       [5] #_collect_permutation_t_matrices##12
+         @ ./threadingconstructs.jl:246 [inlined]
+       [6] (::Base.Threads.var"#threading_run##0#threading_run##1"{EegFun.var"#_collect_permutation_t_matrices##12#_collect_permutation_t_matrices##13"{EegFun.var"#_collect_permutation_t_matrices##14#_collect_permutation_t_matrices##15"{EegFun.StatisticalData, Bool, Vector{Matrix{Float64}}, Vector{Matrix{Float64}}, Vector{Matrix{Float64}}, Vector{Matrix{Float64}}, Vector{Array{Float64, 3}}, Vector{Array{Float64, 3}}, Array{Float64, 3}, UnitRange{Int64}}}, Int64})()
+         @ Base.Threads ./threadingconstructs.jl:178
+  Stacktrace:
+    [1] threading_run(fun::EegFun.var"#_collect_permutation_t_matrices##12#_collect_permutation_t_matrices##13"{EegFun.var"#_collect_permutation_t_matrices##14#_collect_permutation_t_matrices##15"{EegFun.StatisticalData, Bool, Vector{Matrix{Float64}}, Vector{Matrix{Float64}}, Vector{Matrix{Float64}}, Vector{Matrix{Float64}}, Vector{Array{Float64, 3}}, Vector{Array{Float64, 3}}, Array{Float64, 3}, UnitRange{Int64}}}, static::Bool)
+      @ Base.Threads ./threadingconstructs.jl:199
+    [2] macro expansion
+      @ ./threadingconstructs.jl:216 [inlined]
+    [3] _collect_permutation_t_matrices(prepared::EegFun.StatisticalData, n_permutations::Int64, show_progress::Bool)
+      @ EegFun ~/Documents/Julia/EegFun.jl/src/analysis/statistics/permutations.jl:155
+    [4] permutation_test(prepared::EegFun.StatisticalData; n_permutations::Int64, threshold::Float64, threshold_method::Symbol, cluster_type::Symbol, min_num_neighbors::Int64, tail::Symbol, show_progress::Bool)
+      @ EegFun ~/Documents/Julia/EegFun.jl/src/analysis/statistics/statistics.jl:64
+    [5] top-level scope
+      @ ~/Documents/Julia/EegFun.jl/test/tests/statistics_erp.jl:57
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.6+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+    [7] macro expansion
+      @ ~/Documents/Julia/EegFun.jl/test/tests/statistics_erp.jl:588 [inlined]
+    [8] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.6+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+    [9] macro expansion
+      @ ~/Documents/Julia/EegFun.jl/test/tests/statistics_erp.jl:592 [inlined]
+   [10] include(mapexpr::Function, mod::Module, _path::String)
+      @ Base ./Base.jl:307
+   [11] top-level scope
+      @ ~/Documents/Julia/EegFun.jl/test/runtests.jl:48
+   [12] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.6+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+   [13] macro expansion
+      @ ~/Documents/Julia/EegFun.jl/test/runtests.jl:48 [inlined]
+   [14] include(mod::Module, _path::String)
+      @ Base ./Base.jl:306
+   [15] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:317
+   [16] _start()
+      @ Base ./client.jl:550
+PermutationResult show: Error During Test at /home/ian/Documents/Julia/EegFun.jl/test/tests/statistics_erp.jl:615
+  Got exception outside of a @test
+  TaskFailedException
+  
+      nested task error: BoundsError: attempt to access 1-element Vector{Array{Float64, 3}} at index [2]
+      Stacktrace:
+       [1] throw_boundserror(A::Vector{Array{Float64, 3}}, I::Tuple{Int64})
+         @ Base ./essentials.jl:15
+       [2] getindex
+         @ ./essentials.jl:919 [inlined]
+       [3] macro expansion
+         @ ~/Documents/Julia/EegFun.jl/src/analysis/statistics/permutations.jl:283 [inlined]
+       [4] (::EegFun.var"#910#911"{EegFun.var"#912#913"{Nothing, EegFun.StatisticalData, Matrix{Float64}, SparseMatrixCSC{Bool, Int64}, Symbol, Symbol, Int64, Bool, Dict{Symbol, Int64}, Vector{Float64}, Vector{Symbol}, Vector{BitMatrix}, Vector{BitMatrix}, Vector{Array{Float64, 3}}, Vector{Array{Float64, 3}}, Vector{Float64}, Vector{Float64}, Bool, Bool, Bool, UnitRange{Int64}}})(tid::Int64; onethread::Bool)
+         @ EegFun ./threadingconstructs.jl:279
+       [5] #910
+         @ ./threadingconstructs.jl:246 [inlined]
+       [6] (::Base.Threads.var"#threading_run##0#threading_run##1"{EegFun.var"#910#911"{EegFun.var"#912#913"{Nothing, EegFun.StatisticalData, Matrix{Float64}, SparseMatrixCSC{Bool, Int64}, Symbol, Symbol, Int64, Bool, Dict{Symbol, Int64}, Vector{Float64}, Vector{Symbol}, Vector{BitMatrix}, Vector{BitMatrix}, Vector{Array{Float64, 3}}, Vector{Array{Float64, 3}}, Vector{Float64}, Vector{Float64}, Bool, Bool, Bool, UnitRange{Int64}}}, Int64})()
+         @ Base.Threads ./threadingconstructs.jl:178
+  Stacktrace:
+    [1] threading_run(fun::EegFun.var"#910#911"{EegFun.var"#912#913"{Nothing, EegFun.StatisticalData, Matrix{Float64}, SparseMatrixCSC{Bool, Int64}, Symbol, Symbol, Int64, Bool, Dict{Symbol, Int64}, Vector{Float64}, Vector{Symbol}, Vector{BitMatrix}, Vector{BitMatrix}, Vector{Array{Float64, 3}}, Vector{Array{Float64, 3}}, Vector{Float64}, Vector{Float64}, Bool, Bool, Bool, UnitRange{Int64}}}, static::Bool)
+      @ Base.Threads ./threadingconstructs.jl:199
+    [2] macro expansion
+      @ ./threadingconstructs.jl:216 [inlined]
+    [3] _run_permutations(prepared::EegFun.StatisticalData, n_permutations::Int64, critical_t_values::Matrix{Float64}, spatial_connectivity::SparseMatrixCSC{Bool, Int64}, cluster_type::Symbol, tail::Symbol, min_num_neighbors::Int64, show_progress::Bool; permutation_t_matrices::Nothing)
+      @ EegFun ~/Documents/Julia/EegFun.jl/src/analysis/statistics/permutations.jl:279
+    [4] _run_permutations
+      @ ~/Documents/Julia/EegFun.jl/src/analysis/statistics/permutations.jl:228 [inlined]
+    [5] permutation_test(prepared::EegFun.StatisticalData; n_permutations::Int64, threshold::Float64, threshold_method::Symbol, cluster_type::Symbol, min_num_neighbors::Int64, tail::Symbol, show_progress::Bool)
+      @ EegFun ~/Documents/Julia/EegFun.jl/src/analysis/statistics/statistics.jl:136
+    [6] top-level scope
+      @ ~/Documents/Julia/EegFun.jl/test/tests/statistics_erp.jl:57
+    [7] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.6+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+    [8] macro expansion
+      @ ~/Documents/Julia/EegFun.jl/test/tests/statistics_erp.jl:616 [inlined]
+    [9] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.6+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+   [10] macro expansion
+      @ ~/Documents/Julia/EegFun.jl/test/tests/statistics_erp.jl:619 [inlined]
+   [11] include(mapexpr::Function, mod::Module, _path::String)
+      @ Base ./Base.jl:307
+   [12] top-level scope
+      @ ~/Documents/Julia/EegFun.jl/test/runtests.jl:48
+   [13] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.6+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+   [14] macro expansion
+      @ ~/Documents/Julia/EegFun.jl/test/runtests.jl:48 [inlined]
+   [15] include(mod::Module, _path::String)
+      @ Base ./Base.jl:306
+   [16] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:317
+   [17] _start()
+      @ Base ./client.jl:550
+Test Summary:                               | Pass  Error  Total   Time
+EegFun                                      |  105      5    110  13.5s
+  ERP Statistics                            |  105      5    110  13.0s
+    prepare_stats                           |   15            15   3.8s
+    prepare_stats - requires 2 conditions   |    1             1   0.3s
+    prepare_stats - channel selection       |    1             1   0.1s
+    _compute_t_matrix - paired              |    7             7   0.7s
+    _compute_t_matrix - no difference       |    2             2   0.1s
+    _compute_t_matrix - SE correctness      |    2             2   0.0s
+    _compute_t_matrix - prepared dispatch   |    4             4   0.1s
+    parametric thresholding                 |    5             5   0.1s
+    parametric thresholding - right tail    |    3             3   0.0s
+    parametric thresholding - in-place      |    2             2   0.0s
+    critical t-values                       |    4             4   0.1s
+    2D BFS clustering - temporal            |    3             3   0.3s
+    2D BFS clustering - spatiotemporal      |    1             1   0.1s
+    _find_clusters (positive + negative)    |    4             4   0.1s
+    _compute_cluster_statistics             |    3             3   0.1s
+    empty mask produces no clusters         |    1             1   0.0s
+    _prefilter_mask_by_neighbors            |    3             3   0.5s
+    _compute_cluster_pvalues                |    3             3   0.1s
+    _create_significance_mask               |    6             6   0.2s
+    _apply_bonferroni_correction            |    4             4   0.2s
+    nonparametric threshold common          |    3             3   0.1s
+    nonparametric thresholding in-place     |    4             4   0.0s
+    analytic_test                           |   16            16   1.0s
+    analytic_test - Bonferroni              |    1             1   0.0s
+    analytic_test - right tail              |    1             1   0.0s
+    analytic_test - left tail               |    1             1   0.0s
+    analytic_test - invalid args            |    2             2   0.0s
+    permutation_test - basic                |           1      1   4.4s
+    permutation_test - spatiotemporal       |           1      1   0.2s
+    permutation_test - no effect            |           1      1   0.0s
+    permutation_test - nonparametric common |           1      1   0.2s
+    StatisticalData show                    |    2             2   0.1s
+    PermutationResult show                  |           1      1   0.0s
+    AnalyticResult show                     |    1             1   0.1s
+RNG of the outermost testset: Xoshiro(0xf05b56465a9741d3, 0xe79c447f4060d086, 0xfade0e5b8f4ea224, 0x320a4973e742cb18, 0xebce6db93b166bc1)

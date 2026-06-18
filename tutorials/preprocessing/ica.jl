@@ -88,7 +88,7 @@ EegFun.plot_ica_component_activation(dat, ica_result_infomax_extended)
 EegFun.plot_databrowser(dat, ica_result_infomax_extended)
 
 # identify components (default correlation method)
-component_artifacts, component_metrics =
+@time component_artifacts, component_metrics =
     EegFun.identify_components(dat, ica_result_infomax, sample_selection = EegFun.samples_not(:is_extreme_value_200));
 
 # identify components (Combined method: union of correlation and ICLabel)
