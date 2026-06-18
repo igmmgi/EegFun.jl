@@ -12,7 +12,7 @@ The `ContinuousData` form runs ICA on a single recording. The `Vector{EpochData}
 concatenates all epochs into a continuous matrix before decomposition (the standard approach
 for epoched data, since ICA benefits from many data points).
 
-⚠️ **Pre-filter to ≥1 Hz** before running ICA to ensure a good decomposition.
+Tip: **Pre-filter to ≥1 Hz** before running ICA to ensure a good decomposition.
 
 # Key Arguments
 - `n_components`: Number of components (default: n_channels − 1)
@@ -46,17 +46,14 @@ function run_ica(
     algorithm::Symbol = :infomax,
     params::IcaPrms = IcaPrms(),
 )
-    # Create a copy of the data to avoid modifying the original
-    dat_ica = copy(dat)
-
-    selected_channels = get_selected_channels(dat_ica, channel_selection; include_meta = false, include_extra = include_extra)
+    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
     isempty(selected_channels) && error("No channels available after applying channel filter")
 
-    # Combine interval and sample selection (consistent with subset() pattern)
+    # Combine interval and sample selection 
     combined_sel = _combine_interval_sample(interval_selection, sample_selection)
 
     # Get samples to use using predicate
-    sample_indices = get_selected_samples(dat_ica, combined_sel)
+    sample_indices = get_selected_samples(dat, combined_sel)
     isempty(sample_indices) && error("No samples available after applying sample filter")
 
     # Set n_components if not specified
@@ -70,13 +67,13 @@ function run_ica(
     @info "Running ICA: $(length(selected_channels)) channels x $(length(sample_indices)) samples -> $(n_components) components"
 
     # Create subsetted layout that matches the selected channels
-    ica_layout = subset_layout(dat_ica.layout, channel_selection = channels(selected_channels))
+    ica_layout = subset_layout(dat.layout, channel_selection = channels(selected_channels))
 
     # Create data matrix and run ICA
-    dat_for_ica = _create_ica_data_matrix(dat_ica.data, selected_channels, sample_indices)
+    dat_for_ica = _create_ica_data_matrix(dat.data, selected_channels, sample_indices)
 
     # Subset data if requested
-    if percentage_of_data !== 100
+    if percentage_of_data != 100
         dat_for_ica = _select_subsample!(dat_for_ica, percentage_of_data)
     end
 
@@ -132,7 +129,7 @@ function run_ica(
 
     # Create data matrix for ICA
     concatenated_matrix = _create_ica_data_matrix(concatenated_df, selected_channels, sample_indices)
-    if percentage_of_data !== 100
+    if percentage_of_data != 100
         concatenated_matrix = _select_subsample!(concatenated_matrix, percentage_of_data)
     end
 
@@ -265,9 +262,14 @@ function _select_subsample!(data_matrix::Matrix{Float64}, percentage::Real)
     n_original_samples = size(data_matrix, 2)
     n_target_samples = round(Int, n_original_samples * percentage / 100)
 
+    if n_target_samples == n_original_samples
+        @info "Random sample: $n_target_samples of $n_original_samples ($(round(percentage, digits=1))%)"
+        return data_matrix
+    end
+
     # Random sample selection (columns are samples in data_matrix)
     sample_cols = randperm(n_original_samples)[1:n_target_samples]
-    subsampled_matrix = data_matrix[:, sample_cols]
+    subsampled_matrix = data_matrix[:, sort(sample_cols)]
 
     @info "Random sample: $n_target_samples of $n_original_samples ($(round(percentage, digits=1))%)"
 
@@ -353,24 +355,27 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String;
     # Store original mean before removing it
     original_mean = vec(mean(dat_ica, dims = 2))
 
+    n_channels, n_samples = size(dat_ica)
+
     # Center and scale data
     dat_ica .-= original_mean
-    scale = sqrt(norm((dat_ica * dat_ica') / size(dat_ica, 2)))
+    scale = sqrt(norm((dat_ica * transpose(dat_ica)) / n_samples))
     dat_ica ./= scale
 
-    # PCA reduction - optimized for speed
-    n_channels, n_samples = size(dat_ica)
+    # PCA reduction using high-precision SVD
+    # This prevents smallest components from degrading into numerical noise
     F = svd(dat_ica)
     pca_components = F.U[:, 1:n_components]
 
-    # PCA projection into workspace
-    workspace = Matrix{Float64}(undef, n_components, n_samples)
-    mul!(workspace, pca_components', dat_ica)
+    # Analytic sphering using exact singular values (skips a 260 MiB workspace allocation)
+    eigenvalues = (F.S[1:n_components] .^ 2) ./ (n_samples - 1)
+    sphere = diagm(1.0 ./ sqrt.(eigenvalues))
 
-    # Sphering: reuse original dat_ica memory (resize to smaller dimensions)
-    sphere = inv(sqrt(cov(workspace, dims = 2)))
-    dat_ica = Matrix{Float64}(undef, n_components, n_samples)  # Resize to final dimensions
-    mul!(dat_ica, sphere, workspace)
+    # Apply transform and create final workspace matrix (n_components × n_samples)
+    transform_matrix = sphere * transpose(pca_components)
+    dat_ica_sphered = Matrix{Float64}(undef, n_components, n_samples)
+    mul!(dat_ica_sphered, transform_matrix, dat_ica)
+    dat_ica = dat_ica_sphered
 
     # initialize
     n_channels = size(dat_ica, 1)
@@ -396,21 +401,35 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String;
 
             # extract data block
             @inbounds for j = 1:block_size
-                idx = permute_indices[t + j - 1]
+                idx = permute_indices[t+j-1]
                 @simd for i = 1:n_channels
                     work.data_block[i, j] = dat_ica[i, idx]
                 end
             end
 
             # forward pass
-            mul!(work.u, work.weights, work.data_block)
-            @. work.y = 1 - 2 / (1 + exp(-work.u))
+            if block_size < block
+                mul!(view(work.u, :, 1:block_size), work.weights, view(work.data_block, :, 1:block_size))
+            else
+                mul!(work.u, work.weights, work.data_block)
+            end
+
+            @fastmath @inbounds for i = 1:n_components
+                @simd for j = 1:block_size
+                    work.y[i, j] = 1.0 - 2.0 / (1.0 + exp(-work.u[i, j]))
+                end
+            end
 
             # update weights 
-            mul!(work.wu_term, work.y, transpose(work.u))
-            work.bi_weights .= work.BI .+ work.wu_term
-            mul!(work.weights_temp, work.bi_weights, work.weights)
-            @. work.weights += params.l_rate * work.weights_temp
+            if block_size < block
+                mul!(work.wu_term, view(work.y, :, 1:block_size), transpose(view(work.u, :, 1:block_size)))
+                mul!(work.weights_temp, work.wu_term, work.weights)
+                @. work.weights += params.l_rate * (block_size * work.weights + work.weights_temp)
+            else
+                mul!(work.wu_term, work.y, transpose(work.u))
+                mul!(work.weights_temp, work.wu_term, work.weights)
+                @. work.weights += params.l_rate * (block_size * work.weights + work.weights_temp)
+            end
 
             # boom?
             if maximum(abs, work.weights) > params.max_weight
@@ -521,24 +540,27 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout, filename
     # Store original mean before removing it
     original_mean = vec(mean(dat_ica, dims = 2))
 
+    n_channels, n_samples = size(dat_ica)
+
     # Center and scale data
     dat_ica .-= original_mean
-    scale = sqrt(norm((dat_ica * dat_ica') / size(dat_ica, 2)))
+    scale = sqrt(norm((dat_ica * transpose(dat_ica)) / n_samples))
     dat_ica ./= scale
 
-    # PCA reduction - optimized for speed
-    n_channels, n_samples = size(dat_ica)
+    # PCA reduction using high-precision SVD
+    # This prevents smallest components from degrading into numerical noise
     F = svd(dat_ica)
     pca_components = F.U[:, 1:n_components]
 
-    # PCA projection into workspace
-    workspace = Matrix{Float64}(undef, n_components, n_samples)
-    mul!(workspace, pca_components', dat_ica)
+    # Analytic sphering using exact singular values (skips a 260 MiB workspace allocation)
+    eigenvalues = (F.S[1:n_components] .^ 2) ./ (n_samples - 1)
+    sphere = diagm(1.0 ./ sqrt.(eigenvalues))
 
-    # Sphering: reuse original dat_ica memory (resize to smaller dimensions)
-    sphere = inv(sqrt(cov(workspace, dims = 2)))
-    dat_ica = Matrix{Float64}(undef, n_components, n_samples)  # Resize to final dimensions
-    mul!(dat_ica, sphere, workspace)
+    # Apply transform and create final workspace matrix (n_components × n_samples)
+    transform_matrix = sphere * transpose(pca_components)
+    dat_ica_sphered = Matrix{Float64}(undef, n_components, n_samples)
+    mul!(dat_ica_sphered, transform_matrix, dat_ica)
+    dat_ica = dat_ica_sphered
 
     # initialize
     n_channels = size(dat_ica, 1)
@@ -575,35 +597,45 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout, filename
 
             # extract data block
             @inbounds for j = 1:block_size
-                idx = permute_indices[t + j - 1]
+                idx = permute_indices[t+j-1]
                 @simd for i = 1:n_channels
                     work.data_block[i, j] = dat_ica[i, idx]
                 end
             end
 
             # forward pass
-            mul!(work.u, work.weights, work.data_block)
+            if block_size < block
+                mul!(view(work.u, :, 1:block_size), work.weights, view(work.data_block, :, 1:block_size))
+            else
+                mul!(work.u, work.weights, work.data_block)
+            end
 
             # Extended Infomax: use different nonlinearities based on kurtosis sign
             # Super-Gaussian (is_sub_gaussian = false): y = 1 - 2/(1 + exp(-u)) (standard Infomax)
             # Sub-Gaussian (is_sub_gaussian = true): y = -tanh(u)
-            for i = 1:n_channels
+            @fastmath @inbounds for i = 1:n_channels
                 if !is_sub_gaussian[i] # Super-Gaussian: standard Infomax sigmoid
-                    @inbounds for j = 1:block_size
+                    @simd for j = 1:block_size
                         work.y[i, j] = 1.0 - 2.0 / (1.0 + exp(-work.u[i, j]))
                     end
                 else # Sub-Gaussian: -tanh(u)
-                    @inbounds for j = 1:block_size
+                    @simd for j = 1:block_size
                         work.y[i, j] = -tanh(work.u[i, j])
                     end
                 end
             end
 
             # update weights 
-            mul!(work.wu_term, work.y, transpose(work.u))
-            work.bi_weights .= work.BI .+ work.wu_term
-            mul!(work.weights_temp, work.bi_weights, work.weights)
-            @. work.weights += params.l_rate * work.weights_temp
+            if block_size < block
+                mul!(work.wu_term, view(work.y, :, 1:block_size), transpose(view(work.u, :, 1:block_size)))
+                mul!(work.weights_temp, work.wu_term, work.weights)
+                @. work.weights += params.l_rate * (block_size * work.weights + work.weights_temp)
+            else
+                mul!(work.wu_term, work.y, transpose(work.u))
+                # Skip bi_weights allocation, compute directly: (block_size * I + wu_term) * weights
+                mul!(work.weights_temp, work.wu_term, work.weights)
+                @. work.weights += params.l_rate * (block_size * work.weights + work.weights_temp)
+            end
 
             # boom?
             if maximum(abs, work.weights) > params.max_weight
@@ -951,14 +983,14 @@ function _prepare_ica_data_matrix(dat::ContinuousData, ica::InfoIca, selected_sa
     relevant_cols = ica.layout.data.label
     n_samples = length(selected_samples)
     n_channels = length(relevant_cols)
-    
+
     # Pre-allocate to avoid huge DataFrame indexing and permutedims overhead
     dat_matrix = Matrix{Float64}(undef, n_channels, n_samples)
     for (i, col) in enumerate(relevant_cols)
         data_col = dat.data[!, col]
         _copy_col_to_matrix!(dat_matrix, i, data_col, selected_samples)
     end
-    
+
     dat_matrix .-= mean(dat_matrix, dims = 2)
     dat_matrix ./= ica.scale
 
@@ -1134,36 +1166,36 @@ function identify_eog_components(
 
         lags = (-max_lag_samples):lag_step:max_lag_samples
         n_s = size(comp_matrix, 2)
-        
+
         # Pre-allocate contiguous buffers to eliminate cache misses from row-major stride
         comp_buf = Vector{Float64}(undef, n_s)
         eog_buf = Vector{Float64}(undef, n_s)
-        
+
         for comp_idx in remaining_components
             comp_buf .= @view comp_matrix[comp_idx, :]
             m_c = mean(comp_buf)
-            s_c = std(comp_buf, corrected=false)
+            s_c = std(comp_buf, corrected = false)
 
             max_corr = 0.0
             for eog_comp_idx in primary_components
                 eog_buf .= @view comp_matrix[eog_comp_idx, :]
                 m_e = mean(eog_buf)
-                s_e = std(eog_buf, corrected=false)
+                s_e = std(eog_buf, corrected = false)
                 denom = n_s * s_c * s_e
-                
+
                 # Manual zero-allocation cross correlation for the few specific lags
                 max_corr_val = 0.0
                 for lag in lags
                     sum_xy = 0.0
-                    @inbounds @simd for i in max(1, 1 - lag):min(n_s, n_s - lag)
-                        sum_xy += (eog_buf[i] - m_e) * (comp_buf[i + lag] - m_c)
+                    @inbounds @simd for i = max(1, 1 - lag):min(n_s, n_s - lag)
+                        sum_xy += (eog_buf[i] - m_e) * (comp_buf[i+lag] - m_c)
                     end
                     c = abs(sum_xy / denom)
                     if c > max_corr_val
                         max_corr_val = c
                     end
                 end
-                
+
                 if max_corr_val > max_corr
                     max_corr = max_corr_val
                 end
@@ -1793,11 +1825,15 @@ function identify_components(
     kwargs...,
 )
     if method == :correlation
-        return _identify_components_correlation(dat, ica;
-            sample_selection=sample_selection, interval_selection=interval_selection, kwargs...)
+        return _identify_components_correlation(
+            dat,
+            ica;
+            sample_selection = sample_selection,
+            interval_selection = interval_selection,
+            kwargs...,
+        )
     else
-        error("Unknown component identification method: :$method. " *
-              "Supported methods: :correlation")
+        error("Unknown component identification method: :$method. " * "Supported methods: :correlation")
     end
 end
 
