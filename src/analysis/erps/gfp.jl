@@ -199,14 +199,23 @@ function global_dissimilarity(dat::ErpData; channel_selection::Function = channe
 
     # Normalize channel data by GFP at each time point
     gfp_values = vec(std(channel_matrix, dims = 2, corrected = false))
-    normalized_map = channel_matrix ./ gfp_values
-
-    # GD(t) = sqrt(mean((u_i(t) - u_i(t-1))^2))
-    map_diff = diff(normalized_map, dims = 1)
-    gd_values = vec(sqrt.(mean(map_diff .^ 2, dims = 2)))
-
+    
+    # GD(t) = sqrt(mean((u_i(t) - u_i(t-1))^2)) where u_i(t) is normalized by GFP
+    n_timepoints, n_channels = size(channel_matrix)
+    gd_values = zeros(Float64, n_timepoints)
+    
+    for t = 2:n_timepoints
+        sum_sq = 0.0
+        @inbounds @simd for c = 1:n_channels
+            v1 = channel_matrix[t, c] / gfp_values[t]
+            v0 = channel_matrix[t-1, c] / gfp_values[t-1]
+            sum_sq += (v1 - v0)^2
+        end
+        gd_values[t] = sqrt(sum_sq / n_channels)
+    end
+    
     # Replicate first value to maintain same length as time vector
-    gd_values = vcat(gd_values[1], gd_values)
+    gd_values[1] = gd_values[2]
 
     if normalize
         gd_values = _normalize_to_percent(gd_values)
@@ -279,10 +288,19 @@ function gfp_and_dissimilarity(dat::ErpData; channel_selection::Function = chann
     gfp_values = vec(std(channel_matrix, dims = 2, corrected = false))
 
     # Calculate Global Dissimilarity using GFP for normalization
-    normalized_map = channel_matrix ./ gfp_values
-    map_diff = diff(normalized_map, dims = 1)
-    gd_values = vec(sqrt.(mean(map_diff .^ 2, dims = 2)))
-    gd_values = vcat(gd_values[1], gd_values)
+    n_timepoints, n_channels = size(channel_matrix)
+    gd_values = zeros(Float64, n_timepoints)
+    
+    for t = 2:n_timepoints
+        sum_sq = 0.0
+        @inbounds @simd for c = 1:n_channels
+            v1 = channel_matrix[t, c] / gfp_values[t]
+            v0 = channel_matrix[t-1, c] / gfp_values[t-1]
+            sum_sq += (v1 - v0)^2
+        end
+        gd_values[t] = sqrt(sum_sq / n_channels)
+    end
+    gd_values[1] = gd_values[2]
 
     if normalize
         gfp_values = _normalize_to_percent(gfp_values)

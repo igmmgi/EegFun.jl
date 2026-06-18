@@ -177,13 +177,11 @@ function realign!(dat::EpochData, realignment_triggers::Vector{Int})::Nothing
     common_interval = _find_common_time_window(dat)
 
     # Calculate n_samples to strictly avoid off-by-one errors within this single condition
-    all_n_samples = Int[]
-    for epoch in dat.data
+    n_samples = minimum(dat.data) do epoch
         s_idx = find_closest_time_index(epoch.time, common_interval[1])
         e_idx = find_closest_time_index(epoch.time, common_interval[2])
-        push!(all_n_samples, e_idx - s_idx + 1)
+        e_idx - s_idx + 1
     end
-    n_samples = minimum(all_n_samples)
 
     @info "Common time interval: $(common_interval[1]) s to $(common_interval[2]) s (strict: $n_samples samples)"
 
@@ -330,26 +328,20 @@ and shifting the time vector so that this event becomes time zero.
 Episodes missing the trigger are removed from `dat.data`.
 """
 function _realign_epochs!(dat::EpochData, realignment_triggers::Vector{Int})
-    # Filter out epochs missing the trigger
+    # Filter out epochs missing the trigger and realign in a single pass
     valid_data = DataFrame[]
     for (i, epoch) in enumerate(dat.data)
         resp_idx = findfirst(x -> x in realignment_triggers, epoch.trigger)
         if !isnothing(resp_idx)
+            # Find trigger index and shift time vector so realignment_time becomes 0
+            realignment_time = epoch.time[resp_idx]
+            epoch[!, :time] .-= realignment_time
             push!(valid_data, epoch)
         else
             @minimal_warning "Epoch $i dropped: missing realignment trigger."
         end
     end
     dat.data = valid_data
-
-    for (i, epoch) in enumerate(dat.data)
-        # Find trigger index
-        resp_idx = findfirst(x -> x in realignment_triggers, epoch.trigger)
-        realignment_time = epoch.time[resp_idx]
-
-        # Shift time vector so realignment_time becomes 0
-        epoch[!, :time] .-= realignment_time
-    end
 end
 
 
@@ -360,15 +352,13 @@ This finds the latest start time (maximum of all minimum times) and the earliest
 end time (minimum of all maximum times) across all epochs.
 """
 function _find_common_time_window(dat::EpochData)::Tuple{Float64,Float64}
-    # Get time ranges for all epochs
-    min_times = [minimum(epoch.time) for epoch in dat.data]
-    max_times = [maximum(epoch.time) for epoch in dat.data]
-
     # Common interval is the overlap of all individual intervals
+    # Since time is sorted, [1] is minimum and [end] is maximum (O(1) vs O(T))
+    
     # Latest start time
-    common_start = maximum(min_times)
+    common_start = maximum(epoch.time[1] for epoch in dat.data)
     # Earliest end time
-    common_end = minimum(max_times)
+    common_end = minimum(epoch.time[end] for epoch in dat.data)
 
     if common_start >= common_end
         @minimal_error(

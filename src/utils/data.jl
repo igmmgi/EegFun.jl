@@ -563,9 +563,35 @@ Calculate the mean of specified columns in a DataFrame.
 # Returns
 - `Vector{Float64}`: A vector containing the mean of each specified column.
 """
-_colmeans(df::DataFrame, cols)::Vector{Float64} = reduce(+, eachcol(df[!, cols])) ./ length(cols)
-_colmeans(df::Matrix)::Vector{Float64} = reduce(+, eachcol(df)) ./ size(df)[2]
-_colmeans(df::Matrix, cols)::Vector{Float64} = reduce(+, eachcol(df[:, cols])) ./ length(cols)
+function _colmeans(df::DataFrame, cols)::Vector{Float64}
+    isempty(cols) && return Float64[]
+    N = nrow(df)
+    out = zeros(Float64, N)
+    for c in cols
+        out .+= df[!, c]
+    end
+    return out ./ length(cols)
+end
+
+function _colmeans(mat::Matrix)::Vector{Float64}
+    N, C = size(mat)
+    C == 0 && return Float64[]
+    out = zeros(Float64, N)
+    for c in 1:C
+        @views out .+= mat[:, c]
+    end
+    return out ./ C
+end
+
+function _colmeans(mat::Matrix, cols)::Vector{Float64}
+    isempty(cols) && return Float64[]
+    N = size(mat, 1)
+    out = zeros(Float64, N)
+    for c in cols
+        @views out .+= mat[:, c]
+    end
+    return out ./ length(cols)
+end
 
 
 """

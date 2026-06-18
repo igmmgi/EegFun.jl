@@ -91,7 +91,7 @@ PrecompileTools.@compile_workload begin
         EegFun._handle_shared_navigation!(res_epochs.axes, :down, 0.2)
         EegFun._handle_shared_navigation!(res_epochs.axes, :left, 0.2)
         EegFun._handle_shared_navigation!(res_epochs.axes, :right, 0.2)
-        
+
         selection_state_epochs = EegFun.SharedSelectionState(res_epochs.axes; selection_color = :blue, selection_alpha = 0.3)
         EegFun._start_shared_selection!(first(res_epochs.axes), selection_state_epochs, 0.1)
         EegFun._update_shared_selection!(first(res_epochs.axes), selection_state_epochs, 0.1, 0.5)
@@ -102,7 +102,7 @@ PrecompileTools.@compile_workload begin
         res_erp = EegFun.plot_erp(erp; display_plot = false)
         EegFun._handle_shared_navigation!(res_erp.axes, :up, 0.2)
         EegFun._handle_shared_navigation!(res_erp.axes, :left, 0.2)
-        
+
         selection_state_erp = EegFun.SharedSelectionState(res_erp.axes; selection_color = :blue, selection_alpha = 0.3)
         EegFun._start_shared_selection!(first(res_erp.axes), selection_state_erp, 0.1)
         EegFun._update_shared_selection!(first(res_erp.axes), selection_state_erp, 0.1, 0.5)
@@ -140,6 +140,27 @@ PrecompileTools.@compile_workload begin
         # 8. Subset operations
         EegFun.subset(erp[1]; channel_selection = EegFun.channels(:Cz), interval_selection = EegFun.times(-0.2, 0.5))
         EegFun.subset(erp; condition_selection = EegFun.conditions(1))
+
+        # 9. Optimized Statistical & Channel Operations
+        EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Fp1, :Fp2])], output_labels = [:Frontal_Avg])
+        EegFun.channel_difference!(
+            dat,
+            channel_selection1 = EegFun.channels(:Fp1),
+            channel_selection2 = EegFun.channels(:Fp2),
+            channel_out = :vEOG,
+        )
+        erp[1].condition = 1
+        EegFun.condition_average(erp, [[1]])
+        
+        erp_fake2 = copy(erp[1])
+        erp_fake2.condition = 2
+        EegFun.condition_difference([erp[1], erp_fake2], [(1, 2)])
+
+        # 10. ERP Metrics
+        EegFun.gfp(erp[1])
+        EegFun.global_dissimilarity(erp[1])
+        EegFun.lrp(erp[1], erp_fake2; channel_selection = EegFun.channels([:C3, :C4]))
+        EegFun.jackknife_average([erp[1], erp_fake2])
 
         println("Precompilation complete!")
     else

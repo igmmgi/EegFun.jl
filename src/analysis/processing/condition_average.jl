@@ -45,7 +45,11 @@ function _create_average_wave(erps::Vector{<:ErpData}, conditions::Vector{Int}, 
     for ch in eeg_channels
         all_have_ch = all(hasproperty(erp.data, ch) for erp in erps)
         if all_have_ch
-            avg_data[!, ch] = sum(erp.data[!, ch] for erp in erps) ./ n
+            col = avg_data[!, ch]
+            for i = 2:n
+                col .+= erps[i].data[!, ch]
+            end
+            col ./= n
         else
             @minimal_warning "Channel $ch not found in all conditions, keeping values from first condition"
         end
