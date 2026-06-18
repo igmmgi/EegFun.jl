@@ -273,10 +273,17 @@ function _compute_t_matrix(
     mean2_buffer::Union{Nothing,Array{Float64,2}} = nothing,
     mean_diff_buffer::Union{Nothing,Array{Float64,2}} = nothing,
     std_diff_buffer::Union{Nothing,Array{Float64,2}} = nothing,
+    t_matrix_buffer::Union{Nothing,Array{Float64,2}} = nothing,
     compute_p_values::Bool = true
 )
     n_participants, n_electrodes, n_time = size(data1)
-    t_matrix = Array{Float64,2}(undef, n_electrodes, n_time)
+    
+    if !isnothing(t_matrix_buffer)
+        t_matrix = t_matrix_buffer
+    else
+        t_matrix = Array{Float64,2}(undef, n_electrodes, n_time)
+    end
+    
     p_matrix = compute_p_values ? Array{Float64,2}(undef, n_electrodes, n_time) : Array{Float64,2}(undef, 0, 0)
 
     if design == :paired
