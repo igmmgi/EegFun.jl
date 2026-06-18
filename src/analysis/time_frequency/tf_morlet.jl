@@ -157,7 +157,10 @@ function tf_morlet(
 
             # Copy single trial data to padded buffer
             fill!(signal_padded, 0)
-            signal_padded[1:n_samples_per_epoch] .= dat.data[trial_idx][!, channel]
+            signal_col = dat.data[trial_idx][!, channel]::Vector{Float64}
+            @inbounds @simd for i = 1:n_samples_per_epoch
+                signal_padded[i] = signal_col[i]
+            end
 
             # FFT for this trial
             mul!(eegfft, p_fft_signal, signal_padded)
@@ -168,8 +171,9 @@ function tf_morlet(
                 # Note: This element-wise multiplication is a hot inner loop and a primary
                 # performance bottleneck. Matrix-level concatenation options could be 
                 # re-evaluated in the future for potential vectorization gains.
+                curr_wavelet = wavelet_ffts[fi]
                 @inbounds @simd for i = 1:n_conv_pow2
-                    conv_buffer[i] = wavelet_ffts[fi][i] * eegfft[i]
+                    conv_buffer[i] = curr_wavelet[i] * eegfft[i]
                 end
                 mul!(eegconv_buffer, p_ifft_conv, conv_buffer)
 
@@ -203,11 +207,22 @@ function tf_morlet(
         if return_trials # Store each trial separately
             for trial_idx = 1:n_trials
                 power_df[trial_idx][!, channel] = copy(vec(@view eegpower[:, :, trial_idx]))
-                phase_df[trial_idx][!, channel] = vec(angle.(@view eegconv[:, :, trial_idx]))
+                
+                phase_vec = Vector{Float64}(undef, num_frex * n_times_out)
+                eegconv_view = @view eegconv[:, :, trial_idx]
+                @inbounds @simd for i in eachindex(eegconv_view)
+                    phase_vec[i] = angle(eegconv_view[i])
+                end
+                phase_df[trial_idx][!, channel] = phase_vec
             end
         else
             power_df[!, channel] = copy(vec(eegpower))
-            phase_df[!, channel] = vec(angle.(eegconv))
+            
+            phase_vec = Vector{Float64}(undef, num_frex * n_times_out)
+            @inbounds @simd for i in eachindex(eegconv)
+                phase_vec[i] = angle(eegconv[i])
+            end
+            phase_df[!, channel] = phase_vec
         end
     end
 
