@@ -1,6 +1,8 @@
 using Test
 using Random
 using SparseArrays
+using DataFrames
+using Statistics
 
 # ============================================================
 # Helper: build a Vector{ErpData} with N participants × 2 conditions

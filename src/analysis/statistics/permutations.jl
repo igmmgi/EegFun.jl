@@ -142,12 +142,22 @@ function _collect_permutation_t_matrices(prepared::StatisticalData, n_permutatio
         progress = Progress(n_permutations, desc = "Collecting permutation t-matrices: ", showspeed = true)
     end
 
-    # Pre-allocate buffers for shuffling (reuse across permutations)
-    shuffled_A_buffer = similar(prepared.analysis.data[1])
-    shuffled_B_buffer = similar(prepared.analysis.data[2])
+    # Pre-allocate buffers per thread to reuse memory safely across concurrent threads
+    n_threads = Threads.maxthreadid()
+    shuffled_A_buffers = [similar(prepared.analysis.data[1]) for _ in 1:n_threads]
+    shuffled_B_buffers = [similar(prepared.analysis.data[2]) for _ in 1:n_threads]
+    
+    mean1_buffers = prepared.analysis.design == :paired ? [Array{Float64,2}(undef, n_electrodes, n_time) for _ in 1:n_threads] : nothing
+    mean2_buffers = prepared.analysis.design == :paired ? [Array{Float64,2}(undef, n_electrodes, n_time) for _ in 1:n_threads] : nothing
+    mean_diff_buffers = prepared.analysis.design == :paired ? [Array{Float64,2}(undef, n_electrodes, n_time) for _ in 1:n_threads] : nothing
+    std_diff_buffers = prepared.analysis.design == :paired ? [Array{Float64,2}(undef, n_electrodes, n_time) for _ in 1:n_threads] : nothing
 
-    for perm_idx = 1:n_permutations
-        # Shuffle labels using pre-allocated buffers
+    Threads.@threads for perm_idx = 1:n_permutations
+        tid = Threads.threadid()
+        shuffled_A_buffer = shuffled_A_buffers[tid]
+        shuffled_B_buffer = shuffled_B_buffers[tid]
+
+        # Shuffle labels using pre-allocated thread-local buffers
         _shuffle_labels!(
             shuffled_A_buffer,
             shuffled_B_buffer,
@@ -156,8 +166,21 @@ function _collect_permutation_t_matrices(prepared::StatisticalData, n_permutatio
             prepared.analysis.design,
         )
 
-        # Compute t-matrix directly from arrays (no StatisticalData needed)
-        t_matrix_perm, _, _, _ = _compute_t_matrix(shuffled_A_buffer, shuffled_B_buffer, prepared.analysis.design)
+        mean1_buffer = prepared.analysis.design == :paired ? mean1_buffers[tid] : nothing
+        mean2_buffer = prepared.analysis.design == :paired ? mean2_buffers[tid] : nothing
+        mean_diff_buffer = prepared.analysis.design == :paired ? mean_diff_buffers[tid] : nothing
+        std_diff_buffer = prepared.analysis.design == :paired ? std_diff_buffers[tid] : nothing
+
+        # Compute t-matrix directly from arrays using thread-local memory
+        t_matrix_perm, _, _, _ = _compute_t_matrix(
+            shuffled_A_buffer, 
+            shuffled_B_buffer, 
+            prepared.analysis.design,
+            mean1_buffer = mean1_buffer,
+            mean2_buffer = mean2_buffer,
+            mean_diff_buffer = mean_diff_buffer,
+            std_diff_buffer = std_diff_buffer
+        )
         permutation_t_matrices[:, :, perm_idx] = t_matrix_perm
 
         if show_progress
@@ -219,25 +242,26 @@ function _run_permutations(
     is_nonparametric_individual =
         isa(critical_t_values, Tuple) && length(critical_t_values) == 2 && isa(critical_t_values[1], Array{Float64,2})
 
-    permutation_max_positive = Float64[]
-    permutation_max_negative = Float64[]
-    sizehint!(permutation_max_positive, n_permutations)
-    sizehint!(permutation_max_negative, n_permutations)
+    permutation_max_positive = zeros(Float64, n_permutations)
+    permutation_max_negative = zeros(Float64, n_permutations)
 
-    # Pre-allocate buffers (reuse across all permutations)
-    shuffled_A_buffer = similar(prepared.analysis.data[1])
-    shuffled_B_buffer = similar(prepared.analysis.data[2])
-    mask_pos_buffer = BitArray{2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
-    mask_neg_buffer = BitArray{2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
+    n_electrodes = size(prepared.analysis.data[1], 2)
+    n_time = size(prepared.analysis.data[1], 3)
+    n_threads = Threads.maxthreadid()
 
-    # Pre-allocate all buffers for paired design (reuse across permutations)
+    # Pre-allocate buffers per thread to reuse memory across concurrent permutations
+    shuffled_A_buffers = [similar(prepared.analysis.data[1]) for _ in 1:n_threads]
+    shuffled_B_buffers = [similar(prepared.analysis.data[2]) for _ in 1:n_threads]
+    mask_pos_buffers = [BitArray{2}(undef, n_electrodes, n_time) for _ in 1:n_threads]
+    mask_neg_buffers = [BitArray{2}(undef, n_electrodes, n_time) for _ in 1:n_threads]
+
     if prepared.analysis.design == :paired
-        mean1_buffer = Array{Float64,2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
-        mean2_buffer = Array{Float64,2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
-        mean_diff_buffer = Array{Float64,2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
-        std_diff_buffer = Array{Float64,2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
+        mean1_buffers = [Array{Float64,2}(undef, n_electrodes, n_time) for _ in 1:n_threads]
+        mean2_buffers = [Array{Float64,2}(undef, n_electrodes, n_time) for _ in 1:n_threads]
+        mean_diff_buffers = [Array{Float64,2}(undef, n_electrodes, n_time) for _ in 1:n_threads]
+        std_diff_buffers = [Array{Float64,2}(undef, n_electrodes, n_time) for _ in 1:n_threads]
     else
-        mean1_buffer = mean2_buffer = mean_diff_buffer = std_diff_buffer = nothing
+        mean1_buffers = mean2_buffers = mean_diff_buffers = std_diff_buffers = nothing
     end
 
     # Extract commonly used fields from grand_average ErpData
@@ -252,7 +276,19 @@ function _run_permutations(
         progress = Progress(n_permutations, desc = "Permutations: ", showspeed = true)
     end
 
-    for perm_idx = 1:n_permutations
+    Threads.@threads for perm_idx = 1:n_permutations
+        tid = Threads.threadid()
+        
+        # Select thread-local buffers
+        shuffled_A_buffer = shuffled_A_buffers[tid]
+        shuffled_B_buffer = shuffled_B_buffers[tid]
+        mask_pos_buffer = mask_pos_buffers[tid]
+        mask_neg_buffer = mask_neg_buffers[tid]
+        mean1_buffer = prepared.analysis.design == :paired ? mean1_buffers[tid] : nothing
+        mean2_buffer = prepared.analysis.design == :paired ? mean2_buffers[tid] : nothing
+        mean_diff_buffer = prepared.analysis.design == :paired ? mean_diff_buffers[tid] : nothing
+        std_diff_buffer = prepared.analysis.design == :paired ? std_diff_buffers[tid] : nothing
+
         # Get t-matrix: either from pre-computed or compute new
         if !isnothing(permutation_t_matrices)
             t_matrix_perm = permutation_t_matrices[:, :, perm_idx]
@@ -314,8 +350,8 @@ function _run_permutations(
             max_neg = 0.0
         end
 
-        push!(permutation_max_positive, max_pos)
-        push!(permutation_max_negative, max_neg)
+        permutation_max_positive[perm_idx] = max_pos
+        permutation_max_negative[perm_idx] = max_neg
 
         if show_progress
             next!(progress)

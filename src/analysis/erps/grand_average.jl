@@ -42,14 +42,30 @@ function _create_grand_average(erps::Vector{ErpData}, cond_num::Int)
         end
     end
 
+    n_points = nrow(grand_avg_data)
+    n_erps = length(erps)
+    
+    # Pre-allocate summation buffer
+    avg_buf = Vector{Float64}(undef, n_points)
+
     # Average EEG channels across participants
     for ch in eeg_channels
-        # Collect data from all participants for this channel
-        # Stack as columns: n_timepoints x n_participants
-        channel_matrix = hcat([erp.data[!, ch] for erp in erps]...)
-
-        # Average across participants (mean of each time point)
-        grand_avg_data[!, ch] = vec(mean(channel_matrix, dims = 2))
+        fill!(avg_buf, 0.0)
+        
+        # Accumulate without creating matrix or intermediate arrays
+        for erp in erps
+            col_data = erp.data[!, ch]::Vector{Float64}
+            @inbounds @simd for i in 1:n_points
+                avg_buf[i] += col_data[i]
+            end
+        end
+        
+        # Divide by N
+        @inbounds @simd for i in 1:n_points
+            avg_buf[i] /= n_erps
+        end
+        
+        grand_avg_data[!, ch] = copy(avg_buf)
     end
 
     # Calculate total number of epochs across all participants

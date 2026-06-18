@@ -278,40 +278,28 @@ function _compute_confusion_matrices(
 )
     confusion_matrices = zeros(Float64, n_timepoints, n_classes, n_classes)
     n_test = sum(n_trials_per_fold)
-    total_valid = n_iterations * n_folds * n_test
 
     for t = 1:n_timepoints
-        # Preallocate arrays for all valid predictions
-        all_true_t = Vector{Int}(undef, total_valid)
-        all_pred_t = Vector{Int}(undef, total_valid)
-        valid_count = 0
-
+        # Directly accumulate counts into the confusion matrix
         for iter = 1:n_iterations
             for fold = 1:n_folds
                 true_t = @view all_targets[iter, fold, t, 1:n_test]
                 pred_t = @view all_predictions[iter, fold, t, 1:n_test]
-                for i = 1:n_test
-                    if true_t[i] != 0 && pred_t[i] != 0
-                        valid_count += 1
-                        all_true_t[valid_count] = Int(true_t[i])
-                        all_pred_t[valid_count] = Int(pred_t[i])
+                @inbounds @simd for i = 1:n_test
+                    t_val = true_t[i]
+                    p_val = pred_t[i]
+                    if t_val != 0 && p_val != 0
+                        confusion_matrices[t, Int(t_val), Int(p_val)] += 1.0
                     end
                 end
             end
         end
 
-        if valid_count > 0
-            # Resize to actual valid count
-            resize!(all_true_t, valid_count)
-            resize!(all_pred_t, valid_count)
-
-            confusion_matrices[t, :, :] = _create_confusion_matrix(all_true_t, all_pred_t, n_classes)
-            # Normalize to proportions
-            row_sums = sum(confusion_matrices[t, :, :], dims = 2)
-            for c = 1:n_classes
-                if row_sums[c] > 0
-                    confusion_matrices[t, c, :] ./= row_sums[c]
-                end
+        # Normalize to proportions
+        for c = 1:n_classes
+            row_sum = sum(@view confusion_matrices[t, c, :])
+            if row_sum > 0
+                @view(confusion_matrices[t, c, :]) ./= row_sum
             end
         end
     end

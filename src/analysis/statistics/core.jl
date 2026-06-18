@@ -95,10 +95,8 @@ function prepare_stats(
     n_cond2 = length(condition2)
 
     # Stack per-participant data: [participants × electrodes × time]
-    cond1_stacked =
-        cat([reshape(Matrix(erp.data[!, display_electrodes])', 1, n_display_electrodes, n_display_time) for erp in condition1]..., dims = 1)
-    cond2_stacked =
-        cat([reshape(Matrix(erp.data[!, display_electrodes])', 1, n_display_electrodes, n_display_time) for erp in condition2]..., dims = 1)
+    cond1_stacked = _extract_erp_array(condition1, display_electrodes, n_display_time)
+    cond2_stacked = _extract_erp_array(condition2, display_electrodes, n_display_time)
 
     # SE = std across participants (dim 1) / sqrt(n), result is [electrodes × time]
     se_cond1 = dropdims(std(cond1_stacked, dims = 1), dims = 1) ./ sqrt(n_cond1)
@@ -134,12 +132,12 @@ function prepare_stats(
     n_time = length(time_points)
 
     # Extract data arrays: [participants × electrodes × time]
-    condition1 = cat([reshape(Matrix(erp.data[!, electrodes])', 1, n_electrodes, n_time) for erp in condition1]..., dims = 1)
-    condition2 = cat([reshape(Matrix(erp.data[!, electrodes])', 1, n_electrodes, n_time) for erp in condition2]..., dims = 1)
+    condition1_array = _extract_erp_array(condition1, electrodes, n_time)
+    condition2_array = _extract_erp_array(condition2, electrodes, n_time)
 
     return StatisticalData(
         [condition1_avg, condition2_avg],
-        AnalysisData(design, [condition1, condition2], time_points),
+        AnalysisData(design, [condition1_array, condition2_array], time_points),
         se_cond1,
         se_cond2,
         se_diff,
@@ -167,6 +165,29 @@ function prepare_stats(
     else
         @minimal_error "Unsupported data type: $(typeof(first_item)). Expected ErpData or TimeFreqData."
     end
+end
+
+"""
+    _extract_erp_array(erps::Vector{ErpData}, electrodes::Vector{Symbol}, n_time::Int)
+
+Extract ERP data into a 3D array [participants × electrodes × time].
+Pre-allocates the target array to avoid slow Splatting/Catting operations.
+"""
+function _extract_erp_array(erps::Vector{ErpData}, electrodes::Vector{Symbol}, n_time::Int)
+    n_participants = length(erps)
+    n_electrodes = length(electrodes)
+    data = Array{Float64, 3}(undef, n_participants, n_electrodes, n_time)
+    
+    for (p, erp) in enumerate(erps)
+        mat = Matrix{Float64}(erp.data[!, electrodes])
+        for e in 1:n_electrodes
+            @inbounds for t in 1:n_time
+                data[p, e, t] = mat[t, e]
+            end
+        end
+    end
+    
+    return data
 end
 
 
