@@ -371,10 +371,12 @@ function _calculate_lrp(erp_left::ErpData, erp_right::ErpData, pairs::Vector{Tup
 
         # Calculate LRP using the double-subtraction formula
         # LRP for left channel (e.g., C3)
-        lrp_matrix[:, left_col] = 0.5 .* ((ch_left_in_right .- ch_right_in_right) .+ (ch_right_in_left .- ch_left_in_left))
+        @views left_view = lrp_matrix[:, left_col]
+        @. left_view = 0.5 * ((ch_left_in_right - ch_right_in_right) + (ch_right_in_left - ch_left_in_left))
 
-        # LRP for right channel (e.g., C4) 
-        lrp_matrix[:, right_col] = 0.5 .* ((ch_right_in_right .- ch_left_in_right) .+ (ch_left_in_left .- ch_right_in_left))
+        # LRP for right channel (e.g., C4) is mathematically identical to the inverse of the left channel
+        @views right_view = lrp_matrix[:, right_col]
+        @. right_view = -left_view
 
         # Build channel labels (interleaved to match matrix structure)
         push!(lrp_labels, ch_left)

@@ -45,7 +45,7 @@ function _create_difference_wave(erp1::ErpData, erp2::ErpData, cond1::Int, cond2
     # Subtract EEG channels
     for ch in eeg_channels
         if hasproperty(erp2.data, ch)
-            diff_data[!, ch] = erp1.data[!, ch] .- erp2.data[!, ch]
+            diff_data[!, ch] .-= erp2.data[!, ch]
         else
             @minimal_warning "Channel $ch not found in condition $cond2, keeping original values"
         end

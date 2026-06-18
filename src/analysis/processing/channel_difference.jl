@@ -1,22 +1,24 @@
-# Internal function that only accepts resolved channels and mutates the DataFrame
 function _calculate_channel_difference!(dat::DataFrame, channels_in1::Vector{Symbol}, channels_in2::Vector{Symbol}, channel_out::Symbol)
 
-    # Pre-allocate vectors for better performance
-    means = zeros(n_samples(dat), 2)
+    # Pre-allocate single output vector to avoid O(N) temporary allocations
+    N = nrow(dat)
+    out_col = zeros(Float64, N)
 
-    # Calculate means in-place
+    # Add first group in-place
     for channel in channels_in1
-        means[:, 1] .+= dat[!, channel]
+        out_col .+= dat[!, channel]
     end
-    means[:, 1] ./= length(channels_in1)
+    out_col ./= length(channels_in1)
 
+    # Subtract second group in-place
+    factor = 1.0 / length(channels_in2)
     for channel in channels_in2
-        means[:, 2] .+= dat[!, channel]
+        col2 = dat[!, channel]
+        @. out_col -= col2 * factor
     end
-    means[:, 2] ./= length(channels_in2)
 
-    # Calculate difference and assign directly to DataFrame
-    dat[!, channel_out] = means[:, 1] .- means[:, 2]
+    # Assign directly to DataFrame
+    dat[!, channel_out] = out_col
 
     return nothing
 end

@@ -47,21 +47,33 @@ function _create_jackknife_averages(erps::Vector{ErpData})::Vector{ErpData}
     first_erp = erps[1]
     metadata_cols = meta_labels(first_erp)
     eeg_channels = setdiff(propertynames(first_erp.data), metadata_cols)
+    n_timepoints = nrow(first_erp.data)
 
     # Pre-allocate result vector
     jackknife_erps = ErpData[]
 
     @info "Creating jackknife averages for $n_participants participants"
 
+    # Step 1: Pre-compute the total sum for each channel to enable O(N) jackknifing
+    total_sums = Dict{Symbol, Vector{Float64}}()
+    for ch in eeg_channels
+        total_sums[ch] = zeros(Float64, n_timepoints)
+        for erp in erps
+            total_sums[ch] .+= erp.data[!, ch]
+        end
+    end
+
+    # Pre-calculate total epochs
+    total_epochs_all = sum(erp.n_epochs for erp in erps)
+
+    # Step 2: Create jackknife average for each participant
     for excluded_idx = 1:n_participants
-        # Get indices of all participants except the current one
-        included_indices = setdiff(1:n_participants, excluded_idx)
-        included_erps = erps[included_indices]
+        excluded_erp = erps[excluded_idx]
+        
+        @info "  Participant $excluded_idx: averaging $(n_participants - 1) other participants"
 
-        @info "  Participant $excluded_idx: averaging $(length(included_erps)) other participants"
-
-        # Create a copy of the first included ERP's data as the base
-        jackknife_data = copy(included_erps[1].data)
+        # Create a copy of the first ERP's data as the base (just to get the structure and time vector)
+        jackknife_data = copy(first_erp.data)
 
         # Remove condition/condition_name/n_epochs columns if they exist (they're in struct now)
         cols_to_remove = [:condition, :condition_name, :n_epochs]
@@ -71,22 +83,18 @@ function _create_jackknife_averages(erps::Vector{ErpData})::Vector{ErpData}
             end
         end
 
-        # Average EEG channels across included participants
+        # Calculate jackknife average: (Total - Excluded) / (N - 1)
         for ch in eeg_channels
-            # Collect data from all included participants for this channel
-            # Stack as columns: n_timepoints x n_included_participants
-            channel_matrix = hcat([erp.data[!, ch] for erp in included_erps]...)
-
-            # Average across participants (mean of each time point)
-            jackknife_data[!, ch] = vec(mean(channel_matrix, dims = 2))
+            avg_col = (total_sums[ch] .- excluded_erp.data[!, ch]) ./ (n_participants - 1)
+            jackknife_data[!, ch] = avg_col
         end
 
-        # Calculate total number of epochs across included participants
-        total_epochs = sum(erp.n_epochs for erp in included_erps)
+        # Calculate epochs for this jackknife average
+        total_epochs = total_epochs_all - excluded_erp.n_epochs
 
-        # Get condition info from first ERP and update for jackknife
-        cond_name = included_erps[1].condition_name
-        condition = included_erps[1].condition
+        # Get condition info
+        cond_name = first_erp.condition_name
+        condition = first_erp.condition
         jackknife_cond_name = "$(cond_name)_jackknife_$(excluded_idx)"
 
         # Create ErpData object for this jackknife average
