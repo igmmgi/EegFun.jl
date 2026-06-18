@@ -309,6 +309,7 @@ function _run_permutations(
                 mean2_buffer = mean2_buffer,
                 mean_diff_buffer = mean_diff_buffer,
                 std_diff_buffer = std_diff_buffer,
+                compute_p_values = false
             )
         end
 
@@ -497,7 +498,7 @@ function _run_permutations_tf(
         _shuffle_labels_tf!(shuffled_A, shuffled_B, prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design)
 
         # Compute t-matrix for shuffled data
-        t_matrix_perm, _, _ = _compute_t_matrix_tf(shuffled_A, shuffled_B, prepared.analysis.design, tail = tail)
+        t_matrix_perm, _, _ = _compute_t_matrix_tf(shuffled_A, shuffled_B, prepared.analysis.design, tail = tail, compute_p_values = false)
 
         # Threshold
         if is_parametric

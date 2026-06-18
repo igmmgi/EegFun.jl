@@ -273,10 +273,11 @@ function _compute_t_matrix(
     mean2_buffer::Union{Nothing,Array{Float64,2}} = nothing,
     mean_diff_buffer::Union{Nothing,Array{Float64,2}} = nothing,
     std_diff_buffer::Union{Nothing,Array{Float64,2}} = nothing,
+    compute_p_values::Bool = true
 )
     n_participants, n_electrodes, n_time = size(data1)
     t_matrix = Array{Float64,2}(undef, n_electrodes, n_time)
-    p_matrix = Array{Float64,2}(undef, n_electrodes, n_time)
+    p_matrix = compute_p_values ? Array{Float64,2}(undef, n_electrodes, n_time) : Array{Float64,2}(undef, 0, 0)
 
     if design == :paired
 
@@ -347,26 +348,50 @@ function _compute_t_matrix(
 
         # Compute p-values using internal function (avoids code duplication)
         # Use pre-allocated p_matrix buffer
-        p_matrix = _compute_p_matrix(t_matrix, df, tail, p_matrix)
+        if compute_p_values
+            p_matrix = _compute_p_matrix(t_matrix, df, tail, p_matrix)
+        end
 
     else
         # Independent design: need to loop (but df is constant across all points)
         se_matrix = Array{Float64,2}(undef, n_electrodes, n_time)
-        result = nothing
+        n_A = size(data1, 1)
+        n_B = size(data2, 1)
+        df = Float64(n_A + n_B - 2)
+
         @inbounds for t_idx = 1:n_time
             @inbounds for e_idx = 1:n_electrodes
-                data_A = view(data1, :, e_idx, t_idx)
-                data_B = view(data2, :, e_idx, t_idx)
-                result = independent_ttest(data_A, data_B, tail = tail)
-                t_matrix[e_idx, t_idx] = result.t
-                p_matrix[e_idx, t_idx] = result.p
-                # SE for independent t-test: sqrt(var_A/n_A + var_B/n_B)
-                n_A = length(data_A)
-                n_B = length(data_B)
-                se_matrix[e_idx, t_idx] = sqrt(var(data_A) / n_A + var(data_B) / n_B)
+                sum1 = 0.0; sum2 = 0.0; sum1_sq = 0.0; sum2_sq = 0.0
+                
+                @simd for p_idx = 1:n_A
+                    val = data1[p_idx, e_idx, t_idx]
+                    sum1 += val
+                    sum1_sq += val * val
+                end
+                
+                @simd for p_idx = 1:n_B
+                    val = data2[p_idx, e_idx, t_idx]
+                    sum2 += val
+                    sum2_sq += val * val
+                end
+                
+                mean1 = sum1 / n_A
+                mean2 = sum2 / n_B
+                var1 = (sum1_sq / n_A - mean1 * mean1) * n_A / (n_A - 1)
+                var2 = (sum2_sq / n_B - mean2 * mean2) * n_B / (n_B - 1)
+                
+                # Pooled standard error (assuming equal variances as documented)
+                pooled_var = ((n_A - 1) * var1 + (n_B - 1) * var2) / df
+                se = sqrt(pooled_var * (1.0 / n_A + 1.0 / n_B))
+                
+                t_matrix[e_idx, t_idx] = (mean1 - mean2) / se
+                se_matrix[e_idx, t_idx] = se
             end
         end
-        df = result.df
+
+        if compute_p_values
+            p_matrix = _compute_p_matrix(t_matrix, df, tail, p_matrix)
+        end
     end
 
     return t_matrix, df, p_matrix, se_matrix

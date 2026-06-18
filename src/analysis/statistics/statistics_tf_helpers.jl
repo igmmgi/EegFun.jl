@@ -269,10 +269,10 @@ Compute t-statistics and p-values for all electrode × frequency × time points.
 - `df::Float64`: Degrees of freedom
 - `p_matrix::Array{Float64, 3}`: P-values [electrodes × freqs × time]
 """
-function _compute_t_matrix_tf(data1::Array{Float64,4}, data2::Array{Float64,4}, design::Symbol; tail::Symbol = :both)
+function _compute_t_matrix_tf(data1::Array{Float64,4}, data2::Array{Float64,4}, design::Symbol; tail::Symbol = :both, compute_p_values::Bool = true)
     n_participants, n_electrodes, n_freqs, n_time = size(data1)
     t_matrix = Array{Float64,3}(undef, n_electrodes, n_freqs, n_time)
-    p_matrix = Array{Float64,3}(undef, n_electrodes, n_freqs, n_time)
+    p_matrix = compute_p_values ? Array{Float64,3}(undef, n_electrodes, n_freqs, n_time) : Array{Float64,3}(undef, 0, 0, 0)
 
     if design == :paired
         @inbounds for t_idx = 1:n_time
@@ -299,23 +299,48 @@ function _compute_t_matrix_tf(data1::Array{Float64,4}, data2::Array{Float64,4}, 
         end
 
         df = Float64(n_participants - 1)
-        _compute_p_matrix_tf!(p_matrix, t_matrix, df, tail)
+        if compute_p_values
+            _compute_p_matrix_tf!(p_matrix, t_matrix, df, tail)
+        end
 
     else
         # Independent design
-        result = nothing
+        n_A = size(data1, 1)
+        n_B = size(data2, 1)
+        df = Float64(n_A + n_B - 2)
         @inbounds for t_idx = 1:n_time
             for f_idx = 1:n_freqs
                 for e_idx = 1:n_electrodes
-                    data_A = view(data1, :, e_idx, f_idx, t_idx)
-                    data_B = view(data2, :, e_idx, f_idx, t_idx)
-                    result = independent_ttest(data_A, data_B, tail = tail)
-                    t_matrix[e_idx, f_idx, t_idx] = result.t
-                    p_matrix[e_idx, f_idx, t_idx] = result.p
+                    sum1 = 0.0; sum2 = 0.0; sum1_sq = 0.0; sum2_sq = 0.0
+                    
+                    @simd for p_idx = 1:n_A
+                        val = data1[p_idx, e_idx, f_idx, t_idx]
+                        sum1 += val
+                        sum1_sq += val * val
+                    end
+                    
+                    @simd for p_idx = 1:n_B
+                        val = data2[p_idx, e_idx, f_idx, t_idx]
+                        sum2 += val
+                        sum2_sq += val * val
+                    end
+                    
+                    mean1 = sum1 / n_A
+                    mean2 = sum2 / n_B
+                    var1 = (sum1_sq / n_A - mean1 * mean1) * n_A / (n_A - 1)
+                    var2 = (sum2_sq / n_B - mean2 * mean2) * n_B / (n_B - 1)
+                    
+                    pooled_var = ((n_A - 1) * var1 + (n_B - 1) * var2) / df
+                    se = sqrt(pooled_var * (1.0 / n_A + 1.0 / n_B))
+                    
+                    t_matrix[e_idx, f_idx, t_idx] = (mean1 - mean2) / se
                 end
             end
         end
-        df = result.df
+        
+        if compute_p_values
+            _compute_p_matrix_tf!(p_matrix, t_matrix, df, tail)
+        end
     end
 
     return t_matrix, df, p_matrix
