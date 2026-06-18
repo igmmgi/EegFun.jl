@@ -237,7 +237,10 @@ function _create_ica_data_matrix(dat::DataFrame, channels, samples)
 
     # Use direct column access for better performance
     for (i, ch) in enumerate(existing_channels)
-        result[i, :] = dat[samples, ch]
+        col = dat[!, ch]::Vector{Float64}
+        @inbounds @simd for j in eachindex(samples)
+            result[i, j] = col[samples[j]]
+        end
     end
 
     return result
@@ -302,8 +305,8 @@ function create_work_arrays(n_components::Int, block_size::Int)
         zeros(n_components, n_components),  # weights_temp
         zeros(n_components, n_components),  # bi_weights
         zeros(n_components, n_components),  # wu_term
-        zeros(1, n_components^2),  # delta
-        zeros(1, n_components^2),   # olddelta
+        zeros(n_components, n_components),  # delta
+        zeros(n_components, n_components),   # olddelta
     )
 end
 
@@ -317,7 +320,7 @@ Internal dispatcher function that routes to the appropriate ICA algorithm implem
 - `dat_ica::Matrix{Float64}`: Data matrix (channels × samples)
 - `layout::Layout`: Layout information
 - `n_components::Int`: Number of ICA components
-- `algorithm::Symbol`: Algorithm to use (`:infomax`, `:sobi`, `:jade`)
+- `algorithm::Symbol`: Algorithm to use (`:infomax`, `:infomax_extended`)
 - `params::IcaPrms`: Algorithm-specific parameters
 
 # Returns
@@ -392,7 +395,12 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String;
             block_size = block_end - t + 1
 
             # extract data block
-            copyto!(view(work.data_block, :, 1:block_size), view(dat_ica, :, view(permute_indices, t:block_end)))
+            @inbounds for j = 1:block_size
+                idx = permute_indices[t + j - 1]
+                @simd for i = 1:n_channels
+                    work.data_block[i, j] = dat_ica[i, idx]
+                end
+            end
 
             # forward pass
             mul!(work.u, work.weights, work.data_block)
@@ -415,7 +423,7 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String;
         if !wts_blowup
             work.oldweights .-= work.weights
             step += 1
-            work.delta .= reshape(work.oldweights, 1, :)
+            work.delta .= work.oldweights
             change = dot(work.delta, work.delta)
         end
 
@@ -566,7 +574,12 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout, filename
             block_size = block_end - t + 1
 
             # extract data block
-            copyto!(view(work.data_block, :, 1:block_size), view(dat_ica, :, view(permute_indices, t:block_end)))
+            @inbounds for j = 1:block_size
+                idx = permute_indices[t + j - 1]
+                @simd for i = 1:n_channels
+                    work.data_block[i, j] = dat_ica[i, idx]
+                end
+            end
 
             # forward pass
             mul!(work.u, work.weights, work.data_block)
@@ -603,7 +616,7 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout, filename
         if !wts_blowup
             work.oldweights .-= work.weights
             step += 1
-            work.delta .= reshape(work.oldweights, 1, :)
+            work.delta .= work.oldweights
             change = dot(work.delta, work.delta)
         end
 
@@ -623,20 +636,38 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout, filename
         if step > 10 && step % 10 == 0
             # Compute activations - use random subset 
             kurtsize = min(2000, n_samples)
+            activations = Matrix{Float64}(undef, n_channels, kurtsize)
             if kurtsize < n_samples
                 rp = randperm(n_samples)[1:kurtsize]
-                activations = work.weights * dat_ica[:, rp]
+                @inbounds for j = 1:kurtsize
+                    idx = rp[j]
+                    for i = 1:n_channels
+                        sum_val = 0.0
+                        @simd for k = 1:n_channels
+                            sum_val += work.weights[i, k] * dat_ica[k, idx]
+                        end
+                        activations[i, j] = sum_val
+                    end
+                end
             else
-                activations = work.weights * dat_ica
+                mul!(activations, work.weights, dat_ica)
             end
 
             n_switched = 0
             kurtosis_values = Vector{Float64}(undef, n_channels)
 
             for i = 1:n_channels
-                u2_mean_sq = (mean(activations[i, :] .^ 2))^2
+                u2_sum = 0.0
+                u4_sum = 0.0
+                @inbounds @simd for j = 1:kurtsize
+                    val = activations[i, j]
+                    val2 = val * val
+                    u2_sum += val2
+                    u4_sum += val2 * val2
+                end
+                u2_mean_sq = (u2_sum / kurtsize)^2
                 if u2_mean_sq > eps(Float64)
-                    u4_mean = mean(activations[i, :] .^ 4)
+                    u4_mean = u4_sum / kurtsize
                     kurtosis_raw = (u4_mean / u2_mean_sq) - 3.0
 
                     # Apply momentum smoothing to reduce oscillation for components near kurtosis = 0

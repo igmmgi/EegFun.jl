@@ -39,7 +39,7 @@ EegFun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 EegFun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
 # ICA on continuous data excluding extreme samples
-ica_result_infomax = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_200))
+@time ica_result_infomax = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_200))
 
 # Databrowser (here we can turn on/off component removal's)
 EegFun.plot_databrowser(dat)
