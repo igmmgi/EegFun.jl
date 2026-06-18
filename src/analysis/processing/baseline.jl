@@ -13,10 +13,10 @@ Internal function that applies baseline correction to specified channels in a Da
 - Modifies the input DataFrame in-place
 """
 function _apply_baseline!(dat::DataFrame, channels::Vector{Symbol}, baseline_interval::Tuple{Int,Int})
-    # Compute mean baseline interval and apply to each channel
-    baseline_means = mean.(eachcol(dat[baseline_interval[1]:baseline_interval[2], channels]))
-    for (channel, mean_val) in zip(channels, baseline_means)
+    # Compute mean baseline interval and apply to each channel individually to avoid allocating a DataFrame
+    for channel in channels
         col = dat[!, channel]
+        mean_val = mean(view(col, baseline_interval[1]:baseline_interval[2]))
         if col isa Vector{Float64}
             col .-= mean_val
         else

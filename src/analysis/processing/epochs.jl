@@ -574,6 +574,9 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
     # Extract and create array of dataframes with bounds checking
     epochs = DataFrame[]
 
+    # Pre-calculate columns to keep
+    cols_to_keep = setdiff(propertynames(dat.data), [:condition, :condition_name, :file])
+    
     for (epoch, (pre, zero, post)) in enumerate(zip(pre_idx, zero_idx, post_idx))
         # Bounds checking to prevent out-of-bounds errors
         if pre < 1 || post > nrow(dat.data)
@@ -581,16 +584,11 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
             continue
         end
 
-        epoch_df = DataFrame(dat.data[pre:post, :])
-        epoch_df.time = epoch_df.time .- dat.data.time[zero]
-        # Remove condition, condition_name, file columns if they exist (they're in struct now)
-        # Keep epoch column since it represents original epoch number (needed after rejection)
-        cols_to_remove = [:condition, :condition_name, :file]
-        for col in cols_to_remove
-            if hasproperty(epoch_df, col)
-                select!(epoch_df, Not(col))
-            end
-        end
+        # Slice only the necessary columns directly
+        epoch_df = dat.data[pre:post, cols_to_keep]
+        # In-place subtraction to avoid allocating a new time vector
+        epoch_df.time .-= dat.data.time[zero]
+        
         # Add epoch number (original numbering from extraction)
         insertcols!(epoch_df, 4, :epoch => epoch)
         push!(epochs, epoch_df)

@@ -9,11 +9,15 @@ Internal function that applies rereferencing to specified channels in a DataFram
 - `reference_selection::Vector{Symbol}`: Names of channels to use for reference calculation
 """
 function _apply_rereference!(dat::DataFrame, channel_selection::Vector{Symbol}, reference_selection::Vector{Symbol})
-    reference = _calculate_reference(dat, reference_selection)
+    reference = zeros(n_samples(dat))
+    _calculate_reference!(reference, dat, reference_selection)
+    n = length(reference)
     for ch in channel_selection
         col = dat[!, ch]
         if col isa Vector{Float64}
-            col .-= reference
+            @inbounds @simd for i = 1:n
+                col[i] -= reference[i]
+            end
         else
             dat[!, ch] .-= reference
         end
@@ -27,7 +31,26 @@ end
 Internal function that applies rereferencing to specified channels in a vector of DataFrames.
 """
 function _apply_rereference!(dat::Vector{DataFrame}, channel_selection::Vector{Symbol}, reference_selection::Vector{Symbol})
-    _apply_rereference!.(dat, Ref(channel_selection), Ref(reference_selection))
+    if isempty(dat)
+        return nothing
+    end
+    
+    n = n_samples(dat[1])
+    reference = Vector{Float64}(undef, n)
+    
+    for df in dat
+        _calculate_reference!(reference, df, reference_selection)
+        for ch in channel_selection
+            col = df[!, ch]
+            if col isa Vector{Float64}
+                @inbounds @simd for i = 1:n
+                    col[i] -= reference[i]
+                end
+            else
+                df[!, ch] .-= reference
+            end
+        end
+    end
     return nothing
 end
 
@@ -43,17 +66,24 @@ Calculate reference signal from specified channels.
 # Returns
 - Vector containing the average of specified reference channels
 """
-function _calculate_reference(dat::DataFrame, reference_channels)
-    reference = zeros(n_samples(dat))
+function _calculate_reference!(reference::Vector{Float64}, dat::DataFrame, reference_channels)
+    fill!(reference, 0.0)
+    n = length(reference)
     @inbounds for channel in reference_channels
         col = dat[!, channel]
         if col isa Vector{Float64}
-            reference .+= col
+            @simd for i = 1:n
+                reference[i] += col[i]
+            end
         else
             reference .+= col
         end
     end
-    reference ./= length(reference_channels)
+    
+    n_refs = Float64(length(reference_channels))
+    @inbounds @simd for i = 1:n
+        reference[i] /= n_refs
+    end
     return reference
 end
 

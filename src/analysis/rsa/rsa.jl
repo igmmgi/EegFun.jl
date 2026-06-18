@@ -119,7 +119,7 @@ Compute dissimilarity between two neural patterns.
 - `pattern1::Vector{Float64}`: First pattern (e.g., average across trials for condition 1)
 - `pattern2::Vector{Float64}`: Second pattern (e.g., average across trials for condition 2)
 - `measure::Symbol`: Dissimilarity measure (:correlation, :euclidean, :mahalanobis)
-- `covariance_matrix::Union{Matrix{Float64}, Nothing}`: Pooled covariance matrix for Mahalanobis distance (optional)
+- `inv_covariance_matrix::Union{Matrix{Float64}, Nothing}`: Pre-computed inverse pooled covariance matrix for Mahalanobis distance (optional)
 
 # Returns
 - `dissimilarity::Float64`: Dissimilarity value (higher = more dissimilar)
@@ -128,7 +128,7 @@ function _compute_dissimilarity(
     pattern1::Vector{Float64},
     pattern2::Vector{Float64},
     measure::Symbol;
-    covariance_matrix::Union{Matrix{Float64},Nothing} = nothing,
+    inv_covariance_matrix::Union{Matrix{Float64},Nothing} = nothing,
 )
     if measure == :correlation || measure == :pearson
         # 1 - Pearson correlation (dissimilarity)
@@ -139,33 +139,41 @@ function _compute_dissimilarity(
         corr = StatsBase.corspearman(pattern1, pattern2)
         return 1.0 - corr
     elseif measure == :euclidean
-        # Euclidean distance
-        return sqrt(sum((pattern1 .- pattern2) .^ 2))
+        # Euclidean distance (zero allocation)
+        d2 = 0.0
+        @inbounds @simd for i in eachindex(pattern1)
+            diff = pattern1[i] - pattern2[i]
+            d2 += diff * diff
+        end
+        return sqrt(d2)
     elseif measure == :mahalanobis
         # Mahalanobis distance with pooled covariance matrix
-        # Note: The pooled covariance is automatically computed in the rsa() function
+        # Note: The inverse pooled covariance is automatically computed in the rsa() function
         # when dissimilarity_measure == :mahalanobis, so this error should never occur
         # in normal usage. This is a safety check for direct function calls.
-        if isnothing(covariance_matrix)
+        if isnothing(inv_covariance_matrix)
             @minimal_error(
-                "Mahalanobis distance requires a covariance matrix. " *
+                "Mahalanobis distance requires an inverse covariance matrix. " *
                 "This error should not occur when using rsa() or rsa_crossvalidated() functions, " *
                 "as they automatically compute pooled covariance. " *
-                "If calling _compute_dissimilarity() directly, provide covariance_matrix parameter."
+                "If calling _compute_dissimilarity() directly, provide inv_covariance_matrix parameter."
             )
         end
 
         # Compute Mahalanobis distance: sqrt((x-y)' * inv(Σ) * (x-y))
         diff = pattern1 .- pattern2
 
-        # Use pseudo-inverse for numerical stability
         try
-            inv_cov = pinv(covariance_matrix)
-            mahal_dist = sqrt(max(0.0, dot(diff, inv_cov * diff)))
+            mahal_dist = sqrt(max(0.0, dot(diff, inv_covariance_matrix * diff)))
             return mahal_dist
         catch e
-            @minimal_warning "Mahalanobis distance computation failed (singular covariance?), using Euclidean instead"
-            return sqrt(sum(diff .^ 2))
+            @minimal_warning "Mahalanobis distance computation failed, using Euclidean instead"
+            d2 = 0.0
+            @inbounds @simd for i in eachindex(pattern1)
+                d = pattern1[i] - pattern2[i]
+                d2 += d * d
+            end
+            return sqrt(d2)
         end
     else
         @minimal_error("Unknown dissimilarity measure: $measure. Use :correlation, :spearman, :euclidean, or :mahalanobis")
@@ -173,45 +181,44 @@ function _compute_dissimilarity(
 end
 
 """
-    _compute_rdm(
-        condition_patterns::Vector{Matrix{Float64}},
+    _compute_rdm!(
+        rdm::Matrix{Float64},
+        condition_patterns::Vector{<:AbstractVector{Float64}},
         measure::Symbol;
-        covariance_matrix::Union{Matrix{Float64}, Nothing} = nothing
+        inv_covariance_matrix::Union{Matrix{Float64},Nothing} = nothing,
     )
 
-Compute Representational Dissimilarity Matrix (RDM) from condition patterns.
-
-# Arguments
-- `condition_patterns::Vector{Matrix{Float64}}`: Vector of [channels × time] matrices, one per condition
-- `measure::Symbol`: Dissimilarity measure
-- `covariance_matrix::Union{Matrix{Float64}, Nothing}`: Pooled covariance matrix for Mahalanobis distance (optional)
-
-# Returns
-- `rdm::Matrix{Float64}`: RDM matrix [condition × condition]
+Compute Representational Dissimilarity Matrix (RDM) in-place.
 """
-function _compute_rdm(
-    condition_patterns::Vector{Matrix{Float64}},
+function _compute_rdm!(
+    rdm::Matrix{Float64},
+    condition_patterns::Vector{<:AbstractVector{Float64}},
     measure::Symbol;
-    covariance_matrix::Union{Matrix{Float64},Nothing} = nothing,
+    inv_covariance_matrix::Union{Matrix{Float64},Nothing} = nothing,
 )
     n_conditions = length(condition_patterns)
-    rdm = zeros(Float64, n_conditions, n_conditions)
 
     # Only compute upper triangle (excluding diagonal) for efficiency
-    # RDM is symmetric, so we can fill lower triangle by copying
     for i = 1:n_conditions
-        rdm[i, i] = 0.0  # Diagonal is always 0 (self-dissimilarity)
+        rdm[i, i] = 0.0  # Diagonal is always 0
         for j = (i+1):n_conditions
-            # Flatten patterns to vectors for comparison
-            pattern_i = vec(condition_patterns[i])
-            pattern_j = vec(condition_patterns[j])
-            dissim = _compute_dissimilarity(pattern_i, pattern_j, measure; covariance_matrix = covariance_matrix)
+            dissim = _compute_dissimilarity(condition_patterns[i], condition_patterns[j], measure; inv_covariance_matrix = inv_covariance_matrix)
             rdm[i, j] = dissim
             rdm[j, i] = dissim  # Symmetric
         end
     end
 
     return rdm
+end
+
+function _compute_rdm(
+    condition_patterns::Vector{<:AbstractVector{Float64}},
+    measure::Symbol;
+    inv_covariance_matrix::Union{Matrix{Float64},Nothing} = nothing,
+)
+    n_conditions = length(condition_patterns)
+    rdm = zeros(Float64, n_conditions, n_conditions)
+    return _compute_rdm!(rdm, condition_patterns, measure; inv_covariance_matrix = inv_covariance_matrix)
 end
 
 """
@@ -250,17 +257,16 @@ rdm_minmax = normalize_rdm(rdm, method=:minmax)
 - Diagonal remains zero after normalization
 - For `:rank`, ties are handled using average ranks
 """
-function normalize_rdm(rdm::Matrix{Float64}; method::Symbol = :none)
+function normalize_rdm(rdm::AbstractMatrix{Float64}; method::Symbol = :none)
     if method == :none
-        return copy(rdm)
+        return Matrix(rdm)
     end
 
     n = size(rdm, 1)
-    normalized_rdm = copy(rdm)
+    normalized_rdm = Matrix(rdm)
 
     # Extract upper triangle (excluding diagonal) for normalization
-    upper_indices = [CartesianIndex(i, j) for i = 1:n for j = (i+1):n]
-    upper_values = [rdm[idx] for idx in upper_indices]
+    upper_values = _extract_upper_triangular(rdm)
 
     if method == :zscore
         # Z-score normalization: (x - mean) / std
@@ -290,10 +296,13 @@ function normalize_rdm(rdm::Matrix{Float64}; method::Symbol = :none)
     end
 
     # Fill normalized values back into matrix (both upper and lower triangles)
-    for (idx_pos, idx) in enumerate(upper_indices)
-        i, j = idx.I
-        normalized_rdm[i, j] = normalized_values[idx_pos]
-        normalized_rdm[j, i] = normalized_values[idx_pos]  # Symmetric
+    k = 1
+    for i = 1:n
+        for j = (i+1):n
+            normalized_rdm[i, j] = normalized_values[k]
+            normalized_rdm[j, i] = normalized_values[k]  # Symmetric
+            k += 1
+        end
     end
 
     # Ensure diagonal is zero
@@ -409,40 +418,43 @@ function rsa(
         # Preallocate RDM array: [time × condition × condition]
         rdms = zeros(Float64, n_timepoints, n_conditions, n_conditions)
         for t = 1:n_timepoints
-            # Compute pooled covariance if using Mahalanobis distance
-            pooled_cov = nothing
+            # Compute inverse pooled covariance if using Mahalanobis distance
+            inv_pooled_cov = nothing
             if dissimilarity_measure == :mahalanobis
                 pooled_cov = _compute_pooled_covariance(data_arrays, t)
+                inv_pooled_cov = pinv(pooled_cov)
             end
 
             # Compute RDM for each trial
             n_trials = minimum(n_trials_per_condition)
-            trial_rdms = Vector{Matrix{Float64}}()
+            
+            avg_rdm = zeros(Float64, n_conditions, n_conditions)
+            trial_rdm_buffer = zeros(Float64, n_conditions, n_conditions)
+            condition_patterns = Vector{AbstractVector{Float64}}(undef, n_conditions)
+            valid_trials = 0
 
             for trial_idx = 1:n_trials
-                condition_patterns = Matrix{Float64}[]
-                for cond_data in data_arrays
-                    if trial_idx <= size(cond_data, 3)
-                        # Extract [channels] at time t, trial trial_idx
-                        pattern = vec(@view cond_data[:, t, trial_idx])
-                        push!(condition_patterns, reshape(pattern, length(selected_channels), 1))
+                is_valid = true
+                for cond_idx = 1:n_conditions
+                    if trial_idx <= size(data_arrays[cond_idx], 3)
+                        # Extract [channels] at time t, trial trial_idx using view
+                        condition_patterns[cond_idx] = @view data_arrays[cond_idx][:, t, trial_idx]
+                    else
+                        is_valid = false
+                        break
                     end
                 end
-                if length(condition_patterns) == n_conditions
-                    trial_rdm = _compute_rdm(condition_patterns, dissimilarity_measure; covariance_matrix = pooled_cov)
-                    push!(trial_rdms, trial_rdm)
+                
+                if is_valid
+                    _compute_rdm!(trial_rdm_buffer, condition_patterns, dissimilarity_measure; inv_covariance_matrix = inv_pooled_cov)
+                    avg_rdm .+= trial_rdm_buffer
+                    valid_trials += 1
                 end
             end
 
             # Average RDMs across trials (proper matrix averaging)
-            if !isempty(trial_rdms)
-                # Sum all RDM matrices
-                avg_rdm = zeros(Float64, n_conditions, n_conditions)
-                for trial_rdm in trial_rdms
-                    avg_rdm .+= trial_rdm
-                end
-                # Divide by number of trials to get average
-                avg_rdm ./= length(trial_rdms)
+            if valid_trials > 0
+                avg_rdm ./= valid_trials
                 rdms[t, :, :] = avg_rdm
             end
         end
@@ -735,13 +747,13 @@ function _compute_model_correlations(
     p_values = n_permutations > 0 ? zeros(Float64, n_times, n_models) : nothing
 
     for t = 1:n_times
-        neural_rdm = rsa_data.rdm[t, :, :]
+        neural_rdm = @view rsa_data.rdm[t, :, :]
         neural_vec = _extract_upper_triangular(neural_rdm)
 
         for (model_idx, model_rdm) in enumerate(model_rdms)
             # Get model RDM for this time point
             if is_temporal[model_idx]
-                model_rdm_t = model_rdm[t, :, :]
+                model_rdm_t = @view model_rdm[t, :, :]
                 if !issymmetric(model_rdm_t)
                     model_rdm_t = (model_rdm_t + model_rdm_t') / 2
                 end
@@ -800,10 +812,18 @@ end
 
 Extract upper triangular values (excluding diagonal) from an RDM.
 """
-function _extract_upper_triangular(rdm::Matrix{Float64})
+function _extract_upper_triangular(rdm::AbstractMatrix{Float64})
     n = size(rdm, 1)
-    triu_indices = [CartesianIndex(i, j) for i = 1:n for j = (i+1):n]
-    return [rdm[idx] for idx in triu_indices]
+    n_upper = (n * (n - 1)) ÷ 2
+    vec = Vector{Float64}(undef, n_upper)
+    k = 1
+    @inbounds for i = 1:n
+        for j = (i+1):n
+            vec[k] = rdm[i, j]
+            k += 1
+        end
+    end
+    return vec
 end
 
 """
@@ -855,7 +875,7 @@ function _normalize_rdms!(rdms::Array{Float64,3}, method::Symbol)
 
     n_times = size(rdms, 1)
     for t = 1:n_times
-        rdms[t, :, :] = normalize_rdm(rdms[t, :, :]; method = method)
+        rdms[t, :, :] = normalize_rdm(@view(rdms[t, :, :]); method = method)
     end
     return rdms
 end
@@ -875,24 +895,34 @@ function _compute_rdms_from_data(
     dissimilarity_measure::Symbol,
 )
     rdms = zeros(Float64, n_timepoints, n_conditions, n_conditions)
+    
+    # Pre-allocate buffers
+    n_channels = length(selected_channels)
+    condition_patterns = [zeros(Float64, n_channels) for _ in 1:n_conditions]
+    rdm_buffer = zeros(Float64, n_conditions, n_conditions)
 
     for t = 1:n_timepoints
-        # Compute pooled covariance if using Mahalanobis distance
-        pooled_cov = nothing
+        # Compute inverse pooled covariance if using Mahalanobis distance
+        inv_pooled_cov = nothing
         if dissimilarity_measure == :mahalanobis
             pooled_cov = _compute_pooled_covariance(data_arrays, t)
+            inv_pooled_cov = pinv(pooled_cov)
         end
 
         # Average across trials first, then compute RDM
-        condition_patterns = Matrix{Float64}[]
-        for cond_data in data_arrays
-            # Extract [channels × trials] at time t
-            timepoint_data = @view cond_data[:, t, :]  # [channels × trials]
-            # Average across trials: [channels]
-            avg_pattern = vec(mean(timepoint_data, dims = 2))
-            push!(condition_patterns, reshape(avg_pattern, length(selected_channels), 1))
+        for (i, cond_data) in enumerate(data_arrays)
+            n_trials = size(cond_data, 3)
+            fill!(condition_patterns[i], 0.0)
+            for trial in 1:n_trials
+                @inbounds @simd for ch in 1:n_channels
+                    condition_patterns[i][ch] += cond_data[ch, t, trial]
+                end
+            end
+            condition_patterns[i] ./= n_trials
         end
-        rdms[t, :, :] = _compute_rdm(condition_patterns, dissimilarity_measure; covariance_matrix = pooled_cov)
+        
+        _compute_rdm!(rdm_buffer, condition_patterns, dissimilarity_measure; inv_covariance_matrix = inv_pooled_cov)
+        rdms[t, :, :] = rdm_buffer
     end
 
     return rdms

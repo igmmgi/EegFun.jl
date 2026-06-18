@@ -353,13 +353,13 @@ function _compute_measurement(
         # Use rectangular integration (sum * dt) - perfectly fine for uniformly sampled data
         # For uniform sampling (which EEG/ERP data always is), this is equivalent to trapezoidal
         if analysis_type == "rectified_area"
-            return sum(abs.(chan_data)) * dt
+            return sum(abs, chan_data) * dt
         elseif analysis_type == "integral"
             return sum(chan_data) * dt
         elseif analysis_type == "positive_area"
-            return sum(max.(chan_data, 0.0)) * dt
+            return sum(x -> max(x, 0.0), chan_data) * dt
         else  # negative_area
-            return sum(abs.(min.(chan_data, 0.0))) * dt
+            return sum(x -> abs(min(x, 0.0)), chan_data) * dt
         end
 
         # Fractional latency measurements

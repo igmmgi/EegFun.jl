@@ -269,9 +269,15 @@ Compute t-statistics and p-values for all electrode × frequency × time points.
 - `df::Float64`: Degrees of freedom
 - `p_matrix::Array{Float64, 3}`: P-values [electrodes × freqs × time]
 """
-function _compute_t_matrix_tf(data1::Array{Float64,4}, data2::Array{Float64,4}, design::Symbol; tail::Symbol = :both, compute_p_values::Bool = true)
+function _compute_t_matrix_tf(data1::Array{Float64,4}, data2::Array{Float64,4}, design::Symbol; tail::Symbol = :both, compute_p_values::Bool = true, t_matrix_buffer::Union{Nothing,Array{Float64,3}} = nothing)
     n_participants, n_electrodes, n_freqs, n_time = size(data1)
-    t_matrix = Array{Float64,3}(undef, n_electrodes, n_freqs, n_time)
+    
+    if !isnothing(t_matrix_buffer)
+        t_matrix = t_matrix_buffer
+    else
+        t_matrix = Array{Float64,3}(undef, n_electrodes, n_freqs, n_time)
+    end
+    
     p_matrix = compute_p_values ? Array{Float64,3}(undef, n_electrodes, n_freqs, n_time) : Array{Float64,3}(undef, 0, 0, 0)
 
     if design == :paired

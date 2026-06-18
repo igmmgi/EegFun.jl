@@ -102,7 +102,7 @@ function tf_morlet(
     # Pre-compute wavelets and their FFTs once (same for all channels and trials)
     wavelet_ffts = Vector{Vector{ComplexF64}}(undef, num_frex)
     wl_per_freq = Vector{Int}(undef, num_frex)
-    conv_indices_per_freq = Vector{Vector{Int}}(undef, num_frex)
+    valid_starts_per_freq = Vector{Int}(undef, num_frex)
 
     for fi = 1:num_frex
         freq_val = frequencies[fi]
@@ -111,9 +111,7 @@ function tf_morlet(
         wl = hw * 2 + 1
         wl_per_freq[fi] = wl
         valid_start = hw + 1
-
-        # Pre-compute convolution indices for all samples in padded data
-        conv_indices_per_freq[fi] = [valid_start + sample_idx - 1 for sample_idx = 1:n_samples_per_epoch]
+        valid_starts_per_freq[fi] = valid_start
 
         # Create wavelet directly in padded buffer
         fill!(wavelet_padded, 0)
@@ -178,9 +176,9 @@ function tf_morlet(
                 mul!(eegconv_buffer, p_ifft_conv, conv_buffer)
 
                 # Extract only original unpadded samples from convolution
-                conv_indices = conv_indices_per_freq[fi]
+                valid_start = valid_starts_per_freq[fi]
                 @inbounds for (ti_out, ti_padded) in enumerate(time_indices_out)
-                    val = eegconv_buffer[conv_indices[ti_padded]]
+                    val = eegconv_buffer[valid_start + ti_padded - 1]
 
                     if return_trials
                         eegpower[fi, ti_out, trial_idx] = abs2(val)

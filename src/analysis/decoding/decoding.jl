@@ -30,10 +30,19 @@ function _prepare_decoding_data(epochs::Vector{EpochData})
         # [channels × time × trials]
         condition_data = Array{Float64}(undef, n_channels, n_times, n_trials)
 
+        # Pre-allocate references to columns to avoid dictionary lookups in the inner loop
+        cols = Vector{Vector{Float64}}(undef, n_channels)
+        
         for (trial_idx, trial_df) in enumerate(epoch_data.data)
-            trial_matrix = Matrix(trial_df[!, channels])  # [time × channels]
-            @inbounds for ch_idx = 1:n_channels
-                condition_data[ch_idx, :, trial_idx] = @view trial_matrix[:, ch_idx]
+            for (ch_idx, ch) in enumerate(channels)
+                cols[ch_idx] = trial_df[!, ch]::Vector{Float64}
+            end
+            
+            for ch_idx = 1:n_channels
+                col = cols[ch_idx]
+                @inbounds @simd for t = 1:n_times
+                    condition_data[ch_idx, t, trial_idx] = col[t]
+                end
             end
         end
 
@@ -82,9 +91,13 @@ function _prepare_decoding_data(epochs::Vector{TimeFreqEpochData})
         # [(channels×frequencies) × time × trials]
         condition_data = Array{Float64}(undef, n_features, n_times, n_trials)
 
+        # Pre-allocate references to columns
+        cols = Vector{Vector{Float64}}(undef, n_channels)
+        
         for (trial_idx, trial_df) in enumerate(epoch_data.data_power)
-            # Extract channel data matrix from the DataFrame
-            trial_matrix = Matrix(trial_df[!, channels])  # [rows × channels] where rows = time × freq
+            for (ch_idx, ch) in enumerate(channels)
+                cols[ch_idx] = trial_df[!, ch]::Vector{Float64}
+            end
 
             # Reshape: each timepoint gets all channel-frequency pairs as features
             @inbounds for t_idx = 1:n_times
@@ -93,7 +106,7 @@ function _prepare_decoding_data(epochs::Vector{TimeFreqEpochData})
                     # Row in the DataFrame for this (time, freq) combination
                     row_idx = (f_idx - 1) * n_times + t_idx
                     for ch_idx = 1:n_channels
-                        condition_data[feature_idx, t_idx, trial_idx] = trial_matrix[row_idx, ch_idx]
+                        condition_data[feature_idx, t_idx, trial_idx] = cols[ch_idx][row_idx]
                         feature_idx += 1
                     end
                 end
@@ -178,17 +191,20 @@ Fills x_all [all_trials × channels] and labels [all_trials] in-place.
 - Nothing (modifies `x_all` and `labels` in-place)
 """
 function _extract_timepoint_data!(
-    x_all::Matrix{Float64},
+    x_all_t::Matrix{Float64},
     labels::Vector{Int},
     data_arrays::Vector{Array{Float64,3}},
     shuffled_indices::Vector{Vector{Int}},
     t::Int,
 )
     row = 1
+    n_features = size(x_all_t, 1)
     @inbounds for (cond_idx, cond_data) in enumerate(data_arrays)
         trial_indices = shuffled_indices[cond_idx]
         for trial_idx in trial_indices
-            copyto!(@view(x_all[row, :]), @view(cond_data[:, t, trial_idx]))
+            @simd for f = 1:n_features
+                x_all_t[f, row] = cond_data[f, t, trial_idx]
+            end
             labels[row] = cond_idx
             row += 1
         end
@@ -526,21 +542,22 @@ function _decode_core(
 
     # Main decoding loop
     Threads.@threads for iter = 1:n_iterations
-        # Thread-local buffers
-        X_all = Matrix{Float64}(undef, total_trials, n_features)
+        # Thread-local buffers (built as [features × trials] for cache-friendly extraction)
+        X_all_t = Matrix{Float64}(undef, n_features, total_trials)
         labels = Vector{Int}(undef, total_trials)
         
         shuffled_indices = _shuffle_trials(data_arrays)
 
         for t = 1:n_timepoints
-            _extract_timepoint_data!(X_all, labels, data_arrays, shuffled_indices, t)
+            _extract_timepoint_data!(X_all_t, labels, data_arrays, shuffled_indices, t)
 
             for fold = 1:n_folds
                 train_indices, test_indices = cv_splits[fold]
 
-                X_train_view = @view X_all[train_indices, :]
+                # Double transpose cancels out in libsvm_classifier, giving contiguous columns!
+                X_train_view = transpose(@view X_all_t[:, train_indices])
                 y_train = labels[train_indices]
-                X_test_view = @view X_all[test_indices, :]
+                X_test_view = transpose(@view X_all_t[:, test_indices])
                 y_test = labels[test_indices]
 
                 y_pred = libsvm_classifier(X_train_view, y_train, X_test_view; cost = cost)
