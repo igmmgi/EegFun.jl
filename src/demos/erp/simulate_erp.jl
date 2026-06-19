@@ -59,7 +59,7 @@ function _noise_vec(trials::Int, samples::Int, sample_rate::Int, noise_amp::Floa
         indices = min.(ceil.(Int, freqs), length(meanpower))
         amps = meanpower[indices] ./ meanpower[1]
         phases = rand(sumsig) .* 2π
-        
+
         # Use a view for contiguous memory access
         sig_col = @view signal[:, trial]
         for (f, a, p) in zip(freqs, amps, phases)

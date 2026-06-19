@@ -120,6 +120,8 @@ loaded_dat = load(joinpath(DEMO_OUTPUT, "continuous_data.jld2"), "data")
 # Verify it's the same
 EegFun.all_data(loaded_dat) == EegFun.all_data(dat)
 
+EegFun.plot_databrowser(loaded_dat);
+
 
 #######################################################################
 # SAVING EPOCHED DATA

@@ -342,7 +342,7 @@ function signal_example_composition()
         layout = GridLayout(fig[i, 1:2], tellheight = false, valign = :center, padding = (4, 4, 4, 4), rowgap = 4, colgap = 6)
 
         freq_label  = Label(layout[1, 1], "Freq: 0.0 Hz", fontsize = slider_font, halign = :right, width = 78)
-        start_f = i == 1 ? 10.0 : 0.0
+        start_f     = i == 1 ? 10.0 : 0.0
         freq_slider = Slider(layout[1, 2], range = 0.0:0.5:80.0, startvalue = start_f, height = slider_height)
         push!(freq_labels, freq_label)
         push!(freq_sliders, freq_slider)

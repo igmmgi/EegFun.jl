@@ -574,7 +574,9 @@ function _find_clusters_connected_components_tf(
 
                     # Spectral connectivity (same electrode, same time, adjacent freq)
                     if use_spectral
-                        if current_f > 1 && mask[current_e, current_f-1, current_t] && cluster_labels[current_e, current_f-1, current_t] == 0
+                        if current_f > 1 &&
+                           mask[current_e, current_f-1, current_t] &&
+                           cluster_labels[current_e, current_f-1, current_t] == 0
                             cluster_labels[current_e, current_f-1, current_t] = current_cluster_id
                             push!(queue, (current_e, current_f-1, current_t))
                             push!(cluster_electrodes, electrodes[current_e])
@@ -583,7 +585,9 @@ function _find_clusters_connected_components_tf(
                             push!(cluster_pixels, CartesianIndex(current_e, current_f-1, current_t))
                             push!(cluster_members, (current_e, current_f-1, current_t))
                         end
-                        if current_f < n_freqs && mask[current_e, current_f+1, current_t] && cluster_labels[current_e, current_f+1, current_t] == 0
+                        if current_f < n_freqs &&
+                           mask[current_e, current_f+1, current_t] &&
+                           cluster_labels[current_e, current_f+1, current_t] == 0
                             cluster_labels[current_e, current_f+1, current_t] = current_cluster_id
                             push!(queue, (current_e, current_f+1, current_t))
                             push!(cluster_electrodes, electrodes[current_e])
@@ -596,7 +600,9 @@ function _find_clusters_connected_components_tf(
 
                     # Temporal connectivity (same electrode, same freq, adjacent time)
                     if use_temporal
-                        if current_t > 1 && mask[current_e, current_f, current_t-1] && cluster_labels[current_e, current_f, current_t-1] == 0
+                        if current_t > 1 &&
+                           mask[current_e, current_f, current_t-1] &&
+                           cluster_labels[current_e, current_f, current_t-1] == 0
                             cluster_labels[current_e, current_f, current_t-1] = current_cluster_id
                             push!(queue, (current_e, current_f, current_t-1))
                             push!(cluster_electrodes, electrodes[current_e])
@@ -605,7 +611,9 @@ function _find_clusters_connected_components_tf(
                             push!(cluster_pixels, CartesianIndex(current_e, current_f, current_t-1))
                             push!(cluster_members, (current_e, current_f, current_t-1))
                         end
-                        if current_t < n_time && mask[current_e, current_f, current_t+1] && cluster_labels[current_e, current_f, current_t+1] == 0
+                        if current_t < n_time &&
+                           mask[current_e, current_f, current_t+1] &&
+                           cluster_labels[current_e, current_f, current_t+1] == 0
                             cluster_labels[current_e, current_f, current_t+1] = current_cluster_id
                             push!(queue, (current_e, current_f, current_t+1))
                             push!(cluster_electrodes, electrodes[current_e])

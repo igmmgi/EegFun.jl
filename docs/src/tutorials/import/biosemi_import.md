@@ -127,7 +127,8 @@ EegFun.highpass_filter!(dat, 1.0) # 1 Hz high-pass
 EegFun.rereference!(dat, :avg)    # Average reference
 
 # Open interactive databrowser
-# EegFun.plot_databrowser(dat)
+EegFun.plot_databrowser(dat);
+
 ```
 
 :::

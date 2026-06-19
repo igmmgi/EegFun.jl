@@ -44,27 +44,27 @@ function _create_grand_average(erps::Vector{ErpData}, cond_num::Int)
 
     n_points = nrow(grand_avg_data)
     n_erps = length(erps)
-    
+
     # Pre-allocate summation buffer
     avg_buf = Vector{Float64}(undef, n_points)
 
     # Average EEG channels across participants
     for ch in eeg_channels
         fill!(avg_buf, 0.0)
-        
+
         # Accumulate without creating matrix or intermediate arrays
         for erp in erps
             col_data = erp.data[!, ch]::Vector{Float64}
-            @inbounds @simd for i in 1:n_points
+            @inbounds @simd for i = 1:n_points
                 avg_buf[i] += col_data[i]
             end
         end
-        
+
         # Divide by N
-        @inbounds @simd for i in 1:n_points
+        @inbounds @simd for i = 1:n_points
             avg_buf[i] /= n_erps
         end
-        
+
         grand_avg_data[!, ch] = copy(avg_buf)
     end
 

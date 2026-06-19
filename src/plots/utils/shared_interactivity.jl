@@ -61,7 +61,12 @@ end
 
 Set up keyboard interactivity for plots.
 """
-function _setup_shared_interactivity!(fig::Figure, axes::Vector{Axis}, keyboard_actions::Dict = SHARED_KEYBOARD_ACTIONS; zoom_step::Float64 = 0.2)
+function _setup_shared_interactivity!(
+    fig::Figure,
+    axes::Vector{Axis},
+    keyboard_actions::Dict = SHARED_KEYBOARD_ACTIONS;
+    zoom_step::Float64 = 0.2,
+)
     on(events(fig).keyboardbutton) do event
         if event.action in (Keyboard.press, Keyboard.repeat) && haskey(keyboard_actions, event.key)
             action = keyboard_actions[event.key]
@@ -75,7 +80,13 @@ end
 
 Set up keyboard interactivity for plots with help system.
 """
-function _setup_shared_interactivity!(fig::Figure, axes::Vector{Axis}, plot_type::Symbol, keyboard_actions::Dict = SHARED_KEYBOARD_ACTIONS; zoom_step::Float64 = 0.2)
+function _setup_shared_interactivity!(
+    fig::Figure,
+    axes::Vector{Axis},
+    plot_type::Symbol,
+    keyboard_actions::Dict = SHARED_KEYBOARD_ACTIONS;
+    zoom_step::Float64 = 0.2,
+)
     # Set up basic navigation
     _setup_shared_interactivity!(fig, axes, keyboard_actions; zoom_step = zoom_step)
 
@@ -278,7 +289,15 @@ function _update_figure_channel_selection!(fig::Figure, selection_state::SharedS
     current_idx = selection_state.current_selection_idx
     if isnothing(current_idx) || current_idx > length(selection_state.selection_rectangles)
         rect_points = [Point2f(x1, y1), Point2f(x2, y1), Point2f(x2, y2), Point2f(x1, y2)]
-        rect = poly!(fig.scene, rect_points, color = (selection_state.selection_color, selection_state.selection_alpha), strokecolor = :red, strokewidth = 2, overdraw = true, space = :relative)
+        rect = poly!(
+            fig.scene,
+            rect_points,
+            color = (selection_state.selection_color, selection_state.selection_alpha),
+            strokecolor = :red,
+            strokewidth = 2,
+            overdraw = true,
+            space = :relative,
+        )
         push!(selection_state.selection_rectangles, rect)
         push!(selection_state.selection_bounds, (x1, y1, x2, y2))
     else
@@ -343,7 +362,8 @@ function _finish_figure_channel_selection!(
         empty!(selection_state.channel_rectangles)
     end
     if !isempty(all_overlapping_axes_rects)
-        new_rectangles = _draw_channel_rectangles!(fig, all_overlapping_axes_rects, selection_state.selection_color, selection_state.selection_alpha)
+        new_rectangles =
+            _draw_channel_rectangles!(fig, all_overlapping_axes_rects, selection_state.selection_color, selection_state.selection_alpha)
         append!(selection_state.channel_rectangles, new_rectangles)
     end
     if !isempty(unique_channels)

@@ -339,11 +339,8 @@ function plot_erp(
         end
 
         # Set up selection system for all axes (will work with linked axes)
-        selection_state = SharedSelectionState(
-            axes;
-            selection_color = plot_kwargs[:selection_color],
-            selection_alpha = plot_kwargs[:selection_alpha]
-        )
+        selection_state =
+            SharedSelectionState(axes; selection_color = plot_kwargs[:selection_color], selection_alpha = plot_kwargs[:selection_alpha])
 
         # Set up control panel (press 'c' to open) - must be before selection to capture condition_checked
         condition_checked_ref = Ref{Union{Vector{Observable{Bool}},Nothing}}(nothing)

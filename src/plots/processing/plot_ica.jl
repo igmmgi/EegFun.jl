@@ -1035,10 +1035,7 @@ function _update_view_range!(state, start_pos)
 end
 
 # Colour palette for channel overlays — cycles when more channels are selected.
-const _CHANNEL_OVERLAY_COLORS = [
-    :grey, :dodgerblue, :darkorange, :mediumpurple,
-    :forestgreen, :crimson, :goldenrod, :deeppink,
-]
+const _CHANNEL_OVERLAY_COLORS = [:grey, :dodgerblue, :darkorange, :mediumpurple, :forestgreen, :crimson, :goldenrod, :deeppink]
 
 """Open a popup window with a checkbox grid for selecting additional channel overlays."""
 function _show_channel_popup(state)
@@ -1048,11 +1045,9 @@ function _show_channel_popup(state)
     Label(menu_fig[1, 1], "Select Additional Channels", fontsize = 18, halign = :center)
 
     scroll_area = menu_fig[2, 1] = GridLayout()
-    cbs = _build_checkbox_grid!(scroll_area, all_channels, 9,
-        (ch, _) -> ch in state.overlay.names)  # pre-select active channels
+    cbs = _build_checkbox_grid!(scroll_area, all_channels, 9, (ch, _) -> ch in state.overlay.names)  # pre-select active channels
 
-    _add_group_buttons!(menu_fig, 3, cbs, all_channels,
-        [("None (Clear)", _ -> false)])
+    _add_group_buttons!(menu_fig, 3, cbs, all_channels, [("None (Clear)", _ -> false)])
 
     action_area = menu_fig[4, 1] = GridLayout()
     btn_apply = Button(action_area[1, 1], label = "Apply", width = 150)
@@ -1100,7 +1095,7 @@ function _update_channel_overlays!(state, selected_channels::Vector{Symbol})
         col_data = state.dat.data[!, ch_name]
         is_bool = eltype(col_data) == Bool
 
-        for i in 1:min(state.n_visible_components, length(state.channel_axs))
+        for i = 1:min(state.n_visible_components, length(state.channel_axs))
             ax_ch = state.channel_axs[i]
             isnothing(ax_ch) && continue
 

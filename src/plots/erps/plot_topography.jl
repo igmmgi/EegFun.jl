@@ -333,7 +333,7 @@ function plot_topography(
     end
 
     _set_window_title(_generate_window_title(dat))
-    
+
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
     set_theme!(fontsize = plot_kwargs[:theme_fontsize])
     fig = Figure(figure_padding = plot_kwargs[:figure_padding])
@@ -764,7 +764,7 @@ function _draw_smooth_circle_mask!(ax::Axis, x_bounds::Tuple, y_bounds::Tuple)
         a = angles[i]
         ca, sa = cos(a), sin(a)
         annulus[i] = Point2f(outer_x * ca, outer_y * sa)
-        annulus[2 * n_points - i + 1] = Point2f(inner_x * ca, inner_y * sa)
+        annulus[2*n_points-i+1] = Point2f(inner_x * ca, inner_y * sa)
     end
 
     # Draw filled white annulus
@@ -1099,7 +1099,13 @@ end
 
 Set up keyboard interactivity for topographic plots.
 """
-function _setup_topo_interactivity!(fig::Figure, ax::Axis, original_data = nothing, time_interval::Interval = times(); zoom_step::Float64 = 0.2)
+function _setup_topo_interactivity!(
+    fig::Figure,
+    ax::Axis,
+    original_data = nothing,
+    time_interval::Interval = times();
+    zoom_step::Float64 = 0.2,
+)
     deregister_interaction!(ax, :rectanglezoom)
     _setup_topo_keyboard_handlers!(fig, ax; zoom_step = zoom_step)
     _setup_topo_selection!(fig, ax, original_data, time_interval)
@@ -1148,7 +1154,13 @@ end
 
 Set up shared interactivity for multiple topographic plots.
 """
-function _setup_shared_topo_interactivity!(fig::Figure, axes::Vector{Axis}, datasets::Vector, shared_selection_state::TopoSelectionState; zoom_step::Float64 = 0.2)
+function _setup_shared_topo_interactivity!(
+    fig::Figure,
+    axes::Vector{Axis},
+    datasets::Vector,
+    shared_selection_state::TopoSelectionState;
+    zoom_step::Float64 = 0.2,
+)
     deregister_interaction!.(axes, :rectanglezoom)
     _setup_topo_keyboard_handlers!(fig, axes; zoom_step = zoom_step)
     _setup_shared_topo_selection!(fig, datasets, shared_selection_state)
@@ -1188,14 +1200,14 @@ end
 
 Increase the scale of the topographic plot (zoom in on color range).
 """
-_topo_scale_up!(ax::Axis, zoom_step::Float64=0.2) = _scale_topo_levels!(ax, 1.0 - zoom_step)
+_topo_scale_up!(ax::Axis, zoom_step::Float64 = 0.2) = _scale_topo_levels!(ax, 1.0 - zoom_step)
 
 """
     _topo_scale_down!(ax::Axis)
 
 Decrease the scale of the topographic plot (zoom out from color range).
 """
-_topo_scale_down!(ax::Axis, zoom_step::Float64=0.2) = _scale_topo_levels!(ax, 1.0 / (1.0 - zoom_step))
+_topo_scale_down!(ax::Axis, zoom_step::Float64 = 0.2) = _scale_topo_levels!(ax, 1.0 / (1.0 - zoom_step))
 
 # =============================================================================
 # REGION SELECTION FOR TOPO PLOTS

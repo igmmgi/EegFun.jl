@@ -136,7 +136,7 @@ function _apply_gui_filters(dat, gui_state)
     end
 
     if !isempty(epoch_list)
-        if dat isa Union{EpochData, Vector{<:EpochData}}
+        if dat isa Union{EpochData,Vector{<:EpochData}}
             dat = subset(dat; epoch_selection = epochs(epoch_list))
         end
     end
@@ -154,15 +154,15 @@ Warns if requested IDs are not found in the directory.
 function _resolve_batch_files_helper(gui_state)
     fname = gui_state.filename[]
     input_dir = _gui_dir(gui_state)
-    
+
     part_list = _parse_gui_int_field(gui_state.participant[])
     if isnothing(part_list)
         @minimal_warning "Requested plot settings incompatible: recheck!"
         return nothing
     end
-    
+
     part_sel = isempty(part_list) ? participants() : participants(part_list)
-    
+
     if !isempty(part_list)
         all_files   = _find_batch_files(fname, input_dir)
         avail_ids   = sort(unique(_extract_participant_id.(all_files)))
@@ -171,7 +171,7 @@ function _resolve_batch_files_helper(gui_state)
             @minimal_warning "Participant ID(s) $missing_ids not found in '$fname'. Available IDs: $avail_ids"
         end
     end
-    
+
     files = _find_batch_files(fname, input_dir, part_sel)
     return isempty(files) ? nothing : (files, part_sel, input_dir)
 end

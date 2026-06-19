@@ -52,7 +52,8 @@ function _open_save_settings_dialog(fig)
     format_menu = Menu(fig_settings[2, 2], options = ["PNG", "PDF", "SVG", "JPG"], default = "PNG", halign = :left, width = 220)
 
     Label(fig_settings[3, 1], "Resolution (DPI):", halign = :left, font = :bold)
-    scale_menu = Menu(fig_settings[3, 2], options = ["72 DPI", "150 DPI", "300 DPI", "600 DPI"], default = "72 DPI", halign = :left, width = 220)
+    scale_menu =
+        Menu(fig_settings[3, 2], options = ["72 DPI", "150 DPI", "300 DPI", "600 DPI"], default = "72 DPI", halign = :left, width = 220)
     scale_na_label = Label(fig_settings[3, 2], "N/A (Vector Graphics are resolution-independent)", halign = :left, font = :italic)
     scale_na_label.blockscene.visible[] = false
 
@@ -536,7 +537,16 @@ Apply axis limits, labels, and direction to the axis.
 - `ylabel`: Label for y-axis (default: empty string)
 - `yreversed`: Whether to reverse the y-axis (default: false)
 """
-function _set_axis_properties!(ax; xlim = nothing, ylim = nothing, xlabel = "", ylabel = "", yreversed = false, scale_x_value = nothing, scale_y_value = nothing)
+function _set_axis_properties!(
+    ax;
+    xlim = nothing,
+    ylim = nothing,
+    xlabel = "",
+    ylabel = "",
+    yreversed = false,
+    scale_x_value = nothing,
+    scale_y_value = nothing,
+)
 
     # Set axis labels
     ax.xlabel = xlabel
@@ -548,18 +558,18 @@ function _set_axis_properties!(ax; xlim = nothing, ylim = nothing, xlabel = "", 
         ax.xticks = (vmin, vmax) -> begin
             start_x = ceil(vmin / scale_x_value) * scale_x_value
             end_x = floor(vmax / scale_x_value) * scale_x_value
-            ticks = collect(start_x:scale_x_value:(end_x + 1e-9))
-            labels = string.(round.(ticks, sigdigits=4))
+            ticks = collect(start_x:scale_x_value:(end_x+1e-9))
+            labels = string.(round.(ticks, sigdigits = 4))
             return ticks, labels
         end
     end
-    
+
     if !isnothing(scale_y_value)
         ax.yticks = (vmin, vmax) -> begin
             start_y = ceil(vmin / scale_y_value) * scale_y_value
             end_y = floor(vmax / scale_y_value) * scale_y_value
-            ticks = collect(start_y:scale_y_value:(end_y + 1e-9))
-            labels = string.(round.(ticks, sigdigits=4))
+            ticks = collect(start_y:scale_y_value:(end_y+1e-9))
+            labels = string.(round.(ticks, sigdigits = 4))
             return ticks, labels
         end
     end
@@ -622,22 +632,22 @@ function _add_origin_scale_indicator!(
             start_x = ceil(min_x / scale_x_value) * scale_x_value
             end_x = floor(max_x / scale_x_value) * scale_x_value
             # Floating point issues can make range collection problematic, so we use a small epsilon
-            collect(start_x:scale_x_value:(end_x + 1e-9))
+            collect(start_x:scale_x_value:(end_x+1e-9))
         end
 
         y_ticks_obs = lift(ax.finallimits) do lims
             min_y, max_y = lims.origin[2], lims.origin[2] + lims.widths[2]
             start_y = ceil(min_y / scale_y_value) * scale_y_value
             end_y = floor(max_y / scale_y_value) * scale_y_value
-            collect(start_y:scale_y_value:(end_y + 1e-9))
+            collect(start_y:scale_y_value:(end_y+1e-9))
         end
 
         # Format labels
         x_labels_obs = lift(x_ticks_obs) do ticks
-            [string(round(t, sigdigits=3)) for t in ticks]
+            [string(round(t, sigdigits = 3)) for t in ticks]
         end
         y_labels_obs = lift(y_ticks_obs) do ticks
-            [string(round(t, sigdigits=3)) for t in ticks]
+            [string(round(t, sigdigits = 3)) for t in ticks]
         end
 
         # Tick markers (small lines crossing the axes)
@@ -647,8 +657,8 @@ function _add_origin_scale_indicator!(
         y_pts_obs = lift(y_ticks_obs) do ticks
             [Point2f(0.0, t) for t in ticks if abs(t) > 1e-9]
         end
-        scatter!(ax, x_pts_obs, marker='|', markersize=10, color=:black, overdraw=true, xautolimits=false, yautolimits=false)
-        scatter!(ax, y_pts_obs, marker='-', markersize=10, color=:black, overdraw=true, xautolimits=false, yautolimits=false)
+        scatter!(ax, x_pts_obs, marker = '|', markersize = 10, color = :black, overdraw = true, xautolimits = false, yautolimits = false)
+        scatter!(ax, y_pts_obs, marker = '-', markersize = 10, color = :black, overdraw = true, xautolimits = false, yautolimits = false)
 
         # Text labels
         x_lbls = lift(x_labels_obs, x_ticks_obs) do labels, ticks
@@ -657,9 +667,31 @@ function _add_origin_scale_indicator!(
         y_lbls = lift(y_labels_obs, y_ticks_obs) do labels, ticks
             [l for (l, t) in zip(labels, ticks) if abs(t) > 1e-9]
         end
-        text!(ax, x_pts_obs, text=x_lbls, align=(:center, :top), offset=(0, -8), color=:black, fontsize=12, overdraw=true, xautolimits=false, yautolimits=false)
-        text!(ax, y_pts_obs, text=y_lbls, align=(:right, :center), offset=(-8, 0), color=:black, fontsize=12, overdraw=true, xautolimits=false, yautolimits=false)
-        
+        text!(
+            ax,
+            x_pts_obs,
+            text = x_lbls,
+            align = (:center, :top),
+            offset = (0, -8),
+            color = :black,
+            fontsize = 12,
+            overdraw = true,
+            xautolimits = false,
+            yautolimits = false,
+        )
+        text!(
+            ax,
+            y_pts_obs,
+            text = y_lbls,
+            align = (:right, :center),
+            offset = (-8, 0),
+            color = :black,
+            fontsize = 12,
+            overdraw = true,
+            xautolimits = false,
+            yautolimits = false,
+        )
+
         # Axis labels (Time and Amplitude)
         # Place them at the end of the axes
         x_axis_label_pos = lift(ax.finallimits) do lims
@@ -668,8 +700,28 @@ function _add_origin_scale_indicator!(
         y_axis_label_pos = lift(ax.finallimits) do lims
             Point2f(0.0, lims.origin[2] + lims.widths[2])
         end
-        text!(ax, x_axis_label_pos, text=string(" ", xlabel), align=(:left, :center), color=:black, fontsize=14, overdraw=true, xautolimits=false, yautolimits=false)
-        text!(ax, y_axis_label_pos, text=string(ylabel, " "), align=(:center, :bottom), color=:black, fontsize=14, overdraw=true, xautolimits=false, yautolimits=false)
+        text!(
+            ax,
+            x_axis_label_pos,
+            text = string(" ", xlabel),
+            align = (:left, :center),
+            color = :black,
+            fontsize = 14,
+            overdraw = true,
+            xautolimits = false,
+            yautolimits = false,
+        )
+        text!(
+            ax,
+            y_axis_label_pos,
+            text = string(ylabel, " "),
+            align = (:center, :bottom),
+            color = :black,
+            fontsize = 14,
+            overdraw = true,
+            xautolimits = false,
+            yautolimits = false,
+        )
     end
 end
 

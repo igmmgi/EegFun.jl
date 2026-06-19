@@ -199,11 +199,11 @@ function global_dissimilarity(dat::ErpData; channel_selection::Function = channe
 
     # Normalize channel data by GFP at each time point
     gfp_values = vec(std(channel_matrix, dims = 2, corrected = false))
-    
+
     # GD(t) = sqrt(mean((u_i(t) - u_i(t-1))^2)) where u_i(t) is normalized by GFP
     n_timepoints, n_channels = size(channel_matrix)
     gd_values = zeros(Float64, n_timepoints)
-    
+
     for t = 2:n_timepoints
         sum_sq = 0.0
         @inbounds @simd for c = 1:n_channels
@@ -213,7 +213,7 @@ function global_dissimilarity(dat::ErpData; channel_selection::Function = channe
         end
         gd_values[t] = sqrt(sum_sq / n_channels)
     end
-    
+
     # Replicate first value to maintain same length as time vector
     gd_values[1] = gd_values[2]
 
@@ -290,7 +290,7 @@ function gfp_and_dissimilarity(dat::ErpData; channel_selection::Function = chann
     # Calculate Global Dissimilarity using GFP for normalization
     n_timepoints, n_channels = size(channel_matrix)
     gd_values = zeros(Float64, n_timepoints)
-    
+
     for t = 2:n_timepoints
         sum_sq = 0.0
         @inbounds @simd for c = 1:n_channels

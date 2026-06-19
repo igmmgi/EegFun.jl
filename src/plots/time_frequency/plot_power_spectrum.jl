@@ -108,7 +108,14 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
     _plot_power_spectrum_data!(fig, ax, freq_data, power_raw_data, channels_to_plot; kwargs...)
 end
 
-function _plot_power_spectrum_data!(fig, ax, freq_data::Vector{<:AbstractVector}, power_raw_data::Vector{<:AbstractVector}, channels_to_plot::Vector{Symbol}; kwargs...)
+function _plot_power_spectrum_data!(
+    fig,
+    ax,
+    freq_data::Vector{<:AbstractVector},
+    power_raw_data::Vector{<:AbstractVector},
+    channels_to_plot::Vector{Symbol};
+    kwargs...,
+)
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
 
@@ -653,31 +660,27 @@ end
 
 Plot a pre-computed power spectrum with interactive controls.
 """
-function plot_channel_spectrum(
-    dat::SpectrumData;
-    channel_selection::Function = channels(),
-    kwargs...,
-)
+function plot_channel_spectrum(dat::SpectrumData; channel_selection::Function = channels(), kwargs...)
     title_str = _generate_window_title(dat)
     _set_window_title(title_str)
 
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
-    
+
     # Filter to only channels that actually exist in the spectrum data
     all_names = propertynames(dat.data)
     available_channels = [ch for ch in all_names if ch != :freq]
     valid_channels = [ch for ch in selected_channels if ch in available_channels]
-    
+
     if isempty(valid_channels)
         @minimal_error "No valid channels found in spectrum data."
     end
-    
+
     # Pre-extract vectors
     freq_data = Vector{Vector{Float64}}([Float64.(dat.data.freq) for _ in valid_channels])
     power_raw_data = Vector{Vector{Float64}}([Float64.(dat.data[!, ch]) for ch in valid_channels])
 
     plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
-    
+
     fig = Figure()
     ax = Axis(fig[1, 1])
 

@@ -202,7 +202,8 @@ function _compute_rdm!(
     for i = 1:n_conditions
         rdm[i, i] = 0.0  # Diagonal is always 0
         for j = (i+1):n_conditions
-            dissim = _compute_dissimilarity(condition_patterns[i], condition_patterns[j], measure; inv_covariance_matrix = inv_covariance_matrix)
+            dissim =
+                _compute_dissimilarity(condition_patterns[i], condition_patterns[j], measure; inv_covariance_matrix = inv_covariance_matrix)
             rdm[i, j] = dissim
             rdm[j, i] = dissim  # Symmetric
         end
@@ -427,7 +428,7 @@ function rsa(
 
             # Compute RDM for each trial
             n_trials = minimum(n_trials_per_condition)
-            
+
             avg_rdm = zeros(Float64, n_conditions, n_conditions)
             trial_rdm_buffer = zeros(Float64, n_conditions, n_conditions)
             condition_patterns = Vector{AbstractVector{Float64}}(undef, n_conditions)
@@ -444,7 +445,7 @@ function rsa(
                         break
                     end
                 end
-                
+
                 if is_valid
                     _compute_rdm!(trial_rdm_buffer, condition_patterns, dissimilarity_measure; inv_covariance_matrix = inv_pooled_cov)
                     avg_rdm .+= trial_rdm_buffer
@@ -895,10 +896,10 @@ function _compute_rdms_from_data(
     dissimilarity_measure::Symbol,
 )
     rdms = zeros(Float64, n_timepoints, n_conditions, n_conditions)
-    
+
     # Pre-allocate buffers
     n_channels = length(selected_channels)
-    condition_patterns = [zeros(Float64, n_channels) for _ in 1:n_conditions]
+    condition_patterns = [zeros(Float64, n_channels) for _ = 1:n_conditions]
     rdm_buffer = zeros(Float64, n_conditions, n_conditions)
 
     for t = 1:n_timepoints
@@ -913,14 +914,14 @@ function _compute_rdms_from_data(
         for (i, cond_data) in enumerate(data_arrays)
             n_trials = size(cond_data, 3)
             fill!(condition_patterns[i], 0.0)
-            for trial in 1:n_trials
-                @inbounds @simd for ch in 1:n_channels
+            for trial = 1:n_trials
+                @inbounds @simd for ch = 1:n_channels
                     condition_patterns[i][ch] += cond_data[ch, t, trial]
                 end
             end
             condition_patterns[i] ./= n_trials
         end
-        
+
         _compute_rdm!(rdm_buffer, condition_patterns, dissimilarity_measure; inv_covariance_matrix = inv_pooled_cov)
         rdms[t, :, :] = rdm_buffer
     end

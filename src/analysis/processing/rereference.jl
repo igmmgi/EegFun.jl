@@ -34,10 +34,10 @@ function _apply_rereference!(dat::Vector{DataFrame}, channel_selection::Vector{S
     if isempty(dat)
         return nothing
     end
-    
+
     n = n_samples(dat[1])
     reference = Vector{Float64}(undef, n)
-    
+
     for df in dat
         _calculate_reference!(reference, df, reference_selection)
         for ch in channel_selection
@@ -79,7 +79,7 @@ function _calculate_reference!(reference::Vector{Float64}, dat::DataFrame, refer
             reference .+= col
         end
     end
-    
+
     n_refs = Float64(length(reference_channels))
     @inbounds @simd for i = 1:n
         reference[i] /= n_refs

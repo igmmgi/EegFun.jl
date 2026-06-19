@@ -19,12 +19,12 @@ function _build_checkbox_grid!(grid, items, cols, checked_fn; fontsize = 14, lab
         row = ((i - 1) ÷ cols) + 1
         col = ((i - 1) % cols) + 1
         col_base = (col - 1) * 2
-        cb = Checkbox(grid[row, col_base + 1], checked = checked_fn(item, i), width = 16, height = 16)
+        cb = Checkbox(grid[row, col_base+1], checked = checked_fn(item, i), width = 16, height = 16)
         push!(checkboxes, cb)
-        Label(grid[row, col_base + 2], label_fn(item), fontsize = fontsize, halign = :left)
+        Label(grid[row, col_base+2], label_fn(item), fontsize = fontsize, halign = :left)
     end
     actual_cols = min(cols, length(items))
-    for c in 1:actual_cols
+    for c = 1:actual_cols
         col_base = (c - 1) * 2
         colgap!(grid, col_base + 1, 5)
         c < actual_cols && colgap!(grid, col_base + 2, 20)
@@ -40,7 +40,9 @@ Return a Button that opens `popup_fn` on click. Used to build control panels wit
 """
 function _popup_button(fig, label, popup_fn)
     btn = Button(fig, label = label, width = Auto(), fontsize = 18)
-    on(btn.clicks) do _ popup_fn() end
+    on(btn.clicks) do _
+        popup_fn()
+    end
     return btn
 end
 

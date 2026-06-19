@@ -218,18 +218,18 @@ function _compute_nonparametric_threshold_individual(permutation_t_matrices::Arr
 
     thresholds_positive = Array{Float64,2}(undef, n_electrodes, n_time)
     thresholds_negative = Array{Float64,2}(undef, n_electrodes, n_time)
-    
-    t_values_grid = [Float64[] for _ in 1:n_electrodes, _ in 1:n_time]
-    for j in 1:n_time, i in 1:n_electrodes
+
+    t_values_grid = [Float64[] for _ = 1:n_electrodes, _ = 1:n_time]
+    for j = 1:n_time, i = 1:n_electrodes
         sizehint!(t_values_grid[i, j], n_permutations)
     end
-    
+
     percentile_level = 1.0 - alpha
 
     if tail == :both
-        @inbounds for perm_idx in 1:n_permutations
-            for j in 1:n_time
-                for i in 1:n_electrodes
+        @inbounds for perm_idx = 1:n_permutations
+            for j = 1:n_time
+                for i = 1:n_electrodes
                     t_val = permutation_t_matrices[i, j, perm_idx]
                     if !isnan(t_val) && !isinf(t_val)
                         push!(t_values_grid[i, j], abs(t_val))
@@ -238,7 +238,7 @@ function _compute_nonparametric_threshold_individual(permutation_t_matrices::Arr
             end
         end
 
-        for j in 1:n_time, i in 1:n_electrodes
+        for j = 1:n_time, i = 1:n_electrodes
             if isempty(t_values_grid[i, j])
                 thresholds_positive[i, j] = NaN
                 thresholds_negative[i, j] = NaN
@@ -250,9 +250,9 @@ function _compute_nonparametric_threshold_individual(permutation_t_matrices::Arr
         end
 
     elseif tail == :right
-        @inbounds for perm_idx in 1:n_permutations
-            for j in 1:n_time
-                for i in 1:n_electrodes
+        @inbounds for perm_idx = 1:n_permutations
+            for j = 1:n_time
+                for i = 1:n_electrodes
                     t_val = permutation_t_matrices[i, j, perm_idx]
                     if !isnan(t_val) && !isinf(t_val) && t_val > 0
                         push!(t_values_grid[i, j], t_val)
@@ -261,7 +261,7 @@ function _compute_nonparametric_threshold_individual(permutation_t_matrices::Arr
             end
         end
 
-        for j in 1:n_time, i in 1:n_electrodes
+        for j = 1:n_time, i = 1:n_electrodes
             if isempty(t_values_grid[i, j])
                 thresholds_positive[i, j] = NaN
             else
@@ -271,9 +271,9 @@ function _compute_nonparametric_threshold_individual(permutation_t_matrices::Arr
         end
 
     elseif tail == :left
-        @inbounds for perm_idx in 1:n_permutations
-            for j in 1:n_time
-                for i in 1:n_electrodes
+        @inbounds for perm_idx = 1:n_permutations
+            for j = 1:n_time
+                for i = 1:n_electrodes
                     t_val = permutation_t_matrices[i, j, perm_idx]
                     if !isnan(t_val) && !isinf(t_val) && t_val < 0
                         push!(t_values_grid[i, j], abs(t_val))
@@ -282,7 +282,7 @@ function _compute_nonparametric_threshold_individual(permutation_t_matrices::Arr
             end
         end
 
-        for j in 1:n_time, i in 1:n_electrodes
+        for j = 1:n_time, i = 1:n_electrodes
             thresholds_positive[i, j] = NaN
             if isempty(t_values_grid[i, j])
                 thresholds_negative[i, j] = NaN

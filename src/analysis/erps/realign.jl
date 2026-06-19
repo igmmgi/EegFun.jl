@@ -354,7 +354,7 @@ end time (minimum of all maximum times) across all epochs.
 function _find_common_time_window(dat::EpochData)::Tuple{Float64,Float64}
     # Common interval is the overlap of all individual intervals
     # Since time is sorted, [1] is minimum and [end] is maximum (O(1) vs O(T))
-    
+
     # Latest start time
     common_start = maximum(epoch.time[1] for epoch in dat.data)
     # Earliest end time

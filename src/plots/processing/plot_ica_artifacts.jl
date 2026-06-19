@@ -4,17 +4,17 @@
 Helper function to plot generic component metrics and highlight identified components.
 """
 function _plot_component_metric!(
-    ax, 
-    metrics_df, 
-    metric_col::Symbol, 
-    identified_comps::Vector{Int}; 
-    threshold = nothing, 
-    threshold_style = :dash, 
-    threshold_color = :gray, 
+    ax,
+    metrics_df,
+    metric_col::Symbol,
+    identified_comps::Vector{Int};
+    threshold = nothing,
+    threshold_style = :dash,
+    threshold_color = :gray,
     threshold_label = nothing,
     add_legend = false,
     label_all = "All Components",
-    label_highlight = "Identified Components"
+    label_highlight = "Identified Components",
 )
     # Plot all components
     scatter!(ax, metrics_df.Component, metrics_df[!, metric_col], color = :gray, markersize = 12, label = add_legend ? label_all : nothing)
@@ -29,14 +29,14 @@ function _plot_component_metric!(
     if !isempty(identified_comps)
         highlight_df = metrics_df[in.(metrics_df.Component, Ref(identified_comps)), :]
         scatter!(
-            ax, 
-            highlight_df.Component, 
-            highlight_df[!, metric_col], 
-            color = :red, 
-            markersize = 15, 
-            label = add_legend ? label_highlight : nothing
+            ax,
+            highlight_df.Component,
+            highlight_df[!, metric_col],
+            color = :red,
+            markersize = 15,
+            label = add_legend ? label_highlight : nothing,
         )
-        
+
         # Add labels
         for row in eachrow(highlight_df)
             text!(
@@ -90,7 +90,7 @@ function plot_eog_component_features(identified_comps::Dict, metrics_df::DataFra
     end
 
     fig = Figure()
-    
+
     # Plot vEOG Correlation Z-Scores
     ax_v = Axis(fig[1, 1], xlabel = "Component Number", ylabel = "Z-Score", title = "vEOG Correlation Z-Scores")
     _plot_component_metric!(ax_v, metrics_df, :vEOG_zscore, identified_comps[:vEOG]; threshold = [z_threshold, -z_threshold])
@@ -136,7 +136,7 @@ function plot_spatial_kurtosis_components(kurtosis_comps::Vector{Int}, metrics_d
     # Plot spatial kurtosis z-scores
     ax = Axis(fig[1, 1], xlabel = "Component", ylabel = "Spatial Kurtosis Z-Score", title = "Component Spatial Kurtosis Z-Scores")
 
-    _plot_component_metric!(ax, metrics_df, :z_spatial_kurtosis, kurtosis_comps; threshold = [z_threshold], threshold_color=:red)
+    _plot_component_metric!(ax, metrics_df, :z_spatial_kurtosis, kurtosis_comps; threshold = [z_threshold], threshold_color = :red)
     hlines!(ax, [0.0], color = :gray, linestyle = :dot)
 
     if display_plot
@@ -177,15 +177,30 @@ function plot_line_noise_components(line_noise_comps::Vector{Int}, metrics_df::D
 
     # Plot 1: Power Ratio Z-Scores
     ax1 = Axis(fig[1, 1], xlabel = "Component", ylabel = "Power Ratio Z-Score", title = "Line Frequency Power Ratio Z-Scores")
-    _plot_component_metric!(ax1, metrics_df, :power_ratio_zscore, line_noise_comps; 
-                            threshold = [z_threshold], threshold_color = :red, threshold_label = "Threshold",
-                            add_legend = true, label_highlight = "Line Noise Components")
+    _plot_component_metric!(
+        ax1,
+        metrics_df,
+        :power_ratio_zscore,
+        line_noise_comps;
+        threshold = [z_threshold],
+        threshold_color = :red,
+        threshold_label = "Threshold",
+        add_legend = true,
+        label_highlight = "Line Noise Components",
+    )
 
     # Plot 2: Harmonic Ratios
     ax2 = Axis(fig[1, 2], xlabel = "Component", ylabel = "Power Ratio", title = "Harmonic Power Ratios")
-    _plot_component_metric!(ax2, metrics_df, :harmonic_ratio, line_noise_comps; 
-                            threshold = [min_harmonic_power], threshold_label = "Min Harmonic Power",
-                            add_legend = true, label_highlight = "Line Noise Components")
+    _plot_component_metric!(
+        ax2,
+        metrics_df,
+        :harmonic_ratio,
+        line_noise_comps;
+        threshold = [min_harmonic_power],
+        threshold_label = "Min Harmonic Power",
+        add_legend = true,
+        label_highlight = "Line Noise Components",
+    )
 
     if display_plot
         _display_figure(fig)
