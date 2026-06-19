@@ -374,16 +374,25 @@ function signal_example_convolution()
     btn_denoise = Button(preset_grid[1, 3], label = "Smooth Denoise (Gaussian)", width = 240)
     btn_wavelet = Button(preset_grid[1, 4], label = "Amplitude Envelope (Wavelet)", width = 260)
 
+    is_playing = Ref(false)
     on(btn_play.clicks) do _
+        is_playing[] && return
+        is_playing[] = true
         @async begin
-            for p = 0.0:0.01:1.0
-                set_close_to!(sl_pos, p)
-                sleep(0.05)   # 5 seconds total
+            try
+                for p = 0.0:0.01:1.0
+                    !is_playing[] && break
+                    set_close_to!(sl_pos, p)
+                    sleep(0.05)   # 5 seconds total
+                end
+            finally
+                is_playing[] = false
             end
         end
     end
 
     on(btn_denoise.clicks) do _
+        is_playing[] = false
         idx = findfirst(x -> x == "Gaussian", kernel_options)
         if !isnothing(idx)
             menu_kt.i_selected[] = idx
@@ -395,6 +404,7 @@ function signal_example_convolution()
     end
 
     on(btn_wavelet.clicks) do _
+        is_playing[] = false
         idx = findfirst(x -> x == "Wavelet (Morlet)", kernel_options)
         if !isnothing(idx)
             menu_kt.i_selected[] = idx
