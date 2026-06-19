@@ -48,9 +48,9 @@ function _shuffle_labels!(
 
         n_participants, n_electrodes, n_time = size(data1)
         swaps = rand(Bool, n_participants)
-        
-        for t_idx in 1:n_time
-            for e_idx in 1:n_electrodes
+
+        for t_idx = 1:n_time
+            for e_idx = 1:n_electrodes
                 @inbounds @simd for p_idx = 1:n_participants
                     if swaps[p_idx]
                         temp = shuffled_A[p_idx, e_idx, t_idx]
@@ -72,23 +72,23 @@ function _shuffle_labels!(
         shuffled_indices = collect(1:n_total)
         shuffle!(shuffled_indices)
 
-        @inbounds for t_idx in 1:n_time
-            for e_idx in 1:n_electrodes
+        @inbounds for t_idx = 1:n_time
+            for e_idx = 1:n_electrodes
                 @simd for i = 1:n_A
                     src_idx = shuffled_indices[i]
                     if src_idx <= n_A
                         shuffled_A[i, e_idx, t_idx] = data1[src_idx, e_idx, t_idx]
                     else
-                        shuffled_A[i, e_idx, t_idx] = data2[src_idx - n_A, e_idx, t_idx]
+                        shuffled_A[i, e_idx, t_idx] = data2[src_idx-n_A, e_idx, t_idx]
                     end
                 end
-                
+
                 @simd for i = 1:n_B
-                    src_idx = shuffled_indices[n_A + i]
+                    src_idx = shuffled_indices[n_A+i]
                     if src_idx <= n_A
                         shuffled_B[i, e_idx, t_idx] = data1[src_idx, e_idx, t_idx]
                     else
-                        shuffled_B[i, e_idx, t_idx] = data2[src_idx - n_A, e_idx, t_idx]
+                        shuffled_B[i, e_idx, t_idx] = data2[src_idx-n_A, e_idx, t_idx]
                     end
                 end
             end
@@ -144,14 +144,14 @@ function _collect_permutation_t_matrices(prepared::StatisticalData, n_permutatio
 
     # Pre-allocate buffers per thread to reuse memory safely across concurrent threads
     n_threads = Threads.maxthreadid()
-    shuffled_A_buffers = [similar(prepared.analysis.data[1]) for _ in 1:n_threads]
-    shuffled_B_buffers = [similar(prepared.analysis.data[2]) for _ in 1:n_threads]
-    
-    mean1_buffers = prepared.analysis.design == :paired ? [Array{Float64,2}(undef, n_electrodes, n_time) for _ in 1:n_threads] : nothing
-    mean2_buffers = prepared.analysis.design == :paired ? [Array{Float64,2}(undef, n_electrodes, n_time) for _ in 1:n_threads] : nothing
-    mean_diff_buffers = prepared.analysis.design == :paired ? [Array{Float64,2}(undef, n_electrodes, n_time) for _ in 1:n_threads] : nothing
-    std_diff_buffers = prepared.analysis.design == :paired ? [Array{Float64,2}(undef, n_electrodes, n_time) for _ in 1:n_threads] : nothing
-    t_matrix_buffers = [Array{Float64,2}(undef, n_electrodes, n_time) for _ in 1:n_threads]
+    shuffled_A_buffers = [similar(prepared.analysis.data[1]) for _ = 1:n_threads]
+    shuffled_B_buffers = [similar(prepared.analysis.data[2]) for _ = 1:n_threads]
+
+    mean1_buffers = prepared.analysis.design == :paired ? [Array{Float64,2}(undef, n_electrodes, n_time) for _ = 1:n_threads] : nothing
+    mean2_buffers = prepared.analysis.design == :paired ? [Array{Float64,2}(undef, n_electrodes, n_time) for _ = 1:n_threads] : nothing
+    mean_diff_buffers = prepared.analysis.design == :paired ? [Array{Float64,2}(undef, n_electrodes, n_time) for _ = 1:n_threads] : nothing
+    std_diff_buffers = prepared.analysis.design == :paired ? [Array{Float64,2}(undef, n_electrodes, n_time) for _ = 1:n_threads] : nothing
+    t_matrix_buffers = [Array{Float64,2}(undef, n_electrodes, n_time) for _ = 1:n_threads]
 
     Threads.@threads for perm_idx = 1:n_permutations
         tid = Threads.threadid()
@@ -175,14 +175,14 @@ function _collect_permutation_t_matrices(prepared::StatisticalData, n_permutatio
 
         # Compute t-matrix directly from arrays using thread-local memory
         t_matrix_perm, _, _, _ = _compute_t_matrix(
-            shuffled_A_buffer, 
-            shuffled_B_buffer, 
+            shuffled_A_buffer,
+            shuffled_B_buffer,
             prepared.analysis.design,
             mean1_buffer = mean1_buffer,
             mean2_buffer = mean2_buffer,
             mean_diff_buffer = mean_diff_buffer,
             std_diff_buffer = std_diff_buffer,
-            t_matrix_buffer = t_matrix_buffer
+            t_matrix_buffer = t_matrix_buffer,
         )
         permutation_t_matrices[:, :, perm_idx] = t_matrix_perm
 
@@ -253,20 +253,20 @@ function _run_permutations(
     n_threads = Threads.maxthreadid()
 
     # Pre-allocate buffers per thread to reuse memory across concurrent permutations
-    shuffled_A_buffers = [similar(prepared.analysis.data[1]) for _ in 1:n_threads]
-    shuffled_B_buffers = [similar(prepared.analysis.data[2]) for _ in 1:n_threads]
-    mask_pos_buffers = [BitArray{2}(undef, n_electrodes, n_time) for _ in 1:n_threads]
-    mask_neg_buffers = [BitArray{2}(undef, n_electrodes, n_time) for _ in 1:n_threads]
+    shuffled_A_buffers = [similar(prepared.analysis.data[1]) for _ = 1:n_threads]
+    shuffled_B_buffers = [similar(prepared.analysis.data[2]) for _ = 1:n_threads]
+    mask_pos_buffers = [BitArray{2}(undef, n_electrodes, n_time) for _ = 1:n_threads]
+    mask_neg_buffers = [BitArray{2}(undef, n_electrodes, n_time) for _ = 1:n_threads]
 
     if prepared.analysis.design == :paired
-        mean1_buffers = [Array{Float64,2}(undef, n_electrodes, n_time) for _ in 1:n_threads]
-        mean2_buffers = [Array{Float64,2}(undef, n_electrodes, n_time) for _ in 1:n_threads]
-        mean_diff_buffers = [Array{Float64,2}(undef, n_electrodes, n_time) for _ in 1:n_threads]
-        std_diff_buffers = [Array{Float64,2}(undef, n_electrodes, n_time) for _ in 1:n_threads]
+        mean1_buffers = [Array{Float64,2}(undef, n_electrodes, n_time) for _ = 1:n_threads]
+        mean2_buffers = [Array{Float64,2}(undef, n_electrodes, n_time) for _ = 1:n_threads]
+        mean_diff_buffers = [Array{Float64,2}(undef, n_electrodes, n_time) for _ = 1:n_threads]
+        std_diff_buffers = [Array{Float64,2}(undef, n_electrodes, n_time) for _ = 1:n_threads]
     else
         mean1_buffers = mean2_buffers = mean_diff_buffers = std_diff_buffers = nothing
     end
-    t_matrix_buffers = [Array{Float64,2}(undef, n_electrodes, n_time) for _ in 1:n_threads]
+    t_matrix_buffers = [Array{Float64,2}(undef, n_electrodes, n_time) for _ = 1:n_threads]
 
     # Extract commonly used fields from grand_average ErpData
     electrodes = channel_labels(prepared.data[1])
@@ -282,7 +282,7 @@ function _run_permutations(
 
     Threads.@threads for perm_idx = 1:n_permutations
         tid = Threads.threadid()
-        
+
         # Select thread-local buffers
         shuffled_A_buffer = shuffled_A_buffers[tid]
         shuffled_B_buffer = shuffled_B_buffers[tid]
@@ -315,7 +315,7 @@ function _run_permutations(
                 mean_diff_buffer = mean_diff_buffer,
                 std_diff_buffer = std_diff_buffer,
                 t_matrix_buffer = t_matrix_buffer,
-                compute_p_values = false
+                compute_p_values = false,
             )
         end
 
@@ -394,10 +394,10 @@ function _shuffle_labels_tf!(
 
         n_participants, n_electrodes, n_freqs, n_time = size(data1)
         swaps = rand(Bool, n_participants)
-        
-        for t_idx in 1:n_time
-            for f_idx in 1:n_freqs
-                for e_idx in 1:n_electrodes
+
+        for t_idx = 1:n_time
+            for f_idx = 1:n_freqs
+                for e_idx = 1:n_electrodes
                     @inbounds @simd for p_idx = 1:n_participants
                         if swaps[p_idx]
                             temp = shuffled_A[p_idx, e_idx, f_idx, t_idx]
@@ -420,15 +420,15 @@ function _shuffle_labels_tf!(
         n_freqs = size(data1, 3)
         n_time = size(data1, 4)
 
-        @inbounds for t_idx in 1:n_time
-            for f_idx in 1:n_freqs
-                for e_idx in 1:n_electrodes
+        @inbounds for t_idx = 1:n_time
+            for f_idx = 1:n_freqs
+                for e_idx = 1:n_electrodes
                     @simd for i = 1:n_A
                         src_idx = shuffled_indices[i]
                         if src_idx <= n_A
                             shuffled_A[i, e_idx, f_idx, t_idx] = data1[src_idx, e_idx, f_idx, t_idx]
                         else
-                            shuffled_A[i, e_idx, f_idx, t_idx] = data2[src_idx - n_A, e_idx, f_idx, t_idx]
+                            shuffled_A[i, e_idx, f_idx, t_idx] = data2[src_idx-n_A, e_idx, f_idx, t_idx]
                         end
                     end
                     @simd for i = 1:n_B
@@ -436,7 +436,7 @@ function _shuffle_labels_tf!(
                         if src_idx <= n_A
                             shuffled_B[i, e_idx, f_idx, t_idx] = data1[src_idx, e_idx, f_idx, t_idx]
                         else
-                            shuffled_B[i, e_idx, f_idx, t_idx] = data2[src_idx - n_A, e_idx, f_idx, t_idx]
+                            shuffled_B[i, e_idx, f_idx, t_idx] = data2[src_idx-n_A, e_idx, f_idx, t_idx]
                         end
                     end
                 end
@@ -488,11 +488,11 @@ function _run_permutations_tf(
     n_threads = Threads.maxthreadid()
 
     # Pre-allocate thread-local buffers
-    mask_pos_buffers = [BitArray{3}(undef, n_electrodes, n_freqs, n_time) for _ in 1:n_threads]
-    mask_neg_buffers = [BitArray{3}(undef, n_electrodes, n_freqs, n_time) for _ in 1:n_threads]
-    shuffled_A_buffers = [similar(prepared.analysis.data[1]) for _ in 1:n_threads]
-    shuffled_B_buffers = [similar(prepared.analysis.data[2]) for _ in 1:n_threads]
-    t_matrix_buffers = [Array{Float64,3}(undef, n_electrodes, n_freqs, n_time) for _ in 1:n_threads]
+    mask_pos_buffers = [BitArray{3}(undef, n_electrodes, n_freqs, n_time) for _ = 1:n_threads]
+    mask_neg_buffers = [BitArray{3}(undef, n_electrodes, n_freqs, n_time) for _ = 1:n_threads]
+    shuffled_A_buffers = [similar(prepared.analysis.data[1]) for _ = 1:n_threads]
+    shuffled_B_buffers = [similar(prepared.analysis.data[2]) for _ = 1:n_threads]
+    t_matrix_buffers = [Array{Float64,3}(undef, n_electrodes, n_freqs, n_time) for _ = 1:n_threads]
 
     electrode_to_idx = Dict(e => i for (i, e) in enumerate(electrodes))
 
@@ -512,7 +512,14 @@ function _run_permutations_tf(
         _shuffle_labels_tf!(shuffled_A, shuffled_B, prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design)
 
         # Compute t-matrix for shuffled data
-        t_matrix_perm, _, _ = _compute_t_matrix_tf(shuffled_A, shuffled_B, prepared.analysis.design, tail = tail, compute_p_values = false, t_matrix_buffer = t_matrix_buffer)
+        t_matrix_perm, _, _ = _compute_t_matrix_tf(
+            shuffled_A,
+            shuffled_B,
+            prepared.analysis.design,
+            tail = tail,
+            compute_p_values = false,
+            t_matrix_buffer = t_matrix_buffer,
+        )
 
         # Threshold
         if is_parametric

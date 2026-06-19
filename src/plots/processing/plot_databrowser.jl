@@ -63,7 +63,8 @@ mutable struct SelectionState
     selected_regions::Observable{Vector{Tuple{Float64,Float64}}}  # Store multiple regions
     region_plots::Vector{Makie.Poly}  # Store plot objects for each region
     function SelectionState(ax, plot_kwargs)
-        poly_element = poly!(ax, [Point2f(0.0, 0.0)], color = (plot_kwargs[:selection_color], plot_kwargs[:selection_alpha]), visible = false)
+        poly_element =
+            poly!(ax, [Point2f(0.0, 0.0)], color = (plot_kwargs[:selection_color], plot_kwargs[:selection_alpha]), visible = false)
         new(Observable(false), Observable((0.0, 0.0)), Observable(false), poly_element, Observable([]), [])
     end
 end
@@ -81,11 +82,16 @@ mutable struct FilterState
     hp_func::Observable{String}
     lp_func::Observable{String}
     FilterState(plot_kwargs) = new(
-        Observable(false), Observable(false),
-        Observable(plot_kwargs[:default_hp_freq]), Observable(plot_kwargs[:default_lp_freq]),
-        Observable("iir"), Observable("iir"),
-        Observable(2), Observable(2),
-        Observable("filtfilt"), Observable("filtfilt")
+        Observable(false),
+        Observable(false),
+        Observable(plot_kwargs[:default_hp_freq]),
+        Observable(plot_kwargs[:default_lp_freq]),
+        Observable("iir"),
+        Observable("iir"),
+        Observable(2),
+        Observable(2),
+        Observable("filtfilt"),
+        Observable("filtfilt"),
     )
 end
 
@@ -409,15 +415,15 @@ function _create_toggles(fig, ax, state, dat)
         on(tog.active) do active
             config.action(active)
         end
-        
+
         if config.label == "Trigger"
-            btn = Button(fig, label="Trigger", halign=:left)
+            btn = Button(fig, label = "Trigger", halign = :left)
             on(btn.clicks) do _
                 _show_trigger_menu(state, ax, :trigger)
             end
             push!(toggles_grid, [tog, btn])
         elseif config.label == "HP-Filter" || config.label == "LP-Filter"
-            btn = Button(fig, label=config.label, halign=:left)
+            btn = Button(fig, label = config.label, halign = :left)
             filter_type = config.label == "HP-Filter" ? :hp : :lp
             on(btn.clicks) do _
                 _show_single_filter_menu(state, dat, filter_type)
@@ -449,19 +455,16 @@ function _show_trigger_menu(state, ax, marker_symbol)
     active_set = state.plot_kwargs[:active_triggers]
 
     menu_fig = Figure(size = (600, 600))
-    Label(menu_fig[1, 1], "Select Triggers to Display", fontsize=18, halign=:center)
+    Label(menu_fig[1, 1], "Select Triggers to Display", fontsize = 18, halign = :center)
 
     scroll_area = menu_fig[2, 1] = GridLayout()
     cbs = _build_checkbox_grid!(scroll_area, string.(unique_triggers), 5, (trig, _) -> (parse(Float64, trig) in active_set))
 
-    groups = [
-        ("All", ch -> true),
-        ("None", ch -> false),
-    ]
+    groups = [("All", ch -> true), ("None", ch -> false)]
     _add_group_buttons!(menu_fig, 3, cbs, string.(unique_triggers), groups)
 
     action_area = menu_fig[4, 1] = GridLayout()
-    btn_apply = Button(action_area[1, 1], label="Apply", width=200)
+    btn_apply = Button(action_area[1, 1], label = "Apply", width = 200)
     on(btn_apply.clicks) do _
         empty!(active_set)
         for (i, cb) in enumerate(cbs)
@@ -471,7 +474,7 @@ function _show_trigger_menu(state, ax, marker_symbol)
         end
         # Force redraw with new selected triggers
         _update_markers!(ax, state)
-        
+
         # Ensure the toggle matches the new state (if any triggers are selected, turn the main toggle ON)
         # Note: In the future, we could sync the main Toggle UI state, but for now just updating markers works.
     end
@@ -481,23 +484,29 @@ end
 """Popup: select filter cutoff frequency for a specific filter."""
 function _show_single_filter_menu(state, dat, filter_type::Symbol)
     menu_fig = Figure(size = (450, 350))
-    
-    title_str = filter_type == :hp ? "Highpass Filter Settings" : "Lowpass Filter Settings"
-    Label(menu_fig[1, 1], title_str, fontsize = 18, halign = :center, font=:bold)
 
-    grid = menu_fig[2, 1] = GridLayout(valign=:top)
+    title_str = filter_type == :hp ? "Highpass Filter Settings" : "Lowpass Filter Settings"
+    Label(menu_fig[1, 1], title_str, fontsize = 18, halign = :center, font = :bold)
+
+    grid = menu_fig[2, 1] = GridLayout(valign = :top)
     row = 1
-    
+
     if filter_type == :hp
         range_freq = 0.1:0.1:2
-        freq_field = :hp_freq; method_field = :hp_method; order_field = :hp_order; func_field = :hp_func
+        freq_field = :hp_freq;
+        method_field = :hp_method;
+        order_field = :hp_order;
+        func_field = :hp_func
         default_val = 0.5
     else
         range_freq = 5:5:60
-        freq_field = :lp_freq; method_field = :lp_method; order_field = :lp_order; func_field = :lp_func
+        freq_field = :lp_freq;
+        method_field = :lp_method;
+        order_field = :lp_order;
+        func_field = :lp_func
         default_val = 20.0
     end
-    
+
     fs = state.data.filter_state
     if getfield(fs, freq_field)[] == 0.0
         getfield(fs, freq_field)[] = default_val
@@ -506,15 +515,21 @@ function _show_single_filter_menu(state, dat, filter_type::Symbol)
     # Cutoff
     Label(grid[row, 1], "Cutoff (Hz):", halign = :left)
     slider_freq = Slider(grid[row, 2], range = range_freq, startvalue = getfield(fs, freq_field)[])
-    Label(grid[row, 3], @lift(string(round($(slider_freq.value), digits=1))), halign = :left)
-    on(slider_freq.value) do val; getfield(fs, freq_field)[] = val; end
+    Label(grid[row, 3], @lift(string(round($(slider_freq.value), digits = 1))), halign = :left)
+    on(slider_freq.value) do val
+        ;
+        getfield(fs, freq_field)[] = val;
+    end
     row += 1
 
     # Order
     Label(grid[row, 1], "Order:", halign = :left)
     slider_order = Slider(grid[row, 2], range = 1:10, startvalue = getfield(fs, order_field)[])
     Label(grid[row, 3], @lift(string($(slider_order.value))), halign = :left)
-    on(slider_order.value) do val; getfield(fs, order_field)[] = val; end
+    on(slider_order.value) do val
+        ;
+        getfield(fs, order_field)[] = val;
+    end
     row += 1
 
     # Method
@@ -522,8 +537,16 @@ function _show_single_filter_menu(state, dat, filter_type::Symbol)
     method_labels = ["Butterworth (IIR)", "FIR (Hamming)"]
     method_values = ["iir", "fir"]
     current_method = getfield(fs, method_field)[]
-    menu_method = Menu(grid[row, 2], options = zip(method_labels, method_values), default = current_method == "iir" ? "Butterworth (IIR)" : "FIR (Hamming)", width = 220)
-    on(menu_method.selection) do val; getfield(fs, method_field)[] = val; end
+    menu_method = Menu(
+        grid[row, 2],
+        options = zip(method_labels, method_values),
+        default = current_method == "iir" ? "Butterworth (IIR)" : "FIR (Hamming)",
+        width = 220,
+    )
+    on(menu_method.selection) do val
+        ;
+        getfield(fs, method_field)[] = val;
+    end
     row += 1
 
     # Function
@@ -531,8 +554,16 @@ function _show_single_filter_menu(state, dat, filter_type::Symbol)
     func_labels = ["filtfilt (zero-phase)", "filt (one-pass)"]
     func_values = ["filtfilt", "filt"]
     current_func = getfield(fs, func_field)[]
-    menu_func = Menu(grid[row, 2], options = zip(func_labels, func_values), default = current_func == "filtfilt" ? "filtfilt (zero-phase)" : "filt (one-pass)", width = 220)
-    on(menu_func.selection) do val; getfield(fs, func_field)[] = val; end
+    menu_func = Menu(
+        grid[row, 2],
+        options = zip(func_labels, func_values),
+        default = current_func == "filtfilt" ? "filtfilt (zero-phase)" : "filt (one-pass)",
+        width = 220,
+    )
+    on(menu_func.selection) do val
+        ;
+        getfield(fs, func_field)[] = val;
+    end
     row += 1
 
     rowgap!(grid, 10)
@@ -1025,14 +1056,14 @@ function _create_sliders(fig, state::ContinuousDataBrowserState, dat)
     slider_x = Slider(fig[2, 1], range = 1:50:nrow(state.data.current[].data), startvalue = 1, snap = true)
 
     on(slider_range.value) do x
-        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x + slider_x.value.val)
+        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x+slider_x.value.val)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
     end
 
     on(slider_x.value) do x
-        new_range = x:min(nrow(state.data.current[].data), (x + slider_range.value.val) - 1)
+        new_range = x:min(nrow(state.data.current[].data), (x+slider_range.value.val)-1)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
@@ -1472,7 +1503,12 @@ function _add_region_to_selection!(ax, state, x1, x2)
         Point2f(Float64(x2), Float64(ylims[2])),
         Point2f(Float64(x1), Float64(ylims[2])),
     ]
-    region_plot = poly!(ax, region_points, color = (state.plot_kwargs[:selection_color], state.plot_kwargs[:selection_alpha]), strokecolor = :transparent)
+    region_plot = poly!(
+        ax,
+        region_points,
+        color = (state.plot_kwargs[:selection_color], state.plot_kwargs[:selection_alpha]),
+        strokecolor = :transparent,
+    )
     push!(state.selection.region_plots, region_plot)
 
     # Update analysis settings
@@ -1618,9 +1654,9 @@ function _apply_filter!(state::DataBrowserState{T}, filter_type, freq, method, o
     # Get the current data, apply filter, then update the observable
     current_data = state.data.current[]
     if filter_type == :hp
-        highpass_filter!(current_data, freq; filter_method=method, order=order, filter_func=func)
+        highpass_filter!(current_data, freq; filter_method = method, order = order, filter_func = func)
     elseif filter_type == :lp
-        lowpass_filter!(current_data, freq; filter_method=method, order=order, filter_func=func)
+        lowpass_filter!(current_data, freq; filter_method = method, order = order, filter_func = func)
     end
     state.data.current[] = current_data  # Explicitly update the observable
 end
@@ -1780,7 +1816,15 @@ function _init_markers(ax, state; marker_visible = Dict{Symbol,Bool}())
     for (symbol, label) in marker_configs
         if _has_column(state.data, symbol)
             active_vals = symbol == :trigger ? get(state.plot_kwargs, :active_triggers, nothing) : nothing
-            _add_marker!(markers, ax, data, symbol, label = label, visible = get(marker_visible, symbol, false), active_values = active_vals)
+            _add_marker!(
+                markers,
+                ax,
+                data,
+                symbol,
+                label = label,
+                visible = get(marker_visible, symbol, false),
+                active_values = active_vals,
+            )
         end
     end
 
@@ -1926,7 +1970,10 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                 line_width = state.plot_kwargs[:channel_line_width] * 2  # Make repaired channels thicker
             else
                 # Normal channels
-                line_color = @lift(($(state.view.crit_val) > 0.0) ? (abs.($(channel_data_obs)) .>= $(state.view.crit_val)) : fill(false, length($(channel_data_obs))))
+                line_color = @lift(
+                    ($(state.view.crit_val) > 0.0) ? (abs.($(channel_data_obs)) .>= $(state.view.crit_val)) :
+                    fill(false, length($(channel_data_obs)))
+                )
 
                 if !state.ica.is_active
                     line_colormap = [state.plot_kwargs[:unselected_channel_color], state.plot_kwargs[:unselected_channel_color], :red]
@@ -2004,7 +2051,17 @@ end
 
 """Plot a channel line on the axis and store it."""
 function _create_line!(data_lines, col, ax, x_obs, y_obs, color, colormap, linewidth, alpha; visible = true)
-    data_lines[col] = lines!(ax, x_obs, y_obs, color = color, colormap = colormap, linewidth = linewidth, alpha = alpha, visible = visible, colorrange = (0, 1))
+    data_lines[col] = lines!(
+        ax,
+        x_obs,
+        y_obs,
+        color = color,
+        colormap = colormap,
+        linewidth = linewidth,
+        alpha = alpha,
+        visible = visible,
+        colorrange = (0, 1),
+    )
 end
 
 """Add a channel-name text label on the axis."""
@@ -2145,10 +2202,10 @@ Add a scale indicator bar to the plot showing the amplitude scale.
 function _add_scale_indicator!(ax, state, plot_kwargs)
 
     scale_value = plot_kwargs[:scale_indicator_value]
-    
+
     # Use an observable for position so it can be updated by dragging
     if !(plot_kwargs[:scale_indicator_position] isa Observable)
-        plot_kwargs[:scale_indicator_position] = Observable{Tuple{Float64, Float64}}(Float64.(plot_kwargs[:scale_indicator_position]))
+        plot_kwargs[:scale_indicator_position] = Observable{Tuple{Float64,Float64}}(Float64.(plot_kwargs[:scale_indicator_position]))
     end
     pos_obs = plot_kwargs[:scale_indicator_position]
 
@@ -2167,9 +2224,12 @@ function _add_scale_indicator!(ax, state, plot_kwargs)
 
     # Use linesegments! to draw all parts of the scale indicator in a single draw call
     segments = @lift([
-        Point2f($x_pos, $y_bottom), Point2f($x_pos, $y_top),           # Vertical line
-        Point2f($tick_left, $y_bottom), Point2f($tick_right, $y_bottom), # Bottom tick
-        Point2f($tick_left, $y_top), Point2f($tick_right, $y_top)        # Top tick
+        Point2f($x_pos, $y_bottom),
+        Point2f($x_pos, $y_top),           # Vertical line
+        Point2f($tick_left, $y_bottom),
+        Point2f($tick_right, $y_bottom), # Bottom tick
+        Point2f($tick_left, $y_top),
+        Point2f($tick_right, $y_top),        # Top tick
     ])
     linesegments!(ax, segments, color = :black, linewidth = 1)
 
@@ -2188,7 +2248,7 @@ function _add_scale_indicator!(ax, state, plot_kwargs)
     # Enable mouse dragging
     is_dragging = Observable(false)
 
-    on(events(ax).mousebutton, priority=10) do event
+    on(events(ax).mousebutton, priority = 10) do event
         if event.button == Mouse.left
             if event.action == Mouse.press
                 mpos = mouseposition(ax)
@@ -2209,7 +2269,7 @@ function _add_scale_indicator!(ax, state, plot_kwargs)
         return Consume(false)
     end
 
-    on(events(ax).mouseposition, priority=10) do _
+    on(events(ax).mouseposition, priority = 10) do _
         if is_dragging[]
             mpos = mouseposition(ax)
             new_rel_x = (mpos[1] - xlims_obs[][1]) / (xlims_obs[][2] - xlims_obs[][1])

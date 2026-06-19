@@ -219,20 +219,20 @@ macro log_call(func_name)
     return quote
         local_vars = Base.@locals
         arg_strs = String[]
-        
+
         # Format the core data argument first (without kwarg syntax)
         if haskey(local_vars, :dat)
             push!(arg_strs, "dat")
         elseif haskey(local_vars, :data)
             push!(arg_strs, "data")
         end
-        
+
         # Append remaining arguments and kwargs
         for (k, v) in local_vars
             if k == :dat || k == :data || k == Symbol("#self#") || startswith(string(k), "#")
                 continue
             end
-            
+
             # Format values for standard script representation
             if v isa Number || v isa Symbol
                 push!(arg_strs, "$k=$(repr(v))")
@@ -249,7 +249,7 @@ macro log_call(func_name)
                 push!(arg_strs, "$k=::$(typeof(v))")
             end
         end
-        
+
         call_str = "$($name_str)(" * join(arg_strs, ", ") * ")"
         @info "Function call: $call_str"
     end

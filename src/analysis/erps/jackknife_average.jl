@@ -55,7 +55,7 @@ function _create_jackknife_averages(erps::Vector{ErpData})::Vector{ErpData}
     @info "Creating jackknife averages for $n_participants participants"
 
     # Step 1: Pre-compute the total sum for each channel to enable O(N) jackknifing
-    total_sums = Dict{Symbol, Vector{Float64}}()
+    total_sums = Dict{Symbol,Vector{Float64}}()
     for ch in eeg_channels
         total_sums[ch] = zeros(Float64, n_timepoints)
         for erp in erps
@@ -69,7 +69,7 @@ function _create_jackknife_averages(erps::Vector{ErpData})::Vector{ErpData}
     # Step 2: Create jackknife average for each participant
     for excluded_idx = 1:n_participants
         excluded_erp = erps[excluded_idx]
-        
+
         @info "  Participant $excluded_idx: averaging $(n_participants - 1) other participants"
 
         # Create a copy of the first ERP's data as the base (just to get the structure and time vector)

@@ -505,11 +505,8 @@ function plot_erp_image(
         _setup_erp_image_interactivity!(fig, axes, heatmaps; zoom_step = plot_kwargs[:zoom_step])
 
         # Set up selection system (rectangles created AFTER heatmaps)
-        selection_state = SharedSelectionState(
-            axes;
-            selection_color = plot_kwargs[:selection_color],
-            selection_alpha = plot_kwargs[:selection_alpha]
-        )
+        selection_state =
+            SharedSelectionState(axes; selection_color = plot_kwargs[:selection_color], selection_alpha = plot_kwargs[:selection_alpha])
         _setup_unified_selection!(fig, axes, selection_state, dat_subset)
 
         # Set up channel selection events for topo and grid layouts

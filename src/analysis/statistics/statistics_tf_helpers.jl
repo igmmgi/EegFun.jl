@@ -269,15 +269,22 @@ Compute t-statistics and p-values for all electrode × frequency × time points.
 - `df::Float64`: Degrees of freedom
 - `p_matrix::Array{Float64, 3}`: P-values [electrodes × freqs × time]
 """
-function _compute_t_matrix_tf(data1::Array{Float64,4}, data2::Array{Float64,4}, design::Symbol; tail::Symbol = :both, compute_p_values::Bool = true, t_matrix_buffer::Union{Nothing,Array{Float64,3}} = nothing)
+function _compute_t_matrix_tf(
+    data1::Array{Float64,4},
+    data2::Array{Float64,4},
+    design::Symbol;
+    tail::Symbol = :both,
+    compute_p_values::Bool = true,
+    t_matrix_buffer::Union{Nothing,Array{Float64,3}} = nothing,
+)
     n_participants, n_electrodes, n_freqs, n_time = size(data1)
-    
+
     if !isnothing(t_matrix_buffer)
         t_matrix = t_matrix_buffer
     else
         t_matrix = Array{Float64,3}(undef, n_electrodes, n_freqs, n_time)
     end
-    
+
     p_matrix = compute_p_values ? Array{Float64,3}(undef, n_electrodes, n_freqs, n_time) : Array{Float64,3}(undef, 0, 0, 0)
 
     if design == :paired
@@ -317,33 +324,36 @@ function _compute_t_matrix_tf(data1::Array{Float64,4}, data2::Array{Float64,4}, 
         @inbounds for t_idx = 1:n_time
             for f_idx = 1:n_freqs
                 for e_idx = 1:n_electrodes
-                    sum1 = 0.0; sum2 = 0.0; sum1_sq = 0.0; sum2_sq = 0.0
-                    
+                    sum1 = 0.0;
+                    sum2 = 0.0;
+                    sum1_sq = 0.0;
+                    sum2_sq = 0.0
+
                     @simd for p_idx = 1:n_A
                         val = data1[p_idx, e_idx, f_idx, t_idx]
                         sum1 += val
                         sum1_sq += val * val
                     end
-                    
+
                     @simd for p_idx = 1:n_B
                         val = data2[p_idx, e_idx, f_idx, t_idx]
                         sum2 += val
                         sum2_sq += val * val
                     end
-                    
+
                     mean1 = sum1 / n_A
                     mean2 = sum2 / n_B
                     var1 = (sum1_sq / n_A - mean1 * mean1) * n_A / (n_A - 1)
                     var2 = (sum2_sq / n_B - mean2 * mean2) * n_B / (n_B - 1)
-                    
+
                     pooled_var = ((n_A - 1) * var1 + (n_B - 1) * var2) / df
                     se = sqrt(pooled_var * (1.0 / n_A + 1.0 / n_B))
-                    
+
                     t_matrix[e_idx, f_idx, t_idx] = (mean1 - mean2) / se
                 end
             end
         end
-        
+
         if compute_p_values
             _compute_p_matrix_tf!(p_matrix, t_matrix, df, tail)
         end

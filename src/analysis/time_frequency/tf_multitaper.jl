@@ -555,15 +555,6 @@ function freq_spectrum(
     # Return SpectrumData type
     cond_num = hasproperty(dat, :condition) ? dat.condition : 0
     cond_name = condition_name(dat)
-    
-    return SpectrumData(
-        dat.file,
-        cond_num,
-        cond_name,
-        spectrum_df,
-        copy(dat.layout),
-        dat.sample_rate,
-        :welch,
-        copy(dat.analysis_info),
-    )
+
+    return SpectrumData(dat.file, cond_num, cond_name, spectrum_df, copy(dat.layout), dat.sample_rate, :welch, copy(dat.analysis_info))
 end

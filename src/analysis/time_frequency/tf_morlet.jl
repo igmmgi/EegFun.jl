@@ -178,7 +178,7 @@ function tf_morlet(
                 # Extract only original unpadded samples from convolution
                 valid_start = valid_starts_per_freq[fi]
                 @inbounds for (ti_out, ti_padded) in enumerate(time_indices_out)
-                    val = eegconv_buffer[valid_start + ti_padded - 1]
+                    val = eegconv_buffer[valid_start+ti_padded-1]
 
                     if return_trials
                         eegpower[fi, ti_out, trial_idx] = abs2(val)
@@ -205,7 +205,7 @@ function tf_morlet(
         if return_trials # Store each trial separately
             for trial_idx = 1:n_trials
                 power_df[trial_idx][!, channel] = copy(vec(@view eegpower[:, :, trial_idx]))
-                
+
                 phase_vec = Vector{Float64}(undef, num_frex * n_times_out)
                 eegconv_view = @view eegconv[:, :, trial_idx]
                 @inbounds @simd for i in eachindex(eegconv_view)
@@ -215,7 +215,7 @@ function tf_morlet(
             end
         else
             power_df[!, channel] = copy(vec(eegpower))
-            
+
             phase_vec = Vector{Float64}(undef, num_frex * n_times_out)
             @inbounds @simd for i in eachindex(eegconv)
                 phase_vec[i] = angle(eegconv[i])

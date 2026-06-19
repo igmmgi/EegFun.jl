@@ -151,7 +151,7 @@ PrecompileTools.@compile_workload begin
         )
         erp[1].condition = 1
         EegFun.condition_average(erp, [[1]])
-        
+
         erp_fake2 = copy(erp[1])
         erp_fake2.condition = 2
         EegFun.condition_difference([erp[1], erp_fake2], [(1, 2)])

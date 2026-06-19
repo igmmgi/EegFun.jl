@@ -1187,7 +1187,7 @@ function identify_eog_components(
                 max_corr_val = 0.0
                 for lag in lags
                     sum_xy = 0.0
-                    @inbounds @simd for i = max(1, 1 - lag):min(n_s, n_s - lag)
+                    @inbounds @simd for i = max(1, 1-lag):min(n_s, n_s-lag)
                         sum_xy += (eog_buf[i] - m_e) * (comp_buf[i+lag] - m_c)
                     end
                     c = abs(sum_xy / denom)
@@ -1657,7 +1657,7 @@ function identify_line_noise_components(
             signal_fft .= @view signal[1:nfft]
         elseif n_samples < nfft
             signal_fft[1:n_samples] .= signal
-            signal_fft[n_samples+1:end] .= 0.0
+            signal_fft[(n_samples+1):end] .= 0.0
         else
             signal_fft .= signal
         end

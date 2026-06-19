@@ -32,12 +32,12 @@ function _prepare_decoding_data(epochs::Vector{EpochData})
 
         # Pre-allocate references to columns to avoid dictionary lookups in the inner loop
         cols = Vector{Vector{Float64}}(undef, n_channels)
-        
+
         for (trial_idx, trial_df) in enumerate(epoch_data.data)
             for (ch_idx, ch) in enumerate(channels)
                 cols[ch_idx] = trial_df[!, ch]::Vector{Float64}
             end
-            
+
             for ch_idx = 1:n_channels
                 col = cols[ch_idx]
                 @inbounds @simd for t = 1:n_times
@@ -93,7 +93,7 @@ function _prepare_decoding_data(epochs::Vector{TimeFreqEpochData})
 
         # Pre-allocate references to columns
         cols = Vector{Vector{Float64}}(undef, n_channels)
-        
+
         for (trial_idx, trial_df) in enumerate(epoch_data.data_power)
             for (ch_idx, ch) in enumerate(channels)
                 cols[ch_idx] = trial_df[!, ch]::Vector{Float64}
@@ -545,7 +545,7 @@ function _decode_core(
         # Thread-local buffers (built as [features × trials] for cache-friendly extraction)
         X_all_t = Matrix{Float64}(undef, n_features, total_trials)
         labels = Vector{Int}(undef, total_trials)
-        
+
         shuffled_indices = _shuffle_trials(data_arrays)
 
         for t = 1:n_timepoints

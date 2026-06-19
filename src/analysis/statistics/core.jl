@@ -176,17 +176,17 @@ Pre-allocates the target array to avoid slow Splatting/Catting operations.
 function _extract_erp_array(erps::Vector{ErpData}, electrodes::Vector{Symbol}, n_time::Int)
     n_participants = length(erps)
     n_electrodes = length(electrodes)
-    data = Array{Float64, 3}(undef, n_participants, n_electrodes, n_time)
-    
+    data = Array{Float64,3}(undef, n_participants, n_electrodes, n_time)
+
     for (p, erp) in enumerate(erps)
         mat = Matrix{Float64}(erp.data[!, electrodes])
-        for e in 1:n_electrodes
-            @inbounds for t in 1:n_time
+        for e = 1:n_electrodes
+            @inbounds for t = 1:n_time
                 data[p, e, t] = mat[t, e]
             end
         end
     end
-    
+
     return data
 end
 
@@ -274,16 +274,16 @@ function _compute_t_matrix(
     mean_diff_buffer::Union{Nothing,Array{Float64,2}} = nothing,
     std_diff_buffer::Union{Nothing,Array{Float64,2}} = nothing,
     t_matrix_buffer::Union{Nothing,Array{Float64,2}} = nothing,
-    compute_p_values::Bool = true
+    compute_p_values::Bool = true,
 )
     n_participants, n_electrodes, n_time = size(data1)
-    
+
     if !isnothing(t_matrix_buffer)
         t_matrix = t_matrix_buffer
     else
         t_matrix = Array{Float64,2}(undef, n_electrodes, n_time)
     end
-    
+
     p_matrix = compute_p_values ? Array{Float64,2}(undef, n_electrodes, n_time) : Array{Float64,2}(undef, 0, 0)
 
     if design == :paired
@@ -337,7 +337,7 @@ function _compute_t_matrix(
                     mean1[e_idx, t_idx] = mean1_val
                     mean2[e_idx, t_idx] = mean2_val
                 end
-                
+
                 # Compute SE and t-statistic directly in loop (avoids multiple allocations)
                 if std_diff_val == 0.0
                     t_matrix[e_idx, t_idx] = mean_diff_val == 0.0 ? NaN : Inf
@@ -368,29 +368,32 @@ function _compute_t_matrix(
 
         @inbounds for t_idx = 1:n_time
             @inbounds for e_idx = 1:n_electrodes
-                sum1 = 0.0; sum2 = 0.0; sum1_sq = 0.0; sum2_sq = 0.0
-                
+                sum1 = 0.0;
+                sum2 = 0.0;
+                sum1_sq = 0.0;
+                sum2_sq = 0.0
+
                 @simd for p_idx = 1:n_A
                     val = data1[p_idx, e_idx, t_idx]
                     sum1 += val
                     sum1_sq += val * val
                 end
-                
+
                 @simd for p_idx = 1:n_B
                     val = data2[p_idx, e_idx, t_idx]
                     sum2 += val
                     sum2_sq += val * val
                 end
-                
+
                 mean1 = sum1 / n_A
                 mean2 = sum2 / n_B
                 var1 = (sum1_sq / n_A - mean1 * mean1) * n_A / (n_A - 1)
                 var2 = (sum2_sq / n_B - mean2 * mean2) * n_B / (n_B - 1)
-                
+
                 # Pooled standard error (assuming equal variances as documented)
                 pooled_var = ((n_A - 1) * var1 + (n_B - 1) * var2) / df
                 se = sqrt(pooled_var * (1.0 / n_A + 1.0 / n_B))
-                
+
                 t_matrix[e_idx, t_idx] = (mean1 - mean2) / se
                 se_matrix[e_idx, t_idx] = se
             end

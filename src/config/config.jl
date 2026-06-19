@@ -143,16 +143,16 @@ Load and merge configuration from a TOML file with defaults.
 - `Union{Dict,Nothing}`: The loaded configuration or nothing if loading failed
 """
 function _generate_default_config()
-    config = Dict{String, Any}()
+    config = Dict{String,Any}()
     for (path, param) in PARAMETERS
         isnothing(param.default) && continue
-        
+
         parts = split(path, ".")
         current = config
-        for i in 1:(length(parts)-1)
+        for i = 1:(length(parts)-1)
             key = String(parts[i])
             if !haskey(current, key)
-                current[key] = Dict{String, Any}()
+                current[key] = Dict{String,Any}()
             end
             current = current[key]
         end
@@ -168,7 +168,7 @@ function read_config(config_file::String)
         @minimal_error "Configuration file not found: $config_file"
     end
 
-    user_config = Dict{String, Any}()
+    user_config = Dict{String,Any}()
     @info "Loading config file: $config_file"
     try
         user_config = TOML.parsefile(config_file)

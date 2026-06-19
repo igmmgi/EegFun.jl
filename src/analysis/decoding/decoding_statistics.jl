@@ -75,11 +75,11 @@ stats = test_against_chance(decoded_list, alpha=0.05, correction_method=:bonferr
 function test_against_chance(decoded_list::Vector{DecodedData}; alpha::Real = 0.05, correction_method::Symbol = :none)
 
     # validate some inputs
-    if isempty(decoded_list) 
-      @minimal_error("Cannot test empty decoded data list")
+    if isempty(decoded_list)
+        @minimal_error("Cannot test empty decoded data list")
     end
-    if correction_method ∉ (:none, :bonferroni) 
-      @minimal_error("correction_method must be :none or :bonferroni, got :$correction_method")
+    if correction_method ∉ (:none, :bonferroni)
+        @minimal_error("correction_method must be :none or :bonferroni, got :$correction_method")
     end
 
     # Validate all inputs have same structure
@@ -88,12 +88,12 @@ function test_against_chance(decoded_list::Vector{DecodedData}; alpha::Real = 0.
     first_params = first_decoded.parameters
     chance_level = first_params.chance_level
     for decoded in decoded_list[2:end]
-      if decoded.times != first_times 
-        @minimal_error("DecodedData inputs have inconsistent time vectors")
-      end
-      if decoded.parameters.chance_level != chance_level 
-        @minimal_warning "DecodedData objects have different chance_level"
-      end 
+        if decoded.times != first_times
+            @minimal_error("DecodedData inputs have inconsistent time vectors")
+        end
+        if decoded.parameters.chance_level != chance_level
+            @minimal_warning "DecodedData objects have different chance_level"
+        end
     end
 
     # Extract accuracies: [participants × timepoints]

@@ -1,11 +1,5 @@
 """Shared font sizes and widget dimensions for the interactive GUI."""
-const UI_STYLE = (
-    label_font   = 20,
-    button_font  = 18,
-    textbox_font = 16,
-    input_width  = 160,
-    input_height = 30,
-)
+const UI_STYLE = (label_font   = 20, button_font  = 18, textbox_font = 16, input_width  = 160, input_height = 30)
 
 Base.@kwdef mutable struct GUIState
     directory::Observable{String} = Observable("")
@@ -403,10 +397,8 @@ function _build_axis_column!(main_layout, gui_state)
     baseline_end = _create_textbox(baseline_layout[1, 2], width = 80, boxcolor_obs = bl_end_bc)
 
     _create_label(main_layout[9, 3], "Baseline Type TF", fontsize = UI_STYLE.textbox_font)
-    baseline_type = _create_menu(
-        main_layout[10, 3],
-        options = ["Select", "db", "absolute", "relative", "relchange", "percent", "zscore", "normchange"],
-    )
+    baseline_type =
+        _create_menu(main_layout[10, 3], options = ["Select", "db", "absolute", "relative", "relchange", "percent", "zscore", "normchange"])
 
     invert_y_layout = GridLayout(main_layout[11, 3], tellwidth = false, colgap = 8)
     _create_label(invert_y_layout[1, 1], "Invert Y axis", fontsize = UI_STYLE.textbox_font)
