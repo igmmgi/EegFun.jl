@@ -204,44 +204,53 @@ close_global_logging() = close_logging(is_global = true)
 # NOTE: Reads the REPL history file to log the actual call typed by the user.
 # Falls back to the function name string if history is unavailable (scripts, CI, non-REPL contexts).
 
-"""Helper to get the last command from Julia REPL history file."""
-function _get_last_history_line()::Union{String,Nothing}
-    history_file = joinpath(homedir(), ".julia", "logs", "repl_history.jl")
-    if isfile(history_file)
-        try # Read last line (skip empty lines)
-            lines = readlines(history_file)
-            for i = length(lines):-1:1
-                line = strip(lines[i])
-                if !isempty(line) && !startswith(line, "#")
-                    return line
-                end
-            end
-        catch e
-            @debug "Failed to read REPL history" exception = e
-            return nothing
-        end
-    end
-    return nothing
-end
-
 """
     @log_call func_name
 
-Macro to log a function call by reading the last command from history file.
-If history is unavailable, it logs the provided function name.
+Macro to log a function call by reading the current local variables in scope (arguments).
+This provides a reproducible script-ready log line regardless of whether the function 
+was called from the REPL, a script, or a GUI callback.
 
 # Arguments
 - `func_name`: String or Symbol representing the function name.
 """
 macro log_call(func_name)
-    # Ensure func_name is a string for logging
     name_str = string(func_name)
     return quote
-        last_line = _get_last_history_line()
-        if isnothing(last_line)
-            @info "Function call: $($name_str)"
-        else
-            @info "Function call: $last_line"
+        local_vars = Base.@locals
+        arg_strs = String[]
+        
+        # Format the core data argument first (without kwarg syntax)
+        if haskey(local_vars, :dat)
+            push!(arg_strs, "dat")
+        elseif haskey(local_vars, :data)
+            push!(arg_strs, "data")
         end
+        
+        # Append remaining arguments and kwargs
+        for (k, v) in local_vars
+            if k == :dat || k == :data || k == Symbol("#self#") || startswith(string(k), "#")
+                continue
+            end
+            
+            # Format values for standard script representation
+            if v isa Number || v isa Symbol
+                push!(arg_strs, "$k=$(repr(v))")
+            elseif v isa AbstractString
+                push!(arg_strs, "$k=$(repr(v))")
+            elseif v isa AbstractVector{<:Number} || v isa AbstractVector{Symbol} || v isa AbstractVector{<:AbstractString}
+                push!(arg_strs, "$k=$(repr(v))")
+            elseif v isa Tuple
+                push!(arg_strs, "$k=$(repr(v))")
+            elseif v isa Function
+                push!(arg_strs, "$k=$(string(nameof(v)))")
+            else
+                # For complex structs or dicts, log the type signature
+                push!(arg_strs, "$k=::$(typeof(v))")
+            end
+        end
+        
+        call_str = "$($name_str)(" * join(arg_strs, ", ") * ")"
+        @info "Function call: $call_str"
     end
 end

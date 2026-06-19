@@ -430,8 +430,11 @@ function _find_neighbours(labels, coords, distance_criterion)
         p1 = coords[i]
         for j = (i+1):n
             p2 = coords[j]
-            # dist_sq using GeometryBasics points is fast
-            d_sq = sum((p1 .- p2) .^ 2)
+            # dist_sq using fast geometry basics without array allocations
+            d_sq = (p1[1] - p2[1])^2 + (p1[2] - p2[2])^2
+            if length(p1) > 2
+                d_sq += (p1[3] - p2[3])^2
+            end
 
             if d_sq <= crit_sq
                 d = sqrt(d_sq)

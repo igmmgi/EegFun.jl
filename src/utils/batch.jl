@@ -204,7 +204,7 @@ function read_all_data(path_pattern::String, participant_selection::Function = p
     isempty(data) && return data
     T = typeof(data[1])
     if all(x -> x isa T, data)
-        return T[x for x in data]
+        return Vector{T}(data)
     end
     return data
 end
@@ -231,13 +231,13 @@ Group items by their `.condition` field.
 - `OrderedDict{Int, Vector{T}}`: Items grouped by condition number (sorted)
 """
 function group_by_condition(items::Vector{T}) where {T}
-    grouped = OrderedDict{Int,Vector{T}}()
+    grouped = Dict{Int,Vector{T}}()
     for item in items
         cond_num = item.condition
-        push!(get!(grouped, cond_num, T[]), item)
+        push!(get!(() -> T[], grouped, cond_num), item)
     end
-    # Sort by condition number
-    return OrderedDict(sort(collect(grouped), by = first))
+    # Sort by condition number and return as OrderedDict
+    return OrderedDict(sort!(collect(grouped), by = first))
 end
 
 

@@ -428,7 +428,7 @@ end
 function _parse_string_to_ints(text::String, max_count::Int)
     all_indices = _parse_string_to_ints(text)
     if length(all_indices) > max_count
-        return all_indices[1:max_count]
+        resize!(all_indices, max_count)
     end
     return all_indices
 end

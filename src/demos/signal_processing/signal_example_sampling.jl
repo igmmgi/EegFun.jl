@@ -121,7 +121,16 @@ function signal_example_sampling()
     # Sinc (Whittaker-Shannon) reconstruction from discrete samples
     """Whittaker–Shannon sinc interpolation: reconstruct continuous signal from discrete samples."""
     function sinc_reconstruct(t_samp, y_samp, t_out, dt)
-        return [sum(y_samp .* sinc.((t .- t_samp) ./ dt)) for t in t_out]
+        out = zeros(length(t_out))
+        for i in eachindex(t_out)
+            t = t_out[i]
+            acc = 0.0
+            for j in eachindex(t_samp)
+                acc += y_samp[j] * sinc((t - t_samp[j]) / dt)
+            end
+            out[i] = acc
+        end
+        return out
     end
 
     # Function to update the signal data

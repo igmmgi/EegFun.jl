@@ -42,7 +42,7 @@ function head(dat::EegData; n = nothing)
     data = all_data(dat)
     nrows = nrow(data)
     n = min(n, nrows)
-    result = n > 0 ? data[1:n, :] : DataFrame()
+    result = n > 0 ? view(data, 1:n, :) : DataFrame()
     viewer(result)
     return result
 end
@@ -63,7 +63,7 @@ function tail(dat::EegData; n = nothing)
     data = all_data(dat)
     nrows = nrow(data)
     n = min(n, nrows)
-    result = n > 0 ? data[max(1, nrows-n+1):nrows, :] : DataFrame()
+    result = n > 0 ? view(data, max(1, nrows-n+1):nrows, :) : DataFrame()
     viewer(result)
     return result
 end
