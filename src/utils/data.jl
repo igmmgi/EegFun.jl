@@ -44,16 +44,15 @@ function _get_cols_by_group(dat::EegData, group::Symbol)
         return intersect(layout_channels, labels)
     elseif group == :metadata
         isempty(layout_channels) && return Symbol[]
-        first_channel_idx = findfirst(col -> col == layout_channels[1], labels)
-        isnothing(first_channel_idx) && @minimal_error "First channel label not found in data"
+        valid_channels = intersect(layout_channels, labels)
+        isempty(valid_channels) && return Symbol[]
+        first_channel_idx = findfirst(col -> col == valid_channels[1], labels)
         return labels[1:(first_channel_idx-1)]
     elseif group == :extra
         isempty(layout_channels) && return Symbol[]
-        last_channel_idx = findlast(col -> col == layout_channels[end], labels)
-        if isnothing(last_channel_idx)
-            @minimal_warning "Last channel label $(layout_channels[end]) not found in data columns. Available columns: $(labels)"
-            return Symbol[]  # Return empty array instead of throwing error
-        end
+        valid_channels = intersect(layout_channels, labels)
+        isempty(valid_channels) && return Symbol[]
+        last_channel_idx = findlast(col -> col == valid_channels[end], labels)
         return labels[(last_channel_idx+1):end]
     end
 end

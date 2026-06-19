@@ -135,25 +135,10 @@ function _print_plot_help(plot_type::Symbol)
     println("="^40 * "\n")
 end
 
-"""
-    _setup_help_interaction!(fig::Figure, plot_type::Symbol)
-
-Set up help interaction for a figure. When 'i' key is pressed, shows help information.
-"""
 function _setup_help_interaction!(fig::Figure, plot_type::Symbol)
-    help_visible = Ref(false)
-
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press && event.key == Keyboard.i
-            if help_visible[]
-                # Hide help (clear console)
-                print("\r" * " "^100 * "\r")  # Clear line
-                help_visible[] = false
-            else
-                # Show help
-                _print_plot_help(plot_type)
-                help_visible[] = true
-            end
+            _print_plot_help(plot_type)
         end
     end
 end

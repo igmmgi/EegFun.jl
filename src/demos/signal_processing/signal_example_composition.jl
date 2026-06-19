@@ -108,7 +108,7 @@ function signal_example_composition()
     samp_rate = Observable(2000.0)
 
     # Signal 1 parameters
-    freq1 = Observable(0.0)
+    freq1 = Observable(10.0)
     amp1 = Observable(1.0)
     phase1 = Observable(0.0)
 
@@ -123,7 +123,7 @@ function signal_example_composition()
     phase3 = Observable(0.0)
 
     # Noise parameter
-    noise_level = Observable(0.0)
+    noise_level = Observable(0.4)
 
     # Filter parameters
     filter_freq = Observable(0.0)
@@ -342,7 +342,8 @@ function signal_example_composition()
         layout = GridLayout(fig[i, 1:2], tellheight = false, valign = :center, padding = (4, 4, 4, 4), rowgap = 4, colgap = 6)
 
         freq_label  = Label(layout[1, 1], "Freq: 0.0 Hz", fontsize = slider_font, halign = :right, width = 78)
-        freq_slider = Slider(layout[1, 2], range = 0.0:0.5:80.0, startvalue = 0.0, height = slider_height)
+        start_f = i == 1 ? 10.0 : 0.0
+        freq_slider = Slider(layout[1, 2], range = 0.0:0.5:80.0, startvalue = start_f, height = slider_height)
         push!(freq_labels, freq_label)
         push!(freq_sliders, freq_slider)
 
@@ -360,7 +361,7 @@ function signal_example_composition()
     # Noise control (row 4)
     noise_layout = GridLayout(fig[4, 1:2], tellheight = false, valign = :center, padding = (4, 4, 4, 4), rowgap = 4, colgap = 6)
     noise_label  = Label(noise_layout[1, 1], "Noise:", fontsize = slider_font, halign = :right, width = 78)
-    noise_slider = Slider(noise_layout[1, 2], range = 0.0:0.2:2.0, startvalue = 0.0, height = slider_height)
+    noise_slider = Slider(noise_layout[1, 2], range = 0.0:0.2:2.0, startvalue = 0.4, height = slider_height)
 
     # Filter control (row 5)
     filter_outer_layout = GridLayout(fig[5, 1:2], tellheight = false, valign = :center, padding = (4, 4, 4, 4), rowgap = 4, colgap = 6)

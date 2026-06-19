@@ -4,7 +4,7 @@
 _is_pattern(fname) = lowercase(splitext(fname)[2]) != ".jld2"
 
 """Get the input directory from GUI state, falling back to pwd() if empty."""
-_gui_dir(gui_state) = _gui_dir(gui_state)
+_gui_dir(gui_state) = isempty(gui_state.directory[]) ? pwd() : gui_state.directory[]
 # Utility functions for plot_gui helper functions
 
 """
