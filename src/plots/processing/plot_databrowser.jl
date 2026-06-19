@@ -1988,16 +1988,16 @@ end
 # Data accessor functions
 """Return `(get_data, get_time, get_label_y)` closures for continuous data."""
 function _get_data_accessors(data::ContinuousDataState) # data used for dispatch
-    get_data = (current, range, col) -> current.data[range, col]
-    get_time = (current, range) -> current.data.time[range]
+    get_data = (current, range, col) -> @view current.data[!, col][range]
+    get_time = (current, range) -> @view current.data.time[range]
     get_label_y = (current, col, offset) -> current.data[1, col] .+ offset
     return get_data, get_time, get_label_y
 end
 
 """Return `(get_data, get_time, get_label_y)` closures for epoched data."""
 function _get_data_accessors(state::EpochedDataState)
-    get_data = (current, range, col) -> current.data[state.current_epoch[]][range, col]
-    get_time = (current, range) -> current.data[state.current_epoch[]].time[range]
+    get_data = (current, range, col) -> @view current.data[state.current_epoch[]][!, col][range]
+    get_time = (current, range) -> @view current.data[state.current_epoch[]].time[range]
     get_label_y = (current, col, offset) -> current.data[state.current_epoch[]][!, col][1] .+ offset
     return get_data, get_time, get_label_y
 end
@@ -2161,15 +2161,17 @@ function _add_scale_indicator!(ax, state, plot_kwargs)
     y_top = @lift($ylims_obs[1] + ($ylims_obs[2] - $ylims_obs[1]) * $pos_obs[2])
     y_bottom = @lift($y_top - scale_value * $(state.view.amplitude_scale))
 
-    # Draw vertical line
-    lines!(ax, @lift([$x_pos, $x_pos]), @lift([$y_bottom, $y_top]), color = :black, linewidth = 1)
-
-    # Draw horizontal tick marks
     tick_length = @lift(($xlims_obs[2] - $xlims_obs[1]) * 0.005)
     tick_left = @lift($x_pos - $tick_length)
     tick_right = @lift($x_pos + $tick_length)
-    lines!(ax, @lift([$tick_left, $tick_right]), @lift([$y_bottom, $y_bottom]), color = :black, linewidth = 1)
-    lines!(ax, @lift([$tick_left, $tick_right]), @lift([$y_top, $y_top]), color = :black, linewidth = 1)
+
+    # Use linesegments! to draw all parts of the scale indicator in a single draw call
+    segments = @lift([
+        Point2f($x_pos, $y_bottom), Point2f($x_pos, $y_top),           # Vertical line
+        Point2f($tick_left, $y_bottom), Point2f($tick_right, $y_bottom), # Bottom tick
+        Point2f($tick_left, $y_top), Point2f($tick_right, $y_top)        # Top tick
+    ])
+    linesegments!(ax, segments, color = :black, linewidth = 1)
 
     # Add label
     label_x = @lift($x_pos + ($xlims_obs[2] - $xlims_obs[1]) * 0.01)
