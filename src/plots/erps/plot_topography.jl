@@ -718,10 +718,10 @@ function _circle_mask!(dat::Matrix{<:AbstractFloat}, grid_scale::Int)
     center = (grid_scale + 1) / 2
     radius_squared = (grid_scale / 2)^2
 
-    @inbounds for col = 1:grid_scale
-        x_dist_squared = (center - col)^2
-        for row = 1:grid_scale
-            y_dist_squared = (center - row)^2
+    @inbounds for row = 1:grid_scale
+        y_dist_squared = (center - row)^2
+        for col = 1:grid_scale
+            x_dist_squared = (center - col)^2
             if x_dist_squared + y_dist_squared > radius_squared
                 dat[col, row] = NaN
             end
@@ -759,21 +759,16 @@ function _draw_smooth_circle_mask!(ax::Axis, x_bounds::Tuple, y_bounds::Tuple)
     n_points = 200
     angles = range(0, 2π, length = n_points)
 
-    # Inner circle (data boundary)
-    inner_circle_x = inner_x .* cos.(angles)
-    inner_circle_y = inner_y .* sin.(angles)
-
-    # Outer circle (extends outward)
-    outer_circle_x = outer_x .* cos.(angles)
-    outer_circle_y = outer_y .* sin.(angles)
-
-    # Create annulus polygon by combining outer circle with reversed inner circle
-    # This creates a ring shape when filled
-    annulus_x = vcat(outer_circle_x, reverse(inner_circle_x))
-    annulus_y = vcat(outer_circle_y, reverse(inner_circle_y))
+    annulus = Vector{Point2f}(undef, 2 * n_points)
+    @inbounds for i = 1:n_points
+        a = angles[i]
+        ca, sa = cos(a), sin(a)
+        annulus[i] = Point2f(outer_x * ca, outer_y * sa)
+        annulus[2 * n_points - i + 1] = Point2f(inner_x * ca, inner_y * sa)
+    end
 
     # Draw filled white annulus
-    poly!(ax, Point2f.(annulus_x, annulus_y), color = :white, strokecolor = :white, strokewidth = 0)
+    poly!(ax, annulus, color = :white, strokecolor = :white, strokewidth = 0)
 
     return nothing
 end
@@ -829,7 +824,7 @@ function _data_interpolation_topo(dat::Vector{<:AbstractFloat}, layout::Layout, 
     y_range = range(-plot_radius, plot_radius, length = grid_scale)
 
     # Create regular grid more efficiently
-    grid_points = zeros(2, grid_scale^2)
+    grid_points = Matrix{Float64}(undef, 2, grid_scale^2)
     idx = 1
     @inbounds for y in y_range
         for x in x_range
