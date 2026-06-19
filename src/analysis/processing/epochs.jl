@@ -648,8 +648,8 @@ function average_epochs(dat::EpochData)
     # Keep :time for grouping, but don't average it
     metadata_columns = meta_labels(dat)
 
-    # Get EEG channels to average (numeric columns minus metadata)
-    eeg_channels = setdiff(numeric_columns, metadata_columns)
+    # Get EEG channels to average (numeric columns that are either data channels or extra columns)
+    eeg_channels = intersect(numeric_columns, [channel_labels(dat); extra_labels(dat)])
 
     # Ensure we have some channels to average
     isempty(eeg_channels) && @minimal_error("No EEG channels found to average")
