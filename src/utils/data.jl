@@ -132,17 +132,17 @@ end
 
 function meta_data(dat::Union{MultiDataFrameEeg,Vector{<:MultiDataFrameEeg}}; epoch_selection::Function = epochs())
     meta_cols = _get_cols_by_group(dat, :metadata)
-    return isempty(meta_cols) ? DataFrame() : all_data(dat, epoch_selection = epoch_selection)[:, meta_cols]
+    return isempty(meta_cols) ? DataFrame() : all_data(dat, epoch_selection = epoch_selection)[!, meta_cols]
 end
 
 function channel_data(dat::Union{MultiDataFrameEeg,Vector{<:MultiDataFrameEeg}}; epoch_selection::Function = epochs())
     channel_cols = _get_cols_by_group(dat, :channels)
-    return isempty(channel_cols) ? DataFrame() : all_data(dat, epoch_selection = epoch_selection)[:, channel_cols]
+    return isempty(channel_cols) ? DataFrame() : all_data(dat, epoch_selection = epoch_selection)[!, channel_cols]
 end
 
 function extra_data(dat::Union{MultiDataFrameEeg,Vector{<:MultiDataFrameEeg}}; epoch_selection::Function = epochs())
     extra_cols = _get_cols_by_group(dat, :extra)
-    return isempty(extra_cols) ? DataFrame() : all_data(dat, epoch_selection = epoch_selection)[:, extra_cols]
+    return isempty(extra_cols) ? DataFrame() : all_data(dat, epoch_selection = epoch_selection)[!, extra_cols]
 end
 
 """
@@ -203,17 +203,17 @@ meta_labels(dat::EegData) = _get_cols_by_group(dat, :metadata)
 """Return a DataFrame of just the columns in `group` (`:metadata`, `:channels`, `:extra`)."""
 function _get_cols_data(dat::SingleDataFrameEeg, group::Symbol)
     cols = _get_cols_by_group(dat, group)
-    return isempty(cols) ? DataFrame() : dat.data[:, cols]
+    return isempty(cols) ? DataFrame() : dat.data[!, cols]
 end
 
 function _get_cols_data(dat::MultiDataFrameEeg, group::Symbol, epoch::Int)
     cols = _get_cols_by_group(dat, group)
-    return isempty(cols) ? DataFrame() : dat.data[epoch][:, cols]
+    return isempty(cols) ? DataFrame() : dat.data[epoch][!, cols]
 end
 
 function _get_cols_data(dat::MultiDataFrameEeg, group::Symbol)
     cols = _get_cols_by_group(dat, group)
-    return isempty(cols) ? DataFrame() : to_data_frame(dat)[:, cols]
+    return isempty(cols) ? DataFrame() : vcat([df[!, cols] for df in dat.data]...)
 end
 
 """
