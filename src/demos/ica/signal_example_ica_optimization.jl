@@ -260,11 +260,19 @@ function signal_example_ica_optimization()
         execute_ica_step()
     end
 
+    is_running = Ref(false)
     on(btn_run.clicks) do _
+        is_running[] && return
+        is_running[] = true
         @async begin
-            for _ = 1:20
-                execute_ica_step()
-                sleep(0.05)
+            try
+                for _ = 1:20
+                    !is_running[] && break
+                    execute_ica_step()
+                    sleep(0.05)
+                end
+            finally
+                is_running[] = false
             end
         end
     end

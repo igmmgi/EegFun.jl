@@ -16,16 +16,17 @@ function _peak_vec(
     # Create time matrix (trials x samples)
     t = (1:samples)'
     # Calculate phase for all trials and samples at once
-    phase = (t .- pos) ./ sample_rate .* 2π .* peak_freq
+    phase = @. (t - pos) / sample_rate * 2π * peak_freq
 
-    # Apply cosine and mask
+    # Apply cosine
     signal = cos.(phase)
-    # Mask values outside [-pi/2, pi/2] phase range
-    signal[abs.(phase) .> π/2] .= 0
 
     # Apply amplitude with jitter
     rand_amp = randn(trials) .* jitter_amp
-    signal .*= (peak_amp .+ rand_amp)
+    amp_factor = peak_amp .+ rand_amp
+
+    # Apply mask and amplitude in one fused broadcast
+    @. signal = ifelse(abs(phase) > π/2, 0.0, signal * amp_factor)
 
     return signal
 end
@@ -50,7 +51,7 @@ function _noise_vec(trials::Int, samples::Int, sample_rate::Int, noise_amp::Floa
     ]
 
     sumsig = 50  # number of sinusoids
-    signal = zeros(trials, samples)
+    signal = zeros(samples, trials) # column-major contiguous memory
     t_vec = (1:samples) ./ sample_rate .* 2π
 
     for trial = 1:trials
@@ -58,12 +59,15 @@ function _noise_vec(trials::Int, samples::Int, sample_rate::Int, noise_amp::Floa
         indices = min.(ceil.(Int, freqs), length(meanpower))
         amps = meanpower[indices] ./ meanpower[1]
         phases = rand(sumsig) .* 2π
+        
+        # Use a view for contiguous memory access
+        sig_col = @view signal[:, trial]
         for (f, a, p) in zip(freqs, amps, phases)
-            signal[trial, :] .+= sin.(t_vec .* f .+ p) .* a
+            @. sig_col += sin(t_vec * f + p) * a
         end
     end
 
-    return signal .* noise_amp
+    return Matrix(signal') .* noise_amp
 end
 
 """Simulate a multi-component ERP with noise; return the average and individual trials."""
