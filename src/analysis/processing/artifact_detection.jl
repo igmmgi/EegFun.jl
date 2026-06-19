@@ -27,7 +27,7 @@ function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Sy
     eog_diff = diff(dat.data[1:step_samples:end, channel_in])
     eog_idx = findall(x -> abs(x) >= criterion, eog_diff)
     eog_idx = [idx for (i, idx) in enumerate(eog_idx) if i == 1 || (idx - eog_idx[i-1] > 2)] .* step_samples
-    dat.data[!, channel_out] .= false
+    dat.data[!, channel_out] = falses(nrow(dat.data))
     dat.data[eog_idx, channel_out] .= true
     return nothing
 end
@@ -1079,12 +1079,8 @@ function _calculate_epoch_metrics(
     metric_keys = [:z_variance, :z_max, :z_min, :z_abs, :z_range, :z_kurtosis, :absolute_threshold]
     metrics = Dict(k => Dict(ch => Int[] for ch in selected_channels) for k in metric_keys)
 
-    num_epochs = n_epochs(dat)
     Threads.@threads for ch in selected_channels
-        channel_data_all = Vector{Vector{Float64}}(undef, num_epochs)
-        for (i, epoch) in enumerate(dat.data)
-            channel_data_all[i] = epoch[!, ch]
-        end
+        channel_data_all = [epoch[!, ch]::Vector{Float64} for epoch in dat.data]
 
         if abs_criterion > 0
             abs_threshold_violations = findall(epoch_data -> maximum(abs, epoch_data) > abs_criterion, channel_data_all)
@@ -1446,7 +1442,7 @@ function subset_bad_data(data_path::String, threshold::Real; subset_directory::S
     !isdir(subset_dir_path) && mkpath(subset_dir_path)
 
     # Find participants with any condition below threshold
-    bad_participants = unique(epoch_summary.file[epoch_summary.percentage .< threshold])
+    bad_participants = unique(epoch_summary.file[epoch_summary.percentage.<threshold])
     println("Subsetting data: $(length(bad_participants))")
     println("   N remaining: $(length(unique(epoch_summary.file)) - length(bad_participants))")
     println("   N removed: $(length(bad_participants))")

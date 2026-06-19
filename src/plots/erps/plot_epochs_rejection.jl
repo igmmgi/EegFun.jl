@@ -504,21 +504,22 @@ end
 Calculate global Y-axis limits across all epochs and selected channels.
 """
 function _calculate_global_ylim(dat::EpochData, selected_channels::Vector{Symbol})::Tuple{Float64,Float64}
-    min_vals = Float64[]
-    max_vals = Float64[]
+    global_min = Inf
+    global_max = -Inf
 
     for epoch in dat.data
         for ch in selected_channels
             if hasproperty(epoch, ch)
                 ch_data = epoch[!, ch]
-                push!(min_vals, minimum(ch_data))
-                push!(max_vals, maximum(ch_data))
+                global_min = min(global_min, minimum(ch_data))
+                global_max = max(global_max, maximum(ch_data))
             end
         end
     end
 
-    global_min = minimum(min_vals)
-    global_max = maximum(max_vals)
+    if isinf(global_min) || isinf(global_max)
+        return (-1.0, 1.0)
+    end
 
     # Add some padding (5% on each side)
     padding = (global_max - global_min) * 0.05

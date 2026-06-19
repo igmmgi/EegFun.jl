@@ -494,15 +494,14 @@ function _process_dataframe_measurements(
     metadata_final = NamedTuple{Tuple(metadata_keys)}(Tuple(metadata_vals))
 
     # Compute measurements for all channels
-    channel_pairs = Vector{Pair{Symbol,Float64}}(undef, length(selected_channels))
-    for (i, chan_symbol) in enumerate(selected_channels)
+    channel_vals = ntuple(length(selected_channels)) do i
+        chan_symbol = selected_channels[i]
         chan_data = @view df[time_idx, chan_symbol]
-        value = _compute_measurement(chan_data, selected_times, analysis_type, measurement_kwargs, chan_symbol)
-        channel_pairs[i] = chan_symbol => value
+        _compute_measurement(chan_data, selected_times, analysis_type, measurement_kwargs, chan_symbol)
     end
 
     # Combine into single NamedTuple
-    return merge(metadata_final, NamedTuple(channel_pairs))
+    return merge(metadata_final, NamedTuple{Tuple(selected_channels)}(channel_vals))
 end
 
 #=============================================================================

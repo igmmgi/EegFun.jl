@@ -576,7 +576,7 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
 
     # Pre-calculate columns to keep
     cols_to_keep = setdiff(propertynames(dat.data), [:condition, :condition_name, :file])
-    
+
     for (epoch, (pre, zero, post)) in enumerate(zip(pre_idx, zero_idx, post_idx))
         # Bounds checking to prevent out-of-bounds errors
         if pre < 1 || post > nrow(dat.data)
@@ -588,7 +588,7 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
         epoch_df = dat.data[pre:post, cols_to_keep]
         # In-place subtraction to avoid allocating a new time vector
         epoch_df.time .-= dat.data.time[zero]
-        
+
         # Add epoch number (original numbering from extraction)
         insertcols!(epoch_df, 4, :epoch => epoch)
         push!(epochs, epoch_df)
@@ -644,10 +644,6 @@ function average_epochs(dat::EpochData)
         end
     end
 
-    # Define columns that should not be averaged (metadata columns)
-    # Keep :time for grouping, but don't average it
-    metadata_columns = meta_labels(dat)
-
     # Get EEG channels to average (numeric columns that are either data channels or extra columns)
     eeg_channels = intersect(numeric_columns, [channel_labels(dat); extra_labels(dat)])
 
@@ -682,12 +678,7 @@ function average_epochs(dat::EpochData)
         for ch in eeg_channels
             avg_col = zeros(Float64, n_timepoints)
             for epoch in dat.data
-                col = epoch[!, ch]
-                if col isa Vector{Float64}
-                    avg_col .+= col
-                else
-                    avg_col .+= col
-                end
+                avg_col .+= epoch[!, ch]
             end
             avg_col ./= n_epochs
             erp[!, ch] = avg_col
