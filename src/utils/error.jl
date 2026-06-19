@@ -24,8 +24,9 @@ Also logs the error via `@error` for diagnostics.
 """
 macro minimal_error(msg)
     quote
-        @error "Error: " * $(esc(msg)) _module = nothing _file = nothing _line = nothing
-        throw(EegFunError($(esc(msg))))
+        local _msg = string($(esc(msg)))
+        @error "Error: " * _msg _module = nothing _file = nothing _line = nothing
+        throw(EegFunError(_msg))
     end
 end
 

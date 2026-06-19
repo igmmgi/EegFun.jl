@@ -465,7 +465,7 @@ function is_step_value(
         is_step_value!(temp_dat, threshold; channel_selection, sample_selection, interval_selection, mode = :separate)
 
         extreme_cols = [Symbol("is_step_value_$(ch)_$(threshold)") for ch in selected_channels]
-        return temp_dat.data[:, extreme_cols]
+        return temp_dat.data[!, extreme_cols]
     end
 end
 
@@ -610,7 +610,7 @@ function is_extreme_value(
         # Extract the extreme value columns in the same order as the original channels
         selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
         extreme_cols = [Symbol("is_extreme_value_$(ch)_$(threshold)") for ch in selected_channels]
-        return temp_dat.data[:, extreme_cols]
+        return temp_dat.data[!, extreme_cols]
     end
 end
 
