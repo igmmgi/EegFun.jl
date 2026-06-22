@@ -61,22 +61,29 @@ using EegFun
 
 ## First Steps
 
-All EegFun functions are called with the `EegFun.` prefix. A minimal session could look something like this:
+All EegFun functions are called with the `EegFun.` prefix. The fastest way to get started is to use our built-in tutorial datasets:
 
 ```julia
 using EegFun
 
-# Load a raw BioSemi recording
-dat = EegFun.read_raw_data("participant1.bdf")
+# 1. Automatically download the tutorial datasets
+data_dir = download_eegfun_datasets()
+file_path = joinpath(data_dir, "participant1.bdf")
 
-# Attach an electrode layout
+# 2. Load the raw recording
+dat = EegFun.read_raw_data(file_path)
+
+# 3. Attach an electrode layout
 layout = EegFun.read_layout("biosemi72.csv")
 EegFun.polar_to_cartesian_xy!(layout)
 dat = EegFun.create_eegfun_data(dat, layout)
 
-# Browse the raw data interactively
+# 4. Browse the raw data interactively
 EegFun.plot_databrowser(dat)
 ```
+
+> [!NOTE]
+> When you are ready to load your own data, simply replace `file_path` with the string path to your own file on disk (e.g., `EegFun.read_raw_data("C:/EEG/participant1.bdf")`).
 
 > [!TIP]
 > Functions ending with `!` (e.g. `filter!`) mutate their input in-place. Functions without `!` return a new copy. Functions starting with `_` are internal helpers and not part of the public API.

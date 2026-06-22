@@ -110,6 +110,7 @@ public viewer
 # =====================
 # I/O
 # =====================
+public download_eegfun_datasets
 public find_file
 public get_files
 public read_all_data
@@ -127,14 +128,9 @@ public read_xdf
 # =====================
 public average_number_of_neighbours
 public check_channel_neighbors
-public clear_neighbours
 public create_custom_layout
 public create_layout
-public get_neighbours_xy
-public get_neighbours_xyz
 public has_valid_coordinates
-public polar_to_cartesian_xy
-public polar_to_cartesian_xyz
 public print_layout_neighbours
 public subset_layout
 public subset_layout!
@@ -160,7 +156,6 @@ public log_epochs_table
 
 public lowpass_filter
 public lowpass_filter!
-public mark_epoch_intervals
 public mark_epoch_intervals!
 public mirror
 public mirror!
@@ -216,26 +211,18 @@ public n_extreme_value
 public n_step_value
 public repair_artifacts
 public repair_artifacts!
-public repair_artifacts_neighbor
 public repair_artifacts_neighbor!
-public repair_artifacts_spherical_spline
 public repair_artifacts_spherical_spline!
 public repair_channels
-public repair_channels_neighbor
-public repair_channels_per_epoch
-public repair_channels_spherical
 public summarize_electrode_repairs
 public unique_rejections
 
 # =====================
 # ICA
 # =====================
-public calculate_eog_channels
 public calculate_eog_channels!
 public combine_artifact_components
-public detect_eog_onsets
 public detect_eog_onsets!
-public detect_eog_signals
 public detect_eog_signals!
 public get_all_ica_components
 public get_eog_channels
@@ -273,7 +260,6 @@ public realign!
 # Statistics
 # =====================
 public analytic_test
-public compute_probability
 public permutation_test
 public prepare_stats
 
@@ -345,7 +331,6 @@ public plot_erp_measurements
 public plot_erp_stats
 public plot_stat_heatmap
 public plot_filter_response
-public plot_frequency_spectrum
 public plot_gfp
 public plot_gui
 public plot_ica_component_activation
@@ -369,7 +354,6 @@ public plot_trigger_timing
 # =====================
 # Plot helpers (user-facing selection helpers)
 # =====================
-public add_topo_rois
 public add_topo_rois!
 public get_selected_channels
 public get_selected_conditions

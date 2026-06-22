@@ -10,6 +10,7 @@ BrainVisionDataFormat = "a1c37e40-cd17-11e8-241b-47481c954d92"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 DSP = "717857b8-e6f2-59f4-9121-6e50c889abd2"
+DataDeps = "124859b0-ceae-595e-8997-d05f6a7a8dfe"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
@@ -41,11 +42,13 @@ TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 
 [compat]
 AnovaFun = "0.4"
+Aqua = "0.8.16"
 BiosemiDataFormat = "0.2.0"
 BrainVisionDataFormat = "0.1.0"
 CSV = "0.10.0"
 CairoMakie = "0.15.8"
 DSP = "0.8.4"
+DataDeps = "0.7.14"
 DataFrames = "1.7.0"
 Distributions = "0.25.120"
 DocStringExtensions = "0.9.5"
@@ -70,6 +73,7 @@ StatsBase = "0.34.6"
 julia = "1.12"
 
 [extras]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 Coverage = "a2441757-f6aa-5fb2-8edb-039e3f45d037"
 CoverageTools = "c36e975a-824b-4404-a568-ef97ca766997"
@@ -82,4 +86,4 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 [targets]
 dev = ["Revise", "JuliaFormatter"]
 docs = ["Documenter", "DocumenterTools"]
-test = ["Test", "Coverage", "CoverageTools", "BenchmarkTools"]
+test = ["Test", "Coverage", "CoverageTools", "BenchmarkTools", "Aqua"]

@@ -10,6 +10,7 @@ using ExtensibleDataFormat
 using FunctionalImageFormat
 using CSV
 using DataFrames
+using DataDeps
 using JLD2
 using MAT
 
@@ -217,5 +218,16 @@ include("demos/machine_learning/signal_example_decoding.jl")
 
 # Precompilation
 include("precompile.jl")
+
+function __init__()
+    register(
+        DataDep(
+            "TutorialDataSets",
+            "EegFun Tutorial Datasets",
+            "https://zenodo.org/records/19045958/files/TutorialDataSets_EegFun.zip?download=1",
+            post_fetch_method = unpack,
+        ),
+    )
+end
 
 end # module EegFun 
