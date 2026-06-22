@@ -9,8 +9,11 @@ t-test results, cluster permutation test results, and analytic t-test results.
 # BASIC T-TEST RESULT
 # ==============
 
-# this seems a bit lighter than a full struct
-const TTestResult = NamedTuple{(:df, :t, :p),Tuple{Float64,Float64,Float64}}
+struct TTestResult
+    df::Float64
+    t::Float64
+    p::Float64
+end
 
 function Base.show(io::IO, result::TTestResult)
     t_str = isnan(result.t) ? "NaN" : (isinf(result.t) ? (result.t > 0 ? "Inf" : "-Inf") : Printf.@sprintf("%.4f", result.t))

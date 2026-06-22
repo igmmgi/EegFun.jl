@@ -7,7 +7,19 @@
 
 ## Downloading the Dataset
 
-The benchmark uses the same raw Visual Attention (Posner Cueing) dataset featured in our other tutorials. You can download the complete dataset from Zenodo:
+The benchmark uses the same raw Visual Attention (Posner Cueing) dataset featured in our other tutorials. 
+
+**For Interactive Tutorials:**
+You do not need to download the dataset manually. You can seamlessly load any tutorial dataset directly within Julia:
+```julia
+using EegFun
+data_dir = download_eegfun_datasets() # Returns the local path to the downloaded directory
+file_path = joinpath(data_dir, "participant1.bdf") # Or whichever specific file the benchmark requires
+dat = EegFun.read_raw_data(file_path)
+```
+
+**For the Automated Benchmark Scripts:**
+If you are running the cross-platform benchmark scripts (Python, MATLAB, Julia CLI), you will need the physical files on disk. You can download the complete dataset from Zenodo:
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19045958.svg)](https://doi.org/10.5281/zenodo.19045958)
 

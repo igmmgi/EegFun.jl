@@ -1525,6 +1525,7 @@ conditions_not(1)                     # Exclude condition 1
 conditions_not("incongruent")         # Exclude condition by name
 ```
 """
+conditions_not() = x -> fill(true, length(x))
 conditions_not(condition_indices::Union{Vector{Int},UnitRange}) = x -> .!([i in condition_indices for i = 1:length(x)])
 conditions_not(condition_index::Int) = x -> .!([i == condition_index for i = 1:length(x)])
 conditions_not(condition_indices::Int...) = conditions_not(collect(condition_indices))
@@ -1924,6 +1925,23 @@ function _create_eegfun_dataframe(dat::EuropeanDataFormat.EdfData)::DataFrame
         DataFrame(Float64.(dat.data), Symbol.(dat.header.channel_labels[1:size(dat.data, 2)])),
     )
     return df
+end
+
+"""
+    download_eegfun_datasets()
+
+Automatically download and cache built-in tutorial datasets using `DataDeps.jl`.
+Returns the absolute file path to the directory containing the downloaded datasets.
+
+# Examples
+```julia
+data_dir = download_eegfun_datasets()
+file_path = joinpath(data_dir, "participant1.bdf")
+dat = read_raw_data(file_path)
+```
+"""
+function download_eegfun_datasets()
+    return datadep"TutorialDataSets"
 end
 
 function create_eegfun_data(dat::EuropeanDataFormat.EdfData, layout::Layout)::ContinuousData
