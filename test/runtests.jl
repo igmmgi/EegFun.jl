@@ -6,9 +6,10 @@ println("="^40)
 
 @testset "Code quality (Aqua.jl)" begin
     using Aqua
-    Aqua.test_all(EegFun; 
-        ambiguities=false, 
-        deps_compat=(check_extras=false, ignore=[:Dates, :LinearAlgebra, :Logging, :Printf, :Random, :SparseArrays, :TOML, :Test])
+    Aqua.test_all(
+        EegFun;
+        ambiguities = false,
+        deps_compat = (check_extras = false, ignore = [:Dates, :LinearAlgebra, :Logging, :Printf, :Random, :SparseArrays, :TOML, :Test]),
     )
 end
 

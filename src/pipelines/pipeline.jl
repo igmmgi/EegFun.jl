@@ -504,6 +504,8 @@ function preprocess(config::String; base_dir::Union{String,Nothing} = nothing, l
             if log_filename != log_destination
                 mv(log_filename, log_destination, force = true)
             end
+        elseif isfile(log_filename)
+            rm(log_filename, force = true)
         end
     end
 

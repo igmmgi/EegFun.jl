@@ -46,17 +46,17 @@ using EegFun
     # ────────────────────────────────────────────────────────────
     @testset "RDM computation" begin
         Random.seed!(501)
-        patterns = [randn(10) for _ in 1:4]
+        patterns = [randn(10) for _ = 1:4]
 
         rdm = EegFun._compute_rdm(patterns, :correlation)
 
         @test size(rdm) == (4, 4)
         # Diagonal should be zero
-        for i in 1:4
+        for i = 1:4
             @test rdm[i, i] ≈ 0.0
         end
         # Symmetric
-        for i in 1:4, j in 1:4
+        for i = 1:4, j = 1:4
             @test rdm[i, j] ≈ rdm[j, i]
         end
         # All finite
@@ -65,7 +65,7 @@ using EegFun
 
     @testset "RDM in-place" begin
         Random.seed!(502)
-        patterns = [randn(8) for _ in 1:3]
+        patterns = [randn(8) for _ = 1:3]
         rdm = zeros(Float64, 3, 3)
 
         result = EegFun._compute_rdm!(rdm, patterns, :euclidean)
@@ -146,7 +146,7 @@ using EegFun
 
     @testset "create_rdm_from_vectors" begin
         Random.seed!(503)
-        vecs = [randn(20) for _ in 1:3]
+        vecs = [randn(20) for _ = 1:3]
 
         rdm = EegFun.create_rdm_from_vectors(vecs; dissimilarity_measure = :euclidean)
 
@@ -210,7 +210,7 @@ using EegFun
         @test length(result.channels) == 3
 
         # RDMs should be symmetric with zero diagonal
-        for t in 1:length(result.times)
+        for t = 1:length(result.times)
             rdm_t = result.rdm[t, :, :]
             @test all(diag(rdm_t) .≈ 0.0)
             @test issymmetric(rdm_t)
@@ -264,7 +264,7 @@ using EegFun
     @testset "rsa - batch (vector of participants)" begin
         Random.seed!(515)
         all_participants = Vector{Vector{EegFun.EpochData}}()
-        for _ in 1:3
+        for _ = 1:3
             c1 = EegFun.create_test_epoch_data(condition = 1, n_epochs = 10, n_channels = 3, n = 30, fs = 1000)
             c2 = EegFun.create_test_epoch_data(condition = 2, n_epochs = 10, n_channels = 3, n = 30, fs = 1000)
             push!(all_participants, [c1, c2])
@@ -367,7 +367,7 @@ using EegFun
     @testset "compute_noise_ceiling" begin
         Random.seed!(540)
         rsa_list = EegFun.RsaData[]
-        for p in 1:4
+        for p = 1:4
             c1 = EegFun.create_test_epoch_data(condition = 1, n_epochs = 10, n_channels = 3, n = 20, fs = 1000)
             c2 = EegFun.create_test_epoch_data(condition = 2, n_epochs = 10, n_channels = 3, n = 20, fs = 1000)
             c3 = EegFun.create_test_epoch_data(condition = 3, n_epochs = 10, n_channels = 3, n = 20, fs = 1000)
@@ -400,7 +400,7 @@ using EegFun
     @testset "grand_average (RsaData)" begin
         Random.seed!(550)
         rsa_list = EegFun.RsaData[]
-        for p in 1:3
+        for p = 1:3
             c1 = EegFun.create_test_epoch_data(condition = 1, n_epochs = 10, n_channels = 3, n = 20, fs = 1000)
             c2 = EegFun.create_test_epoch_data(condition = 2, n_epochs = 10, n_channels = 3, n = 20, fs = 1000)
             push!(rsa_list, EegFun.rsa([c1, c2]))
@@ -465,7 +465,7 @@ using EegFun
 
         @test size(rdms) == (10, 3, 3)
         # Diagonal should be zero at each time
-        for t in 1:10
+        for t = 1:10
             @test all(diag(rdms[t, :, :]) .≈ 0.0)
         end
     end
@@ -474,10 +474,7 @@ using EegFun
     # 13. create_model_rdms dispatch
     # ────────────────────────────────────────────────────────────
     @testset "create_model_rdms" begin
-        model_data = Dict{String,Any}(
-            "RTs" => [0.3, 0.5, 0.4],
-            "Categories" => [1, 1, 2],
-        )
+        model_data = Dict{String,Any}("RTs" => [0.3, 0.5, 0.4], "Categories" => [1, 1, 2])
 
         rdms, names = EegFun.create_model_rdms(model_data)
 

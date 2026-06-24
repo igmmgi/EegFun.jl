@@ -25,7 +25,7 @@ using DataFrames
         @test dat isa EegFun.ContinuousData
         @test size(dat.data, 1) > 0
         @test :time in propertynames(dat.data)
-        
+
         ch_labels = EegFun.channel_labels(dat)
         @test length(ch_labels) > 0
         @test :Fp1 in ch_labels || :FP1 in ch_labels
