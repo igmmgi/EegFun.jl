@@ -125,8 +125,8 @@ Compute dissimilarity between two neural patterns.
 - `dissimilarity::Float64`: Dissimilarity value (higher = more dissimilar)
 """
 function _compute_dissimilarity(
-    pattern1::Vector{Float64},
-    pattern2::Vector{Float64},
+    pattern1::AbstractVector{Float64},
+    pattern2::AbstractVector{Float64},
     measure::Symbol;
     inv_covariance_matrix::Union{Matrix{Float64},Nothing} = nothing,
 )
