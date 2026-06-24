@@ -560,11 +560,11 @@ function create_rdm_from_timeseries(
         timepoint_data = @view temporal_data[:, :, t]
 
         # Compute RDM for this time point
-        condition_patterns = Matrix{Float64}[]
+        condition_patterns = Vector{Float64}[]
         for cond_idx = 1:n_conditions
             # Extract feature vector for this condition at time t
             pattern = vec(timepoint_data[cond_idx, :])
-            push!(condition_patterns, reshape(pattern, n_features, 1))
+            push!(condition_patterns, pattern)
         end
 
         rdms[t, :, :] = _compute_rdm(condition_patterns, dissimilarity_measure)
