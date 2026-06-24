@@ -84,6 +84,7 @@ public components
 public components_not
 public conditions
 public conditions_not
+public create_eegfun_data
 public extra_data
 public file_name
 public head
@@ -93,6 +94,7 @@ public epochs
 public epochs_not
 public participants
 public participants_not
+public sample_rate
 public samples
 public samples_and
 public samples_and_not
@@ -191,6 +193,25 @@ public correlation_matrix_dual_selection
 public correlation_matrix_eog
 public rename_channel
 public rename_channel!
+
+# =====================
+# RSA (Representational Similarity Analysis)
+# =====================
+public add_noise_ceiling!
+public compare_models
+public compute_noise_ceiling
+public create_model_rdms
+public create_rdm_from_categorical
+public create_rdm_from_distances
+public create_rdm_from_matrix
+public create_rdm_from_reaction_times
+public create_rdm_from_similarity_ratings
+public create_rdm_from_timeseries
+public create_rdm_from_vectors
+public create_temporal_model_rdms
+public normalize_rdm
+public rsa
+public rsa_crossvalidated
 
 # =====================
 # Artifact detection and repair
