@@ -33,6 +33,7 @@ end
     include("tests/eeglab_import.jl")
     include("tests/bids_import.jl")
     include("tests/xdf_import.jl")
+    include("tests/fieldtrip_import.jl")
     include("tests/read_data.jl")
     include("tests/epochs.jl")
     include("tests/erp_measurements.jl")

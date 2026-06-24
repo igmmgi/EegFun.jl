@@ -24,6 +24,7 @@ pages = [
         "Benchmark" => "tutorials/benchmark.md",
     ],
     "How-to Guides" => [
+        "Filter Data" => "how-to/filter-data.md",
         "Preprocessing Walkthrough" => "tutorials/workflows/preprocessing_workflow.md",
         "Worked Examples" => [
             "Visual Attention (Posner Cueing)" => "tutorials/experiments/visual-attention.md",
@@ -94,6 +95,14 @@ pages = [
             "Signal Example (Dot Product)" => "tutorials/teaching/signal_processing/signal_example_dotproduct.md",
             "Signal Example (Convolution)" => "tutorials/teaching/signal_processing/signal_example_convolution.md",
             "Signal Example (Time-Frequency)" => "tutorials/teaching/signal_processing/signal_example_tf.md",
+            "Signal Example (ICA 0)" => "tutorials/teaching/ica/signal_example_ica_0.md",
+            "Signal Example (ICA Mixture)" => "tutorials/teaching/ica/signal_example_ica_mixture.md",
+            "Signal Example (ICA Separation)" => "tutorials/teaching/ica/signal_example_ica_separation.md",
+            "Signal Example (ICA Geometry)" => "tutorials/teaching/ica/signal_example_ica_geometry.md",
+            "Signal Example (ICA Sphering)" => "tutorials/teaching/ica/signal_example_ica_sphering.md",
+            "Signal Example (ICA Optimization)" => "tutorials/teaching/ica/signal_example_ica_optimization.md",
+            "Signal Example (ICA CLT)" => "tutorials/teaching/ica/signal_example_ica_clt.md",
+            "Signal Example (ICA Infomax)" => "tutorials/teaching/ica/signal_example_ica_infomax.md",
             "Signal Example (Decoding)" => "tutorials/teaching/machine_learning/signal_example_decoding.md",
             "Simulate ERP" => "tutorials/teaching/erp/simulate_erp.md",
         ],
@@ -104,6 +113,7 @@ pages = [
             "Plot Time-Frequency" => "tutorials/plotting/plot_tf.md",
         ],
         "Time-Frequency" => [
+            "TF Analysis" => "tutorials/time_frequency/tf_analysis.md",
             "TF Morlet" => "tutorials/time_frequency/tf_morlet.md",
             "TF Multitaper" => "tutorials/time_frequency/tf_multitaper.md",
             "TF STFT" => "tutorials/time_frequency/tf_stft.md",
