@@ -51,6 +51,15 @@ function condition_parse_epoch(config::Dict)
             @minimal_error("trigger_sequences must be specified for condition '$name'")
         end
 
+        # Natively support allcomb syntax written as a String in TOML files
+        if trigger_sequences_raw isa String && startswith(strip(trigger_sequences_raw), "allcomb")
+            try
+                trigger_sequences_raw = eval(Meta.parse(trigger_sequences_raw))
+            catch e
+                @minimal_error("Failed to parse allcomb expression in TOML for condition '$name': $e")
+            end
+        end
+
         # Parse trigger sequences - convert from TOML arrays to proper types
         trigger_sequences = Vector{Vector{Union{Int,Symbol,UnitRange{Int},Vector{Int}}}}()
         for sequence in trigger_sequences_raw
