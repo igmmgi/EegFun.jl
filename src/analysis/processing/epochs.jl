@@ -19,6 +19,23 @@ epoch_cfg = condition_parse_epoch(config)
 """
 condition_parse_epoch(toml_file::String) = condition_parse_epoch(TOML.parsefile(toml_file))
 
+"""
+    allcomb(args...)
+
+Generate all combinations of the provided iterables.
+Returns a `Vector{Vector{Any}}` which is useful for defining `trigger_sequences` 
+in `EpochCondition`.
+
+# Examples
+```julia
+allcomb([31, 39], 51:54, 101)
+```
+"""
+function allcomb(args...)
+    combinations = Iterators.product(args...)
+    return [collect(Union{Int, Symbol, UnitRange{Int}, Vector{Int}}, c) for c in combinations]
+end
+
 function condition_parse_epoch(config::Dict)
     epochs_section = get(config, "epochs", Dict())
 
