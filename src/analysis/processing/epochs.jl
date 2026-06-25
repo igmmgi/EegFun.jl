@@ -31,9 +31,18 @@ in `EpochCondition`.
 allcomb([31, 39], 51:54, 101)
 ```
 """
+_expand_arg(x::AbstractVector) = isempty(x) ? x : mapreduce(_expand_arg_element, vcat, x)
+_expand_arg(x::Union{Number, Symbol}) = [x]
+_expand_arg(x::UnitRange) = collect(x)
+_expand_arg(x) = x
+
+_expand_arg_element(v::UnitRange) = collect(v)
+_expand_arg_element(v) = [v]
+
 function allcomb(args...)
-    combinations = Iterators.product(args...)
-    return [collect(Union{Int, Symbol, UnitRange{Int}, Vector{Int}}, c) for c in combinations]
+    expanded_args = map(_expand_arg, args)
+    combinations = Iterators.product(expanded_args...)
+    return vec([collect(Union{Int, Symbol, UnitRange{Int}, Vector{Int}}, c) for c in combinations])
 end
 
 function condition_parse_epoch(config::Dict)
