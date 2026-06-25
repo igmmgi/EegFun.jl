@@ -493,16 +493,16 @@ function _show_single_filter_menu(state, dat, filter_type::Symbol)
 
     if filter_type == :hp
         range_freq = 0.1:0.1:2
-        freq_field = :hp_freq;
-        method_field = :hp_method;
-        order_field = :hp_order;
+        freq_field = :hp_freq
+        method_field = :hp_method
+        order_field = :hp_order
         func_field = :hp_func
         default_val = 0.5
     else
         range_freq = 5:5:60
-        freq_field = :lp_freq;
-        method_field = :lp_method;
-        order_field = :lp_order;
+        freq_field = :lp_freq
+        method_field = :lp_method
+        order_field = :lp_order
         func_field = :lp_func
         default_val = 20.0
     end
@@ -517,8 +517,8 @@ function _show_single_filter_menu(state, dat, filter_type::Symbol)
     slider_freq = Slider(grid[row, 2], range = range_freq, startvalue = getfield(fs, freq_field)[])
     Label(grid[row, 3], @lift(string(round($(slider_freq.value), digits = 1))), halign = :left)
     on(slider_freq.value) do val
-        ;
-        getfield(fs, freq_field)[] = val;
+
+        getfield(fs, freq_field)[] = val
     end
     row += 1
 
@@ -527,8 +527,8 @@ function _show_single_filter_menu(state, dat, filter_type::Symbol)
     slider_order = Slider(grid[row, 2], range = 1:10, startvalue = getfield(fs, order_field)[])
     Label(grid[row, 3], @lift(string($(slider_order.value))), halign = :left)
     on(slider_order.value) do val
-        ;
-        getfield(fs, order_field)[] = val;
+
+        getfield(fs, order_field)[] = val
     end
     row += 1
 
@@ -544,8 +544,8 @@ function _show_single_filter_menu(state, dat, filter_type::Symbol)
         width = 220,
     )
     on(menu_method.selection) do val
-        ;
-        getfield(fs, method_field)[] = val;
+
+        getfield(fs, method_field)[] = val
     end
     row += 1
 
@@ -561,8 +561,8 @@ function _show_single_filter_menu(state, dat, filter_type::Symbol)
         width = 220,
     )
     on(menu_func.selection) do val
-        ;
-        getfield(fs, func_field)[] = val;
+
+        getfield(fs, func_field)[] = val
     end
     row += 1
 
@@ -1056,14 +1056,14 @@ function _create_sliders(fig, state::ContinuousDataBrowserState, dat)
     slider_x = Slider(fig[2, 1], range = 1:50:nrow(state.data.current[].data), startvalue = 1, snap = true)
 
     on(slider_range.value) do x
-        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x+slider_x.value.val)
+        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x + slider_x.value.val)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
     end
 
     on(slider_x.value) do x
-        new_range = x:min(nrow(state.data.current[].data), (x+slider_range.value.val)-1)
+        new_range = x:min(nrow(state.data.current[].data), (x + slider_range.value.val) - 1)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
@@ -2325,6 +2325,120 @@ function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs.
     _set_window_title("Makie")
     # Return the observable analysis settings
     return (fig = fig, ax = ax, analysis_settings = state.analysis_settings)
+end
+
+"""
+    plot_databrowser(; kwargs...)
+
+Open a file-selector window that lets you drag-and-drop EEG files.
+Selected files are opened in a full interactive data browser via
+`plot_databrowser(dat::EegData)`. The launcher stays open so you can load
+additional files.
+
+Supported formats: `.jld2`, `.set`, `.bdf`, `.edf`, `.vhdr`, `.fif`, `.xdf`.
+"""
+function plot_databrowser(; kwargs...)
+    shared_layout = Ref{Union{Nothing,Layout}}(nothing)
+    layout_status = Observable{String}("Layout: NA")
+
+    fig = Figure(size = (400, 220))
+    Label(fig[1, 1], "EegFun Data Browser", fontsize = 22, halign = :center)
+    Label(fig[2, 1], "Drop EEG file(s) here", fontsize = 14, halign = :center, color = :gray50)
+    status_label = Label(fig[3, 1], "", fontsize = 12, halign = :center, color = :gray40)
+    btn_layout = Button(fig[4, 1], label = "Select Layout File", width = 180, height = 30, fontsize = 14)
+    Label(fig[5, 1], layout_status, fontsize = 12, color = :gray30)
+    n_loaded = Ref(0)
+
+    function _load_layout(filepath::AbstractString)
+        try
+            lay = read_layout(filepath)
+            polar_to_cartesian_xy!(lay)
+            shared_layout[] = lay
+            layout_status[] = "Layout: $(basename(filepath))"
+            status_label.text = "Loaded layout successfully"
+        catch e
+            @error "Failed to load layout" exception = (e, catch_backtrace())
+            status_label.text = "Layout Error: $(sprint(showerror, e))"
+        end
+    end
+
+    function _load_file(filepath::AbstractString)
+        filepath = _sanitize_dropped_path(filepath)
+        if !isfile(filepath)
+            status_label.text = "File not found: $(basename(filepath))"
+            return
+        end
+
+        if lowercase(splitext(filepath)[2]) == ".csv"
+            _load_layout(filepath)
+            return
+        end
+
+        status_label.text = "Loading $(basename(filepath))…"
+        try
+            dat_eeg, ica_data = _read_any_eeg_file(filepath, shared_layout[])
+            dat_eeg.file = basename(filepath)
+            _set_window_title(_generate_window_title(dat_eeg))
+            plot_databrowser(dat_eeg, ica_data; screen = GLMakie.Screen(), kwargs...)
+            n_loaded[] += 1
+            status_label.text = n_loaded[] == 1 ? "Opened: $(basename(filepath))" : "Opened $(n_loaded[]) files"
+        catch e
+            @error "Failed to load file" exception = (e, catch_backtrace())
+            status_label.text = "Error: $(sprint(showerror, e))"
+        end
+    end
+
+    on(btn_layout.clicks) do _
+        filepath = NativeFileDialog.pick_file(pwd())
+        if filepath != "" && isfile(filepath)
+            _load_layout(filepath)
+        end
+    end
+
+    on(events(fig).dropped_files) do files
+        for f in files
+            _load_file(f)
+        end
+    end
+
+    display(GLMakie.Screen(), fig)
+    _set_window_title("EegFun Data Browser")
+    return fig
+end
+
+"""Sanitize a filepath from drag-and-drop (strip URI scheme, URL-decode)."""
+function _sanitize_dropped_path(filepath::AbstractString)
+    filepath = replace(filepath, "file://" => "")
+    filepath = replace(filepath, r"%([0-9A-Fa-f]{2})" => m -> string(Char(parse(UInt8, m[2:end], base = 16))))
+    return String(strip(filepath, ['\r', '\n', '"', '\'']))
+end
+
+"""Load any supported EEG file and return `(dat, ica)` — ica may be `nothing`."""
+function _read_any_eeg_file(filepath::String, layout::Union{Nothing,Layout} = nothing)
+    ext = lowercase(splitext(filepath)[2])
+    ica_data = nothing
+
+    dat_eeg = if ext == ".jld2"
+        read_data(filepath)
+    elseif ext == ".set"
+        res = read_eeglab(filepath)
+        if res isa Tuple
+            dat_eeg_tmp, ica_data = res
+            dat_eeg_tmp
+        else
+            res
+        end
+    else
+        raw = read_raw_data(filepath)
+        if isnothing(layout)
+            create_eegfun_data(raw)
+        else
+            create_eegfun_data(raw, layout)
+        end
+    end
+
+    isnothing(dat_eeg) && error("Unsupported file format or failed to read: $filepath")
+    return (dat_eeg, ica_data)
 end
 
 """Load data from a `.jld2` file or pattern and open the data browser."""
