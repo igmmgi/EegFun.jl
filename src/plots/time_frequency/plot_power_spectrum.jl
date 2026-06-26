@@ -21,7 +21,7 @@ const PLOT_POWER_SPECTRUM_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Scale parameters
     :x_scale => (:linear, "X-axis scale: :linear or :log10"),
-    :y_scale => (:linear, "Y-axis scale: :linear or :log10"),
+    :y_scale => (:log10, "Y-axis scale: :linear or :log10"),
     :unit => (:linear, "Power unit: :linear (μV²/Hz) or :dB (decibels)"),
 
     # Font sizes
@@ -186,27 +186,35 @@ function _plot_power_spectrum_data!(
     rowsize!(fig.layout, 1, Relative(0.7))  # Main content row
 
     x_scale_obs = Observable(x_scale)
-    y_scale_obs = Observable(y_scale)
-    unit_obs = Observable(unit)
+    
+    x_options = ["Linear (Hz)", "Log10 (Hz)"]
+    x_default_idx = x_scale == :log10 ? 2 : 1
+    
+    y_options = ["Linear (μV²/Hz)", "Log10 (μV²/Hz)", "Decibels (dB)"]
+    y_default_idx = if unit == :dB
+        3
+    elseif y_scale == :log10
+        2
+    else
+        1
+    end
+    y_mode_obs = Observable(y_options[y_default_idx])
+
     band_ax_ref = Ref{Union{Nothing,Axis}}(nothing)
 
-    # Add x/y checkboxes for axis types with labels
-    x_log_checkbox = Checkbox(controls_area[1, 1], checked = x_scale == :log10)
-    Label(controls_area[1, 2], "X: Linear/Log")
-    y_log_checkbox = Checkbox(controls_area[2, 1], checked = y_scale == :log10)
-    Label(controls_area[2, 2], "Y: Linear/Log")
-    unit_checkbox = Checkbox(controls_area[3, 1], checked = unit == :dB)
-    Label(controls_area[3, 2], "Unit: μV²/Hz/dB")
+    # Add menus
+    Label(controls_area[1, 1], "X-Axis:")
+    x_menu = Menu(controls_area[1, 2], options = x_options, default = x_options[x_default_idx])
+    
+    Label(controls_area[2, 1], "Y-Axis:")
+    y_menu = Menu(controls_area[2, 2], options = y_options, default = y_options[y_default_idx])
 
-    # Update Observables when checkboxes change
-    on(x_log_checkbox.checked) do checked
-        x_scale_obs[] = checked ? :log10 : :linear
+    on(x_menu.selection) do sel
+        x_scale_obs[] = sel == "Log10 (Hz)" ? :log10 : :linear
     end
-    on(y_log_checkbox.checked) do checked
-        y_scale_obs[] = checked ? :log10 : :linear
-    end
-    on(unit_checkbox.checked) do checked
-        unit_obs[] = checked ? :dB : :linear
+
+    on(y_menu.selection) do sel
+        y_mode_obs[] = sel
     end
 
     # Apply initial scale settings
@@ -323,42 +331,35 @@ function _plot_power_spectrum_data!(
         end
     end
 
-    """Re-convert power data and update line plots when the unit changes."""
-    function update_unit(new_unit)
-        # Convert power data
+    """Unified handler for changing Y-axis mode."""
+    function update_y_mode(mode)
+        new_unit = mode == "Decibels (dB)" ? :dB : :linear
+        new_y_scale = mode == "Log10 (μV²/Hz)" ? :log10 : :linear
+        
+        # 1. Update power data if unit changed
         converted_power_data = get_current_power_data(new_unit)
-
-        # Update line plots
         for (i, (_, psd_obs)) in enumerate(line_plots)
             psd_obs[] = converted_power_data[i]
         end
-
-        # Update y-axis label
+        
+        # 2. Update y-axis label
         ax.ylabel = new_unit == :dB ? "Power Spectral Density (dB)" : plot_kwargs[:ylabel]
 
-        # Recalculate max power and update limits
+        # 3. Update y-axis scale and limits
         all_powers = vcat(converted_power_data...)
         new_max_power = maximum(all_powers)
         new_min_power = minimum(all_powers)
 
-        # Update y-axis scale and limits based on current y_scale setting
-        if y_scale_obs[] == :log10
-            if new_unit == :dB
-                # For dB, use linear scale (dB is already logarithmic)
-                ax.yscale = identity
-                ylims!(ax, (new_min_power - 5, new_max_power + 5))
+        if new_y_scale == :log10
+            positive_powers = filter(x -> x > 0, all_powers)
+            if isempty(positive_powers)
+                log_min, log_max = 0.001, 1.0
             else
-                # For linear units, use log scale
-                positive_powers = filter(x -> x > 0, all_powers)
-                if isempty(positive_powers)
-                    log_min, log_max = 0.001, 1.0
-                else
-                    log_min = max(0.001, minimum(positive_powers))
-                    log_max = max(log_min * 10, new_max_power)
-                end
-                ylims!(ax, (log_min, log_max))
-                ax.yscale = log10
+                log_min = max(0.001, minimum(positive_powers))
+                log_max = max(log_min * 10, new_max_power)
             end
+            ylims!(ax, (log_min, log_max))
+            ax.yscale = log10
         else
             ax.yscale = identity
             if new_unit == :dB
@@ -369,56 +370,13 @@ function _plot_power_spectrum_data!(
         end
     end
 
-    """Recalculate y-axis limits when switching between linear and log10."""
-    function update_y_scale(scale)
-        current_unit = unit_obs[]
-        current_power_data = get_current_power_data(current_unit)
-        all_powers = vcat(current_power_data...)
-        current_max = maximum(all_powers)
-        current_min = minimum(all_powers)
-
-        if scale == :log10
-            if current_unit == :dB
-                # For dB, use linear scale (dB is already logarithmic)
-                ax.yscale = identity
-                ylims!(ax, (current_min - 5, current_max + 5))
-            else
-                # Calculate valid limits first
-                positive_powers = filter(x -> x > 0, all_powers)
-                if isempty(positive_powers)
-                    # Fallback: no positive values, use safe defaults
-                    log_min = 0.001
-                    log_max = 1.0
-                else
-                    log_min = max(0.001, minimum(positive_powers))
-                    log_max = max(log_min * 10, current_max)  # Ensure reasonable range
-                end
-                # Set valid limits BEFORE changing scale to avoid validation errors
-                ylims!(ax, (log_min, log_max))
-                ax.yscale = log10
-            end
-        else
-            # For linear scale, change scale FIRST to avoid log validation of linear limits
-            ax.yscale = identity
-            if current_unit == :dB
-                ylims!(ax, (current_min - 5, current_max + 5))
-            else
-                ylims!(ax, (0.0, max(0.1, current_max)))
-            end
-        end
-    end
-
     # Set up reactive updates
     on(x_scale_obs) do scale
         update_x_scale(scale)
     end
 
-    on(y_scale_obs) do scale
-        update_y_scale(scale)
-    end
-
-    on(unit_obs) do new_unit
-        update_unit(new_unit)
+    on(y_mode_obs) do mode
+        update_y_mode(mode)
     end
 
 
