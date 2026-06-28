@@ -17,11 +17,7 @@ using CSV
         mkpath(eeg_dir)
 
         # Test that read_bids errors with missing files (validates path construction)
-        @test_throws Exception EegFun.read_bids(
-            bids_dir;
-            subject = "01",
-            task = "posner",
-        )
+        @test_throws Exception EegFun.read_bids(bids_dir; subject = "01", task = "posner")
     end
 
     @testset "BIDS path construction - with session" begin
@@ -32,12 +28,7 @@ using CSV
         mkpath(eeg_dir)
 
         # Should construct path with session and fail on missing file (not missing dir)
-        @test_throws Exception EegFun.read_bids(
-            bids_dir;
-            subject = "01",
-            task = "posner",
-            session = "01",
-        )
+        @test_throws Exception EegFun.read_bids(bids_dir; subject = "01", task = "posner", session = "01")
     end
 
     @testset "BIDS path construction - strip prefix" begin
@@ -48,20 +39,12 @@ using CSV
         mkpath(eeg_dir)
 
         # Should handle "sub-" prefix gracefully (strip it)
-        @test_throws Exception EegFun.read_bids(
-            bids_dir;
-            subject = "sub-01",
-            task = "posner",
-        )
+        @test_throws Exception EegFun.read_bids(bids_dir; subject = "sub-01", task = "posner")
     end
 
     @testset "BIDS directory not found" begin
         # Non-existent base directory
-        @test_throws Exception EegFun.read_bids(
-            "/nonexistent/path";
-            subject = "01",
-            task = "posner",
-        )
+        @test_throws Exception EegFun.read_bids("/nonexistent/path"; subject = "01", task = "posner")
     end
 
     # ────────────────────────────────────────────────────────────
@@ -73,12 +56,7 @@ using CSV
         mkpath(eeg_dir)
 
         # Create a minimal electrodes.tsv
-        electrodes_df = DataFrame(
-            name = ["Fz", "Cz", "Pz"],
-            x = [0.0, 0.0, 0.0],
-            y = [0.71, 0.0, -0.71],
-            z = [0.71, 1.0, 0.71],
-        )
+        electrodes_df = DataFrame(name = ["Fz", "Cz", "Pz"], x = [0.0, 0.0, 0.0], y = [0.71, 0.0, -0.71], z = [0.71, 1.0, 0.71])
         CSV.write(joinpath(eeg_dir, "sub-01_electrodes.tsv"), electrodes_df; delim = '\t')
 
         # Verify the file was created correctly

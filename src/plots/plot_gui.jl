@@ -1,5 +1,5 @@
 """Shared font sizes and widget dimensions for the interactive GUI."""
-const UI_STYLE = (label_font   = 20, button_font  = 18, textbox_font = 16, input_width  = 160, input_height = 30)
+const UI_STYLE = (label_font = 20, button_font = 18, textbox_font = 16, input_width = 160, input_height = 30)
 
 Base.@kwdef mutable struct GUIState
     directory::Observable{String} = Observable("")

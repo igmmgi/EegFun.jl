@@ -8,7 +8,12 @@ using EegFun
 
 pages = [
     "Home" => "index.md",
-    "Getting Started" => ["tutorials/getting-started.md", "IDE Workflows" => "tutorials/ide-workflows.md", "Why Julia?" => "tutorials/why-julia.md", "Julia Basics" => "tutorials/julia-basics.md"],
+    "Getting Started" => [
+        "tutorials/getting-started.md",
+        "IDE Workflows" => "tutorials/ide-workflows.md",
+        "Why Julia?" => "tutorials/why-julia.md",
+        "Julia Basics" => "tutorials/julia-basics.md",
+    ],
     "Tutorials" => [
         "Overview" => "tutorials/index.md",
         "Data Structures" => "explanations/data-structures.md",
@@ -17,20 +22,8 @@ pages = [
         "Epoch Selection" => "tutorials/epoch-selection.md",
         "Artifact Handling" => "tutorials/artifact-handling.md",
         "Layouts and Neighbors" => "tutorials/layouts-neighbors.md",
-        "Batch Processing" => "tutorials/batch-processing.md",
-        "Selection Patterns" => "tutorials/selection-patterns.md",
-        "TOML Format" => "tutorials/toml-format.md",
-        "Plot GUI" => "tutorials/plot-gui.md",
-        "Benchmark" => "tutorials/benchmark.md",
-    ],
-    "How-to Guides" => [
-        "Filter Data" => "how-to/filter-data.md",
-        "Preprocessing Walkthrough" => "tutorials/workflows/preprocessing_workflow.md",
-        "Worked Examples" => [
-            "Visual Attention (Posner Cueing)" => "tutorials/experiments/visual-attention.md",
-            "N170 (Face/Body)" => "tutorials/experiments/n170.md",
-        ],
         "Import" => [
+            "Data Import" => "tutorials/import/data_import.md",
             "BioSemi Import" => "tutorials/import/biosemi_import.md",
             "BrainVision Import" => "tutorials/import/brainvision_import.md",
             "EDF Import" => "tutorials/import/edf_import.md",
@@ -41,6 +34,11 @@ pages = [
             "Data" => "tutorials/import/data.md",
             "Data Persistence (JLD2)" => "tutorials/import/jld2.md",
             "BIDS Export" => "tutorials/import/bids_export.md",
+        ],
+        "Data" => [
+            "Data" => "tutorials/data/data.md",
+            "Data Access" => "tutorials/data/data_access.md",
+            "Selection Helpers" => "tutorials/data/selection_helpers.md",
         ],
         "Preprocessing" => [
             "Filter" => "tutorials/preprocessing/filter.md",
@@ -55,8 +53,13 @@ pages = [
             "Channel Repair" => "tutorials/preprocessing/channel_repair.md",
             "Channel Summary" => "tutorials/preprocessing/channel_summary.md",
             "ICA" => "tutorials/preprocessing/ica.md",
+            "Layouts & Neighbours" => "tutorials/preprocessing/layouts.md",
+            "Analysis Settings" => "tutorials/preprocessing/analysis_settings.md",
         ],
-        "Artifacts" => ["Artifacts" => "tutorials/artifacts/artifacts.md", "Artifact Detection" => "tutorials/artifacts/artifact_detection.md"],
+        "Artifacts" => [
+            "Artifacts" => "tutorials/artifacts/artifacts.md",
+            "Artifact Detection" => "tutorials/artifacts/artifact_detection.md",
+        ],
         "ERP Analysis" => [
             "ERP Measurements" => "tutorials/erp/erp_measurements.md",
             "Global Field Power" => "tutorials/erp/gfp.md",
@@ -65,6 +68,19 @@ pages = [
             "Lateralised Readiness Potential" => "tutorials/erp/lrp.md",
             "Realignment" => "tutorials/erp/realign.md",
             "Condition Operations" => "tutorials/erp/condition_operations.md",
+        ],
+        "Time-Frequency" => [
+            "TF Analysis" => "tutorials/time_frequency/tf_analysis.md",
+            "TF Morlet" => "tutorials/time_frequency/tf_morlet.md",
+            "TF Multitaper" => "tutorials/time_frequency/tf_multitaper.md",
+            "TF STFT" => "tutorials/time_frequency/tf_stft.md",
+            "TF Operations" => "tutorials/time_frequency/tf_operations.md",
+        ],
+        "Statistics" => [
+            "Statistics" => "tutorials/statistics/statistics.md",
+            "TF Statistics" => "tutorials/statistics/tf_stats_test.md",
+            "Decoding" => "tutorials/statistics/decoding.md",
+            "RSA" => "tutorials/statistics/rsa.md",
         ],
         "Plotting" => [
             "Plot Artifacts" => "tutorials/plotting/plot_artifacts.md",
@@ -83,28 +99,12 @@ pages = [
             "Plot Layout" => "tutorials/plotting/plot_layout.md",
             "Plot Topography" => "tutorials/plotting/plot_topography.md",
             "Plot Triggers" => "tutorials/plotting/plot_triggers.md",
+            "Saving Figures" => "tutorials/plotting/save_figures.md",
         ],
         "Interactive / GUI" => [
             "Plot Databrowser" => "tutorials/plotting/plot_databrowser.md",
             "Plot ERP Filter GUI" => "tutorials/plotting/plot_erp_filter_gui.md",
             "Plot ERP Measurement GUI" => "tutorials/plotting/plot_erp_measurement_gui.md",
-        ],
-        "Teaching Demos" => [
-            "Signal Example (Sampling)" => "tutorials/teaching/signal_processing/signal_example_sampling.md",
-            "Signal Example (Composition)" => "tutorials/teaching/signal_processing/signal_example_composition.md",
-            "Signal Example (Dot Product)" => "tutorials/teaching/signal_processing/signal_example_dotproduct.md",
-            "Signal Example (Convolution)" => "tutorials/teaching/signal_processing/signal_example_convolution.md",
-            "Signal Example (Time-Frequency)" => "tutorials/teaching/signal_processing/signal_example_tf.md",
-            "Signal Example (ICA 0)" => "tutorials/teaching/ica/signal_example_ica_0.md",
-            "Signal Example (ICA Mixture)" => "tutorials/teaching/ica/signal_example_ica_mixture.md",
-            "Signal Example (ICA Separation)" => "tutorials/teaching/ica/signal_example_ica_separation.md",
-            "Signal Example (ICA Geometry)" => "tutorials/teaching/ica/signal_example_ica_geometry.md",
-            "Signal Example (ICA Sphering)" => "tutorials/teaching/ica/signal_example_ica_sphering.md",
-            "Signal Example (ICA Optimization)" => "tutorials/teaching/ica/signal_example_ica_optimization.md",
-            "Signal Example (ICA CLT)" => "tutorials/teaching/ica/signal_example_ica_clt.md",
-            "Signal Example (ICA Infomax)" => "tutorials/teaching/ica/signal_example_ica_infomax.md",
-            "Signal Example (Decoding)" => "tutorials/teaching/machine_learning/signal_example_decoding.md",
-            "Simulate ERP" => "tutorials/teaching/erp/simulate_erp.md",
         ],
         "Specialized Plotting" => [
             "Plot Decoding" => "tutorials/plotting/plot_decoding.md",
@@ -112,18 +112,50 @@ pages = [
             "Plot Statistics" => "tutorials/plotting/plot_statistics.md",
             "Plot Time-Frequency" => "tutorials/plotting/plot_tf.md",
         ],
-        "Time-Frequency" => [
-            "TF Analysis" => "tutorials/time_frequency/tf_analysis.md",
-            "TF Morlet" => "tutorials/time_frequency/tf_morlet.md",
-            "TF Multitaper" => "tutorials/time_frequency/tf_multitaper.md",
-            "TF STFT" => "tutorials/time_frequency/tf_stft.md",
-            "TF Operations" => "tutorials/time_frequency/tf_operations.md",
+    ],
+    "How-to Guides" => [
+        "Filter Data" => "how-to/filter-data.md",
+        "Selection Patterns" => "tutorials/selection-patterns.md",
+        "TOML Format" => "tutorials/toml-format.md",
+        "Batch Processing" => "tutorials/batch-processing.md",
+        "Pipeline Templates" => "tutorials/workflows/pipeline_templates.md",
+        "Preprocessing Walkthrough" => "tutorials/workflows/preprocessing_workflow.md",
+        "Plot GUI" => "tutorials/plot-gui.md",
+        "Benchmark" => "tutorials/benchmark.md",
+        "Worked Examples" => [
+            "Visual Attention (Posner Cueing)" => "tutorials/experiments/visual-attention.md",
+            "N170 (Face/Body)" => "tutorials/experiments/n170.md",
         ],
-        "Statistics" => [
-            "Statistics" => "tutorials/statistics/statistics.md",
-            "TF Statistics" => "tutorials/statistics/tf_stats_test.md",
-            "Decoding" => "tutorials/statistics/decoding.md",
-            "RSA" => "tutorials/statistics/rsa.md",
+    ],
+    "Explanations" => [
+        "Data Structures" => "explanations/data-structures.md",
+        "Layouts" => "explanations/layouts.md",
+        "Artifact Handling" => "tutorials/artifact-handling.md",
+        "Manual Preprocessing" => "tutorials/manual-preprocessing.md",
+    ],
+    "Teaching Demos" => [
+        "Signal Processing" => [
+            "Sampling" => "tutorials/teaching/signal_processing/signal_example_sampling.md",
+            "Composition" => "tutorials/teaching/signal_processing/signal_example_composition.md",
+            "Dot Product" => "tutorials/teaching/signal_processing/signal_example_dotproduct.md",
+            "Convolution" => "tutorials/teaching/signal_processing/signal_example_convolution.md",
+            "Time-Frequency" => "tutorials/teaching/signal_processing/signal_example_tf.md",
+        ],
+        "ICA" => [
+            "Introduction" => "tutorials/teaching/ica/signal_example_ica_0.md",
+            "Mixture" => "tutorials/teaching/ica/signal_example_ica_mixture.md",
+            "Separation" => "tutorials/teaching/ica/signal_example_ica_separation.md",
+            "Geometry" => "tutorials/teaching/ica/signal_example_ica_geometry.md",
+            "Sphering" => "tutorials/teaching/ica/signal_example_ica_sphering.md",
+            "Optimization" => "tutorials/teaching/ica/signal_example_ica_optimization.md",
+            "CLT" => "tutorials/teaching/ica/signal_example_ica_clt.md",
+            "Infomax" => "tutorials/teaching/ica/signal_example_ica_infomax.md",
+        ],
+        "Machine Learning" => [
+            "Decoding" => "tutorials/teaching/machine_learning/signal_example_decoding.md",
+        ],
+        "ERP" => [
+            "Simulate ERP" => "tutorials/teaching/erp/simulate_erp.md",
         ],
     ],
     "Cheatsheet" => "cheatsheet.md",
@@ -134,6 +166,7 @@ pages = [
         "Types" => "reference/types.md",
     ],
 ]
+
 
 makedocs(;
     modules = [EegFun],

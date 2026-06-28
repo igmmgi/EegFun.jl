@@ -10,16 +10,34 @@ Using the interactive documentation manager:
 julia --project=docs/. doc_manager.jl
 ```
 
-Then select option 1 to build, or option 7 to preview.
+Then select option 1 to build, or option 6 to preview.
 
 ## Directory Structure
 
 - `src/` - Documentation source files (markdown)
+  - `tutorials/` - Tutorial pages (many auto-generated from `tutorials/*.jl` scripts)
+  - `explanations/` - Conceptual/understanding-oriented documentation
+  - `how-to/` - Task-oriented guides
+  - `reference/` - API reference documentation
+- `overviews/` - Custom overview content for each tutorial, used by `generate_demos.jl` to inject descriptive text into the generated tutorial pages. **Not served directly** — this is a data source.
 - `build/` - Generated documentation (not committed)
 - `node_modules/` - Node.js dependencies (not committed)
-- `make.jl` - Main build script
-- `generate_demos.jl` - Script to generate demo documentation
+- `make.jl` - Main build script (defines navigation structure)
+- `generate_demos.jl` - Script to generate tutorial documentation from `tutorials/*.jl` scripts
 - `doc_manager.jl` - Interactive build/preview tool
+
+## Documentation Structure (Diátaxis)
+
+The navigation follows the [Diátaxis framework](https://diataxis.fr/):
+
+| Section | Purpose | Example |
+|---|---|---|
+| **Getting Started** | Onboarding | Installation, Julia basics |
+| **Tutorials** | Learning-oriented | Import data, preprocessing, ERP analysis |
+| **How-to Guides** | Task-oriented | Filter data, batch processing, TOML config |
+| **Explanations** | Understanding-oriented | Data structures, layouts |
+| **Teaching Demos** | Educational demos | Signal processing, ICA theory |
+| **Reference** | API documentation | Function signatures, types |
 
 ## Notes
 
