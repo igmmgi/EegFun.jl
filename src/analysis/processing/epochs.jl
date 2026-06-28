@@ -19,6 +19,32 @@ epoch_cfg = condition_parse_epoch(config)
 """
 condition_parse_epoch(toml_file::String) = condition_parse_epoch(TOML.parsefile(toml_file))
 
+"""
+    allcomb(args...)
+
+Generate all combinations of the provided iterables.
+Returns a `Vector{Vector{Any}}` which is useful for defining `trigger_sequences` 
+in `EpochCondition`.
+
+# Examples
+```julia
+allcomb([31, 39], 51:54, 101)
+```
+"""
+_expand_arg(x::AbstractVector) = isempty(x) ? x : mapreduce(_expand_arg_element, vcat, x)
+_expand_arg(x::Union{Number, Symbol}) = [x]
+_expand_arg(x::UnitRange) = collect(x)
+_expand_arg(x) = x
+
+_expand_arg_element(v::UnitRange) = collect(v)
+_expand_arg_element(v) = [v]
+
+function allcomb(args...)
+    expanded_args = map(_expand_arg, args)
+    combinations = Iterators.product(expanded_args...)
+    return vec([collect(Union{Int, Symbol, UnitRange{Int}, Vector{Int}}, c) for c in combinations])
+end
+
 function condition_parse_epoch(config::Dict)
     epochs_section = get(config, "epochs", Dict())
 
@@ -32,6 +58,15 @@ function condition_parse_epoch(config::Dict)
         trigger_sequences_raw = get(condition_config, "trigger_sequences", nothing)
         if isnothing(trigger_sequences_raw)
             @minimal_error("trigger_sequences must be specified for condition '$name'")
+        end
+
+        # Natively support allcomb syntax written as a String in TOML files
+        if trigger_sequences_raw isa String && startswith(strip(trigger_sequences_raw), "allcomb")
+            try
+                trigger_sequences_raw = eval(Meta.parse(trigger_sequences_raw))
+            catch e
+                @minimal_error("Failed to parse allcomb expression in TOML for condition '$name': $e")
+            end
         end
 
         # Parse trigger sequences - convert from TOML arrays to proper types

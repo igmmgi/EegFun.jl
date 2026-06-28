@@ -307,6 +307,7 @@ public test_against_chance_cluster
 # =====================
 # Triggers
 # =====================
+public allcomb
 public search_sequence
 public trigger_count
 public trigger_info

@@ -491,7 +491,8 @@ For ErpData and ContinuousData (SingleDataFrameEeg), power is computed directly 
 - `channel_selection::Function=channels()`: Channel selection predicate. See `channels()` for options.
   - Example: `channel_selection=channels(:Cz)` for single channel
   - Example: `channel_selection=channels([:Cz, :Pz])` for multiple channels
-- `window_size::Int=1024`: Size of the FFT window for spectral estimation (in samples)
+- `window_size::Union{Int,Nothing}=nothing`: Size of the FFT window for spectral estimation (in samples).
+  - If `nothing` (default), dynamically set to `min(2048, n_samples)` for optimal high-resolution defaults that don't crash on short epochs.
 - `overlap::Real=0.5`: Overlap fraction between windows (0.0 to 1.0). Default is 0.5 (50% overlap)
 - `window_function::Function=DSP.hanning`: Window function for spectral estimation
   - Options: `DSP.hanning`, `DSP.hamming`, `DSP.blackman`, etc.
@@ -516,7 +517,7 @@ spectrum = freq_spectrum(epochs; channel_selection=channels(:Cz), window_size=20
 function freq_spectrum(
     dat::EegData;
     channel_selection::Function = channels(),
-    window_size::Int = 256,
+    window_size::Union{Int,Nothing} = nothing,
     overlap::Real = 0.5,
     window_function::Function = DSP.hanning,
     max_freq::Union{Nothing,Real} = nothing,
@@ -525,15 +526,19 @@ function freq_spectrum(
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
     isempty(selected_channels) && error("No channels selected. Available channels: $(channel_labels(dat))")
 
-    # Validate overlap
-    (overlap < 0 || overlap >= 1) && error("`overlap` must be in range [0, 1), got $overlap")
-
-    noverlap = Int(round(window_size * overlap))
-
     # Get frequency vector from first channel's first signal
     first_channel = selected_channels[1]
     first_signal = channel_data(dat, first_channel)
-    pgram = DSP.welch_pgram(first_signal, window_size, noverlap; fs = dat.sample_rate, window = window_function)
+
+    # Dynamically determine window size if not provided
+    actual_window_size = isnothing(window_size) ? min(2048, length(first_signal)) : window_size
+
+    # Validate overlap
+    (overlap < 0 || overlap >= 1) && error("`overlap` must be in range [0, 1), got $overlap")
+
+    noverlap = Int(round(actual_window_size * overlap))
+
+    pgram = DSP.welch_pgram(first_signal, actual_window_size, noverlap; fs = dat.sample_rate, window = window_function)
     freqs = DSP.freq(pgram)
 
     # Initialize output DataFrame with frequency column
@@ -542,7 +547,7 @@ function freq_spectrum(
     # Process each channel
     for channel in selected_channels
         signal = channel_data(dat, channel)
-        pgram = DSP.welch_pgram(signal, window_size, noverlap; fs = dat.sample_rate, window = window_function)
+        pgram = DSP.welch_pgram(signal, actual_window_size, noverlap; fs = dat.sample_rate, window = window_function)
         spectrum_df[!, channel] = DSP.power(pgram)
     end
 

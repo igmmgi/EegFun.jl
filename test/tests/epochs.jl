@@ -1389,4 +1389,33 @@ using Random
         end
     end
 
+    @testset "allcomb utility" begin
+        # Test basic numeric sequences with ranges
+        res = EegFun.allcomb([1, 10], [1:10])
+        @test res isa Vector{Vector{Union{Int, Symbol, UnitRange{Int}, Vector{Int}}}}
+        @test length(res) == 20
+        @test res[1] == [1, 1]
+        @test res[2] == [10, 1]
+        @test res[19] == [1, 10]
+        @test res[20] == [10, 10]
+
+        # Test with multiple types including symbol
+        res2 = EegFun.allcomb(101, :any, 103)
+        @test length(res2) == 1
+        @test res2[1] == [101, :any, 103]
+
+        # Test with multiple mixed iterables
+        res3 = EegFun.allcomb([31, 39], 51:54, 101)
+        @test length(res3) == 8
+        @test res3[1] == [31, 51, 101]
+        @test res3[2] == [39, 51, 101]
+        @test res3[7] == [31, 54, 101]
+        @test res3[8] == [39, 54, 101]
+
+        # Test with nested array match
+        res4 = EegFun.allcomb([[101, 103]], 200)
+        @test length(res4) == 1
+        @test res4[1] == [[101, 103], 200]
+    end
+
 end
