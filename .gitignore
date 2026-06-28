@@ -40,3 +40,6 @@ Manifest.toml
 
 # Demo output files
 demos/output/
+
+# Preprocess log files generated during testing
+preprocess_log_*.txt

@@ -131,4 +131,11 @@ using DataFrames
         @test_throws Exception EegFun.preprocess("/nonexistent/config.toml")
     end
 
+    # ────────────────────────────────────────────────────────────
+    # Cleanup: remove any preprocess_log files generated during tests
+    # ────────────────────────────────────────────────────────────
+    for f in filter(f -> startswith(f, "preprocess_log_") && endswith(f, ".txt"), readdir())
+        rm(f, force = true)
+    end
+
 end # @testset "Pipeline Utilities"
