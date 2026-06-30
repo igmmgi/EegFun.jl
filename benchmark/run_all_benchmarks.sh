@@ -27,7 +27,7 @@ echo "=================================================="
 echo ""
 echo ">>> Running Julia (EegFun.jl) Benchmark..."
 cd "$BENCHMARK_DIR/julia" || exit
-julia --project="$BENCHMARK_DIR/.." eegfun_benchmark.jl "$DATA_DIR" "$N_FILES" "$RUN_ICA"
+julia -t auto --project="$BENCHMARK_DIR/.." eegfun_benchmark.jl "$DATA_DIR" "$N_FILES" "$RUN_ICA"
 
 # 2. Python Benchmark
 echo ""

@@ -272,6 +272,17 @@ function lowpass_filter!(
     end
     @debug "lowpass_filter! applying lp filter at $cutoff_freq Hz to $(length(selected_channels)) channels"
 
+    if filter_method == "fir" && filter_func == "filtfilt"
+        min_length = dat.data isa Vector ? minimum(nrow.(dat.data)) : nrow(dat.data)
+        min_required_transition_band = 12.0 * dat.sample_rate / min_length
+        min_required_transition_width = min_required_transition_band / cutoff_freq
+        
+        if transition_width < min_required_transition_width
+            @minimal_warning "FIR transition width $(transition_width) too narrow for data length $(min_length). Widening to $(round(min_required_transition_width, digits=3)) to prevent crash."
+            transition_width = min_required_transition_width
+        end
+    end
+
     filter_info = create_lowpass_filter(
         cutoff_freq,
         dat.sample_rate;
@@ -314,6 +325,17 @@ function highpass_filter!(
         return nothing
     end
     @debug "highpass_filter! applying hp filter at $cutoff_freq Hz to $(length(selected_channels)) channels"
+
+    if filter_method == "fir" && filter_func == "filtfilt"
+        min_length = dat.data isa Vector ? minimum(nrow.(dat.data)) : nrow(dat.data)
+        min_required_transition_band = 12.0 * dat.sample_rate / min_length
+        min_required_transition_width = min_required_transition_band / cutoff_freq
+        
+        if transition_width < min_required_transition_width
+            @minimal_warning "FIR transition width $(transition_width) too narrow for data length $(min_length). Widening to $(round(min_required_transition_width, digits=3)) to prevent crash."
+            transition_width = min_required_transition_width
+        end
+    end
 
     filter_info = create_highpass_filter(
         cutoff_freq,

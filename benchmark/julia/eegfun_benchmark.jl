@@ -19,7 +19,7 @@ function process_eeg_to_grandaverage(raw_files::Vector{String}, data_dir::String
         # 1. Read data, layout, and create EegFun.jl data structure
         raw_data = EegFun.read_raw_data(file)
 
-        layout_path = joinpath(data_dir, "biosemi72.csv")
+        layout_path = joinpath(@__DIR__, "..", "..", "resources", "layouts", "biosemi", "biosemi72.csv")
         layout = EegFun.read_layout(layout_path)
         EegFun.polar_to_cartesian_xy!(layout)
 
@@ -120,7 +120,8 @@ results_dir = joinpath(data_dir, "benchmarks")
 mkpath(results_dir)
 
 # println("Compiling Julia pipeline (first run)...")
-Base.invokelatest(process_eeg_to_grandaverage, [test_files[1]], data_dir, run_ica_flag) # Warm-up to trigger JIT compilation
+warmup_files = min(length(test_files), 2)
+Base.invokelatest(process_eeg_to_grandaverage, test_files[1:warmup_files], data_dir, run_ica_flag) # Warm-up to trigger JIT compilation
 
 println("Benchmarking...")
 val, t_elapsed = @timed Base.invokelatest(process_eeg_to_grandaverage, test_files, data_dir, run_ica_flag)
