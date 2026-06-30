@@ -59,7 +59,7 @@ function get_project_root()
 end
 
 
-function build_documentation(project_root::String)
+function build_documentation(project_root::String; build_pdf::Bool = false)
 
     try
         # First generate demo documentation
@@ -71,7 +71,14 @@ function build_documentation(project_root::String)
 
         # Build documentation
         build_jl_path = joinpath(project_root, "docs", "make.jl")
-        print_colored(GREEN, " Building documentation with Documenter.jl...")
+        
+        if build_pdf
+            print_colored(GREEN, " Building PDF book with DocumenterTypst...")
+            ENV["BUILD_PDF"] = "true"
+        else
+            print_colored(GREEN, " Building documentation with Documenter.jl...")
+            ENV["BUILD_PDF"] = "false"
+        end
 
         # Suppress warnings during build
         old_logger = global_logger()
@@ -83,6 +90,9 @@ function build_documentation(project_root::String)
         finally
             # Restore original logger
             global_logger(old_logger)
+            if build_pdf
+                delete!(ENV, "BUILD_PDF")
+            end
         end
         print_colored(GREEN, " Documentation built successfully")
 
@@ -270,7 +280,7 @@ function clean_docs(project_root::String)
     end
 
     # Clean other common build artifacts
-    artifacts = ["site", ".documenter"]
+    artifacts = ["site", ".documenter", "build_pdf", "debug_typst", "src_pdf"]
     for artifact in artifacts
         artifact_path = joinpath(project_root, "docs", artifact)
         if isdir(artifact_path) || isfile(artifact_path)
@@ -494,43 +504,50 @@ function show_interactive_menu(project_root::String)
 
     while true
         println("\nChoose an option:")
-        println("1. Build documentation")
-        println("2. Check documentation coverage")
-        println("3. Format source files")
-        println("4. Format and check syntax")
-        println("5. Clean build artifacts")
-        println("6. View documentation (via LiveServer)")
-        println("7. Generate demo screenshots")
-        println("8. Run complete workflow")
-        println("9. Exit")
+        println("1. Build documentation (VitePress)")
+        println("2. Build PDF book (Typst)")
+        println("3. Check documentation coverage")
+        println("4. Format source files")
+        println("5. Format and check syntax")
+        println("6. Clean build artifacts")
+        println("7. View documentation (via LiveServer)")
+        println("8. Generate demo screenshots")
+        println("9. Run complete workflow")
+        println("10. Exit")
 
-        print("\nEnter your choice (1-9): ")
+        print("\nEnter your choice (1-10): ")
         choice = readline()
 
         if choice == "1"
-            build_documentation(project_root)
+            build_documentation(project_root, build_pdf=false)
             if isfile(joinpath(project_root, "docs", "build", "index.html"))
                 print_colored(GREEN, " Documentation built successfully!")
                 print_colored(CYAN, "Open docs/build/index.html in your browser to view the documentation")
             end
         elseif choice == "2"
-            check_doc_coverage(project_root)
+            build_documentation(project_root, build_pdf=true)
+            if isfile(joinpath(project_root, "docs", "build_pdf", "EegFun.pdf"))
+                print_colored(GREEN, " PDF built successfully!")
+                print_colored(CYAN, "Your PDF is located at docs/build_pdf/EegFun.pdf")
+            end
         elseif choice == "3"
-            format_source_files(project_root)
+            check_doc_coverage(project_root)
         elseif choice == "4"
-            format_and_check(project_root)
+            format_source_files(project_root)
         elseif choice == "5"
-            clean_docs(project_root)
+            format_and_check(project_root)
         elseif choice == "6"
-            view_documentation(project_root)
+            clean_docs(project_root)
         elseif choice == "7"
-            generate_demo_screenshots(project_root)
+            view_documentation(project_root)
         elseif choice == "8"
-            run_all_docs(project_root)
+            generate_demo_screenshots(project_root)
         elseif choice == "9"
+            run_all_docs(project_root)
+        elseif choice == "10"
             break
         else
-            print_colored(RED, "Invalid choice. Please enter 1-9.")
+            print_colored(RED, "Invalid choice. Please enter 1-10.")
         end
     end
 end

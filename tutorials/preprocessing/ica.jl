@@ -7,8 +7,7 @@
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
-# dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"));
-dat = EegFun.read_raw_data("/run/media/ian/SSD2/Projects/flankerConflict/ControlAttentionTask/EEG/BDFs/Flank_C_3.bdf");
+dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"));
 
 # read and prepare layout file
 layout = EegFun.read_layout(EegFun.example_path("layouts/biosemi/biosemi72.csv"));
@@ -20,7 +19,7 @@ dat = EegFun.create_eegfun_data(dat, layout);
 # Some minimal preprocessing (average reference, highpass filter, and detect extreme values)
 EegFun.rereference!(dat, :avg)
 EegFun.highpass_filter!(dat, 1)
-EegFun.is_extreme_value!(dat, 200);
+EegFun.is_extreme_value!(dat, 250);
 
 # Calculate EOG signals
 EegFun.channel_difference!(
@@ -39,11 +38,7 @@ EegFun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 EegFun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
 # ICA on continuous data excluding extreme samples
-@time ica_result_infomax = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_200))
-
-# Databrowser (here we can turn on/off component removal's)
-EegFun.plot_databrowser(dat)
-
+ica_result_infomax = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250))
 
 # Databrowser (here we can turn on/off component removal's)
 EegFun.plot_databrowser(dat, ica_result_infomax)

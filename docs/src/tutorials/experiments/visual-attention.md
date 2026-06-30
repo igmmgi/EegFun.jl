@@ -817,8 +817,8 @@ EegFun.plot_topography_stats(result_perm, interval_selection = EegFun.times(0.05
 
 ## References
 
-- Mangun, G. R., & Hillyard, S. A. (1991). Modulations of sensory-evoked brain potentials indicate changes in perceptual processing during visual-spatial priming. *Journal of Experimental Psychology: Human Perception and Performance*, *17*(4), 1057–1074. [doi:10.1037/0096-1523.17.4.1057](https://doi.org/10.1037/0096-1523.17.4.1057)
-- Posner, M. I. (1980). Orienting of attention. *Quarterly Journal of Experimental Psychology*, *32*(1), 3–25. [doi:10.1080/00335558008248231](https://doi.org/10.1080/00335558008248231)
+- Mangun, G. R., & Hillyard, S. A. (1991). Modulations of sensory-evoked brain potentials indicate changes in perceptual processing during visual-spatial priming. *Journal of Experimental Psychology: Human Perception and Performance*, *17* (4), 1057–1074. [doi:10.1037/0096-1523.17.4.1057](https://doi.org/10.1037/0096-1523.17.4.1057)
+- Posner, M. I. (1980). Orienting of attention. *Quarterly Journal of Experimental Psychology*, *32* (1), 3–25. [doi:10.1080/00335558008248231](https://doi.org/10.1080/00335558008248231)
 
 ---
 

@@ -35,11 +35,12 @@ jobs:
       - name: Install binary dependencies
         run: sudo apt-get update && sudo apt-get install -y xorg-dev mesa-utils xvfb libgl1 freeglut3-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev
       
-      - name: Build and deploy docs
+      - name: Build PDF Docs
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GKSwstype: nul
           CI: true
+          BUILD_PDF: "true"
         run: >
           cd docs;
           DISPLAY=:0 xvfb-run -s '-screen 0 1024x768x24'
@@ -47,4 +48,21 @@ jobs:
             using Pkg;
             Pkg.develop(PackageSpec(path=pwd() |> dirname));
             Pkg.instantiate();
+            include("make.jl")'
+
+      - name: Move PDF to Public Assets
+        run: |
+          mkdir -p docs/src/public
+          cp docs/build_pdf/EegFun.pdf docs/src/public/EegFun.pdf || echo "PDF not found"
+
+      - name: Build and deploy docs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GKSwstype: nul
+          CI: true
+          BUILD_PDF: "false"
+        run: >
+          cd docs;
+          DISPLAY=:0 xvfb-run -s '-screen 0 1024x768x24'
+          julia --color=yes --project=. -e '
             include("make.jl")'

@@ -93,6 +93,8 @@ EegFun.plot_topography(erps, interval_selection = (0.1, 0.2)) # between 100 and 
 [Getting Started Tutorial](tutorials/getting-started.md)
 :::
 
+[📖 Download the EegFun PDF Book](/EegFun.pdf)
+
 | Section | Description |
 |---------|-------------|
 | [Tutorials](tutorials/getting-started.md) | Step-by-step guides |

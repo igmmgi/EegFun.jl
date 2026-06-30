@@ -168,18 +168,80 @@ pages = [
 ]
 
 
-makedocs(;
-    modules = [EegFun],
-    authors = "igmmgi",
-    sitename = "EegFun",
-    repo = "https://github.com/igmmgi/EegFun.jl",
-    format = DocumenterVitepress.MarkdownVitepress(repo = "https://github.com/igmmgi/EegFun.jl", devbranch = "main"),
-    warnonly = [:linkcheck, :cross_references, :missing_docs],
-    draft = false,
-    source = "src",
-    build = "build",
-    pages = pages,
-)
+# Check if we are building the PDF or the VitePress site
+build_pdf = get(ENV, "BUILD_PDF", "false") == "true"
+
+if build_pdf
+    using DocumenterTypst
+    build_format = DocumenterTypst.Typst()
+    build_dir = "build_pdf"
+    
+    # Create a temporary source directory for the PDF build
+    src_dir = "src_pdf"
+    ispath(joinpath(@__DIR__, src_dir)) && rm(joinpath(@__DIR__, src_dir), force=true, recursive=true)
+    cp(joinpath(@__DIR__, "src"), joinpath(@__DIR__, src_dir))
+    
+    # Copy public assets into assets/public so Documenter natively copies them to the build directory
+    mkpath(joinpath(@__DIR__, src_dir, "assets", "public"))
+    for item in readdir(joinpath(@__DIR__, "src", "public"))
+        cp(joinpath(@__DIR__, "src", "public", item), joinpath(@__DIR__, src_dir, "assets", "public", item), force=true)
+    end
+    
+    # Fix absolute image paths for Typst
+    for (root, dirs, files) in walkdir(joinpath(@__DIR__, src_dir))
+        for file in files
+            if endswith(file, ".md")
+                path = joinpath(root, file)
+                content = read(path, String)
+                # Prevent Typst syntax error "expected function, found content" for *17*(4) by stripping italics
+                content = replace(content, r"\*([0-9]+)\*\s*\(" => s"\1(")
+                # Remove VitePress custom container markers like `::: details Show Code` or `:::`
+                content = replace(content, r"^:::\s*.*?\n"m => "")
+                # Remove https images because Typst cannot download them without network flags
+                content = replace(content, r"!\[([^\]]*)\]\(https?://[^\)]+\)" => "")
+                # Replace ![alt](/path) with ![alt](/assets/public/path)
+                content = replace(content, r"!\[([^\]]*)\]\((/[^\)]+)\)" => s"![\1](/assets/public\2)")
+                write(path, content)
+            end
+        end
+    end
+    
+    # Filter out duplicate pages to prevent Typst label errors
+    # Explanations contains duplicate files already in Tutorials
+    filter!(p -> p[1] != "Explanations", pages)
+    
+    # Remove Layouts from Tutorials because it is hundreds of images
+    for section in pages
+        if section[1] == "Tutorials"
+            filter!(p -> p[1] != "Layouts", section[2])
+        end
+    end
+else
+    build_format = DocumenterVitepress.MarkdownVitepress(repo = "https://github.com/igmmgi/EegFun.jl", devbranch = "main")
+    build_dir = "build"
+    src_dir = "src"
+end
+
+try
+    makedocs(;
+        modules = [EegFun],
+        authors = "igmmgi",
+        sitename = "EegFun",
+        repo = "https://github.com/igmmgi/EegFun.jl",
+        format = build_format,
+        warnonly = [:linkcheck, :cross_references, :missing_docs],
+        draft = false,
+        source = src_dir,
+        build = build_dir,
+        pages = pages,
+    )
+finally
+    if build_pdf && ispath(joinpath(@__DIR__, "src_pdf"))
+        rm(joinpath(@__DIR__, "src_pdf"), force=true, recursive=true)
+    end
+end
 
 # Deploy built VitePress site (DocumenterVitepress.deploydocs required since v0.2 for correct base paths)
-DocumenterVitepress.deploydocs(repo = "github.com/igmmgi/EegFun.jl", devbranch = "main", push_preview = true)
+if !build_pdf
+    DocumenterVitepress.deploydocs(repo = "github.com/igmmgi/EegFun.jl", devbranch = "main", push_preview = true)
+end

@@ -181,8 +181,8 @@ function _plot_power_spectrum_data!(
     controls_area = fig[1, 2] = GridLayout()
 
     # Set the column/row proportions 
-    colsize!(fig.layout, 1, Relative(0.9))  # Main plot column
-    colsize!(fig.layout, 2, Relative(0.1))  # Controls column
+    colsize!(fig.layout, 1, Relative(0.85))  # Main plot column
+    colsize!(fig.layout, 2, Relative(0.15))  # Controls column
     rowsize!(fig.layout, 1, Relative(0.7))  # Main content row
 
     x_scale_obs = Observable(x_scale)

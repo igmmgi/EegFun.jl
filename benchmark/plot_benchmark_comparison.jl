@@ -11,10 +11,12 @@ function plot_comparison()
         error("Data directory not found: $data_dir")
     end
 
-    # Define paths based on data_dir
-    python_file = joinpath(data_dir, "benchmark_python_data.csv")
-    matlab_file = joinpath(data_dir, "benchmark_matlab_data.csv")
-    julia_file = joinpath(data_dir, "benchmark_julia_data.csv")
+    results_dir = joinpath(data_dir, "benchmarks")
+
+    # Define paths based on results_dir
+    python_file = joinpath(results_dir, "python_data.csv")
+    matlab_file = joinpath(results_dir, "matlab_data.csv")
+    julia_file = joinpath(results_dir, "julia_data.csv")
 
     # Load data (skipping the header row)
     python_data = isfile(python_file) ? readdlm(python_file, ',', skipstart = 1) : missing
@@ -22,9 +24,9 @@ function plot_comparison()
     julia_data = isfile(julia_file) ? readdlm(julia_file, ',', skipstart = 1) : missing
 
     # Load timings if they exist
-    time_file_j = joinpath(data_dir, "benchmark_julia_time.txt")
-    time_file_p = joinpath(data_dir, "benchmark_python_time.txt")
-    time_file_m = joinpath(data_dir, "benchmark_matlab_time.txt")
+    time_file_j = joinpath(results_dir, "julia_time.txt")
+    time_file_p = joinpath(results_dir, "python_time.txt")
+    time_file_m = joinpath(results_dir, "matlab_time.txt")
 
     julia_time = isfile(time_file_j) ? parse(Float64, read(time_file_j, String)) : NaN
     python_time = isfile(time_file_p) ? parse(Float64, read(time_file_p, String)) : NaN
@@ -122,14 +124,18 @@ function plot_comparison()
     linkaxes!(ax2, ax3, ax4)
 
     for ax in all_axes
-        axislegend(ax, position = :rt)
+        try
+            axislegend(ax, position = :rt)
+        catch
+            # Ignore if there are no plots with labels in this axis
+        end
     end
 
     # Save to PDF
-    out_file1 = joinpath(data_dir, "cross_pipeline_comparison.pdf")
+    out_file1 = joinpath(results_dir, "cross_pipeline_comparison.pdf")
     save(out_file1, fig_combined)
 
-    out_file2 = joinpath(data_dir, "individual_pipelines.pdf")
+    out_file2 = joinpath(results_dir, "individual_pipelines.pdf")
     save(out_file2, fig_indiv)
     println("Successfully generated plots: \n  - ", out_file1, "\n  - ", out_file2)
 end

@@ -22,6 +22,11 @@ function eeglab_benchmark(data_dir, n_files_to_process, run_ica_flag)
     fprintf('Benchmarking EEGLAB pipeline...\n');
     t_start = tic;
 
+    % Add EEGLAB to path if not already present
+    if ~exist('eeglab', 'file')
+        addpath('/home/ian/Documents/MATLAB/eeglab');
+    end
+
     % Start EEGLAB
     eeglab nogui;
     
@@ -34,6 +39,11 @@ function eeglab_benchmark(data_dir, n_files_to_process, run_ica_flag)
     file_list = dir(fullfile(data_dir, '*.bdf'));
     test_files = fullfile({file_list.folder}, {file_list.name});
     test_files = sort(test_files);
+    
+    results_dir = fullfile(data_dir, 'benchmarks');
+    if ~exist(results_dir, 'dir')
+        mkdir(results_dir);
+    end
     
     if n_files_to_process > 0
         test_files = test_files(1:min(length(test_files), n_files_to_process));
@@ -78,7 +88,7 @@ function eeglab_benchmark(data_dir, n_files_to_process, run_ica_flag)
             if i == 1
                 pop_topoplot(EEG_ica, 0, 1:30, 'EEGLAB ICA Components', [5 6]);
                 f_ica = gcf;
-                exportgraphics(f_ica, fullfile(data_dir, 'benchmark_matlab_ica.pdf'), 'ContentType', 'vector');
+                exportgraphics(f_ica, fullfile(results_dir, 'matlab_ica.pdf'), 'ContentType', 'vector');
                 close(f_ica);
             end
             
@@ -137,7 +147,7 @@ function eeglab_benchmark(data_dir, n_files_to_process, run_ica_flag)
 
     times_sec = EEG.times(:) / 1000;
     export_table = table(times_sec, avg_channel_erp_valid(:), avg_channel_erp_invalid(:), 'VariableNames', {'time', 'valid', 'invalid'});
-    writetable(export_table, fullfile(data_dir, 'benchmark_matlab_data.csv'));
+    writetable(export_table, fullfile(results_dir, 'matlab_data.csv'));
 
     f = figure('Visible', 'off');
     plot(times_sec, avg_channel_erp_valid, 'LineWidth', 2, 'Color', 'b');
@@ -153,12 +163,12 @@ function eeglab_benchmark(data_dir, n_files_to_process, run_ica_flag)
     legend('Valid', 'Invalid', 'Location', 'northeast');
     grid off;
 
-    exportgraphics(f, fullfile(data_dir, 'benchmark_matlab_erp.pdf'), 'ContentType', 'vector');
+    exportgraphics(f, fullfile(results_dir, 'matlab_erp.pdf'), 'ContentType', 'vector');
     
     t_elapsed = toc(t_start);
     
     % Save execution time
-    fileID = fopen(fullfile(data_dir, 'benchmark_matlab_time.txt'), 'w');
+    fileID = fopen(fullfile(results_dir, 'matlab_time.txt'), 'w');
     if fileID ~= -1
         fprintf(fileID, '%f', t_elapsed);
         fclose(fileID);

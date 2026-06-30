@@ -73,9 +73,9 @@ used by `run_ica` in EegFun — to find the unmixing matrix W directly.
 - [`signal_example_ica_sphering`](@ref) — Part 4: Sphering (Whitening): morphing data into perfect spheres
 - [`signal_example_ica_optimization`](@ref) — Part 5: Inside the black box: optimization landscape and gradient ascent
 - Bell, A. J., & Sejnowski, T. J. (1995). An information-maximization approach
-  to blind separation. *Neural Computation*, *7*(6), 1129–1159.
+  to blind separation. *Neural Computation*, 7(6), 1129–1159.
 - Hyvärinen, A., & Oja, E. (2000). Independent component analysis: algorithms and
-  applications. *Neural Networks*, *13*(4-5), 411–430.
+  applications. *Neural Networks*, 13(4-5), 411–430.
 
 # Examples
 ```julia

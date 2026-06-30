@@ -19,6 +19,9 @@ def python_mne_benchmark(raw_files, data_dir, run_ica):
     }
     event_dict = {'valid': 101, 'invalid': 102}
     
+    results_dir = os.path.join(data_dir, "benchmarks")
+    os.makedirs(results_dir, exist_ok=True)
+    
     for i, file in enumerate(raw_files):
 
         # 1. Read data and layout file
@@ -53,7 +56,7 @@ def python_mne_benchmark(raw_files, data_dir, run_ica):
             # Sanity check: Plot the first 30 ICA components for the first subject
             if i == 0:
                 fig_ica = ica.plot_components(picks=range(30), show=False)
-                fig_ica.savefig(os.path.join(data_dir, "benchmark_python_ica.pdf"))
+                fig_ica.savefig(os.path.join(results_dir, "python_ica.pdf"))
                 plt.close('all')
                  
             # 4. Artifact Removal
@@ -103,7 +106,7 @@ def python_mne_benchmark(raw_files, data_dir, run_ica):
     times = grand_averages['valid'].times # Keep in seconds
     
     export_data = np.column_stack((times, valid_data, invalid_data))
-    np.savetxt(os.path.join(data_dir, "benchmark_python_data.csv"), export_data, delimiter=",", header="time,valid,invalid", comments="")
+    np.savetxt(os.path.join(results_dir, "python_data.csv"), export_data, delimiter=",", header="time,valid,invalid", comments="")
 
     
     ax.plot(times, valid_data, label='Valid', color='b', linewidth=2)
@@ -117,7 +120,7 @@ def python_mne_benchmark(raw_files, data_dir, run_ica):
     ax.legend(loc='upper right')
     ax.grid(False)
     
-    fig.savefig(os.path.join(data_dir, "benchmark_python_erp.pdf"))
+    fig.savefig(os.path.join(results_dir, "python_erp.pdf"))
     plt.close(fig)
     
     return grand_averages
@@ -146,7 +149,8 @@ if __name__ == "__main__":
     t1 = time.time()
     
     elapsed = t1 - t0
-    with open(os.path.join(data_dir, "benchmark_python_time.txt"), "w") as f:
+    results_dir = os.path.join(data_dir, "benchmarks")
+    with open(os.path.join(results_dir, "python_time.txt"), "w") as f:
         f.write(str(elapsed))
         
     print(f"MNE-Python execution time: {elapsed:.2f} seconds")

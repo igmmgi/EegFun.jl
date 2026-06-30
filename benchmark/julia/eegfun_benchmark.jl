@@ -51,7 +51,7 @@ function process_eeg_to_grandaverage(raw_files::Vector{String}, data_dir::String
                     point_plot = false,
                 )
                 resize!(fig_ica.fig, 1200, 1000)
-                save(joinpath(data_dir, "benchmark_julia_ica.pdf"), fig_ica.fig)
+                save(joinpath(results_dir, "julia_ica.pdf"), fig_ica.fig)
             end
 
             # 4. Remove ICA component
@@ -83,7 +83,7 @@ function process_eeg_to_grandaverage(raw_files::Vector{String}, data_dir::String
         legend_position = :rt,
         legend_labels = ["Valid", "Invalid"],
     )
-    save(joinpath(data_dir, "benchmark_julia_erp.pdf"), fig_res.fig)
+    save(joinpath(results_dir, "julia_erp.pdf"), fig_res.fig)
 
     # 9. Export data to CSV
     valid_po = EegFun.subset(grand_avg[1]; channel_selection = EegFun.channels([:PO7, :PO8]))
@@ -91,7 +91,7 @@ function process_eeg_to_grandaverage(raw_files::Vector{String}, data_dir::String
     valid_data = vec(mean(Matrix(valid_po.data[!, [:PO7, :PO8]]), dims = 2))
     invalid_data = vec(mean(Matrix(invalid_po.data[!, [:PO7, :PO8]]), dims = 2))
 
-    open(joinpath(data_dir, "benchmark_julia_data.csv"), "w") do io
+    open(joinpath(results_dir, "julia_data.csv"), "w") do io
         write(io, "time,valid,invalid\n")
         writedlm(io, [valid_po.data.time valid_data invalid_data], ',')
     end
@@ -116,6 +116,9 @@ end
 
 run_ica_flag = length(ARGS) >= 3 ? parse(Bool, lowercase(ARGS[3])) : true
 
+results_dir = joinpath(data_dir, "benchmarks")
+mkpath(results_dir)
+
 # println("Compiling Julia pipeline (first run)...")
 Base.invokelatest(process_eeg_to_grandaverage, [test_files[1]], data_dir, run_ica_flag) # Warm-up to trigger JIT compilation
 
@@ -123,7 +126,7 @@ println("Benchmarking...")
 val, t_elapsed = @timed Base.invokelatest(process_eeg_to_grandaverage, test_files, data_dir, run_ica_flag)
 
 # Save execution time
-open(joinpath(data_dir, "benchmark_julia_time.txt"), "w") do io
+open(joinpath(results_dir, "julia_time.txt"), "w") do io
     write(io, string(t_elapsed))
 end
 println("Julia execution time: ", round(t_elapsed, digits = 2), " seconds")
