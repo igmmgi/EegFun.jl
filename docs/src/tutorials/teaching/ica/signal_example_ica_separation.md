@@ -1,4 +1,4 @@
-# Signal Example — ICA 2: Mixing & Unmixing
+# Signal Example — ICA 3: Mixing & Unmixing
 
 Interactive demonstration of **signal mixing and ICA unmixing**.
 
@@ -69,15 +69,15 @@ ICA relies on one key insight: **brain signals and eye blinks are statistically 
 The Central Limit Theorem says that mixing independent, non-Gaussian sources always produces something *more* Gaussian (more random-looking) than either source alone. ICA exploits this in reverse: it searches for the unmixing matrix that makes the outputs *as non-Gaussian as possible* — which turns out to be equivalent to making them statistically independent.
 
 > [!TIP]
-> This demo shows that unmixing is just **Matrix Inversion** — see also [Part 3: ICA with Scatter Geometry](signal_example_ica_geometry.md).
+> This demo shows that unmixing is just **Matrix Inversion** — see also [Part 4: ICA with Scatter Geometry](signal_example_ica_geometry.md).
 
 ## See Also
 
-- [Part 0: Matrix Math Basics](signal_example_ica_0.md) — Fundamental math prerequisites
-- [Part 1: What Is a Mixture?](signal_example_ica_mixture.md) — Start here if you've never seen ICA
-- [Part 3: 3 Sources & Scatter Geometry](signal_example_ica_geometry.md) — Advanced: rotation geometry, scatter plots, kurtosis
-- [Part 4: Sphering (Whitening)](signal_example_ica_sphering.md) — Why ICA optimization is just finding an angle
-- [Part 5: Inside the Black Box](signal_example_ica_optimization.md) — How the algorithm actually finds the sources
+- [Part 1: Matrix Math Basics](signal_example_ica_math.md) — Fundamental math prerequisites
+- [Part 2: What Is a Mixture?](signal_example_ica_mixture.md) — Start here if you've never seen ICA
+- [Part 4: 3 Sources & Scatter Geometry](signal_example_ica_geometry.md) — Advanced: rotation geometry, scatter plots, kurtosis
+- [Part 5: Sphering (Whitening)](signal_example_ica_sphering.md) — Why ICA optimization is just finding an angle
+- [Part 6: Inside the Black Box](signal_example_ica_optimization.md) — How the algorithm actually finds the sources
 - [ICA Demo](../../preprocessing/ica.md) — Full ICA workflow on real EEG data
 - [Signal Example — Composition](../signal_processing/signal_example_composition.md) — Building complex waveforms from sine waves
 - [EEGLAB: Running ICA](https://eeglab.org/tutorials/06_RejectArtifacts/RunICA.html) — Practical guide to ICA in EEGLAB

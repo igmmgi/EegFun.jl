@@ -1,9 +1,9 @@
-# Signal Example — ICA 5: Inside the Black Box
+# Signal Example — ICA 6: Inside the Black Box
 
 This interactive visualization demystifies the ICA algorithm by showing how it physically searches for independent sources by treating it as an optimization ("hill climbing") problem.
 
 > [!TIP]
-> This is **Part 5** of the ICA series. Before attempting this, ensure you understand why the search space is purely rotational by looking at **Part 4: Sphering**.
+> This is Part 6 of the ICA series. Before attempting this, ensure you understand why the search space is purely rotational by looking at **Part 5: Sphering**.
 
 ## What is the Black Box doing?
 

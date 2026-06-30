@@ -1,9 +1,9 @@
-# Signal Example — ICA 0: Matrix Math (U = WX)
+# Signal Example — ICA 1: Matrix Math (U = WX)
 
 Before introducing the geometric complexities of the Cocktail Party problem or trying to optimize statistical functions, we must define exactly what an "Unmixing Matrix" technically is.
 
 > [!TIP]
-> This is **Part 0** of the ICA series. It provides the most fundamental mathematical prerequisite for understanding component analysis.
+> This is Part 1 of the ICA series. It provides the most fundamental mathematical prerequisite for understanding component analysis.
 
 ## The Mechanism of $U = WX$
 
@@ -45,5 +45,5 @@ You can click and drag the numbers inside the $3 \times 3$ $\mathbf{W}$ matrix t
 
 ```julia
 using EegFun
-EegFun.signal_example_ica_0()
+EegFun.signal_example_ica_math()
 ```

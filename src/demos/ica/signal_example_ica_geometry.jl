@@ -67,11 +67,11 @@ used by `run_ica` in EegFun — to find the unmixing matrix W directly.
    finds a general unmixing matrix, not just a rotation.
 
 ## See Also
-- [`signal_example_ica_mixture`](@ref) — Part 1: What Is a Mixture?
-- [`signal_example_ica_separation`](@ref) — Part 2: Mixing & Unmixing
+- [`signal_example_ica_mixture`](@ref) — Part 2: What Is a Mixture?
+- [`signal_example_ica_separation`](@ref) — Part 3: Mixing & Unmixing
 - [`signal_example_ica_clt`](@ref) — background: why mixtures become Gaussian
-- [`signal_example_ica_sphering`](@ref) — Part 4: Sphering (Whitening): morphing data into perfect spheres
-- [`signal_example_ica_optimization`](@ref) — Part 5: Inside the black box: optimization landscape and gradient ascent
+- [`signal_example_ica_sphering`](@ref) — Part 5: Sphering (Whitening): morphing data into perfect spheres
+- [`signal_example_ica_optimization`](@ref) — Part 6: Inside the black box: optimization landscape and gradient ascent
 - Bell, A. J., & Sejnowski, T. J. (1995). An information-maximization approach
   to blind separation. *Neural Computation*, 7(6), 1129–1159.
 - Hyvärinen, A., & Oja, E. (2000). Independent component analysis: algorithms and

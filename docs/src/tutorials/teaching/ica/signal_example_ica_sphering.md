@@ -1,9 +1,9 @@
-# Signal Example — ICA 4: Sphering (Whitening)
+# Signal Example — ICA 5: Sphering (Whitening)
 
 This interactive visualization reveals the hidden mathematical shortcut that makes ICA possible: **Sphering**. 
 
 > [!TIP]
-> This is **Part 4** of the ICA series. It bridges the gap between the correlated mixtures of Part 3 and the optimization search space of Part 5.
+> This is Part 5 of the ICA series. It bridges the gap between the correlated mixtures of Part 4 and the optimization search space of Part 6.
 
 ## The Problem
 If you look at raw EEG mixtures, they form skewed, stretched, off-center blobs. If an algorithm blindly tried to untangle that, it would have to calculate huge mathematical matrices involving stretching, skewing, shifting, and rotating all simultaneously. 
@@ -22,7 +22,7 @@ This demo lets you physically drag the data through these three exact mathematic
 ## Why Do We Do This?
 Because once the data is transformed into a perfect sphere, the algorithm's job is over functionally: the only property left to search is **Rotation**. 
 
-By dragging the "Morph" slider all the way to 3.0 (Sphered), you are setting up the perfect circular search space. This directly leads into [Part 5: Inside the Black Box](signal_example_ica_optimization.md), where we will simply rotate a line through this sphered data to locate the independent components!
+By dragging the "Morph" slider all the way to 3.0 (Sphered), you are setting up the perfect circular search space. This directly leads into [Part 6: Inside the Black Box](signal_example_ica_optimization.md), where we will simply rotate a line through this sphered data to locate the independent components!
 
 ## Code
 
@@ -32,6 +32,6 @@ EegFun.signal_example_ica_sphering()
 ```
 
 ## See Also
-- [Part 3: 3 Sources & Geometry](signal_example_ica_geometry.md) — Scatter plots and correlation blobs
+- [Part 4: 3 Sources & Geometry](signal_example_ica_geometry.md) — Scatter plots and correlation blobs
 - [ICA: Central Limit Theorem](signal_example_ica_clt.md) — Why mixed blobs become Gaussian
-- [Part 5: Inside the Black Box](signal_example_ica_optimization.md) — Gradient ascent rotation
+- [Part 6: Inside the Black Box](signal_example_ica_optimization.md) — Gradient ascent rotation

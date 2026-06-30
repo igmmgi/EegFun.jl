@@ -142,7 +142,7 @@ pages = [
             "Time-Frequency" => "tutorials/teaching/signal_processing/signal_example_tf.md",
         ],
         "ICA" => [
-            "Introduction" => "tutorials/teaching/ica/signal_example_ica_0.md",
+            "Introduction" => "tutorials/teaching/ica/signal_example_ica_math.md",
             "Mixture" => "tutorials/teaching/ica/signal_example_ica_mixture.md",
             "Separation" => "tutorials/teaching/ica/signal_example_ica_separation.md",
             "Geometry" => "tutorials/teaching/ica/signal_example_ica_geometry.md",

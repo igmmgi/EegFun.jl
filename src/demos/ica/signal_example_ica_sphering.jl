@@ -13,8 +13,8 @@ a perfectly round, uncorrelated circle proves *why* ICA can use simple rotationa
 algorithms to find the sources.
 
 ## See Also
-- [`signal_example_ica_geometry`](@ref) — Part 3: 3 Sources & Scatter Geometry
-- [`signal_example_ica_optimization`](@ref) — Part 5: Inside the Black Box (Optimization)
+- [`signal_example_ica_geometry`](@ref) — Part 4: 3 Sources & Scatter Geometry
+- [`signal_example_ica_optimization`](@ref) — Part 6: Inside the Black Box (Optimization)
 
 # Examples
 ```julia

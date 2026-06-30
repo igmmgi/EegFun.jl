@@ -39,19 +39,15 @@ jobs:
       - name: Install binary dependencies
         run: sudo apt-get update && sudo apt-get install -y xorg-dev mesa-utils xvfb libgl1 freeglut3-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev
 
-      - name: Build package
-        run: |
-          DISPLAY=:0 xvfb-run -s '-screen 0 1024x768x24' julia --project=. -e '
-            using Pkg
-            Pkg.instantiate()
-            Pkg.build()
-            Pkg.precompile()'
-
-      - name: Run tests
-        run: |
-          DISPLAY=:0 xvfb-run -s '-screen 0 1024x768x24' julia --project=. -e '
-            using Pkg
-            Pkg.test(coverage=true)'
+      - uses: julia-actions/julia-buildpkg@v1
+        env:
+          DISPLAY: ':0'
+      
+      - uses: julia-actions/julia-runtest@v1
+        env:
+          DISPLAY: ':0'
+        with:
+          prefix: xvfb-run -s '-screen 0 1024x768x24'
 
       - uses: julia-actions/julia-processcoverage@v1
       

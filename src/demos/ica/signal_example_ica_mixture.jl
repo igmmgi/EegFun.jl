@@ -1,7 +1,7 @@
 """
     signal_example_ica_mixture()
 
-Interactive Demo — Part 1: What is a Mixture?
+Interactive Demo — Part 2: What is a Mixture?
 
 A simple visualization proving why component analysis is necessary. It shows
 that a single EEG electrode physically records a summated mixture of multiple
