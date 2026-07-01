@@ -14,13 +14,18 @@ Internal function that applies baseline correction to specified channels in a Da
 """
 function _apply_baseline!(dat::DataFrame, channels::Vector{Symbol}, baseline_interval::Tuple{Int,Int})
     # Compute mean baseline interval and apply to each channel individually to avoid allocating a DataFrame
+    start_idx, end_idx = baseline_interval
     for channel in channels
         col = dat[!, channel]
-        mean_val = mean(view(col, baseline_interval[1]:baseline_interval[2]))
         if col isa Vector{Float64}
-            col .-= mean_val
+            col_f64 = col::Vector{Float64}
+            mean_val = mean(view(col_f64, start_idx:end_idx))
+            @inbounds for i in eachindex(col_f64)
+                col_f64[i] -= mean_val
+            end
         else
-            dat[!, channel] .-= mean_val
+            mean_val = mean(view(col, start_idx:end_idx))
+            dat[!, channel] = col .- mean_val
         end
     end
 end
@@ -31,7 +36,9 @@ end
 Internal function that applies baseline correction to each DataFrame in a vector using broadcasting.
 """
 function _apply_baseline!(dat::Vector{DataFrame}, channels::Vector{Symbol}, baseline_interval::Tuple{Int,Int})
-    _apply_baseline!.(dat, Ref(channels), Ref(baseline_interval))
+    Threads.@threads for df in dat
+        _apply_baseline!(df, channels, baseline_interval)
+    end
 end
 
 """

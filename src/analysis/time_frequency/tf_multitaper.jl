@@ -21,10 +21,10 @@ Uses multiple orthogonal tapers (Slepian sequences) to reduce variance in spectr
 - `channel_selection::Function=channels()`: Channel selection predicate. See `channels()` for options.
   - Example: `channel_selection=channels(:Cz)` for single channel
   - Example: `channel_selection=channels([:Cz, :Pz])` for multiple channels
-- `interval_selection::Interval=samples()`: Sample selection predicate. See `samples()` for options.
-  - Example: `sample_selection=samples((-0.5, 2.0))` for time interval from -0.5 to 2.0 seconds
-  - Example: `sample_selection=samples()` for all time points (default)
-  - Default: all samples
+- `interval_selection::Interval=times()`: Interval selection predicate. See `times()` for options.
+  - Example: `interval_selection=times((-0.5, 2.0))` for time interval from -0.5 to 2.0 seconds
+  - Example: `interval_selection=times()` for all time points (default)
+  - Default: all time points
 - `frequencies::Union{AbstractRange,AbstractVector{<:Real}}=range(1, 40, length=40)`: Frequency specification.
   - Can be any range or vector of frequencies in Hz
   - For linear spacing: `frequencies=1:1:40` or `frequencies=range(1, 40, length=40)`
@@ -78,6 +78,7 @@ function tf_multitaper(
     frequency_smoothing::Union{Nothing,Real} = nothing,
     pad::Union{Nothing,Symbol} = nothing,
     return_trials::Bool = false,
+    return_phase::Bool = false,
     filter_edges::Bool = true,
 )
     # Validate padding parameter
@@ -173,12 +174,11 @@ function tf_multitaper(
     tapered_wavelet_ffts = Vector{Vector{Vector{ComplexF64}}}(undef, num_frex)  # [frequency][taper] = FFT of tapered wavelet
 
     # Pre-compute FFT plans for padded data (batch process all trials)
-    template_padded_batch = zeros(ComplexF64, n_samples_padded, n_trials)
-    fft_plan_padded_batch = plan_fft(template_padded_batch, 1, flags = FFTW.MEASURE)
+    template_padded_batch = zeros(ComplexF64, n_trials, n_samples_padded)
+    fft_plan_padded_batch = plan_fft!(template_padded_batch, 2, flags = FFTW.MEASURE)
 
-    # Pre-compute IFFT plan (per trial)
-    template_complex = zeros(ComplexF64, n_samples_padded)
-    ifft_plan_padded = plan_ifft(template_complex, flags = FFTW.MEASURE)
+    # Pre-compute IFFT plan (batch process all trials)
+    ifft_plan_padded_batch = plan_ifft!(template_padded_batch, 2, flags = FFTW.MEASURE)
 
     for (fi, freq) in enumerate(freqs)
         n_window_samples = n_window_samples_per_freq[fi]
@@ -246,13 +246,6 @@ function tf_multitaper(
         end
     end
 
-    # Pre-allocate reusable buffers for frequency-domain convolution
-    data_padded = Matrix{Float64}(undef, n_samples_padded, n_trials)
-    data_fft = Matrix{ComplexF64}(undef, n_samples_padded, n_trials)
-    conv_result = Matrix{ComplexF64}(undef, n_samples_padded, n_trials)
-    ifft_temp = Vector{ComplexF64}(undef, n_samples_padded)
-    trial_signals_matrix = Matrix{Float64}(undef, n_samples_per_epoch, n_trials)
-
     # Initialize output structures - allocate appropriate type based on return_trials
     # Pre-compute shared time and freq columns (same for power and phase)
     time_col = repeat(times_out, inner = num_frex)
@@ -266,38 +259,64 @@ function tf_multitaper(
         phase_df = DataFrame(time = time_col, freq = freq_col, copycols = false)
     end
 
-    # Pre-allocate reusable output buffers (reused across all channels)
-    if return_trials
-        eegpower = zeros(Float64, num_frex, n_times, n_trials)
-        eegconv = zeros(ComplexF64, num_frex, n_times, n_trials)
-    else
-        eegpower = zeros(Float64, num_frex, n_times)
-        eegconv = zeros(ComplexF64, num_frex, n_times)
-    end
+    # A lock to safely write into the DataFrames
+    df_lock = ReentrantLock()
 
     # Process each selected channel
-    for channel in selected_channels
-        # Pre-extract all trial data for this channel into a matrix (n_samples × n_trials) for better cache locality
+    Threads.@threads for channel in selected_channels
+        # Pre-allocate reusable output buffers (reused across trials for this channel)
+        # Assigned exactly once to prevent Core.Box type instability in Julia
+        local eegpower_trials = return_trials ? zeros(Float64, n_trials, num_frex, n_times) : Array{Float64,3}(undef, 0, 0, 0)
+        local eegconv_trials =
+            (return_trials && return_phase) ? zeros(ComplexF64, n_trials, num_frex, n_times) : Array{ComplexF64,3}(undef, 0, 0, 0)
+        local eegpower_avg = return_trials ? Matrix{Float64}(undef, 0, 0) : zeros(Float64, num_frex, n_times)
+        local eegconv_avg = (!return_trials && return_phase) ? zeros(ComplexF64, num_frex, n_times) : Matrix{ComplexF64}(undef, 0, 0)
+
+        # Thread-local accumulator buffers (reused across frequencies for this channel)
+        local power_accum_trials = return_trials ? Matrix{Float64}(undef, n_trials, n_times) : Matrix{Float64}(undef, 0, 0)
+        local complex_accum_trials =
+            (return_trials && return_phase) ? Matrix{ComplexF64}(undef, n_trials, n_times) : Matrix{ComplexF64}(undef, 0, 0)
+        local power_accum_avg = return_trials ? Vector{Float64}(undef, 0) : Vector{Float64}(undef, n_times)
+        local complex_accum_avg = (!return_trials && return_phase) ? Vector{ComplexF64}(undef, n_times) : Vector{ComplexF64}(undef, 0)
+
+        # Pre-allocate reusable buffers for frequency-domain convolution
+        local_data_padded = Matrix{Float64}(undef, n_trials, n_samples_padded)
+        local_data_fft = Matrix{ComplexF64}(undef, n_trials, n_samples_padded)
+        local_conv_result = Matrix{ComplexF64}(undef, n_trials, n_samples_padded)
+        local_trial_signals = Matrix{Float64}(undef, n_trials, n_samples_per_epoch)
+
+        # Pre-extract all trial data for this channel into a matrix for better cache locality
         for trial_idx = 1:n_trials
             col = dat.data[trial_idx][!, channel]
-            # Copy directly without intermediate Vector allocation
-            @inbounds @simd for i = 1:n_samples_per_epoch
-                trial_signals_matrix[i, trial_idx] = Float64(col[i])
+            if col isa Vector{Float64}
+                col_f64 = col::Vector{Float64}
+                @inbounds @simd for i = 1:n_samples_per_epoch
+                    local_trial_signals[trial_idx, i] = col_f64[i]
+                end
+            else
+                # Copy directly without intermediate Vector allocation
+                @inbounds @simd for i = 1:n_samples_per_epoch
+                    local_trial_signals[trial_idx, i] = Float64(col[i])
+                end
             end
         end
 
         # Clear/initialize output buffers for this channel
-        fill!(eegpower, 0.0)
-        fill!(eegconv, 0.0im)
+        # (eegpower and eegconv buffers are zero-initialized on creation and overwritten entirely per frequency)
 
         # Pad data to n_samples_padded (zero-padding at the end)
-        fill!(data_padded, 0.0)
-        data_padded[1:n_samples_per_epoch, :] = trial_signals_matrix
+        fill!(local_data_padded, 0.0)
+        @inbounds for j = 1:n_samples_per_epoch
+            for i = 1:n_trials
+                local_data_padded[i, j] = local_trial_signals[i, j]
+            end
+        end
 
         # FFT entire padded data (batch process all trials at once)
-        # Convert real to complex and perform batch FFT (out-of-place)
-        data_fft .= complex.(data_padded)
-        data_fft .= fft_plan_padded_batch * data_fft
+        @inbounds @simd for i in eachindex(local_data_padded)
+            local_data_fft[i] = ComplexF64(local_data_padded[i])
+        end
+        fft_plan_padded_batch * local_data_fft
 
         # Process each frequency
         for fi = 1:num_frex
@@ -307,31 +326,32 @@ function tf_multitaper(
 
             # Initialize accumulation buffers for this frequency (accumulate across tapers)
             if return_trials
-                power_accum = zeros(Float64, n_times, n_trials)
-                complex_accum = zeros(ComplexF64, n_times, n_trials)
+                fill!(power_accum_trials, 0.0)
+                return_phase && fill!(complex_accum_trials, 0.0im)
             else
-                power_accum = zeros(Float64, n_times)
-                complex_accum = zeros(ComplexF64, n_times)
+                fill!(power_accum_avg, 0.0)
+                return_phase && fill!(complex_accum_avg, 0.0im)
             end
 
             # Process each taper and accumulate results
             for taper_idx = 1:n_tapers
                 tapered_wavelet_fft = tapered_wavelet_ffts[fi][taper_idx]
 
-                # Frequency-domain convolution: multiply data FFT by tapered wavelet FFT (broadcast across all trials)
-                conv_result .= data_fft .* tapered_wavelet_fft
-
-                # IFFT to get time-domain result (FFTW's IFFT doesn't normalize)
-                @inbounds for trial = 1:n_trials
-                    mul!(ifft_temp, ifft_plan_padded, view(conv_result, :, trial))
-                    @simd for i = 1:n_samples_padded
-                        conv_result[i, trial] = ifft_temp[i]
+                # Frequency-domain convolution: multiply data FFT by tapered wavelet FFT
+                # Explicit loops to avoid broadcast allocations on large matrices
+                @inbounds for i = 1:n_samples_padded
+                    wv = tapered_wavelet_fft[i]
+                    @simd for trial_idx = 1:n_trials
+                        local_conv_result[trial_idx, i] = local_data_fft[trial_idx, i] * wv
                     end
                 end
 
+                # IFFT in-place
+                ifft_plan_padded_batch * local_conv_result
+
                 norm_factor = sqrt(2.0 / n_window_samples)
-                @inbounds @simd for i in eachindex(conv_result)
-                    conv_result[i] *= norm_factor
+                @inbounds @simd for i in eachindex(local_conv_result)
+                    local_conv_result[i] *= norm_factor
                 end
 
                 # Extract requested time points and accumulate across tapers
@@ -345,13 +365,17 @@ function tf_multitaper(
                     elseif adjusted_idx > n_samples_padded
                         adjusted_idx = n_samples_padded
                     end
-                    conv_vals = @view conv_result[adjusted_idx, :]
+                    conv_vals = @view local_conv_result[:, adjusted_idx]
                     if return_trials
-                        power_accum[ti_idx, :] .+= abs2.(conv_vals)
-                        complex_accum[ti_idx, :] .+= conv_vals
+                        power_accum_trials[:, ti_idx] .+= abs2.(conv_vals)
+                        if return_phase
+                            complex_accum_trials[:, ti_idx] .+= conv_vals
+                        end
                     else
-                        power_accum[ti_idx] += sum(abs2, conv_vals)
-                        complex_accum[ti_idx] += sum(conv_vals)
+                        power_accum_avg[ti_idx] += sum(abs2, conv_vals)
+                        if return_phase
+                            complex_accum_avg[ti_idx] += sum(conv_vals)
+                        end
                     end
                 end
             end
@@ -359,14 +383,18 @@ function tf_multitaper(
             # Average across tapers and store results
             if return_trials
                 @inbounds for ti_idx = 1:n_times
-                    eegpower[fi, ti_idx, :] .= power_accum[ti_idx, :] .* inv_n_tapers
-                    eegconv[fi, ti_idx, :] .= complex_accum[ti_idx, :] .* inv_n_tapers
+                    eegpower_trials[:, fi, ti_idx] .= power_accum_trials[:, ti_idx] .* inv_n_tapers
+                    if return_phase
+                        eegconv_trials[:, fi, ti_idx] .= complex_accum_trials[:, ti_idx] .* inv_n_tapers
+                    end
                 end
             else
                 inv_n_trials = 1.0 / n_trials
                 @inbounds for ti_idx = 1:n_times
-                    eegpower[fi, ti_idx] = power_accum[ti_idx] * inv_n_tapers * inv_n_trials
-                    eegconv[fi, ti_idx] = complex_accum[ti_idx] * inv_n_tapers * inv_n_trials
+                    eegpower_avg[fi, ti_idx] = power_accum_avg[ti_idx] * inv_n_tapers * inv_n_trials
+                    if return_phase
+                        eegconv_avg[fi, ti_idx] = complex_accum_avg[ti_idx] * inv_n_tapers * inv_n_trials
+                    end
                 end
             end
         end
@@ -374,19 +402,38 @@ function tf_multitaper(
         if filter_edges
             # Compute exact window lengths in samples (floating point) for edge filtering
             window_lengths_samples_exact = [(cycles / freqs[fi]) * dat.sample_rate for fi = 1:num_frex]
-            _filter_edges!(eegpower, eegconv, num_frex, time_indices, window_lengths_samples_exact, n_samples_per_epoch)
+            _filter_edges!(
+                return_trials ? eegpower_trials : eegpower_avg,
+                return_trials ? (return_phase ? eegconv_trials : nothing) : (return_phase ? eegconv_avg : nothing),
+                num_frex,
+                time_indices,
+                window_lengths_samples_exact,
+                n_samples_per_epoch,
+            )
         end
 
-        if return_trials # Store each trial separately
-            for trial_idx = 1:n_trials
-                power_df[trial_idx][!, channel] = vec(@view eegpower[:, :, trial_idx])
-                phase_df[trial_idx][!, channel] = vec(angle.(@view eegconv[:, :, trial_idx]))
+        lock(df_lock) do
+            if return_trials # Store each trial separately
+                for trial_idx = 1:n_trials
+                    power_df[trial_idx][!, channel] = copy(vec(@view eegpower_trials[trial_idx, :, :]))
+                    if return_phase
+                        phase_df[trial_idx][!, channel] = copy(vec(angle.(@view eegconv_trials[trial_idx, :, :])))
+                    else
+                        phase_df[trial_idx][!, channel] = fill(NaN, num_frex * n_times)
+                    end
+                end
+            else
+                power_df[!, channel] = copy(vec(eegpower_avg))
+                if return_phase
+                    phase_vec = Vector{Float64}(undef, num_frex * n_times)
+                    @inbounds @simd for i in eachindex(eegconv_avg)
+                        phase_vec[i] = angle(eegconv_avg[i])
+                    end
+                    phase_df[!, channel] = phase_vec
+                else
+                    phase_df[!, channel] = fill(NaN, num_frex * n_times)
+                end
             end
-        else
-            eegpower ./= n_trials
-            eegconv ./= n_trials
-            power_df[!, channel] = copy(vec(eegpower))
-            phase_df[!, channel] = vec(angle.(eegconv))
         end
     end
 
@@ -465,101 +512,4 @@ function tf_multitaper(
     finally
         _cleanup_logging(log_file, output_dir)
     end
-end
-
-
-
-
-"""
-    freq_spectrum(dat::EegData;
-                  channel_selection::Function=channels(),
-                  window_size::Int=256,
-                  overlap::Real=0.5,
-                  window_function::Function=DSP.hanning,
-                  max_freq::Union{Nothing,Real}=nothing)
-
-Compute power spectrum using Welch's method for EEG data.
-
-This function computes the frequency-domain power spectrum (no time dimension) using
-Welch's method with overlapping windows. For EpochData, power is averaged across epochs.
-For ErpData and ContinuousData (SingleDataFrameEeg), power is computed directly from the single DataFrame.
-
-# Arguments
-- `dat::EegData`: EEG data (EpochData, ErpData, or ContinuousData)
-
-# Keyword Arguments
-- `channel_selection::Function=channels()`: Channel selection predicate. See `channels()` for options.
-  - Example: `channel_selection=channels(:Cz)` for single channel
-  - Example: `channel_selection=channels([:Cz, :Pz])` for multiple channels
-- `window_size::Union{Int,Nothing}=nothing`: Size of the FFT window for spectral estimation (in samples).
-  - If `nothing` (default), dynamically set to `min(2048, n_samples)` for optimal high-resolution defaults that don't crash on short epochs.
-- `overlap::Real=0.5`: Overlap fraction between windows (0.0 to 1.0). Default is 0.5 (50% overlap)
-- `window_function::Function=DSP.hanning`: Window function for spectral estimation
-  - Options: `DSP.hanning`, `DSP.hamming`, `DSP.blackman`, etc.
-- `max_freq::Union{Nothing,Real}=nothing`: Maximum frequency to return in Hz.
-  - If `nothing`, returns all frequencies up to Nyquist
-  - If specified, filters results to frequencies <= max_freq
-
-# Returns
-- `SpectrumData`: Power spectrum data structure with:
-  - `data::DataFrame`: DataFrame with columns: freq, [electrode channels...] containing power spectral density (μV²/Hz)
-  - Other metadata: file, condition, condition_name, layout, sample_rate, method, analysis_info
-
-# Example
-```julia
-# Compute power spectrum for all channels
-spectrum = freq_spectrum(epochs)
-
-# Single channel with custom parameters
-spectrum = freq_spectrum(epochs; channel_selection=channels(:Cz), window_size=2048, max_freq=100.0)
-```
-"""
-function freq_spectrum(
-    dat::EegData;
-    channel_selection::Function = channels(),
-    window_size::Union{Int,Nothing} = nothing,
-    overlap::Real = 0.5,
-    window_function::Function = DSP.hanning,
-    max_freq::Union{Nothing,Real} = nothing,
-)
-    # Get selected channels
-    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
-    isempty(selected_channels) && error("No channels selected. Available channels: $(channel_labels(dat))")
-
-    # Get frequency vector from first channel's first signal
-    first_channel = selected_channels[1]
-    first_signal = channel_data(dat, first_channel)
-
-    # Dynamically determine window size if not provided
-    actual_window_size = isnothing(window_size) ? min(2048, length(first_signal)) : window_size
-
-    # Validate overlap
-    (overlap < 0 || overlap >= 1) && error("`overlap` must be in range [0, 1), got $overlap")
-
-    noverlap = Int(round(actual_window_size * overlap))
-
-    pgram = DSP.welch_pgram(first_signal, actual_window_size, noverlap; fs = dat.sample_rate, window = window_function)
-    freqs = DSP.freq(pgram)
-
-    # Initialize output DataFrame with frequency column
-    spectrum_df = DataFrame(freq = freqs)
-
-    # Process each channel
-    for channel in selected_channels
-        signal = channel_data(dat, channel)
-        pgram = DSP.welch_pgram(signal, actual_window_size, noverlap; fs = dat.sample_rate, window = window_function)
-        spectrum_df[!, channel] = DSP.power(pgram)
-    end
-
-    # Filter by max_freq if specified
-    if !isnothing(max_freq)
-        mask = spectrum_df.freq .<= max_freq
-        spectrum_df = spectrum_df[mask, :]
-    end
-
-    # Return SpectrumData type
-    cond_num = hasproperty(dat, :condition) ? dat.condition : 0
-    cond_name = condition_name(dat)
-
-    return SpectrumData(dat.file, cond_num, cond_name, spectrum_df, copy(dat.layout), dat.sample_rate, :welch, copy(dat.analysis_info))
 end

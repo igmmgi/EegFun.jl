@@ -40,8 +40,8 @@ function mirror!(dat::EpochData, side::Symbol = :both)::Nothing
     end
     @info "Mirroring epoched data on side: $side"
 
-    for (epoch_idx, epoch) in enumerate(dat.data)
-        _mirror_dataframe!(epoch, side)
+    for epoch_idx in eachindex(dat.data)
+        dat.data[epoch_idx] = _mirror_dataframe!(dat.data[epoch_idx], side)
     end
 
     return nothing
@@ -75,7 +75,7 @@ function mirror!(dat::ErpData, side::Symbol = :both)::Nothing
     end
     @info "Mirroring ERP data on side: $side"
 
-    _mirror_dataframe!(dat.data, side)
+    dat.data = _mirror_dataframe!(dat.data, side)
 
     return nothing
 end
@@ -145,9 +145,8 @@ function unmirror!(dat::EpochData, side::Symbol = :both)::Nothing
     end
     @info "Unmirroring epoched data on side: $side"
 
-    # Unmirror each epoch
-    for (epoch_idx, epoch) in enumerate(dat.data)
-        _unmirror_dataframe!(epoch, side)
+    for epoch_idx in eachindex(dat.data)
+        dat.data[epoch_idx] = _unmirror_dataframe!(dat.data[epoch_idx], side)
     end
 
     return nothing
@@ -168,7 +167,7 @@ function unmirror!(dat::ErpData, side::Symbol = :both)::Nothing
     end
     @info "Unmirroring ERP data on side: $side"
 
-    _unmirror_dataframe!(dat.data, side)
+    dat.data = _unmirror_dataframe!(dat.data, side)
 
     return nothing
 end
@@ -240,10 +239,9 @@ function _mirror_dataframe!(df::DataFrame, side::Symbol)
         n_mirror = nrow(mirror_section)
         mirror_section.time = [df.time[1] - (n_mirror - i + 1) * dt for i = 1:n_mirror]
 
-        # Update df in-place
+        # Update df in-place by returning new and assigning at call site
         df_new = vcat(mirror_section, df)
-        empty!(df)
-        append!(df, df_new)
+        return df_new
 
     elseif side == :post
         # Calculate time step
@@ -254,10 +252,9 @@ function _mirror_dataframe!(df::DataFrame, side::Symbol)
         n_mirror = nrow(mirror_section)
         mirror_section.time = [df.time[end] + i * dt for i = 1:n_mirror]
 
-        # Update df in-place
+        # Update df in-place by returning new and assigning at call site
         df_new = vcat(df, mirror_section)
-        empty!(df)
-        append!(df, df_new)
+        return df_new
 
     else  # :both
         # Calculate time step
@@ -273,10 +270,9 @@ function _mirror_dataframe!(df::DataFrame, side::Symbol)
         n_post = nrow(post_mirror)
         post_mirror.time = [df.time[end] + i * dt for i = 1:n_post]
 
-        # Update df in-place
+        # Update df in-place by returning new and assigning at call site
         df_new = vcat(pre_mirror, df, post_mirror)
-        empty!(df)
-        append!(df, df_new)
+        return df_new
     end
 end
 
@@ -295,16 +291,14 @@ function _unmirror_dataframe!(df::DataFrame, side::Symbol)
         start_idx = mirror_length + 1
 
         df_new = df[start_idx:end, :]
-        empty!(df)
-        append!(df, df_new)
+        return df_new
 
     elseif side == :post
         # After mirroring :post: total = original + (original-1) = 2*original - 1
         original_length = div(n_samples + 1, 2)
 
         df_new = df[1:original_length, :]
-        empty!(df)
-        append!(df, df_new)
+        return df_new
 
     else  # :both
         # After mirroring :both: total = (original-1) + original + (original-1) = 3*original - 2
@@ -314,7 +308,6 @@ function _unmirror_dataframe!(df::DataFrame, side::Symbol)
         end_idx = start_idx + original_length - 1
 
         df_new = df[start_idx:end_idx, :]
-        empty!(df)
-        append!(df, df_new)
+        return df_new
     end
 end

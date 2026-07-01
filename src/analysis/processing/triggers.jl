@@ -20,17 +20,23 @@ with subsequent samples set to zero.
 ```
 """
 function _clean_triggers(trigger_data::Vector{<:Integer})::Vector{<:Integer}
+    n = length(trigger_data)
+    cleaned = zeros(eltype(trigger_data), n)
+    if n == 0
+        return cleaned
+    end
 
-    # find where triggers change (onset detection)
-    trigger_changes = diff(vcat(0, trigger_data))
-    onset_indices = trigger_changes .> 0
+    if trigger_data[1] > 0
+        cleaned[1] = trigger_data[1]
+    end
 
-    # insert onsets
-    cleaned = zeros(eltype(trigger_data), length(trigger_data))
-    cleaned[onset_indices] = trigger_data[onset_indices]
+    @inbounds for i = 2:n
+        if trigger_data[i] > trigger_data[i-1]
+            cleaned[i] = trigger_data[i]
+        end
+    end
 
     return cleaned
-
 end
 
 

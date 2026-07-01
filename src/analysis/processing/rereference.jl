@@ -36,9 +36,9 @@ function _apply_rereference!(dat::Vector{DataFrame}, channel_selection::Vector{S
     end
 
     n = n_samples(dat[1])
-    reference = Vector{Float64}(undef, n)
 
-    for df in dat
+    Threads.@threads for df in dat
+        reference = Vector{Float64}(undef, n)
         _calculate_reference!(reference, df, reference_selection)
         for ch in channel_selection
             col = df[!, ch]

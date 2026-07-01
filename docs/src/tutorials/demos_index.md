@@ -61,7 +61,6 @@ Browse interactive code examples demonstrating EegFun.jl's capabilities.
 - [Plot ERP Image](plotting/plot_erp_image.md) - ERP images
 - [Plot ERP Measurements](plotting/plot_erp_measurements.md) - Measurement visualization
 - [Plot Filter](plotting/plot_filter.md) - Filter responses
-- [Plot Frequency Spectrum](plotting/plot_frequency_spectrum.md) - SpectrumData power spectra
 - [Plot GFP](plotting/plot_gfp.md) - Global Field Power
 - [Plot ICA](plotting/plot_ica.md) - ICA component topographies
 - [Plot Joint Probability](plotting/plot_joint_probability.md) - Artifact detection

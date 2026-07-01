@@ -186,10 +186,10 @@ function _plot_power_spectrum_data!(
     rowsize!(fig.layout, 1, Relative(0.7))  # Main content row
 
     x_scale_obs = Observable(x_scale)
-    
+
     x_options = ["Linear (Hz)", "Log10 (Hz)"]
     x_default_idx = x_scale == :log10 ? 2 : 1
-    
+
     y_options = ["Linear (μV²/Hz)", "Log10 (μV²/Hz)", "Decibels (dB)"]
     y_default_idx = if unit == :dB
         3
@@ -205,7 +205,7 @@ function _plot_power_spectrum_data!(
     # Add menus
     Label(controls_area[1, 1], "X-Axis:")
     x_menu = Menu(controls_area[1, 2], options = x_options, default = x_options[x_default_idx])
-    
+
     Label(controls_area[2, 1], "Y-Axis:")
     y_menu = Menu(controls_area[2, 2], options = y_options, default = y_options[y_default_idx])
 
@@ -335,13 +335,13 @@ function _plot_power_spectrum_data!(
     function update_y_mode(mode)
         new_unit = mode == "Decibels (dB)" ? :dB : :linear
         new_y_scale = mode == "Log10 (μV²/Hz)" ? :log10 : :linear
-        
+
         # 1. Update power data if unit changed
         converted_power_data = get_current_power_data(new_unit)
         for (i, (_, psd_obs)) in enumerate(line_plots)
             psd_obs[] = converted_power_data[i]
         end
-        
+
         # 2. Update y-axis label
         ax.ylabel = new_unit == :dB ? "Power Spectral Density (dB)" : plot_kwargs[:ylabel]
 

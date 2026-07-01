@@ -132,7 +132,7 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 | Plot GFP | `EegFun.plot_gfp(erps)` |
 | Plot channel layout | `EegFun.plot_layout_2d(layout)` |
 | Plot artifact detection | `EegFun.plot_artifact_detection(epochs)` |
-| Plot frequency spectrum | `EegFun.plot_frequency_spectrum(dat)` |
+| Plot frequency spectrum | `EegFun.plot_channel_spectrum(dat)` |
 | Plot filter response | `EegFun.plot_filter_response(dat)` |
 | Plot decoding results | `EegFun.plot_decoding(decoded)` |
 | Plot RSA results | `EegFun.plot_rsa(rsa_result)` |

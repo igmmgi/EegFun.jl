@@ -32,7 +32,7 @@ allcomb([31, 39], 51:54, 101)
 ```
 """
 _expand_arg(x::AbstractVector) = isempty(x) ? x : mapreduce(_expand_arg_element, vcat, x)
-_expand_arg(x::Union{Number, Symbol}) = [x]
+_expand_arg(x::Union{Number,Symbol}) = [x]
 _expand_arg(x::UnitRange) = collect(x)
 _expand_arg(x) = x
 
@@ -42,7 +42,7 @@ _expand_arg_element(v) = [v]
 function allcomb(args...)
     expanded_args = map(_expand_arg, args)
     combinations = Iterators.product(expanded_args...)
-    return vec([collect(Union{Int, Symbol, UnitRange{Int}, Vector{Int}}, c) for c in combinations])
+    return vec([collect(Union{Int,Symbol,UnitRange{Int},Vector{Int}}, c) for c in combinations])
 end
 
 function condition_parse_epoch(config::Dict)
@@ -383,8 +383,11 @@ Applies mask_triggers and mask_between_triggers to hide invalid triggers before 
 Returns the filtered triggers array and the original indices mapping.
 """
 function _apply_trigger_mask(triggers::Vector, condition::EpochCondition)
-    if isnothing(condition.mask_triggers) && isnothing(condition.mask_between_triggers)
-        return triggers, collect(1:length(triggers))
+    if isnothing(condition.mask_triggers) &&
+       isnothing(condition.mask_between_triggers) &&
+       isnothing(condition.mask_before_trigger) &&
+       isnothing(condition.mask_after_trigger)
+        return triggers, 1:length(triggers)
     end
 
     hidden = falses(length(triggers))
@@ -392,25 +395,30 @@ function _apply_trigger_mask(triggers::Vector, condition::EpochCondition)
     # Apply individual masks
     if !isnothing(condition.mask_triggers)
         for t in condition.mask_triggers
-            hidden .|= (triggers .== t)
+            @inbounds for i in eachindex(triggers)
+                if triggers[i] == t
+                    hidden[i] = true
+                end
+            end
         end
     end
 
     # Apply between masks
     if !isnothing(condition.mask_between_triggers)
         for (start_t, end_t) in condition.mask_between_triggers
-            start_indices = findall(==(start_t), triggers)
-            end_indices = findall(==(end_t), triggers)
-
-            for s_idx in start_indices
-                e_idx_cand = filter(e -> e > s_idx, end_indices)
-                if !isempty(e_idx_cand)
-                    e_idx = first(e_idx_cand)
-                    # Hide from the start index up to the element right before the end index
-                    hidden[s_idx:(e_idx-1)] .= true
+            in_mask = false
+            @inbounds for i in eachindex(triggers)
+                if !in_mask
+                    if triggers[i] == start_t
+                        in_mask = true
+                        hidden[i] = true
+                    end
                 else
-                    # If no end trigger is found, hide to the end of the recording
-                    hidden[s_idx:end] .= true
+                    if triggers[i] == end_t
+                        in_mask = false
+                    else
+                        hidden[i] = true
+                    end
                 end
             end
         end
@@ -421,8 +429,6 @@ function _apply_trigger_mask(triggers::Vector, condition::EpochCondition)
         idx = findfirst(==(condition.mask_before_trigger), triggers)
         if !isnothing(idx)
             hidden[1:idx] .= true
-        else
-            hidden .= true
         end
     end
 
@@ -431,8 +437,6 @@ function _apply_trigger_mask(triggers::Vector, condition::EpochCondition)
         idx = findlast(==(condition.mask_after_trigger), triggers)
         if !isnothing(idx)
             hidden[idx:end] .= true
-        else
-            hidden .= true
         end
     end
 
@@ -440,6 +444,13 @@ function _apply_trigger_mask(triggers::Vector, condition::EpochCondition)
     filtered_triggers = triggers[valid_indices]
 
     return filtered_triggers, valid_indices
+end
+
+function _map_valid_indices(raw_matches::Vector{Vector{Int}}, valid_indices)
+    if valid_indices isa UnitRange && first(valid_indices) == 1
+        return raw_matches
+    end
+    return [[valid_indices[i] for i in m] for m in raw_matches]
 end
 
 """
@@ -488,7 +499,7 @@ function mark_epoch_intervals!(
 
         # Find all occurrences of the trigger sequences
         raw_matches = search_sequence(filtered_triggers, condition.trigger_sequences)
-        matches = [[valid_indices[i] for i in m] for m in raw_matches]
+        matches = _map_valid_indices(raw_matches, valid_indices)
 
         if isempty(matches)
             @minimal_warning "No triggers found for condition '$(condition.name)'"
@@ -584,7 +595,7 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
 
     # Find matched positions for trigger sequences
     raw_matches = search_sequence(filtered_triggers, epoch_condition.trigger_sequences)
-    matches = [[valid_indices[i] for i in m] for m in raw_matches]
+    matches = _map_valid_indices(raw_matches, valid_indices)
 
     isempty(matches) && @minimal_error("None of the trigger sequences $(epoch_condition.trigger_sequences) found!")
 
@@ -713,7 +724,15 @@ function average_epochs(dat::EpochData)
         for ch in eeg_channels
             avg_col = zeros(Float64, n_timepoints)
             for epoch in dat.data
-                avg_col .+= epoch[!, ch]
+                col = epoch[!, ch]
+                if col isa Vector{Float64}
+                    col_f64 = col::Vector{Float64}
+                    @inbounds for i = 1:n_timepoints
+                        avg_col[i] += col_f64[i]
+                    end
+                else
+                    avg_col .+= col
+                end
             end
             avg_col ./= n_epochs
             erp[!, ch] = avg_col
@@ -899,7 +918,7 @@ function epochs_count(dat::ContinuousData, conditions::Vector{EpochCondition}; p
 
         filtered_triggers, valid_indices = _apply_trigger_mask(dat.data.trigger, condition)
         raw_matches = search_sequence(filtered_triggers, condition.trigger_sequences)
-        matches = [[valid_indices[i] for i in m] for m in raw_matches]
+        matches = _map_valid_indices(raw_matches, valid_indices)
 
         matches = _filter_matches(matches, condition, dat.data.trigger, dat.data.time)
         matches = filter(m -> condition.reference_index <= length(m), matches)

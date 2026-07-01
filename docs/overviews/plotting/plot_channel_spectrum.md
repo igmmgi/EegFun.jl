@@ -1,106 +1,26 @@
-This demo demonstrates frequency domain analysis of EEG channels using power spectral density (PSD) visualization.
+This demo shows how to plot power spectra from `SpectrumData` objects.
 
-### What is Power Spectral Density?
+### `plot_channel_spectrum` Multiple Dispatch
 
-Power Spectral Density (PSD) shows the distribution of signal power across different frequencies:
+| Function | Input | Best For |
+| --- | --- | --- |
+| `plot_channel_spectrum(dat)` | Raw/preprocessed data | Quick interactive inspection with Welch's method |
+| `plot_channel_spectrum(spectrum)` | `SpectrumData` | Plotting pre-computed spectra with full control |
 
-- **Decomposes time-domain signal** into frequency components
-- **Reveals dominant rhythms** (alpha, theta, beta, etc.)
-- **Detects artifacts** like line noise (50/60 Hz)
-- **Quantifies frequency band power** for analysis
+### Key Parameters
 
-### EEG Frequency Bands
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `channel_selection` | `channels()` | Which channels to plot |
+| `x_scale` | `:linear` | `:linear` or `:log10` |
+| `y_scale` | `:linear` | `:linear` or `:log10` |
+| `unit` | `:linear` | `:linear` (μV²/Hz) or `:dB` |
+| `max_freq` | `nothing` | Maximum frequency to display |
+| `show_legend` | `true` | Show channel name legend |
 
-Standard frequency bands in EEG analysis:
+### What You'll Learn
 
-| Band | Frequency Range |
-|------|----------------|
-| **Delta** | 0.5-4 Hz |
-| **Theta** | 4-8 Hz |
-| **Alpha** | 8-13 Hz |
-| **Beta** | 13-30 Hz |
-| **Gamma** | >30 Hz |
-
-### Visualization Options
-
-**Single Channel Spectrum**:
-
-- View PSD for one channel
-- Identify dominant frequency peaks
-- Detect line noise or artifacts
-
-**Multiple Channel Comparison**:
-
-- Compare spectral profiles across electrodes
-- Identify spatial patterns (e.g., posterior alpha)
-- Assess differential effects across regions
-
-**All Channels**:
-
-- Overview of entire dataset
-- Quickly spot problematic channels
-- Identify global artifacts
-
-### Common Use Cases
-
-**1. Quality Control**:
-
-- **Line noise detection**: Look for sharp peaks at 50/60 Hz
-- **Artifact identification**: High power in unexpected frequency ranges
-- **Channel malfunction**: Abnormal spectral profile compared to neighbors
-
-### Interpretation Guidelines
-
-**Posterior alpha peak**:
-
-- Should be dominant in occipital channels
-- Typically 8-13 Hz
-- Suppressed with eyes open
-
-**Line noise**:
-
-- Sharp peak at exactly 50 or 60 Hz
-- Often includes harmonics (100, 150, 200 Hz)
-- Indicates need for notch filtering
-
-### Technical Details
-
-**FFT Parameters**:
-
-The function uses Welch's method for PSD estimation:
-
-- **Window size**: Automatic based on data length
-- **Overlap**: 50% between windows
-- **Window type**: Hamming window
-- **Frequency resolution**: Determined by window size
-
-**Best Practices**:
-
-**Data requirements**:
-
-- **Minimum duration**: A few seconds (longer = better frequency resolution)
-- **Sample rate**: Should capture frequencies of interest (≥2× max frequency)
-- **Artifact-free data**: Remove extreme values before spectral analysis
-
-**Filtering considerations**:
-
-- **High-pass**: Remove DC offset and slow drifts (≥0.1 Hz)
-- **Low-pass**: Anti-aliasing already applied during acquisition
-- **Notch filtering**: Consider before spectrum if you want to see line noise
-
-**Selecting channels**:
-
-- **Single channel**: For targeted analysis (e.g., Oz for alpha)
-- **Regional selection**: Compare frontal vs posterior, left vs right
-- **All channels**: Initial quality control and overview
-
-### Workflow Summary
-
-This demo shows a simple workflow:
-
-1. **Load data** (raw continuous data)
-2. **Create EEG structure** with channel layout
-3. **Visualize spectra**:
-   - All channels at once (overview)
-   - Single channel (e.g., Fp1 for EOG artifacts)
-   - Channel groups (e.g., frontal channels for beta analysis)
+1. Plotting spectra for all or selected channels
+2. Switching between linear and log scales
+3. Using decibel units
+4. Limiting the frequency range

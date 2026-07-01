@@ -276,7 +276,7 @@ function lowpass_filter!(
         min_length = dat.data isa Vector ? minimum(nrow.(dat.data)) : nrow(dat.data)
         min_required_transition_band = 12.0 * dat.sample_rate / min_length
         min_required_transition_width = min_required_transition_band / cutoff_freq
-        
+
         if transition_width < min_required_transition_width
             @minimal_warning "FIR transition width $(transition_width) too narrow for data length $(min_length). Widening to $(round(min_required_transition_width, digits=3)) to prevent crash."
             transition_width = min_required_transition_width
@@ -330,7 +330,7 @@ function highpass_filter!(
         min_length = dat.data isa Vector ? minimum(nrow.(dat.data)) : nrow(dat.data)
         min_required_transition_band = 12.0 * dat.sample_rate / min_length
         min_required_transition_width = min_required_transition_band / cutoff_freq
-        
+
         if transition_width < min_required_transition_width
             @minimal_warning "FIR transition width $(transition_width) too narrow for data length $(min_length). Widening to $(round(min_required_transition_width, digits=3)) to prevent crash."
             transition_width = min_required_transition_width

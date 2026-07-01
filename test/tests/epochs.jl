@@ -1392,7 +1392,7 @@ using Random
     @testset "allcomb utility" begin
         # Test basic numeric sequences with ranges
         res = EegFun.allcomb([1, 10], [1:10])
-        @test res isa Vector{Vector{Union{Int, Symbol, UnitRange{Int}, Vector{Int}}}}
+        @test res isa Vector{Vector{Union{Int,Symbol,UnitRange{Int},Vector{Int}}}}
         @test length(res) == 20
         @test res[1] == [1, 1]
         @test res[2] == [10, 1]

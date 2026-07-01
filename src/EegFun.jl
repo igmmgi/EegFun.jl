@@ -125,17 +125,17 @@ include("analysis/statistics/inference.jl")
 include("analysis/statistics/statistics.jl")
 
 # time-frequency analysis
+include("analysis/time_frequency/tf_utils.jl")
 include("analysis/time_frequency/tf_morlet.jl")
 include("analysis/time_frequency/tf_stft.jl")
 include("analysis/time_frequency/tf_multitaper.jl")
-include("analysis/time_frequency/tf_utils.jl")
+include("analysis/time_frequency/freq_spectrum.jl")
 include("analysis/time_frequency/baseline.jl")
 include("analysis/time_frequency/grand_average.jl")
 include("analysis/time_frequency/condition_average.jl")
 include("analysis/time_frequency/condition_difference.jl")
 include("analysis/time_frequency/channel_average.jl")
 include("analysis/time_frequency/channel_difference.jl")
-include("analysis/time_frequency/utils/utils.jl")
 
 # decoding analysis via libsvm
 include("analysis/decoding/decoding.jl")
