@@ -437,6 +437,18 @@ function tf_multitaper(
         end
     end
 
+    # Restore original column order which might be shuffled by multithreading
+    expected_cols = vcat([:time, :freq], selected_channels)
+    if return_trials
+        for i in 1:n_trials
+            select!(power_df[i], expected_cols)
+            select!(phase_df[i], expected_cols)
+        end
+    else
+        select!(power_df, expected_cols)
+        select!(phase_df, expected_cols)
+    end
+
     # Create and return appropriate data type
     return_type = return_trials ? TimeFreqEpochData : TimeFreqData
     return return_type(
