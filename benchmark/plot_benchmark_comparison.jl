@@ -28,9 +28,9 @@ function plot_comparison()
     time_file_p = joinpath(results_dir, "python_time.txt")
     time_file_m = joinpath(results_dir, "matlab_time.txt")
 
-    julia_time = isfile(time_file_j) ? parse(Float64, read(time_file_j, String)) : NaN
-    python_time = isfile(time_file_p) ? parse(Float64, read(time_file_p, String)) : NaN
-    matlab_time = isfile(time_file_m) ? parse(Float64, read(time_file_m, String)) : NaN
+    julia_time = isfile(time_file_j) ? parse(Float64, split(strip(read(time_file_j, String)), '\n')[1]) : NaN
+    python_time = isfile(time_file_p) ? parse(Float64, split(strip(read(time_file_p, String)), '\n')[1]) : NaN
+    matlab_time = isfile(time_file_m) ? parse(Float64, split(strip(read(time_file_m, String)), '\n')[1]) : NaN
 
     lbl_julia = isnan(julia_time) ? "Julia" : "Julia [$(round(julia_time, digits=2))s]"
     lbl_python = isnan(python_time) ? "Python" : "MNE-Python [$(round(python_time, digits=2))s]"

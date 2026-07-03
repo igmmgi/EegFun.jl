@@ -54,9 +54,11 @@ EegFun.plot_tf(tf_data, ylogscale = true)
 data_cohen = EegFun.read_data(EegFun.example_path("data/julia/tf/tf_test_epochs.jld2"));
 
 # Figure 13.11 A)
-tf_data = EegFun.tf_morlet(data_cohen, frequencies = logrange(2, 80, length = 80), cycles = (3, 7), filter_edges = false)
+tf_data = EegFun.tf_morlet(data_cohen, frequencies = logrange(2, 80, length = 80), cycles = 3, filter_edges = false)
 EegFun.plot_tf(
     tf_data;
+    title = "3-cycle wavelets",
+    colorbar_label = "dB change from baseline",
     baseline_interval = (-0.5, -0.2),
     baseline_method = :db,
     xlim = (-0.2, 1.0),
@@ -64,10 +66,13 @@ EegFun.plot_tf(
     ylogscale = true,
     colormap = :jet,
     interpolate = true,
+    yticks = [2, 4, 10, 20, 40, 80],
+    xticks = [0, 0.2, 0.4, 0.6, 0.8],
+    time_unit = :ms,
 )
 
 # Figure 13.11 B)
-tf_data = EegFun.tf_morlet(data_cohen, frequencies = 2:1:80, cycles = (3, 7))
+tf_data = EegFun.tf_morlet(data_cohen, frequencies = 2:1:80, cycles = (3, 10))
 EegFun.plot_tf(
     tf_data;
     baseline_interval = (-0.5, -0.2),

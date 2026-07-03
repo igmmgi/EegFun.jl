@@ -49,7 +49,9 @@ function eeglab_benchmark(data_dir, n_files_to_process, run_ica_flag)
         test_files = test_files(1:min(length(test_files), n_files_to_process));
     end
 
+    individual_times = zeros(1, length(test_files));
     for i = 1:length(test_files)
+        t_file_start = tic;
 
         % 1. Read data and load channel coordinates
         EEG = pop_biosig(test_files{i});
@@ -132,6 +134,9 @@ function eeglab_benchmark(data_dir, n_files_to_process, run_ica_flag)
         % code. We compute simple average matrices for benchmarking.
         all_erps_valid(:, :, i) = mean(EEG_valid.data, 3);
         all_erps_invalid(:, :, i) = mean(EEG_invalid.data, 3);
+        
+        t_file_elapsed = toc(t_file_start);
+        individual_times(i) = t_file_elapsed;
     end
 
     % 7. Grand Average
@@ -170,7 +175,14 @@ function eeglab_benchmark(data_dir, n_files_to_process, run_ica_flag)
     % Save execution time
     fileID = fopen(fullfile(results_dir, 'matlab_time.txt'), 'w');
     if fileID ~= -1
-        fprintf(fileID, '%f', t_elapsed);
+        fprintf(fileID, '%f\n', t_elapsed);
+        fprintf(fileID, 'MATLAB Version: %s\n', version);
+        try
+            fprintf(fileID, 'EEGLAB Version: %s\n', eeg_getversion);
+        catch
+        end
+        times_str = sprintf('%.2f, ', individual_times);
+        fprintf(fileID, 'Individual Times: %s\n', times_str(1:end-2));
         fclose(fileID);
     end
     

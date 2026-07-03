@@ -22,7 +22,9 @@ def python_mne_benchmark(raw_files, data_dir, run_ica):
     results_dir = os.path.join(data_dir, "benchmarks")
     os.makedirs(results_dir, exist_ok=True)
     
+    individual_times = []
     for i, file in enumerate(raw_files):
+        t_file_start = time.time()
 
         # 1. Read data and layout file
         raw = mne.io.read_raw_bdf(file, preload=True)
@@ -90,6 +92,9 @@ def python_mne_benchmark(raw_files, data_dir, run_ica):
             # 7. Low-pass filter on the ERP (Moved to Evoked level to match Julia pipeline order)
             evoked.filter(l_freq=None, h_freq=30.0, phase='zero')
             all_subject_evokeds[cond].append(evoked)
+        
+        t_file_elapsed = time.time() - t_file_start
+        individual_times.append(t_file_elapsed)
                 
     # 7. Grand Average
     grand_averages = {
@@ -123,7 +128,7 @@ def python_mne_benchmark(raw_files, data_dir, run_ica):
     fig.savefig(os.path.join(results_dir, "python_erp.pdf"))
     plt.close(fig)
     
-    return grand_averages
+    return grand_averages, individual_times
 
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -145,12 +150,15 @@ if __name__ == "__main__":
     
     print("Benchmarking MNE-Python pipeline...")
     t0 = time.time()
-    python_mne_benchmark(test_files, data_dir, run_ica_flag)
+    _, individual_times = python_mne_benchmark(test_files, data_dir, run_ica_flag)
     t1 = time.time()
     
     elapsed = t1 - t0
     results_dir = os.path.join(data_dir, "benchmarks")
     with open(os.path.join(results_dir, "python_time.txt"), "w") as f:
-        f.write(str(elapsed))
+        f.write(f"{elapsed}\n")
+        f.write(f"Python Version: {sys.version.split()[0]}\n")
+        f.write(f"MNE Version: {mne.__version__}\n")
+        f.write(f"Individual Times: {', '.join([f'{t:.2f}' for t in individual_times])}\n")
         
     print(f"MNE-Python execution time: {elapsed:.2f} seconds")

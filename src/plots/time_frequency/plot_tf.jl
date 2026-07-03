@@ -18,12 +18,16 @@ const PLOT_TF_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :colormap => (:viridis, "Colormap for the heatmap"),
     :colorrange => (nothing, "Color range as (min, max) tuple. If nothing, automatically determined from data"),
     :colorbar => (true, "Whether to show a colorbar"),
+    :colorbar_label => (nothing, "Custom colorbar label. If nothing, automatically determined"),
 
     # Axis
     :ylogscale => (false, "Whether to use logarithmic scale for the frequency (y) axis"),
     :xlim => (nothing, "X-axis time limits as (min, max) tuple in seconds. If nothing, shows all time points"),
     :interpolate => (false, "Whether to interpolate the heatmap for a smoother appearance"),
     :title => (nothing, "Plot title. If nothing, automatically determined from condition name and channel"),
+    :xticks => (nothing, "Custom x-axis ticks (e.g., -0.2:0.2:1.0)"),
+    :yticks => (nothing, "Custom y-axis ticks (e.g., [2, 10, 20, 40, 80])"),
+    :time_unit => (:s, "Time unit for x-axis display (:s or :ms). Only affects axis labels and tick formatting — all intervals remain in seconds."),
 
     # Baseline
     :baseline_method => (:db, "Baseline correction method: :db, :absolute, :relative, :relchange, :percent, :zscore"),
@@ -82,8 +86,11 @@ function plot_tf(
     colorbar = plot_kwargs[:colorbar]
     ylogscale = plot_kwargs[:ylogscale]
     xlim = plot_kwargs[:xlim]
+    xticks = plot_kwargs[:xticks]
+    yticks = plot_kwargs[:yticks]
     interpolate = plot_kwargs[:interpolate]
     baseline_method = plot_kwargs[:baseline_method]
+    time_unit = plot_kwargs[:time_unit]
     grid_dims = plot_kwargs[:layout_grid_dims]
 
     n = length(tf_data)
@@ -152,6 +159,9 @@ function plot_tf(
             ylogscale = ylogscale,
             xlim = xlim,
             interpolate = interpolate,
+            xticks = xticks,
+            yticks = yticks,
+            time_unit = time_unit,
         )
         last_hm = hm
         ax.title = "$(tf.condition_name) — $channel"
@@ -164,7 +174,7 @@ function plot_tf(
     length(axes) > 1 && linkaxes!(axes...)
 
     if colorbar && !isnothing(last_hm)
-        cb_label = _tf_colorbar_label(first(tf_plots), baseline_interval, baseline_method)
+        cb_label = isnothing(plot_kwargs[:colorbar_label]) ? _tf_colorbar_label(first(tf_plots), baseline_interval, baseline_method) : plot_kwargs[:colorbar_label]
         Colorbar(fig[1:rows, cols+1], last_hm, label = cb_label)
     end
 
@@ -189,8 +199,11 @@ function plot_tf(
     colorbar                = plot_kwargs[:colorbar]
     ylogscale               = plot_kwargs[:ylogscale]
     xlim                    = plot_kwargs[:xlim]
+    xticks                  = plot_kwargs[:xticks]
+    yticks                  = plot_kwargs[:yticks]
     interpolate             = plot_kwargs[:interpolate]
     baseline_method         = plot_kwargs[:baseline_method]
+    time_unit               = plot_kwargs[:time_unit]
     layout_grid_dims        = plot_kwargs[:layout_grid_dims]
     layout_grid_rowgap      = plot_kwargs[:layout_grid_rowgap]
     layout_grid_colgap      = plot_kwargs[:layout_grid_colgap]
@@ -290,6 +303,9 @@ function plot_tf(
             ylogscale = ylogscale,
             xlim = xlim,
             interpolate = interpolate,
+            xticks = xticks,
+            yticks = yticks,
+            time_unit = time_unit,
         )
         last_hm = hm
 
@@ -330,7 +346,7 @@ function plot_tf(
 
     # Add shared colorbar
     if colorbar && !isnothing(last_hm)
-        cb_label = _tf_colorbar_label(tf_plot, baseline_interval, baseline_method)
+        cb_label = isnothing(plot_kwargs[:colorbar_label]) ? _tf_colorbar_label(tf_plot, baseline_interval, baseline_method) : plot_kwargs[:colorbar_label]
         if layout === :single
             Colorbar(fig[1, 2], last_hm, label = cb_label)
         elseif layout === :grid
@@ -367,6 +383,9 @@ function _plot_tf_heatmap!(
     ylogscale::Bool = false,
     xlim::Union{Nothing,Tuple{Real,Real}} = nothing,
     interpolate::Bool = false,
+    xticks = nothing,
+    yticks = nothing,
+    time_unit::Symbol = :s,
 )
 
     # Extract power matrix: [n_freqs × n_times]
@@ -375,7 +394,12 @@ function _plot_tf_heatmap!(
     power_mat = power_mat'
 
     # Configure axis
-    ax.xlabel = "Time (s)"
+    if time_unit == :ms
+        ax.xlabel = "Time (ms)"
+        ax.xtickformat = values -> [string(round(Int, v * 1000)) for v in values]
+    else
+        ax.xlabel = "Time (s)"
+    end
     ax.ylabel = "Frequency (Hz)"
 
     if ylogscale
@@ -385,6 +409,8 @@ function _plot_tf_heatmap!(
     end
 
     !isnothing(xlim) && xlims!(ax, xlim)
+    !isnothing(xticks) && (ax.xticks = xticks)
+    !isnothing(yticks) && (ax.yticks = yticks)
 
     # Plot heatmap
     hm = heatmap!(

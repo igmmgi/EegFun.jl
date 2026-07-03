@@ -15,7 +15,9 @@ function process_eeg_to_grandaverage(raw_files::Vector{String}, data_dir::String
         EegFun.EpochCondition(name = "Invalid", trigger_sequences = [[2, 5], [4, 5]], reference_index = 2),
     ]
 
+    individual_times = Float64[]
     for (i, file) in enumerate(raw_files)
+        file_time = @elapsed begin
         # 1. Read data, layout, and create EegFun.jl data structure
         raw_data = EegFun.read_raw_data(file)
 
@@ -66,6 +68,8 @@ function process_eeg_to_grandaverage(raw_files::Vector{String}, data_dir::String
         participant_erps = EegFun.average_epochs(epochs)
 
         append!(all_subject_erps, participant_erps)
+        end
+        push!(individual_times, file_time)
     end
 
     # 6. Lowpass filter before grand averaging
@@ -96,7 +100,7 @@ function process_eeg_to_grandaverage(raw_files::Vector{String}, data_dir::String
         writedlm(io, [valid_po.data.time valid_data invalid_data], ',')
     end
 
-    return grand_avg
+    return grand_avg, individual_times
 end
 
 if length(ARGS) < 1
@@ -125,9 +129,16 @@ Base.invokelatest(process_eeg_to_grandaverage, test_files[1:warmup_files], data_
 
 println("Benchmarking...")
 val, t_elapsed = @timed Base.invokelatest(process_eeg_to_grandaverage, test_files, data_dir, run_ica_flag)
+grand_avg, individual_times = val
 
 # Save execution time
+import Pkg
+eegfun_version = Pkg.project().version
+
 open(joinpath(results_dir, "julia_time.txt"), "w") do io
-    write(io, string(t_elapsed))
+    println(io, t_elapsed)
+    println(io, "Julia Version: ", VERSION)
+    println(io, "EegFun Version: ", eegfun_version)
+    println(io, "Individual Times: ", join(round.(individual_times, digits=2), ", "))
 end
 println("Julia execution time: ", round(t_elapsed, digits = 2), " seconds")
