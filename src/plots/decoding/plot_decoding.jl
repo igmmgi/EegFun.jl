@@ -48,7 +48,7 @@ const PLOT_DECODING_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :add_xy_origin => (true, "Add origin lines at x=0 and y=chance (true/false)"),
 
     # Figure padding
-    :figure_padding => ((10, 10, 10, 10), "Padding around entire figure as (left, right, top, bottom) tuple (in pixels)"),
+    :figure_padding => ((10, 30, 10, 10), "Padding around entire figure as (left, right, bottom, top) tuple (in pixels)"),
 )
 
 # ==============================================================================

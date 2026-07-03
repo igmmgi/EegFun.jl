@@ -12,7 +12,7 @@ const PLOT_TF_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Layout
     :layout => (:single, "Layout type: :single, :grid, or :topo"),
-    :figure_padding => ((10, 10, 10, 10), "Padding around entire figure as (left, right, top, bottom) tuple (in pixels)"),
+    :figure_padding => ((10, 30, 10, 10), "Padding around entire figure as (left, right, bottom, top) tuple (in pixels)"),
 
     # Colormap and color range
     :colormap => (:viridis, "Colormap for the heatmap"),

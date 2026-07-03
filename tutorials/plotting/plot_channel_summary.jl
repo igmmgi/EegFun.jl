@@ -27,6 +27,7 @@ EegFun.plot_channel_summary(cs, :range)
 EegFun.plot_channel_summary(cs, :min)
 EegFun.plot_channel_summary(cs, :min, bar_color = :red)
 EegFun.plot_channel_summary(cs, [:min, :max, :std, :range, :var, :zvar])
+EegFun.plot_channel_summary(cs, [:range, :var])
 
 #################################
 # Epoched DataFrameEeg

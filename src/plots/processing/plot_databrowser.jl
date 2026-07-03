@@ -1,7 +1,7 @@
 const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Figure and layout
-    :figure_padding => ((50, 0, 50, 50), "Figure padding as (left, right, bottom, top)"),
+    :figure_padding => ((50, 30, 50, 50), "Figure padding as (left, right, bottom, top)"),
 
     # Axis styling
     :xlabel => ("Time (S)", "X-axis label"),
@@ -1979,7 +1979,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                     line_colormap = [state.plot_kwargs[:unselected_channel_color], state.plot_kwargs[:unselected_channel_color], :red]
                 else
                     base_color = state.plot_kwargs[:unselected_channel_color]
-                    line_colormap = @lift($(state.view.show_original_ica) ? [:green, :green, :red] : [base_color, base_color, :red])
+                    line_colormap = @lift($(state.view.show_original_ica) ? [:black, :black, :red] : [base_color, base_color, :red])
                 end
 
                 line_width = state.plot_kwargs[:channel_line_width]
