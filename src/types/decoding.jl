@@ -92,4 +92,3 @@ function Base.show(io::IO, decoded::DecodedData)
         println(io, "  Max accuracy: $(round(max_acc, digits=3)) at $(round(decoded.times[max_idx], digits=3)) s")
     end
 end
-

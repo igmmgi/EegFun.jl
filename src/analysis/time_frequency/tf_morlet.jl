@@ -158,7 +158,7 @@ function tf_morlet(
     # Restore original column order which might be shuffled by multithreading
     expected_cols = vcat([:time, :freq], channel_names)
     if return_trials
-        for i in 1:n_trials
+        for i = 1:n_trials
             select!(power_df[i], expected_cols)
             select!(phase_df[i], expected_cols)
         end

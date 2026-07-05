@@ -2,7 +2,7 @@
 
 Interactive ERP simulator for teaching how trial averaging extracts signals from noise.
 
-![Simulate ERP](/tutorials/simulate_erp.png)
+![Simulate ERP](../../../public/tutorials/simulate_erp.png)
 
 ## What it shows
 

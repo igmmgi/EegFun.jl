@@ -2,7 +2,7 @@ using Documenter
 using DocumenterVitepress
 
 # Add the parent directory to the load path so we can load the local package
-push!(LOAD_PATH, dirname(@__DIR__))
+pushfirst!(LOAD_PATH, dirname(@__DIR__))
 using EegFun
 
 
@@ -142,7 +142,7 @@ pages = [
             "Time-Frequency" => "tutorials/teaching/signal_processing/signal_example_tf.md",
         ],
         "ICA" => [
-            "Introduction" => "tutorials/teaching/ica/signal_example_ica_math.md",
+            "Introduction" => "tutorials/teaching/ica/signal_example_ica_0.md",
             "Mixture" => "tutorials/teaching/ica/signal_example_ica_mixture.md",
             "Separation" => "tutorials/teaching/ica/signal_example_ica_separation.md",
             "Geometry" => "tutorials/teaching/ica/signal_example_ica_geometry.md",
@@ -181,11 +181,6 @@ if build_pdf
     ispath(joinpath(@__DIR__, src_dir)) && rm(joinpath(@__DIR__, src_dir), force=true, recursive=true)
     cp(joinpath(@__DIR__, "src"), joinpath(@__DIR__, src_dir))
     
-    # Copy public assets into assets/public so Documenter natively copies them to the build directory
-    mkpath(joinpath(@__DIR__, src_dir, "assets", "public"))
-    for item in readdir(joinpath(@__DIR__, "src", "public"))
-        cp(joinpath(@__DIR__, "src", "public", item), joinpath(@__DIR__, src_dir, "assets", "public", item), force=true)
-    end
     
     # Fix absolute image paths for Typst
     for (root, dirs, files) in walkdir(joinpath(@__DIR__, src_dir))
@@ -199,8 +194,6 @@ if build_pdf
                 content = replace(content, r"^:::\s*.*?\n"m => "")
                 # Remove https images because Typst cannot download them without network flags
                 content = replace(content, r"!\[([^\]]*)\]\(https?://[^\)]+\)" => "")
-                # Replace ![alt](/path) with ![alt](/assets/public/path)
-                content = replace(content, r"!\[([^\]]*)\]\((/[^\)]+)\)" => s"![\1](/assets/public\2)")
                 write(path, content)
             end
         end

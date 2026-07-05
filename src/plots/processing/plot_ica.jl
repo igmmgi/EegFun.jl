@@ -1476,4 +1476,3 @@ const PLOT_ICA_QUALITY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Layout parameters
 )
-

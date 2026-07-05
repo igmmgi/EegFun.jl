@@ -2,7 +2,7 @@
 
 Interactive demo showing discrete convolution by sliding a kernel across a signal, with three kernel types including a Morlet wavelet to bridge filtering and time-frequency analysis.
 
-![Signal Example Convolution](/tutorials/signal_example_convolution.png)
+![Signal Example Convolution](../../../public/tutorials/signal_example_convolution.png)
 
 ## What it shows
 

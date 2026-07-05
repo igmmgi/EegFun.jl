@@ -4,7 +4,7 @@ Interactive demonstration of the **Nyquist–Shannon sampling theorem**.
 
 This demo shows how sampling rate affects the reconstruction of a sine wave.
 
-![Signal Example 1](/tutorials/signal_example_sampling.png)
+![Signal Example 1](../../../public/tutorials/signal_example_sampling.png)
 
 ## What it shows
 

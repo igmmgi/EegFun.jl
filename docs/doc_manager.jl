@@ -9,7 +9,7 @@ using Pkg
 using Printf
 
 # Add the parent directory to the load path so we can load the local package
-push!(LOAD_PATH, dirname(@__DIR__))
+pushfirst!(LOAD_PATH, dirname(@__DIR__))
 using EegFun
 
 """

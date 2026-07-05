@@ -440,7 +440,7 @@ function tf_multitaper(
     # Restore original column order which might be shuffled by multithreading
     expected_cols = vcat([:time, :freq], selected_channels)
     if return_trials
-        for i in 1:n_trials
+        for i = 1:n_trials
             select!(power_df[i], expected_cols)
             select!(phase_df[i], expected_cols)
         end

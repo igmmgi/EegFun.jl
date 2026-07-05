@@ -2,7 +2,7 @@
 
 Interactive demo showing time-resolved multivariate pattern classification (MVPA/decoding) on synthetic EEG data.
 
-![Simulate Decoding](/tutorials/signal_example_decoding.png)
+![Simulate Decoding](../../../public/tutorials/signal_example_decoding.png)
 
 ## What it shows
 

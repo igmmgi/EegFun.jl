@@ -2,7 +2,7 @@
 
 Interactive demo comparing three time-frequency analysis methods on a synthetic multi-component signal, with controls for baseline normalization and frequency-axis scaling.
 
-![Signal Example 3](/tutorials/signal_example_tf.png)
+![Signal Example 3](../../../public/tutorials/signal_example_tf.png)
 
 ## What it shows
 

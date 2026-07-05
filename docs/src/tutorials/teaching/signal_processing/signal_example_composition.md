@@ -2,7 +2,7 @@
 
 Interactive multi-signal composer demonstrating how complex waveforms are built from simple sine waves, how noise affects a signal, and how filters shape the frequency content.
 
-![Signal Example 2](/tutorials/signal_example_composition.png)
+![Signal Example 2](../../../public/tutorials/signal_example_composition.png)
 
 ## What it shows
 

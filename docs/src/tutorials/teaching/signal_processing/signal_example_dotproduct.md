@@ -2,7 +2,7 @@
 
 Interactive demo showing the single core idea behind the **Discrete Fourier Transform (DFT)**: multiplying a signal by a test sinusoid and summing the result.
 
-![Signal Example Dot Product](/tutorials/signal_example_dotproduct.png)
+![Signal Example Dot Product](../../../public/tutorials/signal_example_dotproduct.png)
 
 ## What it shows
 

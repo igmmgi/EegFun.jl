@@ -6,7 +6,7 @@ This tutorial uses a complete example dataset to walk through the EegFun.jl anal
 
 The task is a variation of a standard **Posner cueing paradigm** investigating the neural correlates of endogenous attention allocation. On each trial, participants fixate a central cross, receive a directional cue indicating the likely location (80% valid) of an upcoming target, then respond (simple target detection) to the target.
 
-![Trial Structure](/demos/experiments/visual-attention/trial_structure.svg)
+![Trial Structure](../../public/demos/experiments/visual-attention/trial_structure.svg)
 
 - **Valid trials**: The target appears at the cued location
 - **Invalid trials**: The target appears at the uncued location
@@ -69,7 +69,7 @@ Plot the channel layout to check that electrode positions look correct:
 EegFun.plot_layout_2d(dat)
 ```
 
-![Biosemi 72-channel layout](/demos/experiments/visual-attention/biosemi72.png)
+![Biosemi 72-channel layout](../../public/demos/experiments/visual-attention/biosemi72.png)
 
 
 Define channel neighbours (used later potential electrode repair via nearest neighbours, or for cluster based statistics):
@@ -107,7 +107,7 @@ Get a visual overview of the trigger distribution:
 EegFun.plot_trigger_overview(dat)
 ```
 
-![Trigger overview](/demos/experiments/visual-attention/trigger_overview.png)
+![Trigger overview](../../public/demos/experiments/visual-attention/trigger_overview.png)
 
 
 Inspect trigger timing — when each trigger occurred and the interval between triggers:
@@ -127,7 +127,7 @@ The databrowser lets you scroll through the continuous recording and visually in
 EegFun.plot_databrowser(dat)
 ```
 
-![Data browser](/demos/experiments/visual-attention/databrowser.png)
+![Data browser](../../public/demos/experiments/visual-attention/databrowser.png)
 
 Before going further, remove the DC offset with a high-pass filter and rereference to the average — this makes the traces much easier to read:
 
@@ -142,7 +142,7 @@ EegFun.rereference!(dat, :avg)
 EegFun.plot_databrowser(dat)
 ```
 
-![Data browser after filtering](/demos/experiments/visual-attention/eye_blink.png)
+![Data browser after filtering](../../public/demos/experiments/visual-attention/eye_blink.png)
 
 > [!TIP]
 > Look for obvious artifacts: flat channels, excessive drift, large muscle movements. This gives you a feel for data quality before automated processing.
@@ -215,7 +215,7 @@ EegFun.plot_channel_summary(cs, [:range, :min, :max, :var])
 EegFun.plot_channel_summary(cs_epoch, :range)
 ```
 
-![Channel summary (range)](/demos/experiments/visual-attention/channel_summary.png)
+![Channel summary (range)](../../public/demos/experiments/visual-attention/channel_summary.png)
 
 Next, flag every sample where **any** channel exceeds ±200 μV. This creates a Boolean column (`:is_extreme_value_200`) that the databrowser renders as shaded overlays:
 
@@ -227,7 +227,7 @@ EegFun.is_extreme_value!(dat, 200)
 EegFun.plot_databrowser(dat)
 ```
 
-![Extreme values in the databrowser](/demos/experiments/visual-attention/extreme_values.png)
+![Extreme values in the databrowser](../../public/demos/experiments/visual-attention/extreme_values.png)
 
 ### 1.8 Detect and Repair Bad Channels
 
@@ -257,7 +257,7 @@ EegFun.plot_databrowser(dat)
 # → Press R to open the repair menu
 ```
 
-![Channel repair interface](/demos/experiments/visual-attention/channel_repair.png)
+![Channel repair interface](../../public/demos/experiments/visual-attention/channel_repair.png)
 
 ### 1.9 ICA
 
@@ -295,8 +295,8 @@ EegFun.plot_topography(ica_result, component_selection = EegFun.components(1:10)
 EegFun.plot_ica_component_activation(dat, ica_result)
 ```
 
-![ICA component topographies](/demos/experiments/visual-attention/ica_topography.png)
-![ICA component activation](/demos/experiments/visual-attention/ica_activation.png)
+![ICA component topographies](../../public/demos/experiments/visual-attention/ica_topography.png)
+![ICA component activation](../../public/demos/experiments/visual-attention/ica_activation.png)
 
 Components are ordered by the percentage of total variance they explain — the first few typically capture the most prominent signals or artifacts. In most EEG recordings, the largest components are **vertical EOG activity** (eye blinks, showing a frontal topography) and **horizontal eye movements** (lateral frontal pattern). Standard ERP analyses use ICA primarily to remove these ocular components so that the cleaned data better reflects neural activity.
 
@@ -306,7 +306,7 @@ You can immediately browse the data with ICA components overlaid — this lets y
 EegFun.plot_databrowser(dat, ica_result)
 ```
 
-![Databrowser with ICA components](/demos/experiments/visual-attention/ica_databrowser.png)
+![Databrowser with ICA components](../../public/demos/experiments/visual-attention/ica_databrowser.png)
 
 Automatically identify artifact components via EOG correlation and spatial kurtosis:
 
@@ -388,7 +388,7 @@ EegFun.plot_artifact_detection(epochs[1], rejection_info[1]) # Condition 1
 EegFun.plot_artifact_detection(epochs[2], rejection_info[2]) # Condition 2
 ```
 
-![Artifact detection](/demos/experiments/visual-attention/artifact_detection.png)
+![Artifact detection](../../public/demos/experiments/visual-attention/artifact_detection.png)
 
 ```julia
 # Repair channels that can be interpolated
@@ -402,7 +402,7 @@ rejection_info2 = EegFun.detect_bad_epochs_automatic(epochs, abs_criterion = 100
 EegFun.detect_bad_epochs_interactive(epochs[1], artifact_info = rejection_info2[1], dims = (3, 3))
 ```
 
-![Interactive epoch rejection grid](/demos/experiments/visual-attention/epoch_rejection_grid.png)
+![Interactive epoch rejection grid](../../public/demos/experiments/visual-attention/epoch_rejection_grid.png)
 
 ```julia
 # Accept the rejection and keep only good epochs
@@ -451,7 +451,7 @@ EegFun.preprocess("pipeline.toml")
 
 For each participant, the pipeline runs through the following stages:
 
-![Pipeline flowchart](/demos/experiments/visual-attention/pipeline_flowchart.svg)
+![Pipeline flowchart](../../public/demos/experiments/visual-attention/pipeline_flowchart.svg)
 *↻ Repeated for each participant file*
 
 | # | Stage | Description |
@@ -594,7 +594,7 @@ The interactive filter GUI lets you preview the effect of different filter setti
 EegFun.plot_erp_filter_gui("example1_erps_good.jld2")
 ```
 
-![Filter GUI](/demos/experiments/visual-attention/filter_gui.png)
+![Filter GUI](../../public/demos/experiments/visual-attention/filter_gui.png)
 
 This creates a new directory `filtered_erps_good_lp_30hz/` with filtered copies of each participant's ERPs.
 
@@ -619,9 +619,9 @@ EegFun.plot_erp("grand_average_erps_good.jld2", channel_selection = EegFun.chann
 EegFun.plot_erp("grand_average_erps_good.jld2", channel_selection = EegFun.channels([:PO7, :PO8]), baseline_interval = (-0.2, 0), layout = :grid, layout_grid_dims = (1,2))
 ```
 
-![Grand average ERP waveforms at PO7 and PO8](/demos/experiments/visual-attention/erp_plot1.png)
+![Grand average ERP waveforms at PO7 and PO8](../../public/demos/experiments/visual-attention/erp_plot1.png)
 
-![P1 topography (113–117 ms)](/demos/experiments/visual-attention/p1_topo.png)
+![P1 topography (113–117 ms)](../../public/demos/experiments/visual-attention/p1_topo.png)
 
 ### 2.4 Combining Conditions
 
@@ -643,8 +643,8 @@ EegFun.plot_topography("grand_average_erps_good.jld2", baseline_interval = (-0.2
 label_plot = false) 
 ```
 
-![Condition-averaged ERP (Valid vs Invalid)](/demos/experiments/visual-attention/erp_plot2.png)
-![Condition-averaged Topography P1 (Valid vs Invalid)](/demos/experiments/visual-attention/topo_plot2.png)
+![Condition-averaged ERP (Valid vs Invalid)](../../public/demos/experiments/visual-attention/erp_plot2.png)
+![Condition-averaged Topography P1 (Valid vs Invalid)](../../public/demos/experiments/visual-attention/topo_plot2.png)
 
 ### 2.5 Create Difference Waves
 
@@ -691,7 +691,7 @@ fig.axes[1].yticklabelsize = 30
 # and so on ...
 ```
 
-![Publication-quality ERP with highlighted components](/demos/experiments/visual-attention/erp_plot1_custom.png)
+![Publication-quality ERP with highlighted components](../../public/demos/experiments/visual-attention/erp_plot1_custom.png)
 
 ---
 
@@ -713,7 +713,7 @@ EegFun.plot_erp_measurement_gui(erps)
 EegFun.plot_erp_measurement_gui("grand_average_erps_good.jld2")
 ```
 
-![ERP measurement GUI](/demos/experiments/visual-attention/erp_measurment_gui.png)
+![ERP measurement GUI](../../public/demos/experiments/visual-attention/erp_measurment_gui.png)
 
 The GUI lets you select channels, time windows, and measurement types interactively to determine optimal parameters before running batch extraction.
 
@@ -756,7 +756,7 @@ plot_anova(anova_result, x_grouping = :condition, individual_data = :connected_p
 axis_xlabel = "Validity", axis_ylabel = "Mean P1 Amplitude [μV]", axis_xticklabels = ["Valid", "Invalid"])
 ```
 
-![P1 mean amplitude by validity condition](/demos/experiments/visual-attention/p1_amp.png)
+![P1 mean amplitude by validity condition](../../public/demos/experiments/visual-attention/p1_amp.png)
 
 ### 3.4 Permutation-Based Statistics
 
@@ -803,8 +803,8 @@ EegFun.plot_erp_stats(
 EegFun.plot_topography_stats(result_perm, interval_selection = EegFun.times(0.05, 0.2), n_topos = 10, dims = (2, 5), highlight_threshold = 1)
 ```
 
-![ERP cluster-based permutation test results](/demos/experiments/visual-attention/erp_cluster_stats.png)
-![ERP cluster-based permutation test results](/demos/experiments/visual-attention/topo_cluster_stats.png)
+![ERP cluster-based permutation test results](../../public/demos/experiments/visual-attention/erp_cluster_stats.png)
+![ERP cluster-based permutation test results](../../public/demos/experiments/visual-attention/topo_cluster_stats.png)
 
 ## Further Reading
 

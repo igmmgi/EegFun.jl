@@ -27,7 +27,10 @@ const PLOT_TF_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :title => (nothing, "Plot title. If nothing, automatically determined from condition name and channel"),
     :xticks => (nothing, "Custom x-axis ticks (e.g., -0.2:0.2:1.0)"),
     :yticks => (nothing, "Custom y-axis ticks (e.g., [2, 10, 20, 40, 80])"),
-    :time_unit => (:s, "Time unit for x-axis display (:s or :ms). Only affects axis labels and tick formatting — all intervals remain in seconds."),
+    :time_unit => (
+        :s,
+        "Time unit for x-axis display (:s or :ms). Only affects axis labels and tick formatting — all intervals remain in seconds.",
+    ),
 
     # Baseline
     :baseline_method => (:db, "Baseline correction method: :db, :absolute, :relative, :relchange, :percent, :zscore"),
@@ -174,7 +177,9 @@ function plot_tf(
     length(axes) > 1 && linkaxes!(axes...)
 
     if colorbar && !isnothing(last_hm)
-        cb_label = isnothing(plot_kwargs[:colorbar_label]) ? _tf_colorbar_label(first(tf_plots), baseline_interval, baseline_method) : plot_kwargs[:colorbar_label]
+        cb_label =
+            isnothing(plot_kwargs[:colorbar_label]) ? _tf_colorbar_label(first(tf_plots), baseline_interval, baseline_method) :
+            plot_kwargs[:colorbar_label]
         Colorbar(fig[1:rows, cols+1], last_hm, label = cb_label)
     end
 
@@ -346,7 +351,9 @@ function plot_tf(
 
     # Add shared colorbar
     if colorbar && !isnothing(last_hm)
-        cb_label = isnothing(plot_kwargs[:colorbar_label]) ? _tf_colorbar_label(tf_plot, baseline_interval, baseline_method) : plot_kwargs[:colorbar_label]
+        cb_label =
+            isnothing(plot_kwargs[:colorbar_label]) ? _tf_colorbar_label(tf_plot, baseline_interval, baseline_method) :
+            plot_kwargs[:colorbar_label]
         if layout === :single
             Colorbar(fig[1, 2], last_hm, label = cb_label)
         elseif layout === :grid

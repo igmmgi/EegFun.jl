@@ -11,7 +11,7 @@ EegFun.plot_gui()
 
 A window opens with three columns allowing file selection, plot selection, and plot setting type controls.
 
-![Plot GUI overview](/tutorials/plot_gui.png)
+![Plot GUI overview](../public/tutorials/plot_gui.png)
 
 ## GUI Layout
 

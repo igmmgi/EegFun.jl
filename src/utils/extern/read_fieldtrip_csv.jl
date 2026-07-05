@@ -95,4 +95,3 @@ function read_fieldtrip_csv(
     # Create EpochData
     return EegFun.EpochData(file, condition, condition_name, trial_dfs, layout, fsample, analysis_info)
 end
-

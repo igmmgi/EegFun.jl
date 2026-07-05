@@ -293,5 +293,3 @@ function Base.show(io::IO, result::TFAnalyticResult)
     println(io, "│  └─ $freq_range, $time_range")
     println(io, "└─ Significant points: $n_sig_pos positive, $n_sig_neg negative")
 end
-
-
