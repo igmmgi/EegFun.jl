@@ -47,6 +47,7 @@ end
     StatisticalData
 
 Stores prepared data for statistical tests (both permutation and analytic tests).
+Created by `prepare_stats`.
 
 # Fields
 - `data::Vector{ErpData}`: Grand average ERPs for conditions 1 and 2 (for visualization/storage)
@@ -54,12 +55,6 @@ Stores prepared data for statistical tests (both permutation and analytic tests)
 - `se_cond1::Array{Float64, 2}`: Standard error for condition 1 over the full display interval [electrodes × time]
 - `se_cond2::Array{Float64, 2}`: Standard error for condition 2 over the full display interval [electrodes × time]
 - `se_diff::Array{Float64, 2}`: Standard error of the mean difference over the full display interval [electrodes × time]
-"""
-"""
-    StatisticalData
-
-A prepared data structure ready for statistical testing.
-Created by `prepare_stats`.
 """
 struct StatisticalData
     data::Vector{ErpData}

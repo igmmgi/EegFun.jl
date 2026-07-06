@@ -176,7 +176,6 @@ mutable struct EpochedDataState <: AbstractDataState
     end
 end
 
-"""Track optional extra channel overlays (e.g. EOG, EMG)."""
 """
     ExtraChannelInfo
 
