@@ -177,6 +177,12 @@ mutable struct EpochedDataState <: AbstractDataState
 end
 
 """Track optional extra channel overlays (e.g. EOG, EMG)."""
+"""
+    ExtraChannelInfo
+
+A mutable struct to store additional channel information for the data browser.
+Contains names, types, data dictionaries, and temporal alignment metadata.
+"""
 mutable struct ExtraChannelInfo
     channels::Vector{Symbol}
     data_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}
