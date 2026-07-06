@@ -18,7 +18,7 @@
         // We use absolute path to the build directory's public assets because Typst 
         // resolves paths relative to the generated .typ file in the build directory.
         // DocumenterTypst copies `src/assets` to `build_pdf/assets`.
-        #image("assets/public/EegFunLogo.png", width: 85%)
+        #image("public/EegFunLogo.png", width: 85%)
       ]
     ]
   )

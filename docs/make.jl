@@ -173,7 +173,7 @@ build_pdf = get(ENV, "BUILD_PDF", "false") == "true"
 
 if build_pdf
     using DocumenterTypst
-    build_format = DocumenterTypst.Typst()
+    build_format = DocumenterTypst.Typst(platform="none")
     build_dir = "build_pdf"
     
     # Create a temporary source directory for the PDF build
