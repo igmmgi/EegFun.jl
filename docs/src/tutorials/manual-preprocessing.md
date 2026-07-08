@@ -400,6 +400,6 @@ graph TD
 ## Further Reading
 
 - **Artifact detection** — [Artifact Handling](artifact-handling.md) for detecting and repairing bad channels and epochs
-- **Automating this workflow** — [Batch Processing](batch-processing.md) for running `preprocess`/`preprocess_v2` across a full cohort
+- **Automating this workflow** — [Batch Processing](batch-processing.md) for running `preprocess` across a full cohort
 - **Selection syntax** — [Selection Patterns](selection-patterns.md) for channel, sample, and epoch filters used throughout preprocessing
 - **Working example** — [Preprocessing Workflow demo](../tutorials/workflows/preprocessing_workflow.md)
