@@ -21,6 +21,7 @@ const PLOT_LAYOUT_LABEL_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :label_xoffset => (0, "X-axis offset for electrode labels."),
     :label_yoffset => (0, "Y-axis offset for electrode labels."),
     :label_zoffset => (0, "Z-axis offset for electrode labels (3D only)."),
+    :label_align => ((:left, :bottom), "Text alignment for electrode labels (e.g., (:center, :center))."),
 )
 
 const PLOT_LAYOUT_ROI_KWARGS = Dict{Symbol,Tuple{Any,String}}(
@@ -156,6 +157,7 @@ function plot_layout_2d!(
                     labels[i];
                     fontsize = label_kwargs[:label_fontsize],
                     color = label_kwargs[:label_color],
+                    align = label_kwargs[:label_align],
                 )
             end
         end
@@ -214,7 +216,8 @@ function plot_layout_2d(
     kwargs...,
 )
     fig = Figure()
-    ax = Axis(fig[1, 1], aspect = DataAspect())
+    # Increase xautolimitmargin slightly more on the right (0.15) to account for text labels extending outwards
+    ax = Axis(fig[1, 1], aspect = DataAspect(), xautolimitmargin = (0.1, 0.15), yautolimitmargin = (0.1, 0.1))
 
     plot_layout_2d!(fig, ax, layout; neighbours = neighbours, correlation_matrix = correlation_matrix, kwargs...)
 
@@ -245,8 +248,8 @@ Create a convex hull around a set of 2D points with a specified border size usin
 function _create_convex_hull_graham(xpos::Vector{<:Real}, ypos::Vector{<:Real}, border_size::Real)
     # Generate points around each electrode with the border
     circle_points = 0:(2π/361):2π
-    xs = (border_size .* sin.(circle_points) .+ transpose(xpos))[:]
-    ys = (border_size .* cos.(circle_points) .+ transpose(ypos))[:]
+    xs = (border_size.*sin.(circle_points).+transpose(xpos))[:]
+    ys = (border_size.*cos.(circle_points).+transpose(ypos))[:]
 
     # Convert to array of points
     points = [[xs[i], ys[i]] for i in eachindex(xs)]
@@ -424,6 +427,7 @@ function plot_layout_3d!(fig::Figure, ax::Axis3, layout::Layout; neighbours::Boo
                 labels[i];
                 fontsize = label_kwargs[:label_fontsize],
                 color = label_kwargs[:label_color],
+                align = label_kwargs[:label_align],
             )
         end
     end
@@ -470,7 +474,8 @@ $(_generate_kwargs_doc(PLOT_LAYOUT_LABEL_KWARGS))
 """
 function plot_layout_3d(layout::Layout; neighbours::Bool = false, display_plot::Bool = true, kwargs...)
     fig = Figure()
-    ax = Axis3(fig[1, 1])
+    # Increase autolimit margins to account for text labels extending outwards
+    ax = Axis3(fig[1, 1], xautolimitmargin = (0.1, 0.15), yautolimitmargin = (0.1, 0.1), zautolimitmargin = (0.1, 0.1))
 
     plot_layout_3d!(fig, ax, layout; neighbours = neighbours, kwargs...)
 
@@ -631,6 +636,7 @@ function _add_interactive_correlation_points!(
                 labels[i];
                 fontsize = label_kwargs[:label_fontsize],
                 color = label_kwargs[:label_color],
+                align = label_kwargs[:label_align],
             )
             push!(channel_labels[], label_obj)
         end
@@ -691,7 +697,14 @@ function _add_interactive_correlation_points!(
 
                 # Add text label with correlation value at electrode position
                 pos = positions[j]
-                text_obj = text!(ax, position = (pos[1], pos[2]), string(round(corr_val, digits = 2)); fontsize = 16, color = :black)
+                text_obj = text!(
+                    ax,
+                    position = (pos[1], pos[2]),
+                    string(round(corr_val, digits = 2));
+                    fontsize = 16,
+                    color = :black,
+                    align = label_kwargs[:label_align],
+                )
                 push!(current_text_labels[], text_obj)
             end
 
