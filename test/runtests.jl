@@ -52,6 +52,7 @@ end
     include("tests/misc.jl")
     include("tests/plot_channel_summary.jl")
     include("tests/plot_layout.jl")
+    include("tests/plot_topography_3d.jl")
     include("tests/plot_misc.jl")
     include("tests/plot_triggers.jl")
     include("tests/print.jl")

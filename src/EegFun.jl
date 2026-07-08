@@ -21,6 +21,7 @@ using FFTW
 
 # Plotting and visualization
 using Makie
+using GeometryBasics
 using CairoMakie
 using GLMakie
 using ScatteredInterpolation
@@ -185,6 +186,7 @@ include("plots/erps/plot_gfp.jl")
 include("plots/erps/plot_erp_stats.jl")
 include("plots/erps/plot_topography_stats.jl")
 include("plots/erps/plot_topography.jl")
+include("plots/erps/plot_topography_3d.jl")
 
 include("plots/time_frequency/plot_tf.jl")
 include("plots/time_frequency/plot_tf_stats.jl")
