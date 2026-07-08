@@ -996,4 +996,57 @@ using EegFun
         @test !any(dat2.data.is_step_value_50[600:end])
     end
 
+    @testset "is_flatline" begin
+        dat = EegFun.create_test_continuous_data_with_artifacts()
+        
+        # Make Ch1 completely flat for 0.5 second (500 samples if 1000Hz)
+        sr = dat.sample_rate
+        flat_samples = 1:Int(0.5 * sr)
+        dat.data[flat_samples, :Ch1] .= 0.0
+        
+        # Should detect flatline in Ch1
+        EegFun.is_flatline!(dat, 0.1, 0.2)
+        @test "is_flatline" in names(dat.data)
+        @test sum(dat.data[flat_samples, :is_flatline]) > 0
+        
+        # Test separate mode
+        EegFun.is_flatline!(dat, 0.1, 0.2, mode=:separate, channel_selection=EegFun.channels([:Ch1, :Ch2]))
+        @test "is_flatline_Ch1" in names(dat.data)
+        @test "is_flatline_Ch2" in names(dat.data)
+        
+        # Test non-mutating
+        res = EegFun.is_flatline(dat, 0.1, 0.2)
+        @test length(res) == nrow(dat.data)
+        
+        # Test n_flatline
+        n = EegFun.n_flatline(dat, 0.1, 0.2)
+        @test n > 0
+    end
+    
+    @testset "is_peak_to_peak" begin
+        dat = EegFun.create_test_continuous_data_with_artifacts()
+        
+        # Add a big artifact
+        dat.data[500, :Ch2] = 500.0
+        dat.data[505, :Ch2] = -500.0
+        
+        EegFun.is_peak_to_peak!(dat, 800.0, 0.2)
+        @test "is_peak_to_peak" in names(dat.data)
+        @test dat.data[500, :is_peak_to_peak] == true
+        
+        n = EegFun.n_peak_to_peak(dat, 800.0, 0.2)
+        @test n > 0
+    end
+    
+    @testset "find_bridged_channels" begin
+        dat = EegFun.create_test_continuous_data_with_artifacts()
+        
+        # Make Ch1 and Ch2 perfectly correlated
+        dat.data[!, :Ch2] = dat.data[!, :Ch1] .+ 0.001 .* randn(nrow(dat.data))
+        
+        res = EegFun.find_bridged_channels(dat, 0.99)
+        @test nrow(res) >= 1
+        @test (:Ch1 in res.channel_1 && :Ch2 in res.channel_2) || (:Ch2 in res.channel_1 && :Ch1 in res.channel_2)
+    end
+
 end
