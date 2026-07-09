@@ -48,9 +48,10 @@ function prepare_decoding(
     # Group all epochs by condition first
     epochs_by_condition = group_by_condition(epochs)
 
-    # Apply condition selection to the sorted condition numbers
+    # Apply condition selection to sample datasets for each condition
     all_cond_nums = collect(keys(epochs_by_condition))  # Already sorted by group_by_condition
-    selected_mask = condition_selection(1:length(all_cond_nums))
+    sample_epochs = [epochs_by_condition[c][1] for c in all_cond_nums]
+    selected_mask = condition_selection(sample_epochs)
     selected_cond_nums = all_cond_nums[selected_mask]
 
     # Validate at least 2 conditions for classification
