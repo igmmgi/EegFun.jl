@@ -1,5 +1,3 @@
-__precompile__(true)
-
 module EegFun
 
 # Core dependencies
@@ -227,6 +225,7 @@ function __init__()
             "TutorialDataSets",
             "EegFun Tutorial Datasets",
             "https://zenodo.org/records/19045958/files/TutorialDataSets_EegFun.zip?download=1",
+            "7dc98bd7ed05198e8db669d6a7afdb401fda49b5f356ca9f0e64d0d39f0953bf",
             post_fetch_method = unpack,
         ),
     )

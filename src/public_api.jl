@@ -132,7 +132,11 @@ public average_number_of_neighbours
 public check_channel_neighbors
 public create_custom_layout
 public create_layout
+public get_neighbours_xy!
+public get_neighbours_xyz!
 public has_valid_coordinates
+public polar_to_cartesian_xy!
+public polar_to_cartesian_xyz!
 public print_layout_neighbours
 public subset_layout
 public subset_layout!

@@ -367,10 +367,10 @@ function _finish_figure_channel_selection!(
         append!(selection_state.channel_rectangles, new_rectangles)
     end
     if !isempty(unique_channels)
-        println("Total selected channels across all regions: $unique_channels")
-        println("Number of selection areas: $(length(selection_state.selection_rectangles))")
+        @info "Total selected channels across all regions: $unique_channels"
+        @info "Number of selection areas: $(length(selection_state.selection_rectangles))"
     else
-        println("No channels selected")
+        @info "No channels selected"
     end
     channel_selection_active[] = false
 end
@@ -390,7 +390,7 @@ function _clear_all_shared_channel_selections!(fig::Figure, selection_state::Sha
     end
     empty!(selection_state.channel_rectangles)
     empty!(selection_state.selection_bounds)
-    println("Cleared all channel selections")
+    @info "Cleared all channel selections"
 end
 
 """
