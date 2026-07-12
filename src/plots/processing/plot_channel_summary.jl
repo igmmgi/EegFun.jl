@@ -74,7 +74,7 @@ fig, ax = plot_channel_summary(summary_df, :kurtosis,
     error_linewidth = 3)
 ```
 """
-function plot_channel_summary!(fig::Figure, ax::Axis, dat::DataFrame, col::Symbol; kwargs...)
+function plot_channel_summary!(fig::Figure, ax::Axis, dat::DataFrame, col::Symbol; channel_selection::Function = channels(), kwargs...)
     # Merge user kwargs with defaults and validate
     plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
 
@@ -82,6 +82,10 @@ function plot_channel_summary!(fig::Figure, ax::Axis, dat::DataFrame, col::Symbo
     if :channel ∉ propertynames(dat) || col ∉ propertynames(dat)
         @minimal_error("DataFrame must contain :channel and :$col columns.")
     end
+
+    # Apply channel selection
+    mask = channel_selection(Symbol.(dat.channel))
+    dat = dat[mask, :]
 
     # If averaging is requested, compute mean and std
     n_epochs = nothing
@@ -153,13 +157,13 @@ See `plot_channel_summary!` for full documentation of arguments and keyword argu
 # Returns
 - `(fig::Figure, ax::Axis)` - The created figure and axis objects
 """
-function plot_channel_summary(dat::DataFrame, col::Symbol; kwargs...)
+function plot_channel_summary(dat::DataFrame, col::Symbol; channel_selection::Function = channels(), kwargs...)
     # Merge user kwargs with defaults and validate
     plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
 
     fig = Figure()
     ax = Axis(fig[1, 1])
-    plot_channel_summary!(fig, ax, dat, col; plot_kwargs...)
+    plot_channel_summary!(fig, ax, dat, col; channel_selection = channel_selection, plot_kwargs...)
 
     if plot_kwargs[:display_plot]
         _set_window_title("Channel Summary")
@@ -169,10 +173,10 @@ function plot_channel_summary(dat::DataFrame, col::Symbol; kwargs...)
 end
 
 plot_channel_summary(dat::Vector{DataFrame}, col::Symbol; kwargs...) = plot_channel_summary.(dat, col; kwargs...)
-function plot_channel_summary(dat::DataFrame, col::Vector{Symbol}; kwargs...)
+function plot_channel_summary(dat::DataFrame, col::Vector{Symbol}; channel_selection::Function = channels(), kwargs...)
     plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
     fig = Figure()
-    _plot_multiple_columns!(fig, dat, col, plot_kwargs)
+    _plot_multiple_columns!(fig, dat, col, plot_kwargs; channel_selection = channel_selection)
     if plot_kwargs[:display_plot]
         _set_window_title("Channel Summary")
         _display_figure(fig)
@@ -203,7 +207,7 @@ a bar chart of that metric across all channels.
 - Plots are arranged in row-major order (left to right, top to bottom)
 - Stops plotting when all columns are processed, even if grid has empty spaces
 """
-function _plot_multiple_columns!(fig::Figure, dat::DataFrame, col::Vector{Symbol}, plot_kwargs::Dict)
+function _plot_multiple_columns!(fig::Figure, dat::DataFrame, col::Vector{Symbol}, plot_kwargs::Dict; channel_selection::Function = channels())
     n_cols = length(col)
 
     if isnothing(plot_kwargs[:dims])
@@ -220,7 +224,7 @@ function _plot_multiple_columns!(fig::Figure, dat::DataFrame, col::Vector{Symbol
     for r = 1:rs
         for c = 1:cs
             ax = Axis(fig[r, c])
-            plot_channel_summary!(fig, ax, dat, col[count]; plot_kwargs...)
+            plot_channel_summary!(fig, ax, dat, col[count]; channel_selection = channel_selection, plot_kwargs...)
             count += 1
             if count > n_cols
                 break

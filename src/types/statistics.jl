@@ -47,6 +47,7 @@ end
     StatisticalData
 
 Stores prepared data for statistical tests (both permutation and analytic tests).
+Created by `prepare_stats`.
 
 # Fields
 - `data::Vector{ErpData}`: Grand average ERPs for conditions 1 and 2 (for visualization/storage)

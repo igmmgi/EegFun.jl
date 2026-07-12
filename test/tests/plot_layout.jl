@@ -16,6 +16,13 @@ using Makie
         @test isnothing(EegFun.plot_layout_2d!(fig, ax, layout, neighbours = true, display_plot = false))
     end
 
+    @testset "plot_layout! basic functionality" begin
+        fig = Figure()
+        ax = Axis(fig[1, 1])
+        @test isnothing(EegFun.plot_layout!(fig, ax, layout, display_plot = false))
+        @test isnothing(EegFun.plot_layout!(fig, ax, layout, neighbours = true, display_plot = false))
+    end
+
     @testset "plot_layout_2d basic functionality" begin
         # Test basic functionality
         result = EegFun.plot_layout_2d(layout, display_plot = false)
@@ -26,6 +33,14 @@ using Makie
         result = EegFun.plot_layout_2d(layout, neighbours = true, display_plot = false)
         @test result.fig isa Figure
         @test first(result.axes) isa Axis
+    end
+
+    @testset "plot_layout basic functionality" begin
+        # Just test that it returns the same structure
+        result = EegFun.plot_layout(layout, display_plot = false)
+        @test hasproperty(result, :fig)
+        @test hasproperty(result, :axes)
+        @test length(result.axes) == 1
     end
 
     @testset "plot_layout_2d with prefixed kwargs" begin

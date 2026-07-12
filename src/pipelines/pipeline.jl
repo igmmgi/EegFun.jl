@@ -43,14 +43,8 @@ function preprocess(config::String; base_dir::Union{String,Nothing} = nothing, l
         # and creating the PreprocessConfig struct.
         @info section("Setup")
         @info "Configuration Files:"
-        !isfile(config) && @minimal_error "Config file does not exist: $config"
         cfg = read_config(config)
         isnothing(cfg) && @minimal_error "Failed to load configuration from: $config"
-
-        # try and merge user config above with default config
-        default_config = read_config(joinpath(@__DIR__, "..", "..", "src", "config", "default.toml"))
-        isnothing(default_config) && @minimal_error "Failed to load default configuration"
-        cfg = _merge_configs(default_config, cfg)
 
         # Resolve relative paths in config relative to base_dir
         resolve_path(path::String) = isabspath(path) ? path : joinpath(base_dir, path)

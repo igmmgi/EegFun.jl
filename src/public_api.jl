@@ -132,7 +132,11 @@ public average_number_of_neighbours
 public check_channel_neighbors
 public create_custom_layout
 public create_layout
+public get_neighbours_xy!
+public get_neighbours_xyz!
 public has_valid_coordinates
+public polar_to_cartesian_xy!
+public polar_to_cartesian_xyz!
 public print_layout_neighbours
 public subset_layout
 public subset_layout!
@@ -359,6 +363,8 @@ public plot_ica_component_activation
 public plot_ica_component_spectrum
 public plot_joint_probability
 public plot_joint_probability!
+public plot_layout
+public plot_layout!
 public plot_layout_2d
 public plot_layout_2d!
 public plot_layout_3d
@@ -368,6 +374,7 @@ public plot_spatial_kurtosis_components
 public plot_tf_stats
 public plot_tf
 public plot_topography
+public plot_topography_3d
 public plot_topography!
 public plot_topography_stats
 public plot_trigger_overview

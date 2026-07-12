@@ -226,6 +226,8 @@ Pre-compute all train/test indices for all cross-validation folds.
 """
 function _precompute_cv_splits(n_trials_per_condition::Vector{Int}, n_folds::Int)
     splits = Vector{Tuple{Vector{Int},Vector{Int}}}(undef, n_folds)
+    # Note: integer division intentionally drops remainder trials (e.g. 53 trials ÷ 5 folds = 10 per fold, 3 unused).
+    # This is standard practice in EEG decoding to keep fold sizes balanced across conditions.
     n_trials_per_fold = [div(n_trials, n_folds) for n_trials in n_trials_per_condition]
 
     for fold = 1:n_folds
@@ -386,9 +388,9 @@ y_pred = libsvm_classifier(X_train, y_train, X_test, cost=1.0)
 """
 function libsvm_classifier(
     X_train::AbstractMatrix{Float64},
-    y_train::Vector{Int},
+    y_train::AbstractVector{Int},
     X_test::AbstractMatrix{Float64};
-    cost::Float64 = 1.0,
+    cost::Float64=1.0,
 )::Vector{Int}
 
     n_train = size(X_train, 1)
@@ -407,18 +409,9 @@ function libsvm_classifier(
     end
 
     # Fast path for binary classification with standard labels [1, 2]
-    # This is the common case and we can skip all mapping overhead
     if classes == [1, 2]
-        # X_train is [samples × features], transpose for LIBSVM
-        # Use transpose view instead of materializing to save allocations
-        X_train_t = transpose(X_train)
-        X_test_t = transpose(X_test)
-
-        # Train model - LIBSVM accepts dense matrices directly
-        model = LIBSVM.svmtrain(X_train_t, y_train; svmtype = LIBSVM.SVC, kernel = LIBSVM.Kernel.Linear, cost = cost)
-
-        # Predict and return directly (no remapping needed)
-        y_pred, _ = LIBSVM.svmpredict(model, X_test_t)
+        model = LIBSVM.fit!(LIBSVM.LinearSVC(cost=cost, solver=LIBSVM.Linearsolver.L2R_L2LOSS_SVC), X_train, y_train)
+        y_pred = LIBSVM.predict(model, X_test)
         return y_pred
     end
 
@@ -434,15 +427,11 @@ function libsvm_classifier(
         y_train_mapped[i] = class_to_label[y_train[i]]
     end
 
-    # Transpose for LIBSVM (features in columns)
-    X_train_t = transpose(X_train)
-    X_test_t = transpose(X_test)
-
-    # Train model
-    model = LIBSVM.svmtrain(X_train_t, y_train_mapped; svmtype = LIBSVM.SVC, kernel = LIBSVM.Kernel.Linear, cost = cost)
+    # Train model using fast LinearSVC with Primal solver
+    model = LIBSVM.fit!(LIBSVM.LinearSVC(cost=cost, solver=LIBSVM.Linearsolver.L2R_L2LOSS_SVC), X_train, y_train_mapped)
 
     # Predict
-    y_pred_mapped, _ = LIBSVM.svmpredict(model, X_test_t)
+    y_pred_mapped = LIBSVM.predict(model, X_test)
 
     # Map predictions back to original class labels
     y_pred = Vector{Int}(undef, length(y_pred_mapped))
@@ -537,51 +526,104 @@ function _decode_core(
     # Initialize progress bar
     total_steps = n_iterations * n_timepoints
     if show_progress
-        progress = Progress(total_steps, desc = progress_desc, showspeed = true)
+        progress = Progress(total_steps, desc=progress_desc, showspeed=true)
     end
 
-    # Main decoding loop
-    Threads.@threads for iter = 1:n_iterations
-        # Thread-local buffers (built as [features × trials] for cache-friendly extraction)
-        X_all_t = Matrix{Float64}(undef, n_features, total_trials)
-        labels = Vector{Int}(undef, total_trials)
+    # Initialize atomic flag to safely abort all threads on Ctrl-C
+    should_stop = Threads.Atomic{Bool}(false)
 
-        shuffled_indices = _shuffle_trials(data_arrays)
-
-        for t = 1:n_timepoints
-            _extract_timepoint_data!(X_all_t, labels, data_arrays, shuffled_indices, t)
-
-            for fold = 1:n_folds
-                train_indices, test_indices = cv_splits[fold]
-
-                # Double transpose cancels out in libsvm_classifier, giving contiguous columns!
-                X_train_view = transpose(@view X_all_t[:, train_indices])
-                y_train = labels[train_indices]
-                X_test_view = transpose(@view X_all_t[:, test_indices])
-                y_test = labels[test_indices]
-
-                y_pred = libsvm_classifier(X_train_view, y_train, X_test_view; cost = cost)
-
-                n_correct = 0
-                @inbounds for i in eachindex(y_test)
-                    n_correct += (y_test[i] == y_pred[i])
-                end
-                accuracy = n_correct / length(y_test)
-                all_accuracies[iter, fold, t] = accuracy
-
-                all_predictions[iter, fold, t, :] = y_pred
-                all_targets[iter, fold, t, :] = y_test
+    try
+        # Main decoding loop
+        Threads.@threads for iter = 1:n_iterations
+            if should_stop[]
+                continue
             end
 
-            if show_progress
-                next!(progress)
+            # Thread-local buffers (built as [features × trials] for cache-friendly extraction)
+            X_all_t = Matrix{Float64}(undef, n_features, total_trials)
+            labels = Vector{Int}(undef, total_trials)
+
+            # Pre-allocate dense buffers to prevent LIBSVM from copying non-contiguous views
+            local_max_train = maximum(length(first(split)) for split in cv_splits)
+            local_max_test = maximum(length(last(split)) for split in cv_splits)
+            X_train_buf = Matrix{Float64}(undef, n_features, local_max_train)
+            X_test_buf = Matrix{Float64}(undef, n_features, local_max_test)
+            y_train_buf = Vector{Int}(undef, local_max_train)
+            y_test_buf = Vector{Int}(undef, local_max_test)
+
+            shuffled_indices = _shuffle_trials(data_arrays)
+
+            for t = 1:n_timepoints
+                if should_stop[]
+                    break
+                end
+
+                _extract_timepoint_data!(X_all_t, labels, data_arrays, shuffled_indices, t)
+
+                for fold = 1:n_folds
+                    train_indices, test_indices = cv_splits[fold]
+
+                    n_train = length(train_indices)
+                    @inbounds for (i, idx) in enumerate(train_indices)
+                        for f = 1:n_features
+                            X_train_buf[f, i] = X_all_t[f, idx]
+                        end
+                        y_train_buf[i] = labels[idx]
+                    end
+
+                    n_test = length(test_indices)
+                    @inbounds for (i, idx) in enumerate(test_indices)
+                        for f = 1:n_features
+                            X_test_buf[f, i] = X_all_t[f, idx]
+                        end
+                        y_test_buf[i] = labels[idx]
+                    end
+
+                    # Views of contiguous columns are contiguous in memory!
+                    X_train_contig = transpose(@view X_train_buf[:, 1:n_train])
+                    y_train_contig = @view y_train_buf[1:n_train]
+                    X_test_contig = transpose(@view X_test_buf[:, 1:n_test])
+                    y_test_contig = @view y_test_buf[1:n_test]
+
+                    y_pred = libsvm_classifier(X_train_contig, y_train_contig, X_test_contig; cost=cost)
+
+                    n_correct = 0
+                    @inbounds for i in 1:n_test
+                        n_correct += (y_test_contig[i] == y_pred[i])
+                    end
+                    accuracy = n_correct / n_test
+                    all_accuracies[iter, fold, t] = accuracy
+
+                    @inbounds for i in 1:n_test
+                        all_predictions[iter, fold, t, i] = y_pred[i]
+                        all_targets[iter, fold, t, i] = y_test_contig[i]
+                    end
+                end
+
+                if show_progress && !should_stop[]
+                    next!(progress)
+                end
+
+                # Yield to scheduler to allow Ctrl-C (InterruptException) to be processed
+                yield()
             end
         end
+    catch e
+        # If the main task is interrupted, ensure we set the flag to stop background threads
+        Threads.atomic_xchg!(should_stop, true)
+        if e isa InterruptException
+            @minimal_error("Decoding aborted by user (Interrupt).")
+        else
+            rethrow(e)
+        end
+    finally
+        # Ensure flag is set so any lingering tasks die
+        Threads.atomic_xchg!(should_stop, true)
     end
 
     # Average across iterations and folds
-    average_score = vec(mean(mean(all_accuracies, dims = 2), dims = 1))
-    stderror = vec(std(mean(all_accuracies, dims = 2), dims = 1) / sqrt(n_iterations))
+    average_score = vec(mean(mean(all_accuracies, dims=2), dims=1))
+    stderror = vec(std(mean(all_accuracies, dims=2), dims=1) / sqrt(n_iterations))
 
     # Compute confusion matrices
     confusion_matrices =
@@ -596,9 +638,9 @@ function _decode_core(
         average_score,
         selected_channels,
         parameters;
-        stderror = stderror,
-        confusion_matrix = confusion_matrices,
-        raw_predictions = all_predictions,
+        stderror=stderror,
+        confusion_matrix=confusion_matrices,
+        raw_predictions=all_predictions,
     )
 end
 
@@ -640,13 +682,13 @@ all_decoded = decode_libsvm(participant_epochs; n_iterations = 100)
 """
 function decode_libsvm(
     epochs::Vector{EpochData};
-    channel_selection::Function = channels(),
-    interval_selection::Interval = times(),
-    n_iterations::Int = 100,
-    n_folds::Int = 3,
-    equalize_trials::Bool = true,
-    cost::Float64 = 1.0,
-    show_progress::Bool = true,
+    channel_selection::Function=channels(),
+    interval_selection::Interval=times(),
+    n_iterations::Int=100,
+    n_folds::Int=3,
+    equalize_trials::Bool=true,
+    cost::Float64=1.0,
+    show_progress::Bool=true,
 )
     # Input validations
     isempty(epochs) && @minimal_error("Cannot decode with empty epochs vector")
@@ -654,7 +696,7 @@ function decode_libsvm(
     n_folds < 2 && @minimal_error("Need at least 2 folds for cross-validation, got $n_folds")
 
     # Subset epochs by channel and interval selection
-    epochs = subset(epochs; channel_selection = channel_selection, interval_selection = interval_selection, include_extra = false)
+    epochs = subset(epochs; channel_selection=channel_selection, interval_selection=interval_selection, include_extra=false)
     isempty(channel_labels(epochs[1])) && @minimal_error("Channel selection produced no channels")
     isempty(time_vector(epochs[1])) && @minimal_error("Interval selection produced no time points")
 
@@ -679,7 +721,7 @@ function decode_libsvm(
         equalize_trials,
         cost,
         show_progress,
-        progress_desc = "Decoding (iter × time): ",
+        progress_desc="Decoding (iter × time): ",
     )
 end
 
@@ -693,13 +735,13 @@ end
 # ===========================
 function decode_libsvm(
     epochs::Vector{TimeFreqEpochData};
-    channel_selection::Function = channels(),
-    interval_selection::Interval = times(),
-    n_iterations::Int = 100,
-    n_folds::Int = 3,
-    equalize_trials::Bool = true,
-    cost::Float64 = 1.0,
-    show_progress::Bool = true,
+    channel_selection::Function=channels(),
+    interval_selection::Interval=times(),
+    n_iterations::Int=100,
+    n_folds::Int=3,
+    equalize_trials::Bool=true,
+    cost::Float64=1.0,
+    show_progress::Bool=true,
 )
     # Input validations
     isempty(epochs) && @minimal_error("Cannot decode with empty epochs vector")
@@ -707,7 +749,7 @@ function decode_libsvm(
     n_folds < 2 && @minimal_error("Need at least 2 folds for cross-validation, got $n_folds")
 
     # Subset epochs by channel and interval selection
-    epochs = subset(epochs; channel_selection = channel_selection, interval_selection = interval_selection)
+    epochs = subset(epochs; channel_selection=channel_selection, interval_selection=interval_selection)
     isempty(channel_labels(epochs[1])) && @minimal_error("Channel selection produced no channels")
 
     # Prepare data from subsetted epochs
@@ -737,7 +779,7 @@ function decode_libsvm(
         equalize_trials,
         cost,
         show_progress,
-        progress_desc = "TF Decoding (iter × time): ",
+        progress_desc="TF Decoding (iter × time): ",
     )
 end
 
@@ -776,16 +818,16 @@ function grand_average(dat::Vector{DecodedData})
 
     # Average accuracy across participants
     all_accuracies = hcat([d.average_score for d in dat]...)
-    grand_avg_accuracy = vec(mean(all_accuracies, dims = 2))
+    grand_avg_accuracy = vec(mean(all_accuracies, dims=2))
 
     # Compute standard error across participants
-    grand_avg_stderror = vec(std(all_accuracies, dims = 2) / sqrt(length(dat)))
+    grand_avg_stderror = vec(std(all_accuracies, dims=2) / sqrt(length(dat)))
 
     # Average confusion matrices if available
     grand_avg_confusion = nothing
     if !isnothing(first_decoded.confusion_matrix)
-        all_confusions = cat([d.confusion_matrix for d in dat]..., dims = 4)
-        grand_avg_confusion = mean(all_confusions, dims = 4)[:, :, :, 1]
+        all_confusions = cat([d.confusion_matrix for d in dat]..., dims=4)
+        grand_avg_confusion = mean(all_confusions, dims=4)[:, :, :, 1]
     end
 
     # Create grand average DecodedData
@@ -796,9 +838,9 @@ function grand_average(dat::Vector{DecodedData})
         grand_avg_accuracy,
         first_channels,
         first_params;
-        stderror = grand_avg_stderror,
-        confusion_matrix = grand_avg_confusion,
-        raw_predictions = nothing,  # Don't store raw predictions for grand average
+        stderror=grand_avg_stderror,
+        confusion_matrix=grand_avg_confusion,
+        raw_predictions=nothing,  # Don't store raw predictions for grand average
     )
 
     return grand_avg

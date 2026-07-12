@@ -142,7 +142,7 @@ pages = [
             "Time-Frequency" => "tutorials/teaching/signal_processing/signal_example_tf.md",
         ],
         "ICA" => [
-            "Introduction" => "tutorials/teaching/ica/signal_example_ica_0.md",
+            "Matrix Math" => "tutorials/teaching/ica/signal_example_ica_math.md",
             "Mixture" => "tutorials/teaching/ica/signal_example_ica_mixture.md",
             "Separation" => "tutorials/teaching/ica/signal_example_ica_separation.md",
             "Geometry" => "tutorials/teaching/ica/signal_example_ica_geometry.md",
@@ -173,7 +173,7 @@ build_pdf = get(ENV, "BUILD_PDF", "false") == "true"
 
 if build_pdf
     using DocumenterTypst
-    build_format = DocumenterTypst.Typst()
+    build_format = DocumenterTypst.Typst(platform="none")
     build_dir = "build_pdf"
     
     # Create a temporary source directory for the PDF build

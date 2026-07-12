@@ -7,7 +7,7 @@ EegFun.jl provides automated pipelines that process an entire cohort of EEG reco
 ```julia
 using EegFun
 
-# Run the v1 pipeline
+# Run the pipeline
 EegFun.preprocess("config.toml")
 
 ```
@@ -115,13 +115,18 @@ After all files are processed:
 - **Channel reliability** — which electrodes were frequently repaired
 - **ICA statistics** — average components removed per participant
 
-## Error Isolation
+## Logging and Error Isolation
 
-If a single file fails (corrupt data, missing triggers, etc.), the pipeline logs the error and continues with the remaining files. You get:
+Comprehensive logging ensures that all information regarding the preprocessing steps can be easily retrieved. 
 
-- A **study-level log** summarising the entire run
-- **Per-file logs** with every table, warning, and decision for each participant
-- **Traceability** — output files record the pipeline version and config used
+If a single file fails (corrupt data, missing triggers, etc.), the pipeline logs the error and continues with the remaining files. As part of the output, you receive:
+
+- A **study-level log** summarising the entire cohort run, including aggregate statistics.
+- **Per-file logs** detailing every warning, decision, and step taken for an individual participant. This includes critical metrics such as:
+  - The number and percentage of trials removed/remaining per condition.
+  - The number of ICA components identified and removed.
+  - Channels that were repaired or interpolated.
+- **Traceability** — output files record the exact pipeline version and configuration used to ensure reproducibility.
 
 ## Output Files
 
@@ -140,13 +145,13 @@ The pipeline saves intermediate and final outputs as JLD2 files (controlled by `
 
 ## Custom Pipelines
 
-If the built-in pipelines don't match your workflow, generate a template with the standard boilerplate (config loading, logging, error handling) already wired up:
+We provide a dedicated function that creates a skeleton template so researchers can piece together their own tailored preprocessing pipelines. If the built-in pipelines don't perfectly match your workflow, this command generates a template with the standard boilerplate (config loading, logging, error handling) already wired up:
 
 ```julia
 EegFun.generate_pipeline_template("my_pipeline.jl", "my_preprocess")
 ```
 
-This creates a Julia file with a complete pipeline skeleton. Edit the processing steps to suit your experiment, then run:
+This creates a Julia file with a complete pipeline skeleton. You can then edit the specific processing steps to suit your experiment, and run it just like the default pipeline:
 
 ```julia
 include("my_pipeline.jl")
@@ -165,7 +170,7 @@ This moves participants with less than 70% data retention to an "excluded" subdi
 
 ## Philosophy
 
-The pipeline follows a **minimal-intervention** approach to preprocessing, guided by the principle that EEG data is often better left alone than aggressively cleaned (Delorme, 2023). Rather than applying many sequential transformations — each of which risks distorting the signal — the pipeline focuses on:
+The pipeline follows a **pragmatic, minimal-intervention** approach to preprocessing. While guided by the principle that excessive cleaning can distort the signal (Delorme, 2023), our approach sits slightly above "EEG is better left alone." We actively remove clear artifacts and by default use ICA to remove standard artifact components. Rather than applying an exhaustive sequence of transformations, the pipeline focuses on:
 
 - **Filtering conservatively** — a gentle high-pass to remove drift, with optional low-pass
 - **Using ICA primarily for clear EOG artifacts** — eye blinks and saccades are the main targets for component removal, rather than attempting to classify and remove every possible source of noise
