@@ -137,44 +137,50 @@ using DataFrames
     @testset "preprocess - end-to-end" begin
         data_dir = joinpath(dirname(dirname(@__DIR__)), "resources", "data")
         test_file = joinpath(data_dir, "bdf", "example1.bdf")
-        
+
         if isfile(test_file)
             # Create a temporary directory for the pipeline config and output
             mktempdir() do temp_dir
                 # Create epoch condition file
                 epoch_file = joinpath(temp_dir, "epochs.toml")
-                write(epoch_file, """
-                [epochs]
-                [[epochs.conditions]]
-                name = "Test Condition"
-                trigger_sequences = [1]
-                """)
+                write(
+                    epoch_file,
+                    """
+  [epochs]
+  [[epochs.conditions]]
+  name = "Test Condition"
+  trigger_sequences = [1]
+  """,
+                )
 
                 # Create pipeline config file
                 pipeline_file = joinpath(temp_dir, "pipeline.toml")
-                write(pipeline_file, """
-                [files.input]
-                directory = "$(joinpath(data_dir, "bdf"))"
-                raw_data_files = "example1\\\\.bdf"
-                layout_file = "biosemi72.csv"
-                epoch_condition_file = "epochs.toml"
+                write(
+                    pipeline_file,
+                    """
+[files.input]
+directory = "$(joinpath(data_dir, "bdf"))"
+raw_data_files = "example1\\\\.bdf"
+layout_file = "biosemi72.csv"
+epoch_condition_file = "epochs.toml"
 
-                [files.output]
-                directory = "output"
-                save_continuous_data_original = false
-                save_continuous_data_cleaned = false
+[files.output]
+directory = "output"
+save_continuous_data_original = false
+save_continuous_data_cleaned = false
 
-                [preprocess]
-                epoch_start = -0.1
-                epoch_end = 0.5
-                """)
+[preprocess]
+epoch_start = -0.1
+epoch_end = 0.5
+""",
+                )
 
                 # Run the pipeline (this shouldn't throw any errors)
                 # Redirect stdout/stderr to avoid spamming the test output
-                redirect_stdio(stdout=devnull, stderr=devnull) do
+                redirect_stdio(stdout = devnull, stderr = devnull) do
                     EegFun.preprocess(pipeline_file; base_dir = temp_dir)
                 end
-                
+
                 # Check that the output directory was created and contains the expected files
                 out_dir = joinpath(temp_dir, "output")
                 @test isdir(out_dir)

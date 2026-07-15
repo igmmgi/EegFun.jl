@@ -1,7 +1,10 @@
 name = "EegFun"
 uuid = "aa15e9e4-a77e-4972-a32b-58bceaaa184b"
-version = "0.4.0"
-authors = ["igmmgi <ian.mackenzie@uni-tuebingen.de>", "carolin.dudschig@uni-tuebingen.de"]
+version = "0.4.1"
+authors = [
+    "igmmgi <ian.mackenzie@uni-tuebingen.de>",
+    "carolin.dudschig@uni-tuebingen.de",
+]
 
 [deps]
 AnovaFun = "786f6bac-1c88-4ef5-b24a-5b341b5d6c78"

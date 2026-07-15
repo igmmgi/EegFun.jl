@@ -390,7 +390,7 @@ function libsvm_classifier(
     X_train::AbstractMatrix{Float64},
     y_train::AbstractVector{Int},
     X_test::AbstractMatrix{Float64};
-    cost::Float64=1.0,
+    cost::Float64 = 1.0,
 )::Vector{Int}
 
     n_train = size(X_train, 1)
@@ -410,7 +410,7 @@ function libsvm_classifier(
 
     # Fast path for binary classification with standard labels [1, 2]
     if classes == [1, 2]
-        model = LIBSVM.fit!(LIBSVM.LinearSVC(cost=cost, solver=LIBSVM.Linearsolver.L2R_L2LOSS_SVC), X_train, y_train)
+        model = LIBSVM.fit!(LIBSVM.LinearSVC(cost = cost, solver = LIBSVM.Linearsolver.L2R_L2LOSS_SVC), X_train, y_train)
         y_pred = LIBSVM.predict(model, X_test)
         return y_pred
     end
@@ -428,7 +428,7 @@ function libsvm_classifier(
     end
 
     # Train model using fast LinearSVC with Primal solver
-    model = LIBSVM.fit!(LIBSVM.LinearSVC(cost=cost, solver=LIBSVM.Linearsolver.L2R_L2LOSS_SVC), X_train, y_train_mapped)
+    model = LIBSVM.fit!(LIBSVM.LinearSVC(cost = cost, solver = LIBSVM.Linearsolver.L2R_L2LOSS_SVC), X_train, y_train_mapped)
 
     # Predict
     y_pred_mapped = LIBSVM.predict(model, X_test)
@@ -526,7 +526,7 @@ function _decode_core(
     # Initialize progress bar
     total_steps = n_iterations * n_timepoints
     if show_progress
-        progress = Progress(total_steps, desc=progress_desc, showspeed=true)
+        progress = Progress(total_steps, desc = progress_desc, showspeed = true)
     end
 
     # Initialize atomic flag to safely abort all threads on Ctrl-C
@@ -585,16 +585,16 @@ function _decode_core(
                     X_test_contig = transpose(@view X_test_buf[:, 1:n_test])
                     y_test_contig = @view y_test_buf[1:n_test]
 
-                    y_pred = libsvm_classifier(X_train_contig, y_train_contig, X_test_contig; cost=cost)
+                    y_pred = libsvm_classifier(X_train_contig, y_train_contig, X_test_contig; cost = cost)
 
                     n_correct = 0
-                    @inbounds for i in 1:n_test
+                    @inbounds for i = 1:n_test
                         n_correct += (y_test_contig[i] == y_pred[i])
                     end
                     accuracy = n_correct / n_test
                     all_accuracies[iter, fold, t] = accuracy
 
-                    @inbounds for i in 1:n_test
+                    @inbounds for i = 1:n_test
                         all_predictions[iter, fold, t, i] = y_pred[i]
                         all_targets[iter, fold, t, i] = y_test_contig[i]
                     end
@@ -622,8 +622,8 @@ function _decode_core(
     end
 
     # Average across iterations and folds
-    average_score = vec(mean(mean(all_accuracies, dims=2), dims=1))
-    stderror = vec(std(mean(all_accuracies, dims=2), dims=1) / sqrt(n_iterations))
+    average_score = vec(mean(mean(all_accuracies, dims = 2), dims = 1))
+    stderror = vec(std(mean(all_accuracies, dims = 2), dims = 1) / sqrt(n_iterations))
 
     # Compute confusion matrices
     confusion_matrices =
@@ -638,9 +638,9 @@ function _decode_core(
         average_score,
         selected_channels,
         parameters;
-        stderror=stderror,
-        confusion_matrix=confusion_matrices,
-        raw_predictions=all_predictions,
+        stderror = stderror,
+        confusion_matrix = confusion_matrices,
+        raw_predictions = all_predictions,
     )
 end
 
@@ -682,13 +682,13 @@ all_decoded = decode_libsvm(participant_epochs; n_iterations = 100)
 """
 function decode_libsvm(
     epochs::Vector{EpochData};
-    channel_selection::Function=channels(),
-    interval_selection::Interval=times(),
-    n_iterations::Int=100,
-    n_folds::Int=3,
-    equalize_trials::Bool=true,
-    cost::Float64=1.0,
-    show_progress::Bool=true,
+    channel_selection::Function = channels(),
+    interval_selection::Interval = times(),
+    n_iterations::Int = 100,
+    n_folds::Int = 3,
+    equalize_trials::Bool = true,
+    cost::Float64 = 1.0,
+    show_progress::Bool = true,
 )
     # Input validations
     isempty(epochs) && @minimal_error("Cannot decode with empty epochs vector")
@@ -696,7 +696,7 @@ function decode_libsvm(
     n_folds < 2 && @minimal_error("Need at least 2 folds for cross-validation, got $n_folds")
 
     # Subset epochs by channel and interval selection
-    epochs = subset(epochs; channel_selection=channel_selection, interval_selection=interval_selection, include_extra=false)
+    epochs = subset(epochs; channel_selection = channel_selection, interval_selection = interval_selection, include_extra = false)
     isempty(channel_labels(epochs[1])) && @minimal_error("Channel selection produced no channels")
     isempty(time_vector(epochs[1])) && @minimal_error("Interval selection produced no time points")
 
@@ -721,7 +721,7 @@ function decode_libsvm(
         equalize_trials,
         cost,
         show_progress,
-        progress_desc="Decoding (iter × time): ",
+        progress_desc = "Decoding (iter × time): ",
     )
 end
 
@@ -735,13 +735,13 @@ end
 # ===========================
 function decode_libsvm(
     epochs::Vector{TimeFreqEpochData};
-    channel_selection::Function=channels(),
-    interval_selection::Interval=times(),
-    n_iterations::Int=100,
-    n_folds::Int=3,
-    equalize_trials::Bool=true,
-    cost::Float64=1.0,
-    show_progress::Bool=true,
+    channel_selection::Function = channels(),
+    interval_selection::Interval = times(),
+    n_iterations::Int = 100,
+    n_folds::Int = 3,
+    equalize_trials::Bool = true,
+    cost::Float64 = 1.0,
+    show_progress::Bool = true,
 )
     # Input validations
     isempty(epochs) && @minimal_error("Cannot decode with empty epochs vector")
@@ -749,7 +749,7 @@ function decode_libsvm(
     n_folds < 2 && @minimal_error("Need at least 2 folds for cross-validation, got $n_folds")
 
     # Subset epochs by channel and interval selection
-    epochs = subset(epochs; channel_selection=channel_selection, interval_selection=interval_selection)
+    epochs = subset(epochs; channel_selection = channel_selection, interval_selection = interval_selection)
     isempty(channel_labels(epochs[1])) && @minimal_error("Channel selection produced no channels")
 
     # Prepare data from subsetted epochs
@@ -779,7 +779,7 @@ function decode_libsvm(
         equalize_trials,
         cost,
         show_progress,
-        progress_desc="TF Decoding (iter × time): ",
+        progress_desc = "TF Decoding (iter × time): ",
     )
 end
 
@@ -818,16 +818,16 @@ function grand_average(dat::Vector{DecodedData})
 
     # Average accuracy across participants
     all_accuracies = hcat([d.average_score for d in dat]...)
-    grand_avg_accuracy = vec(mean(all_accuracies, dims=2))
+    grand_avg_accuracy = vec(mean(all_accuracies, dims = 2))
 
     # Compute standard error across participants
-    grand_avg_stderror = vec(std(all_accuracies, dims=2) / sqrt(length(dat)))
+    grand_avg_stderror = vec(std(all_accuracies, dims = 2) / sqrt(length(dat)))
 
     # Average confusion matrices if available
     grand_avg_confusion = nothing
     if !isnothing(first_decoded.confusion_matrix)
-        all_confusions = cat([d.confusion_matrix for d in dat]..., dims=4)
-        grand_avg_confusion = mean(all_confusions, dims=4)[:, :, :, 1]
+        all_confusions = cat([d.confusion_matrix for d in dat]..., dims = 4)
+        grand_avg_confusion = mean(all_confusions, dims = 4)[:, :, :, 1]
     end
 
     # Create grand average DecodedData
@@ -838,9 +838,9 @@ function grand_average(dat::Vector{DecodedData})
         grand_avg_accuracy,
         first_channels,
         first_params;
-        stderror=grand_avg_stderror,
-        confusion_matrix=grand_avg_confusion,
-        raw_predictions=nothing,  # Don't store raw predictions for grand average
+        stderror = grand_avg_stderror,
+        confusion_matrix = grand_avg_confusion,
+        raw_predictions = nothing,  # Don't store raw predictions for grand average
     )
 
     return grand_avg

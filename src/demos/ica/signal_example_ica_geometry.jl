@@ -116,12 +116,12 @@ function signal_example_ica_geometry()
     noise3_buf = randn(n)
 
     # ── Observables ────────────────────────────────────────────────────────────
-    mix_α     = Observable(25.0)   # S1-S2 plane
-    mix_β     = Observable(15.0)   # S1-S3 plane
-    mix_γ     = Observable(20.0)   # S2-S3 plane
-    unmix_α   = Observable(25.0)
-    unmix_β   = Observable(15.0)
-    unmix_γ   = Observable(20.0)
+    mix_α    = Observable(25.0)   # S1-S2 plane
+    mix_β    = Observable(15.0)   # S1-S3 plane
+    mix_γ    = Observable(20.0)   # S2-S3 plane
+    unmix_α  = Observable(25.0)
+    unmix_β  = Observable(15.0)
+    unmix_γ  = Observable(20.0)
     sig_freq  = Observable(8.0)
     noise_lvl = Observable(0.1)
 
@@ -164,7 +164,7 @@ function signal_example_ica_geometry()
 
         # S3: muscle burst
         burst_center = 1.80
-        burst_σ      = 0.11
+        burst_σ     = 0.11
         burst_freq   = 22.0
         s3           = 2.5 .* sin.(2π .* burst_freq .* (t_arr .- burst_center)) .* exp.(.-((t_arr .- burst_center) .^ 2) ./ (2 .* burst_σ^2))
 
@@ -390,8 +390,8 @@ function signal_example_ica_geometry()
     sl_unmix_α, lbl_unmix_α = labelled_slider(ctrl, 4, "Unmix φ\n(S1-S2)", 0.0:1.0:90.0, 25.0, v -> "$(round(Int, v))°")
     sl_unmix_β, lbl_unmix_β = labelled_slider(ctrl, 5, "Unmix ψ\n(S1-S3)", 0.0:1.0:90.0, 15.0, v -> "$(round(Int, v))°")
     sl_unmix_γ, lbl_unmix_γ = labelled_slider(ctrl, 6, "Unmix χ\n(S2-S3)", 0.0:1.0:90.0, 20.0, v -> "$(round(Int, v))°")
-    sl_freq, lbl_freq       = labelled_slider(ctrl, 7, "Burst Freq", 1.0:1.0:20.0, 8.0, v -> "$(round(Int, v)) Hz")
-    sl_noise, lbl_noise     = labelled_slider(ctrl, 8, "Noise", 0.0:0.05:1.0, 0.1, v -> "$(round(v; digits = 2))")
+    sl_freq, lbl_freq         = labelled_slider(ctrl, 7, "Burst Freq", 1.0:1.0:20.0, 8.0, v -> "$(round(Int, v)) Hz")
+    sl_noise, lbl_noise       = labelled_slider(ctrl, 8, "Noise", 0.0:0.05:1.0, 0.1, v -> "$(round(v; digits = 2))")
 
     Label(ctrl[1, 9], "Auto-ICA"; fontsize = ctrl_sz, halign = :center)
     btn_ica     = Button(ctrl[2, 9]; label = "Infomax", fontsize = ctrl_sz)

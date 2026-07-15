@@ -257,8 +257,8 @@ Create a convex hull around a set of 2D points with a specified border size usin
 function _create_convex_hull_graham(xpos::Vector{<:Real}, ypos::Vector{<:Real}, border_size::Real)
     # Generate points around each electrode with the border
     circle_points = 0:(2π/361):2π
-    xs = (border_size.*sin.(circle_points).+transpose(xpos))[:]
-    ys = (border_size.*cos.(circle_points).+transpose(ypos))[:]
+    xs = (border_size .* sin.(circle_points) .+ transpose(xpos))[:]
+    ys = (border_size .* cos.(circle_points) .+ transpose(ypos))[:]
 
     # Convert to array of points
     points = [[xs[i], ys[i]] for i in eachindex(xs)]

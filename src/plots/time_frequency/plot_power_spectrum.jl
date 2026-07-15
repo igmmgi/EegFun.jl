@@ -100,7 +100,7 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
 
     @views for ch in channels_to_plot
         signal = df[!, ch]
-        pgram = DSP.welch_pgram(signal, effective_window_size, noverlap; fs=fs, window=window_function)
+        pgram = DSP.welch_pgram(signal, effective_window_size, noverlap; fs = fs, window = window_function)
         push!(freq_data, DSP.freq(pgram))
         push!(power_raw_data, DSP.power(pgram))
     end
@@ -171,10 +171,10 @@ function _plot_power_spectrum_data!(
     # Configure grid using the new axis styling function
     _set_axis_grid!(
         ax;
-        xgrid=plot_kwargs[:xgrid],
-        ygrid=plot_kwargs[:ygrid],
-        xminorgrid=plot_kwargs[:xminorgrid],
-        yminorgrid=plot_kwargs[:yminorgrid],
+        xgrid = plot_kwargs[:xgrid],
+        ygrid = plot_kwargs[:ygrid],
+        xminorgrid = plot_kwargs[:xminorgrid],
+        yminorgrid = plot_kwargs[:yminorgrid],
     )
 
     # Create interactive controls in the figure
@@ -204,10 +204,10 @@ function _plot_power_spectrum_data!(
 
     # Add menus
     Label(controls_area[1, 1], "X-Axis:")
-    x_menu = Menu(controls_area[1, 2], options=x_options, default=x_options[x_default_idx])
+    x_menu = Menu(controls_area[1, 2], options = x_options, default = x_options[x_default_idx])
 
     Label(controls_area[2, 1], "Y-Axis:")
-    y_menu = Menu(controls_area[2, 2], options=y_options, default=y_options[y_default_idx])
+    y_menu = Menu(controls_area[2, 2], options = y_options, default = y_options[y_default_idx])
 
     on(x_menu.selection) do sel
         x_scale_obs[] = sel == "Log10 (Hz)" ? :log10 : :linear
@@ -239,7 +239,7 @@ function _plot_power_spectrum_data!(
         end
 
         psd_obs = Observable(psd)
-        line_plot = lines!(ax, freqs, psd_obs, label=string(ch), linewidth=plot_kwargs[:linewidth], alpha=plot_kwargs[:line_alpha])
+        line_plot = lines!(ax, freqs, psd_obs, label = string(ch), linewidth = plot_kwargs[:linewidth], alpha = plot_kwargs[:line_alpha])
         push!(line_plots, (line_plot, psd_obs))
     end
 
@@ -291,7 +291,7 @@ function _plot_power_spectrum_data!(
     # Add frequency band indicators below the x-axis if requested
     if show_freq_bands
 
-        band_ax = Axis(fig[2, 1], height=50)
+        band_ax = Axis(fig[2, 1], height = 50)
         band_ax_ref[] = band_ax
         linkxaxes!(ax, band_ax)
 
@@ -307,8 +307,8 @@ function _plot_power_spectrum_data!(
                 # Add colored bar and label
                 bar_x = [fmin, fmax]
                 bar_y = [0.5, 0.5]
-                lines!(band_ax, bar_x, bar_y, color=band_colors[i], linewidth=8, alpha=plot_kwargs[:freq_band_alpha])
-                text!(band_ax, (fmin + fmax) / 2, 0.5, text=band_name, align=(:center, :center), fontsize=32, color=:black)
+                lines!(band_ax, bar_x, bar_y, color = band_colors[i], linewidth = 8, alpha = plot_kwargs[:freq_band_alpha])
+                text!(band_ax, (fmin + fmax) / 2, 0.5, text = band_name, align = (:center, :center), fontsize = 32, color = :black)
             end
         end
     end
@@ -436,9 +436,9 @@ fig, ax = plot_channel_spectrum(dat, unit = :dB)
 
 function plot_channel_spectrum(
     dat::SingleDataFrameEeg;
-    sample_selection::Function=samples(),
-    interval_selection::Interval=times(),
-    channel_selection::Function=channels(),
+    sample_selection::Function = samples(),
+    interval_selection::Interval = times(),
+    channel_selection::Function = channels(),
     kwargs...,
 )
     # Generate window title from dataset
@@ -450,7 +450,7 @@ function plot_channel_spectrum(
 
     # data selection
     dat_subset =
-        subset(dat, sample_selection=sample_selection, interval_selection=interval_selection, channel_selection=channel_selection)
+        subset(dat, sample_selection = sample_selection, interval_selection = interval_selection, channel_selection = channel_selection)
 
     # Create figure and main axis
     fig = Figure()
@@ -462,7 +462,7 @@ function plot_channel_spectrum(
     if plot_kwargs[:show_legend]
         n_channels = length(dat_subset.layout.data.label)
         n_cols = n_channels > 10 ? cld(n_channels, 20) : 1
-        axislegend(ax, nbanks=n_cols)
+        axislegend(ax, nbanks = n_cols)
     end
 
     if plot_kwargs[:display_plot]
@@ -470,7 +470,7 @@ function plot_channel_spectrum(
     end
 
     _set_window_title("Makie")
-    return (fig=fig, axes=[ax])
+    return (fig = fig, axes = [ax])
 
 end
 
@@ -536,9 +536,9 @@ plot_ica_component_spectrum(dat, ica_result, component_selection = components(1)
 function plot_ica_component_spectrum(
     dat::ContinuousData,
     ica_result::InfoIca;
-    sample_selection::Function=samples(),
-    interval_selection::Interval=times(),
-    component_selection::Function=components(),
+    sample_selection::Function = samples(),
+    interval_selection::Interval = times(),
+    component_selection::Function = components(),
     kwargs...,
 )
     # Merge user kwargs with defaults
@@ -549,7 +549,7 @@ function plot_ica_component_spectrum(
     # If empty, warn and return early
     if isempty(selected_components)
         @minimal_warning "No components selected for ICA spectrum plot"
-        return (fig=Figure(), axes=Axis[])
+        return (fig = Figure(), axes = Axis[])
     end
 
     # Debug: verify selected components
@@ -563,7 +563,7 @@ function plot_ica_component_spectrum(
     # Prepare data matrix for selected samples only
     relevant_cols = vcat(ica_result.layout.data.label)
     dat_matrix = permutedims(Matrix(dat.data[selected_samples, relevant_cols]))
-    dat_matrix .-= mean(dat_matrix, dims=2)
+    dat_matrix .-= mean(dat_matrix, dims = 2)
     dat_matrix ./= ica_result.scale
 
     # Calculate component activations for selected samples
@@ -602,14 +602,14 @@ function plot_ica_component_spectrum(
         ncols = length(selected_components) > 10 ? ceil(Int, length(selected_components) / 10) : 1
 
         # Place legend on the axis itself
-        axislegend(ax, nbanks=ncols)
+        axislegend(ax, nbanks = ncols)
     end
 
     if plot_kwargs[:display_plot]
         _display_figure(fig)
     end
 
-    return (fig=fig, axes=[ax])
+    return (fig = fig, axes = [ax])
 end
 
 
@@ -618,11 +618,11 @@ end
 
 Plot a pre-computed power spectrum with interactive controls.
 """
-function plot_channel_spectrum(dat::SpectrumData; channel_selection::Function=channels(), kwargs...)
+function plot_channel_spectrum(dat::SpectrumData; channel_selection::Function = channels(), kwargs...)
     title_str = _generate_window_title(dat)
     _set_window_title(title_str)
 
-    selected_channels = get_selected_channels(dat, channel_selection; include_meta=false, include_extra=false)
+    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
 
     # Filter to only channels that actually exist in the spectrum data
     all_names = propertynames(dat.data)
@@ -647,7 +647,7 @@ function plot_channel_spectrum(dat::SpectrumData; channel_selection::Function=ch
     if plot_kwargs[:show_legend]
         n_channels = length(valid_channels)
         n_cols = n_channels > 10 ? cld(n_channels, 20) : 1
-        axislegend(ax, nbanks=n_cols)
+        axislegend(ax, nbanks = n_cols)
     end
 
     if plot_kwargs[:display_plot]
@@ -655,5 +655,5 @@ function plot_channel_spectrum(dat::SpectrumData; channel_selection::Function=ch
     end
 
     _set_window_title("Makie")
-    return (fig=fig, axes=[ax])
+    return (fig = fig, axes = [ax])
 end

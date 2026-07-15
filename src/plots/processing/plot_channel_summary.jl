@@ -207,7 +207,13 @@ a bar chart of that metric across all channels.
 - Plots are arranged in row-major order (left to right, top to bottom)
 - Stops plotting when all columns are processed, even if grid has empty spaces
 """
-function _plot_multiple_columns!(fig::Figure, dat::DataFrame, col::Vector{Symbol}, plot_kwargs::Dict; channel_selection::Function = channels())
+function _plot_multiple_columns!(
+    fig::Figure,
+    dat::DataFrame,
+    col::Vector{Symbol},
+    plot_kwargs::Dict;
+    channel_selection::Function = channels(),
+)
     n_cols = length(col)
 
     if isnothing(plot_kwargs[:dims])
