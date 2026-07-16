@@ -1080,7 +1080,7 @@ end
 Set up keyboard event handlers for topographic plots.
 Handles both single axis and multiple axes.
 """
-function _setup_topo_keyboard_handlers!(fig::Figure, axes::Union{Axis,Vector{Axis}}; zoom_step::Float64 = 0.2)
+function _setup_topo_keyboard_handlers!(fig::Figure, axes; zoom_step::Float64 = 0.2)
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press
             if event.key == Keyboard.i
@@ -1196,18 +1196,42 @@ function _scale_topo_levels!(ax::Axis, scale_factor::Float64)
 end
 
 """
+    _scale_topo_levels!(ax::LScene, scale_factor::Float64)
+
+Scale the 3D topographic mesh colorrange by the given factor.
+"""
+function _scale_topo_levels!(ax::LScene, scale_factor::Float64)
+    # Find the Mesh plot in the LScene
+    for plot in ax.scene.plots
+        if hasproperty(plot, :colorrange) && !isnothing(plot.colorrange[])
+            current_range = plot.colorrange[]
+            level_min, level_max = current_range
+            center = (level_min + level_max) / 2
+            range_size = level_max - level_min
+
+            new_range = range_size * scale_factor
+            new_min = center - new_range / 2
+            new_max = center + new_range / 2
+
+            plot.colorrange[] = (new_min, new_max)
+            break
+        end
+    end
+end
+
+"""
     _topo_scale_up!(ax::Axis)
 
 Increase the scale of the topographic plot (zoom in on color range).
 """
-_topo_scale_up!(ax::Axis, zoom_step::Float64 = 0.2) = _scale_topo_levels!(ax, 1.0 - zoom_step)
+_topo_scale_up!(ax, zoom_step::Float64 = 0.2) = _scale_topo_levels!(ax, 1.0 - zoom_step)
 
 """
     _topo_scale_down!(ax::Axis)
 
 Decrease the scale of the topographic plot (zoom out from color range).
 """
-_topo_scale_down!(ax::Axis, zoom_step::Float64 = 0.2) = _scale_topo_levels!(ax, 1.0 / (1.0 - zoom_step))
+_topo_scale_down!(ax, zoom_step::Float64 = 0.2) = _scale_topo_levels!(ax, 1.0 / (1.0 - zoom_step))
 
 # =============================================================================
 # REGION SELECTION FOR TOPO PLOTS

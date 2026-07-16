@@ -225,6 +225,10 @@ function plot_topography_3d(
         end
     end
 
+    if get(plot_kwargs, :interactive, true)
+        _setup_topo_keyboard_handlers!(fig, ax; zoom_step = get(plot_kwargs, :zoom_step, 0.2))
+    end
+
     if display_plot
         _display_figure(fig)
     end
