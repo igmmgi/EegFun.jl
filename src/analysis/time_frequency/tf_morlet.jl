@@ -22,11 +22,6 @@ function tf_morlet(
     # Get original data time range (before padding) - these are the time points we want in output
     n_samples_original_unpadded = n_samples(dat)  # Store original unpadded length for edge filtering
 
-    # Apply padding if requested 
-    if !isnothing(pad)
-        mirror!(dat, pad)
-    end
-
     # Get number of trials/epochs
     n_trials = n_epochs(dat)
     n_samples_per_epoch = n_samples(dat) # Use full signal for convolution (may be padded)
@@ -142,6 +137,7 @@ function tf_morlet(
             return_trials,
             return_phase,
             filter_edges,
+            pad,
             n_times_out,
             valid_starts_per_freq,
             time_indices_out,
@@ -193,6 +189,7 @@ function _process_tf_channel!(
     return_trials::Bool,
     return_phase::Bool,
     filter_edges::Bool,
+    pad::Union{Nothing,Symbol},
     n_times_out::Int,
     valid_starts_per_freq::Vector{Int},
     time_indices_out,
@@ -235,10 +232,23 @@ function _process_tf_channel!(
     # Pad data to n_conv_pow2 (zero-padding at the end)
     fill!(local_data_padded, 0.0)
 
-    # Explicit loop for padding to avoid copy allocations
-    @inbounds for j = 1:n_samples_per_epoch
+    n_pre_pad = (!isnothing(pad) && (pad == :both || pad == :pre)) ? n_samples_per_epoch - 1 : 0
+    n_post_pad = (!isnothing(pad) && (pad == :both || pad == :post)) ? n_samples_per_epoch - 1 : 0
+    n_padded_samples = n_pre_pad + n_samples_per_epoch + n_post_pad
+
+    # Explicit loop for padding to avoid copy allocations (Virtual Padding)
+    @inbounds for j = 1:n_padded_samples
+        if j <= n_pre_pad
+            src_j = n_samples_per_epoch - j + 1
+        elseif j > n_pre_pad + n_samples_per_epoch
+            idx_in_post = j - (n_pre_pad + n_samples_per_epoch)
+            src_j = n_samples_per_epoch - idx_in_post
+        else
+            src_j = j - n_pre_pad
+        end
+
         for i = 1:n_trials
-            local_data_padded[i, j] = local_trial_signals[i, j]
+            local_data_padded[i, j] = local_trial_signals[i, src_j]
         end
     end
 

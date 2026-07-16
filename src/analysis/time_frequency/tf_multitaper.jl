@@ -121,11 +121,6 @@ function tf_multitaper(
     n_samples_original_unpadded = n_samples(dat)  # Store original unpadded length for edge filtering
     times_original = time_vector(dat)
 
-    # Apply padding if requested (mutating dat directly for consistency with tf_morlet)
-    if !isnothing(pad)
-        mirror!(dat, pad)
-    end
-
     # Get sample rate and time vector from processed data
     times_processed = time_vector(dat)
     n_samples_per_epoch = n_samples(dat)  # Number of samples per epoch (may be padded)
@@ -306,9 +301,24 @@ function tf_multitaper(
 
         # Pad data to n_samples_padded (zero-padding at the end)
         fill!(local_data_padded, 0.0)
-        @inbounds for j = 1:n_samples_per_epoch
+        
+        n_pre_pad = (!isnothing(pad) && (pad == :both || pad == :pre)) ? n_samples_per_epoch - 1 : 0
+        n_post_pad = (!isnothing(pad) && (pad == :both || pad == :post)) ? n_samples_per_epoch - 1 : 0
+        n_padded_samples = n_pre_pad + n_samples_per_epoch + n_post_pad
+        
+        # Explicit loop for padding to avoid copy allocations (Virtual Padding)
+        @inbounds for j = 1:n_padded_samples
+            if j <= n_pre_pad
+                src_j = n_samples_per_epoch - j + 1
+            elseif j > n_pre_pad + n_samples_per_epoch
+                idx_in_post = j - (n_pre_pad + n_samples_per_epoch)
+                src_j = n_samples_per_epoch - idx_in_post
+            else
+                src_j = j - n_pre_pad
+            end
+            
             for i = 1:n_trials
-                local_data_padded[i, j] = local_trial_signals[i, j]
+                local_data_padded[i, j] = local_trial_signals[i, src_j]
             end
         end
 
@@ -358,7 +368,8 @@ function tf_multitaper(
                 half_window = n_window_samples ÷ 2
                 @inbounds for ti_idx = 1:n_times
                     sample_idx = time_indices[ti_idx]
-                    adjusted_idx = sample_idx + half_window
+                    # Shift by n_pre_pad because local_conv_result contains virtually padded signal
+                    adjusted_idx = sample_idx + n_pre_pad + half_window
                     # Clamp to valid range
                     if adjusted_idx < 1
                         adjusted_idx = 1
