@@ -872,7 +872,7 @@ function _show_additional_menu(state, clicked_region_idx = nothing)
     # Create the menu figure
     # TODO: why does new window not always take this size?
     menu_fig = Figure(size = (300, 300))
-    plot_types = ["Topoplot", "Spectrum", "Get Selected Regions"]
+    plot_types = ["Topoplot", "Topoplot 3D", "Spectrum", "Get Selected Regions"]
 
     menu_buttons = [Button(menu_fig[idx, 1], label = plot_type) for (idx, plot_type) in enumerate(plot_types)]
 
@@ -890,6 +890,8 @@ function _show_additional_menu(state, clicked_region_idx = nothing)
                 isnothing(selected_data) && return # No data available, just return
                 if btn.label[] == "Topoplot"
                     plot_topography(selected_data)
+                elseif btn.label[] == "Topoplot 3D"
+                    plot_topography_3d(selected_data)
                 elseif btn.label[] == "Spectrum"
                     plot_channel_spectrum(selected_data)
                 end

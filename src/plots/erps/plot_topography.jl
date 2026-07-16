@@ -84,9 +84,6 @@ function _render_topo_surface!(
         end
     end
 
-    # Clamp the data to the color limits to avoid transparent spots without needing pointy extendlow/extendhigh colorbar caps
-    data_interp = clamp.(data_interp, ylim[1], ylim[2])
-
     co = contourf!(
         ax,
         range(x_bounds[1], x_bounds[2], length = gridscale),
@@ -94,6 +91,8 @@ function _render_topo_surface!(
         data_interp,
         levels = range(ylim[1], ylim[2], length = num_levels);
         colormap = colormap,
+        extendlow = :auto,
+        extendhigh = :auto,
         nan_color = :transparent,
     )
     co.colorrange = ylim
