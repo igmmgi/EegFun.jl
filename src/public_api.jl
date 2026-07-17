@@ -243,6 +243,8 @@ public repair_artifacts_spherical_spline!
 public repair_channels
 public summarize_electrode_repairs
 public unique_rejections
+public compute_csd
+public compute_csd!
 
 # =====================
 # ICA
