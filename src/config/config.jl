@@ -670,9 +670,13 @@ function _write_parameter_docs(io::IO, parameter_spec::ConfigParameter{T}) where
         println(io, "# Allowed values: $(join(parameter_spec.allowed, ", "))")
     end
 
-    # Print default value or mark as required
+    # Print default value or mark as required/optional
     if isnothing(parameter_spec.default)
-        println(io, "# [REQUIRED]")
+        if occursin("(optional)", lowercase(parameter_spec.description))
+            println(io, "# [OPTIONAL]")
+        else
+            println(io, "# [REQUIRED]")
+        end
     else
         println(io, "# Default: $(parameter_spec.default)")
     end
@@ -688,6 +692,8 @@ function _write_parameter_value(io::IO, param_name::String, value)
         println(io, "$param_name = \"$(replace(value, "\\" => "\\\\"))\"")
     elseif value isa Vector
         println(io, "$param_name = $(isempty(value) ? "[]" : "[$(join(value, ", "))]")")
+    elseif isnothing(value)
+        println(io, "# $param_name = ")
     else
         println(io, "$param_name = $value")
     end

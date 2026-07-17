@@ -896,7 +896,7 @@ using Dates
         # Test nothing value
         io = IOBuffer()
         EegFun._write_parameter_value(io, "test_param", nothing)
-        @test String(take!(io)) == "test_param = nothing\n"
+        @test String(take!(io)) == "# test_param = \n"
 
         # Test numeric values
         io = IOBuffer()

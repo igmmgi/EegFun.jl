@@ -1549,7 +1549,7 @@ to vectors of epoch indices that exceeded the criteria.
 function _calculate_epoch_metrics(
     dat::EpochData,
     selected_channels::Vector{Symbol},
-    selected_samples::Vector{Int},
+    selected_samples::AbstractVector{<:Integer},
     z_criterion::Real,
     abs_criterion::Real,
 )::Dict{Symbol,Dict{Symbol,Vector{Int}}}

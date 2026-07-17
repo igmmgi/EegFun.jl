@@ -1633,15 +1633,24 @@ end
 function get_selected_samples(dat::SingleDataFrameEeg, sample_selection::Function)
     return findall(sample_selection(dat.data))
 end
+function get_selected_samples(dat::SingleDataFrameEeg, ::Nothing)
+    return 1:nrow(dat.data)
+end
 
 # Helper to select samples based on a predicate
 function get_selected_samples(dat::MultiDataFrameEeg, sample_selection::Function)
     return findall(sample_selection(dat.data[1])) # assume all data have the same samples
 end
+function get_selected_samples(dat::MultiDataFrameEeg, ::Nothing)
+    return 1:nrow(dat.data[1])
+end
 
 # Helper to select samples from a DataFrame
 function get_selected_samples(dat::DataFrame, sample_selection::Function)
     return findall(sample_selection(dat))
+end
+function get_selected_samples(dat::DataFrame, ::Nothing)
+    return 1:nrow(dat)
 end
 
 """Apply an epoch predicate and return matching epoch indices."""
