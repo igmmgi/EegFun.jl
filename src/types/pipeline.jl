@@ -74,10 +74,14 @@ Configuration for EEG-specific preprocessing settings.
 # Fields
 - `artifact_value_abs_criterion::Int`: Threshold for artifact detection (μV)
 - `extreme_value_abs_criterion::Int`: Threshold for extreme value detection (μV)
+- `artifact_interval_start::Union{Nothing,Float64}`: Start time for artifact rejection interval (optional)
+- `artifact_interval_end::Union{Nothing,Float64}`: End time for artifact rejection interval (optional)
 """
 @kwdef struct EegConfig
     artifact_value_abs_criterion::Int
     extreme_value_abs_criterion::Int
+    artifact_interval_start::Union{Nothing,Float64} = nothing
+    artifact_interval_end::Union{Nothing,Float64} = nothing
 end
 
 """
@@ -128,6 +132,20 @@ Configuration for CleanLine line-noise removal.
 end
 
 """
+    ResampleConfig
+
+Configuration for data resampling.
+
+# Fields
+- `apply::Bool`: Whether to apply resampling
+- `target_rate::Int`: The target sampling rate in Hz
+"""
+@kwdef struct ResampleConfig
+    apply::Bool
+    target_rate::Int
+end
+
+"""
     PreprocessConfig
 
 Comprehensive configuration for EEG data preprocessing.
@@ -141,6 +159,7 @@ pipeline, including filtering, referencing, artifact detection, and ICA settings
 - `epoch_end::Float64`: End time for epoch extraction (seconds)
 - `filter::FilterConfig`: Filter configuration
 - `cleanline::CleanLineConfig`: CleanLine line noise removal configuration
+- `resample::ResampleConfig`: Resampling configuration
 - `eog::EogConfig`: EOG channel calculation and detection settings
 - `eeg::EegConfig`: EEG-specific preprocessing settings
 - `ica::IcaConfig`: ICA configuration settings
@@ -152,6 +171,7 @@ pipeline, including filtering, referencing, artifact detection, and ICA settings
     epoch_end::Float64
     filter::FilterConfig
     cleanline::CleanLineConfig
+    resample::ResampleConfig
     eog::EogConfig
     eeg::EegConfig
     ica::IcaConfig
@@ -197,6 +217,8 @@ function EegConfig(cfg::Dict)
     return EegConfig(
         artifact_value_abs_criterion = Int(cfg["artifact_value_abs_criterion"]),
         extreme_value_abs_criterion = Int(cfg["extreme_value_abs_criterion"]),
+        artifact_interval_start = haskey(cfg, "artifact_interval_start") && !isnothing(cfg["artifact_interval_start"]) ? Float64(cfg["artifact_interval_start"]) : nothing,
+        artifact_interval_end = haskey(cfg, "artifact_interval_end") && !isnothing(cfg["artifact_interval_end"]) ? Float64(cfg["artifact_interval_end"]) : nothing,
     )
 end
 
@@ -224,6 +246,14 @@ function CleanLineConfig(cfg::Dict)
     )
 end
 
+"""Construct `ResampleConfig` from a configuration dictionary."""
+function ResampleConfig(cfg::Dict)
+    return ResampleConfig(
+        apply = cfg["apply"],
+        target_rate = Int(cfg["target_rate"]),
+    )
+end
+
 """Construct `PreprocessConfig` from a configuration dictionary."""
 function PreprocessConfig(cfg::Dict)
     return PreprocessConfig(
@@ -232,6 +262,7 @@ function PreprocessConfig(cfg::Dict)
         epoch_end = cfg["epoch_end"],
         filter = FilterConfig(cfg["filter"]),
         cleanline = CleanLineConfig(cfg["cleanline"]),
+        resample = ResampleConfig(cfg["resample"]),
         eog = EogConfig(cfg["eog"]),
         eeg = EegConfig(cfg["eeg"]),
         ica = IcaConfig(cfg["ica"]),

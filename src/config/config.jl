@@ -93,6 +93,8 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "preprocess.eeg.extreme_value_abs_criterion"  => number_param("Value (mV) for defining data section as an extreme value.", 500),
     "preprocess.eeg.artifact_value_abs_criterion" => number_param("Value (mV) for defining data section (or epoch) as an artifact value.", 100),
     "preprocess.eeg.artifact_value_z_criterion"   => number_param("Value (z) for defining data section (or epoch) as an artifact value (NB. various statistics with 0 being off!).", 0),
+    "preprocess.eeg.artifact_interval_start"      => number_param("Start time (s) for artifact rejection (optional).", nothing),
+    "preprocess.eeg.artifact_interval_end"        => number_param("End time (s) for artifact rejection (optional).", nothing),
 
     # ICA settings
     "preprocess.ica.apply"              => bool_param("Independent Component Analysis (ICA) true/false.", true),
@@ -108,6 +110,10 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "preprocess.cleanline.k_tapers"           => number_param("Number of tapers (usually 2*TW-1).", 5),
     "preprocess.cleanline.p_value"            => number_param("Significance threshold for F-test.", 0.05),
     "preprocess.cleanline.pad"                => number_param("Padding factor for FFT.", 2),
+
+    # Resampling settings
+    "preprocess.resample.apply"               => bool_param("Apply resampling/downsampling?", false),
+    "preprocess.resample.target_rate"         => number_param("Target sampling rate in Hz (e.g. 512, 256).", 512),
 
     # Filtering settings - using helper function
     _filter_param_spec("preprocess.filter.highpass", true, "hp", 0.1, 0.01, 20.0, 1, 1, 4)...,

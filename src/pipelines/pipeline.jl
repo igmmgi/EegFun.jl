@@ -165,6 +165,13 @@ function preprocess(config::String; base_dir::Union{String,Nothing} = nothing, l
                 highpass_filter!(dat, preprocess_cfg.filter)
                 lowpass_filter!(dat, preprocess_cfg.filter)
 
+                #################### RESAMPLE ###################
+                if preprocess_cfg.resample.apply
+                    @info section("Resampling")
+                    @info "Resampling data to $(preprocess_cfg.resample.target_rate) Hz"
+                    resample!(dat, preprocess_cfg.resample.target_rate)
+                end
+
                 #################### CALCULATE EOG CHANNELS ###################
                 @info section("EOG")
                 @info subsection("Calculating EOG (vEOG/hEOG) channels")
@@ -369,10 +376,20 @@ function preprocess(config::String; base_dir::Union{String,Nothing} = nothing, l
 
                 #################### DETECT BAD EPOCHS ###################
                 @info section("Automatic epoch detection")
+                
+                # Determine interval selection for artifact rejection
+                if !isnothing(preprocess_cfg.eeg.artifact_interval_start) && !isnothing(preprocess_cfg.eeg.artifact_interval_end)
+                    rej_interval = times(preprocess_cfg.eeg.artifact_interval_start, preprocess_cfg.eeg.artifact_interval_end)
+                    @info "Restricting artifact rejection to window: $(preprocess_cfg.eeg.artifact_interval_start)s to $(preprocess_cfg.eeg.artifact_interval_end)s"
+                else
+                    rej_interval = times()
+                end
+
                 rejection_info_step1 = detect_bad_epochs_automatic(
                     epochs;
                     z_criterion = 0.0,
                     abs_criterion = preprocess_cfg.eeg.artifact_value_abs_criterion,
+                    interval_selection = rej_interval,
                     name = "rejection_step1",
                 )
                 channel_repairable!(rejection_info_step1, epochs[1].layout)
@@ -398,6 +415,7 @@ function preprocess(config::String; base_dir::Union{String,Nothing} = nothing, l
                     epochs;
                     z_criterion = 0.0,
                     abs_criterion = preprocess_cfg.eeg.artifact_value_abs_criterion,
+                    interval_selection = rej_interval,
                     name = "rejection_step2",
                 )
                 channel_repairable!(rejection_info_step2, epochs[1].layout)

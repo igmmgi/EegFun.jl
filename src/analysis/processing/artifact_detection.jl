@@ -1418,6 +1418,7 @@ function detect_bad_epochs_automatic(
     z_criterion::Real = 3,
     abs_criterion::Real = 100,
     channel_selection::Function = channels(),
+    interval_selection::Interval = times(),
     z_measures::Vector{Symbol} = [:variance, :max, :min, :abs, :range, :kurtosis],
     name::String = "rejection_info",
 )::EpochRejectionInfo
@@ -1443,8 +1444,13 @@ function detect_bad_epochs_automatic(
     @info "Selected channels: $(_print_vector(selected_channels))"
     isempty(selected_channels) && @minimal_error("No channels selected for epoch rejection")
 
+    # Get sample indices for the selected interval
+    selected_samples = get_selected_samples(dat, interval_selection)
+    @info "Selected interval: $(length(selected_samples)) samples"
+    isempty(selected_samples) && @minimal_error("No samples selected for epoch rejection")
+
     # Calculate metrics and identify rejected epochs
-    metrics = _calculate_epoch_metrics(dat, selected_channels, Float64(z_criterion), Float64(abs_criterion))
+    metrics = _calculate_epoch_metrics(dat, selected_channels, selected_samples, Float64(z_criterion), Float64(abs_criterion))
 
     # Initialize rejection lists (all needed for EpochRejectionInfo struct)
     rejected_info = Rejection[]
@@ -1543,6 +1549,7 @@ to vectors of epoch indices that exceeded the criteria.
 function _calculate_epoch_metrics(
     dat::EpochData,
     selected_channels::Vector{Symbol},
+    selected_samples::Vector{Int},
     z_criterion::Real,
     abs_criterion::Real,
 )::Dict{Symbol,Dict{Symbol,Vector{Int}}}
@@ -1551,7 +1558,8 @@ function _calculate_epoch_metrics(
     metrics = Dict(k => Dict(ch => Int[] for ch in selected_channels) for k in metric_keys)
 
     Threads.@threads for ch in selected_channels
-        channel_data_all = [epoch[!, ch]::Vector{Float64} for epoch in dat.data]
+        # subset the data by the selected sample interval for the metric calculation
+        channel_data_all = [epoch[selected_samples, ch]::Vector{Float64} for epoch in dat.data]
 
         if abs_criterion > 0
             abs_threshold_violations = findall(epoch_data -> maximum(abs, epoch_data) > abs_criterion, channel_data_all)
