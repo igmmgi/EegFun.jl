@@ -89,7 +89,7 @@ function plot_topography_3d(
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     interval_selection::Interval = times(),
-    baseline_interval::Interval = times(),
+    baseline_interval::Interval = nothing,
     display_plot = true,
     kwargs...,
 )
@@ -248,7 +248,7 @@ function plot_topography_3d(
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     interval_selection::Interval = times(),
-    baseline_interval::Interval = times(),
+    baseline_interval::Interval = nothing,
     display_plot = true,
     kwargs...,
 )

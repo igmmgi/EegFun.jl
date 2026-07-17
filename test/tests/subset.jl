@@ -256,23 +256,30 @@ using DataFrames
     end
 
     @testset "times() helper function" begin
-        @testset "times() returns nothing" begin
-            @test isnothing(EegFun.times())
+        @testset "times() returns AllSelection" begin
+            @test EegFun.times() isa EegFun.AllSelection
         end
 
-        @testset "times(start, stop) returns tuple" begin
-            @test EegFun.times(0.1, 0.5) == (0.1, 0.5)
+        @testset "times(start, stop) returns TimeSelection" begin
+            sel = EegFun.times(0.1, 0.5)
+            @test sel isa EegFun.TimeSelection
+            @test sel.start == 0.1
+            @test sel.stop == 0.5
         end
 
-        @testset "times(tuple) returns tuple" begin
-            @test EegFun.times((0.2, 0.6)) == (0.2, 0.6)
+        @testset "times(tuple) returns TimeSelection" begin
+            sel = EegFun.times((0.2, 0.6))
+            @test sel isa EegFun.TimeSelection
+            @test sel.start == 0.2
+            @test sel.stop == 0.6
         end
 
-
-
-        @testset "times(Tuple) passes through" begin
+        @testset "times(Tuple) maps to TimeSelection" begin
             interval = (0.3, 0.7)
-            @test EegFun.times(interval) === interval
+            sel = EegFun.times(interval)
+            @test sel isa EegFun.TimeSelection
+            @test sel.start == 0.3
+            @test sel.stop == 0.7
         end
     end
 end

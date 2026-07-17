@@ -616,10 +616,10 @@ function _average_channel_columns(row::NamedTuple, selected_channels::Vector{Sym
 end
 
 """
-    erp_measurements!(dat::ErpData, analysis_type::String; analysis_interval = times(), baseline_interval = times(), channel_selection = channels(), participant = 0, kwargs...)
+    erp_measurements!(dat::ErpData, analysis_type::String; analysis_interval = times(), baseline_interval = nothing, channel_selection = channels(), participant = 0, kwargs...)
     erp_measurements!(dat::EpochData, analysis_type::String; kwargs...)
     erp_measurements!(data::Vector{<:Union{ErpData,EpochData}}, analysis_type::String; kwargs...)
-    erp_measurements(file_pattern::String, analysis_type::String; analysis_interval = times(), baseline_interval = times(),
+    erp_measurements(file_pattern::String, analysis_type::String; analysis_interval = times(), baseline_interval = nothing,
     participant_selection = participants(), condition_selection = conditions(), channel_selection = channels(),
     input_dir = pwd(), output_dir = nothing, output_file = "erp_measurements", kwargs...)
 
@@ -656,7 +656,7 @@ function erp_measurements!(
     dat::ErpData,
     analysis_type::String;
     analysis_interval::Interval = times(),
-    baseline_interval::Interval = times(),
+    baseline_interval::Interval = nothing,
     channel_selection::Function = channels(),
     participant::Int = 0,
     average_channels::Bool = false,
@@ -714,7 +714,7 @@ function erp_measurements!(
     dat::EpochData,
     analysis_type::String;
     analysis_interval::Interval = times(),
-    baseline_interval::Interval = times(),
+    baseline_interval::Interval = nothing,
     channel_selection::Function = channels(),
     participant::Int = 0,
     average_channels::Bool = false,
@@ -802,7 +802,7 @@ function erp_measurements(
     file_pattern::String,
     analysis_type::String;
     analysis_interval::Interval = times(),
-    baseline_interval::Interval = times(),
+    baseline_interval::Interval = nothing,
     participant_selection::Function = participants(),
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),

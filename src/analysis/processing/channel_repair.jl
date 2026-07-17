@@ -161,7 +161,7 @@ Repair bad channels in ContinuousData using weighted neighbor interpolation.
 """
 function _repair_channels_neighbor!(
     data::ContinuousData,
-    channels_to_repair::Vector{Symbol},
+    channels_to_repair::AbstractVector{Symbol},
     neighbours_dict::OrderedDict{Symbol,Neighbours};
     repair_info = nothing,
 )
@@ -188,7 +188,7 @@ Tracking for EpochData is handled via EpochRejectionInfo, not through a separate
 """
 function _repair_channels_neighbor!(
     data::EpochData,
-    channels_to_repair::Vector{Symbol},
+    channels_to_repair::AbstractVector{Symbol},
     neighbours_dict::OrderedDict{Symbol,Neighbours};
     epoch_selection::Function = epochs(),
 )
@@ -219,8 +219,8 @@ Core implementation for repairing bad channels using spherical spline interpolat
 """
 function _repair_channels_spherical!(
     data::AbstractMatrix,
-    channels_to_repair::Vector{Symbol},
-    channels::Vector{Symbol},
+    channels_to_repair::AbstractVector{Symbol},
+    channels::AbstractVector{Symbol},
     layout::DataFrame;
     m::Int = 4,
     lambda::Float64 = 1e-5,
@@ -301,7 +301,7 @@ Repair bad channels in ContinuousData using spherical spline interpolation.
 """
 function _repair_channels_spherical!(
     data::ContinuousData,
-    channels_to_repair::Vector{Symbol};
+    channels_to_repair::AbstractVector{Symbol};
     m::Int = 4,
     lambda::Float64 = 1e-5,
     repair_info = nothing,
@@ -336,7 +336,7 @@ Tracking for EpochData is handled via EpochRejectionInfo, not through a separate
 """
 function _repair_channels_spherical!(
     data::EpochData,
-    channels_to_repair::Vector{Symbol};
+    channels_to_repair::AbstractVector{Symbol};
     epoch_selection::Function = epochs(),
     m::Int = 4,
     lambda::Float64 = 1e-5,

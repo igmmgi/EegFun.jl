@@ -418,20 +418,25 @@ end
 
 
 # === TIME INTERVAL TYPE ALIAS ===
-# Intervals are represented as tuples (start, stop), functions, or nothing
+# Intervals are represented as selections or legacy types
+
+abstract type AbstractSelection end
+struct TimeSelection <: AbstractSelection
+    start::Float64
+    stop::Float64
+end
+struct AllSelection <: AbstractSelection end
 
 """
 Type alias for interval specifications used throughout EegFun.
 
 Accepts:
-- Tuples: `(start, stop)` - time range in seconds (enforces exactly 2 elements)
-- Functions: `samples(...)` - custom predicates for advanced selection
-- `nothing` - no filtering (select all data)
-
-Used for both time intervals (plotting, subsetting) and baseline intervals (baseline correction).
+- AbstractSelection types: `TimeSelection`, `AllSelection`
+- Tuples (fallback): `(start, stop)`
+- Functions (fallback): `samples(...)`
+- `nothing` (fallback)
 """
-const Interval = Union{Tuple{Real,Real},Function,Nothing}
-
+const Interval = Union{AbstractSelection, Tuple{Real,Real}, Function, Nothing}
 """
     EpochCondition
 

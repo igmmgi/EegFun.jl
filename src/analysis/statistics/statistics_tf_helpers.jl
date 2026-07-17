@@ -102,8 +102,10 @@ function prepare_stats(
     isempty(electrodes) && @minimal_error "No channels matched the channel selection."
 
     # Apply frequency selection
-    if !isnothing(frequency_selection) && frequency_selection isa Tuple
-        freq_mask = (all_freqs .>= frequency_selection[1]) .& (all_freqs .<= frequency_selection[2])
+    if !isnothing(frequency_selection) && !(frequency_selection isa AllSelection)
+        f_start = frequency_selection isa TimeSelection ? frequency_selection.start : frequency_selection[1]
+        f_stop = frequency_selection isa TimeSelection ? frequency_selection.stop : frequency_selection[2]
+        freq_mask = (all_freqs .>= f_start) .& (all_freqs .<= f_stop)
         frequencies = all_freqs[freq_mask]
     else
         frequencies = all_freqs
@@ -111,8 +113,10 @@ function prepare_stats(
     isempty(frequencies) && @minimal_error "No frequencies matched the frequency selection."
 
     # Apply time (interval) selection
-    if !isnothing(interval_selection) && interval_selection isa Tuple
-        time_mask = (all_times .>= interval_selection[1]) .& (all_times .<= interval_selection[2])
+    if !isnothing(interval_selection) && !(interval_selection isa AllSelection)
+        t_start = interval_selection isa TimeSelection ? interval_selection.start : interval_selection[1]
+        t_stop = interval_selection isa TimeSelection ? interval_selection.stop : interval_selection[2]
+        time_mask = (all_times .>= t_start) .& (all_times .<= t_stop)
         time_points = all_times[time_mask]
     else
         time_points = all_times

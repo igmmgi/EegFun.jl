@@ -711,7 +711,7 @@ Internal function to count extreme values for specified channels.
 # Returns
 - `Vector{Int}`: Count of extreme values for each channel
 """
-function _n_extreme_value(df::DataFrame, channels::Vector{Symbol}, threshold::Float64)
+function _n_extreme_value(df::DataFrame, channels::AbstractVector{Symbol}, threshold::Float64)
     counts = Int[]
     for ch in channels
         channel_data = df[!, ch]
@@ -1419,7 +1419,7 @@ function detect_bad_epochs_automatic(
     abs_criterion::Real = 100,
     channel_selection::Function = channels(),
     interval_selection::Interval = times(),
-    z_measures::Vector{Symbol} = [:variance, :max, :min, :abs, :range, :kurtosis],
+    z_measures::AbstractVector{Symbol} = [:variance, :max, :min, :abs, :range, :kurtosis],
     name::String = "rejection_info",
 )::EpochRejectionInfo
 
@@ -1548,7 +1548,7 @@ to vectors of epoch indices that exceeded the criteria.
 """
 function _calculate_epoch_metrics(
     dat::EpochData,
-    selected_channels::Vector{Symbol},
+    selected_channels::AbstractVector{Symbol},
     selected_samples::AbstractVector{<:Integer},
     z_criterion::Real,
     abs_criterion::Real,

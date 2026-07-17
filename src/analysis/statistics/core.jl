@@ -2,7 +2,7 @@
 # for statistical testing of EEG/ERP data.
 
 """
-    prepare_stats(erps::Vector{ErpData}; design::Symbol = :paired, condition_selection::Function = conditions([1, 2]), channel_selection::Function = channels(), interval_selection::Interval = times(), baseline_interval::Interval = times(), analysis_interval::Interval = times())
+    prepare_stats(erps::Vector{ErpData}; design::Symbol = :paired, condition_selection::Function = conditions([1, 2]), channel_selection::Function = channels(), interval_selection::Interval = times(), baseline_interval::Interval = nothing, analysis_interval::Interval = times())
 
 Prepare ErpData for comparing two conditions in statistical tests (permutation and analytic tests).
 
@@ -27,7 +27,7 @@ function prepare_stats(
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
     interval_selection::Interval = times(),
-    baseline_interval::Interval = times(),
+    baseline_interval::Interval = nothing,
     analysis_interval::Interval = times(),
 )
     # Group all ERPs by condition first

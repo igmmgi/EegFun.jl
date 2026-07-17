@@ -99,10 +99,11 @@ function plot_topography_stats(
 
     # Get time points and determine range
     all_time_points = result.time_points
-    if isnothing(interval_selection)
+    if isnothing(interval_selection) || interval_selection isa AllSelection
         t_start, t_end = first(all_time_points), last(all_time_points)
     else
-        t_start, t_end = interval_selection
+        t_start = interval_selection isa TimeSelection ? interval_selection.start : interval_selection[1]
+        t_end = interval_selection isa TimeSelection ? interval_selection.stop : interval_selection[2]
     end
 
     # Find indices within the time range

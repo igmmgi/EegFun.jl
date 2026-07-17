@@ -76,10 +76,11 @@ function plot_topography(
         @minimal_error("No frequencies found in range $(freq_range). Data range: $(first(all_freqs)) to $(last(all_freqs)) Hz")
 
     # Apply time range filter
-    if isnothing(interval_selection)
+    if isnothing(interval_selection) || interval_selection isa AllSelection
         time_mask = fill(true, length(all_times))
     else
-        t_start, t_stop = interval_selection
+        t_start = interval_selection isa TimeSelection ? interval_selection.start : interval_selection[1]
+        t_stop = interval_selection isa TimeSelection ? interval_selection.stop : interval_selection[2]
         time_mask = t_start .<= all_times .<= t_stop
     end
     isempty(findall(time_mask)) &&
@@ -240,10 +241,11 @@ function plot_topography(
     all_times = Float64.(sort(unique(tf_plots[1].data_power.time)))
     freq_mask = freq_range[1] .<= all_freqs .<= freq_range[2]
 
-    if isnothing(interval_selection)
+    if isnothing(interval_selection) || interval_selection isa AllSelection
         time_mask = fill(true, length(all_times))
     else
-        t_start, t_stop = interval_selection
+        t_start = interval_selection isa TimeSelection ? interval_selection.start : interval_selection[1]
+        t_stop = interval_selection isa TimeSelection ? interval_selection.stop : interval_selection[2]
         time_mask = t_start .<= all_times .<= t_stop
     end
 
@@ -433,10 +435,11 @@ function plot_topography_stats(
         error("No frequencies found in range $(freq_range). Data range: $(first(all_frequencies)) to $(last(all_frequencies)) Hz")
 
     # Find time indices in the selected range
-    if isnothing(interval_selection)
+    if isnothing(interval_selection) || interval_selection isa AllSelection
         t_start, t_end = first(all_time_points), last(all_time_points)
     else
-        t_start, t_end = interval_selection
+        t_start = interval_selection isa TimeSelection ? interval_selection.start : interval_selection[1]
+        t_end = interval_selection isa TimeSelection ? interval_selection.stop : interval_selection[2]
     end
     time_mask = t_start .<= all_time_points .<= t_end
     time_indices = findall(time_mask)

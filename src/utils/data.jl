@@ -821,49 +821,42 @@ into a samples() predicate function for use in subset().
 # Returns
 - `Function`: samples() predicate that selects the specified time range
 """
-function _interval_to_samples(interval::Interval)
-    if isnothing(interval)
-        return samples()  # All samples
-    else
-        # Extract start/stop from tuple or range
-        if interval isa AbstractRange
-            start_time, stop_time = first(interval), last(interval)
+function _interval_to_samples(sel::TimeSelection)
+    start_time, stop_time = sel.start, sel.stop
+    return x -> begin
+        t = x[!, :time]
+        mask = (t .>= start_time) .& (t .<= stop_time)
+        selected_times = t[mask]
+        if !isempty(selected_times)
+            actual_start = round(first(selected_times); digits = 4)
+            actual_stop = round(last(selected_times); digits = 4)
+            n = length(selected_times)
+            @debug "times(): Requested $(start_time)s–$(stop_time)s, actual sample range $(actual_start)s–$(actual_stop)s ($(n) sample$(n > 1 ? "s" : ""))"
+        elseif start_time == stop_time
+            # Single time point with no exact match: snap to nearest sample
+            _, idx = findmin(abs.(t .- start_time))
+            @debug "times(): Requested $(start_time)s, snapped to nearest sample at $(round(t[idx]; digits=4))s"
+            mask = fill(false, nrow(x))
+            mask[idx] = true
         else
-            start_time, stop_time = interval
+            @warn "times(): No samples found in range $(start_time)s–$(stop_time)s"
         end
-        # Create time predicate directly (don't use samples() for time filtering)
-        return x -> begin
-            t = x[!, :time]
-            mask = (t .>= start_time) .& (t .<= stop_time)
-            selected_times = t[mask]
-            if !isempty(selected_times)
-                actual_start = round(first(selected_times); digits = 4)
-                actual_stop = round(last(selected_times); digits = 4)
-                n = length(selected_times)
-                @debug "times(): Requested $(start_time)s–$(stop_time)s, actual sample range $(actual_start)s–$(actual_stop)s ($(n) sample$(n > 1 ? "s" : ""))"
-            elseif start_time == stop_time
-                # Single time point with no exact match: snap to nearest sample
-                _, idx = findmin(abs.(t .- start_time))
-                @debug "times(): Requested $(start_time)s, snapped to nearest sample at $(round(t[idx]; digits=4))s"
-                mask = fill(false, nrow(x))
-                mask[idx] = true
-            else
-                @warn "times(): No samples found in range $(start_time)s–$(stop_time)s"
-            end
-            mask
-        end
+        mask
     end
 end
+
+_interval_to_samples(::AllSelection) = samples()
+_interval_to_samples(::Nothing) = samples()
+_interval_to_samples(t::Tuple{Real, Real}) = _interval_to_samples(TimeSelection(t[1], t[2]))
+_interval_to_samples(f::Function) = f
 
 """
     _combine_interval_sample(interval::Interval, sample_selection::Function)
 
 Combine an interval selection with a sample selection predicate.
-When `interval` is `nothing` (default), returns the original `sample_selection` unchanged.
-Otherwise combines both predicates with `.&`.
 """
 function _combine_interval_sample(interval::Interval, sample_selection::Function)
-    if isnothing(interval)
+    if interval isa Nothing || interval isa AllSelection
         return sample_selection
     else
         interval_sel = _interval_to_samples(interval)
@@ -1382,21 +1375,21 @@ samples_and_not(columns::Vector{Symbol}) = x -> .!(all(x[!, col] for col in colu
     times(interval::Tuple{Real,Real})
 
 Create time interval values for the `interval_selection` keyword argument.
-Unlike other predicate generators, `times()` returns an `Interval` value
-(a `Tuple` or `nothing`), not a predicate function.
+Unlike other predicate generators, `times()` returns an `AbstractSelection` value
+(a `TimeSelection` or `AllSelection`), not a predicate function.
 
 # Examples
 ```julia
-times()                             # Select all time points (default, returns nothing)
+times()                             # Select all time points (returns AllSelection)
 times(0.3)                          # Select single time point (snaps to nearest sample)
 times(-0.2, 0.5)                    # Select time window from -200ms to 500ms
 times((-0.2, 0.5))                  # Same, from a Tuple
 ```
 """
-times() = nothing
-times(t::Real) = (t, t)
-times(start::Real, stop::Real) = (start, stop)
-times(interval::Tuple{Real,Real}) = interval
+times() = AllSelection()
+times(t::Real) = TimeSelection(Float64(t), Float64(t))
+times(start::Real, stop::Real) = TimeSelection(Float64(start), Float64(stop))
+times(interval::Tuple{Real,Real}) = TimeSelection(Float64(interval[1]), Float64(interval[2]))
 
 
 
@@ -1633,7 +1626,7 @@ end
 function get_selected_samples(dat::SingleDataFrameEeg, sample_selection::Function)
     return findall(sample_selection(dat.data))
 end
-function get_selected_samples(dat::SingleDataFrameEeg, ::Nothing)
+function get_selected_samples(dat::SingleDataFrameEeg, ::Union{Nothing, AllSelection})
     return 1:nrow(dat.data)
 end
 
@@ -1641,7 +1634,7 @@ end
 function get_selected_samples(dat::MultiDataFrameEeg, sample_selection::Function)
     return findall(sample_selection(dat.data[1])) # assume all data have the same samples
 end
-function get_selected_samples(dat::MultiDataFrameEeg, ::Nothing)
+function get_selected_samples(dat::MultiDataFrameEeg, ::Union{Nothing, AllSelection})
     return 1:nrow(dat.data[1])
 end
 
@@ -1649,8 +1642,14 @@ end
 function get_selected_samples(dat::DataFrame, sample_selection::Function)
     return findall(sample_selection(dat))
 end
-function get_selected_samples(dat::DataFrame, ::Nothing)
+function get_selected_samples(dat::DataFrame, ::Union{Nothing, AllSelection})
     return 1:nrow(dat)
+end
+
+# Helper to convert TimeSelection and Tuple into sample functions
+function get_selected_samples(dat::Union{SingleDataFrameEeg, MultiDataFrameEeg, DataFrame}, sel::Union{TimeSelection, Tuple{Real, Real}})
+    func = _interval_to_samples(sel)
+    return get_selected_samples(dat, func)
 end
 
 """Apply an epoch predicate and return matching epoch indices."""

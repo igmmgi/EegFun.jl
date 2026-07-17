@@ -94,7 +94,7 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
              channel_plot_order::Union{Nothing, Vector{Symbol}} = nothing,
              sample_selection::Function = samples(),
              interval_selection::Interval = times(),
-             baseline_interval::Interval = times(),
+             baseline_interval::Interval = nothing,
              kwargs...)
 
 Load ERP data and create plots. Accepts either a direct `.jld2` filepath or a filename 
@@ -137,7 +137,7 @@ function plot_erp(
     channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
     sample_selection::Function = samples(),
     interval_selection::Interval = times(),
-    baseline_interval::Interval = times(),
+    baseline_interval::Interval = nothing,
     kwargs...,
 )
     # Detect: filepath (ends with .jld2) vs pattern
@@ -202,7 +202,7 @@ function plot_erp(
     channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
     sample_selection::Function = samples(),
     interval_selection::Interval = times(),
-    baseline_interval::Interval = times(),
+    baseline_interval::Interval = nothing,
     kwargs...,
 )
     # For single ErpData, condition_selection doesn't apply (there's only one condition)
@@ -226,7 +226,7 @@ function plot_erp(
     channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
     sample_selection::Function = samples(),
     interval_selection::Interval = times(),
-    baseline_interval::Interval = times(),
+    baseline_interval::Interval = nothing,
     kwargs...,
 )
 
@@ -555,7 +555,7 @@ function _prepare_erp_data(
     channel_selection = channels(),
     sample_selection = samples(),
     interval_selection::Interval = times(),
-    baseline_interval::Interval = times(),
+    baseline_interval::Interval = nothing,
 )
     # Data subsetting - ONLY by condition and sample, NOT by channel
     # This keeps all channels available for right-click topoplots
