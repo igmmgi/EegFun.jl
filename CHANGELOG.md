@@ -7,6 +7,11 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 
 ## [Unreleased]
 
+### Added
+
+- Ported the Chronux/EEGLAB adaptive multi-taper line noise removal algorithm (`cleanline!`).
+- Integrated `cleanline!` into the automated processing pipeline (`pipeline.jl`).
+- Added multi-threading support and DC spectral leakage protection (window mean-centering) for optimal `cleanline!` performance on un-filtered raw data.
 ## [0.5.0] - 2026-07-16
 
 ### Added

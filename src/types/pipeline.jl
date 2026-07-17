@@ -100,6 +100,34 @@ Configuration for Independent Component Analysis.
 end
 
 """
+    CleanLineConfig
+
+Configuration for CleanLine line-noise removal.
+
+# Fields
+- `apply::Bool`: Whether to apply CleanLine
+- `line_frequencies::Vector{Float64}`: Target line noise frequencies (e.g., [50.0])
+- `bandwidth::Float64`: Bandwidth for line frequency detection (Hz)
+- `sliding_win_length::Float64`: Window length in seconds
+- `sliding_win_step::Float64`: Window step in seconds
+- `time_bandwidth::Float64`: Time-bandwidth product for tapers
+- `k_tapers::Int`: Number of tapers
+- `p_value::Float64`: Significance threshold for F-test
+- `pad::Int`: FFT padding factor
+"""
+@kwdef struct CleanLineConfig
+    apply::Bool
+    line_frequencies::Vector{Float64}
+    bandwidth::Float64
+    sliding_win_length::Float64
+    sliding_win_step::Float64
+    time_bandwidth::Float64
+    k_tapers::Int
+    p_value::Float64
+    pad::Int
+end
+
+"""
     PreprocessConfig
 
 Comprehensive configuration for EEG data preprocessing.
@@ -112,6 +140,7 @@ pipeline, including filtering, referencing, artifact detection, and ICA settings
 - `epoch_start::Float64`: Start time for epoch extraction (seconds)
 - `epoch_end::Float64`: End time for epoch extraction (seconds)
 - `filter::FilterConfig`: Filter configuration
+- `cleanline::CleanLineConfig`: CleanLine line noise removal configuration
 - `eog::EogConfig`: EOG channel calculation and detection settings
 - `eeg::EegConfig`: EEG-specific preprocessing settings
 - `ica::IcaConfig`: ICA configuration settings
@@ -122,6 +151,7 @@ pipeline, including filtering, referencing, artifact detection, and ICA settings
     epoch_start::Float64
     epoch_end::Float64
     filter::FilterConfig
+    cleanline::CleanLineConfig
     eog::EogConfig
     eeg::EegConfig
     ica::IcaConfig
@@ -179,6 +209,21 @@ function IcaConfig(cfg::Dict)
     )
 end
 
+"""Construct `CleanLineConfig` from a configuration dictionary."""
+function CleanLineConfig(cfg::Dict)
+    return CleanLineConfig(
+        apply = cfg["apply"],
+        line_frequencies = Vector{Float64}(cfg["line_frequencies"]),
+        bandwidth = Float64(cfg["bandwidth"]),
+        sliding_win_length = Float64(cfg["sliding_win_length"]),
+        sliding_win_step = Float64(cfg["sliding_win_step"]),
+        time_bandwidth = Float64(cfg["time_bandwidth"]),
+        k_tapers = Int(cfg["k_tapers"]),
+        p_value = Float64(cfg["p_value"]),
+        pad = Int(cfg["pad"]),
+    )
+end
+
 """Construct `PreprocessConfig` from a configuration dictionary."""
 function PreprocessConfig(cfg::Dict)
     return PreprocessConfig(
@@ -186,6 +231,7 @@ function PreprocessConfig(cfg::Dict)
         epoch_start = cfg["epoch_start"],
         epoch_end = cfg["epoch_end"],
         filter = FilterConfig(cfg["filter"]),
+        cleanline = CleanLineConfig(cfg["cleanline"]),
         eog = EogConfig(cfg["eog"]),
         eeg = EegConfig(cfg["eeg"]),
         ica = IcaConfig(cfg["ica"]),

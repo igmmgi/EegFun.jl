@@ -148,6 +148,8 @@ public validate_layout
 public average_epochs
 public baseline
 public baseline!
+public cleanline
+public cleanline!
 public create_highpass_filter
 public create_lowpass_filter
 public detrend

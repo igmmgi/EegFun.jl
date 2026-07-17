@@ -98,6 +98,17 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "preprocess.ica.apply"              => bool_param("Independent Component Analysis (ICA) true/false.", true),
     "preprocess.ica.percentage_of_data" => number_param("Percentage of data to use for ICA (0-100).", 100.0, 0.0, 100.0),
 
+    # CleanLine settings
+    "preprocess.cleanline.apply"              => bool_param("Apply CleanLine algorithm to remove line noise?", false),
+    "preprocess.cleanline.line_frequencies"   => _param(Vector{Float64}, "Line noise frequencies to target (e.g. [50.0])", [50.0]),
+    "preprocess.cleanline.bandwidth"          => number_param("Bandwidth for scanning frequencies around the line frequency.", 2.0),
+    "preprocess.cleanline.sliding_win_length" => number_param("Sliding window length (seconds) for multi-taper regression.", 4.0),
+    "preprocess.cleanline.sliding_win_step"   => number_param("Sliding window step (seconds) for multi-taper regression.", 2.0),
+    "preprocess.cleanline.time_bandwidth"     => number_param("Time-bandwidth product (TW) for tapers.", 3.0),
+    "preprocess.cleanline.k_tapers"           => number_param("Number of tapers (usually 2*TW-1).", 5),
+    "preprocess.cleanline.p_value"            => number_param("Significance threshold for F-test.", 0.05),
+    "preprocess.cleanline.pad"                => number_param("Padding factor for FFT.", 2),
+
     # Filtering settings - using helper function
     _filter_param_spec("preprocess.filter.highpass", true, "hp", 0.1, 0.01, 20.0, 1, 1, 4)...,
     _filter_param_spec("preprocess.filter.lowpass", false, "lp", 30.0, 5.00, 500.0, 3, 1, 8)...,

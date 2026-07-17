@@ -144,6 +144,22 @@ function preprocess(config::String; base_dir::Union{String,Nothing} = nothing, l
                     @info "Skipping rereferencing (reference_channel = none)"
                 end
 
+                ################### CLEANLINE ###################
+                if preprocess_cfg.cleanline.apply
+                    @info section("Line Noise Removal (CleanLine)")
+                    cleanline!(
+                        dat;
+                        line_frequencies = preprocess_cfg.cleanline.line_frequencies,
+                        bandwidth = preprocess_cfg.cleanline.bandwidth,
+                        sliding_win_length = preprocess_cfg.cleanline.sliding_win_length,
+                        sliding_win_step = preprocess_cfg.cleanline.sliding_win_step,
+                        time_bandwidth = preprocess_cfg.cleanline.time_bandwidth,
+                        k_tapers = preprocess_cfg.cleanline.k_tapers,
+                        p_value = preprocess_cfg.cleanline.p_value,
+                        pad = preprocess_cfg.cleanline.pad
+                    )
+                end
+
                 ################### APPLY INITIAL FILTERS ###################
                 @info section("Initial Filters")
                 highpass_filter!(dat, preprocess_cfg.filter)
