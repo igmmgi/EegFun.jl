@@ -964,7 +964,8 @@ Display a before/after comparison table of epoch counts — `epochs_uncorrected`
 Typically called after artifact rejection to log how many epochs were removed per condition.
 """
 function epochs_table(epochs_uncorrected::Vector{EpochData}, epochs_unrejected::Vector{EpochData}; print_table::Bool = true, kwargs...)
-    length(epochs_uncorrected) != length(epochs_unrejected) && throw(ArgumentError("epochs_uncorrected and epochs_unrejected must have same length"))
+    length(epochs_uncorrected) != length(epochs_unrejected) &&
+        throw(ArgumentError("epochs_uncorrected and epochs_unrejected must have same length"))
 
     df = _build_base_epochs_df(epochs_uncorrected)
     df.n_epochs_uncorrected = [n_epochs(epoch) for epoch in epochs_uncorrected]

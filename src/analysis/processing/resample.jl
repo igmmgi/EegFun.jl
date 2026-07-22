@@ -1,5 +1,5 @@
 
-struct PaddedVector{T, V<:AbstractVector{T}} <: AbstractVector{T}
+struct PaddedVector{T,V<:AbstractVector{T}} <: AbstractVector{T}
     data::V
     pad_len::Int
 end
@@ -7,11 +7,11 @@ Base.size(p::PaddedVector) = (length(p.data) + 2*p.pad_len,)
 Base.IndexStyle(::Type{<:PaddedVector}) = IndexLinear()
 function Base.getindex(p::PaddedVector, i::Int)
     if i <= p.pad_len
-        p.data[p.pad_len - i + 1]
+        p.data[p.pad_len-i+1]
     elseif i > length(p.data) + p.pad_len
-        p.data[end - (i - length(p.data) - p.pad_len) + 1]
+        p.data[end-(i-length(p.data)-p.pad_len)+1]
     else
-        p.data[i - p.pad_len]
+        p.data[i-p.pad_len]
     end
 end
 
@@ -22,60 +22,60 @@ function _resample_dataframe(df::DataFrame, old_rate::Real, target_rate::Real, c
     rate = target_rate / old_rate
     N_old = nrow(df)
     N_new = ceil(Int, N_old * rate)
-    
+
     df_new = DataFrame()
-    
+
     # 1. Resample signal channels
     # Pre-compute the polyphase filter to avoid redesigning it for every channel
     h = DSP.resample_filter(rate)
     pad_len = min(N_old ÷ 2, round(Int, old_rate))
     pad_new = round(Int, pad_len * rate)
-    
+
     for ch in channel_cols
         if hasproperty(df, ch)
             sig = convert(Vector{Float64}, df[!, ch])
             if pad_len > 0
                 padded_sig = PaddedVector(sig, pad_len)
                 resampled_padded = DSP.resample(padded_sig, rate, h)
-                df_new[!, ch] = resampled_padded[pad_new + 1 : pad_new + N_new]
+                df_new[!, ch] = resampled_padded[(pad_new+1):(pad_new+N_new)]
             else
                 df_new[!, ch] = DSP.resample(sig, rate, h)
             end
         end
     end
-    
+
     # 2. Resample time column if it exists
     if hasproperty(df, :time)
         t0 = df.time[1]
-        df_new.time = range(t0, step=1/target_rate, length=N_new)
+        df_new.time = range(t0, step = 1/target_rate, length = N_new)
     end
-    
+
     # 3. Handle other metadata columns
     other_cols = setdiff(propertynames(df), [channel_cols..., :time])
-    
+
     if hasproperty(df, trigger_col)
         trigger_type = eltype(df[!, trigger_col])
         df_new[!, trigger_col] = zeros(trigger_type, N_new)
-        
+
         trigger_indices = findall(df[!, trigger_col] .!= 0)
         trigger_values = df[!, trigger_col][trigger_indices]
-        
+
         for (orig_idx, trig_val) in zip(trigger_indices, trigger_values)
             new_idx = round(Int, orig_idx * rate)
             new_idx = clamp(new_idx, 1, N_new)
             df_new[!, trigger_col][new_idx] = trig_val
         end
-        
+
         other_cols = setdiff(other_cols, [trigger_col])
     end
-    
+
     if !isempty(other_cols)
-        old_indices = [clamp(round(Int, i / rate), 1, N_old) for i in 1:N_new]
+        old_indices = [clamp(round(Int, i / rate), 1, N_old) for i = 1:N_new]
         for col in other_cols
             df_new[!, col] = df[!, col][old_indices]
         end
     end
-    
+
     return df_new[:, propertynames(df)]
 end
 
@@ -93,24 +93,24 @@ function resample!(dat::SingleDataFrameEeg, target_rate::Real)::Nothing
     if target_rate <= 0
         @minimal_error("Target rate must be positive, got $target_rate")
     end
-    
+
     if target_rate == dat.sample_rate
         @info "Target rate matches current sample rate, no resampling needed"
         return nothing
     end
-    
+
     @info "Resampling data from $(dat.sample_rate) Hz to $(target_rate) Hz"
-    
+
     chans = channel_labels(dat)
     dat.data = _resample_dataframe(dat.data, dat.sample_rate, target_rate, chans, :trigger)
-    
+
     if hasproperty(dat.data, :sample)
         dat.data.sample = 1:nrow(dat.data)
     end
-    
+
     dat.sample_rate = Float64(target_rate)
     @info "Resampling complete. New sample rate: $(dat.sample_rate) Hz, $(nrow(dat.data)) samples"
-    
+
     return nothing
 end
 
@@ -118,28 +118,28 @@ function resample!(dat::EpochData, target_rate::Real)::Nothing
     if target_rate <= 0
         @minimal_error("Target rate must be positive, got $target_rate")
     end
-    
+
     if target_rate == dat.sample_rate
         @info "Target rate matches current sample rate, no resampling needed"
         return nothing
     end
-    
+
     @info "Resampling $(length(dat.data)) epochs from $(dat.sample_rate) Hz to $(target_rate) Hz"
-    
+
     chans = channel_labels(dat)
     for (i, epoch) in enumerate(dat.data)
         dat.data[i] = _resample_dataframe(epoch, dat.sample_rate, target_rate, chans, :trigger)
-        
+
         if hasproperty(dat.data[i], :sample)
             first_sample = round(Int, epoch.sample[1] * (target_rate / dat.sample_rate))
             n_samples = nrow(dat.data[i])
             dat.data[i].sample = first_sample:(first_sample+n_samples-1)
         end
     end
-    
+
     dat.sample_rate = Float64(target_rate)
     @info "Resampling complete. New sample rate: $(dat.sample_rate) Hz, $(nrow(dat.data[1])) samples per epoch"
-    
+
     return nothing
 end
 

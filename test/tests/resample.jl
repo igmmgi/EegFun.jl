@@ -4,7 +4,7 @@ using JLD2
 
 function _make_test_layout(df::DataFrame)
     cols = String.(setdiff(propertynames(df), [:time, :trigger, :trial, :condition, :rt, :sample]))
-    return EegFun.Layout(DataFrame(label=cols), nothing, nothing, nothing)
+    return EegFun.Layout(DataFrame(label = cols), nothing, nothing, nothing)
 end
 
 @testset "Resample tests" begin
@@ -26,13 +26,7 @@ end
             data.trigger[100] = 1  # Add a trigger
             data.trigger[500] = 2
 
-            continuous = EegFun.ContinuousData(
-                "test_data",
-                data,
-                _make_test_layout(data),
-                sample_rate,
-                EegFun.AnalysisInfo(),
-            )
+            continuous = EegFun.ContinuousData("test_data", data, _make_test_layout(data), sample_rate, EegFun.AnalysisInfo())
 
             # Resample by factor of 2
             resampled = EegFun.resample(continuous, 256)
@@ -65,13 +59,7 @@ end
 
             data = DataFrame(time = time, C3 = randn(n_samples), C4 = randn(n_samples))
 
-            continuous = EegFun.ContinuousData(
-                "test_data",
-                data,
-                _make_test_layout(data),
-                sample_rate,
-                EegFun.AnalysisInfo(),
-            )
+            continuous = EegFun.ContinuousData("test_data", data, _make_test_layout(data), sample_rate, EegFun.AnalysisInfo())
 
             original_nrow = nrow(continuous.data)
 
@@ -91,13 +79,7 @@ end
 
             data = DataFrame(time = time, C3 = randn(n_samples))
 
-            continuous = EegFun.ContinuousData(
-                "test_data",
-                data,
-                _make_test_layout(data),
-                sample_rate,
-                EegFun.AnalysisInfo(),
-            )
+            continuous = EegFun.ContinuousData("test_data", data, _make_test_layout(data), sample_rate, EegFun.AnalysisInfo())
 
             # Downsample by 4
             resampled = EegFun.resample(continuous, 256)
@@ -110,13 +92,7 @@ end
 
         @testset "Factor of 1 (no change)" begin
             data = DataFrame(time = [0.0, 0.001], C3 = [1.0, 2.0])
-            continuous = EegFun.ContinuousData(
-                "test_data",
-                data,
-                _make_test_layout(data),
-                1000,
-                EegFun.AnalysisInfo(),
-            )
+            continuous = EegFun.ContinuousData("test_data", data, _make_test_layout(data), 1000, EegFun.AnalysisInfo())
 
             original_nrow = nrow(continuous.data)
             EegFun.resample!(continuous, 1000)
@@ -139,8 +115,7 @@ end
             )
             data.trigger[100] = 1
 
-            continuous =
-                EegFun.ContinuousData("test_data", data, _make_test_layout(data), 500, EegFun.AnalysisInfo())
+            continuous = EegFun.ContinuousData("test_data", data, _make_test_layout(data), 500, EegFun.AnalysisInfo())
 
             resampled = EegFun.resample(continuous, 100)
 
@@ -178,15 +153,8 @@ end
                 push!(epochs, epoch)
             end
 
-            epoch_data = EegFun.EpochData(
-                "test_data",
-                1,
-                "condition_1",
-                epochs,
-                _make_test_layout(epochs[1]),
-                sample_rate,
-                EegFun.AnalysisInfo(),
-            )
+            epoch_data =
+                EegFun.EpochData("test_data", 1, "condition_1", epochs, _make_test_layout(epochs[1]), sample_rate, EegFun.AnalysisInfo())
 
             # Resample by factor of 2
             resampled = EegFun.resample(epoch_data, 256)
@@ -221,15 +189,7 @@ end
                 push!(epochs, epoch)
             end
 
-            epoch_data = EegFun.EpochData(
-                "test_data",
-                1,
-                "condition_1",
-                epochs,
-                _make_test_layout(epochs[1]),
-                512,
-                EegFun.AnalysisInfo(),
-            )
+            epoch_data = EegFun.EpochData("test_data", 1, "condition_1", epochs, _make_test_layout(epochs[1]), 512, EegFun.AnalysisInfo())
 
             original_n_samples = nrow(epoch_data.data[1])
 
@@ -250,15 +210,7 @@ end
                 push!(epochs, epoch)
             end
 
-            epoch_data = EegFun.EpochData(
-                "test_data",
-                1,
-                "condition_1",
-                epochs,
-                _make_test_layout(epochs[1]),
-                256,
-                EegFun.AnalysisInfo(),
-            )
+            epoch_data = EegFun.EpochData("test_data", 1, "condition_1", epochs, _make_test_layout(epochs[1]), 256, EegFun.AnalysisInfo())
 
             resampled = EegFun.resample(epoch_data, 128)
 
@@ -315,16 +267,7 @@ end
             # Create ERP with condition info
             data = DataFrame(time = collect(0:511) ./ 512, C3 = randn(512))
 
-            erp = EegFun.ErpData(
-                "test_data",
-                1,
-                "Target",
-                data,
-                _make_test_layout(data),
-                512,
-                EegFun.AnalysisInfo(),
-                30,
-            )
+            erp = EegFun.ErpData("test_data", 1, "Target", data, _make_test_layout(data), 512, EegFun.AnalysisInfo(), 30)
 
             resampled = EegFun.resample(erp, 128)
 
@@ -338,13 +281,7 @@ end
 
         @testset "Invalid target rates" begin
             data = DataFrame(time = [0.0, 0.001], C3 = [1.0, 2.0])
-            continuous = EegFun.ContinuousData(
-                "test_data",
-                data,
-                _make_test_layout(data),
-                1000,
-                EegFun.AnalysisInfo(),
-            )
+            continuous = EegFun.ContinuousData("test_data", data, _make_test_layout(data), 1000, EegFun.AnalysisInfo())
 
             # Zero target rate
             @test_throws Exception EegFun.resample(continuous, 0)
@@ -353,7 +290,7 @@ end
             @test_throws Exception EegFun.resample(continuous, -1.0)
         end
 
-        
+
     end
 
     @testset "Batch processing" begin
@@ -364,13 +301,7 @@ end
                 for i = 1:3
                     data = DataFrame(time = collect(0:511) ./ 512, C3 = randn(512), C4 = randn(512))
 
-                    continuous = EegFun.ContinuousData(
-                        "test_data",
-                        data,
-                        _make_test_layout(data),
-                        512,
-                        EegFun.AnalysisInfo(),
-                    )
+                    continuous = EegFun.ContinuousData("test_data", data, _make_test_layout(data), 512, EegFun.AnalysisInfo())
 
                     jldsave(joinpath(tmpdir, "$(i)_continuous.jld2"); data = continuous)
                 end
@@ -404,15 +335,8 @@ end
                         push!(epochs, epoch)
                     end
 
-                    epoch_data = EegFun.EpochData(
-                        "test_data",
-                        1,
-                        "condition_1",
-                        epochs,
-                        _make_test_layout(epochs[1]),
-                        256,
-                        EegFun.AnalysisInfo(),
-                    )
+                    epoch_data =
+                        EegFun.EpochData("test_data", 1, "condition_1", epochs, _make_test_layout(epochs[1]), 256, EegFun.AnalysisInfo())
 
                     jldsave(joinpath(tmpdir, "$(i)_epochs.jld2"); data = epoch_data)
                 end
@@ -438,13 +362,7 @@ end
                 # Create files for participants 1-5
                 for i = 1:5
                     data = DataFrame(time = collect(0:255) ./ 256, C3 = randn(256))
-                    continuous = EegFun.ContinuousData(
-                        "test_data",
-                        data,
-                        _make_test_layout(data),
-                        256,
-                        EegFun.AnalysisInfo(),
-                    )
+                    continuous = EegFun.ContinuousData("test_data", data, _make_test_layout(data), 256, EegFun.AnalysisInfo())
                     jldsave(joinpath(tmpdir, "$(i)_continuous.jld2"); data = continuous)
                 end
 

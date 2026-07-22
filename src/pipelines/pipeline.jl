@@ -43,7 +43,13 @@ Preprocess EEG data according to the specified configuration file.
 - Filter sections with `apply = false` are skipped automatically
 - Interactive mode (`interactive_continuous`, `interactive_ica`, `interactive_epochs`) will pause execution for *each* file. It is recommended to use interactive mode only for single-file pilot runs to fine-tune parameters, rather than batch processing across a full dataset.
 """
-function preprocess(config::String; base_dir::Union{String,Nothing} = nothing, log_level::Symbol = :info, skip_existing::Bool = false, dry_run::Bool = false)
+function preprocess(
+    config::String;
+    base_dir::Union{String,Nothing} = nothing,
+    log_level::Symbol = :info,
+    skip_existing::Bool = false,
+    dry_run::Bool = false,
+)
 
     # Use config file's directory as base_dir if not provided
     # This makes relative paths in TOML work relative to the analysis script location
@@ -160,15 +166,15 @@ function preprocess(config::String; base_dir::Union{String,Nothing} = nothing, l
             @info ""
             @info subsection("Output Files")
             save_flags = [
-                ("Continuous (raw)",        cfg["files"]["output"]["save_continuous_data_raw"]),
-                ("Continuous (corrected)",  cfg["files"]["output"]["save_continuous_data_corrected"]),
-                ("ICA data",               cfg["files"]["output"]["save_ica_data"]),
-                ("Epochs (uncorrected)",    cfg["files"]["output"]["save_epoch_data_uncorrected"]),
-                ("Epochs (unrejected)",     cfg["files"]["output"]["save_epoch_data_unrejected"]),
-                ("Epochs (final)",          cfg["files"]["output"]["save_epoch_data_final"]),
-                ("ERPs (uncorrected)",      cfg["files"]["output"]["save_erp_data_uncorrected"]),
-                ("ERPs (unrejected)",       cfg["files"]["output"]["save_erp_data_unrejected"]),
-                ("ERPs (final)",            cfg["files"]["output"]["save_erp_data_final"]),
+                ("Continuous (raw)", cfg["files"]["output"]["save_continuous_data_raw"]),
+                ("Continuous (corrected)", cfg["files"]["output"]["save_continuous_data_corrected"]),
+                ("ICA data", cfg["files"]["output"]["save_ica_data"]),
+                ("Epochs (uncorrected)", cfg["files"]["output"]["save_epoch_data_uncorrected"]),
+                ("Epochs (unrejected)", cfg["files"]["output"]["save_epoch_data_unrejected"]),
+                ("Epochs (final)", cfg["files"]["output"]["save_epoch_data_final"]),
+                ("ERPs (uncorrected)", cfg["files"]["output"]["save_erp_data_uncorrected"]),
+                ("ERPs (unrejected)", cfg["files"]["output"]["save_erp_data_unrejected"]),
+                ("ERPs (final)", cfg["files"]["output"]["save_erp_data_final"]),
             ]
             for (label, flag) in save_flags
                 @info "  $(flag ? "✓" : "✗") $label"
@@ -184,7 +190,7 @@ function preprocess(config::String; base_dir::Union{String,Nothing} = nothing, l
         processed_files = 0
         skipped_files = 0
         failed_files = String[]
-        
+
         # Track timing for ETA calculation
         total_processing_time = 0.0
         n_processed_for_eta = 0
@@ -199,9 +205,9 @@ function preprocess(config::String; base_dir::Union{String,Nothing} = nothing, l
                     continue
                 end
             end
-            
+
             file_start_time = time()
-            
+
             eta_str = "calculating..."
             if n_processed_for_eta > 0
                 avg_time = total_processing_time / n_processed_for_eta
@@ -260,7 +266,7 @@ function preprocess(config::String; base_dir::Union{String,Nothing} = nothing, l
                         time_bandwidth = preprocess_cfg.cleanline.time_bandwidth,
                         k_tapers = preprocess_cfg.cleanline.k_tapers,
                         p_value = preprocess_cfg.cleanline.p_value,
-                        pad = preprocess_cfg.cleanline.pad
+                        pad = preprocess_cfg.cleanline.pad,
                     )
                 end
 
@@ -358,16 +364,17 @@ function preprocess(config::String; base_dir::Union{String,Nothing} = nothing, l
                     @info "Reviewing continuous data before ICA. Close the window to continue."
                     res = plot_databrowser(dat)
                     wait(res.fig.scene)
-                    
+
                     # Apply any manual settings configured in the databrowser
                     apply_analysis_settings!(dat, res.analysis_settings)
-                    
+
                     # Track manually repaired channels for the summary logs
                     manual_repaired = res.analysis_settings[].repaired_channels
                     if !isempty(manual_repaired)
                         @info "Manually repaired channels: $manual_repaired"
                         if isnothing(continuous_repair_info)
-                            continuous_repair_info = create_continuous_repair_info(:neighbor_interpolation; name = "continuous_repair_manual")
+                            continuous_repair_info =
+                                create_continuous_repair_info(:neighbor_interpolation; name = "continuous_repair_manual")
                         end
                         # Append to the info object without re-repairing, since apply_analysis_settings! did it
                         append!(continuous_repair_info.repaired, manual_repaired)
@@ -432,12 +439,12 @@ function preprocess(config::String; base_dir::Union{String,Nothing} = nothing, l
                     hasproperty(dat_ica, :selected_region) && push!(artifact_flags, :selected_region)
 
                     @info subsection("Running ICA")
-                    
+
                     # Calculate rank to prevent ICA crash from rank-deficient data
                     n_repaired = isnothing(continuous_repair_info) ? 0 : length(continuous_repair_info.repaired)
                     n_ref = preprocess_cfg.reference_channel == :avg ? 1 : 0
                     n_comps = length(channel_labels(dat_ica)) - n_repaired - n_ref
-                    
+
                     ica = run_ica(
                         dat_ica;
                         n_components = n_comps,
@@ -447,11 +454,8 @@ function preprocess(config::String; base_dir::Union{String,Nothing} = nothing, l
 
                     # Identify all artifact components 
                     @info subsection("Component Identification")
-                    component_artifacts, component_metrics = identify_components(
-                        dat,
-                        ica,
-                        sample_selection = samples_or_not(artifact_flags),
-                    )
+                    component_artifacts, component_metrics =
+                        identify_components(dat, ica, sample_selection = samples_or_not(artifact_flags))
 
                     # Print component metrics to log files
                     log_pretty_table(component_metrics[:eog_metrics]; title = "EOG Component Metrics")
@@ -464,7 +468,7 @@ function preprocess(config::String; base_dir::Union{String,Nothing} = nothing, l
                         @info "Use the databrowser ICA menu to review and manually select components to remove. Close the window to continue."
                         res = plot_databrowser(dat, ica)
                         wait(res.fig.scene)
-                        
+
                         # Add user's manually removed components to the "manual" category in component_artifacts
                         manual_removals = res.analysis_settings[].removed_ica_components
                         if !isempty(manual_removals)
@@ -529,7 +533,7 @@ function preprocess(config::String; base_dir::Union{String,Nothing} = nothing, l
 
                 #################### DETECT BAD EPOCHS ###################
                 @info section("Automatic epoch detection")
-                
+
                 # Determine interval selection for artifact rejection
                 if !isnothing(preprocess_cfg.eeg.artifact_interval_start) && !isnothing(preprocess_cfg.eeg.artifact_interval_end)
                     rej_interval = times(preprocess_cfg.eeg.artifact_interval_start, preprocess_cfg.eeg.artifact_interval_end)
@@ -583,9 +587,9 @@ function preprocess(config::String; base_dir::Union{String,Nothing} = nothing, l
                 if preprocess_cfg.interactive_epochs
                     @info section("Interactive Epoch Rejection Review")
                     @info "Review epoch artifacts. Checked epochs will be rejected. Close the window to continue."
-                    state = detect_bad_epochs_interactive(epochs; artifact_info=rejection_info_step2)
+                    state = detect_bad_epochs_interactive(epochs; artifact_info = rejection_info_step2)
                     wait(state.fig.scene)
-                    
+
                     # Merge manual rejection state into the automatic rejection info
                     interactive_info = EegFun._to_rejection_info(state)
                     # We can just use the interactive_info directly as it contains all manual rejections!
@@ -638,7 +642,7 @@ function preprocess(config::String; base_dir::Union{String,Nothing} = nothing, l
                 file_elapsed = time() - file_start_time
                 total_processing_time += file_elapsed
                 n_processed_for_eta += 1
-                
+
                 @info "Successfully processed file $file_idx/$(length(raw_data_files)): $(basename(data_file)) in $(_format_time(file_elapsed))"
                 processed_files += 1
 

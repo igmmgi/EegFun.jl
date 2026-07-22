@@ -269,7 +269,11 @@ end
 
         @testset "Error handling" begin
             # Non-existent directory
-            @test_throws Exception EegFun.channel_average("erps_unrejected", [EegFun.channels([:Ch1, :Ch2])], input_dir = "/nonexistent/path")
+            @test_throws Exception EegFun.channel_average(
+                "erps_unrejected",
+                [EegFun.channels([:Ch1, :Ch2])],
+                input_dir = "/nonexistent/path",
+            )
 
             # Mismatched output labels
             @test_throws Exception EegFun.channel_average(
@@ -339,7 +343,8 @@ end
         @testset "Return value structure" begin
             output_dir = joinpath(test_dir, "combined_return_check")
 
-            result = EegFun.channel_average("erps_unrejected", [EegFun.channels([:Ch1, :Ch2])], input_dir = test_dir, output_dir = output_dir)
+            result =
+                EegFun.channel_average("erps_unrejected", [EegFun.channels([:Ch1, :Ch2])], input_dir = test_dir, output_dir = output_dir)
 
             @test hasfield(typeof(result), :success)
             @test hasfield(typeof(result), :errors)
@@ -506,8 +511,12 @@ end
 
             # Test pattern matching "erps_uncorrected"
             output_dir1 = joinpath(test_dir, "combined_original")
-            result1 =
-                EegFun.channel_average("erps_uncorrected", [EegFun.channels([:Ch1, :Ch2])], input_dir = pattern_dir, output_dir = output_dir1)
+            result1 = EegFun.channel_average(
+                "erps_uncorrected",
+                [EegFun.channels([:Ch1, :Ch2])],
+                input_dir = pattern_dir,
+                output_dir = output_dir1,
+            )
             @test result1.success == 1
 
             # Test pattern matching "erps" (should match all)

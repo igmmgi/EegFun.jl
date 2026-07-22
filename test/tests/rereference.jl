@@ -129,7 +129,8 @@ end
         @testset "Multiple channel reference" begin
             output_dir = joinpath(test_dir, "rereferenced_multiple")
 
-            result = EegFun.rereference("erps_unrejected", input_dir = test_dir, reference_selection = [:Ch1, :Ch2], output_dir = output_dir)
+            result =
+                EegFun.rereference("erps_unrejected", input_dir = test_dir, reference_selection = [:Ch1, :Ch2], output_dir = output_dir)
 
             @test isdir(output_dir)
             @test length(readdir(output_dir)) == 4
@@ -269,8 +270,12 @@ end
             output_dir = joinpath(test_dir, "rereferenced_invalid")
 
             # This should handle invalid channels gracefully in batch processing
-            result =
-                EegFun.rereference("erps_unrejected", input_dir = test_dir, reference_selection = [:InvalidChannel], output_dir = output_dir)
+            result = EegFun.rereference(
+                "erps_unrejected",
+                input_dir = test_dir,
+                reference_selection = [:InvalidChannel],
+                output_dir = output_dir,
+            )
 
             # Should have errors due to invalid channels
             @test !isnothing(result)

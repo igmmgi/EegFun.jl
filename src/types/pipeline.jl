@@ -222,8 +222,10 @@ function EegConfig(cfg::Dict)
         artifact_value_abs_criterion = Int(cfg["artifact_value_abs_criterion"]),
         artifact_value_z_criterion = Float64(cfg["artifact_value_z_criterion"]),
         extreme_value_abs_criterion = Int(cfg["extreme_value_abs_criterion"]),
-        artifact_interval_start = haskey(cfg, "artifact_interval_start") && !isnothing(cfg["artifact_interval_start"]) ? Float64(cfg["artifact_interval_start"]) : nothing,
-        artifact_interval_end = haskey(cfg, "artifact_interval_end") && !isnothing(cfg["artifact_interval_end"]) ? Float64(cfg["artifact_interval_end"]) : nothing,
+        artifact_interval_start = haskey(cfg, "artifact_interval_start") && !isnothing(cfg["artifact_interval_start"]) ?
+                                  Float64(cfg["artifact_interval_start"]) : nothing,
+        artifact_interval_end = haskey(cfg, "artifact_interval_end") && !isnothing(cfg["artifact_interval_end"]) ?
+                                Float64(cfg["artifact_interval_end"]) : nothing,
     )
 end
 
@@ -253,10 +255,7 @@ end
 
 """Construct `ResampleConfig` from a configuration dictionary."""
 function ResampleConfig(cfg::Dict)
-    return ResampleConfig(
-        apply = cfg["apply"],
-        target_rate = Int(cfg["target_rate"]),
-    )
+    return ResampleConfig(apply = cfg["apply"], target_rate = Int(cfg["target_rate"]))
 end
 
 """Construct `PreprocessConfig` from a configuration dictionary."""

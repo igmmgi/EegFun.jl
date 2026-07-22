@@ -340,7 +340,7 @@ component_metrics[:line_noise_metrics]
 @info EegFun.subsection("Removing ICA components")
 all_removed_components = EegFun.get_all_ica_components(component_artifacts)
 @info "Removed $(length(all_removed_components)) ICA components: $component_artifacts"
-EegFun.remove_ica_components!(dat, ica_result, component_selection = EegFun.components(all_removed_components))
+EegFun.subtract_ica_components!(dat, ica_result, component_selection = EegFun.components(all_removed_components))
 
 # Optional: save ICA decomposition
 # jldsave(joinpath(DEMO_OUTPUT, "ica.jld2"); data = ica_result)

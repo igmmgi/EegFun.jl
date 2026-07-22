@@ -267,11 +267,11 @@ function tf_stft(
 
         # Pad data to n_samples_padded (zero-padding at the end)
         fill!(local_data_padded, 0.0)
-        
+
         n_pre_pad = (!isnothing(pad) && (pad == :both || pad == :pre)) ? n_samples_per_epoch - 1 : 0
         n_post_pad = (!isnothing(pad) && (pad == :both || pad == :post)) ? n_samples_per_epoch - 1 : 0
         n_padded_samples = n_pre_pad + n_samples_per_epoch + n_post_pad
-        
+
         # Explicit loop for padding to avoid copy allocations (Virtual Padding)
         @inbounds for j = 1:n_padded_samples
             if j <= n_pre_pad
@@ -282,7 +282,7 @@ function tf_stft(
             else
                 src_j = j - n_pre_pad
             end
-            
+
             for i = 1:n_trials
                 local_data_padded[i, j] = local_trial_signals[i, src_j]
             end
@@ -321,8 +321,8 @@ function tf_stft(
             half_window = n_window_samples ÷ 2
             @inbounds for ti_idx = 1:n_times
                 sample_idx = time_indices[ti_idx]
-                    # Shift by n_pre_pad because local_conv_result contains virtually padded signal
-                    adjusted_idx = sample_idx + n_pre_pad + half_window
+                # Shift by n_pre_pad because local_conv_result contains virtually padded signal
+                adjusted_idx = sample_idx + n_pre_pad + half_window
                 # Clamp to valid range
                 if adjusted_idx < 1
                     adjusted_idx = 1

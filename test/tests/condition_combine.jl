@@ -426,7 +426,12 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_nested_empty")
 
             # Test with nested empty groups: [[], [1, 2]]
-            @test_throws Exception EegFun.condition_combine("epochs_unrejected", [[], [1, 2]], input_dir = test_dir, output_dir = output_dir)
+            @test_throws Exception EegFun.condition_combine(
+                "epochs_unrejected",
+                [[], [1, 2]],
+                input_dir = test_dir,
+                output_dir = output_dir,
+            )
         end
 
         @testset "Very large number of groups" begin

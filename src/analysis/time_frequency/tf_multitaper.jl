@@ -301,11 +301,11 @@ function tf_multitaper(
 
         # Pad data to n_samples_padded (zero-padding at the end)
         fill!(local_data_padded, 0.0)
-        
+
         n_pre_pad = (!isnothing(pad) && (pad == :both || pad == :pre)) ? n_samples_per_epoch - 1 : 0
         n_post_pad = (!isnothing(pad) && (pad == :both || pad == :post)) ? n_samples_per_epoch - 1 : 0
         n_padded_samples = n_pre_pad + n_samples_per_epoch + n_post_pad
-        
+
         # Explicit loop for padding to avoid copy allocations (Virtual Padding)
         @inbounds for j = 1:n_padded_samples
             if j <= n_pre_pad
@@ -316,7 +316,7 @@ function tf_multitaper(
             else
                 src_j = j - n_pre_pad
             end
-            
+
             for i = 1:n_trials
                 local_data_padded[i, j] = local_trial_signals[i, src_j]
             end

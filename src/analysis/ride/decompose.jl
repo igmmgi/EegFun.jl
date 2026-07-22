@@ -20,7 +20,7 @@ Defines a single RIDE component to be extracted.
 """
 struct RideComponent
     name::Symbol
-    latencies::Union{Vector{Int}, Nothing}
+    latencies::Union{Vector{Int},Nothing}
     window_radius::Int
 end
 
@@ -37,9 +37,9 @@ Contains the decomposed templates, final latencies, and residues.
 """
 struct RideResult{T<:Real}
     components::Vector{Symbol}
-    templates::Array{T, 3}      # (samples, channels, components)
+    templates::Array{T,3}      # (samples, channels, components)
     latencies::Matrix{Int}      # (trials, components)
-    residue::Array{T, 3}        # (samples, channels, trials)
+    residue::Array{T,3}        # (samples, channels, trials)
     converged::Bool
     iterations::Int
 end
@@ -58,12 +58,12 @@ end
 Execute the full RIDE decomposition pipeline on a 3D data tensor `(samples, channels, trials)`.
 """
 function ride_decompose(
-    data::AbstractArray{T, 3}, 
+    data::AbstractArray{T,3},
     comps::Vector{RideComponent};
     outer_iters::Int = 4,
     inner_iters::Int = 50,
     inner_tol::Float64 = 1e-3,
-    method::Symbol = :median
+    method::Symbol = :median,
 ) where {T<:Real}
 
     n_samples, n_channels, n_trials = size(data)
@@ -71,14 +71,16 @@ function ride_decompose(
 
     # Initialize latencies matrix (trials, components)
     latencies = zeros(Int, n_trials, n_components)
-    
+
     # Track which components need estimation
     needs_estimation = falses(n_components)
-    
-    for k in 1:n_components
+
+    for k = 1:n_components
         if !isnothing(comps[k].latencies)
             if length(comps[k].latencies) != n_trials
-                error("Component $(comps[k].name) latencies length ($(length(comps[k].latencies))) does not match number of trials ($n_trials)")
+                error(
+                    "Component $(comps[k].name) latencies length ($(length(comps[k].latencies))) does not match number of trials ($n_trials)",
+                )
             end
             latencies[:, k] .= comps[k].latencies
         else
@@ -88,75 +90,68 @@ function ride_decompose(
 
     # Initialize templates
     templates = zeros(T, n_samples, n_channels, n_components)
-    
+
     converged_outer = false
     actual_outer_iters = 0
-    
+
     prev_latencies = copy(latencies)
 
     # Outer loop: Alternate between EM template extraction and Woody latency estimation
-    for outer in 1:outer_iters
+    for outer = 1:outer_iters
         actual_outer_iters = outer
-        
+
         # 1. EM Template Iteration
         # Modifies `templates` in-place
-        _, inner_converged = ride_iteration!(
-            templates, data, latencies; 
-            max_iter = inner_iters, tol = inner_tol, method = method
-        )
-        
+        _, inner_converged = ride_iteration!(templates, data, latencies; max_iter = inner_iters, tol = inner_tol, method = method)
+
         # 2. Re-estimate Latencies for unknown components
         if any(needs_estimation)
-            for k in 1:n_components
+            for k = 1:n_components
                 if needs_estimation[k]
                     # Compute data for Woody filter: Raw data minus all OTHER components
                     # (This prevents stimulus or response components from confusing the C-component estimator)
                     woody_data = copy(data)
                     shifted_comp = zeros(T, n_samples)
-                    
-                    for j in 1:n_components
+
+                    for j = 1:n_components
                         if j == k
                             continue
                         end
-                        
-                        comp_j = view(templates, :, :, j)
-                        @inbounds for t in 1:n_trials
+
+                        comp_j = view(templates,:,:,j)
+                        @inbounds for t = 1:n_trials
                             shift_val = latencies[t, j]
-                            for c in 1:n_channels
+                            for c = 1:n_channels
                                 shift_signal!(shifted_comp, view(comp_j, :, c), shift_val)
-                                for s in 1:n_samples
+                                for s = 1:n_samples
                                     woody_data[s, c, t] -= shifted_comp[s]
                                 end
                             end
                         end
                     end
-                    
+
                     # Run Woody filter using the current template for this component
                     # And use current latencies as initial guesses
-                    current_template = view(templates, :, :, k)
+                    current_template = view(templates,:,:,k)
                     initial_lats = latencies[:, k]
-                    
-                    new_lats = woody_filter(
-                        woody_data, 
-                        comps[k].window_radius;
-                        template = current_template,
-                        initial_latencies = initial_lats
-                    )
-                    
+
+                    new_lats =
+                        woody_filter(woody_data, comps[k].window_radius; template = current_template, initial_latencies = initial_lats)
+
                     latencies[:, k] .= new_lats
                 end
             end
-            
+
             # Check latency convergence
             # If 99% of trials haven't changed latency, we converge
             changed_trials = sum(latencies .!= prev_latencies)
             max_allowed_changes = ceil(Int, 0.01 * n_trials * sum(needs_estimation))
-            
+
             if changed_trials <= max_allowed_changes
                 converged_outer = true
                 break
             end
-            
+
             copyto!(prev_latencies, latencies)
         else
             # If no components need estimation, we only need 1 outer iteration
@@ -168,26 +163,19 @@ function ride_decompose(
     # 3. Calculate final residue
     residue = copy(data)
     shifted_comp = zeros(T, n_samples)
-    
-    for k in 1:n_components
-        comp_k = view(templates, :, :, k)
-        @inbounds for t in 1:n_trials
+
+    for k = 1:n_components
+        comp_k = view(templates,:,:,k)
+        @inbounds for t = 1:n_trials
             shift_val = latencies[t, k]
-            for c in 1:n_channels
+            for c = 1:n_channels
                 shift_signal!(shifted_comp, view(comp_k, :, c), shift_val)
-                for s in 1:n_samples
+                for s = 1:n_samples
                     residue[s, c, t] -= shifted_comp[s]
                 end
             end
         end
     end
 
-    return RideResult(
-        [c.name for c in comps],
-        templates,
-        latencies,
-        residue,
-        converged_outer,
-        actual_outer_iters
-    )
+    return RideResult([c.name for c in comps], templates, latencies, residue, converged_outer, actual_outer_iters)
 end

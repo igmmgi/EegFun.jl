@@ -156,10 +156,15 @@ mkpath(DEMO_OUTPUT)
 # read raw data
 dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"));
 dat = EegFun.create_eegfun_data(dat); # works but no layout info available, thus, no topographic plots
+
 # Some minimal preprocessing (average reference and highpass filter)
 # EegFun.rereference!(dat, :avg)
 EegFun.highpass_filter!(dat, 0.5)
 EegFun.plot_databrowser(dat);
+
+#######################################################
+# read raw data
+dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"));
 
 # read and prepare layout file
 layout = EegFun.read_layout(EegFun.example_path("layouts/biosemi/biosemi72.csv"));
@@ -167,6 +172,11 @@ EegFun.polar_to_cartesian_xy!(layout)
 
 # create EegFun data structure (EegFun.ContinuousData)
 dat = EegFun.create_eegfun_data(dat, layout);
+
+# Some minimal preprocessing (average reference and highpass filter)
+# EegFun.rereference!(dat, :avg)
+EegFun.highpass_filter!(dat, 0.5)
+EegFun.plot_databrowser(dat);
 
 # Basic databrowser
 EegFun.plot_databrowser(dat);

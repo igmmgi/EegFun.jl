@@ -72,14 +72,14 @@ const PARAMETERS = Dict{String,ConfigParameter}(
 
     # What data should we save?
     "files.output.save_continuous_data_raw" => bool_param("Save continuous data original?", true),
-    "files.output.save_continuous_data_corrected"  => bool_param("Save continuous data cleaned?", true),
-    "files.output.save_ica_data"                 => bool_param("Save ICA results?", true),
-    "files.output.save_epoch_data_uncorrected"      => bool_param("Save epoched data original?", true),
-    "files.output.save_epoch_data_unrejected"       => bool_param("Save epoched data cleaned?", true),
-    "files.output.save_epoch_data_final"          => bool_param("Save epoched data good?", true),
-    "files.output.save_erp_data_uncorrected"        => bool_param("Save ERP data original?", true),
-    "files.output.save_erp_data_unrejected"         => bool_param("Save ERP data cleaned?", true),
-    "files.output.save_erp_data_final"            => bool_param("Save ERP data good?", true),
+    "files.output.save_continuous_data_corrected" => bool_param("Save continuous data cleaned?", true),
+    "files.output.save_ica_data" => bool_param("Save ICA results?", true),
+    "files.output.save_epoch_data_uncorrected" => bool_param("Save epoched data original?", true),
+    "files.output.save_epoch_data_unrejected" => bool_param("Save epoched data cleaned?", true),
+    "files.output.save_epoch_data_final" => bool_param("Save epoched data good?", true),
+    "files.output.save_erp_data_uncorrected" => bool_param("Save ERP data original?", true),
+    "files.output.save_erp_data_unrejected" => bool_param("Save ERP data cleaned?", true),
+    "files.output.save_erp_data_final" => bool_param("Save ERP data good?", true),
 
     # Preprocessing settings
     "preprocess.interactive_continuous"           => bool_param("Pause execution to interactively review continuous data", false),
@@ -115,8 +115,8 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "preprocess.cleanline.pad"                => number_param("Padding factor for FFT.", 2),
 
     # Resampling settings
-    "preprocess.resample.apply"               => bool_param("Apply resampling/downsampling?", false),
-    "preprocess.resample.target_rate"         => number_param("Target sampling rate in Hz (e.g. 512, 256).", 512),
+    "preprocess.resample.apply"       => bool_param("Apply resampling/downsampling?", false),
+    "preprocess.resample.target_rate" => number_param("Target sampling rate in Hz (e.g. 512, 256).", 512),
 
     # Filtering settings - using helper function
     _filter_param_spec("preprocess.filter.highpass", true, "hp", 0.1, 0.01, 20.0, 1, 1, 4)...,

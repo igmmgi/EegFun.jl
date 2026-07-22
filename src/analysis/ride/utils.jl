@@ -14,13 +14,13 @@ Negative `shift` moves data backward in time (left).
 """
 function shift_signal!(dest::AbstractVector{T}, src::AbstractVector{T}, shift::Int) where {T}
     n = length(src)
-    
+
     # If shift is larger than array, return all zeros
     if abs(shift) >= n
         fill!(dest, zero(T))
         return dest
     end
-    
+
     if shift > 0
         # Shift right
         copyto!(dest, shift + 1, src, 1, n - shift)
@@ -29,7 +29,7 @@ function shift_signal!(dest::AbstractVector{T}, src::AbstractVector{T}, shift::I
         # Shift left
         s = abs(shift)
         copyto!(dest, 1, src, s + 1, n - s)
-        fill!(view(dest, (n - s + 1):n), zero(T))
+        fill!(view(dest, (n-s+1):n), zero(T))
     else
         # No shift
         copyto!(dest, src)
@@ -54,7 +54,7 @@ end
 Shift each column of a matrix (samples x channels) by `shift` samples.
 """
 function shift_matrix!(dest::AbstractMatrix{T}, src::AbstractMatrix{T}, shift::Int) where {T}
-    @inbounds for col in 1:size(src, 2)
+    @inbounds for col = 1:size(src, 2)
         v_src = view(src, :, col)
         v_dest = view(dest, :, col)
         shift_signal!(v_dest, v_src, shift)

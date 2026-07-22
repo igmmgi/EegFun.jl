@@ -847,7 +847,7 @@ end
 
 _interval_to_samples(::AllSelection) = samples()
 _interval_to_samples(::Nothing) = samples()
-_interval_to_samples(t::Tuple{Real, Real}) = _interval_to_samples(TimeSelection(t[1], t[2]))
+_interval_to_samples(t::Tuple{Real,Real}) = _interval_to_samples(TimeSelection(t[1], t[2]))
 _interval_to_samples(f::Function) = f
 
 """
@@ -1360,11 +1360,13 @@ samples_not(:is_bad)                    # Rows where :is_bad is false
 samples_or_not([:is_extreme, :is_bad])  # Rows where NO flag is true
 ```
 """
-samples_or(columns::Vector{Symbol}) = x -> isempty(columns) ? fill(false, nrow(x)) : reduce((a,b)->a.|b, (x[!, col] for col in columns))
-samples_and(columns::Vector{Symbol}) = x -> isempty(columns) ? fill(true, nrow(x)) : reduce((a,b)->a.&b, (x[!, col] for col in columns))
+samples_or(columns::Vector{Symbol}) = x -> isempty(columns) ? fill(false, nrow(x)) : reduce((a, b)->a .| b, (x[!, col] for col in columns))
+samples_and(columns::Vector{Symbol}) = x -> isempty(columns) ? fill(true, nrow(x)) : reduce((a, b)->a .& b, (x[!, col] for col in columns))
 samples_not(column::Symbol) = x -> .!(x[!, column])
-samples_or_not(columns::Vector{Symbol}) = x -> isempty(columns) ? fill(true, nrow(x)) : .!(reduce((a,b)->a.|b, (x[!, col] for col in columns)))
-samples_and_not(columns::Vector{Symbol}) = x -> isempty(columns) ? fill(true, nrow(x)) : .!(reduce((a,b)->a.&b, (x[!, col] for col in columns)))
+samples_or_not(columns::Vector{Symbol}) =
+    x -> isempty(columns) ? fill(true, nrow(x)) : .!(reduce((a, b)->a .| b, (x[!, col] for col in columns)))
+samples_and_not(columns::Vector{Symbol}) =
+    x -> isempty(columns) ? fill(true, nrow(x)) : .!(reduce((a, b)->a .& b, (x[!, col] for col in columns)))
 
 # Helper functions for time interval selection (Interval type)
 # These return Interval values (tuples, ranges, or nothing), not predicates
@@ -1626,7 +1628,7 @@ end
 function get_selected_samples(dat::SingleDataFrameEeg, sample_selection::Function)
     return findall(sample_selection(dat.data))
 end
-function get_selected_samples(dat::SingleDataFrameEeg, ::Union{Nothing, AllSelection})
+function get_selected_samples(dat::SingleDataFrameEeg, ::Union{Nothing,AllSelection})
     return 1:nrow(dat.data)
 end
 
@@ -1634,7 +1636,7 @@ end
 function get_selected_samples(dat::MultiDataFrameEeg, sample_selection::Function)
     return findall(sample_selection(dat.data[1])) # assume all data have the same samples
 end
-function get_selected_samples(dat::MultiDataFrameEeg, ::Union{Nothing, AllSelection})
+function get_selected_samples(dat::MultiDataFrameEeg, ::Union{Nothing,AllSelection})
     return 1:nrow(dat.data[1])
 end
 
@@ -1642,12 +1644,12 @@ end
 function get_selected_samples(dat::DataFrame, sample_selection::Function)
     return findall(sample_selection(dat))
 end
-function get_selected_samples(dat::DataFrame, ::Union{Nothing, AllSelection})
+function get_selected_samples(dat::DataFrame, ::Union{Nothing,AllSelection})
     return 1:nrow(dat)
 end
 
 # Helper to convert TimeSelection and Tuple into sample functions
-function get_selected_samples(dat::Union{SingleDataFrameEeg, MultiDataFrameEeg, DataFrame}, sel::Union{TimeSelection, Tuple{Real, Real}})
+function get_selected_samples(dat::Union{SingleDataFrameEeg,MultiDataFrameEeg,DataFrame}, sel::Union{TimeSelection,Tuple{Real,Real}})
     func = _interval_to_samples(sel)
     return get_selected_samples(dat, func)
 end

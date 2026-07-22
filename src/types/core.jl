@@ -436,7 +436,7 @@ Accepts:
 - Functions (fallback): `samples(...)`
 - `nothing` (fallback)
 """
-const Interval = Union{AbstractSelection, Tuple{Real,Real}, Function, Nothing}
+const Interval = Union{AbstractSelection,Tuple{Real,Real},Function,Nothing}
 """
     EpochCondition
 
