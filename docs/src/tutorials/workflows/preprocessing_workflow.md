@@ -93,7 +93,7 @@ EegFun.get_neighbours_xy!(layout, 0.35) # Calculate neighbors (normalized units 
 dat = EegFun.create_eegfun_data(raw_data, layout)
 
 # Optional: save original continuous data
-# jldsave(joinpath(DEMO_OUTPUT, "continuous_original.jld2"); data = dat)
+# jldsave(joinpath(DEMO_OUTPUT, "continuous_raw.jld2"); data = dat)
 
 
 #######################################################################
@@ -191,12 +191,12 @@ hEOG_vEOG_cm_epoch = EegFun.correlation_matrix_eog(dat, eog_cfg, sample_selectio
 
 # Extract epochs from "lightly preprocessed" continuous data
 # (filtered and rereferenced, but NO ICA or artifact removal yet)
-epochs_original = EegFun.extract_epochs(dat, epoch_cfg, (-0.2, 1.0))
-erps_original = EegFun.average_epochs(epochs_original)
+epochs_uncorrected = EegFun.extract_epochs(dat, epoch_cfg, (-0.2, 1.0))
+erps_uncorrected = EegFun.average_epochs(epochs_uncorrected)
 
 # Optional: save for comparison
-# jldsave(joinpath(DEMO_OUTPUT, "epochs_original.jld2"); data = epochs_original)
-# jldsave(joinpath(DEMO_OUTPUT, "erps_original.jld2"); data = erps_original)
+# jldsave(joinpath(DEMO_OUTPUT, "epochs_uncorrected.jld2"); data = epochs_uncorrected)
+# jldsave(joinpath(DEMO_OUTPUT, "erps_uncorrected.jld2"); data = erps_uncorrected)
 
 
 #######################################################################
@@ -389,7 +389,7 @@ EegFun.channel_difference!(
 EegFun.is_extreme_value!(dat, 75.0, channel_out = :is_artifact_value_75_final)
 
 # Optional: save cleaned continuous data
-# jldsave(joinpath(DEMO_OUTPUT, "continuous_cleaned.jld2"); data = dat)
+# jldsave(joinpath(DEMO_OUTPUT, "continuous_corrected.jld2"); data = dat)
 
 
 #######################################################################
@@ -446,7 +446,7 @@ EegFun.channel_repairable!(rejection_info_step1, epochs[1].layout)
 EegFun.repair_artifacts!(epochs, rejection_info_step1)
 
 # Optional: save epochs with repairs
-# jldsave(joinpath(DEMO_OUTPUT, "epochs_cleaned.jld2"); data = epochs)
+# jldsave(joinpath(DEMO_OUTPUT, "epochs_unrejected.jld2"); data = epochs)
 
 
 #######################################################################
@@ -482,7 +482,7 @@ artifact_info = EegFun.ArtifactInfo(
 
 # Compare original vs. final epoch counts
 epoch_count_comparison =
-    EegFun.log_epochs_table(epochs_original, epochs, title = "Epoch counts per condition (after repair and rejection):")
+    EegFun.log_epochs_table(epochs_uncorrected, epochs, title = "Epoch counts per condition (after repair and rejection):")
 
 
 #######################################################################
@@ -491,22 +491,22 @@ epoch_count_comparison =
 
 @info EegFun.subsection("Rejecting bad epochs")
 # Remove remaining bad epochs
-epochs_good = EegFun.reject_epochs(epochs, rejection_info_step2)
+epochs_final = EegFun.reject_epochs(epochs, rejection_info_step2)
 
 
 #######################################################################
 # SAVE GOOD EPOCH DATA
 #######################################################################
 
-# jldsave(joinpath(DEMO_OUTPUT, "epochs_good.jld2"); data = epochs_good)
+# jldsave(joinpath(DEMO_OUTPUT, "epochs_final.jld2"); data = epochs_final)
 
 
 #######################################################################
 # AVERAGE TO ERPs
 #######################################################################
 
-erps_good = EegFun.average_epochs(epochs_good)
-# jldsave(joinpath(DEMO_OUTPUT, "erps_good.jld2"); data = erps_good)
+erps_final = EegFun.average_epochs(epochs_final)
+# jldsave(joinpath(DEMO_OUTPUT, "erps_final.jld2"); data = erps_final)
 
 
 #######################################################################
@@ -516,8 +516,8 @@ erps_good = EegFun.average_epochs(epochs_good)
 @info EegFun.section("End of Processing")
 
 # Compare original vs. cleaned ERPs
-EegFun.plot_erp(erps_original, channel_selection = EegFun.channels([:Cz, :Pz]))
-EegFun.plot_erp(erps_good, channel_selection = EegFun.channels([:Cz, :Pz]))
+EegFun.plot_erp(erps_uncorrected, channel_selection = EegFun.channels([:Cz, :Pz]))
+EegFun.plot_erp(erps_final, channel_selection = EegFun.channels([:Cz, :Pz]))
 
 
 #######################################################################

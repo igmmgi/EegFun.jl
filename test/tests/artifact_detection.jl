@@ -235,7 +235,7 @@ using EegFun
         @test length(new_columns2) == 2  # Should create 2 separate columns
     end
 
-    @testset "detect_eog_signals!" begin
+    @testset "detect_eog_onsets!" begin
         dat = EegFun.create_test_continuous_data_with_artifacts()
 
         # Add vEOG and hEOG channels
@@ -253,7 +253,7 @@ using EegFun
             "hEOG_channels" => [["F9"], ["F10"], ["hEOG"]],
         )
 
-        EegFun.detect_eog_signals!(dat, eog_cfg)
+        EegFun.detect_eog_onsets!(dat, eog_cfg)
 
         @test :is_vEOG in propertynames(dat.data)
         @test :is_hEOG in propertynames(dat.data)

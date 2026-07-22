@@ -15,7 +15,7 @@ using CSV
                 EegFun.create_test_erp_data(participant = participant, condition = 2),
             ]
 
-            file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
+            file_path = joinpath(test_dir, "$(participant)_erps_unrejected.jld2")
             jldsave(file_path; data = erps)
         end
 
@@ -23,7 +23,7 @@ using CSV
 
         # Test mean amplitude measurement
         result = EegFun.erp_measurements(
-            "erps_cleaned",
+            "erps_unrejected",
             "mean_amplitude",
             analysis_interval = (0.1, 0.2),
             input_dir = test_dir,
@@ -56,7 +56,7 @@ using CSV
                 EegFun.create_test_erp_data(participant = participant, condition = 2),
             ]
 
-            file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
+            file_path = joinpath(test_dir, "$(participant)_erps_unrejected.jld2")
             jldsave(file_path; data = erps)
         end
 
@@ -71,7 +71,7 @@ using CSV
             "peak_to_peak_latency",
         ]
             result = EegFun.erp_measurements(
-                "erps_cleaned",
+                "erps_unrejected",
                 analysis_type,
                 analysis_interval = (0.1, 0.2),
                 input_dir = test_dir,
@@ -284,14 +284,14 @@ using CSV
         for participant = 1:2
             epochs = EegFun.create_test_epoch_data_vector(conditions = 1:2, n_channels = 3)  # This returns Vector{EpochData}
 
-            file_path = joinpath(test_dir, "$(participant)_epochs_cleaned.jld2")
+            file_path = joinpath(test_dir, "$(participant)_epochs_unrejected.jld2")
             jldsave(file_path; data = epochs)
         end
 
         output_dir = joinpath(test_dir, "measurements_epochs")
 
         result = EegFun.erp_measurements(
-            "epochs_cleaned",
+            "epochs_unrejected",
             "mean_amplitude",
             analysis_interval = (0.1, 0.2),
             input_dir = test_dir,
@@ -313,7 +313,7 @@ using CSV
                 EegFun.create_test_erp_data(participant = participant, condition = 2),
             ]
 
-            file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
+            file_path = joinpath(test_dir, "$(participant)_erps_unrejected.jld2")
             jldsave(file_path; data = erps)
         end
 
@@ -321,7 +321,7 @@ using CSV
 
         # Test participant filtering
         result = EegFun.erp_measurements(
-            "erps_cleaned",
+            "erps_unrejected",
             "mean_amplitude",
             analysis_interval = (0.1, 0.2),
             input_dir = test_dir,
@@ -335,7 +335,7 @@ using CSV
 
         # Test condition filtering
         result = EegFun.erp_measurements(
-            "erps_cleaned",
+            "erps_unrejected",
             "mean_amplitude",
             analysis_interval = (0.1, 0.2),
             input_dir = test_dir,
@@ -356,7 +356,7 @@ using CSV
                 EegFun.create_test_erp_data(participant = participant, condition = 2),
             ]
 
-            file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
+            file_path = joinpath(test_dir, "$(participant)_erps_unrejected.jld2")
             jldsave(file_path; data = erps)
         end
 
@@ -364,7 +364,7 @@ using CSV
 
         # Test specific channel selection
         result = EegFun.erp_measurements(
-            "erps_cleaned",
+            "erps_unrejected",
             "mean_amplitude",
             analysis_interval = (0.1, 0.2),
             input_dir = test_dir,
@@ -387,14 +387,14 @@ using CSV
                 EegFun.create_test_erp_data(participant = participant, condition = 2),
             ]
 
-            file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
+            file_path = joinpath(test_dir, "$(participant)_erps_unrejected.jld2")
             jldsave(file_path; data = erps)
         end
 
         output_dir = joinpath(test_dir, "measurements_baseline")
 
         result = EegFun.erp_measurements(
-            "erps_cleaned",
+            "erps_unrejected",
             "mean_amplitude",
             analysis_interval = (0.1, 0.2),
             baseline_interval = (-0.2, 0.0),
@@ -407,7 +407,7 @@ using CSV
 
         # Verify measurements are reasonable (should be different from non-baseline corrected)
         result_no_baseline = EegFun.erp_measurements(
-            "erps_cleaned",
+            "erps_unrejected",
             "mean_amplitude",
             analysis_interval = (0.1, 0.2),
             input_dir = test_dir,
@@ -425,7 +425,7 @@ using CSV
     @testset "Error handling" begin
         @testset "Invalid input directory" begin
             @test_throws Exception EegFun.erp_measurements(
-                "erps_cleaned",
+                "erps_unrejected",
                 "mean_amplitude",
                 analysis_interval = (0.1, 0.2),
                 input_dir = "/nonexistent/dir",
@@ -434,7 +434,7 @@ using CSV
 
         @testset "Invalid analysis type" begin
             @test_throws Exception EegFun.erp_measurements(
-                "erps_cleaned",
+                "erps_unrejected",
                 "invalid_type",
                 analysis_interval = (0.1, 0.2),
                 input_dir = test_dir,
@@ -443,7 +443,7 @@ using CSV
 
         @testset "Invalid analysis interval" begin
             @test_throws Exception EegFun.erp_measurements(
-                "erps_cleaned",
+                "erps_unrejected",
                 "mean_amplitude",
                 analysis_interval = (0.2, 0.1),
                 input_dir = test_dir,
@@ -454,7 +454,7 @@ using CSV
             output_dir = joinpath(test_dir, "measurements_outside")
 
             result = EegFun.erp_measurements(
-                "erps_cleaned",
+                "erps_unrejected",
                 "mean_amplitude",
                 analysis_interval = (2.1, 3.0),
                 input_dir = test_dir,
@@ -483,13 +483,13 @@ using CSV
 
         @testset "Empty data files" begin
             # Create file with empty data
-            empty_file = joinpath(test_dir, "empty_erps_cleaned.jld2")
+            empty_file = joinpath(test_dir, "empty_erps_unrejected.jld2")
             jldsave(empty_file; data = EegFun.ErpData[])
 
             output_dir = joinpath(test_dir, "measurements_empty")
 
             result = EegFun.erp_measurements(
-                "erps_cleaned",
+                "erps_unrejected",
                 "mean_amplitude",
                 analysis_interval = (0.1, 0.2),
                 input_dir = test_dir,
@@ -502,13 +502,13 @@ using CSV
 
         @testset "Files with no recognized data variable" begin
             # Create file with unrecognized variable
-            unrecognized_file = joinpath(test_dir, "unrecognized_erps_cleaned.jld2")
+            unrecognized_file = joinpath(test_dir, "unrecognized_erps_unrejected.jld2")
             jldsave(unrecognized_file; other_data = "test")
 
             output_dir = joinpath(test_dir, "measurements_unrecognized")
 
             result = EegFun.erp_measurements(
-                "erps_cleaned",
+                "erps_unrejected",
                 "mean_amplitude",
                 analysis_interval = (0.1, 0.2),
                 input_dir = test_dir,
@@ -599,7 +599,7 @@ using CSV
             custom_file = "custom_measurements"
 
             result = EegFun.erp_measurements(
-                "erps_cleaned",
+                "erps_unrejected",
                 "mean_amplitude",
                 analysis_interval = (0.1, 0.2),
                 input_dir = test_dir,
@@ -612,7 +612,7 @@ using CSV
         end
 
         @testset "Auto-generated output directory" begin
-            result = EegFun.erp_measurements("erps_cleaned", "mean_amplitude", analysis_interval = (0.1, 0.2), input_dir = test_dir)
+            result = EegFun.erp_measurements("erps_unrejected", "mean_amplitude", analysis_interval = (0.1, 0.2), input_dir = test_dir)
 
             # Should create directory with pattern-based name
             expected_dir = joinpath(test_dir, "measurements_mean_amplitude")
@@ -624,7 +624,7 @@ using CSV
         output_dir = joinpath(test_dir, "measurements_integrity")
 
         result = EegFun.erp_measurements(
-            "erps_cleaned",
+            "erps_unrejected",
             "mean_amplitude",
             analysis_interval = (0.1, 0.2),
             input_dir = test_dir,
@@ -659,7 +659,7 @@ using CSV
         output_dir = joinpath(test_dir, "measurements_logging")
 
         result = EegFun.erp_measurements(
-            "erps_cleaned",
+            "erps_unrejected",
             "mean_amplitude",
             analysis_interval = (0.1, 0.2),
             input_dir = test_dir,

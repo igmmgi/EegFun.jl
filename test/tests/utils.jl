@@ -38,37 +38,37 @@ using Logging
         # Create test files
         for participant = 1:5
             erps = [EegFun.create_test_erp_data(participant = participant, condition = 1)]
-            file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
+            file_path = joinpath(test_dir, "$(participant)_erps_unrejected.jld2")
             jldsave(file_path; data = erps)
         end
 
         # Create some non-matching files
         for participant = 1:3
             erps = [EegFun.create_test_erp_data(participant = participant, condition = 1)]
-            file_path = joinpath(test_dir, "$(participant)_epochs_cleaned.jld2")
+            file_path = joinpath(test_dir, "$(participant)_epochs_unrejected.jld2")
             jldsave(file_path; data = erps)
         end
 
         # Test basic file finding
-        files = EegFun._find_batch_files("erps_cleaned", test_dir)
+        files = EegFun._find_batch_files("erps_unrejected", test_dir)
         @test length(files) == 5
         @test all(endswith.(files, ".jld2"))
-        @test all(contains.(files, "erps_cleaned"))
+        @test all(contains.(files, "erps_unrejected"))
 
         # Test participant filtering
-        files_filtered = EegFun._find_batch_files("erps_cleaned", test_dir, [1, 3, 5])
+        files_filtered = EegFun._find_batch_files("erps_unrejected", test_dir, [1, 3, 5])
         @test length(files_filtered) == 3
-        @test "1_erps_cleaned.jld2" in files_filtered
-        @test "3_erps_cleaned.jld2" in files_filtered
-        @test "5_erps_cleaned.jld2" in files_filtered
+        @test "1_erps_unrejected.jld2" in files_filtered
+        @test "3_erps_unrejected.jld2" in files_filtered
+        @test "5_erps_unrejected.jld2" in files_filtered
 
         # Test single participant
-        files_single = EegFun._find_batch_files("erps_cleaned", test_dir, 2)
+        files_single = EegFun._find_batch_files("erps_unrejected", test_dir, 2)
         @test length(files_single) == 1
-        @test "2_erps_cleaned.jld2" in files_single
+        @test "2_erps_unrejected.jld2" in files_single
 
         # Test no participants (should return all)
-        files_all = EegFun._find_batch_files("erps_cleaned", test_dir, nothing)
+        files_all = EegFun._find_batch_files("erps_unrejected", test_dir, nothing)
         @test length(files_all) == 5
 
         # Test non-matching pattern

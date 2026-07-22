@@ -17,8 +17,8 @@ grand_avgs = grand_average(results)
 For large studies, it is often more efficient to process files directly from their storage directory. This approach automatically handles file discovery and condition grouping.
 
 ```julia
-# Averages all JLD2 files in the folder that match the "erps_cleaned" pattern
-grand_average("erps_cleaned", input_dir = "derivatives/erp_analysis/")
+# Averages all JLD2 files in the folder that match the "erps_unrejected" pattern
+grand_average("erps_unrejected", input_dir = "derivatives/erp_analysis/")
 ```
 
 ## How it Works

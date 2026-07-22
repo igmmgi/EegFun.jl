@@ -15,7 +15,7 @@ epoch_dir = joinpath(homedir(), "Documents", "Julia", "TestDataSets", "Attention
 println("Regenerating TF morlet data from epochs...")
 
 EegFun.tf_morlet(
-    "epochs_good";
+    "epochs_final";
     input_dir = epoch_dir,
     condition_selection = EegFun.conditions([1, 2]),
     frequencies = 1:2:40,
@@ -26,14 +26,14 @@ EegFun.tf_morlet(
 # ==============================================================================
 # Setup
 # ==============================================================================
-input_dir = joinpath(epoch_dir, "tf_morlet_epochs_good")
-file_pattern = "epochs_good"
+input_dir = joinpath(epoch_dir, "tf_morlet_epochs_final")
+file_pattern = "epochs_final"
 
 # ==============================================================================
 # Load a single participant to test plot_topography for TF data
 # ==============================================================================
 println("Loading single participant TF data...")
-single_data = EegFun.read_data(joinpath(input_dir, "example1_epochs_good.jld2"))
+single_data = EegFun.read_data(joinpath(input_dir, "example1_epochs_final.jld2"))
 
 # Inspect conditions
 println("Number of datasets: ", length(single_data))

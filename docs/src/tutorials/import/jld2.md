@@ -36,7 +36,7 @@ results = load("results.jld2")    # loads everything as a Dict
 
 ```julia
 loaded = EegFun.read_data("erps.jld2")                    # auto-detect types
-all_erps = EegFun.read_all_data("./derivatives/erps/erps_good")  # load all matching
+all_erps = EegFun.read_all_data("./derivatives/erps/erps_final")  # load all matching
 grouped = EegFun.group_by_condition(all_erps)               # organise by condition
 ```
 

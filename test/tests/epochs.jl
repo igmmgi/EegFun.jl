@@ -719,7 +719,7 @@ using Random
             @testset "Setup test files" begin
                 for participant in [1, 2]
                     epochs = create_batch_test_epoch_data(n_conditions = 2, n_epochs_per_condition = 5)
-                    filename = joinpath(test_dir, "$(participant)_epochs_cleaned.jld2")
+                    filename = joinpath(test_dir, "$(participant)_epochs_unrejected.jld2")
                     jldsave(filename; data = epochs)
                     @test isfile(filename)
                 end
@@ -729,7 +729,7 @@ using Random
                 output_dir = joinpath(test_dir, "averaged_output")
 
                 # Test averaging epochs
-                result = EegFun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir)
+                result = EegFun.average_epochs("epochs_unrejected", input_dir = test_dir, output_dir = output_dir)
 
                 @test !isnothing(result)
                 @test result.success == 2
@@ -737,11 +737,11 @@ using Random
                 @test isdir(output_dir)
 
                 # Check that averaged files exist (filename transformed from "epochs" to "erps")
-                @test isfile(joinpath(output_dir, "1_erps_cleaned.jld2"))
-                @test isfile(joinpath(output_dir, "2_erps_cleaned.jld2"))
+                @test isfile(joinpath(output_dir, "1_erps_unrejected.jld2"))
+                @test isfile(joinpath(output_dir, "2_erps_unrejected.jld2"))
 
                 # Load and verify averaged data
-                erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
+                erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
                 @test length(erps) == 2  # 2 conditions
                 @test erps[1] isa EegFun.ErpData
                 @test hasproperty(erps[1].data, :Fz)
@@ -754,7 +754,7 @@ using Random
                 output_dir = joinpath(test_dir, "averaged_participant")
 
                 result = EegFun.average_epochs(
-                    "epochs_cleaned",
+                    "epochs_unrejected",
                     input_dir = test_dir,
                     output_dir = output_dir,
                     participant_selection = EegFun.participants(1),
@@ -762,15 +762,15 @@ using Random
 
                 @test result.success == 1
                 @test result.errors == 0
-                @test isfile(joinpath(output_dir, "1_erps_cleaned.jld2"))
-                @test !isfile(joinpath(output_dir, "2_erps_cleaned.jld2"))
+                @test isfile(joinpath(output_dir, "1_erps_unrejected.jld2"))
+                @test !isfile(joinpath(output_dir, "2_erps_unrejected.jld2"))
             end
 
             @testset "Average multiple participants" begin
                 output_dir = joinpath(test_dir, "averaged_multi_participants")
 
                 result = EegFun.average_epochs(
-                    "epochs_cleaned",
+                    "epochs_unrejected",
                     input_dir = test_dir,
                     output_dir = output_dir,
                     participant_selection = EegFun.participants([1, 2]),
@@ -778,15 +778,15 @@ using Random
 
                 @test result.success == 2
                 @test result.errors == 0
-                @test isfile(joinpath(output_dir, "1_erps_cleaned.jld2"))
-                @test isfile(joinpath(output_dir, "2_erps_cleaned.jld2"))
+                @test isfile(joinpath(output_dir, "1_erps_unrejected.jld2"))
+                @test isfile(joinpath(output_dir, "2_erps_unrejected.jld2"))
             end
 
             @testset "Average specific conditions" begin
                 output_dir = joinpath(test_dir, "averaged_condition")
 
                 result = EegFun.average_epochs(
-                    "epochs_cleaned",
+                    "epochs_unrejected",
                     input_dir = test_dir,
                     output_dir = output_dir,
                     condition_selection = EegFun.conditions(1),
@@ -795,7 +795,7 @@ using Random
                 @test result.success == 2
 
                 # Load and verify only one condition
-                erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
+                erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
                 @test length(erps) == 1
                 @test erps[1].condition == 1
             end
@@ -804,7 +804,7 @@ using Random
                 output_dir = joinpath(test_dir, "averaged_multi_conditions")
 
                 result = EegFun.average_epochs(
-                    "epochs_cleaned",
+                    "epochs_unrejected",
                     input_dir = test_dir,
                     output_dir = output_dir,
                     condition_selection = EegFun.conditions([1, 2]),
@@ -813,7 +813,7 @@ using Random
                 @test result.success == 2
 
                 # Load and verify both conditions
-                erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
+                erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
                 @test length(erps) == 2
                 @test erps[1].condition == 1
                 @test erps[2].condition == 2
@@ -821,10 +821,10 @@ using Random
 
             @testset "Error handling" begin
                 # Non-existent directory
-                @test_throws Exception EegFun.average_epochs("epochs_cleaned", input_dir = "/nonexistent/path")
+                @test_throws Exception EegFun.average_epochs("epochs_unrejected", input_dir = "/nonexistent/path")
 
                 # Invalid pattern (doesn't contain 'epochs')
-                @test_throws Exception EegFun.average_epochs("erps_cleaned", input_dir = test_dir)
+                @test_throws Exception EegFun.average_epochs("erps_unrejected", input_dir = test_dir)
             end
 
             @testset "No matching files" begin
@@ -832,7 +832,7 @@ using Random
                 mkpath(empty_dir)
 
                 # Directory exists but has no JLD2 files matching pattern
-                result = EegFun.average_epochs("epochs_cleaned", input_dir = empty_dir)
+                result = EegFun.average_epochs("epochs_unrejected", input_dir = empty_dir)
 
                 @test isnothing(result)  # No files to process
             end
@@ -840,7 +840,7 @@ using Random
             @testset "Logging" begin
                 output_dir = joinpath(test_dir, "averaged_with_log")
 
-                result = EegFun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir)
+                result = EegFun.average_epochs("epochs_unrejected", input_dir = test_dir, output_dir = output_dir)
 
                 # Check log file exists
                 log_file = joinpath(output_dir, "average_epochs.log")
@@ -850,7 +850,7 @@ using Random
                 log_contents = read(log_file, String)
                 @test contains(log_contents, "Batch epoch averaging started at")
                 @test contains(log_contents, "average_epochs")
-                @test contains(log_contents, "epochs_cleaned")
+                @test contains(log_contents, "epochs_unrejected")
             end
 
             @testset "Existing output directory" begin
@@ -862,11 +862,11 @@ using Random
                 @test isfile(joinpath(output_dir, "dummy.txt"))
 
                 # Run average_epochs - should work fine with existing directory
-                result = EegFun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir)
+                result = EegFun.average_epochs("epochs_unrejected", input_dir = test_dir, output_dir = output_dir)
 
                 @test result.success == 2
                 @test isfile(joinpath(output_dir, "dummy.txt"))  # Original file preserved
-                @test isfile(joinpath(output_dir, "1_erps_cleaned.jld2"))
+                @test isfile(joinpath(output_dir, "1_erps_unrejected.jld2"))
             end
 
             @testset "Partial failures" begin
@@ -875,18 +875,18 @@ using Random
 
                 # Create one valid file
                 epochs = create_batch_test_epoch_data(n_conditions = 2, n_epochs_per_condition = 5)
-                jldsave(joinpath(partial_dir, "1_epochs_cleaned.jld2"); data = epochs)
+                jldsave(joinpath(partial_dir, "1_epochs_unrejected.jld2"); data = epochs)
 
                 # Create one malformed file (invalid data type - String instead of Vector{EpochData})
-                jldsave(joinpath(partial_dir, "2_epochs_cleaned.jld2"); data = "invalid_data")
+                jldsave(joinpath(partial_dir, "2_epochs_unrejected.jld2"); data = "invalid_data")
 
                 output_dir = joinpath(test_dir, "averaged_partial")
-                result = EegFun.average_epochs("epochs_cleaned", input_dir = partial_dir, output_dir = output_dir)
+                result = EegFun.average_epochs("epochs_unrejected", input_dir = partial_dir, output_dir = output_dir)
 
                 @test result.success == 1
                 @test result.errors == 1
-                @test isfile(joinpath(output_dir, "1_erps_cleaned.jld2"))
-                @test !isfile(joinpath(output_dir, "2_erps_cleaned.jld2"))  # Failed file not saved
+                @test isfile(joinpath(output_dir, "1_erps_unrejected.jld2"))
+                @test !isfile(joinpath(output_dir, "2_erps_unrejected.jld2"))  # Failed file not saved
             end
 
             @testset "Condition out of range" begin
@@ -895,7 +895,7 @@ using Random
                 # Request condition 5 when only 2 exist
                 # With predicate-based selection, this results in empty selection but successful processing
                 result = EegFun.average_epochs(
-                    "epochs_cleaned",
+                    "epochs_unrejected",
                     input_dir = test_dir,
                     output_dir = output_dir,
                     condition_selection = EegFun.conditions(5),
@@ -909,7 +909,7 @@ using Random
             @testset "Return value structure" begin
                 output_dir = joinpath(test_dir, "averaged_return_check")
 
-                result = EegFun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir)
+                result = EegFun.average_epochs("epochs_unrejected", input_dir = test_dir, output_dir = output_dir)
 
                 # Check result structure
                 @test hasfield(typeof(result), :success)
@@ -925,13 +925,13 @@ using Random
                 output_dir = joinpath(test_dir, "averaged_integrity")
 
                 # Get original epoch data
-                original_epochs = load(joinpath(test_dir, "1_epochs_cleaned.jld2"), "data")
+                original_epochs = load(joinpath(test_dir, "1_epochs_unrejected.jld2"), "data")
 
                 # Average epochs
-                EegFun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir)
+                EegFun.average_epochs("epochs_unrejected", input_dir = test_dir, output_dir = output_dir)
 
                 # Load averaged data
-                erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
+                erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
 
                 # Check that averaged ERP is smoother (single value, no variance)
                 @test erps[1].data[1, :Fz] isa Float64  # Single averaged value
@@ -951,7 +951,7 @@ using Random
 
                 # Average specific participant AND condition
                 result = EegFun.average_epochs(
-                    "epochs_cleaned",
+                    "epochs_unrejected",
                     input_dir = test_dir,
                     output_dir = output_dir,
                     participant_selection = EegFun.participants(1),
@@ -961,10 +961,10 @@ using Random
                 @test result.success == 1
 
                 # Load and verify
-                erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
+                erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
                 @test length(erps) == 1  # Only one condition
                 @test erps[1].condition == 1
-                @test !isfile(joinpath(output_dir, "2_erps_cleaned.jld2"))  # Participant 2 not processed
+                @test !isfile(joinpath(output_dir, "2_erps_unrejected.jld2"))  # Participant 2 not processed
             end
 
             @testset "Different epoch counts per condition" begin
@@ -1051,21 +1051,21 @@ using Random
                 mkpath(pattern_dir)
 
                 epochs = create_batch_test_epoch_data(n_conditions = 2, n_epochs_per_condition = 3)
-                jldsave(joinpath(pattern_dir, "1_epochs_original.jld2"); data = epochs)
-                jldsave(joinpath(pattern_dir, "2_epochs_cleaned.jld2"); data = epochs)
+                jldsave(joinpath(pattern_dir, "1_epochs_uncorrected.jld2"); data = epochs)
+                jldsave(joinpath(pattern_dir, "2_epochs_unrejected.jld2"); data = epochs)
                 jldsave(joinpath(pattern_dir, "3_custom_epochs.jld2"); data = epochs)
 
-                # Test pattern matching "epochs_original"
+                # Test pattern matching "epochs_uncorrected"
                 output_dir1 = joinpath(test_dir, "averaged_original")
-                result1 = EegFun.average_epochs("epochs_original", input_dir = pattern_dir, output_dir = output_dir1)
+                result1 = EegFun.average_epochs("epochs_uncorrected", input_dir = pattern_dir, output_dir = output_dir1)
                 @test result1.success == 1
-                @test isfile(joinpath(output_dir1, "1_erps_original.jld2"))
+                @test isfile(joinpath(output_dir1, "1_erps_uncorrected.jld2"))
 
-                # Test pattern matching "epochs_cleaned"
+                # Test pattern matching "epochs_unrejected"
                 output_dir2 = joinpath(test_dir, "averaged_cleaned_pattern")
-                result2 = EegFun.average_epochs("epochs_cleaned", input_dir = pattern_dir, output_dir = output_dir2)
+                result2 = EegFun.average_epochs("epochs_unrejected", input_dir = pattern_dir, output_dir = output_dir2)
                 @test result2.success == 1
-                @test isfile(joinpath(output_dir2, "2_erps_cleaned.jld2"))
+                @test isfile(joinpath(output_dir2, "2_erps_unrejected.jld2"))
 
                 # Test pattern matching "epochs" (should match all)
                 output_dir3 = joinpath(test_dir, "averaged_all_epochs")
@@ -1123,9 +1123,9 @@ using Random
             @testset "Metadata preservation" begin
                 output_dir = joinpath(test_dir, "averaged_metadata")
 
-                EegFun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir)
+                EegFun.average_epochs("epochs_unrejected", input_dir = test_dir, output_dir = output_dir)
 
-                erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
+                erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
 
                 # Verify metadata columns exist
                 # Note: :sample is not preserved during averaging (it's a per-epoch metadata)
@@ -1143,13 +1143,13 @@ using Random
                 output_dir = joinpath(test_dir, "averaged_layout")
 
                 # Get original layout
-                original_epochs = load(joinpath(test_dir, "1_epochs_cleaned.jld2"), "data")
+                original_epochs = load(joinpath(test_dir, "1_epochs_unrejected.jld2"), "data")
                 original_layout = original_epochs[1].layout
                 original_fs = original_epochs[1].sample_rate
 
-                EegFun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir)
+                EegFun.average_epochs("epochs_unrejected", input_dir = test_dir, output_dir = output_dir)
 
-                erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
+                erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
 
                 # Verify layout preservation
                 @test erps[1].layout.data == original_layout.data
@@ -1199,18 +1199,18 @@ using Random
                 overwrite_dir = joinpath(test_dir, "averaged_overwrite")
 
                 # First run
-                result1 = EegFun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = overwrite_dir)
+                result1 = EegFun.average_epochs("epochs_unrejected", input_dir = test_dir, output_dir = overwrite_dir)
                 @test result1.success == 2
 
                 # Get original file modification time (filename transformed from "epochs" to "erps")
-                file1 = joinpath(overwrite_dir, "1_erps_cleaned.jld2")
+                file1 = joinpath(overwrite_dir, "1_erps_unrejected.jld2")
                 mtime1 = stat(file1).mtime
 
                 # Wait a tiny bit to ensure different mtime
                 sleep(0.1)
 
                 # Second run (should overwrite)
-                result2 = EegFun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = overwrite_dir)
+                result2 = EegFun.average_epochs("epochs_unrejected", input_dir = test_dir, output_dir = overwrite_dir)
                 @test result2.success == 2
 
                 # Verify file was overwritten (different mtime)

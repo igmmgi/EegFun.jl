@@ -13,7 +13,7 @@ using EegFun
 #######################################################################
 
 input_dir = EegFun.example_path("data/julia/erps")
-file_pattern = "erps_good"
+file_pattern = "erps_final"
 
 prepared = EegFun.prepare_stats(
     file_pattern,

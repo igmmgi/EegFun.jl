@@ -17,26 +17,26 @@ using CSV
                 EegFun.create_test_erp_data(participant = participant, condition = 4),
             ]
 
-            file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
+            file_path = joinpath(test_dir, "$(participant)_erps_unrejected.jld2")
             jldsave(file_path; data = erps)
         end
 
         output_dir = joinpath(test_dir, "differences")
 
         # Test basic difference creation
-        result = EegFun.condition_difference("erps_cleaned", [(1, 2), (3, 4)], input_dir = test_dir, output_dir = output_dir)
+        result = EegFun.condition_difference("erps_unrejected", [(1, 2), (3, 4)], input_dir = test_dir, output_dir = output_dir)
 
         # Verify output files were created
         @test isdir(output_dir)
         output_files = readdir(output_dir)
         # Should have 3 files: 1, 2, 3 (participants from this test)
         @test length(output_files) >= 3  # At least 3 files from this test
-        @test "1_erps_cleaned.jld2" in output_files
-        @test "2_erps_cleaned.jld2" in output_files
-        @test "3_erps_cleaned.jld2" in output_files
+        @test "1_erps_unrejected.jld2" in output_files
+        @test "2_erps_unrejected.jld2" in output_files
+        @test "3_erps_unrejected.jld2" in output_files
 
         # Load and verify one output file
-        output_file = joinpath(output_dir, "1_erps_cleaned.jld2")
+        output_file = joinpath(output_dir, "1_erps_unrejected.jld2")
         @test isfile(output_file)
 
         differences = load(output_file, "data")
@@ -56,7 +56,7 @@ using CSV
         output_dir = joinpath(test_dir, "differences_single")
 
         result = EegFun.condition_difference(
-            "erps_cleaned",
+            "erps_unrejected",
             [(1, 2)],
             input_dir = test_dir,
             participant_selection = EegFun.participants(2),
@@ -65,7 +65,7 @@ using CSV
 
         @test isdir(output_dir)
         output_files = readdir(output_dir)
-        @test "2_erps_cleaned.jld2" in output_files
+        @test "2_erps_unrejected.jld2" in output_files
         # Should have at least 1 file (participant 2), but might have more from other tests
         @test length(output_files) >= 1
     end
@@ -73,7 +73,7 @@ using CSV
     @testset "Vector condition pairs" begin
         output_dir = joinpath(test_dir, "differences_vector")
 
-        result = EegFun.condition_difference("erps_cleaned", [[1, 2], [3, 4]], input_dir = test_dir, output_dir = output_dir)
+        result = EegFun.condition_difference("erps_unrejected", [[1, 2], [3, 4]], input_dir = test_dir, output_dir = output_dir)
 
         @test isdir(output_dir)
         output_files = readdir(output_dir)
@@ -89,13 +89,13 @@ using CSV
             # Missing conditions 3 and 4
         ]
 
-        file_path = joinpath(test_dir, "99_erps_cleaned.jld2")
+        file_path = joinpath(test_dir, "99_erps_unrejected.jld2")
         jldsave(file_path; data = erps)
 
         output_dir = joinpath(test_dir, "differences_missing")
 
         result = EegFun.condition_difference(
-            "erps_cleaned",
+            "erps_unrejected",
             [(1, 2), (3, 4)],
             input_dir = test_dir,
             participant_selection = EegFun.participants(99),
@@ -105,28 +105,28 @@ using CSV
         # Should still create file but only with available pairs
         @test isdir(output_dir)
         output_files = readdir(output_dir)
-        @test "99_erps_cleaned.jld2" in output_files
+        @test "99_erps_unrejected.jld2" in output_files
         # Should have at least 1 file (participant 99), but might have more from other tests
         @test length(output_files) >= 1
 
-        differences = load(joinpath(output_dir, "99_erps_cleaned.jld2"), "data")
+        differences = load(joinpath(output_dir, "99_erps_unrejected.jld2"), "data")
         @test length(differences) == 1  # Only one difference wave (1-2)
     end
 
     @testset "Error handling" begin
         @testset "Invalid input directory" begin
-            @test_throws Exception EegFun.condition_difference("erps_cleaned", [(1, 2)], input_dir = "/nonexistent/dir")
+            @test_throws Exception EegFun.condition_difference("erps_unrejected", [(1, 2)], input_dir = "/nonexistent/dir")
         end
 
 
 
 
         @testset "Empty condition pairs" begin
-            @test_throws Exception EegFun.condition_difference("erps_cleaned", [], input_dir = test_dir)
+            @test_throws Exception EegFun.condition_difference("erps_unrejected", [], input_dir = test_dir)
         end
 
         @testset "Invalid condition pairs" begin
-            @test_throws Exception EegFun.condition_difference("erps_cleaned", [(1, "invalid")], input_dir = test_dir)
+            @test_throws Exception EegFun.condition_difference("erps_unrejected", [(1, "invalid")], input_dir = test_dir)
         end
     end
 
@@ -134,7 +134,7 @@ using CSV
         output_dir = joinpath(test_dir, "differences_integrity")
 
         result = EegFun.condition_difference(
-            "erps_cleaned",
+            "erps_unrejected",
             [(1, 2)],
             input_dir = test_dir,
             participant_selection = EegFun.participants(1),
@@ -142,10 +142,10 @@ using CSV
         )
 
         # Load original and difference data
-        original_file = joinpath(test_dir, "1_erps_cleaned.jld2")
+        original_file = joinpath(test_dir, "1_erps_unrejected.jld2")
         original_erps = load(original_file, "data")
 
-        diff_file = joinpath(output_dir, "1_erps_cleaned.jld2")
+        diff_file = joinpath(output_dir, "1_erps_unrejected.jld2")
         differences = load(diff_file, "data")
 
         # Verify difference calculation
@@ -179,13 +179,13 @@ using CSV
 
         @testset "Empty ERP data" begin
             # Create file with empty ERP list
-            empty_file = joinpath(test_dir, "empty_erps_cleaned.jld2")
+            empty_file = joinpath(test_dir, "empty_erps_unrejected.jld2")
             jldsave(empty_file; data = EegFun.ErpData[])
 
             output_dir = joinpath(test_dir, "differences_empty")
 
             result = EegFun.condition_difference(
-                "erps_cleaned",
+                "erps_unrejected",
                 [(1, 2)],
                 input_dir = test_dir,
                 participant_selection = EegFun.participants(999),  # Non-existent participant
@@ -203,7 +203,7 @@ using CSV
         @testset "Custom output directory" begin
             custom_dir = joinpath(test_dir, "custom_output")
 
-            result = EegFun.condition_difference("erps_cleaned", [(1, 2)], input_dir = test_dir, output_dir = custom_dir)
+            result = EegFun.condition_difference("erps_unrejected", [(1, 2)], input_dir = test_dir, output_dir = custom_dir)
 
             @test isdir(custom_dir)
             # Expect 5 files: 1, 2, 3, 99, and empty (but empty will have 0 differences)
@@ -211,10 +211,10 @@ using CSV
         end
 
         @testset "Auto-generated output directory" begin
-            result = EegFun.condition_difference("erps_cleaned", [(1, 2)], input_dir = test_dir)
+            result = EegFun.condition_difference("erps_unrejected", [(1, 2)], input_dir = test_dir)
 
             # Should create directory with pattern-based name
-            expected_dir = joinpath(test_dir, "differences_erps_cleaned_1-2")
+            expected_dir = joinpath(test_dir, "differences_erps_unrejected_1-2")
             @test isdir(expected_dir)
         end
     end
@@ -222,7 +222,7 @@ using CSV
     @testset "Logging and return values" begin
         output_dir = joinpath(test_dir, "differences_logging")
 
-        result = EegFun.condition_difference("erps_cleaned", [(1, 2)], input_dir = test_dir, output_dir = output_dir)
+        result = EegFun.condition_difference("erps_unrejected", [(1, 2)], input_dir = test_dir, output_dir = output_dir)
 
         # Check that log file was created
         log_file = joinpath(output_dir, "condition_difference.log")

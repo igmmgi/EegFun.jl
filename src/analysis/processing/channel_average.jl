@@ -213,7 +213,7 @@ This function loads JLD2 files containing EEG data, averages specified channel g
 and saves the resulting data with new averaged channels to a new directory.
 
 # Arguments
-- `file_pattern::String`: Pattern to match JLD2 files (e.g., "erps_cleaned", "epochs_cleaned")
+- `file_pattern::String`: Pattern to match JLD2 files (e.g., "erps_unrejected", "epochs_unrejected")
 - `channel_selections::Vector{Function}`: Channel selection predicates (e.g., `[channels([:Fp1, :Fp2]), channels([:PO7, :PO8])]`)
 - `output_labels::Union{Vector{Symbol}, Nothing}`: Labels for averaged channels (default: auto-generated from selection)
 - `input_dir::String`: Input directory containing JLD2 files (default: current directory)
@@ -225,21 +225,21 @@ and saves the resulting data with new averaged channels to a new directory.
 # Examples
 ```julia
 # Average frontal and parietal channels using predicates
-channel_average("erps_cleaned", [channels([:Fp1, :Fp2]), channels([:PO7, :PO8])])
+channel_average("erps_unrejected", [channels([:Fp1, :Fp2]), channels([:PO7, :PO8])])
 
 # With custom output labels
-channel_average("erps_cleaned", 
+channel_average("erps_unrejected", 
                 [channels([:Fp1, :Fp2]), channels([:PO7, :PO8])],
                 output_labels = [:frontal, :parietal])
 
 # Process specific participants and conditions
-channel_average("erps_cleaned", [channels([:Fp1, :Fp2])], 
+channel_average("erps_unrejected", [channels([:Fp1, :Fp2])], 
                 input_dir = "/path/to/data", 
                 participants = [1, 2, 3], 
                 conditions = [1, 2])
 
 # Create reduced dataset with only averaged channels
-channel_average("erps_cleaned", 
+channel_average("erps_unrejected", 
                 [channels([:Fp1, :Fp2]), channels([:PO7, :PO8])], 
                 reduce = true)
 ```

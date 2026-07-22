@@ -544,7 +544,7 @@ repair when channels have good neighbors.
 ```julia
 # Repair channels per epoch
 channels_repaired, epochs_repaired = repair_channels_per_epoch!(
-    epochs_cleaned, 
+    epochs_unrejected, 
     layout, 
     100.0, 
     :is_artifact_value_100

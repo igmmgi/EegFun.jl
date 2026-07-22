@@ -167,7 +167,7 @@ using DataFrames
             mkpath(deriv_dir)
 
             # Create dummy JLD2 files (just empty files for naming tests)
-            for suffix in ["_epochs_original", "_erps_good", "_ica", "_artifact_info"]
+            for suffix in ["_epochs_uncorrected", "_erps_final", "_ica", "_artifact_info"]
                 touch(joinpath(deriv_dir, "example1$(suffix).jld2"))
             end
 
@@ -184,7 +184,7 @@ using DataFrames
 
             # Check renamed files
             files = readdir(sub_dir)
-            @test "sub-01_task-posner_desc-epochsOriginal_eeg.jld2" in files
+            @test "sub-01_task-posner_desc-epochsUncorrected_eeg.jld2" in files
             @test "sub-01_task-posner_desc-erpsGood_eeg.jld2" in files
             @test "sub-01_task-posner_desc-ica_eeg.jld2" in files
             @test "sub-01_task-posner_desc-artifactInfo_eeg.jld2" in files

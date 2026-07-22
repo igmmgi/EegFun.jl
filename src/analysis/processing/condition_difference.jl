@@ -121,7 +121,7 @@ erps = average_epochs(epochs)
 diff_waves = condition_difference(erps, [(1, 2)])
 
 # Batch
-condition_difference("erps_cleaned", [(1, 2)])
+condition_difference("erps_unrejected", [(1, 2)])
 ```
 """
 function condition_difference(data::Vector{<:ErpData}, condition_pairs::Union{Vector{Tuple{Int,Int}},Vector{Vector{Int}}})::Vector{ErpData}

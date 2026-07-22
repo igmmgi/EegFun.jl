@@ -34,7 +34,7 @@ $(_generate_kwargs_doc(ERP_MEASUREMENTS_KWARGS))
 
 # Examples
 ```julia
-dat = EegFun.read_data("erps_good.jld2")
+dat = EegFun.read_data("erps_final.jld2")
 
 # Mean amplitude in 300-500ms interval
 plot_erp_measurements(dat, "mean_amplitude",
@@ -48,7 +48,7 @@ plot_erp_measurements(dat, "max_peak_latency",
     channel_selection = channels([:Cz, :Pz]))
 
 # Load from file path
-plot_erp_measurements("erps_good.jld2", "max_peak_amplitude",
+plot_erp_measurements("erps_final.jld2", "max_peak_amplitude",
     analysis_interval = (0.1, 0.3))
 ```
 """

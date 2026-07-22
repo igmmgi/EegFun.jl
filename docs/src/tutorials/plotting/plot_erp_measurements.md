@@ -57,7 +57,7 @@ This demo covers:
 
 using EegFun
 
-dat = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps_good.jld2"))
+dat = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps_final.jld2"))
 
 # Mean amplitude
 # EegFun.plot_erp_measurements(dat, "mean_amplitude", analysis_interval = (0.3, 0.5), baseline_interval = (-0.2, 0.0)) # not really useful as too crowded!
@@ -76,7 +76,7 @@ EegFun.plot_erp_measurements(dat, "max_peak_amplitude", analysis_interval = (0.0
 
 # Load from file path
 EegFun.plot_erp_measurements(
-    EegFun.example_path("data/julia/erps/example1_erps_good.jld2"),
+    EegFun.example_path("data/julia/erps/example1_erps_final.jld2"),
     "max_peak_amplitude",
     analysis_interval = (0.0, 1.0),
     baseline_interval = (-0.2, 0.0),

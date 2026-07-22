@@ -19,7 +19,7 @@ Works with both EpochData and TimeFreqEpochData.
 # Examples
 ```julia
 # ERP decoding
-# all_epochs = read_all_data(EpochData, joinpath(input_dir, "epochs_good"))
+# all_epochs = read_all_data(EpochData, joinpath(input_dir, "epochs_final"))
 participant_epochs = prepare_decoding(
     all_epochs,
     condition_selection = conditions([1, 2]),

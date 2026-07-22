@@ -71,17 +71,20 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "files.output.directory"           => simple_string_param("Directory for processed output files", "./preprocessed_files"),
 
     # What data should we save?
-    "files.output.save_continuous_data_original" => bool_param("Save continuous data original?", true),
-    "files.output.save_continuous_data_cleaned"  => bool_param("Save continuous data cleaned?", true),
+    "files.output.save_continuous_data_raw" => bool_param("Save continuous data original?", true),
+    "files.output.save_continuous_data_corrected"  => bool_param("Save continuous data cleaned?", true),
     "files.output.save_ica_data"                 => bool_param("Save ICA results?", true),
-    "files.output.save_epoch_data_original"      => bool_param("Save epoched data original?", true),
-    "files.output.save_epoch_data_cleaned"       => bool_param("Save epoched data cleaned?", true),
-    "files.output.save_epoch_data_good"          => bool_param("Save epoched data good?", true),
-    "files.output.save_erp_data_original"        => bool_param("Save ERP data original?", true),
-    "files.output.save_erp_data_cleaned"         => bool_param("Save ERP data cleaned?", true),
-    "files.output.save_erp_data_good"            => bool_param("Save ERP data good?", true),
+    "files.output.save_epoch_data_uncorrected"      => bool_param("Save epoched data original?", true),
+    "files.output.save_epoch_data_unrejected"       => bool_param("Save epoched data cleaned?", true),
+    "files.output.save_epoch_data_final"          => bool_param("Save epoched data good?", true),
+    "files.output.save_erp_data_uncorrected"        => bool_param("Save ERP data original?", true),
+    "files.output.save_erp_data_unrejected"         => bool_param("Save ERP data cleaned?", true),
+    "files.output.save_erp_data_final"            => bool_param("Save ERP data good?", true),
 
     # Preprocessing settings
+    "preprocess.interactive_continuous"           => bool_param("Pause execution to interactively review continuous data", false),
+    "preprocess.interactive_ica"                  => bool_param("Pause execution to interactively review ICA components", false),
+    "preprocess.interactive_epochs"               => bool_param("Pause execution to interactively review epoch rejection", false),
     "preprocess.epoch_start"                      => number_param("Epoch start (seconds).", -1),
     "preprocess.epoch_end"                        => number_param("Epoch end (seconds).", 1),
     "preprocess.reference_channel"                => simple_string_param("Channels(s) to use as reference", "avg"),
@@ -683,18 +686,31 @@ function _write_parameter_docs(io::IO, parameter_spec::ConfigParameter{T}) where
 end
 
 """
+    _format_toml_value(value) -> String
+
+Recursively format a value for TOML output.
+"""
+function _format_toml_value(value)
+    if value isa String
+        return "\"$(replace(value, "\\" => "\\\\"))\""
+    elseif value isa Vector
+        return isempty(value) ? "[]" : "[" * join([_format_toml_value(v) for v in value], ", ") * "]"
+    elseif value isa Bool
+        return value ? "true" : "false"
+    else
+        return string(value)
+    end
+end
+
+"""
     _write_parameter_value(io::IO, param_name::String, value)
 
 Write a parameter value to the given IO stream in the appropriate TOML format.
 """
 function _write_parameter_value(io::IO, param_name::String, value)
-    if value isa String
-        println(io, "$param_name = \"$(replace(value, "\\" => "\\\\"))\"")
-    elseif value isa Vector
-        println(io, "$param_name = $(isempty(value) ? "[]" : "[$(join(value, ", "))]")")
-    elseif isnothing(value)
+    if isnothing(value)
         println(io, "# $param_name = ")
     else
-        println(io, "$param_name = $value")
+        println(io, "$param_name = $(_format_toml_value(value))")
     end
 end

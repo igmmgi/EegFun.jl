@@ -31,8 +31,8 @@ function _extract_participant_id(filename::String)
         return parse(Int, numeric_matches[end].match)
     end
 
-    # use hash of filename as fallback
-    participant = hash(filename) % 10000
+    # use hash of filename as fallback (using large modulo to prevent collisions)
+    participant = Int(hash(filename) % 1_000_000_000)
     @info "  No numeric participant ID found in filename, using hash: $participant"
     return participant
 end
@@ -184,8 +184,8 @@ This mirrors the single-argument form of `read_data`, so you compose the path
 the same way:
 
 ```julia
-read_data("./derivatives/erps/example1_erps_good.jld2")   # single file
-read_all_data("./derivatives/erps/erps_good")             # all matching files
+read_data("./derivatives/erps/example1_erps_final.jld2")   # single file
+read_all_data("./derivatives/erps/erps_final")             # all matching files
 ```
 
 # Arguments

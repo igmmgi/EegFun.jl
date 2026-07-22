@@ -30,7 +30,7 @@ Useful for:
 # Examples
 ```julia
 # Load from file
-plot_erp_measurement_gui("participant_1_erps_good.jld2")
+plot_erp_measurement_gui("participant_1_erps_final.jld2")
 
 # Single condition
 erp = read_data("participant_1.jld2")

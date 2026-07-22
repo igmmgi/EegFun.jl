@@ -16,9 +16,9 @@ mkpath(DEMO_OUTPUT)
 #######################################################################
 
 # Each file is one participant's averaged ERPs (saved by batch_erp or manually)
-erps_p1 = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps_good.jld2"))
-erps_p2 = EegFun.read_data(EegFun.example_path("data/julia/erps/example2_erps_good.jld2"))
-erps_p3 = EegFun.read_data(EegFun.example_path("data/julia/erps/example3_erps_good.jld2"))
+erps_p1 = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps_final.jld2"))
+erps_p2 = EegFun.read_data(EegFun.example_path("data/julia/erps/example2_erps_final.jld2"))
+erps_p3 = EegFun.read_data(EegFun.example_path("data/julia/erps/example3_erps_final.jld2"))
 
 # Flatten into a single list — one ErpData per participant per condition
 all_erps = vcat(erps_p1, erps_p2, erps_p3)
@@ -50,13 +50,13 @@ EegFun.plot_erp(grand_avgs, condition_selection = EegFun.conditions([1]), channe
 # BATCH GRAND AVERAGE (FROM DISK)
 #######################################################################
 
-# Averages all JLD2 files whose name contains "erps_good" in the given directory.
-# Saves the result to tutorials/output/grand_average_erps_good.jld2
-EegFun.grand_average("erps_good", input_dir  = EegFun.example_path("data/julia/erps/"), output_dir = DEMO_OUTPUT)
+# Averages all JLD2 files whose name contains "erps_final" in the given directory.
+# Saves the result to tutorials/output/grand_average_erps_final.jld2
+EegFun.grand_average("erps_final", input_dir  = EegFun.example_path("data/julia/erps/"), output_dir = DEMO_OUTPUT)
 
 # With participant and condition filtering
 EegFun.grand_average(
-    "erps_good",
+    "erps_final",
     input_dir = EegFun.example_path("data/julia/erps/"),
     participant_selection = EegFun.participants(1:10),
     condition_selection = EegFun.conditions([1, 2]),
@@ -68,5 +68,5 @@ EegFun.grand_average(
 # LOAD AND PLOT BATCH RESULT
 #######################################################################
 
-ga = EegFun.read_data(joinpath(DEMO_OUTPUT, "grand_average_erps_good.jld2"))
+ga = EegFun.read_data(joinpath(DEMO_OUTPUT, "grand_average_erps_final.jld2"))
 EegFun.plot_erp(ga, channel_selection = EegFun.channels([:Cz, :Pz]))

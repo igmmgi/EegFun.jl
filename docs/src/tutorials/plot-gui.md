@@ -125,10 +125,10 @@ Instead of a single filename, type a **filename pattern** into the file box. Eeg
 
 ```text
 # Example: type this into the file box
-erps_good
+erps_final
 ```
 
-This matches any file containing `erps_good` in the directory (e.g. `01_erps_good.jld2`, `02_erps_good.jld2`, …).
+This matches any file containing `erps_final` in the directory (e.g. `01_erps_final.jld2`, `02_erps_final.jld2`, …).
 
 ### Filtering by participant
 

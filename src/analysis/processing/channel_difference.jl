@@ -163,7 +163,7 @@ function calculate_eog_channels!(dat::EegData, eog_cfg::Dict)
 end
 
 """
-    detect_eog_signals!(dat::EegData, eog_cfg::EogConfig)
+    detect_eog_onsets!(dat::EegData, eog_cfg::EogConfig)
 
 Detect EOG onsets for both vertical and horizontal EOG channels based on configuration.
 
@@ -179,10 +179,10 @@ eog_cfg = EogConfig(
     vEOG_channels = [["Fp1"], ["Fp2"], ["vEOG"]],
     hEOG_channels = [["F9"], ["F10"], ["hEOG"]]
 )
-detect_eog_signals!(dat, eog_cfg)
+detect_eog_onsets!(dat, eog_cfg)
 ```
 """
-function detect_eog_signals!(dat::EegData, eog_cfg::EogConfig)
+function detect_eog_onsets!(dat::EegData, eog_cfg::EogConfig)
     # Detect vertical EOG onsets
     vEOG_cfg = eog_cfg.vEOG_channels
     detect_eog_onsets!(dat, eog_cfg.vEOG_criterion, Symbol(vEOG_cfg[3][1]), Symbol("is_" * vEOG_cfg[3][1]))

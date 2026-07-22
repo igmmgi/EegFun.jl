@@ -17,7 +17,7 @@ using AnovaFun
 # measurements, and saves results to a CSV file.
 
 input_dir = EegFun.example_path("data/julia/erps")
-file_pattern = "erps_good"
+file_pattern = "erps_final"
 
 # Mean amplitude in the P300 window
 mean_amp = EegFun.erp_measurements(
@@ -64,7 +64,7 @@ mean_amp.data  # DataFrame with: participant, condition, channel, measurement
 #######################################################################
 
 # GUI for exploring measurements interactively before batch extraction
-dat = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps_good.jld2"))
+dat = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps_final.jld2"))
 EegFun.plot_erp_measurement_gui(dat)     # all conditions
 # EegFun.plot_erp_measurement_gui(dat[1]) # first condition only
 

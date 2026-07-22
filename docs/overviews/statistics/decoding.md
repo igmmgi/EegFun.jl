@@ -30,7 +30,7 @@ Track when discriminative information emerges, peaks, and decays across the tria
 
 ```julia
 participant_epochs = prepare_decoding(
-    "epochs_good",
+    "epochs_final",
     condition_selection = conditions([1, 2]),
     sample_selection = samples((-0.2, 1.5))
 )

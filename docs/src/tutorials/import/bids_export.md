@@ -80,14 +80,14 @@ Pipeline output files are automatically renamed to BIDS naming conventions:
 
 | Pipeline Suffix | BIDS Label |
 |-----------------|------------|
-| `_continuous_original` | `desc-continuousOriginal` |
-| `_continuous_cleaned` | `desc-continuousCleaned` |
-| `_epochs_original` | `desc-epochsOriginal` |
-| `_epochs_cleaned` | `desc-epochsCleaned` |
-| `_epochs_good` | `desc-epochsGood` |
-| `_erps_original` | `desc-erpsOriginal` |
-| `_erps_cleaned` | `desc-erpsCleaned` |
-| `_erps_good` | `desc-erpsGood` |
+| `_continuous_raw` | `desc-continuousOriginal` |
+| `_continuous_corrected` | `desc-continuousCleaned` |
+| `_epochs_uncorrected` | `desc-epochsUncorrected` |
+| `_epochs_unrejected` | `desc-epochsUnrejected` |
+| `_epochs_final` | `desc-epochsFinal` |
+| `_erps_uncorrected` | `desc-erpsOriginal` |
+| `_erps_unrejected` | `desc-erpsCleaned` |
+| `_erps_final` | `desc-erpsGood` |
 | `_ica` | `desc-ica` |
 | `_artifact_info` | `desc-artifactInfo` |
 
@@ -131,7 +131,7 @@ bids_dataset/
         ├── dataset_description.json
         └── sub-01/
             └── eeg/
-                ├── sub-01_task-posner_desc-epochsGood_eeg.jld2
+                ├── sub-01_task-posner_desc-epochsFinal_eeg.jld2
                 ├── sub-01_task-posner_desc-erpsGood_eeg.jld2
                 └── ...
 ```

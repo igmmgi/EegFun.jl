@@ -21,7 +21,7 @@ function apply_analysis_settings!(dat::EegData, ica::InfoIca, settings::Analysis
 
     # ICA component removal if selected
     if !isempty(settings.removed_ica_components)
-        remove_ica_components!(dat, ica, component_selection = components(settings.removed_ica_components))
+        subtract_ica_components!(dat, ica, component_selection = components(settings.removed_ica_components))
     end
 
     return nothing

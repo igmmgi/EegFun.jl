@@ -382,7 +382,7 @@ Loads `.jld2` files containing `EpochData` (one or more conditions per file),
 runs `tf_morlet` on each condition, and saves the results as `Vector{TimeFreqData}`.
 
 # Arguments
-- `file_pattern::String`: Pattern to match files (e.g., "epochs", "epochs_cleaned")
+- `file_pattern::String`: Pattern to match files (e.g., "epochs", "epochs_unrejected")
 - `input_dir::String`: Input directory containing JLD2 files (default: current directory)
 - `output_dir::Union{String, Nothing}`: Output directory (default: creates subdirectory)
 - `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
@@ -392,10 +392,10 @@ runs `tf_morlet` on each condition, and saves the results as `Vector{TimeFreqDat
 # Examples
 ```julia
 # Run Morlet wavelet TF on all epoch files
-tf_morlet("epochs_cleaned"; cycles=7)
+tf_morlet("epochs_unrejected"; cycles=7)
 
 # Specific participants, custom frequencies
-tf_morlet("epochs_cleaned";
+tf_morlet("epochs_unrejected";
           participant_selection=participants([1, 2, 3]),
           frequencies=logrange(2, 40, length=30),
           cycles=(3, 10))

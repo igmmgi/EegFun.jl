@@ -16,25 +16,25 @@ using DataFrames
                 EegFun.create_test_erp_data(participant = participant, condition = 4),
             ]
 
-            file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
+            file_path = joinpath(test_dir, "$(participant)_erps_unrejected.jld2")
             jldsave(file_path; data = erps)
         end
 
         output_dir = joinpath(test_dir, "averages")
 
         # Test basic average creation
-        result = EegFun.condition_average("erps_cleaned", [[1, 2], [3, 4]], input_dir = test_dir, output_dir = output_dir)
+        result = EegFun.condition_average("erps_unrejected", [[1, 2], [3, 4]], input_dir = test_dir, output_dir = output_dir)
 
         # Verify output files were created
         @test isdir(output_dir)
         output_files = readdir(output_dir)
         @test length(output_files) >= 3
-        @test "1_erps_cleaned.jld2" in output_files
-        @test "2_erps_cleaned.jld2" in output_files
-        @test "3_erps_cleaned.jld2" in output_files
+        @test "1_erps_unrejected.jld2" in output_files
+        @test "2_erps_unrejected.jld2" in output_files
+        @test "3_erps_unrejected.jld2" in output_files
 
         # Load and verify one output file
-        output_file = joinpath(output_dir, "1_erps_cleaned.jld2")
+        output_file = joinpath(output_dir, "1_erps_unrejected.jld2")
         @test isfile(output_file)
 
         averages = load(output_file, "data")
@@ -54,7 +54,7 @@ using DataFrames
         output_dir = joinpath(test_dir, "averages_single")
 
         result = EegFun.condition_average(
-            "erps_cleaned",
+            "erps_unrejected",
             [[1, 2]],
             input_dir = test_dir,
             participant_selection = EegFun.participants(2),
@@ -63,7 +63,7 @@ using DataFrames
 
         @test isdir(output_dir)
         output_files = readdir(output_dir)
-        @test "2_erps_cleaned.jld2" in output_files
+        @test "2_erps_unrejected.jld2" in output_files
         @test length(output_files) >= 1
     end
 
@@ -75,13 +75,13 @@ using DataFrames
             # Missing conditions 3 and 4
         ]
 
-        file_path = joinpath(test_dir, "99_erps_cleaned.jld2")
+        file_path = joinpath(test_dir, "99_erps_unrejected.jld2")
         jldsave(file_path; data = erps)
 
         output_dir = joinpath(test_dir, "averages_missing")
 
         result = EegFun.condition_average(
-            "erps_cleaned",
+            "erps_unrejected",
             [[1, 2], [3, 4]],
             input_dir = test_dir,
             participant_selection = EegFun.participants(99),
@@ -91,16 +91,16 @@ using DataFrames
         # Should still create file but only with available groups
         @test isdir(output_dir)
         output_files = readdir(output_dir)
-        @test "99_erps_cleaned.jld2" in output_files
+        @test "99_erps_unrejected.jld2" in output_files
         @test length(output_files) >= 1
 
-        averages = load(joinpath(output_dir, "99_erps_cleaned.jld2"), "data")
+        averages = load(joinpath(output_dir, "99_erps_unrejected.jld2"), "data")
         @test length(averages) == 1  # Only one average wave (1, 2)
     end
 
     @testset "Error handling" begin
         @testset "Invalid input directory" begin
-            @test_throws Exception EegFun.condition_average("erps_cleaned", [[1, 2]], input_dir = "/nonexistent/dir")
+            @test_throws Exception EegFun.condition_average("erps_unrejected", [[1, 2]], input_dir = "/nonexistent/dir")
         end
 
         @testset "No matching files" begin
@@ -111,7 +111,7 @@ using DataFrames
         end
 
         @testset "Empty condition groups" begin
-            @test_throws Exception EegFun.condition_average("erps_cleaned", Vector{Int}[], input_dir = test_dir)
+            @test_throws Exception EegFun.condition_average("erps_unrejected", Vector{Int}[], input_dir = test_dir)
         end
     end
 
@@ -119,16 +119,16 @@ using DataFrames
         @testset "Custom output directory" begin
             custom_dir = joinpath(test_dir, "custom_avg_output")
 
-            result = EegFun.condition_average("erps_cleaned", [[1, 2]], input_dir = test_dir, output_dir = custom_dir)
+            result = EegFun.condition_average("erps_unrejected", [[1, 2]], input_dir = test_dir, output_dir = custom_dir)
 
             @test isdir(custom_dir)
             @test length(readdir(custom_dir)) >= 3
         end
 
         @testset "Auto-generated output directory" begin
-            result = EegFun.condition_average("erps_cleaned", [[1, 2]], input_dir = test_dir)
+            result = EegFun.condition_average("erps_unrejected", [[1, 2]], input_dir = test_dir)
 
-            expected_dir = joinpath(test_dir, "averages_erps_cleaned_1-2")
+            expected_dir = joinpath(test_dir, "averages_erps_unrejected_1-2")
             @test isdir(expected_dir)
         end
     end
@@ -136,7 +136,7 @@ using DataFrames
     @testset "Logging and return values" begin
         output_dir = joinpath(test_dir, "averages_logging")
 
-        result = EegFun.condition_average("erps_cleaned", [[1, 2]], input_dir = test_dir, output_dir = output_dir)
+        result = EegFun.condition_average("erps_unrejected", [[1, 2]], input_dir = test_dir, output_dir = output_dir)
 
         # Check that log file was created
         log_file = joinpath(output_dir, "condition_average.log")

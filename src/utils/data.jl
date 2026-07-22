@@ -1360,11 +1360,11 @@ samples_not(:is_bad)                    # Rows where :is_bad is false
 samples_or_not([:is_extreme, :is_bad])  # Rows where NO flag is true
 ```
 """
-samples_or(columns::Vector{Symbol}) = x -> any(x[!, col] for col in columns)
-samples_and(columns::Vector{Symbol}) = x -> all(x[!, col] for col in columns)
+samples_or(columns::Vector{Symbol}) = x -> isempty(columns) ? fill(false, nrow(x)) : reduce((a,b)->a.|b, (x[!, col] for col in columns))
+samples_and(columns::Vector{Symbol}) = x -> isempty(columns) ? fill(true, nrow(x)) : reduce((a,b)->a.&b, (x[!, col] for col in columns))
 samples_not(column::Symbol) = x -> .!(x[!, column])
-samples_or_not(columns::Vector{Symbol}) = x -> .!(any(x[!, col] for col in columns))
-samples_and_not(columns::Vector{Symbol}) = x -> .!(all(x[!, col] for col in columns))
+samples_or_not(columns::Vector{Symbol}) = x -> isempty(columns) ? fill(true, nrow(x)) : .!(reduce((a,b)->a.|b, (x[!, col] for col in columns)))
+samples_and_not(columns::Vector{Symbol}) = x -> isempty(columns) ? fill(true, nrow(x)) : .!(reduce((a,b)->a.&b, (x[!, col] for col in columns)))
 
 # Helper functions for time interval selection (Interval type)
 # These return Interval values (tuples, ranges, or nothing), not predicates

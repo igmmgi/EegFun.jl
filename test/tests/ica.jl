@@ -96,32 +96,32 @@ using LinearAlgebra
         dat = create_synthetic_continuous()
         ica_res = EegFun.run_ica(dat; n_components = 3)
         # Non-mutating removal
-        cleaned_df, ica_updated = EegFun.remove_ica_components(dat.data, ica_res; component_selection = EegFun.components([1]))
+        cleaned_df, ica_updated = EegFun.subtract_ica_components(dat.data, ica_res; component_selection = EegFun.components([1]))
         @test !isempty(ica_updated.removed_activations)
         @test cleaned_df isa DataFrame
         # Restore non-mutating
-        restored_df, ica_restored = EegFun.restore_ica_components(cleaned_df, ica_updated; component_selection = EegFun.components([1]))
+        restored_df, ica_restored = EegFun.add_ica_components(cleaned_df, ica_updated; component_selection = EegFun.components([1]))
         @test isempty(ica_restored.removed_activations)
 
         # Mutating on ContinuousData
         dat2 = copy(dat)
         ica2 = copy(ica_res)
-        EegFun.remove_ica_components!(dat2, ica2; component_selection = EegFun.components([1, 2]))
+        EegFun.subtract_ica_components!(dat2, ica2; component_selection = EegFun.components([1, 2]))
         @test length(keys(ica2.removed_activations)) == 2
-        EegFun.restore_ica_components!(dat2, ica2; component_selection = EegFun.components([1]))
+        EegFun.add_ica_components!(dat2, ica2; component_selection = EegFun.components([1]))
         @test length(keys(ica2.removed_activations)) == 1
 
         # Invalid component index (no-op when selection yields no components)
         before = length(keys(ica2.removed_activations))
-        EegFun.remove_ica_components!(dat2, ica2; component_selection = EegFun.components([999]))
+        EegFun.subtract_ica_components!(dat2, ica2; component_selection = EegFun.components([999]))
         @test length(keys(ica2.removed_activations)) == before
-        EegFun.restore_ica_components!(dat2.data, ica2; component_selection = EegFun.components([999]))
+        EegFun.add_ica_components!(dat2.data, ica2; component_selection = EegFun.components([999]))
         @test length(keys(ica2.removed_activations)) == before
 
         # Restoring a valid component that was not removed should throw
         dat3 = create_synthetic_continuous()
         ica3 = EegFun.run_ica(dat3; n_components = 3)
-        @test_throws ArgumentError EegFun.restore_ica_components!(dat3.data, ica3; component_selection = EegFun.components([1]))
+        @test_throws ArgumentError EegFun.add_ica_components!(dat3.data, ica3; component_selection = EegFun.components([1]))
 
         # Roundtrip (mutating): remove then restore yields original data
         dat4 = create_synthetic_continuous()
@@ -129,8 +129,8 @@ using LinearAlgebra
         nfull = EegFun.n_channels(dat4)
         ica4 = EegFun.run_ica(dat4; n_components = nfull)
         orig_ch = select(copy(dat4.data, copycols = true), dat4.layout.data.label)
-        EegFun.remove_ica_components!(dat4, ica4; component_selection = EegFun.components([1, 2]))
-        EegFun.restore_ica_components!(dat4, ica4; component_selection = EegFun.components([1, 2]))
+        EegFun.subtract_ica_components!(dat4, ica4; component_selection = EegFun.components([1, 2]))
+        EegFun.add_ica_components!(dat4, ica4; component_selection = EegFun.components([1, 2]))
         roundtrip_ch = select(dat4.data, dat4.layout.data.label)
         @test all(isapprox.(Matrix(roundtrip_ch), Matrix(orig_ch); rtol = 1e-6, atol = 1e-8))
 

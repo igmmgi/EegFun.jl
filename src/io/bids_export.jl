@@ -411,14 +411,14 @@ end
 
 # Mapping from pipeline file suffixes to BIDS desc- labels
 const _BIDS_DERIVATIVE_SUFFIXES = OrderedDict(
-    "_continuous_original" => "continuousOriginal",
-    "_continuous_cleaned"  => "continuousCleaned",
-    "_epochs_original"     => "epochsOriginal",
-    "_epochs_cleaned"      => "epochsCleaned",
-    "_epochs_good"         => "epochsGood",
-    "_erps_original"       => "erpsOriginal",
-    "_erps_cleaned"        => "erpsCleaned",
-    "_erps_good"           => "erpsGood",
+    "_continuous_raw" => "continuousOriginal",
+    "_continuous_corrected"  => "continuousCleaned",
+    "_epochs_uncorrected"     => "epochsUncorrected",
+    "_epochs_unrejected"      => "epochsUnrejected",
+    "_epochs_final"         => "epochsFinal",
+    "_erps_uncorrected"       => "erpsOriginal",
+    "_erps_unrejected"        => "erpsCleaned",
+    "_erps_final"           => "erpsGood",
     "_ica"                 => "ica",
     "_artifact_info"       => "artifactInfo",
 )

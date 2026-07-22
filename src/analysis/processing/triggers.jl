@@ -435,7 +435,7 @@ was active seamlessly at `time == 0.0`.
 
 # Examples
 ```julia
-info = trigger_info(epochs_good)
+info = trigger_info(epochs_final)
 # Output example: (sequence = [101, 114, 239, 201], t0 = 101)
 ```
 """
@@ -478,7 +478,7 @@ end
     trigger_info(file_pattern::String; input_dir::String = pwd(), participant_selection = participants())
 
 Run `trigger_info` across all `.jld2` files matching the `file_pattern`. 
-This allows you to either pass a direct filename or a generic batch string like `"epochs_good"`.
+This allows you to either pass a direct filename or a generic batch string like `"epochs_final"`.
 Returns a merged dictionary of all unique trigger sequences across the entire experiment.
 """
 function trigger_info(file_pattern::String; input_dir::String = pwd(), participant_selection::Function = participants())

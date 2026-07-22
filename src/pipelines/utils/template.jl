@@ -108,7 +108,7 @@ function _generate_setup_section()
         
         # Find and load layout file
         layout_file = find_file(cfg["files"]["input"]["layout_file"], joinpath(@__DIR__, "..", "..", "data", "layouts"))
-        isnothing(layout_file) && @minimal_error "Layout file not found: \$layout_name"
+        isnothing(layout_file) && @minimal_error "Layout file not found: \$(cfg["files"]["input"]["layout_file"])"
         layout = read_layout(layout_file)
         
         # Check if requested output directory exists and if not, create it
@@ -118,9 +118,11 @@ function _generate_setup_section()
         # Print config to output directory
         print_config(cfg, joinpath(output_directory, "config.toml"))
         
-        # Layout coordinates and calculation of channel neighbours (2D)
-        get_neighbours_xy!(layout, cfg["preprocess"]["layout"]["neighbour_criterion"])
-        print_layout_neighbours(layout, joinpath(output_directory, "neighbours_xy.toml"))
+        # Layout coordinates and calculation of channel neighbours (2D/3D)
+        polar_to_cartesian_xy!(layout)
+        polar_to_cartesian_xyz!(layout)
+        get_neighbours_xy!(layout, preprocess_cfg.neighbour_criterion)
+        print_layout_neighbours(layout, joinpath(output_directory, "neighbours.toml"))
         
         # ============================================================================
         # CUSTOM PREPROCESSING PIPELINE STARTS HERE

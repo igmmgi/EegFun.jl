@@ -105,11 +105,11 @@ channel_noise_comps, channel_noise_comps_metrics_df = EegFun.identify_spatial_ku
 # Get all identified component artifacts
 all_comps = EegFun.get_all_ica_components(component_artifacts)
 dat_ica_removed, ica_result_updated =
-    EegFun.remove_ica_components(dat, ica_result_infomax_extended, component_selection = EegFun.components(all_comps))
+    EegFun.subtract_ica_components(dat, ica_result_infomax_extended, component_selection = EegFun.components(all_comps))
 
 # Reconstruct for sanity check (ie., add components back to data)
 dat_ica_reconstructed, ica_result_restored =
-    EegFun.restore_ica_components(dat_ica_removed, ica_result_updated, component_selection = EegFun.components(all_comps))
+    EegFun.add_ica_components(dat_ica_removed, ica_result_updated, component_selection = EegFun.components(all_comps))
 
 # Original should = reconstructed
 EegFun.channel_data(dat) ≈ EegFun.channel_data(dat_ica_reconstructed)

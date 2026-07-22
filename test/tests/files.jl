@@ -6,14 +6,14 @@ using Test
 
     # Create test files for various scenarios
     test_files = [
-        "1_epochs_cleaned.jld2",
-        "2_epochs_cleaned.jld2",
-        "3_epochs_cleaned.jld2",
-        "1_erps_cleaned.jld2",
-        "2_erps_cleaned.jld2",
-        "Flank_C_3_epochs_cleaned.jld2",
-        "Flank_C_4_epochs_cleaned.jld2",
-        "Flank_C_5_epochs_cleaned.jld2",
+        "1_epochs_unrejected.jld2",
+        "2_epochs_unrejected.jld2",
+        "3_epochs_unrejected.jld2",
+        "1_erps_unrejected.jld2",
+        "2_erps_unrejected.jld2",
+        "Flank_C_3_epochs_unrejected.jld2",
+        "Flank_C_4_epochs_unrejected.jld2",
+        "Flank_C_5_epochs_unrejected.jld2",
         "test_file.csv",
         "another_file.txt",
     ]
@@ -37,7 +37,7 @@ using Test
 
     @testset "check_files_exist with Vector{String}" begin
         # Test with existing files
-        existing_files = [joinpath(test_dir, "1_epochs_cleaned.jld2"), joinpath(test_dir, "2_epochs_cleaned.jld2")]
+        existing_files = [joinpath(test_dir, "1_epochs_unrejected.jld2"), joinpath(test_dir, "2_epochs_unrejected.jld2")]
         result = EegFun.check_files_exist(existing_files)
         @test result == true
 
@@ -47,7 +47,7 @@ using Test
         @test result == false
 
         # Test with mixed existing and missing files
-        mixed_files = [joinpath(test_dir, "1_epochs_cleaned.jld2"), joinpath(test_dir, "nonexistent.jld2")]
+        mixed_files = [joinpath(test_dir, "1_epochs_unrejected.jld2"), joinpath(test_dir, "nonexistent.jld2")]
         result = EegFun.check_files_exist(mixed_files)
         @test result == false
     end
@@ -55,13 +55,13 @@ using Test
 
     @testset "get_files with String pattern" begin
         # Test with regex pattern
-        files = EegFun.get_files(test_dir, ".*epochs_cleaned.*")
+        files = EegFun.get_files(test_dir, ".*epochs_unrejected.*")
         @test length(files) == 6  # 3 numbered files + 3 Flank files
-        @test all(contains.(files, "epochs_cleaned"))
+        @test all(contains.(files, "epochs_unrejected"))
 
         # Test with specific pattern
         files = EegFun.get_files(test_dir, "1_.*")
-        @test length(files) == 2  # 1_epochs_cleaned.jld2 and 1_erps_cleaned.jld2
+        @test length(files) == 2  # 1_epochs_unrejected.jld2 and 1_erps_unrejected.jld2
         @test all(contains.(files, "1_"))
 
         # Test with no matches
@@ -71,7 +71,7 @@ using Test
 
     @testset "get_files with Vector{String}" begin
         # Test with specific filenames
-        specific_files = ["1_epochs_cleaned.jld2", "2_epochs_cleaned.jld2"]
+        specific_files = ["1_epochs_unrejected.jld2", "2_epochs_unrejected.jld2"]
         files = EegFun.get_files(test_dir, specific_files)
         @test length(files) == 2
         @test all(isfile.(files))

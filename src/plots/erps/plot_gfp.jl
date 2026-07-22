@@ -90,8 +90,8 @@ to discover and plot all matching files (one plot per file).
 
 # Examples
 ```julia
-plot_gfp("erps_good.jld2")
-plot_gfp("erps_good")
+plot_gfp("erps_final.jld2")
+plot_gfp("erps_final")
 ```
 """
 function plot_gfp(filepath::String; input_dir::String = pwd(), participant_selection::Function = participants(), kwargs...)

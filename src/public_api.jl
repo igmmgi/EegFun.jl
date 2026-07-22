@@ -252,7 +252,7 @@ public compute_csd!
 public calculate_eog_channels!
 public combine_artifact_components
 public detect_eog_onsets!
-public detect_eog_signals!
+public detect_eog_onsets!
 public get_all_ica_components
 public get_eog_channels
 public get_selected_components
@@ -264,8 +264,8 @@ public identify_spatial_kurtosis_components
 public infomax_extended_ica
 public infomax_ica
 public partition_channels_by_eog_correlation
-public remove_ica_components
-public restore_ica_components
+public subtract_ica_components
+public add_ica_components
 public run_ica
 public summarize_ica_components
 

@@ -65,7 +65,7 @@ cjp = EegFun.channel_joint_probability(dat)
 ```
 
 > [!TIP]
-> Blink artefacts can inflate variance and joint probability for frontal channels (e.g. Fp1, Fp2), causing them to be falsely identified as bad. If you have already detected EOG onsets with `detect_eog_signals!`, you can mark an interval around each onset and exclude those samples when computing channel metrics:
+> Blink artefacts can inflate variance and joint probability for frontal channels (e.g. Fp1, Fp2), causing them to be falsely identified as bad. If you have already detected EOG onsets with `detect_eog_onsets!`, you can mark an interval around each onset and exclude those samples when computing channel metrics:
 >
 > ```julia
 > # Mark a −100 to +300 ms interval around each vEOG onset

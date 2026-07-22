@@ -55,7 +55,7 @@ using EegFun
 #######################################################################
 # LOAD ERP DATA
 #######################################################################
-dat = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps_good.jld2"))
+dat = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps_final.jld2"))
 
 #######################################################################
 # GLOBAL FIELD POWER (GFP)

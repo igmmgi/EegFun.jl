@@ -105,7 +105,7 @@ end
         @testset "Setup test files" begin
             for participant in [1, 2]
                 erps = EegFun.create_test_batch_erp_data(n_conditions = 2, n_channels = 7)
-                filename = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
+                filename = joinpath(test_dir, "$(participant)_erps_unrejected.jld2")
                 jldsave(filename; data = erps)
                 @test isfile(filename)
             end
@@ -116,7 +116,7 @@ end
 
             # Average two channel groups
             result = EegFun.channel_average(
-                "erps_cleaned",
+                "erps_unrejected",
                 [EegFun.channels([:Ch1, :Ch2]), EegFun.channels([:Ch3, :Ch4])],
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -128,11 +128,11 @@ end
             @test isdir(output_dir)
 
             # Check that averaged files exist
-            @test isfile(joinpath(output_dir, "1_erps_cleaned.jld2"))
-            @test isfile(joinpath(output_dir, "2_erps_cleaned.jld2"))
+            @test isfile(joinpath(output_dir, "1_erps_unrejected.jld2"))
+            @test isfile(joinpath(output_dir, "2_erps_unrejected.jld2"))
 
             # Load and verify averaged data
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
             @test length(erps) == 2  # 2 conditions
             @test erps[1] isa EegFun.ErpData
 
@@ -152,7 +152,7 @@ end
             output_dir = joinpath(test_dir, "combined_custom_labels")
 
             result = EegFun.channel_average(
-                "erps_cleaned",
+                "erps_unrejected",
                 [EegFun.channels([:Ch1, :Ch2]), EegFun.channels([:Ch3, :Ch4])],
                 output_labels = [:Group1, :Group2],
                 input_dir = test_dir,
@@ -161,7 +161,7 @@ end
 
             @test result.success == 2
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
             @test hasproperty(erps[1].data, :Group1)
             @test hasproperty(erps[1].data, :Group2)
             @test !hasproperty(erps[1].data, :avg_1)
@@ -172,7 +172,7 @@ end
 
             # With reduce=true, only averaged channels should remain
             result = EegFun.channel_average(
-                "erps_cleaned",
+                "erps_unrejected",
                 [EegFun.channels([:Ch1, :Ch2]), EegFun.channels([:Ch3, :Ch4])],
                 output_labels = [:Group1, :Group2],
                 input_dir = test_dir,
@@ -182,7 +182,7 @@ end
 
             @test result.success == 2
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
 
             # Should have metadata + only averaged channels
             @test hasproperty(erps[1].data, :time)
@@ -201,7 +201,7 @@ end
             output_dir = joinpath(test_dir, "combined_participant")
 
             result = EegFun.channel_average(
-                "erps_cleaned",
+                "erps_unrejected",
                 [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -210,15 +210,15 @@ end
 
             @test result.success == 1
             @test result.errors == 0
-            @test isfile(joinpath(output_dir, "1_erps_cleaned.jld2"))
-            @test !isfile(joinpath(output_dir, "2_erps_cleaned.jld2"))
+            @test isfile(joinpath(output_dir, "1_erps_unrejected.jld2"))
+            @test !isfile(joinpath(output_dir, "2_erps_unrejected.jld2"))
         end
 
         @testset "Average multiple participants" begin
             output_dir = joinpath(test_dir, "combined_multi_participants")
 
             result = EegFun.channel_average(
-                "erps_cleaned",
+                "erps_unrejected",
                 [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -227,15 +227,15 @@ end
 
             @test result.success == 2
             @test result.errors == 0
-            @test isfile(joinpath(output_dir, "1_erps_cleaned.jld2"))
-            @test isfile(joinpath(output_dir, "2_erps_cleaned.jld2"))
+            @test isfile(joinpath(output_dir, "1_erps_unrejected.jld2"))
+            @test isfile(joinpath(output_dir, "2_erps_unrejected.jld2"))
         end
 
         @testset "Average specific conditions" begin
             output_dir = joinpath(test_dir, "combined_condition")
 
             result = EegFun.channel_average(
-                "erps_cleaned",
+                "erps_unrejected",
                 [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -245,7 +245,7 @@ end
             @test result.success == 2
 
             # Load and verify only one condition
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
             @test length(erps) == 1
             @test erps[1].data[1, :condition] == 1
         end
@@ -254,7 +254,7 @@ end
             output_dir = joinpath(test_dir, "combined_multi_conditions")
 
             result = EegFun.channel_average(
-                "erps_cleaned",
+                "erps_unrejected",
                 [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -263,17 +263,17 @@ end
 
             @test result.success == 2
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
             @test length(erps) == 2
         end
 
         @testset "Error handling" begin
             # Non-existent directory
-            @test_throws Exception EegFun.channel_average("erps_cleaned", [EegFun.channels([:Ch1, :Ch2])], input_dir = "/nonexistent/path")
+            @test_throws Exception EegFun.channel_average("erps_unrejected", [EegFun.channels([:Ch1, :Ch2])], input_dir = "/nonexistent/path")
 
             # Mismatched output labels
             @test_throws Exception EegFun.channel_average(
-                "erps_cleaned",
+                "erps_unrejected",
                 [EegFun.channels([:Ch1, :Ch2]), EegFun.channels([:Ch3, :Ch4])],
                 output_labels = [:Group1],  # Only 1 label for 2 groups
                 input_dir = test_dir,
@@ -284,7 +284,7 @@ end
             empty_dir = joinpath(test_dir, "empty_match")
             mkpath(empty_dir)
 
-            result = EegFun.channel_average("erps_cleaned", [EegFun.channels([:Ch1, :Ch2])], input_dir = empty_dir)
+            result = EegFun.channel_average("erps_unrejected", [EegFun.channels([:Ch1, :Ch2])], input_dir = empty_dir)
 
             @test isnothing(result)
         end
@@ -292,7 +292,7 @@ end
         @testset "Logging" begin
             output_dir = joinpath(test_dir, "combined_with_log")
 
-            EegFun.channel_average("erps_cleaned", [EegFun.channels([:Ch1, :Ch2])], input_dir = test_dir, output_dir = output_dir)
+            EegFun.channel_average("erps_unrejected", [EegFun.channels([:Ch1, :Ch2])], input_dir = test_dir, output_dir = output_dir)
 
             log_file = joinpath(output_dir, "channel_average.log")
             @test isfile(log_file)
@@ -309,10 +309,10 @@ end
             touch(joinpath(output_dir, "dummy.txt"))
             @test isfile(joinpath(output_dir, "dummy.txt"))
 
-            EegFun.channel_average("erps_cleaned", [EegFun.channels([:Ch1, :Ch2])], input_dir = test_dir, output_dir = output_dir)
+            EegFun.channel_average("erps_unrejected", [EegFun.channels([:Ch1, :Ch2])], input_dir = test_dir, output_dir = output_dir)
 
             @test isfile(joinpath(output_dir, "dummy.txt"))
-            @test isfile(joinpath(output_dir, "1_erps_cleaned.jld2"))
+            @test isfile(joinpath(output_dir, "1_erps_unrejected.jld2"))
         end
 
         @testset "Partial failures" begin
@@ -321,25 +321,25 @@ end
 
             # Create one valid file
             erps = EegFun.create_test_batch_erp_data(n_conditions = 2, n_channels = 7)
-            jldsave(joinpath(partial_dir, "1_erps_cleaned.jld2"); data = erps)
+            jldsave(joinpath(partial_dir, "1_erps_unrejected.jld2"); data = erps)
 
             # Create one malformed file (invalid data type - String instead of Vector{ErpData})
-            jldsave(joinpath(partial_dir, "2_erps_cleaned.jld2"); data = "invalid_data")
+            jldsave(joinpath(partial_dir, "2_erps_unrejected.jld2"); data = "invalid_data")
 
             output_dir = joinpath(test_dir, "combined_partial")
             result =
-                EegFun.channel_average("erps_cleaned", [EegFun.channels([:Ch1, :Ch2])], input_dir = partial_dir, output_dir = output_dir)
+                EegFun.channel_average("erps_unrejected", [EegFun.channels([:Ch1, :Ch2])], input_dir = partial_dir, output_dir = output_dir)
 
             @test result.success == 1
             @test result.errors == 1
-            @test isfile(joinpath(output_dir, "1_erps_cleaned.jld2"))
-            @test !isfile(joinpath(output_dir, "2_erps_cleaned.jld2"))
+            @test isfile(joinpath(output_dir, "1_erps_unrejected.jld2"))
+            @test !isfile(joinpath(output_dir, "2_erps_unrejected.jld2"))
         end
 
         @testset "Return value structure" begin
             output_dir = joinpath(test_dir, "combined_return_check")
 
-            result = EegFun.channel_average("erps_cleaned", [EegFun.channels([:Ch1, :Ch2])], input_dir = test_dir, output_dir = output_dir)
+            result = EegFun.channel_average("erps_unrejected", [EegFun.channels([:Ch1, :Ch2])], input_dir = test_dir, output_dir = output_dir)
 
             @test hasfield(typeof(result), :success)
             @test hasfield(typeof(result), :errors)
@@ -391,19 +391,19 @@ end
             output_dir = joinpath(test_dir, "combined_layout")
 
             # Get original layout info
-            original_erps = load(joinpath(test_dir, "1_erps_cleaned.jld2"), "data")
+            original_erps = load(joinpath(test_dir, "1_erps_unrejected.jld2"), "data")
             original_n_channels = nrow(original_erps[1].layout.data)
 
             # Average without reduce (should append to layout)
             EegFun.channel_average(
-                "erps_cleaned",
+                "erps_unrejected",
                 [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 reduce = false,
             )
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
 
             # Layout should have original channels + 1 averaged
             @test nrow(erps[1].layout.data) == original_n_channels + 1
@@ -417,7 +417,7 @@ end
 
             # Average with reduce (layout should only have averaged channels)
             EegFun.channel_average(
-                "erps_cleaned",
+                "erps_unrejected",
                 [EegFun.channels([:Ch1, :Ch2]), EegFun.channels([:Ch3, :Ch4])],
                 output_labels = [:Group1, :Group2],
                 input_dir = test_dir,
@@ -425,7 +425,7 @@ end
                 reduce = true,
             )
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
 
             # Layout should only have 2 channels
             @test nrow(erps[1].layout.data) == 2
@@ -439,7 +439,7 @@ end
 
             # Average 3 different groups
             result = EegFun.channel_average(
-                "erps_cleaned",
+                "erps_unrejected",
                 [EegFun.channels([:Ch1, :Ch2]), EegFun.channels([:Ch3, :Ch4]), EegFun.channels([:Ch5, :Ch6, :Ch7])],
                 output_labels = [:Group1, :Group2, :Group3],
                 input_dir = test_dir,
@@ -448,7 +448,7 @@ end
 
             @test result.success == 2
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
             @test hasproperty(erps[1].data, :Group1)
             @test hasproperty(erps[1].data, :Group2)
             @test hasproperty(erps[1].data, :Group3)
@@ -462,7 +462,7 @@ end
 
             # Average just one group
             result = EegFun.channel_average(
-                "erps_cleaned",
+                "erps_unrejected",
                 [EegFun.channels([:Ch1, :Ch2])],
                 output_labels = [:Group1],
                 input_dir = test_dir,
@@ -471,7 +471,7 @@ end
 
             @test result.success == 2
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
             @test hasproperty(erps[1].data, :Group1)
         end
 
@@ -480,7 +480,7 @@ end
 
             # Average with participant AND condition filters
             result = EegFun.channel_average(
-                "erps_cleaned",
+                "erps_unrejected",
                 [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -490,9 +490,9 @@ end
 
             @test result.success == 1
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
             @test length(erps) == 1
-            @test !isfile(joinpath(output_dir, "2_erps_cleaned.jld2"))
+            @test !isfile(joinpath(output_dir, "2_erps_unrejected.jld2"))
         end
 
         @testset "Pattern matching variants" begin
@@ -500,14 +500,14 @@ end
             mkpath(pattern_dir)
 
             erps = EegFun.create_test_batch_erp_data(n_conditions = 2, n_channels = 7)
-            jldsave(joinpath(pattern_dir, "1_erps_original.jld2"); data = erps)
-            jldsave(joinpath(pattern_dir, "2_erps_cleaned.jld2"); data = erps)
+            jldsave(joinpath(pattern_dir, "1_erps_uncorrected.jld2"); data = erps)
+            jldsave(joinpath(pattern_dir, "2_erps_unrejected.jld2"); data = erps)
             jldsave(joinpath(pattern_dir, "3_custom_erps.jld2"); data = erps)
 
-            # Test pattern matching "erps_original"
+            # Test pattern matching "erps_uncorrected"
             output_dir1 = joinpath(test_dir, "combined_original")
             result1 =
-                EegFun.channel_average("erps_original", [EegFun.channels([:Ch1, :Ch2])], input_dir = pattern_dir, output_dir = output_dir1)
+                EegFun.channel_average("erps_uncorrected", [EegFun.channels([:Ch1, :Ch2])], input_dir = pattern_dir, output_dir = output_dir1)
             @test result1.success == 1
 
             # Test pattern matching "erps" (should match all)
@@ -520,15 +520,15 @@ end
             overwrite_dir = joinpath(test_dir, "combined_overwrite")
 
             # First run
-            EegFun.channel_average("erps_cleaned", [EegFun.channels([:Ch1, :Ch2])], input_dir = test_dir, output_dir = overwrite_dir)
+            EegFun.channel_average("erps_unrejected", [EegFun.channels([:Ch1, :Ch2])], input_dir = test_dir, output_dir = overwrite_dir)
 
-            file1 = joinpath(overwrite_dir, "1_erps_cleaned.jld2")
+            file1 = joinpath(overwrite_dir, "1_erps_unrejected.jld2")
             mtime1 = stat(file1).mtime
 
             sleep(0.1)
 
             # Second run (should overwrite)
-            EegFun.channel_average("erps_cleaned", [EegFun.channels([:Ch1, :Ch2])], input_dir = test_dir, output_dir = overwrite_dir)
+            EegFun.channel_average("erps_unrejected", [EegFun.channels([:Ch1, :Ch2])], input_dir = test_dir, output_dir = overwrite_dir)
 
             mtime2 = stat(file1).mtime
             @test mtime2 > mtime1
@@ -539,7 +539,7 @@ end
 
             # Average all channels except Ch5
             result = EegFun.channel_average(
-                "erps_cleaned",
+                "erps_unrejected",
                 [EegFun.channels_not([:Ch5])],
                 output_labels = [:not_Ch5],
                 input_dir = test_dir,
@@ -549,7 +549,7 @@ end
 
             @test result.success == 2
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
             @test hasproperty(erps[1].data, :not_Ch5)
             @test !hasproperty(erps[1].data, :Ch5)
             @test !hasproperty(erps[1].data, :Ch1)  # All original channels removed in reduce mode
@@ -609,7 +609,7 @@ end
 
             # Average just one channel (edge case)
             result = EegFun.channel_average(
-                "erps_cleaned",
+                "erps_unrejected",
                 [EegFun.channels([:Ch5])],
                 output_labels = [:Ch5_avg],
                 input_dir = test_dir,
@@ -618,7 +618,7 @@ end
 
             @test result.success == 2
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
             @test hasproperty(erps[1].data, :Ch5_avg)
 
             # Single channel average should equal the original
@@ -630,7 +630,7 @@ end
 
             # Average ALL channels
             result = EegFun.channel_average(
-                "erps_cleaned",
+                "erps_unrejected",
                 [EegFun.channels()],  # All channels
                 output_labels = [:global_avg],
                 input_dir = test_dir,
@@ -640,14 +640,14 @@ end
 
             @test result.success == 2
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
 
             # Should only have metadata + global_avg
             @test hasproperty(erps[1].data, :global_avg)
             @test !hasproperty(erps[1].data, :Ch1)
 
             # Verify it's the average of all original channels
-            original_erps = load(joinpath(test_dir, "1_erps_cleaned.jld2"), "data")
+            original_erps = load(joinpath(test_dir, "1_erps_unrejected.jld2"), "data")
             all_ch_data = hcat(
                 original_erps[1].data.Ch1,
                 original_erps[1].data.Ch2,
@@ -666,7 +666,7 @@ end
 
             # Same channel in multiple groups
             result = EegFun.channel_average(
-                "erps_cleaned",
+                "erps_unrejected",
                 [EegFun.channels([:Ch1, :Ch2, :Ch5]), EegFun.channels([:Ch5, :Ch6, :Ch7])],
                 output_labels = [:Group1, :Group2],
                 input_dir = test_dir,
@@ -675,7 +675,7 @@ end
 
             @test result.success == 2
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
             @test hasproperty(erps[1].data, :Group1)
             @test hasproperty(erps[1].data, :Group2)
 
@@ -690,12 +690,12 @@ end
             output_dir = joinpath(test_dir, "combined_metadata_preserve")
 
             # Get original metadata
-            original_erps = load(joinpath(test_dir, "1_erps_cleaned.jld2"), "data")
+            original_erps = load(joinpath(test_dir, "1_erps_unrejected.jld2"), "data")
             original_fs = original_erps[1].sample_rate
 
-            EegFun.channel_average("erps_cleaned", [EegFun.channels([:Ch1, :Ch2])], input_dir = test_dir, output_dir = output_dir)
+            EegFun.channel_average("erps_unrejected", [EegFun.channels([:Ch1, :Ch2])], input_dir = test_dir, output_dir = output_dir)
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
 
             # Verify sample rate preserved
             @test erps[1].sample_rate == original_fs
@@ -710,7 +710,7 @@ end
             # Request condition 5 when only 2 exist
             # With predicate-based selection, this results in empty selection but successful processing
             result = EegFun.channel_average(
-                "erps_cleaned",
+                "erps_unrejected",
                 [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -772,14 +772,14 @@ end
             output_dir = joinpath(test_dir, "combined_metadata_cols")
 
             EegFun.channel_average(
-                "erps_cleaned",
+                "erps_unrejected",
                 [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 reduce = false,
             )
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
 
             # Verify metadata columns still exist
             @test hasproperty(erps[1].data, :time)
@@ -792,7 +792,7 @@ end
             output_dir = joinpath(test_dir, "combined_metadata_reduce")
 
             EegFun.channel_average(
-                "erps_cleaned",
+                "erps_unrejected",
                 [EegFun.channels([:Ch1, :Ch2])],
                 output_labels = [:Group1],
                 input_dir = test_dir,
@@ -800,7 +800,7 @@ end
                 reduce = true,
             )
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
+            erps = load(joinpath(output_dir, "1_erps_unrejected.jld2"), "data")
 
             # Metadata should be preserved in reduce mode
             @test hasproperty(erps[1].data, :time)

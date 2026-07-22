@@ -63,14 +63,14 @@ end
                 EegFun.create_test_erp_data(participant = participant, condition = 2),
             ]
 
-            file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
+            file_path = joinpath(test_dir, "$(participant)_erps_unrejected.jld2")
             jldsave(file_path; data = erps)
         end
 
         output_dir = joinpath(test_dir, "rereferenced")
 
         # Test average reference
-        result = EegFun.rereference("erps_cleaned", input_dir = test_dir, reference_selection = :avg, output_dir = output_dir)
+        result = EegFun.rereference("erps_unrejected", input_dir = test_dir, reference_selection = :avg, output_dir = output_dir)
 
         # Verify output files were created
         @test isdir(output_dir)
@@ -78,7 +78,7 @@ end
         @test length(output_files) == 4  # One for each participant
 
         # Load and verify one output file
-        output_file = joinpath(output_dir, "1_erps_cleaned.jld2")
+        output_file = joinpath(output_dir, "1_erps_unrejected.jld2")
         @test isfile(output_file)
 
         rereferenced_erps = load(output_file, "data")
@@ -100,7 +100,7 @@ end
         @testset "Average reference" begin
             output_dir = joinpath(test_dir, "rereferenced_avg")
 
-            result = EegFun.rereference("erps_cleaned", input_dir = test_dir, reference_selection = :avg, output_dir = output_dir)
+            result = EegFun.rereference("erps_unrejected", input_dir = test_dir, reference_selection = :avg, output_dir = output_dir)
 
             @test isdir(output_dir)
             @test length(readdir(output_dir)) == 4
@@ -109,7 +109,7 @@ end
         @testset "Mastoid reference" begin
             output_dir = joinpath(test_dir, "rereferenced_mastoid")
 
-            result = EegFun.rereference("erps_cleaned", input_dir = test_dir, reference_selection = :Ch2, output_dir = output_dir)
+            result = EegFun.rereference("erps_unrejected", input_dir = test_dir, reference_selection = :Ch2, output_dir = output_dir)
 
             # Ch2 reference should work
             @test !isnothing(result)
@@ -120,7 +120,7 @@ end
         @testset "Single channel reference" begin
             output_dir = joinpath(test_dir, "rereferenced_cz")
 
-            result = EegFun.rereference("erps_cleaned", input_dir = test_dir, reference_selection = [:Ch1], output_dir = output_dir)
+            result = EegFun.rereference("erps_unrejected", input_dir = test_dir, reference_selection = [:Ch1], output_dir = output_dir)
 
             @test isdir(output_dir)
             @test length(readdir(output_dir)) == 4
@@ -129,7 +129,7 @@ end
         @testset "Multiple channel reference" begin
             output_dir = joinpath(test_dir, "rereferenced_multiple")
 
-            result = EegFun.rereference("erps_cleaned", input_dir = test_dir, reference_selection = [:Ch1, :Ch2], output_dir = output_dir)
+            result = EegFun.rereference("erps_unrejected", input_dir = test_dir, reference_selection = [:Ch1, :Ch2], output_dir = output_dir)
 
             @test isdir(output_dir)
             @test length(readdir(output_dir)) == 4
@@ -141,20 +141,20 @@ end
         for participant = 1:2
             epochs = EegFun.create_test_epoch_data_vector(conditions = 1:2, n_channels = 3)  # This returns Vector{EpochData}
 
-            file_path = joinpath(test_dir, "$(participant)_epochs_cleaned.jld2")
+            file_path = joinpath(test_dir, "$(participant)_epochs_unrejected.jld2")
             jldsave(file_path; data = epochs)
         end
 
         output_dir = joinpath(test_dir, "rereferenced_epochs")
 
-        result = EegFun.rereference("epochs_cleaned", input_dir = test_dir, reference_selection = :avg, output_dir = output_dir)
+        result = EegFun.rereference("epochs_unrejected", input_dir = test_dir, reference_selection = :avg, output_dir = output_dir)
 
         @test isdir(output_dir)
         output_files = readdir(output_dir)
         @test length(output_files) >= 2  # At least one for each participant
 
         # Load and verify epoch data structure
-        output_file = joinpath(output_dir, "1_epochs_cleaned.jld2")
+        output_file = joinpath(output_dir, "1_epochs_unrejected.jld2")
         rereferenced_epochs = load(output_file, "data")
         @test length(rereferenced_epochs) == 2  # Two conditions
 
@@ -169,7 +169,7 @@ end
 
         # Test participant filtering
         result = EegFun.rereference(
-            "erps_cleaned",
+            "erps_unrejected",
             input_dir = test_dir,
             participant_selection = EegFun.participants([1, 2]),
             reference_selection = :avg,
@@ -183,7 +183,7 @@ end
         # Test condition filtering
         output_dir2 = joinpath(test_dir, "rereferenced_conditions")
         result = EegFun.rereference(
-            "erps_cleaned",
+            "erps_unrejected",
             input_dir = test_dir,
             condition_selection = EegFun.conditions([1]),
             reference_selection = :avg,
@@ -195,7 +195,7 @@ end
         @test length(output_files2) == 4  # All participants, but only condition 1
 
         # Verify only condition 1 was processed
-        output_file = joinpath(output_dir2, "1_erps_cleaned.jld2")
+        output_file = joinpath(output_dir2, "1_erps_unrejected.jld2")
         rereferenced_erps = load(output_file, "data")
         @test length(rereferenced_erps) == 1  # Only condition 1
         @test rereferenced_erps[1].condition == 1
@@ -203,7 +203,7 @@ end
 
     @testset "Error handling" begin
         @testset "Invalid input directory" begin
-            @test_throws Exception EegFun.rereference("erps_cleaned", input_dir = "/nonexistent/dir")
+            @test_throws Exception EegFun.rereference("erps_unrejected", input_dir = "/nonexistent/dir")
         end
 
         @testset "No matching files" begin
@@ -218,13 +218,13 @@ end
 
         @testset "Files with no recognized data variable" begin
             # Create file with unrecognized variable and non-matching participant
-            unrecognized_file = joinpath(test_dir, "999_unrecognized_erps_cleaned.jld2")
+            unrecognized_file = joinpath(test_dir, "999_unrecognized_erps_unrejected.jld2")
             jldsave(unrecognized_file; other_data = "test")
 
             output_dir = joinpath(test_dir, "rereferenced_unrecognized")
 
             result = EegFun.rereference(
-                "erps_cleaned",
+                "erps_unrejected",
                 input_dir = test_dir,
                 participant_selection = EegFun.participants(999),  # This should match the file but fail processing
                 output_dir = output_dir,
@@ -243,17 +243,17 @@ end
             empty_test_dir = mktempdir()
 
             # Create file with empty data
-            empty_file = joinpath(empty_test_dir, "empty_erps_cleaned.jld2")
+            empty_file = joinpath(empty_test_dir, "empty_erps_unrejected.jld2")
             jldsave(empty_file; data = EegFun.ErpData[])
 
             # Create the unrecognized file
-            unrecognized_file = joinpath(empty_test_dir, "999_unrecognized_erps_cleaned.jld2")
+            unrecognized_file = joinpath(empty_test_dir, "999_unrecognized_erps_unrejected.jld2")
             jldsave(unrecognized_file; other_data = "test")
 
             output_dir = joinpath(empty_test_dir, "rereferenced_empty")
 
             result = EegFun.rereference(
-                "erps_cleaned",
+                "erps_unrejected",
                 input_dir = empty_test_dir,
                 # Process all files to get both empty and unrecognized
                 output_dir = output_dir,
@@ -270,7 +270,7 @@ end
 
             # This should handle invalid channels gracefully in batch processing
             result =
-                EegFun.rereference("erps_cleaned", input_dir = test_dir, reference_selection = [:InvalidChannel], output_dir = output_dir)
+                EegFun.rereference("erps_unrejected", input_dir = test_dir, reference_selection = [:InvalidChannel], output_dir = output_dir)
 
             # Should have errors due to invalid channels
             @test !isnothing(result)
@@ -282,7 +282,7 @@ end
         output_dir = joinpath(test_dir, "rereferenced_integrity")
 
         result = EegFun.rereference(
-            "erps_cleaned",
+            "erps_unrejected",
             input_dir = test_dir,
             participant_selection = EegFun.participants(1),
             condition_selection = EegFun.conditions([1]),
@@ -291,11 +291,11 @@ end
         )
 
         # Load original and rereferenced data
-        original_file = joinpath(test_dir, "1_erps_cleaned.jld2")
+        original_file = joinpath(test_dir, "1_erps_unrejected.jld2")
         original_erps = load(original_file, "data")
         original_erp = original_erps[1]  # Condition 1
 
-        rereferenced_file = joinpath(output_dir, "1_erps_cleaned.jld2")
+        rereferenced_file = joinpath(output_dir, "1_erps_unrejected.jld2")
         rereferenced_erps = load(rereferenced_file, "data")
         rereferenced_erp = rereferenced_erps[1]  # Condition 1
 
@@ -323,7 +323,7 @@ end
         @testset "Custom output directory" begin
             custom_dir = joinpath(test_dir, "custom_rereferenced")
 
-            result = EegFun.rereference("erps_cleaned", input_dir = test_dir, reference_selection = :avg, output_dir = custom_dir)
+            result = EegFun.rereference("erps_unrejected", input_dir = test_dir, reference_selection = :avg, output_dir = custom_dir)
 
             @test isdir(custom_dir)
             # Should have 3 output files (participants 1-3) + 1 log file = 4 files
@@ -332,10 +332,10 @@ end
         end
 
         @testset "Auto-generated output directory" begin
-            result = EegFun.rereference("erps_cleaned", input_dir = test_dir, reference_selection = :avg)
+            result = EegFun.rereference("erps_unrejected", input_dir = test_dir, reference_selection = :avg)
 
             # Should create directory with pattern-based name
-            expected_dir = joinpath(test_dir, "rereferenced_erps_cleaned_avg")
+            expected_dir = joinpath(test_dir, "rereferenced_erps_unrejected_avg")
             @test isdir(expected_dir)
         end
     end
@@ -343,7 +343,7 @@ end
     @testset "Logging and return values" begin
         output_dir = joinpath(test_dir, "rereferenced_logging")
 
-        result = EegFun.rereference("erps_cleaned", input_dir = test_dir, reference_selection = :avg, output_dir = output_dir)
+        result = EegFun.rereference("erps_unrejected", input_dir = test_dir, reference_selection = :avg, output_dir = output_dir)
 
         # Check that log file was created
         log_file = joinpath(output_dir, "rereference.log")
@@ -362,7 +362,7 @@ end
         output_dir = joinpath(test_dir, "rereferenced_verification")
 
         result = EegFun.rereference(
-            "erps_cleaned",
+            "erps_unrejected",
             input_dir = test_dir,
             participant_selection = EegFun.participants(1),
             condition_selection = EegFun.conditions([1]),
@@ -371,11 +371,11 @@ end
         )
 
         # Load original and rereferenced data
-        original_file = joinpath(test_dir, "1_erps_cleaned.jld2")
+        original_file = joinpath(test_dir, "1_erps_unrejected.jld2")
         original_erps = load(original_file, "data")
         original_erp = original_erps[1]
 
-        rereferenced_file = joinpath(output_dir, "1_erps_cleaned.jld2")
+        rereferenced_file = joinpath(output_dir, "1_erps_unrejected.jld2")
         rereferenced_erps = load(rereferenced_file, "data")
         rereferenced_erp = rereferenced_erps[1]
 
@@ -393,12 +393,12 @@ end
 
     @testset "Different file patterns" begin
         # Test with different file patterns
-        for pattern in ["erps_cleaned", "nonexistent", "original"]
+        for pattern in ["erps_unrejected", "nonexistent", "original"]
             output_dir = joinpath(test_dir, "rereferenced_$pattern")
 
             result = EegFun.rereference(pattern, input_dir = test_dir, reference_selection = :avg, output_dir = output_dir)
 
-            if pattern in ["erps_cleaned"]
+            if pattern in ["erps_unrejected"]
                 @test isdir(output_dir)
                 @test length(readdir(output_dir)) > 0
             else

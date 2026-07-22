@@ -244,9 +244,9 @@ $(_generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
 
 # Examples
 ```julia
-plot_topography("grand_average_erps_good.jld2")
-plot_topography("erps_good")
-plot_topography("erps_good", participant_selection = participants(1))
+plot_topography("grand_average_erps_final.jld2")
+plot_topography("erps_final")
+plot_topography("erps_final", participant_selection = participants(1))
 ```
 """
 function plot_topography(filepath::String; input_dir::String = pwd(), participant_selection::Function = participants(), kwargs...)

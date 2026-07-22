@@ -79,6 +79,7 @@ Configuration for EEG-specific preprocessing settings.
 """
 @kwdef struct EegConfig
     artifact_value_abs_criterion::Int
+    artifact_value_z_criterion::Float64
     extreme_value_abs_criterion::Int
     artifact_interval_start::Union{Nothing,Float64} = nothing
     artifact_interval_end::Union{Nothing,Float64} = nothing
@@ -176,6 +177,9 @@ pipeline, including filtering, referencing, artifact detection, and ICA settings
     eeg::EegConfig
     ica::IcaConfig
     neighbour_criterion::Float64
+    interactive_continuous::Bool
+    interactive_ica::Bool
+    interactive_epochs::Bool
 end
 
 # === CONSTRUCTORS ===
@@ -216,6 +220,7 @@ end
 function EegConfig(cfg::Dict)
     return EegConfig(
         artifact_value_abs_criterion = Int(cfg["artifact_value_abs_criterion"]),
+        artifact_value_z_criterion = Float64(cfg["artifact_value_z_criterion"]),
         extreme_value_abs_criterion = Int(cfg["extreme_value_abs_criterion"]),
         artifact_interval_start = haskey(cfg, "artifact_interval_start") && !isnothing(cfg["artifact_interval_start"]) ? Float64(cfg["artifact_interval_start"]) : nothing,
         artifact_interval_end = haskey(cfg, "artifact_interval_end") && !isnothing(cfg["artifact_interval_end"]) ? Float64(cfg["artifact_interval_end"]) : nothing,
@@ -267,5 +272,8 @@ function PreprocessConfig(cfg::Dict)
         eeg = EegConfig(cfg["eeg"]),
         ica = IcaConfig(cfg["ica"]),
         neighbour_criterion = cfg["layout"]["neighbour_criterion"],
+        interactive_continuous = get(cfg, "interactive_continuous", false),
+        interactive_ica = get(cfg, "interactive_ica", false),
+        interactive_epochs = get(cfg, "interactive_epochs", false),
     )
 end

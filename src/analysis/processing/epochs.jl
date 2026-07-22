@@ -957,19 +957,19 @@ function epochs_table(epochs::Vector{EpochData}; print_table::Bool = true, kwarg
     return df
 end
 """
-    epochs_table(epochs_original::Vector{EpochData}, epochs_cleaned::Vector{EpochData}; print_table::Bool = true, kwargs...)
+    epochs_table(epochs_uncorrected::Vector{EpochData}, epochs_unrejected::Vector{EpochData}; print_table::Bool = true, kwargs...)
 
-Display a before/after comparison table of epoch counts — `epochs_original` versus
-`epochs_cleaned` — for each condition. Returns the DataFrame.
+Display a before/after comparison table of epoch counts — `epochs_uncorrected` versus
+`epochs_unrejected` — for each condition. Returns the DataFrame.
 Typically called after artifact rejection to log how many epochs were removed per condition.
 """
-function epochs_table(epochs_original::Vector{EpochData}, epochs_cleaned::Vector{EpochData}; print_table::Bool = true, kwargs...)
-    length(epochs_original) != length(epochs_cleaned) && throw(ArgumentError("epochs_original and epochs_cleaned must have same length"))
+function epochs_table(epochs_uncorrected::Vector{EpochData}, epochs_unrejected::Vector{EpochData}; print_table::Bool = true, kwargs...)
+    length(epochs_uncorrected) != length(epochs_unrejected) && throw(ArgumentError("epochs_uncorrected and epochs_unrejected must have same length"))
 
-    df = _build_base_epochs_df(epochs_original)
-    df.n_epochs_original = [n_epochs(epoch) for epoch in epochs_original]
-    df.n_epochs_cleaned = [n_epochs(epoch) for epoch in epochs_cleaned]
-    df.percentage = round.((df.n_epochs_cleaned ./ df.n_epochs_original) .* 100; digits = 1)
+    df = _build_base_epochs_df(epochs_uncorrected)
+    df.n_epochs_uncorrected = [n_epochs(epoch) for epoch in epochs_uncorrected]
+    df.n_epochs_unrejected = [n_epochs(epoch) for epoch in epochs_unrejected]
+    df.percentage = round.((df.n_epochs_unrejected ./ df.n_epochs_uncorrected) .* 100; digits = 1)
 
     if print_table
         pretty_table(stdout, df; alignment = [:l, :r, :l, :r, :r, :r], kwargs...)

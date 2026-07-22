@@ -134,12 +134,12 @@ The pipeline saves intermediate and final outputs as JLD2 files (controlled by `
 
 | File suffix | Contents |
 | --- | --- |
-| `_continuous_original` | Raw continuous data after import |
-| `_continuous_cleaned` | Continuous data after filtering, ICA, and repair |
-| `_epochs_original` | Epochs before artifact handling |
-| `_epochs_cleaned` | Epochs after channel repair |
-| `_epochs_good` | Epochs after rejection (final clean data) |
-| `_erps_original` / `_erps_cleaned` / `_erps_good` | Averaged ERPs at each stage |
+| `_continuous_raw` | Raw continuous data after import |
+| `_continuous_corrected` | Continuous data after filtering, ICA, and repair |
+| `_epochs_uncorrected` | Epochs before artifact handling |
+| `_epochs_unrejected` | Epochs after channel repair |
+| `_epochs_final` | Epochs after rejection (final clean data) |
+| `_erps_uncorrected` / `_erps_unrejected` / `_erps_final` | Averaged ERPs at each stage |
 | `_ica` | ICA decomposition results |
 | `_artifact_info` | Artifact tracking (repaired channels, rejected epochs, ICA components) |
 

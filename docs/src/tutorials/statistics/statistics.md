@@ -66,7 +66,7 @@ Addresses the multiple comparisons problem in ERP analysis:
 using EegFun
 
 input_dir = EegFun.example_path("data/julia/erps")
-file_pattern = "erps_good"
+file_pattern = "erps_final"
 
 println("Preparing data...")
 stat_data = EegFun.prepare_stats(

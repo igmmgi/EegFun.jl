@@ -41,7 +41,7 @@ pairs = [(i, i+1) for i in 1:2:15]
 lrp_results = lrp(erps, pairs)
 
 # Batch across all participants
-lrp("erps_cleaned", [(1, 2), (3, 4)], input_dir = "/data/study1")
+lrp("erps_unrejected", [(1, 2), (3, 4)], input_dir = "/data/study1")
 ```
 """
 function lrp(erp_left::ErpData, erp_right::ErpData; channel_selection::Function = channels())::ErpData

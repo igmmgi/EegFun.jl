@@ -101,7 +101,7 @@ Load ERP data and create plots. Accepts either a direct `.jld2` filepath or a fi
 pattern to discover and plot all matching files.
 
 # Arguments
-- `filepath::String`: Either a `.jld2` file path, or a pattern string (e.g. `"erps_good"`) 
+- `filepath::String`: Either a `.jld2` file path, or a pattern string (e.g. `"erps_final"`) 
   to match against files in `input_dir`
 - `input_dir::String`: Directory to search for pattern-matched files (default: `pwd()`)
 - `participant_selection::Function`: Participant filter for pattern mode (default: `participants()`)
@@ -115,16 +115,16 @@ $(_generate_kwargs_doc(PLOT_ERP_KWARGS))
 # Examples
 ```julia
 # Load and plot from file
-plot_erp("grand_average_erps_good.jld2")
+plot_erp("grand_average_erps_final.jld2")
 
 # Plot all files matching pattern in current directory
-plot_erp("erps_good")
+plot_erp("erps_final")
 
 # Plot specific participant
-plot_erp("erps_good", participant_selection = participants(1))
+plot_erp("erps_final", participant_selection = participants(1))
 
 # With channel selection
-plot_erp("erps_good", channel_selection = channels([:PO7, :PO8]), layout = :grid)
+plot_erp("erps_final", channel_selection = channels([:PO7, :PO8]), layout = :grid)
 ```
 """
 function plot_erp(

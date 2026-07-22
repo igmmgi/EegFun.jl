@@ -149,7 +149,7 @@ If your montage doesn't have dedicated EOG electrodes, use:
 ### 6. Extract Initial "Original" Epochs
 
 ```julia
-epochs_original = EegFun.extract_epochs(dat, epoch_cfg, (-0.2, 1.0))
+epochs_uncorrected = EegFun.extract_epochs(dat, epoch_cfg, (-0.2, 1.0))
 ```
 
 #### Why?

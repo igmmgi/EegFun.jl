@@ -9,7 +9,7 @@
 
 using EegFun
 
-dat = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps_good.jld2"))
+dat = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps_final.jld2"))
 
 # All conditions overlaid
 # EegFun.plot_erp_measurement_gui(dat)

@@ -125,7 +125,7 @@ erps = average_epochs(epochs)
 avg_waves = condition_average(erps, [[1, 2], [3, 4]])
 
 # Batch
-condition_average("erps_cleaned", [[1, 2], [3, 4]])
+condition_average("erps_unrejected", [[1, 2], [3, 4]])
 ```
 """
 function condition_average(data::Vector{<:ErpData}, condition_groups::Vector{Vector{Int}})::Vector{ErpData}

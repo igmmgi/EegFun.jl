@@ -166,8 +166,8 @@ epoch_condition_file = "epochs.toml"
 
 [files.output]
 directory = "output"
-save_continuous_data_original = false
-save_continuous_data_cleaned = false
+save_continuous_data_raw = false
+save_continuous_data_corrected = false
 
 [preprocess]
 epoch_start = -0.1
@@ -184,12 +184,138 @@ epoch_end = 0.5
                 # Check that the output directory was created and contains the expected files
                 out_dir = joinpath(temp_dir, "output")
                 @test isdir(out_dir)
-                @test isfile(joinpath(out_dir, "example1_epochs_good.jld2"))
-                @test isfile(joinpath(out_dir, "example1_erps_good.jld2"))
+                @test isfile(joinpath(out_dir, "example1_epochs_final.jld2"))
+                @test isfile(joinpath(out_dir, "example1_erps_final.jld2"))
                 @test isfile(joinpath(out_dir, "example1_artifact_info.jld2"))
             end
         else
             EegFun.@minimal_warning "Test file not found: $test_file (skipping end-to-end pipeline test)"
+        end
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # 9. preprocess - dry_run mode
+    # ────────────────────────────────────────────────────────────
+    @testset "preprocess - dry_run" begin
+        data_dir = joinpath(dirname(dirname(@__DIR__)), "resources", "data")
+        test_file = joinpath(data_dir, "bdf", "example1.bdf")
+
+        if isfile(test_file)
+            mktempdir() do temp_dir
+                epoch_file = joinpath(temp_dir, "epochs.toml")
+                write(
+                    epoch_file,
+                    """
+  [epochs]
+  [[epochs.conditions]]
+  name = "Test Condition"
+  trigger_sequences = [1]
+  """,
+                )
+
+                pipeline_file = joinpath(temp_dir, "pipeline.toml")
+                write(
+                    pipeline_file,
+                    """
+[files.input]
+directory = "$(joinpath(data_dir, "bdf"))"
+raw_data_files = "example1\\\\.bdf"
+layout_file = "biosemi72.csv"
+epoch_condition_file = "epochs.toml"
+
+[files.output]
+directory = "output"
+
+[preprocess]
+epoch_start = -0.1
+epoch_end = 0.5
+""",
+                )
+
+                # dry_run should return nothing and NOT create output files
+                result = redirect_stdio(stdout = devnull, stderr = devnull) do
+                    EegFun.preprocess(pipeline_file; base_dir = temp_dir, dry_run = true)
+                end
+
+                @test isnothing(result)
+                # Output directory may be created (for the config copy), but no data files
+                out_dir = joinpath(temp_dir, "output")
+                if isdir(out_dir)
+                    jld2_files = filter(f -> endswith(f, ".jld2"), readdir(out_dir))
+                    @test isempty(jld2_files)
+                end
+            end
+        else
+            EegFun.@minimal_warning "Test file not found: $test_file (skipping dry_run test)"
+        end
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # 10. preprocess - skip_existing mode
+    # ────────────────────────────────────────────────────────────
+    @testset "preprocess - skip_existing" begin
+        data_dir = joinpath(dirname(dirname(@__DIR__)), "resources", "data")
+        test_file = joinpath(data_dir, "bdf", "example1.bdf")
+
+        if isfile(test_file)
+            mktempdir() do temp_dir
+                epoch_file = joinpath(temp_dir, "epochs.toml")
+                write(
+                    epoch_file,
+                    """
+  [epochs]
+  [[epochs.conditions]]
+  name = "Test Condition"
+  trigger_sequences = [1]
+  """,
+                )
+
+                pipeline_file = joinpath(temp_dir, "pipeline.toml")
+                write(
+                    pipeline_file,
+                    """
+[files.input]
+directory = "$(joinpath(data_dir, "bdf"))"
+raw_data_files = "example1\\\\.bdf"
+layout_file = "biosemi72.csv"
+epoch_condition_file = "epochs.toml"
+
+[files.output]
+directory = "output"
+save_continuous_data_raw = false
+save_continuous_data_corrected = false
+
+[preprocess]
+epoch_start = -0.1
+epoch_end = 0.5
+""",
+                )
+
+                # First run: process normally
+                redirect_stdio(stdout = devnull, stderr = devnull) do
+                    EegFun.preprocess(pipeline_file; base_dir = temp_dir)
+                end
+
+                out_dir = joinpath(temp_dir, "output")
+                final_file = joinpath(out_dir, "example1_epochs_final.jld2")
+                @test isfile(final_file)
+
+                # Record modification time of the final file
+                mtime_before = mtime(final_file)
+
+                # Small sleep to ensure mtime would differ if file were rewritten
+                sleep(1.1)
+
+                # Second run with skip_existing: should NOT reprocess
+                redirect_stdio(stdout = devnull, stderr = devnull) do
+                    EegFun.preprocess(pipeline_file; base_dir = temp_dir, skip_existing = true)
+                end
+
+                # The final file should NOT have been overwritten
+                @test mtime(final_file) == mtime_before
+            end
+        else
+            EegFun.@minimal_warning "Test file not found: $test_file (skipping skip_existing test)"
         end
     end
 

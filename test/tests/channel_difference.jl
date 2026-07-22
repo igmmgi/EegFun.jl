@@ -204,7 +204,7 @@ using EegFun
         @test :hEOG ∈ propertynames(epoch_df)
     end
 
-    # Test detect_eog_signals! with EogConfig
+    # Test detect_eog_onsets! with EogConfig
     dat = EegFun.create_test_continuous_data(n = 1000, fs = 1000)
     # Create signal with large jumps (not just large amplitude) for EOG detection
     # detect_eog_onsets! looks for differences/jumps, so create step changes
@@ -229,7 +229,7 @@ using EegFun
         hEOG_channels = [["F9"], ["F10"], ["hEOG"]],
     )
 
-    EegFun.detect_eog_signals!(dat, eog_cfg_detect)
+    EegFun.detect_eog_onsets!(dat, eog_cfg_detect)
 
     @test :is_vEOG ∈ propertynames(dat.data)
     @test :is_hEOG ∈ propertynames(dat.data)

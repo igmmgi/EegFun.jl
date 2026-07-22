@@ -34,7 +34,7 @@ end
 
 
 """
-    detect_eog_signals!(dat::EegData, eog_cfg::Dict)
+    detect_eog_onsets!(dat::EegData, eog_cfg::Dict)
 
 Detect EOG onsets for both vertical and horizontal EOG channels based on configuration.
 
@@ -50,10 +50,10 @@ eog_cfg = Dict(
     "vEOG_channels" => [["Fp1"], ["IO1"], ["vEOG"]],
     "hEOG_channels" => [["F9"], ["F10"], ["hEOG"]]
 )
-detect_eog_signals!(dat, eog_cfg)
+detect_eog_onsets!(dat, eog_cfg)
 ```
 """
-function detect_eog_signals!(dat::EegData, eog_cfg::Dict)
+function detect_eog_onsets!(dat::EegData, eog_cfg::Dict)
     vEOG_cfg = eog_cfg["vEOG_channels"]
     detect_eog_onsets!(dat, eog_cfg["vEOG_criterion"], Symbol(vEOG_cfg[3][1]), Symbol("is_" * vEOG_cfg[3][1]))
     hEOG_cfg = eog_cfg["hEOG_channels"]
@@ -128,7 +128,7 @@ to the data. The `Vector{EpochData}` form broadcasts across conditions.
 is_extreme_value!(dat, 100)             # → :is_extreme_value_100
 is_extreme_value!(dat, 100, mode = :separate)
 is_extreme_value!(epoch_data, 100, epoch_selection = epochs([1, 3]))
-is_extreme_value!(epochs_cleaned, 100)  # batch over conditions
+is_extreme_value!(epochs_unrejected, 100)  # batch over conditions
 ```
 """
 function is_extreme_value!(

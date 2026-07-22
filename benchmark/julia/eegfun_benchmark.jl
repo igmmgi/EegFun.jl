@@ -57,7 +57,7 @@ function process_eeg_to_grandaverage(raw_files::Vector{String}, data_dir::String
             end
 
             # 4. Remove ICA component
-            EegFun.remove_ica_components!(dat, ica_result, component_selection = EegFun.components([1]))
+            EegFun.subtract_ica_components!(dat, ica_result, component_selection = EegFun.components([1]))
         end
 
         # 5. Epoch and baseline data

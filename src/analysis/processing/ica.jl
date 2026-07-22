@@ -32,7 +32,7 @@ ica_result = run_ica(dat, sample_selection = samples_not(:is_extreme_value_100))
 ica_result = run_ica(dat, percentage_of_data = 25.0)
 
 # Epoched data
-ica_result = run_ica(epochs_cleaned)
+ica_result = run_ica(epochs_unrejected)
 ```
 """
 function run_ica(
@@ -790,10 +790,10 @@ end
 
 
 """
-    remove_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
-    remove_ica_components!(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
-    remove_ica_components(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
-    remove_ica_components(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
+    subtract_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
+    subtract_ica_components!(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
+    subtract_ica_components(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
+    subtract_ica_components(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
 
 Remove ICA components from data. Mutating (`!`) versions operate in-place; non-mutating versions
 return a copy of the data with components removed along with an updated `InfoIca` object.
@@ -801,16 +801,16 @@ return a copy of the data with components removed along with an updated `InfoIca
 # Example
 ```julia
 # In-place
-remove_ica_components!(dat, ica_result)
+subtract_ica_components!(dat, ica_result)
 
 # Non-mutating
-cleaned_dat, ica_updated = remove_ica_components(dat, ica_result)
+cleaned_dat, ica_updated = subtract_ica_components(dat, ica_result)
 
 # Select specific components
-remove_ica_components!(dat, ica_result, component_selection = components([1, 3, 5]))
+subtract_ica_components!(dat, ica_result, component_selection = components([1, 3, 5]))
 ```
 """
-function remove_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
+function subtract_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
     components_to_remove = get_selected_components(ica, component_selection)
     n_components = size(ica.unmixing, 1)
     if !all(1 .<= components_to_remove .<= n_components)
@@ -847,31 +847,31 @@ function remove_ica_components!(dat::DataFrame, ica::InfoIca; component_selectio
     return nothing
 end
 
-function remove_ica_components(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
+function subtract_ica_components(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
     dat_out = copy(dat)
     ica_out = copy(ica)  # Use our custom copy method
-    remove_ica_components!(dat_out, ica_out, component_selection = component_selection)
+    subtract_ica_components!(dat_out, ica_out, component_selection = component_selection)
     return dat_out, ica_out
 end
 
-function remove_ica_components(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
+function subtract_ica_components(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
     dat_out = copy(dat)
     ica_out = copy(ica)  # Use our custom copy method
-    remove_ica_components!(dat_out.data, ica_out, component_selection = component_selection)
+    subtract_ica_components!(dat_out.data, ica_out, component_selection = component_selection)
     return dat_out, ica_out
 end
 
-function remove_ica_components!(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
-    remove_ica_components!(dat.data, ica, component_selection = component_selection)
+function subtract_ica_components!(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
+    subtract_ica_components!(dat.data, ica, component_selection = component_selection)
     return nothing
 end
 
 
 """
-    restore_ica_components!(dat::DataFrame, ica::InfoIca; component_selection = components())
-    restore_ica_components!(dat::ContinuousData, ica::InfoIca; component_selection = components())
-    restore_ica_components(dat::DataFrame, ica::InfoIca; component_selection = components())
-    restore_ica_components(dat::ContinuousData, ica::InfoIca; component_selection = components())
+    add_ica_components!(dat::DataFrame, ica::InfoIca; component_selection = components())
+    add_ica_components!(dat::ContinuousData, ica::InfoIca; component_selection = components())
+    add_ica_components(dat::DataFrame, ica::InfoIca; component_selection = components())
+    add_ica_components(dat::ContinuousData, ica::InfoIca; component_selection = components())
 
 Restore previously removed ICA components using stored activations.
 Mutating (`!`) versions operate in-place; non-mutating versions return a copy and an updated `InfoIca`.
@@ -880,16 +880,16 @@ Components must have been removed first (activations stored in `ica.removed_acti
 # Example
 ```julia
 # In-place
-restore_ica_components!(dat, ica_result)
+add_ica_components!(dat, ica_result)
 
 # Non-mutating
-restored_dat, ica_updated = restore_ica_components(dat, ica_result)
+restored_dat, ica_updated = add_ica_components(dat, ica_result)
 
 # Select specific components to restore
-restore_ica_components!(dat, ica_result, component_selection = components([1, 3]))
+add_ica_components!(dat, ica_result, component_selection = components([1, 3]))
 ```
 """
-function restore_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
+function add_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
     components_to_restore = get_selected_components(ica, component_selection)
     n_components = size(ica.unmixing, 1)
     if !all(1 .<= components_to_restore .<= n_components)
@@ -933,24 +933,24 @@ function restore_ica_components!(dat::DataFrame, ica::InfoIca; component_selecti
 end
 
 
-function restore_ica_components(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
+function add_ica_components(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
     dat_out = copy(dat)
     ica_out = copy(ica)  # Use our custom copy method
-    restore_ica_components!(dat_out, ica_out, component_selection = component_selection)
+    add_ica_components!(dat_out, ica_out, component_selection = component_selection)
     return dat_out, ica_out
 end
 
 
-function restore_ica_components(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
+function add_ica_components(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
     dat_out = copy(dat)
     ica_out = copy(ica)  # Use our custom copy method
-    restore_ica_components!(dat_out.data, ica_out, component_selection = component_selection)
+    add_ica_components!(dat_out.data, ica_out, component_selection = component_selection)
     return dat_out, ica_out
 end
 
 
-function restore_ica_components!(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
-    restore_ica_components!(dat.data, ica, component_selection = component_selection)
+function add_ica_components!(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
+    add_ica_components!(dat.data, ica, component_selection = component_selection)
     return nothing
 end
 

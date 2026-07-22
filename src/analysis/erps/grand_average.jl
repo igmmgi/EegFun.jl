@@ -136,7 +136,7 @@ grand_avgs = grand_average([erp1, erp2, erp3])
 grand_avgs = grand_average(erps, condition_selection = conditions([1, 3]))
 grand_avg_rsa = grand_average([rsa_p1, rsa_p2, rsa_p3])
 grand_avg_decoding = grand_average([decoded_p1, decoded_p2])
-grand_average("erps_cleaned")
+grand_average("erps_unrejected")
 ```
 """
 function grand_average(erps::Vector{ErpData}; condition_selection::Function = conditions())

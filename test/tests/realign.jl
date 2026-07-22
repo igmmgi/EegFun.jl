@@ -295,11 +295,11 @@ end
         rts = range(0.3, 0.8, length = 10)
         epochs = [_make_epoch_with_response(rt_seconds = rt) for rt in rts]
         dat = _make_epoch_data(epochs, participant = p)
-        jldsave(joinpath(test_dir, "$(p)_epochs_good.jld2"); data = [dat])
+        jldsave(joinpath(test_dir, "$(p)_epochs_final.jld2"); data = [dat])
     end
 
     @testset "Basic batch processing" begin
-        EegFun.realign("epochs_good", RESP_TRIGGERS, input_dir = test_dir, output_dir = output_dir)
+        EegFun.realign("epochs_final", RESP_TRIGGERS, input_dir = test_dir, output_dir = output_dir)
 
         @test isdir(output_dir)
         out_files = readdir(output_dir)
@@ -321,7 +321,7 @@ end
     @testset "Batch with participant filtering" begin
         output_dir2 = joinpath(test_dir, "realigned_filtered")
         EegFun.realign(
-            "epochs_good",
+            "epochs_final",
             RESP_TRIGGERS,
             input_dir = test_dir,
             participant_selection = EegFun.participants([1, 2]),

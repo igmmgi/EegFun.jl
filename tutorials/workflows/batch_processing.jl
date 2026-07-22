@@ -15,13 +15,13 @@ const ERP_DIR = EegFun.example_path("data/julia/erps/")
 #######################################################################
 
 # Load a single participant's ERPs
-erps_p1 = EegFun.read_data(joinpath(ERP_DIR, "example1_erps_good.jld2"))
+erps_p1 = EegFun.read_data(joinpath(ERP_DIR, "example1_erps_final.jld2"))
 
 # Load all 12 participants from the ERP directory
-erps_all = EegFun.read_all_data(joinpath(ERP_DIR, "erps_good"))
+erps_all = EegFun.read_all_data(joinpath(ERP_DIR, "erps_final"))
 
 # Subset to first 6 participants
-erps_subset = EegFun.read_all_data(joinpath(ERP_DIR, "erps_good"), EegFun.participants(1:6))
+erps_subset = EegFun.read_all_data(joinpath(ERP_DIR, "erps_final"), EegFun.participants(1:6))
 
 
 #######################################################################
@@ -35,7 +35,7 @@ grand_avgs = EegFun.grand_average(erps_all)
 grand_avgs_12 = EegFun.grand_average(erps_all, condition_selection = EegFun.conditions([1, 2]))
 
 # From disk directly — saves to output_dir automatically
-# EegFun.grand_average("erps_good", input_dir = ERP_DIR, output_dir = EegFun.example_path("data/julia/grand_average/"))
+# EegFun.grand_average("erps_final", input_dir = ERP_DIR, output_dir = EegFun.example_path("data/julia/grand_average/"))
 
 
 #######################################################################

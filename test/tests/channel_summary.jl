@@ -230,7 +230,7 @@ end # EegFun testset
         @testset "Setup test files" begin
             for participant in [1, 2]
                 erps = EegFun.create_test_batch_erp_data(n_conditions = 2)
-                filename = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
+                filename = joinpath(test_dir, "$(participant)_erps_unrejected.jld2")
                 jldsave(filename; data = erps)
                 @test isfile(filename)
             end
@@ -240,7 +240,7 @@ end # EegFun testset
             output_dir = joinpath(test_dir, "summary_output")
 
             # Test basic channel summary
-            EegFun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = output_dir)
+            EegFun.channel_summary("erps_unrejected", input_dir = test_dir, output_dir = output_dir)
 
             @test isdir(output_dir)
 
@@ -275,7 +275,7 @@ end # EegFun testset
             output_dir = joinpath(test_dir, "summary_participant")
 
             EegFun.channel_summary(
-                "erps_cleaned",
+                "erps_unrejected",
                 input_dir = test_dir,
                 output_dir = output_dir,
                 participant_selection = EegFun.participants(1),
@@ -287,14 +287,14 @@ end # EegFun testset
             results = CSV.read(csv_file, DataFrame)
             # Only participant 1: 1 file × 2 conditions × 3 channels = 6 rows
             @test nrow(results) == 6
-            @test all(results.file .== "1_erps_cleaned")
+            @test all(results.file .== "1_erps_unrejected")
         end
 
         @testset "Summary multiple participants" begin
             output_dir = joinpath(test_dir, "summary_multi_participants")
 
             EegFun.channel_summary(
-                "erps_cleaned",
+                "erps_unrejected",
                 input_dir = test_dir,
                 output_dir = output_dir,
                 participant_selection = EegFun.participants([1, 2]),
@@ -305,15 +305,15 @@ end # EegFun testset
 
             # 2 files × 2 conditions × 3 channels = 12 rows
             @test nrow(results) == 12
-            @test "1_erps_cleaned" in results.file
-            @test "2_erps_cleaned" in results.file
+            @test "1_erps_unrejected" in results.file
+            @test "2_erps_unrejected" in results.file
         end
 
         @testset "Summary specific conditions" begin
             output_dir = joinpath(test_dir, "summary_condition")
 
             EegFun.channel_summary(
-                "erps_cleaned",
+                "erps_unrejected",
                 input_dir = test_dir,
                 output_dir = output_dir,
                 condition_selection = EegFun.conditions(1),
@@ -331,7 +331,7 @@ end # EegFun testset
             output_dir = joinpath(test_dir, "summary_multi_conditions")
 
             EegFun.channel_summary(
-                "erps_cleaned",
+                "erps_unrejected",
                 input_dir = test_dir,
                 output_dir = output_dir,
                 condition_selection = EegFun.conditions([1, 2]),
@@ -351,7 +351,7 @@ end # EegFun testset
 
             # Select only Ch1 and Ch2
             EegFun.channel_summary(
-                "erps_cleaned",
+                "erps_unrejected",
                 input_dir = test_dir,
                 output_dir = output_dir,
                 channel_selection = EegFun.channels([:Ch1, :Ch2]),
@@ -372,7 +372,7 @@ end # EegFun testset
 
             # Exclude Ch3
             EegFun.channel_summary(
-                "erps_cleaned",
+                "erps_unrejected",
                 input_dir = test_dir,
                 output_dir = output_dir,
                 channel_selection = EegFun.channels_not([:Ch3]),
@@ -389,7 +389,7 @@ end # EegFun testset
         @testset "Custom output filename" begin
             output_dir = joinpath(test_dir, "summary_custom_name")
 
-            EegFun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = output_dir, output_file = "my_custom_summary")
+            EegFun.channel_summary("erps_unrejected", input_dir = test_dir, output_dir = output_dir, output_file = "my_custom_summary")
 
             # Check custom filename
             csv_file = joinpath(output_dir, "my_custom_summary.csv")
@@ -402,7 +402,7 @@ end # EegFun testset
 
         @testset "Error handling" begin
             # Non-existent directory
-            @test_throws Exception EegFun.channel_summary("erps_cleaned", input_dir = "/nonexistent/path")
+            @test_throws Exception EegFun.channel_summary("erps_unrejected", input_dir = "/nonexistent/path")
         end
 
         @testset "No matching files" begin
@@ -410,7 +410,7 @@ end # EegFun testset
             mkpath(empty_dir)
 
             # Directory exists but has no JLD2 files matching pattern
-            result = EegFun.channel_summary("erps_cleaned", input_dir = empty_dir)
+            result = EegFun.channel_summary("erps_unrejected", input_dir = empty_dir)
 
             @test isnothing(result)  # No files to process
         end
@@ -418,7 +418,7 @@ end # EegFun testset
         @testset "Logging" begin
             output_dir = joinpath(test_dir, "summary_with_log")
 
-            EegFun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = output_dir)
+            EegFun.channel_summary("erps_unrejected", input_dir = test_dir, output_dir = output_dir)
 
             # Check log file exists
             log_file = joinpath(output_dir, "channel_summary.log")
@@ -428,7 +428,7 @@ end # EegFun testset
             log_contents = read(log_file, String)
             @test contains(log_contents, "Batch channel summary started")
             @test contains(log_contents, "channel_summary")
-            @test contains(log_contents, "erps_cleaned")
+            @test contains(log_contents, "erps_unrejected")
         end
 
         @testset "Existing output directory" begin
@@ -440,7 +440,7 @@ end # EegFun testset
             @test isfile(joinpath(output_dir, "dummy.txt"))
 
             # Run channel_summary - should work fine with existing directory
-            EegFun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = output_dir)
+            EegFun.channel_summary("erps_unrejected", input_dir = test_dir, output_dir = output_dir)
 
             @test isfile(joinpath(output_dir, "dummy.txt"))  # Original file preserved
             @test isfile(joinpath(output_dir, "channel_summary.csv"))
@@ -452,13 +452,13 @@ end # EegFun testset
 
             # Create one valid file
             erps = EegFun.create_test_batch_erp_data(n_conditions = 2)
-            jldsave(joinpath(partial_dir, "1_erps_cleaned.jld2"); data = erps)
+            jldsave(joinpath(partial_dir, "1_erps_unrejected.jld2"); data = erps)
 
             # Create one malformed file (invalid data type - String instead of Vector{ErpData})
-            jldsave(joinpath(partial_dir, "2_erps_cleaned.jld2"); data = "invalid_data")
+            jldsave(joinpath(partial_dir, "2_erps_unrejected.jld2"); data = "invalid_data")
 
             output_dir = joinpath(test_dir, "summary_partial")
-            EegFun.channel_summary("erps_cleaned", input_dir = partial_dir, output_dir = output_dir)
+            EegFun.channel_summary("erps_unrejected", input_dir = partial_dir, output_dir = output_dir)
 
             # Should have results from the valid file only
             csv_file = joinpath(output_dir, "channel_summary.csv")
@@ -474,7 +474,7 @@ end # EegFun testset
 
             # Request condition 5 when only 2 exist
             EegFun.channel_summary(
-                "erps_cleaned",
+                "erps_unrejected",
                 input_dir = test_dir,
                 output_dir = output_dir,
                 condition_selection = EegFun.conditions(5),
@@ -552,7 +552,7 @@ end # EegFun testset
 
             # Summary for specific participant AND condition AND channels
             EegFun.channel_summary(
-                "erps_cleaned",
+                "erps_unrejected",
                 input_dir = test_dir,
                 output_dir = output_dir,
                 participant_selection = EegFun.participants(1),
@@ -564,7 +564,7 @@ end # EegFun testset
 
             # 1 file × 1 condition × 2 channels = 2 rows
             @test nrow(results) == 2
-            @test all(results.file .== "1_erps_cleaned")
+            @test all(results.file .== "1_erps_unrejected")
             @test all(results.condition .== 1)
             @test "Ch3" ∉ results.channel
         end
@@ -575,13 +575,13 @@ end # EegFun testset
             mkpath(pattern_dir)
 
             erps = EegFun.create_test_batch_erp_data(n_conditions = 2)
-            jldsave(joinpath(pattern_dir, "1_erps_original.jld2"); data = erps)
-            jldsave(joinpath(pattern_dir, "2_erps_cleaned.jld2"); data = erps)
+            jldsave(joinpath(pattern_dir, "1_erps_uncorrected.jld2"); data = erps)
+            jldsave(joinpath(pattern_dir, "2_erps_unrejected.jld2"); data = erps)
             jldsave(joinpath(pattern_dir, "3_custom_erps.jld2"); data = erps)
 
-            # Test pattern matching "erps_original"
+            # Test pattern matching "erps_uncorrected"
             output_dir1 = joinpath(test_dir, "summary_original")
-            EegFun.channel_summary("erps_original", input_dir = pattern_dir, output_dir = output_dir1)
+            EegFun.channel_summary("erps_uncorrected", input_dir = pattern_dir, output_dir = output_dir1)
 
             results1 = CSV.read(joinpath(output_dir1, "channel_summary.csv"), DataFrame)
             @test nrow(results1) == 6  # 1 file × 2 conditions × 3 channels
@@ -597,13 +597,13 @@ end # EegFun testset
         @testset "File metadata preservation" begin
             output_dir = joinpath(test_dir, "summary_metadata")
 
-            EegFun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = output_dir)
+            EegFun.channel_summary("erps_unrejected", input_dir = test_dir, output_dir = output_dir)
 
             results = CSV.read(joinpath(output_dir, "channel_summary.csv"), DataFrame)
 
             # Check that file names are correctly preserved
-            @test "1_erps_cleaned" in results.file
-            @test "2_erps_cleaned" in results.file
+            @test "1_erps_unrejected" in results.file
+            @test "2_erps_unrejected" in results.file
 
             # Check condition numbers are correct
             @test 1 in results.condition
@@ -622,7 +622,7 @@ end # EegFun testset
             overwrite_dir = joinpath(test_dir, "summary_overwrite")
 
             # First run
-            EegFun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = overwrite_dir)
+            EegFun.channel_summary("erps_unrejected", input_dir = test_dir, output_dir = overwrite_dir)
 
             csv_file = joinpath(overwrite_dir, "channel_summary.csv")
             mtime1 = stat(csv_file).mtime
@@ -631,7 +631,7 @@ end # EegFun testset
             sleep(0.1)
 
             # Second run (should overwrite)
-            EegFun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = overwrite_dir)
+            EegFun.channel_summary("erps_unrejected", input_dir = test_dir, output_dir = overwrite_dir)
 
             # Verify file was overwritten
             mtime2 = stat(csv_file).mtime
@@ -677,7 +677,7 @@ end # EegFun testset
             # Test that zvar is correctly computed
             output_dir = joinpath(test_dir, "summary_zvar")
 
-            EegFun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = output_dir)
+            EegFun.channel_summary("erps_unrejected", input_dir = test_dir, output_dir = output_dir)
 
             results = CSV.read(joinpath(output_dir, "channel_summary.csv"), DataFrame)
 

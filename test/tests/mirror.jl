@@ -136,7 +136,7 @@ using DataFrames
 
         epoch1 = DataFrame(time = collect(time), Cz = collect(1.0:n_samples))
 
-        epochs_original = EegFun.EpochData(
+        epochs_uncorrected = EegFun.EpochData(
             "test_data",
             1,
             "condition_1",
@@ -145,13 +145,13 @@ using DataFrames
             100,
             EegFun.AnalysisInfo(),
         )
-        original_length = nrow(epochs_original.data[1])
+        original_length = nrow(epochs_uncorrected.data[1])
 
         # Non-mutating mirror
-        epochs_mirrored = EegFun.mirror(epochs_original, :both)
+        epochs_mirrored = EegFun.mirror(epochs_uncorrected, :both)
 
         # Check original unchanged
-        @test nrow(epochs_original.data[1]) == original_length
+        @test nrow(epochs_uncorrected.data[1]) == original_length
 
         # Check mirrored is different
         @test nrow(epochs_mirrored.data[1]) > original_length
@@ -161,8 +161,8 @@ using DataFrames
 
         # Check unmirrored matches original
         @test nrow(epochs_unmirrored.data[1]) == original_length
-        @test epochs_unmirrored.data[1].time ≈ epochs_original.data[1].time
-        @test epochs_unmirrored.data[1].Cz ≈ epochs_original.data[1].Cz
+        @test epochs_unmirrored.data[1].time ≈ epochs_uncorrected.data[1].time
+        @test epochs_unmirrored.data[1].Cz ≈ epochs_uncorrected.data[1].Cz
     end
 
 
