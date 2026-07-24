@@ -411,14 +411,15 @@ end
 
 # Mapping from pipeline file suffixes to BIDS desc- labels
 const _BIDS_DERIVATIVE_SUFFIXES = OrderedDict(
-    "_continuous_raw" => "continuousOriginal",
-    "_continuous_corrected" => "continuousCleaned",
-    "_epochs_uncorrected" => "epochsUncorrected",
-    "_epochs_unrejected" => "epochsUnrejected",
-    "_epochs_final" => "epochsFinal",
-    "_erps_uncorrected" => "erpsOriginal",
-    "_erps_unrejected" => "erpsCleaned",
-    "_erps_final" => "erpsGood",
+    "_continuous_raw" => "raw",
+    "_continuous_corrected" => "corrected",
+    "_continuous" => "",
+    "_epochs_raw" => "raw",
+    "_epochs_corrected" => "corrected",
+    "_epochs" => "",
+    "_erps_raw" => "raw",
+    "_erps_corrected" => "corrected",
+    "_erps" => "",
     "_ica" => "ica",
     "_artifact_info" => "artifactInfo",
 )
@@ -465,7 +466,11 @@ function _bids_copy_derivatives(
             bids_name = nothing
             for (suffix, desc_label) in _BIDS_DERIVATIVE_SUFFIXES
                 if startswith(jld2_file, "$(base)$(suffix)")
-                    bids_name = "$(bids_prefix)_desc-$(desc_label)_eeg.jld2"
+                    if isempty(desc_label)
+                        bids_name = "$(bids_prefix)_eeg.jld2"
+                    else
+                        bids_name = "$(bids_prefix)_desc-$(desc_label)_eeg.jld2"
+                    end
                     break
                 end
             end

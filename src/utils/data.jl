@@ -1360,13 +1360,15 @@ samples_not(:is_bad)                    # Rows where :is_bad is false
 samples_or_not([:is_extreme, :is_bad])  # Rows where NO flag is true
 ```
 """
-samples_or(columns::Vector{Symbol}) = x -> isempty(columns) ? fill(false, nrow(x)) : reduce((a, b)->a .| b, (x[!, col] for col in columns))
-samples_and(columns::Vector{Symbol}) = x -> isempty(columns) ? fill(true, nrow(x)) : reduce((a, b)->a .& b, (x[!, col] for col in columns))
+samples_or(columns::Vector{Symbol}) =
+    x -> isempty(columns) ? fill(false, nrow(x)) : reduce((a, b) -> a .| b, (x[!, col] for col in columns))
+samples_and(columns::Vector{Symbol}) =
+    x -> isempty(columns) ? fill(true, nrow(x)) : reduce((a, b) -> a .& b, (x[!, col] for col in columns))
 samples_not(column::Symbol) = x -> .!(x[!, column])
 samples_or_not(columns::Vector{Symbol}) =
-    x -> isempty(columns) ? fill(true, nrow(x)) : .!(reduce((a, b)->a .| b, (x[!, col] for col in columns)))
+    x -> isempty(columns) ? fill(true, nrow(x)) : .!(reduce((a, b) -> a .| b, (x[!, col] for col in columns)))
 samples_and_not(columns::Vector{Symbol}) =
-    x -> isempty(columns) ? fill(true, nrow(x)) : .!(reduce((a, b)->a .& b, (x[!, col] for col in columns)))
+    x -> isempty(columns) ? fill(true, nrow(x)) : .!(reduce((a, b) -> a .& b, (x[!, col] for col in columns)))
 
 # Helper functions for time interval selection (Interval type)
 # These return Interval values (tuples, ranges, or nothing), not predicates
@@ -1897,7 +1899,7 @@ function create_eegfun_data(dat::BiosemiDataFormat.BiosemiData, layout::Layout):
     @info "Creating EEG DataFrame from Biosemi data"
     file_name = filename(dat)
     df = _create_eegfun_dataframe(dat)
-    return ContinuousData(file_name, df, layout, dat.header.sample_rate[1], AnalysisInfo())
+    return ContinuousData(file_name, df, layout, dat.header.sample_rate[1], AnalysisInfo(sample_rate = dat.header.sample_rate[1]))
 end
 
 # Optional Layout variant for quick databrowser visualization
@@ -1958,7 +1960,7 @@ function create_eegfun_data(dat::EuropeanDataFormat.EdfData, layout::Layout)::Co
     @info "Creating EEG DataFrame (*.edf)"
     file_name = basename_without_ext(dat.filename)
     df = _create_eegfun_dataframe(dat)
-    return ContinuousData(file_name, df, layout, dat.header.sample_rate[1], AnalysisInfo())
+    return ContinuousData(file_name, df, layout, dat.header.sample_rate[1], AnalysisInfo(sample_rate = dat.header.sample_rate[1]))
 end
 
 # Optional Layout variant for quick databrowser visualization
@@ -2039,7 +2041,7 @@ function create_eegfun_data(dat::BrainVisionDataFormat.BrainVisionData, layout::
     @info "Creating EEG DataFrame (*.vhdr/*.vmrk/*.eeg)"
     file_name = basename_without_ext(dat.filename)
     df = _create_eegfun_dataframe(dat)
-    return ContinuousData(file_name, df, layout, dat.header.Fs, AnalysisInfo())
+    return ContinuousData(file_name, df, layout, dat.header.Fs, AnalysisInfo(sample_rate = dat.header.Fs))
 end
 
 # Optional Layout variant for quick databrowser visualization
@@ -2176,7 +2178,7 @@ function create_eegfun_data(dat::FunctionalImageFormat.FifData, layout::Layout):
     @info "Creating EEG DataFrame (*.fif)"
     file_name = basename_without_ext(dat.filename)
     df = _create_eegfun_dataframe(dat)
-    return ContinuousData(file_name, df, layout, Int(round(dat.header.sfreq)), AnalysisInfo())
+    return ContinuousData(file_name, df, layout, Int(round(dat.header.sfreq)), AnalysisInfo(sample_rate = Int(round(dat.header.sfreq))))
 end
 
 # Optional Layout variant for quick databrowser visualization
@@ -2253,7 +2255,7 @@ function create_eegfun_data(dat::ExtensibleDataFormat.XdfData, layout::Layout)::
     eeg_streams = [s for s in values(dat.streams) if s.header.type == "EEG"]
     sample_rate = !isempty(eeg_streams) ? eeg_streams[1].header.nominal_srate : 1.0
 
-    return ContinuousData(file_name, df, layout, Int(round(sample_rate)), AnalysisInfo())
+    return ContinuousData(file_name, df, layout, Int(round(sample_rate)), AnalysisInfo(sample_rate = Int(round(sample_rate))))
 end
 
 function create_eegfun_data(dat::ExtensibleDataFormat.XdfData)
@@ -2362,10 +2364,27 @@ function create_eegfun_data(dat::FunctionalImageFormat.FifEpochs, layout::Layout
 
     if length(dfs) == 1 && !isempty(dat.nave) && dat.nave[1] > 1
         @info "Creating EEG DataFrame (*.fif evoked)"
-        return ErpData(file_name, 1, condition_name, dfs[1], layout, Int(round(dat.header.sfreq)), AnalysisInfo(), Int(dat.nave[1]))
+        return ErpData(
+            file_name,
+            1,
+            condition_name,
+            dfs[1],
+            layout,
+            Int(round(dat.header.sfreq)),
+            AnalysisInfo(sample_rate = Int(round(dat.header.sfreq))),
+            Int(dat.nave[1]),
+        )
     else
         @info "Creating EEG DataFrame (*.fif epochs)"
-        return EpochData(file_name, 1, condition_name, dfs, layout, Int(round(dat.header.sfreq)), AnalysisInfo())
+        return EpochData(
+            file_name,
+            1,
+            condition_name,
+            dfs,
+            layout,
+            Int(round(dat.header.sfreq)),
+            AnalysisInfo(sample_rate = Int(round(dat.header.sfreq))),
+        )
     end
 end
 

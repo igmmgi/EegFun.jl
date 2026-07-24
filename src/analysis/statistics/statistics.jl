@@ -254,9 +254,9 @@ function analytic_test(prepared::StatisticalData; alpha::Real = 0.05, tail::Symb
     if correction_method == :bonferroni
         n_comparisons = count(!isnan, p_matrix)
         bonferroni_alpha = n_comparisons > 0 ? alpha / n_comparisons : 0.0
-        n_sig_uncorrected = count(p -> !isnan(p) && p <= alpha, p_matrix)
+        n_sig_raw = count(p -> !isnan(p) && p <= alpha, p_matrix)
         n_sig_bonferroni = count(corrected_mask)
-        @info "Bonferroni correction: n_comparisons=$n_comparisons, bonferroni_alpha=$bonferroni_alpha, uncorrected_sig=$n_sig_uncorrected, bonferroni_sig=$n_sig_bonferroni"
+        @info "Bonferroni correction: n_comparisons=$n_comparisons, bonferroni_alpha=$bonferroni_alpha, raw_sig=$n_sig_raw, bonferroni_sig=$n_sig_bonferroni"
     end
 
     # Create positive and negative masks based on t-values (vectorized)
@@ -519,9 +519,9 @@ function analytic_test(prepared::TFStatisticalData; alpha::Real = 0.05, tail::Sy
     if correction_method == :bonferroni
         n_comparisons = count(!isnan, p_matrix)
         bonferroni_alpha = n_comparisons > 0 ? alpha / n_comparisons : 0.0
-        n_sig_uncorrected = count(p -> !isnan(p) && p <= alpha, p_matrix)
+        n_sig_raw = count(p -> !isnan(p) && p <= alpha, p_matrix)
         n_sig_bonferroni = count(corrected_mask)
-        @info "Bonferroni correction: n_comparisons=$n_comparisons, bonferroni_alpha=$bonferroni_alpha, uncorrected_sig=$n_sig_uncorrected, bonferroni_sig=$n_sig_bonferroni"
+        @info "Bonferroni correction: n_comparisons=$n_comparisons, bonferroni_alpha=$bonferroni_alpha, raw_sig=$n_sig_raw, bonferroni_sig=$n_sig_bonferroni"
     end
 
     # Create positive and negative masks

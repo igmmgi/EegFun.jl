@@ -502,7 +502,7 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String;
         scale,
         original_mean,
         [Symbol("IC$i") for i = 1:size(work.weights, 1)],
-        OrderedDict{Int,Matrix{Float64}}(),
+        Dict{Int,Matrix{Float64}}(),
         layout,
         falses(size(work.weights, 1)),  # Regular Infomax: all super-Gaussian (all false)
     )
@@ -782,7 +782,7 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout, filename
         scale,
         original_mean,
         [Symbol("IC$i") for i = 1:size(work.weights, 1)],
-        OrderedDict{Int,Matrix{Float64}}(),
+        Dict{Int,Matrix{Float64}}(),
         layout,
         is_sub_gaussian[order],  # Extended Infomax: actual sub-Gaussian flags
     )
@@ -857,12 +857,16 @@ end
 function subtract_ica_components(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
     dat_out = copy(dat)
     ica_out = copy(ica)  # Use our custom copy method
-    subtract_ica_components!(dat_out.data, ica_out, component_selection = component_selection)
+    subtract_ica_components!(dat_out, ica_out, component_selection = component_selection)
     return dat_out, ica_out
 end
 
 function subtract_ica_components!(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
     subtract_ica_components!(dat.data, ica, component_selection = component_selection)
+
+    components_to_subtract = get_selected_components(ica, component_selection)
+    dat.analysis_info.n_ica_components_removed += length(components_to_subtract)
+
     return nothing
 end
 
@@ -944,13 +948,17 @@ end
 function add_ica_components(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
     dat_out = copy(dat)
     ica_out = copy(ica)  # Use our custom copy method
-    add_ica_components!(dat_out.data, ica_out, component_selection = component_selection)
+    add_ica_components!(dat_out, ica_out, component_selection = component_selection)
     return dat_out, ica_out
 end
 
 
 function add_ica_components!(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
     add_ica_components!(dat.data, ica, component_selection = component_selection)
+
+    components_to_add = get_selected_components(ica, component_selection)
+    dat.analysis_info.n_ica_components_removed -= length(components_to_add)
+
     return nothing
 end
 

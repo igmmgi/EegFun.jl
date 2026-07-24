@@ -1,10 +1,3 @@
-include("utils.jl")
-include("woody.jl")
-include("iterator.jl")
-include("decompose.jl")
-
-export extract_ride
-
 """
     extract_ride(epochs::EpochData, comps::Vector{RideComponent}; kwargs...)
 

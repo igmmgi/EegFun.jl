@@ -28,7 +28,7 @@ Preprocess EEG data according to the specified configuration file.
   If `nothing` (default), uses the directory of the config file. This allows relative paths
   in your TOML to work relative to where your analysis script is located.
 - `log_level::Symbol`: Log level for preprocessing (:debug, :info, :warn, :error)
-- `skip_existing::Bool`: If `true`, skip files whose final output (`_epochs_final.jld2`)
+- `skip_existing::Bool`: If `true`, skip files whose final output (`_epochs.jld2`)
   already exists in the output directory. Useful for resuming after a crash (default: `false`).
 - `dry_run::Bool`: If `true`, validate the configuration, resolve all paths, check that all
   input files exist, and report what *would* happen — without actually processing any data.
@@ -136,51 +136,17 @@ function preprocess(
         # DRY RUN: Report what would happen and return early
         # ────────────────────────────────────────────────────────
         if dry_run
-            @info section("Dry Run Summary")
-            @info "✓ Configuration loaded and validated successfully"
-            @info "✓ Input directory exists: $input_directory"
-            @info "✓ Output directory: $output_directory"
-            @info "✓ Layout file loaded: $layout_file_path ($(length(layout.data.label)) channels)"
-            @info "✓ Epoch condition file loaded: $epoch_condition_file ($(length(epoch_cfgs)) condition(s))"
-            @info "✓ Found $(length(raw_data_files)) file(s) to process:"
-            for (i, f) in enumerate(raw_data_files)
-                existing = isfile(_make_output_filename(output_directory, f, "_epochs_final"))
-                status = existing ? "(already processed)" : "(pending)"
-                @info "  $i. $(basename(f)) $status"
-            end
-            @info ""
-            @info subsection("Preprocessing Settings")
-            @info "  Reference: $(preprocess_cfg.reference_channel)"
-            @info "  Epoch window: $(preprocess_cfg.epoch_start)s to $(preprocess_cfg.epoch_end)s"
-            @info "  Highpass filter: $(preprocess_cfg.filter.highpass.apply ? "$(preprocess_cfg.filter.highpass.freq) Hz" : "off")"
-            @info "  Lowpass filter: $(preprocess_cfg.filter.lowpass.apply ? "$(preprocess_cfg.filter.lowpass.freq) Hz" : "off")"
-            @info "  ICA: $(preprocess_cfg.ica.apply ? "on ($(preprocess_cfg.ica.percentage_of_data)% of data)" : "off")"
-            @info "  CleanLine: $(preprocess_cfg.cleanline.apply ? "on ($(preprocess_cfg.cleanline.line_frequencies) Hz)" : "off")"
-            @info "  Resampling: $(preprocess_cfg.resample.apply ? "on ($(preprocess_cfg.resample.target_rate) Hz)" : "off")"
-            @info "  Artifact threshold (abs): $(preprocess_cfg.eeg.artifact_value_abs_criterion) μV"
-            @info "  Artifact threshold (z): $(preprocess_cfg.eeg.artifact_value_z_criterion == 0 ? "off" : preprocess_cfg.eeg.artifact_value_z_criterion)"
-            @info "  Extreme value threshold: $(preprocess_cfg.eeg.extreme_value_abs_criterion) μV"
-            @info "  Interactive continuous: $(preprocess_cfg.interactive_continuous)"
-            @info "  Interactive ICA: $(preprocess_cfg.interactive_ica)"
-            @info "  Interactive epochs: $(preprocess_cfg.interactive_epochs)"
-            @info ""
-            @info subsection("Output Files")
-            save_flags = [
-                ("Continuous (raw)", cfg["files"]["output"]["save_continuous_data_raw"]),
-                ("Continuous (corrected)", cfg["files"]["output"]["save_continuous_data_corrected"]),
-                ("ICA data", cfg["files"]["output"]["save_ica_data"]),
-                ("Epochs (uncorrected)", cfg["files"]["output"]["save_epoch_data_uncorrected"]),
-                ("Epochs (unrejected)", cfg["files"]["output"]["save_epoch_data_unrejected"]),
-                ("Epochs (final)", cfg["files"]["output"]["save_epoch_data_final"]),
-                ("ERPs (uncorrected)", cfg["files"]["output"]["save_erp_data_uncorrected"]),
-                ("ERPs (unrejected)", cfg["files"]["output"]["save_erp_data_unrejected"]),
-                ("ERPs (final)", cfg["files"]["output"]["save_erp_data_final"]),
-            ]
-            for (label, flag) in save_flags
-                @info "  $(flag ? "✓" : "✗") $label"
-            end
-            @info ""
-            @info "Dry run complete. No data was processed."
+            _pipeline_dry_run_summary(
+                input_directory,
+                output_directory,
+                layout_file_path,
+                layout,
+                epoch_condition_file,
+                epoch_cfgs,
+                raw_data_files,
+                preprocess_cfg,
+                cfg,
+            )
             return nothing
         end
 
@@ -198,7 +164,7 @@ function preprocess(
         for (file_idx, data_file) in enumerate(raw_data_files)
             # Skip files that have already been processed (if skip_existing is enabled)
             if skip_existing
-                final_output = _make_output_filename(output_directory, data_file, "_epochs_final")
+                final_output = _make_output_filename(output_directory, data_file, "_epochs")
                 if isfile(final_output)
                     @info "Skipping file $file_idx/$(length(raw_data_files)): $(basename(data_file)) (already processed)"
                     skipped_files += 1
@@ -243,154 +209,13 @@ function preprocess(
                 mark_epoch_intervals!(dat, epoch_cfgs, [preprocess_cfg.epoch_start, preprocess_cfg.epoch_end])
 
                 ################### APPLY INITIAL FILTERS ###################
-                @info section("Initial Filters")
-                highpass_filter!(dat, preprocess_cfg.filter)
-                lowpass_filter!(dat, preprocess_cfg.filter)
-
-                #################### RESAMPLE ###################
-                if preprocess_cfg.resample.apply
-                    @info section("Resampling")
-                    @info "Resampling data to $(preprocess_cfg.resample.target_rate) Hz"
-                    resample!(dat, preprocess_cfg.resample.target_rate)
-                end
-
-                ################### CLEANLINE ###################
-                if preprocess_cfg.cleanline.apply
-                    @info section("Line Noise Removal (CleanLine)")
-                    cleanline!(
-                        dat;
-                        line_frequencies = preprocess_cfg.cleanline.line_frequencies,
-                        bandwidth = preprocess_cfg.cleanline.bandwidth,
-                        sliding_win_length = preprocess_cfg.cleanline.sliding_win_length,
-                        sliding_win_step = preprocess_cfg.cleanline.sliding_win_step,
-                        time_bandwidth = preprocess_cfg.cleanline.time_bandwidth,
-                        k_tapers = preprocess_cfg.cleanline.k_tapers,
-                        p_value = preprocess_cfg.cleanline.p_value,
-                        pad = preprocess_cfg.cleanline.pad,
-                    )
-                end
+                _pipeline_initial_filters!(dat, preprocess_cfg)
 
                 #################### CALCULATE EOG CHANNELS ###################
-                @info section("EOG")
-                @info subsection("Calculating EOG (vEOG/hEOG) channels")
-                calculate_eog_channels!(dat, preprocess_cfg.eog)
-
-                # Autodetect EOG signals
-                @info subsection("Detecting EOG (vEOG/hEOG) onsets")
-                detect_eog_onsets!(dat, preprocess_cfg.eog)
-
-                # Calculate correlations between all channels and EOG channels
-                @info subsection("Channel x vEOG/hEOG Correlation Matrix")
-                hEOG_vEOG_cm = correlation_matrix_eog(dat, preprocess_cfg.eog)
-                add_zscore_columns!(hEOG_vEOG_cm)
-                log_pretty_table(hEOG_vEOG_cm; title = "Channel x vEOG/hEOG Correlation Matrix (whole dataset)")
-
-                # Calculate correlations between all channels and EOG channels (epoch interval)
-                @info subsection("Channel x vEOG/hEOG Correlation Matrix (epoch interval)")
-                hEOG_vEOG_cm_epoch = correlation_matrix_eog(dat, preprocess_cfg.eog; sample_selection = samples(:epoch_interval))
-                add_zscore_columns!(hEOG_vEOG_cm_epoch)
-                log_pretty_table(hEOG_vEOG_cm_epoch; title = "Channel x vEOG/hEOG Correlation Matrix (epoch interval)")
-
-
+                hEOG_vEOG_cm_epoch = _pipeline_eog!(dat, preprocess_cfg)
 
                 ############################### INITIAL ARTIFACT DETECTION ###############################
-                # This is the initial artifact detection on the continuous data and just looks for sections of 
-                # data that are extreme (i.e., beyond a certain threshold and unlikely to be real data).
-                # Also, try and identify bad channels based on the channel joint probability and z-score variance measures.
-                @info section("Artifact Detection: Continuous Data")
-
-                ################### INITIAL CHANNEL SUMMARY ###################
-                @info subsection("Channel Summary")
-                summary_whole_dataset = channel_summary(dat)
-                log_pretty_table(summary_whole_dataset; title = "Channel Summary (whole dataset)")
-
-                summary_epoch_interval = channel_summary(dat, sample_selection = samples(:epoch_interval))
-                log_pretty_table(summary_epoch_interval; title = "Channel Summary (epoch interval)")
-
-                #################### DETECT EXTREME VALUES IN CONTINUOUS DATA ###################
-                @info subsection("Artifact Detection (extreme values)")
-                @info "Detecting extreme values: $(preprocess_cfg.eeg.extreme_value_abs_criterion) μV"
-                is_extreme_value!(
-                    dat,
-                    preprocess_cfg.eeg.extreme_value_abs_criterion,
-                    channel_out = _flag_symbol("is_extreme_value", preprocess_cfg.eeg.extreme_value_abs_criterion),
-                )
-
-                @info subsection("Artifact Detection (criterion values)")
-                @info "Detecting artifact values: $(preprocess_cfg.eeg.artifact_value_abs_criterion) μV"
-                is_extreme_value!(
-                    dat,
-                    preprocess_cfg.eeg.artifact_value_abs_criterion,
-                    channel_out = _flag_symbol("is_artifact_value", preprocess_cfg.eeg.artifact_value_abs_criterion),
-                )
-
-                #################### CHANNEL JOINT PROBABILITY IN CONTINUOUS DATA ###################
-                @info subsection("Bad Channel Detection using Channel Joint Probability + Z-Score Variance")
-                cjp_whole_dataset = channel_joint_probability(dat)
-                log_pretty_table(cjp_whole_dataset; title = "Channel Joint Probability (whole dataset)")
-
-                cjp_epoch_interval = channel_joint_probability(dat, sample_selection = samples(:epoch_interval))
-                log_pretty_table(cjp_epoch_interval; title = "Channel Joint Probability (epoch interval)")
-
-                @info subsubsection("Bad Channels")
-                bad_channels_whole_dataset = identify_bad_channels(summary_whole_dataset, cjp_whole_dataset)
-                bad_channels_epoch_interval = identify_bad_channels(summary_epoch_interval, cjp_epoch_interval)
-
-                # Separate identification within whole dataset and epoch intervals and taking common seems more reliable
-                bad_channels = intersect(bad_channels_whole_dataset, bad_channels_epoch_interval)
-
-                # Some channels may be classified as "bad" due to EOG-related activity.
-                # Partition into non-EOG-related (retain) and EOG-related (prob. handled better via ICA later).
-                bad_channels_non_eog_related, bad_channels_eog_related = partition_channels_by_eog_correlation(
-                    bad_channels,
-                    hEOG_vEOG_cm_epoch;
-                    eog_channels = [:hEOG, :vEOG],
-                    threshold = 0.3,
-                    use_z = false,
-                )
-
-                @info "Bad channels (non-EOG related): $(length(bad_channels_non_eog_related)) channels - $(bad_channels_non_eog_related)"
-                @info "Bad channels (EOG related): $(length(bad_channels_eog_related)) channels - $(bad_channels_eog_related)"
-
-                # Analyze which channels can be repaired (needed for ICA and repair steps)
-                continuous_repair_info = nothing
-                if !isempty(bad_channels_non_eog_related)
-                    continuous_repair_info = create_continuous_repair_info(:neighbor_interpolation; name = "continuous_repair")
-                    channel_repairable!(continuous_repair_info, bad_channels_non_eog_related, dat.layout)
-                end
-
-                if preprocess_cfg.interactive_continuous
-                    @info section("Interactive Continuous Data Review")
-                    @info "Reviewing continuous data before ICA. Close the window to continue."
-                    res = plot_databrowser(dat)
-                    wait(res.fig.scene)
-
-                    # Apply any manual settings configured in the databrowser
-                    apply_analysis_settings!(dat, res.analysis_settings)
-
-                    # Track manually repaired channels for the summary logs
-                    manual_repaired = res.analysis_settings[].repaired_channels
-                    if !isempty(manual_repaired)
-                        @info "Manually repaired channels: $manual_repaired"
-                        if isnothing(continuous_repair_info)
-                            continuous_repair_info =
-                                create_continuous_repair_info(:neighbor_interpolation; name = "continuous_repair_manual")
-                        end
-                        # Append to the info object without re-repairing, since apply_analysis_settings! did it
-                        append!(continuous_repair_info.repaired, manual_repaired)
-                        unique!(continuous_repair_info.repaired)
-                    end
-
-                    @info "Continuous data review complete."
-                end
-
-                #################### REPAIR BAD CHANNELS ###################
-                if !isnothing(continuous_repair_info)
-                    @info section("Channel Repair")
-                    repair_channels!(dat, continuous_repair_info; method = :neighbor_interpolation)
-                    @info continuous_repair_info
-                end
-
+                continuous_repair_info = _pipeline_continuous_artifacts!(dat, preprocess_cfg, hEOG_vEOG_cm_epoch)
                 ################### REREFERENCE DATA ###################
                 if preprocess_cfg.reference_channel != :none
                     @info section("Rereference")
@@ -405,240 +230,38 @@ function preprocess(
                 # Here, preprocessing (rereferencing and channel repair) has been applied, but
                 # no ICA artifact correction has been performed.
                 @info section("Initial Epoch Extraction (Pre-ICA)")
-                epochs_uncorrected = extract_epochs(dat, epoch_cfgs, (preprocess_cfg.epoch_start, preprocess_cfg.epoch_end))
-                erps_uncorrected = average_epochs(epochs_uncorrected)
+                epochs_raw = extract_epochs(dat, epoch_cfgs, (preprocess_cfg.epoch_start, preprocess_cfg.epoch_end))
+                erps_raw = average_epochs(epochs_raw)
 
-                if cfg["files"]["output"]["save_epoch_data_uncorrected"]
+                if cfg["files"]["output"]["save_epoch_data_raw"]
                     @info "Saving epoch data (original)"
-                    jldsave(_make_output_filename(output_directory, data_file, "_epochs_uncorrected"); data = epochs_uncorrected)
+                    jldsave(_make_output_filename(output_directory, data_file, "_epochs_raw"); data = epochs_raw)
                 end
 
-                if cfg["files"]["output"]["save_erp_data_uncorrected"]
+                if cfg["files"]["output"]["save_erp_data_raw"]
                     @info "Saving ERP data (original)"
-                    jldsave(_make_output_filename(output_directory, data_file, "_erps_uncorrected"); data = erps_uncorrected)
+                    jldsave(_make_output_filename(output_directory, data_file, "_erps_raw"); data = erps_raw)
                 end
 
                 #################### Independent Component Analysis (ICA) ###################
                 # We perform the ica on "continuous" data (clean sections) that usually has a 
                 # more extreme high-pass filter applied. 
-                # We then run ica on clean sections of "continuous" data
-                component_artifacts = nothing  # Initialize in case ICA is not applied
-                if preprocess_cfg.ica.apply
-                    @info section("ICA")
-
-                    dat_ica = copy(dat) # we need a copy of the data for the ICA
-
-                    # Apply ICA-specific filters
-                    @info subsection("ICA filters")
-                    highpass_filter!(dat_ica, preprocess_cfg.filter, section = :ica_highpass)
-                    lowpass_filter!(dat_ica, preprocess_cfg.filter, section = :ica_lowpass)
-
-                    extreme_flag = _flag_symbol("is_extreme_value", preprocess_cfg.eeg.extreme_value_abs_criterion)
-                    # Exclude both automatic extreme values and any manually marked bad regions from the GUI
-                    artifact_flags = [extreme_flag]
-                    hasproperty(dat_ica, :selected_region) && push!(artifact_flags, :selected_region)
-
-                    @info subsection("Running ICA")
-
-                    # Calculate rank to prevent ICA crash from rank-deficient data
-                    n_repaired = isnothing(continuous_repair_info) ? 0 : length(continuous_repair_info.repaired)
-                    n_ref = preprocess_cfg.reference_channel == :avg ? 1 : 0
-                    n_comps = length(channel_labels(dat_ica)) - n_repaired - n_ref
-
-                    ica = run_ica(
-                        dat_ica;
-                        n_components = n_comps,
-                        sample_selection = samples_or_not(artifact_flags),
-                        percentage_of_data = preprocess_cfg.ica.percentage_of_data,
-                    )
-
-                    # Identify all artifact components 
-                    @info subsection("Component Identification")
-                    component_artifacts, component_metrics =
-                        identify_components(dat, ica, sample_selection = samples_or_not(artifact_flags))
-
-                    # Print component metrics to log files
-                    log_pretty_table(component_metrics[:eog_metrics]; title = "EOG Component Metrics")
-                    log_pretty_table(component_metrics[:ecg_metrics]; title = "ECG Component Metrics")
-                    log_pretty_table(component_metrics[:line_noise_metrics]; title = "Line Noise Component Metrics")
-                    log_pretty_table(component_metrics[:channel_noise_metrics]; title = "Channel Noise Component Metrics")
-
-                    if preprocess_cfg.interactive_ica
-                        @info section("Interactive ICA Component Review")
-                        @info "Use the databrowser ICA menu to review and manually select components to remove. Close the window to continue."
-                        res = plot_databrowser(dat, ica)
-                        wait(res.fig.scene)
-
-                        # Add user's manually removed components to the "manual" category in component_artifacts
-                        manual_removals = res.analysis_settings[].removed_ica_components
-                        if !isempty(manual_removals)
-                            @info "Manually removed components: $manual_removals"
-                            if !haskey(component_artifacts.artifacts, :manual)
-                                component_artifacts.artifacts[:manual] = Int[]
-                            end
-                            append!(component_artifacts.artifacts[:manual], manual_removals)
-                            unique!(component_artifacts.artifacts[:manual])
-                        end
-                    end
-
-                    @info subsection("Removing ICA components")
-                    all_removed_components = get_all_ica_components(component_artifacts)
-                    @info "Removed $(length(all_removed_components)) ICA components" component_artifacts
-                    subtract_ica_components!(dat, ica, component_selection = components(all_removed_components))
-
-                    # save ica results
-                    if cfg["files"]["output"]["save_ica_data"]
-                        @info "Saving ica data"
-                        jldsave(_make_output_filename(output_directory, data_file, "_ica"); data = ica)
-                    end
-
-                end
-
-
+                component_artifacts = _pipeline_ica!(dat, preprocess_cfg, continuous_repair_info, output_directory, data_file, cfg)
 
                 #################### RECALCULATE EOG CHANNELS AFTER ICA AND REPAIR ###################
-                # After ICA component removal and channel repair, EOG channels need to be recalculated
-                # because the underlying channel data has changed
-                @info section("EOG Recalculation")
-                @info subsection("Recalculating EOG (vEOG/hEOG) channels after ICA and repair")
-                calculate_eog_channels!(dat, preprocess_cfg.eog)
-
-                #################### DETECT ARTIFACT VALUES IN CONTINUOUS DATA (FOR EPOCHING) ###################
-                @info section("Detecting artifact values in continuous data")
-                is_extreme_value!(
+                _pipeline_epoch_and_reject!(
                     dat,
-                    preprocess_cfg.eeg.artifact_value_abs_criterion,
-                    channel_out = Symbol("is_artifact_value" * "_" * string(preprocess_cfg.eeg.artifact_value_abs_criterion)),
+                    preprocess_cfg,
+                    epoch_cfgs,
+                    continuous_repair_info,
+                    component_artifacts,
+                    output_directory,
+                    data_file,
+                    cfg,
+                    epochs_raw,
+                    all_epoch_counts,
                 )
 
-                # Save the cleaned continuous data in Julia format
-                if cfg["files"]["output"]["save_continuous_data_corrected"]
-                    @info "Saving continuous data"
-                    jldsave(_make_output_filename(output_directory, data_file, "_continuous_corrected"); data = dat)
-                end
-
-                #################### EPOCH EXTRACTION ###################
-                @info section("Extracting cleaned epoched data")
-                epochs = extract_epochs(dat, epoch_cfgs, (preprocess_cfg.epoch_start, preprocess_cfg.epoch_end))
-
-                # Check if any epochs have empty data
-                empty_epochs = [i for (i, ep) in enumerate(epochs) if isempty(ep.data)]
-                if !isempty(empty_epochs)
-                    @minimal_error "Epoch extraction resulted in empty epochs for conditions: $(join([epochs[i].condition_name for i in empty_epochs], ", ")). Check epoch interval parameters and trigger locations."
-                end
-
-                #################### BASELINE WHOLE EPOCHS ##############
-                @info section("Baseline whole epochs")
-                baseline!(epochs)
-
-                #################### DETECT BAD EPOCHS ###################
-                @info section("Automatic epoch detection")
-
-                # Determine interval selection for artifact rejection
-                if !isnothing(preprocess_cfg.eeg.artifact_interval_start) && !isnothing(preprocess_cfg.eeg.artifact_interval_end)
-                    rej_interval = times(preprocess_cfg.eeg.artifact_interval_start, preprocess_cfg.eeg.artifact_interval_end)
-                    @info "Restricting artifact rejection to window: $(preprocess_cfg.eeg.artifact_interval_start)s to $(preprocess_cfg.eeg.artifact_interval_end)s"
-                else
-                    rej_interval = times()
-                end
-
-                rejection_info_step1 = detect_bad_epochs_automatic(
-                    epochs;
-                    z_criterion = preprocess_cfg.eeg.artifact_value_z_criterion,
-                    abs_criterion = preprocess_cfg.eeg.artifact_value_abs_criterion,
-                    interval_selection = rej_interval,
-                    name = "rejection_step1",
-                )
-                channel_repairable!(rejection_info_step1, epochs[1].layout)
-                @info "" # formatting
-                @info rejection_info_step1
-
-                #################### CHANNEL REPAIR PER EPOCH ###################
-                # Repair channels identified in rejection_step1 before rejecting epochs
-                # This may save epochs that would otherwise be rejected
-                @info section("Channel Repair per Epoch")
-                repair_artifacts!(epochs, rejection_info_step1)
-
-                #################### SAVE EPOCH DATA ###################
-                if cfg["files"]["output"]["save_epoch_data_unrejected"]
-                    @info "Saving epoch data (cleaned)"
-                    jldsave(_make_output_filename(output_directory, data_file, "_epochs_unrejected"); data = epochs)
-                end
-
-                #################### RE-DETECT ARTIFACTS AFTER REPAIR ###################
-                # Re-detect artifacts after repair to get updated rejection info
-                @info subsection("Re-detecting artifacts after repair")
-                rejection_info_step2 = detect_bad_epochs_automatic(
-                    epochs;
-                    z_criterion = preprocess_cfg.eeg.artifact_value_z_criterion,
-                    abs_criterion = preprocess_cfg.eeg.artifact_value_abs_criterion,
-                    interval_selection = rej_interval,
-                    name = "rejection_step2",
-                )
-                channel_repairable!(rejection_info_step2, epochs[1].layout)
-                @info "" # formatting
-                @info rejection_info_step2
-
-                #################### COMPARE REJECTION STEPS ###################
-                @info subsection("Rejection Step Comparison (before vs after repair)")
-                rejection_comparison = compare_rejections(rejection_info_step1, rejection_info_step2)
-                log_pretty_table(rejection_comparison; title = "Rejection Step Comparison: Effectiveness of Channel Repair")
-
-                if preprocess_cfg.interactive_epochs
-                    @info section("Interactive Epoch Rejection Review")
-                    @info "Review epoch artifacts. Checked epochs will be rejected. Close the window to continue."
-                    state = detect_bad_epochs_interactive(epochs; artifact_info = rejection_info_step2)
-                    wait(state.fig.scene)
-
-                    # Merge manual rejection state into the automatic rejection info
-                    interactive_info = EegFun._to_rejection_info(state)
-                    # We can just use the interactive_info directly as it contains all manual rejections!
-                    # Wait, the interactive GUI starts with checkboxes active for automatically rejected epochs!
-                    # So state.rejected contains BOTH automatic AND manual rejections.
-                    # We can just override rejection_info_step2 with this combined info
-                    rejection_info_step2 = interactive_info
-                end
-
-                #################### SAVE ERP DATA ###################
-                if cfg["files"]["output"]["save_erp_data_unrejected"]
-                    erps = average_epochs(epochs)
-                    @info "Saving ERP data (cleaned)"
-                    jldsave(_make_output_filename(output_directory, data_file, "_erps_unrejected"); data = erps)
-                end
-
-                #################### EPOCH REJECTION ###################
-                @info subsection("Rejecting bad epochs")
-                epochs = reject_epochs(epochs, rejection_info_step2)
-
-                #################### SAVE ARTIFACT INFO ###################
-                # Collect all artifact-related info into a single structure
-                @info subsection("Artifact Information")
-                artifact_info = ArtifactInfo(
-                    !isnothing(continuous_repair_info) ? [continuous_repair_info] : ContinuousRepairInfo[],
-                    vcat(rejection_info_step1, rejection_info_step2),
-                    component_artifacts,  # Save ICA components if ICA was applied, otherwise nothing
-                )
-                jldsave(_make_output_filename(output_directory, data_file, "_artifact_info"); data = artifact_info)
-                @info "Saved artifact info: $(artifact_info)"
-
-                #################### LOG EPOCH COUNTS AND STORE FOR SUMMARY ###################
-                df = log_epochs_table(epochs_uncorrected, epochs, title = "Epoch counts per condition (after repair and rejection):")
-                push!(all_epoch_counts, df)
-
-                #################### SAVE EPOCH DATA ###################
-                if cfg["files"]["output"]["save_epoch_data_final"]
-                    @info "Saving epoch data (good)"
-                    jldsave(_make_output_filename(output_directory, data_file, "_epochs_final"); data = epochs)
-                end
-
-                #################### SAVE ERP DATA ###################
-                if cfg["files"]["output"]["save_erp_data_final"]
-                    erps = average_epochs(epochs)
-                    @info "Saving ERP data (good)"
-                    jldsave(_make_output_filename(output_directory, data_file, "_erps_final"); data = erps)
-                end
-
-                @info section("End of Processing")
                 file_elapsed = time() - file_start_time
                 total_processing_time += file_elapsed
                 n_processed_for_eta += 1
@@ -713,4 +336,475 @@ function preprocess(
         end
     end
 
+end
+
+# =========================================================================
+# PIPELINE INTERNAL STAGES
+# =========================================================================
+function _pipeline_dry_run_summary(
+    input_directory,
+    output_directory,
+    layout_file_path,
+    layout,
+    epoch_condition_file,
+    epoch_cfgs,
+    raw_data_files,
+    preprocess_cfg,
+    cfg,
+)
+    @info section("Dry Run Summary")
+    @info "✓ Configuration loaded and validated successfully"
+    @info "✓ Input directory exists: $input_directory"
+    @info "✓ Output directory: $output_directory"
+    @info "✓ Layout file loaded: $layout_file_path ($(length(layout.data.label)) channels)"
+    @info "✓ Epoch condition file loaded: $epoch_condition_file ($(length(epoch_cfgs)) condition(s))"
+    @info "✓ Found $(length(raw_data_files)) file(s) to process:"
+    for (i, f) in enumerate(raw_data_files)
+        existing = isfile(_make_output_filename(output_directory, f, "_epochs"))
+        status = existing ? "(already processed)" : "(pending)"
+        @info "  $i. $(basename(f)) $status"
+    end
+    @info ""
+    @info subsection("Preprocessing Settings")
+    @info "  Reference: $(preprocess_cfg.reference_channel)"
+    @info "  Epoch window: $(preprocess_cfg.epoch_start)s to $(preprocess_cfg.epoch_end)s"
+    @info "  Highpass filter: $(preprocess_cfg.filter.highpass.apply ? "$(preprocess_cfg.filter.highpass.freq) Hz" : "off")"
+    @info "  Lowpass filter: $(preprocess_cfg.filter.lowpass.apply ? "$(preprocess_cfg.filter.lowpass.freq) Hz" : "off")"
+    @info "  ICA: $(preprocess_cfg.ica.apply ? "on ($(preprocess_cfg.ica.percentage_of_data)% of data)" : "off")"
+    @info "  CleanLine: $(preprocess_cfg.cleanline.apply ? "on ($(preprocess_cfg.cleanline.line_frequencies) Hz)" : "off")"
+    @info "  Resampling: $(preprocess_cfg.resample.apply ? "on ($(preprocess_cfg.resample.target_rate) Hz)" : "off")"
+    @info "  Artifact threshold (abs): $(preprocess_cfg.eeg.artifact_value_abs_criterion) μV"
+    @info "  Artifact threshold (z): $(preprocess_cfg.eeg.artifact_value_z_criterion == 0 ? "off" : preprocess_cfg.eeg.artifact_value_z_criterion)"
+    @info "  Extreme value threshold: $(preprocess_cfg.eeg.extreme_value_abs_criterion) μV"
+    @info "  Interactive continuous: $(preprocess_cfg.interactive_continuous)"
+    @info "  Interactive ICA: $(preprocess_cfg.interactive_ica)"
+    @info "  Interactive epochs: $(preprocess_cfg.interactive_epochs)"
+    @info ""
+    @info subsection("Output Files")
+    save_flags = [
+        ("Continuous (raw)", cfg["files"]["output"]["save_continuous_data_raw"]),
+        ("Continuous (corrected)", cfg["files"]["output"]["save_continuous_data_corrected"]),
+        ("ICA data", cfg["files"]["output"]["save_ica_data"]),
+        ("Epochs (raw)", cfg["files"]["output"]["save_epoch_data_raw"]),
+        ("Epochs (corrected)", cfg["files"]["output"]["save_epoch_data_corrected"]),
+        ("Epochs (final)", cfg["files"]["output"]["save_epoch_data"]),
+        ("ERPs (raw)", cfg["files"]["output"]["save_erp_data_raw"]),
+        ("ERPs (corrected)", cfg["files"]["output"]["save_erp_data_corrected"]),
+        ("ERPs (final)", cfg["files"]["output"]["save_erp_data"]),
+    ]
+    for (label, flag) in save_flags
+        @info "  $(flag ? "✓" : "✗") $label"
+    end
+    @info ""
+    @info "Dry run complete. No data was processed."
+    return nothing
+end
+
+
+function _pipeline_initial_filters!(dat::ContinuousData, preprocess_cfg::PreprocessConfig)
+    @info section("Initial Filters")
+    highpass_filter!(dat, preprocess_cfg.filter)
+    lowpass_filter!(dat, preprocess_cfg.filter)
+
+    #################### RESAMPLE ###################
+    if preprocess_cfg.resample.apply
+        @info section("Resampling")
+        @info "Resampling data to $(preprocess_cfg.resample.target_rate) Hz"
+        resample!(dat, preprocess_cfg.resample.target_rate)
+    end
+
+    ################### CLEANLINE ###################
+    if preprocess_cfg.cleanline.apply
+        @info section("Line Noise Removal (CleanLine)")
+        cleanline!(
+            dat;
+            line_frequencies = preprocess_cfg.cleanline.line_frequencies,
+            bandwidth = preprocess_cfg.cleanline.bandwidth,
+            sliding_win_length = preprocess_cfg.cleanline.sliding_win_length,
+            sliding_win_step = preprocess_cfg.cleanline.sliding_win_step,
+            time_bandwidth = preprocess_cfg.cleanline.time_bandwidth,
+            k_tapers = preprocess_cfg.cleanline.k_tapers,
+            p_value = preprocess_cfg.cleanline.p_value,
+            pad = preprocess_cfg.cleanline.pad,
+        )
+    end
+end
+
+
+function _pipeline_eog!(dat::ContinuousData, preprocess_cfg::PreprocessConfig)
+    #################### CALCULATE EOG CHANNELS ###################
+    @info section("EOG")
+    @info subsection("Calculating EOG (vEOG/hEOG) channels")
+    calculate_eog_channels!(dat, preprocess_cfg.eog)
+
+    # Autodetect EOG signals
+    @info subsection("Detecting EOG (vEOG/hEOG) onsets")
+    detect_eog_onsets!(dat, preprocess_cfg.eog)
+
+    # Calculate correlations between all channels and EOG channels
+    @info subsection("Channel x vEOG/hEOG Correlation Matrix")
+    hEOG_vEOG_cm = correlation_matrix_eog(dat, preprocess_cfg.eog)
+    add_zscore_columns!(hEOG_vEOG_cm)
+    log_pretty_table(hEOG_vEOG_cm; title = "Channel x vEOG/hEOG Correlation Matrix (whole dataset)")
+
+    # Calculate correlations between all channels and EOG channels (epoch interval)
+    @info subsection("Channel x vEOG/hEOG Correlation Matrix (epoch interval)")
+    hEOG_vEOG_cm_epoch = correlation_matrix_eog(dat, preprocess_cfg.eog; sample_selection = samples(:epoch_interval))
+    add_zscore_columns!(hEOG_vEOG_cm_epoch)
+    log_pretty_table(hEOG_vEOG_cm_epoch; title = "Channel x vEOG/hEOG Correlation Matrix (epoch interval)")
+    return hEOG_vEOG_cm_epoch
+end
+
+
+function _pipeline_continuous_artifacts!(dat::ContinuousData, preprocess_cfg::PreprocessConfig, hEOG_vEOG_cm_epoch::DataFrame)
+    ############################### INITIAL ARTIFACT DETECTION ###############################
+    # This is the initial artifact detection on the continuous data and just looks for sections of 
+    # data that are extreme (i.e., beyond a certain threshold and unlikely to be real data).
+    # Also, try and identify bad channels based on the channel joint probability and z-score variance measures.
+    @info section("Artifact Detection: Continuous Data")
+
+    ################### INITIAL CHANNEL SUMMARY ###################
+    @info subsection("Channel Summary")
+    summary_whole_dataset = channel_summary(dat)
+    log_pretty_table(summary_whole_dataset; title = "Channel Summary (whole dataset)")
+
+    summary_epoch_interval = channel_summary(dat, sample_selection = samples(:epoch_interval))
+    log_pretty_table(summary_epoch_interval; title = "Channel Summary (epoch interval)")
+
+    #################### DETECT EXTREME VALUES IN CONTINUOUS DATA ###################
+    @info subsection("Artifact Detection (extreme values)")
+    @info "Detecting extreme values: $(preprocess_cfg.eeg.extreme_value_abs_criterion) μV"
+    is_extreme_value!(
+        dat,
+        preprocess_cfg.eeg.extreme_value_abs_criterion,
+        channel_out = _flag_symbol("is_extreme_value", preprocess_cfg.eeg.extreme_value_abs_criterion),
+    )
+
+    @info subsection("Artifact Detection (criterion values)")
+    @info "Detecting artifact values: $(preprocess_cfg.eeg.artifact_value_abs_criterion) μV"
+    is_extreme_value!(
+        dat,
+        preprocess_cfg.eeg.artifact_value_abs_criterion,
+        channel_out = _flag_symbol("is_artifact_value", preprocess_cfg.eeg.artifact_value_abs_criterion),
+    )
+
+    #################### CHANNEL JOINT PROBABILITY IN CONTINUOUS DATA ###################
+    @info subsection("Bad Channel Detection using Channel Joint Probability + Z-Score Variance")
+    cjp_whole_dataset = channel_joint_probability(dat)
+    log_pretty_table(cjp_whole_dataset; title = "Channel Joint Probability (whole dataset)")
+
+    cjp_epoch_interval = channel_joint_probability(dat, sample_selection = samples(:epoch_interval))
+    log_pretty_table(cjp_epoch_interval; title = "Channel Joint Probability (epoch interval)")
+
+    @info subsubsection("Bad Channels")
+    bad_channels_whole_dataset = identify_bad_channels(summary_whole_dataset, cjp_whole_dataset)
+    bad_channels_epoch_interval = identify_bad_channels(summary_epoch_interval, cjp_epoch_interval)
+
+    # Separate identification within whole dataset and epoch intervals and taking common seems more reliable
+    bad_channels = intersect(bad_channels_whole_dataset, bad_channels_epoch_interval)
+
+    # Some channels may be classified as "bad" due to EOG-related activity.
+    # Partition into non-EOG-related (retain) and EOG-related (prob. handled better via ICA later).
+    bad_channels_non_eog_related, bad_channels_eog_related = partition_channels_by_eog_correlation(
+        bad_channels,
+        hEOG_vEOG_cm_epoch;
+        eog_channels = [:hEOG, :vEOG],
+        threshold = 0.3,
+        use_z = false,
+    )
+
+    @info "Bad channels (non-EOG related): $(length(bad_channels_non_eog_related)) channels - $(bad_channels_non_eog_related)"
+    @info "Bad channels (EOG related): $(length(bad_channels_eog_related)) channels - $(bad_channels_eog_related)"
+
+    # Analyze which channels can be repaired (needed for ICA and repair steps)
+    continuous_repair_info = nothing
+    if !isempty(bad_channels_non_eog_related)
+        continuous_repair_info = create_continuous_repair_info(:neighbor_interpolation; name = "continuous_repair")
+        channel_repairable!(continuous_repair_info, bad_channels_non_eog_related, dat.layout)
+    end
+
+    if preprocess_cfg.interactive_continuous
+        @info section("Interactive Continuous Data Review")
+        @info "Reviewing continuous data before ICA. Close the window to continue."
+        res = plot_databrowser(dat)
+        wait(res.fig.scene)
+
+        # Apply any manual settings configured in the databrowser
+        apply_analysis_settings!(dat, res.analysis_settings)
+
+        # Track manually repaired channels for the summary logs
+        manual_repaired = res.analysis_settings[].repaired_channels
+        if !isempty(manual_repaired)
+            @info "Manually repaired channels: $manual_repaired"
+            if isnothing(continuous_repair_info)
+                continuous_repair_info = create_continuous_repair_info(:neighbor_interpolation; name = "continuous_repair_manual")
+            end
+            # Append to the info object without re-repairing, since apply_analysis_settings! did it
+            append!(continuous_repair_info.repaired, manual_repaired)
+            unique!(continuous_repair_info.repaired)
+        end
+
+        @info "Continuous data review complete."
+    end
+
+    #################### REPAIR BAD CHANNELS ###################
+    if !isnothing(continuous_repair_info)
+        @info section("Channel Repair")
+        repair_channels!(dat, continuous_repair_info; method = :neighbor_interpolation)
+        @info continuous_repair_info
+    end
+    return continuous_repair_info
+end
+
+
+function _pipeline_ica!(
+    dat::ContinuousData,
+    preprocess_cfg::PreprocessConfig,
+    continuous_repair_info::Union{ContinuousRepairInfo,Nothing},
+    output_directory::String,
+    data_file::String,
+    cfg::Dict,
+)
+    # We then run ica on clean sections of "continuous" data
+    component_artifacts = nothing  # Initialize in case ICA is not applied
+    if preprocess_cfg.ica.apply
+        @info section("ICA")
+
+        dat_ica = copy(dat) # we need a copy of the data for the ICA
+
+        # Apply ICA-specific filters
+        @info subsection("ICA filters")
+        highpass_filter!(dat_ica, preprocess_cfg.filter, section = :ica_highpass)
+        lowpass_filter!(dat_ica, preprocess_cfg.filter, section = :ica_lowpass)
+
+        extreme_flag = _flag_symbol("is_extreme_value", preprocess_cfg.eeg.extreme_value_abs_criterion)
+        # Exclude both automatic extreme values and any manually marked bad regions from the GUI
+        artifact_flags = [extreme_flag]
+        hasproperty(dat_ica, :selected_region) && push!(artifact_flags, :selected_region)
+
+        @info subsection("Running ICA")
+
+        # Calculate rank to prevent ICA crash from rank-deficient data
+        n_repaired = isnothing(continuous_repair_info) ? 0 : length(continuous_repair_info.repaired)
+        n_ref = preprocess_cfg.reference_channel == :avg ? 1 : 0
+        n_comps = length(channel_labels(dat_ica)) - n_repaired - n_ref
+
+        ica = run_ica(
+            dat_ica;
+            n_components = n_comps,
+            sample_selection = samples_or_not(artifact_flags),
+            percentage_of_data = preprocess_cfg.ica.percentage_of_data,
+        )
+
+        # Identify all artifact components 
+        @info subsection("Component Identification")
+        component_artifacts, component_metrics = identify_components(dat, ica, sample_selection = samples_or_not(artifact_flags))
+
+        # Print component metrics to log files
+        log_pretty_table(component_metrics[:eog_metrics]; title = "EOG Component Metrics")
+        log_pretty_table(component_metrics[:ecg_metrics]; title = "ECG Component Metrics")
+        log_pretty_table(component_metrics[:line_noise_metrics]; title = "Line Noise Component Metrics")
+        log_pretty_table(component_metrics[:channel_noise_metrics]; title = "Channel Noise Component Metrics")
+
+        if preprocess_cfg.interactive_ica
+            @info section("Interactive ICA Component Review")
+            @info "Use the databrowser ICA menu to review and manually select components to remove. Close the window to continue."
+            res = plot_databrowser(dat, ica)
+            wait(res.fig.scene)
+
+            # Add user's manually removed components to the "manual" category in component_artifacts
+            manual_removals = res.analysis_settings[].removed_ica_components
+            if !isempty(manual_removals)
+                @info "Manually removed components: $manual_removals"
+                if !haskey(component_artifacts.artifacts, :manual)
+                    component_artifacts.artifacts[:manual] = Int[]
+                end
+                append!(component_artifacts.artifacts[:manual], manual_removals)
+                unique!(component_artifacts.artifacts[:manual])
+            end
+        end
+
+        @info subsection("Removing ICA components")
+        all_removed_components = get_all_ica_components(component_artifacts)
+        @info "Removed $(length(all_removed_components)) ICA components" component_artifacts
+        subtract_ica_components!(dat, ica, component_selection = components(all_removed_components))
+
+        # save ica results
+        if cfg["files"]["output"]["save_ica_data"]
+            @info "Saving ica data"
+            jldsave(_make_output_filename(output_directory, data_file, "_ica"); data = ica)
+        end
+
+    end
+    return component_artifacts
+end
+
+
+function _pipeline_epoch_and_reject!(
+    dat::ContinuousData,
+    preprocess_cfg::PreprocessConfig,
+    epoch_cfgs::Vector{EpochCondition},
+    continuous_repair_info::Union{ContinuousRepairInfo,Nothing},
+    component_artifacts::Union{ArtifactComponents,Nothing},
+    output_directory::String,
+    data_file::String,
+    cfg::Dict,
+    epochs_raw::Vector{EpochData},
+    all_epoch_counts::Vector{DataFrame},
+)
+    #################### RECALCULATE EOG CHANNELS AFTER ICA AND REPAIR ###################
+    # After ICA component removal and channel repair, EOG channels need to be recalculated
+    # because the underlying channel data has changed
+    @info section("EOG Recalculation")
+    @info subsection("Recalculating EOG (vEOG/hEOG) channels after ICA and repair")
+    calculate_eog_channels!(dat, preprocess_cfg.eog)
+
+    #################### DETECT ARTIFACT VALUES IN CONTINUOUS DATA (FOR EPOCHING) ###################
+    @info section("Detecting artifact values in continuous data")
+    is_extreme_value!(
+        dat,
+        preprocess_cfg.eeg.artifact_value_abs_criterion,
+        channel_out = Symbol("is_artifact_value" * "_" * string(preprocess_cfg.eeg.artifact_value_abs_criterion)),
+    )
+
+    # Save the cleaned continuous data in Julia format
+    if cfg["files"]["output"]["save_continuous_data_corrected"]
+        @info "Saving continuous data"
+        jldsave(_make_output_filename(output_directory, data_file, "_continuous_corrected"); data = dat)
+    end
+
+    #################### EPOCH EXTRACTION ###################
+    @info section("Extracting cleaned epoched data")
+    epochs = extract_epochs(dat, epoch_cfgs, (preprocess_cfg.epoch_start, preprocess_cfg.epoch_end))
+
+    # Check if any epochs have empty data
+    empty_epochs = [i for (i, ep) in enumerate(epochs) if isempty(ep.data)]
+    if !isempty(empty_epochs)
+        @minimal_error "Epoch extraction resulted in empty epochs for conditions: $(join([epochs[i].condition_name for i in empty_epochs], ", ")). Check epoch interval parameters and trigger locations."
+    end
+
+    #################### BASELINE WHOLE EPOCHS ##############
+    @info section("Baseline whole epochs")
+    baseline!(epochs)
+
+    #################### DETECT BAD EPOCHS ###################
+    @info section("Automatic epoch detection")
+
+    # Determine interval selection for artifact rejection
+    if !isnothing(preprocess_cfg.eeg.artifact_interval_start) && !isnothing(preprocess_cfg.eeg.artifact_interval_end)
+        rej_interval = times(preprocess_cfg.eeg.artifact_interval_start, preprocess_cfg.eeg.artifact_interval_end)
+        @info "Restricting artifact rejection to window: $(preprocess_cfg.eeg.artifact_interval_start)s to $(preprocess_cfg.eeg.artifact_interval_end)s"
+    else
+        rej_interval = times()
+    end
+
+    rejection_info_step1 = detect_bad_epochs_automatic(
+        epochs;
+        z_criterion = preprocess_cfg.eeg.artifact_value_z_criterion,
+        abs_criterion = preprocess_cfg.eeg.artifact_value_abs_criterion,
+        interval_selection = rej_interval,
+        name = "rejection_step1",
+    )
+    channel_repairable!(rejection_info_step1, epochs[1].layout)
+    @info "" # formatting
+    @info rejection_info_step1
+
+    #################### CHANNEL REPAIR PER EPOCH ###################
+    # Repair channels identified in rejection_step1 before rejecting epochs
+    # This may save epochs that would otherwise be rejected
+    @info section("Channel Repair per Epoch")
+    repair_artifacts!(epochs, rejection_info_step1)
+
+    #################### SAVE EPOCH DATA ###################
+    if cfg["files"]["output"]["save_epoch_data_corrected"]
+        @info "Saving epoch data (cleaned)"
+        jldsave(_make_output_filename(output_directory, data_file, "_epochs_corrected"); data = epochs)
+    end
+
+    #################### RE-DETECT ARTIFACTS AFTER REPAIR ###################
+    # Re-detect artifacts after repair to get updated rejection info
+    @info subsection("Re-detecting artifacts after repair")
+    rejection_info_step2 = detect_bad_epochs_automatic(
+        epochs;
+        z_criterion = preprocess_cfg.eeg.artifact_value_z_criterion,
+        abs_criterion = preprocess_cfg.eeg.artifact_value_abs_criterion,
+        interval_selection = rej_interval,
+        name = "rejection_step2",
+    )
+    channel_repairable!(rejection_info_step2, epochs[1].layout)
+    @info "" # formatting
+    @info rejection_info_step2
+
+    #################### COMPARE REJECTION STEPS ###################
+    @info subsection("Rejection Step Comparison (before vs after repair)")
+    rejection_comparison = compare_rejections(rejection_info_step1, rejection_info_step2)
+    log_pretty_table(rejection_comparison; title = "Rejection Step Comparison: Effectiveness of Channel Repair")
+
+    if preprocess_cfg.interactive_epochs
+        @info section("Interactive Epoch Rejection Review")
+        @info "Review epoch artifacts. Checked epochs will be rejected. Close the window to continue."
+        state = detect_bad_epochs_interactive(epochs; artifact_info = rejection_info_step2)
+        wait(state.fig.scene)
+
+        # Merge manual rejection state into the automatic rejection info
+        interactive_info = EegFun._to_rejection_info(state)
+        # We can just use the interactive_info directly as it contains all manual rejections!
+        # Wait, the interactive GUI starts with checkboxes active for automatically rejected epochs!
+        # So state.rejected contains BOTH automatic AND manual rejections.
+        # We can just override rejection_info_step2 with this combined info
+        rejection_info_step2 = interactive_info
+    end
+
+    #################### SAVE ERP DATA ###################
+    if cfg["files"]["output"]["save_erp_data_corrected"]
+        erps = average_epochs(epochs)
+        @info "Saving ERP data (cleaned)"
+        jldsave(_make_output_filename(output_directory, data_file, "_erps_corrected"); data = erps)
+    end
+
+    #################### EPOCH REJECTION ###################
+    @info subsection("Rejecting bad epochs")
+    epochs = reject_epochs(epochs, rejection_info_step2)
+
+    #################### SAVE ARTIFACT INFO ###################
+    # Collect all artifact-related info into a single structure
+    @info subsection("Artifact Information")
+    artifact_info = ArtifactInfo(
+        !isnothing(continuous_repair_info) ? [continuous_repair_info] : ContinuousRepairInfo[],
+        vcat(rejection_info_step1, rejection_info_step2),
+        component_artifacts,  # Save ICA components if ICA was applied, otherwise nothing
+    )
+    jldsave(_make_output_filename(output_directory, data_file, "_artifact_info"); data = artifact_info)
+    @info "Saved artifact info: $(artifact_info)"
+
+    #################### LOG EPOCH COUNTS AND STORE FOR SUMMARY ###################
+    df = log_epochs_table(epochs_raw, epochs, title = "Epoch counts per condition (after repair and rejection):")
+    push!(all_epoch_counts, df)
+
+    #################### SAVE EPOCH DATA ###################
+    if cfg["files"]["output"]["save_epoch_data"]
+        @info "Saving epoch data (good)"
+        jldsave(_make_output_filename(output_directory, data_file, "_epochs"); data = epochs)
+    end
+
+    #################### SAVE ERP DATA ###################
+    if cfg["files"]["output"]["save_erp_data"]
+        erps = average_epochs(epochs)
+        @info "Saving ERP data (good)"
+        jldsave(_make_output_filename(output_directory, data_file, "_erps"); data = erps)
+    end
+
+    @info section("End of Processing")
+end
+
+
+"""
+    validate_config(config::String; base_dir::Union{String,Nothing} = nothing)
+
+Validates a preprocessing pipeline configuration file without actually executing the pipeline.
+This evaluates the TOML syntax, resolves file paths, checks for missing data, and prints a summary
+of the operations that would be performed.
+"""
+function validate_config(config::String; base_dir::Union{String,Nothing} = nothing)
+    preprocess(config; base_dir = base_dir, log_level = :info, dry_run = true)
 end

@@ -84,12 +84,12 @@ using Dates
         # Test that all file parameters exist
         @test haskey(EegFun.PARAMETERS, "files.output.directory")
         @test haskey(EegFun.PARAMETERS, "files.output.save_ica_data")
-        @test haskey(EegFun.PARAMETERS, "files.output.save_epoch_data_uncorrected")
-        @test haskey(EegFun.PARAMETERS, "files.output.save_epoch_data_unrejected")
-        @test haskey(EegFun.PARAMETERS, "files.output.save_epoch_data_final")
-        @test haskey(EegFun.PARAMETERS, "files.output.save_erp_data_uncorrected")
-        @test haskey(EegFun.PARAMETERS, "files.output.save_erp_data_unrejected")
-        @test haskey(EegFun.PARAMETERS, "files.output.save_erp_data_final")
+        @test haskey(EegFun.PARAMETERS, "files.output.save_epoch_data_raw")
+        @test haskey(EegFun.PARAMETERS, "files.output.save_epoch_data_corrected")
+        @test haskey(EegFun.PARAMETERS, "files.output.save_epoch_data")
+        @test haskey(EegFun.PARAMETERS, "files.output.save_erp_data_raw")
+        @test haskey(EegFun.PARAMETERS, "files.output.save_erp_data_corrected")
+        @test haskey(EegFun.PARAMETERS, "files.output.save_erp_data")
 
         # Test that all preprocess parameters exist
         @test haskey(EegFun.PARAMETERS, "preprocess.reference_channel")
@@ -147,7 +147,7 @@ using Dates
             open(nested_config_path, "w") do io
                 println(io, "[files.output]")
                 println(io, "directory = \"/custom/output\"")
-                println(io, "save_erp_data_uncorrected = false")
+                println(io, "save_erp_data_raw = false")
                 println(io, "")
                 println(io, "[preprocess.filter.ica_highpass]")
                 println(io, "freq = 2.5")
@@ -156,7 +156,7 @@ using Dates
 
             config = EegFun.read_config(nested_config_path)
             @test config["files"]["output"]["directory"] == "/custom/output"
-            @test config["files"]["output"]["save_erp_data_uncorrected"] == false
+            @test config["files"]["output"]["save_erp_data_raw"] == false
             @test config["files"]["output"]["save_ica_data"] == true  # default preserved
             @test config["preprocess"]["filter"]["ica_highpass"]["freq"] == 2.5
             @test config["preprocess"]["filter"]["ica_highpass"]["apply"] == true  # now present in test config

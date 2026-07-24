@@ -145,6 +145,7 @@ function rereference!(dat::EegData, reference_selection::Union{Symbol,Vector{Sym
     # Store reference info
     dat.analysis_info.reference = reference_selection isa Symbol ? reference_selection : Symbol(join(reference_selection, '_'))
 
+
     return nothing
 
 end

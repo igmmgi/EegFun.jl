@@ -58,7 +58,12 @@ settings that affect the interpretation of the data.
     reference::Symbol = :none
     hp_filter::Float64 = 0.0
     lp_filter::Float64 = 0.0
+    sample_rate::Int64 = 0
+    n_ica_components_removed::Int = 0
+    n_channels_repaired::Int = 0
+    repaired_channels::Vector{Symbol} = Symbol[]
 end
+
 
 """
     AnalysisSettings
@@ -119,13 +124,13 @@ electrode positions in various coordinate systems (polar, 2D Cartesian,
 
 # Fields
 - `data::DataFrame`: DataFrame containing layout information with metadata groups
-- `neighbours::Union{Nothing, OrderedDict{Symbol, Neighbours}}`: Dictionary of neighbours for each electrode
+- `neighbours::Union{Nothing, Dict{Symbol, Neighbours}}`: Dictionary of neighbours for each electrode
 - `criterion::Union{Nothing, Float64}`: Distance criterion for neighbour calculation in normalized coordinate units
 - `criterion_type::Union{Nothing, Symbol}`: Type of neighbour calculation (`:xy` or `:xyz`)
 """
 mutable struct Layout
     data::DataFrame
-    neighbours::Union{Nothing,OrderedDict{Symbol,Neighbours}}
+    neighbours::Union{Nothing,Dict{Symbol,Neighbours}}
     criterion::Union{Nothing,Float64}
     criterion_type::Union{Nothing,Symbol}
 end
@@ -145,7 +150,7 @@ end
 function Base.copy(layout::Layout)::Layout
     return Layout(
         copy(layout.data, copycols = true),
-        layout.neighbours,  # Share since OrderedDict and Neighbours are immutable
+        layout.neighbours,  # Share since Dict and Neighbours are immutable
         layout.criterion,    # Share since Float64 is immutable
         layout.criterion_type,
     )
@@ -527,7 +532,7 @@ about the decomposition process.
 - `scale::Float64`: Scaling factor applied to the data
 - `mean::Vector{Float64}`: Mean vector subtracted from the data
 - `ica_label::Vector{Symbol}`: Component labels (e.g., [:IC1, :IC2, ...])
-- `removed_activations::OrderedDict{Int, Matrix{Float64}}`: Removed component activations by epoch
+- `removed_activations::Dict{Int, Matrix{Float64}}`: Removed component activations by epoch
 - `layout::Layout`: Layout information for the ICA components (contains channel labels)
 - `is_sub_gaussian::Vector{Bool}`: Boolean vector indicating if each component is sub-Gaussian (true = sub-Gaussian, false = super-Gaussian). For regular Infomax, all components are super-Gaussian (all false).
 """
@@ -540,7 +545,7 @@ struct InfoIca <: EegFunData
     scale::Float64
     mean::Vector{Float64}
     ica_label::Vector{Symbol}
-    removed_activations::OrderedDict{Int,Matrix{Float64}}
+    removed_activations::Dict{Int,Matrix{Float64}}
     layout::Layout  # Layout information for the ICA components
     is_sub_gaussian::Vector{Bool}  # true = sub-Gaussian, false = super-Gaussian
 end
@@ -572,8 +577,8 @@ end
     Base.show(io::IO, cond::EpochCondition)
     Base.show(io::IO, layout::Layout)
     Base.show(io::IO, ::MIME"text/plain", layout::Layout)
-    Base.show(io::IO, neighbours_dict::OrderedDict{Symbol,Neighbours})
-    Base.show(io::IO, ::MIME"text/plain", neighbours_dict::OrderedDict{Symbol,Neighbours})
+    Base.show(io::IO, neighbours_dict::Dict{Symbol,Neighbours})
+    Base.show(io::IO, ::MIME"text/plain", neighbours_dict::Dict{Symbol,Neighbours})
     Base.show(io::IO, dat::MultiDataFrameEeg)
     Base.show(io::IO, dat::ContinuousData)
     Base.show(io::IO, dat::SingleDataFrameEeg)
@@ -719,9 +724,17 @@ function Base.show(io::IO, ::MIME"text/plain", layout::Layout)
     show(io, layout)
 end
 
-# Custom show method for neighbours OrderedDict
-function Base.show(io::IO, neighbours_dict::OrderedDict{Symbol,Neighbours})
-    show(io, MIME"text/plain"(), neighbours_dict)
+# Custom show method for neighbours Dict
+function Base.show(io::IO, neighbours_dict::Dict{Symbol,Neighbours})
+    if isempty(neighbours_dict)
+        print(io, "Neighbours Dictionary (empty)")
+        return
+    end
+
+    n_electrodes = length(neighbours_dict)
+    avg_neighbours = average_number_of_neighbours(neighbours_dict)
+
+    print(io, "Neighbours Dictionary ($n_electrodes electrodes, avg neighbours: $(round(avg_neighbours, digits=1)))")
 end
 
 filename(dat::BiosemiDataFormat.BiosemiData)::String = basename_without_ext(dat.filename)
@@ -738,7 +751,13 @@ filename(dat::SpectrumData)::String = dat.file
 
 
 
-function Base.show(io::IO, ::MIME"text/plain", neighbours_dict::OrderedDict{Symbol,Neighbours})
+"""
+    Base.show(io::IO, ::MIME"text/plain", neighbours_dict::Dict{Symbol,Neighbours})
+
+Prints a detailed multi-line representation of the `Neighbours` dictionary, showing the
+neighbours for each electrode. Displays a summary of the dictionary configuration.
+"""
+function Base.show(io::IO, ::MIME"text/plain", neighbours_dict::Dict{Symbol,Neighbours})
     n_electrodes = length(neighbours_dict)
     avg_neighbours = average_number_of_neighbours(neighbours_dict)
 

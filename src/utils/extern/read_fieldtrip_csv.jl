@@ -73,7 +73,7 @@ function read_fieldtrip_csv(
     layout = EegFun.Layout(layout_df, nothing, nothing, nothing)
 
     # Create AnalysisInfo
-    analysis_info = EegFun.AnalysisInfo()
+    analysis_info = EegFun.AnalysisInfo(sample_rate = Int(round(fsample)))
 
     # Split data into trials
     trial_dfs = Vector{DataFrame}(undef, n_trials)

@@ -98,9 +98,9 @@ $(_generate_kwargs_doc(PLOT_EPOCHS_KWARGS))
 
 # Examples
 ```julia
-plot_epochs("epochs_uncorrected.jld2")
-plot_epochs("epochs_uncorrected")
-plot_epochs("epochs_uncorrected", participant_selection = participants(1))
+plot_epochs("epochs_raw.jld2")
+plot_epochs("epochs_raw")
+plot_epochs("epochs_raw", participant_selection = participants(1))
 ```
 """
 function plot_epochs(

@@ -169,7 +169,7 @@ function _eeglab_to_epochdata(eeg::Dict, filepath::String, preserve_radial_dista
     condition_name = get(eeg, "setname", basename(filepath))
 
     # Create AnalysisInfo (EEGLAB doesn't have reliable filter/reference metadata)
-    analysis_info = AnalysisInfo()
+    analysis_info = AnalysisInfo(sample_rate = Int(round(sample_rate)))
 
     # Create EpochData
     epoch_data = EpochData(
@@ -244,7 +244,7 @@ function _eeglab_to_continuousdata(eeg::Dict, filepath::String, preserve_radial_
     insertcols!(df, 3, :trigger_info => trigger_info_vec)
 
     # Create AnalysisInfo
-    analysis_info = AnalysisInfo()
+    analysis_info = AnalysisInfo(sample_rate = Int(round(sample_rate)))
 
     # Create ContinuousData
     continuous_data = ContinuousData(filepath, df, layout, sample_rate, analysis_info)
@@ -266,7 +266,7 @@ function _eeglab_to_erpdata(eeg::Dict, filepath::String, preserve_radial_distanc
     insertcols!(df, 1, :time => times)
 
     # Create AnalysisInfo (we don't really know much about the data)
-    analysis_info = AnalysisInfo()
+    analysis_info = AnalysisInfo(sample_rate = Int(round(sample_rate)))
 
     # Get condition name (is this correct?)
     condition_name = get(eeg, "setname", basename(filepath))

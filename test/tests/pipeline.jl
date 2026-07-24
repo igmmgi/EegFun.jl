@@ -184,8 +184,8 @@ epoch_end = 0.5
                 # Check that the output directory was created and contains the expected files
                 out_dir = joinpath(temp_dir, "output")
                 @test isdir(out_dir)
-                @test isfile(joinpath(out_dir, "example1_epochs_final.jld2"))
-                @test isfile(joinpath(out_dir, "example1_erps_final.jld2"))
+                @test isfile(joinpath(out_dir, "example1_epochs.jld2"))
+                @test isfile(joinpath(out_dir, "example1_erps.jld2"))
                 @test isfile(joinpath(out_dir, "example1_artifact_info.jld2"))
             end
         else
@@ -297,7 +297,7 @@ epoch_end = 0.5
                 end
 
                 out_dir = joinpath(temp_dir, "output")
-                final_file = joinpath(out_dir, "example1_epochs_final.jld2")
+                final_file = joinpath(out_dir, "example1_epochs.jld2")
                 @test isfile(final_file)
 
                 # Record modification time of the final file

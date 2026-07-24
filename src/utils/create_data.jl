@@ -35,7 +35,7 @@ function create_test_continuous_data(; n = 2000, fs = 1000, n_channels = 3, seed
     end
 
     layout = create_test_layout(n_channels = n_channels)
-    return EegFun.ContinuousData("test_data", copy(df, copycols = true), layout, fs, EegFun.AnalysisInfo(:none, 0.0, 0.0))
+    return EegFun.ContinuousData("test_data", copy(df, copycols = true), layout, fs, EegFun.AnalysisInfo(sample_rate = fs))
 end
 
 """
@@ -65,7 +65,7 @@ function create_test_epoch_data(; n = 2000, fs = 1000, condition = 1, n_epochs =
         push!(dfs, df)
     end
 
-    return EegFun.EpochData("test_data", condition, "condition_$(condition)", dfs, layout, fs, EegFun.AnalysisInfo(:none, 0.0, 0.0))
+    return EegFun.EpochData("test_data", condition, "condition_$(condition)", dfs, layout, fs, EegFun.AnalysisInfo(sample_rate = fs))
 end
 
 """
@@ -107,7 +107,7 @@ function create_test_erp_data(; participant = 1, condition = 1, fs = 1000, n_cha
     end
 
     layout = create_test_layout(n_channels = n_channels)
-    return EegFun.ErpData("test_data", condition, "condition_$condition", df, layout, fs, EegFun.AnalysisInfo(:none, 0.0, 0.0), 10)
+    return EegFun.ErpData("test_data", condition, "condition_$condition", df, layout, fs, EegFun.AnalysisInfo(sample_rate = fs), 10)
 end
 
 """
@@ -161,7 +161,7 @@ function create_test_epoch_data_with_rt(;
     end
 
     layout = create_test_layout(n_channels = n_channels)
-    return EegFun.EpochData("test_data", condition, "condition_$condition", dfs, layout, fs, EegFun.AnalysisInfo(:none, 0.0, 0.0))
+    return EegFun.EpochData("test_data", condition, "condition_$condition", dfs, layout, fs, EegFun.AnalysisInfo(sample_rate = fs))
 end
 
 
@@ -185,7 +185,7 @@ function create_test_continuous_data_with_triggers(; n = 1000, fs = 1000, seed::
 
     df = DataFrame(time = t, trigger = trigger, A = x)
     layout = EegFun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing, nothing)
-    return EegFun.ContinuousData("test_data", copy(df, copycols = true), layout, fs, EegFun.AnalysisInfo(:none, 0.0, 0.0))
+    return EegFun.ContinuousData("test_data", copy(df, copycols = true), layout, fs, EegFun.AnalysisInfo(sample_rate = fs))
 end
 
 
@@ -209,7 +209,7 @@ function create_test_continuous_data_with_artifacts(; n::Int = 1000, fs::Int = 1
     df = DataFrame(:time => t, :trigger => zeros(Int, n), :Ch1 => clean_signal, :Ch2 => artifact_signal)
     layout = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
 
-    return EegFun.ContinuousData("test_data", df, layout, fs, EegFun.AnalysisInfo())
+    return EegFun.ContinuousData("test_data", df, layout, fs, EegFun.AnalysisInfo(sample_rate = fs))
 end
 
 
@@ -224,7 +224,7 @@ function create_test_continuous_data_empty_triggers(; n_samples = 1000, fs = 100
     df = DataFrame(time = t, trigger = zeros(Int16, n_samples), channel1 = _synthetic_signal(t), channel2 = _synthetic_signal(t))
 
     layout = EegFun.Layout(DataFrame(label = [:channel1, :channel2], inc = [0.0, 90.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
-    return EegFun.ContinuousData("test_data", df, layout, fs, EegFun.AnalysisInfo(:none, 0.0, 0.0))
+    return EegFun.ContinuousData("test_data", df, layout, fs, EegFun.AnalysisInfo(sample_rate = fs))
 end
 
 """
@@ -272,7 +272,7 @@ function create_test_lrp_data(;
         nothing,
     )
 
-    return EegFun.ErpData("test_data", condition, "condition_$condition", df, layout, fs, EegFun.AnalysisInfo(:none, 0.0, 0.0), 10)
+    return EegFun.ErpData("test_data", condition, "condition_$condition", df, layout, fs, EegFun.AnalysisInfo(sample_rate = fs), 10)
 end
 
 
@@ -404,7 +404,7 @@ function create_test_epoch_data_with_artifacts(;
     end
 
     layout = create_test_layout(n_channels = n_channels)
-    epoch_data = EegFun.EpochData("test_data", condition, "condition_$condition", dfs, layout, fs, EegFun.AnalysisInfo(:none, 0.0, 0.0))
+    epoch_data = EegFun.EpochData("test_data", condition, "condition_$condition", dfs, layout, fs, EegFun.AnalysisInfo(sample_rate = fs))
 
     return epoch_data, bad_indices
 end
@@ -515,7 +515,7 @@ function signal_to_data(
     layout = Layout(layout_df, nothing, nothing, nothing)
 
     # Create AnalysisInfo
-    analysis_info = AnalysisInfo()
+    analysis_info = AnalysisInfo(sample_rate = 250)
 
     # If only one epoch, return ErpData
     if n_trials == 1
@@ -586,7 +586,7 @@ function create_test_tf_data(;
 
     layout = create_test_layout(n_channels = n_channels)
 
-    return TimeFreqData(file, condition, condition_name, power_df, phase_df, layout, fs, :wavelet, nothing, AnalysisInfo())
+    return TimeFreqData(file, condition, condition_name, power_df, phase_df, layout, fs, :wavelet, nothing, AnalysisInfo(sample_rate = fs))
 end
 
 """
@@ -650,7 +650,18 @@ function create_test_tf_epoch_data(;
         phase_dfs[epoch] = phase_df
     end
 
-    return TimeFreqEpochData(file, condition, condition_name, power_dfs, phase_dfs, layout, fs, :wavelet, nothing, AnalysisInfo())
+    return TimeFreqEpochData(
+        file,
+        condition,
+        condition_name,
+        power_dfs,
+        phase_dfs,
+        layout,
+        fs,
+        :wavelet,
+        nothing,
+        AnalysisInfo(sample_rate = fs),
+    )
 end
 
 """
@@ -708,5 +719,5 @@ function create_synthetic_epochs(
         push!(epochs, df)
     end
 
-    return EpochData("participant_$(participant_id)", condition_id, condition_name, epochs, layout, 200, AnalysisInfo(:none, 0.0, 0.0))
+    return EpochData("participant_$(participant_id)", condition_id, condition_name, epochs, layout, 200, AnalysisInfo(sample_rate = 200))
 end

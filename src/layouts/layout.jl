@@ -413,7 +413,7 @@ end
 # === NEIGHBOR CALCULATIONS ===
 
 """
-    _find_neighbours(labels, coords, distance_criterion) -> OrderedDict
+    _find_neighbours(labels, coords, distance_criterion) -> Dict
 
 Internal helper to identify neighbours utilizing distance symmetry.
 """
@@ -447,8 +447,8 @@ function _find_neighbours(labels, coords, distance_criterion)
         end
     end
 
-    # Transform to OrderedDict with weights
-    neighbour_dict = OrderedDict{Symbol,Neighbours}()
+    # Transform to Dict with weights
+    neighbour_dict = Dict{Symbol,Neighbours}()
 
     for i = 1:n
         label = Symbol(labels[i])
@@ -475,12 +475,11 @@ end
 
 # === NEIGHBOR UTILITIES ===
 """
-    _format_neighbours_toml(neighbours_dict::OrderedDict{Symbol, Neighbours}, nneighbours::Real)
+    _format_neighbours_toml(neighbours_dict::Dict{Symbol, Neighbours}, nneighbours::Real)
 
 Helper function to format the neighbours dictionary as TOML structure.
-Preserves the order of electrodes from the original OrderedDict.
 """
-function _format_neighbours_toml(neighbours_dict::OrderedDict{Symbol,Neighbours}, nneighbours::Real)
+function _format_neighbours_toml(neighbours_dict::Dict{Symbol,Neighbours}, nneighbours::Real)
     toml_dict = OrderedDict{String,Any}()
 
     # Add metadata first
@@ -490,10 +489,11 @@ function _format_neighbours_toml(neighbours_dict::OrderedDict{Symbol,Neighbours}
         "generated_at" => string(now()),
     )
 
-    # Add electrode data in original order
+    # Add electrode data in alphabetical order
     toml_dict["electrodes"] = OrderedDict{String,Any}()
 
-    for (electrode, neighbours) in neighbours_dict
+    for electrode in sort(collect(keys(neighbours_dict)))
+        neighbours = neighbours_dict[electrode]
         electrode_str = string(electrode)
         toml_dict["electrodes"][electrode_str] = OrderedDict(
             "neighbours" => [string(n) for n in neighbours.channels],
@@ -507,7 +507,7 @@ function _format_neighbours_toml(neighbours_dict::OrderedDict{Symbol,Neighbours}
 end
 
 """
-    print_layout_neighbours(neighbours_dict::OrderedDict{Symbol, Neighbours}, filename::String)
+    print_layout_neighbours(neighbours_dict::Dict{Symbol, Neighbours}, filename::String)
 
 Write the neighbors dictionary to a TOML file in a structured format, showing for each electrode:
 - Its neighbors
@@ -515,10 +515,10 @@ Write the neighbors dictionary to a TOML file in a structured format, showing fo
 - The weights used for interpolation
 - The average number of neighbors per electrode
 
-The electrode order from the original OrderedDict is preserved.
+The electrodes are printed in alphabetical order.
 
 # Arguments
-- `neighbours_dict::OrderedDict{Symbol, Neighbours}`: Dictionary returned by get_electrode_neighbours_xy/xyz
+- `neighbours_dict::Dict{Symbol, Neighbours}`: Dictionary returned by get_electrode_neighbours_xy/xyz
 - `filename::String`: Path to the output TOML file
 
 # Example
@@ -530,7 +530,7 @@ get_neighbours_xy!(layout, 0.4)
 print_layout_neighbours(layout.neighbours, "neighbours.toml")
 ```
 """
-function print_layout_neighbours(neighbours_dict::OrderedDict{Symbol,Neighbours}, filename::String)
+function print_layout_neighbours(neighbours_dict::Dict{Symbol,Neighbours}, filename::String)
     nneighbours = average_number_of_neighbours(neighbours_dict)
     toml_data = _format_neighbours_toml(neighbours_dict, nneighbours)
     @info "Printing neighbours to $filename"
@@ -552,16 +552,16 @@ function print_layout_neighbours(layout::Layout)
     end
     nneighbours = average_number_of_neighbours(layout.neighbours)
     toml_data = _format_neighbours_toml(layout.neighbours, nneighbours)
-    TOML.print(stdout, toml_data)
+    TOML.print(stdout, toml_data, sorted = true)
 end
 
 """
-    average_number_of_neighbours(neighbours_dict::OrderedDict{Symbol, Neighbours})
+    average_number_of_neighbours(neighbours_dict::Dict{Symbol, Neighbours})
 
 Calculate the average number of neighbours per electrode from a neighbours dictionary.
 
 # Arguments
-- `neighbours_dict::OrderedDict{Symbol, Neighbours}`: Dictionary containing neighbour information for each electrode
+- `neighbours_dict::Dict{Symbol, Neighbours}`: Dictionary containing neighbour information for each electrode
 
 # Returns
 - `Float64`: The average number of neighbours per electrode
@@ -573,7 +573,7 @@ get_neighbours_xy!(layout, 0.4)
 avg_neighbours = average_number_of_neighbours(layout.neighbours)
 ```
 """
-function average_number_of_neighbours(neighbours_dict::OrderedDict{Symbol,Neighbours})
+function average_number_of_neighbours(neighbours_dict::Dict{Symbol,Neighbours})
     if isempty(neighbours_dict)
         return 0.0
     end
@@ -621,7 +621,7 @@ criterion = neighbour_criterion(layout)
 neighbour_criterion(layout::Layout) = layout.criterion
 
 """
-    neighbours(layout::Layout) -> Union{Nothing, OrderedDict{Symbol, Neighbours}}
+    neighbours(layout::Layout) -> Union{Nothing, Dict{Symbol, Neighbours}}
 
 Get the neighbor information for all electrodes.
 
@@ -629,7 +629,7 @@ Get the neighbor information for all electrodes.
 - `layout::Layout`: The layout object
 
 # Returns
-- `Union{Nothing, OrderedDict{Symbol, Neighbours}}`: Dictionary of neighbors for each electrode, or nothing if not calculated
+- `Union{Nothing, Dict{Symbol, Neighbours}}`: Dictionary of neighbors for each electrode, or nothing if not calculated
 
 # Examples
 ```julia
@@ -955,7 +955,7 @@ function subset_layout!(layout::Layout; channel_selection = channels())
     # Subset neighbour information to remaining channels (no-op when all kept)
     if has_neighbours(layout) && n_channels_after < n_channels_before
         remaining = Set(selected_channels)
-        layout.neighbours = OrderedDict{Symbol,Neighbours}(
+        layout.neighbours = Dict{Symbol,Neighbours}(
             ch => _subset_neighbours(get(layout.neighbours, ch, Neighbours(Symbol[], Float64[], Float64[])), remaining) for
             ch in selected_channels
         )

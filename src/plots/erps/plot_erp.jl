@@ -36,6 +36,7 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Plot configuration
     :average_channels => (false, "Average across channels (true/false)"),
+    :error_bars => (:none, "Error bars type to plot: :none, :sem, :within_sem, :ci95"),
 
     # Legend parameters - get all Legend attributes with their actual defaults
     # This allows users to control any Legend parameter
@@ -185,6 +186,7 @@ function plot_erp(
                 layout = layout,
                 condition_selection = condition_selection,
                 channel_selection = channel_selection,
+                channel_plot_order = channel_plot_order,
                 sample_selection = sample_selection,
                 interval_selection = interval_selection,
                 baseline_interval = baseline_interval,
@@ -195,6 +197,7 @@ function plot_erp(
         return results
     end
 end
+
 function plot_erp(
     dat::ErpData;
     layout::Union{Symbol,PlotLayout} = :single,
@@ -218,6 +221,7 @@ function plot_erp(
         kwargs...,
     )
 end
+
 function plot_erp(
     datasets::Vector{ErpData};
     layout::Union{Symbol,PlotLayout} = :single,
@@ -229,6 +233,27 @@ function plot_erp(
     baseline_interval::Interval = nothing,
     kwargs...,
 )
+    # If there are datasets from multiple participants, automatically create separate windows
+    file_ids = unique(d.file for d in datasets)
+    if length(file_ids) > 1
+        results = NamedTuple[]
+        for file_id in file_ids
+            participant_data = filter(d -> d.file == file_id, datasets)
+            result = plot_erp(
+                participant_data;
+                layout = layout,
+                condition_selection = condition_selection,
+                channel_selection = channel_selection,
+                channel_plot_order = channel_plot_order,
+                sample_selection = sample_selection,
+                interval_selection = interval_selection,
+                baseline_interval = baseline_interval,
+                kwargs...,
+            )
+            push!(results, result)
+        end
+        return results
+    end
 
     # Prepare kwargs and data
     plot_kwargs, user_provided_color = _prepare_plot_kwargs(kwargs)
@@ -242,6 +267,133 @@ function plot_erp(
         baseline_interval = baseline_interval,
     )
 
+    variances_dict = Dict{Int,Tuple{DataFrames.DataFrame,Int}}()
+
+    return _plot_erp_core(
+        dat_subset,
+        all_channels,
+        channel_selection_func,
+        original_channels,
+        variances_dict,
+        plot_kwargs,
+        user_provided_color,
+        layout,
+        baseline_interval,
+        channel_plot_order,
+    )
+end
+
+function plot_erp_errorbar(
+    filepath::String;
+    input_dir::String = "",
+    participant_selection::Function = participants(),
+    layout::Union{Symbol,PlotLayout} = :single,
+    condition_selection::Function = conditions(),
+    channel_selection::Function = channels(),
+    channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
+    sample_selection::Function = samples(),
+    interval_selection::Interval = times(),
+    baseline_interval::Interval = nothing,
+    kwargs...,
+)
+    # Pattern-based discovery — one plot per file? No, plot_erp_errorbar groups them!
+    files = _find_batch_files(filepath, input_dir, participant_selection)
+    if isempty(files)
+        all_matching = _find_batch_files(filepath, input_dir)  # without participant filter
+        if isempty(all_matching)
+            @minimal_error "No ERP files matching pattern '$filepath' in $input_dir"
+        else
+            avail_ids = sort(unique(_extract_participant_id.(all_matching)))
+            @minimal_error "Pattern '$filepath' matched $(length(all_matching)) file(s), but none passed the participant selection. Available participant IDs: $avail_ids"
+        end
+    end
+
+    datasets = ErpData[]
+    for file in sort(files, by = _natural_sort_key)
+        file_path = joinpath(input_dir, file)
+        @info "Loading: $file"
+        data = read_data(file_path)
+        isnothing(data) && continue
+
+        if data isa Vector{ErpData}
+            append!(datasets, data)
+        else
+            push!(datasets, data)
+        end
+    end
+
+    if isempty(datasets)
+        @minimal_error "No data loaded from pattern: $filepath"
+    end
+
+    return plot_erp_errorbar(
+        datasets;
+        layout = layout,
+        condition_selection = condition_selection,
+        channel_selection = channel_selection,
+        channel_plot_order = channel_plot_order,
+        sample_selection = sample_selection,
+        interval_selection = interval_selection,
+        baseline_interval = baseline_interval,
+        kwargs...,
+    )
+end
+
+function plot_erp_errorbar(
+    datasets::Vector{ErpData};
+    layout::Union{Symbol,PlotLayout} = :single,
+    condition_selection::Function = conditions(),
+    channel_selection::Function = channels(),
+    channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
+    sample_selection::Function = samples(),
+    interval_selection::Interval = times(),
+    baseline_interval::Interval = nothing,
+    kwargs...,
+)
+    # Prepare kwargs and data
+    plot_kwargs, user_provided_color = _prepare_plot_kwargs(kwargs)
+    dat_subset, all_channels, channel_selection_func, original_channels = _prepare_erp_data(
+        datasets,
+        plot_kwargs;
+        condition_selection = condition_selection,
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        interval_selection = interval_selection,
+        baseline_interval = baseline_interval,
+    )
+
+    @info "Averaging across participants dynamically..."
+    dat_subset, variances_dict = _compute_dynamic_grand_averages(dat_subset, plot_kwargs[:error_bars])
+
+
+
+    return _plot_erp_core(
+        dat_subset,
+        all_channels,
+        channel_selection_func,
+        original_channels,
+        variances_dict,
+        plot_kwargs,
+        user_provided_color,
+        layout,
+        baseline_interval,
+        channel_plot_order,
+    )
+end
+
+
+function _plot_erp_core(
+    dat_subset,
+    all_channels,
+    channel_selection_func,
+    original_channels,
+    variances_dict,
+    plot_kwargs,
+    user_provided_color,
+    layout,
+    baseline_interval,
+    channel_plot_order,
+)
     # Apply channel_selection to determine which channels to plot
     # dat_subset has all channels, but we only plot the selected ones
     selected_channels = get_selected_channels(first(dat_subset), channel_selection_func; include_meta = false, include_extra = true)
@@ -308,6 +460,7 @@ function plot_erp(
             channels_to_plot;
             line_refs = ax_line_refs,
             user_provided_color = user_provided_color,
+            variances_dict = variances_dict,
             plot_kwargs...,
         )
         if plot_kwargs[:interactive] && !isnothing(legend_refs)
@@ -379,7 +532,6 @@ function plot_erp(
     return (fig = fig, axes = axes, line_refs = line_refs)
 end
 
-
 """
     plot_erp!(fig::Figure, ax::Axis, dat::ErpData; kwargs...)
 
@@ -399,9 +551,10 @@ function plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
     # Extract special parameters before validation (like plot_erp does)
     baseline_interval = get(kwargs, :baseline_interval, nothing)
     channel_selection_func = get(kwargs, :channel_selection, channels())
+    channel_plot_order = get(kwargs, :channel_plot_order, nothing)
 
     # Remove them from kwargs before validation
-    filtered_kwargs = pairs(NamedTuple(filter(p -> p[1] ∉ [:baseline_interval, :channel_selection], pairs(kwargs))))
+    filtered_kwargs = pairs(NamedTuple(filter(p -> p[1] ∉ [:baseline_interval, :channel_selection, :channel_plot_order], pairs(kwargs))))
 
     plot_kwargs, user_provided_color = _prepare_plot_kwargs(filtered_kwargs)
 
@@ -413,11 +566,82 @@ function plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
         sample_selection = get(plot_kwargs, :sample_selection, samples()),
         baseline_interval = baseline_interval,
     )
+    variances_dict = Dict{Int,Tuple{DataFrames.DataFrame,Int}}()
+
     # Apply channel_selection to determine which channels to plot
     selected_channels = get_selected_channels(first(dat_subset), channel_selection_func; include_meta = false, include_extra = true)
     # Preserve order from selected_channels (user's channel_selection order)
     all_plot_channels = [ch for ch in selected_channels if ch in all_channels]
-    _plot_erp!(ax, dat_subset, all_plot_channels; user_provided_color = user_provided_color, plot_kwargs...)
+
+    # Apply user-specified plotting order if provided
+    if !isnothing(channel_plot_order)
+        ordered = Symbol[ch for ch in channel_plot_order if ch in all_plot_channels]
+        if !isempty(ordered)
+            all_plot_channels = ordered
+        end
+    end
+
+    _plot_erp!(
+        ax,
+        dat_subset,
+        all_plot_channels;
+        user_provided_color = user_provided_color,
+        variances_dict = variances_dict,
+        plot_kwargs...,
+    )
+    return ax
+end
+
+"""
+    plot_erp_errorbar!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
+
+Plot grand-averaged ERP data with error ribbons on an existing axis, mutating the figure and axis.
+"""
+plot_erp_errorbar!(fig::Figure, ax::Axis, dat::ErpData; kwargs...) = plot_erp_errorbar!(fig, ax, [dat]; kwargs...)
+function plot_erp_errorbar!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
+    # Extract special parameters before validation (like plot_erp does)
+    baseline_interval = get(kwargs, :baseline_interval, nothing)
+    channel_selection_func = get(kwargs, :channel_selection, channels())
+    channel_plot_order = get(kwargs, :channel_plot_order, nothing)
+
+    # Remove them from kwargs before validation
+    filtered_kwargs = pairs(NamedTuple(filter(p -> p[1] ∉ [:baseline_interval, :channel_selection, :channel_plot_order], pairs(kwargs))))
+
+    plot_kwargs, user_provided_color = _prepare_plot_kwargs(filtered_kwargs)
+
+    dat_subset, all_channels, _, _ = _prepare_erp_data(
+        datasets,
+        plot_kwargs;
+        condition_selection = conditions(),
+        channel_selection = channel_selection_func,
+        sample_selection = get(plot_kwargs, :sample_selection, samples()),
+        baseline_interval = baseline_interval,
+    )
+
+    @info "Averaging across participants dynamically..."
+    dat_subset, variances_dict = _compute_dynamic_grand_averages(dat_subset, plot_kwargs[:error_bars])
+
+    # Apply channel_selection to determine which channels to plot
+    selected_channels = get_selected_channels(first(dat_subset), channel_selection_func; include_meta = false, include_extra = true)
+    # Preserve order from selected_channels (user's channel_selection order)
+    all_plot_channels = [ch for ch in selected_channels if ch in all_channels]
+
+    # Apply user-specified plotting order if provided
+    if !isnothing(channel_plot_order)
+        ordered = Symbol[ch for ch in channel_plot_order if ch in all_plot_channels]
+        if !isempty(ordered)
+            all_plot_channels = ordered
+        end
+    end
+
+    _plot_erp!(
+        ax,
+        dat_subset,
+        all_plot_channels;
+        user_provided_color = user_provided_color,
+        variances_dict = variances_dict,
+        plot_kwargs...,
+    )
     return ax
 end
 
@@ -442,6 +666,7 @@ function _plot_erp!(
     condition_mask::Vector{Bool} = Bool[],
     line_refs = nothing,
     user_provided_color::Bool = false,
+    variances_dict::Dict{Int,Tuple{DataFrames.DataFrame,Int}} = Dict{Int,Tuple{DataFrames.DataFrame,Int}}(),
     kwargs...,
 )
 
@@ -476,6 +701,26 @@ function _plot_erp!(
 
             # Always use Observable for y-data (allows updates for baseline changes and linked legend interactions)
             y_obs = Observable(dat.data[!, channel])
+
+            error_type = plot_kwargs[:error_bars]
+            if error_type != :none && haskey(variances_dict, dataset_idx)
+                var_df, n_stat = variances_dict[dataset_idx]
+                if hasproperty(var_df, channel)
+                    var_col = var_df[!, channel]
+                    sem = sqrt.(var_col) ./ sqrt(n_stat)
+                    err_val = error_type == :ci95 ? sem .* 1.96 : sem
+
+                    # Create bounds tied to the Observable mean so they shift correctly if baseline changes interactively
+                    lower_bound = lift(y -> y .- err_val, y_obs)
+                    upper_bound = lift(y -> y .+ err_val, y_obs)
+
+                    band_color = to_color(all_colors[color_idx])
+                    band_color_alpha = RGBAf(band_color.r, band_color.g, band_color.b, 0.2)
+
+                    band!(ax, dat.data[!, :time], lower_bound, upper_bound, color = band_color_alpha, visible = condition_visible)
+                end
+            end
+
             line = lines!(
                 ax,
                 dat.data[!, :time],
@@ -610,6 +855,177 @@ function _prepare_erp_data(
     end
 
     return dat_subset, all_channels, channel_selection, original_channels
+end
+
+function _compute_dynamic_grand_averages(datasets::Vector{ErpData}, error_bars::Symbol)
+    # Check if they are already grand averaged
+    if all(dat -> dat.file == "grand_avg", datasets)
+        @minimal_warning "Datasets are already grand averages. Skipping dynamic participant averaging."
+        return datasets, Dict{Int,Tuple{DataFrames.DataFrame,Int}}()
+    end
+
+    # Group by condition
+    erps_by_condition = OrderedDict{Int,Vector{ErpData}}()
+    for dat in datasets
+        cond = dat.condition
+        if !haskey(erps_by_condition, cond)
+            erps_by_condition[cond] = ErpData[]
+        end
+        push!(erps_by_condition[cond], dat)
+    end
+
+    grand_averages = ErpData[]
+    variances_dict = Dict{Int,Tuple{DataFrames.DataFrame,Int}}()
+
+    # Pre-compute participant global means if Cousineau-Morey is requested
+    participant_global_means = Dict{String,DataFrames.DataFrame}()
+    grand_global_mean = DataFrames.DataFrame()
+    if error_bars == :within_sem
+        participant_erps = Dict{String,Vector{ErpData}}()
+        for erp in datasets
+            pid = erp.file
+            if !haskey(participant_erps, pid)
+                participant_erps[pid] = ErpData[]
+            end
+            push!(participant_erps[pid], erp)
+        end
+
+        first_erp = datasets[1]
+        metadata_cols = meta_labels(first_erp)
+        all_channel_sets = [setdiff(propertynames(erp.data), metadata_cols) for erp in datasets]
+        eeg_channels = collect(intersect(all_channel_sets...))
+        n_points = nrow(first_erp.data)
+
+        for (pid, erplist) in participant_erps
+            df_mean = DataFrames.DataFrame()
+            n_erps_p = length(erplist)
+            for ch in eeg_channels
+                avg_buf = zeros(Float64, n_points)
+                for erp in erplist
+                    col_data = erp.data[!, ch]::Vector{Float64}
+                    @inbounds @simd for i = 1:n_points
+                        avg_buf[i] += col_data[i]
+                    end
+                end
+                avg_buf ./= n_erps_p
+                df_mean[!, ch] = avg_buf
+            end
+            participant_global_means[pid] = df_mean
+        end
+
+        n_participants = length(participant_global_means)
+        if n_participants > 0
+            for ch in eeg_channels
+                avg_buf = zeros(Float64, n_points)
+                for df_mean in values(participant_global_means)
+                    col_data = df_mean[!, ch]::Vector{Float64}
+                    @inbounds @simd for i = 1:n_points
+                        avg_buf[i] += col_data[i]
+                    end
+                end
+                avg_buf ./= n_participants
+                grand_global_mean[!, ch] = avg_buf
+            end
+        end
+    end
+
+    K_conditions = length(erps_by_condition)
+    cm_correction = K_conditions > 1 ? (K_conditions / (K_conditions - 1)) : 1.0
+
+    dataset_idx = 1
+    for cond_num in sort(collect(keys(erps_by_condition)))
+        erps = erps_by_condition[cond_num]
+        first_erp = erps[1]
+        metadata_cols = meta_labels(first_erp)
+        all_channel_sets = [setdiff(propertynames(erp.data), metadata_cols) for erp in erps]
+        eeg_channels = collect(intersect(all_channel_sets...))
+
+        grand_avg_data = copy(first_erp.data)
+        cols_to_remove = [:condition, :condition_name, :n_epochs]
+        for col in cols_to_remove
+            if hasproperty(grand_avg_data, col)
+                select!(grand_avg_data, Not(col))
+            end
+        end
+
+        var_df = DataFrames.DataFrame()
+        for col in metadata_cols
+            if hasproperty(grand_avg_data, col)
+                var_df[!, col] = grand_avg_data[!, col]
+            end
+        end
+
+        n_points = nrow(grand_avg_data)
+        n_erps = length(erps)
+
+        avg_buf = Vector{Float64}(undef, n_points)
+        for ch in eeg_channels
+            fill!(avg_buf, 0.0)
+            for erp in erps
+                col_data = erp.data[!, ch]::Vector{Float64}
+                @inbounds @simd for i = 1:n_points
+                    avg_buf[i] += col_data[i]
+                end
+            end
+            @inbounds @simd for i = 1:n_points
+                avg_buf[i] /= n_erps
+            end
+            grand_avg_data[!, ch] = copy(avg_buf)
+
+            if n_erps > 1 && error_bars != :none
+                var_buf = zeros(Float64, n_points)
+                if error_bars == :within_sem
+                    for erp in erps
+                        pid = erp.file
+                        col_data = erp.data[!, ch]::Vector{Float64}
+                        p_mean = participant_global_means[pid][!, ch]::Vector{Float64}
+                        g_mean = grand_global_mean[!, ch]::Vector{Float64}
+
+                        @inbounds @simd for i = 1:n_points
+                            y_corr = col_data[i] - p_mean[i] + g_mean[i]
+                            diff = y_corr - avg_buf[i]
+                            var_buf[i] += diff * diff
+                        end
+                    end
+                    @inbounds @simd for i = 1:n_points
+                        var_buf[i] = (var_buf[i] / (n_erps - 1)) * cm_correction
+                    end
+                else
+                    for erp in erps
+                        col_data = erp.data[!, ch]::Vector{Float64}
+                        @inbounds @simd for i = 1:n_points
+                            diff = col_data[i] - avg_buf[i]
+                            var_buf[i] += diff * diff
+                        end
+                    end
+                    @inbounds @simd for i = 1:n_points
+                        var_buf[i] /= (n_erps - 1)
+                    end
+                end
+                var_df[!, ch] = var_buf
+            end
+        end
+
+        total_epochs = sum(erp.n_epochs for erp in erps)
+        grand_avg = ErpData(
+            "grand_avg",
+            cond_num,
+            "grand_avg_$(first_erp.condition_name)",
+            grand_avg_data,
+            copy(first_erp.layout),
+            first_erp.sample_rate,
+            copy(first_erp.analysis_info),
+            total_epochs,
+        )
+
+        push!(grand_averages, grand_avg)
+        if error_bars != :none && n_erps > 1
+            variances_dict[dataset_idx] = (var_df, n_erps)
+        end
+        dataset_idx += 1
+    end
+
+    return grand_averages, variances_dict
 end
 
 

@@ -374,7 +374,15 @@ function Base.copy(dat::ErpData)::ErpData
 end
 
 function Base.copy(info::AnalysisInfo)::AnalysisInfo
-    return AnalysisInfo(info.reference, info.hp_filter, info.lp_filter)
+    return AnalysisInfo(
+        reference = info.reference,
+        hp_filter = info.hp_filter,
+        lp_filter = info.lp_filter,
+        sample_rate = info.sample_rate,
+        n_ica_components_removed = info.n_ica_components_removed,
+        n_channels_repaired = info.n_channels_repaired,
+        repaired_channels = copy(info.repaired_channels),
+    )
 end
 
 # Function to parse component input text into a list of component indices

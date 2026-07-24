@@ -704,7 +704,7 @@ using CSV
 
             layout = EegFun.Layout(DataFrame(label = [:Ch1], inc = [0.0], azi = [0.0]), nothing, nothing, nothing)
 
-            analysis_info = EegFun.AnalysisInfo(:none, 0.0, 0.0)
+            analysis_info = EegFun.AnalysisInfo()
             return EegFun.ErpData("test", condition, "condition_$condition", df, layout, fs, analysis_info, 1)
         end
 

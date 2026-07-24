@@ -338,12 +338,12 @@ function plot_artifact_detection(
 end
 
 """
-    plot_artifact_repair(epochs_uncorrected::EpochData, epochs_repaired::EpochData, artifacts::EpochRejectionInfo; channel_selection::Function=channels(), kwargs...)
+    plot_artifact_repair(epochs_raw::EpochData, epochs_repaired::EpochData, artifacts::EpochRejectionInfo; channel_selection::Function=channels(), kwargs...)
 
 Interactive plot comparison between original and repaired epochs with navigation buttons.
 
 # Arguments
-- `epochs_uncorrected::EpochData`: Original epoch data
+- `epochs_raw::EpochData`: Original epoch data
 - `epochs_repaired::EpochData`: Repaired epoch data  
 - `artifacts::EpochRejectionInfo`: Artifact detection results
 - `channel_selection::Function`: Channel predicate for selecting channels to plot (default: all layout channels)
@@ -368,21 +368,21 @@ fig = plot_artifact_repair(epochs_orig, epochs_repaired, artifacts, xlim = (-0.2
 ```
 """
 function plot_artifact_repair(
-    epochs_uncorrected::EpochData,
+    epochs_raw::EpochData,
     epochs_repaired::EpochData,
     artifacts::EpochRejectionInfo;
     channel_selection::Function = channels(),
     kwargs...,
 )
     # Generate window title from dataset
-    title_str = _generate_window_title(epochs_uncorrected)
+    title_str = _generate_window_title(epochs_raw)
     _set_window_title(title_str)
 
     # Merge user kwargs with defaults and validate
     plot_kwargs = _merge_plot_kwargs(PLOT_ARTIFACT_KWARGS, kwargs)
 
     # Get channels to plot
-    selected_channels = get_selected_channels(epochs_uncorrected, channel_selection, include_meta = false, include_extra = false)
+    selected_channels = get_selected_channels(epochs_raw, channel_selection, include_meta = false, include_extra = false)
 
     # Create figure and axes
     fig = Figure()
@@ -415,7 +415,7 @@ function plot_artifact_repair(
     sort!(epochs_with_artifacts)
 
     # Create controls
-    n_epochs = length(epochs_uncorrected.data)
+    n_epochs = length(epochs_raw.data)
     controls = _create_artifact_controls(fig[3, 1], n_epochs, epochs_with_artifacts)
 
     # Set row sizes
@@ -451,7 +451,7 @@ function plot_artifact_repair(
         end
 
         # Get epoch data
-        epoch_orig = epochs_uncorrected.data[epoch_idx_val]
+        epoch_orig = epochs_raw.data[epoch_idx_val]
         epoch_repaired = epochs_repaired.data[epoch_idx_val]
 
         # Find rejected channels for this epoch
@@ -488,7 +488,7 @@ function plot_artifact_repair(
     _create_channel_selection_handlers(
         fig,
         ax1,
-        epochs_uncorrected,
+        epochs_raw,
         selected_channels,
         selected_channels_set,
         plot_kwargs,
@@ -498,7 +498,7 @@ function plot_artifact_repair(
     _create_channel_selection_handlers(
         fig,
         ax2,
-        epochs_uncorrected,
+        epochs_raw,
         selected_channels,
         selected_channels_set,
         plot_kwargs,
@@ -535,14 +535,14 @@ function plot_artifact_repair(
 end
 
 """
-    plot_artifact_rejection(epochs_uncorrected::EpochData, epochs_rejected::EpochData, artifacts::EpochRejectionInfo; channel_selection::Function=channels(), kwargs...)
+    plot_artifact_rejection(epochs_raw::EpochData, epochs_rejected::EpochData, artifacts::EpochRejectionInfo; channel_selection::Function=channels(), kwargs...)
 
 Interactive plot comparison between original and rejected epochs with navigation buttons.
 Epochs are aligned by epoch number from the dataframe. If an epoch was rejected (doesn't exist in epochs_rejected),
 both plots show a blank plot with red spines.
 
 # Arguments
-- `epochs_uncorrected::EpochData`: Original epoch data (before rejection)
+- `epochs_raw::EpochData`: Original epoch data (before rejection)
 - `epochs_rejected::EpochData`: Epoch data after rejection (may have fewer epochs)
 - `artifacts::EpochRejectionInfo`: Artifact detection results
 - `channel_selection::Function`: Channel predicate for selecting channels to plot (default: all layout channels)
@@ -567,21 +567,21 @@ fig = plot_artifact_rejection(epochs_orig, epochs_rejected, artifacts, xlim = (-
 ```
 """
 function plot_artifact_rejection(
-    epochs_uncorrected::EpochData,
+    epochs_raw::EpochData,
     epochs_rejected::EpochData,
     artifacts::EpochRejectionInfo;
     channel_selection::Function = channels(),
     kwargs...,
 )
     # Generate window title from dataset
-    title_str = _generate_window_title(epochs_uncorrected)
+    title_str = _generate_window_title(epochs_raw)
     _set_window_title(title_str)
 
     # Merge user kwargs with defaults and validate
     plot_kwargs = _merge_plot_kwargs(PLOT_ARTIFACT_KWARGS, kwargs)
 
     # Get channels to plot
-    selected_channels = get_selected_channels(epochs_uncorrected, channel_selection, include_meta = false, include_extra = false)
+    selected_channels = get_selected_channels(epochs_raw, channel_selection, include_meta = false, include_extra = false)
 
     # Create figure and axes
     fig = Figure()
@@ -614,7 +614,7 @@ function plot_artifact_rejection(
     sort!(epochs_with_artifacts)
 
     # Create controls
-    n_epochs = length(epochs_uncorrected.data)
+    n_epochs = length(epochs_raw.data)
     controls = _create_artifact_controls(fig[3, 1], n_epochs, epochs_with_artifacts)
 
     # Set row sizes
@@ -657,7 +657,7 @@ function plot_artifact_rejection(
         end
 
         # Get epoch number from original data
-        epoch_orig = epochs_uncorrected.data[epoch_idx_val]
+        epoch_orig = epochs_raw.data[epoch_idx_val]
         epoch_num = epoch_orig.epoch[1]
 
         # Find rejected channels for this epoch
@@ -714,7 +714,7 @@ function plot_artifact_rejection(
     _create_channel_selection_handlers(
         fig,
         ax1,
-        epochs_uncorrected,
+        epochs_raw,
         selected_channels,
         selected_channels_set,
         plot_kwargs,
@@ -724,7 +724,7 @@ function plot_artifact_rejection(
     _create_channel_selection_handlers(
         fig,
         ax2,
-        epochs_uncorrected,
+        epochs_raw,
         selected_channels,
         selected_channels_set,
         plot_kwargs,

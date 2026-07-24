@@ -40,7 +40,7 @@ function _build_erp_test_data(;
             end
 
             layout = EegFun.create_test_layout(n_channels = n_channels)
-            erp = EegFun.ErpData("participant$p", cond, "condition_$cond", df, layout, fs, EegFun.AnalysisInfo(:none, 0.0, 0.0), 20)
+            erp = EegFun.ErpData("participant$p", cond, "condition_$cond", df, layout, fs, EegFun.AnalysisInfo(), 20)
             push!(erps, erp)
         end
     end

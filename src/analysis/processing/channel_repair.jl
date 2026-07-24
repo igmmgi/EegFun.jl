@@ -12,7 +12,7 @@ Repair bad EEG channels using the specified method.
 - `method::Symbol`: Repair method to use
   - `:neighbor_interpolation` (default): Weighted neighbor interpolation
   - `:spherical_spline`: Spherical spline interpolation
-- `neighbours_dict::Union{OrderedDict, Nothing}`: Neighbor information (for neighbor_interpolation)
+- `neighbours_dict::Union{Dict, Nothing}`: Neighbor information (for neighbor_interpolation)
 - `m::Int`: Order of Legendre polynomials (for spherical_spline, default: 4)
 - `lambda::Float64`: Regularization parameter (for spherical_spline, default: 1e-5)
 - `epoch_selection::Function`: Epoch selection predicate (for EpochData, default: all epochs)
@@ -41,6 +41,15 @@ function repair_channels!(data, channels_to_repair; method::Symbol = :neighbor_i
         end
     else
         throw(ArgumentError("Unknown repair method: $method. Use :neighbor_interpolation or :spherical_spline"))
+    end
+
+    if !(data isa EpochData) && hasfield(typeof(data), :analysis_info)
+        for ch in channels_to_repair
+            if ch ∉ data.analysis_info.repaired_channels
+                push!(data.analysis_info.repaired_channels, ch)
+                data.analysis_info.n_channels_repaired += 1
+            end
+        end
     end
 end
 
@@ -72,7 +81,7 @@ end
 # === CORE IMPLEMENTATION FUNCTIONS ===
 
 """
-    _repair_channels_neighbor!(data::AbstractMatrix, channels::Vector{Symbol}, channels_to_repair::Vector{Symbol}, neighbours_dict::OrderedDict{Symbol, Neighbours})
+    _repair_channels_neighbor!(data::AbstractMatrix, channels::Vector{Symbol}, channels_to_repair::Vector{Symbol}, neighbours_dict::Dict{Symbol, Neighbours})
 
 Repair bad channels in a data matrix using weighted neighbor interpolation.
 """
@@ -80,7 +89,7 @@ function _repair_channels_neighbor!(
     data::AbstractMatrix,
     channels::Vector{Symbol},
     channels_to_repair::Vector{Symbol},
-    neighbours_dict::OrderedDict{Symbol,Neighbours};
+    neighbours_dict::Dict{Symbol,Neighbours};
     repair_info = nothing,
 )
     # Check that channels match data dimensions
@@ -155,14 +164,14 @@ function _repair_channels_neighbor!(
 end
 
 """
-    _repair_channels_neighbor!(data::ContinuousData, channels_to_repair::Vector{Symbol}, neighbours_dict::OrderedDict{Symbol, Neighbours}; repair_info = nothing)
+    _repair_channels_neighbor!(data::ContinuousData, channels_to_repair::Vector{Symbol}, neighbours_dict::Dict{Symbol, Neighbours}; repair_info = nothing)
 
 Repair bad channels in ContinuousData using weighted neighbor interpolation.
 """
 function _repair_channels_neighbor!(
     data::ContinuousData,
     channels_to_repair::AbstractVector{Symbol},
-    neighbours_dict::OrderedDict{Symbol,Neighbours};
+    neighbours_dict::Dict{Symbol,Neighbours};
     repair_info = nothing,
 )
     # Extract channels vector from ContinuousData
@@ -181,7 +190,7 @@ function _repair_channels_neighbor!(
 end
 
 """
-    _repair_channels_neighbor!(data::EpochData, channels_to_repair::Vector{Symbol}, neighbours_dict::OrderedDict{Symbol, Neighbours}; epoch_selection::Function=epochs())
+    _repair_channels_neighbor!(data::EpochData, channels_to_repair::Vector{Symbol}, neighbours_dict::Dict{Symbol, Neighbours}; epoch_selection::Function=epochs())
 
 Repair bad channels in epoched EEG data using weighted neighbor interpolation.
 Tracking for EpochData is handled via EpochRejectionInfo, not through a separate repair_info parameter.
@@ -189,7 +198,7 @@ Tracking for EpochData is handled via EpochRejectionInfo, not through a separate
 function _repair_channels_neighbor!(
     data::EpochData,
     channels_to_repair::AbstractVector{Symbol},
-    neighbours_dict::OrderedDict{Symbol,Neighbours};
+    neighbours_dict::Dict{Symbol,Neighbours};
     epoch_selection::Function = epochs(),
 )
     # Get selected epochs

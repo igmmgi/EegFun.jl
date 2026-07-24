@@ -252,7 +252,6 @@ public compute_csd!
 public calculate_eog_channels!
 public combine_artifact_components
 public detect_eog_onsets!
-public detect_eog_onsets!
 public get_all_ica_components
 public get_eog_channels
 public get_selected_components
@@ -279,6 +278,7 @@ public erp_measurements!
 public gfp
 public gfp_and_dissimilarity
 public global_dissimilarity
+public extract_ride
 public grand_average
 public jackknife_average
 public lrp
@@ -330,6 +330,7 @@ public read_bids
 public export_bids
 public generate_pipeline_template
 public preprocess
+public validate_config
 
 public print_config
 public show_parameter_info
@@ -353,6 +354,8 @@ public plot_ecg_component_features
 public plot_eog_component_features
 public plot_epochs
 public plot_erp
+public plot_erp_errorbar
+public plot_erp_errorbar!
 public plot_erp!
 public plot_erp_filter_gui
 public plot_erp_image
