@@ -290,11 +290,12 @@ function signal_example_tf()
     ctrl  = fig[3, 1:2] = GridLayout(tellheight = false)
     fsize = 16
 
-    # Row 1: method + param + noise
-    global_row = ctrl[1, 1:10] = GridLayout()
-
-    Label(global_row[1, 1], "Method:"; fontsize = fsize, halign = :right)
-    menu = Menu(global_row[1, 2], options = ["Morlet Wavelet", "STFT (Hanning)", "Multitaper (DPSS)"], default = "Morlet Wavelet")
+    # Rows 1 & 2: global and baseline controls (combined for alignment)
+    top_ctrl = ctrl[1, 1] = GridLayout()
+    
+    # Row 1
+    Label(top_ctrl[1, 1], "Method:"; fontsize = fsize, halign = :right)
+    menu = Menu(top_ctrl[1, 2], options = ["Morlet Wavelet", "STFT (Hanning)", "Multitaper (DPSS)"], default = "Morlet Wavelet")
     on(menu.selection) do sel
         if sel == "Morlet Wavelet"
             method_val[] = :morlet
@@ -312,10 +313,9 @@ function signal_example_tf()
         end
     end
 
-    # Single parameter slider — semantics depend on method
-    Label(global_row[1, 3], "  Param:"; fontsize = fsize, halign = :right)
-    sl_param = Slider(global_row[1, 4], range = 3.0:1.0:12.0, startvalue = 7.0)
-    Label(global_row[1, 5], param_lbl_obs; fontsize = fsize)
+    Label(top_ctrl[1, 3], "  Param:"; fontsize = fsize, halign = :right)
+    sl_param = Slider(top_ctrl[1, 4], range = 3.0:1.0:12.0, startvalue = 7.0)
+    Label(top_ctrl[1, 5], param_lbl_obs; fontsize = fsize, halign = :left)
     on(sl_param.value) do v
         param_val[] = v
         if method_val[] == :stft
@@ -325,19 +325,18 @@ function signal_example_tf()
         end
     end
 
-    Label(global_row[1, 6], "  Noise:"; fontsize = fsize, halign = :right)
-    sl_noise  = Slider(global_row[1, 7], range = 0.5:0.5:5.0, startvalue = 0.5)
-    lbl_noise = Label(global_row[1, 8], "0.5"; fontsize = fsize)
+    Label(top_ctrl[1, 6], "  Noise:"; fontsize = fsize, halign = :right)
+    sl_noise  = Slider(top_ctrl[1, 7], range = 0.5:0.5:5.0, startvalue = 0.5)
+    lbl_noise = Label(top_ctrl[1, 8], "0.5"; fontsize = fsize, halign = :left)
     on(sl_noise.value) do v
         noise_val[] = v
         lbl_noise.text = string(round(v, digits = 1))
     end
 
-    # Row 2: baseline controls
-    baseline_row = ctrl[2, 1:10] = GridLayout()
-    Label(baseline_row[1, 1], "Baseline:"; fontsize = fsize, halign = :right)
+    # Row 2
+    Label(top_ctrl[2, 1], "Baseline:"; fontsize = fsize, halign = :right)
     baseline_menu = Menu(
-        baseline_row[1, 2],
+        top_ctrl[2, 2],
         options = ["None", "dB", "% Change", "Z-score", "Absolute", "Relative", "Rel. Change", "Norm. Change"],
         default = "None",
     )
@@ -354,58 +353,64 @@ function signal_example_tf()
         )[sel]
     end
 
-    Label(baseline_row[1, 3], "  Window:"; fontsize = fsize, halign = :right)
-    baseline_iv_slider = IntervalSlider(baseline_row[1, 4], range = -1.0:0.05:2.0, startvalues = (-1.0, 0.0))
-    baseline_iv_lbl = Label(baseline_row[1, 5], "-1.0 – 0.0 s"; fontsize = fsize)
+    Label(top_ctrl[2, 3], "  Window:"; fontsize = fsize, halign = :right)
+    baseline_iv_slider = IntervalSlider(top_ctrl[2, 4], range = -1.0:0.05:2.0, startvalues = (-1.0, 0.0))
+    baseline_iv_lbl = Label(top_ctrl[2, 5], "-1.0 – 0.0 s"; fontsize = fsize, halign = :left)
     on(baseline_iv_slider.interval) do iv
         baseline_interval_val[] = iv
         baseline_iv_lbl.text = "$(round(iv[1], digits=2)) – $(round(iv[2], digits=2)) s"
     end
 
-    Label(baseline_row[1, 6], "  Freq scale:"; fontsize = fsize, halign = :right)
-    log_toggle = Toggle(baseline_row[1, 7], active = false)
-    Label(baseline_row[1, 8], "Log"; fontsize = fsize, halign = :left)
+    Label(top_ctrl[2, 6], "  Freq scale:"; fontsize = fsize, halign = :right)
+    log_toggle = Toggle(top_ctrl[2, 7], active = false)
+    Label(top_ctrl[2, 8], "Log"; fontsize = fsize, halign = :left)
     on(log_toggle.active) do is_log
         ax_tf.yscale = is_log ? log10 : identity
         ylims!(ax_tf, 1.0, 50.0)
     end
+    colsize!(top_ctrl, 1, Fixed(80))
+    colsize!(top_ctrl, 2, Weight(1))
+    colsize!(top_ctrl, 3, Fixed(80))
+    colsize!(top_ctrl, 4, Weight(1))
+    colsize!(top_ctrl, 5, Fixed(130))
+    colsize!(top_ctrl, 6, Fixed(100))
+    colsize!(top_ctrl, 7, Weight(1))
+    colsize!(top_ctrl, 8, Fixed(50))
 
-    # Rows 3–6: component grid (shifted down from 2–5 to make room for baseline row)
-    comp_grid = ctrl[3:6, 1:10] = GridLayout()
+    # Row 3: component grid
+    comp_grid = ctrl[2, 1] = GridLayout()
 
     # ── Column headers (row 1 of comp_grid) ────────────────────────────────
     Label(comp_grid[1, 1], ""; fontsize = fsize - 2, font = :bold, halign = :center)
     Label(comp_grid[1, 2], "Active"; fontsize = fsize - 2, font = :bold, halign = :center)
-    Label(comp_grid[1, 3], "Freq (Hz)"; fontsize = fsize - 2, font = :bold, halign = :center)
-    Label(comp_grid[1, 4], "Amp"; fontsize = fsize - 2, font = :bold, halign = :center)
-    Label(comp_grid[1, 5:6], "Interval (s)"; fontsize = fsize - 2, font = :bold, halign = :center)
+    Label(comp_grid[1, 3:4], "Freq (Hz)"; fontsize = fsize - 2, font = :bold, halign = :center)
+    Label(comp_grid[1, 5:6], "Amp"; fontsize = fsize - 2, font = :bold, halign = :center)
+    Label(comp_grid[1, 7:8], "Interval (s)"; fontsize = fsize - 2, font = :bold, halign = :center)
 
     # ── Helper: one component row inside comp_grid ──────────────────────────
-    """Create a row of component controls (toggle, freq, amp, interval sliders) inside the grid."""
     function make_comp_row(grid_row, label, active_obs, freq_obs, amp_obs, interval_obs, init_active, init_freq, init_amp, init_interval)
-
         Label(comp_grid[grid_row, 1], label; fontsize = fsize, halign = :right)
 
-        tb = Toggle(comp_grid[grid_row, 2])
+        tb = Toggle(comp_grid[grid_row, 2], halign = :center)
         tb.active[] = init_active
         connect!(active_obs, tb.active)
 
         sl_f  = Slider(comp_grid[grid_row, 3], range = 1.0:1.0:40.0, startvalue = init_freq)
-        lbl_f = Label(comp_grid[grid_row, 3, Bottom()], string(Int(init_freq)); fontsize = fsize - 2)
+        lbl_f = Label(comp_grid[grid_row, 4], string(Int(init_freq)); fontsize = fsize, halign = :left)
         on(sl_f.value) do v
             freq_obs[] = v
             lbl_f.text = string(Int(round(v)))
         end
 
-        sl_a  = Slider(comp_grid[grid_row, 4], range = 0.0:0.5:5.0, startvalue = init_amp)
-        lbl_a = Label(comp_grid[grid_row, 4, Bottom()], string(init_amp); fontsize = fsize - 2)
+        sl_a  = Slider(comp_grid[grid_row, 5], range = 0.0:0.5:5.0, startvalue = init_amp)
+        lbl_a = Label(comp_grid[grid_row, 6], string(init_amp); fontsize = fsize, halign = :left)
         on(sl_a.value) do v
             amp_obs[] = v
             lbl_a.text = string(round(v, digits = 1))
         end
 
-        sl_iv  = IntervalSlider(comp_grid[grid_row, 5:6], range = -1.0:0.1:2.0, startvalues = init_interval)
-        lbl_iv = Label(comp_grid[grid_row, 5:6, Bottom()], "$(init_interval[1]) – $(init_interval[2])"; fontsize = fsize - 2)
+        sl_iv  = IntervalSlider(comp_grid[grid_row, 7], range = -1.0:0.1:2.0, startvalues = init_interval)
+        lbl_iv = Label(comp_grid[grid_row, 8], "$(init_interval[1]) – $(init_interval[2])"; fontsize = fsize, halign = :left)
         on(sl_iv.interval) do iv
             interval_obs[] = iv
             lbl_iv.text = "$(round(iv[1], digits=1)) – $(round(iv[2], digits=1))"
@@ -419,10 +424,13 @@ function signal_example_tf()
     # Size columns now that content exists
     colsize!(comp_grid, 1, Fixed(70))      # component name
     colsize!(comp_grid, 2, Fixed(55))      # toggle
-    colsize!(comp_grid, 3, Relative(0.27)) # Freq slider
-    colsize!(comp_grid, 4, Relative(0.20)) # Amp slider
-    colsize!(comp_grid, 5, Relative(0.25)) # Interval left half
-    colsize!(comp_grid, 6, Relative(0.25)) # Interval right half
+    colsize!(comp_grid, 3, Weight(1))      # Freq slider
+    colsize!(comp_grid, 4, Fixed(35))      # Freq label
+    colsize!(comp_grid, 5, Weight(1))      # Amp slider
+    colsize!(comp_grid, 6, Fixed(40))      # Amp label
+    colsize!(comp_grid, 7, Weight(1.5))    # Interval slider
+    colsize!(comp_grid, 8, Fixed(100))     # Interval label
+
 
     rowsize!(fig.layout, 3, Relative(0.25))
 

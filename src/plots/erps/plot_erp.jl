@@ -558,7 +558,7 @@ function plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
 
     plot_kwargs, user_provided_color = _prepare_plot_kwargs(filtered_kwargs)
 
-    dat_subset, all_channels, _, _ = _prepare_erp_data(
+    dat_subset, all_channels, updated_channel_selection, _ = _prepare_erp_data(
         datasets,
         plot_kwargs;
         condition_selection = conditions(),
@@ -569,7 +569,7 @@ function plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
     variances_dict = Dict{Int,Tuple{DataFrames.DataFrame,Int}}()
 
     # Apply channel_selection to determine which channels to plot
-    selected_channels = get_selected_channels(first(dat_subset), channel_selection_func; include_meta = false, include_extra = true)
+    selected_channels = get_selected_channels(first(dat_subset), updated_channel_selection; include_meta = false, include_extra = true)
     # Preserve order from selected_channels (user's channel_selection order)
     all_plot_channels = [ch for ch in selected_channels if ch in all_channels]
 

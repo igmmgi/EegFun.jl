@@ -77,9 +77,15 @@ function _run_erp_simulation(
     samp_freq::Int = 1000,
     sig_length::Float64 = 1.0,
     base_length::Float64 = 0.2,
+    noise_base::Union{Matrix{Float64}, Nothing} = nothing,
 )
     n_samples = Int(samp_freq * (sig_length + base_length))
-    my_signal = _noise_vec(trials, n_samples, samp_freq, comps[end, 6])
+    if noise_base !== nothing
+        my_signal = noise_base[1:trials, :] .* comps[end, 6]
+    else
+        my_signal = _noise_vec(trials, n_samples, samp_freq, comps[end, 6])
+    end
+
 
     n_components = size(comps, 1)
     for comp = 1:n_components
@@ -185,30 +191,38 @@ function simulate_erp()
 
     time = collect(1:n_samples) .- (samp_freq * base_length)
 
+    # Precompute noise base for up to 500 trials to avoid millions of sin/cos calls on every slider drag
+    MAX_TRIALS = 500
+    noise_base = Observable(_noise_vec(MAX_TRIALS, n_samples, samp_freq, 1.0))
+
+
     # Control layout at the bottom
     ctrl_layout = gl[2, 1:2] = GridLayout()
 
     trials = Observable(1)
-    sl_trials = Slider(ctrl_layout[1, 1], range = 1:1:500, startvalue = 1)
-    Label(ctrl_layout[1, 1, Top()], "Number of Trials")
-    Label(ctrl_layout[1, 1, Bottom()], lift(x -> string(Int(x)), trials))
+    Label(ctrl_layout[1, 1], "Number of Trials", halign = :right)
+    sl_trials = Slider(ctrl_layout[1, 2], range = 1:1:500, startvalue = 1)
+    Label(ctrl_layout[1, 3], lift(x -> string(Int(x)), trials), halign = :left)
     connect!(trials, sl_trials.value)
 
     # Noise control
     noise_amp = Observable(0.0)
-    sl_noise = Slider(ctrl_layout[1, 2], range = 0.0:1:20.0, startvalue = 0.0)
-    Label(ctrl_layout[1, 2, Top()], "Noise Amplitude")
-    Label(ctrl_layout[1, 2, Bottom()], lift(x -> string(round(x, digits = 1)), noise_amp))
+    Label(ctrl_layout[1, 4], "Noise Amplitude", halign = :right)
+    sl_noise = Slider(ctrl_layout[1, 5], range = 0.0:1:20.0, startvalue = 0.0)
+    Label(ctrl_layout[1, 6], lift(x -> string(round(x, digits = 1)), noise_amp), halign = :left)
     connect!(noise_amp, sl_noise.value)
 
     # Regenerate Button
-    btn_regen = Button(ctrl_layout[1, 3], label = "Regenerate", width = 200)
+    btn_regen = Button(ctrl_layout[1, 7], label = "Regenerate", width = 120)
 
     # Toggle for CI vs Trials
-    tb_ci = Toggle(ctrl_layout[1, 4])
+    tb_ci = Toggle(ctrl_layout[1, 8])
     tb_ci.active[] = false
-    Label(ctrl_layout[1, 5], "Confidence Interval", halign = :left)
+    Label(ctrl_layout[1, 9], "Confidence Interval", halign = :left)
     show_ci = tb_ci.active
+
+    colsize!(ctrl_layout, 2, Weight(1))
+    colsize!(ctrl_layout, 5, Weight(1))
 
     # List to store components
     components = Component[]
@@ -226,30 +240,30 @@ function simulate_erp()
         # (widget references are local — Makie retains them via the scene graph)
 
         # Active toggle - start INACTIVE
-        tb = Toggle(parent[row, 1])
+        tb = Toggle(parent[row, 1], halign = :center)
         tb.active[] = false
         active[] = false
         connect!(active, tb.active)
 
         # Parameter sliders with value labels
         sl_freq = Slider(parent[row, 2], range = 0.1:0.1:20.0, startvalue = 3.0)
-        lbl_freq = Label(parent[row, 2, Bottom()], lift(x -> string(round(x, digits = 1)), freq))
+        lbl_freq = Label(parent[row, 3], lift(x -> string(round(x, digits = 1)), freq), halign = :left)
         connect!(freq, sl_freq.value)
 
-        sl_amp = Slider(parent[row, 3], range = -20.0:1.0:20.0, startvalue = 5.0)
-        lbl_amp = Label(parent[row, 3, Bottom()], lift(x -> string(round(x, digits = 1)), amp))
+        sl_amp = Slider(parent[row, 4], range = -20.0:1.0:20.0, startvalue = 5.0)
+        lbl_amp = Label(parent[row, 5], lift(x -> string(round(x, digits = 1)), amp), halign = :left)
         connect!(amp, sl_amp.value)
 
-        sl_latency = Slider(parent[row, 4], range = 0.0:10.0:1000.0, startvalue = 100.0)
-        lbl_latency = Label(parent[row, 4, Bottom()], lift(x -> string(Int(round(x))), latency))
+        sl_latency = Slider(parent[row, 6], range = 0.0:10.0:1000.0, startvalue = 100.0)
+        lbl_latency = Label(parent[row, 7], lift(x -> string(Int(round(x))), latency), halign = :left)
         connect!(latency, sl_latency.value)
 
-        sl_jitter_amp = Slider(parent[row, 5], range = 0.0:1.0:20.0, startvalue = 0.0)
-        lbl_jitter_amp = Label(parent[row, 5, Bottom()], lift(x -> string(round(x, digits = 1)), jitter_amp))
+        sl_jitter_amp = Slider(parent[row, 8], range = 0.0:1.0:20.0, startvalue = 0.0)
+        lbl_jitter_amp = Label(parent[row, 9], lift(x -> string(round(x, digits = 1)), jitter_amp), halign = :left)
         connect!(jitter_amp, sl_jitter_amp.value)
 
-        sl_jitter_lat = Slider(parent[row, 6], range = 0.0:1.0:150.0, startvalue = 0.0)
-        lbl_jitter_lat = Label(parent[row, 6, Bottom()], lift(x -> string(round(x, digits = 1)), jitter_lat))
+        sl_jitter_lat = Slider(parent[row, 10], range = 0.0:1.0:150.0, startvalue = 0.0)
+        lbl_jitter_lat = Label(parent[row, 11], lift(x -> string(round(x, digits = 1)), jitter_lat), halign = :left)
         connect!(jitter_lat, sl_jitter_lat.value)
 
         Component(active, freq, amp, latency, jitter_amp, jitter_lat)
@@ -258,10 +272,15 @@ function simulate_erp()
     # Component parameter labels
     labels = ["Active", "Freq (Hz)", "Amp (μV)", "Latency (ms)", "Amp Jitter", "Lat Jitter"]
     for (i, label) in enumerate(labels)
-        Label(comp_layout[2, i], label)
+        Label(comp_layout[2, i == 1 ? 1 : (i-1)*2], label, font = :bold)
     end
+    
     # Fix toggle column width so the layout doesn't shift
-    colsize!(comp_layout, 1, Fixed(50))
+    colsize!(comp_layout, 1, Fixed(60))
+    for c in [2, 4, 6, 8, 10]
+        colsize!(comp_layout, c, Weight(1))
+        colsize!(comp_layout, c+1, Fixed(45))
+    end
 
     # Add initial components - all start INACTIVE
     for i = 1:5
@@ -289,7 +308,7 @@ function simulate_erp()
             active_comps[end, 6] = noise_amp[]
 
             new_erp, new_signals =
-                _run_erp_simulation(trials[], active_comps, samp_freq = samp_freq, sig_length = sig_length, base_length = base_length)
+                _run_erp_simulation(trials[], active_comps, samp_freq = samp_freq, sig_length = sig_length, base_length = base_length, noise_base = noise_base[])
 
             # Update plot directly without clearing axis
             update_plot(new_signals, new_erp)
@@ -360,35 +379,41 @@ function simulate_erp()
     end
 
     # Connect parameter changes to simulation update
-    for comp in components
-        # Active state always triggers update
-        on(comp.active) do _
-            update_simulation()
-        end
+    # We use a central trigger and async_latest to prevent the slider dragging 
+    # from queueing hundreds of massive updates and freezing the UI.
+    update_trigger = Observable(0)
+    throttled_trigger = async_latest(update_trigger)
+    on(throttled_trigger) do _
+        update_simulation()
+    end
 
-        # Other parameters only trigger update if component is active
+    for comp in components
+        on(comp.active) do _
+            update_trigger[] += 1
+        end
         for param in [comp.freq, comp.amp, comp.latency, comp.jitter_amp, comp.jitter_lat]
             on(param) do _
                 if comp.active[]
-                    update_simulation()
+                    update_trigger[] += 1
                 end
             end
         end
     end
 
     on(trials) do _
-        update_simulation()
+        update_trigger[] += 1
     end
 
     on(noise_amp) do _
         if any(c -> c.active[], components)
-            update_simulation()
+            update_trigger[] += 1
         end
     end
 
     on(btn_regen.clicks) do _
+        noise_base[] = _noise_vec(MAX_TRIALS, n_samples, samp_freq, 1.0)
         if any(c -> c.active[], components)
-            update_simulation()
+            update_trigger[] += 1
         end
     end
 
