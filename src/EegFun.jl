@@ -102,6 +102,7 @@ include("analysis/processing/condition_average.jl")
 include("analysis/processing/epochs.jl")
 include("analysis/processing/filter.jl")
 include("analysis/processing/ica.jl")
+include("analysis/processing/picard.jl")
 include("analysis/processing/cleanline.jl")
 
 include("analysis/processing/mirror.jl")

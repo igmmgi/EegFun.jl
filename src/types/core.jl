@@ -513,6 +513,9 @@ specific settings.
     degconst::Float64 = 180.0 / π
     default_stop::Float64 = 1e-6
     use_gpu::Bool = false
+    picard_m::Int = 7
+    picard_lambda_min::Float64 = 0.01
+    picard_ls_tries::Int = 10
 end
 
 """

@@ -344,8 +344,11 @@ function _run_ica_algorithm(
         return infomax_ica(dat_ica, layout, filename; n_components = n_components, params = params)
     elseif algorithm == :infomax_extended
         return infomax_extended_ica(dat_ica, layout, filename; n_components = n_components, params = params)
+    elseif algorithm == :picard || algorithm == :picard_extended
+        extended = algorithm == :picard_extended
+        return picard_ica(dat_ica, layout, filename; n_components = n_components, extended = extended, params = params)
     else
-        error("Unknown ICA algorithm: $algorithm. Supported algorithms: :infomax, :infomax_extended")
+        error("Unknown ICA algorithm: $algorithm. Supported algorithms: :infomax, :infomax_extended, :picard, :picard_extended")
     end
 end
 
