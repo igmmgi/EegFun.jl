@@ -42,7 +42,18 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 
+[weakdeps]
+AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+Metal = "dde4ed3a-d17e-413a-9261-7009f984a904"
+
+[extensions]
+EegFunAMDGPUExt = "AMDGPU"
+EegFunCUDAExt = "CUDA"
+EegFunMetalExt = "Metal"
+
 [compat]
+AMDGPU = "2.7.0"
 AnovaFun = "0.4"
 Aqua = "0.8.16"
 BiosemiDataFormat = "0.2.0"
@@ -92,15 +103,3 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 dev = ["Revise", "JuliaFormatter"]
 docs = ["Documenter", "DocumenterTools"]
 test = ["Test", "Coverage", "CoverageTools", "BenchmarkTools", "Aqua"]
-
-[weakdeps]
-AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
-CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
-Metal = "dde4ed3a-d17e-413a-9261-7009f984a904"
-
-[extensions]
-EegFunAMDGPUExt = "AMDGPU"
-EegFunCUDAExt = "CUDA"
-EegFunMetalExt = "Metal"
-
-
