@@ -2,7 +2,7 @@
 # UNIFIED GPU INTERFACE AND BACKEND REGISTRY
 # =============================================================================
 # EegFun uses KernelAbstractions as its primary GPU kernel abstraction engine.
-# Vendor-specific packages (AMDGPU.jl, CUDA.jl, Metal.jl, oneAPI.jl) are handled
+# Vendor-specific packages (AMDGPU.jl, CUDA.jl, Metal.jl) are handled
 # via Julia 1.9+ package extensions. When a user loads a GPU package (e.g., `using CUDA`),
 # the corresponding extension registers its array constructor and KA backend with EegFun.
 
@@ -34,7 +34,7 @@ end
 """
     is_gpu_available() -> Bool
 
-Check whether a functional GPU extension (AMDGPU, CUDA, Metal, oneAPI) has been loaded and registered.
+Check whether a functional GPU extension (AMDGPU, CUDA, Metal) has been loaded and registered.
 """
 function is_gpu_available()
     return GLOBAL_GPU_STATE.active

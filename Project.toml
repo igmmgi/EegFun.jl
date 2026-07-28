@@ -97,11 +97,10 @@ test = ["Test", "Coverage", "CoverageTools", "BenchmarkTools", "Aqua"]
 AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 Metal = "dde4ed3a-d17e-413a-9261-7009f984a904"
-oneAPI = "8f1865be-43e8-5c5f-b1cd-cd26e87a261e"
 
 [extensions]
 EegFunAMDGPUExt = "AMDGPU"
 EegFunCUDAExt = "CUDA"
 EegFunMetalExt = "Metal"
-EegFunOneAPIExt = "oneAPI"
+
 

@@ -404,7 +404,7 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String;
     # pre-allocate permutation vector
     permute_indices = Vector{Int}(undef, n_samples)
 
-    # Detect GPU hardware backend via registered package extensions (CUDA.jl, AMDGPU.jl, Metal.jl, oneAPI.jl)
+    # Detect GPU hardware backend via registered package extensions (CUDA.jl, AMDGPU.jl, Metal.jl)
     gpu_active = false
     active_backend = CPU()
     if params.use_gpu
@@ -413,7 +413,7 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String;
             active_backend = gpu_backend()
             @info "[GPU ACTIVATED] Running Infomax ICA on $(gpu_device_name())..."
         else
-            @minimal_warning "Requested GPU acceleration (use_gpu=true), but no functional GPU package (CUDA.jl, AMDGPU.jl, Metal.jl, oneAPI.jl) has been loaded. Please run 'using CUDA' or 'using AMDGPU' before calling run_ica. Falling back to CPU."
+            @minimal_warning "Requested GPU acceleration (use_gpu=true), but no functional GPU package (CUDA.jl, AMDGPU.jl, Metal.jl) has been loaded. Please run 'using CUDA' or 'using AMDGPU' before calling run_ica. Falling back to CPU."
         end
     end
 
