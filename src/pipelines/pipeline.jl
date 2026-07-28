@@ -80,19 +80,23 @@ function preprocess(
         # Resolve relative paths in config relative to base_dir
         resolve_path(path::String) = isabspath(path) ? path : joinpath(base_dir, path)
 
+        # Create PreprocessConfig and FilesConfig objects for typed access
+        preprocess_cfg = PreprocessConfig(cfg["preprocess"])
+        files_cfg = FilesConfig(cfg["files"])
+
         # Resolve input directory
-        input_directory = resolve_path(cfg["files"]["input"]["directory"])
+        input_directory = resolve_path(files_cfg.input.directory)
         !isdir(input_directory) && @minimal_error "Input directory does not exist: $input_directory"
 
         # Resolve output directory
-        output_directory = resolve_path(cfg["files"]["output"]["directory"])
+        output_directory = resolve_path(files_cfg.output.directory)
         !isdir(output_directory) && mkpath(output_directory)
 
         # Resolve layout file path - try resolved path first, then fall back to package layouts
-        layout_file_path = resolve_path(cfg["files"]["input"]["layout_file"])
+        layout_file_path = resolve_path(files_cfg.input.layout_file)
         if !isfile(layout_file_path)
             # Fall back to searching in package layouts directory
-            layout_file = find_file(cfg["files"]["input"]["layout_file"], joinpath(@__DIR__, "..", "..", "resources", "layouts"))
+            layout_file = find_file(files_cfg.input.layout_file, joinpath(@__DIR__, "..", "..", "resources", "layouts"))
             if !isnothing(layout_file)
                 layout_file_path = layout_file
             end
@@ -101,18 +105,15 @@ function preprocess(
         layout = read_layout(layout_file_path)
 
         # Resolve epoch condition file path
-        epoch_condition_file = resolve_path(cfg["files"]["input"]["epoch_condition_file"])
-
-        # Create the PreprocessConfig object for easier access
-        preprocess_cfg = PreprocessConfig(cfg["preprocess"])
+        epoch_condition_file = resolve_path(files_cfg.input.epoch_condition_file)
 
         # check if all requested raw data files exist
         raw_data_files =
-            get_files(input_directory, cfg["files"]["input"]["raw_data_files"]; recursive = get(cfg["files"]["input"], "recursive", false))
+            get_files(input_directory, files_cfg.input.raw_data_files; recursive = files_cfg.input.recursive)
         raw_data_files_exist = check_files_exist(raw_data_files)
         !raw_data_files_exist && @minimal_error "Missing raw data files requested within TOML file!"
         isempty(raw_data_files) &&
-            @minimal_error "No files found in '$input_directory' matching pattern '$(cfg["files"]["input"]["raw_data_files"])'. Check the 'directory' and 'raw_data_files' settings in your pipeline.toml."
+            @minimal_error "No files found in '$input_directory' matching pattern '$(files_cfg.input.raw_data_files)'. Check the 'directory' and 'raw_data_files' settings in your pipeline.toml."
         @info "Found $(length(raw_data_files)) files: $(_print_vector(basename.(raw_data_files)))"
 
         # Read the epoch conditions defined within the toml file
@@ -145,7 +146,7 @@ function preprocess(
                 epoch_cfgs,
                 raw_data_files,
                 preprocess_cfg,
-                cfg,
+                files_cfg,
             )
             return nothing
         end
@@ -197,7 +198,7 @@ function preprocess(
                 dat = create_eegfun_data(read_raw_data(data_file), layout)
 
                 # Save the original data in Julia format
-                if cfg["files"]["output"]["save_continuous_data_raw"]
+                if files_cfg.output.save_continuous_data_raw
                     @info "Saving continuous data (original)"
                     jldsave(_make_output_filename(output_directory, data_file, "_continuous_raw"); data = dat)
                 end
@@ -233,12 +234,12 @@ function preprocess(
                 epochs_raw = extract_epochs(dat, epoch_cfgs, (preprocess_cfg.epoch_start, preprocess_cfg.epoch_end))
                 erps_raw = average_epochs(epochs_raw)
 
-                if cfg["files"]["output"]["save_epoch_data_raw"]
+                if files_cfg.output.save_epoch_data_raw
                     @info "Saving epoch data (original)"
                     jldsave(_make_output_filename(output_directory, data_file, "_epochs_raw"); data = epochs_raw)
                 end
 
-                if cfg["files"]["output"]["save_erp_data_raw"]
+                if files_cfg.output.save_erp_data_raw
                     @info "Saving ERP data (original)"
                     jldsave(_make_output_filename(output_directory, data_file, "_erps_raw"); data = erps_raw)
                 end
@@ -246,7 +247,7 @@ function preprocess(
                 #################### Independent Component Analysis (ICA) ###################
                 # We perform the ica on "continuous" data (clean sections) that usually has a 
                 # more extreme high-pass filter applied. 
-                component_artifacts = _pipeline_ica!(dat, preprocess_cfg, continuous_repair_info, output_directory, data_file, cfg)
+                component_artifacts = _pipeline_ica!(dat, preprocess_cfg, continuous_repair_info, output_directory, data_file, files_cfg)
 
                 #################### RECALCULATE EOG CHANNELS AFTER ICA AND REPAIR ###################
                 _pipeline_epoch_and_reject!(
@@ -257,7 +258,7 @@ function preprocess(
                     component_artifacts,
                     output_directory,
                     data_file,
-                    cfg,
+                    files_cfg,
                     epochs_raw,
                     all_epoch_counts,
                 )
@@ -349,8 +350,8 @@ function _pipeline_dry_run_summary(
     epoch_condition_file,
     epoch_cfgs,
     raw_data_files,
-    preprocess_cfg,
-    cfg,
+    preprocess_cfg::PreprocessConfig,
+    files_cfg::FilesConfig,
 )
     @info section("Dry Run Summary")
     @info "✓ Configuration loaded and validated successfully"
@@ -382,15 +383,15 @@ function _pipeline_dry_run_summary(
     @info ""
     @info subsection("Output Files")
     save_flags = [
-        ("Continuous (raw)", cfg["files"]["output"]["save_continuous_data_raw"]),
-        ("Continuous (corrected)", cfg["files"]["output"]["save_continuous_data_corrected"]),
-        ("ICA data", cfg["files"]["output"]["save_ica_data"]),
-        ("Epochs (raw)", cfg["files"]["output"]["save_epoch_data_raw"]),
-        ("Epochs (corrected)", cfg["files"]["output"]["save_epoch_data_corrected"]),
-        ("Epochs (final)", cfg["files"]["output"]["save_epoch_data"]),
-        ("ERPs (raw)", cfg["files"]["output"]["save_erp_data_raw"]),
-        ("ERPs (corrected)", cfg["files"]["output"]["save_erp_data_corrected"]),
-        ("ERPs (final)", cfg["files"]["output"]["save_erp_data"]),
+        ("Continuous (raw)", files_cfg.output.save_continuous_data_raw),
+        ("Continuous (corrected)", files_cfg.output.save_continuous_data_corrected),
+        ("ICA data", files_cfg.output.save_ica_data),
+        ("Epochs (raw)", files_cfg.output.save_epoch_data_raw),
+        ("Epochs (corrected)", files_cfg.output.save_epoch_data_corrected),
+        ("Epochs (final)", files_cfg.output.save_epoch_data),
+        ("ERPs (raw)", files_cfg.output.save_erp_data_raw),
+        ("ERPs (corrected)", files_cfg.output.save_erp_data_corrected),
+        ("ERPs (final)", files_cfg.output.save_erp_data),
     ]
     for (label, flag) in save_flags
         @info "  $(flag ? "✓" : "✗") $label"
@@ -563,7 +564,7 @@ function _pipeline_ica!(
     continuous_repair_info::Union{ContinuousRepairInfo,Nothing},
     output_directory::String,
     data_file::String,
-    cfg::Dict,
+    files_cfg::FilesConfig,
 )
     # We then run ica on clean sections of "continuous" data
     component_artifacts = nothing  # Initialize in case ICA is not applied
@@ -630,7 +631,7 @@ function _pipeline_ica!(
         subtract_ica_components!(dat, ica, component_selection = components(all_removed_components))
 
         # save ica results
-        if cfg["files"]["output"]["save_ica_data"]
+        if files_cfg.output.save_ica_data
             @info "Saving ica data"
             jldsave(_make_output_filename(output_directory, data_file, "_ica"); data = ica)
         end
@@ -648,7 +649,7 @@ function _pipeline_epoch_and_reject!(
     component_artifacts::Union{ArtifactComponents,Nothing},
     output_directory::String,
     data_file::String,
-    cfg::Dict,
+    files_cfg::FilesConfig,
     epochs_raw::Vector{EpochData},
     all_epoch_counts::Vector{DataFrame},
 )
@@ -668,7 +669,7 @@ function _pipeline_epoch_and_reject!(
     )
 
     # Save the cleaned continuous data in Julia format
-    if cfg["files"]["output"]["save_continuous_data_corrected"]
+    if files_cfg.output.save_continuous_data_corrected
         @info "Saving continuous data"
         jldsave(_make_output_filename(output_directory, data_file, "_continuous_corrected"); data = dat)
     end
@@ -716,7 +717,7 @@ function _pipeline_epoch_and_reject!(
     repair_artifacts!(epochs, rejection_info_step1; method = preprocess_cfg.channel_repair_method)
 
     #################### SAVE EPOCH DATA ###################
-    if cfg["files"]["output"]["save_epoch_data_corrected"]
+    if files_cfg.output.save_epoch_data_corrected
         @info "Saving epoch data (cleaned)"
         jldsave(_make_output_filename(output_directory, data_file, "_epochs_corrected"); data = epochs)
     end
@@ -756,7 +757,7 @@ function _pipeline_epoch_and_reject!(
     end
 
     #################### SAVE ERP DATA ###################
-    if cfg["files"]["output"]["save_erp_data_corrected"]
+    if files_cfg.output.save_erp_data_corrected
         erps = average_epochs(epochs)
         @info "Saving ERP data (cleaned)"
         jldsave(_make_output_filename(output_directory, data_file, "_erps_corrected"); data = erps)
@@ -782,13 +783,13 @@ function _pipeline_epoch_and_reject!(
     push!(all_epoch_counts, df)
 
     #################### SAVE EPOCH DATA ###################
-    if cfg["files"]["output"]["save_epoch_data"]
+    if files_cfg.output.save_epoch_data
         @info "Saving epoch data (good)"
         jldsave(_make_output_filename(output_directory, data_file, "_epochs"); data = epochs)
     end
 
     #################### SAVE ERP DATA ###################
-    if cfg["files"]["output"]["save_erp_data"]
+    if files_cfg.output.save_erp_data
         erps = average_epochs(epochs)
         @info "Saving ERP data (good)"
         jldsave(_make_output_filename(output_directory, data_file, "_erps"); data = erps)

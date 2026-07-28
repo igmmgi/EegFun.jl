@@ -355,7 +355,7 @@ function _run_batch_operation(
         result = try
             process_fn(input_path, output_path)
         catch e
-            @minimal_warning "Error processing $file"
+            @minimal_warning "Error processing $file: $(sprint(showerror, e))"
             BatchResult(false, file, "Exception: $(sprint(showerror, e))")
         end
 
@@ -398,8 +398,10 @@ If `output_dir` is `nothing`, just closes logging without moving the file.
 """
 function _cleanup_logging(log_file::String, output_dir::Union{String,Nothing})
     close_global_logging()
-    if !isnothing(output_dir)
-        log_dest = joinpath(output_dir, log_file)
-        log_file != log_dest && mv(log_file, log_dest, force = true)
+    if !isnothing(output_dir) && isfile(log_file)
+        dest = joinpath(output_dir, basename(log_file))
+        if abspath(log_file) != abspath(dest)
+            mv(log_file, dest, force = true)
+        end
     end
 end

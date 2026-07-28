@@ -9,6 +9,7 @@ println("="^40)
     Aqua.test_all(
         EegFun;
         ambiguities = false,
+        persistent_tasks = false,
         deps_compat = (check_extras = false, ignore = [:Dates, :LinearAlgebra, :Logging, :Printf, :Random, :SparseArrays, :TOML, :Test]),
     )
 end

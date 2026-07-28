@@ -38,10 +38,12 @@ public EpochRepairInfo
 public ErpData
 public ErpMeasurementsResult
 public ExtraChannelInfo
+public FilesConfig
 public FilterConfig
 public FilterInfo
 public FilterSection
 public IcaConfig
+public InputFilesConfig
 public IcaPrms
 public InfoIca
 public Interval
@@ -52,6 +54,7 @@ public NoiseCeiling
 public PermutationDistribution
 public PermutationResult
 public PreprocessConfig
+public from_dict
 public Rejection
 public SingleDataFrameEeg
 public SpectrumData

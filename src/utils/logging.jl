@@ -97,7 +97,7 @@ Create a FormatLogger that writes to the given IO handle.
 """
 function _create_file_logger(io::IO, level::Logging.LogLevel; include_kwargs::Bool = false)
     return FormatLogger(io) do io_inner, log
-        if log.level >= level
+        if isopen(io_inner) && log.level >= level
             println(io_inner, log.message)
             if include_kwargs && !isempty(log.kwargs)
                 for (key, val) in log.kwargs
@@ -141,7 +141,7 @@ function setup_logging(log_file::String; log_level::Symbol = :info, is_global::B
     t_field = is_global ? :global_log_start_time : :log_start_time
 
     # Capture original logger if we haven't yet (before replacing with our first file logger)
-    if isnothing(LOG_STATE.log_handle) && isnothing(LOG_STATE.global_log_handle)
+    if isnothing(LOG_STATE.saved_logger) && !(global_logger() isa TeeLogger)
         LOG_STATE.saved_logger = global_logger()
     end
 
@@ -185,6 +185,8 @@ function close_logging(; is_global::Bool = false)
         if !isnothing(LOG_STATE.saved_logger)
             global_logger(LOG_STATE.saved_logger)
             LOG_STATE.saved_logger = nothing
+        else
+            global_logger(ConsoleLogger(stdout, LOG_STATE.log_level))
         end
     else
         # Still have one file logger active (must be the global one if were closing local, 

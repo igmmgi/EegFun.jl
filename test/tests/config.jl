@@ -1063,6 +1063,19 @@ using Dates
         @test p_cfg_int.cleanline.line_frequencies isa Vector{Float64}
     end
 
+    @testset "FilesConfig Construction Tests" begin
+        files_dict = Dict(
+            "input" => Dict("directory" => "./data", "raw_data_files" => "\\.bdf", "recursive" => false, "layout_file" => "biosemi72.csv", "epoch_condition_file" => "epochs.toml"),
+            "output" => Dict("directory" => "./out", "save_continuous_data_raw" => true, "save_epoch_data_raw" => false),
+        )
+        files_cfg = EegFun.FilesConfig(files_dict)
+        @test files_cfg.input.directory == "./data"
+        @test files_cfg.input.layout_file == "biosemi72.csv"
+        @test files_cfg.output.directory == "./out"
+        @test files_cfg.output.save_continuous_data_raw == true
+        @test files_cfg.output.save_epoch_data_raw == false
+    end
+
     # Cleanup
     rm(test_dir, recursive = true, force = true)
 end
