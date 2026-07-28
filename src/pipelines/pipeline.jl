@@ -109,8 +109,7 @@ function preprocess(
         epoch_condition_file = resolve_path(files_cfg.input.epoch_condition_file)
 
         # check if all requested raw data files exist
-        raw_data_files =
-            get_files(input_directory, files_cfg.input.raw_data_files; recursive = files_cfg.input.recursive)
+        raw_data_files = get_files(input_directory, files_cfg.input.raw_data_files; recursive = files_cfg.input.recursive)
         raw_data_files_exist = check_files_exist(raw_data_files)
         !raw_data_files_exist && @minimal_error "Missing raw data files requested within TOML file!"
         isempty(raw_data_files) &&
@@ -539,7 +538,8 @@ function _pipeline_continuous_artifacts!(dat::ContinuousData, preprocess_cfg::Pr
         if !isempty(manual_repaired)
             @info "Manually repaired channels: $manual_repaired"
             if isnothing(continuous_repair_info)
-                continuous_repair_info = create_continuous_repair_info(preprocess_cfg.channel_repair_method; name = "continuous_repair_manual")
+                continuous_repair_info =
+                    create_continuous_repair_info(preprocess_cfg.channel_repair_method; name = "continuous_repair_manual")
             end
             # Append to the info object without re-repairing, since apply_analysis_settings! did it
             append!(continuous_repair_info.repaired, manual_repaired)

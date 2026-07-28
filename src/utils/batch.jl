@@ -440,14 +440,8 @@ function batch_process(
         @info "Output directory: $resolved_output_dir"
         @info "Parallel execution: $parallel"
 
-        results = _run_batch_operation(
-            process_fn,
-            files,
-            input_dir,
-            resolved_output_dir;
-            operation_name = operation_name,
-            parallel = parallel,
-        )
+        results =
+            _run_batch_operation(process_fn, files, input_dir, resolved_output_dir; operation_name = operation_name, parallel = parallel)
 
         return _log_batch_summary(results, resolved_output_dir)
 

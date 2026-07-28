@@ -77,7 +77,7 @@ function _run_erp_simulation(
     samp_freq::Int = 1000,
     sig_length::Float64 = 1.0,
     base_length::Float64 = 0.2,
-    noise_base::Union{Matrix{Float64}, Nothing} = nothing,
+    noise_base::Union{Matrix{Float64},Nothing} = nothing,
 )
     n_samples = Int(samp_freq * (sig_length + base_length))
     if noise_base !== nothing
@@ -274,7 +274,7 @@ function simulate_erp()
     for (i, label) in enumerate(labels)
         Label(comp_layout[2, i == 1 ? 1 : (i-1)*2], label, font = :bold)
     end
-    
+
     # Fix toggle column width so the layout doesn't shift
     colsize!(comp_layout, 1, Fixed(60))
     for c in [2, 4, 6, 8, 10]
@@ -307,8 +307,14 @@ function simulate_erp()
             active_comps = vcat(active_comps_list...)
             active_comps[end, 6] = noise_amp[]
 
-            new_erp, new_signals =
-                _run_erp_simulation(trials[], active_comps, samp_freq = samp_freq, sig_length = sig_length, base_length = base_length, noise_base = noise_base[])
+            new_erp, new_signals = _run_erp_simulation(
+                trials[],
+                active_comps,
+                samp_freq = samp_freq,
+                sig_length = sig_length,
+                base_length = base_length,
+                noise_base = noise_base[],
+            )
 
             # Update plot directly without clearing axis
             update_plot(new_signals, new_erp)

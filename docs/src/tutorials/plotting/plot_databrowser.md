@@ -158,7 +158,7 @@ dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"));
 dat = EegFun.create_eegfun_data(dat); # works but no layout info available, thus, no topographic plots
 
 # Some minimal preprocessing (average reference and highpass filter)
-# EegFun.rereference!(dat, :avg)
+EegFun.rereference!(dat, :avg)
 EegFun.highpass_filter!(dat, 0.5)
 EegFun.plot_databrowser(dat);
 

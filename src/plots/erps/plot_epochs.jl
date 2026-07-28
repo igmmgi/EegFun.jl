@@ -857,7 +857,7 @@ function _build_time_cat(n_trials::Int, time_vec::AbstractVector)
     pos = 1
     @inbounds for t = 1:n_trials
         @simd for i = 1:n
-            time_cat[pos + i - 1] = time_vec[i]
+            time_cat[pos+i-1] = time_vec[i]
         end
         pos += n
         if t != n_trials
@@ -878,7 +878,7 @@ function _concatenate_trials(trials, ch, time_vec)
     @inbounds for t = 1:m
         y = trials[t][!, ch]::Vector{Float64}
         @simd for i = 1:n
-            y_cat[pos + i - 1] = y[i]
+            y_cat[pos+i-1] = y[i]
         end
         pos += n
         if t != m

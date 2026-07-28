@@ -868,8 +868,8 @@ function subtract_ica_components!(dfs::Vector{DataFrame}, ica::InfoIca; componen
         for (ep_idx, df) in enumerate(dfs)
             col = df[!, ch]::Vector{Float64}
             sample_offset = (ep_idx - 1) * n_samples_per_epoch
-            @inbounds @simd for i in 1:n_samples_per_epoch
-                contig_data[ch_idx, sample_offset + i] = col[i]
+            @inbounds @simd for i = 1:n_samples_per_epoch
+                contig_data[ch_idx, sample_offset+i] = col[i]
             end
         end
     end
@@ -897,8 +897,8 @@ function subtract_ica_components!(dfs::Vector{DataFrame}, ica::InfoIca; componen
         for (ep_idx, df) in enumerate(dfs)
             col = df[!, ch]::Vector{Float64}
             sample_offset = (ep_idx - 1) * n_samples_per_epoch
-            @inbounds @simd for i in 1:n_samples_per_epoch
-                col[i] = cleaned_data[ch_idx, sample_offset + i]
+            @inbounds @simd for i = 1:n_samples_per_epoch
+                col[i] = cleaned_data[ch_idx, sample_offset+i]
             end
         end
     end

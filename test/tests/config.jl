@@ -1033,17 +1033,26 @@ using Dates
             "filter" => Dict(
                 "highpass" => Dict("apply" => true, "type" => "hp", "freq" => 0.1, "func" => "butter", "method" => "iir", "order" => 2),
                 "lowpass" => Dict("apply" => true, "type" => "lp", "freq" => 30.0, "func" => "butter", "method" => "iir", "order" => 2),
-                "ica_highpass" => Dict("apply" => true, "type" => "hp", "freq" => 1.0, "func" => "butter", "method" => "iir", "order" => 2),
-                "ica_lowpass" => Dict("apply" => true, "type" => "lp", "freq" => 30.0, "func" => "butter", "method" => "iir", "order" => 2),
+                "ica_highpass" =>
+                    Dict("apply" => true, "type" => "hp", "freq" => 1.0, "func" => "butter", "method" => "iir", "order" => 2),
+                "ica_lowpass" =>
+                    Dict("apply" => true, "type" => "lp", "freq" => 30.0, "func" => "butter", "method" => "iir", "order" => 2),
             ),
             "cleanline" => Dict(
-                "apply" => false, "line_frequencies" => [50.0], "bandwidth" => 2.0,
-                "sliding_win_length" => 4.0, "sliding_win_step" => 2.0, "time_bandwidth" => 3.0,
-                "k_tapers" => 5, "p_value" => 0.05, "pad" => 2
+                "apply" => false,
+                "line_frequencies" => [50.0],
+                "bandwidth" => 2.0,
+                "sliding_win_length" => 4.0,
+                "sliding_win_step" => 2.0,
+                "time_bandwidth" => 3.0,
+                "k_tapers" => 5,
+                "p_value" => 0.05,
+                "pad" => 2,
             ),
             "resample" => Dict("apply" => false, "target_rate" => 512),
             "eog" => Dict("vEOG_criterion" => 50, "hEOG_criterion" => 30, "vEOG_channels" => [["Fp1"]], "hEOG_channels" => [["F9"]]),
-            "eeg" => Dict("artifact_value_abs_criterion" => 100, "artifact_value_z_criterion" => 0.0, "extreme_value_abs_criterion" => 500),
+            "eeg" =>
+                Dict("artifact_value_abs_criterion" => 100, "artifact_value_z_criterion" => 0.0, "extreme_value_abs_criterion" => 500),
             "ica" => Dict("apply" => true, "percentage_of_data" => 100.0),
         )
         p_cfg_default = EegFun.PreprocessConfig(cfg)
@@ -1065,7 +1074,13 @@ using Dates
 
     @testset "FilesConfig Construction Tests" begin
         files_dict = Dict(
-            "input" => Dict("directory" => "./data", "raw_data_files" => "\\.bdf", "recursive" => false, "layout_file" => "biosemi72.csv", "epoch_condition_file" => "epochs.toml"),
+            "input" => Dict(
+                "directory" => "./data",
+                "raw_data_files" => "\\.bdf",
+                "recursive" => false,
+                "layout_file" => "biosemi72.csv",
+                "epoch_condition_file" => "epochs.toml",
+            ),
             "output" => Dict("directory" => "./out", "save_continuous_data_raw" => true, "save_epoch_data_raw" => false),
         )
         files_cfg = EegFun.FilesConfig(files_dict)

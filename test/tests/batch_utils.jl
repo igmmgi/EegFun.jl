@@ -549,7 +549,13 @@ using Logging
 
             # Test serial batch_process
             res_serial = with_logger(NullLogger()) do
-                EegFun.batch_process("epochs", input_dir = bp_input_dir, output_dir = bp_output_dir, log_file = "test_bp_serial.log", operation_name = "Test batch engine") do in_path, out_path
+                EegFun.batch_process(
+                    "epochs",
+                    input_dir = bp_input_dir,
+                    output_dir = bp_output_dir,
+                    log_file = "test_bp_serial.log",
+                    operation_name = "Test batch engine",
+                ) do in_path, out_path
                     d = load(in_path, "data")
                     jldsave(out_path; data = d .* 2)
                     return EegFun.BatchResult(true, basename(in_path), "OK")
@@ -563,7 +569,14 @@ using Logging
             # Test parallel batch_process
             bp_parallel_out = joinpath(test_dir, "bp_parallel_output")
             res_parallel = with_logger(NullLogger()) do
-                EegFun.batch_process("epochs", input_dir = bp_input_dir, output_dir = bp_parallel_out, log_file = "test_bp_parallel.log", operation_name = "Test parallel engine", parallel = true) do in_path, out_path
+                EegFun.batch_process(
+                    "epochs",
+                    input_dir = bp_input_dir,
+                    output_dir = bp_parallel_out,
+                    log_file = "test_bp_parallel.log",
+                    operation_name = "Test parallel engine",
+                    parallel = true,
+                ) do in_path, out_path
                     d = load(in_path, "data")
                     jldsave(out_path; data = d .* 3)
                     return EegFun.BatchResult(true, basename(in_path), "Parallel OK")

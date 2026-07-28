@@ -362,7 +362,8 @@ function _validate_parameter(value, parameter_spec::ConfigParameter{T}, paramete
     if param_type <: Number
         value isa Number || return validation_error("$parameter_name must be a number, got $(typeof(value))")
     elseif param_type == Vector{Real} || param_type <: AbstractVector{<:Real}
-        (value isa AbstractVector && eltype(value) <: Real) || return validation_error("$parameter_name must be a vector of numbers, got $(typeof(value))")
+        (value isa AbstractVector && eltype(value) <: Real) ||
+            return validation_error("$parameter_name must be a vector of numbers, got $(typeof(value))")
     else
         # Check type compatibility (fixed for Julia 1.12 TOML parsing)
         value isa param_type || return validation_error("$parameter_name must be of type $param_type, got $(typeof(value))")

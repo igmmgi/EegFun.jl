@@ -292,7 +292,7 @@ function signal_example_tf()
 
     # Rows 1 & 2: global and baseline controls (combined for alignment)
     top_ctrl = ctrl[1, 1] = GridLayout()
-    
+
     # Row 1
     Label(top_ctrl[1, 1], "Method:"; fontsize = fsize, halign = :right)
     menu = Menu(top_ctrl[1, 2], options = ["Morlet Wavelet", "STFT (Hanning)", "Multitaper (DPSS)"], default = "Morlet Wavelet")
