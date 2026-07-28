@@ -44,8 +44,10 @@ function run_ica(
     include_extra::Bool = false,
     percentage_of_data::Real = 100.0,
     algorithm::Symbol = :infomax,
+    use_gpu::Bool = false,
     params::IcaPrms = IcaPrms(),
 )
+    params.use_gpu = use_gpu || params.use_gpu
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
     isempty(selected_channels) && error("No channels available after applying channel filter")
 
@@ -64,7 +66,7 @@ function run_ica(
         n_components = length(selected_channels) - 1
     end
 
-    @info "Running ICA: $(length(selected_channels)) channels x $(length(sample_indices)) samples -> $(n_components) components"
+    @info "Running ICA (use_gpu=$(params.use_gpu)): $(length(selected_channels)) channels x $(length(sample_indices)) samples -> $(n_components) components"
 
     # Create subsetted layout that matches the selected channels
     ica_layout = subset_layout(dat.layout, channel_selection = channels(selected_channels))
@@ -99,8 +101,10 @@ function run_ica(
     remove_duplicates::Bool = true,
     percentage_of_data::Real = 100.0,
     algorithm::Symbol = :infomax,
+    use_gpu::Bool = false,
     params::IcaPrms = IcaPrms(),
 )
+    params.use_gpu = use_gpu || params.use_gpu
     isempty(epoched_data) && error("Empty epoched_data vector provided")
 
     # Use the first EpochData object as reference for some meta-like data
@@ -349,6 +353,14 @@ end
 # INFOMAX ICA IMPLEMENTATION
 # =============================================================================
 
+@kernel function _infomax_gpu_activation_kernel!(Y, @Const(U), M, N)
+    i, j = @index(Global, NTuple)
+    if i <= M && j <= N
+        val = U[i, j]
+        Y[i, j] = 1.0f0 - 2.0f0 / (1.0f0 + exp(-val))
+    end
+end
+
 """Standard Infomax ICA implementation (super-Gaussian sources only)."""
 function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String; n_components::Int, params::IcaPrms = IcaPrms())
 
@@ -392,6 +404,48 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String;
     # pre-allocate permutation vector
     permute_indices = Vector{Int}(undef, n_samples)
 
+    # Detect GPU hardware backend
+    gpu_active = false
+    gpu_backend = nothing
+    amdgpu_mod = nothing
+    if params.use_gpu
+        try
+            if isdefined(@__MODULE__, :AMDGPU)
+                amdgpu_mod = getfield(@__MODULE__, :AMDGPU)
+            elseif isdefined(Main, :AMDGPU)
+                amdgpu_mod = getfield(Main, :AMDGPU)
+            else
+                for (pkgid, mod) in Base.loaded_modules
+                    if pkgid.name == "AMDGPU"
+                        amdgpu_mod = mod
+                        break
+                    end
+                end
+            end
+            
+            if amdgpu_mod !== nothing && invokelatest(amdgpu_mod.functional)
+                # Verify matrix multiplication (rocBLAS) is supported and operational
+                try
+                    roc_arr_type = getfield(amdgpu_mod, :ROCArray)
+                    test_mat = invokelatest(roc_arr_type, Float32[1.0 0.0; 0.0 1.0])
+                    _ = invokelatest(*, test_mat, test_mat)
+                    
+                    gpu_active = true
+                    gpu_backend = invokelatest(amdgpu_mod.ROCBackend)
+                    dev_name = string(invokelatest(amdgpu_mod.device))
+                    @info "[GPU ACTIVATED] Running Infomax ICA on AMD GPU (ROCm: $dev_name)..."
+                catch e_blas
+                    gpu_active = false
+                end
+            end
+        catch e
+            gpu_active = false
+        end
+        if !gpu_active
+            @minimal_warning "Requested GPU acceleration (use_gpu=true), but AMDGPU or rocBLAS is not functional or loaded on this hardware/driver setup. Falling back to CPU."
+        end
+    end
+
     @inbounds while step < params.max_iter
         randperm!(permute_indices)
 
@@ -407,28 +461,60 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String;
                 end
             end
 
-            # forward pass
-            if block_size < block
-                mul!(view(work.u, :, 1:block_size), work.weights, view(work.data_block, :, 1:block_size))
-            else
-                mul!(work.u, work.weights, work.data_block)
-            end
-
-            @fastmath @inbounds for i = 1:n_components
-                @simd for j = 1:block_size
-                    work.y[i, j] = 1.0 - 2.0 / (1.0 + exp(-work.u[i, j]))
+            # forward pass & weight update
+            if gpu_active && amdgpu_mod !== nothing
+                try
+                    roc_arr = getfield(amdgpu_mod, :ROCArray)
+                    data_block_gpu = roc_arr(Float32.(view(work.data_block, :, 1:block_size)))
+                    weights_gpu = roc_arr(Float32.(work.weights))
+                    u_gpu = weights_gpu * data_block_gpu
+                    y_gpu = roc_arr(zeros(Float32, n_components, block_size))
+                    
+                    grid_m = ceil(Int, n_components / 16) * 16
+                    grid_n = ceil(Int, block_size / 16) * 16
+                    k_act! = _infomax_gpu_activation_kernel!(gpu_backend, (16, 16))
+                    k_act!(y_gpu, u_gpu, n_components, block_size, ndrange=(grid_m, grid_n))
+                    KernelAbstractions.synchronize(gpu_backend)
+                    
+                    wu_gpu = y_gpu * transpose(u_gpu)
+                    wtemp_gpu = wu_gpu * weights_gpu
+                    @. weights_gpu += Float32(params.l_rate) * (Float32(block_size) * weights_gpu + wtemp_gpu)
+                    work.weights .= Float64.(Array(weights_gpu))
+                catch e
+                    # Fallback to CPU if GPU call fails
+                    mul!(work.u, work.weights, work.data_block)
+                    @fastmath @inbounds for i = 1:n_components
+                        @simd for j = 1:block_size
+                            work.y[i, j] = 1.0 - 2.0 / (1.0 + exp(-work.u[i, j]))
+                        end
+                    end
+                    mul!(work.wu_term, work.y, transpose(work.u))
+                    mul!(work.weights_temp, work.wu_term, work.weights)
+                    @. work.weights += params.l_rate * (block_size * work.weights + work.weights_temp)
                 end
-            end
-
-            # update weights 
-            if block_size < block
-                mul!(work.wu_term, view(work.y, :, 1:block_size), transpose(view(work.u, :, 1:block_size)))
-                mul!(work.weights_temp, work.wu_term, work.weights)
-                @. work.weights += params.l_rate * (block_size * work.weights + work.weights_temp)
             else
-                mul!(work.wu_term, work.y, transpose(work.u))
-                mul!(work.weights_temp, work.wu_term, work.weights)
-                @. work.weights += params.l_rate * (block_size * work.weights + work.weights_temp)
+                if block_size < block
+                    mul!(view(work.u, :, 1:block_size), work.weights, view(work.data_block, :, 1:block_size))
+                else
+                    mul!(work.u, work.weights, work.data_block)
+                end
+
+                @fastmath @inbounds for i = 1:n_components
+                    @simd for j = 1:block_size
+                        work.y[i, j] = 1.0 - 2.0 / (1.0 + exp(-work.u[i, j]))
+                    end
+                end
+
+                # update weights 
+                if block_size < block
+                    mul!(work.wu_term, view(work.y, :, 1:block_size), transpose(view(work.u, :, 1:block_size)))
+                    mul!(work.weights_temp, work.wu_term, work.weights)
+                    @. work.weights += params.l_rate * (block_size * work.weights + work.weights_temp)
+                else
+                    mul!(work.wu_term, work.y, transpose(work.u))
+                    mul!(work.weights_temp, work.wu_term, work.weights)
+                    @. work.weights += params.l_rate * (block_size * work.weights + work.weights_temp)
+                end
             end
 
             # boom?

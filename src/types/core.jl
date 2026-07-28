@@ -512,6 +512,7 @@ specific settings.
     restart_factor::Float64 = 0.9
     degconst::Float64 = 180.0 / π
     default_stop::Float64 = 1e-6
+    use_gpu::Bool = false
 end
 
 """

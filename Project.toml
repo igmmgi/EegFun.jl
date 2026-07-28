@@ -1,12 +1,10 @@
 name = "EegFun"
 uuid = "aa15e9e4-a77e-4972-a32b-58bceaaa184b"
 version = "0.5.0"
-authors = [
-    "igmmgi <ian.mackenzie@uni-tuebingen.de>",
-    "carolin.dudschig@uni-tuebingen.de",
-]
+authors = ["igmmgi <ian.mackenzie@uni-tuebingen.de>", "carolin.dudschig@uni-tuebingen.de"]
 
 [deps]
+AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
 AnovaFun = "786f6bac-1c88-4ef5-b24a-5b341b5d6c78"
 BiosemiDataFormat = "d1c37e40-cd17-11e8-241b-47481c954d91"
 BrainVisionDataFormat = "a1c37e40-cd17-11e8-241b-47481c954d92"
@@ -25,6 +23,7 @@ FunctionalImageFormat = "81713a14-8c46-4899-bb05-3bedfc9b76e7"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 GeometryBasics = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
+KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 LIBSVM = "b1bec4e5-fd48-53fe-b0cb-9723c09d164b"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
@@ -45,6 +44,7 @@ StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 
 [compat]
+AMDGPU = "2.7.0"
 AnovaFun = "0.4"
 Aqua = "0.8.16"
 BiosemiDataFormat = "0.2.0"
@@ -63,6 +63,7 @@ FunctionalImageFormat = "0.1.0"
 GLMakie = "0.13.8"
 GeometryBasics = "0.5.11"
 JLD2 = "0.5.15, 0.6"
+KernelAbstractions = "0.9.42"
 LIBSVM = "0.8.1"
 LoggingExtras = "1.0.0"
 MAT = "0.11.4, 0.12"

@@ -203,6 +203,7 @@ using OrderedCollections
             0.9,    # restart_factor
             0.0,    # degconst
             1e-6,   # default_stop
+            true,   # use_gpu
         )
 
         @test ica_params.l_rate == 0.001
@@ -216,6 +217,7 @@ using OrderedCollections
         @test ica_params.restart_factor == 0.9
         @test ica_params.degconst == 0.0
         @test ica_params.default_stop == 1e-6
+        @test ica_params.use_gpu == true
 
         # Test mutability
         ica_params.l_rate = 0.002

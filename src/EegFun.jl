@@ -12,10 +12,12 @@ using DataDeps
 using JLD2
 using MAT
 
-# Signal processing
+# Signal processing & GPU
 using DSP
 using LinearAlgebra
 using FFTW
+using KernelAbstractions
+using AMDGPU
 
 # Plotting and visualization
 using Makie

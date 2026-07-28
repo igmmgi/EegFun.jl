@@ -10,6 +10,7 @@ println("="^40)
         EegFun;
         ambiguities = false,
         persistent_tasks = false,
+        stale_deps = (ignore = [:AMDGPU],),
         deps_compat = (check_extras = false, ignore = [:Dates, :LinearAlgebra, :Logging, :Printf, :Random, :SparseArrays, :TOML, :Test]),
     )
 end
