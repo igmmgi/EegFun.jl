@@ -152,7 +152,7 @@ using LinearAlgebra
         result = EegFun.identify_eog_components(dat_no_eog, ica_res)
         @test isnothing(result[1])
         # No samples selected -> returns empty dict and empty df
-        empty_eog, empty_eog_df = EegFun.identify_eog_components(dat, ica_res; sample_selection = x -> falses(nrow(x)))
+        empty_eog, empty_eog_df = EegFun.identify_eog_components(dat, ica_res; sample_selection = x -> falses(EegFun.n_samples(x)))
         @test empty_eog == Dict(:vEOG => Int[], :hEOG => Int[])
         @test size(empty_eog_df) == (0, 0)
 
@@ -165,7 +165,7 @@ using LinearAlgebra
             c in [:Component, :num_peaks, :num_valid_ibis, :mean_ibi_s, :std_ibi_s, :peak_ratio, :heart_rate_bpm]
         )
         # No samples selected -> empty results
-        ecg_vec0, ecg_df0 = EegFun.identify_ecg_components(dat, ica_res; sample_selection = x -> falses(nrow(x)))
+        ecg_vec0, ecg_df0 = EegFun.identify_ecg_components(dat, ica_res; sample_selection = x -> falses(EegFun.n_samples(x)))
         @test isempty(ecg_vec0) && size(ecg_df0) == (0, 0)
 
         # Spatial kurtosis components
@@ -183,7 +183,7 @@ using LinearAlgebra
             c in [:Component, :line_power, :flanking_power, :power_ratio, :harmonic_ratio, :power_ratio_zscore]
         )
         # No samples selected -> empty results
-        ln_vec0, ln_df0 = EegFun.identify_line_noise_components(dat, ica_res; sample_selection = x -> falses(nrow(x)))
+        ln_vec0, ln_df0 = EegFun.identify_line_noise_components(dat, ica_res; sample_selection = x -> falses(EegFun.n_samples(x)))
         @test isempty(ln_vec0) && size(ln_df0) == (0, 0)
     end
 

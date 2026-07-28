@@ -183,9 +183,11 @@ function tf_stft(
     max_window_samples = maximum(n_window_samples_per_freq)
     n_samples_padded = max(n_samples_per_epoch, max_window_samples)
 
-    # Pre-compute complex wavelets and their FFTs for each frequency
-    # Wavelet = Hanning window * complex exponential (cos + i*sin)
+    # Pre-compute complex wavelets and their FFTs for each frequency using a pre-planned FFT
+    wavelet_padded = zeros(ComplexF64, n_samples_padded)
+    p_fft_wavelet = plan_fft(wavelet_padded, flags = FFTW.MEASURE)
     wavelet_ffts = Vector{Vector{ComplexF64}}(undef, num_frex)
+
     for fi = 1:num_frex
         n_window_samples = n_window_samples_per_freq[fi]
         freq = freqs[fi]
@@ -197,9 +199,11 @@ function tf_stft(
         sin_wav = hanning_window .* sin.(angle_in)
         wavelet = cos_wav .+ im .* sin_wav
 
-        wavelet_padded = zeros(ComplexF64, n_samples_padded)
+        fill!(wavelet_padded, 0)
         wavelet_padded[1:n_window_samples] = wavelet
-        wavelet_ffts[fi] = fft(wavelet_padded)
+        w_fft = zeros(ComplexF64, n_samples_padded)
+        mul!(w_fft, p_fft_wavelet, wavelet_padded)
+        wavelet_ffts[fi] = w_fft
     end
 
     # Plan for batch FFT of entire padded data (all trials at once)

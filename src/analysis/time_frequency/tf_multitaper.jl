@@ -175,7 +175,12 @@ function tf_multitaper(
     # Pre-compute IFFT plan (batch process all trials)
     ifft_plan_padded_batch = plan_ifft!(template_padded_batch, 2, flags = FFTW.MEASURE)
 
-    for (fi, freq) in enumerate(freqs)
+    # Pre-allocate wavelet buffer and FFT plan
+    wavelet_padded = zeros(ComplexF64, n_samples_padded)
+    p_fft_wavelet = plan_fft(wavelet_padded, flags = FFTW.MEASURE)
+
+    for fi = 1:num_frex
+        freq = freqs[fi]
         n_window_samples = n_window_samples_per_freq[fi]
         window_length_sec = window_lengths_sec[fi]
 
@@ -228,16 +233,17 @@ function tf_multitaper(
         cos_wav = cos.(angle_in)
         sin_wav = sin.(angle_in)
 
-        # For each taper, create tapered wavelet and compute FFT
+        # For each taper, create tapered wavelet and compute FFT using pre-planned FFT
         for taper_idx = 1:K
             taper_col = @view tapers_per_freq[fi][:, taper_idx]
             # Tapered wavelet: taper * (cos + i*sin)
             tapered_wavelet = taper_col .* (cos_wav .+ im .* sin_wav)
 
-            # Pad to n_samples_padded and compute FFT
-            tapered_wavelet_padded = zeros(ComplexF64, n_samples_padded)
-            tapered_wavelet_padded[1:n_window_samples] = tapered_wavelet
-            tapered_wavelet_ffts[fi][taper_idx] = fft(tapered_wavelet_padded)
+            fill!(wavelet_padded, 0)
+            wavelet_padded[1:n_window_samples] = tapered_wavelet
+            w_fft = zeros(ComplexF64, n_samples_padded)
+            mul!(w_fft, p_fft_wavelet, wavelet_padded)
+            tapered_wavelet_ffts[fi][taper_idx] = w_fft
         end
     end
 

@@ -810,20 +810,16 @@ function _data_interpolation_topo(dat::Vector{<:AbstractFloat}, layout::Layout, 
     points = permutedims(Matrix(layout.data[!, [:x2, :y2]]))
 
     # Calculate circular bounds that enclose all electrodes
-    # Find maximum radial distance from origin to any electrode
     x_coords = @view points[1, :]
     y_coords = @view points[2, :]
     max_radius = maximum(sqrt.(x_coords .^ 2 .+ y_coords .^ 2))
 
-    # Add small margin (5%) beyond furthest electrode
     margin = max_radius * 0.05
     plot_radius = max_radius + margin
 
-    # Create square grid centered at origin with radius = plot_radius
     x_range = range(-plot_radius, plot_radius, length = grid_scale)
     y_range = range(-plot_radius, plot_radius, length = grid_scale)
 
-    # Create regular grid more efficiently
     grid_points = Matrix{Float64}(undef, 2, grid_scale^2)
     idx = 1
     @inbounds for y in y_range
@@ -834,10 +830,9 @@ function _data_interpolation_topo(dat::Vector{<:AbstractFloat}, layout::Layout, 
         end
     end
 
-    # Select radial basis function type or interpolation method
     supported_methods =
         [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
-    method = if method == :multiquadratic
+    method_obj = if method == :multiquadratic
         ScatteredInterpolation.Multiquadratic()
     elseif method == :inverse_multiquadratic
         ScatteredInterpolation.InverseMultiquadratic()
@@ -848,22 +843,20 @@ function _data_interpolation_topo(dat::Vector{<:AbstractFloat}, layout::Layout, 
     elseif method == :thin_plate
         ScatteredInterpolation.ThinPlate()
     elseif method == :polyharmonic
-        ScatteredInterpolation.Polyharmonic(3)  # k=3 for r³
+        ScatteredInterpolation.Polyharmonic(3)
     elseif method == :shepard
-        ScatteredInterpolation.Shepard()  # Inverse Distance Weighting
+        ScatteredInterpolation.Shepard()
     elseif method == :nearest
         ScatteredInterpolation.NearestNeighbor()
     else
         throw(ArgumentError("Unknown method: $method. Supported: $supported_methods"))
     end
 
-    itp = ScatteredInterpolation.interpolate(method, points, dat)
+    itp = ScatteredInterpolation.interpolate(method_obj, points, dat)
     result = reshape(ScatteredInterpolation.evaluate(itp, grid_points), grid_scale, grid_scale)
     _circle_mask!(result, grid_scale)
 
-    # Return data and circular bounds for contourf display
     return result, (-plot_radius, plot_radius), (-plot_radius, plot_radius)
-
 end
 
 """

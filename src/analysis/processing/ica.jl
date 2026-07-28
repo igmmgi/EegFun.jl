@@ -847,6 +847,65 @@ function subtract_ica_components!(dat::DataFrame, ica::InfoIca; component_select
     return nothing
 end
 
+"""Contiguous 2D matrix BLAS unmixing for epoched DataFrames (Vector{DataFrame})."""
+function subtract_ica_components!(dfs::Vector{DataFrame}, ica::InfoIca; component_selection::Function = components())
+    isempty(dfs) && return nothing
+    components_to_remove = get_selected_components(ica, component_selection)
+    n_components = size(ica.unmixing, 1)
+    if !all(1 .<= components_to_remove .<= n_components)
+        throw(ArgumentError("Components must be between 1 and $n_components"))
+    end
+
+    labels = ica.layout.data.label
+    n_channels = length(labels)
+    n_epochs = length(dfs)
+    n_samples_per_epoch = nrow(dfs[1])
+    n_total_samples = n_samples_per_epoch * n_epochs
+
+    # Extract all trial samples into a single contiguous matrix (n_channels × n_total_samples)
+    contig_data = Matrix{Float64}(undef, n_channels, n_total_samples)
+    for (ch_idx, ch) in enumerate(labels)
+        for (ep_idx, df) in enumerate(dfs)
+            col = df[!, ch]::Vector{Float64}
+            sample_offset = (ep_idx - 1) * n_samples_per_epoch
+            @inbounds @simd for i in 1:n_samples_per_epoch
+                contig_data[ch_idx, sample_offset + i] = col[i]
+            end
+        end
+    end
+
+    # Scale data
+    contig_data .-= ica.mean
+    contig_data ./= ica.scale
+
+    # Compute and store removed activations
+    all_removed_activations = view(ica.unmixing, components_to_remove, :) * contig_data
+    for (i, comp_idx) in enumerate(components_to_remove)
+        ica.removed_activations[comp_idx] = all_removed_activations[i:i, :]
+    end
+
+    # Pre-compute transformation matrix
+    tra = Matrix(I, n_channels, n_channels) - view(ica.mixing, :, components_to_remove) * view(ica.unmixing, components_to_remove, :)
+
+    # Clean data and restore scaling
+    cleaned_data = tra * contig_data
+    cleaned_data .*= ica.scale
+    cleaned_data .+= ica.mean
+
+    # Copy cleaned values back into trial DataFrames
+    for (ch_idx, ch) in enumerate(labels)
+        for (ep_idx, df) in enumerate(dfs)
+            col = df[!, ch]::Vector{Float64}
+            sample_offset = (ep_idx - 1) * n_samples_per_epoch
+            @inbounds @simd for i in 1:n_samples_per_epoch
+                col[i] = cleaned_data[ch_idx, sample_offset + i]
+            end
+        end
+    end
+
+    return nothing
+end
+
 function subtract_ica_components(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
     dat_out = copy(dat)
     ica_out = copy(ica)  # Use our custom copy method

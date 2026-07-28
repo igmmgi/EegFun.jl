@@ -565,11 +565,22 @@ Calculate the mean of specified columns in a DataFrame.
 function _colmeans(df::DataFrame, cols)::Vector{Float64}
     isempty(cols) && return Float64[]
     N = nrow(df)
+    n_cols = length(cols)
     out = zeros(Float64, N)
     for c in cols
-        out .+= df[!, c]
+        col_vec = df[!, c]
+        if col_vec isa Vector{Float64}
+            col_f64 = col_vec::Vector{Float64}
+            @inbounds @simd for i = 1:N
+                out[i] += col_f64[i]
+            end
+        else
+            @inbounds @simd for i = 1:N
+                out[i] += Float64(col_vec[i])
+            end
+        end
     end
-    return out ./ length(cols)
+    return out ./ n_cols
 end
 
 function _colmeans(mat::Matrix)::Vector{Float64}
@@ -577,7 +588,9 @@ function _colmeans(mat::Matrix)::Vector{Float64}
     C == 0 && return Float64[]
     out = zeros(Float64, N)
     for c = 1:C
-        @views out .+= mat[:, c]
+        @inbounds @simd for i = 1:N
+            out[i] += mat[i, c]
+        end
     end
     return out ./ C
 end
@@ -585,11 +598,14 @@ end
 function _colmeans(mat::Matrix, cols)::Vector{Float64}
     isempty(cols) && return Float64[]
     N = size(mat, 1)
+    n_cols = length(cols)
     out = zeros(Float64, N)
     for c in cols
-        @views out .+= mat[:, c]
+        @inbounds @simd for i = 1:N
+            out[i] += mat[i, c]
+        end
     end
-    return out ./ length(cols)
+    return out ./ n_cols
 end
 
 
