@@ -17,7 +17,6 @@ using DSP
 using LinearAlgebra
 using FFTW
 using KernelAbstractions
-using AMDGPU
 
 # Plotting and visualization
 using Makie
@@ -62,6 +61,7 @@ include("types/decoding.jl")
 include("types/rsa.jl")
 
 # Utility functions
+include("utils/gpu.jl")
 include("utils/create_data.jl")
 include("utils/error.jl")
 include("utils/batch.jl")

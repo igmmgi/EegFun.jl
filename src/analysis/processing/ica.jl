@@ -404,45 +404,16 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String;
     # pre-allocate permutation vector
     permute_indices = Vector{Int}(undef, n_samples)
 
-    # Detect GPU hardware backend
+    # Detect GPU hardware backend via registered package extensions (CUDA.jl, AMDGPU.jl, Metal.jl, oneAPI.jl)
     gpu_active = false
-    gpu_backend = nothing
-    amdgpu_mod = nothing
+    active_backend = CPU()
     if params.use_gpu
-        try
-            if isdefined(@__MODULE__, :AMDGPU)
-                amdgpu_mod = getfield(@__MODULE__, :AMDGPU)
-            elseif isdefined(Main, :AMDGPU)
-                amdgpu_mod = getfield(Main, :AMDGPU)
-            else
-                for (pkgid, mod) in Base.loaded_modules
-                    if pkgid.name == "AMDGPU"
-                        amdgpu_mod = mod
-                        break
-                    end
-                end
-            end
-            
-            if amdgpu_mod !== nothing && invokelatest(amdgpu_mod.functional)
-                # Verify matrix multiplication (rocBLAS) is supported and operational
-                try
-                    roc_arr_type = getfield(amdgpu_mod, :ROCArray)
-                    test_mat = invokelatest(roc_arr_type, Float32[1.0 0.0; 0.0 1.0])
-                    _ = invokelatest(*, test_mat, test_mat)
-                    
-                    gpu_active = true
-                    gpu_backend = invokelatest(amdgpu_mod.ROCBackend)
-                    dev_name = string(invokelatest(amdgpu_mod.device))
-                    @info "[GPU ACTIVATED] Running Infomax ICA on AMD GPU (ROCm: $dev_name)..."
-                catch e_blas
-                    gpu_active = false
-                end
-            end
-        catch e
-            gpu_active = false
-        end
-        if !gpu_active
-            @minimal_warning "Requested GPU acceleration (use_gpu=true), but AMDGPU or rocBLAS is not functional or loaded on this hardware/driver setup. Falling back to CPU."
+        if is_gpu_available()
+            gpu_active = true
+            active_backend = gpu_backend()
+            @info "[GPU ACTIVATED] Running Infomax ICA on $(gpu_device_name())..."
+        else
+            @minimal_warning "Requested GPU acceleration (use_gpu=true), but no functional GPU package (CUDA.jl, AMDGPU.jl, Metal.jl, oneAPI.jl) has been loaded. Please run 'using CUDA' or 'using AMDGPU' before calling run_ica. Falling back to CPU."
         end
     end
 
@@ -462,26 +433,28 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String;
             end
 
             # forward pass & weight update
-            if gpu_active && amdgpu_mod !== nothing
+            if gpu_active
                 try
-                    roc_arr = getfield(amdgpu_mod, :ROCArray)
-                    data_block_gpu = roc_arr(Float32.(view(work.data_block, :, 1:block_size)))
-                    weights_gpu = roc_arr(Float32.(work.weights))
+                    data_block_gpu = gpu_array(Float32.(view(work.data_block, :, 1:block_size)))
+                    weights_gpu = gpu_array(Float32.(work.weights))
                     u_gpu = weights_gpu * data_block_gpu
-                    y_gpu = roc_arr(zeros(Float32, n_components, block_size))
+                    y_gpu = gpu_array(zeros(Float32, n_components, block_size))
                     
                     grid_m = ceil(Int, n_components / 16) * 16
                     grid_n = ceil(Int, block_size / 16) * 16
-                    k_act! = _infomax_gpu_activation_kernel!(gpu_backend, (16, 16))
+                    k_act! = _infomax_gpu_activation_kernel!(active_backend, (16, 16))
                     k_act!(y_gpu, u_gpu, n_components, block_size, ndrange=(grid_m, grid_n))
-                    KernelAbstractions.synchronize(gpu_backend)
+                    KernelAbstractions.synchronize(active_backend)
                     
                     wu_gpu = y_gpu * transpose(u_gpu)
                     wtemp_gpu = wu_gpu * weights_gpu
                     @. weights_gpu += Float32(params.l_rate) * (Float32(block_size) * weights_gpu + wtemp_gpu)
                     work.weights .= Float64.(Array(weights_gpu))
                 catch e
-                    # Fallback to CPU if GPU call fails
+                    # Disable GPU active flag and fall back to CPU if execution fails
+                    gpu_active = false
+                    @minimal_warning "GPU execution encountered an error ($e). Falling back to CPU for remaining iterations."
+
                     mul!(work.u, work.weights, work.data_block)
                     @fastmath @inbounds for i = 1:n_components
                         @simd for j = 1:block_size

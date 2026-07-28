@@ -4,7 +4,6 @@ version = "0.5.0"
 authors = ["igmmgi <ian.mackenzie@uni-tuebingen.de>", "carolin.dudschig@uni-tuebingen.de"]
 
 [deps]
-AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
 AnovaFun = "786f6bac-1c88-4ef5-b24a-5b341b5d6c78"
 BiosemiDataFormat = "d1c37e40-cd17-11e8-241b-47481c954d91"
 BrainVisionDataFormat = "a1c37e40-cd17-11e8-241b-47481c954d92"
@@ -44,7 +43,6 @@ StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 
 [compat]
-AMDGPU = "2.7.0"
 AnovaFun = "0.4"
 Aqua = "0.8.16"
 BiosemiDataFormat = "0.2.0"
@@ -94,3 +92,16 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 dev = ["Revise", "JuliaFormatter"]
 docs = ["Documenter", "DocumenterTools"]
 test = ["Test", "Coverage", "CoverageTools", "BenchmarkTools", "Aqua"]
+
+[weakdeps]
+AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+Metal = "dde4ed3a-d17e-413a-9261-7009f984a904"
+oneAPI = "8f1865be-43e8-5c5f-b1cd-cd26e87a261e"
+
+[extensions]
+EegFunAMDGPUExt = "AMDGPU"
+EegFunCUDAExt = "CUDA"
+EegFunMetalExt = "Metal"
+EegFunOneAPIExt = "oneAPI"
+
