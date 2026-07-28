@@ -397,8 +397,6 @@ function _plot_tf_heatmap!(
 
     # Extract power matrix: [n_freqs × n_times]
     power_mat = _tf_df_to_matrix(tf_plot.data_power, channel, freqs_vec, times)
-    # Transpose for Makie heatmap (expects n_times × n_freqs)
-    power_mat = power_mat'
 
     # Configure axis
     if time_unit == :ms
@@ -419,12 +417,12 @@ function _plot_tf_heatmap!(
     !isnothing(xticks) && (ax.xticks = xticks)
     !isnothing(yticks) && (ax.yticks = yticks)
 
-    # Plot heatmap
+    # Plot heatmap (expects n_times × n_freqs via zero-allocation lazy transpose)
     hm = heatmap!(
         ax,
         times,
         freqs_vec,
-        power_mat,
+        transpose(power_mat),
         colormap = colormap,
         colorrange = colorrange,
         nan_color = :transparent,

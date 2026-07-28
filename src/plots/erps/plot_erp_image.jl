@@ -661,24 +661,35 @@ Apply boxcar (moving average) smoothing to the ERP image data.
 smoothed_data = _apply_boxcar_average(data, 5)
 ```
 """
-function _apply_boxcar_average(data::Matrix, window_size::Int)
+function _apply_boxcar_average(data::Matrix{Float64}, window_size::Int)
     n_epochs, n_timepoints = size(data)
-    smoothed_data = similar(data)
-
-    # Calculate half window size for centering
+    smoothed_data = Matrix{Float64}(undef, n_epochs, n_timepoints)
     half_window = window_size ÷ 2
 
-    for epoch = 1:n_epochs
-        for timepoint = 1:n_timepoints
-            # Define the window boundaries
-            start_epoch = max(1, epoch - half_window)
-            end_epoch = min(n_epochs, epoch + half_window)
+    @inbounds for j = 1:n_timepoints
+        win_start = 1
+        win_end = min(n_epochs, 1 + half_window)
+        current_sum = 0.0
+        for i = win_start:win_end
+            current_sum += data[i, j]
+        end
+        smoothed_data[1, j] = current_sum / (win_end - win_start + 1)
 
-            # Calculate the average within the window
-            smoothed_data[epoch, timepoint] = mean(data[start_epoch:end_epoch, timepoint])
+        for i = 2:n_epochs
+            new_win_start = max(1, i - half_window)
+            new_win_end = min(n_epochs, i + half_window)
+
+            if new_win_start > win_start
+                current_sum -= data[win_start, j]
+            end
+            if new_win_end > win_end
+                current_sum += data[new_win_end, j]
+            end
+            win_start = new_win_start
+            win_end = new_win_end
+            smoothed_data[i, j] = current_sum / (win_end - win_start + 1)
         end
     end
-
     return smoothed_data
 end
 

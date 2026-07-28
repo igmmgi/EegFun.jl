@@ -464,20 +464,9 @@ function _plot_epochs!(ax, dat, channels, plot_kwargs; label::Union{String,Nothi
     trial_color = plot_kwargs[:color] isa Vector ? plot_kwargs[:color][1] : plot_kwargs[:color]
     trial_linewidth = plot_kwargs[:linewidth] isa Vector ? plot_kwargs[:linewidth][1] : plot_kwargs[:linewidth]
 
-    # Concatenate trials initially
+    # Concatenate trials efficiently
+    time_cat = _build_time_cat(length(dat.data), time_vec)
     y_cat = _concatenate_trials(dat.data, channels[1], time_vec)
-    time_cat = similar(y_cat)
-    pos = 1
-    @inbounds for t = 1:length(dat.data)
-        for i = 1:length(time_vec)
-            time_cat[pos] = time_vec[i]
-            pos += 1
-        end
-        if t != length(dat.data)
-            time_cat[pos] = NaN
-            pos += 1
-        end
-    end
 
     # Use Observable for y-data to allow updates (e.g., for baseline changes)
     y_obs = Observable(y_cat)
@@ -860,6 +849,25 @@ function _store_avg_line_ref!(ax_line_refs, cond_idx, ch, avg_line, y_obs)
     ax_line_refs[cond_idx][ch][:average] = (avg_line, y_obs)
 end
 
+"""Precompute NaN-separated time vector for epoched trial overlays."""
+function _build_time_cat(n_trials::Int, time_vec::AbstractVector)
+    n = length(time_vec)
+    total_len = n_trials * n + (n_trials - 1)
+    time_cat = Vector{Float64}(undef, total_len)
+    pos = 1
+    @inbounds for t = 1:n_trials
+        @simd for i = 1:n
+            time_cat[pos + i - 1] = time_vec[i]
+        end
+        pos += n
+        if t != n_trials
+            time_cat[pos] = NaN
+            pos += 1
+        end
+    end
+    return time_cat
+end
+
 """Concatenate trial data for one channel into a single NaN-separated vector."""
 function _concatenate_trials(trials, ch, time_vec)
     m = length(trials)
@@ -868,12 +876,11 @@ function _concatenate_trials(trials, ch, time_vec)
     y_cat = Vector{Float64}(undef, total_len)
     pos = 1
     @inbounds for t = 1:m
-        df = trials[t]
-        y = df[!, ch]
-        for i = 1:n
-            y_cat[pos] = y[i]
-            pos += 1
+        y = trials[t][!, ch]::Vector{Float64}
+        @simd for i = 1:n
+            y_cat[pos + i - 1] = y[i]
         end
+        pos += n
         if t != m
             y_cat[pos] = NaN
             pos += 1

@@ -869,11 +869,16 @@ end
 """Open a popup menu with Topoplot / Spectrum / Region actions."""
 function _show_additional_menu(state, clicked_region_idx = nothing)
 
-    # Create the menu figure
-    # TODO: why does new window not always take this size?
-    menu_fig = Figure(size = (300, 300))
-    plot_types = ["Topoplot", "Topoplot 3D", "Spectrum", "Get Selected Regions"]
+    # Check if layout has valid coordinates for topographic plots
+    has_coords = has_valid_coordinates(state.data.original.layout)
 
+    plot_types = String[]
+    if has_coords
+        push!(plot_types, "Topoplot", "Topoplot 3D")
+    end
+    push!(plot_types, "Spectrum", "Get Selected Regions")
+
+    menu_fig = Figure(size = (300, max(150, 75 * length(plot_types))))
     menu_buttons = [Button(menu_fig[idx, 1], label = plot_type) for (idx, plot_type) in enumerate(plot_types)]
 
     for btn in menu_buttons
@@ -899,7 +904,7 @@ function _show_additional_menu(state, clicked_region_idx = nothing)
         end
     end
 
-    new_screen = GLMakie.Screen(size = (300, 300))
+    new_screen = GLMakie.Screen(size = (300, max(150, 75 * length(plot_types))))
     display(new_screen, menu_fig)
 end
 
@@ -1063,14 +1068,14 @@ function _create_sliders(fig, state::ContinuousDataBrowserState, dat)
     slider_x = Slider(fig[2, 1], range = 1:50:nrow(state.data.current[].data), startvalue = 1, snap = true)
 
     on(slider_range.value) do x
-        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x+slider_x.value.val)
+        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x + slider_x.value.val)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
     end
 
     on(slider_x.value) do x
-        new_range = x:min(nrow(state.data.current[].data), (x+slider_range.value.val)-1)
+        new_range = x:min(nrow(state.data.current[].data), (x + slider_range.value.val) - 1)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
@@ -1371,6 +1376,10 @@ end
 
 """Open the channel repair menu (continuous data only)."""
 function _show_channel_repair_menu(state::DataBrowserState{<:ContinuousDataState}, ax)
+    if !has_valid_coordinates(state.data.original.layout)
+        @minimal_warning "Channel repair requires electrode layout coordinates. Please load a layout file (e.g. using EegFun.read_layout)."
+        return
+    end
     _channel_repair_menu(state, _get_selected_channels(state), ax)
 end
 
@@ -1422,14 +1431,33 @@ function _find_closest_browser_channel(ax, state, mouse_x, mouse_y)
     return min_distance <= tolerance ? closest_channel : nothing
 end
 
-"""Toggle the selected/highlighted state of one channel and redraw."""
+"""Toggle the selected/highlighted state of one channel instantly."""
 function _toggle_channel_visibility!(ax, state, channel_idx)
-    # Toggle the selection of the clicked channel
-    state.channels.selected[channel_idx] = !state.channels.selected[channel_idx]
+    col = state.channels.labels[channel_idx]
+    is_selected = state.channels.selected[channel_idx] = !state.channels.selected[channel_idx]
+    is_repaired = _is_channel_repaired(state, col)
 
-    # Immediate redraw for responsive feedback
-    _clear_and_save_limits!(ax, state)
-    _draw(ax, state)
+    if haskey(state.channels.data_lines, col) && haskey(state.channels.data_labels, col)
+        line_handle = state.channels.data_lines[col]
+        label_handle = state.channels.data_labels[col]
+
+        if is_repaired || is_selected
+            sel_color = state.plot_kwargs[:selected_channel_color]
+            line_handle.colormap[] = [sel_color, sel_color, sel_color]
+            line_handle.linewidth[] = state.plot_kwargs[:channel_line_width] * 2
+            label_handle.color[] = :red
+        else
+            base_color = state.plot_kwargs[:unselected_channel_color]
+            line_handle.colormap[] =
+                state.ica.is_active && state.view.show_original_ica[] ? [:black, :black, :red] : [base_color, base_color, :red]
+            line_handle.linewidth[] = state.plot_kwargs[:channel_line_width]
+            label_handle.color[] = :black
+        end
+    else
+        # Fallback if handles do not exist yet
+        _clear_and_save_limits!(ax, state)
+        _draw(ax, state)
+    end
 end
 
 """Register keyboard shortcuts (arrows, i=help, r=repair, c=clear)."""
@@ -1718,9 +1746,8 @@ end
 
 ########################
 # Drawing
-########################
-"""Add a vertical marker (trigger/EOG) to the marker list."""
-function _add_marker!(markers, ax, data, col; label = nothing, trial = nothing, visible = false, active_values = nothing)
+##################"""Add a vertical marker (trigger/EOG) to the marker list, window-scoped for performance."""
+function _add_marker!(markers, ax, state, data, col; label = nothing, trial = nothing, visible = false, active_values = nothing)
     if isnothing(trial)
         # More efficient: filter directly without findall
         mask = data[!, col] .!= 0
@@ -1739,17 +1766,41 @@ function _add_marker!(markers, ax, data, col; label = nothing, trial = nothing, 
     # if no markers, return
     nrow(marker_data) == 0 && return
 
-    label = isnothing(label) ? string.(marker_data[!, col]) : repeat([label], nrow(marker_data))
+    label_vec = isnothing(label) ? string.(marker_data[!, col]) : repeat([label], nrow(marker_data))
+
+    # Reactive atomic window-scoped marker time, label, & position subviews
+    marker_obs = @lift(begin
+        if state isa EpochedDataBrowserState
+            idxs = 1:nrow(marker_data)
+        else
+            win = $(state.view.xrange)
+            t_start = data.time[win[1]]
+            t_end = data.time[win[end]]
+            times = marker_data.time
+            i1 = searchsortedfirst(times, t_start)
+            i2 = searchsortedlast(times, t_end)
+            idxs = i1:i2
+        end
+        times = marker_data.time[idxs]
+        lbls = label_vec[idxs]
+        y_top = Float32($(ax.yaxis.attributes.limits)[2] * 0.98)
+        pos = Point2f[Point2f(x, y_top) for x in times]
+        (times, lbls, pos)
+    end)
+
+    visible_times = @lift($marker_obs[1])
+    visible_labels = @lift($marker_obs[2])
+    visible_positions = @lift($marker_obs[3])
 
     push!(
         markers,
         Marker(
             marker_data,
-            vlines!(ax, marker_data.time, color = :grey, linewidth = 1, visible = visible),
+            vlines!(ax, visible_times, color = :grey, linewidth = 1, visible = visible),
             text!(
                 ax,
-                label,
-                position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in marker_data.time],
+                visible_labels,
+                position = visible_positions,
                 space = :data,
                 align = (:center, :center),
                 fontsize = 22,
@@ -1826,6 +1877,7 @@ function _init_markers(ax, state; marker_visible = Dict{Symbol,Bool}())
             _add_marker!(
                 markers,
                 ax,
+                state,
                 data,
                 symbol,
                 label = label,
@@ -1970,25 +2022,23 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
             is_repaired = _is_channel_repaired(state, col)
 
             # Line properties (reuse channel_data_obs for efficiency)
-            if is_repaired || is_selected
-                # Repaired channels get black color and thicker lines
-                line_color = state.plot_kwargs[:selected_channel_color]
-                line_colormap = [:black]
-                line_width = state.plot_kwargs[:channel_line_width] * 2  # Make repaired channels thicker
-            else
-                # Normal channels
-                line_color = @lift(
-                    ($(state.view.crit_val) > 0.0) ? (abs.($(channel_data_obs)) .>= $(state.view.crit_val)) :
-                    fill(false, length($(channel_data_obs)))
-                )
+            # Keep line_color as Vector{Bool} observable at all times so GLMakie shader pipeline type is fixed
+            line_color = @lift(
+                ($(state.view.crit_val) > 0.0) ? (abs.($(channel_data_obs)) .>= $(state.view.crit_val)) :
+                fill(false, length($(channel_data_obs)))
+            )
 
+            if is_repaired || is_selected
+                sel_color = state.plot_kwargs[:selected_channel_color]
+                line_colormap = [sel_color, sel_color, sel_color]
+                line_width = state.plot_kwargs[:channel_line_width] * 2  # Make repaired/selected channels thicker
+            else
+                base_color = state.plot_kwargs[:unselected_channel_color]
                 if !state.ica.is_active
-                    line_colormap = [state.plot_kwargs[:unselected_channel_color], state.plot_kwargs[:unselected_channel_color], :red]
+                    line_colormap = [base_color, base_color, :red]
                 else
-                    base_color = state.plot_kwargs[:unselected_channel_color]
                     line_colormap = @lift($(state.view.show_original_ica) ? [:black, :black, :red] : [base_color, base_color, :red])
                 end
-
                 line_width = state.plot_kwargs[:channel_line_width]
             end
 
@@ -2193,12 +2243,11 @@ _get_title(dat::EpochData) = "Epoch 1/$(n_epochs(dat))"
 _get_title(dat::ContinuousData) = ""
 _get_title(dat::ErpData) = "Epoch Average (n=$(n_epochs(dat)))"
 
-"""Toggle visibility of a vertical marker and update its label positions."""
+"""Toggle visibility of a vertical marker."""
 function _plot_vertical_lines!(ax, marker, active)
     marker.line.visible = active
     marker.text.visible = active
     marker.visible = active
-    marker.text.position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in marker.data.time] # incase y changed
 end
 
 """
@@ -2238,18 +2287,20 @@ function _add_scale_indicator!(ax, state, plot_kwargs)
         Point2f($tick_left, $y_top),
         Point2f($tick_right, $y_top),        # Top tick
     ])
-    linesegments!(ax, segments, color = :black, linewidth = 1)
+    linesegments!(ax, segments, color = :black, linewidth = 1.5, overdraw = true)
 
-    # Add label
+    # Add label (formatted as integer if whole number, e.g. "100 μV")
+    val_str = isinteger(scale_value) ? "$(Int(scale_value)) μV" : "$scale_value μV"
     label_x = @lift($x_pos + ($xlims_obs[2] - $xlims_obs[1]) * 0.01)
     text!(
         ax,
         @lift(Point2f($label_x, $y_top)),
-        text = "$(round(scale_value, digits=0)) μV",
+        text = val_str,
         align = (:left, :center),
         fontsize = 14,
         color = :black,
         space = :data,
+        overdraw = true,
     )
 
     # Enable mouse dragging

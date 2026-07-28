@@ -38,12 +38,15 @@ function _tf_df_to_matrix(
     n_time = length(time_points)
     mat = fill(NaN, n_freqs, n_time)
 
-    for (ti, t) in enumerate(time_points)
-        rt = round(t, digits = 6)
-        for (fi, f) in enumerate(frequencies)
-            row = get(row_index, (round(f, digits = 6), rt), nothing)
+    col_data = df[!, channel]::Vector{Float64}
+    rounded_freqs = round.(frequencies, digits = 6)
+    rounded_times = round.(time_points, digits = 6)
+
+    @inbounds for (ti, rt) in enumerate(rounded_times)
+        for (fi, rf) in enumerate(rounded_freqs)
+            row = get(row_index, (rf, rt), nothing)
             if !isnothing(row)
-                mat[fi, ti] = df[row, channel]
+                mat[fi, ti] = col_data[row]
             end
         end
     end
