@@ -17,6 +17,7 @@ public ArtifactInfo
 public BaselineInfo
 public BatchConfig
 public BatchResult
+public batch_process
 public ChannelRepairInfo
 public Cluster
 public ClusterInfo
@@ -53,6 +54,7 @@ public Neighbours
 public NoiseCeiling
 public PermutationDistribution
 public PermutationResult
+public PipelineConfig
 public PreprocessConfig
 public from_dict
 public Rejection

@@ -1076,6 +1076,16 @@ using Dates
         @test files_cfg.output.save_epoch_data_raw == false
     end
 
+    @testset "PipelineConfig Construction Tests" begin
+        full_dict = Dict(
+            "files" => Dict("input" => Dict("directory" => "./raw_dir")),
+            "preprocess" => Dict("channel_repair" => Dict("method" => "spherical_spline")),
+        )
+        p_cfg = EegFun.PipelineConfig(full_dict)
+        @test p_cfg.files.input.directory == "./raw_dir"
+        @test p_cfg.preprocess.channel_repair_method == :spherical_spline
+    end
+
     # Cleanup
     rm(test_dir, recursive = true, force = true)
 end

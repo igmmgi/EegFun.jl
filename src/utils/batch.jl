@@ -342,34 +342,118 @@ function _run_batch_operation(
     input_dir::String,
     output_dir::String;
     operation_name::String = "Processing",
+    parallel::Bool = false,
 )
     n_files = length(files)
     results = Vector{BatchResult}(undef, n_files)
 
-    for (i, file) in enumerate(files)
-        @info "$operation_name: $file ($i/$n_files)"
-
-        input_path = joinpath(input_dir, file)
-        output_path = joinpath(output_dir, file)
-
-        result = try
-            process_fn(input_path, output_path)
-        catch e
-            @minimal_warning "Error processing $file: $(sprint(showerror, e))"
-            BatchResult(false, file, "Exception: $(sprint(showerror, e))")
+    if parallel && n_files > 1 && Threads.nthreads() > 1
+        Threads.@threads for i = 1:n_files
+            file = files[i]
+            input_path = joinpath(input_dir, file)
+            output_path = joinpath(output_dir, file)
+            results[i] = try
+                process_fn(input_path, output_path)
+            catch e
+                @minimal_warning "Error processing $file: $(sprint(showerror, e))"
+                BatchResult(false, file, "Exception: $(sprint(showerror, e))")
+            end
         end
+    else
+        for (i, file) in enumerate(files)
+            @info "$operation_name: $file ($i/$n_files)"
 
-        results[i] = result
+            input_path = joinpath(input_dir, file)
+            output_path = joinpath(output_dir, file)
 
-        # Log individual result
-        if result.success
-            @info "  ✓ $(result.message)"
-        else
-            @minimal_warning "  ✗ $(result.message)"
+            result = try
+                process_fn(input_path, output_path)
+            catch e
+                @minimal_warning "Error processing $file: $(sprint(showerror, e))"
+                BatchResult(false, file, "Exception: $(sprint(showerror, e))")
+            end
+
+            results[i] = result
+
+            if result.success
+                @info "  ✓ $(result.message)"
+            else
+                @minimal_warning "  ✗ $(result.message)"
+            end
         end
     end
 
     return results
+end
+
+"""
+    batch_process(process_fn::Function, file_pattern::String;
+                  input_dir::String = pwd(),
+                  output_dir::Union{String,Nothing} = nothing,
+                  default_output_dir_fn::Union{Function,Nothing} = nothing,
+                  participant_selection::Function = participants(),
+                  log_file::String = "batch_operation.log",
+                  operation_name::String = "Batch processing",
+                  parallel::Bool = false)
+
+Generic higher-order batch processing engine encapsulating file discovery, directory setup,
+logging lifecycle, parallel multithreading execution, error handling, and summary reporting.
+"""
+function batch_process(
+    process_fn::Function,
+    file_pattern::String;
+    input_dir::String = pwd(),
+    output_dir::Union{String,Nothing} = nothing,
+    default_output_dir_fn::Union{Function,Nothing} = nothing,
+    participant_selection::Function = participants(),
+    log_file::String = "batch_operation.log",
+    operation_name::String = "Batch processing",
+    parallel::Bool = false,
+)
+    setup_global_logging(log_file)
+    resolved_output_dir = nothing
+
+    try
+        @info "$operation_name started at $(now())"
+
+        error_msg = _validate_input_dir(input_dir)
+        if !isnothing(error_msg)
+            @minimal_error(error_msg)
+        end
+
+        resolved_output_dir = if !isnothing(output_dir)
+            output_dir
+        elseif !isnothing(default_output_dir_fn)
+            default_output_dir_fn(input_dir, file_pattern)
+        else
+            joinpath(input_dir, "batch_output")
+        end
+        mkpath(resolved_output_dir)
+
+        files = _find_batch_files(file_pattern, input_dir, participant_selection)
+        if isempty(files)
+            @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
+            return nothing
+        end
+
+        @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
+        @info "Output directory: $resolved_output_dir"
+        @info "Parallel execution: $parallel"
+
+        results = _run_batch_operation(
+            process_fn,
+            files,
+            input_dir,
+            resolved_output_dir;
+            operation_name = operation_name,
+            parallel = parallel,
+        )
+
+        return _log_batch_summary(results, resolved_output_dir)
+
+    finally
+        _cleanup_logging(log_file, resolved_output_dir)
+    end
 end
 
 """

@@ -268,6 +268,16 @@ function _coerce_value(::Type{T}, val) where {T}
     end
 end
 
+"""
+    PipelineConfig
+
+Unified top-level configuration for the preprocessing pipeline.
+"""
+@kwdef struct PipelineConfig
+    files::FilesConfig = FilesConfig()
+    preprocess::PreprocessConfig = PreprocessConfig()
+end
+
 # === DICTIONARY CONSTRUCTORS ===
 
 FilterSection(cfg::Dict) = from_dict(FilterSection, cfg)
@@ -281,3 +291,4 @@ PreprocessConfig(cfg::Dict) = from_dict(PreprocessConfig, cfg)
 InputFilesConfig(cfg::Dict) = from_dict(InputFilesConfig, cfg)
 OutputFilesConfig(cfg::Dict) = from_dict(OutputFilesConfig, cfg)
 FilesConfig(cfg::Dict) = from_dict(FilesConfig, cfg)
+PipelineConfig(cfg::Dict) = from_dict(PipelineConfig, cfg)

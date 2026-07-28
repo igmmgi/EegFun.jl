@@ -536,6 +536,44 @@ using Logging
             @test summary.success == 3
             @test summary.errors == 0
         end
+
+        @testset "batch_process engine and parallel execution" begin
+            bp_input_dir = joinpath(test_dir, "bp_input")
+            bp_output_dir = joinpath(test_dir, "bp_output")
+            mkpath(bp_input_dir)
+
+            for i = 1:3
+                filename = joinpath(bp_input_dir, "subj$(i)_epochs.jld2")
+                jldsave(filename; data = [i])
+            end
+
+            # Test serial batch_process
+            res_serial = with_logger(NullLogger()) do
+                EegFun.batch_process("epochs", input_dir = bp_input_dir, output_dir = bp_output_dir, log_file = "test_bp_serial.log", operation_name = "Test batch engine") do in_path, out_path
+                    d = load(in_path, "data")
+                    jldsave(out_path; data = d .* 2)
+                    return EegFun.BatchResult(true, basename(in_path), "OK")
+                end
+            end
+
+            @test res_serial.success == 3
+            @test res_serial.errors == 0
+            @test isfile(joinpath(bp_output_dir, "subj1_epochs.jld2"))
+
+            # Test parallel batch_process
+            bp_parallel_out = joinpath(test_dir, "bp_parallel_output")
+            res_parallel = with_logger(NullLogger()) do
+                EegFun.batch_process("epochs", input_dir = bp_input_dir, output_dir = bp_parallel_out, log_file = "test_bp_parallel.log", operation_name = "Test parallel engine", parallel = true) do in_path, out_path
+                    d = load(in_path, "data")
+                    jldsave(out_path; data = d .* 3)
+                    return EegFun.BatchResult(true, basename(in_path), "Parallel OK")
+                end
+            end
+
+            @test res_parallel.success == 3
+            @test res_parallel.errors == 0
+            @test isfile(joinpath(bp_parallel_out, "subj1_epochs.jld2"))
+        end
     end
 
     # Cleanup: restore state and remove temporary files

@@ -80,9 +80,10 @@ function preprocess(
         # Resolve relative paths in config relative to base_dir
         resolve_path(path::String) = isabspath(path) ? path : joinpath(base_dir, path)
 
-        # Create PreprocessConfig and FilesConfig objects for typed access
-        preprocess_cfg = PreprocessConfig(cfg["preprocess"])
-        files_cfg = FilesConfig(cfg["files"])
+        # Create unified PipelineConfig object for typed access
+        pipeline_cfg = PipelineConfig(cfg)
+        preprocess_cfg = pipeline_cfg.preprocess
+        files_cfg = pipeline_cfg.files
 
         # Resolve input directory
         input_directory = resolve_path(files_cfg.input.directory)
