@@ -39,6 +39,8 @@ simple_string_param(desc, default = ""; allowed = nothing) = _param(String, desc
 bool_param(desc, default = false) = _param(Bool, desc, default)
 """Create a numeric parameter with optional min/max bounds."""
 number_param(desc, default, min = nothing, max = nothing) = _param(Real, desc, default, min = min, max = max)
+"""Create a numeric vector parameter (`Vector{Real}`)."""
+number_vector_param(desc, default) = _param(Vector{Real}, desc, default)
 """Create a channel-groups parameter (`Vector{Vector{String}}`)."""
 channel_groups_param(desc, default) = _param(Vector{Vector{String}}, desc, default)
 
@@ -97,7 +99,7 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "preprocess.eeg.artifact_value_abs_criterion" => number_param("Value (mV) for defining data section (or epoch) as an artifact value.", 100),
     "preprocess.eeg.artifact_value_z_criterion"   => number_param("Value (z) for defining data section (or epoch) as an artifact value (NB. various statistics with 0 being off!).", 0),
     "preprocess.eeg.artifact_interval_start"      => number_param("Start time (s) for artifact rejection (optional).", nothing),
-    "preprocess.eeg.artifact_interval_end"        => number_param("End time (s) for artifact rejection (optional).", nothing),
+    "preprocess.channel_repair.method"            => simple_string_param("Method for bad channel interpolation (:spherical_spline or :neighbor_interpolation)", "spherical_spline"),
 
     # ICA settings
     "preprocess.ica.apply"              => bool_param("Independent Component Analysis (ICA) true/false.", true),
@@ -105,7 +107,7 @@ const PARAMETERS = Dict{String,ConfigParameter}(
 
     # CleanLine settings
     "preprocess.cleanline.apply"              => bool_param("Apply CleanLine algorithm to remove line noise?", false),
-    "preprocess.cleanline.line_frequencies"   => _param(Vector{Float64}, "Line noise frequencies to target (e.g. [50.0])", [50.0]),
+    "preprocess.cleanline.line_frequencies"   => number_vector_param("Line noise frequencies to target (e.g. [50.0])", [50.0]),
     "preprocess.cleanline.bandwidth"          => number_param("Bandwidth for scanning frequencies around the line frequency.", 2.0),
     "preprocess.cleanline.sliding_win_length" => number_param("Sliding window length (seconds) for multi-taper regression.", 4.0),
     "preprocess.cleanline.sliding_win_step"   => number_param("Sliding window step (seconds) for multi-taper regression.", 2.0),
@@ -249,13 +251,13 @@ function _convert_any_arrays!(config::Dict; path = "")
                 catch e
                     @minimal_warning "Failed to convert $new_path from Any array to $param_type: $e"
                 end
-            elseif param_type <: Vector && isa(value, Vector) && eltype(value) == Any
-                # Handle other Vector types
+            elseif (param_type <: Vector || param_type == Vector{Real}) && isa(value, Vector)
+                # Handle other Vector types (including Vector{Real})
                 try
-                    inner_type = param_type.parameters[1]
+                    inner_type = param_type == Vector{Real} ? Float64 : param_type.parameters[1]
                     config[key] = inner_type.(value)
                 catch e
-                    @minimal_warning "Failed to convert $new_path from Any array to $param_type: $e"
+                    @minimal_warning "Failed to convert $new_path from $(typeof(value)) to $param_type: $e"
                 end
             end
         end
@@ -359,6 +361,8 @@ function _validate_parameter(value, parameter_spec::ConfigParameter{T}, paramete
     # Check if value is the right type
     if param_type <: Number
         value isa Number || return validation_error("$parameter_name must be a number, got $(typeof(value))")
+    elseif param_type == Vector{Real} || param_type <: AbstractVector{<:Real}
+        (value isa AbstractVector && eltype(value) <: Real) || return validation_error("$parameter_name must be a vector of numbers, got $(typeof(value))")
     else
         # Check type compatibility (fixed for Julia 1.12 TOML parsing)
         value isa param_type || return validation_error("$parameter_name must be of type $param_type, got $(typeof(value))")

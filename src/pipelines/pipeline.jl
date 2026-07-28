@@ -519,7 +519,7 @@ function _pipeline_continuous_artifacts!(dat::ContinuousData, preprocess_cfg::Pr
     # Analyze which channels can be repaired (needed for ICA and repair steps)
     continuous_repair_info = nothing
     if !isempty(bad_channels_non_eog_related)
-        continuous_repair_info = create_continuous_repair_info(:neighbor_interpolation; name = "continuous_repair")
+        continuous_repair_info = create_continuous_repair_info(preprocess_cfg.channel_repair_method; name = "continuous_repair")
         channel_repairable!(continuous_repair_info, bad_channels_non_eog_related, dat.layout)
     end
 
@@ -537,7 +537,7 @@ function _pipeline_continuous_artifacts!(dat::ContinuousData, preprocess_cfg::Pr
         if !isempty(manual_repaired)
             @info "Manually repaired channels: $manual_repaired"
             if isnothing(continuous_repair_info)
-                continuous_repair_info = create_continuous_repair_info(:neighbor_interpolation; name = "continuous_repair_manual")
+                continuous_repair_info = create_continuous_repair_info(preprocess_cfg.channel_repair_method; name = "continuous_repair_manual")
             end
             # Append to the info object without re-repairing, since apply_analysis_settings! did it
             append!(continuous_repair_info.repaired, manual_repaired)
@@ -550,7 +550,7 @@ function _pipeline_continuous_artifacts!(dat::ContinuousData, preprocess_cfg::Pr
     #################### REPAIR BAD CHANNELS ###################
     if !isnothing(continuous_repair_info)
         @info section("Channel Repair")
-        repair_channels!(dat, continuous_repair_info; method = :neighbor_interpolation)
+        repair_channels!(dat, continuous_repair_info; method = preprocess_cfg.channel_repair_method)
         @info continuous_repair_info
     end
     return continuous_repair_info
@@ -713,7 +713,7 @@ function _pipeline_epoch_and_reject!(
     # Repair channels identified in rejection_step1 before rejecting epochs
     # This may save epochs that would otherwise be rejected
     @info section("Channel Repair per Epoch")
-    repair_artifacts!(epochs, rejection_info_step1)
+    repair_artifacts!(epochs, rejection_info_step1; method = preprocess_cfg.channel_repair_method)
 
     #################### SAVE EPOCH DATA ###################
     if cfg["files"]["output"]["save_epoch_data_corrected"]

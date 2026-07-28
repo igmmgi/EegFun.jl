@@ -94,6 +94,8 @@ using Dates
         # Test that all preprocess parameters exist
         @test haskey(EegFun.PARAMETERS, "preprocess.reference_channel")
         @test haskey(EegFun.PARAMETERS, "preprocess.layout.neighbour_criterion")
+        @test haskey(EegFun.PARAMETERS, "preprocess.channel_repair.method")
+        @test EegFun.PARAMETERS["preprocess.channel_repair.method"].default == "spherical_spline"
         @test haskey(EegFun.PARAMETERS, "preprocess.eog.vEOG_channels")
         @test haskey(EegFun.PARAMETERS, "preprocess.eog.hEOG_channels")
         @test haskey(EegFun.PARAMETERS, "preprocess.eog.vEOG_criterion")
@@ -1022,8 +1024,43 @@ using Dates
     # ERROR HANDLING
     # =============================================================================
 
-    @testset "Error Handling Tests" begin
-        @test typeof(EegFun.generate_config_template) <: Function
+    @testset "PreprocessConfig Channel Repair Method Tests" begin
+        cfg = Dict(
+            "reference_channel" => "avg",
+            "epoch_start" => -1.0,
+            "epoch_end" => 1.0,
+            "layout" => Dict("neighbour_criterion" => 0.25),
+            "filter" => Dict(
+                "highpass" => Dict("apply" => true, "type" => "hp", "freq" => 0.1, "func" => "butter", "method" => "iir", "order" => 2),
+                "lowpass" => Dict("apply" => true, "type" => "lp", "freq" => 30.0, "func" => "butter", "method" => "iir", "order" => 2),
+                "ica_highpass" => Dict("apply" => true, "type" => "hp", "freq" => 1.0, "func" => "butter", "method" => "iir", "order" => 2),
+                "ica_lowpass" => Dict("apply" => true, "type" => "lp", "freq" => 30.0, "func" => "butter", "method" => "iir", "order" => 2),
+            ),
+            "cleanline" => Dict(
+                "apply" => false, "line_frequencies" => [50.0], "bandwidth" => 2.0,
+                "sliding_win_length" => 4.0, "sliding_win_step" => 2.0, "time_bandwidth" => 3.0,
+                "k_tapers" => 5, "p_value" => 0.05, "pad" => 2
+            ),
+            "resample" => Dict("apply" => false, "target_rate" => 512),
+            "eog" => Dict("vEOG_criterion" => 50, "hEOG_criterion" => 30, "vEOG_channels" => [["Fp1"]], "hEOG_channels" => [["F9"]]),
+            "eeg" => Dict("artifact_value_abs_criterion" => 100, "artifact_value_z_criterion" => 0.0, "extreme_value_abs_criterion" => 500),
+            "ica" => Dict("apply" => true, "percentage_of_data" => 100.0),
+        )
+        p_cfg_default = EegFun.PreprocessConfig(cfg)
+        @test p_cfg_default.channel_repair_method == :spherical_spline
+
+        cfg_custom = copy(cfg)
+        cfg_custom["channel_repair"] = Dict("method" => "neighbor_interpolation")
+        p_cfg_custom = EegFun.PreprocessConfig(cfg_custom)
+        @test p_cfg_custom.channel_repair_method == :neighbor_interpolation
+
+        # Test integer vector input for line_frequencies (e.g. [50, 100])
+        cfg_int_freqs = copy(cfg)
+        cfg_int_freqs["cleanline"] = copy(cfg["cleanline"])
+        cfg_int_freqs["cleanline"]["line_frequencies"] = [50, 100]
+        p_cfg_int = EegFun.PreprocessConfig(cfg_int_freqs)
+        @test p_cfg_int.cleanline.line_frequencies == [50.0, 100.0]
+        @test p_cfg_int.cleanline.line_frequencies isa Vector{Float64}
     end
 
     # Cleanup

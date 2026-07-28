@@ -165,6 +165,7 @@ pipeline, including filtering, referencing, artifact detection, and ICA settings
 - `eeg::EegConfig`: EEG-specific preprocessing settings
 - `ica::IcaConfig`: ICA configuration settings
 - `neighbour_criterion::Float64`: Distance criterion (in mm) for channel neighbour definition
+- `channel_repair_method::Symbol`: Bad channel repair/interpolation method (`:spherical_spline` or `:neighbor_interpolation`)
 """
 @kwdef struct PreprocessConfig
     reference_channel::Symbol
@@ -177,9 +178,10 @@ pipeline, including filtering, referencing, artifact detection, and ICA settings
     eeg::EegConfig
     ica::IcaConfig
     neighbour_criterion::Float64
-    interactive_continuous::Bool
-    interactive_ica::Bool
-    interactive_epochs::Bool
+    channel_repair_method::Symbol = :spherical_spline
+    interactive_continuous::Bool = false
+    interactive_ica::Bool = false
+    interactive_epochs::Bool = false
 end
 
 # === CONSTRUCTORS ===
@@ -260,6 +262,14 @@ end
 
 """Construct `PreprocessConfig` from a configuration dictionary."""
 function PreprocessConfig(cfg::Dict)
+    repair_method_val = if haskey(cfg, "channel_repair") && haskey(cfg["channel_repair"], "method")
+        cfg["channel_repair"]["method"]
+    elseif haskey(cfg, "repair_method")
+        cfg["repair_method"]
+    else
+        "spherical_spline"
+    end
+
     return PreprocessConfig(
         reference_channel = Symbol(cfg["reference_channel"]),
         epoch_start = cfg["epoch_start"],
@@ -271,6 +281,7 @@ function PreprocessConfig(cfg::Dict)
         eeg = EegConfig(cfg["eeg"]),
         ica = IcaConfig(cfg["ica"]),
         neighbour_criterion = cfg["layout"]["neighbour_criterion"],
+        channel_repair_method = Symbol(repair_method_val),
         interactive_continuous = get(cfg, "interactive_continuous", false),
         interactive_ica = get(cfg, "interactive_ica", false),
         interactive_epochs = get(cfg, "interactive_epochs", false),
