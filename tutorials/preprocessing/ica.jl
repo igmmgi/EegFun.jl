@@ -7,7 +7,6 @@
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
-using CUDA
 dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"));
 
 # read and prepare layout file
@@ -45,6 +44,10 @@ EegFun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 # @time ica_result_infomax =
 #     EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax_extended, use_gpu = true)
 
+@time ica_result_infomax = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax_extended)
+@time ica_result_infomax = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :picard_extended)
+
+@time ica_result_infomax = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :picard)
 
 @time ica_result_infomax = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :picard)
 @time ica_result_infomax =
@@ -55,7 +58,7 @@ EegFun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 # 
 # # ICA type plots
 # # Basic Topoplots
-# EegFun.plot_topography(ica_result_infomax, component_selection = EegFun.components(1:20));
+EegFun.plot_topography(ica_result_infomax, component_selection = EegFun.components(1:20));
 # 
 # # Component spectra
 # EegFun.plot_ica_component_spectrum(dat, ica_result_infomax, component_selection = EegFun.components(1:70))
