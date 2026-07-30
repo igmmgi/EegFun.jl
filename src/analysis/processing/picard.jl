@@ -77,7 +77,7 @@ function _picard_loss(Y::Matrix{T}, W::Matrix{T}, signs::Vector{T}, extended::Bo
 end
 
 # Solve the 2×2 block Hessian system element-wise.
-function _picard_solve_hessian!(Z::Matrix{T}, h::Matrix{T}, G::Matrix{T}) where {T<:AbstractFloat}
+function _picard_solve_hessian!(Z::AbstractMatrix{T}, h::AbstractMatrix{T}, G::AbstractMatrix{T}) where {T<:AbstractFloat}
     ht = transpose(h)
     Gt = transpose(G)
     @. Z = (ht * G - Gt) / (h * ht - one(T))

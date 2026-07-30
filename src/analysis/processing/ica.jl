@@ -802,6 +802,10 @@ end
 
 """AMICA ICA implementation natively integrated for EegFun.jl"""
 function amica_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String; n_components::Int, params::IcaPrms = IcaPrms())
+    if params.use_gpu
+        @minimal_warning "GPU acceleration is not yet implemented for AMICA ICA. Falling back to CPU. This may be slow."
+    end
+
     n_channels, n_samples = size(dat_ica)
 
     # PCA / Sphering identically to infomax

@@ -37,18 +37,32 @@ EegFun.channel_difference!(
 EegFun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 EegFun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
+# TODO: 
+# picard gpu broken!
+# amica gpu seems slow! Actually, still seems to be running on the CPU!
+
 # # ICA on continuous data excluding extreme samples
-@time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax)
-# @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :picard)
+# @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax)
+@time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :picard)
 # @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax_extended)
 # @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :picard_extended)
-# @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :amica, params = params)
+# @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :amica)
 
-# # Databrowser (here we can turn on/off component removal's)
-# EegFun.plot_databrowser(dat, ica_result)
-# 
-# # ICA type plots
-# # Basic Topoplots
+@time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax, use_gpu = true)
+@time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :picard, use_gpu = true)
+@time ica_result =
+    EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax_extended, use_gpu = true)
+@time ica_result =
+    EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :picard_extended, use_gpu = true)
+@time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :amica, use_gpu = true)
+
+
+# Databrowser (here we can turn on/off component removal's)
+EegFun.plot_databrowser(dat, ica_result)
+
+
+# ICA type plots
+# Basic Topoplots
 EegFun.plot_topography(ica_result, component_selection = EegFun.components(1:20));
 
 # # Component spectra
