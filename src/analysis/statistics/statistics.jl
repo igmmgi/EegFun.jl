@@ -31,6 +31,7 @@ function permutation_test(
     min_num_neighbors::Int = 2,
     tail::Symbol = :both,
     show_progress::Bool = true,
+    use_gpu::Bool = false,
 )
     # Validate inputs
     _validate_permutation_inputs(prepared, n_permutations, threshold, cluster_type, tail)
@@ -38,6 +39,24 @@ function permutation_test(
     # Validate threshold method
     if !(threshold_method in [:parametric, :nonparametric_common, :nonparametric_individual])
         error("threshold_method must be :parametric, :nonparametric_common, or :nonparametric_individual. " * "Got :$threshold_method")
+    end
+    
+    # GPU check
+    gpu_active = false
+    if use_gpu
+        if is_gpu_available()
+            gpu_active = true
+            @info "[GPU ACTIVATED] Computing $n_permutations permutations on $(gpu_device_name())..."
+        else
+            @minimal_warning "Requested GPU acceleration (use_gpu=true) but no functional GPU package is loaded. Falling back to CPU."
+        end
+    end
+
+    # If GPU is active, precompute all permutations natively on the GPU
+    if gpu_active
+        permutation_t_matrices = _collect_permutation_t_matrices_gpu(prepared, n_permutations)
+    else
+        permutation_t_matrices = nothing
     end
 
     # Compute observed t-matrix and df
@@ -56,12 +75,13 @@ function permutation_test(
 
         # Store for later use in permutations
         threshold_for_permutations = critical_t_values
-        permutation_t_matrices = nothing
 
     elseif threshold_method == :nonparametric_common
         # Non-parametric common: run all permutations first to get threshold
-        @info "Collecting permutation t-matrices for non-parametric common thresholding..."
-        permutation_t_matrices = _collect_permutation_t_matrices(prepared, n_permutations, show_progress)
+        if isnothing(permutation_t_matrices)
+            @info "Collecting permutation t-matrices for non-parametric common thresholding..."
+            permutation_t_matrices = _collect_permutation_t_matrices(prepared, n_permutations, show_progress)
+        end
 
         # Compute common threshold from permutation distribution
         @info "Computing non-parametric common threshold..."
@@ -77,8 +97,10 @@ function permutation_test(
 
     elseif threshold_method == :nonparametric_individual
         # Non-parametric individual: run all permutations first to get thresholds
-        @info "Collecting permutation t-matrices for non-parametric individual thresholding..."
-        permutation_t_matrices = _collect_permutation_t_matrices(prepared, n_permutations, show_progress)
+        if isnothing(permutation_t_matrices)
+            @info "Collecting permutation t-matrices for non-parametric individual thresholding..."
+            permutation_t_matrices = _collect_permutation_t_matrices(prepared, n_permutations, show_progress)
+        end
 
         # Compute individual thresholds from permutation distribution
         @info "Computing non-parametric individual thresholds..."

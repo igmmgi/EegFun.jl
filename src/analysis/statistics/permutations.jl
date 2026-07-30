@@ -194,6 +194,104 @@ function _collect_permutation_t_matrices(prepared::StatisticalData, n_permutatio
     return permutation_t_matrices
 end
 
+"""
+    _collect_permutation_t_matrices_gpu(prepared, n_permutations)
+
+GPU-accelerated collection of permutation t-matrices.
+Computes permutations using massive batched matrix multiplications instead of CPU loops.
+"""
+function _collect_permutation_t_matrices_gpu(prepared::StatisticalData, n_permutations::Int)
+    n_electrodes = size(prepared.analysis.data[1], 2)
+    n_time = size(prepared.analysis.data[1], 3)
+    n_features = n_electrodes * n_time
+
+    if prepared.analysis.design == :paired
+        n_participants = size(prepared.analysis.data[1], 1)
+
+        # Calculate D = data1 - data2
+        D_cpu = reshape(prepared.analysis.data[1] .- prepared.analysis.data[2], n_participants, n_features)
+
+        D_gpu = gpu_array(Float32.(D_cpu)) # n_participants x n_features
+
+        # Sum of squares is invariant
+        sum_sq_D = sum(D_gpu .^ 2, dims=1) # 1 x n_features
+
+        # Random sign matrix S (+1 or -1)
+        S_cpu = rand([-1.0f0, 1.0f0], n_permutations, n_participants)
+        S_gpu = gpu_array(S_cpu)
+
+        # Matrix multiplication computes permutation sums simultaneously!
+        sum_D_perm = S_gpu * D_gpu # n_permutations x n_features
+
+        mean_D_perm = sum_D_perm ./ Float32(n_participants)
+
+        # var = (sum(x^2)/n - mean^2) * n/(n-1)
+        var_D_perm = @. (sum_sq_D / Float32(n_participants) - mean_D_perm^2) * (Float32(n_participants) / Float32(n_participants - 1))
+        
+        # Avoid negative variance due to floating point precision
+        var_D_perm = max.(var_D_perm, 0.0f0)
+
+        std_D_perm = sqrt.(var_D_perm)
+        se_D_perm = std_D_perm ./ sqrt(Float32(n_participants))
+
+        # Avoid division by zero
+        t_perm_gpu = @. ifelse(se_D_perm == 0.0f0, ifelse(mean_D_perm == 0.0f0, 0.0f0, Inf32), mean_D_perm / se_D_perm)
+
+        # Download and reshape back to [n_electrodes, n_time, n_permutations]
+        t_perm_cpu = Float64.(Array(t_perm_gpu)) # n_permutations x n_features
+        return copy(reshape(t_perm_cpu', n_electrodes, n_time, n_permutations))
+
+    elseif prepared.analysis.design == :independent
+        n_A = size(prepared.analysis.data[1], 1)
+        n_B = size(prepared.analysis.data[2], 1)
+        n_total = n_A + n_B
+
+        data1_flat = reshape(prepared.analysis.data[1], n_A, n_features)
+        data2_flat = reshape(prepared.analysis.data[2], n_B, n_features)
+        X_cpu = vcat(data1_flat, data2_flat)
+
+        X_gpu = gpu_array(Float32.(X_cpu)) # n_total x n_features
+        X2_gpu = X_gpu .^ 2
+
+        sum_tot = sum(X_gpu, dims=1) # 1 x n_features
+        sum_sq_tot = sum(X2_gpu, dims=1) # 1 x n_features
+
+        # Generate binary indicator matrix M on CPU
+        M_cpu = zeros(Float32, n_permutations, n_total)
+        for p = 1:n_permutations
+            idx = randperm(n_total)
+            M_cpu[p, idx[1:n_A]] .= 1.0f0
+        end
+        M_gpu = gpu_array(M_cpu)
+
+        # Matrix multiplications to compute partitioned sums
+        sum_A = M_gpu * X_gpu # n_permutations x n_features
+        sum_sq_A = M_gpu * X2_gpu # n_permutations x n_features
+
+        sum_B = sum_tot .- sum_A
+        sum_sq_B = sum_sq_tot .- sum_sq_A
+
+        mean_A = sum_A ./ Float32(n_A)
+        mean_B = sum_B ./ Float32(n_B)
+
+        var_A = @. (sum_sq_A / Float32(n_A) - mean_A^2) * (Float32(n_A) / Float32(n_A - 1))
+        var_B = @. (sum_sq_B / Float32(n_B) - mean_B^2) * (Float32(n_B) / Float32(n_B - 1))
+
+        var_A = max.(var_A, 0.0f0)
+        var_B = max.(var_B, 0.0f0)
+
+        df = Float32(n_total - 2)
+        pooled_var = @. ((Float32(n_A - 1) * var_A) + (Float32(n_B - 1) * var_B)) / df
+        se = sqrt.(pooled_var .* (1.0f0 / Float32(n_A) + 1.0f0 / Float32(n_B)))
+
+        diff_mean = mean_A .- mean_B
+        t_perm_gpu = @. ifelse(se == 0.0f0, ifelse(diff_mean == 0.0f0, 0.0f0, Inf32), diff_mean / se)
+
+        t_perm_cpu = Float64.(Array(t_perm_gpu))
+        return copy(reshape(t_perm_cpu', n_electrodes, n_time, n_permutations))
+    end
+end
+
 
 """
     _run_permutations(prepared, n_permutations, critical_t_values, spatial_connectivity, cluster_type, tail, min_num_neighbors, show_progress; permutation_t_matrices)

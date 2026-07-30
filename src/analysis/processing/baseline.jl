@@ -143,6 +143,12 @@ function _to_interval(interval::Tuple{Real,Real})
     return (start, stop)
 end
 
+function _to_interval(interval::TimeSelection)
+    start, stop = interval.start, interval.stop
+    start > stop && @minimal_error("Baseline start ($start) must be <= stop ($stop)")
+    return (start, stop)
+end
+
 
 """
     _validate_baseline_interval(baseline_interval::Interval) -> Tuple{Real,Real}
