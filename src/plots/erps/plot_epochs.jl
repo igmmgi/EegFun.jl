@@ -183,6 +183,7 @@ function plot_epochs(
         condition_selection = condition_selection,
         channel_selection = channels(),  # Select ALL channels (no filtering)
         sample_selection = sample_selection,
+        interval_selection = interval_selection,
         epoch_selection = epoch_selection,
         include_extra = include_extra,
     )

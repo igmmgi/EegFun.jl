@@ -284,14 +284,12 @@ end
 """Pre-allocated work arrays for the Infomax ICA iteration loop."""
 mutable struct WorkArrays
     weights::Matrix{Float64}
-    BI::Matrix{Float64}
     u::Matrix{Float64}
     y::Matrix{Float64}
     data_block::Matrix{Float64}
     oldweights::Matrix{Float64}
     startweights::Matrix{Float64}
     weights_temp::Matrix{Float64}
-    bi_weights::Matrix{Float64}
     wu_term::Matrix{Float64}
     delta::Matrix{Float64}
     olddelta::Matrix{Float64}
@@ -302,14 +300,12 @@ function create_work_arrays(n_components::Int, block_size::Int)
     weights = Matrix{Float64}(I, n_components, n_components)  # Initialize as identity matrix
     return WorkArrays(
         weights,  # weights - start as identity matrix
-        block_size * Matrix{Float64}(I, n_components, n_components),  # BI
         zeros(n_components, block_size),  # u
         zeros(n_components, block_size),  # y
         zeros(n_components, block_size),  # data_block
         copy(weights),  # oldweights - copy of identity matrix
         copy(weights),  # startweights - copy of identity matrix
         zeros(n_components, n_components),  # weights_temp
-        zeros(n_components, n_components),  # bi_weights
         zeros(n_components, n_components),  # wu_term
         zeros(n_components, n_components),  # delta
         zeros(n_components, n_components),   # olddelta
@@ -387,21 +383,19 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String;
     # initialize
     n_channels = size(dat_ica, 1)
     n_samples = size(dat_ica, 2)
-    
+
     # Detect GPU hardware backend
     gpu_active = false
-    active_backend = CPU()
     if params.use_gpu
         if is_gpu_available()
             gpu_active = true
-            active_backend = gpu_backend()
             @info "[GPU ACTIVATED] Running Infomax ICA on $(gpu_device_name())..."
-            
+
             # Dynamically calculate GPU block size
             cpu_block = min(nextpow(2, max(Int(floor(sqrt(n_samples / 3.0))), 1)), 512)
             gpu_block = min(nextpow(2, cpu_block * 4), 1024)
             block = min(n_samples, max(gpu_block, 32))
-            
+
             work = create_work_arrays(n_channels, block)
         else
             @minimal_warning "Requested GPU acceleration (use_gpu=true), but no functional GPU package (CUDA.jl, AMDGPU.jl, Metal.jl) has been loaded. Please run 'using CUDA' or 'using AMDGPU' before calling run_ica. Falling back to CPU."
@@ -416,7 +410,7 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String;
     end
 
     if gpu_active
-        _infomax_optimize_gpu!(work, dat_ica, params, block, active_backend)
+        _infomax_optimize_gpu!(work, dat_ica, params, block)
     else
         _infomax_optimize_cpu!(work, dat_ica, params, block)
     end
@@ -550,7 +544,7 @@ function _infomax_optimize_cpu!(work::WorkArrays, dat_ica::Matrix{Float64}, para
     end
 end
 
-function _infomax_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float64}, params::IcaPrms, block::Int, active_backend)
+function _infomax_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float64}, params::IcaPrms, block::Int)
     n_channels, n_samples = size(dat_ica)
     n_components = n_channels
 
@@ -574,7 +568,7 @@ function _infomax_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float64}, para
 
         perm_gpu = gpu_array(permute_indices)
         dat_ica_gpu_shuffled = dat_ica_gpu[:, perm_gpu]
-        
+
         u_view_full = view(u_gpu, :, 1:block)
         y_view_full = view(y_gpu, :, 1:block)
         u_view_full_t = transpose(u_view_full)
@@ -585,7 +579,7 @@ function _infomax_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float64}, para
 
             try
                 data_block_gpu = view(dat_ica_gpu_shuffled, :, t:block_end)
-                
+
                 if block_size == block
                     mul!(u_view_full, weights_gpu, data_block_gpu)
                     @. y_view_full = 1.0f0 - 2.0f0 / (1.0f0 + exp(-u_view_full))
@@ -597,7 +591,7 @@ function _infomax_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float64}, para
                     @. y_view = 1.0f0 - 2.0f0 / (1.0f0 + exp(-u_view))
                     mul!(wu_gpu, y_view, transpose(u_view))
                 end
-                
+
                 mul!(wtemp_gpu, wu_gpu, weights_gpu)
                 @. weights_gpu += Float32(params.l_rate) * (Float32(block_size) * weights_gpu + wtemp_gpu)
             catch e
@@ -658,7 +652,7 @@ function _infomax_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float64}, para
             )
         end
     end
-    
+
     work.weights .= Array(weights_gpu)
 end
 
@@ -718,24 +712,22 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout, filename
     # initialize
     n_channels = size(dat_ica, 1)
     n_samples = size(dat_ica, 2)
-    
+
     # Track kurtosis signs for each component (true = sub-Gaussian, false = super-Gaussian)
     is_sub_gaussian = falses(n_channels)
-    
+
     # Detect GPU hardware backend
     gpu_active = false
-    active_backend = CPU()
     if params.use_gpu
         if is_gpu_available()
             gpu_active = true
-            active_backend = gpu_backend()
             @info "[GPU ACTIVATED] Running Extended Infomax ICA on $(gpu_device_name())..."
-            
+
             # Dynamically calculate GPU block size
             cpu_block = min(nextpow(2, max(Int(floor(sqrt(n_samples / 3.0))), 1)), 512)
             gpu_block = min(nextpow(2, cpu_block * 4), 1024)
             block = min(n_samples, max(gpu_block, 32))
-            
+
             work = create_work_arrays(n_channels, block)
         else
             @minimal_warning "Requested GPU acceleration (use_gpu=true), but no functional GPU package (CUDA.jl, AMDGPU.jl, Metal.jl) has been loaded. Please run 'using CUDA' or 'using AMDGPU' before calling run_ica. Falling back to CPU."
@@ -748,7 +740,7 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout, filename
         block = min(nextpow(2, max(raw_block, 1)), 512)
         work = create_work_arrays(n_channels, block)
     end
-    
+
     if gpu_active
         _infomax_extended_optimize_gpu!(work, dat_ica, params, block, is_sub_gaussian)
     else
@@ -768,7 +760,7 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout, filename
     meanvar = vec(sum(abs2, mixing, dims = 1) .* sum(abs2, dat_ica, dims = 2)' ./ (n_components * n_samples - 1))
     meanvar_normalized = meanvar ./ sum(meanvar)
     order = sortperm(meanvar_normalized, rev = true)
-    
+
     return InfoIca(
         filename,
         work.weights[order, :],
@@ -784,21 +776,27 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout, filename
     )
 end
 
-function _infomax_extended_optimize_cpu!(work::WorkArrays, dat_ica::Matrix{Float64}, params::IcaPrms, block::Int, is_sub_gaussian::BitVector)
+function _infomax_extended_optimize_cpu!(
+    work::WorkArrays,
+    dat_ica::Matrix{Float64},
+    params::IcaPrms,
+    block::Int,
+    is_sub_gaussian::BitVector,
+)
     n_channels, n_samples = size(dat_ica)
     n_components = n_channels
-    
+
     old_kurtosis = zeros(Float64, n_channels)
     extmomentum = 0.5
-    
+
     step = 0
     wts_blowup = false
     change = 0.0
     oldchange = 0.0
     angledelta = 0.0
-    
+
     permute_indices = Vector{Int}(undef, n_samples)
-    
+
     n_super = n_channels
     n_sub = 0
 
@@ -808,7 +806,7 @@ function _infomax_extended_optimize_cpu!(work::WorkArrays, dat_ica::Matrix{Float
         for t = 1:block:n_samples
             block_end = min(t + block - 1, n_samples)
             block_size = block_end - t + 1
-            
+
             # extract data block
             @inbounds for j = 1:block_size
                 idx = permute_indices[t+j-1]
@@ -854,7 +852,7 @@ function _infomax_extended_optimize_cpu!(work::WorkArrays, dat_ica::Matrix{Float
                 break
             end
         end
-        
+
         if !wts_blowup
             work.oldweights .-= work.weights
             step += 1
@@ -877,7 +875,7 @@ function _infomax_extended_optimize_cpu!(work::WorkArrays, dat_ica::Matrix{Float
             kurtsize = min(2000, n_samples)
             n_switched = 0
             kurtosis_values = Vector{Float64}(undef, n_channels)
-            
+
             # CPU Kurtosis logic
             activations = Matrix{Float64}(undef, n_channels, kurtsize)
             if kurtsize < n_samples
@@ -965,19 +963,25 @@ function _infomax_extended_optimize_cpu!(work::WorkArrays, dat_ica::Matrix{Float
     end
 end
 
-function _infomax_extended_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float64}, params::IcaPrms, block::Int, is_sub_gaussian::BitVector)
+function _infomax_extended_optimize_gpu!(
+    work::WorkArrays,
+    dat_ica::Matrix{Float64},
+    params::IcaPrms,
+    block::Int,
+    is_sub_gaussian::BitVector,
+)
     n_channels, n_samples = size(dat_ica)
     n_components = n_channels
 
     old_kurtosis = zeros(Float64, n_channels)
     extmomentum = 0.5
-    
+
     step = 0
     wts_blowup = false
     change = 0.0
     oldchange = 0.0
     angledelta = 0.0
-    
+
     permute_indices = Vector{Int}(undef, n_samples)
     n_super = n_channels
     n_sub = 0
@@ -989,7 +993,7 @@ function _infomax_extended_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float
     wu_gpu = gpu_array(zeros(Float32, n_components, n_components))
     wtemp_gpu = gpu_array(zeros(Float32, n_components, n_components))
     is_sub_gaussian_gpu = gpu_array(is_sub_gaussian)
-    
+
     kurtsize = min(2000, n_samples)
     activations_gpu = gpu_array(zeros(Float32, n_channels, kurtsize))
 
@@ -998,7 +1002,7 @@ function _infomax_extended_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float
 
         perm_gpu = gpu_array(permute_indices)
         dat_ica_gpu_shuffled = dat_ica_gpu[:, perm_gpu]
-        
+
         u_view_full = view(u_gpu, :, 1:block)
         y_view_full = view(y_gpu, :, 1:block)
         u_view_full_t = transpose(u_view_full)
@@ -1006,10 +1010,10 @@ function _infomax_extended_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float
         for t = 1:block:n_samples
             block_end = min(t + block - 1, n_samples)
             block_size = block_end - t + 1
-            
+
             try
                 data_block_gpu = view(dat_ica_gpu_shuffled, :, t:block_end)
-                
+
                 if block_size == block
                     mul!(u_view_full, weights_gpu, data_block_gpu)
                     @. y_view_full = ifelse(is_sub_gaussian_gpu, -tanh(u_view_full), 1.0f0 - 2.0f0 / (1.0f0 + exp(-u_view_full)))
@@ -1021,7 +1025,7 @@ function _infomax_extended_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float
                     @. y_view = ifelse(is_sub_gaussian_gpu, -tanh(u_view), 1.0f0 - 2.0f0 / (1.0f0 + exp(-u_view)))
                     mul!(wu_gpu, y_view, transpose(u_view))
                 end
-                
+
                 mul!(wtemp_gpu, wu_gpu, weights_gpu)
                 @. weights_gpu += Float32(params.l_rate) * (Float32(block_size) * weights_gpu + wtemp_gpu)
             catch e
@@ -1062,25 +1066,25 @@ function _infomax_extended_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float
             rp_gpu = gpu_array(rp_cpu)
             dat_subset = dat_ica_gpu[:, rp_gpu]
             mul!(activations_gpu, weights_gpu, dat_subset)
-            
+
             # Compute raw kurtosis entirely on the GPU using mapreduce patterns or broadcasting
             act_sq = activations_gpu .^ 2
-            u2_sum = sum(act_sq, dims=2)
+            u2_sum = sum(act_sq, dims = 2)
             u2_mean_sq = (u2_sum ./ kurtsize) .^ 2
-            
+
             act_quad = act_sq .^ 2
-            u4_mean = sum(act_quad, dims=2) ./ kurtsize
-            
+            u4_mean = sum(act_quad, dims = 2) ./ kurtsize
+
             # Fetch back to CPU for momentum smoothing
             u2_mean_sq_cpu = Array(u2_mean_sq)
             u4_mean_cpu = Array(u4_mean)
-            
+
             n_switched = 0
-            
+
             for i = 1:n_channels
                 if u2_mean_sq_cpu[i] > eps(Float64)
                     kurtosis_raw = (u4_mean_cpu[i] / u2_mean_sq_cpu[i]) - 3.0
-                    
+
                     if old_kurtosis[i] != 0.0
                         kurtosis = extmomentum * old_kurtosis[i] + (1.0 - extmomentum) * kurtosis_raw
                     else
@@ -1097,10 +1101,10 @@ function _infomax_extended_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float
                     end
                 end
             end
-            
+
             # Push updated boolean vector to GPU
             is_sub_gaussian_gpu .= gpu_array(is_sub_gaussian)
-            
+
             # Update kurtosis counts
             n_sub = count(is_sub_gaussian)
             n_super = n_channels - n_sub
@@ -1134,7 +1138,7 @@ function _infomax_extended_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float
             )
         end
     end
-    
+
     work.weights .= Array(weights_gpu)
 end
 
