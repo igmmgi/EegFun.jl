@@ -76,6 +76,24 @@ function _picard_loss(Y::Matrix{T}, W::Matrix{T}, signs::Vector{T}, extended::Bo
     return T(-logdetW + _picard_y_loss(Y, signs, extended, thread_sums))
 end
 
+# GPU native implementation of Picard Y-dependent loss
+function _picard_y_loss_gpu(
+    Y_gpu::AbstractMatrix{T},
+    signs_gpu::AbstractVector{T},
+    extended::Bool
+) where {T<:AbstractFloat}
+    N, T_len = size(Y_gpu)
+    s = reshape(signs_gpu, N, 1)
+    
+    if extended
+        val = sum(@. s * (abs(Y_gpu) + log1p(exp(T(-2.0) * abs(Y_gpu)))) + T(0.5) * Y_gpu^2)
+    else
+        val = sum(@. s * (abs(Y_gpu) + log1p(exp(T(-2.0) * abs(Y_gpu)))))
+    end
+    
+    return val / T(T_len)
+end
+
 # Solve the 2×2 block Hessian system element-wise.
 function _picard_solve_hessian!(Z::AbstractMatrix{T}, h::AbstractMatrix{T}, G::AbstractMatrix{T}) where {T<:AbstractFloat}
     ht = transpose(h)
@@ -505,7 +523,7 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
     W_cpu_tmp = copy(W_cpu)
     logdetW_val, _ = logabsdet(W_cpu_tmp)
     logdetW = Float32(logdetW_val)
-    current_loss = Float32(-logdetW + _picard_y_loss(Array(Y), Array(signs), extended, thread_sums))
+    current_loss = Float32(-logdetW + _picard_y_loss_gpu(Y, signs, extended))
     sign_change = false
 
     C = extended ? gpu_array(zeros(Float32, N, N)) : gpu_array(zeros(Float32, 0, 0))
@@ -590,7 +608,7 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
         copyto!(G_old, G)
 
         if extended && sign_change
-            current_loss = Float32(-logdetW + _picard_y_loss(Array(Y), Array(signs), extended, thread_sums))
+            current_loss = Float32(-logdetW + _picard_y_loss_gpu(Y, signs, extended))
             empty!(s_list)
             empty!(y_list)
             empty!(r_list)
@@ -612,7 +630,7 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
             logdet_total = logdetW + Float32(step_logdet)
 
             @. Y_new = Y + alpha * DY
-            y_loss = _picard_y_loss(Array(Y_new), Array(signs), extended, thread_sums)
+            y_loss = _picard_y_loss_gpu(Y_new, signs, extended)
             trial_loss = -logdet_total + y_loss
 
             if isfinite(trial_loss) && trial_loss < current_loss
@@ -642,7 +660,7 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
                 logdet_total = logdetW + Float32(step_logdet)
 
                 @. Y_new = Y + alpha * DY
-                y_loss = _picard_y_loss(Array(Y_new), Array(signs), extended, thread_sums)
+                y_loss = _picard_y_loss_gpu(Y_new, signs, extended)
                 trial_loss = -logdet_total + y_loss
 
                 if isfinite(trial_loss) && trial_loss < current_loss

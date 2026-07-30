@@ -1210,13 +1210,12 @@ function _infomax_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float64}, para
                 @error "GPU processing failed in inner loop, throwing error." exception = (e, catch_backtrace())
                 rethrow(e)
             end
+        end
 
-            # Check boom on GPU
-            if maximum(abs, weights_gpu) > params.max_weight
-                wts_blowup = true
-                change = NaN
-                break
-            end
+        # Check boom on GPU once per step
+        if maximum(abs, weights_gpu) > params.max_weight
+            wts_blowup = true
+            change = NaN
         end
 
         if !wts_blowup
@@ -1644,13 +1643,12 @@ function _infomax_extended_optimize_gpu!(
                 @error "GPU processing failed in inner loop, throwing error." exception = (e, catch_backtrace())
                 rethrow(e)
             end
+        end
 
-            # Check boom on GPU
-            if maximum(abs, weights_gpu) > params.max_weight
-                wts_blowup = true
-                change = NaN
-                break
-            end
+        # Check boom on GPU once per step
+        if maximum(abs, weights_gpu) > params.max_weight
+            wts_blowup = true
+            change = NaN
         end
 
         if !wts_blowup

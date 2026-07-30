@@ -41,20 +41,23 @@ EegFun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 # picard gpu broken!
 # amica gpu seems slow! Actually, still seems to be running on the CPU!
 
-# # ICA on continuous data excluding extreme samples
-# @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax)
-@time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :picard)
-# @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax_extended)
-# @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :picard_extended)
-# @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :amica)
-
+# ICA on continuous data 
+@time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax)
 @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax, use_gpu = true)
-@time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :picard, use_gpu = true)
+
+@time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax_extended)
 @time ica_result =
     EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax_extended, use_gpu = true)
+
+@time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :picard)
+@time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :picard, use_gpu = true)
+
+@time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :picard_extended)
 @time ica_result =
     EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :picard_extended, use_gpu = true)
-@time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :amica, use_gpu = true)
+
+# @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :amica)
+# @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :amica, use_gpu = true)
 
 
 # Databrowser (here we can turn on/off component removal's)
