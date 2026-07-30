@@ -800,11 +800,202 @@ function calculate_amica_lrate!(
     return false
 end
 
+function _amica_optimize_gpu!(
+    dat_ica_t::Matrix{Float64},
+    A_cpu::Matrix{Float64},
+    LLdetS::Float64,
+    scale_cpu::Matrix{Float64},
+    location_cpu::Matrix{Float64},
+    shape_cpu::Matrix{Float64},
+    proportions_cpu::Matrix{Float64},
+    m::Int,
+    params::IcaPrms,
+    lrate::AmicaLearningRate{Float64},
+)
+    N, n = size(dat_ica_t)
+    
+    dat_gpu = gpu_array(Float32.(dat_ica_t))
+    A = gpu_array(Float32.(A_cpu))
+    
+    # Preallocate GPU full-batch arrays
+    y = gpu_array(zeros(Float32, N, n, m))
+    y_rho = gpu_array(zeros(Float32, N, n, m))
+    Q = gpu_array(zeros(Float32, N, n, m))
+    z = gpu_array(zeros(Float32, N, n, m))
+    fp = gpu_array(zeros(Float32, N, n, m))
+    
+    qconst_cpu = zeros(Float32, 1, n, m)
+    source_signals = gpu_array(zeros(Float32, N, n))
+    
+    scale = gpu_array(Float32.(scale_cpu))
+    location = gpu_array(Float32.(location_cpu))
+    shape = gpu_array(Float32.(shape_cpu))
+    proportions = gpu_array(Float32.(proportions_cpu))
+    
+    # We will reshape these to 1 x n x m during broadcasting
+    scale_3d = reshape(scale, 1, n, m)
+    location_3d = reshape(location, 1, n, m)
+    shape_3d = reshape(shape, 1, n, m)
+    proportions_3d = reshape(proportions, 1, n, m)
+    
+    dA = gpu_array(zeros(Float32, n, n))
+    
+    LL = fill(-Inf, params.max_iter > 0 ? params.max_iter : 2000)
+    do_newton = true
+    no_newton = false
+    newt_start_iter = 50
+    update_shape = true
+    maxiter = params.max_iter > 0 ? params.max_iter : 2000
+
+    for iter = 1:maxiter
+        W_c = inv(A_cpu)
+        W = gpu_array(Float32.(W_c))
+        
+        mul!(source_signals, dat_gpu, transpose(W))
+        
+        # We need qconst
+        for j = 1:m, i = 1:n
+            qconst_cpu[1, i, j] = -log(2f0) - SpecialFunctions.loggamma(1f0 + 1f0 / Float32(shape_cpu[i, j])) + log(Float32(proportions_cpu[i, j])) + log(Float32(scale_cpu[i, j]))
+        end
+        qconst = gpu_array(qconst_cpu)
+        
+        ss_3d = reshape(source_signals, N, n, 1)
+        
+        # y = scale * (source_signals - location)
+        @. y = scale_3d * (ss_3d - location_3d)
+        
+        # y_rho = exp((shape - 1.0) * log(abs(y)))
+        @. y_rho = exp((shape_3d - 1.0f0) * log(max(abs(y), 1.0f-16)))
+        
+        # Q = qconst - (y_rho * abs(y))
+        @. Q = qconst - (y_rho * abs(y))
+        
+        Qmax = maximum(Q, dims=3)
+        
+        scratch3 = exp.(Q .- Qmax)
+        logexp = log.(sum(scratch3, dims=3)) .+ Qmax
+        
+        @. z = exp(Q - logexp) + 1.0f-15
+        
+        zsum = sum(z, dims=3)
+        @. z = z / zsum
+        
+        @. fp = y_rho * sign(y) * shape_3d
+        
+        sc = @. y_rho * abs(y)
+        sc = @. ifelse(sc >= 1.0f-16, z * log(sc) * sc, 0.0f0)
+        drho_numer = dropdims(sum(sc, dims=1), dims=1) # n x m
+        
+        g_block_sum = sum(scale_3d .* z .* fp, dims=3) # N x n x 1
+        g_times_sources = transpose(dropdims(g_block_sum, dims=3)) * source_signals # n x n
+        
+        newton_sigma2 = dropdims(sum(source_signals .^ 2, dims=1), dims=1) ./ Float32(N) # n
+        
+        sum_z = dropdims(sum(z, dims=1), dims=1) # n x m
+        dmu_numer = dropdims(sum(fp .* z, dims=1), dims=1) # n x m
+        kp = dropdims(sum(fp .* z .* fp, dims=1), dims=1) # n x m
+        
+        mask = shape_3d .<= 2.0f0
+        y_safe = @. ifelse(y == 0.0f0, 1.0f-16, y)
+        
+        dmu_denom_1 = @. (z * fp / y_safe) * scale_3d
+        dmu_denom_2 = @. (z * fp * fp) * scale_3d
+        dmu_denom = dropdims(sum(ifelse.(mask, dmu_denom_1, dmu_denom_2), dims=1), dims=1)
+        
+        dbeta_denom = dropdims(sum(ifelse.(mask, fp .* z .* y, 0.0f0), dims=1), dims=1)
+        dlambda_numer = dropdims(sum(z .* (fp .* y .- 1.0f0).^2, dims=1), dims=1)
+        
+        ldet = -logabsdet(A_cpu)[1]
+        Lt_sum = sum(logexp) # scalar
+        Lt = Float32(ldet + LLdetS) * Float32(N) + Lt_sum
+        LL_iter = Lt / (N * n)
+        LL[iter] = Float64(LL_iter)
+        
+        @. dA = -g_times_sources / Float32(N)
+        dA[diagind(dA)] .+= 1.0f0
+        
+        # Convert accumulators to Float64
+        sum_z_c = Float64.(Array(sum_z))
+        dmu_numer_c = Float64.(Array(dmu_numer))
+        dmu_denom_c = Float64.(Array(dmu_denom))
+        dbeta_denom_c = Float64.(Array(dbeta_denom))
+        drho_numer_c = Float64.(Array(drho_numer))
+        kp_c = Float64.(Array(kp))
+        dlambda_numer_c = Float64.(Array(dlambda_numer))
+        newton_sigma2_c = Float64.(Array(newton_sigma2))
+        
+        if m > 1
+            @. proportions_cpu = ifelse(sum_z_c >= 0.0, sum_z_c / N, 1.0 / N)
+        end
+        
+        newton_active = do_newton && iter >= newt_start_iter
+        if newton_active
+            dkap = @. (kp_c / (proportions_cpu * N)) * scale_cpu^2
+            newton_kappa_c = vec(sum(proportions_cpu .* dkap, dims=2))
+            newton_lambda_c = vec(sum(proportions_cpu .* (dlambda_numer_c ./ sum_z_c .+ dkap .* location_cpu.^2), dims=2))
+        else
+            newton_kappa_c = zeros(Float64, n)
+            newton_lambda_c = zeros(Float64, n)
+        end
+        
+        if m > 1
+            @. location_cpu += dmu_numer_c / dmu_denom_c
+        end
+        
+        @. scale_cpu *= sqrt(sum_z_c / dbeta_denom_c)
+        
+        if update_shape
+            @. shape_cpu = clamp(shape_cpu + (lrate.shapelrate * (1.0 - (shape_cpu / SpecialFunctions.digamma(1.0 + 1.0 / shape_cpu)) * drho_numer_c / sum_z_c)), lrate.minrho, lrate.maxrho)
+        end
+        
+        scale .= gpu_array(Float32.(scale_cpu))
+        location .= gpu_array(Float32.(location_cpu))
+        shape .= gpu_array(Float32.(shape_cpu))
+        proportions .= gpu_array(Float32.(proportions_cpu))
+        
+        dA_c = Float64.(Array(dA))
+        no_newton = update_amica_mixing!(
+            A_cpu,
+            dA_c,
+            newton_kappa_c,
+            newton_lambda_c,
+            newton_sigma2_c,
+            iter,
+            do_newton,
+            no_newton,
+            newt_start_iter,
+            lrate
+        )
+        
+        reparameterize_amica!(A_cpu, location_cpu, scale_cpu)
+        
+        A .= gpu_array(Float32.(A_cpu))
+        location .= gpu_array(Float32.(location_cpu))
+        scale .= gpu_array(Float32.(scale_cpu))
+        
+        if iter > 1
+            if isnan(LL[iter])
+                @warn("Got NaN! Exiting ...")
+                break
+            end
+            if calculate_amica_lrate!(LL, iter, newt_start_iter, do_newton, lrate)
+                break
+            end
+            if abs(LL[iter] - LL[iter-1]) < 1e-7
+                break
+            end
+        end
+        
+        if iter == 1 || iter % 10 == 0
+            @info "AMICA iter $iter, LL = $(LL[iter])"
+        end
+    end
+    
+    return LL
+end
+
 """AMICA ICA implementation natively integrated for EegFun.jl"""
 function amica_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String; n_components::Int, params::IcaPrms = IcaPrms())
-    if params.use_gpu
-        @minimal_warning "GPU acceleration is not yet implemented for AMICA ICA. Falling back to CPU. This may be slow."
-    end
 
     n_channels, n_samples = size(dat_ica)
 
@@ -873,10 +1064,20 @@ function amica_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String; n
     newt_start_iter = 50
     update_shape = true
 
+    # Detect GPU hardware backend
+    gpu_active = false
+    if params.use_gpu
+        if is_gpu_available()
+            gpu_active = true
+            @info "[GPU ACTIVATED] Running AMICA ICA on $(gpu_device_name())..."
+        else
+            @minimal_warning "Requested GPU acceleration (use_gpu=true), but no functional GPU package (CUDA.jl, AMDGPU.jl, Metal.jl) has been loaded. Please run 'using CUDA' or 'using AMDGPU' before calling run_ica. Falling back to CPU."
+        end
+    end
+
     # Main loop
-    for iter = 1:maxiter
-        LL_iter = update_amica_parameters!(
-            wa_threads,
+    if gpu_active
+        LL_gpu = _amica_optimize_gpu!(
             dat_ica_t,
             A,
             LLdetS,
@@ -884,50 +1085,67 @@ function amica_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String; n
             location,
             shape,
             proportions,
-            do_newton && iter >= newt_start_iter,
             m,
-            update_shape,
-            lrate.shapelrate,
-            lrate.minrho,
-            lrate.maxrho,
-            block_size,
-        )
-
-        LL[iter] = LL_iter
-
-        wa = wa_threads[1]
-        no_newton = update_amica_mixing!(
-            A,
-            wa.dA,
-            wa.newton_kappa,
-            wa.newton_lambda,
-            wa.newton_sigma2,
-            iter,
-            do_newton,
-            no_newton,
-            newt_start_iter,
+            params,
             lrate,
         )
+        LL .= LL_gpu
+    else
+        for iter = 1:maxiter
+            LL_iter = update_amica_parameters!(
+                wa_threads,
+                dat_ica_t,
+                A,
+                LLdetS,
+                scale,
+                location,
+                shape,
+                proportions,
+                do_newton && iter >= newt_start_iter,
+                m,
+                update_shape,
+                lrate.shapelrate,
+                lrate.minrho,
+                lrate.maxrho,
+                block_size,
+            )
 
-        reparameterize_amica!(A, location, scale)
+            LL[iter] = LL_iter
 
-        if iter > 1
-            if isnan(LL[iter])
-                @warn("Got NaN! Exiting ...")
-                break
+            wa = wa_threads[1]
+            no_newton = update_amica_mixing!(
+                A,
+                wa.dA,
+                wa.newton_kappa,
+                wa.newton_lambda,
+                wa.newton_sigma2,
+                iter,
+                do_newton,
+                no_newton,
+                newt_start_iter,
+                lrate,
+            )
+
+            reparameterize_amica!(A, location, scale)
+
+            if iter > 1
+                if isnan(LL[iter])
+                    @warn("Got NaN! Exiting ...")
+                    break
+                end
+                if calculate_amica_lrate!(LL, iter, newt_start_iter, do_newton, lrate)
+                    break
+                end
+
+                # Convergence check (from Amica)
+                if abs(LL[iter] - LL[iter-1]) < 1e-7
+                    break
+                end
             end
-            if calculate_amica_lrate!(LL, iter, newt_start_iter, do_newton, lrate)
-                break
-            end
 
-            # Convergence check (from Amica)
-            if abs(LL[iter] - LL[iter-1]) < 1e-7
-                break
+            if iter == 1 || iter % 10 == 0
+                @info "AMICA iter $iter, LL = $(LL[iter])"
             end
-        end
-
-        if iter == 1 || iter % 10 == 0
-            @info "AMICA iter $iter, LL = $(LL[iter])"
         end
     end
 
