@@ -14,10 +14,12 @@
 end
 
 # Compute the Y-dependent loss terms, optionally fused with a linear step (Y + α*DY).
+# thread_sums is a pre-allocated buffer of length ≥ nthreads() to avoid per-call allocation.
 function _picard_y_loss(
     Y::Matrix{T},
     signs::Vector{T},
-    extended::Bool;
+    extended::Bool,
+    thread_sums::Vector{Float64};
     DY::Matrix{T} = Y,
     alpha::T = zero(T)
 ) where {T<:AbstractFloat}
@@ -25,7 +27,7 @@ function _picard_y_loss(
     fused = alpha != zero(T)
     nth = Threads.nthreads()
     chunk_size = div(T_len, nth)
-    thread_sums = zeros(Float64, nth)
+    fill!(thread_sums, 0.0)
 
     Threads.@threads for tid in 1:nth
         j_start = (tid - 1) * chunk_size + 1
@@ -62,10 +64,11 @@ function _picard_loss(
     Y::Matrix{T},
     W::Matrix{T},
     signs::Vector{T},
-    extended::Bool
+    extended::Bool,
+    thread_sums::Vector{Float64}
 ) where {T<:AbstractFloat}
     logdetW, _ = logabsdet(W)
-    return T(-logdetW + _picard_y_loss(Y, signs, extended))
+    return T(-logdetW + _picard_y_loss(Y, signs, extended, thread_sums))
 end
 
 # Solve the 2×2 block Hessian system element-wise.
@@ -93,16 +96,82 @@ function _picard_regularize_hessian!(h::Matrix{T}, lambda_min::T) where {T<:Abst
     end
 end
 
+# Pre-allocated circular buffer for L-BFGS history (avoids push!/popfirst!/copy! allocations)
+mutable struct LBFGSBuffer{T<:AbstractFloat}
+    s_buf::Vector{Matrix{T}}   # pre-allocated direction history
+    y_buf::Vector{Matrix{T}}   # pre-allocated gradient diff history
+    r_buf::Vector{T}           # pre-allocated curvature scalars
+    a_buf::Vector{T}           # pre-allocated alpha coefficients
+    m::Int                     # max history length
+    len::Int                   # current number of stored entries
+    head::Int                  # next write position (1-indexed)
+end
+
+function LBFGSBuffer(T::Type{<:AbstractFloat}, N::Int, m::Int)
+    s_buf = [zeros(T, N, N) for _ in 1:m]
+    y_buf = [zeros(T, N, N) for _ in 1:m]
+    r_buf = zeros(T, m)
+    a_buf = zeros(T, m)
+    return LBFGSBuffer{T}(s_buf, y_buf, r_buf, a_buf, m, 0, 1)
+end
+
+@inline function _lbfgs_reset!(buf::LBFGSBuffer)
+    buf.len = 0
+    buf.head = 1
+end
+
+function _lbfgs_push!(buf::LBFGSBuffer{T}, direction::Matrix{T}, y_diff::Matrix{T}, r_val::T) where {T}
+    idx = buf.head
+    copyto!(buf.s_buf[idx], direction)
+    copyto!(buf.y_buf[idx], y_diff)
+    buf.r_buf[idx] = r_val
+    buf.head = (idx % buf.m) + 1
+    buf.len = min(buf.len + 1, buf.m)
+end
+
+# Get the k-th most recent entry (1 = most recent, len = oldest)
+@inline function _lbfgs_get(buf::LBFGSBuffer, k::Int)
+    # head-1 is the most recently written slot
+    idx = mod1(buf.head - k, buf.m)
+    return buf.s_buf[idx], buf.y_buf[idx], buf.r_buf[idx]
+end
+
 # L-BFGS two-loop recursion with Hessian preconditioning
 function _picard_l_bfgs_direction!(
     Z::Matrix{T},
     q::Matrix{T},
     G::Matrix{T},
     h::Matrix{T},
-    s_list::Vector{Matrix{T}},
-    y_list::Vector{Matrix{T}},
-    r_list::Vector{T},
-    a_list::Vector{T}
+    buf::LBFGSBuffer{T}
+) where {T<:AbstractFloat}
+    copyto!(q, G)
+
+    m_len = buf.len
+    # Backward pass: most recent (k=1) to oldest (k=m_len)
+    for k in 1:m_len
+        s, y, r = _lbfgs_get(buf, k)
+        a = r * dot(s, q)
+        buf.a_buf[k] = a
+        @. q -= a * y
+    end
+
+    _picard_solve_hessian!(Z, h, q)
+
+    # Forward pass: oldest (k=m_len) to most recent (k=1)
+    for k in m_len:-1:1
+        s, y, r = _lbfgs_get(buf, k)
+        a = buf.a_buf[k]
+        beta = r * dot(y, Z)
+        @. Z += (a - beta) * s
+    end
+
+    @. Z = -Z
+end
+
+# List-based overload for GPU path (GPU arrays can't use the pre-allocated LBFGSBuffer)
+function _picard_l_bfgs_direction!(
+    Z, q, G, h,
+    s_list::Vector, y_list::Vector, r_list::Vector{T}, a_list::Vector{T}
 ) where {T<:AbstractFloat}
     copyto!(q, G)
     empty!(a_list)
@@ -147,7 +216,8 @@ function _picard_line_search(
     current_loss::T,
     logdetW::T,
     ls_tries::Int,
-    extended::Bool
+    extended::Bool,
+    thread_sums::Vector{Float64}
 ) where {T<:AbstractFloat}
     N = size(Y, 1)
     alpha = one(T)
@@ -163,7 +233,7 @@ function _picard_line_search(
         step_logdet, _ = logabsdet(transform)
         logdet_total = logdetW + T(step_logdet)
 
-        y_loss = _picard_y_loss(Y, signs, extended; DY=DY, alpha=alpha)
+        y_loss = _picard_y_loss(Y, signs, extended, thread_sums; DY=DY, alpha=alpha)
         new_loss = -logdet_total + y_loss
 
         if isfinite(new_loss) && new_loss < current_loss
@@ -179,11 +249,7 @@ function _picard_line_search(
     return false, current_loss, alpha, logdetW
 end
 
-@inline function _picard_reset_lbfgs!(s_list, y_list, r_list)
-    empty!(s_list)
-    empty!(y_list)
-    empty!(r_list)
-end
+# _picard_reset_lbfgs! is now replaced by _lbfgs_reset! on the LBFGSBuffer
 
 # =============================================================================
 # CPU Optimization Loop
@@ -225,21 +291,32 @@ function _picard_optimize_cpu!(
     signs     = ones(T, N)
     old_signs = ones(T, N)
 
-    s_list = Matrix{T}[]
-    y_list = Matrix{T}[]
-    r_list = T[]
-    a_list = T[]
+    # Pre-allocated L-BFGS circular buffer (avoids copy/push!/popfirst! allocations)
+    lbfgs = LBFGSBuffer(T, N, m)
+
+    # Pre-allocated thread_sums buffer for _picard_y_loss
+    thread_sums = zeros(Float64, Threads.nthreads())
 
     logdetW_val, _ = logabsdet(W)
     logdetW = T(logdetW_val)
-    current_loss = _picard_loss(Y, W, signs, extended)
+    current_loss = _picard_loss(Y, W, signs, extended, thread_sums)
     sign_change = false
 
+    # Extended mode covariance: C = W * C_orig * W'
+    # C_orig = (dat_ica * dat_ica') / T_len
     C = extended ? zeros(T, N, N) : zeros(T, 0, 0)
+    C_orig = extended ? zeros(T, N, N) : zeros(T, 0, 0)
     K = extended ? zeros(T, N) : zeros(T, 0)
+    
+    # Temporary buffer for C = W * C_orig * W'
+    C_tmp = extended ? zeros(T, N, N) : zeros(T, 0, 0)
+
     if extended
-        mul!(C, dat_ica, transpose(dat_ica))
-        C ./= T(T_len)
+        mul!(C_orig, dat_ica, transpose(dat_ica))
+        C_orig ./= T(T_len)
+        
+        mul!(C_tmp, W, C_orig)
+        mul!(C, C_tmp, transpose(W))
     end
 
     for n in 1:max_iter
@@ -306,37 +383,29 @@ function _picard_optimize_cpu!(
 
         if n > 1
             @. y_diff = G - G_old
-            push!(s_list, copy(direction))
-            push!(y_list, copy(y_diff))
-            push!(r_list, one(T) / dot(direction, y_diff))
-
-            if length(s_list) > m
-                popfirst!(s_list)
-                popfirst!(y_list)
-                popfirst!(r_list)
-            end
+            _lbfgs_push!(lbfgs, direction, y_diff, one(T) / dot(direction, y_diff))
         end
         copyto!(G_old, G)
 
         if extended && sign_change
-            current_loss = _picard_loss(Y, W, signs, extended)
-            _picard_reset_lbfgs!(s_list, y_list, r_list)
+            current_loss = _picard_loss(Y, W, signs, extended, thread_sums)
+            _lbfgs_reset!(lbfgs)
         end
 
-        _picard_l_bfgs_direction!(Z, q, G, h, s_list, y_list, r_list, a_list)
+        _picard_l_bfgs_direction!(Z, q, G, h, lbfgs)
         copyto!(direction, Z)
 
         converged, new_loss, alpha, logdetW = _picard_line_search(
             Y, W, Y_new, W_new, DY, DW, transform, direction,
-            signs, current_loss, logdetW, ls_tries, extended
+            signs, current_loss, logdetW, ls_tries, extended, thread_sums
         )
 
         if !converged
             @. direction = -G
-            _picard_reset_lbfgs!(s_list, y_list, r_list)
+            _lbfgs_reset!(lbfgs)
             converged, new_loss, alpha, logdetW = _picard_line_search(
                 Y, W, Y_new, W_new, DY, DW, transform, direction,
-                signs, current_loss, logdetW, ls_tries, extended
+                signs, current_loss, logdetW, ls_tries, extended, thread_sums
             )
 
             if !converged
@@ -345,13 +414,17 @@ function _picard_optimize_cpu!(
             end
         end
 
+        # Scale direction by alpha to store the actual step taken in L-BFGS history
+        @. direction *= alpha
+
         copyto!(Y, Y_new)
         copyto!(W, W_new)
         current_loss = new_loss
 
         if extended
-            mul!(C, Y, transpose(Y))
-            C ./= T(T_len)
+            # Exact C update: C = W_new * C_orig * W_new'
+            mul!(C_tmp, W, C_orig)
+            mul!(C, C_tmp, transpose(W))
         end
 
         if n == 1 || n % 10 == 0
@@ -410,17 +483,28 @@ function _picard_optimize_gpu!(
     r_list = Float32[]
     a_list = Float32[]
 
+    # Pre-allocated thread_sums buffer for _picard_y_loss (GPU path calls it with Array'd data)
+    thread_sums = zeros(Float64, Threads.nthreads())
+
     W_cpu_tmp = copy(W_cpu)
     logdetW_val, _ = logabsdet(W_cpu_tmp)
     logdetW = Float32(logdetW_val)
-    current_loss = Float32(-logdetW + _picard_y_loss(Array(Y), Array(signs), extended))
+    current_loss = Float32(-logdetW + _picard_y_loss(Array(Y), Array(signs), extended, thread_sums))
     sign_change = false
 
-    C = gpu_array(zeros(Float32, N, N))
-    K = gpu_array(zeros(Float32, N))
+    C = extended ? gpu_array(zeros(Float32, N, N)) : gpu_array(zeros(Float32, 0, 0))
+    C_orig_cpu = extended ? zeros(Float32, N, N) : zeros(Float32, 0, 0)
     if extended
-        mul!(C, Y, transpose(Y))
-        C ./= Float32(T_len)
+        mul!(C_orig_cpu, dat_ica_cpu, transpose(dat_ica_cpu))
+        C_orig_cpu ./= Float32(T_len)
+    end
+    C_orig = gpu_array(C_orig_cpu)
+    K = extended ? gpu_array(zeros(Float32, N)) : gpu_array(zeros(Float32, 0))
+    C_tmp = extended ? gpu_array(zeros(Float32, N, N)) : gpu_array(zeros(Float32, 0, 0))
+
+    if extended
+        mul!(C_tmp, W, C_orig)
+        mul!(C, C_tmp, transpose(W))
     end
 
     for n in 1:max_iter
@@ -490,8 +574,10 @@ function _picard_optimize_gpu!(
         copyto!(G_old, G)
 
         if extended && sign_change
-            current_loss = Float32(-logdetW + _picard_y_loss(Array(Y), Array(signs), extended))
-            _picard_reset_lbfgs!(s_list, y_list, r_list)
+            current_loss = Float32(-logdetW + _picard_y_loss(Array(Y), Array(signs), extended, thread_sums))
+            empty!(s_list)
+            empty!(y_list)
+            empty!(r_list)
         end
 
         _picard_l_bfgs_direction!(Z, q, G, h, s_list, y_list, r_list, a_list)
@@ -510,7 +596,7 @@ function _picard_optimize_gpu!(
             logdet_total = logdetW + Float32(step_logdet)
 
             @. Y_new = Y + alpha * DY
-            y_loss = _picard_y_loss(Array(Y_new), Array(signs), extended)
+            y_loss = _picard_y_loss(Array(Y_new), Array(signs), extended, thread_sums)
             trial_loss = -logdet_total + y_loss
 
             if isfinite(trial_loss) && trial_loss < current_loss
@@ -525,7 +611,9 @@ function _picard_optimize_gpu!(
 
         if !converged
             @. direction = -G
-            _picard_reset_lbfgs!(s_list, y_list, r_list)
+            empty!(s_list)
+            empty!(y_list)
+            empty!(r_list)
 
             mul!(DY, direction, Y)
             mul!(DW, direction, W)
@@ -538,7 +626,7 @@ function _picard_optimize_gpu!(
                 logdet_total = logdetW + Float32(step_logdet)
 
                 @. Y_new = Y + alpha * DY
-                y_loss = _picard_y_loss(Array(Y_new), Array(signs), extended)
+                y_loss = _picard_y_loss(Array(Y_new), Array(signs), extended, thread_sums)
                 trial_loss = -logdet_total + y_loss
 
                 if isfinite(trial_loss) && trial_loss < current_loss
@@ -557,13 +645,16 @@ function _picard_optimize_gpu!(
             end
         end
 
+        # Scale direction by alpha to store the actual step taken in L-BFGS history
+        @. direction *= alpha
+
         copyto!(Y, Y_new)
         copyto!(W, W_new)
         current_loss = new_loss
 
         if extended
-            mul!(C, Y, transpose(Y))
-            C ./= Float32(T_len)
+            mul!(C_tmp, W, C_orig)
+            mul!(C, C_tmp, transpose(W))
         end
 
         if n == 1 || n % 10 == 0

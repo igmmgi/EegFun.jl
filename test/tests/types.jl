@@ -191,19 +191,19 @@ using OrderedCollections
 
     @testset "IcaPrms" begin
         # Test constructor with all parameters
-        ica_params = EegFun.IcaPrms(
-            0.001,  # l_rate
-            1000,   # max_iter
-            1e-6,   # w_change
-            0.9,    # anneal_deg
-            0.8,    # anneal_step
-            1e12,   # blowup
-            0.5,    # blowup_fac
-            1000.0, # max_weight
-            0.9,    # restart_factor
-            0.0,    # degconst
-            1e-6,   # default_stop
-            true,   # use_gpu
+        ica_params = EegFun.IcaPrms(;
+            l_rate = 0.001,
+            max_iter = 1000,
+            w_change = 1e-6,
+            anneal_deg = 0.9,
+            anneal_step = 0.8,
+            blowup = 1e12,
+            blowup_fac = 0.5,
+            max_weight = 1000.0,
+            restart_factor = 0.9,
+            degconst = 0.0,
+            default_stop = 1e-6,
+            use_gpu = false,
         )
 
         @test ica_params.l_rate == 0.001
@@ -217,7 +217,10 @@ using OrderedCollections
         @test ica_params.restart_factor == 0.9
         @test ica_params.degconst == 0.0
         @test ica_params.default_stop == 1e-6
-        @test ica_params.use_gpu == true
+        @test ica_params.use_gpu == false
+        @test ica_params.picard_m == 7
+        @test ica_params.picard_lambda_min == 0.01
+        @test ica_params.picard_ls_tries == 10
 
         # Test mutability
         ica_params.l_rate = 0.002
