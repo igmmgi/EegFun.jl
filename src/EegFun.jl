@@ -15,6 +15,7 @@ using MAT
 # Signal processing & GPU
 using DSP
 using LinearAlgebra
+using SpecialFunctions
 using FFTW
 using KernelAbstractions
 

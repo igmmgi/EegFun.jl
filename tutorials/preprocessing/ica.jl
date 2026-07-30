@@ -38,40 +38,35 @@ EegFun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 EegFun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
 # # ICA on continuous data excluding extreme samples
-# @time ica_result_infomax = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250))
-# @time ica_result_infomax = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), use_gpu = true)
-# @time ica_result_infomax = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax_extended)
-# @time ica_result_infomax =
-#     EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax_extended, use_gpu = true)
-
-@time ica_result_infomax = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax)
-@time ica_result_infomax = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :picard)
-@time ica_result_infomax = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax_extended)
-@time ica_result_infomax = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :picard_extended)
+@time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax)
+# @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :picard)
+# @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax_extended)
+# @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :picard_extended)
+# @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :amica, params = params)
 
 # # Databrowser (here we can turn on/off component removal's)
-# EegFun.plot_databrowser(dat, ica_result_infomax)
+# EegFun.plot_databrowser(dat, ica_result)
 # 
 # # ICA type plots
 # # Basic Topoplots
-EegFun.plot_topography(ica_result_infomax, component_selection = EegFun.components(1:20));
-# 
+EegFun.plot_topography(ica_result, component_selection = EegFun.components(1:20));
+
 # # Component spectra
-# EegFun.plot_ica_component_spectrum(dat, ica_result_infomax, component_selection = EegFun.components(1:70))
+# EegFun.plot_ica_component_spectrum(dat, ica_result, component_selection = EegFun.components(1:70))
 # 
 # # Component data/activation
-# EegFun.plot_ica_component_activation(dat, ica_result_infomax)
+# EegFun.plot_ica_component_activation(dat, ica_result)
 # 
 # # Databrowser (here we can turn on/off component removal's)
 # EegFun.plot_databrowser(dat)
 # 
 # 
 # # Databrowser (here we can turn on/off component removal's)
-# EegFun.plot_databrowser(dat, ica_result_infomax)
+# EegFun.plot_databrowser(dat, ica_result)
 # 
 # 
 # # Extended ICA
-# ica_result_infomax_extended = EegFun.run_ica(
+# ica_result = EegFun.run_ica(
 #     dat;
 #     sample_selection = EegFun.samples_not(:is_extreme_value_200),
 #     percentage_of_data = 20,
@@ -80,41 +75,41 @@ EegFun.plot_topography(ica_result_infomax, component_selection = EegFun.componen
 # 
 # # ICA type plots
 # # Basic Topoplots
-# EegFun.plot_topography(ica_result_infomax_extended, component_selection = EegFun.components(1:20));
+# EegFun.plot_topography(ica_result, component_selection = EegFun.components(1:20));
 # 
 # # Component spectra
-# EegFun.plot_ica_component_spectrum(dat, ica_result_infomax_extended, component_selection = EegFun.components(1:70))
+# EegFun.plot_ica_component_spectrum(dat, ica_result, component_selection = EegFun.components(1:70))
 # 
 # # Component data/activation
-# EegFun.plot_ica_component_activation(dat, ica_result_infomax_extended)
+# EegFun.plot_ica_component_activation(dat, ica_result)
 # 
 # # Databrowser (here we can turn on/off component removal's)
-# EegFun.plot_databrowser(dat, ica_result_infomax_extended)
+# EegFun.plot_databrowser(dat, ica_result)
 # 
 # # identify components (default correlation method)
 # @time component_artifacts, component_metrics =
-#     EegFun.identify_components(dat, ica_result_infomax, sample_selection = EegFun.samples_not(:is_extreme_value_200));
+#     EegFun.identify_components(dat, ica_result, sample_selection = EegFun.samples_not(:is_extreme_value_200));
 # 
 # # identify components (Combined method: union of correlation and ICLabel)
 # component_artifacts_comb, component_metrics_comb =
-#     EegFun.identify_components(dat, ica_result_infomax, method = :combined, sample_selection = EegFun.samples_not(:is_extreme_value_200));
+#     EegFun.identify_components(dat, ica_result, method = :combined, sample_selection = EegFun.samples_not(:is_extreme_value_200));
 # 
 # # or individually
 # eog_comps, eog_comps_metrics_df =
-#     EegFun.identify_eog_components(dat, ica_result_infomax, sample_selection = EegFun.samples_not(:is_extreme_value_200));
+#     EegFun.identify_eog_components(dat, ica_result, sample_selection = EegFun.samples_not(:is_extreme_value_200));
 # 
 # ecg_comps, ecg_comps_metrics_df =
-#     EegFun.identify_ecg_components(dat, ica_result_infomax, sample_selection = EegFun.samples_not(:is_extreme_value_200));
+#     EegFun.identify_ecg_components(dat, ica_result, sample_selection = EegFun.samples_not(:is_extreme_value_200));
 # 
-# line_noise_comps, line_noise_comps_metrics_df = EegFun.identify_line_noise_components(dat, ica_result_infomax);
+# line_noise_comps, line_noise_comps_metrics_df = EegFun.identify_line_noise_components(dat, ica_result);
 # 
-# channel_noise_comps, channel_noise_comps_metrics_df = EegFun.identify_spatial_kurtosis_components(ica_result_infomax);
+# channel_noise_comps, channel_noise_comps_metrics_df = EegFun.identify_spatial_kurtosis_components(ica_result);
 # 
 # 
 # # Get all identified component artifacts
 # all_comps = EegFun.get_all_ica_components(component_artifacts)
 # dat_ica_removed, ica_result_updated =
-#     EegFun.subtract_ica_components(dat, ica_result_infomax_extended, component_selection = EegFun.components(all_comps))
+#     EegFun.subtract_ica_components(dat, ica_result, component_selection = EegFun.components(all_comps))
 # 
 # # Reconstruct for sanity check (ie., add components back to data)
 # dat_ica_reconstructed, ica_result_restored =
@@ -141,10 +136,10 @@ EegFun.plot_topography(ica_result_infomax, component_selection = EegFun.componen
 # epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.2, 1.0))  # -200 to 1000 ms
 # 
 # # ICA on epoched data
-# ica_result_infomax = EegFun.run_ica(epochs; sample_selection = EegFun.samples_not(:is_extreme_value_200))
+# ica_result = EegFun.run_ica(epochs; sample_selection = EegFun.samples_not(:is_extreme_value_200))
 # 
 # # ICA type plots
-# EegFun.plot_topography(ica_result_infomax, component_selection = EegFun.components(1:4));
-# EegFun.plot_ica_component_activation(dat, ica_result_infomax_extended)
-# EegFun.plot_ica_component_spectrum(dat, ica_result_infomax, component_selection = EegFun.components(1:70))
-# EegFun.plot_databrowser(dat, ica_result_infomax)
+# EegFun.plot_topography(ica_result, component_selection = EegFun.components(1:4));
+# EegFun.plot_ica_component_activation(dat, ica_result)
+# EegFun.plot_ica_component_spectrum(dat, ica_result, component_selection = EegFun.components(1:70))
+# EegFun.plot_databrowser(dat, ica_result)
