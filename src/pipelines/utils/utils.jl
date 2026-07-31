@@ -820,17 +820,46 @@ function check_raw_data(directory::String; raw_data_files::String="\\.(bdf|edf|v
         labels_hash = chan_labels_hash,
     )
     
-    log_pretty_table(df; title="Raw Data Files Metadata Check")
+    # Identify common baselines
+    mode_chans = mode(n_chans)
+    mode_sr = mode(sampling_rates)
+    mode_hash = mode(chan_labels_hash)
+    med_dur = isempty(durations_min) ? 0.0 : median(durations_min)
+    
+    # Add problem flag column
+    issues = String[]
+    for i in 1:nrow(df)
+        has_issue = false
+        if df.n_channels[i] != mode_chans || df.sampling_rate[i] != mode_sr || df.labels_hash[i] != mode_hash
+            has_issue = true
+        elseif med_dur > 0 && df.duration_min[i] < med_dur * 0.5
+            has_issue = true
+        end
+        push!(issues, has_issue ? "*" : "")
+    end
+    
+    df.issue = issues
+    
+    # Highlight rows with issues in red in the terminal output
+    hl = PrettyTables.TextHighlighter(
+        (data, i, j) -> data[i, :issue] == "*",
+        PrettyTables.Crayon(foreground = :red, bold = true)
+    )
+    
+    log_pretty_table(df; title="Raw Data Files Metadata Check", highlighters=[hl])
     
     # Check for discrepancies
     if length(unique(n_chans)) > 1
-        @warn "Discrepancy detected! Files have different numbers of channels."
+        bad_files = df.file[df.n_channels .!= mode_chans]
+        @warn "Discrepancy detected! Files have different numbers of channels: $(join(bad_files, ", "))"
     end
     if length(unique(sampling_rates)) > 1
-        @warn "Discrepancy detected! Files have different sampling rates."
+        bad_files = df.file[df.sampling_rate .!= mode_sr]
+        @warn "Discrepancy detected! Files have different sampling rates: $(join(bad_files, ", "))"
     end
     if length(unique(chan_labels_hash)) > 1
-        @warn "Discrepancy detected! Files have different channel labels (even if the number of channels is the same)."
+        bad_files = df.file[df.labels_hash .!= mode_hash]
+        @warn "Discrepancy detected! Files have different channel labels: $(join(bad_files, ", "))"
     end
     
     # Flag files that are unusually short or small (e.g. < 50% of median)

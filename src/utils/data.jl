@@ -1222,7 +1222,7 @@ function log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
     table_output = sprint() do output_io
         # TODO: better way of doing this?
         # Set a large display size to avoid terminal limitations (i.e., cropping!)
-        io_context = IOContext(output_io, :displaysize => (2000, 2000))
+        io_context = IOContext(output_io, :displaysize => (2000, 2000), :color => true)
         # Default column_labels to column names only — this suppresses the auto-generated
         # type subheader row that PrettyTables adds when given a DataFrame directly.
         # Callers can still override by passing their own column_labels kwarg.
