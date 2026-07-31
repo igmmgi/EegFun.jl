@@ -23,20 +23,14 @@ times, signal = EegFun.generate_signal(
     0.0,                                    # noise amplitude
 );
 epochs_synthetic = EegFun.signal_to_data(times, signal, :Channel1, sample_rate)
-EegFun.plot_epochs(epochs_synthetic, channel_selection = EegFun.channels([:Channel1]))
+# EegFun.plot_epochs(epochs_synthetic, channel_selection = EegFun.channels([:Channel1]))
 
 spectrum = EegFun.freq_spectrum(epochs_synthetic, max_freq = 80.0)
 EegFun.plot_channel_spectrum(spectrum, channel_selection = EegFun.channels([:Channel1]))
 
-# tf_stft_fixed
-tf_data = EegFun.tf_stft(epochs_synthetic, frequencies = 1:1:40, window_length = 0.5)
+# tf_stft
+@time tf_data = EegFun.tf_stft(epochs_synthetic, frequencies = 1:1:40, window_length = 0.5, pad = :both, use_gpu = true)
 EegFun.plot_tf(tf_data, ylogscale = false)
-
-tf_data = EegFun.tf_stft(epochs_synthetic, frequencies = 1:1:40, window_length = 0.5)
-EegFun.plot_tf(tf_data, ylogscale = false)
-
-tf_data = EegFun.tf_stft(epochs_synthetic, frequencies = logrange(1, 40, length = 30), window_length = 0.5)
-EegFun.plot_tf(tf_data, ylogscale = true)
 
 tf_data = EegFun.tf_stft(epochs_synthetic, frequencies = logrange(1, 40, length = 30), window_length = 0.5)
 EegFun.plot_tf(tf_data, ylogscale = true)

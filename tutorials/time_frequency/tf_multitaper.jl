@@ -28,15 +28,9 @@ EegFun.plot_epochs(epochs_synthetic, channel_selection = EegFun.channels([:Chann
 spectrum = EegFun.freq_spectrum(epochs_synthetic, max_freq = 80.0)
 EegFun.plot_channel_spectrum(spectrum, channel_selection = EegFun.channels([:Channel1]))
 
-# tf_stft_fixed
-tf_data = EegFun.tf_multitaper(epochs_synthetic, frequencies = 1:1:40, cycles = 5)
+# tf_multitaper
+@time tf_data = EegFun.tf_multitaper(epochs_synthetic, frequencies = 1:1:40, cycles = 5, pad = :both, use_gpu = true)
 EegFun.plot_tf(tf_data, ylogscale = false)
-
-tf_data = EegFun.tf_multitaper(epochs_synthetic, frequencies = 1:1:40, cycles = 5)
-EegFun.plot_tf(tf_data, ylogscale = false)
-
-tf_data = EegFun.tf_multitaper(epochs_synthetic, frequencies = logrange(1, 40, length = 30), cycles = 5)
-EegFun.plot_tf(tf_data, ylogscale = true)
 
 tf_data = EegFun.tf_multitaper(epochs_synthetic, frequencies = logrange(1, 40, length = 30), cycles = 5)
 EegFun.plot_tf(tf_data, ylogscale = true)
