@@ -18,6 +18,7 @@ public BaselineInfo
 public BatchConfig
 public BatchResult
 public batch_process
+public check_raw_data
 public ChannelRepairInfo
 public Cluster
 public ClusterInfo

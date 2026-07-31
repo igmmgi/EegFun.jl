@@ -10,10 +10,10 @@ Read raw EEG data from various file formats (BDF, BrainVision, EDF, FIF, XDF).
 # Returns
 - Raw data object from the underlying reader library.
 """
-function read_raw_data(filepath::String; kwargs...)
+function read_raw_data(filepath::String; header_only::Bool=false, kwargs...)
     ext = get_file_extension(filepath)
     if ext == ".bdf"
-        return read_bdf(filepath; kwargs...)
+        return read_bdf(filepath; header_only=header_only, kwargs...)
     elseif ext == ".vhdr" || ext == ".eeg" || ext == ".vmrk"
         return read_brainvision(filepath; kwargs...)
     elseif ext == ".edf"
