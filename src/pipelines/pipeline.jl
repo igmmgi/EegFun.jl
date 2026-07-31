@@ -197,6 +197,12 @@ function preprocess(
                 @info section("Raw Data")
                 dat = create_eegfun_data(read_raw_data(data_file), layout)
 
+                # Check if the data file contains all channels required by the layout
+                missing_channels = setdiff(layout.data.label, channel_labels(dat))
+                if !isempty(missing_channels)
+                    @minimal_error "Data file is missing channels defined in layout: $(join(missing_channels, ", "))"
+                end
+
                 # Save the original data in Julia format
                 if files_cfg.output.save_continuous_data_raw
                     @info "Saving continuous data (original)"
