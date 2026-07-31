@@ -73,14 +73,14 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "files.output.directory"           => simple_string_param("Directory for processed output files", "./preprocessed_files"),
 
     # What data should we save?
-    "files.output.save_continuous_data_raw" => bool_param("Save continuous data original?", true),
-    "files.output.save_continuous_data_corrected" => bool_param("Save continuous data cleaned?", true),
+    "files.output.save_continuous_data_raw" => bool_param("Save continuous data original?", false),
+    "files.output.save_continuous_data_corrected" => bool_param("Save continuous data cleaned?", false),
     "files.output.save_ica_data" => bool_param("Save ICA results?", true),
-    "files.output.save_epoch_data_raw" => bool_param("Save epoched data original?", true),
-    "files.output.save_epoch_data_corrected" => bool_param("Save epoched data cleaned?", true),
+    "files.output.save_epoch_data_raw" => bool_param("Save epoched data original?", false),
+    "files.output.save_epoch_data_corrected" => bool_param("Save epoched data cleaned?", false),
     "files.output.save_epoch_data" => bool_param("Save epoched data good?", true),
-    "files.output.save_erp_data_raw" => bool_param("Save ERP data original?", true),
-    "files.output.save_erp_data_corrected" => bool_param("Save ERP data cleaned?", true),
+    "files.output.save_erp_data_raw" => bool_param("Save ERP data original?", false),
+    "files.output.save_erp_data_corrected" => bool_param("Save ERP data cleaned?", false),
     "files.output.save_erp_data" => bool_param("Save ERP data good?", true),
 
     # Preprocessing settings
