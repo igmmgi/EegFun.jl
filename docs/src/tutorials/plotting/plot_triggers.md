@@ -2,7 +2,7 @@
 
 This demo demonstrates visualizing event markers and triggers in continuous EEG data to verify timing and event sequences.
 
-### What are Triggers?
+## What are Triggers?
 
 Triggers (also called event markers or stimulus codes) are time-stamped codes that mark when experimental events occurred during recording:
 
@@ -13,11 +13,11 @@ Triggers (also called event markers or stimulus codes) are time-stamped codes th
 - Hardware events
 - etc.
 
-### Trigger Cleaning
+## Trigger Cleaning
 
 EegFun automatically cleans triggers by default removing consecutive duplicates. For example, the raw sequence `0 0 1 1 0 0 2 2 2 0` becomes `0 0 1 0 0 0 2 0 0 0`. This ensures each trigger represents a single event rather than a sustained hardware signal.
 
-### Trigger Visualization Functions
+## Trigger Visualization Functions
 
 **trigger_count**:
 
@@ -36,7 +36,7 @@ EegFun automatically cleans triggers by default removing consecutive duplicates.
 - Inter-trigger intervals (ITIs)
 - Timing precision verification
 
-### Use Cases
+## Use Cases
 
 **Quality control**:
 
@@ -54,7 +54,7 @@ EegFun automatically cleans triggers by default removing consecutive duplicates.
 - Identify spurious triggers
 - Find timing drift or jitter
 
-### Filtering Triggers
+## Filtering Triggers
 
 Use `ignore_triggers` to exclude specific codes:
 
@@ -66,24 +66,24 @@ Use `ignore_triggers` to exclude specific codes:
 
 This demo shows trigger visualization workflows:
 
-### Count Triggers
+## Count Triggers
 
 - Load raw data
 - Count triggers before processing
 - Verify expected trigger codes exist
 
-### Create Data Structure
+## Create Data Structure
 
 - Load layout and create EegFun structure
 - Count triggers again to verify preservation
 
-### Visualize Overview
+## Visualize Overview
 
 - Plot trigger distribution
 - Optionally ignore certain trigger codes
 - Assess trigger patterns
 
-### Analyze Timing
+## Analyze Timing
 
 - Plot inter-trigger intervals
 - Verify timing consistency

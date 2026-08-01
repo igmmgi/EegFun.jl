@@ -2,7 +2,7 @@
 
 This demo demonstrates time-frequency analysis using Morlet wavelets to decompose EEG signals into time-varying frequency content.
 
-### What are Morlet Wavelets?
+## What are Morlet Wavelets?
 
 Morlet wavelets are oscillating waves with Gaussian envelopes that provide localized time-frequency analysis:
 
@@ -10,7 +10,7 @@ Morlet wavelets are oscillating waves with Gaussian envelopes that provide local
 - **Gaussian envelope**: Smooth windowing that minimizes spectral leakage
 - **Time-frequency trade-off**: Cannot have perfect precision in both simultaneously
 
-### Key Parameter: Number of Cycles
+## Key Parameter: Number of Cycles
 
 The `cycles` parameter controls the time-frequency resolution trade-off:
 
@@ -27,7 +27,7 @@ The `cycles` parameter controls the time-frequency resolution trade-off:
 - **High frequencies**: More cycles = better spectral precision
 - Balances resolution optimally across the spectrum
 
-### Frequency Spacing
+## Frequency Spacing
 
 **Linear spacing** (`frequencies = 1:1:40`):
 
@@ -41,7 +41,7 @@ The `cycles` parameter controls the time-frequency resolution trade-off:
 - Better for wide ranges (e.g., 2-80 Hz)
 - Use with `ylogscale = true` in plots
 
-### Baseline Correction
+## Baseline Correction
 
 Apply baseline correction to isolate event-related changes:
 
@@ -56,7 +56,7 @@ baseline_method = :db           # Decibel conversion (10*log10(activity/baseline
 - **:percent**: Percent change from baseline
 - **:zscore**: Z-score normalization
 
-### Edge Effects
+## Edge Effects
 
 The `filter_edges` and `pad` parameters control edge artifacts:
 
@@ -65,7 +65,7 @@ tf_morlet(epochs, pad = :both)         # Mirror padding
 tf_morlet(epochs, filter_edges = true) # Remove edge samples
 ```
 
-### Workflow Summary
+## Workflow Summary
 
 This demo shows:
 
@@ -76,7 +76,7 @@ This demo shows:
 5. **Baseline correction**: Isolating event-related power changes
 
 
-### Further Reading
+## Further Reading
 
 Cohen, M. X. (2014). *Analyzing Neural Time Series Data: Theory and Practice*. Chapter 12: Morlet Wavelets and Wavelet Convolution
 
@@ -112,17 +112,13 @@ times, signal = EegFun.generate_signal(
     0.0,                                    # noise amplitude
 );
 epochs_synthetic = EegFun.signal_to_data(times, signal, :Channel1, sample_rate)
-EegFun.plot_epochs(epochs_synthetic, channel_selection = EegFun.channels([:Channel1]))
+# EegFun.plot_epochs(epochs_synthetic, channel_selection = EegFun.channels([:Channel1]))
 
 spectrum = EegFun.freq_spectrum(epochs_synthetic, max_freq = 80.0)
-EegFun.plot_channel_spectrum(spectrum, channel_selection = EegFun.channels([:Channel1]))
+# EegFun.plot_channel_spectrum(spectrum, channel_selection = EegFun.channels([:Channel1]))
 
 # tf_morlet
-@time tf_data = EegFun.tf_morlet(epochs_synthetic, frequencies = 1:1:40, cycles = 3, pad = :both)
-EegFun.plot_tf(tf_data, ylogscale = false)
-
-# tf_morlet
-tf_data = EegFun.tf_morlet(epochs_synthetic, frequencies = 1:1:40, cycles = 3)
+@time tf_data = EegFun.tf_morlet(epochs_synthetic, frequencies = 1:1:40, cycles = 3, pad = :both, use_gpu = true)
 EegFun.plot_tf(tf_data, ylogscale = false)
 
 tf_data = EegFun.tf_morlet(epochs_synthetic, frequencies = 1:0.5:40, cycles = 10)

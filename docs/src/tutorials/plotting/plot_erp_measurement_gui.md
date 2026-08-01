@@ -2,7 +2,7 @@
 
 This demo shows how to use the interactive ERP measurement GUI for visual exploration and parameter tuning.
 
-### What Does It Do?
+## What Does It Do?
 
 `plot_erp_measurement_gui` opens an interactive window that lets you explore ERP measurements in real time. You can adjust the analysis interval, baseline window, measurement type, and channel — all with live visual feedback. This is useful for:
 
@@ -10,7 +10,7 @@ This demo shows how to use the interactive ERP measurement GUI for visual explor
 - **Parameter exploration** — finding the right analysis window before batch processing
 - **Visual validation** — confirming that automated measurements are sensible
 
-### Relationship to `erp_measurements`
+## Relationship to `erp_measurements`
 
 Use the GUI to explore and decide on your measurement parameters, then apply those parameters programmatically with `EegFun.erp_measurements()` for your final analysis.
 
@@ -18,15 +18,15 @@ Use the GUI to explore and decide on your measurement parameters, then apply tho
 
 This demo covers:
 
-### Basic Usage
+## Basic Usage
 
 - Launch the GUI with all conditions overlaid
 
-### Single Condition
+## Single Condition
 
 - Explore one condition at a time
 
-### Pre-configured Settings
+## Pre-configured Settings
 
 - Open the GUI with specific initial channel, measurement type, and intervals
 

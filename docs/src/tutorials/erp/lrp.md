@@ -30,15 +30,15 @@ Where "left" and "right" refer to the hand used for the response.
 
 ## Workflow Summary
 
-### Single-Participant LRP
+## Single-Participant LRP
 
 - Calculate LRP from left and right response conditions
 
-### Batch Processing
+## Batch Processing
 
 - Process all participants with specified condition pairs
 
-### Visualisation
+## Visualisation
 
 - Plot LRP waveforms with `plot_erp`
 

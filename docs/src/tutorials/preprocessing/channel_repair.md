@@ -2,11 +2,11 @@
 
 This demo demonstrates channel interpolation methods for repairing bad electrodes using spatial interpolation techniques.
 
-### What is Channel Repair?
+## What is Channel Repair?
 
 Channel repair (interpolation) estimates the signal at bad electrodes using data from neighboring good channels. This preserves data quality while maintaining electrode count for spatial analyses.
 
-### When to Repair Channels
+## When to Repair Channels
 
 Channel repair is appropriate when:
 
@@ -21,7 +21,7 @@ Channel repair is appropriate when:
 - The entire dataset is noisy
 - Bad channels cluster together spatially
 
-### Interpolation Methods
+## Interpolation Methods
 
 **Neighbor Interpolation**:
 
@@ -34,7 +34,7 @@ Channel repair is appropriate when:
 
 - Uses spherical spline functions to model scalp potential distribution
 
-### Best Practices
+## Best Practices
 
 **Timing**:
 
@@ -56,25 +56,25 @@ Channel repair is appropriate when:
 
 This demo shows channel repair workflows:
 
-### Identify Channels to Repair
+## Identify Channels to Repair
 
 - Load and preprocess data
 - Select specific channels for demonstration
 - Verify channels exist in the dataset
 
-### Calculate Neighbor Relationships
+## Calculate Neighbor Relationships
 
 - Compute spatial neighbors based on 3D electrode positions
 - Use distance threshold to define neighborhood
 - Required for neighbor interpolation method
 
-### Apply Interpolation
+## Apply Interpolation
 
 - Test neighbor interpolation method
 - Test spherical spline method
 - Store original data for comparison
 
-### Validate Repair Quality
+## Validate Repair Quality
 
 - Compare interpolated vs. original data
 - Verify that interpolation changed the data as expected

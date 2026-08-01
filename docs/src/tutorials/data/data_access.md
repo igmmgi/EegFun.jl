@@ -2,7 +2,7 @@
 
 This demo shows how to inspect and navigate EegFun data structures using common access utilities.
 
-### Data Access Functions
+## Data Access Functions
 
 EegFun provides several functions to access different parts of a data structure:
 
@@ -12,7 +12,7 @@ EegFun provides several functions to access different parts of a data structure:
 - **`extra_data`**: Returns derived/extra columns (EOG flags, artifact markers)
 - **`channel_labels`**: Returns the channel names as a vector of Symbols
 
-### Quick Preview
+## Quick Preview
 
 For quick data inspection without viewing the entire dataset:
 
@@ -20,7 +20,7 @@ For quick data inspection without viewing the entire dataset:
 - **`tail(dat)`**: Shows the last N rows (default: 5)
 - **`viewer(dat)`**: Opens data in VS Code's table viewer (falls back to console display)
 
-### Works Across Data Types
+## Works Across Data Types
 
 All access functions work consistently across ContinuousData, EpochData, and ErpData. For EpochData, you can add an `epoch_selection` parameter to access specific epochs.
 

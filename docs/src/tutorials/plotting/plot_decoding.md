@@ -2,13 +2,13 @@
 
 This demo shows how to visualise MVPA (multivariate pattern analysis) decoding results.
 
-### Why Plot Decoding Results?
+## Why Plot Decoding Results?
 
 - **Temporal dynamics** — see when brain signals become discriminative
 - **Error shading** — visualise variability across cross-validation folds or subjects
 - **Significance markers** — overlay statistical test results on the accuracy curve
 
-### Key Functions
+## Key Functions
 
 | Function | Purpose | Typical Use |
 | --- | --- | --- |
@@ -16,7 +16,7 @@ This demo shows how to visualise MVPA (multivariate pattern analysis) decoding r
 | `plot_decoding(decoded_list)` | Multi-subject subplot grid | Individual differences |
 | `plot_decoding(decoded, stats)` | Accuracy + significance | Publication figure |
 
-### What You'll Learn
+## What You'll Learn
 
 1. Plotting decoding accuracy over time with error shading
 2. Customising colours, line width and titles

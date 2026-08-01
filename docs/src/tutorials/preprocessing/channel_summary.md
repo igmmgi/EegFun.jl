@@ -2,7 +2,7 @@
 
 This demo demonstrates how to generate summary statistics across all channels for data quality assessment.
 
-### What is Channel Summary?
+## What is Channel Summary?
 
 Channel summary provides aggregate statistics across all EEG channels, offering a quick overview of data characteristics. This complements channel-specific metrics by revealing patterns across the entire montage.
 
@@ -13,7 +13,7 @@ Channel summary provides aggregate statistics across all EEG channels, offering 
 - Minimum and maximum values
 - Sample counts
 
-### Use Cases
+## Use Cases
 
 **Data quality overview**:
 
@@ -31,13 +31,13 @@ Channel summary provides aggregate statistics across all EEG channels, offering 
 
 This demo shows channel summary analysis:
 
-### Generate Initial Summary
+## Generate Initial Summary
 
 - Load and preprocess data (average reference, high-pass filter)
 - Calculate summary statistics across all channels
 - Display results using formatted table
 
-### Summary with Sample Selection
+## Summary with Sample Selection
 
 - Mark extreme values for exclusion
 - Recalculate summary excluding artifacts

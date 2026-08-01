@@ -2,7 +2,7 @@
 
 This demo shows how to perform common operations on time-frequency data: baseline correction, channel averaging and differencing, condition averaging and differencing, and grand averaging.
 
-### Key Functions
+## Key Functions
 
 | Function | Purpose |
 | --- | --- |
@@ -13,7 +13,7 @@ This demo shows how to perform common operations on time-frequency data: baselin
 | `condition_difference` | Subtract conditions (TF) |
 | `grand_average` | Average across participants (TF) |
 
-### Important Notes
+## Important Notes
 
 - All TF operations update **both** `data_power` and `data_phase` DataFrames consistently
 - The API mirrors the ERP operations but is dispatched on `TimeFreqData`
@@ -21,24 +21,24 @@ This demo shows how to perform common operations on time-frequency data: baselin
 
 ## Workflow Summary
 
-### Baseline Correction
+## Baseline Correction
 
 - Apply after TF decomposition and before statistical analysis
 - Decibel (`:db`) is the most common method for EEG
 - Cannot be applied twice — re-compute TF data to change baseline
 
-### Channel Operations
+## Channel Operations
 
 - `channel_average` creates ROI averages (e.g., midline, frontal cluster)
 - `channel_difference` computes laterality or other contrasts
 - Use `reduce = true` to drop original channels
 
-### Condition Operations
+## Condition Operations
 
 - `condition_difference` subtracts one condition's power from another
 - `condition_average` pools conditions together
 
-### Grand Average
+## Grand Average
 
 - Load multi-participant data with `read_all_data`
 - `grand_average` groups by condition and averages power across participants

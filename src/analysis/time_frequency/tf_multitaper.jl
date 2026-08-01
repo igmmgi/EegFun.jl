@@ -244,14 +244,14 @@ function tf_multitaper(
     end
 
     if gpu_active
-        template_padded_batch_gpu = gpu_array(zeros(ComplexF64, n_trials, n_samples_padded))
-        fft_plan_padded_batch = plan_fft!(template_padded_batch_gpu, 2)
-        ifft_plan_padded_batch = plan_ifft!(template_padded_batch_gpu, 2)
-        
+        template_padded_batch_gpu = gpu_array(zeros(ComplexF64, n_samples_padded, n_trials))
+        fft_plan_padded_batch = plan_fft!(template_padded_batch_gpu, 1)
+        ifft_plan_padded_batch = plan_ifft!(template_padded_batch_gpu, 1)
+
         gpu_buffers = (
-            local_data_padded_gpu = gpu_array(zeros(Float64, n_trials, n_samples_padded)),
-            local_data_fft_gpu = gpu_array(zeros(ComplexF64, n_trials, n_samples_padded)),
-            local_conv_result_gpu = gpu_array(zeros(ComplexF64, n_trials, n_samples_padded)),
+            local_data_padded_gpu = gpu_array(zeros(Float64, n_samples_padded, n_trials)),
+            local_data_fft_gpu = gpu_array(zeros(ComplexF64, n_samples_padded, n_trials)),
+            local_conv_result_gpu = gpu_array(zeros(ComplexF64, n_samples_padded, n_trials)),
             curr_wavelet_gpu = gpu_array(zeros(ComplexF64, n_samples_padded)),
             eegpower_trials_gpu = return_trials ? gpu_array(zeros(Float64, n_trials, num_frex, n_times)) : nothing,
             eegconv_trials_gpu = (return_trials && return_phase) ? gpu_array(zeros(ComplexF64, n_trials, num_frex, n_times)) : nothing,
@@ -262,15 +262,15 @@ function tf_multitaper(
             power_accum_avg_gpu = !return_trials ? gpu_array(zeros(Float64, n_times)) : nothing,
             complex_accum_avg_gpu = (!return_trials && return_phase) ? gpu_array(zeros(ComplexF64, n_times)) : nothing,
             adjusted_indices_gpu = gpu_array(zeros(Int, n_times)),
-            extracted_power_gpu = !return_trials ? gpu_array(zeros(Float64, n_trials, n_times)) : nothing,
-            sum_power_gpu = !return_trials ? gpu_array(zeros(Float64, 1, n_times)) : nothing,
-            sum_complex_gpu = (!return_trials && return_phase) ? gpu_array(zeros(ComplexF64, 1, n_times)) : nothing
+            extracted_power_gpu = !return_trials ? gpu_array(zeros(Float64, n_times, n_trials)) : nothing,
+            sum_power_gpu = !return_trials ? gpu_array(zeros(Float64, n_times, 1)) : nothing,
+            sum_complex_gpu = (!return_trials && return_phase) ? gpu_array(zeros(ComplexF64, n_times, 1)) : nothing,
         )
     else
         # Plan for batch FFT of entire padded data (all trials at once)
-        template_padded_batch = zeros(ComplexF64, n_trials, n_samples_padded)
-        fft_plan_padded_batch = plan_fft!(template_padded_batch, 2, flags = FFTW.MEASURE)
-        ifft_plan_padded_batch = plan_ifft!(template_padded_batch, 2, flags = FFTW.MEASURE)
+        template_padded_batch = zeros(ComplexF64, n_samples_padded, n_trials)
+        fft_plan_padded_batch = plan_fft!(template_padded_batch, 1, flags = FFTW.MEASURE)
+        ifft_plan_padded_batch = plan_ifft!(template_padded_batch, 1, flags = FFTW.MEASURE)
         gpu_buffers = nothing
     end
 
@@ -292,10 +292,29 @@ function tf_multitaper(
 
     # Process each selected channel
     function _process_multitaper_channel!(
-        channel, dat, n_trials, n_samples_per_epoch, n_padded_samples, n_samples_padded, num_frex,
-        return_trials, return_phase, filter_edges, pad, n_times, time_indices,
-        n_window_samples_per_freq, n_tapers_per_freq, inv_n_tapers_per_freq,
-        fft_plan_padded_batch, ifft_plan_padded_batch, tapered_wavelet_ffts, df_lock, power_df, phase_df, gpu_buffers
+        channel,
+        dat,
+        n_trials,
+        n_samples_per_epoch,
+        n_padded_samples,
+        n_samples_padded,
+        num_frex,
+        return_trials,
+        return_phase,
+        filter_edges,
+        pad,
+        n_times,
+        time_indices,
+        n_window_samples_per_freq,
+        n_tapers_per_freq,
+        inv_n_tapers_per_freq,
+        fft_plan_padded_batch,
+        ifft_plan_padded_batch,
+        tapered_wavelet_ffts,
+        df_lock,
+        power_df,
+        phase_df,
+        gpu_buffers,
     )
         gpu_active = !isnothing(gpu_buffers)
         if gpu_active
@@ -310,13 +329,13 @@ function tf_multitaper(
             complex_accum_trials_gpu = gpu_buffers.complex_accum_trials_gpu
             power_accum_avg_gpu = gpu_buffers.power_accum_avg_gpu
             complex_accum_avg_gpu = gpu_buffers.complex_accum_avg_gpu
-            
+
             adjusted_indices_gpu = gpu_buffers.adjusted_indices_gpu
             extracted_power_gpu = gpu_buffers.extracted_power_gpu
             sum_power_gpu = gpu_buffers.sum_power_gpu
             sum_complex_gpu = gpu_buffers.sum_complex_gpu
             adjusted_indices_cpu = Vector{Int}(undef, n_times)
-            
+
             if return_trials
                 fill!(eegpower_trials_gpu, 0.0)
                 return_phase && fill!(eegconv_trials_gpu, 0.0im)
@@ -325,78 +344,84 @@ function tf_multitaper(
                 return_phase && fill!(eegconv_avg_gpu, 0.0im)
             end
         else
-            local eegpower_trials::Array{Float64,3} = return_trials ? zeros(Float64, n_trials, num_frex, n_times) : Array{Float64,3}(undef, 0, 0, 0)
-            local eegconv_trials::Array{ComplexF64,3} = (return_trials && return_phase) ? zeros(ComplexF64, n_trials, num_frex, n_times) : Array{ComplexF64,3}(undef, 0, 0, 0)
+            local eegpower_trials::Array{Float64,3} =
+                return_trials ? zeros(Float64, n_trials, num_frex, n_times) : Array{Float64,3}(undef, 0, 0, 0)
+            local eegconv_trials::Array{ComplexF64,3} =
+                (return_trials && return_phase) ? zeros(ComplexF64, n_trials, num_frex, n_times) : Array{ComplexF64,3}(undef, 0, 0, 0)
             local eegpower_avg::Matrix{Float64} = return_trials ? Matrix{Float64}(undef, 0, 0) : zeros(Float64, num_frex, n_times)
-            local eegconv_avg::Matrix{ComplexF64} = (!return_trials && return_phase) ? zeros(ComplexF64, num_frex, n_times) : Matrix{ComplexF64}(undef, 0, 0)
-            
-            local power_accum_trials::Matrix{Float64} = return_trials ? Matrix{Float64}(undef, n_trials, n_times) : Matrix{Float64}(undef, 0, 0)
-            local complex_accum_trials::Matrix{ComplexF64} = (return_trials && return_phase) ? Matrix{ComplexF64}(undef, n_trials, n_times) : Matrix{ComplexF64}(undef, 0, 0)
+            local eegconv_avg::Matrix{ComplexF64} =
+                (!return_trials && return_phase) ? zeros(ComplexF64, num_frex, n_times) : Matrix{ComplexF64}(undef, 0, 0)
+
+            local power_accum_trials::Matrix{Float64} =
+                return_trials ? Matrix{Float64}(undef, n_trials, n_times) : Matrix{Float64}(undef, 0, 0)
+            local complex_accum_trials::Matrix{ComplexF64} =
+                (return_trials && return_phase) ? Matrix{ComplexF64}(undef, n_trials, n_times) : Matrix{ComplexF64}(undef, 0, 0)
             local power_accum_avg::Vector{Float64} = return_trials ? Vector{Float64}(undef, 0) : Vector{Float64}(undef, n_times)
-            local complex_accum_avg::Vector{ComplexF64} = (!return_trials && return_phase) ? Vector{ComplexF64}(undef, n_times) : Vector{ComplexF64}(undef, 0)
+            local complex_accum_avg::Vector{ComplexF64} =
+                (!return_trials && return_phase) ? Vector{ComplexF64}(undef, n_times) : Vector{ComplexF64}(undef, 0)
         end
-        
-        local_data_padded = Matrix{Float64}(undef, n_trials, n_samples_padded)
-        local_data_fft = Matrix{ComplexF64}(undef, n_trials, n_samples_padded)
-        local_conv_result = Matrix{ComplexF64}(undef, n_trials, n_samples_padded)
-        local_trial_signals = Matrix{Float64}(undef, n_trials, n_samples_per_epoch)
-        
+
+        local_data_padded = Matrix{Float64}(undef, n_samples_padded, n_trials)
+        local_data_fft = Matrix{ComplexF64}(undef, n_samples_padded, n_trials)
+        local_conv_result = Matrix{ComplexF64}(undef, n_samples_padded, n_trials)
+        local_trial_signals = Matrix{Float64}(undef, n_samples_per_epoch, n_trials)
+
         for trial_idx = 1:n_trials
             col = dat.data[trial_idx][!, channel]
             if col isa Vector{Float64}
                 col_f64 = col::Vector{Float64}
                 @inbounds @simd for i = 1:n_samples_per_epoch
-                    local_trial_signals[trial_idx, i] = col_f64[i]
+                    local_trial_signals[i, trial_idx] = col_f64[i]
                 end
             else
                 @inbounds @simd for i = 1:n_samples_per_epoch
-                    local_trial_signals[trial_idx, i] = Float64(col[i])
+                    local_trial_signals[i, trial_idx] = Float64(col[i])
                 end
             end
         end
-        
-        fill!(local_data_padded, 0.0)
-        
-        @inbounds for j = 1:n_padded_samples
-            local src_j
-            if j <= n_pre_pad
-                src_j = n_samples_per_epoch - j + 1
-            elseif j > n_pre_pad + n_samples_per_epoch
-                idx_in_post = j - (n_pre_pad + n_samples_per_epoch)
-                src_j = n_samples_per_epoch - idx_in_post
-            else
-                src_j = j - n_pre_pad
-            end
 
-            for i = 1:n_trials
-                local_data_padded[i, j] = local_trial_signals[i, src_j]
+        fill!(local_data_padded, 0.0)
+
+        @inbounds for trial_idx = 1:n_trials
+            for j = 1:n_padded_samples
+                local src_j
+                if j <= n_pre_pad
+                    src_j = n_samples_per_epoch - j + 1
+                elseif j > n_pre_pad + n_samples_per_epoch
+                    idx_in_post = j - (n_pre_pad + n_samples_per_epoch)
+                    src_j = n_samples_per_epoch - idx_in_post
+                else
+                    src_j = j - n_pre_pad
+                end
+
+                local_data_padded[j, trial_idx] = local_trial_signals[src_j, trial_idx]
             end
         end
-        
+
         @inbounds @simd for i in eachindex(local_data_padded)
             local_data_fft[i] = ComplexF64(local_data_padded[i])
         end
-        
+
         if gpu_active
             copyto!(local_data_fft_gpu, local_data_fft)
-            fft_plan_padded_batch * local_data_fft_gpu
+            mul!(local_data_fft_gpu, fft_plan_padded_batch, local_data_fft_gpu)
         else
-            fft_plan_padded_batch * local_data_fft
+            mul!(local_data_fft, fft_plan_padded_batch, local_data_fft)
         end
-        
+
 
         for fi = 1:num_frex
             n_window_samples = n_window_samples_per_freq[fi]
             n_tapers = n_tapers_per_freq[fi]
             inv_n_tapers = inv_n_tapers_per_freq[fi]
-            
+
             if gpu_active
                 half_window = n_window_samples ÷ 2
                 for ti_idx = 1:n_times
                     adjusted_indices_cpu[ti_idx] = min(max(time_indices[ti_idx] + n_pre_pad + half_window, 1), n_samples_padded)
                 end
                 copyto!(adjusted_indices_gpu, adjusted_indices_cpu)
-                
+
                 if return_trials
                     fill!(power_accum_trials_gpu, 0.0)
                     return_phase && fill!(complex_accum_trials_gpu, 0.0im)
@@ -413,48 +438,47 @@ function tf_multitaper(
                     return_phase && fill!(complex_accum_avg, 0.0im)
                 end
             end
-            
+
             for taper_idx = 1:n_tapers
                 tapered_wavelet_fft = tapered_wavelet_ffts[fi][taper_idx]
                 norm_factor = sqrt(2.0 / n_window_samples)
                 half_window = n_window_samples ÷ 2
-                
+
                 if gpu_active
                     copyto!(gpu_buffers.curr_wavelet_gpu, tapered_wavelet_fft)
-                    local_conv_result_gpu .= local_data_fft_gpu .* transpose(gpu_buffers.curr_wavelet_gpu)
-                    ifft_plan_padded_batch * local_conv_result_gpu
+                    local_conv_result_gpu .= local_data_fft_gpu .* gpu_buffers.curr_wavelet_gpu
+                    mul!(local_conv_result_gpu, ifft_plan_padded_batch, local_conv_result_gpu)
                     local_conv_result_gpu .*= norm_factor
-                    
-                    extracted_gpu = @view local_conv_result_gpu[:, adjusted_indices_gpu]
-                    
+
+                    extracted_gpu = @view local_conv_result_gpu[adjusted_indices_gpu, :]
+
                     if return_trials
-                        power_accum_trials_gpu .+= abs2.(extracted_gpu)
+                        power_accum_trials_gpu .+= transpose(abs2.(extracted_gpu))
                         if return_phase
-                            complex_accum_trials_gpu .+= extracted_gpu
+                            complex_accum_trials_gpu .+= transpose(extracted_gpu)
                         end
                     else
                         extracted_power_gpu .= abs2.(extracted_gpu)
                         sum!(sum_power_gpu, extracted_power_gpu)
                         power_accum_avg_gpu .+= vec(sum_power_gpu)
-                        
+
                         if return_phase
                             sum!(sum_complex_gpu, extracted_gpu)
                             complex_accum_avg_gpu .+= vec(sum_complex_gpu)
                         end
                     end
                 else
-                    @inbounds for i = 1:n_samples_padded
-                        wv = tapered_wavelet_fft[i]
-                        @simd for trial_idx = 1:n_trials
-                            local_conv_result[trial_idx, i] = local_data_fft[trial_idx, i] * wv
+                    @inbounds for trial_idx = 1:n_trials
+                        @simd for i = 1:n_samples_padded
+                            local_conv_result[i, trial_idx] = local_data_fft[i, trial_idx] * tapered_wavelet_fft[i]
                         end
                     end
-                    ifft_plan_padded_batch * local_conv_result
-                    
+                    mul!(local_conv_result, ifft_plan_padded_batch, local_conv_result)
+
                     @inbounds @simd for i in eachindex(local_conv_result)
                         local_conv_result[i] *= norm_factor
                     end
-                    
+
                     @inbounds for ti_idx = 1:n_times
                         sample_idx = time_indices[ti_idx]
                         adjusted_idx = sample_idx + n_pre_pad + half_window
@@ -463,23 +487,34 @@ function tf_multitaper(
                         elseif adjusted_idx > n_samples_padded
                             adjusted_idx = n_samples_padded
                         end
-                        conv_vals = @view local_conv_result[:, adjusted_idx]
-                        
+
                         if return_trials
-                            power_accum_trials[:, ti_idx] .+= abs2.(conv_vals)
-                            if return_phase
-                                complex_accum_trials[:, ti_idx] .+= conv_vals
+                            @inbounds @simd for trial_idx = 1:n_trials
+                                val = local_conv_result[adjusted_idx, trial_idx]
+                                power_accum_trials[trial_idx, ti_idx] += abs2(val)
+                                if return_phase
+                                    complex_accum_trials[trial_idx, ti_idx] += val
+                                end
                             end
                         else
-                            power_accum_avg[ti_idx] += sum(abs2, conv_vals)
+                            power_sum = 0.0
+                            conv_sum = 0.0im
+                            @inbounds @simd for trial_idx = 1:n_trials
+                                val = local_conv_result[adjusted_idx, trial_idx]
+                                power_sum += abs2(val)
+                                if return_phase
+                                    conv_sum += val
+                                end
+                            end
+                            power_accum_avg[ti_idx] += power_sum
                             if return_phase
-                                complex_accum_avg[ti_idx] += sum(conv_vals)
+                                complex_accum_avg[ti_idx] += conv_sum
                             end
                         end
                     end
                 end
             end
-            
+
             if gpu_active
                 if return_trials
                     @views eegpower_trials_gpu[:, fi, :] .= power_accum_trials_gpu .* inv_n_tapers
@@ -571,19 +606,57 @@ function tf_multitaper(
     if gpu_active
         for channel in selected_channels
             _process_multitaper_channel!(
-                channel, dat, n_trials, n_samples_per_epoch, n_padded_samples, n_samples_padded, num_frex,
-                return_trials, return_phase, filter_edges, pad, n_times, time_indices,
-                n_window_samples_per_freq, n_tapers_per_freq, inv_n_tapers_per_freq,
-                fft_plan_padded_batch, ifft_plan_padded_batch, tapered_wavelet_ffts, df_lock, power_df, phase_df, gpu_buffers
+                channel,
+                dat,
+                n_trials,
+                n_samples_per_epoch,
+                n_padded_samples,
+                n_samples_padded,
+                num_frex,
+                return_trials,
+                return_phase,
+                filter_edges,
+                pad,
+                n_times,
+                time_indices,
+                n_window_samples_per_freq,
+                n_tapers_per_freq,
+                inv_n_tapers_per_freq,
+                fft_plan_padded_batch,
+                ifft_plan_padded_batch,
+                tapered_wavelet_ffts,
+                df_lock,
+                power_df,
+                phase_df,
+                gpu_buffers,
             )
         end
     else
         Threads.@threads for channel in selected_channels
             _process_multitaper_channel!(
-                channel, dat, n_trials, n_samples_per_epoch, n_padded_samples, n_samples_padded, num_frex,
-                return_trials, return_phase, filter_edges, pad, n_times, time_indices,
-                n_window_samples_per_freq, n_tapers_per_freq, inv_n_tapers_per_freq,
-                fft_plan_padded_batch, ifft_plan_padded_batch, tapered_wavelet_ffts, df_lock, power_df, phase_df, gpu_buffers
+                channel,
+                dat,
+                n_trials,
+                n_samples_per_epoch,
+                n_padded_samples,
+                n_samples_padded,
+                num_frex,
+                return_trials,
+                return_phase,
+                filter_edges,
+                pad,
+                n_times,
+                time_indices,
+                n_window_samples_per_freq,
+                n_tapers_per_freq,
+                inv_n_tapers_per_freq,
+                fft_plan_padded_batch,
+                ifft_plan_padded_batch,
+                tapered_wavelet_ffts,
+                df_lock,
+                power_df,
+                phase_df,
+                gpu_buffers,
             )
         end
     end

@@ -214,7 +214,7 @@ function _collect_permutation_t_matrices_gpu(prepared::StatisticalData, n_permut
         D_gpu = gpu_array(Float32.(D_cpu)) # n_participants x n_features
 
         # Sum of squares is invariant
-        sum_sq_D = sum(D_gpu .^ 2, dims=1) # 1 x n_features
+        sum_sq_D = sum(D_gpu .^ 2, dims = 1) # 1 x n_features
 
         # Random sign matrix S (+1 or -1)
         S_cpu = rand([-1.0f0, 1.0f0], n_permutations, n_participants)
@@ -227,7 +227,7 @@ function _collect_permutation_t_matrices_gpu(prepared::StatisticalData, n_permut
 
         # var = (sum(x^2)/n - mean^2) * n/(n-1)
         var_D_perm = @. (sum_sq_D / Float32(n_participants) - mean_D_perm^2) * (Float32(n_participants) / Float32(n_participants - 1))
-        
+
         # Avoid negative variance due to floating point precision
         var_D_perm = max.(var_D_perm, 0.0f0)
 
@@ -253,8 +253,8 @@ function _collect_permutation_t_matrices_gpu(prepared::StatisticalData, n_permut
         X_gpu = gpu_array(Float32.(X_cpu)) # n_total x n_features
         X2_gpu = X_gpu .^ 2
 
-        sum_tot = sum(X_gpu, dims=1) # 1 x n_features
-        sum_sq_tot = sum(X2_gpu, dims=1) # 1 x n_features
+        sum_tot = sum(X_gpu, dims = 1) # 1 x n_features
+        sum_sq_tot = sum(X2_gpu, dims = 1) # 1 x n_features
 
         # Generate binary indicator matrix M on CPU
         M_cpu = zeros(Float32, n_permutations, n_total)

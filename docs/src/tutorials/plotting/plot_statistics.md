@@ -2,20 +2,20 @@
 
 This demo shows how to visualise ERP statistical test results, including condition comparisons, significance markers, and t-values.
 
-### Why Plot Statistics?
+## Why Plot Statistics?
 
 - **Identify significant differences** — see where conditions diverge with corrected significance bars
 - **Inspect effect size** — overlay difference waves and t-statistics
 - **Compare methods** — works with both analytic (t-test) and permutation test results
 
-### Key Functions
+## Key Functions
 
 | Function | Purpose |
 | --- | --- |
 | `plot_erp_stats(result, channel_selection=channels(:Cz))` | Plot analytic test results |
 | `plot_erp_stats(perm_result, channel_selection=channels(:Cz))` | Plot permutation test results |
 
-### Key Parameters
+## Key Parameters
 
 | Parameter | Default | Description |
 | --- | --- | --- |
@@ -30,7 +30,7 @@ This demo shows how to visualise ERP statistical test results, including conditi
 | `significance_position` | `:auto` | `:auto`, `:bottom`, `:zero`, or a `Float64` |
 | `significance_color` | `(:gray, 0.6)` | Colour for significance bars |
 
-### What You'll Learn
+## What You'll Learn
 
 1. Plotting ERP waveforms with significance markers
 2. Adding difference waves and t-value overlays

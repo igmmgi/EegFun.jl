@@ -1691,20 +1691,16 @@ end
 
 # GPU versions of Picard
 # GPU native implementation of Picard Y-dependent loss
-function _picard_y_loss_gpu(
-    Y_gpu::AbstractMatrix{T},
-    signs_gpu::AbstractVector{T},
-    extended::Bool
-) where {T<:AbstractFloat}
+function _picard_y_loss_gpu(Y_gpu::AbstractMatrix{T}, signs_gpu::AbstractVector{T}, extended::Bool) where {T<:AbstractFloat}
     N, T_len = size(Y_gpu)
     s = reshape(signs_gpu, N, 1)
-    
+
     if extended
         val = sum(@. s * (abs(Y_gpu) + log1p(exp(T(-2.0) * abs(Y_gpu)))) + T(0.5) * Y_gpu^2)
     else
         val = sum(@. s * (abs(Y_gpu) + log1p(exp(T(-2.0) * abs(Y_gpu)))))
     end
-    
+
     return val / T(T_len)
 end
 # List-based overload for GPU path (GPU arrays can't use the pre-allocated LBFGSBuffer)
@@ -2311,12 +2307,11 @@ function update_amica_parameters!(
     scale .*= sqrt.(wa.sum_z ./ wa.dbeta_denom)
 
     if upd_shape
-        shape .=
-            clamp.(
-                shape .+ (shapelrate .* (1 .- (shape ./ SpecialFunctions.digamma.(1 .+ 1 ./ shape)) .* wa.drho_numer ./ wa.sum_z)),
-                minrho,
-                maxrho,
-            )
+        shape .= clamp.(
+            shape .+ (shapelrate .* (1 .- (shape ./ SpecialFunctions.digamma.(1 .+ 1 ./ shape)) .* wa.drho_numer ./ wa.sum_z)),
+            minrho,
+            maxrho,
+        )
     end
 
     return LL_iter
@@ -2502,18 +2497,7 @@ function amica_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String; n
 
     # Main loop
     if gpu_active
-        LL_gpu = _amica_optimize_gpu!(
-            dat_ica_t,
-            A,
-            LLdetS,
-            scale,
-            location,
-            shape,
-            proportions,
-            m,
-            params,
-            lrate,
-        )
+        LL_gpu = _amica_optimize_gpu!(dat_ica_t, A, LLdetS, scale, location, shape, proportions, m, params, lrate)
         LL .= LL_gpu
     else
         for iter = 1:maxiter
@@ -2622,33 +2606,33 @@ function _amica_optimize_gpu!(
     lrate::AmicaLearningRate{Float64},
 )
     N, n = size(dat_ica_t)
-    
+
     dat_gpu = gpu_array(Float32.(dat_ica_t))
     A = gpu_array(Float32.(A_cpu))
-    
+
     # Preallocate GPU full-batch arrays
     y = gpu_array(zeros(Float32, N, n, m))
     y_rho = gpu_array(zeros(Float32, N, n, m))
     Q = gpu_array(zeros(Float32, N, n, m))
     z = gpu_array(zeros(Float32, N, n, m))
     fp = gpu_array(zeros(Float32, N, n, m))
-    
+
     qconst_cpu = zeros(Float32, 1, n, m)
     source_signals = gpu_array(zeros(Float32, N, n))
-    
+
     scale = gpu_array(Float32.(scale_cpu))
     location = gpu_array(Float32.(location_cpu))
     shape = gpu_array(Float32.(shape_cpu))
     proportions = gpu_array(Float32.(proportions_cpu))
-    
+
     # We will reshape these to 1 x n x m during broadcasting
     scale_3d = reshape(scale, 1, n, m)
     location_3d = reshape(location, 1, n, m)
     shape_3d = reshape(shape, 1, n, m)
     proportions_3d = reshape(proportions, 1, n, m)
-    
+
     dA = gpu_array(zeros(Float32, n, n))
-    
+
     LL = fill(-Inf, params.max_iter > 0 ? params.max_iter : 2000)
     do_newton = true
     no_newton = false
@@ -2659,70 +2643,73 @@ function _amica_optimize_gpu!(
     for iter = 1:maxiter
         W_c = inv(A_cpu)
         W = gpu_array(Float32.(W_c))
-        
+
         mul!(source_signals, dat_gpu, transpose(W))
-        
+
         # We need qconst
         for j = 1:m, i = 1:n
-            qconst_cpu[1, i, j] = -log(2f0) - SpecialFunctions.loggamma(1f0 + 1f0 / Float32(shape_cpu[i, j])) + log(Float32(proportions_cpu[i, j])) + log(Float32(scale_cpu[i, j]))
+            qconst_cpu[1, i, j] =
+                -log(2.0f0) - SpecialFunctions.loggamma(1.0f0 + 1.0f0 / Float32(shape_cpu[i, j])) +
+                log(Float32(proportions_cpu[i, j])) +
+                log(Float32(scale_cpu[i, j]))
         end
         qconst = gpu_array(qconst_cpu)
-        
+
         ss_3d = reshape(source_signals, N, n, 1)
-        
+
         # y = scale * (source_signals - location)
         @. y = scale_3d * (ss_3d - location_3d)
-        
+
         # y_rho = exp((shape - 1.0) * log(abs(y)))
         @. y_rho = exp((shape_3d - 1.0f0) * log(max(abs(y), 1.0f-16)))
-        
+
         # Q = qconst - (y_rho * abs(y))
         @. Q = qconst - (y_rho * abs(y))
-        
-        Qmax = maximum(Q, dims=3)
-        
+
+        Qmax = maximum(Q, dims = 3)
+
         scratch3 = exp.(Q .- Qmax)
-        logexp = log.(sum(scratch3, dims=3)) .+ Qmax
-        
+        logexp = log.(sum(scratch3, dims = 3)) .+ Qmax
+
         @. z = exp(Q - logexp) + 1.0f-15
-        
-        zsum = sum(z, dims=3)
+
+        zsum = sum(z, dims = 3)
         @. z = z / zsum
-        
+
         @. fp = y_rho * sign(y) * shape_3d
-        
+
         sc = @. y_rho * abs(y)
         sc = @. ifelse(sc >= 1.0f-16, z * log(sc) * sc, 0.0f0)
-        drho_numer = dropdims(sum(sc, dims=1), dims=1) # n x m
-        
-        g_block_sum = sum(scale_3d .* z .* fp, dims=3) # N x n x 1
-        g_times_sources = transpose(dropdims(g_block_sum, dims=3)) * source_signals # n x n
-        
-        newton_sigma2 = dropdims(sum(source_signals .^ 2, dims=1), dims=1) ./ Float32(N) # n
-        
-        sum_z = dropdims(sum(z, dims=1), dims=1) # n x m
-        dmu_numer = dropdims(sum(fp .* z, dims=1), dims=1) # n x m
-        kp = dropdims(sum(fp .* z .* fp, dims=1), dims=1) # n x m
-        
+        drho_numer = dropdims(sum(sc, dims = 1), dims = 1) # n x m
+
+        g_block_sum = sum(scale_3d .* z .* fp, dims = 3) # N x n x 1
+        g_times_sources = transpose(dropdims(g_block_sum, dims = 3)) * source_signals # n x n
+
+        newton_sigma2 = dropdims(sum(source_signals .^ 2, dims = 1), dims = 1) ./ Float32(N) # n
+
+        sum_z = dropdims(sum(z, dims = 1), dims = 1) # n x m
+        dmu_numer = dropdims(sum(fp .* z, dims = 1), dims = 1) # n x m
+        kp = dropdims(sum(fp .* z .* fp, dims = 1), dims = 1) # n x m
+
         mask = shape_3d .<= 2.0f0
         y_safe = @. ifelse(y == 0.0f0, 1.0f-16, y)
-        
+
         dmu_denom_1 = @. (z * fp / y_safe) * scale_3d
         dmu_denom_2 = @. (z * fp * fp) * scale_3d
-        dmu_denom = dropdims(sum(ifelse.(mask, dmu_denom_1, dmu_denom_2), dims=1), dims=1)
-        
-        dbeta_denom = dropdims(sum(ifelse.(mask, fp .* z .* y, 0.0f0), dims=1), dims=1)
-        dlambda_numer = dropdims(sum(z .* (fp .* y .- 1.0f0).^2, dims=1), dims=1)
-        
+        dmu_denom = dropdims(sum(ifelse.(mask, dmu_denom_1, dmu_denom_2), dims = 1), dims = 1)
+
+        dbeta_denom = dropdims(sum(ifelse.(mask, fp .* z .* y, 0.0f0), dims = 1), dims = 1)
+        dlambda_numer = dropdims(sum(z .* (fp .* y .- 1.0f0) .^ 2, dims = 1), dims = 1)
+
         ldet = -logabsdet(A_cpu)[1]
         Lt_sum = sum(logexp) # scalar
         Lt = Float32(ldet + LLdetS) * Float32(N) + Lt_sum
         LL_iter = Lt / (N * n)
         LL[iter] = Float64(LL_iter)
-        
+
         @. dA = -g_times_sources / Float32(N)
         dA[diagind(dA)] .+= 1.0f0
-        
+
         # Convert accumulators to Float64
         sum_z_c = Float64.(Array(sum_z))
         dmu_numer_c = Float64.(Array(dmu_numer))
@@ -2732,36 +2719,41 @@ function _amica_optimize_gpu!(
         kp_c = Float64.(Array(kp))
         dlambda_numer_c = Float64.(Array(dlambda_numer))
         newton_sigma2_c = Float64.(Array(newton_sigma2))
-        
+
         if m > 1
             @. proportions_cpu = ifelse(sum_z_c >= 0.0, sum_z_c / N, 1.0 / N)
         end
-        
+
         newton_active = do_newton && iter >= newt_start_iter
         if newton_active
             dkap = @. (kp_c / (proportions_cpu * N)) * scale_cpu^2
-            newton_kappa_c = vec(sum(proportions_cpu .* dkap, dims=2))
-            newton_lambda_c = vec(sum(proportions_cpu .* (dlambda_numer_c ./ sum_z_c .+ dkap .* location_cpu.^2), dims=2))
+            newton_kappa_c = vec(sum(proportions_cpu .* dkap, dims = 2))
+            newton_lambda_c = vec(sum(proportions_cpu .* (dlambda_numer_c ./ sum_z_c .+ dkap .* location_cpu .^ 2), dims = 2))
         else
             newton_kappa_c = zeros(Float64, n)
             newton_lambda_c = zeros(Float64, n)
         end
-        
+
         if m > 1
             @. location_cpu += dmu_numer_c / dmu_denom_c
         end
-        
+
         @. scale_cpu *= sqrt(sum_z_c / dbeta_denom_c)
-        
+
         if update_shape
-            @. shape_cpu = clamp(shape_cpu + (lrate.shapelrate * (1.0 - (shape_cpu / SpecialFunctions.digamma(1.0 + 1.0 / shape_cpu)) * drho_numer_c / sum_z_c)), lrate.minrho, lrate.maxrho)
+            @. shape_cpu = clamp(
+                shape_cpu +
+                (lrate.shapelrate * (1.0 - (shape_cpu / SpecialFunctions.digamma(1.0 + 1.0 / shape_cpu)) * drho_numer_c / sum_z_c)),
+                lrate.minrho,
+                lrate.maxrho,
+            )
         end
-        
+
         scale .= gpu_array(Float32.(scale_cpu))
         location .= gpu_array(Float32.(location_cpu))
         shape .= gpu_array(Float32.(shape_cpu))
         proportions .= gpu_array(Float32.(proportions_cpu))
-        
+
         dA_c = Float64.(Array(dA))
         no_newton = update_amica_mixing!(
             A_cpu,
@@ -2773,15 +2765,15 @@ function _amica_optimize_gpu!(
             do_newton,
             no_newton,
             newt_start_iter,
-            lrate
+            lrate,
         )
-        
+
         reparameterize_amica!(A_cpu, location_cpu, scale_cpu)
-        
+
         A .= gpu_array(Float32.(A_cpu))
         location .= gpu_array(Float32.(location_cpu))
         scale .= gpu_array(Float32.(scale_cpu))
-        
+
         if iter > 1
             if isnan(LL[iter])
                 @warn("Got NaN! Exiting ...")
@@ -2794,12 +2786,12 @@ function _amica_optimize_gpu!(
                 break
             end
         end
-        
+
         if iter == 1 || iter % 10 == 0
             @info "AMICA iter $iter, LL = $(LL[iter])"
         end
     end
-    
+
     return LL
 end
 
@@ -3252,7 +3244,7 @@ function identify_eog_components(
                 max_corr_val = 0.0
                 for lag in lags
                     sum_xy = 0.0
-                    @inbounds @simd for i = max(1, 1 - lag):min(n_s, n_s - lag)
+                    @inbounds @simd for i = max(1, 1-lag):min(n_s, n_s-lag)
                         sum_xy += (eog_buf[i] - m_e) * (comp_buf[i+lag] - m_c)
                     end
                     c = abs(sum_xy / denom)

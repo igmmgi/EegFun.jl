@@ -2,13 +2,13 @@
 
 This demo shows how to change the sampling rate of EEG data through resampling.
 
-### What is Resampling?
+## What is Resampling?
 
 Resampling changes the number of samples per second in your data. EegFun's `resample` function supports **downsampling** — reducing the sampling rate by an integer factor (e.g., 2048 Hz → 512 Hz with factor 2).
 
 > **Note**: Upsampling (increasing the sampling rate) is not currently supported.
 
-### Why Resample?
+## Why Resample?
 
 **Downsampling benefits**:
 
@@ -17,7 +17,7 @@ Resampling changes the number of samples per second in your data. EegFun's `resa
 - **Match dataset requirements**: Some analyses expect specific rates
 - **Remove unnecessary detail**: Most ERP information is below 50 Hz
 
-### The Nyquist Theorem
+## The Nyquist Theorem
 
 The sampling rate must be **at least 2× the highest frequency** in your signal:
 
@@ -31,7 +31,7 @@ The sampling rate must be **at least 2× the highest frequency** in your signal:
 - **250-500 Hz** sampling is typically adequate
 - Higher rates needed for high-frequency oscillations (gamma: 30-100 Hz)
 
-### Anti-Aliasing
+## Anti-Aliasing
 
 When downsampling, **always lowpass filter first** to prevent aliasing:
 
@@ -50,7 +50,7 @@ dat_new = resample(dat, 4)  # Now safe to downsample
 
 EegFun's `resample` function uses simple decimation (keeping every `factor`-th sample) — it does **not** apply anti-aliasing automatically. Always lowpass filter before downsampling to prevent aliasing artifacts.
 
-### Downsampling Factors
+## Downsampling Factors
 
 The demo shows downsampling by factors of 2 and 4:
 
@@ -69,7 +69,7 @@ dat_new = resample(dat, 4)  # Divide rate by 4 (e.g., 2048 → 512 Hz)
 | 1024 Hz | 2 | 512 Hz |
 | 512 Hz | 2 | 256 Hz |
 
-### Trigger Preservation
+## Trigger Preservation
 
 The demo verifies that triggers are preserved during resampling:
 
@@ -80,7 +80,7 @@ trigger_count(dat_new)  # Should match after resampling
 
 Trigger timing is automatically adjusted to match the new sampling rate.
 
-### When to Resample
+## When to Resample
 
 **Resample early** in your pipeline:
 
@@ -94,7 +94,7 @@ This minimizes processing time for subsequent steps.
 
 **Don't resample after epoching** unless necessary - it's more efficient to resample continuous data first.
 
-### Workflow Summary
+## Workflow Summary
 
 This demo demonstrates:
 
@@ -104,7 +104,7 @@ This demo demonstrates:
 4. **Verify new rate** matches expected value
 5. **Verify triggers preserved** with `trigger_count()`
 
-### Best Practices
+## Best Practices
 
 **Choose appropriate target rate**:
 

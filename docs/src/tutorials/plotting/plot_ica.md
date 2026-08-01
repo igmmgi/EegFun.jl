@@ -2,20 +2,20 @@
 
 This demo shows how to visualise ICA component topographies as scalp maps.
 
-### Why Plot ICA Topographies?
+## Why Plot ICA Topographies?
 
 - **Identify artefact components** — blink and eye movement components have characteristic frontal patterns
 - **Verify decomposition** — well-separated components should have distinct, interpretable scalp maps
 - **Select components** — focus on a subset of components for inspection or removal
 
-### Key Functions
+## Key Functions
 
 | Function | Purpose | Typical Use |
 | --- | --- | --- |
 | `plot_topography(ica)` | Plot all components | Full overview |
 | `plot_topography(ica, component_selection=...)` | Plot selected components | Focused inspection |
 
-### Key Parameters
+## Key Parameters
 
 | Parameter | Default | Description |
 | --- | --- | --- |
@@ -25,7 +25,7 @@ This demo shows how to visualise ICA component topographies as scalp maps.
 | `colormap` | `:RdBu` | Colour map for the topography |
 | `colorbar_plot` | `true` | Show colorbars |
 
-### What You'll Learn
+## What You'll Learn
 
 1. Displaying all ICA component topographies in a grid
 2. Selecting specific components by index or range

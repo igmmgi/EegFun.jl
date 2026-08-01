@@ -2,7 +2,7 @@
 
 This demo demonstrates creating topographic scalp maps to visualize the spatial distribution of EEG activity at specific time points.
 
-### What are Topographic Maps?
+## What are Topographic Maps?
 
 Topographic maps (topoplots) show the spatial distribution of electrical activity across the scalp:
 
@@ -10,7 +10,7 @@ Topographic maps (topoplots) show the spatial distribution of electrical activit
 - **Interpolated surfaces**: Smooth maps between discrete electrode positions
 - **Time-specific snapshots**: Activity at particular latencies or time intervals
 
-### Interpolation Methods
+## Interpolation Methods
 
 **`:thin_plate`**: Thin-plate spline (default; smooth, natural-looking)
 
@@ -24,7 +24,7 @@ Topographic maps (topoplots) show the spatial distribution of electrical activit
 
 > **Note**: All interpolation methods except `:spherical_spline` are implemented using the [ScatteredInterpolation.jl](https://github.com/eljungsk/ScatteredInterpolation.jl) package. The spherical spline method uses a custom implementation based on Perrin et al. (1989).
 
-### Interpretation
+## Interpretation
 
 **Focal activity**:
 
@@ -42,7 +42,7 @@ Topographic maps (topoplots) show the spatial distribution of electrical activit
 - Cool colors (blue): Negative voltage
 - Convention may vary by field
 
-### Use Cases
+## Use Cases
 
 **Visualize ERP components**:
 
@@ -60,7 +60,7 @@ Topographic maps (topoplots) show the spatial distribution of electrical activit
 - Customizable appearance
 - Multiple time points or conditions
 
-### Customization Options
+## Customization Options
 
 **Interpolation**:
 
@@ -86,7 +86,7 @@ Topographic maps (topoplots) show the spatial distribution of electrical activit
 - Size and tick labels
 - Show/hide per plot
 
-### Working with Different Data Types
+## Working with Different Data Types
 
 **Continuous data**: Average over time interval
 
@@ -98,25 +98,25 @@ Topographic maps (topoplots) show the spatial distribution of electrical activit
 
 This demo shows topographic visualization workflows:
 
-### Basic Continuous Data
+## Basic Continuous Data
 
 - Load and preprocess data
 - Create topographic maps with different methods
 - Customize time intervals and appearance
 
-### Epoched Data
+## Epoched Data
 
 - Extract epochs from continuous data
 - Plot topographies for specific epochs
 - Customize interpolation and display
 
-### ERP Data
+## ERP Data
 
 - Average epochs into ERPs
 - Create condition-specific topographies
 - Control colorbar placement
 
-### Multi-Panel Figures
+## Multi-Panel Figures
 
 - Create custom figure layouts
 - Combine multiple topographies

@@ -2,7 +2,7 @@
 
 This demo shows how to manipulate channels by averaging groups together, computing differences between them, and deleting unwanted channels.
 
-### Key Functions
+## Key Functions
 
 | Function | Purpose | Example |
 | --- | --- | --- |
@@ -11,7 +11,7 @@ This demo shows how to manipulate channels by averaging groups together, computi
 | `channel_average!` | Average channel groups into new columns | ROI means |
 | `channel_delete!` | Remove channels from data and layout | Drop non-EEG channels |
 
-### Common Use Cases
+## Common Use Cases
 
 - **EOG channels**: `channel_difference!` calculates vEOG (Fp1/Fp2 minus IO1/IO2) and hEOG (F9 minus F10)
 - **ROI averages**: `channel_average!` creates region-of-interest means (e.g., frontal, parietal)
@@ -19,21 +19,21 @@ This demo shows how to manipulate channels by averaging groups together, computi
 
 ## Workflow Summary
 
-### Channel Difference
+## Channel Difference
 
 - Calculate EOG channels from electrode pairs
 - Create arbitrary difference channels
 
-### EOG Configuration
+## EOG Configuration
 
 - Use `EogConfig` to calculate both EOG channels in one call
 
-### Channel Averaging
+## Channel Averaging
 
 - Average channel groups with custom labels
 - Reduce dataset to only averaged channels
 
-### Channel Deletion
+## Channel Deletion
 
 - Remove single or multiple channels (mutating and non-mutating versions)
 

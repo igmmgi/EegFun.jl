@@ -2,7 +2,7 @@
 
 This demo demonstrates time-frequency analysis using the multitaper method for high-quality spectral estimation.
 
-### What is the Multitaper Method?
+## What is the Multitaper Method?
 
 The multitaper method improves spectral estimates by averaging across multiple orthogonal tapers (windows):
 
@@ -11,7 +11,7 @@ The multitaper method improves spectral estimates by averaging across multiple o
 - **Averaging**: Reduces variance while preserving spectral features
 - **Time-bandwidth product (NW)**: Controls frequency smoothing
 
-### Key Parameters
+## Key Parameters
 
 **Cycles**:
 
@@ -22,7 +22,7 @@ tf_multitaper(epochs, cycles = 5)
 ```
 
 
-### Frequency Spacing
+## Frequency Spacing
 
 **Linear spacing** (`frequencies = 1:1:40`):
 
@@ -35,7 +35,7 @@ tf_multitaper(epochs, cycles = 5)
 - Better for wide ranges (2-80 Hz)
 - Use with `ylogscale = true` for visualization
 
-### Baseline Correction
+## Baseline Correction
 
 ```julia
 plot_tf(
@@ -47,7 +47,7 @@ plot_tf(
 
 Isolates event-related changes relative to pre-stimulus baseline.
 
-### Workflow Summary
+## Workflow Summary
 
 This demo shows:
 
@@ -57,7 +57,7 @@ This demo shows:
 4. **Baseline correction**: Event-related power changes
 5. **Edge filtering**: Removing edge artifacts
 
-### Practical Tips
+## Practical Tips
 
 **Choose cycles based on needs**:
 
@@ -75,7 +75,7 @@ This demo shows:
 - Control temporal smoothness of the output
 - Smaller steps = smoother time course but slower computation
 
-### Further Reading
+## Further Reading
 
 Cohen, M. X. (2014). *Analyzing Neural Time Series Data: Theory and Practice*. Chapter 16: Multitapers
 
@@ -115,15 +115,9 @@ EegFun.plot_epochs(epochs_synthetic, channel_selection = EegFun.channels([:Chann
 spectrum = EegFun.freq_spectrum(epochs_synthetic, max_freq = 80.0)
 EegFun.plot_channel_spectrum(spectrum, channel_selection = EegFun.channels([:Channel1]))
 
-# tf_stft_fixed
-tf_data = EegFun.tf_multitaper(epochs_synthetic, frequencies = 1:1:40, cycles = 5)
+# tf_multitaper
+@time tf_data = EegFun.tf_multitaper(epochs_synthetic, frequencies = 1:1:40, cycles = 5, pad = :both, use_gpu = true)
 EegFun.plot_tf(tf_data, ylogscale = false)
-
-tf_data = EegFun.tf_multitaper(epochs_synthetic, frequencies = 1:1:40, cycles = 5)
-EegFun.plot_tf(tf_data, ylogscale = false)
-
-tf_data = EegFun.tf_multitaper(epochs_synthetic, frequencies = logrange(1, 40, length = 30), cycles = 5)
-EegFun.plot_tf(tf_data, ylogscale = true)
 
 tf_data = EegFun.tf_multitaper(epochs_synthetic, frequencies = logrange(1, 40, length = 30), cycles = 5)
 EegFun.plot_tf(tf_data, ylogscale = true)

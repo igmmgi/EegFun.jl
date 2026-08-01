@@ -2,13 +2,13 @@
 
 This demo shows how to visualise Representational Similarity Analysis (RSA) results.
 
-### What is RSA?
+## What is RSA?
 
 - **RDM** (Representational Dissimilarity Matrix) captures pairwise differences between neural representations
 - **RDM Timecourse** shows how representational structure evolves over time
 - **Model Correlations** compare observed RDMs against theoretical models
 
-### Key Functions
+## Key Functions
 
 | Function | Purpose |
 | --- | --- |
@@ -16,7 +16,7 @@ This demo shows how to visualise Representational Similarity Analysis (RSA) resu
 | `plot_rdm_timecourse(rsa_result)` | Dissimilarity over time |
 | `plot_model_correlations(rsa_result)` | Model comparison over time |
 
-### Key Parameters
+## Key Parameters
 
 | Parameter | Function | Description |
 | --- | --- | --- |
@@ -25,7 +25,7 @@ This demo shows how to visualise Representational Similarity Analysis (RSA) resu
 | `show_colorbar` | All | Show/hide colour bar |
 | `colormap` | All | Colour map for the heatmap |
 
-### What You'll Learn
+## What You'll Learn
 
 1. Plotting RDM heatmaps at specific time points or averaged
 2. Visualising dissimilarity timecourses for selected condition pairs

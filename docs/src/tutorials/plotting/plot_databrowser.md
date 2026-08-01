@@ -2,7 +2,7 @@
 
 This demo demonstrates the interactive databrowser for exploring and analyzing EEG data in real-time.
 
-### What is the Databrowser?
+## What is the Databrowser?
 
 The databrowser is an interactive visualization tool for navigating through EEG data:
 
@@ -10,7 +10,7 @@ The databrowser is an interactive visualization tool for navigating through EEG 
 - **Epoch data**: Navigate individual trials interactively
 - **Analysis settings**: Select regions, channels, and configurations visually
 
-### Key Features
+## Key Features
 
 **Interactive Navigation**:
 
@@ -33,7 +33,7 @@ The databrowser is an interactive visualization tool for navigating through EEG 
 plot_databrowser(dat, ica_result)
 ```
 
-### Analysis Settings
+## Analysis Settings
 
 The databrowser can also be used to return analysis settings for further processing:
 
@@ -48,7 +48,7 @@ Extract user-selected:
 - Channel subsets  
 - Sample masks
 
-### Keyboard Shortcuts
+## Keyboard Shortcuts
 
 | Key | Action |
 |-----|--------|
@@ -57,7 +57,7 @@ Extract user-selected:
 | **C** | Clear current selections |
 | **Arrow keys** | Navigate time intervals |
 
-### Custom Styling
+## Custom Styling
 
 Customize visual appearance:
 
@@ -68,7 +68,7 @@ plot_databrowser(dat,
 )
 ```
 
-### Working with Files
+## Working with Files
 
 Load data directly from saved files:
 
@@ -77,7 +77,7 @@ plot_databrowser("dat.jld2")                   # saved continuous data
 plot_databrowser("epochs.jld2", "ica.jld2")    # saved epochs and ica result
 ```
 
-### Common Workflows
+## Common Workflows
 
 **1. Initial Quality Control**:
 
@@ -99,7 +99,7 @@ plot_databrowser("epochs.jld2", "ica.jld2")    # saved epochs and ica result
 - Verify trigger timing
 - Check epoch boundaries
 
-### Use Cases
+## Use Cases
 
 **Interactive channel repair**:
 
@@ -119,7 +119,7 @@ plot_databrowser("epochs.jld2", "ica.jld2")    # saved epochs and ica result
 - Check rereferencing results
 - Validate artifact rejection
 
-### Workflow Summary
+## Workflow Summary
 
 This demo shows:
 

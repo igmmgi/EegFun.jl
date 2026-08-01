@@ -2,7 +2,7 @@
 
 This demo demonstrates importing BioSemi BDF files into EegFun.jl.
 
-### What is BioSemi BDF Format?
+## What is BioSemi BDF Format?
 
 BioSemi is a popular manufacturer of active electrode EEG systems. The BDF (BioSemi Data Format) is a 24-bit variant of the European Data Format (EDF) designed specifically for BioSemi's ActiveTwo and ActiveOne systems.
 
@@ -13,7 +13,7 @@ BioSemi is a popular manufacturer of active electrode EEG systems. The BDF (BioS
 - Trigger channel for event markers (last channel)
 - Standard format widely supported across analysis tools
 
-### Import Capabilities
+## Import Capabilities
 
 **Data loading**:
 
@@ -27,7 +27,7 @@ BioSemi is a popular manufacturer of active electrode EEG systems. The BDF (BioS
 - Electrode layout file matching your cap configuration
 - BioSemi systems typically use standard cap layouts (16, 32, 64, 72, or 128 channels)
 
-### Data Mapping
+## Data Mapping
 
 **EegFun.read_raw_data** loads BioSemi data, then **create_eegfun_data** converts to native EegFun types:
 
@@ -37,7 +37,7 @@ BioSemi is a popular manufacturer of active electrode EEG systems. The BDF (BioS
 
 ## Important Notes
 
-### Layout Files
+## Layout Files
 
 BioSemi doesn't embed electrode positions in the data file, so you must provide a matching layout. EegFun includes standard BioSemi layouts in `resources/layouts/biosemi/`:
 
@@ -49,7 +49,7 @@ BioSemi doesn't embed electrode positions in the data file, so you must provide 
 
 Choose the layout matching your recording setup.
 
-### Trigger Encoding
+## Trigger Encoding
 
 BioSemi encodes triggers in a dedicated Status channel using binary encoding. EegFun automatically extracts these during import, making them available via `trigger_count()` and epoch extraction functions.
 
@@ -57,17 +57,17 @@ BioSemi encodes triggers in a dedicated Status channel using binary encoding. Ee
 
 This demo shows the complete BioSemi import workflow:
 
-### Load Raw BDF Data
+## Load Raw BDF Data
 
 - Use `read_raw_data()` with path to `.bdf` file
 - Automatic format detection based on file extension
 
-### Prepare Layout
+## Prepare Layout
 
 - Load appropriate BioSemi layout file
 - Convert polar coordinates to cartesian for visualization
 
-### Create EegFun Data Structure
+## Create EegFun Data Structure
 
 - Combine raw data with layout using `create_eegfun_data()`
 - Results in `ContinuousData` ready for analysis

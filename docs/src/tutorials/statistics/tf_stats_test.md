@@ -2,7 +2,7 @@
 
 This demo shows statistical testing and topography visualization for time-frequency data, including analytic tests and cluster-based permutation tests.
 
-### Key Functions
+## Key Functions
 
 | Function | Purpose |
 | --- | --- |
@@ -17,23 +17,23 @@ This demo shows statistical testing and topography visualization for time-freque
 
 ## Workflow Summary
 
-### TF Decomposition
+## TF Decomposition
 
 - Batch compute Morlet wavelets from epoch data with `tf_morlet`
 
-### Single-Participant Visualization
+## Single-Participant Visualization
 
 - `plot_tf` for per-channel time-frequency plots with baseline correction
 - `plot_topography` for scalp maps at specific frequency bands and time windows
 
-### Group Statistics
+## Group Statistics
 
 - `prepare_stats` loads all participants and prepares for comparison (paired or independent)
 - Supports frequency selection, time intervals, and baseline correction
 - `analytic_test` for quick exploration
 - `permutation_test` with spatiotemporal clustering for robust inference
 
-### Statistical Visualization
+## Statistical Visualization
 
 - `plot_tf_stats` shows per-channel significance as contours
 - `plot_topography_stats` shows scalp topography with significance highlighting for specific frequency bands

@@ -2,7 +2,7 @@
 
 This demo demonstrates time-resolved multivariate pattern analysis (MVPA) for decoding experimental conditions from EEG data.
 
-### What is MVPA Decoding?
+## What is MVPA Decoding?
 
 MVPA uses machine learning classifiers to decode experimental conditions from spatial patterns of brain activity:
 
@@ -12,7 +12,7 @@ MVPA uses machine learning classifiers to decode experimental conditions from sp
 
 This reveals **when** and **how well** neural patterns can distinguish between experimental conditions.
 
-### Why Use Decoding?
+## Why Use Decoding?
 
 **Information content**:
 
@@ -26,7 +26,7 @@ Uses distributed activity across channels, potentially more sensitive than univa
 
 Track when discriminative information emerges, peaks, and decays across the trial.
 
-### Workflow
+## Workflow
 
 **1. Prepare data**:
 
@@ -71,7 +71,7 @@ stats_cluster = test_against_chance_cluster(all_decoded, alpha = 0.05)
 plot_decoding(grand_avg, stats)
 ```
 
-### Cross-Validation
+## Cross-Validation
 
 Decoding uses **k-fold cross-validation**:
 
@@ -83,7 +83,7 @@ Decoding uses **k-fold cross-validation**:
 
 This prevents overfitting and gives unbiased accuracy estimates.
 
-### Statistical Testing
+## Statistical Testing
 
 **Multiple Comparison Correction**:
 
@@ -97,7 +97,7 @@ This prevents overfitting and gives unbiased accuracy estimates.
 
 Identifies contiguous time intervals where decoding is above chance while controlling family-wise error rate.
 
-### Interpreting Results
+## Interpreting Results
 
 **Decoding accuracy**:
 
@@ -115,7 +115,7 @@ Identifies contiguous time intervals where decoding is above chance while contro
 
 Only interpret time points that survive statistical testing with appropriate correction.
 
-### Demo Structure
+## Demo Structure
 
 **Synthetic data**:
 
@@ -129,7 +129,7 @@ Applies decoding to actual experimental data, comparing two conditions across pa
 
 Demonstrates different statistical correction methods for comparison.
 
-### Best Practices
+## Best Practices
 
 **Data requirements**:
 

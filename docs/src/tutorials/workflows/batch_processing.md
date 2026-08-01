@@ -2,7 +2,7 @@
 
 This demo shows how to load and process multiple EEG files, manage file collections, and group results by experimental condition.
 
-### Batch Loading
+## Batch Loading
 
 EegFun provides utilities for working with multiple data files:
 
@@ -10,7 +10,7 @@ EegFun provides utilities for working with multiple data files:
 - **`read_data`**: Load a single saved data file (JLD2 format)
 - **`get_files`**: Find files matching a pattern in a directory
 
-### Grouping by Condition
+## Grouping by Condition
 
 After loading data from multiple participants, `group_by_condition` organises the results into an `OrderedDict` keyed by condition number. This is essential for:
 
@@ -18,7 +18,7 @@ After loading data from multiple participants, `group_by_condition` organises th
 - Running group-level statistics
 - Comparing conditions across participants
 
-### File Management
+## File Management
 
 Helper functions for working with data files:
 

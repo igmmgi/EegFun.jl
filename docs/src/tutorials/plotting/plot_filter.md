@@ -2,7 +2,7 @@
 
 This demo demonstrates visualizing filter frequency and phase responses to verify filter characteristics before applying them to data.
 
-### What is Filter Visualization?
+## What is Filter Visualization?
 
 Filter response plots show how a filter affects different frequencies:
 
@@ -10,7 +10,7 @@ Filter response plots show how a filter affects different frequencies:
 - **Phase response**: Time delays introduced across frequencies
 - **Cutoff characteristics**: Transition band steepness and rolloff
 
-### Why Visualize Filters?
+## Why Visualize Filters?
 
 **Verify design parameters**:
 
@@ -30,7 +30,7 @@ Filter response plots show how a filter affects different frequencies:
 - Show filter characteristics clearly
 - Support reproducibility
 
-### Filter Types Supported
+## Filter Types Supported
 
 **High-pass filters**:
 
@@ -50,7 +50,7 @@ Filter response plots show how a filter affects different frequencies:
 - Combine high-pass and low-pass
 - Focus on frequency bands of interest
 
-### Filter Methods
+## Filter Methods
 
 **IIR (Infinite Impulse Response)**:
 
@@ -66,7 +66,7 @@ Filter response plots show how a filter affects different frequencies:
 - Computationally more expensive
 - Symmetric impulse response
 
-### Visualization Features
+## Visualization Features
 
 **Reference lines**:
 
@@ -85,26 +85,26 @@ Filter response plots show how a filter affects different frequencies:
 
 This demo shows filter response visualization:
 
-### Create Filters
+## Create Filters
 
 - Lowpass IIR filter (30 Hz)
 - Highpass IIR filter (1 Hz)
 - Lowpass FIR filter (40 Hz)
 - Various cutoff frequencies
 
-### Plot Responses
+## Plot Responses
 
 - Basic magnitude response plots
 - Compare IIR vs FIR characteristics
 - Visualize different cutoffs
 
-### Customize Appearance
+## Customize Appearance
 
 - Custom colors and line widths
 - Reference lines at specific dB levels
 - Titles and styling options
 
-### Verify Characteristics
+## Verify Characteristics
 
 - Check cutoff frequency accuracy
 - Assess transition band steepness

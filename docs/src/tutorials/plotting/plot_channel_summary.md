@@ -2,7 +2,7 @@
 
 This demo shows how to compute and visualize channel summary statistics for quality control and data characterization.
 
-### What is Channel Summary?
+## What is Channel Summary?
 
 Channel summary computes aggregate statistics across time for each channel:
 
@@ -12,7 +12,7 @@ Channel summary computes aggregate statistics across time for each channel:
 
 These statistics help identify problematic channels, assess data quality, and characterize recording conditions.
 
-### Available Metrics
+## Available Metrics
 
 The `channel_summary()` function computes:
 
@@ -28,7 +28,7 @@ The `channel_summary()` function computes:
 | **range** | Max - Min |
 | **kurtosis** | Distribution tail weight |
 
-### Visualization Options
+## Visualization Options
 
 **Single Metric**:
 ```julia
@@ -48,7 +48,7 @@ plot_channel_summary(cs, :range, average_over = :epoch)
 ```
 Averages statistics across epochs before plotting
 
-### Common Use Cases
+## Common Use Cases
 
 **1. Quality Control**:
 
@@ -67,7 +67,7 @@ Averages statistics across epochs before plotting
 - **Systematic patterns**: Poor grounding, bridging between neighboring channels
 - **Single channel anomalies**: Loose connection, bad electrode
 
-### Interpretation
+## Interpretation
 
 **Healthy channels** typically show:
 
@@ -92,7 +92,7 @@ Averages statistics across epochs before plotting
 - Indicates clipping/saturation
 - Cannot be recovered, must exclude
 
-### Workflow Summary
+## Workflow Summary
 
 This demo demonstrates:
 

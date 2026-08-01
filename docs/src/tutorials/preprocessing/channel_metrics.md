@@ -2,7 +2,7 @@
 
 This demo demonstrates how to calculate and visualize channel quality metrics for identifying bad channels and detecting artifacts.
 
-### What are Channel Metrics?
+## What are Channel Metrics?
 
 Channel quality metrics quantify various characteristics of the EEG signal at each electrode. These metrics help identify problematic channels that may need repair or rejection before analysis.
 
@@ -29,7 +29,7 @@ Channel quality metrics quantify various characteristics of the EEG signal at ea
 - Identifies channels that deviate from the typical multi-channel pattern
 - Combines information from variance and correlation metrics
 
-### Use Cases
+## Use Cases
 
 **Quality control**:
 
@@ -41,20 +41,20 @@ Channel quality metrics quantify various characteristics of the EEG signal at ea
 
 This demo shows channel quality assessment workflows:
 
-### Basic Channel Metrics
+## Basic Channel Metrics
 
 - Load and preprocess raw data (average reference, high-pass filter)
 - Calculate channel joint probability metrics
 - Identify channels with extreme values
 
-### EOG Correlation Analysis
+## EOG Correlation Analysis
 
 - Compute vertical and horizontal EOG channels
 - Detect EOG onsets automatically
 - Calculate correlation between EEG channels and EOG
 - Partition bad channels into EOG-related vs. non-EOG artifacts
 
-### Metric Interpretation
+## Metric Interpretation
 
 - Add z-score columns for standardized thresholds
 - Identify channels that are artifact-related vs. bad contacts

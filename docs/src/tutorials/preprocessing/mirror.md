@@ -2,7 +2,7 @@
 
 This demo demonstrates mirror padding, a technique for extending time-series data by reflecting it at the edges.
 
-### What is Mirror Padding?
+## What is Mirror Padding?
 
 Mirror padding extends your data at the beginning and/or end by creating a reflected copy:
 
@@ -16,7 +16,7 @@ Both:         [E D C B A | A B C D E | E D C B A]
 
 This creates smooth, continuous edges that avoid discontinuities.
 
-### Why Use Mirror Padding?
+## Why Use Mirror Padding?
 
 **Edge Artifact Reduction**:
 
@@ -38,7 +38,7 @@ Mirror padding solves this by:
 2. **Filter** (artifacts now occur in padding region)
 3. **Remove padding** (discard corrupted edges, keep clean data)
 
-### Padding Options
+## Padding Options
 
 The `mirror()` function accepts three padding modes:
 
@@ -48,7 +48,7 @@ The `mirror()` function accepts three padding modes:
 | **:post** | Mirror after the end |
 | **:both** | Mirror at both ends |
 
-### Use Cases
+## Use Cases
 
 **High-pass filtering**:
 
@@ -62,7 +62,7 @@ Wavelet transforms and spectral analysis benefit from smooth edges.
 
 When processing multiple epochs sequentially, padding prevents edge artifacts between epochs.
 
-### Workflow Summary
+## Workflow Summary
 
 This demo shows:
 

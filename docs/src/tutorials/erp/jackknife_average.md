@@ -27,17 +27,18 @@ Miller, Patterson, & Ulrich (1998). Jackknife-based method for measuring LRP ons
 
 ## Workflow Summary
 
-### Single-Condition Jackknife
+## Single-Condition Jackknife
 
 - Create leave-one-out averages from a vector of participant ERPs
 
-### Batch Processing
+## Batch Processing
 
 - Process all participant files and save jackknife averages
 
-### Typical Pipeline
+## Typical Pipeline
 
 - Calculate LRP → Jackknife average → Measure onset latency → Apply correction to t-test
+
 
 ## Code Examples
 

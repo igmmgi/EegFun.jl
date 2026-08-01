@@ -2,7 +2,7 @@
 
 This demo shows how to extract quantitative measurements from ERPs and analyse them with traditional statistics using AnovaFun.
 
-### Key Functions
+## Key Functions
 
 | Function | Purpose |
 | --- | --- |
@@ -13,7 +13,7 @@ This demo shows how to extract quantitative measurements from ERPs and analyse t
 | `anova` | AnovaFun: repeated-measures or between-subject ANOVA |
 | `emmeans` / `pairwise` | AnovaFun: estimated marginal means and pairwise contrasts |
 
-### Available Measurement Types
+## Available Measurement Types
 
 | Category | Types |
 | --- | --- |
@@ -23,13 +23,13 @@ This demo shows how to extract quantitative measurements from ERPs and analyse t
 
 ## Workflow Summary
 
-### Extract Measurements
+## Extract Measurements
 
 - Use `plot_erp_measurement_gui` to explore and choose parameters interactively
 - Run `erp_measurements` to batch-extract values across all participants
 - Output is a DataFrame and a saved CSV with columns: participant, condition, channel, measurement
 
-### Traditional Statistics with AnovaFun
+## Traditional Statistics with AnovaFun
 
 - Load the CSV or use the in-memory DataFrame
 - Use `paired_ttest` for condition comparisons at specific channels

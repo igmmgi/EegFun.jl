@@ -2,7 +2,7 @@
 
 This demo demonstrates applying different re-referencing schemes to EEG data.
 
-### What is Re-referencing?
+## What is Re-referencing?
 
 Re-referencing changes the voltage baseline by subtracting a reference signal from all electrodes. Since EEG measures potential differences, the choice of reference affects:
 
@@ -10,7 +10,7 @@ Re-referencing changes the voltage baseline by subtracting a reference signal fr
 - Component interpretations
 - Statistical comparisons
 
-### Why Re-reference?
+## Why Re-reference?
 
 **Recording reference**: The reference used during data acquisition (e.g., Cz, linked mastoids, or manufacturer default)
 
@@ -18,7 +18,7 @@ Re-referencing changes the voltage baseline by subtracting a reference signal fr
 
 Re-referencing allows you to change from the recording reference to a more appropriate analysis reference.
 
-### Common Reference Schemes
+## Common Reference Schemes
 
 **Average Reference (`:avg`)**:
 
@@ -39,14 +39,14 @@ Re-referencing allows you to change from the recording reference to a more appro
 - Useful for specific research questions
 - Activity at reference site becomes invisible (single reference electrode = 0)
 
-### Best Practices
+## Best Practices
 
 - Apply the same reference across all conditions and participants
 - Re-reference **before** interpolating bad channels (bad channels affect average reference)
 - Document your reference choice in publications
 - Use average reference for high-density recordings
 
-### Re-referencing is Reversible
+## Re-referencing is Reversible
 
 You can change references multiple times. EegFun tracks the current reference and updates accordingly.
 
@@ -54,19 +54,19 @@ You can change references multiple times. EegFun tracks the current reference an
 
 This demo shows re-referencing workflows:
 
-### Continuous Data
+## Continuous Data
 
 - Load and preprocess data
 - Apply different reference schemes (`:Fp1`, `:AF7`)
 - Visualize in databrowser to see effects
 
-### Epoched Data
+## Epoched Data
 
 - Create epochs from continuous data
 - Apply references to segmented trials
 - Data structure automatically updated
 
-### ERP Data
+## ERP Data
 
 - Average epochs into ERPs
 - Apply references to averaged data

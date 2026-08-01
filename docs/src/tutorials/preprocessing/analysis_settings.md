@@ -2,7 +2,7 @@
 
 This demo shows how to save and replay preprocessing settings using `AnalysisSettings`.
 
-### What are Analysis Settings?
+## What are Analysis Settings?
 
 `AnalysisSettings` stores a preprocessing recipe that can be applied to data in one step. This is useful for:
 
@@ -10,7 +10,7 @@ This demo shows how to save and replay preprocessing settings using `AnalysisSet
 - Storing settings from interactive exploration (e.g., databrowser GUI)
 - Standardising processing across participants in a study
 
-### Tracked Settings
+## Tracked Settings
 
 An `AnalysisSettings` object can contain:
 
@@ -22,13 +22,13 @@ An `AnalysisSettings` object can contain:
 - **`removed_ica_components`**: ICA components to remove
 - **`selected_regions`**: ROI definitions
 
-### Applying Settings
+## Applying Settings
 
 - **`apply_analysis_settings!(dat, settings)`**: Apply in-place (mutating)
 - **`apply_analysis_settings(dat, settings)`**: Return a processed copy (non-mutating)
 - **`apply_analysis_settings!(dat, ica, settings)`**: Apply with ICA component removal
 
-### Analysis Info Tracking
+## Analysis Info Tracking
 
 Every EegFun data object automatically tracks its preprocessing history via `analysis_info`. This records what filters, references, and other operations have been applied.
 

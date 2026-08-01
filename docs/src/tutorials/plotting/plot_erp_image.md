@@ -2,7 +2,7 @@
 
 This demo shows how to create ERP image plots for visualizing single-trial EEG activity.
 
-### What is an ERP Image?
+## What is an ERP Image?
 
 An ERP image displays single-trial data as a 2D heatmap:
 
@@ -12,7 +12,7 @@ An ERP image displays single-trial data as a 2D heatmap:
 
 This reveals trial-to-trial variability that is hidden when viewing only averaged ERPs.
 
-### Why Use ERP Images?
+## Why Use ERP Images?
 
 **See variability beyond the average**:
 
@@ -35,7 +35,7 @@ Distinguish between:
 - **Phase-locked** activity: Consistent phase but variable amplitude
 - **Induced** activity: Not phase-locked to stimulus
 
-### Layout Options
+## Layout Options
 
 The demo shows three layout modes:
 
@@ -45,7 +45,7 @@ The demo shows three layout modes:
 | **:grid** | Channels arranged in a grid |
 | **:topo** | Channels positioned by scalp location |
 
-### Visualization Features
+## Visualization Features
 
 **Boxcar averaging**:
 
@@ -71,7 +71,7 @@ plot_erp_image(epochs, plot_erp = false)  # Hide the averaged ERP
 
 By default, the averaged ERP is plotted above the image for reference.
 
-### Interpretation
+## Interpretation
 
 **Vertical bands**:
 
@@ -89,7 +89,7 @@ High-frequency noise or lack of consistent time-locked activity.
 
 Trials with extreme values may indicate artifacts (blinks, movements, poor contact).
 
-### Workflow Summary
+## Workflow Summary
 
 This demo demonstrates:
 

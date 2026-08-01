@@ -2,7 +2,7 @@
 
 This demo demonstrates time-frequency analysis using the Short-Time Fourier Transform (STFT), a classic approach to spectrograms.
 
-### What is STFT?
+## What is STFT?
 
 STFT applies the Fast Fourier Transform (FFT) to windowed segments of the signal:
 
@@ -11,7 +11,7 @@ STFT applies the Fast Fourier Transform (FFT) to windowed segments of the signal
 3. **Slide window**: Move forward in time and repeat
 4. **Build spectrogram**: Stack spectra to create time-frequency representation
 
-### Key Parameters
+## Key Parameters
 
 **Window length** (`window_length`):
 
@@ -44,7 +44,7 @@ tf_stft(epochs, time_steps = 0.005)  # 5 ms steps
 
 Smaller = smoother time course, larger = faster computation.
 
-### Frequency Spacing
+## Frequency Spacing
 
 **Linear** (`frequencies = 2:1:80`):
 
@@ -57,7 +57,7 @@ Smaller = smoother time course, larger = faster computation.
 - Better for wide ranges
 - Use `ylogscale = true` in plots
 
-### Baseline Correction
+## Baseline Correction
 
 ```julia
 plot_tf(
@@ -70,14 +70,14 @@ plot_tf(
 
 Shows relative power changes from pre-stimulus baseline.
 
-### Edge Effects
+## Edge Effects
 
 **Filter edges** (`filter_edges = true`):
 
 - Removes edge samples where windowing causes artifacts
 - Recommended for cleaner results
 
-### Workflow Summary
+## Workflow Summary
 
 This demo shows:
 
@@ -88,7 +88,7 @@ This demo shows:
 5. **Baseline correction**: Event-related power changes
 6. **Edge filtering**: Removing edge artifacts
 
-### Further Reading
+## Further Reading
 
 Cohen, M. X. (2014). *Analyzing Neural Time Series Data: Theory and Practice*. Chapter 15: Short-Time FFT
 
@@ -123,20 +123,14 @@ times, signal = EegFun.generate_signal(
     0.0,                                    # noise amplitude
 );
 epochs_synthetic = EegFun.signal_to_data(times, signal, :Channel1, sample_rate)
-EegFun.plot_epochs(epochs_synthetic, channel_selection = EegFun.channels([:Channel1]))
+# EegFun.plot_epochs(epochs_synthetic, channel_selection = EegFun.channels([:Channel1]))
 
 spectrum = EegFun.freq_spectrum(epochs_synthetic, max_freq = 80.0)
 EegFun.plot_channel_spectrum(spectrum, channel_selection = EegFun.channels([:Channel1]))
 
-# tf_stft_fixed
-tf_data = EegFun.tf_stft(epochs_synthetic, frequencies = 1:1:40, window_length = 0.5)
+# tf_stft
+@time tf_data = EegFun.tf_stft(epochs_synthetic, frequencies = 1:1:40, window_length = 0.5, pad = :both, use_gpu = true)
 EegFun.plot_tf(tf_data, ylogscale = false)
-
-tf_data = EegFun.tf_stft(epochs_synthetic, frequencies = 1:1:40, window_length = 0.5)
-EegFun.plot_tf(tf_data, ylogscale = false)
-
-tf_data = EegFun.tf_stft(epochs_synthetic, frequencies = logrange(1, 40, length = 30), window_length = 0.5)
-EegFun.plot_tf(tf_data, ylogscale = true)
 
 tf_data = EegFun.tf_stft(epochs_synthetic, frequencies = logrange(1, 40, length = 30), window_length = 0.5)
 EegFun.plot_tf(tf_data, ylogscale = true)

@@ -104,9 +104,11 @@ function plot_topography(
 
     # Map channel data onto layout order
     layout_labels = layout.data.label
-    layout_values = Float64[let ch_idx = findfirst(==(lbl), channels_list)
-        !isnothing(ch_idx) ? channel_data[ch_idx] : 0.0
-    end for lbl in layout_labels]
+    layout_values = Float64[
+        let ch_idx = findfirst(==(lbl), channels_list)
+            !isnothing(ch_idx) ? channel_data[ch_idx] : 0.0
+        end for lbl in layout_labels
+    ]
 
     # Merge user kwargs with shared topography defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
@@ -262,9 +264,11 @@ function plot_topography(
             vals = filter(isfinite, vec(power_mat[freq_mask, time_mask]))
             push!(channel_data, isempty(vals) ? 0.0 : mean(vals))
         end
-        layout_values = Float64[let ch_idx = findfirst(==(lbl), channels_list)
-            !isnothing(ch_idx) ? channel_data[ch_idx] : 0.0
-        end for lbl in layout_labels]
+        layout_values = Float64[
+            let ch_idx = findfirst(==(lbl), channels_list)
+                !isnothing(ch_idx) ? channel_data[ch_idx] : 0.0
+            end for lbl in layout_labels
+        ]
         all_layout_values[idx] = layout_values
         global_min = min(global_min, minimum(layout_values))
         global_max = max(global_max, maximum(layout_values))
@@ -542,10 +546,12 @@ function plot_topography_stats(
 
         # Map electrode values to layout order
         channel_data = topo_values[i]
-        layout_values = Float64[let ch_idx = findfirst(==(lbl), electrodes)
-            v = !isnothing(ch_idx) ? channel_data[ch_idx] : 0.0
-            isfinite(v) ? v : 0.0
-        end for lbl in layout_labels]
+        layout_values = Float64[
+            let ch_idx = findfirst(==(lbl), electrodes)
+                v = !isnothing(ch_idx) ? channel_data[ch_idx] : 0.0
+                isfinite(v) ? v : 0.0
+            end for lbl in layout_labels
+        ]
 
         _render_topo_surface!(
             fig,

@@ -2,14 +2,14 @@
 
 This demo shows how to plot power spectra from `SpectrumData` objects.
 
-### `plot_channel_spectrum` Multiple Dispatch
+## `plot_channel_spectrum` Multiple Dispatch
 
 | Function | Input | Best For |
 | --- | --- | --- |
 | `plot_channel_spectrum(dat)` | Raw/preprocessed data | Quick interactive inspection with Welch's method |
 | `plot_channel_spectrum(spectrum)` | `SpectrumData` | Plotting pre-computed spectra with full control |
 
-### Key Parameters
+## Key Parameters
 
 | Parameter | Default | Description |
 | --- | --- | --- |
@@ -20,7 +20,7 @@ This demo shows how to plot power spectra from `SpectrumData` objects.
 | `max_freq` | `nothing` | Maximum frequency to display |
 | `show_legend` | `true` | Show channel name legend |
 
-### What You'll Learn
+## What You'll Learn
 
 1. Plotting spectra for all or selected channels
 2. Switching between linear and log scales

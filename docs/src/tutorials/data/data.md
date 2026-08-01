@@ -2,7 +2,7 @@
 
 This demo demonstrates the core data structures in EegFun.jl and how to access and subset data.
 
-### Core Data Structures
+## Core Data Structures
 
 **ContinuousData**:
 
@@ -21,7 +21,7 @@ This demo demonstrates the core data structures in EegFun.jl and how to access a
 - Averaged event-related potentials
 - Single DataFrame
 
-### Data Access Functions
+## Data Access Functions
 
 **all_data**: Complete data including channels and metadata
 
@@ -35,24 +35,24 @@ This demo demonstrates the core data structures in EegFun.jl and how to access a
 
 This demo shows basic data operations:
 
-### Load and Structure Data
+## Load and Structure Data
 
 - Load raw BioSemi data
 - Load electrode layout
 - Create ContinuousData structure
 
-### Access Data Components
+## Access Data Components
 
 - Extract all data, channel data, and metadata
 - Understand different data access patterns
 
-### Create Epochs
+## Create Epochs
 
 - Define epoch conditions around triggers
 - Extract segmented trials
 - Access epoch data with selection functions
 
-### Subset Data
+## Subset Data
 
 - Subset by channel selection (specific electrodes)
 - Subset by sample selection (time intervals)

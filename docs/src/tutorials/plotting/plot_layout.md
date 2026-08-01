@@ -2,7 +2,7 @@
 
 This demo demonstrates visualizing electrode layout configurations in 2D and 3D space.
 
-### What is Electrode Layout?
+## What is Electrode Layout?
 
 Electrode layout defines the spatial positions of EEG sensors on the scalp using:
 
@@ -10,7 +10,7 @@ Electrode layout defines the spatial positions of EEG sensors on the scalp using
 - **3D coordinates** (x, y, z): Actual positions on spherical head model
 - **Spherical coordinates** (incidence, azimuth): Angular positions
 
-### Layout Visualization Functions
+## Layout Visualization Functions
 
 **plot_layout_2d**:
 
@@ -31,7 +31,7 @@ Electrode layout defines the spatial positions of EEG sensors on the scalp using
 - Helps verify interpolation neighborhoods
 - Interactive hover to show connections
 
-### Use Cases
+## Use Cases
 
 **Verify electrode montage**:
 
@@ -51,7 +51,7 @@ Electrode layout defines the spatial positions of EEG sensors on the scalp using
 - Plan interpolation strategies
 - Define ROIs for analysis
 
-### Customization Options
+## Customization Options
 
 **Head outline**:
 
@@ -74,7 +74,7 @@ Electrode layout defines the spatial positions of EEG sensors on the scalp using
 - Customizable borders and fills
 - Multiple ROIs with different styles
 
-### Neighbor Detection
+## Neighbor Detection
 
 Calculate spatial neighbors based on distance thresholds:
 
@@ -86,31 +86,31 @@ Calculate spatial neighbors based on distance thresholds:
 
 This demo shows electrode layout visualization:
 
-### Basic 2D Visualization
+## Basic 2D Visualization
 
 - Load electrode layout
 - Convert to 2D coordinates
 - Plot with default settings
 
-### Customize Appearance
+## Customize Appearance
 
 - Adjust head outline (color, width, radius)
 - Modify markers (style, size, color)
 - Customize labels (size, color, offsets)
 
-### Add Regions of Interest
+## Add Regions of Interest
 
 - Highlight electrode groups
 - Customize ROI borders and fills
 - Create multiple ROIs with different styles
 
-### Neighbor Visualization
+## Neighbor Visualization
 
 - Calculate neighbor relationships
 - Plot with neighbor connections
 - Export neighbor definitions
 
-### Save Figures
+## Save Figures
 
 - Export publication-ready figures
 - Use CairoMakie for vector graphics

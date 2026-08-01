@@ -2,7 +2,7 @@
 
 This demo shows how to use EegFun's selection helper functions for filtering, subsetting, and targeting specific parts of your data.
 
-### Selection Helpers
+## Selection Helpers
 
 EegFun uses predicate-generator functions that create selection criteria:
 
@@ -11,7 +11,7 @@ EegFun uses predicate-generator functions that create selection criteria:
 - **`epochs()`**: Select epochs by index or range
 - **`samples()`**: Select samples using custom predicates on metadata columns
 
-### How They Work
+## How They Work
 
 Selection helpers return functions (predicates) that are passed to `subset()`, and other functions via keyword arguments:
 
@@ -20,7 +20,7 @@ Selection helpers return functions (predicates) that are passed to `subset()`, a
 subset(erp, channel_selection = channels(:Cz, :Pz))
 ```
 
-### Composing Selections
+## Composing Selections
 
 Multiple selections can be combined in a single call:
 

@@ -122,8 +122,8 @@ for demo_info in demos
         end
         description = join(description_lines, ' ')
 
-        # Use full overview content
-        overview_section = overview_content
+        # Use full overview content, but promote ### to ## to avoid skipping heading levels
+        overview_section = replace(overview_content, r"^### "m => "## ")
     else
         # Fallback: use default overview and description
         @warn "No custom overview found for $filename, using default"

@@ -2,7 +2,7 @@
 
 This demo demonstrates baseline correction methods for ERP data, including different baseline intervals and correction approaches for continuous, epoch, and ERP data.
 
-### What is Baseline Correction?
+## What is Baseline Correction?
 
 Baseline correction removes the pre-stimulus mean from each trial, ensuring that activity is measured relative to a neutral reference period. This is essential for ERP analysis because:
 
@@ -10,7 +10,7 @@ Baseline correction removes the pre-stimulus mean from each trial, ensuring that
 - **Standardizes pre-stimulus activity**: Ensures comparable starting points across conditions
 - **Enables amplitude interpretation**: Makes measurements interpretable relative to baseline activity
 
-### Common Baseline Windows
+## Common Baseline Windows
 
 **Pre-stimulus period** (most common):
 
@@ -18,7 +18,7 @@ Baseline correction removes the pre-stimulus mean from each trial, ensuring that
 - Captures typical pre-stimulus activity
 - Assumes stable activity before stimulus
 
-### Baseline Methods
+## Baseline Methods
 
 **Mean correction** (default):
 
@@ -58,21 +58,21 @@ Baseline correction assumes the pre-stimulus period represents neutral brain act
 
 This demo demonstrates baseline correction for different data types:
 
-### Baseline Continuous Data 
+## Baseline Continuous Data 
 
 - Load raw BioSemi data
 - Apply baseline to entire continuous recording
 - Visualize DC offset removal in databrowser
 - Baseline to specific timepoint (t=0)
 
-### Baseline Epoch Data
+## Baseline Epoch Data
 
 - Extract epochs around experimental events
 - Apply baseline at different timepoints (t=0, t=0.5)
 - Visualize effect on individual trials
 - Compare baseline choices
 
-### Baseline ERP Data
+## Baseline ERP Data
 
 - Average epochs into ERPs
 - Baseline to single timepoint (t=0, t=0.5)

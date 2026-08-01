@@ -65,7 +65,7 @@ function tf_morlet(
         n_post_pad = 0
     end
     n_padded_samples = n_pre_pad + n_samples_original_unpadded + n_post_pad
-    
+
     time_indices_out = (n_pre_pad+1):(n_pre_pad+n_samples_original_unpadded)
     n_times_out = length(time_indices_out)
 
@@ -85,28 +85,28 @@ function tf_morlet(
     max_hw = ceil(Int, 6 * max_sigma * dat.sample_rate) ÷ 2
     max_wl = max_hw * 2 + 1
     n_conv_pow2 = nextpow(2, max_wl + n_padded_samples - 1)
-    
+
     # GPU buffers
     if gpu_active
-        template_padded_batch_gpu = gpu_array(zeros(ComplexF64, n_trials, n_conv_pow2))
-        fft_plan_padded_batch = plan_fft!(template_padded_batch_gpu, 2)
-        ifft_plan_padded_batch = plan_ifft!(template_padded_batch_gpu, 2)
-        
+        template_padded_batch_gpu = gpu_array(zeros(ComplexF64, n_conv_pow2, n_trials))
+        fft_plan_padded_batch = plan_fft!(template_padded_batch_gpu, 1)
+        ifft_plan_padded_batch = plan_ifft!(template_padded_batch_gpu, 1)
+
         gpu_buffers = (
-            local_data_padded_gpu = gpu_array(zeros(Float64, n_trials, n_conv_pow2)),
-            local_data_fft_gpu = gpu_array(zeros(ComplexF64, n_trials, n_conv_pow2)),
-            local_conv_result_gpu = gpu_array(zeros(ComplexF64, n_trials, n_conv_pow2)),
+            local_data_padded_gpu = gpu_array(zeros(Float64, n_conv_pow2, n_trials)),
+            local_data_fft_gpu = gpu_array(zeros(ComplexF64, n_conv_pow2, n_trials)),
+            local_conv_result_gpu = gpu_array(zeros(ComplexF64, n_conv_pow2, n_trials)),
             curr_wavelet_gpu = gpu_array(zeros(ComplexF64, n_conv_pow2)),
             eegpower_trials_gpu = return_trials ? gpu_array(zeros(Float64, n_trials, num_frex, n_times_out)) : nothing,
             eegconv_trials_gpu = (return_trials && return_phase) ? gpu_array(zeros(ComplexF64, n_trials, num_frex, n_times_out)) : nothing,
             eegpower_avg_gpu = !return_trials ? gpu_array(zeros(Float64, num_frex, n_times_out)) : nothing,
             eegconv_avg_gpu = (!return_trials && return_phase) ? gpu_array(zeros(ComplexF64, num_frex, n_times_out)) : nothing,
-            adjusted_indices_gpu = gpu_array(zeros(Int, n_times_out))
+            adjusted_indices_gpu = gpu_array(zeros(Int, n_times_out)),
         )
     else
-        template_padded_batch = zeros(ComplexF64, n_trials, n_conv_pow2)
-        fft_plan_padded_batch = plan_fft!(template_padded_batch, 2, flags = FFTW.MEASURE)
-        ifft_plan_padded_batch = plan_ifft!(template_padded_batch, 2, flags = FFTW.MEASURE)
+        template_padded_batch = zeros(ComplexF64, n_conv_pow2, n_trials)
+        fft_plan_padded_batch = plan_fft!(template_padded_batch, 1, flags = FFTW.MEASURE)
+        ifft_plan_padded_batch = plan_ifft!(template_padded_batch, 1, flags = FFTW.MEASURE)
         gpu_buffers = nothing
     end
 
@@ -155,33 +155,34 @@ function tf_morlet(
 
     # Process each selected channel and each trial separately
     channel_names = channel_labels(dat)
-    
-    process_channel = (channel) -> begin
-        _process_tf_channel!(
-            channel,
-            dat,
-            n_trials,
-            n_samples_per_epoch,
-            n_conv_pow2,
-            num_frex,
-            return_trials,
-            return_phase,
-            filter_edges,
-            pad,
-            n_times_out,
-            valid_starts_per_freq,
-            time_indices_out,
-            wl_per_freq,
-            fft_plan_padded_batch,
-            ifft_plan_padded_batch,
-            wavelet_ffts,
-            df_lock,
-            power_df,
-            phase_df,
-            gpu_buffers,
-        )
-    end
-    
+
+    process_channel =
+        (channel) -> begin
+            _process_tf_channel!(
+                channel,
+                dat,
+                n_trials,
+                n_samples_per_epoch,
+                n_conv_pow2,
+                num_frex,
+                return_trials,
+                return_phase,
+                filter_edges,
+                pad,
+                n_times_out,
+                valid_starts_per_freq,
+                time_indices_out,
+                wl_per_freq,
+                fft_plan_padded_batch,
+                ifft_plan_padded_batch,
+                wavelet_ffts,
+                df_lock,
+                power_df,
+                phase_df,
+                gpu_buffers,
+            )
+        end
+
     if gpu_active
         for channel in channel_names
             process_channel(channel)
@@ -244,10 +245,10 @@ function _process_tf_channel!(
     gpu_buffers,
 )
     # Thread-local reusable buffers (CPU)
-    local_data_padded = Matrix{Float64}(undef, n_trials, n_conv_pow2)
-    local_data_fft = Matrix{ComplexF64}(undef, n_trials, n_conv_pow2)
-    local_conv_result = Matrix{ComplexF64}(undef, n_trials, n_conv_pow2)
-    local_trial_signals = Matrix{Float64}(undef, n_trials, n_samples_per_epoch)
+    local_data_padded = Matrix{Float64}(undef, n_conv_pow2, n_trials)
+    local_data_fft = Matrix{ComplexF64}(undef, n_conv_pow2, n_trials)
+    local_conv_result = Matrix{ComplexF64}(undef, n_conv_pow2, n_trials)
+    local_trial_signals = Matrix{Float64}(undef, n_samples_per_epoch, n_trials)
 
     gpu_active = !isnothing(gpu_buffers)
     if gpu_active
@@ -260,7 +261,7 @@ function _process_tf_channel!(
         eegconv_avg_gpu = gpu_buffers.eegconv_avg_gpu
         adjusted_indices_gpu = gpu_buffers.adjusted_indices_gpu
         adjusted_indices_cpu = Vector{Int}(undef, n_times_out)
-        
+
         # Reset output arrays
         if return_trials
             fill!(eegpower_trials_gpu, 0.0)
@@ -288,11 +289,11 @@ function _process_tf_channel!(
         if col isa Vector{Float64}
             col_f64 = col::Vector{Float64}
             @inbounds @simd for i = 1:n_samples_per_epoch
-                local_trial_signals[trial_idx, i] = col_f64[i]
+                local_trial_signals[i, trial_idx] = col_f64[i]
             end
         else
             @inbounds @simd for i = 1:n_samples_per_epoch
-                local_trial_signals[trial_idx, i] = Float64(col[i])
+                local_trial_signals[i, trial_idx] = Float64(col[i])
             end
         end
     end
@@ -305,18 +306,18 @@ function _process_tf_channel!(
     n_padded_samples = n_pre_pad + n_samples_per_epoch + n_post_pad
 
     # Explicit loop for padding to avoid copy allocations (Virtual Padding)
-    @inbounds for j = 1:n_padded_samples
-        if j <= n_pre_pad
-            src_j = n_samples_per_epoch - j + 1
-        elseif j > n_pre_pad + n_samples_per_epoch
-            idx_in_post = j - (n_pre_pad + n_samples_per_epoch)
-            src_j = n_samples_per_epoch - idx_in_post
-        else
-            src_j = j - n_pre_pad
-        end
+    @inbounds for trial_idx = 1:n_trials
+        for j = 1:n_padded_samples
+            if j <= n_pre_pad
+                src_j = n_samples_per_epoch - j + 1
+            elseif j > n_pre_pad + n_samples_per_epoch
+                idx_in_post = j - (n_pre_pad + n_samples_per_epoch)
+                src_j = n_samples_per_epoch - idx_in_post
+            else
+                src_j = j - n_pre_pad
+            end
 
-        for i = 1:n_trials
-            local_data_padded[i, j] = local_trial_signals[i, src_j]
+            local_data_padded[j, trial_idx] = local_trial_signals[src_j, trial_idx]
         end
     end
 
@@ -324,12 +325,12 @@ function _process_tf_channel!(
     @inbounds @simd for i in eachindex(local_data_padded)
         local_data_fft[i] = ComplexF64(local_data_padded[i])
     end
-    
+
     if gpu_active
         copyto!(local_data_fft_gpu, local_data_fft)
-        fft_plan_padded_batch * local_data_fft_gpu
+        mul!(local_data_fft_gpu, fft_plan_padded_batch, local_data_fft_gpu)
     else
-        fft_plan_padded_batch * local_data_fft
+        mul!(local_data_fft, fft_plan_padded_batch, local_data_fft)
     end
 
     # Process each frequency
@@ -343,39 +344,38 @@ function _process_tf_channel!(
             # GPU inner loop broadcast
             curr_wavelet_gpu = gpu_buffers.curr_wavelet_gpu
             copyto!(curr_wavelet_gpu, curr_wavelet)
-            local_conv_result_gpu .= local_data_fft_gpu .* transpose(curr_wavelet_gpu)
-            ifft_plan_padded_batch * local_conv_result_gpu
+            local_conv_result_gpu .= local_data_fft_gpu .* curr_wavelet_gpu
+            mul!(local_conv_result_gpu, ifft_plan_padded_batch, local_conv_result_gpu)
             local_conv_result_gpu .*= sqrt2
-            
+
             # Extract requested time points (precompute valid indices)
             valid_start = valid_starts_per_freq[fi]
             for ti_out = 1:n_times_out
                 adjusted_indices_cpu[ti_out] = valid_start + time_indices_out[ti_out] - 1
             end
             copyto!(adjusted_indices_gpu, adjusted_indices_cpu)
-            extracted_gpu = @view local_conv_result_gpu[:, adjusted_indices_gpu]
-            
+            extracted_gpu = @view local_conv_result_gpu[adjusted_indices_gpu, :]
+
             if return_trials
-                @views eegpower_trials_gpu[:, fi, :] .= abs2.(extracted_gpu)
+                @views eegpower_trials_gpu[:, fi, :] .= transpose(abs2.(extracted_gpu))
                 if return_phase
-                    @views eegconv_trials_gpu[:, fi, :] .= extracted_gpu
+                    @views eegconv_trials_gpu[:, fi, :] .= transpose(extracted_gpu)
                 end
             else
-                @views eegpower_avg_gpu[fi, :] .= vec(sum(abs2.(extracted_gpu), dims=1))
+                @views eegpower_avg_gpu[fi, :] .= vec(sum(abs2.(extracted_gpu), dims = 2))
                 if return_phase
-                    @views eegconv_avg_gpu[fi, :] .= vec(sum(extracted_gpu, dims=1))
+                    @views eegconv_avg_gpu[fi, :] .= vec(sum(extracted_gpu, dims = 2))
                 end
             end
         else
-            @inbounds for i = 1:n_conv_pow2
-                wv = curr_wavelet[i]
-                @simd for trial_idx = 1:n_trials
-                    local_conv_result[trial_idx, i] = local_data_fft[trial_idx, i] * wv
+            @inbounds for trial_idx = 1:n_trials
+                @simd for i = 1:n_conv_pow2
+                    local_conv_result[i, trial_idx] = local_data_fft[i, trial_idx] * curr_wavelet[i]
                 end
             end
 
             # IFFT to get time-domain result (in-place along dim 2)
-            ifft_plan_padded_batch * local_conv_result
+            mul!(local_conv_result, ifft_plan_padded_batch, local_conv_result)
 
             # Scale to approximate MNE's normalization
             @inbounds @simd for i in eachindex(local_conv_result)
@@ -390,7 +390,7 @@ function _process_tf_channel!(
 
                 if return_trials
                     @inbounds @simd for trial_idx = 1:n_trials
-                        val = local_conv_result[trial_idx, idx]
+                        val = local_conv_result[idx, trial_idx]
                         eegpower_trials[trial_idx, fi, ti_out] = abs2(val)
                         if return_phase
                             eegconv_trials[trial_idx, fi, ti_out] = val
@@ -400,7 +400,7 @@ function _process_tf_channel!(
                     power_sum = 0.0
                     conv_sum = 0.0im
                     @inbounds @simd for trial_idx = 1:n_trials
-                        val = local_conv_result[trial_idx, idx]
+                        val = local_conv_result[idx, trial_idx]
                         power_sum += abs2(val)
                         if return_phase
                             conv_sum += val
@@ -422,7 +422,7 @@ function _process_tf_channel!(
                 eegconv_avg_gpu ./= n_trials
             end
         end
-        
+
         # Download from GPU exactly once
         if return_trials
             eegpower_trials = Array(eegpower_trials_gpu)

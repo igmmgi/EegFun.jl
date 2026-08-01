@@ -2,7 +2,7 @@
 
 This demo offers a walkthrough of artifact handling in EegFun: continuous-data artifact detection, EOG channels, epoched artifact detection, interactive review, artifact repair, and epoch rejection.
 
-### Key Functions
+## Key Functions
 
 | Function | Purpose |
 | --- | --- |
@@ -20,32 +20,32 @@ This demo offers a walkthrough of artifact handling in EegFun: continuous-data a
 
 ## Workflow Summary
 
-### EOG Channel Creation
+## EOG Channel Creation
 
 - Derive vertical and horizontal EOG from frontal (e.g., IO1/IO2, Fp1/Fp2) and lateral (e.g., F9/F10) channels using `channel_difference!`
 - Detect blink/saccade onsets with `detect_eog_onsets!` and mark affected intervals with `mark_epoch_intervals!`
 
-### Continuous-Data Artifact Detection
+## Continuous-Data Artifact Detection
 
 - `is_extreme_value!` — marks samples exceeding an absolute threshold (e.g., ±100 μV)
 - `is_step_value!` — marks sudden voltage jumps (e.g., cable disconnections)
 - Both support `channel_selection` and `sample_selection` for targeted detection
 - Use `n_extreme_value` / `n_step_value` to count detections (combined or per-channel with `mode = :separate`)
 
-### Epoch Artifact Detection
+## Epoch Artifact Detection
 
 - **`z_criterion`** (default: 3.0) — epochs with z-scores above this are rejected. Set to 0 to disable.
 - **`abs_criterion`** (default: 100 μV) — epochs exceeding this absolute voltage are rejected. Set to 0 to disable.
 - **`z_measures`** — which metrics to use for z-score: `[:variance, :max, :min, :abs, :range, :kurtosis]`
 - Use `channel_selection` for channel-specific detection (e.g., frontal channels only)
 
-### Inspect and Review
+## Inspect and Review
 
 - Use `unique_epochs`, `unique_channels`, `unique_rejections`, and `get_rejected` to assess rejection rates
 - Visualise with `plot_artifact_detection`
 - Optionally use `detect_bad_epochs_interactive` for manual verification
 
-### Repair and Rejection
+## Repair and Rejection
 
 - `repair_artifacts` interpolates bad channels within flagged epochs (`:neighbor_interpolation`, `:spherical_spline`)
 - `reject_epochs` removes flagged epochs entirely

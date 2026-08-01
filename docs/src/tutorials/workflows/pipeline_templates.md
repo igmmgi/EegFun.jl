@@ -2,7 +2,7 @@
 
 This demo shows how to generate scaffold files for custom preprocessing pipelines and configuration files.
 
-### Pipeline Templates
+## Pipeline Templates
 
 `generate_pipeline_template` creates a ready-to-use Julia file with:
 
@@ -13,7 +13,7 @@ This demo shows how to generate scaffold files for custom preprocessing pipeline
 
 This saves time when starting a new preprocessing project by providing a well-organised starting point.
 
-### Configuration Templates
+## Configuration Templates
 
 `generate_config_template` creates a TOML configuration file with all available preprocessing parameters:
 
@@ -25,7 +25,7 @@ This saves time when starting a new preprocessing project by providing a well-or
 - **Layout**: Neighbour distance criterion
 - **Epoch**: Timing parameters (start/end times)
 
-### Using Templates with Pipelines
+## Using Templates with Pipelines
 
 The generated pipeline and config files are designed to work together:
 

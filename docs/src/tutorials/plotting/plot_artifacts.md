@@ -2,7 +2,7 @@
 
 This demo demonstrates methods for detecting and visualizing artifacts in EEG data.
 
-### What are EEG Artifacts?
+## What are EEG Artifacts?
 
 Artifacts are unwanted signals from non-neural sources:
 
@@ -18,7 +18,7 @@ Artifacts are unwanted signals from non-neural sources:
 - **Line noise**: 50/60 Hz environmental interference
 - **Movement**: Low-frequency drifts and transients
 
-### Detection Methods
+## Detection Methods
 
 **Threshold-based:**
 
@@ -38,7 +38,7 @@ Artifacts are unwanted signals from non-neural sources:
 - Manual validation of automatic detection
 - Refinement of rejection criteria
 
-### Visualization Approaches
+## Visualization Approaches
 
 This demo shows multiple complementary views:
 
@@ -60,7 +60,7 @@ This demo shows multiple complementary views:
 - Channel quality metrics
 - Decision support for repair vs. rejection
 
-### Artifact Management Strategy
+## Artifact Management Strategy
 
 **Repair (Interpolation):**
 
@@ -79,7 +79,7 @@ This demo shows multiple complementary views:
 1. Repair isolated channel issues
 2. Reject epochs with widespread artifacts
 
-### Workflow Summary
+## Workflow Summary
 
 This demo shows:
 
@@ -89,7 +89,7 @@ This demo shows:
 4. **Assessment**: Evaluating artifact patterns to guide cleaning strategy
 5. **Reporting**: Quantifying data attrition for methods documentation
 
-### Critical Principle
+## Critical Principle
 
 > **Garbage in, garbage out**: No computational method can rescue poor quality data. The most effective strategy is careful data collection with proper electrode preparation and participant instruction. Artifact management is a secondary cleaning strategy, not a substitute for quality acquisition.
 

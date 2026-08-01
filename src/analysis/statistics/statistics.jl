@@ -40,7 +40,7 @@ function permutation_test(
     if !(threshold_method in [:parametric, :nonparametric_common, :nonparametric_individual])
         error("threshold_method must be :parametric, :nonparametric_common, or :nonparametric_individual. " * "Got :$threshold_method")
     end
-    
+
     # GPU check
     gpu_active = false
     if use_gpu

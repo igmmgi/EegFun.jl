@@ -2,7 +2,7 @@
 
 This demo demonstrates visualizing individual epoch waveforms with flexible layout options.
 
-### What is Epoch Plotting?
+## What is Epoch Plotting?
 
 Epoch plots display individual trial timecourses, showing:
 
@@ -11,7 +11,7 @@ Epoch plots display individual trial timecourses, showing:
 - **Trial variability**: Individual differences across repetitions
 - **ERP overlay**: Optional averaged waveform on top
 
-### Layout Options
+## Layout Options
 
 **`:single`** (default):
 
@@ -33,7 +33,7 @@ Epoch plots display individual trial timecourses, showing:
 - Intuitive interpretation
 - Optional scale axis
 
-### Use Cases
+## Use Cases
 
 **Trial-level inspection**:
 
@@ -59,7 +59,7 @@ Epoch plots display individual trial timecourses, showing:
 - Compare trial-level activity
 - Assess consistency
 
-### Customization Options
+## Customization Options
 
 **Channel selection**:
 
@@ -79,7 +79,7 @@ Epoch plots display individual trial timecourses, showing:
 - Spacing and gaps
 - Scale axis (topo layout)
 
-### Interactive Features
+## Interactive Features
 
 When `interactive=true` (default):
 
@@ -91,25 +91,25 @@ When `interactive=true` (default):
 
 This demo shows epoch visualization workflows:
 
-### Load and Prepare Data
+## Load and Prepare Data
 
 - Read raw data
 - Apply preprocessing
 - Extract epochs
 
-### Basic Plotting
+## Basic Plotting
 
 - Plot single condition
 - Select specific channels
 - Compare conditions with overlay
 
-### Layout Options
+## Layout Options
 
 - Single plot: All channels together
 - Grid layout: Individual subplots
 - Topo layout: Spatial arrangement
 
-### Channel Selection
+## Channel Selection
 
 - Focus on specific channels
 - Combine with different layouts

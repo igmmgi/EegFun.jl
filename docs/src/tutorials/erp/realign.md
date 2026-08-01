@@ -28,15 +28,15 @@ Common use cases:
 
 ## Workflow Summary
 
-### Single-Participant Realignment
+## Single-Participant Realignment
 
 - Realign epochs to response time column
 
-### Batch Realignment
+## Batch Realignment
 
 - Process all participant files in a directory
 
-### Typical Pipeline
+## Typical Pipeline
 
 - Extract stimulus-locked epochs → realign to RT → average → LRP → jackknife
 

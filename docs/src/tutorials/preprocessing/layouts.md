@@ -2,7 +2,7 @@
 
 This demo demonstrates how to load, inspect, modify, and manage electrode layouts and their spatial neighbour relationships.
 
-### What are Layouts?
+## What are Layouts?
 
 Layouts define the spatial positions of EEG electrodes on the scalp. They are essential for:
 
@@ -11,7 +11,7 @@ Layouts define the spatial positions of EEG electrodes on the scalp. They are es
 - Cluster-based permutation tests (spatial adjacency)
 - Neighbour-based artifact repair
 
-### Coordinate Systems
+## Coordinate Systems
 
 EegFun supports multiple coordinate representations:
 
@@ -21,7 +21,7 @@ EegFun supports multiple coordinate representations:
 
 **3D Cartesian (x, y, z)**: Used for spherical spline interpolation and 3D neighbour calculations (`polar_to_cartesian_xyz!`)
 
-### Neighbours
+## Neighbours
 
 Spatial neighbours define which electrodes are "close" to each other. This adjacency information is used by:
 

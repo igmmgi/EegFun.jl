@@ -2,7 +2,7 @@
 
 This demo shows how to save Makie figures in different file formats with resolution and quality settings.
 
-### Backends
+## Backends
 
 | Backend | Purpose |
 |---------|---------|
@@ -11,7 +11,7 @@ This demo shows how to save Makie figures in different file formats with resolut
 
 You only need `using CairoMakie` — you do **not** need to activate it. Pass `backend = CairoMakie` in the `save()` call instead.
 
-### File Formats
+## File Formats
 
 | Format | Type | Key Option |
 |--------|------|------------|
@@ -19,7 +19,7 @@ You only need `using CairoMakie` — you do **not** need to activate it. Pass `b
 | **SVG** | Vector | `pt_per_unit` — scale canvas size in points |
 | **PDF** | Vector | `pt_per_unit` — scale canvas size in points |
 
-### PNG (Raster)
+## PNG (Raster)
 
 ```julia
 save("figure.png", fig)                    # default resolution
@@ -27,7 +27,7 @@ save("figure.png", fig; px_per_unit = 4)   # high resolution
 save("figure.png", fig; update = false)    # save current interactive view as-is
 ```
 
-### SVG & PDF (Vector)
+## SVG & PDF (Vector)
 
 Always pass `backend = CairoMakie` when saving vector formats. Without it, `save()` uses the active backend (GLMakie), which embeds a rasterized bitmap — not true vector graphics.
 
@@ -37,7 +37,7 @@ save("figure.pdf", fig; backend = CairoMakie)
 save("figure.pdf", fig; backend = CairoMakie, pt_per_unit = 1.5)  # larger
 ```
 
-### Quick Reference
+## Quick Reference
 
 ```julia
 using GLMakie      # interactive work

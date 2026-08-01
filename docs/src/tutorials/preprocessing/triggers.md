@@ -2,11 +2,11 @@
 
 This demo shows how to inspect trigger (event marker) data and search for trigger sequences in EEG recordings.
 
-### Why Triggers?
+## Why Triggers?
 
 Triggers mark experimental events (stimulus onsets, responses, conditions) in the continuous EEG recording. Before epoching, you need to verify that triggers are present, correctly coded, and occur at the expected frequencies.
 
-### Key Functions
+## Key Functions
 
 | Function | Purpose |
 | --- | --- |
@@ -15,7 +15,7 @@ Triggers mark experimental events (stimulus onsets, responses, conditions) in th
 | `plot_trigger_overview` | Visualise trigger distribution |
 | `plot_trigger_timing` | Visualise trigger timing |
 
-### Sequence Search Features
+## Sequence Search Features
 
 - **Single values**: find all onsets of trigger `1`
 - **Multi-trigger sequences**: find `[1, 2]` (cue followed by target)
@@ -25,15 +25,15 @@ Triggers mark experimental events (stimulus onsets, responses, conditions) in th
 
 ## Workflow Summary
 
-### Trigger Counting
+## Trigger Counting
 
 - View raw and cleaned trigger counts in a formatted table
 
-### Sequence Searching
+## Sequence Searching
 
 - Find single triggers, multi-trigger sequences, and patterns with wildcards
 
-### Visualisation
+## Visualisation
 
 - Plot trigger timing and distribution
 

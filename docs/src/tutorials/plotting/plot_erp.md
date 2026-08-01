@@ -2,7 +2,7 @@
 
 This demo demonstrates plotting event-related potentials (ERPs) with comprehensive customization options.
 
-### What is an ERP Plot?
+## What is an ERP Plot?
 
 ERP plots visualize averaged brain responses time-locked to events:
 
@@ -11,7 +11,7 @@ ERP plots visualize averaged brain responses time-locked to events:
 - **Condition comparison**: Overlay multiple experimental conditions
 - **Channel-specific**: View individual electrodes or averages
 
-### Layout Options
+## Layout Options
 
 The demo shows three layout modes:
 
@@ -21,7 +21,7 @@ The demo shows three layout modes:
 | **:grid** | Multiple subplots (one per channel) |
 | **:topo** | Channels arranged by scalp location |
 
-### Single Layout
+## Single Layout
 
 **Average across channels**:
 
@@ -50,7 +50,7 @@ plot_erp(erps,
 
 Shows only specified channels.
 
-### Grid Layout
+## Grid Layout
 
 Displays multiple channels as subplots:
 
@@ -89,7 +89,7 @@ plot_erp(erps,
 )
 ```
 
-### Topographic Layout
+## Topographic Layout
 
 Arranges channels by scalp position:
 
@@ -99,7 +99,7 @@ plot_erp(erps, layout = :topo)
 
 Each channel plotted at its actual spatial location for intuitive interpretation.
 
-### Customization Options
+## Customization Options
 
 **Y-axis orientation**:
 
@@ -124,7 +124,7 @@ plot_erp(erps,
 )
 ```
 
-### Combining with Topography
+## Combining with Topography
 
 Create publication-quality figures with embedded topographies:
 
@@ -144,7 +144,7 @@ plot_topography!(fig, ax2, erps[1],
 
 Shows ERP waveform with scalp distribution at a specific time point.
 
-### Common Use Cases
+## Common Use Cases
 
 **Condition comparison**:
 
@@ -164,7 +164,7 @@ Shows ERP waveform with scalp distribution at a specific time point.
 - Customizable colors and styles
 - Grid layouts for multiple channels
 
-### Interpretation
+## Interpretation
 
 **Positive/negative deflections**:
 
@@ -178,7 +178,7 @@ Shows ERP waveform with scalp distribution at a specific time point.
 - **P3** (~300-600 ms): Attention, memory updating
 - **N400** (~400 ms): Semantic processing
 
-### Workflow Summary
+## Workflow Summary
 
 This demo shows:
 

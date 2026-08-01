@@ -2,7 +2,7 @@
 
 This demo demonstrates importing EEGLAB `.set` files into EegFun.jl. EEGLAB is a widely used open-source toolboxes for EEG processing (in MATLAB). 
 
-### About EEGLAB .set Format
+## About EEGLAB .set Format
 
 The `.set` format is a MATLAB-based file that contains a header structure with all recording parameters, trigger information, and often precomputed info like ICA weights or epoch definitions. The actual EEG data may be stored within the `.set` file or in a separate `.fdt` file.
 
@@ -12,7 +12,7 @@ The `.set` format is a MATLAB-based file that contains a header structure with a
 - Often includes ICA components and weights
 - Comprehensive metadata storage
 
-### Import Capabilities
+## Import Capabilities
 
 **Data loading**:
 
@@ -21,7 +21,7 @@ The `.set` format is a MATLAB-based file that contains a header structure with a
 - Mapping of event/trigger labels (hashed to triggers)
 - Support for external data files (.fdt)
 
-### Data Mapping
+## Data Mapping
 
 **EegFun.read_eeglab** handles mapping of EEGLAB structures to native EegFun types:
 

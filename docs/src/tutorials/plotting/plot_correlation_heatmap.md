@@ -2,7 +2,7 @@
 
 This demo demonstrates how to compute and visualize channel correlation matrices for quality control and artifact detection.
 
-### What is a Correlation Matrix?
+## What is a Correlation Matrix?
 
 A correlation matrix shows the Pearson correlation coefficient between all channel pairs:
 
@@ -11,7 +11,7 @@ A correlation matrix shows the Pearson correlation coefficient between all chann
 - **Low correlation** (near 0): Channels are independent
 - **Negative correlation** (near -1): Channels move in opposite directions
 
-### Why Use Correlation Matrices?
+## Why Use Correlation Matrices?
 
 **Quality Control**:
 
@@ -19,7 +19,7 @@ A correlation matrix shows the Pearson correlation coefficient between all chann
 - **Detect bridging**: Unexpectedly high correlation between channels
 - **Assess reference choice**: Impact on spatial correlation structure
 
-### Visualization Types
+## Visualization Types
 
 **Full Correlation Heatmap**:
 
@@ -44,7 +44,7 @@ Displays channel-to-channel correlations directly on the 2D sensor layout:
 - See its correlation with all other channels as colored dots
 - **Use case**: Quick visual inspection of spatial correlation patterns
 
-### Expected Patterns
+## Expected Patterns
 
 **Healthy Data**:
 
@@ -72,7 +72,7 @@ Displays channel-to-channel correlations directly on the 2D sensor layout:
 - Expected for Fp1/Fp2 (near eyes)
 - **Solution**: Use ICA for removal if excessive
 
-### Common Use Cases
+## Common Use Cases
 
 **1. Post-Acquisition Quality Check**:
 
@@ -104,7 +104,7 @@ cm = correlation_matrix_dual_selection(
 Identify which channels are affected by eye movements
 
 
-### Workflow Summary
+## Workflow Summary
 
 This demo shows:
 

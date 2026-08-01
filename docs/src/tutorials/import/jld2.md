@@ -2,11 +2,11 @@
 
 This demo shows how to save and load processed EEG data using the JLD2 format and EegFun's built-in loading utilities.
 
-### Why JLD2?
+## Why JLD2?
 
 JLD2 is the standard approach for persisting Julia objects. When used with EegFun.jl, it preserves all data types and metadata without conversion, so you can save and reload continuous data, epochs, ERPs, and ICA results exactly as they are.
 
-### Key Functions
+## Key Functions
 
 | Function | Purpose |
 | --- | --- |
@@ -16,7 +16,7 @@ JLD2 is the standard approach for persisting Julia objects. When used with EegFu
 | `read_all_data` | Batch load all matching files from a directory |
 | `group_by_condition` | Organise loaded data into an OrderedDict by condition |
 
-### Key Patterns
+## Key Patterns
 
 **Saving data** — use Julia's `jldsave` to store one or more objects:
 
@@ -49,28 +49,28 @@ EegFun.plot_databrowser("continuous_data.jld2", "ica.jld2")
 
 ## Workflow Summary
 
-### Basic Saving and Loading
+## Basic Saving and Loading
 
 - Save and reload continuous data, epochs, ERPs, and ICA results
 - Verify round-trip consistency
 
-### Multiple Items per File
+## Multiple Items per File
 
 - Store related objects (epochs, ERPs, ICA) in a single file
 - Load individual keys by name
 
-### EegFun Loading Utilities
+## EegFun Loading Utilities
 
 - `read_data` for smart single-file loading with auto type detection
 - `read_all_data` for batch loading a cohort with participant selection
 - `group_by_condition` for organising loaded data by condition number
 
-### Batch Loading
+## Batch Loading
 
 - Use file patterns to load a cohort of participants
 - Feed into group-level analysis (e.g., grand average)
 
-### File Organization
+## File Organization
 
 - Recommended project directory structure
 - Naming conventions for easy batch processing

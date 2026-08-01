@@ -2,7 +2,7 @@
 
 This demo shows permutation-based statistical testing for ERP data, with multiple thresholding and cluster correction approaches.
 
-### Key Functions
+## Key Functions
 
 | Function | Purpose |
 | --- | --- |
@@ -11,7 +11,7 @@ This demo shows permutation-based statistical testing for ERP data, with multipl
 | `permutation_test` | Cluster-based permutation test with multiple thresholding options |
 | `plot_erp_stats` | Visualise results with significance shading and critical t-values |
 
-### Thresholding Methods
+## Thresholding Methods
 
 | Method | Description |
 | --- | --- |
@@ -19,7 +19,7 @@ This demo shows permutation-based statistical testing for ERP data, with multipl
 | `:nonparametric_common` | Single threshold from pooled permutation distribution |
 | `:nonparametric_individual` | Point-specific thresholds from permutation distributions |
 
-### Cluster-Based Permutation Testing
+## Cluster-Based Permutation Testing
 
 Addresses the multiple comparisons problem in ERP analysis:
 
@@ -34,16 +34,16 @@ Addresses the multiple comparisons problem in ERP analysis:
 
 ## Workflow Summary
 
-### Prepare Data
+## Prepare Data
 
 - Load group ERP data with `prepare_stats` specifying conditions, channels, and time intervals
 - Supports `:paired` (within-subject) and `:independent` (between-subject) designs
 
-### Analytic Tests
+## Analytic Tests
 
 - Quick uncorrected or Bonferroni-corrected t-tests for exploration
 
-### Permutation Tests
+## Permutation Tests
 
 - Choose thresholding method based on assumptions and computational budget
 - Set `cluster_type = :spatiotemporal` and `min_num_neighbors` for spatial constraints
@@ -66,7 +66,7 @@ Addresses the multiple comparisons problem in ERP analysis:
 using EegFun
 
 input_dir = EegFun.example_path("data/julia/erps")
-file_pattern = "erps_final"
+file_pattern = "erps"
 
 println("Preparing data...")
 stat_data = EegFun.prepare_stats(
@@ -111,13 +111,14 @@ EegFun.plot_erp_stats(
 # ----------------------------------------------------------------------------
 # Option: Parametric Thresholding (Default, Fastest)
 # ----------------------------------------------------------------------------
-result_permutation_parametric = EegFun.permutation_test(
+@time result_permutation_parametric = EegFun.permutation_test(
     stat_data,
-    n_permutations = 1000,           # Number of permutations (more = more accurate)
+    n_permutations = 50000,           # Number of permutations (more = more accurate)
     threshold_method = :parametric,  # Use t-distribution for thresholding
     cluster_type = :spatiotemporal,  # Cluster in space AND time
     min_num_neighbors = 3,           # Pre-filter: need 3+ neighbors
     show_progress = true,            # Show progress bar
+    use_gpu = false,
 )
 
 EegFun.plot_erp_stats(
@@ -141,13 +142,14 @@ EegFun.plot_erp_stats(
 # Reuse stored t-matrices for cluster-level inference
 # Equivalent to FieldTrip: method='montecarlo', corrMethod='cluster', clusterThreshold='nonparametric_common'
 
-result_permutation_nonparametric_common = EegFun.permutation_test(
+@time result_permutation_nonparametric_common = EegFun.permutation_test(
     stat_data,
-    n_permutations = 1000,
+    n_permutations = 10000,
     threshold_method = :nonparametric_common,  # Non-parametric common threshold
     cluster_type = :spatiotemporal,
     min_num_neighbors = 3,
     show_progress = true,
+    use_gpu = true,
 )
 
 # ----------------------------------------------------------------------------
@@ -162,13 +164,14 @@ result_permutation_nonparametric_common = EegFun.permutation_test(
 # Reuse stored t-matrices for cluster-level inference
 # Equivalent to FieldTrip: method='montecarlo', corrMethod='cluster', clusterThreshold='nonparametric_individual'
 
-result_permutation_nonparametric_individual = EegFun.permutation_test(
+@time result_permutation_nonparametric_individual = EegFun.permutation_test(
     stat_data,
-    n_permutations = 1000,
+    n_permutations = 10000,
     threshold_method = :nonparametric_individual,  # Non-parametric individual thresholds
     cluster_type = :spatiotemporal,
     min_num_neighbors = 3,
     show_progress = true,
+    use_gpu = true,
 )
 
 

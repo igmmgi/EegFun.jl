@@ -2,7 +2,7 @@
 
 This demo explores the core functionality of segmenting continuous data into epochs (or trials) based on event markers, and basic manipulation of these segments.
 
-### What are Epochs?
+## What are Epochs?
 
 Epoching is the process of extracting specific time intervals around events (e.g., stimuli or responses) from a continuous recording. This allows for epoch-based analysis and averaging to reveal Event-Related Potentials (ERPs).
 
@@ -11,7 +11,7 @@ Epoching is the process of extracting specific time intervals around events (e.g
 - Time-relative segmentation
 - Multi-condition definition via trigger sequences
 
-### Capabilities
+## Capabilities
 
 - **Flexible Extraction**: Define intervals relative to trigger onset (e.g., -200ms to +1000ms).
 - **Condition Matching**: Match triggers or sequences of triggers to specific condition names.
