@@ -1,13 +1,9 @@
-"""
-Statistical test types for EEG/ERP data analysis.
+# Statistical test types for EEG/ERP data analysis.
+#
+# Defines all types used for statistical testing, including
+# t-test results, cluster permutation test results, and analytic t-test results.
 
-This module defines all types used for statistical testing, including
-t-test results, cluster permutation test results, and analytic t-test results.
-"""
-
-# ==============
-# BASIC T-TEST RESULT
-# ==============
+# === BASIC T-TEST RESULT ===
 
 struct TTestResult
     df::Float64
@@ -22,9 +18,7 @@ function Base.show(io::IO, result::TTestResult)
     print(io, "t($df_str) = $t_str, p = $p_str")
 end
 
-# ==============
-# DATA PREPARATION TYPES
-# ==============
+# === DATA PREPARATION TYPES ===
 
 """
     AnalysisData
@@ -88,9 +82,7 @@ function Base.show(io::IO, data::StatisticalData)
     println(io, "└─ Analysis dimensions: $(size(data.analysis.data[1])) (participants × electrodes × time)")
 end
 
-# ==============
-# CLUSTER TYPES
-# ==============
+# === CLUSTER TYPES ===
 
 """
     Cluster
@@ -136,9 +128,7 @@ struct ClusterInfo
     n_permutations::Int
 end
 
-# ==============
-# TEST CONFIGURATION TYPES
-# ==============
+# === TEST CONFIGURATION TYPES ===
 
 """
     TestInfo
@@ -218,9 +208,7 @@ struct PermutationDistribution
     negative::Vector{Float64}
 end
 
-# ==============
-# RESULT TYPES
-# ==============
+# === RESULT TYPES ===
 
 """
     StatsResult

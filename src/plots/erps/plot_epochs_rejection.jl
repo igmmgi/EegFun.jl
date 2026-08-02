@@ -1,14 +1,10 @@
-"""
-Interactive visual epoch rejection interface using Makie.
+# Interactive visual epoch rejection interface using Makie.
+#
+# Provides an interactive GUI for manually rejecting epochs based on
+# visual inspection. It displays epochs in a grid layout with checkboxes for
+# marking epochs as good/bad and navigation buttons for scrolling through data.
 
-This module provides an interactive GUI for manually rejecting epochs based on
-visual inspection. It displays epochs in a grid layout with checkboxes for
-marking epochs as good/bad and navigation buttons for scrolling through data.
-"""
-
-#=============================================================================
-    DEFAULT KEYWORD ARGUMENTS
-=============================================================================#
+# === DEFAULT KEYWORD ARGUMENTS ===
 const PLOT_EPOCHS_REJECTION_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
     :display_plot => (true, "Whether to display the plot"),
@@ -43,9 +39,7 @@ const PLOT_EPOCHS_REJECTION_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :xlim => (nothing, "X-axis limits as (min, max) tuple, or nothing for automatic"),
 )
 
-#=============================================================================
-    EPOCH REJECTION STATE
-=============================================================================#
+# === EPOCH REJECTION STATE ===
 
 """
     EpochRejectionState
@@ -71,9 +65,7 @@ mutable struct EpochRejectionState
 end
 
 
-#=============================================================================
-    MAIN PLOTTING FUNCTION
-=============================================================================#
+# === MAIN PLOTTING FUNCTION ===
 
 """
     detect_bad_epochs_interactive(dat::EpochData;
@@ -249,9 +241,7 @@ function detect_bad_epochs_interactive(
     ]
 end
 
-#=============================================================================
-    UI CREATION FUNCTIONS
-=============================================================================#
+# === UI CREATION FUNCTIONS ===
 
 """
 Create the main interface layout with epoch grid, checkboxes, and navigation.
@@ -462,9 +452,7 @@ function Base.show(io::IO, state::EpochRejectionState)
 end
 
 
-#=============================================================================
-    INPUT VALIDATION
-=============================================================================#
+# === INPUT VALIDATION ===
 
 """
 Validate inputs for the rejection GUI.
@@ -479,9 +467,7 @@ function _validate_rejection_gui_inputs(dat::EpochData, dims::Tuple{Int,Int})
 end
 
 
-#=============================================================================
-    HELPER FUNCTIONS
-=============================================================================#
+# === HELPER FUNCTIONS ===
 
 
 """
@@ -528,9 +514,7 @@ end
 
 
 
-#=============================================================================
-    HELPER FUNCTIONS FOR EXTRACTING RESULTS
-=============================================================================#
+# === HELPER FUNCTIONS FOR EXTRACTING RESULTS ===
 
 """
     get_rejected_epochs(state::EpochRejectionState)::Vector{Int}

@@ -95,9 +95,7 @@ function _threshold_t_matrix_parametric(t_matrix::Array{Float64,2}, critical_t_v
     return mask_positive, mask_negative
 end
 
-# ===================
-# NON-PARAMETRIC THRESHOLDING
-# ===================
+# === NON-PARAMETRIC THRESHOLDING ===
 
 """
     _collect_valid_t_values(permutation_t_matrices, predicate, transform)
@@ -423,9 +421,7 @@ function _threshold_t_matrix_nonparametric(
 end
 
 
-# ===================
-# TF PARAMETRIC THRESHOLDING (3D: electrodes × frequencies × time)
-# ===================
+# === TF PARAMETRIC THRESHOLDING (3D: electrodes × frequencies × time) ===
 
 """
     _threshold_t_matrix_parametric_tf!(mask_positive, mask_negative, t_matrix, critical_t_values, tail)
@@ -496,9 +492,7 @@ function _threshold_t_matrix_parametric_tf(t_matrix::Array{Float64,3}, critical_
 end
 
 
-# ===================
-# TF NON-PARAMETRIC THRESHOLDING (3D)
-# ===================
+# === TF NON-PARAMETRIC THRESHOLDING (3D) ===
 
 """
     _collect_valid_t_values_tf(permutation_t_matrices, predicate, transform)

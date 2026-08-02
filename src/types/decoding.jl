@@ -1,10 +1,8 @@
-"""
-Types for MVPA/decoding analysis results.
-
-This module defines types for storing multivariate pattern analysis (MVPA)
-and decoding results, including classification accuracy over time and
-confusion matrices.
-"""
+# Types for MVPA/decoding analysis results.
+#
+# Defines types for storing multivariate pattern analysis (MVPA)
+# and decoding results, including classification accuracy over time and
+# confusion matrices.
 
 """
     DecodingParameters
@@ -30,10 +28,6 @@ end
     DecodedData
 
 Stores MVPA/decoding analysis results for a single participant.
-
-This type represents the results of multivariate pattern classification
-analysis, including classification accuracy over time, confusion matrices,
-and metadata about the analysis parameters.
 
 # Fields
 - `file::String`: Source filename

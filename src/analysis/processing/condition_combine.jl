@@ -2,9 +2,7 @@
 Batch combining of conditions for epoch data.
 """
 
-#=============================================================================
-    COMBINE-CONDITIONS-SPECIFIC VALIDATION
-=============================================================================#
+# === COMBINE-CONDITIONS-SPECIFIC VALIDATION ===
 
 """Validate that file pattern is for epochs data."""
 function _validate_epochs_pattern_combine(pattern::String)
@@ -19,9 +17,7 @@ function _condition_combine_default_output_dir(input_dir::String, pattern::Strin
     joinpath(input_dir, "combined_$(pattern)_$(groups_str)")
 end
 
-#=============================================================================
-    COMBINE-CONDITIONS-SPECIFIC PROCESSING
-=============================================================================#
+# === COMBINE-CONDITIONS-SPECIFIC PROCESSING ===
 
 """
 Process a single epochs file through condition combining pipeline.
@@ -51,9 +47,7 @@ function _condition_combine_process_file(filepath::String, output_path::String, 
     return BatchResult(true, filename, "Combined into $n_groups group(s) with $total_epochs total epochs")
 end
 
-#=============================================================================
-    IN-MEMORY API FUNCTION
-=============================================================================#
+# === IN-MEMORY API FUNCTION ===
 
 """
     condition_combine(data::Vector{<:EpochData}, condition_groups::Vector{Vector{Int}})::Vector{EpochData}
@@ -119,9 +113,7 @@ function condition_combine(data::Vector{<:EpochData}, condition_groups::Vector{V
     return combined_data
 end
 
-#=============================================================================
-    BATCH API FUNCTION
-=============================================================================#
+# === BATCH API FUNCTION ===
 
 
 function condition_combine(

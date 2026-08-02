@@ -1,9 +1,7 @@
-"""
-Types for Representational Similarity Analysis (RSA) results.
-
-This module defines types for storing RSA results, including Representational
-Dissimilarity Matrices (RDMs) and correlations with model RDMs.
-"""
+# Types for Representational Similarity Analysis (RSA) results.
+#
+# Defines types for storing RSA results, including Representational
+# Dissimilarity Matrices (RDMs) and correlations with model RDMs.
 
 """
     NoiseCeiling
@@ -46,10 +44,6 @@ end
     RsaData
 
 Stores RSA analysis results for a single participant.
-
-This type represents the results of Representational Similarity Analysis,
-including Representational Dissimilarity Matrices (RDMs) computed at each
-time point, correlations with model RDMs, and metadata about the analysis.
 
 # Fields
 - `file::String`: Source filename

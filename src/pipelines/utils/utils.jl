@@ -34,9 +34,7 @@ subsection(title::String; width::Int = 80) = "\n" * _center_title(title, width)
 """Return a `# Title` sub-sub-section header."""
 subsubsection(title::String) = "\n# " * title
 
-# =============================================================================
-# CHANNEL REPAIR TRACKING
-# =============================================================================
+# === CHANNEL REPAIR TRACKING ===
 
 """
     ContinuousRepairInfo
@@ -182,9 +180,7 @@ function Base.show(io::IO, info::ArtifactInfo)
     end
 end
 
-# =============================================================================
-# HELPER FUNCTIONS FOR CREATING REPAIR INFO
-# =============================================================================
+# === HELPER FUNCTIONS FOR CREATING REPAIR INFO ===
 
 """
     create_continuous_repair_info(method::Symbol; name::String="continuous_repair")
@@ -215,7 +211,7 @@ Populates `repair_info.repaired` and `repair_info.skipped` with the analysis.
 - `ContinuousRepairInfo`: The same repair_info object (modified in-place)
 
 # Notes
-This function only analyzes repairability - it does not perform any repairs.
+Only analyzes repairability - does not perform any repairs.
 Use `repair_channels!` to actually perform the repairs after this analysis.
 """
 function channel_repairable!(repair_info::ContinuousRepairInfo, bad_channels::Vector{Symbol}, layout::Layout)
@@ -250,9 +246,7 @@ end
 
 @add_nonmutating channel_repairable!
 
-# =============================================================================
-# CONTINUOUS DATA REPAIR FUNCTIONS
-# =============================================================================
+# === CONTINUOUS DATA REPAIR FUNCTIONS ===
 
 """
     repair_channels_neighbor!(data::ContinuousData, repair_info::ContinuousRepairInfo)
@@ -795,7 +789,8 @@ function check_raw_data(directory::String; raw_data_files::String = "\\.(bdf|edf
             end
             duration_sec = num_records * hdr.duration_data_records
         else
-            # TODO: Implement header-only reading for other formats to speed up data_check
+            # NOTE: Reads full data file. In the future, implementing header-only 
+            # reading for these formats would significantly speed up data_check.
             dat_raw = read_raw_data(f)
             # The 1-argument create_eegfun_data builds a dummy layout matching the data channels
             dat = create_eegfun_data(dat_raw)

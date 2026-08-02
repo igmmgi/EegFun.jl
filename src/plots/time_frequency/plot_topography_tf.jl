@@ -6,9 +6,7 @@ Topographic visualizations for Time-Frequency data.
 """
 
 
-# =====================================
-#  TOPOGRAPHY FOR TIME-FREQUENCY DATA
-# =====================================
+# === TOPOGRAPHY FOR TIME-FREQUENCY DATA ===
 """
     plot_topography(tf::TimeFreqData;
                      freq_range::Tuple{Real, Real},
@@ -338,9 +336,7 @@ function plot_topography(
 end
 
 
-# =========================================
-#  TOPO STATS FOR TF STATISTICAL RESULTS
-# =========================================
+# === TOPO STATS FOR TF STATISTICAL RESULTS ===
 """
     plot_topography_stats(result::TFStatsResult;
                      freq_range::Tuple{Real, Real},

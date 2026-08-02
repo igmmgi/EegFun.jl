@@ -1,4 +1,3 @@
-# TODO: colorbar_position seems a bit awkward 
 # Currently I have settings with :right, :below, :same for colorbar_position
 # or offset positions (e.g., 1, 2). Actually, the whole colorbar stuff feels a bit off!
 # MUST BE BETTER WAY TO HANDLE THIS!!!

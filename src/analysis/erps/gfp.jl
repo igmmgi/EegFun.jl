@@ -15,9 +15,7 @@ References:
   Brain Topography, 3(1), 137-141.
 """
 
-# ==============================================================================
-#   INTERNAL HELPERS
-# ==============================================================================
+# === INTERNAL HELPERS ===
 
 """Normalize values to 0-100% range. Returns original values if range is zero."""
 function _normalize_to_percent(values::Vector{Float64})
@@ -76,9 +74,7 @@ function _apply_to_conditions(
     return [fn(erp_data; kwargs...) for erp_data in dat_filtered]
 end
 
-# ==============================================================================
-#   GFP
-# ==============================================================================
+# === GFP ===
 
 """
     gfp(dat::ErpData; 
@@ -153,9 +149,7 @@ function gfp(
 end
 
 
-# ==============================================================================
-#   GLOBAL DISSIMILARITY
-# ==============================================================================
+# === GLOBAL DISSIMILARITY ===
 
 """
     global_dissimilarity(dat::ErpData;
@@ -243,9 +237,7 @@ function global_dissimilarity(
 end
 
 
-# ==============================================================================
-#   GFP AND DISSIMILARITY (combined)
-# ==============================================================================
+# === GFP AND DISSIMILARITY (combined) ===
 
 """
     gfp_and_dissimilarity(dat::ErpData;

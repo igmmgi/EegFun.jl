@@ -527,16 +527,14 @@ end
 
 
 
-# =============================================================================
-# PER-EPOCH CHANNEL REPAIR
-# =============================================================================
+# === PER-EPOCH CHANNEL REPAIR ===
 
 """
     repair_channels_per_epoch!(epochs::Vector{EpochData}, layout::Layout, threshold::Real, artifact_col::Symbol)
 
 Repair channels on a per-epoch basis for epochs with artifacts.
 
-This function identifies channels that exceed the artifact threshold in each epoch and repairs
+Identify channels that exceed the artifact threshold in each epoch and repair
 them using neighbor interpolation if good neighbors are available. This allows trial-by-trial 
 repair when channels have good neighbors.
 

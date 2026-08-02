@@ -1063,9 +1063,7 @@ function _calc_g_matrix(cosang::Matrix{Float64}, n_legendre_terms::Int = 15)
     return G
 end
 
-# =============================================================================
-# INTERACTIVITY FUNCTIONS
-# =============================================================================
+# === INTERACTIVITY FUNCTIONS ===
 
 """
     _setup_topo_keyboard_handlers!(fig::Figure, axes::Union{Axis, Vector{Axis}})
@@ -1104,9 +1102,7 @@ function _setup_topo_interactivity!(
     _setup_topo_selection!(fig, ax, original_data, time_interval)
 end
 
-# =============================================================================
-# TOPO SELECTION STATE
-# =============================================================================
+# === TOPO SELECTION STATE ===
 
 """
     TopoSelectionState
@@ -1226,9 +1222,7 @@ Decrease the scale of the topographic plot (zoom out from color range).
 """
 _topo_scale_down!(ax, zoom_step::Float64 = 0.2) = _scale_topo_levels!(ax, 1.0 / (1.0 - zoom_step))
 
-# =============================================================================
-# REGION SELECTION FOR TOPO PLOTS
-# =============================================================================
+# === REGION SELECTION FOR TOPO PLOTS ===
 
 
 """

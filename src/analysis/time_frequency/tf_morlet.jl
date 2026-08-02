@@ -489,9 +489,7 @@ function tf_morlet(data_vec::Vector{<:EpochData}; kwargs...)
     return [tf_morlet(dat; kwargs...) for dat in data_vec]
 end
 
-# =============================================================================
-#     BATCH PROCESSING FUNCTIONS
-# =============================================================================
+# === BATCH PROCESSING FUNCTIONS ===
 
 """
     tf_morlet(file_pattern::String;

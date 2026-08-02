@@ -1,13 +1,9 @@
-"""
-Representational Similarity Analysis (RSA) functions.
+# Representational Similarity Analysis (RSA) functions.
+#
+# Computes Representational Dissimilarity Matrices (RDMs) from EEG data 
+# and compares them to model RDMs.
 
-This module provides functions for computing Representational Dissimilarity
-Matrices (RDMs) from EEG data and comparing them to model RDMs.
-"""
-
-# ==============================================================================
-#   DATA PREPARATION (reuse from decoding)
-# ==============================================================================
+# === DATA PREPARATION (reuse from decoding) ===
 
 """
     _prepare_rsa_data(epochs::Vector{EpochData})
@@ -101,9 +97,7 @@ function _compute_pooled_covariance(data_arrays::Vector{Array{Float64,3}}, time_
     return pooled_cov
 end
 
-# ==============================================================================
-#   DISSIMILARITY MEASURES
-# ==============================================================================
+# === DISSIMILARITY MEASURES ===
 
 """
     _compute_dissimilarity(
@@ -314,9 +308,7 @@ function normalize_rdm(rdm::AbstractMatrix{Float64}; method::Symbol = :none)
     return normalized_rdm
 end
 
-# ==============================================================================
-#   RSA ANALYSIS
-# ==============================================================================
+# === RSA ANALYSIS ===
 
 """
     rsa(
@@ -485,9 +477,7 @@ function rsa(all_participant_epochs::Vector{Vector{EpochData}}; kwargs...)
     return [rsa(participant_epochs; kwargs...) for participant_epochs in all_participant_epochs]
 end
 
-# ==============================================================================
-#   MODEL COMPARISON
-# ==============================================================================
+# === MODEL COMPARISON ===
 
 """
     compare_models(
@@ -621,9 +611,7 @@ function compare_models(
     return rsa_data
 end
 
-# ==============================================================================
-#   GRAND AVERAGE
-# ==============================================================================
+# === GRAND AVERAGE ===
 
 function grand_average(rsa_data_list::Vector{RsaData}; compute_noise_ceiling::Bool = true)
     if isempty(rsa_data_list)
@@ -684,9 +672,7 @@ function grand_average(rsa_data_list::Vector{RsaData}; compute_noise_ceiling::Bo
     return grand_rsa
 end
 
-# ==============================================================================
-#   INTERNAL HELPERS
-# ==============================================================================
+# === INTERNAL HELPERS ===
 
 """
     _validate_model_rdms(model_rdms, n_conditions, n_times)

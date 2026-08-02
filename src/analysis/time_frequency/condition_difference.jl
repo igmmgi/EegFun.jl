@@ -2,9 +2,7 @@
 Condition difference for time-frequency data.
 """
 
-#=============================================================================
-    TF DIFFERENCE-SPECIFIC PROCESSING
-=============================================================================#
+# === TF DIFFERENCE-SPECIFIC PROCESSING ===
 
 """
 Create a difference TF result by subtracting tf2 from tf1 (power and phase).
@@ -48,9 +46,7 @@ function _create_tf_difference_wave(tf1::TimeFreqData, tf2::TimeFreqData, cond1:
 end
 
 
-#=============================================================================
-    IN-MEMORY API FUNCTION
-=============================================================================#
+# === IN-MEMORY API FUNCTION ===
 
 function condition_difference(
     data::Vector{TimeFreqData},

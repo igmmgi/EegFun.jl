@@ -1,6 +1,4 @@
-# =============================================================================
-# DEFAULT KEYWORD ARGUMENTS
-# =============================================================================
+# === DEFAULT KEYWORD ARGUMENTS ===
 const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
     :display_plot => (true, "Whether to display the plot"),
@@ -1125,9 +1123,7 @@ function _setup_epochs_control_panel!(
     end
 end
 
-# =============================================================================
-# RIGHT-CLICK HANDLERS FOR EPOCHS
-# =============================================================================
+# === RIGHT-CLICK HANDLERS FOR EPOCHS ===
 
 """Dispatch right-click to the epochs context menu if inside the selection."""
 function _handle_epochs_right_click!(selection_state, mouse_x, data, condition_checked_ref)

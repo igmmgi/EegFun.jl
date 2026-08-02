@@ -2,9 +2,7 @@
 Plotting functions for Global Field Power (GFP) and Global Dissimilarity.
 """
 
-# =============================================================================
-# DEFAULT KEYWORD ARGUMENTS
-# =============================================================================
+# === DEFAULT KEYWORD ARGUMENTS ===
 const PLOT_GFP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
     :display_plot => (true, "Whether to display the plot"),

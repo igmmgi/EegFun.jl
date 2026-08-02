@@ -60,7 +60,7 @@ positions_3D(layout::Layout)::DataFrame = layout.data[:, [:x3, :y3, :z3]]
 
 Validate that a layout contains all required columns and data.
 
-This function checks that the layout DataFrame contains the minimum required
+Check that the layout DataFrame contains the minimum required
 columns for EEG layout operations.
 
 # Arguments
@@ -643,7 +643,7 @@ neighbours(layout::Layout) = layout.neighbours
 
 Clear all neighbor information from the layout.
 
-This function removes all calculated neighbor data and resets the distance
+Remove all calculated neighbor data and reset the distance
 criterion. This is useful when layout coordinates change and neighbor
 calculations need to be redone.
 
@@ -717,7 +717,7 @@ end
 
 Get neighbors with automatic computation if needed (mutating version).
 
-This function automatically calculates 2D neighbors if they don't exist or
+Automatically calculate 2D neighbors if they don't exist or
 if the distance criterion has changed. It caches the results for efficiency.
 
 # Arguments
@@ -757,7 +757,7 @@ get_neighbours_xy!(dat::EegFunData, distance_criterion::Real) = get_neighbours_x
 
 Get neighbors with automatic computation if needed (mutating version).
 
-This function automatically calculates 3D neighbors if they don't exist or
+Automatically calculate 3D neighbors if they don't exist or
 if the distance criterion has changed. It caches the results for efficiency.
 
 # Arguments

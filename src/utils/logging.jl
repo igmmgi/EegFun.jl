@@ -29,9 +29,7 @@ function _format_duration(duration::Millisecond)
     return string(Dates.canonicalize(Second(s)))
 end
 
-# ============================================================================
-# Helper Functions
-# ============================================================================
+# === Helper Functions ===
 
 # Internal: map symbols to log levels
 const LOG_LEVEL_MAP = Dict{Symbol,Logging.LogLevel}(
@@ -200,11 +198,7 @@ end
 close_global_logging() = close_logging(is_global = true)
 
 
-# ============================================================================
-# FUNCTION CALL LOGGING
-# ============================================================================
-# NOTE: Reads the REPL history file to log the actual call typed by the user.
-# Falls back to the function name string if history is unavailable (scripts, CI, non-REPL contexts).
+# === FUNCTION CALL LOGGING ===
 
 """
     @log_call func_name

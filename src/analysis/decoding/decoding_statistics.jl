@@ -168,9 +168,7 @@ function _apply_correction(p_values::Vector{Float64}, alpha::Float64, method::Sy
     end
 end
 
-# ===================
-# CLUSTER-BASED PERMUTATION TESTING
-# ===================
+# === CLUSTER-BASED PERMUTATION TESTING ===
 
 """
     _find_temporal_clusters(mask::BitVector, times::Vector{Float64})

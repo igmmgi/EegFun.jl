@@ -1,9 +1,7 @@
-"""
-    Preprocessing Configuration Types
-
-This module contains all configuration types specific to EEG data preprocessing,
-including filtering, referencing, artifact detection, and ICA settings.
-"""
+# Preprocessing Configuration Types
+#
+# Contains all configuration types specific to EEG data preprocessing,
+# including filtering, referencing, artifact detection, and ICA settings.
 
 """
     FilterSection

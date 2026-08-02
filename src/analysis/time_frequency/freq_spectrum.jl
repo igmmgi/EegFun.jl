@@ -8,7 +8,7 @@
 
 Compute power spectrum using Welch's method for EEG data.
 
-This function computes the frequency-domain power spectrum (no time dimension) using
+Compute the frequency-domain power spectrum (no time dimension) using
 Welch's method with overlapping windows. For EpochData, power is averaged across epochs.
 For ErpData and ContinuousData (SingleDataFrameEeg), power is computed directly from the single DataFrame.
 

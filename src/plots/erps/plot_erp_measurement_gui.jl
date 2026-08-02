@@ -511,7 +511,7 @@ function plot_erp_measurement_gui(
     # Initial plot
     update_erp_plot!()
 
-    # TODO: interactive legend not working here!?
+    # BUG: interactive legend not working here!?
     # Add manual legend for multi-condition plots (outside axis, won't be cleared by empty!)
     if length(erp_vec) > 1
         # Get the line elements from the axis

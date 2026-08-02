@@ -159,7 +159,7 @@ function _fieldtrip_to_continuousdata(ft::Dict, filepath::String, layout::Layout
 
         events = ft["cfg"]["event"]
 
-        # TODO: we have only tested this for our bdf data that is read into matlab
+        # NOTE: Event extraction has primarily been tested with BDF data imported into MATLAB.
         # FieldTrip events are stored as struct-of-arrays (like EEGLAB)
         sample_idx = findfirst(==("sample"), events.names)
         value_idx = findfirst(==("value"), events.names)

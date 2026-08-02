@@ -1,6 +1,4 @@
-# =============================================================================
-# DEFAULT KEYWORD ARGUMENTS
-# =============================================================================
+# === DEFAULT KEYWORD ARGUMENTS ===
 const LAYOUT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Topo layout parameters
@@ -31,9 +29,7 @@ struct PlotLayout
     metadata::Dict{Symbol,Any}                 # Layout configuration parameters 
 end
 
-# =============================================================================
-# HELPER FUNCTIONS
-# =============================================================================
+# === HELPER FUNCTIONS ===
 
 
 """

@@ -149,9 +149,7 @@ function channel_average(
     )
 end
 
-#=============================================================================
-    BATCH PROCESSING (FILE PATTERN)
-=============================================================================#
+# === BATCH PROCESSING (FILE PATTERN) ===
 
 """Generate default output directory name for channel averaging."""
 function _default_channel_average_output_dir(input_dir::String, pattern::String)
@@ -209,7 +207,7 @@ end
 
 Batch process EEG data files to average specified channels using predicates.
 
-This function loads JLD2 files containing EEG data, averages specified channel groups,
+Load JLD2 files containing EEG data, average specified channel groups,
 and saves the resulting data with new averaged channels to a new directory.
 
 # Arguments

@@ -1,13 +1,9 @@
-"""
-Cross-validated RDM computation for Representational Similarity Analysis (RSA).
+# Cross-validated RDM computation for Representational Similarity Analysis (RSA).
+#
+# Implements cross-validated RDM computation methods to assess
+# reliability and robustness of representational dissimilarity estimates.
 
-This module implements cross-validated RDM computation methods to assess
-reliability and robustness of representational dissimilarity estimates.
-"""
-
-# ==============================================================================
-#   CROSS-VALIDATED RDM COMPUTATION
-# ==============================================================================
+# === CROSS-VALIDATED RDM COMPUTATION ===
 
 """
     rsa_crossvalidated(
@@ -146,9 +142,7 @@ function rsa_crossvalidated(
     return rsa_result
 end
 
-# ==============================================================================
-#   CROSS-VALIDATION METHODS
-# ==============================================================================
+# === CROSS-VALIDATION METHODS ===
 
 """
     _cv_splithalf(data_arrays, n_timepoints, n_conditions, selected_channels, dissimilarity_measure, n_iterations)

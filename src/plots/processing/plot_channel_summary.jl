@@ -1,6 +1,4 @@
-# =============================================================================
-# DEFAULT KEYWORD ARGUMENTS
-# =============================================================================
+# === DEFAULT KEYWORD ARGUMENTS ===
 const PLOT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :display_plot => (true, "Display plot."),
     :sort_values => (false, "Sort the bars by the values in the `col` column in descending order."),

@@ -1,6 +1,4 @@
-# =============================================================================
-# ADAPTIVE MULTI-TAPER LINE NOISE REMOVAL (CLEANLINE)
-# =============================================================================
+# === ADAPTIVE MULTI-TAPER LINE NOISE REMOVAL (CLEANLINE) ===
 
 """
     CleanLineParams

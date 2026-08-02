@@ -1,6 +1,4 @@
-# =============================================================================
-# HELPER FUNCTIONS
-# =============================================================================
+# === HELPER FUNCTIONS ===
 
 """
     _create_artifact_controls(fig, n_epochs, epochs_with_artifacts)
@@ -157,9 +155,7 @@ function _create_navigation_handlers(controls, epoch_idx, artifact_idx, n_epochs
     end
 end
 
-# =============================================================================
-# DEFAULT KEYWORD ARGUMENTS
-# =============================================================================
+# === DEFAULT KEYWORD ARGUMENTS ===
 const PLOT_ARTIFACT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :display_plot => (true, "Display plot."),
 

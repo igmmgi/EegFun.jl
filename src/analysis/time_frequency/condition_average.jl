@@ -2,9 +2,7 @@
 Condition averaging for time-frequency data.
 """
 
-#=============================================================================
-    TF AVERAGE-SPECIFIC PROCESSING
-=============================================================================#
+# === TF AVERAGE-SPECIFIC PROCESSING ===
 
 """
 Create an average TF result by averaging power and phase across conditions.
@@ -52,9 +50,7 @@ function _create_tf_average_wave(tfs::Vector{TimeFreqData}, conditions::Vector{I
 end
 
 
-#=============================================================================
-    IN-MEMORY API FUNCTION
-=============================================================================#
+# === IN-MEMORY API FUNCTION ===
 
 function condition_average(data::Vector{TimeFreqData}, condition_groups::Vector{Vector{Int}})::Vector{TimeFreqData}
 

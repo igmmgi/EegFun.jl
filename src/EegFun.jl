@@ -47,8 +47,6 @@ using TOML
 # Machine learning (for decoding/MVPA)
 using LIBSVM
 
-# Note: Multithreading (Threads.@threads) is deferred for future optimization.
-# using Base.Threads
 
 # Public API declarations
 include("public_api.jl")

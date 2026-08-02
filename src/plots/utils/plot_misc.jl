@@ -1,6 +1,4 @@
-# =============================================================================
-# NOTE ON SPELLING: COLOR vs COLOUR
-# =============================================================================
+# === NOTE ON SPELLING: COLOR vs COLOUR ===
 # This codebase uses "color" (American spelling) throughout to maintain
 # consistency with Makie.jl's API, which uses "color" in all its attributes
 # (e.g., colormap, colorbar, strokecolor, etc.). While "colour" may be the
@@ -497,9 +495,7 @@ function _extract_layout_kwargs(plot_kwargs::Dict{Symbol,Any})
     return layout_kwargs
 end
 
-# =============================================================================
-# AXIS STYLING FUNCTIONS
-# =============================================================================
+# === AXIS STYLING FUNCTIONS ===
 
 """
     _set_axis_grid!(ax; xgrid = false, ygrid = false, xminorgrid = false, yminorgrid = false)
@@ -725,9 +721,7 @@ function _add_origin_scale_indicator!(
     end
 end
 
-# =============================================================================
-# WINDOW TITLE AND STRING ABBREVIATION UTILITIES
-# =============================================================================
+# === WINDOW TITLE AND STRING ABBREVIATION UTILITIES ===
 
 """
     _split_into_parts(s::String)
@@ -1010,9 +1004,7 @@ function _shorten_condition_names(
     return full_string
 end
 
-# =============================================================================
-# BASELINE HELPER FUNCTIONS
-# =============================================================================
+# === BASELINE HELPER FUNCTIONS ===
 
 """
     _extract_baseline_values(interval::Interval)

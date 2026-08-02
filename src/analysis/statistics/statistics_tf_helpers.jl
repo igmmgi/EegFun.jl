@@ -1,6 +1,4 @@
-# ===================
-# TF DATA PREPARATION (4D: participants × electrodes × frequencies × time)
-# ===================
+# === TF DATA PREPARATION (4D: participants × electrodes × frequencies × time) ===
 
 """
     prepare_stats(tfs::Vector{TimeFreqData}; design, condition_selection, channel_selection, frequency_selection, interval_selection, baseline_interval, baseline_method)
@@ -152,9 +150,7 @@ function prepare_stats(
 end
 
 
-# ===================
-# TF HELPER FUNCTIONS
-# ===================
+# === TF HELPER FUNCTIONS ===
 
 """
     _extract_tf_array(tfs, electrodes, frequencies, time_points)
@@ -253,9 +249,7 @@ function _create_tf_grand_average(
 end
 
 
-# ===================
-# TF T-TEST COMPUTATION (4D)
-# ===================
+# === TF T-TEST COMPUTATION (4D) ===
 
 """
     _compute_t_matrix_tf(data1, data2, design; tail)

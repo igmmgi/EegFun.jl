@@ -1,6 +1,4 @@
-# =============================================================================
-# FILTER TYPES AND STRUCTURES
-# =============================================================================
+# === FILTER TYPES AND STRUCTURES ===
 
 """
     FilterInfo
@@ -28,9 +26,7 @@ struct FilterInfo
     transition_band::Float64
 end
 
-# =============================================================================
-# FILTER CREATION
-# =============================================================================
+# === FILTER CREATION ===
 """
     create_lowpass_filter(cutoff_freq::Real, sample_rate::Real; 
     filter_method::String = "iir", 
@@ -111,25 +107,7 @@ function create_highpass_filter(
 end
 
 
-"""
-    _create_filter(filter_type::String, cutoff_freq::Real, sample_rate::Real; filter_method::String, order::Integer = 2, transition_width::Real = 0.1)
-
-Create a digital filter object for the specified parameters.
-
-# Arguments
-- `filter_type`: String specifying filter type ("hp"=highpass, "lp"=lowpass)
-- `cutoff_freq`: Cutoff frequency in Hz
-- `sample_rate`: Sampling rate in Hz
-- `filter_method`: String specifying filter implementation ("iir" or "fir")
-- `order`: Filter order for IIR filters (default: 2, becomes effective order 4 with filtfilt)
-- `transition_width`: Relative width of transition band as fraction of cutoff (default: 0.1 for EEG)
-
-# Returns
-- `FilterInfo`: A struct containing all filter information and the actual filter object
-
-# Notes
-- NOTE: When using filtfilt (default), effective filter order is approximately doubled
-"""
+"""Internal: create a `FilterInfo` for the given filter type and parameters."""
 function _create_filter(
     filter_type::String,
     cutoff_freq::Real,
@@ -186,9 +164,25 @@ function _create_filter(
 end
 
 
-# =============================================================================
-# FILTER APPLICATION
-# =============================================================================
+# === FILTER APPLICATION ===
+
+"""
+    _ensure_fir_transition_width(dat::EegData, transition_width::Real, cutoff_freq::Real) -> Float64
+
+Ensures that the FIR filter transition width is wide enough to avoid crashing based on data length.
+Returns the required transition width.
+"""
+function _ensure_fir_transition_width(dat::EegData, transition_width::Real, cutoff_freq::Real)
+    min_length = dat.data isa Vector ? minimum(nrow.(dat.data)) : nrow(dat.data)
+    min_required_transition_band = 12.0 * dat.sample_rate / min_length
+    min_required_transition_width = min_required_transition_band / cutoff_freq
+
+    if transition_width < min_required_transition_width
+        @minimal_warning "FIR transition width $(transition_width) too narrow for data length $(min_length). Widening to $(round(min_required_transition_width, digits=3)) to prevent crash."
+        return min_required_transition_width
+    end
+    return transition_width
+end
 
 """
     _apply_filter!(dat::DataFrame, channels::Vector{Symbol}, filter; filter_func::String = "filtfilt")
@@ -273,14 +267,7 @@ function lowpass_filter!(
     @debug "lowpass_filter! applying lp filter at $cutoff_freq Hz to $(length(selected_channels)) channels"
 
     if filter_method == "fir" && filter_func == "filtfilt"
-        min_length = dat.data isa Vector ? minimum(nrow.(dat.data)) : nrow(dat.data)
-        min_required_transition_band = 12.0 * dat.sample_rate / min_length
-        min_required_transition_width = min_required_transition_band / cutoff_freq
-
-        if transition_width < min_required_transition_width
-            @minimal_warning "FIR transition width $(transition_width) too narrow for data length $(min_length). Widening to $(round(min_required_transition_width, digits=3)) to prevent crash."
-            transition_width = min_required_transition_width
-        end
+        transition_width = _ensure_fir_transition_width(dat, transition_width, cutoff_freq)
     end
 
     filter_info = create_lowpass_filter(
@@ -327,14 +314,7 @@ function highpass_filter!(
     @debug "highpass_filter! applying hp filter at $cutoff_freq Hz to $(length(selected_channels)) channels"
 
     if filter_method == "fir" && filter_func == "filtfilt"
-        min_length = dat.data isa Vector ? minimum(nrow.(dat.data)) : nrow(dat.data)
-        min_required_transition_band = 12.0 * dat.sample_rate / min_length
-        min_required_transition_width = min_required_transition_band / cutoff_freq
-
-        if transition_width < min_required_transition_width
-            @minimal_warning "FIR transition width $(transition_width) too narrow for data length $(min_length). Widening to $(round(min_required_transition_width, digits=3)) to prevent crash."
-            transition_width = min_required_transition_width
-        end
+        transition_width = _ensure_fir_transition_width(dat, transition_width, cutoff_freq)
     end
 
     filter_info = create_highpass_filter(
@@ -367,9 +347,7 @@ function highpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbo
 end
 
 
-# =============================================================================
-# FILTER ANALYSIS AND CHARACTERIZATION
-# =============================================================================
+# === FILTER ANALYSIS AND CHARACTERIZATION ===
 
 """
     get_filter_characteristics(filter, sample_rate::Real, transition_width::Real; npoints::Int=1000)
@@ -495,9 +473,7 @@ function print_filter_characteristics(filter_info::FilterInfo; npoints::Int = 10
 end
 
 
-# =============================================================================
-# BATCH FILTERING API
-# =============================================================================
+# === BATCH FILTERING API ===
 
 """Generate default output directory name for filter operation."""
 function _default_filter_output_dir(input_dir::String, pattern::String, filter_type::String, freq::Real)

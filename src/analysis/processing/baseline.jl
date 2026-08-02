@@ -118,14 +118,12 @@ function baseline!(dat::Vector{ErpData}; channel_selection::Function = channels(
     return nothing
 end
 
-# TODO: actually, these are probably not needed as baseline can just be applied inplace whenever it is needed
-# For now, just keep for a little bit of consistency with other functions?
+# NOTE: Non-mutating version kept for consistency with other processing functions,
+# though baseline correction is typically fast enough to be done in-place.
 @add_nonmutating baseline!
 
 
-#=============================================================================
-    BASELINE-SPECIFIC HELPERS
-=============================================================================#
+# === BASELINE-SPECIFIC HELPERS ===
 """Generate default output directory name for baseline operation."""
 function _default_baseline_output_dir(input_dir::String, pattern::String, baseline_interval::Tuple{Real,Real})
     interval_str = "$(baseline_interval[1])_to_$(baseline_interval[2])"
@@ -307,7 +305,6 @@ baseline("epochs", (-0.2, 0.0), participant_selection=participants(3))
 # Baseline correct specific participants and conditions
 baseline("epochs", (-0.2, 0.0), participant_selection=participants([3, 4]), condition_selection=conditions([1, 2]))
 
-# Use tuple directly
 ```
 """
 function baseline(

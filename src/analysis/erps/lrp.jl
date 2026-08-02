@@ -70,9 +70,7 @@ function lrp(erp_left::ErpData, erp_right::ErpData; channel_selection::Function 
 end
 
 
-#=============================================================================
-    INTERNAL HELPER FUNCTIONS
-=============================================================================#
+# === INTERNAL HELPER FUNCTIONS ===
 
 """
 Parse channel label to extract letters and digits.
@@ -176,9 +174,7 @@ function _detect_all_lateral_pairs(left_labels::Vector{Symbol}, right_labels::Ve
 end
 
 
-#=============================================================================
-    LRP-SPECIFIC VALIDATION
-=============================================================================#
+# === LRP-SPECIFIC VALIDATION ===
 
 """Validate LRP-specific parameters, returning error message or nothing."""
 function _validate_lrp_params(condition_pairs::Vector{Tuple{Int,Int}})
@@ -198,9 +194,7 @@ function _default_lrp_output_dir(input_dir::String, condition_pairs::Vector{Tupl
     joinpath(input_dir, "lrp_$(pairs_str)")
 end
 
-#=============================================================================
-    LRP-SPECIFIC PROCESSING
-=============================================================================#
+# === LRP-SPECIFIC PROCESSING ===
 
 """
 Process a single ERP file through LRP calculation pipeline.
@@ -238,9 +232,7 @@ function _process_lrp_file(filepath::String, output_path::String, condition_pair
     end
 end
 
-#=============================================================================
-    MAIN API FUNCTION FOR BATCH PROCESSING
-=============================================================================#
+# === MAIN API FUNCTION FOR BATCH PROCESSING ===
 
 
 function lrp(

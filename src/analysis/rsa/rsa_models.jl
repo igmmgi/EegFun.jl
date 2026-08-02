@@ -1,60 +1,56 @@
-"""
-Helper functions for creating model RDMs from various data types.
-
-This module provides utilities to convert different types of "other" data
-(behavioral, computational, theoretical) into Representational Dissimilarity
-Matrices (RDMs) for comparison with neural RDMs.
-
+# Helper functions for creating model RDMs from various data types.
+#
+# Converts different types of "other" data (behavioral, computational, 
+# theoretical) into Representational Dissimilarity Matrices (RDMs) for 
+# comparison with neural RDMs.
+#
 # Input Format Specifications
+#
+# **Important**: Model RDMs expect **summarized/averaged values per condition**, not trial-by-trial data.
+# You should average or summarize your behavioral/model data across trials BEFORE creating model RDMs.
 
-**Important**: Model RDMs expect **summarized/averaged values per condition**, not trial-by-trial data.
-You should average or summarize your behavioral/model data across trials BEFORE creating model RDMs.
+# ## Static Models (Single Timepoint)
+# 
+# For data with **one summary value per condition** (e.g., mean reaction times):
+# 
+# **Expected Format**: `Vector{Float64}` [n_conditions]
+# - One **averaged/representative** value per condition
+# - Example: `[0.302, 0.501, 0.403]` = mean RTs for 3 conditions (already averaged across trials)
+# 
+# **Helper Function**: `create_rdm_from_reaction_times(rts)`
+# 
+# ---
+# 
+# For data with **multiple features per condition** (e.g., word embeddings):
+# 
+# **Expected Format**: `Vector{Vector{Float64}}` or `Matrix{Float64}`
+# - `Vector{Vector{Float64}}`: Each inner vector is one condition's features
+# - `Matrix{Float64}`: [n_conditions × n_features] - each row is one condition
+# 
+# **Helper Functions**: 
+# - `create_rdm_from_vectors(vectors)`
+# - `create_rdm_from_matrix(data_matrix)`
+# 
+# ---
+# 
+# ## Temporal Models (Multiple Timepoints)
+# 
+# For data with **many values per condition over time** (e.g., eye tracking, EDA):
+# 
+# **Expected Format**: `Array{Float64, 3}` [n_conditions × n_features × n_timepoints]
+# - Dimension 1: Conditions (e.g., Face, Object, Scene)
+# - Dimension 2: Features (e.g., x_position, y_position, pupil_size for eye tracking)
+# - Dimension 3: Time points
+# - **Plus**: `Vector{Float64}` [n_timepoints] - time vector in seconds
+# 
+# **Helper Function**: `create_rdm_from_timeseries(data, times; align_to=neural_times)`
+# 
+# **Key Feature**: Automatic temporal alignment! If your model data has different
+# sampling rate than neural data, use `align_to` parameter to automatically resample.
+# 
+# ---
 
-## Static Models (Single Timepoint)
-
-For data with **one summary value per condition** (e.g., mean reaction times):
-
-**Expected Format**: `Vector{Float64}` [n_conditions]
-- One **averaged/representative** value per condition
-- Example: `[0.302, 0.501, 0.403]` = mean RTs for 3 conditions (already averaged across trials)
-
-**Helper Function**: `create_rdm_from_reaction_times(rts)`
-
----
-
-For data with **multiple features per condition** (e.g., word embeddings):
-
-**Expected Format**: `Vector{Vector{Float64}}` or `Matrix{Float64}`
-- `Vector{Vector{Float64}}`: Each inner vector is one condition's features
-- `Matrix{Float64}`: [n_conditions × n_features] - each row is one condition
-
-**Helper Functions**: 
-- `create_rdm_from_vectors(vectors)`
-- `create_rdm_from_matrix(data_matrix)`
-
----
-
-## Temporal Models (Multiple Timepoints)
-
-For data with **many values per condition over time** (e.g., eye tracking, EDA):
-
-**Expected Format**: `Array{Float64, 3}` [n_conditions × n_features × n_timepoints]
-- Dimension 1: Conditions (e.g., Face, Object, Scene)
-- Dimension 2: Features (e.g., x_position, y_position, pupil_size for eye tracking)
-- Dimension 3: Time points
-- **Plus**: `Vector{Float64}` [n_timepoints] - time vector in seconds
-
-**Helper Function**: `create_rdm_from_timeseries(data, times; align_to=neural_times)`
-
-**Key Feature**: Automatic temporal alignment! If your model data has different
-sampling rate than neural data, use `align_to` parameter to automatically resample.
-
----
-"""
-
-# ==============================================================================
-#   HELPER FUNCTIONS
-# ==============================================================================
+# === HELPER FUNCTIONS ===
 
 """
     _fill_rdm_from_dissimilarities!(rdm::Matrix{Float64}, compute_dissim::Function)
@@ -74,9 +70,7 @@ function _fill_rdm_from_dissimilarities!(rdm::Matrix{Float64}, compute_dissim::F
     return rdm
 end
 
-# ==============================================================================
-#   STATIC MODEL RDMs (ONE VALUE PER CONDITION)
-# ==============================================================================
+# === STATIC MODEL RDMs (ONE VALUE PER CONDITION) ===
 
 """
     create_rdm_from_vectors(
@@ -341,9 +335,7 @@ function create_rdm_from_categorical(categories::Vector{Int})
     return rdm
 end
 
-# ==============================================================================
-#   TEMPORAL ALIGNMENT AND RESAMPLING
-# ==============================================================================
+# === TEMPORAL ALIGNMENT AND RESAMPLING ===
 """
     resample_temporal_data(
         temporal_data::Array{Float64, 3},
@@ -713,9 +705,7 @@ function create_temporal_model_rdms(
     return model_rdms, model_names
 end
 
-# ==============================================================================
-#   CONVENIENCE FUNCTION FOR MULTIPLE MODEL TYPES
-# ==============================================================================
+# === CONVENIENCE FUNCTION FOR MULTIPLE MODEL TYPES ===
 
 # Helper functions using multiple dispatch for type detection
 _create_single_rdm(data::Vector{Vector{Float64}}) = create_rdm_from_vectors(data)

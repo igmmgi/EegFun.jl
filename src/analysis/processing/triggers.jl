@@ -3,7 +3,7 @@
 
 Clean trigger data by detecting only the onset (first occurrence) of each trigger value.
 
-This function converts sustained trigger signals into single onset events. 
+Convert sustained trigger signals into single onset events.
 When a trigger is held for multiple samples, only the first sample is retained, 
 with subsequent samples set to zero.
 
@@ -46,7 +46,7 @@ end
 
 Count occurrences of each trigger value in ContinuousData or DataFrame.
 
-This function analyzes trigger data to provide a summary of how many times each
+Analyze trigger data to provide a summary of how many times each
 trigger value appears in the dataset. Zero values are excluded from the count.
 Useful for validating experimental paradigms and checking trigger timing.
 
@@ -257,9 +257,7 @@ function trigger_count(dat::ExtensibleDataFormat.XdfData)::TriggerInfo
     return _trigger_count_impl([trigger], ["count"]; trigger_info = trigger_info)
 end
 
-# =============================================================================
-# TRIGGER SEQUENCE SEARCH FUNCTIONS
-# =============================================================================
+# === TRIGGER SEQUENCE SEARCH FUNCTIONS ===
 
 """
     search_sequence(array, sequences::Vector{<:Vector}; ignore_values = [0], sort_indices = true) -> Vector{Vector{Int}}
@@ -420,9 +418,7 @@ _matches_expected(actual::Real, expected::UnitRange) = actual in expected
 _matches_expected(actual::Real, expected::Vector{<:Integer}) = actual in expected  # Set match: [101, 103]
 _matches_expected(actual, expected) = error("Unsupported sequence type: $expected")
 
-#=============================================================================
-    EPOChed TRIGGER SEQ DISCOVERY
-=============================================================================#
+# === EPOChed TRIGGER SEQ DISCOVERY ===
 
 """
     trigger_info(dat::Union{EpochData, Vector{EpochData}})

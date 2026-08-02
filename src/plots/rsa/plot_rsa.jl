@@ -1,12 +1,7 @@
-"""
-Plotting functions for Representational Similarity Analysis (RSA) results.
-
-This module provides functions for visualizing RDMs, model correlations,
-and other RSA analysis results.
-"""
-# ==============================================================================
-#   DEFAULT KEYWORD ARGUMENTS
-# ==============================================================================
+# Plotting functions for Representational Similarity Analysis (RSA) results.
+#
+# Visualizes RDMs, model correlations, and other RSA analysis results.
+# === DEFAULT KEYWORD ARGUMENTS ===
 
 const PLOT_RSA_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters

@@ -167,9 +167,7 @@ end
 
 
 
-#=============================================================================
-    REREFERENCE-SPECIFIC VALIDATION
-=============================================================================#
+# === REREFERENCE-SPECIFIC VALIDATION ===
 
 """Generate default output directory name for rereferencing operation."""
 function _default_rereference_output_dir(input_dir::String, pattern::String, ref_selection)
@@ -177,9 +175,7 @@ function _default_rereference_output_dir(input_dir::String, pattern::String, ref
     joinpath(input_dir, "rereferenced_$(pattern)_$(ref_str)")
 end
 
-#=============================================================================
-    REREFERENCE-SPECIFIC PROCESSING
-=============================================================================#
+# === REREFERENCE-SPECIFIC PROCESSING ===
 
 """
 Process a single file through rereferencing pipeline.
@@ -219,9 +215,7 @@ function _process_rereference_file(filepath::String, output_path::String, refere
     return BatchResult(true, fname, "Rereferenced to $ref_str")
 end
 
-#=============================================================================
-    MAIN API FUNCTION
-=============================================================================#
+# === MAIN API FUNCTION ===
 
 """
     rereference(file_pattern::String; 

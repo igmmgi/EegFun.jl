@@ -3,9 +3,7 @@ Data mirroring for reducing edge artifacts.
 Provides functions to mirror (reverse and append) EEG data before and/or after epochs. 
 """
 
-#=============================================================================
-    CORE MIRRORING FUNCTIONS
-=============================================================================#
+# === CORE MIRRORING FUNCTIONS ===
 
 """
     mirror!(dat::EpochData, side::Symbol = :both) -> Nothing
@@ -114,9 +112,7 @@ function mirror(data_vec::Vector{ErpData}, side::Symbol = :both)::Vector{ErpData
 end
 
 
-#=============================================================================
-    UNMIRRORING FUNCTIONS
-=============================================================================#
+# === UNMIRRORING FUNCTIONS ===
 
 """
     unmirror!(dat::EpochData, side::Symbol = :both) -> Nothing
@@ -219,9 +215,7 @@ function unmirror(data_vec::Vector{ErpData}, side::Symbol = :both)::Vector{ErpDa
 end
 
 
-#=============================================================================
-    INTERNAL HELPER FUNCTIONS
-=============================================================================#
+# === INTERNAL HELPER FUNCTIONS ===
 
 """
 Mirror a DataFrame in-place by reflecting the data at the boundaries.

@@ -53,6 +53,10 @@ settings that affect the interpretation of the data.
 - `reference::Symbol`: Reference type used (e.g., :avg, :mastoid, :none)
 - `hp_filter::Float64`: High-pass filter cutoff in Hz (0.0 if none)
 - `lp_filter::Float64`: Low-pass filter cutoff in Hz (0.0 if none)
+- `sample_rate::Int64`: Sample rate of the data in Hz
+- `n_ica_components_removed::Int`: Number of ICA components removed
+- `n_channels_repaired::Int`: Number of channels repaired
+- `repaired_channels::Vector{Symbol}`: List of repaired channels
 """
 @kwdef mutable struct AnalysisInfo
     reference::Symbol = :none
@@ -162,10 +166,6 @@ end
 
 Stores continuous EEG data with associated layout and analysis information.
 
-This type represents continuous EEG recordings where all time points are
-stored in a single DataFrame. The data typically includes time series
-for each electrode channel along with metadata columns.
-
 # Fields
 - `file::String`: Source filename
 - `data::DataFrame`: DataFrame containing continuous data (without file column)
@@ -186,10 +186,6 @@ end
     ErpData
 
 Stores event-related potential data with associated layout and analysis information.
-
-This type represents averaged event-related potentials where multiple epochs
-have been averaged together into a single time series. The data includes
-the averaged ERP waveform for each electrode channel.
 
 # Fields
 - `file::String`: Source filename
@@ -217,10 +213,6 @@ end
     EpochData
 
 Stores epoch-based EEG data with associated layout and analysis information.
-
-This type represents EEG data organized into individual epochs, where each
-epoch is stored as a separate DataFrame. This format is useful for
-event-related potential analysis and other epoch-based processing.
 
 # Fields
 - `file::String`: Source filename (constant across all epochs)
@@ -259,10 +251,6 @@ end
     TimeFreqData
 
 Stores time-frequency analysis results for a single condition/average.
-
-This type represents time-frequency power and phase data where all time-frequency points
-are stored in DataFrames with columns for time, frequency, and each electrode channel.
-Suitable for averaged TF representations.
 
 # Fields
 - `file::String`: Source filename
@@ -321,10 +309,6 @@ end
 
 Stores time-frequency analysis results with individual trials preserved.
 
-This type represents time-frequency power and phase data organized into individual trials,
-where each trial is stored as a separate DataFrame. Each DataFrame contains
-columns for time, frequency, and each electrode channel.
-
 # Fields
 - `file::String`: Source filename (constant across all trials)
 - `condition::Int64`: Condition number (constant across all trials)
@@ -381,10 +365,6 @@ end
     SpectrumData
 
 Stores power spectrum analysis results (frequency domain, no time dimension).
-
-This type represents power spectral density data computed using Welch's method or
-other spectral estimation techniques. The data is stored in a DataFrame with
-frequency values and power for each electrode channel.
 
 # Fields
 - `file::String`: Source filename
@@ -499,6 +479,10 @@ specific settings.
 - `restart_factor::Float64`: Factor for restarting stuck algorithms
 - `degconst::Float64`: Degree constant for spherical coordinates
 - `default_stop::Float64`: Default stopping criterion threshold
+- `use_gpu::Bool`: Whether to use GPU acceleration (default: false)
+- `picard_m::Int`: Picard algorithm parameter m
+- `picard_lambda_min::Float64`: Picard algorithm minimum lambda
+- `picard_ls_tries::Int`: Picard algorithm line search tries
 """
 @kwdef mutable struct IcaPrms
     l_rate::Float64 = 0.001
@@ -541,7 +525,7 @@ about the decomposition process.
 - `is_sub_gaussian::Vector{Bool}`: Boolean vector indicating if each component is sub-Gaussian (true = sub-Gaussian, false = super-Gaussian). For regular Infomax, all components are super-Gaussian (all false).
 """
 struct InfoIca <: EegFunData
-    filename::String  # Filename of the input data file
+    filename::String
     unmixing::Matrix{Float64}
     mixing::Matrix{Float64}
     sphere::Matrix{Float64}
@@ -550,8 +534,8 @@ struct InfoIca <: EegFunData
     mean::Vector{Float64}
     ica_label::Vector{Symbol}
     removed_activations::Dict{Int,Matrix{Float64}}
-    layout::Layout  # Layout information for the ICA components
-    is_sub_gaussian::Vector{Bool}  # true = sub-Gaussian, false = super-Gaussian
+    layout::Layout
+    is_sub_gaussian::Vector{Bool}
 end
 
 """
@@ -576,33 +560,8 @@ struct ErpMeasurementsResult <: EegFunData
     baseline_interval::Union{Interval,Nothing}
 end
 
-"""
-    Base.show(io::IO, result::ErpMeasurementsResult)
-    Base.show(io::IO, cond::EpochCondition)
-    Base.show(io::IO, layout::Layout)
-    Base.show(io::IO, ::MIME"text/plain", layout::Layout)
-    Base.show(io::IO, neighbours_dict::Dict{Symbol,Neighbours})
-    Base.show(io::IO, ::MIME"text/plain", neighbours_dict::Dict{Symbol,Neighbours})
-    Base.show(io::IO, dat::MultiDataFrameEeg)
-    Base.show(io::IO, dat::ContinuousData)
-    Base.show(io::IO, dat::SingleDataFrameEeg)
-    Base.show(io::IO, dat::AnalysisInfo)
-    Base.show(io::IO, ica::InfoIca)
-    Base.show(io::IO, ::MIME"text/plain", ica::InfoIca)
-    Base.show(io::IO, result::TTestResult)
-    Base.show(io::IO, data::StatisticalData)
-    Base.show(io::IO, result::PermutationResult)
-    Base.show(io::IO, result::AnalyticResult)
-    Base.show(io::IO, data::TFStatisticalData)
-    Base.show(io::IO, result::TFClusterPermutationResult)
-    Base.show(io::IO, result::TFAnalyticResult)
-    Base.show(io::IO, decoded::DecodedData)
-    Base.show(io::IO, nc::NoiseCeiling)
-    Base.show(io::IO, rsa::RsaData)
-
-Custom display methods for EegFun data types. Each type prints a structured
-summary including key fields, dimensions, and metadata.
-"""
+# Custom display methods for EegFun data types. Each type prints a structured
+# summary including key fields, dimensions, and metadata.
 function Base.show(io::IO, result::ErpMeasurementsResult)
     println(io, "ErpMeasurementsResult")
     println(io, "  Analysis type: $(getfield(result, :analysis_type))")

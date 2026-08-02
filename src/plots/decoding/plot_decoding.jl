@@ -1,9 +1,7 @@
 """
 Plotting function for MVPA/decoding results.
 """
-# ==============================================================================
-#   DEFAULT KEYWORD ARGUMENTS
-# ==============================================================================
+# === DEFAULT KEYWORD ARGUMENTS ===
 
 const PLOT_DECODING_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
@@ -51,9 +49,7 @@ const PLOT_DECODING_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :figure_padding => ((10, 30, 10, 10), "Padding around entire figure as (left, right, bottom, top) tuple (in pixels)"),
 )
 
-# ==============================================================================
-#   HELPER FUNCTIONS
-# ==============================================================================
+# === HELPER FUNCTIONS ===
 
 """
     _add_decoding_origin_lines!(ax::Axis, chance_level::Float64, plot_kwargs::Dict)
@@ -155,7 +151,7 @@ end
 
 Base function that plots decoding data to an existing axis.
 
-This function handles the core plotting logic:
+Handles the core plotting logic:
 - Setting up axis limits
 - Adding origin lines (x=0 and y=chance_level)
 - Plotting error band
@@ -196,9 +192,7 @@ function _plot_decoding_to_axis!(
 
 end
 
-# ==============================================================================
-#   MAIN PLOTTING FUNCTIONS
-# ==============================================================================
+# === MAIN PLOTTING FUNCTIONS ===
 
 """
     plot_decoding(decoded::DecodedData; kwargs...)

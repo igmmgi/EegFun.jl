@@ -70,9 +70,7 @@ function _build_connectivity_matrix(electrodes::Vector{Symbol}, layout::Layout, 
     end
 end
 
-# ===================
-# PRE-FILTERING
-# ===================
+# === PRE-FILTERING ===
 
 """
     _prefilter_mask_by_neighbors!(mask, spatial_connectivity, min_num_neighbors)
@@ -157,9 +155,7 @@ function _prefilter_mask_by_neighbors(mask::BitArray{2}, spatial_connectivity::S
     return filtered_mask
 end
 
-# ===================
-# CLUSTER FINDING (BFS)
-# ===================
+# === CLUSTER FINDING (BFS) ===
 
 """
     _set_cluster_polarity(clusters, polarity)
@@ -355,9 +351,7 @@ function _find_clusters(
     return positive_clusters, negative_clusters
 end
 
-# ===================
-# CLUSTER STATISTICS
-# ===================
+# === CLUSTER STATISTICS ===
 
 """
     _compute_cluster_statistics(clusters, t_matrix, electrode_to_idx; return_clusters)
@@ -436,9 +430,7 @@ function _compute_cluster_statistics(clusters::Vector{Cluster}, t_matrix::Array{
 end
 
 
-# ===================
-# TF PRE-FILTERING (3D)
-# ===================
+# === TF PRE-FILTERING (3D) ===
 
 """
     _prefilter_mask_by_neighbors_tf!(mask, spatial_connectivity, min_num_neighbors)
@@ -482,9 +474,7 @@ function _prefilter_mask_by_neighbors_tf!(mask::BitArray{3}, spatial_connectivit
 end
 
 
-# ===================
-# TF CLUSTER FINDING (3D BFS)
-# ===================
+# === TF CLUSTER FINDING (3D BFS) ===
 
 """
     _find_clusters_connected_components_tf(mask, electrodes, frequencies, time_points, spatial_connectivity, cluster_type)
@@ -711,9 +701,7 @@ function _find_clusters_tf(
 end
 
 
-# ===================
-# TF CLUSTER STATISTICS (3D)
-# ===================
+# === TF CLUSTER STATISTICS (3D) ===
 
 """
     _compute_cluster_statistics_tf(clusters, t_matrix, electrode_to_idx; return_clusters)

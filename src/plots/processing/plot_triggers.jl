@@ -37,7 +37,7 @@ const PLOT_TRIGGERS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     _filter_triggers(trigger_times, trigger_values, ignore_triggers)
 
 Filter out specified trigger codes from trigger data.
-Note: This function assumes ignore_triggers is not empty.
+Note: Assumes ignore_triggers is not empty.
 
 # Arguments
 - `trigger_times`: Vector of trigger times

@@ -1,6 +1,4 @@
-# =============================================================================
-# DEFAULT KEYWORD ARGUMENTS
-# =============================================================================
+# === DEFAULT KEYWORD ARGUMENTS ===
 const PLOT_FILTER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Axis limits
     :ylim => ((-100, 5), "Y-axis limits in dB as (min, max) tuple"),
@@ -39,9 +37,7 @@ const PLOT_FILTER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :xscale => (Makie.Symlog10(10.0), "X-axis scale type"),
 )
 
-# =============================================================================
-# FILTER VISUALIZATION
-# =============================================================================
+# === FILTER VISUALIZATION ===
 
 """
     plot_filter_response(filter_info::FilterInfo; kwargs...)

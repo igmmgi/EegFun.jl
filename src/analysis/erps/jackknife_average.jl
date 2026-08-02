@@ -6,9 +6,7 @@ compute the average of all other participants (excluding that participant).
 This is commonly used with LRP data to reduce variance for statistical testing.
 """
 
-#=============================================================================
-    JACKKNIFE-SPECIFIC VALIDATION
-=============================================================================#
+# === JACKKNIFE-SPECIFIC VALIDATION ===
 
 """Validate jackknife parameters."""
 function _validate_jackknife_params(erps::Vector{ErpData})
@@ -27,9 +25,7 @@ function _default_jackknife_output_dir(input_dir::String, pattern::String)
     joinpath(input_dir, "jackknife_$(pattern)")
 end
 
-#=============================================================================
-    JACKKNIFE-SPECIFIC HELPERS
-=============================================================================#
+# === JACKKNIFE-SPECIFIC HELPERS ===
 
 """
 Create jackknife averages: for each participant, average all other participants.
@@ -170,9 +166,7 @@ function _load_and_group_for_jackknife(files::Vector{String}, input_dir::String,
     return all_erps_by_condition, participant_ids
 end
 
-#=============================================================================
-    MAIN API FUNCTIONS
-=============================================================================#
+# === MAIN API FUNCTIONS ===
 
 """
     jackknife_average(erps::Vector{ErpData})::Vector{ErpData}

@@ -1,17 +1,13 @@
-"""
-Noise ceiling estimation for Representational Similarity Analysis (RSA).
-
-This module implements noise ceiling computation using leave-one-out cross-validation
-across participants, following the methodology of Nili et al. (2014).
-
+# Noise ceiling estimation for Representational Similarity Analysis (RSA).
+#
+# Implements noise ceiling computation using leave-one-out cross-validation
+# across participants, following the methodology of Nili et al. (2014).
+#
 # References
-Nili, H., Wingfield, C., Walther, A., Su, L., Marslen-Wilson, W., & Kriegeskorte, N. (2014).
-A toolbox for representational similarity analysis. PLoS computational biology, 10(4), e1003553.
-"""
+# Nili, H., Wingfield, C., Walther, A., Su, L., Marslen-Wilson, W., & Kriegeskorte, N. (2014).
+# A toolbox for representational similarity analysis. PLoS computational biology, 10(4), e1003553.
 
-# ==============================================================================
-#   HELPER FUNCTIONS
-# ==============================================================================
+# === HELPER FUNCTIONS ===
 
 """
     _correlate_rdms(rdm1::Matrix{Float64}, rdm2::Matrix{Float64}; method::Symbol = :spearman)
@@ -49,9 +45,7 @@ function _correlate_rdms(rdm1::Matrix{Float64}, rdm2::Matrix{Float64}; method::S
     end
 end
 
-# ==============================================================================
-#   NOISE CEILING COMPUTATION
-# ==============================================================================
+# === NOISE CEILING COMPUTATION ===
 
 """
     compute_noise_ceiling(

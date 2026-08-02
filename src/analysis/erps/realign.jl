@@ -1,14 +1,12 @@
 """
 Realignment of epoched EEG data to different time points.
 
-This function takes stimulus-locked epoched data and realigns it to a different
+Realign stimulus-locked epoched data to a different
 event time point (e.g., response time, saccade onset, etc.). This is useful for
 creating response-locked waveforms from stimulus-locked epochs.
 """
 
-#=============================================================================
-    CALCULATING TRIGGER INTERVALS
-=============================================================================#
+# === CALCULATING TRIGGER INTERVALS ===
 
 """
     calculate_trigger_interval!(dat::EpochData, start_triggers::Vector{Int}, end_triggers::Vector{Int}; column_name::Symbol = :interval)
@@ -118,9 +116,7 @@ function calculate_trigger_interval(
 end
 
 
-#=============================================================================
-    CORE REALIGNMENT FUNCTIONS
-=============================================================================#
+# === CORE REALIGNMENT FUNCTIONS ===
 
 
 """
@@ -128,7 +124,7 @@ end
 
 Realign epoched data in-place to an event specified by trigger codes.
 
-This function takes stimulus-locked epoched data and realigns each epoch so 
+Realign stimulus-locked epoched data so
 that the time of the first matching `realignment_trigger` becomes the new time zero. 
 After realignment, all epochs are cropped to a common time interval determined by 
 the latest start time and earliest end time across all valid epochs. 
@@ -318,9 +314,7 @@ end
 
 
 
-#=============================================================================
-    INTERNAL HELPER FUNCTIONS
-=============================================================================#
+# === INTERNAL HELPER FUNCTIONS ===
 
 """
 Realign each epoch by searching for the first occurrence of the realignment triggers 
@@ -427,9 +421,7 @@ function _crop_epochs_to_window!(dat::EpochData, window::Tuple{Float64,Float64},
 end
 
 
-#=============================================================================
-    BATCH PROCESSING FUNCTIONS
-=============================================================================#
+# === BATCH PROCESSING FUNCTIONS ===
 
 """Generate default output directory name for realignment operation."""
 function _default_realign_output_dir(input_dir::String, pattern::String)
@@ -605,9 +597,7 @@ function realign!(file_pattern::String, realignment_triggers::Vector{Int}; kwarg
 end
 
 
-#=============================================================================
-    TRIGGER INTERVAL BATCH PROCESSING FUNCTIONS
-=============================================================================#
+# === TRIGGER INTERVAL BATCH PROCESSING FUNCTIONS ===
 
 """Generate default output directory name for calculate_trigger_interval operation."""
 function _default_calculate_trigger_interval_output_dir(input_dir::String, pattern::String, column_name::Symbol)

@@ -226,9 +226,7 @@ end
 
 is_extreme_value!(dat::Vector{EpochData}, threshold::Real; kwargs...) = is_extreme_value!.(dat, threshold; kwargs...)
 
-# ==============================================================================
-# STEP/JUMP ARTIFACT DETECTION
-# ==============================================================================
+# === STEP/JUMP ARTIFACT DETECTION ===
 
 """
     _is_step_value(signal::AbstractVector{Float64}, threshold::Real)
@@ -722,9 +720,7 @@ function _n_extreme_value(df::DataFrame, channels::AbstractVector{Symbol}, thres
 end
 
 
-# ==============================================================================
-# FLATLINE (LOW VARIANCE) DETECTION
-# ==============================================================================
+# === FLATLINE (LOW VARIANCE) DETECTION ===
 
 """
     _is_flatline(signal::AbstractVector{<:Real}, threshold::Real, window_samples::Int)
@@ -919,9 +915,7 @@ function n_flatline(
     end
 end
 
-# ==============================================================================
-# PEAK TO PEAK ARTIFACT DETECTION
-# ==============================================================================
+# === PEAK TO PEAK ARTIFACT DETECTION ===
 
 """
     _is_peak_to_peak(signal::AbstractVector{<:Real}, threshold::Real, window_samples::Int)
@@ -1116,9 +1110,7 @@ function n_peak_to_peak(
     end
 end
 
-# ==============================================================================
-# BRIDGED CHANNEL DETECTION
-# ==============================================================================
+# === BRIDGED CHANNEL DETECTION ===
 
 """
     find_bridged_channels(dat::SingleDataFrameEeg, correlation_threshold::Real=0.99; channel_selection=channels())
@@ -1193,14 +1185,11 @@ function find_bridged_channels(dat::MultiDataFrameEeg, correlation_threshold::Re
     return DataFrame(channel_1 = first.(pairs), channel_2 = last.(pairs), correlation = correlations)
 end
 
-"""
-Automatic epoch rejection based on statistical criteria.
-
-This module provides functions to automatically reject epochs based on
-statistical measures (variance, max, min, absolute max, range, kurtosis)
-using z-score thresholds. This is useful for removing epochs with artifacts
-without manual inspection.
-"""
+# Automatic epoch rejection based on statistical criteria.
+#
+# Automatically rejects epochs based on statistical measures 
+# (variance, max, min, absolute max, range, kurtosis) using z-score thresholds. 
+# This is useful for removing epochs with artifacts without manual inspection.
 struct Rejection
     channel::Symbol
     epoch::Int
@@ -1351,7 +1340,7 @@ all_data(infos::Vector{EpochRejectionInfo})::DataFrame = vcat(all_data.(infos)..
 
 Detect bad epochs using statistical criteria and/or absolute voltage thresholds.
 
-This function can use two types of criteria for epoch rejection:
+Supports two types of criteria for epoch rejection:
 1. **Z-score criteria**: Calculates six statistical measures for each epoch (variance, max, min,
    absolute max, range, kurtosis) across selected channels. For each measure, the maximum
    across channels is taken for each epoch, then z-scored across epochs. Epochs exceeding
@@ -1591,9 +1580,7 @@ function _calculate_epoch_metrics(
 end
 
 
-# ===================
-# REPORTING FUNCTIONS
-# ===================
+# === REPORTING FUNCTIONS ===
 
 """Pretty-print an `EpochRejectionInfo` summary with criterion, counts, and breakdowns."""
 function Base.show(io::IO, info::EpochRejectionInfo)
@@ -1751,7 +1738,7 @@ Populates `artifacts.repaired` and `artifacts.skipped` with the analysis.
 - `EpochRejectionInfo`: The same artifacts object (modified in-place)
 
 # Notes
-This function only analyzes repairability - it does not perform any repairs.
+Only analyzes repairability - does not perform any repairs.
 Use `repair_artifacts_neighbor!` to actually perform the repairs after this analysis.
 """
 function channel_repairable!(artifacts::EpochRejectionInfo, layout::Layout)

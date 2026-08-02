@@ -2,9 +2,7 @@
 Time-frequency plotting functions for visualizing TimeFreqData.
 """
 
-# =============================================================================
-# DEFAULT KEYWORD ARGUMENTS
-# =============================================================================
+# === DEFAULT KEYWORD ARGUMENTS ===
 const PLOT_TF_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display
     :display_plot => (true, "Whether to display the plot"),
@@ -370,9 +368,7 @@ function plot_tf(
 end
 
 
-# =============================================================================
-# INTERNAL HELPERS
-# =============================================================================
+# === INTERNAL HELPERS ===
 
 """
     _plot_tf_heatmap!(ax, tf_plot, channel, freqs_vec, times; kwargs...)

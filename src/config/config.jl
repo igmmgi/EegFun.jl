@@ -1,6 +1,4 @@
-# =============================================================================
-# TYPES AND STRUCTURES
-# =============================================================================
+# === TYPES AND STRUCTURES ===
 
 """
     ConfigParameter{T}
@@ -22,9 +20,7 @@ A struct to define configuration parameters with type and validation constraints
     max::Union{Nothing,T} = nothing
 end
 
-# =============================================================================
-# PARAMETER CONSTRUCTOR HELPERS
-# =============================================================================
+# === PARAMETER CONSTRUCTOR HELPERS ===
 
 """Create a `ConfigParameter{T}` with common defaults."""
 function _param(::Type{T}, desc, default = nothing; allowed = nothing, min = nothing, max = nothing) where {T}
@@ -57,9 +53,7 @@ function _filter_param_spec(prefix, apply, type, freq, min_freq, max_freq, order
 end
 
 
-# =============================================================================
-# PARAMETER DEFINITIONS
-# =============================================================================
+# === PARAMETER DEFINITIONS ===
 
 # fmt: off
 const PARAMETERS = Dict{String,ConfigParameter}(
@@ -128,9 +122,7 @@ const PARAMETERS = Dict{String,ConfigParameter}(
 )
 # fmt: on
 
-# =============================================================================
-# VALIDATION TYPES
-# =============================================================================
+# === VALIDATION TYPES ===
 
 """
     ValidationResult
@@ -149,9 +141,7 @@ Result of parameter validation.
 end
 
 
-# =============================================================================
-# MAIN CONFIGURATION FUNCTIONS
-# =============================================================================
+# === MAIN CONFIGURATION FUNCTIONS ===
 
 """
     read_config(config_file::String)
@@ -213,9 +203,7 @@ function read_config(config_file::String)
 end
 
 
-# =============================================================================
-# TYPE CONVERSION FUNCTIONS
-# =============================================================================
+# === TYPE CONVERSION FUNCTIONS ===
 
 """
     _convert_any_arrays!(config::Dict)
@@ -264,9 +252,7 @@ function _convert_any_arrays!(config::Dict; path = "")
     end
 end
 
-# =============================================================================
-# CONFIGURATION MERGING FUNCTIONS
-# =============================================================================
+# === CONFIGURATION MERGING FUNCTIONS ===
 
 """
     _merge_configs(default_config::Dict, user_config::Dict)
@@ -302,9 +288,7 @@ function _merge_nested!(target::Dict, source::Dict)
 end
 
 
-# =============================================================================
-# CONFIGURATION VALIDATION FUNCTIONS
-# =============================================================================
+# === CONFIGURATION VALIDATION FUNCTIONS ===
 
 """
     _validate_config(config::Dict; path="")
@@ -389,9 +373,7 @@ end
 
 
 
-# =============================================================================
-# PARAMETER INFORMATION DISPLAY FUNCTIONS
-# =============================================================================
+# === PARAMETER INFORMATION DISPLAY FUNCTIONS ===
 
 """
     show_parameter_info(; parameter_name::String="")
@@ -555,9 +537,7 @@ function _display_grouped_params(grouped_params::Dict{String,Vector{Tuple{String
     end
 end
 
-# =============================================================================
-# TEMPLATE GENERATION FUNCTIONS
-# =============================================================================
+# === TEMPLATE GENERATION FUNCTIONS ===
 
 """
     generate_config_template(; filename::String="config_template.toml")
@@ -631,9 +611,7 @@ function _write_subsection(io::IO, section::String, subsection::String, params::
     end
 end
 
-# =============================================================================
-# UTILITY FUNCTIONS
-# =============================================================================
+# === UTILITY FUNCTIONS ===
 
 """
     _group_parameters_by_section()

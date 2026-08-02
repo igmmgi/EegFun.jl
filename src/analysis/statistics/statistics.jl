@@ -235,9 +235,7 @@ function permutation_test(
 
     return result
 end
-# ===================
-# ANALYTIC TEST
-# ===================
+# === ANALYTIC TEST ===
 
 """
     analytic_test(prepared::StatisticalData;
@@ -340,9 +338,7 @@ function analytic_test(prepared::StatisticalData; alpha::Real = 0.05, tail::Symb
 end
 
 
-# ===================
-# TF PERMUTATION TEST
-# ===================
+# === TF PERMUTATION TEST ===
 function permutation_test(
     prepared::TFStatisticalData;
     n_permutations::Int = 1000,
@@ -525,9 +521,7 @@ function permutation_test(
 end
 
 
-# ===================
-# TF ANALYTIC TEST
-# ===================
+# === TF ANALYTIC TEST ===
 function analytic_test(prepared::TFStatisticalData; alpha::Real = 0.05, tail::Symbol = :both, correction_method::Symbol = :no)
     correction_method ∉ (:no, :bonferroni) && @minimal_error "correction_method must be :no or :bonferroni. Got :$correction_method"
     tail ∉ (:both, :left, :right) && @minimal_error "tail must be :both, :left, or :right. Got :$tail"
@@ -594,9 +588,7 @@ function analytic_test(prepared::TFStatisticalData; alpha::Real = 0.05, tail::Sy
 end
 
 
-# ===================
-# TF-SPECIFIC INFERENCE HELPERS
-# ===================
+# === TF-SPECIFIC INFERENCE HELPERS ===
 
 """
     _compute_tf_cluster_pvalues(clusters, cluster_stats, permutation_max, n_permutations, alpha)

@@ -2,9 +2,7 @@
 Batch ERP measurements (amplitude, latency) for EEG/ERP data.
 """
 
-#=============================================================================
-    MEASUREMENT TYPES (single source of truth)
-=============================================================================#
+# === MEASUREMENT TYPES (single source of truth) ===
 
 """Valid ERP measurement type strings."""
 const VALID_MEASUREMENT_TYPES = [
@@ -47,9 +45,7 @@ const _LATENCY_MEASUREMENT_TYPES =
 """Check whether a measurement type returns a latency value."""
 _is_latency_measurement(t::String) = t in _LATENCY_MEASUREMENT_TYPES
 
-#=============================================================================
-    DEFAULT KEYWORD ARGUMENTS
-=============================================================================#
+# === DEFAULT KEYWORD ARGUMENTS ===
 const ERP_MEASUREMENTS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Robust peak detection
     :local_interval => (
@@ -67,9 +63,7 @@ const ERP_MEASUREMENTS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :fractional_peak_direction => (:onset, "Direction for fractional peak latency: :onset (before peak) or :offset (after peak)"),
 )
 
-#=============================================================================
-    ERP-MEASUREMENTS-SPECIFIC VALIDATION
-=============================================================================#
+# === ERP-MEASUREMENTS-SPECIFIC VALIDATION ===
 
 """Validate analysis type, returning error message or nothing."""
 function _validate_analysis_type(analysis_type::String)
@@ -91,9 +85,7 @@ function _normalize_interval(interval::Interval)
     interval isa AbstractRange ? (first(interval), last(interval)) : interval
 end
 
-#=============================================================================
-    ERP-MEASUREMENTS-SPECIFIC HELPERS
-=============================================================================#
+# === ERP-MEASUREMENTS-SPECIFIC HELPERS ===
 
 """
 Find robust peak (peak that is larger than neighbors and local averages).
@@ -504,9 +496,7 @@ function _process_dataframe_measurements(
     return merge(metadata_final, NamedTuple{Tuple(selected_channels)}(channel_vals))
 end
 
-#=============================================================================
-    ERP-MEASUREMENTS-SPECIFIC PROCESSING
-=============================================================================#
+# === ERP-MEASUREMENTS-SPECIFIC PROCESSING ===
 
 """
 Process a single file through ERP measurements pipeline.
@@ -559,9 +549,7 @@ function _process_measurements_file(
 end
 
 
-#=============================================================================
-    TYPE-SPECIFIC ERP MEASUREMENT METHODS
-=============================================================================#
+# === TYPE-SPECIFIC ERP MEASUREMENT METHODS ===
 
 """
 Helper function to apply baseline correction to data.
@@ -793,9 +781,7 @@ function erp_measurements!(data::Vector{<:Union{ErpData,EpochData}}, analysis_ty
     return isempty(all_results) ? nothing : all_results
 end
 
-#=============================================================================
-    MAIN API FUNCTION
-=============================================================================#
+# === MAIN API FUNCTION ===
 
 
 function erp_measurements(

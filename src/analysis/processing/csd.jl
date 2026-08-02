@@ -17,11 +17,10 @@ function compute_csd!(data; m::Int = 4, lambda::Float64 = 1e-5, n_legendre_terms
     # 1. Ensure 3D coordinates are available
     _ensure_coordinates_3d!(data.layout)
 
-    # TODO (Performance Optimization):
+    # Performance Note:
     # The G and H matrices depend purely on the physical coordinates of the electrodes.
-    # Currently, they are re-calculated (including 50-term Legendre polynomials and a heavy pinv)
-    # on every function call. For massive performance gains (< 0.01s), cache `filter_matrix` 
-    # directly inside the `Layout` object so this function reduces to a single matrix multiplication.
+    # Currently, they are re-calculated on every function call. For optimization, we could 
+    # cache `filter_matrix` directly inside the `Layout` object in the future.
 
     channels = Symbol.(data.layout.data.label)
     n_channels = length(channels)

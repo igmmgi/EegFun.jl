@@ -161,9 +161,7 @@ function resample!(data_vec::Vector{T}, target_rate::Real)::Nothing where {T<:Ee
 end
 
 
-# =============================================================================
-#     BATCH PROCESSING FUNCTIONS
-# =============================================================================
+# === BATCH PROCESSING FUNCTIONS ===
 
 """Generate default output directory name for resampling operation."""
 function _default_resample_output_dir(input_dir::String, pattern::String, target_rate::Real)

@@ -1,10 +1,6 @@
-"""
-Batch grand averaging of ERP data across participants.
-"""
+# Batch grand averaging of ERP data across participants.
 
-#=============================================================================
-    GRANDAVERAGE-SPECIFIC HELPERS
-=============================================================================#
+# === GRANDAVERAGE-SPECIFIC HELPERS ===
 
 """Generate default output directory name for grand averaging."""
 function _default_grand_average_output_dir(input_dir::String, pattern::String)
@@ -160,9 +156,7 @@ function grand_average(erps::Vector{ErpData}; condition_selection::Function = co
     return _create_all_grand_averages(filtered_groups)
 end
 
-#=============================================================================
-    MAIN API FUNCTION
-=============================================================================#
+# === MAIN API FUNCTION ===
 
 function grand_average(
     file_pattern::String;

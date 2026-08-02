@@ -217,9 +217,7 @@ function plot_tf_stats(
 end
 
 
-# ============================================================
-# Internal helpers
-# ============================================================
+# === Internal helpers ===
 
 """
     _extract_tf_stats_matrix(result, ch_idx, content) -> Matrix{Float64}
@@ -267,9 +265,7 @@ function _extract_tf_significance_mask(result::TFStatsResult, ch_idx::Int)
 end
 
 
-# ============================================================
-# Significance overlay renderers
-# ============================================================
+# === Significance overlay renderers ===
 
 """
     _render_significance_contour!(ax, time_points, frequencies, sig_mask; color, linewidth)

@@ -119,9 +119,7 @@ function _prepare_decoding_data(epochs::Vector{TimeFreqEpochData})
     return data_arrays, n_trials_per_condition
 end
 
-# ==============================================================================
-#   TRIAL EQUALIZATION
-# ==============================================================================
+# === TRIAL EQUALIZATION ===
 
 
 """
@@ -327,9 +325,7 @@ end
 
 
 
-# ==============================================================================
-#   CROSS-VALIDATION AND DECODING
-# ==============================================================================
+# === CROSS-VALIDATION AND DECODING ===
 
 """
     _create_confusion_matrix(y_true::Vector{Int}, y_pred::Vector{Int}, n_classes::Int)
@@ -368,7 +364,7 @@ end
 
 LIBSVM classifier for decoding.
 
-This function uses LIBSVM.jl directly (no MLJ wrapper) for SVM classification.
+Uses LIBSVM.jl directly (no MLJ wrapper) for SVM classification.
 
 # Arguments
 - `X_train::AbstractMatrix{Float64}`: Training data [n_samples × n_features]
@@ -443,9 +439,7 @@ function libsvm_classifier(
 end
 
 
-# ==============================================================================
-#   CORE DECODING ENGINE (shared by ERP and TF decode_libsvm)
-# ==============================================================================
+# === CORE DECODING ENGINE (shared by ERP and TF decode_libsvm) ===
 
 """
     _decode_core(data_arrays, n_trials_per_condition, time_points, selected_channels,
@@ -644,9 +638,7 @@ function _decode_core(
     )
 end
 
-# ===========================
-#   DECODE WITH DIRECT LIBSVM 
-# ===========================
+# === DECODE WITH DIRECT LIBSVM ===
 """
     decode_libsvm(epochs::Vector{EpochData}; channel_selection = channels(),
                   interval_selection = times(), n_iterations::Int = 100, n_folds::Int = 3,
@@ -730,9 +722,7 @@ function decode_libsvm(participant_epochs::Vector{Vector{T}}; kwargs...) where {
 end
 
 
-# ===========================
-#   TF DECODING WITH LIBSVM
-# ===========================
+# === TF DECODING WITH LIBSVM ===
 function decode_libsvm(
     epochs::Vector{TimeFreqEpochData};
     channel_selection::Function = channels(),
@@ -785,9 +775,7 @@ end
 
 
 
-# ====================================
-#   GRAND AVERAGE FOR DECODING RESULTS
-# ====================================
+# === GRAND AVERAGE FOR DECODING RESULTS ===
 
 function grand_average(dat::Vector{DecodedData})
 

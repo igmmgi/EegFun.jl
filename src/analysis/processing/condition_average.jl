@@ -2,9 +2,7 @@
 Batch computation of condition averages for ERP data.
 """
 
-#=============================================================================
-    AVERAGE-SPECIFIC VALIDATION
-=============================================================================#
+# === AVERAGE-SPECIFIC VALIDATION ===
 
 """Generate default output directory name for condition averaging."""
 function _condition_average_default_output_dir(input_dir::String, pattern::String, groups::Vector{Vector{Int}})
@@ -12,9 +10,7 @@ function _condition_average_default_output_dir(input_dir::String, pattern::Strin
     joinpath(input_dir, "averages_$(pattern)_$(groups_str)")
 end
 
-#=============================================================================
-    AVERAGE-SPECIFIC PROCESSING
-=============================================================================#
+# === AVERAGE-SPECIFIC PROCESSING ===
 
 """
 Create an average wave by averaging ERP data across conditions.
@@ -99,9 +95,7 @@ function _condition_average_process_file(filepath::String, output_path::String, 
     end
 end
 
-#=============================================================================
-    IN-MEMORY API FUNCTION
-=============================================================================#
+# === IN-MEMORY API FUNCTION ===
 
 """
     condition_average(data::Vector{<:ErpData}, condition_groups::Vector{Vector{Int}}) -> Vector{ErpData}
@@ -172,9 +166,7 @@ function condition_average(data::Vector{<:ErpData}, condition_groups::Vector{Vec
     return average_waves
 end
 
-#=============================================================================
-    BATCH API FUNCTION
-=============================================================================#
+# === BATCH API FUNCTION ===
 
 
 function condition_average(

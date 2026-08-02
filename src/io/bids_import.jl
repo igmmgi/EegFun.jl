@@ -1,6 +1,4 @@
-# =============================================================================
-# BIDS IMPORT
-# =============================================================================
+# === BIDS IMPORT ===
 
 """
     read_bids(dataset_dir::String; subject::String, task::String, session::String="", run::Int=0, datatype::String="eeg") -> ContinuousData

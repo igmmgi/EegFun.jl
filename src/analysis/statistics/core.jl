@@ -238,9 +238,7 @@ function _validate_permutation_inputs(
     return nothing
 end
 
-# ===================
-# T-TEST COMPUTATION
-# ===================
+# === T-TEST COMPUTATION ===
 
 """
     compute_t_matrix(prepared::StatisticalData; tail::Symbol = :both)

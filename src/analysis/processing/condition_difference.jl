@@ -2,9 +2,7 @@
 Batch computation of condition difference waves for ERP data.
 """
 
-#=============================================================================
-    DIFFERENCE-SPECIFIC HELPERS
-=============================================================================#
+# === DIFFERENCE-SPECIFIC HELPERS ===
 
 """Generate default output directory name for difference operation."""
 function _condition_difference_default_output_dir(
@@ -16,9 +14,7 @@ function _condition_difference_default_output_dir(
     joinpath(input_dir, "differences_$(pattern)_$(pairs_str)")
 end
 
-#=============================================================================
-    DIFFERENCE-SPECIFIC PROCESSING
-=============================================================================#
+# === DIFFERENCE-SPECIFIC PROCESSING ===
 
 """
 Create a difference wave by subtracting ERP2 from ERP1.
@@ -99,9 +95,7 @@ function _condition_difference_process_file(
     end
 end
 
-#=============================================================================
-    IN-MEMORY API FUNCTION
-=============================================================================#
+# === IN-MEMORY API FUNCTION ===
 
 """
     condition_difference(data::Vector{<:ErpData}, condition_pairs) -> Vector{ErpData}
@@ -166,9 +160,7 @@ function condition_difference(data::Vector{<:ErpData}, condition_pairs::Union{Ve
     return difference_waves
 end
 
-#=============================================================================
-    BATCH API FUNCTION
-=============================================================================#
+# === BATCH API FUNCTION ===
 
 function condition_difference(
     file_pattern::String,

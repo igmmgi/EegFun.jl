@@ -676,9 +676,7 @@ function tf_stft(data_vec::Vector{<:EpochData}; kwargs...)
 end
 
 
-# =============================================================================
-#     BATCH PROCESSING FUNCTIONS
-# =============================================================================
+# === BATCH PROCESSING FUNCTIONS ===
 function tf_stft(
     file_pattern::String;
     input_dir::String = pwd(),

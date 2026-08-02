@@ -1,6 +1,4 @@
-# =============================================================================
-# BIDS EXPORT
-# =============================================================================
+# === BIDS EXPORT ===
 
 """
     export_bids(; task, raw_dir, raw_pattern, derivatives_dir, output_dir,
@@ -189,9 +187,7 @@ function export_bids(;
 end
 
 
-# =============================================================================
-# TOP-LEVEL FILES
-# =============================================================================
+# === TOP-LEVEL FILES ===
 
 """Write a README file for the BIDS dataset."""
 function _bids_write_readme(output_dir::String, dataset_name::String)
@@ -208,9 +204,7 @@ function _bids_write_readme(output_dir::String, dataset_name::String)
     end
 end
 
-# =============================================================================
-# PARTICIPANT MAP
-# =============================================================================
+# === PARTICIPANT MAP ===
 
 """Build a mapping from raw filename basenames to BIDS subject IDs."""
 function _bids_build_participant_map(raw_files::Vector{String}, user_map::Union{Nothing,Dict{String,String}})
@@ -238,9 +232,7 @@ function _bids_build_participant_map(raw_files::Vector{String}, user_map::Union{
 end
 
 
-# =============================================================================
-# DATASET-LEVEL FILES
-# =============================================================================
+# === DATASET-LEVEL FILES ===
 
 """Write dataset_description.json."""
 function _bids_write_dataset_description(output_dir::String, name::String, authors::Vector{String}, license::String)
@@ -278,9 +270,7 @@ function _bids_write_participants_tsv(output_dir::String, pmap::Dict{String,Stri
 end
 
 
-# =============================================================================
-# PER-SUBJECT SIDECAR FILES
-# =============================================================================
+# === PER-SUBJECT SIDECAR FILES ===
 
 """Write *_eeg.json sidecar."""
 function _bids_write_eeg_sidecar(
@@ -405,9 +395,7 @@ function _bids_write_coordsystem_json(dir::String, prefix::String)
 end
 
 
-# =============================================================================
-# DERIVATIVES
-# =============================================================================
+# === DERIVATIVES ===
 
 # Mapping from pipeline file suffixes to BIDS desc- labels
 const _BIDS_DERIVATIVE_SUFFIXES = OrderedDict(
@@ -493,9 +481,7 @@ function _bids_copy_derivatives(
 end
 
 
-# =============================================================================
-# UTILITY HELPERS
-# =============================================================================
+# === UTILITY HELPERS ===
 
 """Classify a channel label as EEG, EOG, EMG, ECG, or TRIG for BIDS channels.tsv."""
 function _bids_classify_channel(label::Symbol)::String

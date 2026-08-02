@@ -1,6 +1,4 @@
-# =============================================================================
-# CORRELATION ANALYSIS
-# =============================================================================
+# === CORRELATION ANALYSIS ===
 
 """
     correlation_matrix(dat::SingleDataFrameEeg; channel_selection::Function = channels())
@@ -67,7 +65,7 @@ end
 
 Calculate correlation matrix between two sets of channels using a single sample selection.
 
-This function is particularly useful for calculating correlations between all EEG channels 
+Particularly useful for calculating correlations between all EEG channels
 and EOG channels using the same time points.
 
 # Arguments
@@ -368,9 +366,7 @@ function _trim_extremes(x::Vector{Float64})
     return view(sorted, (trim+1):(n-trim))
 end
 
-# =============================================================================
-# CORRELATION MATRIX UTILITIES
-# =============================================================================
+# === CORRELATION MATRIX UTILITIES ===
 
 """
     get_eog_channels(eog_cfg::EogConfig)
@@ -401,7 +397,7 @@ end
 
 Add z-score columns to a correlation matrix DataFrame.
 
-This function adds z-score columns for each numeric column in the DataFrame,
+Add z-score columns for each numeric column in the DataFrame,
 excluding specified columns (default: :row).
 
 # Arguments
@@ -534,9 +530,7 @@ function correlation_matrix_eog(
     )
 end
 
-# =============================================================================
-# BAD CHANNEL IDENTIFICATION
-# =============================================================================
+# === BAD CHANNEL IDENTIFICATION ===
 
 """
     identify_bad_channels(summary_df::DataFrame, joint_prob_df::DataFrame; 

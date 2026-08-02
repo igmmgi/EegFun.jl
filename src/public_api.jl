@@ -6,9 +6,7 @@
 # but remain accessible via EegFun.TypeName if needed.
 # Alphabetically sorted within each category.
 
-# =====================
-# Types — User-facing data, result, and config types
-# =====================
+# === Types — User-facing data, result, and config types ===
 public AnalysisData
 public AnalysisSettings
 public AnalyticResult
@@ -17,8 +15,6 @@ public ArtifactInfo
 public BaselineInfo
 public BatchConfig
 public BatchResult
-public batch_process
-public check_raw_data
 public ChannelRepairInfo
 public Cluster
 public ClusterInfo
@@ -57,7 +53,6 @@ public PermutationDistribution
 public PermutationResult
 public PipelineConfig
 public PreprocessConfig
-public from_dict
 public Rejection
 public SingleDataFrameEeg
 public SpectrumData
@@ -78,9 +73,7 @@ public TriggerInfo
 public TTestResult
 public ZScoreRejectionInfo
 
-# =====================
-# Data access and utilities
-# =====================
+# === Data access and utilities ===
 public all_data
 public channel_data
 public channel_labels
@@ -115,9 +108,7 @@ public times
 public to_data_frame
 public viewer
 
-# =====================
-# I/O
-# =====================
+# === I/O ===
 public download_eegfun_datasets
 public find_file
 public get_files
@@ -131,9 +122,7 @@ public read_layout
 public read_raw_data
 public read_xdf
 
-# =====================
-# Layout
-# =====================
+# === Layout ===
 public average_number_of_neighbours
 public check_channel_neighbors
 public create_custom_layout
@@ -148,9 +137,7 @@ public subset_layout
 public subset_layout!
 public validate_layout
 
-# =====================
-# Preprocessing
-# =====================
+# === Preprocessing ===
 public average_epochs
 public baseline
 public baseline!
@@ -183,9 +170,7 @@ public resample!
 public unmirror
 public unmirror!
 
-# =====================
-# Channel and condition operations
-# =====================
+# === Channel and condition operations ===
 public channel_average
 public channel_average!
 public channel_delete
@@ -206,9 +191,7 @@ public correlation_matrix_eog
 public rename_channel
 public rename_channel!
 
-# =====================
-# RSA (Representational Similarity Analysis)
-# =====================
+# === RSA (Representational Similarity Analysis) ===
 public add_noise_ceiling!
 public compare_models
 public compute_noise_ceiling
@@ -225,9 +208,7 @@ public normalize_rdm
 public rsa
 public rsa_crossvalidated
 
-# =====================
-# Artifact detection and repair
-# =====================
+# === Artifact detection and repair ===
 public compare_rejections
 public consecutive
 public create_continuous_repair_info
@@ -252,9 +233,7 @@ public unique_rejections
 public compute_csd
 public compute_csd!
 
-# =====================
-# ICA
-# =====================
+# === ICA ===
 public calculate_eog_channels!
 public combine_artifact_components
 public detect_eog_onsets!
@@ -274,9 +253,7 @@ public add_ica_components
 public run_ica
 public summarize_ica_components
 
-# =====================
-# ERP analysis
-# =====================
+# === ERP analysis ===
 public calculate_trigger_interval
 public calculate_trigger_interval!
 public erp_measurements
@@ -291,16 +268,12 @@ public lrp
 public realign
 public realign!
 
-# =====================
-# Statistics
-# =====================
+# === Statistics ===
 public analytic_test
 public permutation_test
 public prepare_stats
 
-# =====================
-# Time-frequency
-# =====================
+# === Time-frequency ===
 public freq_spectrum
 public tf_baseline
 public tf_baseline!
@@ -308,9 +281,7 @@ public tf_morlet
 public tf_multitaper
 public tf_stft
 
-# =====================
-# Decoding / MVPA
-# =====================
+# === Decoding / MVPA ===
 public decode_libsvm
 public libsvm_classifier
 public prepare_decoding
@@ -318,32 +289,29 @@ public resample_temporal_data
 public test_against_chance
 public test_against_chance_cluster
 
-# =====================
-# Triggers
-# =====================
+# === Triggers ===
 public allcomb
 public search_sequence
 public trigger_count
 public trigger_info
 
-# =====================
-# Pipelines and config
-# =====================
+# === Pipelines and config ===
 public apply_analysis_settings
 public apply_analysis_settings!
-public generate_config_template
-public read_bids
+public batch_process
+public check_raw_data
 public export_bids
+public from_dict
+public generate_config_template
 public generate_pipeline_template
 public preprocess
+public read_bids
 public validate_config
 
 public print_config
 public show_parameter_info
 
-# =====================
-# Plotting
-# =====================
+# === Plotting ===
 public plot_artifact_components
 public plot_artifact_detection
 public plot_artifact_rejection
@@ -393,24 +361,18 @@ public plot_topography_stats
 public plot_trigger_overview
 public plot_trigger_timing
 
-# =====================
-# Plot helpers (user-facing selection helpers)
-# =====================
+# === Plot helpers (user-facing selection helpers) ===
 public add_topo_rois!
 public get_selected_channels
 public get_selected_conditions
 public get_selected_epochs
 public get_selected_samples
 
-# =====================
-# Logging
-# =====================
+# === Logging ===
 public close_logging
 public setup_logging
 
-# =====================
-# Demos
-# =====================
+# === Demos ===
 public generate_signal
 public signal_example_composition
 public signal_example_convolution
@@ -427,9 +389,7 @@ public signal_to_data
 public simulate_erp
 public signal_example_decoding
 
-# =====================
-# Misc
-# =====================
+# === Misc ===
 public example_path
 public version_info
 public get_package_version

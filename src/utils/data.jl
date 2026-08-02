@@ -236,7 +236,7 @@ channel_labels(dat::EegData, channel_numbers)::Vector{Symbol} = channel_labels(d
 channel_labels(dat::EegData, channel_numbers::Int)::Vector{Symbol} = channel_labels(dat)[[channel_numbers]]
 
 # Handle collections of EEG data
-# TODO: is it possible that all do not have the same channel labels?
+# NOTE: Assumes all EegData objects in the collection have identical channel labels.
 channel_labels(dat::Vector{<:EegData})::Vector{Symbol} = channel_labels(first(dat))
 
 
@@ -1220,8 +1220,8 @@ log_pretty_table(df; log_level = :warn, title = "Warning Table")
 function log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
 
     table_output = sprint() do output_io
-        # TODO: better way of doing this?
-        # Set a large display size to avoid terminal limitations (i.e., cropping!)
+        # Set a large display size to avoid terminal limitations (i.e., cropping)
+        # when capturing the table string output.
         io_context = IOContext(output_io, :displaysize => (2000, 2000), :color => true)
         # Default column_labels to column names only — this suppresses the auto-generated
         # type subheader row that PrettyTables adds when given a DataFrame directly.
@@ -1881,9 +1881,7 @@ end
 
 
 
-# =============================================================================
-# DATA CREATION FUNCTIONS
-# =============================================================================
+# === DATA CREATION FUNCTIONS ===
 
 """
     _create_layout_from_labels(labels::Vector{Symbol})::Layout

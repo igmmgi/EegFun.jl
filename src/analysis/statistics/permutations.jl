@@ -467,9 +467,7 @@ function _run_permutations(
 end
 
 
-# ===================
-# TF LABEL SHUFFLING (4D)
-# ===================
+# === TF LABEL SHUFFLING (4D) ===
 
 """
     _shuffle_labels_tf!(shuffled_A, shuffled_B, data1, data2, design)
@@ -545,9 +543,7 @@ function _shuffle_labels_tf!(
 end
 
 
-# ===================
-# TF PERMUTATION LOOP
-# ===================
+# === TF PERMUTATION LOOP ===
 
 """
     _run_permutations_tf(prepared, n_permutations, critical_t_values, spatial_connectivity,

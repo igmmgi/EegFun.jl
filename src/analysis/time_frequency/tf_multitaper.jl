@@ -695,9 +695,7 @@ function tf_multitaper(data_vec::Vector{<:EpochData}; kwargs...)
 end
 
 
-# =============================================================================
-#     BATCH PROCESSING FUNCTIONS
-# =============================================================================
+# === BATCH PROCESSING FUNCTIONS ===
 function tf_multitaper(
     file_pattern::String;
     input_dir::String = pwd(),

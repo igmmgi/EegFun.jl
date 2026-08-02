@@ -1,11 +1,7 @@
-# =============================================================================
-# SHARED CONSTANTS
-# =============================================================================
+# === SHARED CONSTANTS ===
 const SHARED_KEYBOARD_ACTIONS = Dict(Keyboard.up => :up, Keyboard.down => :down, Keyboard.left => :left, Keyboard.right => :right)
 
-# =============================================================================
-# SHARED SELECTION STATE
-# =============================================================================
+# === SHARED SELECTION STATE ===
 """
     SharedSelectionState
 
@@ -53,9 +49,7 @@ mutable struct SharedSelectionState
     end
 end
 
-# =============================================================================
-# SHARED INTERACTIVITY FUNCTIONS
-# =============================================================================
+# === SHARED INTERACTIVITY FUNCTIONS ===
 """
     _setup_shared_interactivity!(fig::Figure, axes::Vector{Axis}, keyboard_actions::Dict)
 
@@ -149,9 +143,7 @@ function _xless!(ax::Axis, zoom_step::Float64)
     xlims!(ax, ax.xaxis.attributes.limits[] .* (1.0 / (1.0 - zoom_step)))
 end
 
-# =============================================================================
-# SHARED SELECTION FUNCTIONS
-# =============================================================================
+# === SHARED SELECTION FUNCTIONS ===
 
 """
     _is_mouse_in_axis(ax::Axis, mouse_pos)
@@ -251,9 +243,7 @@ function _clear_shared_selection!(selection_state::SharedSelectionState)
     selection_state.visible[] = false
 end
 
-# =============================================================================
-# SHARED CHANNEL SELECTION FUNCTIONS
-# =============================================================================
+# === SHARED CHANNEL SELECTION FUNCTIONS ===
 
 """
     _start_figure_channel_selection!(fig::Figure, selection_state::SharedSelectionState, plot_layout, channel_selection_active)
@@ -446,9 +436,7 @@ function _get_axes_rectangles(axes::Vector{Axis}, channels::Vector{Symbol}, fig:
     return axes_rects
 end
 
-# =============================================================================
-# SHARED UNIFIED SELECTION SETUP
-# =============================================================================
+# === SHARED UNIFIED SELECTION SETUP ===
 
 """
     _find_active_axis(axes::Vector{Axis}, mouse_pos)
@@ -577,9 +565,7 @@ function _setup_unified_selection!(
     _handle_mouse_movement(fig, axes, selection_state)
 end
 
-# =============================================================================
-# SHARED CHANNEL SELECTION EVENT FUNCTIONS
-# =============================================================================
+# === SHARED CHANNEL SELECTION EVENT FUNCTIONS ===
 
 """
     _setup_channel_selection_events!(fig::Figure, selection_state::SharedSelectionState, plot_layout, data, axes::Vector{Axis}; channel_right_click_handler=nothing)
@@ -644,9 +630,7 @@ function _setup_channel_selection_events!(
     end
 end
 
-# =============================================================================
-# SHARED UTILITY FUNCTIONS
-# =============================================================================
+# === SHARED UTILITY FUNCTIONS ===
 
 """
     _is_shift_held(fig::Figure)

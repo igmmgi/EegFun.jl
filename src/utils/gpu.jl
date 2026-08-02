@@ -1,6 +1,4 @@
-# =============================================================================
-# UNIFIED GPU INTERFACE AND BACKEND REGISTRY
-# =============================================================================
+# === UNIFIED GPU INTERFACE AND BACKEND REGISTRY ===
 # EegFun uses KernelAbstractions as its primary GPU kernel abstraction engine.
 # Vendor-specific packages (AMDGPU.jl, CUDA.jl, Metal.jl) are handled
 # via Julia 1.9+ package extensions. When a user loads a GPU package (e.g., `using CUDA`),

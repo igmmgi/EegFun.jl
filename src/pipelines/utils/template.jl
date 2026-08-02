@@ -18,9 +18,7 @@ Configuration options for generating pipeline templates.
     include_summary::Bool = true
 end
 
-# ============================================================================
-# Template Section Generators
-# ============================================================================
+# === Template Section Generators ===
 
 """
     _generate_header() -> String
@@ -230,9 +228,7 @@ Generate usage example comments.
 function _generate_usage_example(function_name::String)
     return """
 
-# ============================================================================
-# USAGE EXAMPLE
-# ============================================================================
+# === USAGE EXAMPLE ===
 
 # To use this custom pipeline:
 # 1. Modify the sections above to add your specific processing steps
@@ -241,9 +237,7 @@ function _generate_usage_example(function_name::String)
 """
 end
 
-# ============================================================================
-# Main Template Generation Function
-# ============================================================================
+# === Main Template Generation Function ===
 
 """
     generate_pipeline_template(
@@ -258,7 +252,7 @@ provides a structured framework with sections and subsections for custom process
 
 # Why use this?
 
-This function generates a complete preprocessing pipeline template that handles all the
+Generate a complete preprocessing pipeline template that handles all the
 boilerplate code required for a robust EEG preprocessing workflow. Instead of manually
 writing repetitive setup code (logging initialization, configuration loading, file
 validation, error handling, etc.), you can generate a ready-to-use template that:

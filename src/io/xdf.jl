@@ -1,6 +1,4 @@
-# =============================================================================
-# XDF IMPORT
-# =============================================================================
+# === XDF IMPORT ===
 
 """
     read_xdf(filepath::String; select_streams, sync, dejitter_timestamps, handle_clock_resets) -> ExtensibleDataFormat.XdfData

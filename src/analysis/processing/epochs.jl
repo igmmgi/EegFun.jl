@@ -660,7 +660,7 @@ end
 """
     average_epochs(dat::EpochData)
 
-Average epochs to create an ERP. This function:
+Average epochs to create an ERP. Specifically:
 1. Concatenates all epochs
 2. Groups by time point and condition
 3. Averages the EEG channels at each time point
@@ -1008,9 +1008,7 @@ end
 Batch averaging of epoch data to create ERPs.
 """
 
-#=============================================================================
-    AVERAGE-SPECIFIC VALIDATION
-=============================================================================#
+# === AVERAGE-SPECIFIC VALIDATION ===
 
 """Validate that file pattern is for epochs data."""
 function _validate_epochs_pattern(pattern::String)
@@ -1023,9 +1021,7 @@ function _default_average_output_dir(input_dir::String, pattern::String)
     joinpath(input_dir, "averaged_$(pattern)")
 end
 
-#=============================================================================
-    AVERAGE-SPECIFIC PROCESSING
-=============================================================================#
+# === AVERAGE-SPECIFIC PROCESSING ===
 
 """
 Process a single epochs file through averaging pipeline.
@@ -1057,9 +1053,7 @@ function _process_average_file(filepath::String, output_path::String, condition_
     return BatchResult(true, filename, "Averaged $(length(erps_data)) condition(s)")
 end
 
-#=============================================================================
-    MAIN API FUNCTION
-=============================================================================#
+# === MAIN API FUNCTION ===
 function average_epochs(
     file_pattern::String;
     input_dir::String = pwd(),

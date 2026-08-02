@@ -352,12 +352,8 @@ end
 
 
 
-# =============================================================================
-# ICA (Infomax)
-# =============================================================================
-# =============================================================================
-# INFOMAX ICA IMPLEMENTATION
-# =============================================================================
+# === ICA (Infomax) ===
+# === INFOMAX ICA IMPLEMENTATION ===
 
 """Standard Infomax ICA implementation (super-Gaussian sources only)."""
 function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String; n_components::Int, params::IcaPrms = IcaPrms())
@@ -552,12 +548,8 @@ function _infomax_optimize_cpu!(work::WorkArrays, dat_ica::Matrix{Float64}, para
 end
 
 
-# =============================================================================
-# ICA extended (Infomax extended)
-# =============================================================================
-# =============================================================================
-# EXTENDED INFOMAX ICA IMPLEMENTATION
-# =============================================================================
+# === ICA extended (Infomax extended) ===
+# === EXTENDED INFOMAX ICA IMPLEMENTATION ===
 
 """
     infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout; n_components::Int, params::IcaPrms = IcaPrms())
@@ -863,9 +855,7 @@ function _infomax_extended_optimize_cpu!(
 end
 
 
-# =============================================================================
-# GPU versions of above (Infomax)
-# =============================================================================
+# === GPU versions of above (Infomax) ===
 function _infomax_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float64}, params::IcaPrms, block::Int)
     n_channels, n_samples = size(dat_ica)
     n_components = n_channels
@@ -1179,12 +1169,8 @@ subtract_ica_components!(dat, ica_result, component_selection = components([1, 3
 ```
 """
 
-# =============================================================================
-# Picard
-# =============================================================================
-# =============================================================================
-# PICARD ICA IMPLEMENTATION (Preconditioned ICA for Real Data)
-# =============================================================================
+# === Picard ===
+# === PICARD ICA IMPLEMENTATION (Preconditioned ICA for Real Data) ===
 
 # Fast SIMD-friendly approximation of log(1 + exp(-2|y|))
 @inline function _fast_log1p_exp(ax::T) where {T<:AbstractFloat}
@@ -1402,9 +1388,7 @@ end
 
 # _picard_reset_lbfgs! is now replaced by _lbfgs_reset! on the LBFGSBuffer
 
-# =============================================================================
-# CPU Optimization Loop
-# =============================================================================
+# === CPU Optimization Loop ===
 
 function _picard_optimize_cpu!(W::Matrix{T}, dat_ica::Matrix{T}, params::IcaPrms, extended::Bool) where {T<:AbstractFloat}
     N, T_len = size(dat_ica)
@@ -1606,9 +1590,7 @@ end
 
 # =============================================================================
 
-# =============================================================================
-# Public API
-# =============================================================================
+# === Public API ===
 
 function picard_ica(
     dat_ica::Matrix{Float64},
@@ -1685,9 +1667,7 @@ function picard_ica(
     )
 end
 
-# =============================================================================
-# GPU versions of Picard
-# =============================================================================
+# === GPU versions of Picard ===
 
 # GPU versions of Picard
 # GPU native implementation of Picard Y-dependent loss
@@ -1964,12 +1944,8 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
     copyto!(W_cpu, Array(W))
 end
 
-# =============================================================================
-# Amica
-# =============================================================================
-# =========================
-# AMICA ICA IMPLEMENTATION
-# =========================
+# === Amica ===
+# === AMICA ICA IMPLEMENTATION ===
 
 # Define learning rate struct to avoid Amica.jl dependency
 mutable struct AmicaLearningRate{T<:Real}
@@ -2588,9 +2564,7 @@ end
 
 
 
-# =============================================================================
-# GPU versions of Amica
-# =============================================================================
+# === GPU versions of Amica ===
 
 # GPU versions of Amica
 function _amica_optimize_gpu!(
@@ -2797,9 +2771,7 @@ end
 
 """AMICA ICA implementation natively integrated for EegFun.jl"""
 
-# =============================================================================
-# Downstream Components
-# =============================================================================
+# === Downstream Components ===
 function subtract_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
     components_to_remove = get_selected_components(ica, component_selection)
     n_components = size(ica.unmixing, 1)
@@ -3151,8 +3123,8 @@ function identify_eog_components(
     _precomputed_samples::Union{Nothing,Vector{Int}} = nothing,
 )
 
-    # Check basic inputs - return nothing as first value if EOG channels are missing
-    # TODO: what about when only one is available?
+    # Check basic inputs - return nothing as first value if EOG channels are missing.
+    # NOTE: Currently requires both vEOG and hEOG to be present.
     if !(vEOG_channel in propertynames(dat.data)) || !(hEOG_channel in propertynames(dat.data))
         return nothing, DataFrame()
     end

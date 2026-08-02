@@ -345,9 +345,7 @@ function preprocess(
 
 end
 
-# =========================================================================
-# PIPELINE INTERNAL STAGES
-# =========================================================================
+# === PIPELINE INTERNAL STAGES ===
 function _pipeline_dry_run_summary(
     input_directory,
     output_directory,

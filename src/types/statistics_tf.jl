@@ -11,9 +11,7 @@ Abstract supertype for TF statistical results, used for dispatch in plotting fun
 """
 abstract type TFStatsResult <: StatsResult end
 
-# ==============
-# DATA PREPARATION TYPES
-# ==============
+# === DATA PREPARATION TYPES ===
 
 """
     TFAnalysisData
@@ -69,9 +67,7 @@ function Base.show(io::IO, data::TFStatisticalData)
     )
 end
 
-# ==============
-# STAT MATRIX AND MASK TYPES
-# ==============
+# === STAT MATRIX AND MASK TYPES ===
 
 """
     TFStatMatrix
@@ -101,9 +97,7 @@ struct TFMasks
     negative::BitArray{3}
 end
 
-# ==============
-# CLUSTER TYPES
-# ==============
+# === CLUSTER TYPES ===
 
 """
     TFCluster
@@ -147,9 +141,7 @@ struct TFClusters
     negative::Vector{TFCluster}
 end
 
-# ==============
-# RESULT TYPES
-# ==============
+# === RESULT TYPES ===
 
 """
     TFClusterPermutationResult

@@ -178,18 +178,14 @@ channel_summary(dat::Vector{<:MultiDataFrameEeg}; kwargs...) = channel_summary.(
 Batch channel summary statistics for EEG/ERP data.
 """
 
-#=============================================================================
-    CHANNEL-SUMMARY-SPECIFIC HELPERS
-=============================================================================#
+# === CHANNEL-SUMMARY-SPECIFIC HELPERS ===
 
 """Generate default output directory name for channel summary."""
 function _default_channel_summary_output_dir(input_dir::String, pattern::String)
     joinpath(input_dir, "channel_summary_$(pattern)")
 end
 
-#=============================================================================
-    CHANNEL-SUMMARY-SPECIFIC PROCESSING
-=============================================================================#
+# === CHANNEL-SUMMARY-SPECIFIC PROCESSING ===
 
 """
 Process a single file through channel summary pipeline.
@@ -243,9 +239,7 @@ function _process_channel_summary_file(
     return (BatchResult(true, filename, "Processed $n_conditions condition(s)"), summary_dfs)
 end
 
-#=============================================================================
-    MAIN API FUNCTION
-=============================================================================#
+# === MAIN API FUNCTION ===
 
 
 function channel_summary(
