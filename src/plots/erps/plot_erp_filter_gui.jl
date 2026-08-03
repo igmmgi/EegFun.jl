@@ -28,6 +28,12 @@ Perfect for:
 - Both filters disabled by default
 - For batch filtering, use `lowpass_filter` or `highpass_filter` functions
 """
+# No arguments - load example data
+function plot_erp_filter_gui(; kwargs...)
+    data = read_data(example_path("data/julia/erps/example1_erps.jld2"))
+    return plot_erp_filter_gui(data[1]; kwargs...)
+end
+
 # String filepath - load data and dispatch
 function plot_erp_filter_gui(filepath::String; kwargs...)
     data = read_data(filepath)
