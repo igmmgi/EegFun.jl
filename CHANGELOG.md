@@ -7,6 +7,21 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-03
+
+### Added
+
+- Integrated Native AMICA algorithm with GPU support.
+- Added GPU support for time-frequency (TF) analysis and statistics.
+- Added `check_raw_data` utility function.
+- Added validation to ensure the data file contains all channels required by the layout.
+
+### Changed
+
+- Changed saving default flags 
+- Improved and optimized PICARD ICA implementation, including GPU support.
+- Updated tutorial code examples and documentation formatting.
+
 ## [0.5.0] - 2026-07-22
 
 ### Added
@@ -26,6 +41,7 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 - zero-allocation virtual padding in time-frequency pipelines (`tf_morlet`, `tf_stft`, `tf_multitaper`) to reduce memory usage and improve speed.
 - Added interactive "Topoplot 3D" plotting option to the Data Browser's selected region popup menu.
 - Added keyboard interactivity (Up/Down arrow keys) to dynamically scale colormap limits in 3D topographic plots (`LScene`/`Mesh` support).
+
 
 ### Changed
 
