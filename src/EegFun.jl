@@ -232,8 +232,8 @@ function __init__()
         DataDep(
             "TutorialDataSets",
             "EegFun Tutorial Datasets",
-            "https://zenodo.org/records/19045958/files/TutorialDataSets_EegFun.zip?download=1",
-            "7dc98bd7ed05198e8db669d6a7afdb401fda49b5f356ca9f0e64d0d39f0953bf",
+            "https://zenodo.org/records/21770157/files/TutorialDataSets_EegFun.zip?download=1",
+            "9c49c03b7185ba4a5f4aae6d1091ddbdafbda9f37ec10c03338e3dd1665d79ef",
             post_fetch_method = unpack,
         ),
     )
