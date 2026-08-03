@@ -43,7 +43,7 @@ EegFun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 # using Metal (for Apple Silicon GPUs)
 
 # # ICA on continuous data 
-# @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax)
+ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax)
 # @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax, use_gpu = true)
 # 
 # @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax_extended)
@@ -70,7 +70,7 @@ EegFun.plot_topography(ica_result, component_selection = EegFun.components(1:20)
 # EegFun.plot_ica_component_spectrum(dat, ica_result, component_selection = EegFun.components(1:70))
 # 
 # # Component data/activation
-# EegFun.plot_ica_component_activation(dat, ica_result)
+EegFun.plot_ica_component_activation(dat, ica_result)
 # 
 # # Databrowser (here we can turn on/off component removal's)
 # EegFun.plot_databrowser(dat)

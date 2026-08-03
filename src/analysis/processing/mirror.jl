@@ -305,3 +305,57 @@ function _unmirror_dataframe!(df::DataFrame, side::Symbol)
         return df_new
     end
 end
+
+# === CONTINUOUS DATA SUPPORT ===
+
+function mirror!(dat::ContinuousData, side::Symbol = :both)::Nothing
+    if side ∉ [:pre, :post, :both]
+        @minimal_error("side must be :pre, :post, or :both, got :$side")
+    end
+    @info "Mirroring continuous data on side: $side"
+    dat.data = _mirror_dataframe!(dat.data, side)
+    return nothing
+end
+
+function mirror!(data_vec::Vector{ContinuousData}, side::Symbol = :both)::Nothing
+    for dat in data_vec
+        mirror!(dat, side)
+    end
+    return nothing
+end
+
+function unmirror!(dat::ContinuousData, side::Symbol = :both)::Nothing
+    if side ∉ [:pre, :post, :both]
+        @minimal_error("side must be :pre, :post, or :both, got :$side")
+    end
+    @info "Unmirroring continuous data on side: $side"
+    dat.data = _unmirror_dataframe!(dat.data, side)
+    return nothing
+end
+
+function unmirror!(data_vec::Vector{ContinuousData}, side::Symbol = :both)::Nothing
+    for dat in data_vec
+        unmirror!(dat, side)
+    end
+    return nothing
+end
+
+function mirror(dat::ContinuousData, side::Symbol = :both)::ContinuousData
+    dat_copy = copy(dat)
+    mirror!(dat_copy, side)
+    return dat_copy
+end
+
+function mirror(data_vec::Vector{ContinuousData}, side::Symbol = :both)::Vector{ContinuousData}
+    return [mirror(dat, side) for dat in data_vec]
+end
+
+function unmirror(dat::ContinuousData, side::Symbol = :both)::ContinuousData
+    dat_copy = copy(dat)
+    unmirror!(dat_copy, side)
+    return dat_copy
+end
+
+function unmirror(data_vec::Vector{ContinuousData}, side::Symbol = :both)::Vector{ContinuousData}
+    return [unmirror(dat, side) for dat in data_vec]
+end
