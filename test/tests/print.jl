@@ -62,14 +62,12 @@ using OrderedCollections
     end
 
     @testset "Version" begin
-        version = EegFun.get_package_version(package_name = "EegFun")
+        version = string(pkgversion(EegFun))
         @test typeof(version) === String
         @test !isempty(version)
 
-        # Test that it returns a valid version format or "unknown"
-        if version != "unknown"
-            @test occursin(r"^\d+\.\d+\.\d+", version)  # Should match semver pattern
-        end
+        # Test that it returns a valid version format
+        @test occursin(r"^\d+\.\d+\.\d+", version)  # Should match semver pattern
     end
 
     @testset "Config Printing" begin
