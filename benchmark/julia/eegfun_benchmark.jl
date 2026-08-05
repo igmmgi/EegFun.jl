@@ -132,8 +132,7 @@ val, t_elapsed = @timed Base.invokelatest(process_eeg_to_grandaverage, test_file
 grand_avg, individual_times = val
 
 # Save execution time
-import Pkg
-eegfun_version = Pkg.project().version
+eegfun_version = pkgversion(EegFun)
 
 open(joinpath(results_dir, "julia_time.txt"), "w") do io
     println(io, t_elapsed)
