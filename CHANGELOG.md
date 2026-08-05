@@ -18,7 +18,7 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 
 ### Changed
 
-- Changed saving default flags 
+- Changed saving default flags
 - Improved and optimized PICARD ICA implementation, including GPU support.
 - Updated tutorial code examples and documentation formatting.
 
@@ -41,7 +41,6 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 - zero-allocation virtual padding in time-frequency pipelines (`tf_morlet`, `tf_stft`, `tf_multitaper`) to reduce memory usage and improve speed.
 - Added interactive "Topoplot 3D" plotting option to the Data Browser's selected region popup menu.
 - Added keyboard interactivity (Up/Down arrow keys) to dynamically scale colormap limits in 3D topographic plots (`LScene`/`Mesh` support).
-
 
 ### Changed
 
