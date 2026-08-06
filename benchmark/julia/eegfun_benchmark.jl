@@ -18,56 +18,57 @@ function process_eeg_to_grandaverage(raw_files::Vector{String}, data_dir::String
     individual_times = Float64[]
     for (i, file) in enumerate(raw_files)
         file_time = @elapsed begin
-        # 1. Read data, layout, and create EegFun.jl data structure
-        raw_data = EegFun.read_raw_data(file)
+            # 1. Read data, layout, and create EegFun.jl data structure
+            raw_data = EegFun.read_raw_data(file)
 
-        layout_path = joinpath(@__DIR__, "..", "..", "resources", "layouts", "biosemi", "biosemi72.csv")
-        layout = EegFun.read_layout(layout_path)
-        EegFun.polar_to_cartesian_xy!(layout)
+            layout_path = joinpath(@__DIR__, "..", "..", "resources", "layouts", "biosemi", "biosemi72.csv")
+            layout = EegFun.read_layout(layout_path)
+            EegFun.polar_to_cartesian_xy!(layout)
 
-        dat = EegFun.create_eegfun_data(raw_data, copy(layout))
+            dat = EegFun.create_eegfun_data(raw_data, copy(layout))
 
-        # 2. Initial preprocessing options: rereference, high-pass filter, and mark bad data sections
-        EegFun.rereference!(dat, :avg)
-        EegFun.highpass_filter!(dat, 0.1)
-        EegFun.is_extreme_value!(dat, 250.0, channel_out = :bad_segments)
+            # 2. Initial preprocessing options: rereference, high-pass filter, and mark bad data sections
+            EegFun.rereference!(dat, :avg)
+            EegFun.highpass_filter!(dat, 0.1)
+            EegFun.is_extreme_value!(dat, 250.0, channel_out = :bad_segments)
 
-        if run_ica
-            # 3. Apply extended Infomax ICA (additional high-pass filter at 1 Hz)
-            dat_ica = deepcopy(dat)
-            EegFun.highpass_filter!(dat_ica, 1.0)
-            ica_result = EegFun.run_ica(
-                dat_ica;
-                algorithm = :infomax_extended,
-                n_components = EegFun.n_channels(dat_ica) - 1,
-                sample_selection = EegFun.samples_not(:bad_segments),
-            )
-
-            # Sanity check: Plot the first 30 ICA components for the first subject
-            if i == 1
-                fig_ica = EegFun.plot_topography(
-                    ica_result,
-                    component_selection = EegFun.components(1:30),
-                    colorbar_plot = false,
-                    label_plot = false,
-                    point_plot = false,
+            if run_ica
+                # 3. Apply Infomax Extended ICA (additional high-pass filter at 1 Hz)
+                dat_ica = deepcopy(dat)
+                EegFun.highpass_filter!(dat_ica, 1.0)
+                ica_result = EegFun.run_ica(
+                    dat_ica;
+                    algorithm = :infomax_extended,
+                    use_gpu = false,
+                    n_components = EegFun.n_channels(dat_ica) - 1,
+                    sample_selection = EegFun.samples_not(:bad_segments),
                 )
-                resize!(fig_ica.fig, 1200, 1000)
-                save(joinpath(results_dir, "julia_ica.pdf"), fig_ica.fig)
+
+                # Sanity check: Plot the first 30 ICA components for the first subject
+                if i == 1
+                    fig_ica = EegFun.plot_topography(
+                        ica_result,
+                        component_selection = EegFun.components(1:30),
+                        colorbar_plot = false,
+                        label_plot = false,
+                        point_plot = false,
+                    )
+                    resize!(fig_ica.fig, 1200, 1000)
+                    save(joinpath(results_dir, "julia_ica.pdf"), fig_ica.fig)
+                end
+
+                # 4. Remove ICA component
+                EegFun.subtract_ica_components!(dat, ica_result, component_selection = EegFun.components([1]))
             end
 
-            # 4. Remove ICA component
-            EegFun.subtract_ica_components!(dat, ica_result, component_selection = EegFun.components([1]))
-        end
+            # 5. Epoch and baseline data
+            epochs = EegFun.extract_epochs(dat, epoch_conditions, (-0.5, 1.0))
+            EegFun.baseline!(epochs, (-0.2, 0.0))
 
-        # 5. Epoch and baseline data
-        epochs = EegFun.extract_epochs(dat, epoch_conditions, (-0.5, 1.0))
-        EegFun.baseline!(epochs, (-0.2, 0.0))
+            # Average epochs        
+            participant_erps = EegFun.average_epochs(epochs)
 
-        # Average epochs        
-        participant_erps = EegFun.average_epochs(epochs)
-
-        append!(all_subject_erps, participant_erps)
+            append!(all_subject_erps, participant_erps)
         end
         push!(individual_times, file_time)
     end
@@ -139,6 +140,6 @@ open(joinpath(results_dir, "julia_time.txt"), "w") do io
     println(io, t_elapsed)
     println(io, "Julia Version: ", VERSION)
     println(io, "EegFun Version: ", eegfun_version)
-    println(io, "Individual Times: ", join(round.(individual_times, digits=2), ", "))
+    println(io, "Individual Times: ", join(round.(individual_times, digits = 2), ", "))
 end
 println("Julia execution time: ", round(t_elapsed, digits = 2), " seconds")
