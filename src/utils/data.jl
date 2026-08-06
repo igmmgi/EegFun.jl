@@ -1114,7 +1114,7 @@ end
 # === BATCH PROCESSING ===
 
 function _default_subset_output_dir(input_dir::String, pattern::String)
-    joinpath(input_dir, "subset_$(pattern)")
+    joinpath(input_dir, "subset_$(clean_pattern(pattern))")
 end
 
 function _process_subset_file(filepath::String, output_path::String; kwargs...)

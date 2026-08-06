@@ -477,7 +477,7 @@ end
 
 """Generate default output directory name for filter operation."""
 function _default_filter_output_dir(input_dir::String, pattern::String, filter_type::String, freq::Real)
-    joinpath(input_dir, "filtered_$(pattern)_$(filter_type)_$(freq)hz")
+    joinpath(input_dir, "filtered_$(clean_pattern(pattern))_$(filter_type)_$(freq)hz")
 end
 
 """Process a single file through filtering pipeline."""

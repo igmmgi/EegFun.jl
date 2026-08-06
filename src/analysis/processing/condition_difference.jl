@@ -11,7 +11,7 @@ function _condition_difference_default_output_dir(
     pairs::Union{Vector{Tuple{Int,Int}},Vector{Vector{Int}}},
 )
     pairs_str = join([join(pair, "-") for pair in pairs], "_")
-    joinpath(input_dir, "differences_$(pattern)_$(pairs_str)")
+    joinpath(input_dir, "differences_$(clean_pattern(pattern))_$(pairs_str)")
 end
 
 # === DIFFERENCE-SPECIFIC PROCESSING ===

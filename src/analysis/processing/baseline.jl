@@ -127,7 +127,7 @@ end
 """Generate default output directory name for baseline operation."""
 function _default_baseline_output_dir(input_dir::String, pattern::String, baseline_interval::Tuple{Real,Real})
     interval_str = "$(baseline_interval[1])_to_$(baseline_interval[2])"
-    joinpath(input_dir, "baseline_$(pattern)_$(interval_str)")
+    joinpath(input_dir, "baseline_$(clean_pattern(pattern))_$(interval_str)")
 end
 
 

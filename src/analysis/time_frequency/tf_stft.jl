@@ -697,7 +697,7 @@ function tf_stft(
             @minimal_error(error_msg)
         end
 
-        output_dir = something(output_dir, joinpath(input_dir, "tf_stft_$(file_pattern)"))
+        output_dir = something(output_dir, joinpath(input_dir, "tf_stft_$(clean_pattern(file_pattern))"))
         mkpath(output_dir)
 
         files = _find_batch_files(file_pattern, input_dir, participant_selection)

@@ -14,7 +14,7 @@ end
 """Generate default output directory name for condition combining."""
 function _condition_combine_default_output_dir(input_dir::String, pattern::String, groups::Vector{Vector{Int}})
     groups_str = join([join(group, "-") for group in groups], "_")
-    joinpath(input_dir, "combined_$(pattern)_$(groups_str)")
+    joinpath(input_dir, "combined_$(clean_pattern(pattern))_$(groups_str)")
 end
 
 # === COMBINE-CONDITIONS-SPECIFIC PROCESSING ===

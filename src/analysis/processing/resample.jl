@@ -166,7 +166,7 @@ end
 """Generate default output directory name for resampling operation."""
 function _default_resample_output_dir(input_dir::String, pattern::String, target_rate::Real)
     new_rate_str = "resampled_by_$(target_rate)"
-    joinpath(input_dir, "$(new_rate_str)_$(pattern)")
+    joinpath(input_dir, "$(new_rate_str)_$(clean_pattern(pattern))")
 end
 
 

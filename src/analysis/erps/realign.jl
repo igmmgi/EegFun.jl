@@ -425,7 +425,7 @@ end
 
 """Generate default output directory name for realignment operation."""
 function _default_realign_output_dir(input_dir::String, pattern::String)
-    joinpath(input_dir, "realigned_$(pattern)")
+    joinpath(input_dir, "realigned_$(clean_pattern(pattern))")
 end
 
 

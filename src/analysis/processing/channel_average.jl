@@ -153,7 +153,7 @@ end
 
 """Generate default output directory name for channel averaging."""
 function _default_channel_average_output_dir(input_dir::String, pattern::String)
-    joinpath(input_dir, "averaged_channels_$(pattern)")
+    joinpath(input_dir, "averaged_channels_$(clean_pattern(pattern))")
 end
 
 """

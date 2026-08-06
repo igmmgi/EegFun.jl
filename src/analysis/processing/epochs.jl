@@ -1018,7 +1018,7 @@ end
 
 """Generate default output directory name for averaging operation."""
 function _default_average_output_dir(input_dir::String, pattern::String)
-    joinpath(input_dir, "averaged_$(pattern)")
+    joinpath(input_dir, "averaged_$(clean_pattern(pattern))")
 end
 
 # === AVERAGE-SPECIFIC PROCESSING ===

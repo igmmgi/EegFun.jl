@@ -172,7 +172,7 @@ end
 """Generate default output directory name for rereferencing operation."""
 function _default_rereference_output_dir(input_dir::String, pattern::String, ref_selection)
     ref_str = ref_selection isa Symbol ? string(ref_selection) : join(ref_selection, "_")
-    joinpath(input_dir, "rereferenced_$(pattern)_$(ref_str)")
+    joinpath(input_dir, "rereferenced_$(clean_pattern(pattern))_$(ref_str)")
 end
 
 # === REREFERENCE-SPECIFIC PROCESSING ===
