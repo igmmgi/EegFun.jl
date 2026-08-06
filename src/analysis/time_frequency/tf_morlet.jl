@@ -539,7 +539,7 @@ function tf_morlet(
     setup_global_logging(log_file)
 
     try
-        @info "Batch tf_morlet started at \$(now())"
+        @info "Batch tf_morlet started at $(now())"
         @log_call "tf_morlet"
 
         error_msg = _validate_input_dir(input_dir)
@@ -547,16 +547,8 @@ function tf_morlet(
             @minimal_error(error_msg)
         end
 
-        output_dir = something(output_dir, joinpath(input_dir, "tf_morlet_\$(file_pattern)"))
+        output_dir = something(output_dir, joinpath(input_dir, "tf_morlet_$(clean_pattern(file_pattern))"))
         mkpath(output_dir)
-
-        files = _find_batch_files(file_pattern, input_dir, participant_selection)
-        if isempty(files)
-            @minimal_warning "No JLD2 files found matching pattern '\$file_pattern'"
-            return nothing
-        end
-
-        @info "Found \$(length(files)) files for tf_morlet analysis"
 
         process_fn =
             (input_path, output_path) -> begin
@@ -568,11 +560,10 @@ function tf_morlet(
                 data = _condition_select(data, condition_selection)
                 tf_results = tf_morlet(data; kwargs...)
                 jldsave(output_path; data = tf_results)
-                return BatchResult(true, filename, "TF morlet analysis complete (\$(length(tf_results)) conditions)")
+                return BatchResult(true, filename, "TF morlet analysis complete ($(length(tf_results)) conditions)")
             end
 
-        results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "TF morlet")
-        _log_batch_summary(results, output_dir)
+        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "TF morlet")
 
     finally
         _cleanup_logging(log_file, output_dir)

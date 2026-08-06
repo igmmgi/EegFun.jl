@@ -107,7 +107,7 @@ using DataFrames
             output_dir = joinpath(test_dir, "averages_none")
 
             result = EegFun.condition_average("nonexistent_pattern", [[1, 2]], input_dir = test_dir, output_dir = output_dir)
-            @test result.success == 0
+            @test isnothing(result)
         end
 
         @testset "Empty condition groups" begin
@@ -386,7 +386,7 @@ end
         output_dir = joinpath(test_dir, "tf_avg_none")
 
         result = EegFun.condition_average("nonexistent_pattern", [[1, 2]], input_dir = test_dir, output_dir = output_dir)
-        @test result.success == 0
+        @test isnothing(result)
     end
 
     rm(test_dir, recursive = true)

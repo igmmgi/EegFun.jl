@@ -31,26 +31,7 @@ using Logging
         @test result_fail.message == "Error message"
     end
 
-    @testset "BatchConfig struct" begin
-        # Test BatchConfig creation and access
-        config = EegFun.BatchConfig("test_pattern", "/input", "/output", [1, 2], [1, 2])
 
-        @test config.file_pattern == "test_pattern"
-        @test config.input_dir == "/input"
-        @test config.output_dir == "/output"
-        @test config.participants == [1, 2]
-        @test config.conditions == [1, 2]
-
-        # Test with nothing values
-        config_nothing = EegFun.BatchConfig("test", "/input", "/output", nothing, nothing)
-        @test isnothing(config_nothing.participants)
-        @test isnothing(config_nothing.conditions)
-
-        # Test with single Int
-        config_single = EegFun.BatchConfig("test", "/input", "/output", 1, 1)
-        @test config_single.participants == 1
-        @test config_single.conditions == 1
-    end
 
     @testset "_find_batch_files" begin
         # Create test files
@@ -541,6 +522,7 @@ using Logging
             bp_input_dir = joinpath(test_dir, "bp_input")
             bp_output_dir = joinpath(test_dir, "bp_output")
             mkpath(bp_input_dir)
+            mkpath(bp_output_dir)
 
             for i = 1:3
                 filename = joinpath(bp_input_dir, "subj$(i)_epochs.jld2")
@@ -551,10 +533,10 @@ using Logging
             res_serial = with_logger(NullLogger()) do
                 EegFun.batch_process(
                     "epochs",
-                    input_dir = bp_input_dir,
-                    output_dir = bp_output_dir,
-                    log_file = "test_bp_serial.log",
-                    operation_name = "Test batch engine",
+                    bp_input_dir,
+                    bp_output_dir,
+                    EegFun.participants(),
+                    "Test batch engine",
                 ) do in_path, out_path
                     d = load(in_path, "data")
                     jldsave(out_path; data = d .* 2)
@@ -568,13 +550,14 @@ using Logging
 
             # Test parallel batch_process
             bp_parallel_out = joinpath(test_dir, "bp_parallel_output")
+            mkpath(bp_parallel_out)
             res_parallel = with_logger(NullLogger()) do
                 EegFun.batch_process(
                     "epochs",
-                    input_dir = bp_input_dir,
-                    output_dir = bp_parallel_out,
-                    log_file = "test_bp_parallel.log",
-                    operation_name = "Test parallel engine",
+                    bp_input_dir,
+                    bp_parallel_out,
+                    EegFun.participants(),
+                    "Test parallel engine",
                     parallel = true,
                 ) do in_path, out_path
                     d = load(in_path, "data")

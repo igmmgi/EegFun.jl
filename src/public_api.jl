@@ -13,7 +13,6 @@ public AnalyticResult
 public ArtifactComponents
 public ArtifactInfo
 public BaselineInfo
-public BatchConfig
 public BatchResult
 public ChannelRepairInfo
 public Cluster

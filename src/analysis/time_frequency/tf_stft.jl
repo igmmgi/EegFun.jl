@@ -700,14 +700,6 @@ function tf_stft(
         output_dir = something(output_dir, joinpath(input_dir, "tf_stft_$(clean_pattern(file_pattern))"))
         mkpath(output_dir)
 
-        files = _find_batch_files(file_pattern, input_dir, participant_selection)
-        if isempty(files)
-            @minimal_warning "No JLD2 files found matching pattern '$file_pattern'"
-            return nothing
-        end
-
-        @info "Found $(length(files)) files for tf_stft analysis"
-
         process_fn =
             (input_path, output_path) -> begin
                 filename = basename(input_path)
@@ -721,8 +713,7 @@ function tf_stft(
                 return BatchResult(true, filename, "TF STFT analysis complete ($(length(tf_results)) conditions)")
             end
 
-        results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "TF STFT")
-        _log_batch_summary(results, output_dir)
+        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "TF STFT")
 
     finally
         _cleanup_logging(log_file, output_dir)

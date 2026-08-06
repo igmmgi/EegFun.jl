@@ -10,14 +10,6 @@ struct BatchResult
     message::String
 end
 
-"""configuration for batch operations."""
-struct BatchConfig
-    file_pattern::String
-    input_dir::String
-    output_dir::String
-    participants::Union{Int,Vector{Int},Nothing}
-    conditions::Union{Int,Vector{Int},Nothing}
-end
 
 """Extract participant ID (number) from filename, returns Int."""
 function _extract_participant_id(filename::String)
@@ -342,6 +334,7 @@ function _run_batch_operation(
     input_dir::String,
     output_dir::String;
     operation_name::String = "Processing",
+    filename_modifier::Function = identity,
     parallel::Bool = false,
 )
     n_files = length(files)
@@ -351,7 +344,8 @@ function _run_batch_operation(
         Threads.@threads for i = 1:n_files
             file = files[i]
             input_path = joinpath(input_dir, file)
-            output_path = joinpath(output_dir, file)
+            out_file = filename_modifier(file)
+            output_path = joinpath(output_dir, out_file)
             results[i] = try
                 process_fn(input_path, output_path)
             catch e
@@ -364,7 +358,8 @@ function _run_batch_operation(
             @info "$operation_name: $file ($i/$n_files)"
 
             input_path = joinpath(input_dir, file)
-            output_path = joinpath(output_dir, file)
+            out_file = filename_modifier(file)
+            output_path = joinpath(output_dir, out_file)
 
             result = try
                 process_fn(input_path, output_path)
@@ -386,68 +381,32 @@ function _run_batch_operation(
     return results
 end
 
-"""
-    batch_process(process_fn::Function, file_pattern::String;
-                  input_dir::String = pwd(),
-                  output_dir::Union{String,Nothing} = nothing,
-                  default_output_dir_fn::Union{Function,Nothing} = nothing,
-                  participant_selection::Function = participants(),
-                  log_file::String = "batch_operation.log",
-                  operation_name::String = "Batch processing",
-                  parallel::Bool = false)
-
-Generic higher-order batch processing engine encapsulating file discovery, directory setup,
-logging lifecycle, parallel multithreading execution, error handling, and summary reporting.
-"""
 function batch_process(
     process_fn::Function,
-    file_pattern::String;
-    input_dir::String = pwd(),
-    output_dir::Union{String,Nothing} = nothing,
-    default_output_dir_fn::Union{Function,Nothing} = nothing,
-    participant_selection::Function = participants(),
-    log_file::String = "batch_operation.log",
-    operation_name::String = "Batch processing",
+    file_pattern::String,
+    input_dir::String,
+    output_dir::String,
+    participant_selection::Function,
+    operation_name::String;
+    filename_modifier::Function = identity,
     parallel::Bool = false,
 )
-    setup_global_logging(log_file)
-    resolved_output_dir = nothing
-
-    try
-        @info "$operation_name started at $(now())"
-
-        error_msg = _validate_input_dir(input_dir)
-        if !isnothing(error_msg)
-            @minimal_error(error_msg)
-        end
-
-        resolved_output_dir = if !isnothing(output_dir)
-            output_dir
-        elseif !isnothing(default_output_dir_fn)
-            default_output_dir_fn(input_dir, file_pattern)
-        else
-            joinpath(input_dir, "batch_output")
-        end
-        mkpath(resolved_output_dir)
-
-        files = _find_batch_files(file_pattern, input_dir, participant_selection)
-        if isempty(files)
-            @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-            return nothing
-        end
-
-        @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
-        @info "Output directory: $resolved_output_dir"
-        @info "Parallel execution: $parallel"
-
-        results =
-            _run_batch_operation(process_fn, files, input_dir, resolved_output_dir; operation_name = operation_name, parallel = parallel)
-
-        return _log_batch_summary(results, resolved_output_dir)
-
-    finally
-        _cleanup_logging(log_file, resolved_output_dir)
+    files = _find_batch_files(file_pattern, input_dir, participant_selection)
+    if isempty(files)
+        @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
+        return nothing
     end
+
+    @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
+
+    results = _run_batch_operation(
+        process_fn, files, input_dir, output_dir; 
+        operation_name = operation_name, 
+        filename_modifier = filename_modifier,
+        parallel = parallel
+    )
+    
+    return _log_batch_summary(results, output_dir)
 end
 
 """

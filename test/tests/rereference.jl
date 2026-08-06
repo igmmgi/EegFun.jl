@@ -212,9 +212,7 @@ end
 
             result = EegFun.rereference("nonexistent_pattern", input_dir = test_dir, output_dir = output_dir)
 
-            @test result isa NamedTuple
-            @test result.success == 0
-            @test result.errors == 0
+            @test isnothing(result)
         end
 
         @testset "Files with no recognized data variable" begin
@@ -408,9 +406,7 @@ end
                 @test length(readdir(output_dir)) > 0
             else
                 # These patterns shouldn't match any files
-                @test result isa NamedTuple
-                @test result.success == 0
-                @test result.errors == 0
+                @test isnothing(result)
             end
         end
     end
