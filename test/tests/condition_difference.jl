@@ -172,9 +172,9 @@ using CSV
         @testset "No matching files" begin
             output_dir = joinpath(test_dir, "differences_none")
 
-            # No files match so the function returns (success=0, errors=0)
+            # No files match so the function returns nothing
             result = EegFun.condition_difference("nonexistent_pattern", [(1, 2)], input_dir = test_dir, output_dir = output_dir)
-            @test result.success == 0
+            @test isnothing(result)
         end
 
         @testset "Empty ERP data" begin
@@ -192,10 +192,8 @@ using CSV
                 output_dir = output_dir,
             )
 
-            # The function returns a named tuple with success/error counts
-            @test result isa NamedTuple
-            @test haskey(result, :success)
-            @test haskey(result, :errors)
+            # The function returns nothing when no files match
+            @test isnothing(result)
         end
     end
 
@@ -461,7 +459,7 @@ end
         output_dir = joinpath(test_dir, "tf_diff_none")
 
         result = EegFun.condition_difference("nonexistent_pattern", [(1, 2)], input_dir = test_dir, output_dir = output_dir)
-        @test result.success == 0
+        @test isnothing(result)
     end
 
     rm(test_dir, recursive = true)

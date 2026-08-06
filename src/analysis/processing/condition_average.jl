@@ -7,7 +7,7 @@ Batch computation of condition averages for ERP data.
 """Generate default output directory name for condition averaging."""
 function _condition_average_default_output_dir(input_dir::String, pattern::String, groups::Vector{Vector{Int}})
     groups_str = join([join(group, "-") for group in groups], "_")
-    joinpath(input_dir, "averages_$(pattern)_$(groups_str)")
+    joinpath(input_dir, "averages_$(clean_pattern(pattern))_$(groups_str)")
 end
 
 # === AVERAGE-SPECIFIC PROCESSING ===
@@ -202,24 +202,8 @@ function condition_average(
         output_dir = something(output_dir, _condition_average_default_output_dir(input_dir, file_pattern, condition_groups))
         mkpath(output_dir)
 
-        # Find files
-        files = _find_batch_files(file_pattern, input_dir, participant_selection)
-
-        if isempty(files)
-            @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-            result = (success = 0, errors = 0)
-        else
-            @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
-            @info "Condition groups: $condition_groups"
-
-            # Create processing function with captured parameters
-            process_fn = (input_path, output_path) -> _condition_average_process_file(input_path, output_path, condition_groups)
-
-            # Execute batch operation
-            results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Creating averages")
-
-            result = _log_batch_summary(results, output_dir)
-        end
+        process_fn = (input_path, output_path) -> _condition_average_process_file(input_path, output_path, condition_groups)
+        result = batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Creating averages")
 
     finally
         _cleanup_logging(log_file, output_dir)

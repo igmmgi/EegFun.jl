@@ -28,6 +28,12 @@ Perfect for:
 - Both filters disabled by default
 - For batch filtering, use `lowpass_filter` or `highpass_filter` functions
 """
+# No arguments - load example data
+function plot_erp_filter_gui(; kwargs...)
+    data = read_data(example_path("data/julia/erps/example1_erps.jld2"))
+    return plot_erp_filter_gui(data[1]; kwargs...)
+end
+
 # String filepath - load data and dispatch
 function plot_erp_filter_gui(filepath::String; kwargs...)
     data = read_data(filepath)
@@ -37,13 +43,13 @@ function plot_erp_filter_gui(filepath::String; kwargs...)
     return plot_erp_filter_gui(data; kwargs...)
 end
 
-# Single ErpData - dispatch to vector version
-function plot_erp_filter_gui(erp::ErpData; channel::Union{Symbol,Nothing} = nothing)
+# Single ErpData/ContinuousData - dispatch to vector version
+function plot_erp_filter_gui(erp::Union{ErpData, ContinuousData}; channel::Union{Symbol,Nothing} = nothing)
     return plot_erp_filter_gui([erp]; channel)
 end
 
-# Vector of ErpData - main implementation
-function plot_erp_filter_gui(erp_vec::Vector{ErpData}; channel::Union{Symbol,Nothing} = nothing, display_plot::Bool = true)
+# Vector of ErpData/ContinuousData - main implementation
+function plot_erp_filter_gui(erp_vec::Vector{<:Union{ErpData, ContinuousData}}; channel::Union{Symbol,Nothing} = nothing, display_plot::Bool = true)
 
     # Get available channels from first ERP
     first_erp = erp_vec[1]
@@ -172,9 +178,9 @@ function plot_erp_filter_gui(erp_vec::Vector{ErpData}; channel::Union{Symbol,Not
 
     Label(controls_grid[row, 1], "Cutoff Frequency:", halign = :left)
     row += 1
-    highpass_cutoff_slider = Slider(controls_grid[row, 1], range = 0.1:0.1:10.0, startvalue = 0.1)
+    highpass_cutoff_slider = Slider(controls_grid[row, 1], range = 0.01:0.01:10.0, startvalue = 0.1)
     row += 1
-    highpass_cutoff_label = Label(controls_grid[row, 1], "0.1 Hz", halign = :left)
+    highpass_cutoff_label = Label(controls_grid[row, 1], "0.10 Hz", halign = :left)
     row += 1
 
     Label(controls_grid[row, 1], "Order:", halign = :left)
@@ -199,7 +205,7 @@ function plot_erp_filter_gui(erp_vec::Vector{ErpData}; channel::Union{Symbol,Not
             plot_area_grid[row_idx, col_idx],
             xlabel = row_idx == nrows ? "Time (s)" : "",
             ylabel = col_idx == 1 ? "μV" : "",
-            title = erp_vec[i].condition_name,
+            title = hasproperty(erp_vec[i], :condition_name) ? erp_vec[i].condition_name : "Continuous Data",
         )
         push!(axes, ax)
     end
@@ -216,8 +222,13 @@ function plot_erp_filter_gui(erp_vec::Vector{ErpData}; channel::Union{Symbol,Not
         for (idx, ax) in enumerate(axes)
             empty!(ax)
 
-            # Plot original ERP in black
-            plot_erp!(fig, ax, [erp_vec[idx]], channel_selection = channels(selected_channel[]), legend = false)
+            # Plot original data in black
+            if erp_vec[idx] isa ErpData
+                plot_erp!(fig, ax, [erp_vec[idx]], channel_selection = channels(selected_channel[]), legend = false)
+            else
+                t = (0:size(erp_vec[idx].data, 1)-1) ./ erp_vec[idx].sample_rate
+                lines!(ax, t, erp_vec[idx].data[!, selected_channel[]], color = :black)
+            end
 
             # Apply filters if enabled
             if lowpass_enabled[] || highpass_enabled[]
@@ -256,8 +267,13 @@ function plot_erp_filter_gui(erp_vec::Vector{ErpData}; channel::Union{Symbol,Not
                         unmirror!(filtered_erp, :both)
                     end
 
-                    # Plot filtered ERP in red (solid line)
-                    plot_erp!(fig, ax, [filtered_erp], channel_selection = channels(selected_channel[]), legend = false, color = :red)
+                    # Plot filtered data in red (solid line)
+                    if filtered_erp isa ErpData
+                        plot_erp!(fig, ax, [filtered_erp], channel_selection = channels(selected_channel[]), legend = false, color = :red)
+                    else
+                        t_filt = (0:size(filtered_erp.data, 1)-1) ./ filtered_erp.sample_rate
+                        lines!(ax, t_filt, filtered_erp.data[!, selected_channel[]], color = :red)
+                    end
 
                     # Add legend to this subplot
                     original_line = filter(plot_obj -> plot_obj isa Lines, ax.scene.plots)[1]
@@ -335,7 +351,7 @@ function plot_erp_filter_gui(erp_vec::Vector{ErpData}; channel::Union{Symbol,Not
 
     on(highpass_cutoff_slider.value) do val
         highpass_cutoff[] = val
-        highpass_cutoff_label.text = @sprintf("%.1f Hz", val)
+        highpass_cutoff_label.text = @sprintf("%.2f Hz", val)
         update_plot!()
     end
 

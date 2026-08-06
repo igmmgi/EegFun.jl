@@ -182,7 +182,7 @@ Batch channel summary statistics for EEG/ERP data.
 
 """Generate default output directory name for channel summary."""
 function _default_channel_summary_output_dir(input_dir::String, pattern::String)
-    joinpath(input_dir, "channel_summary_$(pattern)")
+    joinpath(input_dir, "channel_summary_$(clean_pattern(pattern))")
 end
 
 # === CHANNEL-SUMMARY-SPECIFIC PROCESSING ===

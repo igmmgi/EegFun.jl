@@ -4,7 +4,7 @@
 
 """Generate default output directory name for grand averaging."""
 function _default_grand_average_output_dir(input_dir::String, pattern::String)
-    joinpath(input_dir, "grand_average_$(pattern)")
+    joinpath(input_dir, "grand_average_$(clean_pattern(pattern))")
 end
 
 """
@@ -215,7 +215,7 @@ function grand_average(
         end
 
         # Save
-        output_file = "grand_average_$(file_pattern).jld2"
+        output_file = "grand_average_$(clean_pattern(file_pattern)).jld2"
         output_path = joinpath(output_dir, output_file)
         jldsave(output_path; data = grand_averages)
 

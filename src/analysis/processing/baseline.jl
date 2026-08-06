@@ -127,7 +127,7 @@ end
 """Generate default output directory name for baseline operation."""
 function _default_baseline_output_dir(input_dir::String, pattern::String, baseline_interval::Tuple{Real,Real})
     interval_str = "$(baseline_interval[1])_to_$(baseline_interval[2])"
-    joinpath(input_dir, "baseline_$(pattern)_$(interval_str)")
+    joinpath(input_dir, "baseline_$(clean_pattern(pattern))_$(interval_str)")
 end
 
 
@@ -338,22 +338,8 @@ function baseline(
         output_dir = something(output_dir, _default_baseline_output_dir(input_dir, file_pattern, baseline_interval))
         mkpath(output_dir)
 
-        # Find files
-        files = _find_batch_files(file_pattern, input_dir, participant_selection)
-        if isempty(files)
-            @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-            return nothing
-        end
-        @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
-
-        # Create processing function with captured parameters
-        @info "Baseline interval: $baseline_interval"
         process_fn = (input_path, output_path) -> _process_baseline_file(input_path, output_path, baseline_interval, condition_selection)
-
-        # Execute batch operation
-        results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Baseline correction")
-
-        _log_batch_summary(results, output_dir)
+        result = batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Baseline correction")
 
     finally
         _cleanup_logging(log_file, output_dir)

@@ -7,6 +7,21 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-03
+
+### Added
+
+- Integrated Native AMICA algorithm with GPU support.
+- Added GPU support for time-frequency (TF) analysis and statistics.
+- Added `check_raw_data` utility function.
+- Added validation to ensure the data file contains all channels required by the layout.
+
+### Changed
+
+- Changed saving default flags
+- Improved and optimized PICARD ICA implementation, including GPU support.
+- Updated tutorial code examples and documentation formatting.
+
 ## [0.5.0] - 2026-07-22
 
 ### Added

@@ -27,6 +27,11 @@ dat.data
 EegFun.rereference!(dat, :AF7)
 dat.data
 
+# Rereference to :AF7
+EegFun.rereference!(dat, [:Fp1, :AF7])
+dat.data
+
+
 # We can also see the influence of reference using the databrowser
 EegFun.plot_databrowser(dat)
 

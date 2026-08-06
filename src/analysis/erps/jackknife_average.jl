@@ -22,7 +22,7 @@ end
 
 """Generate default output directory name for jackknife operation."""
 function _default_jackknife_output_dir(input_dir::String, pattern::String)
-    joinpath(input_dir, "jackknife_$(pattern)")
+    joinpath(input_dir, "jackknife_$(clean_pattern(pattern))")
 end
 
 # === JACKKNIFE-SPECIFIC HELPERS ===

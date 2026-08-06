@@ -18,22 +18,6 @@ using Logging
 
     end
 
-    @testset "BatchConfig struct" begin
-        # Test BatchConfig creation and access
-        config = EegFun.BatchConfig("test_pattern", "/input", "/output", [1, 2], [1, 2])
-
-        @test config.file_pattern == "test_pattern"
-        @test config.input_dir == "/input"
-        @test config.output_dir == "/output"
-        @test config.participants == [1, 2]
-        @test config.conditions == [1, 2]
-
-        # Test with nothing values
-        config_nothing = EegFun.BatchConfig("test", "/input", "/output", nothing, nothing)
-        @test isnothing(config_nothing.participants)
-        @test isnothing(config_nothing.conditions)
-    end
-
     @testset "_find_batch_files" begin
         # Create test files
         for participant = 1:5

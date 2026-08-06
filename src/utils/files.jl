@@ -23,6 +23,16 @@ function get_files(directory::String, files::Vector{String})
 end
 
 """
+    clean_pattern(pattern::String) -> String
+
+Sanitize a file pattern by taking the substring before the first dot.
+Useful for generating clean default output directory and file names.
+"""
+function clean_pattern(pattern::String)
+    return string(first(split(pattern, '.')))
+end
+
+"""
     find_file(filename::String, search_dir::String; 
               recursive::Bool = true, extensions::Vector{String} = []) -> Union{String, Nothing}
 

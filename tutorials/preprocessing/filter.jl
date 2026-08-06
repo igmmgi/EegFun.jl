@@ -24,6 +24,7 @@ dat = EegFun.create_eegfun_data(dat, layout)
 
 # Remove slow drifts with a 0.1 Hz high-pass (standard for ERPs)
 EegFun.highpass_filter!(dat, 0.1)
+# EegFun.highpass_filter!(dat, 0.1, filter_method="fir")
 
 # Stronger high-pass for ICA preprocessing (1 Hz)
 dat_ica = copy(dat)

@@ -18,38 +18,6 @@ end
 
 
 """
-    get_package_version(; package_name::String = "EegFun")
-
-Get the package version from Project.toml.
-
-It locates the package using Base.find_package() and reads Project.toml
-from the package root.
-
-# Returns
-- `String`: The version string from Project.toml, or "unknown" if not available/problem
-"""
-function get_package_version(; package_name::String = "EegFun")
-    try
-        pkg_path = Base.find_package(package_name)
-        version = "unknown"
-        if !isnothing(pkg_path)
-            package_root = dirname(dirname(pkg_path))
-            project_file = joinpath(package_root, "Project.toml")
-            if isfile(project_file)
-                project_toml = TOML.parsefile(project_file)
-                if haskey(project_toml, "version")
-                    version = project_toml["version"]
-                end
-            end
-        end
-        return version
-    catch e
-        @debug "get_package_version failed" exception = e
-        return "unknown"
-    end
-end
-
-"""
     print_config(config, [io=stdout])
     print_config(config, filename::String)
 
@@ -76,7 +44,7 @@ function print_config(config, io::IO = stdout)
     # Always add fresh metadata first
     config_with_meta["metadata"] = OrderedDict(
         "julia_version" => string(VERSION),
-        "EegFun_version" => get_package_version(package_name = "EegFun"),
+        "EegFun_version" => string(pkgversion(@__MODULE__)),
         "date" => string(now()),
     )
 
@@ -118,7 +86,7 @@ ver_info = version_info()
 function version_info()
     return Dict{String,Any}(
         "julia_version" => string(VERSION),
-        "EegFun_version" => get_package_version(package_name = "EegFun"),
+        "EegFun_version" => string(pkgversion(@__MODULE__)),
         "timestamp" => string(now()),
     )
 end

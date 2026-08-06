@@ -5,6 +5,7 @@ This directory contains the cross-platform benchmarking suite for comparing EEG 
 ## Running the Benchmarks
 
 All benchmark scripts expect the following arguments:
+
 1. `data_dir` - The path to the directory containing your raw EEG data files (in `.bdf` format).
 2. `n_files_to_process` - (Optional) The number of files to process. For a quick test, you can set this to `2`.
 3. `run_ica` - (Optional) A boolean flag to determine if ICA should be run (defaults to `true` or equivalent in each script).
@@ -55,5 +56,6 @@ julia plot_benchmark_comparison.jl /path/to/your/data/directory
 ```
 
 This will generate two PDF files in your data directory:
+
 - `cross_pipeline_comparison.pdf` - A combined plot overlaying the ERPs from all three platforms.
 - `individual_pipelines.pdf` - Individual subplots for each platform.

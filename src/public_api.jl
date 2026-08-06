@@ -13,7 +13,6 @@ public AnalyticResult
 public ArtifactComponents
 public ArtifactInfo
 public BaselineInfo
-public BatchConfig
 public BatchResult
 public ChannelRepairInfo
 public Cluster
@@ -392,4 +391,3 @@ public signal_example_decoding
 # === Misc ===
 public example_path
 public version_info
-public get_package_version

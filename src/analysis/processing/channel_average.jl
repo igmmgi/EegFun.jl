@@ -153,7 +153,7 @@ end
 
 """Generate default output directory name for channel averaging."""
 function _default_channel_average_output_dir(input_dir::String, pattern::String)
-    joinpath(input_dir, "averaged_channels_$(pattern)")
+    joinpath(input_dir, "averaged_channels_$(clean_pattern(pattern))")
 end
 
 """
@@ -283,28 +283,11 @@ function channel_average(
         output_dir = something(output_dir, _default_channel_average_output_dir(input_dir, file_pattern))
         mkpath(output_dir)
 
-        # Find files
-        files = _find_batch_files(file_pattern, input_dir, participant_selection)
-
-        if isempty(files)
-            @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-            return nothing
-        end
-
-        @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
-        @info "Channel selections: $(length(channel_selections)) group(s)"
-        @info "Output labels: $output_labels"
-        @info "Reduce mode: $reduce"
-
-        # Create processing function with captured parameters
         process_fn =
             (input_path, output_path) ->
                 _process_channel_average_file(input_path, output_path, channel_selections, output_labels, condition_selection, reduce)
 
-        # Execute batch operation
-        results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Averaging channels")
-
-        return _log_batch_summary(results, output_dir)
+        return batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Averaging channels")
 
     finally
         _cleanup_logging(log_file, output_dir)

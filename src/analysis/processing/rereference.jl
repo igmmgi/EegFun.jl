@@ -172,7 +172,7 @@ end
 """Generate default output directory name for rereferencing operation."""
 function _default_rereference_output_dir(input_dir::String, pattern::String, ref_selection)
     ref_str = ref_selection isa Symbol ? string(ref_selection) : join(ref_selection, "_")
-    joinpath(input_dir, "rereferenced_$(pattern)_$(ref_str)")
+    joinpath(input_dir, "rereferenced_$(clean_pattern(pattern))_$(ref_str)")
 end
 
 # === REREFERENCE-SPECIFIC PROCESSING ===
@@ -277,25 +277,13 @@ function rereference(
         output_dir = something(output_dir, _default_rereference_output_dir(input_dir, file_pattern, reference_selection))
         mkpath(output_dir)
 
-        # Find files
-        files = _find_batch_files(file_pattern, input_dir, participant_selection)
+        ref_str = reference_selection isa Symbol ? string(reference_selection) : join(reference_selection, ", ")
+        @info "Reference settings: $ref_str"
 
-        if isempty(files)
-            @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-        else
-            ref_str = reference_selection isa Symbol ? string(reference_selection) : join(reference_selection, ", ")
-            @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
-            @info "Reference settings: $ref_str"
+        process_fn =
+            (input_path, output_path) -> _process_rereference_file(input_path, output_path, reference_selection, condition_selection)
 
-            # Create processing function with captured parameters
-            process_fn =
-                (input_path, output_path) -> _process_rereference_file(input_path, output_path, reference_selection, condition_selection)
-
-            # Execute batch operation
-            results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Rereferencing")
-
-            result = _log_batch_summary(results, output_dir)
-        end
+        result = batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Rereferencing")
 
     finally
         _cleanup_logging(log_file, output_dir)

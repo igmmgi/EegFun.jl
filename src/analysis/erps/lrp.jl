@@ -267,25 +267,8 @@ function lrp(
         output_dir = something(output_dir, _default_lrp_output_dir(input_dir, condition_pairs))
         mkpath(output_dir)
 
-        # Find files
-        files = _find_batch_files(file_pattern, input_dir, participant_selection)
-
-        if isempty(files)
-            @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-            return nothing
-        end
-
-        @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
-        @info "Condition pairs: $condition_pairs"
-        @info "Channel selection: $(channel_selection == channels() ? "all lateral pairs" : "custom")"
-
-        # Create processing function with captured parameters
         process_fn = (input_path, output_path) -> _process_lrp_file(input_path, output_path, condition_pairs, channel_selection)
-
-        # Execute batch operation
-        results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Calculating LRP")
-
-        _log_batch_summary(results, output_dir)
+        result = batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Calculating LRP")
 
     finally
         _cleanup_logging(log_file, output_dir)

@@ -199,16 +199,10 @@ function tf_baseline(
             @minimal_error(error_msg)
         end
 
-        output_dir = something(output_dir, joinpath(input_dir, "tf_baseline_$(file_pattern)"))
+        output_dir = something(output_dir, joinpath(input_dir, "tf_baseline_$(clean_pattern(file_pattern))"))
         mkpath(output_dir)
 
-        files = _find_batch_files(file_pattern, input_dir, participant_selection)
-        if isempty(files)
-            @minimal_warning "No JLD2 files found matching pattern '$file_pattern'"
-            return nothing
-        end
-
-        @info "Found $(length(files)) files, baseline: $baseline_interval, method: $method"
+        @info "baseline: $baseline_interval, method: $method"
 
         process_fn = (input_path, output_path) -> begin
             filename = basename(input_path)
@@ -222,8 +216,7 @@ function tf_baseline(
             return BatchResult(true, filename, "Baseline corrected")
         end
 
-        results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "TF baseline")
-        _log_batch_summary(results, output_dir)
+        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "TF baseline")
 
     finally
         _cleanup_logging(log_file, output_dir)

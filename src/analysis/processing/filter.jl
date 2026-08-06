@@ -477,7 +477,7 @@ end
 
 """Generate default output directory name for filter operation."""
 function _default_filter_output_dir(input_dir::String, pattern::String, filter_type::String, freq::Real)
-    joinpath(input_dir, "filtered_$(pattern)_$(filter_type)_$(freq)hz")
+    joinpath(input_dir, "filtered_$(clean_pattern(pattern))_$(filter_type)_$(freq)hz")
 end
 
 """Process a single file through filtering pipeline."""
@@ -599,19 +599,11 @@ function _run_filter_batch(
         output_dir = something(output_dir, _default_filter_output_dir(input_dir, file_pattern, filter_type, cutoff_freq))
         mkpath(output_dir)
 
-        # Find files
-        files = _find_batch_files(file_pattern, input_dir, participant_selection)
-        if isempty(files)
-            @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-            return nothing
-        end
-
         # Execute
         process_fn =
             (input_path, output_path) -> _process_filter_file(input_path, output_path, filter_type, cutoff_freq, condition_selection)
-        results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Filtering")
-
-        return _log_batch_summary(results, output_dir)
+        
+        return batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Filtering")
     finally
         _cleanup_logging(log_file, output_dir)
     end
