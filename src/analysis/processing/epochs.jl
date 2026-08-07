@@ -45,6 +45,47 @@ function allcomb(args...)
     return vec([collect(Union{Int,Symbol,UnitRange{Int},Vector{Int}}, c) for c in combinations])
 end
 
+# Parses "allcomb(arg1, arg2, ...)" strings from TOML without using eval.
+# Accepted argument types: integer, a:b range, [1,2] array, [[1,2]] nested array, :any symbol.
+# Claude suggested parser to avoid eval in TOML related to allcomb
+function _parse_allcomb_string(condition_name::String, expr::String)
+    m = match(r"^allcomb\((.*)\)$"s, strip(expr))
+    isnothing(m) &&
+        @minimal_error("Invalid allcomb expression for condition '$condition_name': expected 'allcomb(arg1, arg2, ...)'. Got: '$expr'")
+
+    # Split outer arguments at top-level commas (respecting brackets)
+    args = String[]
+    depth, buf = 0, IOBuffer()
+    for c in strip(m.captures[1])
+        if c in ('[', '(')
+            depth += 1
+            write(buf, c)
+        elseif c in (']', ')')
+            depth -= 1
+            write(buf, c)
+        elseif c == ',' && depth == 0
+            push!(args, strip(String(take!(buf))))
+        else
+            write(buf, c)
+        end
+    end
+    (rem = strip(String(take!(buf))); !isempty(rem) && push!(args, rem))
+    isempty(args) && @minimal_error("allcomb() called with no arguments for condition '$condition_name'")
+
+    # Parse each argument
+    parse_int(s) =
+        (n = tryparse(Int, strip(s)); isnothing(n) && @minimal_error("Cannot parse '$s' as integer in allcomb for '$condition_name'"); n)
+    parsed = map(args) do s
+        s = strip(s)
+        (m2 = match(r"^:([A-Za-z_]\w*)$", s); !isnothing(m2)) && return Symbol(m2.captures[1])           # :any
+        (m2 = match(r"^(-?\d+):(-?\d+)$", s); !isnothing(m2)) && return parse(Int, m2.captures[1]):parse(Int, m2.captures[2])  # a:b
+        (m2 = match(r"^\[\[(.*)\]\]$", s); !isnothing(m2)) && return [parse_int.(split(m2.captures[1], ","))]  # [[1,2]]
+        (m2 = match(r"^\[(.*)\]$", s); !isnothing(m2)) && return parse_int.(split(m2.captures[1], ","))   # [1,2]
+        return parse_int(s)                                                                                 # 101
+    end
+    return allcomb(parsed...)
+end
+
 function condition_parse_epoch(config::Dict)
     epochs_section = get(config, "epochs", Dict())
 
@@ -60,12 +101,17 @@ function condition_parse_epoch(config::Dict)
             @minimal_error("trigger_sequences must be specified for condition '$name'")
         end
 
-        # Natively support allcomb syntax written as a String in TOML files
-        if trigger_sequences_raw isa String && startswith(strip(trigger_sequences_raw), "allcomb")
-            try
-                trigger_sequences_raw = eval(Meta.parse(trigger_sequences_raw))
-            catch e
-                @minimal_error("Failed to parse allcomb expression in TOML for condition '$name': $e")
+        # Support allcomb(...) written as a string in TOML config files.
+        # Uses a safe restricted parser — NOT eval — so only allcomb syntax is accepted.
+        if trigger_sequences_raw isa String
+            if startswith(strip(trigger_sequences_raw), "allcomb")
+                trigger_sequences_raw = _parse_allcomb_string(name, trigger_sequences_raw)
+            else
+                @minimal_error(
+                    "trigger_sequences for condition '$name' is a plain string, which is not supported. " *
+                    "Use a TOML array-of-arrays (e.g. trigger_sequences = [[31, 51, 101], [39, 51, 101]]), " *
+                    "or an allcomb() expression (e.g. trigger_sequences = \"allcomb([31, 39], 51:54, 101)\").",
+                )
             end
         end
 
@@ -118,8 +164,11 @@ function condition_parse_epoch(config::Dict)
             mask_between_triggers = nothing
         end
 
-        # Validation - cache sequence length for efficiency
+        # Validation - cache sequence length for efficiency and ensure uniformity
         seq_length = length(trigger_sequences[1])
+        if !all(length(seq) == seq_length for seq in trigger_sequences)
+            @minimal_error("All trigger sequences must have the same length for condition '$name'")
+        end
         if reference_index < 1 || reference_index > seq_length
             @minimal_error("reference_index must be between 1 and $seq_length for condition '$name'")
         end
@@ -1087,7 +1136,15 @@ function average_epochs(
         mkpath(output_dir)
 
         process_fn = (input_path, output_path) -> _process_average_file(input_path, output_path, condition_selection)
-        batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Averaging"; filename_modifier = fn -> replace(fn, "epochs" => "erps"))
+        batch_process(
+            process_fn,
+            file_pattern,
+            input_dir,
+            output_dir,
+            participant_selection,
+            "Averaging";
+            filename_modifier = fn -> replace(fn, "epochs" => "erps"),
+        )
     finally
         _cleanup_logging(log_file, output_dir)
     end

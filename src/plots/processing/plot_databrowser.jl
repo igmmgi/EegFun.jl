@@ -484,7 +484,7 @@ function _show_trigger_menu(state, ax, marker_symbol)
         # Note: In the future, we could sync the main Toggle UI state, but for now just updating markers works.
     end
 
-    display(GLMakie.Screen(), menu_fig)
+    _display_popup(menu_fig)
 end
 """Popup: select filter cutoff frequency for a specific filter."""
 function _show_single_filter_menu(state, dat, filter_type::Symbol)
@@ -580,7 +580,7 @@ function _show_single_filter_menu(state, dat, filter_type::Symbol)
         _apply_filters!(state)
     end
 
-    display(GLMakie.Screen(), menu_fig)
+    _display_popup(menu_fig)
 end
 
 
@@ -613,7 +613,7 @@ function _show_labels_menu(state, ax)
         _draw(ax, state)
     end
 
-    display(GLMakie.Screen(), menu_fig)
+    _display_popup(menu_fig)
 end
 
 """Create the channel-label selection button for the control panel."""
@@ -670,7 +670,7 @@ function _show_reference_menu(state, dat)
         end
     end
 
-    display(GLMakie.Screen(), menu_fig)
+    _display_popup(menu_fig)
 end
 
 """Create the re-reference button for the control panel."""
@@ -818,7 +818,7 @@ function _show_ica_menu(state, ax, ica)
         j < length(display_items) && colgap!(display_area, col + 1, 30)
     end
 
-    display(GLMakie.Screen(), menu_fig)
+    _display_popup(menu_fig)
 end
 
 """Create the ICA components button for the control panel."""
@@ -904,8 +904,7 @@ function _show_additional_menu(state, clicked_region_idx = nothing)
         end
     end
 
-    new_screen = GLMakie.Screen(size = (300, max(150, 75 * length(plot_types))))
-    display(new_screen, menu_fig)
+    _display_popup(menu_fig)
 end
 
 """Open the interactive channel repair window with checkboxes and method selection."""
@@ -965,8 +964,7 @@ function _channel_repair_menu(state, selected_channels, ax)
         end
     end
 
-    new_screen = GLMakie.Screen()
-    display(new_screen, menu_fig)
+    _display_popup(menu_fig)
 end
 
 """Interpolate the selected channels, store originals in repair history, and redraw."""
@@ -1110,7 +1108,7 @@ function _show_extra_channel_menu(state, ax, dat)
         _draw_extra_channel!(ax, state)
     end
 
-    display(GLMakie.Screen(), menu_fig)
+    _display_popup(menu_fig)
 end
 
 """Create the extra-channels button for the control panel."""
@@ -1688,10 +1686,14 @@ end
 function _apply_filter!(state::DataBrowserState{T}, filter_type, freq, method, order, func) where {T<:AbstractDataState}
     # Get the current data, apply filter, then update the observable
     current_data = state.data.current[]
+    
+    sym_method = method isa Symbol ? method : Symbol(method)
+    sym_func = func isa Symbol ? func : Symbol(func)
+
     if filter_type == :hp
-        highpass_filter!(current_data, freq; filter_method = method, order = order, filter_func = func)
+        highpass_filter!(current_data, freq; filter_method = sym_method, order = order, filter_func = sym_func)
     elseif filter_type == :lp
-        lowpass_filter!(current_data, freq; filter_method = method, order = order, filter_func = func)
+        lowpass_filter!(current_data, freq; filter_method = sym_method, order = order, filter_func = sym_func)
     end
     state.data.current[] = current_data  # Explicitly update the observable
 end
@@ -2437,7 +2439,7 @@ function plot_databrowser(; kwargs...)
             dat_eeg, ica_data = _read_any_eeg_file(filepath, shared_layout[])
             dat_eeg.file = basename(filepath)
             _set_window_title(_generate_window_title(dat_eeg))
-            plot_databrowser(dat_eeg, ica_data; screen = GLMakie.Screen(), kwargs...)
+            plot_databrowser(dat_eeg, ica_data; kwargs...)
             n_loaded[] += 1
             status_label.text = n_loaded[] == 1 ? "Opened: $(basename(filepath))" : "Opened $(n_loaded[]) files"
         catch e
@@ -2459,7 +2461,7 @@ function plot_databrowser(; kwargs...)
         end
     end
 
-    display(GLMakie.Screen(), fig)
+    display(fig)
     _set_window_title("EegFun Data Browser")
     return fig
 end
@@ -2532,11 +2534,10 @@ function plot_databrowser(
 end
 
 """Open a separate data browser window for each dataset in the vector."""
-function plot_databrowser(data::Vector{<:EegData}, ica = nothing; screen = nothing, kwargs...)
+function plot_databrowser(data::Vector{<:EegData}, ica = nothing; kwargs...)
     @info "Vector of $(length(data)) datasets provided — opening a browser for each"
     for dat in data
-        _set_window_title(_generate_window_title(dat))  # must be before Screen()
-        s = GLMakie.Screen()
-        plot_databrowser(dat, ica; screen = s, kwargs...)
+        _set_window_title(_generate_window_title(dat))
+        plot_databrowser(dat, ica; kwargs...)
     end
 end

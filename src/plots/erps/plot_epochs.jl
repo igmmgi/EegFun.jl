@@ -1117,7 +1117,7 @@ function _setup_epochs_control_panel!(
                 end
             end
 
-            display(control_fig[])
+            _display_popup(control_fig[])
 
         end
     end
@@ -1179,8 +1179,7 @@ function _show_epochs_context_menu!(selection_state, data, condition_checked_ref
         end
     end
 
-    new_screen = GLMakie.Screen()
-    display(new_screen, menu_fig)
+    _display_popup(menu_fig)
 end
 
 """

@@ -83,17 +83,16 @@ Stores the final analysis settings applied by the user in the databrowser.
 - `selected_regions::Vector{Tuple{Float64,Float64}}`: Time regions selected by user
 - `removed_ica_components::Vector{Int}`: ICA components that were removed
 """
-struct AnalysisSettings
-    hp_filter::Float64
-    lp_filter::Float64
-    reference::Symbol
-    repaired_channels::Vector{Symbol}
-    repair_method::Symbol  # Single repair method for all repaired channels
-    selected_regions::Vector{Tuple{Float64,Float64}}
-    removed_ica_components::Vector{Int}
+@kwdef struct AnalysisSettings
+    hp_filter::Float64 = 0.0
+    lp_filter::Float64 = 0.0
+    reference::Symbol = :none
+    repaired_channels::Vector{Symbol} = Symbol[]
+    repair_method::Symbol = :none
+    selected_regions::Vector{Tuple{Float64,Float64}} = Tuple{Float64,Float64}[]
+    removed_ica_components::Vector{Int} = Int[]
 end
 
-AnalysisSettings() = AnalysisSettings(0.0, 0.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], Int[])
 
 # === LAYOUT TYPES ===
 """
@@ -821,7 +820,7 @@ end
 # Custom copy method for InfoIca
 function Base.copy(ica::InfoIca)::InfoIca
     return InfoIca(
-        ica.filename,  # Filename is immutable, no need to copy
+        ica.filename,
         copy(ica.unmixing),
         copy(ica.mixing),
         copy(ica.sphere),
@@ -830,7 +829,7 @@ function Base.copy(ica::InfoIca)::InfoIca
         copy(ica.mean),
         copy(ica.ica_label),
         copy(ica.removed_activations),
-        ica.layout,  # Layout is shared, no need to copy
+        ica.layout,
         copy(ica.is_sub_gaussian),
     )
 end

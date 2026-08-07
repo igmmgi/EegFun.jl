@@ -29,4 +29,13 @@ end
 apply_analysis_settings!(dat::EegData, ica::InfoIca, settings::Observable{AnalysisSettings}) =
     apply_analysis_settings!(dat, ica, settings[])
 
-@add_nonmutating apply_analysis_settings!
+"""
+    apply_analysis_settings(dat, args...; kwargs...)
+
+Non-mutating version of `apply_analysis_settings!`.
+"""
+function apply_analysis_settings(dat, args...; kwargs...)
+    dat_copy = copy(dat)
+    apply_analysis_settings!(dat_copy, args...; kwargs...)
+    return dat_copy
+end

@@ -54,7 +54,7 @@ function print_config(config, io::IO = stdout)
             config_with_meta[string(key)] = value
         end
     end
-    TOML.print(io, config_with_meta)
+    TOML.print(x -> x isa Symbol ? string(x) : x, io, config_with_meta)
 end
 
 # Convenience method for printing to a file

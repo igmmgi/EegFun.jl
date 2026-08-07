@@ -1070,8 +1070,7 @@ function _show_erp_context_menu!(selection_state, data, condition_checked_ref)
         end
     end
 
-    new_screen = GLMakie.Screen(size = (300, 300))
-    display(new_screen, menu_fig)
+    _display_popup(menu_fig)
 end
 
 """
@@ -1166,8 +1165,7 @@ function _show_channel_average_menu!(selected_channels, data, condition_checked_
         plot_erp(data_to_plot; channel_selection = channels(selected_channels), average_channels = true)
     end
 
-    new_screen = GLMakie.Screen(size = (300, 150))
-    display(new_screen, menu_fig)
+    _display_popup(menu_fig)
 end
 
 
@@ -1437,7 +1435,7 @@ function _setup_erp_control_panel!(
                 end
             end
 
-            display(control_fig[])
+            _display_popup(control_fig[])
 
         end
     end

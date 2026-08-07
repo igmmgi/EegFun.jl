@@ -507,14 +507,17 @@ common_channels(dat1::EegData, dat2::EegData)::Vector{Symbol} = intersect(channe
 
 """
     to_data_frame(dat::MultiDataFrameEeg) -> DataFrame
+    to_data_frame(dat::Vector{<:MultiDataFrameEeg}) -> DataFrame
 
-Convert a multi-dataframe EEG object to a single DataFrame by concatenating all epochs.
+Convert a multi-dataframe EEG object (or vector of conditions) to a single DataFrame
+by concatenating all epochs. Works for `EpochData`, `TimeFreqEpochData`, and any
+other `MultiDataFrameEeg` subtype.
 """
 function to_data_frame(dat::MultiDataFrameEeg)
     isempty(dat.data) && return DataFrame()
     return vcat(dat.data...)
 end
-function to_data_frame(dat::Vector{EpochData})
+function to_data_frame(dat::Vector{<:MultiDataFrameEeg})
     isempty(dat) && return DataFrame()
     isempty(dat[1].data) && return DataFrame()
     return vcat([vcat(dat[idx].data[:]...) for idx in eachindex(dat)]...)
@@ -545,7 +548,10 @@ Calculate the range of data (maximum - minimum).
 # Returns
 - `Float64`: Difference between maximum and minimum values
 """
-_datarange(x::AbstractVector)::Float64 = -(-(extrema(x)...))
+function _datarange(x::AbstractVector)::Float64
+    mn, mx = extrema(x)
+    return mx - mn
+end
 
 
 """
@@ -1220,19 +1226,21 @@ function log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
         pretty_table(io_context, df; kw...)
     end
 
-    # Log with specified level
-    if log_level == :debug
-        @debug "\n\n$table_output\n"
-    elseif log_level == :info
-        @info "\n\n$table_output\n"
-    elseif log_level == :warn
-        @minimal_warning "\n\n$table_output\n"
-    elseif log_level == :error
-        @error "\n\n$table_output\n"
-    else
+    # Map symbol to standard LogLevel
+    levels = Dict(
+        :debug => Logging.Debug,
+        :info => Logging.Info,
+        :warn => Logging.Warn,
+        :error => Logging.Error
+    )
+    
+    lvl = get(levels, log_level, Logging.Info)
+    if !haskey(levels, log_level)
         @minimal_warning "Unknown log level: $log_level, using :info instead"
-        @info "\n\n$table_output\n"
     end
+    
+    # Log with minimal metadata (no file/line noise)
+    @logmsg lvl "\n\n$table_output\n" _module=nothing _file=nothing _line=nothing
 
     return nothing
 end
@@ -1265,7 +1273,7 @@ channels(x -> startswith.(string.(x), "F"))  # Custom predicate
 """
 channels() = x -> fill(true, length(x))  # Default: select all channels given
 channels(channel_names::Vector{Symbol}) = x -> x .∈ Ref(channel_names)
-channels(channel_name::Symbol) = x -> x .== channel_name
+channels(channel_name::Symbol) = channels([channel_name])
 channels(channel_names::Symbol...) = channels(collect(channel_names))
 channels(channel_number::Int) = channels([channel_number])
 channels(channel_numbers::Union{Vector{Int},UnitRange}) = x -> [i in channel_numbers for i = 1:length(x)]
@@ -1287,7 +1295,7 @@ channels_not(1:4)                   # Exclude first 4 channels by index
 ```
 """
 channels_not(channel_names::Vector{Symbol}) = x -> .!(x .∈ Ref(channel_names))
-channels_not(channel_name::Symbol) = x -> .!(x .== channel_name)
+channels_not(channel_name::Symbol) = channels_not([channel_name])
 channels_not(channel_names::Symbol...) = channels_not(collect(channel_names))
 channels_not(channel_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in channel_numbers for i = 1:length(x)])
 

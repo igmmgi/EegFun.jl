@@ -40,7 +40,7 @@ function repair_channels!(data, channels_to_repair; method::Symbol = :neighbor_i
             _repair_channels_spherical!(data, channels_to_repair; repair_info = repair_info, kwargs...)
         end
     else
-        throw(ArgumentError("Unknown repair method: $method. Use :neighbor_interpolation or :spherical_spline"))
+        @minimal_error("Unknown repair method: $method. Use :neighbor_interpolation or :spherical_spline")
     end
 
     if !(data isa EpochData) && hasfield(typeof(data), :analysis_info)
@@ -53,7 +53,16 @@ function repair_channels!(data, channels_to_repair; method::Symbol = :neighbor_i
     end
 end
 
-@add_nonmutating repair_channels!
+"""
+    repair_channels(dat, args...; kwargs...)
+
+Non-mutating version of `repair_channels!`.
+"""
+function repair_channels(dat, args...; kwargs...)
+    dat_copy = copy(dat)
+    repair_channels!(dat_copy, args...; kwargs...)
+    return dat_copy
+end
 
 # Helper function for neighbor interpolation
 function _repair_channels_neighbor!(data, channels_to_repair; neighbours_dict = nothing, repair_info = nothing, kwargs...)
@@ -66,7 +75,7 @@ function _repair_channels_neighbor!(data, channels_to_repair; neighbours_dict = 
             end
             neighbours_dict = layout.neighbours
         else
-            throw(ArgumentError("neighbours_dict must be provided for AbstractMatrix data"))
+            @minimal_error("neighbours_dict must be provided for AbstractMatrix data")
         end
     end
 
@@ -95,7 +104,7 @@ function _repair_channels_neighbor!(
     # Check that channels match data dimensions
     n_channels = size(data, 1)
     if length(channels) != n_channels
-        throw(ArgumentError("Number of channels ($(length(channels))) doesn't match data dimensions ($n_channels)"))
+        @minimal_error "Number of channels ($(length(channels))) doesn't match data dimensions ($n_channels)"
     end
 
     # Initialize tracking if provided
@@ -239,7 +248,7 @@ function _repair_channels_spherical!(
     # Check that channels match data dimensions
     n_channels = size(data, 1)
     if length(channels) != n_channels
-        throw(ArgumentError("Number of channels doesn't match data dimensions"))
+        @minimal_error("Number of channels doesn't match data dimensions")
     end
 
     # Initialize tracking if provided

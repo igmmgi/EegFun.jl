@@ -1055,7 +1055,7 @@ function _show_channel_popup(state)
         _update_channel_overlays!(state, selected)
     end
 
-    display(GLMakie.Screen(), menu_fig)
+    _display_popup(menu_fig)
 end
 
 """Add a button that opens the channel-overlay popup window."""

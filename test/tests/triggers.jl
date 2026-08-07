@@ -64,6 +64,21 @@ using OrderedCollections
             @test EegFun._clean_triggers([1, 0]) == [1, 0]
         end
 
+        @testset "decreasing value transitions" begin
+            # Trigger value drops to a different non-zero value (was previously dropped)
+            input = [0, 5, 5, 3, 3, 0]
+            expected = [0, 5, 0, 3, 0, 0]
+            @test EegFun._clean_triggers(input) == expected
+
+            # Single-sample decreasing transition
+            @test EegFun._clean_triggers([5, 3]) == [5, 3]
+
+            # Increasing then decreasing
+            input = [0, 1, 2, 1, 0]
+            expected = [0, 1, 2, 1, 0]
+            @test EegFun._clean_triggers(input) == expected
+        end
+
         @testset "type handling" begin
             # Different integer types
             triggers_int8 = Int8[0, 1, 1, 0, 2]

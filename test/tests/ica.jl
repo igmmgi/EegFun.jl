@@ -121,7 +121,7 @@ using LinearAlgebra
         # Restoring a valid component that was not removed should throw
         dat3 = create_synthetic_continuous()
         ica3 = EegFun.run_ica(dat3; n_components = 3)
-        @test_throws ArgumentError EegFun.add_ica_components!(dat3.data, ica3; component_selection = EegFun.components([1]))
+        @test_throws EegFun.EegFunError EegFun.add_ica_components!(dat3.data, ica3; component_selection = EegFun.components([1]))
 
         # Roundtrip (mutating): remove then restore yields original data
         dat4 = create_synthetic_continuous()

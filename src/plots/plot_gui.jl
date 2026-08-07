@@ -148,7 +148,7 @@ function plot_gui()
     colsize!(main_layout, 2, Auto())
     colsize!(main_layout, 3, Auto())
 
-    display(gui_fig)
+    _display_popup(gui_fig)
     _set_window_title("Makie")
 
     return nothing
@@ -506,7 +506,6 @@ function _plot_databrowser(gui_state)
                 if dat isa Vector
                     plot_databrowser(dat)
                 else
-                    new_screen = GLMakie.Screen()
                     plot_databrowser(dat; screen = new_screen)
                 end
             end
@@ -527,7 +526,6 @@ function _plot_databrowser(gui_state)
             # Update electrode menu with actual channel labels from the loaded data
             gui_state.channel_menu.options = vcat(["Select"], string.(channel_labels(dat)))
             @async begin
-                new_screen = GLMakie.Screen()
                 plot_databrowser(dat; screen = new_screen)
             end
         end

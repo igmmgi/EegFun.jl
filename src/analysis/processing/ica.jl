@@ -49,14 +49,14 @@ function run_ica(
 )
     params.use_gpu = use_gpu || params.use_gpu
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
-    isempty(selected_channels) && error("No channels available after applying channel filter")
+    isempty(selected_channels) && @minimal_error("No channels available after applying channel filter")
 
     # Combine interval and sample selection 
     combined_sel = _combine_interval_sample(interval_selection, sample_selection)
 
     # Get samples to use using predicate
     sample_indices = get_selected_samples(dat, combined_sel)
-    isempty(sample_indices) && error("No samples available after applying sample filter")
+    isempty(sample_indices) && @minimal_error("No samples available after applying sample filter")
 
     # Set n_components if not specified
     if isnothing(n_components)
@@ -105,13 +105,13 @@ function run_ica(
     params::IcaPrms = IcaPrms(),
 )
     params.use_gpu = use_gpu || params.use_gpu
-    isempty(epoched_data) && error("Empty epoched_data vector provided")
+    isempty(epoched_data) && @minimal_error("Empty epoched_data vector provided")
 
     # Use the first EpochData object as reference for some meta-like data
     reference_epoch_data = epoched_data[1]
     for (i, epoch_data) in enumerate(epoched_data)
         if epoch_data.sample_rate != reference_epoch_data.sample_rate
-            error(
+            @minimal_error(
                 "Inconsistent sample rates: EpochData $i has $(epoch_data.sample_rate) Hz, expected $(reference_epoch_data.sample_rate) Hz",
             )
         end
@@ -119,7 +119,7 @@ function run_ica(
 
     # Get channel information from reference
     selected_channels = get_selected_channels(reference_epoch_data, channel_selection; include_meta = false, include_extra = include_extra)
-    isempty(selected_channels) && error("No channels available after applying channel filter")
+    isempty(selected_channels) && @minimal_error("No channels available after applying channel filter")
 
     # Concatenate all epoched data and check for duplicates
     concatenated_df = all_data(epoched_data)
@@ -129,7 +129,7 @@ function run_ica(
     combined_sel = _combine_interval_sample(interval_selection, sample_selection)
 
     sample_indices = get_selected_samples(concatenated_df, combined_sel)
-    isempty(sample_indices) && error("No samples available after applying sample filter to epoched data")
+    isempty(sample_indices) && @minimal_error("No samples available after applying sample filter to epoched data")
 
     # Create data matrix for ICA
     concatenated_matrix = _create_ica_data_matrix(concatenated_df, selected_channels, sample_indices)
@@ -261,7 +261,7 @@ Modifies the matrix in place by returning a subsampled view.
 - `Matrix{Float64}`: Subsampled matrix with fewer columns
 """
 function _select_subsample!(data_matrix::Matrix{Float64}, percentage::Real)
-    (percentage <= 0 || percentage > 100) && error("percentage_of_data must be between 0 and 100, got $percentage")
+    (percentage <= 0 || percentage > 100) && @minimal_error("percentage_of_data must be between 0 and 100, got $percentage")
 
     n_original_samples = size(data_matrix, 2)
     n_target_samples = round(Int, n_original_samples * percentage / 100)
@@ -346,7 +346,7 @@ function _run_ica_algorithm(
     elseif algorithm == :amica
         return amica_ica(dat_ica, layout, filename; n_components = n_components, params = params)
     else
-        error("Unknown ICA algorithm: $algorithm. Supported algorithms: :infomax, :infomax_extended, :picard, :picard_extended, :amica")
+        @minimal_error("Unknown ICA algorithm: $algorithm. Supported algorithms: :infomax, :infomax_extended, :picard, :picard_extended, :amica")
     end
 end
 
@@ -2776,7 +2776,7 @@ function subtract_ica_components!(dat::DataFrame, ica::InfoIca; component_select
     components_to_remove = get_selected_components(ica, component_selection)
     n_components = size(ica.unmixing, 1)
     if !all(1 .<= components_to_remove .<= n_components)
-        throw(ArgumentError("Components must be between 1 and $n_components"))
+        @minimal_error("Components must be between 1 and $n_components")
     end
 
     # Get data dimensions
@@ -2815,7 +2815,7 @@ function subtract_ica_components!(dfs::Vector{DataFrame}, ica::InfoIca; componen
     components_to_remove = get_selected_components(ica, component_selection)
     n_components = size(ica.unmixing, 1)
     if !all(1 .<= components_to_remove .<= n_components)
-        throw(ArgumentError("Components must be between 1 and $n_components"))
+        @minimal_error("Components must be between 1 and $n_components")
     end
 
     labels = ica.layout.data.label
@@ -2918,13 +2918,13 @@ function add_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::
     components_to_restore = get_selected_components(ica, component_selection)
     n_components = size(ica.unmixing, 1)
     if !all(1 .<= components_to_restore .<= n_components)
-        throw(ArgumentError("Components must be between 1 and $n_components"))
+        @minimal_error("Components must be between 1 and $n_components")
     end
 
     # Check that all components to restore have stored activations
     for comp in components_to_restore
         if !haskey(ica.removed_activations, comp)
-            throw(ArgumentError("Component $comp has no stored activations to restore"))
+            @minimal_error("Component $comp has no stored activations to restore")
         end
     end
 
@@ -3862,7 +3862,7 @@ function identify_components(
             kwargs...,
         )
     else
-        error("Unknown component identification method: :$method. " * "Supported methods: :correlation")
+        @minimal_error("Unknown component identification method: :$method. " * "Supported methods: :correlation")
     end
 end
 

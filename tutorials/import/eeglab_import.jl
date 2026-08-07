@@ -7,6 +7,7 @@
 # dat = EegFun.read_eeglab("/path/to/your/data.set")
 
 using EegFun
+using GLMakie
 
 # this seems to be a raw continuous data file without any ICA info
 dat = EegFun.read_eeglab(EegFun.example_path("data/eeglab/eeglab_data.set"))

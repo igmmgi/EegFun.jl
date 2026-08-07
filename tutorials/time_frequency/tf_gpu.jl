@@ -1,5 +1,6 @@
 
 using EegFun
+using GLMakie
 using CUDA
 using BenchmarkTools
 using Test

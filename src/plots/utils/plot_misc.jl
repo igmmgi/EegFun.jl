@@ -274,7 +274,7 @@ function _open_save_settings_dialog(fig)
         end
     end
 
-    display(fig_settings)
+    _display_popup(fig_settings)
 end
 
 
@@ -287,15 +287,23 @@ function _display_figure(fig)
         end
     end
 
+    display(fig)
+end
+
+"""
+    _display_popup(fig)
+
+Display a figure in a new, independent popup window if the backend supports it (e.g., GLMakie).
+Otherwise, falls back to the default `display(fig)`.
+"""
+function _display_popup(fig)
     backend = Makie.current_backend()
-    screen = if backend == GLMakie
-        GLMakie.Screen()
-    elseif backend == CairoMakie
-        CairoMakie.Screen()
+    if !isnothing(backend) && string(backend) == "GLMakie"
+        screen = backend.Screen()
+        display(screen, fig)
     else
-        @minimal_error "Unsupported Makie backend: $backend"
+        display(fig)
     end
-    display(screen, fig)
 end
 
 """
@@ -304,7 +312,7 @@ end
 Set the window title for GLMakie. Does nothing for CairoMakie (which doesn't support window titles).
 """
 function _set_window_title(title::String)
-    if Makie.current_backend() == GLMakie
+    if string(Makie.current_backend()) == "GLMakie"
         Makie.current_backend().activate!(title = title)
     end
     # Note: CairoMakie doesn't support window titles.

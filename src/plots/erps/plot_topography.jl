@@ -1636,6 +1636,5 @@ function _show_topo_context_menu!(
         end
     end
 
-    new_screen = GLMakie.Screen(size = (400, 200))
-    display(new_screen, menu_fig)
+    _display_popup(menu_fig)
 end

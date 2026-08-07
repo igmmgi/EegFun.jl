@@ -131,7 +131,16 @@ function cleanline!(
 
     return nothing
 end
-@add_nonmutating cleanline!
+"""
+    cleanline(dat, args...; kwargs...)
+
+Non-mutating version of `cleanline!`.
+"""
+function cleanline(dat, args...; kwargs...)
+    dat_copy = copy(dat)
+    cleanline!(dat_copy, args...; kwargs...)
+    return dat_copy
+end
 
 function _cleanline_channel!(
     data::Vector{Float64},

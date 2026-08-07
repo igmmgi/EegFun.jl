@@ -27,6 +27,7 @@ function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Sy
     eog_diff = diff(dat.data[1:step_samples:end, channel_in])
     eog_idx = findall(x -> abs(x) >= criterion, eog_diff)
     eog_idx = [idx for (i, idx) in enumerate(eog_idx) if i == 1 || (idx - eog_idx[i-1] > 2)] .* step_samples
+    filter!(idx -> idx <= nrow(dat.data), eog_idx)
     dat.data[!, channel_out] = falses(nrow(dat.data))
     dat.data[eog_idx, channel_out] .= true
     return nothing
@@ -101,7 +102,7 @@ _is_extreme_value!(mask, signal, 50.0)
 ```
 """
 function _is_extreme_value!(mask::Vector{Bool}, signal::AbstractVector{Float64}, threshold::Real)
-    @assert length(mask) == length(signal) "Mask and signal must have the same length"
+    length(mask) == length(signal) || @minimal_error "Mask and signal must have the same length (mask: $(length(mask)), signal: $(length(signal)))"
     @inbounds for i in eachindex(signal)
         mask[i] = abs(signal[i]) > threshold
     end
@@ -191,12 +192,12 @@ function is_extreme_value!(
     # Use provided channel_out or generate default name
     channel_out = something(channel_out, Symbol("is_extreme_value_$(threshold)"))
 
+    # Combine interval and sample selection once (constant across all epochs)
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+
     # Process each selected epoch
     Threads.@threads for epoch_idx in selected_epochs
         epoch_df = dat.data[epoch_idx]
-
-        # Get selected samples for this epoch (combining interval and sample selection)
-        combined_sel = _combine_interval_sample(interval_selection, sample_selection)
         selected_samples = get_selected_samples(epoch_df, combined_sel)
 
         # Initialize artifact flag column for this epoch
@@ -360,12 +361,12 @@ function is_step_value!(
     # Use provided channel_out or generate default name
     channel_out = something(channel_out, Symbol("is_step_value_$(threshold)"))
 
+    # Combine interval and sample selection once (constant across all epochs)
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+
     # Process each selected epoch
     Threads.@threads for epoch_idx in selected_epochs
         epoch_df = dat.data[epoch_idx]
-
-        # Get selected samples for this epoch (combining interval and sample selection)
-        combined_sel = _combine_interval_sample(interval_selection, sample_selection)
         selected_samples = get_selected_samples(epoch_df, combined_sel)
 
         # Initialize artifact flag column for this epoch
@@ -823,9 +824,11 @@ function is_flatline!(
     window_samples = round(Int, window_size * dat.sample_rate)
     channel_out = something(channel_out, :is_flatline)
 
+    # Combine interval and sample selection once (constant across all epochs)
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+
     Threads.@threads for epoch_idx in selected_epochs
         epoch_df = dat.data[epoch_idx]
-        combined_sel = _combine_interval_sample(interval_selection, sample_selection)
         selected_samples = get_selected_samples(epoch_df, combined_sel)
 
         epoch_df[!, channel_out] = falses(nrow(epoch_df))
@@ -1017,9 +1020,11 @@ function is_peak_to_peak!(
     window_samples = round(Int, window_size * dat.sample_rate)
     channel_out = something(channel_out, :is_peak_to_peak)
 
+    # Combine interval and sample selection once (constant across all epochs)
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+
     Threads.@threads for epoch_idx in selected_epochs
         epoch_df = dat.data[epoch_idx]
-        combined_sel = _combine_interval_sample(interval_selection, sample_selection)
         selected_samples = get_selected_samples(epoch_df, combined_sel)
 
         epoch_df[!, channel_out] = falses(nrow(epoch_df))

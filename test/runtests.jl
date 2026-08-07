@@ -1,6 +1,6 @@
 using Test
 using EegFun
-
+using GLMakie
 println("Running EegFun.jl Test Suite")
 println("="^40)
 

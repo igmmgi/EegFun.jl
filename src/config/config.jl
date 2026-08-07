@@ -15,7 +15,7 @@ A struct to define configuration parameters with type and validation constraints
 @kwdef struct ConfigParameter{T}
     description::String
     default::Union{Nothing,T} = nothing
-    allowed::Union{Nothing,Vector{String}} = nothing
+    allowed::Union{Nothing,Vector} = nothing
     min::Union{Nothing,T} = nothing
     max::Union{Nothing,T} = nothing
 end
@@ -31,6 +31,8 @@ end
 string_param(desc, default = ""; allowed = nothing) = _param(Union{Vector{String},String}, desc, default, allowed = allowed)
 """Create a simple `String` parameter."""
 simple_string_param(desc, default = ""; allowed = nothing) = _param(String, desc, default, allowed = allowed)
+"""Create a Symbol parameter."""
+symbol_param(desc, default; allowed = nothing) = _param(Symbol, desc, default, allowed = allowed)
 """Create a `Bool` parameter."""
 bool_param(desc, default = false) = _param(Bool, desc, default)
 """Create a numeric parameter with optional min/max bounds."""
@@ -44,9 +46,9 @@ channel_groups_param(desc, default) = _param(Vector{Vector{String}}, desc, defau
 function _filter_param_spec(prefix, apply, type, freq, min_freq, max_freq, order, min_order, max_order)
     Dict(
         "$prefix.apply"  => bool_param("Apply: true/false", apply),
-        "$prefix.type"   => string_param("Filter type identifier", type, allowed = ["hp", "lp"]),
-        "$prefix.method" => string_param("Filter type", "iir", allowed = ["fir", "iir"]),
-        "$prefix.func"   => string_param("Filter function", "filtfilt", allowed = ["filt", "filtfilt"]),
+        "$prefix.type"   => symbol_param("Filter type identifier", type, allowed = [:hp, :lp]),
+        "$prefix.method" => symbol_param("Filter method", :iir, allowed = [:fir, :iir]),
+        "$prefix.func"   => symbol_param("Filter function", :filtfilt, allowed = [:filt, :filtfilt]),
         "$prefix.freq"   => number_param("Cutoff frequency (Hz)", freq, min_freq, max_freq),
         "$prefix.order"  => number_param("Filter order", order, min_order, max_order),
     )
@@ -115,10 +117,10 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "preprocess.resample.target_rate" => number_param("Target sampling rate in Hz (e.g. 512, 256).", 512),
 
     # Filtering settings - using helper function
-    _filter_param_spec("preprocess.filter.highpass", true, "hp", 0.1, 0.01, 20.0, 1, 1, 4)...,
-    _filter_param_spec("preprocess.filter.lowpass", false, "lp", 30.0, 5.00, 500.0, 3, 1, 8)...,
-    _filter_param_spec("preprocess.filter.ica_highpass", true, "hp", 1.0, 1.00, 20.0, 1, 1, 4)...,
-    _filter_param_spec("preprocess.filter.ica_lowpass", false, "lp", 30.0, 5.00, 500.0, 3, 1, 8)...,
+    _filter_param_spec("preprocess.filter.highpass", true, :hp, 0.1, 0.01, 20.0, 1, 1, 4)...,
+    _filter_param_spec("preprocess.filter.lowpass", false, :lp, 30.0, 5.00, 500.0, 3, 1, 8)...,
+    _filter_param_spec("preprocess.filter.ica_highpass", true, :hp, 1.0, 1.00, 20.0, 1, 1, 4)...,
+    _filter_param_spec("preprocess.filter.ica_lowpass", false, :lp, 30.0, 5.00, 500.0, 3, 1, 8)...,
 )
 # fmt: on
 
@@ -239,6 +241,8 @@ function _convert_any_arrays!(config::Dict; path = "")
                 catch e
                     @minimal_warning "Failed to convert $new_path from Any array to $param_type: $e"
                 end
+            elseif param_type == Symbol && isa(value, AbstractString)
+                config[key] = Symbol(value)
             elseif (param_type <: Vector || param_type == Vector{Real}) && isa(value, Vector)
                 # Handle other Vector types (including Vector{Real})
                 try
@@ -676,6 +680,8 @@ Recursively format a value for TOML output.
 function _format_toml_value(value)
     if value isa String
         return "\"$(replace(value, "\\" => "\\\\"))\""
+    elseif value isa Symbol
+        return "\"$(value)\""
     elseif value isa Vector
         return isempty(value) ? "[]" : "[" * join([_format_toml_value(v) for v in value], ", ") * "]"
     elseif value isa Bool

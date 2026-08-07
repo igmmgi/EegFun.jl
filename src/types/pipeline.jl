@@ -18,10 +18,10 @@ Configuration for a single filter (highpass, lowpass, etc.).
 """
 @kwdef struct FilterSection
     apply::Bool = false
-    type::String = "hp"
+    type::Symbol = :hp
     freq::Float64 = 0.1
-    func::String = "filtfilt"
-    method::String = "iir"
+    func::Symbol = :filtfilt
+    method::Symbol = :iir
     order::Int = 2
 end
 
@@ -37,10 +37,10 @@ Configuration for all filters used in preprocessing.
 - `ica_lowpass::FilterSection`: Lowpass filter for ICA data
 """
 @kwdef struct FilterConfig
-    highpass::FilterSection = FilterSection(apply = true, type = "hp", freq = 0.1)
-    lowpass::FilterSection = FilterSection(apply = true, type = "lp", freq = 30.0)
-    ica_highpass::FilterSection = FilterSection(apply = true, type = "hp", freq = 1.0)
-    ica_lowpass::FilterSection = FilterSection(apply = true, type = "lp", freq = 30.0)
+    highpass::FilterSection = FilterSection(apply = true, type = :hp, freq = 0.1)
+    lowpass::FilterSection = FilterSection(apply = true, type = :lp, freq = 30.0)
+    ica_highpass::FilterSection = FilterSection(apply = true, type = :hp, freq = 1.0)
+    ica_lowpass::FilterSection = FilterSection(apply = true, type = :lp, freq = 30.0)
 end
 
 """

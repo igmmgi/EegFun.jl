@@ -163,7 +163,16 @@ function rereference!(dat::Vector{ErpData}, reference_selection::Union{Symbol,Ve
 end
 
 # generates all non-mutating versions
-@add_nonmutating rereference!
+"""
+    rereference(dat, args...; kwargs...)
+
+Non-mutating version of `rereference!`.
+"""
+function rereference(dat, args...; kwargs...)
+    dat_copy = copy(dat)
+    rereference!(dat_copy, args...; kwargs...)
+    return dat_copy
+end
 
 
 

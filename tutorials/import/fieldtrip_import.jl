@@ -7,6 +7,7 @@
 # dat = EegFun.read_fieldtrip("/path/to/your/data.mat", layout)
 
 using EegFun
+using GLMakie
 
 # Load layout (FieldTrip doesn't store layout with data)
 layout = EegFun.read_layout(EegFun.example_path("layouts/biosemi/biosemi72.csv"))

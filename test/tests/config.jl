@@ -378,7 +378,7 @@ using Dates
             config = EegFun.read_config(custom_config_path)
             @test !isnothing(config)
             @test config["preprocess"]["filter"]["highpass"]["freq"] == 0.5
-            @test config["preprocess"]["filter"]["highpass"]["method"] == "iir"  # Default value
+            @test config["preprocess"]["filter"]["highpass"]["method"] == :iir  # Default value
             @test config["preprocess"]["filter"]["highpass"]["order"] == 1     # Default value
 
             # Test nested merging
@@ -424,8 +424,8 @@ using Dates
         valid_config = Dict{String,Any}(
             "preprocess" => Dict{String,Any}(
                 "filter" => Dict{String,Any}(
-                    "highpass" => Dict{String,Any}("apply" => true, "method" => "iir", "freq" => 0.1, "order" => 1),
-                    "lowpass" => Dict{String,Any}("apply" => true, "method" => "iir", "freq" => 40, "order" => 3),
+                    "highpass" => Dict{String,Any}("apply" => true, "method" => :iir, "freq" => 0.1, "order" => 1),
+                    "lowpass" => Dict{String,Any}("apply" => true, "method" => :iir, "freq" => 40, "order" => 3),
                 ),
             ),
         )
@@ -438,7 +438,7 @@ using Dates
                 "filter" => Dict{String,Any}(
                     "highpass" => Dict{String,Any}(
                         "apply" => "true",  # Should be Bool
-                        "method" => "iir",
+                        "method" => :iir,
                         "freq" => 0.1,
                         "order" => 1,
                     ),
@@ -456,7 +456,7 @@ using Dates
                 "filter" => Dict{String,Any}(
                     "highpass" => Dict{String,Any}(
                         "apply" => true,
-                        "method" => "iir",
+                        "method" => :iir,
                         "freq" => -1,  # Below minimum
                         "order" => 1,
                     ),
@@ -641,7 +641,7 @@ using Dates
 
     @testset "_filter_param_spec Tests" begin
         # Test filter parameter specification creation
-        filter_spec = EegFun._filter_param_spec("test.prefix", true, "hp", 1.0, 0.1, 10.0, 2, 1, 5)
+        filter_spec = EegFun._filter_param_spec("test.prefix", true, :hp, 1.0, 0.1, 10.0, 2, 1, 5)
 
         @test haskey(filter_spec, "test.prefix.apply")
         @test haskey(filter_spec, "test.prefix.type")
@@ -652,12 +652,13 @@ using Dates
 
         # Test parameter types
         @test filter_spec["test.prefix.apply"] isa EegFun.ConfigParameter{Bool}
-        @test filter_spec["test.prefix.type"] isa EegFun.ConfigParameter{Union{Vector{String},String}}
-        @test filter_spec["test.prefix.method"] isa EegFun.ConfigParameter{Union{Vector{String},String}}
+        @test filter_spec["test.prefix.type"] isa EegFun.ConfigParameter{Symbol}
+        @test filter_spec["test.prefix.method"] isa EegFun.ConfigParameter{Symbol}
+        @test filter_spec["test.prefix.func"] isa EegFun.ConfigParameter{Symbol}
         @test filter_spec["test.prefix.freq"] isa EegFun.ConfigParameter{Real}
 
         # Test parameter values
-        @test filter_spec["test.prefix.type"].default == "hp"
+        @test filter_spec["test.prefix.type"].default == :hp
         @test filter_spec["test.prefix.freq"].default == 1.0
         @test filter_spec["test.prefix.freq"].min == 0.1
         @test filter_spec["test.prefix.freq"].max == 10.0
@@ -1031,12 +1032,12 @@ using Dates
             "epoch_end" => 1.0,
             "layout" => Dict("neighbour_criterion" => 0.25),
             "filter" => Dict(
-                "highpass" => Dict("apply" => true, "type" => "hp", "freq" => 0.1, "func" => "butter", "method" => "iir", "order" => 2),
-                "lowpass" => Dict("apply" => true, "type" => "lp", "freq" => 30.0, "func" => "butter", "method" => "iir", "order" => 2),
+                "highpass" => Dict("apply" => true, "type" => :hp, "freq" => 0.1, "func" => :filtfilt, "method" => :iir, "order" => 2),
+                "lowpass" => Dict("apply" => true, "type" => :lp, "freq" => 30.0, "func" => :filtfilt, "method" => :iir, "order" => 2),
                 "ica_highpass" =>
-                    Dict("apply" => true, "type" => "hp", "freq" => 1.0, "func" => "butter", "method" => "iir", "order" => 2),
+                    Dict("apply" => true, "type" => :hp, "freq" => 1.0, "func" => :filtfilt, "method" => :iir, "order" => 2),
                 "ica_lowpass" =>
-                    Dict("apply" => true, "type" => "lp", "freq" => 30.0, "func" => "butter", "method" => "iir", "order" => 2),
+                    Dict("apply" => true, "type" => :lp, "freq" => 30.0, "func" => :filtfilt, "method" => :iir, "order" => 2),
             ),
             "cleanline" => Dict(
                 "apply" => false,
