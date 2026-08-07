@@ -115,6 +115,7 @@ ERP images are a powerful complement to traditional ERP plots, revealing the und
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 
 # read raw data
 dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"));

@@ -58,6 +58,7 @@ This demo shows how to perform common operations on time-frequency data: baselin
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 
 #######################################################################
 # CREATE EXAMPLE TF DATA

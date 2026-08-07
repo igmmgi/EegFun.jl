@@ -55,6 +55,7 @@ This demo shows how to combine epoch conditions, compute ERP difference waves, a
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 
 #######################################################################
 # CREATE EXAMPLE DATA

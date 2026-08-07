@@ -47,6 +47,7 @@ This demo shows how to visualise Global Field Power (GFP) and Global Dissimilari
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 
 #######################################################################
 # LOAD DATA AND CREATE ERPS

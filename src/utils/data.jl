@@ -1227,18 +1227,13 @@ function log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
     end
 
     # Map symbol to standard LogLevel
-    levels = Dict(
-        :debug => Logging.Debug,
-        :info => Logging.Info,
-        :warn => Logging.Warn,
-        :error => Logging.Error
-    )
-    
+    levels = Dict(:debug => Logging.Debug, :info => Logging.Info, :warn => Logging.Warn, :error => Logging.Error)
+
     lvl = get(levels, log_level, Logging.Info)
     if !haskey(levels, log_level)
         @minimal_warning "Unknown log level: $log_level, using :info instead"
     end
-    
+
     # Log with minimal metadata (no file/line noise)
     @logmsg lvl "\n\n$table_output\n" _module=nothing _file=nothing _line=nothing
 

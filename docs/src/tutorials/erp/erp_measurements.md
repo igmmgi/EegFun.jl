@@ -51,6 +51,7 @@ This demo shows how to extract quantitative measurements from ERPs and analyse t
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 using AnovaFun
 
 #######################################################################

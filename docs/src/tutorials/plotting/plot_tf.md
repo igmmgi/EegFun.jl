@@ -40,6 +40,7 @@ Use `plot_tf` to visualise the output of `tf_morlet`, `tf_multitaper`, or `tf_st
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 
 #######################################################################
 # LOAD DATA AND RUN TF DECOMPOSITION

@@ -40,6 +40,7 @@ This demo shows how to use the interactive filter GUI to explore the effect of d
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 
 #######################################################################
 # LOAD DATA AND CREATE ERPS

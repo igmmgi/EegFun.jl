@@ -400,12 +400,15 @@ function batch_process(
     @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
 
     results = _run_batch_operation(
-        process_fn, files, input_dir, output_dir; 
-        operation_name = operation_name, 
+        process_fn,
+        files,
+        input_dir,
+        output_dir;
+        operation_name = operation_name,
         filename_modifier = filename_modifier,
-        parallel = parallel
+        parallel = parallel,
     )
-    
+
     return _log_batch_summary(results, output_dir)
 end
 

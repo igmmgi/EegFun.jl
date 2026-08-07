@@ -102,7 +102,8 @@ _is_extreme_value!(mask, signal, 50.0)
 ```
 """
 function _is_extreme_value!(mask::Vector{Bool}, signal::AbstractVector{Float64}, threshold::Real)
-    length(mask) == length(signal) || @minimal_error "Mask and signal must have the same length (mask: $(length(mask)), signal: $(length(signal)))"
+    length(mask) == length(signal) ||
+        @minimal_error "Mask and signal must have the same length (mask: $(length(mask)), signal: $(length(signal)))"
     @inbounds for i in eachindex(signal)
         mask[i] = abs(signal[i]) > threshold
     end

@@ -54,6 +54,7 @@ Miller, Patterson, & Ulrich (1998). Jackknife-based method for measuring LRP ons
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 
 const DEMO_OUTPUT = "./tutorials/output/"
 mkpath(DEMO_OUTPUT)

@@ -1686,7 +1686,7 @@ end
 function _apply_filter!(state::DataBrowserState{T}, filter_type, freq, method, order, func) where {T<:AbstractDataState}
     # Get the current data, apply filter, then update the observable
     current_data = state.data.current[]
-    
+
     sym_method = method isa Symbol ? method : Symbol(method)
     sym_func = func isa Symbol ? func : Symbol(func)
 

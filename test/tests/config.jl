@@ -453,14 +453,12 @@ using Dates
         # Test invalid configuration - out of range
         invalid_config = Dict{String,Any}(
             "preprocess" => Dict{String,Any}(
-                "filter" => Dict{String,Any}(
-                    "highpass" => Dict{String,Any}(
-                        "apply" => true,
-                        "method" => :iir,
-                        "freq" => -1,  # Below minimum
-                        "order" => 1,
-                    ),
-                ),
+                "filter" => Dict{String,Any}("highpass" => Dict{String,Any}(
+                    "apply" => true,
+                    "method" => :iir,
+                    "freq" => -1,  # Below minimum
+                    "order" => 1,
+                )),
             ),
         )
         result = EegFun._validate_config(invalid_config)

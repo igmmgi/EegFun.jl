@@ -65,6 +65,7 @@ All EegFun functions are called with the `EegFun.` prefix. The fastest way to ge
 
 ```julia
 using EegFun
+using GLMakie # Required for interactive plotting
 
 # 1. Automatically download the tutorial datasets
 data_dir = download_eegfun_datasets()

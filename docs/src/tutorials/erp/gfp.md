@@ -51,6 +51,7 @@ This demo shows how to compute Global Field Power (GFP) and Global Dissimilarity
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 
 #######################################################################
 # LOAD ERP DATA

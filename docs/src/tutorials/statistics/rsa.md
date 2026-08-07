@@ -42,6 +42,7 @@ RSA quantifies how neural patterns represent different stimuli/conditions:
 # grand averaging with noise ceiling, RDM heatmaps, and timecourse visualization.
 
 using EegFun
+using GLMakie
 
 @info EegFun.section("Representational Similarity Analysis (RSA)")
 println("Basic RSA analysis...")

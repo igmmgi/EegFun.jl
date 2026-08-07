@@ -160,7 +160,7 @@ function ride_iteration!(
 
         # 3. Check convergence
         for k = 1:n_components
-            diff = sum(abs, view(templates, :, :, k) .- view(prev_templates, :, :, k))
+            diff = sum(abs, view(templates,:,:,k) .- view(prev_templates,:,:,k))
             max_diff = max(max_diff, diff)
         end
 

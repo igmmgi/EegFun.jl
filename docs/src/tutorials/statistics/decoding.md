@@ -159,6 +159,7 @@ Demonstrates different statistical correction methods for comparison.
 # grand averaging, and statistical testing (uncorrected, Bonferroni, cluster-based).
 
 using EegFun
+using GLMakie
 using DataFrames
 using Random
 

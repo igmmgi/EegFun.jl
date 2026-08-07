@@ -44,12 +44,16 @@ function plot_erp_filter_gui(filepath::String; kwargs...)
 end
 
 # Single ErpData/ContinuousData - dispatch to vector version
-function plot_erp_filter_gui(erp::Union{ErpData, ContinuousData}; channel::Union{Symbol,Nothing} = nothing)
+function plot_erp_filter_gui(erp::Union{ErpData,ContinuousData}; channel::Union{Symbol,Nothing} = nothing)
     return plot_erp_filter_gui([erp]; channel)
 end
 
 # Vector of ErpData/ContinuousData - main implementation
-function plot_erp_filter_gui(erp_vec::Vector{<:Union{ErpData, ContinuousData}}; channel::Union{Symbol,Nothing} = nothing, display_plot::Bool = true)
+function plot_erp_filter_gui(
+    erp_vec::Vector{<:Union{ErpData,ContinuousData}};
+    channel::Union{Symbol,Nothing} = nothing,
+    display_plot::Bool = true,
+)
 
     # Get available channels from first ERP
     first_erp = erp_vec[1]
@@ -226,7 +230,7 @@ function plot_erp_filter_gui(erp_vec::Vector{<:Union{ErpData, ContinuousData}}; 
             if erp_vec[idx] isa ErpData
                 plot_erp!(fig, ax, [erp_vec[idx]], channel_selection = channels(selected_channel[]), legend = false)
             else
-                t = (0:size(erp_vec[idx].data, 1)-1) ./ erp_vec[idx].sample_rate
+                t = (0:(size(erp_vec[idx].data, 1)-1)) ./ erp_vec[idx].sample_rate
                 lines!(ax, t, erp_vec[idx].data[!, selected_channel[]], color = :black)
             end
 
@@ -271,7 +275,7 @@ function plot_erp_filter_gui(erp_vec::Vector{<:Union{ErpData, ContinuousData}}; 
                     if filtered_erp isa ErpData
                         plot_erp!(fig, ax, [filtered_erp], channel_selection = channels(selected_channel[]), legend = false, color = :red)
                     else
-                        t_filt = (0:size(filtered_erp.data, 1)-1) ./ filtered_erp.sample_rate
+                        t_filt = (0:(size(filtered_erp.data, 1)-1)) ./ filtered_erp.sample_rate
                         lines!(ax, t_filt, filtered_erp.data[!, selected_channel[]], color = :red)
                     end
 

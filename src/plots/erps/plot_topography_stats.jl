@@ -223,11 +223,9 @@ function plot_topography_stats(
 
         # Map electrode values to layout order
         channel_data = topo_values[i]
-        layout_values = Float64[
-            let ch_idx = findfirst(==(lbl), electrodes)
-                !isnothing(ch_idx) ? channel_data[ch_idx] : 0.0
-            end for lbl in layout_labels
-        ]
+        layout_values = Float64[let ch_idx = findfirst(==(lbl), electrodes)
+            !isnothing(ch_idx) ? channel_data[ch_idx] : 0.0
+        end for lbl in layout_labels]
 
         # Render using shared helper (uses num_levels, not gridscale, for contour levels)
         _render_topo_surface!(

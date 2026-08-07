@@ -619,7 +619,7 @@ function _run_filter_batch(
         # Execute
         process_fn =
             (input_path, output_path) -> _process_filter_file(input_path, output_path, filter_type, cutoff_freq, condition_selection)
-        
+
         return batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Filtering")
     finally
         _cleanup_logging(log_file, output_dir)

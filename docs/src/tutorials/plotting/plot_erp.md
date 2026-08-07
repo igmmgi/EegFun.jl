@@ -205,6 +205,7 @@ ERP plots are the foundation of event-related brain potential analysis!
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 using JLD2
 
 # read raw data
