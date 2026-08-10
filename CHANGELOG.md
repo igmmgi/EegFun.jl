@@ -7,6 +7,11 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-08-10
+
+### Fixed
+
+- Fixed `DimensionMismatch` bug in `rereference` when using array-based reference selections (like `[:M1, :M2]`).
 ## [0.7.0] - 2026-08-07
 
 ### Changed

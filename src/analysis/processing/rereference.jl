@@ -215,7 +215,7 @@ function _process_rereference_file(filepath::String, output_path::String, refere
     end
 
     # Apply rereferencing (mutates data in-place)
-    rereference!.(data, reference_selection)
+    rereference!.(data, Ref(reference_selection))
 
     # Save (always use "data" as variable name since read_data finds by type)
     jldsave(output_path; data = data)
