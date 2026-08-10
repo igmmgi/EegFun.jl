@@ -408,10 +408,10 @@ function permutation_test(
     # Auto-compute neighbours if needed
     layout = prepared.data[1].layout
     if cluster_type ∈ (:spatial, :spatiotemporal, :full) && isnothing(layout.neighbours)
-        @minimal_warning "Layout.neighbours is not set. Computing with default distance criterion (0.25)."
-        get_neighbours_xy!(layout, 0.25)
-        if length(prepared.data) > 1 && prepared.data[2].layout !== layout
-            get_neighbours_xy!(prepared.data[2].layout, 0.25)
+        @minimal_warning "Layout.neighbours is not set. Computing with default distance criterion (0.35)."
+        get_neighbours_xy!(layout, 0.35)
+        if isa(prepared, StatisticalDataPaired)
+            get_neighbours_xy!(prepared.data[2].layout, 0.35)
         end
     end
 

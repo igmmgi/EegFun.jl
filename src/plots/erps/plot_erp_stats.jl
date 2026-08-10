@@ -72,18 +72,18 @@ plot_erp_stats(result_perm, channel_selection=channels(:PO7),
 """
 function plot_erp_stats(
     result::StatsResult;
-    layout::Union{Symbol,PlotLayout} = :single,
-    channel_selection::Function = channels(),
-    channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
-    plot_erp::Bool = true,
-    plot_difference::Bool = false,
-    plot_tvalues::Bool = false,
-    plot_significance::Bool = false,
-    plot_critical_t::Bool = false,
-    plot_se::Bool = false,
-    difference_offset::Real = 0.0,
-    significance_position::Union{Symbol,Real} = :auto,
-    significance_color = (:gray, 0.6),
+    layout::Union{Symbol,PlotLayout}=:single,
+    channel_selection::Function=channels(),
+    channel_plot_order::Union{Nothing,Vector{Symbol}}=nothing,
+    plot_erp::Bool=true,
+    plot_difference::Bool=false,
+    plot_tvalues::Bool=false,
+    plot_significance::Bool=false,
+    plot_critical_t::Bool=false,
+    plot_se::Bool=false,
+    difference_offset::Real=0.0,
+    significance_position::Union{Symbol,Real}=:auto,
+    significance_color=(:gray, 0.6),
     kwargs...,
 )
     # If plot_critical_t is requested, automatically enable t-value plotting
@@ -163,7 +163,7 @@ function plot_erp_stats(
     eeg_layout = result.data[1].layout
 
     # Create figure and apply layout system
-    fig = Figure(size = (800, 600), title = plot_kwargs[:figure_title], figure_padding = plot_kwargs[:figure_padding])
+    fig = Figure(size=(800, 600), title=plot_kwargs[:figure_title], figure_padding=plot_kwargs[:figure_padding])
     plot_layout = create_layout(layout, selected_channels, eeg_layout; layout_kwargs...)
     axes, layout_channels = _apply_layout!(fig, plot_layout; plot_kwargs...)
 
@@ -180,18 +180,18 @@ function plot_erp_stats(
                 result,
                 channel_idx,
                 ch;
-                plot_erp = plot_erp,
-                plot_difference = plot_difference,
-                plot_tvalues = plot_tvalues,
-                plot_significance = plot_significance,
-                plot_critical_t = plot_critical_t,
-                plot_se = plot_se,
-                colors = stats_colors,
-                difference_offset = difference_offset,
-                significance_position = significance_position,
-                significance_color = significance_color,
-                linewidth = plot_kwargs[:linewidth],
-                legend_labels = plot_kwargs[:legend_labels],
+                plot_erp=plot_erp,
+                plot_difference=plot_difference,
+                plot_tvalues=plot_tvalues,
+                plot_significance=plot_significance,
+                plot_critical_t=plot_critical_t,
+                plot_se=plot_se,
+                colors=stats_colors,
+                difference_offset=difference_offset,
+                significance_color=significance_color,
+                linewidth=plot_kwargs[:linewidth],
+                legend_labels=plot_kwargs[:legend_labels],
+                add_labels=(ch == first(channels_to_plot))
             )
         end
     end
@@ -219,14 +219,14 @@ function plot_erp_stats(
 
     # Add a single legend (on the first axis)
     if !isempty(axes)
-        axislegend(axes[1], position = plot_kwargs[:legend_position], framevisible = plot_kwargs[:legend_framevisible])
+        axislegend(axes[1], position=plot_kwargs[:legend_position], framevisible=plot_kwargs[:legend_framevisible])
     end
 
     if plot_kwargs[:display_plot]
         _display_figure(fig)
     end
 
-    return (fig = fig, axes = axes)
+    return (fig=fig, axes=axes)
 end
 
 
@@ -241,18 +241,19 @@ function _plot_erp_stats_channel!(
     result::StatsResult,
     channel_idx::Int,
     channel_sym::Symbol;
-    plot_erp::Bool = true,
-    plot_difference::Bool = false,
-    plot_tvalues::Bool = false,
-    plot_significance::Bool = false,
-    plot_critical_t::Bool = false,
-    plot_se::Bool = false,
-    colors::Vector = [:blue, :red, :black, :purple],
-    difference_offset::Real = 0.0,
-    significance_position::Union{Symbol,Real} = :auto,
-    significance_color = (:gray, 0.6),
-    linewidth::Int = 2,
-    legend_labels::Vector = [],
+    plot_erp::Bool=true,
+    plot_difference::Bool=false,
+    plot_tvalues::Bool=false,
+    plot_significance::Bool=false,
+    plot_critical_t::Bool=false,
+    plot_se::Bool=false,
+    colors::Vector=[:blue, :red, :black, :purple],
+    difference_offset::Real=0.0,
+    significance_position::Union{Symbol,Real}=:auto,
+    significance_color=(:gray, 0.6),
+    linewidth::Int=2,
+    legend_labels::Vector=[],
+    add_labels::Bool=true,
 )
     time_points = result.time_points
     t_values = result.stat_matrix.t[channel_idx, :]
@@ -283,15 +284,15 @@ function _plot_erp_stats_channel!(
     if plot_erp
         cond_A_name = isempty(legend_labels) ? result.data[1].condition_name : legend_labels[1]
         cond_B_name = length(legend_labels) >= 2 ? legend_labels[2] : result.data[2].condition_name
-        lines!(ax, erp_time_points, cond_A_avg, color = colors[1], linewidth = linewidth, label = cond_A_name)
-        lines!(ax, erp_time_points, cond_B_avg, color = colors[2], linewidth = linewidth, label = cond_B_name)
+        lines!(ax, erp_time_points, cond_A_avg, color=colors[1], linewidth=linewidth, label=add_labels ? cond_A_name : nothing)
+        lines!(ax, erp_time_points, cond_B_avg, color=colors[2], linewidth=linewidth, label=add_labels ? cond_B_name : nothing)
 
         # SE bands around individual condition ERPs (full display interval)
         if plot_se
             se_A = result.se_cond1[channel_idx, :]
             se_B = result.se_cond2[channel_idx, :]
-            band!(ax, erp_time_points, cond_A_avg .- se_A, cond_A_avg .+ se_A, color = (colors[1], 0.15))
-            band!(ax, erp_time_points, cond_B_avg .- se_B, cond_B_avg .+ se_B, color = (colors[2], 0.15))
+            band!(ax, erp_time_points, cond_A_avg .- se_A, cond_A_avg .+ se_A, color=(colors[1], 0.15))
+            band!(ax, erp_time_points, cond_B_avg .- se_B, cond_B_avg .+ se_B, color=(colors[2], 0.15))
         end
     end
 
@@ -305,25 +306,26 @@ function _plot_erp_stats_channel!(
 
     # Plot difference wave (if requested)
     if plot_difference
+        diff_label = length(legend_labels) >= 3 ? legend_labels[3] : "Difference"
         if difference_offset != 0.0
             diff_wave_plot = diff_wave .+ difference_offset
             diff_label = "Difference (offset=$(difference_offset))"
 
-            hlines!(ax, [difference_offset], color = (:gray, 0.7), linewidth = 1)
+            hlines!(ax, [difference_offset], color=(:gray, 0.7), linewidth=1)
             text!(
                 ax,
                 erp_time_points[end] * 0.98,
                 difference_offset,
-                text = "0 μV",
-                align = (:right, :center),
-                color = :gray,
-                fontsize = 18,
+                text="0 μV",
+                align=(:right, :center),
+                color=:gray,
+                fontsize=18,
             )
         else
             diff_label = "Difference"
         end
 
-        lines!(ax, erp_time_points, diff_wave_plot, color = colors[3], linewidth = linewidth, label = diff_label)
+        lines!(ax, erp_time_points, diff_wave_plot, color=colors[3], linewidth=linewidth, label=add_labels ? diff_label : nothing)
 
         # SE band around difference wave (full display interval)
         if plot_se
@@ -333,15 +335,15 @@ function _plot_erp_stats_channel!(
                 erp_time_points,
                 diff_wave_plot .- se_diff_channel,
                 diff_wave_plot .+ se_diff_channel,
-                color = (colors[3], 0.15),
-                label = "±1 SEM",
+                color=(colors[3], 0.15),
+                label="±1 SEM",
             )
         end
     end
 
     # Plot t-values (if requested)
     if plot_tvalues
-        lines!(ax, time_points, t_values, color = colors[4], linewidth = linewidth, label = "t-statistic")
+        lines!(ax, time_points, t_values, color=colors[4], linewidth=linewidth, label="t-statistic")
     end
 
     # Show significance regions as bars
@@ -370,15 +372,15 @@ function _plot_erp_stats_channel!(
                     Point2f(t_end, bar_y + bar_height),
                     Point2f(t_start, bar_y + bar_height),
                 ]
-                poly!(ax, rect_vertices, color = significance_color, strokewidth = 0)
+                poly!(ax, rect_vertices, color=significance_color, strokewidth=0)
             end
         end
     end
 
     # Show critical t-values if requested
     if plot_critical_t && plot_tvalues && !isnothing(critical_t_pos)
-        lines!(ax, time_points, critical_t_pos, color = :grey, linewidth = linewidth, linestyle = :dashdot, label = "Critical t+")
-        lines!(ax, time_points, critical_t_neg, color = :grey, linewidth = linewidth, linestyle = :dashdot, label = "Critical t-")
+        lines!(ax, time_points, critical_t_pos, color=:grey, linewidth=linewidth, linestyle=:dashdot, label="Critical t+")
+        lines!(ax, time_points, critical_t_neg, color=:grey, linewidth=linewidth, linestyle=:dashdot, label="Critical t-")
     end
 
     return nothing
@@ -483,7 +485,7 @@ function plot_stat_heatmap(result::StatsResult; kwargs...)
     electrodes = result.electrodes
     t_values = result.stat_matrix.t
 
-    fig = Figure(size = (800, 600), title = plot_kwargs[:figure_title], figure_padding = plot_kwargs[:figure_padding])
+    fig = Figure(size=(800, 600), title=plot_kwargs[:figure_title], figure_padding=plot_kwargs[:figure_padding])
 
     if length(electrodes) > 40
         yticks = (1:5:length(electrodes), String.(electrodes)[1:5:end])
@@ -491,7 +493,7 @@ function plot_stat_heatmap(result::StatsResult; kwargs...)
         yticks = (1:length(electrodes), String.(electrodes))
     end
 
-    ax = Axis(fig[1, 1], yticks = yticks)
+    ax = Axis(fig[1, 1], yticks=yticks)
 
     max_t = maximum(abs.(t_values))
 
@@ -500,11 +502,11 @@ function plot_stat_heatmap(result::StatsResult; kwargs...)
         time_points,
         1:length(electrodes),
         transpose(t_values),
-        colormap = get(kwargs, :colormap, :RdBu_r),
-        colorrange = get(kwargs, :colorrange, (-max_t, max_t)),
+        colormap=get(kwargs, :colormap, :RdBu_r),
+        colorrange=get(kwargs, :colorrange, (-max_t, max_t)),
     )
 
-    Colorbar(fig[1, 2], hm, label = "t-value")
+    Colorbar(fig[1, 2], hm, label="t-value")
 
     _apply_axis_properties!(ax; plot_kwargs...)
 
@@ -512,5 +514,5 @@ function plot_stat_heatmap(result::StatsResult; kwargs...)
         _display_figure(fig)
     end
 
-    return (fig = fig, axes = [ax])
+    return (fig=fig, axes=[ax])
 end

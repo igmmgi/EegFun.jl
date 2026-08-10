@@ -23,20 +23,20 @@ end
 # === PARAMETER CONSTRUCTOR HELPERS ===
 
 """Create a `ConfigParameter{T}` with common defaults."""
-function _param(::Type{T}, desc, default = nothing; allowed = nothing, min = nothing, max = nothing) where {T}
-    ConfigParameter{T}(description = desc, default = default, allowed = allowed, min = min, max = max)
+function _param(::Type{T}, desc, default=nothing; allowed=nothing, min=nothing, max=nothing) where {T}
+    ConfigParameter{T}(description=desc, default=default, allowed=allowed, min=min, max=max)
 end
 
 """Create a string (or string-vector) parameter."""
-string_param(desc, default = ""; allowed = nothing) = _param(Union{Vector{String},String}, desc, default, allowed = allowed)
+string_param(desc, default=""; allowed=nothing) = _param(Union{Vector{String},String}, desc, default, allowed=allowed)
 """Create a simple `String` parameter."""
-simple_string_param(desc, default = ""; allowed = nothing) = _param(String, desc, default, allowed = allowed)
+simple_string_param(desc, default=""; allowed=nothing) = _param(String, desc, default, allowed=allowed)
 """Create a Symbol parameter."""
-symbol_param(desc, default; allowed = nothing) = _param(Symbol, desc, default, allowed = allowed)
+symbol_param(desc, default; allowed=nothing) = _param(Symbol, desc, default, allowed=allowed)
 """Create a `Bool` parameter."""
-bool_param(desc, default = false) = _param(Bool, desc, default)
+bool_param(desc, default=false) = _param(Bool, desc, default)
 """Create a numeric parameter with optional min/max bounds."""
-number_param(desc, default, min = nothing, max = nothing) = _param(Real, desc, default, min = min, max = max)
+number_param(desc, default, min=nothing, max=nothing) = _param(Real, desc, default, min=min, max=max)
 """Create a numeric vector parameter (`Vector{Real}`)."""
 number_vector_param(desc, default) = _param(Vector{Real}, desc, default)
 """Create a channel-groups parameter (`Vector{Vector{String}}`)."""
@@ -45,12 +45,12 @@ channel_groups_param(desc, default) = _param(Vector{Vector{String}}, desc, defau
 """Generate the standard set of filter parameters (apply, type, method, func, freq, order) for a given prefix."""
 function _filter_param_spec(prefix, apply, type, freq, min_freq, max_freq, order, min_order, max_order)
     Dict(
-        "$prefix.apply"  => bool_param("Apply: true/false", apply),
-        "$prefix.type"   => symbol_param("Filter type identifier", type, allowed = [:hp, :lp]),
-        "$prefix.method" => symbol_param("Filter method", :iir, allowed = [:fir, :iir]),
-        "$prefix.func"   => symbol_param("Filter function", :filtfilt, allowed = [:filt, :filtfilt]),
-        "$prefix.freq"   => number_param("Cutoff frequency (Hz)", freq, min_freq, max_freq),
-        "$prefix.order"  => number_param("Filter order", order, min_order, max_order),
+        "$prefix.apply" => bool_param("Apply: true/false", apply),
+        "$prefix.type" => symbol_param("Filter type identifier", type, allowed=[:hp, :lp]),
+        "$prefix.method" => symbol_param("Filter method", :iir, allowed=[:fir, :iir]),
+        "$prefix.func" => symbol_param("Filter function", :filtfilt, allowed=[:filt, :filtfilt]),
+        "$prefix.freq" => number_param("Cutoff frequency (Hz)", freq, min_freq, max_freq),
+        "$prefix.order" => number_param("Filter order", order, min_order, max_order),
     )
 end
 
@@ -61,12 +61,12 @@ end
 const PARAMETERS = Dict{String,ConfigParameter}(
 
     # File paths and settings
-    "files.input.directory"            => simple_string_param("Directory containing raw data files.", "."),
-    "files.input.raw_data_files"       => string_param("Pattern (regex or explicit list) for raw data files to process.", "\\.bdf"),
-    "files.input.recursive"            => bool_param("Search subdirectories recursively for raw data files (e.g., BIDS).", false),
-    "files.input.layout_file"          => simple_string_param("Electrode layout file name (\"*.csv\")", "biosemi72.csv"),
+    "files.input.directory" => simple_string_param("Directory containing raw data files.", "."),
+    "files.input.raw_data_files" => string_param("Pattern (regex or explicit list) for raw data files to process.", "\\.bdf"),
+    "files.input.recursive" => bool_param("Search subdirectories recursively for raw data files (e.g., BIDS).", false),
+    "files.input.layout_file" => simple_string_param("Electrode layout file name (\"*.csv\")", "biosemi72.csv"),
     "files.input.epoch_condition_file" => simple_string_param("TOML file that defines the condition epochs.", ""),
-    "files.output.directory"           => simple_string_param("Directory for processed output files", "./preprocessed_files"),
+    "files.output.directory" => simple_string_param("Directory for processed output files", "./preprocessed_files"),
 
     # What data should we save?
     "files.output.save_continuous_data_raw" => bool_param("Save continuous data original?", false),
@@ -80,40 +80,40 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "files.output.save_erp_data" => bool_param("Save ERP data good?", true),
 
     # Preprocessing settings
-    "preprocess.interactive_continuous"           => bool_param("Pause execution to interactively review continuous data", false),
-    "preprocess.interactive_ica"                  => bool_param("Pause execution to interactively review ICA components", false),
-    "preprocess.interactive_epochs"               => bool_param("Pause execution to interactively review epoch rejection", false),
-    "preprocess.epoch_start"                      => number_param("Epoch start (seconds).", -1),
-    "preprocess.epoch_end"                        => number_param("Epoch end (seconds).", 1),
-    "preprocess.reference_channel"                => simple_string_param("Channels(s) to use as reference", "avg"),
-    "preprocess.layout.neighbour_criterion"       => number_param("Distance criterion (normalized) for channel neighbour definition.", 0.25, 0),
-    "preprocess.eog.vEOG_channels"                => channel_groups_param("Channels used in the calculation of vertical eye movements (vEOG).", [["Fp1", "Fp2"], ["IO1", "IO2"], ["vEOG"]]),
-    "preprocess.eog.hEOG_channels"                => channel_groups_param("Channels used in the calculation of horizontal eye movements (hEOG).", [["F9"], ["F10"], ["hEOG"]]),
-    "preprocess.eog.vEOG_criterion"               => number_param("Distance criterion for vertical EOG channel definition.", 50, 0),
-    "preprocess.eog.hEOG_criterion"               => number_param("Distance criterion for horizontal EOG channel definition.", 30, 0),
-    "preprocess.eeg.extreme_value_abs_criterion"  => number_param("Value (mV) for defining data section as an extreme value.", 500),
+    "preprocess.interactive_continuous" => bool_param("Pause execution to interactively review continuous data", false),
+    "preprocess.interactive_ica" => bool_param("Pause execution to interactively review ICA components", false),
+    "preprocess.interactive_epochs" => bool_param("Pause execution to interactively review epoch rejection", false),
+    "preprocess.epoch_start" => number_param("Epoch start (seconds).", -1),
+    "preprocess.epoch_end" => number_param("Epoch end (seconds).", 1),
+    "preprocess.reference_channel" => simple_string_param("Channels(s) to use as reference", "avg"),
+    "preprocess.layout.neighbour_criterion" => number_param("Distance criterion (normalized) for channel neighbour definition.", 0.25, 0),
+    "preprocess.eog.vEOG_channels" => channel_groups_param("Channels used in the calculation of vertical eye movements (vEOG).", [["Fp1", "Fp2"], ["IO1", "IO2"], ["vEOG"]]),
+    "preprocess.eog.hEOG_channels" => channel_groups_param("Channels used in the calculation of horizontal eye movements (hEOG).", [["F9"], ["F10"], ["hEOG"]]),
+    "preprocess.eog.vEOG_criterion" => number_param("Distance criterion for vertical EOG channel definition.", 50, 0),
+    "preprocess.eog.hEOG_criterion" => number_param("Distance criterion for horizontal EOG channel definition.", 30, 0),
+    "preprocess.eeg.extreme_value_abs_criterion" => number_param("Value (mV) for defining data section as an extreme value.", 500),
     "preprocess.eeg.artifact_value_abs_criterion" => number_param("Value (mV) for defining data section (or epoch) as an artifact value.", 100),
-    "preprocess.eeg.artifact_value_z_criterion"   => number_param("Value (z) for defining data section (or epoch) as an artifact value (NB. various statistics with 0 being off!).", 0),
-    "preprocess.eeg.artifact_interval_start"      => number_param("Start time (s) for artifact rejection (optional).", nothing),
-    "preprocess.channel_repair.method"            => simple_string_param("Method for bad channel interpolation (:spherical_spline or :neighbor_interpolation)", "spherical_spline"),
+    "preprocess.eeg.artifact_value_z_criterion" => number_param("Value (z) for defining data section (or epoch) as an artifact value (NB. various statistics with 0 being off!).", 0),
+    "preprocess.eeg.artifact_interval_start" => number_param("Start time (s) for artifact rejection (optional).", nothing),
+    "preprocess.channel_repair.method" => simple_string_param("Method for bad channel interpolation (:spherical_spline or :neighbor_interpolation)", "spherical_spline"),
 
     # ICA settings
-    "preprocess.ica.apply"              => bool_param("Independent Component Analysis (ICA) true/false.", true),
+    "preprocess.ica.apply" => bool_param("Independent Component Analysis (ICA) true/false.", true),
     "preprocess.ica.percentage_of_data" => number_param("Percentage of data to use for ICA (0-100).", 100.0, 0.0, 100.0),
 
     # CleanLine settings
-    "preprocess.cleanline.apply"              => bool_param("Apply CleanLine algorithm to remove line noise?", false),
-    "preprocess.cleanline.line_frequencies"   => number_vector_param("Line noise frequencies to target (e.g. [50.0])", [50.0]),
-    "preprocess.cleanline.bandwidth"          => number_param("Bandwidth for scanning frequencies around the line frequency.", 2.0),
+    "preprocess.cleanline.apply" => bool_param("Apply CleanLine algorithm to remove line noise?", false),
+    "preprocess.cleanline.line_frequencies" => number_vector_param("Line noise frequencies to target (e.g. [50.0])", [50.0]),
+    "preprocess.cleanline.bandwidth" => number_param("Bandwidth for scanning frequencies around the line frequency.", 2.0),
     "preprocess.cleanline.sliding_win_length" => number_param("Sliding window length (seconds) for multi-taper regression.", 4.0),
-    "preprocess.cleanline.sliding_win_step"   => number_param("Sliding window step (seconds) for multi-taper regression.", 2.0),
-    "preprocess.cleanline.time_bandwidth"     => number_param("Time-bandwidth product (TW) for tapers.", 3.0),
-    "preprocess.cleanline.k_tapers"           => number_param("Number of tapers (usually 2*TW-1).", 5),
-    "preprocess.cleanline.p_value"            => number_param("Significance threshold for F-test.", 0.05),
-    "preprocess.cleanline.pad"                => number_param("Padding factor for FFT.", 2),
+    "preprocess.cleanline.sliding_win_step" => number_param("Sliding window step (seconds) for multi-taper regression.", 2.0),
+    "preprocess.cleanline.time_bandwidth" => number_param("Time-bandwidth product (TW) for tapers.", 3.0),
+    "preprocess.cleanline.k_tapers" => number_param("Number of tapers (usually 2*TW-1).", 5),
+    "preprocess.cleanline.p_value" => number_param("Significance threshold for F-test.", 0.05),
+    "preprocess.cleanline.pad" => number_param("Padding factor for FFT.", 2),
 
     # Resampling settings
-    "preprocess.resample.apply"       => bool_param("Apply resampling/downsampling?", false),
+    "preprocess.resample.apply" => bool_param("Apply resampling/downsampling?", false),
     "preprocess.resample.target_rate" => number_param("Target sampling rate in Hz (e.g. 512, 256).", 512),
 
     # Filtering settings - using helper function
@@ -213,13 +213,13 @@ end
 Convert Any arrays in the config to their proper types based on parameter specifications.
 This fixes the issue where TOML.jl in Julia 1.12 returns Any arrays instead of typed arrays.
 """
-function _convert_any_arrays!(config::Dict; path = "")
+function _convert_any_arrays!(config::Dict; path="")
     for (key, value) in config
         new_path = isempty(path) ? key : "$path.$key"
 
         if isa(value, Dict)
             # Recursively process nested dictionaries
-            _convert_any_arrays!(value; path = new_path)
+            _convert_any_arrays!(value; path=new_path)
         elseif haskey(PARAMETERS, new_path)
             # Convert this parameter if we have type information
             param_spec = PARAMETERS[new_path]
@@ -306,22 +306,22 @@ Validate config values against their metadata definitions.
 # Returns
 - `ValidationResult`: Result of the validation
 """
-function _validate_config(config::Dict; path = "")
+function _validate_config(config::Dict; path="")
     for (key, value) in config
         new_path = isempty(path) ? key : "$path.$key"
         if isa(value, Dict) # Recursively validate nested dictionary
-            result = _validate_config(value; path = new_path)
+            result = _validate_config(value; path=new_path)
             !result.success && return result
         else # Check if we have data for this parameter
             if haskey(PARAMETERS, new_path)
                 result = _validate_parameter(value, PARAMETERS[new_path], new_path)
                 !result.success && return result
             else # Unknown parameter?
-                return ValidationResult(success = false, error = "Unknown parameter: $new_path", key_path = new_path)
+                return ValidationResult(success=false, error="Unknown parameter: $new_path", key_path=new_path)
             end
         end
     end
-    return ValidationResult(success = true)
+    return ValidationResult(success=true)
 end
 
 """
@@ -343,7 +343,7 @@ function _validate_parameter(value, parameter_spec::ConfigParameter{T}, paramete
     # Helper function for creating validation errors
     """Create a failed `ValidationResult` for this parameter."""
     function validation_error(msg)
-        ValidationResult(success = false, error = msg, key_path = parameter_name)
+        ValidationResult(success=false, error=msg, key_path=parameter_name)
     end
 
     # Check if value is the right type
@@ -371,7 +371,7 @@ function _validate_parameter(value, parameter_spec::ConfigParameter{T}, paramete
         !(value in parameter_spec.allowed) &&
         return validation_error("$parameter_name ($value) must be one of: $(join(parameter_spec.allowed, ", "))")
 
-    return ValidationResult(success = true)
+    return ValidationResult(success=true)
 end
 
 
@@ -388,7 +388,7 @@ If parameter_name is provided, shows detailed information about that specific pa
 # Arguments
 - `parameter_name::String`: Optional path to a specific parameter (e.g., "filtering.highpass.cutoff")
 """
-function show_parameter_info(; parameter_name::String = "")
+function show_parameter_info(; parameter_name::String="")
     isempty(parameter_name) ? _show_all_parameters() : _show_specific_parameter(parameter_name)
 end
 
@@ -424,7 +424,7 @@ end
 function _display_subsection(subsection, params)
     !isempty(subsection) && @info "  [$subsection]"
 
-    sorted_params = sort(params, by = first)
+    sorted_params = sort(params, by=first)
     for (path, parameter_spec) in sorted_params
         param_name = String(last(split(path, ".")))
         indent = isempty(subsection) ? "  " : "    "
@@ -532,7 +532,7 @@ function _display_grouped_params(grouped_params::Dict{String,Vector{Tuple{String
     for subsection in sorted_subsections
         !isempty(subsection) && @info "  [$subsection]"
 
-        sorted_params = sort(grouped_params[subsection], by = first)
+        sorted_params = sort(grouped_params[subsection], by=first)
         for (path, parameter_spec) in sorted_params
             param_name = String(last(split(path, ".")))
             indent = isempty(subsection) ? "  " : "    "
@@ -551,7 +551,7 @@ Generate and save a template TOML configuration file with all available paramete
 # Arguments
 - `filename::String`: Name of the template file to create (keyword argument, default: "config_template.toml")
 """
-function generate_config_template(; filename::String = "config_template.toml")
+function generate_config_template(; filename::String="config_template.toml")
     if !endswith(filename, ".toml")
         filename = filename * ".toml"
     end
@@ -607,7 +607,7 @@ function _write_subsection(io::IO, section::String, subsection::String, params::
         println(io, "[$section.$subsection]")
     end
 
-    sorted_params = sort(params, by = first)
+    sorted_params = sort(params, by=first)
     for (path, parameter_spec) in sorted_params
         param_name = String(last(split(path, ".")))
         _write_parameter_docs(io, parameter_spec)

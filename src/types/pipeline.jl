@@ -153,7 +153,7 @@ Comprehensive configuration for EEG data preprocessing.
     eog::EogConfig = EogConfig()
     eeg::EegConfig = EegConfig()
     ica::IcaConfig = IcaConfig()
-    neighbour_criterion::Float64 = 0.25
+    neighbour_criterion::Float64 = 0.35
     channel_repair_method::Symbol = :spherical_spline
     interactive_continuous::Bool = false
     interactive_ica::Bool = false

@@ -9,9 +9,16 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 
 ## [0.7.1] - 2026-08-10
 
+### Changed
+
+- Increased the default distance criterion for spatial layout neighbours (`neighbour_criterion`) from `0.25` to `0.35` to better support standard 10-20/10-10 electrode layouts and prevent empty connectivity matrices during cluster permutation tests.
+
 ### Fixed
 
+- Fixed messy legends in `plot_erp_stats` by hiding redundant labels for channels.
+- Added a warning in `plot_erp_stats` when `average_channels=true` is passed, as spatial averaging is statistically invalid for cluster permutation statistics.
 - Fixed `DimensionMismatch` bug in `rereference` when using array-based reference selections (like `[:M1, :M2]`).
+
 ## [0.7.0] - 2026-08-07
 
 ### Changed
