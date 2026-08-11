@@ -7,6 +7,11 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed an issue where `EegFun.conditions(...)` array subsets (like `conditions([3, 1])`) would discard the requested array order and always extract conditions numerically/alphabetically. This ensures paired statistics (`prepare_stats`) and plotting functions accurately reflect the requested data order.
+
+
 ## [0.7.1] - 2026-08-10
 
 ### Changed

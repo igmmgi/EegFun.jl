@@ -1508,11 +1508,11 @@ conditions(["congruent", "neutral"])   # Select multiple conditions by name
 ```
 """
 conditions() = x -> fill(true, length(x))  # Default: select all conditions given
-conditions(condition_indices::Union{Vector{Int},UnitRange}) = x -> [i in condition_indices for i = 1:length(x)]
-conditions(condition_index::Int) = x -> [i == condition_index for i = 1:length(x)]
+conditions(condition_indices::Union{Vector{Int},UnitRange}) = x -> intersect(condition_indices, 1:length(x))
+conditions(condition_index::Int) = x -> intersect([condition_index], 1:length(x))
 conditions(condition_indices::Int...) = conditions(collect(condition_indices))
-conditions(condition_names::Vector{String}) = x -> [condition_name(dat) in condition_names for dat in x]
-conditions(cond_name::String) = x -> [condition_name(dat) == cond_name for dat in x]
+conditions(condition_names::Vector{String}) = x -> filter(!isnothing, [findfirst(dat -> condition_name(dat) == n, x) for n in condition_names])
+conditions(cond_name::String) = x -> filter(!isnothing, [findfirst(dat -> condition_name(dat) == cond_name, x)])
 conditions(predicate::Function) = predicate  # Allow custom function predicates
 """
     conditions_not(index::Int)
@@ -1672,7 +1672,8 @@ end
 
 """Apply a condition predicate and return matching dataset indices."""
 function get_selected_conditions(datasets::Vector{<:EegFunData}, condition_selection::Function)
-    return findall(condition_selection(datasets))
+    res = condition_selection(datasets)
+    return res isa AbstractVector{Bool} ? findall(res) : res
 end
 
 
