@@ -15,7 +15,9 @@ const PLOT_POWER_SPECTRUM_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Axis styling
     :xlabel => ("Frequency (Hz)", "X-axis label"),
     :ylabel => ("Power Spectral Density (μV²/Hz)", "Y-axis label"),
-    :title => ("Power Spectrum", "Plot title"),
+    :plot_title => ("Power Spectrum", "Plot title"),
+:plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+:plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
 
     # Scale parameters
     :x_scale => (:linear, "X-axis scale: :linear or :log10"),
@@ -23,7 +25,7 @@ const PLOT_POWER_SPECTRUM_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :unit => (:linear, "Power unit: :linear (μV²/Hz) or :dB (decibels)"),
 
     # Font sizes
-    :title_fontsize => (16, "Font size for title"),
+    :plot_title_fontsize => (16, "Font size for title"),
     :label_fontsize => (14, "Font size for axis labels"),
     :tick_fontsize => (12, "Font size for tick labels"),
     :legend_fontsize => (12, "Font size for legend"),
@@ -159,8 +161,8 @@ function _plot_power_spectrum_data!(
     # Update y-axis label based on unit
     ylabel_text = unit == :dB ? "Power Spectral Density (dB)" : plot_kwargs[:ylabel]
     ax.ylabel = ylabel_text
-    ax.title = plot_kwargs[:title]
-    ax.titlesize = plot_kwargs[:title_fontsize]
+    ax.title = plot_kwargs[:plot_title]
+    ax.titlesize = plot_kwargs[:plot_title_fontsize]
     ax.xlabelsize = plot_kwargs[:label_fontsize]
     ax.ylabelsize = plot_kwargs[:label_fontsize]
     ax.xticklabelsize = plot_kwargs[:tick_fontsize]

@@ -280,7 +280,7 @@ end
     @testset "Plot with custom styling" begin
         erp_data = EegFun.create_test_erp_data(participant = 1, condition = 1, fs = 100, n_channels = 5)
 
-        fig = EegFun.plot_gfp(erp_data, display_plot = false, color = :blue, linewidth = 3, xlim = (-0.1, 0.5), title = "Test GFP")
+        fig = EegFun.plot_gfp(erp_data, display_plot = false, color = :blue, linewidth = 3, xlim = (-0.1, 0.5), plot_title = "Test GFP")
 
         @test fig isa Figure
     end

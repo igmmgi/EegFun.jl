@@ -16,8 +16,11 @@ const PLOT_DECODING_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :ylabel => ("Classification Accuracy", "Label for y-axis"),
 
     # Title
-    :title => ("", "Plot title"),
-    :show_title => (true, "Show title (true/false)"),
+    :plot_title => ("", "Plot title"),
+    :plot_title_fontsize => (16, "Font size for plot titles"),
+:plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+:plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
+    :show_plot_title => (true, "Show title (true/false)"),
 
     # Line styling
     :linewidth => (2, "Line width for decoding curve"),
@@ -264,8 +267,8 @@ function plot_decoding(decoded::DecodedData; kwargs...)
     accuracy = decoded.average_score
     stderror = decoded.stderror
     chance_level = decoded.parameters.chance_level
-    title_text = plot_kwargs[:title]
-    show_title = plot_kwargs[:show_title]
+    title_text = plot_kwargs[:plot_title]
+    show_title = plot_kwargs[:show_plot_title]
 
     # Create figure
     fig = Figure(title = figure_title, size = (800, 600))
@@ -307,8 +310,8 @@ function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
     # Extract parameters
     display_plot = plot_kwargs[:display_plot]
     figure_title = plot_kwargs[:figure_title]
-    title_text = plot_kwargs[:title]
-    show_title = plot_kwargs[:show_title]
+    title_text = plot_kwargs[:plot_title]
+    show_title = plot_kwargs[:show_plot_title]
 
     # Determine optimal subplot layout using best_rect
     n_subjects = length(decoded_list)

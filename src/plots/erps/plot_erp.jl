@@ -2,7 +2,9 @@
 const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
     :display_plot => (true, "Display the plot (true/false)"),
-    :figure_title => ("ERP Plot", "Title for the plot window"),
+    :window_title => ("", "Title for the OS plot window. If empty, it's generated automatically."),
+    :figure_title => ("", "Title drawn at the top of the entire figure canvas"),
+    :figure_title_fontsize => (24, "Font size for figure title"),
     :interactive => (true, "Enable interactive features (true/false)"),
     :zoom_step => (0.2, "Fractional zoom step for arrow keys (e.g. 0.2 means 20% zoom in/out)"),
     :selection_color => (:blue, "Color for interactive selection rectangles"),
@@ -23,8 +25,11 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     ),
 
     # Title
-    :title => ("", "Plot title"),
-    :show_title => (true, "Show title (true/false)"),
+    :plot_title => ("", "Plot title"),
+    :plot_title_fontsize => (16, "Font size for plot titles"),
+:plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+:plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
+    :show_plot_title => (true, "Show title (true/false)"),
 
     # Line styling
     :linewidth => (2, "Line width for ERPs"),
@@ -413,15 +418,19 @@ function _plot_erp_core(
 
     # set default plot title only for single layouts
     # For grid/topo layouts, we want individual channel names, not a global title
-    if plot_kwargs[:show_title] && plot_kwargs[:title] == "" && layout == :single
-        plot_kwargs[:title] = length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(_print_vector(all_plot_channels))"
+    if plot_kwargs[:show_plot_title] && plot_kwargs[:plot_title] == "" && layout == :single
+        plot_kwargs[:plot_title] = length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(_print_vector(all_plot_channels))"
         if plot_kwargs[:average_channels]
-            plot_kwargs[:title] = "Avg: $(_print_vector(original_channels))"
+            plot_kwargs[:plot_title] = "Avg: $(_print_vector(original_channels))"
         end
     end
 
-    # Generate window title from datasets
-    title_str = _generate_window_title(dat_subset)
+    # Generate window title from datasets or use provided window_title
+    if !isempty(plot_kwargs[:window_title])
+        title_str = plot_kwargs[:window_title]
+    else
+        title_str = _generate_window_title(dat_subset)
+    end
     _set_window_title(title_str)
 
     # Extract layout_* parameters, remove prefix, and pass to create_layout
@@ -429,7 +438,9 @@ function _plot_erp_core(
 
     # Create figure and apply layout system
     set_theme!(fontsize = plot_kwargs[:theme_fontsize])
-    fig = Figure(title = plot_kwargs[:figure_title], figure_padding = plot_kwargs[:figure_padding])
+    fig = Figure(title = title_str, figure_padding = plot_kwargs[:figure_padding])
+
+
 
     plot_layout = create_layout(layout, all_plot_channels, first(dat_subset).layout; layout_kwargs...)
 
@@ -517,6 +528,11 @@ function _plot_erp_core(
             )
         end
 
+    end
+
+    # Draw supertitle if user explicitly provided a figure_title
+    if !isempty(plot_kwargs[:figure_title])
+        Label(fig[0, :], plot_kwargs[:figure_title], fontsize=plot_kwargs[:figure_title_fontsize], font=:bold, tellwidth=false)
     end
 
     if plot_kwargs[:display_plot]

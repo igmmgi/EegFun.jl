@@ -117,7 +117,7 @@ using DataFrames
 
         # Test _apply_axis_properties!
         kwargs = Dict(
-            :title => "Test Title",
+            :plot_title => "Test Title",
             :xlabel => "X Label",
             :ylabel => "Y Label",
             :xlim => (0, 10),
@@ -167,7 +167,7 @@ using DataFrames
         axes, _ = EegFun._apply_layout!(fig, layout; xgrid = true, ygrid = true, xminorgrid = false, yminorgrid = false)
 
         # Test _apply_layout_axis_properties!
-        kwargs = Dict(:title => "")
+        kwargs = Dict(:plot_title => "")
         EegFun._apply_layout_axis_properties!(axes, layout; kwargs...)
 
         # Should set channel names as titles when user title is empty
@@ -175,7 +175,7 @@ using DataFrames
         @test axes[2].title[] == "Ch2"
 
         # Test with user title
-        kwargs = Dict(:title => "User Title")
+        kwargs = Dict(:plot_title => "User Title")
         EegFun._apply_layout_axis_properties!(axes, layout; kwargs...)
 
         # Should respect user title, not override with channel names

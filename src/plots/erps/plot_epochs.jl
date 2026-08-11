@@ -8,7 +8,10 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :plot_avg_trials => (true, "Whether to draw ERP average overlay"),
 
     # Axis limits, labels, and direction
-    :title => (nothing, "Plot title. If nothing, automatically determined"),
+    :plot_title => (nothing, "Plot title. If nothing, automatically determined"),
+    :plot_title_fontsize => (16, "Font size for plot titles"),
+:plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+:plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
     :xlabel => ("Time (s)", "Label for x-axis"),
     :ylabel => ("μV", "Label for y-axis"),
     :xlim => (nothing, "X-axis limits as (min, max) tuple. If nothing, automatically determined"),

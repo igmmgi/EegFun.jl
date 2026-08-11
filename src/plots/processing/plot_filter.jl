@@ -8,12 +8,14 @@ const PLOT_FILTER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :display_plot => (true, "Whether to display the plot"),
 
     # Plot styling
-    :title => ("Filter Frequency Response", "Plot title"),
+    :plot_title => ("Filter Frequency Response", "Plot title"),
+:plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+:plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
     :xlabel => ("Frequency (Hz)", "X-axis label"),
     :ylabel => ("Magnitude (dB)", "Y-axis label"),
 
     # Font sizes
-    :title_fontsize => (24, "Font size for title"),
+    :plot_title_fontsize => (24, "Font size for title"),
     :label_fontsize => (22, "Font size for axis labels"),
     :tick_fontsize => (20, "Font size for tick labels"),
 
@@ -78,8 +80,8 @@ function plot_filter_response(
     # Base axis properties
     base_props = (
         xlabel = plot_kwargs[:xlabel],
-        title = plot_kwargs[:title],
-        titlesize = plot_kwargs[:title_fontsize],
+        title = plot_kwargs[:plot_title],
+        titlesize = plot_kwargs[:plot_title_fontsize],
         xlabelsize = plot_kwargs[:label_fontsize],
         ylabelsize = plot_kwargs[:label_fontsize],
         xticklabelsize = plot_kwargs[:tick_fontsize],
@@ -108,7 +110,7 @@ function plot_filter_response(
         xlabel = "Time (samples)",
         ylabel = "Amplitude",
         title = "Impulse Response",
-        titlesize = plot_kwargs[:title_fontsize],
+        titlesize = plot_kwargs[:plot_title_fontsize],
         xlabelsize = plot_kwargs[:label_fontsize],
         ylabelsize = plot_kwargs[:label_fontsize],
         xticklabelsize = plot_kwargs[:tick_fontsize],

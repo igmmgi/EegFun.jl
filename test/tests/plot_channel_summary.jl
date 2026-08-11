@@ -34,7 +34,7 @@ using Makie
                 ax,
                 df,
                 :range,
-                title = "Custom Title",
+                plot_title = "Custom Title",
                 xlabel = "Custom X Label",
                 bar_color = :red,
                 sort_values = true,
@@ -94,7 +94,7 @@ using Makie
         result = EegFun.plot_channel_summary(
             df,
             :range,
-            title = "Test Title",
+            plot_title = "Test Title",
             bar_color = :green,
             sort_values = true,
             display_plot = false,  # Don't display during testing
@@ -208,7 +208,7 @@ using Makie
         @test haskey(EegFun.PLOT_CHANNEL_SUMMARY_KWARGS, :average_over)
         @test haskey(EegFun.PLOT_CHANNEL_SUMMARY_KWARGS, :display_plot)
         @test haskey(EegFun.PLOT_CHANNEL_SUMMARY_KWARGS, :bar_color)
-        @test haskey(EegFun.PLOT_CHANNEL_SUMMARY_KWARGS, :title)
+        @test haskey(EegFun.PLOT_CHANNEL_SUMMARY_KWARGS, :plot_title)
         @test haskey(EegFun.PLOT_CHANNEL_SUMMARY_KWARGS, :xlabel)
         @test haskey(EegFun.PLOT_CHANNEL_SUMMARY_KWARGS, :bar_width)
         @test haskey(EegFun.PLOT_CHANNEL_SUMMARY_KWARGS, :bar_alpha)

@@ -16,8 +16,11 @@ const PLOT_RSA_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :ylabel => ("Correlation", "Label for y-axis"),
 
     # Title
-    :title => ("", "Plot title"),
-    :show_title => (true, "Show title (true/false)"),
+    :plot_title => ("", "Plot title"),
+    :plot_title_fontsize => (16, "Font size for plot titles"),
+:plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+:plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
+    :show_plot_title => (true, "Show title (true/false)"),
 
     # Line styling
     :linewidth => (2, "Line width"),
@@ -66,8 +69,8 @@ function plot_rdm_heatmap(rsa_data::RsaData; time_point::Union{Float64,Int,Nothi
     _get_val(k) = isa(plot_kwargs[k], Tuple) ? plot_kwargs[k][1] : plot_kwargs[k]
     display_plot = _get_val(:display_plot)
     figure_title = _get_val(:figure_title)
-    title_text = _get_val(:title)
-    show_title = _get_val(:show_title)
+    title_text = _get_val(:plot_title)
+    show_title = _get_val(:show_plot_title)
 
     # Determine which RDM to plot
     n_conditions = length(rsa_data.condition_names)
@@ -171,8 +174,8 @@ function plot_rdm_timecourse(rsa_data::RsaData; condition_pairs::Union{Vector{Tu
     _get_val(k) = isa(plot_kwargs[k], Tuple) ? plot_kwargs[k][1] : plot_kwargs[k]
     display_plot = _get_val(:display_plot)
     figure_title = _get_val(:figure_title)
-    title_text = _get_val(:title)
-    show_title = _get_val(:show_title)
+    title_text = _get_val(:plot_title)
+    show_title = _get_val(:show_plot_title)
 
     n_conditions = length(rsa_data.condition_names)
     times = rsa_data.times
@@ -297,8 +300,8 @@ function plot_model_correlations(rsa_data::RsaData; kwargs...)
     _get_val(k) = isa(plot_kwargs[k], Tuple) ? plot_kwargs[k][1] : plot_kwargs[k]
     display_plot = _get_val(:display_plot)
     figure_title = _get_val(:figure_title)
-    title_text = _get_val(:title)
-    show_title = _get_val(:show_title)
+    title_text = _get_val(:plot_title)
+    show_title = _get_val(:show_plot_title)
 
     times = rsa_data.times
     correlations = rsa_data.model_correlations

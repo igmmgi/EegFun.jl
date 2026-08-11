@@ -200,7 +200,7 @@ function plot_topography_stats(
     fig_title = figure_title == "Topography Plot" ? "$test_type Test — $data_label" : figure_title
 
     fig = Figure(size = (200 * n_cols + 100, 200 * n_rows + 50))
-    if plot_kwargs[:show_title]
+    if plot_kwargs[:show_plot_title]
         Label(fig[0, 1:n_cols], fig_title, fontsize = 18, font = :bold)
     end
 
@@ -218,7 +218,7 @@ function plot_topography_stats(
         row = div(i - 1, n_cols) + 1
         col = mod1(i, n_cols)
 
-        ax = Axis(fig[row, col], aspect = DataAspect(), title = bin_time_labels[i], titlesize = plot_kwargs[:title_fontsize])
+        ax = Axis(fig[row, col], aspect = DataAspect(), title = bin_time_labels[i], titlesize = plot_kwargs[:plot_title_fontsize])
         push!(axes, ax)
 
         # Map electrode values to layout order

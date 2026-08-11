@@ -73,6 +73,7 @@ plot_erp_stats(result_perm, channel_selection=channels(:PO7),
 function plot_erp_stats(
     result::StatsResult;
     layout::Union{Symbol,PlotLayout}=:single,
+    condition_selection::Function=conditions(),
     channel_selection::Function=channels(),
     channel_plot_order::Union{Nothing,Vector{Symbol}}=nothing,
     plot_erp::Bool=true,
@@ -96,7 +97,7 @@ function plot_erp_stats(
 
     # Prepare kwargs (reuse PLOT_ERP_KWARGS, override stats-specific defaults)
     plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs)
-    plot_kwargs[:figure_title] = get(kwargs, :figure_title, "ERP Stats")
+    plot_kwargs[:window_title] = get(kwargs, :window_title, "ERP Stats")
 
     # Compute colors for stats plot elements: [cond1, cond2, difference, t-values]
     default_stats_colors = [:blue, :red, :black, :purple]
@@ -148,11 +149,11 @@ function plot_erp_stats(
     end
 
     # Set title for single layout
-    if layout == :single && plot_kwargs[:show_title] && plot_kwargs[:title] == ""
+    if layout == :single && plot_kwargs[:show_plot_title] && plot_kwargs[:plot_title] == ""
         if length(selected_channels) == 1
-            plot_kwargs[:title] = "$(selected_channels[1]) - $title_suffix"
+            plot_kwargs[:plot_title] = "$(selected_channels[1]) - $title_suffix"
         else
-            plot_kwargs[:title] = "$(_print_vector(selected_channels)) - $title_suffix"
+            plot_kwargs[:plot_title] = "$(_print_vector(selected_channels)) - $title_suffix"
         end
     end
 
@@ -163,7 +164,10 @@ function plot_erp_stats(
     eeg_layout = result.data[1].layout
 
     # Create figure and apply layout system
-    fig = Figure(size=(800, 600), title=plot_kwargs[:figure_title], figure_padding=plot_kwargs[:figure_padding])
+    fig = Figure(size=(800, 600), title=plot_kwargs[:window_title], figure_padding=plot_kwargs[:figure_padding])
+
+
+
     plot_layout = create_layout(layout, selected_channels, eeg_layout; layout_kwargs...)
     axes, layout_channels = _apply_layout!(fig, plot_layout; plot_kwargs...)
 
@@ -180,6 +184,7 @@ function plot_erp_stats(
                 result,
                 channel_idx,
                 ch;
+                condition_selection=condition_selection,
                 plot_erp=plot_erp,
                 plot_difference=plot_difference,
                 plot_tvalues=plot_tvalues,
@@ -222,6 +227,11 @@ function plot_erp_stats(
         axislegend(axes[1], position=plot_kwargs[:legend_position], framevisible=plot_kwargs[:legend_framevisible])
     end
 
+    # Draw supertitle if user explicitly provided a figure_title
+    if !isempty(plot_kwargs[:figure_title])
+        Label(fig[0, :], plot_kwargs[:figure_title], fontsize=plot_kwargs[:figure_title_fontsize], font=:bold, tellwidth=false)
+    end
+
     if plot_kwargs[:display_plot]
         _display_figure(fig)
     end
@@ -241,6 +251,7 @@ function _plot_erp_stats_channel!(
     result::StatsResult,
     channel_idx::Int,
     channel_sym::Symbol;
+    condition_selection::Function=conditions(),
     plot_erp::Bool=true,
     plot_difference::Bool=false,
     plot_tvalues::Bool=false,
@@ -257,6 +268,8 @@ function _plot_erp_stats_channel!(
 )
     time_points = result.time_points
     t_values = result.stat_matrix.t[channel_idx, :]
+
+    plotted_erps = subset(collect(result.data); condition_selection=condition_selection)
 
     # Get condition averages for this channel (index by Symbol, not integer position)
     cond_A_erp = result.data[1]
@@ -282,17 +295,19 @@ function _plot_erp_stats_channel!(
 
     # Plot condition averages (ERP waveforms) with optional SE bands
     if plot_erp
-        cond_A_name = isempty(legend_labels) ? result.data[1].condition_name : legend_labels[1]
-        cond_B_name = length(legend_labels) >= 2 ? legend_labels[2] : result.data[2].condition_name
-        lines!(ax, erp_time_points, cond_A_avg, color=colors[1], linewidth=linewidth, label=add_labels ? cond_A_name : nothing)
-        lines!(ax, erp_time_points, cond_B_avg, color=colors[2], linewidth=linewidth, label=add_labels ? cond_B_name : nothing)
+        for (i, erp) in enumerate(plotted_erps)
+            erp_name = isempty(legend_labels) ? erp.condition_name : (i <= length(legend_labels) ? legend_labels[i] : erp.condition_name)
+            erp_avg = erp.data[!, channel_sym]
+            lines!(ax, erp_time_points, erp_avg, color=colors[i], linewidth=linewidth, label=add_labels ? erp_name : nothing)
 
-        # SE bands around individual condition ERPs (full display interval)
-        if plot_se
-            se_A = result.se_cond1[channel_idx, :]
-            se_B = result.se_cond2[channel_idx, :]
-            band!(ax, erp_time_points, cond_A_avg .- se_A, cond_A_avg .+ se_A, color=(colors[1], 0.15))
-            band!(ax, erp_time_points, cond_B_avg .- se_B, cond_B_avg .+ se_B, color=(colors[2], 0.15))
+            # SE bands around individual condition ERPs (full display interval)
+            if plot_se
+                orig_idx = findfirst(x -> x.condition == erp.condition, result.data)
+                if !isnothing(orig_idx)
+                    se_data = orig_idx == 1 ? result.se_cond1[channel_idx, :] : result.se_cond2[channel_idx, :]
+                    band!(ax, erp_time_points, erp_avg .- se_data, erp_avg .+ se_data, color=(colors[i], 0.15))
+                end
+            end
         end
     end
 
@@ -477,7 +492,7 @@ Plots a 2D heatmap of the t-statistics (Channels x Time).
 """
 function plot_stat_heatmap(result::StatsResult; kwargs...)
     plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs)
-    plot_kwargs[:figure_title] = get(kwargs, :figure_title, "T-Statistic Heatmap")
+    plot_kwargs[:window_title] = get(kwargs, :window_title, "T-Statistic Heatmap")
     plot_kwargs[:xlabel] = get(kwargs, :xlabel, "Time (s)")
     plot_kwargs[:ylabel] = get(kwargs, :ylabel, "Channels")
 
@@ -485,7 +500,7 @@ function plot_stat_heatmap(result::StatsResult; kwargs...)
     electrodes = result.electrodes
     t_values = result.stat_matrix.t
 
-    fig = Figure(size=(800, 600), title=plot_kwargs[:figure_title], figure_padding=plot_kwargs[:figure_padding])
+    fig = Figure(size=(800, 600), title=plot_kwargs[:window_title], figure_padding=plot_kwargs[:figure_padding])
 
     if length(electrodes) > 40
         yticks = (1:5:length(electrodes), String.(electrodes)[1:5:end])
@@ -509,6 +524,11 @@ function plot_stat_heatmap(result::StatsResult; kwargs...)
     Colorbar(fig[1, 2], hm, label="t-value")
 
     _apply_axis_properties!(ax; plot_kwargs...)
+
+    # Draw supertitle if user explicitly provided a figure_title
+    if !isempty(plot_kwargs[:figure_title])
+        Label(fig[0, :], plot_kwargs[:figure_title], fontsize=plot_kwargs[:figure_title_fontsize], font=:bold, tellwidth=false)
+    end
 
     if plot_kwargs[:display_plot]
         _display_figure(fig)

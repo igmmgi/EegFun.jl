@@ -448,8 +448,8 @@ Set properties for axes in a grid layout.
 """
 function _set_grid_axis_properties!(ax::Axis, channel::Symbol, row::Int, col::Int, total_rows::Int, total_cols::Int; kwargs...)
 
-    if haskey(kwargs, :title) && kwargs[:title] != ""
-        ax.title = kwargs[:title]
+    if haskey(kwargs, :plot_title) && kwargs[:plot_title] != ""
+        ax.title = kwargs[:plot_title]
     else
         ax.title = string(channel)
     end
@@ -491,6 +491,11 @@ function _apply_layout_axis_properties!(axes::Vector{Axis}, plot_layout::PlotLay
             hidespines!(ax)
         end
     end
+    
+    # Draw inner titles if requested (applies to all layouts, including :single)
+    for ax in axes
+        _draw_inner_title_if_requested!(ax; kwargs...)
+    end
 end
 
 
@@ -501,7 +506,10 @@ Apply common axis properties from keyword arguments.
 """
 function _apply_axis_properties!(ax::Axis; kwargs...)
 
-    ax.title = kwargs[:title]
+    ax.title = kwargs[:plot_title]
+    if haskey(kwargs, :plot_title_fontsize) && !isnothing(kwargs[:plot_title_fontsize])
+        ax.titlesize = kwargs[:plot_title_fontsize]
+    end
     ax.xlabel = kwargs[:xlabel]
     ax.ylabel = kwargs[:ylabel]
 
@@ -529,6 +537,8 @@ function _apply_axis_properties!(ax::Axis; kwargs...)
     ax.xminorgridvisible = kwargs[:xminorgrid]
     ax.yminorgridvisible = kwargs[:yminorgrid]
 
+    # Draw inner titles if requested
+    _draw_inner_title_if_requested!(ax; kwargs...)
 end
 
 
@@ -562,4 +572,21 @@ function _add_scale_axis!(
     scale_ax.title = "Scale"
 
     return scale_ax
+end
+
+"""
+    _draw_inner_title_if_requested!(ax::Axis; kwargs...)
+
+Draws the title inside the axis if `plot_title_position` is provided.
+"""
+function _draw_inner_title_if_requested!(ax::Axis; kwargs...)
+    if haskey(kwargs, :plot_title_position) && !isnothing(kwargs[:plot_title_position])
+        title_str = isempty(ax.title[]) ? "" : ax.title[]
+        if !isempty(title_str)
+            text!(ax, kwargs[:plot_title_position][1], kwargs[:plot_title_position][2],
+                  text = title_str, space = :relative, align = kwargs[:plot_title_align],
+                  fontsize = kwargs[:plot_title_fontsize], font = :bold)
+            ax.title = ""
+        end
+    end
 end

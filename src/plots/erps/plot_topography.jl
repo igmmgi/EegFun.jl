@@ -131,15 +131,15 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
     num_levels = pop!(plot_kwargs, :num_levels)
 
     # Set title based on user preferences and data
-    if plot_kwargs[:show_title]
-        if plot_kwargs[:title] != ""
-            ax.title = plot_kwargs[:title] # Use user-provided title
+    if plot_kwargs[:show_plot_title]
+        if plot_kwargs[:plot_title] != ""
+            ax.title = plot_kwargs[:plot_title] # Use user-provided title
         else # get time from data 
             time_min, time_max = extrema(dat.time)
             time_unit = get(plot_kwargs, :time_unit, :s)
             ax.title = _format_time_range(time_min, time_max, time_unit)
         end
-        ax.titlesize = plot_kwargs[:title_fontsize]
+        ax.titlesize = plot_kwargs[:plot_title_fontsize]
     end
 
     # Compute channel data averaged over time window

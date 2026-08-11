@@ -17,8 +17,11 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :yreversed => (false, "Whether to reverse the y-axis"),
 
     # Title
-    :title => ("", "Plot title"),
-    :show_title => (true, "Show title (true/false)"),
+    :plot_title => ("", "Plot title"),
+    :plot_title_fontsize => (16, "Font size for plot titles"),
+:plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+:plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
+    :show_plot_title => (true, "Show title (true/false)"),
 
     # Image styling
     :colormap => (:jet, "Colormap for the image"),
@@ -170,8 +173,8 @@ function plot_erp_image(
 
     # Set default plot title only for single layouts (same as plot_erp)
     # For grid/topo layouts, we want individual channel names, not a global title
-    if plot_kwargs[:show_title] && plot_kwargs[:title] == "" && layout == :single
-        plot_kwargs[:title] = length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(_print_vector(all_plot_channels))"
+    if plot_kwargs[:show_plot_title] && plot_kwargs[:plot_title] == "" && layout == :single
+        plot_kwargs[:plot_title] = length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(_print_vector(all_plot_channels))"
     end
 
     # Handle colorbar positioning for grid layouts

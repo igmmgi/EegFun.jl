@@ -122,15 +122,15 @@ function plot_topography_3d(
     ax = LScene(fig[1, 1], show_axis = false)
 
     # Add title
-    if plot_kwargs[:show_title]
-        if plot_kwargs[:title] != ""
-            title_str = plot_kwargs[:title]
+    if plot_kwargs[:show_plot_title]
+        if plot_kwargs[:plot_title] != ""
+            title_str = plot_kwargs[:plot_title]
         else
             time_min, time_max = extrema(dat_subset.data.time)
             time_unit = get(plot_kwargs, :time_unit, :s)
             title_str = _format_time_range(time_min, time_max, time_unit)
         end
-        Label(fig[1, 1, Top()], title_str, fontsize = plot_kwargs[:title_fontsize], font = :bold)
+        Label(fig[1, 1, Top()], title_str, fontsize = plot_kwargs[:plot_title_fontsize], font = :bold)
     end
 
     # Load 3D head mesh and extract vertices

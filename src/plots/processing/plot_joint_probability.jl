@@ -11,11 +11,13 @@ const PLOT_JOINT_PROBABILITY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Axis styling
     :xlabel => ("Electrode", "Label for x-axis"),
     :ylabel => ("Joint Probability", "Label for y-axis"),
-    :title => ("", "Plot title"),
+    :plot_title => ("", "Plot title"),
+:plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+:plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
     :xtick_rotation => (π / 4, "Rotation angle for x-axis tick labels"),
 
     # Font sizes
-    :title_fontsize => (16, "Font size for title"),
+    :plot_title_fontsize => (16, "Font size for title"),
     :label_fontsize => (14, "Font size for axis labels"),
     :tick_fontsize => (12, "Font size for tick labels"),
 
@@ -83,8 +85,8 @@ function plot_joint_probability!(fig::Figure, ax::Axis, dat::DataFrame; kwargs..
     ax.xticklabelrotation = plot_kwargs[:xtick_rotation]
     ax.xlabel = plot_kwargs[:xlabel]
     ax.ylabel = plot_kwargs[:ylabel]
-    ax.title = plot_kwargs[:title]
-    ax.titlesize = plot_kwargs[:title_fontsize]
+    ax.title = plot_kwargs[:plot_title]
+    ax.titlesize = plot_kwargs[:plot_title_fontsize]
     ax.xlabelsize = plot_kwargs[:label_fontsize]
     ax.ylabelsize = plot_kwargs[:label_fontsize]
     ax.xticklabelsize = plot_kwargs[:tick_fontsize]

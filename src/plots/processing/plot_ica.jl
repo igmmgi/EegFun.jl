@@ -25,9 +25,11 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :num_levels => (20, "Number of contour levels (for ICA plots). For standard plots, use ylim instead."),
 
     # Title parameters
-    :title => ("", "Plot title"),
-    :title_fontsize => (16, "Font size for the title"),
-    :show_title => (true, "Whether to show the title"),
+    :plot_title => ("", "Plot title"),
+:plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+:plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
+    :plot_title_fontsize => (16, "Font size for the title"),
+    :show_plot_title => (true, "Whether to show the title"),
     :time_unit =>
         (:s, "Time unit for display labels (:s or :ms). Only affects title strings — all intervals and selections remain in seconds."),
 
@@ -1454,7 +1456,7 @@ const PLOT_ICA_QUALITY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :min_peak_ratio => (0.7, "Minimum peak ratio for ECG detection"),
 
     # Plot styling
-    :title_fontsize => (16, "Font size for plot titles"),
+    :plot_title_fontsize => (16, "Font size for plot titles"),
     :label_fontsize => (14, "Font size for axis labels"),
     :tick_fontsize => (12, "Font size for tick labels"),
     :legend_fontsize => (12, "Font size for legend"),

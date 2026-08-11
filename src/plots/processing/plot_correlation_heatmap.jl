@@ -7,9 +7,11 @@ const PLOT_CORRELATION_HEATMAP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :display_plot => (true, "Whether to display the plot"),
 
     # Title and labels
-    :title => ("", "Plot title"),
-    :title_fontsize => (16, "Font size for the title"),
-    :show_title => (true, "Whether to show the title"),
+    :plot_title => ("", "Plot title"),
+:plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+:plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
+    :plot_title_fontsize => (16, "Font size for the title"),
+    :show_plot_title => (true, "Whether to show the title"),
 
     # Heatmap styling
     :colormap => (:jet, "Colormap for the heatmap"),
@@ -120,9 +122,9 @@ function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kw
     ax.yticklabelsize = plot_kwargs[:tick_fontsize]
 
     # Set title
-    if plot_kwargs[:show_title] && !isempty(plot_kwargs[:title])
-        ax.title = plot_kwargs[:title]
-        ax.titlesize = plot_kwargs[:title_fontsize]
+    if plot_kwargs[:show_plot_title] && !isempty(plot_kwargs[:plot_title])
+        ax.title = plot_kwargs[:plot_title]
+        ax.titlesize = plot_kwargs[:plot_title_fontsize]
     end
 
     # Configure grid using the new axis styling function
