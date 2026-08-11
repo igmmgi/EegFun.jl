@@ -504,12 +504,13 @@ using OrderedCollections
             data_vec = [erp1, erp2, erp3]
 
             # conditions(String) - select by single name
-            @test EegFun.conditions("condition_1")(data_vec) == [true, false, false]
-            @test EegFun.conditions("condition_2")(data_vec) == [false, true, false]
+            @test EegFun.conditions("condition_1")(data_vec) == [1]
+            @test EegFun.conditions("condition_2")(data_vec) == [2]
 
             # conditions(Vector{String}) - select by multiple names
-            @test EegFun.conditions(["condition_1", "condition_3"])(data_vec) == [true, false, true]
-            @test EegFun.conditions(["condition_2"])(data_vec) == [false, true, false]
+            @test EegFun.conditions(["condition_1", "condition_3"])(data_vec) == [1, 3]
+            @test EegFun.conditions(["condition_3", "condition_1"])(data_vec) == [3, 1]
+            @test EegFun.conditions(["condition_2"])(data_vec) == [2]
 
             # conditions_not(String) - exclude by single name
             @test EegFun.conditions_not("condition_1")(data_vec) == [false, true, true]

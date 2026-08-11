@@ -1511,8 +1511,8 @@ conditions() = x -> fill(true, length(x))  # Default: select all conditions give
 conditions(condition_indices::Union{Vector{Int},UnitRange}) = x -> intersect(condition_indices, 1:length(x))
 conditions(condition_index::Int) = x -> intersect([condition_index], 1:length(x))
 conditions(condition_indices::Int...) = conditions(collect(condition_indices))
-conditions(condition_names::Vector{String}) = x -> filter(!isnothing, [findfirst(dat -> condition_name(dat) == n, x) for n in condition_names])
-conditions(cond_name::String) = x -> filter(!isnothing, [findfirst(dat -> condition_name(dat) == cond_name, x)])
+conditions(condition_names::Vector{String}) = x -> Vector{Int}(filter(!isnothing, [findfirst(dat -> condition_name(dat) == n, x) for n in condition_names]))
+conditions(cond_name::String) = x -> Vector{Int}(filter(!isnothing, [findfirst(dat -> condition_name(dat) == cond_name, x)]))
 conditions(predicate::Function) = predicate  # Allow custom function predicates
 """
     conditions_not(index::Int)
