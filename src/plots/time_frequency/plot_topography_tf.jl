@@ -138,7 +138,7 @@ function plot_topography(
     freq_str = "$(round(Int, freq_range[1]))-$(round(Int, freq_range[2])) Hz"
     time_str = isnothing(interval_selection) ? "all times" : @sprintf("%.0f–%.0f ms", selected_times[1] * 1000, selected_times[end] * 1000)
     default_title = "$(tf_plot.condition_name) — $freq_str, $time_str"
-    title = figure_title == "Topography Plot" ? default_title : figure_title
+    title = isempty(figure_title) ? default_title : figure_title
 
     # Create figure
     fig = Figure(size = (400, 400))
@@ -512,12 +512,10 @@ function plot_topography_stats(
     test_type = isa(result, TFAnalyticResult) ? "Analytic" : "Permutation"
     data_label = topo_data == :tvalues ? "t-statistic" : "Power Difference"
     freq_str = "$(round(Int, freq_range[1]))–$(round(Int, freq_range[2])) Hz"
-    fig_title = figure_title == "Topography Plot" ? "$test_type Test — $data_label ($freq_str)" : figure_title
+    fig_title = isempty(figure_title) ? "$test_type Test — $data_label ($freq_str)" : figure_title
 
     fig = Figure(size = (200 * n_cols + 100, 200 * n_rows + 50))
-    if plot_kwargs[:show_plot_title]
-        Label(fig[0, 1:n_cols], fig_title, fontsize = 18, font = :bold)
-    end
+    Label(fig[0, 1:n_cols], fig_title, fontsize = 18, font = :bold)
 
     # Extract colorbar kwargs
     colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)

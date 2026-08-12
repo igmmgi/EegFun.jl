@@ -25,11 +25,10 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     ),
 
     # Title
-    :plot_title => ("", "Plot title"),
+    :plot_title => (nothing, "Plot title"),
     :plot_title_fontsize => (16, "Font size for plot titles"),
-:plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
-:plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
-    :show_plot_title => (true, "Show title (true/false)"),
+    :plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+    :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
 
     # Line styling
     :linewidth => (2, "Line width for ERPs"),
@@ -66,17 +65,8 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :scale_x_value => (nothing, "X-axis scale value/step size (e.g. 0.1 for 100 ms)"),
     :scale_y_value => (nothing, "Y-axis scale value/step size (e.g. 5.0 for 5 μV)"),
 
-    # Layout parameters (for topo and other layouts)
-    :layout_topo_plot_width => (0.05, "Width of individual plots (fraction of figure width)"),
-    :layout_topo_plot_height => (0.05, "Height of individual plots (fraction of figure height)"),
-    :layout_topo_scale_offset => (0.1, "Offset factor for scale plot position"),
-    :layout_topo_scale_pos => ((0.8, -0.8), "Fallback position for scale plot in topo layout as (x, y) tuple"),
-
-    # Grid layout parameters
-    :layout_grid_rowgap => (10, "Gap between rows (in pixels)"),
-    :layout_grid_colgap => (10, "Gap between columns (in pixels)"),
-    :layout_grid_dims => (nothing, "Grid dimensions as (rows, cols) tuple for grid layouts. If nothing, automatically determined"),
-    :layout_grid_skip_positions => (nothing, "Positions to skip in grid layout as vector of (row, col) tuples, e.g., [(2,1), (2,3)]"),
+    # Layout parameters - dynamically pull all layout options
+    [Symbol("layout_$(attr)") => val for (attr, val) in LAYOUT_KWARGS]...,
 
     # General layout parameters
     :figure_padding => ((10, 30, 10, 10), "Padding around entire figure as (left, right, bottom, top) tuple (in pixels)"),
@@ -418,7 +408,7 @@ function _plot_erp_core(
 
     # set default plot title only for single layouts
     # For grid/topo layouts, we want individual channel names, not a global title
-    if plot_kwargs[:show_plot_title] && plot_kwargs[:plot_title] == "" && layout == :single
+    if isnothing(plot_kwargs[:plot_title]) && layout == :single
         plot_kwargs[:plot_title] = length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(_print_vector(all_plot_channels))"
         if plot_kwargs[:average_channels]
             plot_kwargs[:plot_title] = "Avg: $(_print_vector(original_channels))"

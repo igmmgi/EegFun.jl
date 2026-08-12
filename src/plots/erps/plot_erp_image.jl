@@ -3,7 +3,8 @@
 const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
     :display_plot => (true, "Display the plot (true/false)"),
-    :figure_title => ("ERP Image Plot", "Title for the plot window"),
+    :figure_title => ("", "Title drawn at the top of the entire figure canvas"),
+    :figure_title_fontsize => (24, "Font size for figure title"),
     :interactive => (true, "Enable interactive features (true/false)"),
     :zoom_step => (0.2, "Fractional zoom step for arrow keys (e.g. 0.2 means 20% zoom in/out)"),
     :selection_color => (:blue, "Color for interactive selection rectangles"),
@@ -17,11 +18,10 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :yreversed => (false, "Whether to reverse the y-axis"),
 
     # Title
-    :plot_title => ("", "Plot title"),
+    :plot_title => (nothing, "Plot title"),
     :plot_title_fontsize => (16, "Font size for plot titles"),
-:plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
-:plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
-    :show_plot_title => (true, "Show title (true/false)"),
+    :plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+    :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
 
     # Image styling
     :colormap => (:jet, "Colormap for the image"),
@@ -32,10 +32,15 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :plot_erp => (true, "Whether to plot ERP average overlay"),
     :boxcar_average => (1, "Boxcar average window size for smoothing the ERP image (1 = no smoothing)"),
 
-    # Colorbar
+    # Colorbar parameters - get all Colorbar attributes with their actual defaults
+    [
+        Symbol("colorbar_$(attr)") => (get(COLORBAR_DEFAULTS, attr, nothing), "Colorbar $(attr) parameter") for
+        attr in propertynames(Colorbar)
+    ]...,
+    
+    # Specific colorbar overrides for erp_image
     :colorbar_plot => (true, "Whether to show the colorbar"),
-    :colorbar_position => ((1, 2), "Position of the colorbar as (row, col) tuple"),
-    :colorbar_width => (30, "Width of the colorbar in pixels"),
+    :colorbar_position => (:right, "Position of the colorbar (:right, :left, :top, :bottom, or tuple)"),
     :colorbar_label => ("μV", "Label for the colorbar"),
     :colorbar_plot_numbers => ([], "Plot indices for which to show colorbars. Empty list shows colorbars for all plots."),
 
@@ -48,16 +53,8 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Origin lines
     :add_xy_origin => (true, "Add origin lines at x=0 and y=0 (true/false)"),
 
-    # Layout parameters (for topo and other layouts)
-    :layout_topo_plot_width => (0.07, "Width of individual plots (fraction of figure width)"),
-    :layout_topo_plot_height => (0.07, "Height of individual plots (fraction of figure height)"),
-    :layout_topo_scale_pos => ((0.95, 0.05), "Fallback position for scale plot in topo layout as (x, y) tuple"),
-
-    # Grid layout parameters
-    :layout_grid_rowgap => (10, "Gap between rows (in pixels)"),
-    :layout_grid_colgap => (10, "Gap between columns (in pixels)"),
-    :layout_grid_dims => (nothing, "Grid dimensions as (rows, cols) tuple for grid layouts. If nothing, automatically determined"),
-    :layout_grid_skip_positions => (nothing, "Positions to skip in grid layout as vector of (row, col) tuples, e.g., [(2,1), (2,3)]"),
+    # Layout parameters - dynamically pull all layout options
+    [Symbol("layout_$(attr)") => val for (attr, val) in LAYOUT_KWARGS]...,
 
     # General layout parameters
     :figure_padding => ((10, 30, 10, 10), "Padding around entire figure as (left, right, bottom, top) tuple (in pixels)"),
@@ -173,7 +170,7 @@ function plot_erp_image(
 
     # Set default plot title only for single layouts (same as plot_erp)
     # For grid/topo layouts, we want individual channel names, not a global title
-    if plot_kwargs[:show_plot_title] && plot_kwargs[:plot_title] == "" && layout == :single
+    if isnothing(plot_kwargs[:plot_title]) && layout == :single
         plot_kwargs[:plot_title] = length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(_print_vector(all_plot_channels))"
     end
 
@@ -185,68 +182,32 @@ function plot_erp_image(
     # Extract layout_* parameters, remove prefix, and pass to create_layout
     layout_kwargs = _extract_layout_kwargs(plot_kwargs)
 
+    # Extract colorbar kwargs
+    colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
+
     # Create figure and apply layout system
     fig = Figure()
 
-    # For grid layouts with colorbars, we need to expand the grid
+    plot_layout = create_layout(layout, all_plot_channels, dat_subset.layout; layout_kwargs...)
+
+    # For grid layouts with colorbars, we use Makie subgrids
     if layout == :grid && colorbar_enabled
-        # Get the grid dimensions that would be created
-        temp_layout = create_layout(layout, all_plot_channels, dat_subset.layout; layout_kwargs...)
-        rows, cols = temp_layout.dims
-
-        # Expand grid to accommodate colorbars (default: to the right)
-        if !isnothing(user_colorbar_position) && user_colorbar_position isa Tuple
-            cb_row_offset, cb_col_offset = user_colorbar_position
-            if cb_row_offset > 1
-                # Colorbars below: double rows
-                total_rows = rows * 2
-                total_cols = cols
-            else
-                # Colorbars to the right: double columns
-                total_rows = rows
-                total_cols = cols * 2
-            end
-        else
-            # Default: colorbars to the right
-            total_rows = rows
-            total_cols = cols * 2
-        end
-
-        # Create a modified layout with expanded dimensions
-        # We'll manually create axes in the expanded grid
-        plot_layout = create_layout(layout, all_plot_channels, dat_subset.layout; layout_kwargs...)
         axes = Axis[]
         channels = Symbol[]
 
-        # Create axes in the expanded grid
+        rows, cols = plot_layout.dims
         for (idx, channel) in enumerate(plot_layout.channels)
             base_row = div(idx - 1, cols) + 1
             base_col = mod1(idx, cols)
 
-            if !isnothing(user_colorbar_position) && user_colorbar_position isa Tuple
-                cb_row_offset, cb_col_offset = user_colorbar_position
-                if cb_row_offset > 1
-                    # Colorbars below
-                    plot_row = (base_row - 1) * 2 + 1
-                    plot_col = base_col
-                else
-                    # Colorbars to the right
-                    plot_row = base_row
-                    plot_col = (base_col - 1) * 2 + 1
-                end
-            else
-                # Default: colorbars to the right
-                plot_row = base_row
-                plot_col = (base_col - 1) * 2 + 1
-            end
-
-            ax = Axis(fig[plot_row, plot_col])
+            # Create a subgrid for this cell
+            sg = GridLayout(fig[base_row, base_col])
+            ax = Axis(sg[1, 1])
             push!(axes, ax)
             push!(channels, channel)
         end
     else
-        # For single or topo layouts, use normal layout system
-        plot_layout = create_layout(layout, all_plot_channels, dat_subset.layout; layout_kwargs...)
+        # For single or topo layouts (or grid without colorbars), use normal layout system
         axes, channels = _apply_layout!(fig, plot_layout; plot_kwargs...)
     end
 
@@ -337,46 +298,23 @@ function plot_erp_image(
             end
 
             if should_show_colorbar
+                cb_pos = _get_colorbar_position(plot_kwargs[:colorbar_position], 1:1, 1:1)
+                
                 if plot_layout.type == :single
-                    # Single layout: use provided position
-                    colorbar_position = plot_kwargs[:colorbar_position]
-                    Colorbar(fig[colorbar_position...], hm, width = plot_kwargs[:colorbar_width], label = plot_kwargs[:colorbar_label])
+                    # Single layout
+                    Colorbar(fig[cb_pos...], hm; colorbar_kwargs...)
                 elseif plot_layout.type == :grid
-                    # Grid layout: calculate position based on plot position
+                    # Grid layout: fetch the subgrid we created
                     rows, cols = plot_layout.dims
                     idx = findfirst(==(channel), channels)
                     base_row = div(idx - 1, cols) + 1
                     base_col = mod1(idx, cols)
-
-                    if !isnothing(user_colorbar_position) && user_colorbar_position isa Tuple
-                        cb_row_offset, cb_col_offset = user_colorbar_position
-                        if cb_row_offset > 1
-                            # Colorbars below
-                            plot_row = (base_row - 1) * 2 + 1
-                            plot_col = base_col
-                            colorbar_row = plot_row + (cb_row_offset - 1)
-                            colorbar_col = plot_col + (cb_col_offset - 1)
-                        else
-                            # Colorbars to the right
-                            plot_row = base_row
-                            plot_col = (base_col - 1) * 2 + 1
-                            colorbar_row = plot_row + (cb_row_offset - 1)
-                            colorbar_col = plot_col + (cb_col_offset - 1)
-                        end
-                    else
-                        # Default: colorbar to the right
-                        plot_row = base_row
-                        plot_col = (base_col - 1) * 2 + 1
-                        colorbar_row = plot_row
-                        colorbar_col = plot_col + 1
-                    end
-
-                    Colorbar(
-                        fig[colorbar_row, colorbar_col],
-                        hm,
-                        width = plot_kwargs[:colorbar_width],
-                        label = plot_kwargs[:colorbar_label],
-                    )
+                    
+                    # The subgrid is at fig.layout.content matching base_row, base_col
+                    # An easier way is just to grab the parent of the axis
+                    sg = ax.layoutobservables.gridcontent[].parent
+                    
+                    Colorbar(sg[cb_pos...], hm; colorbar_kwargs...)
                 end
             end
         end
@@ -476,27 +414,23 @@ function plot_erp_image(
     # The key is that all topo elements use absolute positioning within the same grid cell
     # and don't participate in grid size calculations
     if plot_layout.type == :topo && plot_kwargs[:colorbar_plot] && !isempty(heatmaps) && !isnothing(scale_pos)
-        # Calculate colorbar position: place it to the right of the scale axis
-        # The scale axis width is Relative(plot_kwargs[:layout_topo_plot_width])
-        # We add a small fixed offset (0.02) to position the colorbar next to it
-        # scale_width = plot_kwargs[:layout_topo_plot_width]
+        # Topo layout colorbar
+        cb_pos = _get_colorbar_position(plot_kwargs[:colorbar_position], 1:1, 1:1)
+        
+        # We add a small fixed offset (0.015) to position the colorbar next to it
         colorbar_halign = scale_pos[1] + 0.015  # Position to the right of scale axis
-
-        # Get scale height from layout metadata (same as channel plots and scale axis)
-        scale_height = plot_layout.metadata[:topo_plot_height]
+        colorbar_valign = scale_pos[2]
 
         # Create colorbar in fig[1, 1] with halign/valign, positioned to the right of scale axis
-        # Use tellwidth=false and tellheight=false to prevent it from affecting grid layout
         Colorbar(
             fig[1, 1],
-            heatmaps[1],
+            heatmaps[1];
             label = plot_kwargs[:colorbar_label],
-            width = plot_kwargs[:colorbar_width],
-            height = Relative(scale_height),
             halign = colorbar_halign,
-            valign = scale_pos[2],
-            tellwidth = false,
+            valign = colorbar_valign,
             tellheight = false,
+            tellwidth = false,
+            colorbar_kwargs...
         )
     end
 

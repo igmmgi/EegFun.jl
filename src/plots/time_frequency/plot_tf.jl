@@ -15,7 +15,15 @@ const PLOT_TF_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Colormap and color range
     :colormap => (:viridis, "Colormap for the heatmap"),
     :colorrange => (nothing, "Color range as (min, max) tuple. If nothing, automatically determined from data"),
-    :colorbar => (true, "Whether to show a colorbar"),
+    # Colorbar parameters - get all Colorbar attributes with their actual defaults
+    [
+        Symbol("colorbar_$(attr)") => (get(COLORBAR_DEFAULTS, attr, nothing), "Colorbar $(attr) parameter") for
+        attr in propertynames(Colorbar)
+    ]...,
+    
+    # Specific colorbar overrides for tf
+    :colorbar_plot => (true, "Whether to show the colorbar"),
+    :colorbar_position => (:right, "Position of the colorbar (:right, :left, :top, :bottom, or tuple)"),
     :colorbar_label => (nothing, "Custom colorbar label. If nothing, automatically determined"),
 
     # Axis
@@ -24,8 +32,8 @@ const PLOT_TF_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :interpolate => (false, "Whether to interpolate the heatmap for a smoother appearance"),
     :plot_title => (nothing, "Plot title. If nothing, automatically determined from condition name and channel"),
     :plot_title_fontsize => (16, "Font size for plot titles"),
-:plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
-:plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
+    :plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+    :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
     :xticks => (nothing, "Custom x-axis ticks (e.g., -0.2:0.2:1.0)"),
     :yticks => (nothing, "Custom y-axis ticks (e.g., [2, 10, 20, 40, 80])"),
     :time_unit => (
@@ -36,14 +44,8 @@ const PLOT_TF_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Baseline
     :baseline_method => (:db, "Baseline correction method: :db, :absolute, :relative, :relchange, :percent, :zscore"),
 
-    # Grid layout parameters
-    :layout_grid_dims => (nothing, "Grid dimensions as (rows, cols) tuple. If nothing, automatically determined"),
-    :layout_grid_rowgap => (10, "Gap between rows in grid layout (pixels)"),
-    :layout_grid_colgap => (10, "Gap between columns in grid layout (pixels)"),
-
-    # Topo layout parameters
-    :layout_topo_plot_width => (0.10, "Width of individual plots in topo layout (fraction of figure width)"),
-    :layout_topo_plot_height => (0.10, "Height of individual plots in topo layout (fraction of figure height)"),
+    # Layout parameters - dynamically pull all layout options
+    [Symbol("layout_$(attr)") => val for (attr, val) in LAYOUT_KWARGS]...,
 )
 
 
@@ -85,9 +87,14 @@ function plot_tf(
     isempty(tf_data) && error("Empty TimeFreqData vector")
 
     plot_kwargs = _merge_plot_kwargs(PLOT_TF_KWARGS, kwargs)
+    
+    # Extract colorbar/layout kwargs
+    colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
+    layout_kwargs = _extract_layout_kwargs(plot_kwargs)
+    
     colormap = plot_kwargs[:colormap]
     colorrange = plot_kwargs[:colorrange]
-    colorbar = plot_kwargs[:colorbar]
+    colorbar = pop!(plot_kwargs, :colorbar_plot, true)
     ylogscale = plot_kwargs[:ylogscale]
     xlim = plot_kwargs[:xlim]
     xticks = plot_kwargs[:xticks]
@@ -95,7 +102,7 @@ function plot_tf(
     interpolate = plot_kwargs[:interpolate]
     baseline_method = plot_kwargs[:baseline_method]
     time_unit = plot_kwargs[:time_unit]
-    grid_dims = plot_kwargs[:layout_grid_dims]
+    grid_dims = get(layout_kwargs, :grid_dims, nothing)
 
     n = length(tf_data)
     rows, cols = isnothing(grid_dims) ? _best_rect(n) : grid_dims
@@ -181,7 +188,9 @@ function plot_tf(
         cb_label =
             isnothing(plot_kwargs[:colorbar_label]) ? _tf_colorbar_label(first(tf_plots), baseline_interval, baseline_method) :
             plot_kwargs[:colorbar_label]
-        Colorbar(fig[1:rows, cols+1], last_hm, label = cb_label)
+        
+        cb_pos = _get_colorbar_position(plot_kwargs[:colorbar_position], 1:rows, 1:cols)
+        Colorbar(fig[cb_pos...], last_hm; label = cb_label, colorbar_kwargs...)
     end
 
     _display_figure(fig)
@@ -198,11 +207,16 @@ function plot_tf(
 )
 
     plot_kwargs             = _merge_plot_kwargs(PLOT_TF_KWARGS, kwargs)
+    
+    # Extract colorbar/layout kwargs
+    colorbar_kwargs         = _extract_colorbar_kwargs!(plot_kwargs)
+    layout_kwargs           = _extract_layout_kwargs(plot_kwargs)
+    
     layout                  = plot_kwargs[:layout]
     colormap                = plot_kwargs[:colormap]
     colorrange              = plot_kwargs[:colorrange]
     title                   = plot_kwargs[:plot_title]
-    colorbar                = plot_kwargs[:colorbar]
+    colorbar                = pop!(plot_kwargs, :colorbar_plot, true)
     ylogscale               = plot_kwargs[:ylogscale]
     xlim                    = plot_kwargs[:xlim]
     xticks                  = plot_kwargs[:xticks]
@@ -210,11 +224,11 @@ function plot_tf(
     interpolate             = plot_kwargs[:interpolate]
     baseline_method         = plot_kwargs[:baseline_method]
     time_unit               = plot_kwargs[:time_unit]
-    layout_grid_dims        = plot_kwargs[:layout_grid_dims]
-    layout_grid_rowgap      = plot_kwargs[:layout_grid_rowgap]
-    layout_grid_colgap      = plot_kwargs[:layout_grid_colgap]
-    layout_topo_plot_width  = plot_kwargs[:layout_topo_plot_width]
-    layout_topo_plot_height = plot_kwargs[:layout_topo_plot_height]
+    layout_grid_dims        = get(layout_kwargs, :grid_dims, nothing)
+    layout_grid_rowgap      = get(layout_kwargs, :grid_rowgap, 10)
+    layout_grid_colgap      = get(layout_kwargs, :grid_colgap, 10)
+    layout_topo_plot_width  = get(layout_kwargs, :topo_plot_width, 0.1)
+    layout_topo_plot_height = get(layout_kwargs, :topo_plot_height, 0.1)
 
     # Apply baseline if requested, but only if data hasn't already been baselined
     if !isnothing(baseline_interval) && !isnothing(tf_data.baseline)
@@ -355,13 +369,18 @@ function plot_tf(
         cb_label =
             isnothing(plot_kwargs[:colorbar_label]) ? _tf_colorbar_label(tf_plot, baseline_interval, baseline_method) :
             plot_kwargs[:colorbar_label]
+            
         if layout === :single
-            Colorbar(fig[1, 2], last_hm, label = cb_label)
+            cb_pos = _get_colorbar_position(plot_kwargs[:colorbar_position], 1:1, 1:1)
+            Colorbar(fig[cb_pos...], last_hm; label = cb_label, colorbar_kwargs...)
         elseif layout === :grid
             rows, cols = plot_layout.dims
-            Colorbar(fig[1:rows, cols+1], last_hm, label = cb_label)
+            cb_pos = _get_colorbar_position(plot_kwargs[:colorbar_position], 1:rows, 1:cols)
+            Colorbar(fig[cb_pos...], last_hm; label = cb_label, colorbar_kwargs...)
         else # :topo
-            Colorbar(fig[1, 2], last_hm, label = cb_label, height = Relative(0.5))
+            # Topo is a bit weird because of the scale axis, let's just stick it on the right
+            cb_pos = _get_colorbar_position(plot_kwargs[:colorbar_position], 1:1, 1:1)
+            Colorbar(fig[cb_pos[1], cb_pos[2] + 1], last_hm; label = cb_label, height = Relative(0.5), colorbar_kwargs...)
         end
     end
 

@@ -167,10 +167,10 @@ using DataFrames
         axes, _ = EegFun._apply_layout!(fig, layout; xgrid = true, ygrid = true, xminorgrid = false, yminorgrid = false)
 
         # Test _apply_layout_axis_properties!
-        kwargs = Dict(:plot_title => "")
+        kwargs = Dict(:plot_title => nothing)
         EegFun._apply_layout_axis_properties!(axes, layout; kwargs...)
 
-        # Should set channel names as titles when user title is empty
+        # Should set channel names as titles when user title is nothing
         @test axes[1].title[] == "Ch1"
         @test axes[2].title[] == "Ch2"
 
@@ -191,10 +191,10 @@ using DataFrames
         axes, _ = EegFun._apply_layout!(fig, layout; xgrid = true, ygrid = true, xminorgrid = false, yminorgrid = false)
 
         # Test _apply_layout_axis_properties! for topo
-        kwargs = Dict(:title => "")
+        kwargs = Dict(:plot_title => nothing)
         EegFun._apply_layout_axis_properties!(axes, layout; kwargs...)
 
-        # Should set channel names as titles when user title is empty
+        # Should set channel names as titles when user title is nothing
         @test axes[1].title[] == "Ch1"
         @test axes[2].title[] == "Ch2"
 

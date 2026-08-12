@@ -149,7 +149,7 @@ function plot_erp_stats(
     end
 
     # Set title for single layout
-    if layout == :single && plot_kwargs[:show_plot_title] && plot_kwargs[:plot_title] == ""
+    if layout == :single && isnothing(plot_kwargs[:plot_title])
         if length(selected_channels) == 1
             plot_kwargs[:plot_title] = "$(selected_channels[1]) - $title_suffix"
         else

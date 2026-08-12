@@ -448,7 +448,7 @@ Set properties for axes in a grid layout.
 """
 function _set_grid_axis_properties!(ax::Axis, channel::Symbol, row::Int, col::Int, total_rows::Int, total_cols::Int; kwargs...)
 
-    if haskey(kwargs, :plot_title) && kwargs[:plot_title] != ""
+    if !isnothing(get(kwargs, :plot_title, nothing))
         ax.title = kwargs[:plot_title]
     else
         ax.title = string(channel)
@@ -486,7 +486,11 @@ function _apply_layout_axis_properties!(axes::Vector{Axis}, plot_layout::PlotLay
         end
     elseif plot_layout.type == :topo
         for (idx, ax) in enumerate(axes)
-            ax.title = string(plot_layout.channels[idx])
+            if !isnothing(get(kwargs, :plot_title, nothing))
+                ax.title = kwargs[:plot_title]
+            else
+                ax.title = string(plot_layout.channels[idx])
+            end
             hidedecorations!(ax, grid = false, ticks = true, ticklabels = true)
             hidespines!(ax)
         end
@@ -506,7 +510,7 @@ Apply common axis properties from keyword arguments.
 """
 function _apply_axis_properties!(ax::Axis; kwargs...)
 
-    ax.title = kwargs[:plot_title]
+    ax.title = isnothing(kwargs[:plot_title]) ? "" : kwargs[:plot_title]
     if haskey(kwargs, :plot_title_fontsize) && !isnothing(kwargs[:plot_title_fontsize])
         ax.titlesize = kwargs[:plot_title_fontsize]
     end

@@ -10,8 +10,8 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Axis limits, labels, and direction
     :plot_title => (nothing, "Plot title. If nothing, automatically determined"),
     :plot_title_fontsize => (16, "Font size for plot titles"),
-:plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
-:plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
+    :plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+    :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
     :xlabel => ("Time (s)", "Label for x-axis"),
     :ylabel => ("μV", "Label for y-axis"),
     :xlim => (nothing, "X-axis limits as (min, max) tuple. If nothing, automatically determined"),
@@ -28,18 +28,8 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Layout configuration
     :layout => (:single, "Layout type: :single, :grid, or :topo"),
 
-    # Layout parameters (for topo and other layouts)
-    :layout_topo_plot_width => (0.10, "Width of individual plots (fraction of figure width)"),
-    :layout_topo_plot_height => (0.10, "Height of individual plots (fraction of figure height)"),
-    :layout_topo_margin => (0.12, "Margin between plots"),
-    :layout_topo_scale_pos => ((0.0, 0.0), "Fallback position for scale plot in topo layout as (x, y) tuple"),
-    :layout_topo_show_scale => (false, "Whether to show a scale axis in topo layout"),
-
-    # Grid layout parameters
-    :layout_grid_rowgap => (10, "Gap between rows (in pixels)"),
-    :layout_grid_colgap => (10, "Gap between columns (in pixels)"),
-    :layout_grid_dims => (nothing, "Grid dimensions as (rows, cols) tuple for grid layouts. If nothing, automatically determined"),
-    :layout_grid_skip_positions => (nothing, "Positions to skip in grid layout as vector of (row, col) tuples, e.g., [(2,1), (2,3)]"),
+    # Layout parameters - dynamically pull all layout options
+    [Symbol("layout_$(attr)") => val for (attr, val) in LAYOUT_KWARGS]...,
 
     # Display options
     :theme_fontsize => (24, "Font size for theme"),

@@ -6,7 +6,8 @@
 const PLOT_RSA_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
     :display_plot => (true, "Display the plot (true/false)"),
-    :figure_title => ("RSA Results", "Title for the plot window"),
+    :figure_title => ("", "Title drawn at the top of the entire figure canvas"),
+    :figure_title_fontsize => (24, "Font size for figure title"),
     :interactive => (true, "Enable interactive features (true/false)"),
 
     # Axis limits and labels
@@ -16,11 +17,10 @@ const PLOT_RSA_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :ylabel => ("Correlation", "Label for y-axis"),
 
     # Title
-    :plot_title => ("", "Plot title"),
+    :plot_title => (nothing, "Plot title"),
     :plot_title_fontsize => (16, "Font size for plot titles"),
-:plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
-:plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
-    :show_plot_title => (true, "Show title (true/false)"),
+    :plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+    :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
 
     # Line styling
     :linewidth => (2, "Line width"),
@@ -68,9 +68,8 @@ function plot_rdm_heatmap(rsa_data::RsaData; time_point::Union{Float64,Int,Nothi
     # Extract parameters (unwrap tuples if needed)
     _get_val(k) = isa(plot_kwargs[k], Tuple) ? plot_kwargs[k][1] : plot_kwargs[k]
     display_plot = _get_val(:display_plot)
-    figure_title = _get_val(:figure_title)
     title_text = _get_val(:plot_title)
-    show_title = _get_val(:show_plot_title)
+    show_title = !isnothing(title_text)
 
     # Determine which RDM to plot
     n_conditions = length(rsa_data.condition_names)
@@ -95,17 +94,19 @@ function plot_rdm_heatmap(rsa_data::RsaData; time_point::Union{Float64,Int,Nothi
     end
 
     # Create figure
-    fig = Figure(title = figure_title)
+    fig = Figure()
 
-    if isempty(title_text)
+    if show_title && !isempty(title_text)
+        title_str = title_text
+    elseif show_title
         title_str = "RDM at $time_label"
     else
-        title_str = title_text
+        title_str = ""
     end
 
     ax = Axis(
         fig[1, 1],
-        title = show_title ? title_str : "",
+        title = title_str,
         xlabel = "Condition",
         ylabel = "Condition",
         xgridvisible = _get_val(:xgrid),
@@ -124,6 +125,12 @@ function plot_rdm_heatmap(rsa_data::RsaData; time_point::Union{Float64,Int,Nothi
     # Add colorbar if requested
     if _get_val(:show_colorbar)
         Colorbar(fig[1, 2], hm, label = "Dissimilarity")
+    end
+
+    # Draw supertitle if user explicitly provided a figure_title
+    figure_title = _get_val(:figure_title)
+    if !isempty(figure_title)
+        Label(fig[0, :], figure_title, fontsize=_get_val(:figure_title_fontsize), font=:bold, tellwidth=false)
     end
 
     # Display if requested
@@ -173,9 +180,8 @@ function plot_rdm_timecourse(rsa_data::RsaData; condition_pairs::Union{Vector{Tu
     # Extract parameters (unwrap tuples if needed)
     _get_val(k) = isa(plot_kwargs[k], Tuple) ? plot_kwargs[k][1] : plot_kwargs[k]
     display_plot = _get_val(:display_plot)
-    figure_title = _get_val(:figure_title)
     title_text = _get_val(:plot_title)
-    show_title = _get_val(:show_plot_title)
+    show_title = !isnothing(title_text)
 
     n_conditions = length(rsa_data.condition_names)
     times = rsa_data.times
@@ -204,17 +210,19 @@ function plot_rdm_timecourse(rsa_data::RsaData; condition_pairs::Union{Vector{Tu
     end
 
     # Create figure
-    fig = Figure(title = figure_title)
+    fig = Figure()
 
-    if isempty(title_text)
+    if show_title && !isempty(title_text)
+        title_str = title_text
+    elseif show_title
         title_str = "RDM Timecourse"
     else
-        title_str = title_text
+        title_str = ""
     end
 
     ax = Axis(
         fig[1, 1],
-        title = show_title ? title_str : "",
+        title = title_str,
         xlabel = _get_val(:xlabel),
         ylabel = "Dissimilarity",
         xgridvisible = _get_val(:xgrid),
@@ -262,6 +270,12 @@ function plot_rdm_timecourse(rsa_data::RsaData; condition_pairs::Union{Vector{Tu
     # Add legend
     axislegend(ax, position = :rt)
 
+    # Draw supertitle if user explicitly provided a figure_title
+    figure_title = _get_val(:figure_title)
+    if !isempty(figure_title)
+        Label(fig[0, :], figure_title, fontsize=_get_val(:figure_title_fontsize), font=:bold, tellwidth=false)
+    end
+
     # Display if requested
     if display_plot
         display(fig)
@@ -299,9 +313,8 @@ function plot_model_correlations(rsa_data::RsaData; kwargs...)
     # Extract parameters (unwrap tuples if needed)
     _get_val(k) = isa(plot_kwargs[k], Tuple) ? plot_kwargs[k][1] : plot_kwargs[k]
     display_plot = _get_val(:display_plot)
-    figure_title = _get_val(:figure_title)
     title_text = _get_val(:plot_title)
-    show_title = _get_val(:show_plot_title)
+    show_title = !isnothing(title_text)
 
     times = rsa_data.times
     correlations = rsa_data.model_correlations
@@ -318,17 +331,19 @@ function plot_model_correlations(rsa_data::RsaData; kwargs...)
     end
 
     # Create figure
-    fig = Figure(title = figure_title)
+    fig = Figure()
 
-    if isempty(title_text)
+    if show_title && !isempty(title_text)
+        title_str = title_text
+    elseif show_title
         title_str = "Model Correlations"
     else
-        title_str = title_text
+        title_str = ""
     end
 
     ax = Axis(
         fig[1, 1],
-        title = show_title ? title_str : "",
+        title = title_str,
         xlabel = _get_val(:xlabel),
         ylabel = _get_val(:ylabel),
         xgridvisible = _get_val(:xgrid),
@@ -396,6 +411,12 @@ function plot_model_correlations(rsa_data::RsaData; kwargs...)
 
     # Add legend
     axislegend(ax, position = :rt)
+
+    # Draw supertitle if user explicitly provided a figure_title
+    figure_title = _get_val(:figure_title)
+    if !isempty(figure_title)
+        Label(fig[0, :], figure_title, fontsize=_get_val(:figure_title_fontsize), font=:bold, tellwidth=false)
+    end
 
     # Display if requested
     if display_plot

@@ -131,7 +131,7 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
     num_levels = pop!(plot_kwargs, :num_levels)
 
     # Set title based on user preferences and data
-    if plot_kwargs[:show_plot_title]
+    if !isnothing(plot_kwargs[:plot_title]) && !isempty(plot_kwargs[:plot_title])
         if plot_kwargs[:plot_title] != ""
             ax.title = plot_kwargs[:plot_title] # Use user-provided title
         else # get time from data 

@@ -429,6 +429,29 @@ function _extract_colorbar_kwargs!(plot_kwargs::Dict{Symbol,Any})
 end
 
 """
+    _get_colorbar_position(pos::Union{Symbol, Tuple}, row_span, col_span)
+
+Converts a symbolic position (:right, :left, :top, :bottom) into a (row, col) grid coordinate
+relative to the given row and column spans of the main plot(s). 
+Returns a tuple (row, col) suitable for indexing into a Makie Figure (e.g. fig[row, col]).
+"""
+function _get_colorbar_position(pos, row_span, col_span)
+    if pos isa Tuple
+        return pos
+    elseif pos == :right
+        return (row_span, last(col_span) + 1)
+    elseif pos == :left
+        return (row_span, first(col_span) - 1)
+    elseif pos == :bottom
+        return (last(row_span) + 1, col_span)
+    elseif pos == :top
+        return (first(row_span) - 1, col_span)
+    else
+        return (row_span, last(col_span) + 1) # Default to right
+    end
+end
+
+"""
     _extract_legend_kwargs(plot_kwargs::Dict{Symbol, Any}; exclude_positioning::Bool=false)
 
 Extract legend-related parameters from plot_kwargs and return a new dictionary

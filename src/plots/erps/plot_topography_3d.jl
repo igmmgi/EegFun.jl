@@ -122,7 +122,7 @@ function plot_topography_3d(
     ax = LScene(fig[1, 1], show_axis = false)
 
     # Add title
-    if plot_kwargs[:show_plot_title]
+    if !isnothing(plot_kwargs[:plot_title]) && !isempty(plot_kwargs[:plot_title])
         if plot_kwargs[:plot_title] != ""
             title_str = plot_kwargs[:plot_title]
         else
@@ -191,8 +191,8 @@ function plot_topography_3d(
     colorbar_plot = pop!(plot_kwargs, :colorbar_plot, true)
     if colorbar_plot
         colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
-        colorbar_position = pop!(plot_kwargs, :colorbar_position, (1, 2))
-        Colorbar(fig[colorbar_position...], m; colorbar_kwargs...)
+        cb_pos = _get_colorbar_position(pop!(plot_kwargs, :colorbar_position, :right), 1:1, 1:1)
+        Colorbar(fig[cb_pos...], m; colorbar_kwargs...)
     end
 
     # Configure initial camera view if requested

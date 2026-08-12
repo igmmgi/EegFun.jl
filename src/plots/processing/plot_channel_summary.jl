@@ -11,9 +11,9 @@ const PLOT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :error_linewidth => (2, "Error bar linewidth."),
     :xlabel => ("Electrode", "x-axis label."),
     :ylabel => ("", "y-axis label"),
-    :plot_title => ("", "Plot title."),
-:plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
-:plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
+    :plot_title => (nothing, "Plot title."),
+    :plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+    :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
     :plot_title_fontsize => (16, "Font size for title."),
     :label_fontsize => (14, "Font size for axis labels."),
     :tick_fontsize => (12, "Font size for tick labels."),
@@ -274,8 +274,10 @@ function _configure_axis!(ax::Axis, channel_names::Vector{String}, col::Symbol, 
     ax.xticks = (1:length(channel_names), channel_names)
     ax.xticklabelrotation = plot_kwargs[:xtick_rotation]
     ax.xlabel = plot_kwargs[:xlabel]
-    ax.title = plot_kwargs[:plot_title]
-    ax.titlesize = plot_kwargs[:plot_title_fontsize]
+    if !isnothing(plot_kwargs[:plot_title])
+        ax.title = plot_kwargs[:plot_title]
+        ax.titlesize = plot_kwargs[:plot_title_fontsize]
+    end
     ax.xlabelsize = plot_kwargs[:label_fontsize]
     ax.ylabelsize = plot_kwargs[:label_fontsize]
     ax.xticklabelsize = plot_kwargs[:tick_fontsize]

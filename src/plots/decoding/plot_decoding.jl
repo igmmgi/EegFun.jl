@@ -6,7 +6,8 @@ Plotting function for MVPA/decoding results.
 const PLOT_DECODING_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
     :display_plot => (true, "Display the plot (true/false)"),
-    :figure_title => ("Decoding Results", "Title for the plot window"),
+    :figure_title => ("", "Title drawn at the top of the entire figure canvas"),
+    :figure_title_fontsize => (24, "Font size for figure title"),
     :interactive => (true, "Enable interactive features (true/false)"),
 
     # Axis limits and labels
@@ -16,11 +17,10 @@ const PLOT_DECODING_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :ylabel => ("Classification Accuracy", "Label for y-axis"),
 
     # Title
-    :plot_title => ("", "Plot title"),
+    :plot_title => (nothing, "Plot title"),
     :plot_title_fontsize => (16, "Font size for plot titles"),
-:plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
-:plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
-    :show_plot_title => (true, "Show title (true/false)"),
+    :plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+    :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
 
     # Line styling
     :linewidth => (2, "Line width for decoding curve"),
@@ -262,16 +262,15 @@ function plot_decoding(decoded::DecodedData; kwargs...)
 
     # Extract parameters
     display_plot = plot_kwargs[:display_plot]
-    figure_title = plot_kwargs[:figure_title]
     times = decoded.times
     accuracy = decoded.average_score
     stderror = decoded.stderror
     chance_level = decoded.parameters.chance_level
     title_text = plot_kwargs[:plot_title]
-    show_title = plot_kwargs[:show_plot_title]
+    show_title = !isnothing(title_text)
 
     # Create figure
-    fig = Figure(title = figure_title, size = (800, 600))
+    fig = Figure(size = (800, 600))
     ax = Axis(
         fig[1, 1],
         xlabel = plot_kwargs[:xlabel],
@@ -280,16 +279,20 @@ function plot_decoding(decoded::DecodedData; kwargs...)
         ygridvisible = plot_kwargs[:ygrid],
     )
 
-    # Set title if requested
-    if show_title && !isempty(title_text)
-        ax.title = title_text
-    elseif show_title && isempty(title_text)
-        # Default title from decoded data
+    # Set title: nothing means default, "" means no title, otherwise custom string
+    if isnothing(title_text)
         ax.title = "Decoding: $(join(decoded.condition_names, " vs "))"
+    elseif !isempty(title_text)
+        ax.title = title_text
     end
 
     # Plot decoding data to axis
     _plot_decoding_to_axis!(ax, times, accuracy, stderror, chance_level, plot_kwargs)
+
+    # Draw supertitle if user explicitly provided a figure_title
+    if !isempty(plot_kwargs[:figure_title])
+        Label(fig[0, :], plot_kwargs[:figure_title], fontsize=plot_kwargs[:figure_title_fontsize], font=:bold, tellwidth=false)
+    end
 
     _set_window_title("Decoding")
     if display_plot
@@ -309,16 +312,15 @@ function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
 
     # Extract parameters
     display_plot = plot_kwargs[:display_plot]
-    figure_title = plot_kwargs[:figure_title]
     title_text = plot_kwargs[:plot_title]
-    show_title = plot_kwargs[:show_plot_title]
+    show_title = !isnothing(title_text)
 
     # Determine optimal subplot layout using best_rect
     n_subjects = length(decoded_list)
     rows, cols = _best_rect(n_subjects)
 
     # Create figure with appropriate size for subplots
-    fig = Figure(title = figure_title, size = (400 * cols, 300 * rows))
+    fig = Figure(size = (400 * cols, 300 * rows))
 
     # Determine common time range and y limits across all subjects
     all_times = [d.times for d in decoded_list]
@@ -359,14 +361,12 @@ function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
         )
 
         # Set title for this subplot
-        if show_title
-            if !isempty(title_text)
-                ax.title = title_text
-            else
-                # Use subject identifier from file name or index
-                subject_id = isnothing(decoded.file) ? "Subject $idx" : basename(decoded.file)
-                ax.title = subject_id
-            end
+        if isnothing(title_text)
+            # Use subject identifier from file name or index
+            subject_id = isnothing(decoded.file) ? "Subject $idx" : basename(decoded.file)
+            ax.title = subject_id
+        elseif !isempty(title_text)
+            ax.title = title_text
         end
 
         # Set axis limits
@@ -380,6 +380,11 @@ function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
 
         # Plot decoding data to axis (no legend for individual subplots)
         _plot_decoding_to_axis!(ax, times, accuracy, stderror, chance_level, plot_kwargs)
+    end
+
+    # Draw supertitle if user explicitly provided a figure_title
+    if !isempty(plot_kwargs[:figure_title])
+        Label(fig[0, :], plot_kwargs[:figure_title], fontsize=plot_kwargs[:figure_title_fontsize], font=:bold, tellwidth=false)
     end
 
     _set_window_title("Decoding")

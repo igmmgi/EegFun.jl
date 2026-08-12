@@ -11,9 +11,9 @@ const PLOT_JOINT_PROBABILITY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Axis styling
     :xlabel => ("Electrode", "Label for x-axis"),
     :ylabel => ("Joint Probability", "Label for y-axis"),
-    :plot_title => ("", "Plot title"),
-:plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
-:plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
+    :plot_title => (nothing, "Plot title"),
+    :plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+    :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
     :xtick_rotation => (π / 4, "Rotation angle for x-axis tick labels"),
 
     # Font sizes
