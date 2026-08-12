@@ -19,7 +19,10 @@ const PLOT_RSA_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Title
     :plot_title => (nothing, "Plot title"),
     :plot_title_fontsize => (16, "Font size for plot titles"),
-    :plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+    :plot_title_position => (
+        nothing,
+        "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis.",
+    ),
     :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
 
     # Line styling
@@ -130,7 +133,7 @@ function plot_rdm_heatmap(rsa_data::RsaData; time_point::Union{Float64,Int,Nothi
     # Draw supertitle if user explicitly provided a figure_title
     figure_title = _get_val(:figure_title)
     if !isempty(figure_title)
-        Label(fig[0, :], figure_title, fontsize=_get_val(:figure_title_fontsize), font=:bold, tellwidth=false)
+        Label(fig[0, :], figure_title, fontsize = _get_val(:figure_title_fontsize), font = :bold, tellwidth = false)
     end
 
     # Display if requested
@@ -273,7 +276,7 @@ function plot_rdm_timecourse(rsa_data::RsaData; condition_pairs::Union{Vector{Tu
     # Draw supertitle if user explicitly provided a figure_title
     figure_title = _get_val(:figure_title)
     if !isempty(figure_title)
-        Label(fig[0, :], figure_title, fontsize=_get_val(:figure_title_fontsize), font=:bold, tellwidth=false)
+        Label(fig[0, :], figure_title, fontsize = _get_val(:figure_title_fontsize), font = :bold, tellwidth = false)
     end
 
     # Display if requested
@@ -415,7 +418,7 @@ function plot_model_correlations(rsa_data::RsaData; kwargs...)
     # Draw supertitle if user explicitly provided a figure_title
     figure_title = _get_val(:figure_title)
     if !isempty(figure_title)
-        Label(fig[0, :], figure_title, fontsize=_get_val(:figure_title_fontsize), font=:bold, tellwidth=false)
+        Label(fig[0, :], figure_title, fontsize = _get_val(:figure_title_fontsize), font = :bold, tellwidth = false)
     end
 
     # Display if requested

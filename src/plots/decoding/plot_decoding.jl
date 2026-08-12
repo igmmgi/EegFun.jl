@@ -19,7 +19,10 @@ const PLOT_DECODING_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Title
     :plot_title => (nothing, "Plot title"),
     :plot_title_fontsize => (16, "Font size for plot titles"),
-    :plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+    :plot_title_position => (
+        nothing,
+        "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis.",
+    ),
     :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
 
     # Line styling
@@ -291,7 +294,7 @@ function plot_decoding(decoded::DecodedData; kwargs...)
 
     # Draw supertitle if user explicitly provided a figure_title
     if !isempty(plot_kwargs[:figure_title])
-        Label(fig[0, :], plot_kwargs[:figure_title], fontsize=plot_kwargs[:figure_title_fontsize], font=:bold, tellwidth=false)
+        Label(fig[0, :], plot_kwargs[:figure_title], fontsize = plot_kwargs[:figure_title_fontsize], font = :bold, tellwidth = false)
     end
 
     _set_window_title("Decoding")
@@ -384,7 +387,7 @@ function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
 
     # Draw supertitle if user explicitly provided a figure_title
     if !isempty(plot_kwargs[:figure_title])
-        Label(fig[0, :], plot_kwargs[:figure_title], fontsize=plot_kwargs[:figure_title_fontsize], font=:bold, tellwidth=false)
+        Label(fig[0, :], plot_kwargs[:figure_title], fontsize = plot_kwargs[:figure_title_fontsize], font = :bold, tellwidth = false)
     end
 
     _set_window_title("Decoding")

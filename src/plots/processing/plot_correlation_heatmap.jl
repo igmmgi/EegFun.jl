@@ -8,7 +8,10 @@ const PLOT_CORRELATION_HEATMAP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Title and labels
     :plot_title => (nothing, "Plot title"),
-    :plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+    :plot_title_position => (
+        nothing,
+        "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis.",
+    ),
     :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
     :plot_title_fontsize => (16, "Font size for the title"),
 
@@ -36,7 +39,7 @@ const PLOT_CORRELATION_HEATMAP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
         Symbol("colorbar_$(attr)") => (get(COLORBAR_DEFAULTS, attr, nothing), "Colorbar $(attr) parameter") for
         attr in propertynames(Colorbar)
     ]...,
-    
+
     # Specific colorbar overrides for correlation heatmap
     :colorbar_plot => (true, "Whether to display the colorbar"),
     :colorbar_position => (:right, "Position of the colorbar (:right, :left, :top, :bottom, or tuple)"),
@@ -147,16 +150,11 @@ function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kw
     # Add a colorbar if requested
     colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
     colorbar_plot = pop!(plot_kwargs, :colorbar_plot, true)
-    
+
     if colorbar_plot
         cb_pos = _get_colorbar_position(plot_kwargs[:colorbar_position], 1:1, 1:1)
         sg = ax.layoutobservables.gridcontent[].parent
-        Colorbar(
-            sg[cb_pos...];
-            colormap = plot_kwargs[:colormap],
-            limits = colorrange,
-            colorbar_kwargs...
-        )
+        Colorbar(sg[cb_pos...]; colormap = plot_kwargs[:colormap], limits = colorrange, colorbar_kwargs...)
     end
 
     return nothing

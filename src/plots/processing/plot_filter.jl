@@ -9,7 +9,10 @@ const PLOT_FILTER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Plot styling
     :plot_title => ("Filter Frequency Response", "Plot title"),
-    :plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+    :plot_title_position => (
+        nothing,
+        "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis.",
+    ),
     :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
     :xlabel => ("Frequency (Hz)", "X-axis label"),
     :ylabel => ("Magnitude (dB)", "Y-axis label"),

@@ -20,7 +20,7 @@ const PLOT_TF_KWARGS = Dict{Symbol,Tuple{Any,String}}(
         Symbol("colorbar_$(attr)") => (get(COLORBAR_DEFAULTS, attr, nothing), "Colorbar $(attr) parameter") for
         attr in propertynames(Colorbar)
     ]...,
-    
+
     # Specific colorbar overrides for tf
     :colorbar_plot => (true, "Whether to show the colorbar"),
     :colorbar_position => (:right, "Position of the colorbar (:right, :left, :top, :bottom, or tuple)"),
@@ -32,7 +32,10 @@ const PLOT_TF_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :interpolate => (false, "Whether to interpolate the heatmap for a smoother appearance"),
     :plot_title => (nothing, "Plot title. If nothing, automatically determined from condition name and channel"),
     :plot_title_fontsize => (16, "Font size for plot titles"),
-    :plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+    :plot_title_position => (
+        nothing,
+        "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis.",
+    ),
     :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
     :xticks => (nothing, "Custom x-axis ticks (e.g., -0.2:0.2:1.0)"),
     :yticks => (nothing, "Custom y-axis ticks (e.g., [2, 10, 20, 40, 80])"),
@@ -87,11 +90,11 @@ function plot_tf(
     isempty(tf_data) && error("Empty TimeFreqData vector")
 
     plot_kwargs = _merge_plot_kwargs(PLOT_TF_KWARGS, kwargs)
-    
+
     # Extract colorbar/layout kwargs
     colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
     layout_kwargs = _extract_layout_kwargs(plot_kwargs)
-    
+
     colormap = plot_kwargs[:colormap]
     colorrange = plot_kwargs[:colorrange]
     colorbar = pop!(plot_kwargs, :colorbar_plot, true)
@@ -188,7 +191,7 @@ function plot_tf(
         cb_label =
             isnothing(plot_kwargs[:colorbar_label]) ? _tf_colorbar_label(first(tf_plots), baseline_interval, baseline_method) :
             plot_kwargs[:colorbar_label]
-        
+
         cb_pos = _get_colorbar_position(plot_kwargs[:colorbar_position], 1:rows, 1:cols)
         Colorbar(fig[cb_pos...], last_hm; label = cb_label, colorbar_kwargs...)
     end
@@ -206,12 +209,12 @@ function plot_tf(
     kwargs...,
 )
 
-    plot_kwargs             = _merge_plot_kwargs(PLOT_TF_KWARGS, kwargs)
-    
+    plot_kwargs = _merge_plot_kwargs(PLOT_TF_KWARGS, kwargs)
+
     # Extract colorbar/layout kwargs
-    colorbar_kwargs         = _extract_colorbar_kwargs!(plot_kwargs)
-    layout_kwargs           = _extract_layout_kwargs(plot_kwargs)
-    
+    colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
+    layout_kwargs   = _extract_layout_kwargs(plot_kwargs)
+
     layout                  = plot_kwargs[:layout]
     colormap                = plot_kwargs[:colormap]
     colorrange              = plot_kwargs[:colorrange]
@@ -369,7 +372,7 @@ function plot_tf(
         cb_label =
             isnothing(plot_kwargs[:colorbar_label]) ? _tf_colorbar_label(tf_plot, baseline_interval, baseline_method) :
             plot_kwargs[:colorbar_label]
-            
+
         if layout === :single
             cb_pos = _get_colorbar_position(plot_kwargs[:colorbar_position], 1:1, 1:1)
             Colorbar(fig[cb_pos...], last_hm; label = cb_label, colorbar_kwargs...)
@@ -380,7 +383,7 @@ function plot_tf(
         else # :topo
             # Topo is a bit weird because of the scale axis, let's just stick it on the right
             cb_pos = _get_colorbar_position(plot_kwargs[:colorbar_position], 1:1, 1:1)
-            Colorbar(fig[cb_pos[1], cb_pos[2] + 1], last_hm; label = cb_label, height = Relative(0.5), colorbar_kwargs...)
+            Colorbar(fig[cb_pos[1], cb_pos[2]+1], last_hm; label = cb_label, height = Relative(0.5), colorbar_kwargs...)
         end
     end
 

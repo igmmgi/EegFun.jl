@@ -23,20 +23,20 @@ end
 # === PARAMETER CONSTRUCTOR HELPERS ===
 
 """Create a `ConfigParameter{T}` with common defaults."""
-function _param(::Type{T}, desc, default=nothing; allowed=nothing, min=nothing, max=nothing) where {T}
-    ConfigParameter{T}(description=desc, default=default, allowed=allowed, min=min, max=max)
+function _param(::Type{T}, desc, default = nothing; allowed = nothing, min = nothing, max = nothing) where {T}
+    ConfigParameter{T}(description = desc, default = default, allowed = allowed, min = min, max = max)
 end
 
 """Create a string (or string-vector) parameter."""
-string_param(desc, default=""; allowed=nothing) = _param(Union{Vector{String},String}, desc, default, allowed=allowed)
+string_param(desc, default = ""; allowed = nothing) = _param(Union{Vector{String},String}, desc, default, allowed = allowed)
 """Create a simple `String` parameter."""
-simple_string_param(desc, default=""; allowed=nothing) = _param(String, desc, default, allowed=allowed)
+simple_string_param(desc, default = ""; allowed = nothing) = _param(String, desc, default, allowed = allowed)
 """Create a Symbol parameter."""
-symbol_param(desc, default; allowed=nothing) = _param(Symbol, desc, default, allowed=allowed)
+symbol_param(desc, default; allowed = nothing) = _param(Symbol, desc, default, allowed = allowed)
 """Create a `Bool` parameter."""
-bool_param(desc, default=false) = _param(Bool, desc, default)
+bool_param(desc, default = false) = _param(Bool, desc, default)
 """Create a numeric parameter with optional min/max bounds."""
-number_param(desc, default, min=nothing, max=nothing) = _param(Real, desc, default, min=min, max=max)
+number_param(desc, default, min = nothing, max = nothing) = _param(Real, desc, default, min = min, max = max)
 """Create a numeric vector parameter (`Vector{Real}`)."""
 number_vector_param(desc, default) = _param(Vector{Real}, desc, default)
 """Create a channel-groups parameter (`Vector{Vector{String}}`)."""
@@ -46,9 +46,9 @@ channel_groups_param(desc, default) = _param(Vector{Vector{String}}, desc, defau
 function _filter_param_spec(prefix, apply, type, freq, min_freq, max_freq, order, min_order, max_order)
     Dict(
         "$prefix.apply" => bool_param("Apply: true/false", apply),
-        "$prefix.type" => symbol_param("Filter type identifier", type, allowed=[:hp, :lp]),
-        "$prefix.method" => symbol_param("Filter method", :iir, allowed=[:fir, :iir]),
-        "$prefix.func" => symbol_param("Filter function", :filtfilt, allowed=[:filt, :filtfilt]),
+        "$prefix.type" => symbol_param("Filter type identifier", type, allowed = [:hp, :lp]),
+        "$prefix.method" => symbol_param("Filter method", :iir, allowed = [:fir, :iir]),
+        "$prefix.func" => symbol_param("Filter function", :filtfilt, allowed = [:filt, :filtfilt]),
         "$prefix.freq" => number_param("Cutoff frequency (Hz)", freq, min_freq, max_freq),
         "$prefix.order" => number_param("Filter order", order, min_order, max_order),
     )
@@ -86,16 +86,26 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "preprocess.epoch_start" => number_param("Epoch start (seconds).", -1),
     "preprocess.epoch_end" => number_param("Epoch end (seconds).", 1),
     "preprocess.reference_channel" => simple_string_param("Channels(s) to use as reference", "avg"),
-    "preprocess.layout.neighbour_criterion" => number_param("Distance criterion (normalized) for channel neighbour definition.", 0.25, 0),
-    "preprocess.eog.vEOG_channels" => channel_groups_param("Channels used in the calculation of vertical eye movements (vEOG).", [["Fp1", "Fp2"], ["IO1", "IO2"], ["vEOG"]]),
-    "preprocess.eog.hEOG_channels" => channel_groups_param("Channels used in the calculation of horizontal eye movements (hEOG).", [["F9"], ["F10"], ["hEOG"]]),
+    "preprocess.layout.neighbour_criterion" =>
+        number_param("Distance criterion (normalized) for channel neighbour definition.", 0.25, 0),
+    "preprocess.eog.vEOG_channels" => channel_groups_param(
+        "Channels used in the calculation of vertical eye movements (vEOG).",
+        [["Fp1", "Fp2"], ["IO1", "IO2"], ["vEOG"]],
+    ),
+    "preprocess.eog.hEOG_channels" =>
+        channel_groups_param("Channels used in the calculation of horizontal eye movements (hEOG).", [["F9"], ["F10"], ["hEOG"]]),
     "preprocess.eog.vEOG_criterion" => number_param("Distance criterion for vertical EOG channel definition.", 50, 0),
     "preprocess.eog.hEOG_criterion" => number_param("Distance criterion for horizontal EOG channel definition.", 30, 0),
     "preprocess.eeg.extreme_value_abs_criterion" => number_param("Value (mV) for defining data section as an extreme value.", 500),
-    "preprocess.eeg.artifact_value_abs_criterion" => number_param("Value (mV) for defining data section (or epoch) as an artifact value.", 100),
-    "preprocess.eeg.artifact_value_z_criterion" => number_param("Value (z) for defining data section (or epoch) as an artifact value (NB. various statistics with 0 being off!).", 0),
+    "preprocess.eeg.artifact_value_abs_criterion" =>
+        number_param("Value (mV) for defining data section (or epoch) as an artifact value.", 100),
+    "preprocess.eeg.artifact_value_z_criterion" => number_param(
+        "Value (z) for defining data section (or epoch) as an artifact value (NB. various statistics with 0 being off!).",
+        0,
+    ),
     "preprocess.eeg.artifact_interval_start" => number_param("Start time (s) for artifact rejection (optional).", nothing),
-    "preprocess.channel_repair.method" => simple_string_param("Method for bad channel interpolation (:spherical_spline or :neighbor_interpolation)", "spherical_spline"),
+    "preprocess.channel_repair.method" =>
+        simple_string_param("Method for bad channel interpolation (:spherical_spline or :neighbor_interpolation)", "spherical_spline"),
 
     # ICA settings
     "preprocess.ica.apply" => bool_param("Independent Component Analysis (ICA) true/false.", true),
@@ -213,13 +223,13 @@ end
 Convert Any arrays in the config to their proper types based on parameter specifications.
 This fixes the issue where TOML.jl in Julia 1.12 returns Any arrays instead of typed arrays.
 """
-function _convert_any_arrays!(config::Dict; path="")
+function _convert_any_arrays!(config::Dict; path = "")
     for (key, value) in config
         new_path = isempty(path) ? key : "$path.$key"
 
         if isa(value, Dict)
             # Recursively process nested dictionaries
-            _convert_any_arrays!(value; path=new_path)
+            _convert_any_arrays!(value; path = new_path)
         elseif haskey(PARAMETERS, new_path)
             # Convert this parameter if we have type information
             param_spec = PARAMETERS[new_path]
@@ -306,22 +316,22 @@ Validate config values against their metadata definitions.
 # Returns
 - `ValidationResult`: Result of the validation
 """
-function _validate_config(config::Dict; path="")
+function _validate_config(config::Dict; path = "")
     for (key, value) in config
         new_path = isempty(path) ? key : "$path.$key"
         if isa(value, Dict) # Recursively validate nested dictionary
-            result = _validate_config(value; path=new_path)
+            result = _validate_config(value; path = new_path)
             !result.success && return result
         else # Check if we have data for this parameter
             if haskey(PARAMETERS, new_path)
                 result = _validate_parameter(value, PARAMETERS[new_path], new_path)
                 !result.success && return result
             else # Unknown parameter?
-                return ValidationResult(success=false, error="Unknown parameter: $new_path", key_path=new_path)
+                return ValidationResult(success = false, error = "Unknown parameter: $new_path", key_path = new_path)
             end
         end
     end
-    return ValidationResult(success=true)
+    return ValidationResult(success = true)
 end
 
 """
@@ -343,7 +353,7 @@ function _validate_parameter(value, parameter_spec::ConfigParameter{T}, paramete
     # Helper function for creating validation errors
     """Create a failed `ValidationResult` for this parameter."""
     function validation_error(msg)
-        ValidationResult(success=false, error=msg, key_path=parameter_name)
+        ValidationResult(success = false, error = msg, key_path = parameter_name)
     end
 
     # Check if value is the right type
@@ -371,7 +381,7 @@ function _validate_parameter(value, parameter_spec::ConfigParameter{T}, paramete
         !(value in parameter_spec.allowed) &&
         return validation_error("$parameter_name ($value) must be one of: $(join(parameter_spec.allowed, ", "))")
 
-    return ValidationResult(success=true)
+    return ValidationResult(success = true)
 end
 
 
@@ -388,7 +398,7 @@ If parameter_name is provided, shows detailed information about that specific pa
 # Arguments
 - `parameter_name::String`: Optional path to a specific parameter (e.g., "filtering.highpass.cutoff")
 """
-function show_parameter_info(; parameter_name::String="")
+function show_parameter_info(; parameter_name::String = "")
     isempty(parameter_name) ? _show_all_parameters() : _show_specific_parameter(parameter_name)
 end
 
@@ -424,7 +434,7 @@ end
 function _display_subsection(subsection, params)
     !isempty(subsection) && @info "  [$subsection]"
 
-    sorted_params = sort(params, by=first)
+    sorted_params = sort(params, by = first)
     for (path, parameter_spec) in sorted_params
         param_name = String(last(split(path, ".")))
         indent = isempty(subsection) ? "  " : "    "
@@ -532,7 +542,7 @@ function _display_grouped_params(grouped_params::Dict{String,Vector{Tuple{String
     for subsection in sorted_subsections
         !isempty(subsection) && @info "  [$subsection]"
 
-        sorted_params = sort(grouped_params[subsection], by=first)
+        sorted_params = sort(grouped_params[subsection], by = first)
         for (path, parameter_spec) in sorted_params
             param_name = String(last(split(path, ".")))
             indent = isempty(subsection) ? "  " : "    "
@@ -551,7 +561,7 @@ Generate and save a template TOML configuration file with all available paramete
 # Arguments
 - `filename::String`: Name of the template file to create (keyword argument, default: "config_template.toml")
 """
-function generate_config_template(; filename::String="config_template.toml")
+function generate_config_template(; filename::String = "config_template.toml")
     if !endswith(filename, ".toml")
         filename = filename * ".toml"
     end
@@ -607,7 +617,7 @@ function _write_subsection(io::IO, section::String, subsection::String, params::
         println(io, "[$section.$subsection]")
     end
 
-    sorted_params = sort(params, by=first)
+    sorted_params = sort(params, by = first)
     for (path, parameter_spec) in sorted_params
         param_name = String(last(split(path, ".")))
         _write_parameter_docs(io, parameter_spec)

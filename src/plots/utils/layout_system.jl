@@ -495,7 +495,7 @@ function _apply_layout_axis_properties!(axes::Vector{Axis}, plot_layout::PlotLay
             hidespines!(ax)
         end
     end
-    
+
     # Draw inner titles if requested (applies to all layouts, including :single)
     for ax in axes
         _draw_inner_title_if_requested!(ax; kwargs...)
@@ -587,9 +587,16 @@ function _draw_inner_title_if_requested!(ax::Axis; kwargs...)
     if haskey(kwargs, :plot_title_position) && !isnothing(kwargs[:plot_title_position])
         title_str = isempty(ax.title[]) ? "" : ax.title[]
         if !isempty(title_str)
-            text!(ax, kwargs[:plot_title_position][1], kwargs[:plot_title_position][2],
-                  text = title_str, space = :relative, align = kwargs[:plot_title_align],
-                  fontsize = kwargs[:plot_title_fontsize], font = :bold)
+            text!(
+                ax,
+                kwargs[:plot_title_position][1],
+                kwargs[:plot_title_position][2],
+                text = title_str,
+                space = :relative,
+                align = kwargs[:plot_title_align],
+                fontsize = kwargs[:plot_title_fontsize],
+                font = :bold,
+            )
             ax.title = ""
         end
     end

@@ -10,7 +10,10 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Axis limits, labels, and direction
     :plot_title => (nothing, "Plot title. If nothing, automatically determined"),
     :plot_title_fontsize => (16, "Font size for plot titles"),
-    :plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+    :plot_title_position => (
+        nothing,
+        "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis.",
+    ),
     :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
     :xlabel => ("Time (s)", "Label for x-axis"),
     :ylabel => ("μV", "Label for y-axis"),

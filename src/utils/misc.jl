@@ -463,7 +463,7 @@ function _generate_kwargs_doc(kwargs_dict::Dict{Symbol,Tuple{Any,String}})::Stri
 
     # Define which legend arguments are actually useful to show in the main docs
     allowed_legend_keys = [:legend, :legend_position, :legend_label, :legend_channel, :legend_nbanks]
-    
+
     legend_keys = Symbol[]
     layout_keys = Symbol[]
     main_keys = Symbol[]
@@ -513,7 +513,10 @@ function _generate_kwargs_doc(kwargs_dict::Dict{Symbol,Tuple{Any,String}})::Stri
     # Append note for the hidden Makie kwargs
     push!(doc_lines, "> **Further Legend Options**")
     push!(doc_lines, "> `EegFun.jl` passes any argument prefixed with `legend_` directly to Makie's legend system.")
-    push!(doc_lines, "> While only the most common options are listed above, you can pass **any** standard Makie legend attribute (e.g., `legend_bgcolor`, `legend_patchsize`).")
+    push!(
+        doc_lines,
+        "> While only the most common options are listed above, you can pass **any** standard Makie legend attribute (e.g., `legend_bgcolor`, `legend_patchsize`).",
+    )
     push!(doc_lines, "> See the Makie.jl documentation for a full list of discoverable arguments.")
 
     return join(doc_lines, "\n")

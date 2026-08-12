@@ -23,7 +23,10 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Title parameters
     :plot_title => (nothing, "Plot title"),
-    :plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+    :plot_title_position => (
+        nothing,
+        "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis.",
+    ),
     :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
     :plot_title_fontsize => (16, "Font size for the title"),
     :time_unit =>
@@ -235,14 +238,7 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
         end
 
         # Use the internal plotting function (colorbar positioning is handled internally)
-        _plot_topography!(
-            fig,
-            ax,
-            ica,
-            comps[i];
-            plot_kwargs...,
-            colorbar_plot = colorbar_plot,
-        )
+        _plot_topography!(fig, ax, ica, comps[i]; plot_kwargs..., colorbar_plot = colorbar_plot)
     end
 
     # Add keyboard event handling for scaling

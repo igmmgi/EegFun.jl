@@ -297,9 +297,11 @@ function plot_erp_measurement_gui(
                     end
 
                     if length(selected_channels[]) == 1
-                        channel_menu.selection[] = string(selected_channels[][1])
+                        ch = selected_channels[][1]
+                        idx = findfirst(==(ch), all_channels)
+                        channel_menu.i_selected[] = isnothing(idx) ? 0 : idx
                     else
-                        channel_menu.selection[] = nothing
+                        channel_menu.i_selected[] = 0
                     end
                 end
 
@@ -449,10 +451,16 @@ function plot_erp_measurement_gui(
     # State for stable y-limits
     cached_ylims = Ref{Tuple{Float64,Float64}}((0.0, 1.0))
     cached_ch = Ref{Vector{Symbol}}(Symbol[])
+    current_legend = Ref{Union{Legend,Nothing}}(nothing)
 
     # Plot ERPs using plot_erp! to add to existing axis
     function update_erp_plot!()
         empty!(ax)  # Clear existing plot
+
+        if !isnothing(current_legend[])
+            delete!(current_legend[])
+            current_legend[] = nothing
+        end
 
         chs = selected_channels[]
         bi = baseline_interval_obs[]
@@ -506,19 +514,18 @@ function plot_erp_measurement_gui(
         update_baseline_band!(baseline_interval_obs[])
         _set_window_title("ERP Measurement Tool")
 
+        # Add manual legend for multi-condition plots (outside axis, won't be cleared by empty!)
+        if length(erp_vec) > 1
+            # Get the line elements from the axis
+            line_elements = filter(p -> p isa Lines, ax.scene.plots)
+            labels = [erp.condition_name for erp in erp_vec]
+            current_legend[] = Legend(plot_area_grid[1, 2], line_elements[1:length(erp_vec)], labels, halign = :right, valign = :top)
+        end
+
     end
 
     # Initial plot
     update_erp_plot!()
-
-    # BUG: interactive legend not working here!?
-    # Add manual legend for multi-condition plots (outside axis, won't be cleared by empty!)
-    if length(erp_vec) > 1
-        # Get the line elements from the axis
-        line_elements = filter(p -> p isa Lines, ax.scene.plots)
-        labels = [erp.condition_name for erp in erp_vec]
-        Legend(plot_area_grid[1, 2], line_elements[1:length(erp_vec)], labels, halign = :right, valign = :top)
-    end
 
     # ===== DRAG STATE FOR INTERACTIVE EDGE/BAND DRAGGING =====
     # Targets: :none, :analysis_left, :analysis_right, :analysis_middle, :baseline_left, :baseline_right, :baseline_middle

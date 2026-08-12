@@ -16,7 +16,10 @@ const PLOT_GFP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Title
     :plot_title => (nothing, "Plot title"),
     :plot_title_fontsize => (16, "Font size for plot titles"),
-    :plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+    :plot_title_position => (
+        nothing,
+        "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis.",
+    ),
     :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
 
     # Line styling

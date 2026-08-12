@@ -16,7 +16,10 @@ const PLOT_POWER_SPECTRUM_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :xlabel => ("Frequency (Hz)", "X-axis label"),
     :ylabel => ("Power Spectral Density (μV²/Hz)", "Y-axis label"),
     :plot_title => ("Power Spectrum", "Plot title"),
-    :plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+    :plot_title_position => (
+        nothing,
+        "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis.",
+    ),
     :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
 
     # Scale parameters

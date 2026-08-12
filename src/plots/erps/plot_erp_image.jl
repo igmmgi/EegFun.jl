@@ -20,7 +20,10 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Title
     :plot_title => (nothing, "Plot title"),
     :plot_title_fontsize => (16, "Font size for plot titles"),
-    :plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+    :plot_title_position => (
+        nothing,
+        "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis.",
+    ),
     :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
 
     # Image styling
@@ -37,7 +40,7 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
         Symbol("colorbar_$(attr)") => (get(COLORBAR_DEFAULTS, attr, nothing), "Colorbar $(attr) parameter") for
         attr in propertynames(Colorbar)
     ]...,
-    
+
     # Specific colorbar overrides for erp_image
     :colorbar_plot => (true, "Whether to show the colorbar"),
     :colorbar_position => (:right, "Position of the colorbar (:right, :left, :top, :bottom, or tuple)"),
@@ -299,7 +302,7 @@ function plot_erp_image(
 
             if should_show_colorbar
                 cb_pos = _get_colorbar_position(plot_kwargs[:colorbar_position], 1:1, 1:1)
-                
+
                 if plot_layout.type == :single
                     # Single layout
                     Colorbar(fig[cb_pos...], hm; colorbar_kwargs...)
@@ -309,11 +312,11 @@ function plot_erp_image(
                     idx = findfirst(==(channel), channels)
                     base_row = div(idx - 1, cols) + 1
                     base_col = mod1(idx, cols)
-                    
+
                     # The subgrid is at fig.layout.content matching base_row, base_col
                     # An easier way is just to grab the parent of the axis
                     sg = ax.layoutobservables.gridcontent[].parent
-                    
+
                     Colorbar(sg[cb_pos...], hm; colorbar_kwargs...)
                 end
             end
@@ -416,7 +419,7 @@ function plot_erp_image(
     if plot_layout.type == :topo && plot_kwargs[:colorbar_plot] && !isempty(heatmaps) && !isnothing(scale_pos)
         # Topo layout colorbar
         cb_pos = _get_colorbar_position(plot_kwargs[:colorbar_position], 1:1, 1:1)
-        
+
         # We add a small fixed offset (0.015) to position the colorbar next to it
         colorbar_halign = scale_pos[1] + 0.015  # Position to the right of scale axis
         colorbar_valign = scale_pos[2]
@@ -430,7 +433,7 @@ function plot_erp_image(
             valign = colorbar_valign,
             tellheight = false,
             tellwidth = false,
-            colorbar_kwargs...
+            colorbar_kwargs...,
         )
     end
 

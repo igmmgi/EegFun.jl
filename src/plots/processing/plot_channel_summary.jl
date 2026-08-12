@@ -12,7 +12,10 @@ const PLOT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :xlabel => ("Electrode", "x-axis label."),
     :ylabel => ("", "y-axis label"),
     :plot_title => (nothing, "Plot title."),
-    :plot_title_position => (nothing, "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis."),
+    :plot_title_position => (
+        nothing,
+        "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis.",
+    ),
     :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
     :plot_title_fontsize => (16, "Font size for title."),
     :label_fontsize => (14, "Font size for axis labels."),
