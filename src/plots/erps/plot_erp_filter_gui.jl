@@ -29,12 +29,22 @@ Perfect for:
 - For batch filtering, use `lowpass_filter` or `highpass_filter` functions
 """
 # No arguments - load example data
+"""
+    plot_erp_filter_gui(; kwargs...)
+
+Launch a GUI for interactively filtering ERP data.
+"""
 function plot_erp_filter_gui(; kwargs...)
     data = read_data(example_path("data/julia/erps/example1_erps.jld2"))
     return plot_erp_filter_gui(data[1]; kwargs...)
 end
 
 # String filepath - load data and dispatch
+"""
+    plot_erp_filter_gui(filepath::String; kwargs...)
+
+Launch a GUI for interactively filtering ERP data from a file.
+"""
 function plot_erp_filter_gui(filepath::String; kwargs...)
     data = read_data(filepath)
     if isnothing(data)
@@ -44,11 +54,21 @@ function plot_erp_filter_gui(filepath::String; kwargs...)
 end
 
 # Single ErpData/ContinuousData - dispatch to vector version
+"""
+    plot_erp_filter_gui(erp::Union{ErpData,ContinuousData}; channel::Union{Symbol,Nothing} = nothing)
+
+Launch a GUI for interactively filtering a single dataset.
+"""
 function plot_erp_filter_gui(erp::Union{ErpData,ContinuousData}; channel::Union{Symbol,Nothing} = nothing)
     return plot_erp_filter_gui([erp]; channel)
 end
 
 # Vector of ErpData/ContinuousData - main implementation
+"""
+    plot_erp_filter_gui(erps::Vector{<:Union{ErpData,ContinuousData}}; channel::Union{Symbol,Nothing} = nothing)
+
+Launch a GUI for interactively filtering multiple datasets.
+"""
 function plot_erp_filter_gui(
     erp_vec::Vector{<:Union{ErpData,ContinuousData}};
     channel::Union{Symbol,Nothing} = nothing,

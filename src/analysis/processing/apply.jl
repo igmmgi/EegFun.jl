@@ -34,8 +34,8 @@ apply_analysis_settings!(dat::EegData, ica::InfoIca, settings::Observable{Analys
 
 Non-mutating version of `apply_analysis_settings!`.
 """
-function apply_analysis_settings(dat, args...; kwargs...)
+function apply_analysis_settings(dat::EegData, args...)
     dat_copy = copy(dat)
-    apply_analysis_settings!(dat_copy, args...; kwargs...)
+    apply_analysis_settings!(dat_copy, args...)
     return dat_copy
 end

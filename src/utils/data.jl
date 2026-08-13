@@ -1370,11 +1370,18 @@ samples_or_not([:is_extreme, :is_bad])  # Rows where NO flag is true
 """
 samples_or(columns::Vector{Symbol}) =
     x -> isempty(columns) ? fill(false, nrow(x)) : reduce((a, b) -> a .| b, (x[!, col] for col in columns))
+"""See `samples_or`."""
 samples_and(columns::Vector{Symbol}) =
     x -> isempty(columns) ? fill(true, nrow(x)) : reduce((a, b) -> a .& b, (x[!, col] for col in columns))
+
+"""See `samples_or`."""
 samples_not(column::Symbol) = x -> .!(x[!, column])
+
+"""See `samples_or`."""
 samples_or_not(columns::Vector{Symbol}) =
     x -> isempty(columns) ? fill(true, nrow(x)) : .!(reduce((a, b) -> a .| b, (x[!, col] for col in columns)))
+
+"""See `samples_or`."""
 samples_and_not(columns::Vector{Symbol}) =
     x -> isempty(columns) ? fill(true, nrow(x)) : .!(reduce((a, b) -> a .& b, (x[!, col] for col in columns)))
 

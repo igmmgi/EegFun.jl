@@ -536,6 +536,11 @@ plot_ica_component_spectrum(dat, ica_result, component_selection = components(1)
 ```
 """
 
+"""
+    plot_ica_component_spectrum(data::ContinuousData, ica::InfoIca, components::Union{Int,Vector{Int}})
+
+Plot the power spectrum of specified ICA components.
+"""
 function plot_ica_component_spectrum(
     dat::ContinuousData,
     ica_result::InfoIca;

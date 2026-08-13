@@ -366,9 +366,9 @@ function _compute_t_matrix(
 
         @inbounds for t_idx = 1:n_time
             @inbounds for e_idx = 1:n_electrodes
-                sum1 = 0.0;
-                sum2 = 0.0;
-                sum1_sq = 0.0;
+                sum1 = 0.0
+                sum2 = 0.0
+                sum1_sq = 0.0
                 sum2_sq = 0.0
 
                 @simd for p_idx = 1:n_A

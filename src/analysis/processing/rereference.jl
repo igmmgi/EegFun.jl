@@ -120,6 +120,11 @@ function _get_reference_channels(dat::EegData, reference_channel::Symbol)
 end
 
 # Single method for all EEG data types
+"""
+    rereference!(dat::EegData, reference_selection::Union{Symbol,Vector{Symbol}}; channel_selection::Function = channels())
+
+Rereference EEG data to a specified channel or combination of channels.
+"""
 function rereference!(dat::EegData, reference_selection::Union{Symbol,Vector{Symbol}}; channel_selection::Function = channels())
 
     reference_channels = _get_reference_channels(dat, reference_selection)

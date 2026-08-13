@@ -381,6 +381,11 @@ function _run_batch_operation(
     return results
 end
 
+"""
+    batch_process(process_fn::Function, file_pattern::String, input_dir::String, output_dir::String, participant_selection::Function, operation_name::String; filename_modifier::Function = identity, parallel::Bool = false)
+
+Generic batch processing loop to apply a processing function over files matching a pattern.
+"""
 function batch_process(
     process_fn::Function,
     file_pattern::String,

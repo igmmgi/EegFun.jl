@@ -167,20 +167,20 @@ function signal_example_ica_sphering()
     end
 
     on(btn1.clicks) do _
-        ;
-        set_close_to!(sl_morph, 0.0);
+
+        set_close_to!(sl_morph, 0.0)
     end
     on(btn2.clicks) do _
-        ;
-        set_close_to!(sl_morph, 1.0);
+
+        set_close_to!(sl_morph, 1.0)
     end
     on(btn3.clicks) do _
-        ;
-        set_close_to!(sl_morph, 2.0);
+
+        set_close_to!(sl_morph, 2.0)
     end
     on(btn4.clicks) do _
-        ;
-        set_close_to!(sl_morph, 3.0);
+
+        set_close_to!(sl_morph, 3.0)
     end
 
     rowsize!(fig.layout, 0, Relative(0.05))

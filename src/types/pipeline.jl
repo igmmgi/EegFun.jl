@@ -71,6 +71,7 @@ Configuration for EEG-specific preprocessing settings.
 - `extreme_value_abs_criterion::Int`: Threshold for extreme value detection (μV)
 - `artifact_interval_start::Union{Nothing,Float64}`: Start time for artifact rejection interval (optional)
 - `artifact_interval_end::Union{Nothing,Float64}`: End time for artifact rejection interval (optional)
+- `artifact_value_z_criterion::Float64`: Z-score threshold for artifact detection (optional)
 """
 @kwdef struct EegConfig
     artifact_value_abs_criterion::Int = 100
@@ -142,6 +143,22 @@ end
     PreprocessConfig
 
 Comprehensive configuration for EEG data preprocessing.
+
+# Fields
+- `reference_channel::Symbol`: Channel to use for rereferencing
+- `epoch_start::Float64`: Start time of the epoch in seconds
+- `epoch_end::Float64`: End time of the epoch in seconds
+- `filter::FilterConfig`: Filter configuration
+- `cleanline::CleanLineConfig`: CleanLine configuration
+- `resample::ResampleConfig`: Resample configuration
+- `eog::EogConfig`: EOG configuration
+- `eeg::EegConfig`: EEG configuration
+- `ica::IcaConfig`: ICA configuration
+- `neighbour_criterion::Float64`: Criterion for layout neighbours
+- `channel_repair_method::Symbol`: Method for repairing bad channels
+- `interactive_continuous::Bool`: Show interactive continuous plot
+- `interactive_ica::Bool`: Show interactive ICA plot
+- `interactive_epochs::Bool`: Show interactive epochs plot
 """
 @kwdef struct PreprocessConfig
     reference_channel::Symbol = :avg
@@ -164,6 +181,13 @@ end
     InputFilesConfig
 
 Configuration for pipeline input files and directories.
+
+# Fields
+- `directory::String`: Input directory path
+- `raw_data_files::Union{Vector{String},String}`: Raw data files or regex pattern
+- `recursive::Bool`: Whether to search recursively
+- `layout_file::String`: Path to the layout file
+- `epoch_condition_file::String`: Path to the epoch condition file
 """
 @kwdef struct InputFilesConfig
     directory::String = "."
@@ -177,6 +201,18 @@ end
     OutputFilesConfig
 
 Configuration for pipeline output files and saving options.
+
+# Fields
+- `directory::String`: Output directory path
+- `save_continuous_data_raw::Bool`: Save raw continuous data
+- `save_continuous_data_corrected::Bool`: Save corrected continuous data
+- `save_ica_data::Bool`: Save ICA data
+- `save_epoch_data_raw::Bool`: Save raw epoch data
+- `save_epoch_data_corrected::Bool`: Save corrected epoch data
+- `save_epoch_data::Bool`: Save final epoch data
+- `save_erp_data_raw::Bool`: Save raw ERP data
+- `save_erp_data_corrected::Bool`: Save corrected ERP data
+- `save_erp_data::Bool`: Save final ERP data
 """
 @kwdef struct OutputFilesConfig
     directory::String = "./preprocessed_files"
@@ -195,6 +231,10 @@ end
     FilesConfig
 
 Top-level configuration for pipeline files (input and output).
+
+# Fields
+- `input::InputFilesConfig`: Input files configuration
+- `output::OutputFilesConfig`: Output files configuration
 """
 @kwdef struct FilesConfig
     input::InputFilesConfig = InputFilesConfig()
@@ -270,6 +310,10 @@ end
     PipelineConfig
 
 Unified top-level configuration for the preprocessing pipeline.
+
+# Fields
+- `files::FilesConfig`: Files configuration
+- `preprocess::PreprocessConfig`: Preprocess configuration
 """
 @kwdef struct PipelineConfig
     files::FilesConfig = FilesConfig()

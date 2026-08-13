@@ -52,6 +52,11 @@ plot_erp_measurement_gui(erp,
 - This GUI is designed for visual exploration and teaching, not batch processing
 """
 # String filepath - load data and dispatch
+"""
+    plot_erp_measurement_gui(filepath::String; kwargs...)
+
+Launch a GUI for interacting with ERP measurements from a file.
+"""
 function plot_erp_measurement_gui(filepath::String; kwargs...)
     data = read_data(filepath)
     if isnothing(data)
@@ -60,6 +65,11 @@ function plot_erp_measurement_gui(filepath::String; kwargs...)
     return plot_erp_measurement_gui(data; kwargs...)
 end
 # Single ErpData - dispatch to vector version
+"""
+    plot_erp_measurement_gui(erp::Union{ErpData,EpochData}; kwargs...)
+
+Launch a GUI for interacting with ERP measurements for a single dataset.
+"""
 function plot_erp_measurement_gui(
     erp::ErpData;
     channel::Union{Symbol,Vector{Symbol},Nothing} = nothing,
@@ -72,6 +82,11 @@ function plot_erp_measurement_gui(
 end
 
 # Vector of ErpData - main implementation
+"""
+    plot_erp_measurement_gui(erps::Vector{<:Union{ErpData,EpochData}}; kwargs...)
+
+Launch a GUI for interacting with ERP measurements for multiple datasets.
+"""
 function plot_erp_measurement_gui(
     erp_vec::Vector{ErpData};
     channel::Union{Symbol,Vector{Symbol},Nothing} = nothing,

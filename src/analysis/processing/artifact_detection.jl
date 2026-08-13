@@ -1196,6 +1196,11 @@ end
 # Automatically rejects epochs based on statistical measures 
 # (variance, max, min, absolute max, range, kurtosis) using z-score thresholds. 
 # This is useful for removing epochs with artifacts without manual inspection.
+"""
+    Rejection(channel::Symbol, epoch::Int)
+
+Struct representing a rejected epoch for a specific channel.
+"""
 struct Rejection
     channel::Symbol
     epoch::Int

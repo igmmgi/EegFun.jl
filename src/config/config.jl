@@ -185,6 +185,11 @@ function _generate_default_config()
     return config
 end
 
+"""
+    read_config(config_file::String)
+
+Read a TOML configuration file into a dictionary.
+"""
 function read_config(config_file::String)
     default_config = _generate_default_config()
 

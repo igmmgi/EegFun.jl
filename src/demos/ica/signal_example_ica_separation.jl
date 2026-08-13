@@ -372,23 +372,23 @@ function signal_example_ica_separation()
         flip1 = cor(c1, s1r) < 0
         flip2 = cor(c2, s2r) < 0
         if flip1
-            ;
-            c1 .*= -1;
+
+            c1 .*= -1
         end
         if flip2
-            ;
-            c2 .*= -1;
+
+            c2 .*= -1
         end
         copyto!(ica_c1_buf, c1 .- mean(c1))
         copyto!(ica_c2_buf, c2 .- mean(c2))
         W = res.unmixing[(swap ? [2, 1] : [1, 2]), :]
         if flip1
-            ;
-            W[1, :] .*= -1;
+
+            W[1, :] .*= -1
         end
         if flip2
-            ;
-            W[2, :] .*= -1;
+
+            W[2, :] .*= -1
         end
         ica_weights_buf .= W
         w1e, w2e = clamp(-W[1, 2] / W[1, 1], 0, 1.5), clamp(-W[2, 1] / W[2, 2], 0, 1.5)

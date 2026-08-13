@@ -281,7 +281,6 @@ function jackknife_average(
 
         # Save jackknife data: one file per participant
         # Each file contains Vector{ErpData} if multiple conditions, or single ErpData if one condition
-        n_participants = length(files)
 
         for (idx, (file, participant_id)) in enumerate(zip(files, participant_ids))
             # Collect jackknife data for this participant across all conditions

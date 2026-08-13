@@ -279,9 +279,14 @@ function plot_erp(
     )
 end
 
+"""
+    plot_erp_errorbar(datasets::Vector{ErpData}; kwargs...)
+
+Plot ERP errorbars for multiple datasets.
+"""
 function plot_erp_errorbar(
     filepath::String;
-    input_dir::String = "",
+    input_dir::String = pwd(),
     participant_selection::Function = participants(),
     layout::Union{Symbol,PlotLayout} = :single,
     condition_selection::Function = conditions(),
@@ -335,6 +340,39 @@ function plot_erp_errorbar(
     )
 end
 
+"""
+    plot_erp_errorbar(dataset::ErpData; kwargs...)
+
+Plot ERP errorbars for a single dataset.
+"""
+function plot_erp_errorbar(
+    dat::ErpData;
+    layout::Union{Symbol,PlotLayout} = :single,
+    channel_selection::Function = channels(),
+    channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
+    sample_selection::Function = samples(),
+    interval_selection::Interval = times(),
+    baseline_interval::Interval = nothing,
+    kwargs...,
+)
+    return plot_erp_errorbar(
+        [dat];
+        layout = layout,
+        condition_selection = conditions(),
+        channel_selection = channel_selection,
+        channel_plot_order = channel_plot_order,
+        sample_selection = sample_selection,
+        interval_selection = interval_selection,
+        baseline_interval = baseline_interval,
+        kwargs...,
+    )
+end
+
+"""
+    plot_erp_errorbar(datasets::Vector{ErpData}; kwargs...)
+
+Plot ERP errorbars for multiple datasets.
+"""
 function plot_erp_errorbar(
     datasets::Vector{ErpData};
     layout::Union{Symbol,PlotLayout} = :single,
@@ -605,6 +643,11 @@ end
 Plot grand-averaged ERP data with error ribbons on an existing axis, mutating the figure and axis.
 """
 plot_erp_errorbar!(fig::Figure, ax::Axis, dat::ErpData; kwargs...) = plot_erp_errorbar!(fig, ax, [dat]; kwargs...)
+"""
+    plot_erp_errorbar!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
+
+Plot ERP errorbars for multiple datasets into an existing figure and axis.
+"""
 function plot_erp_errorbar!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
     # Extract special parameters before validation (like plot_erp does)
     baseline_interval = get(kwargs, :baseline_interval, nothing)

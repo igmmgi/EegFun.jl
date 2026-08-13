@@ -105,6 +105,11 @@ function _run_erp_simulation(
 end
 
 # Component parameters structure
+"""
+    Component
+
+Mutable struct representing an ERP component for simulation.
+"""
 mutable struct Component
     active::Observable{Bool}
     freq::Observable{Float64}

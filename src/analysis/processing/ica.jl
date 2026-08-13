@@ -2870,6 +2870,11 @@ function subtract_ica_components!(dfs::Vector{DataFrame}, ica::InfoIca; componen
     return nothing
 end
 
+"""
+    subtract_ica_components(dat, ica::InfoIca; component_selection::Function = components())
+
+Non-mutating version of `subtract_ica_components!`.
+"""
 function subtract_ica_components(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
     dat_out = copy(dat)
     ica_out = copy(ica)  # Use our custom copy method
@@ -2960,6 +2965,11 @@ function add_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::
 end
 
 
+"""
+    add_ica_components(dat, ica::InfoIca; component_selection::Function = components())
+
+Non-mutating version of `add_ica_components!`.
+"""
 function add_ica_components(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
     dat_out = copy(dat)
     ica_out = copy(ica)  # Use our custom copy method
