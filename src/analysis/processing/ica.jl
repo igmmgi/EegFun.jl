@@ -2096,12 +2096,12 @@ function process_amica_blocks!(
             rng = lower:upper
 
             source_signals = view(wa.source_signals, 1:n_samples, :)
-            y = view(wa.y,(1:n_samples),:,:)
-            y_rho = view(wa.y_rho,(1:n_samples),:,:)
-            Q = view(wa.Q,(1:n_samples),:,:)
-            z = view(wa.z,(1:n_samples),:,:)
-            fp = view(wa.fp,(1:n_samples),:,:)
-            scratch3 = view(wa.scratch3,(1:n_samples),:,:)
+            y = view(wa.y, (1:n_samples), :, :)
+            y_rho = view(wa.y_rho, (1:n_samples), :, :)
+            Q = view(wa.Q, (1:n_samples), :, :)
+            z = view(wa.z, (1:n_samples), :, :)
+            fp = view(wa.fp, (1:n_samples), :, :)
+            scratch3 = view(wa.scratch3, (1:n_samples), :, :)
             Qmax = view(wa.scratch_N_n, 1:n_samples, :)
             logexp = view(wa.scratch_N_n2, 1:n_samples, :)
             zsum = view(wa.scratch_N_n, 1:n_samples, :)
@@ -2136,11 +2136,11 @@ function process_amica_blocks!(
                 end
             end
 
-            maximum!(view(Qmax,:,:,(1:1)), Q)
+            maximum!(view(Qmax, :, :, (1:1)), Q)
             @fastmath @inbounds @simd for I in eachindex(Q)
                 scratch3[I] = exp(Q[I] - Qmax[I[1], I[2]])
             end
-            sum!(view(logexp,:,:,(1:1)), scratch3)
+            sum!(view(logexp, :, :, (1:1)), scratch3)
             @fastmath @inbounds @simd for I in eachindex(logexp)
                 logexp[I] = log(logexp[I]) + Qmax[I]
             end
@@ -2155,7 +2155,7 @@ function process_amica_blocks!(
                 end
             end
 
-            sum!(view(zsum,:,:,(1:1)), z)
+            sum!(view(zsum, :, :, (1:1)), z)
             @fastmath @inbounds @simd for I in eachindex(z)
                 z[I] = z[I] / zsum[I[1], I[2]]
             end
@@ -2185,7 +2185,7 @@ function process_amica_blocks!(
                     end
                 end
             end
-            sum!(view(g_block_sum,:,:,(1:1)), scratch3)
+            sum!(view(g_block_sum, :, :, (1:1)), scratch3)
             mul!(wa.g_times_sources, transpose(g_block_sum), source_signals, one(T), one(T))
 
             if newton_active

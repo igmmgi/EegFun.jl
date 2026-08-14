@@ -118,7 +118,7 @@ function ride_decompose(
                             continue
                         end
 
-                        comp_j = view(templates,:,:,j)
+                        comp_j = view(templates, :, :, j)
                         @inbounds for t = 1:n_trials
                             shift_val = latencies[t, j]
                             for c = 1:n_channels
@@ -132,7 +132,7 @@ function ride_decompose(
 
                     # Run Woody filter using the current template for this component
                     # And use current latencies as initial guesses
-                    current_template = view(templates,:,:,k)
+                    current_template = view(templates, :, :, k)
                     initial_lats = latencies[:, k]
 
                     new_lats =
@@ -165,7 +165,7 @@ function ride_decompose(
     shifted_comp = zeros(T, n_samples)
 
     for k = 1:n_components
-        comp_k = view(templates,:,:,k)
+        comp_k = view(templates, :, :, k)
         @inbounds for t = 1:n_trials
             shift_val = latencies[t, k]
             for c = 1:n_channels
