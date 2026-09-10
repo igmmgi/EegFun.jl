@@ -155,11 +155,12 @@ using DataFrames
 
                 # Create pipeline config file
                 pipeline_file = joinpath(temp_dir, "pipeline.toml")
+                bdf_dir = replace(joinpath(data_dir, "bdf"), '\\' => '/')
                 write(
                     pipeline_file,
                     """
 [files.input]
-directory = "$(joinpath(data_dir, "bdf"))"
+directory = "$bdf_dir"
 raw_data_files = "example1\\\\.bdf"
 layout_file = "biosemi72.csv"
 epoch_condition_file = "epochs.toml"
@@ -214,11 +215,12 @@ epoch_end = 0.5
                 )
 
                 pipeline_file = joinpath(temp_dir, "pipeline.toml")
+                bdf_dir = replace(joinpath(data_dir, "bdf"), '\\' => '/')
                 write(
                     pipeline_file,
                     """
 [files.input]
-directory = "$(joinpath(data_dir, "bdf"))"
+directory = "$bdf_dir"
 raw_data_files = "example1\\\\.bdf"
 layout_file = "biosemi72.csv"
 epoch_condition_file = "epochs.toml"
@@ -271,11 +273,12 @@ epoch_end = 0.5
                 )
 
                 pipeline_file = joinpath(temp_dir, "pipeline.toml")
+                bdf_dir = replace(joinpath(data_dir, "bdf"), '\\' => '/')
                 write(
                     pipeline_file,
                     """
 [files.input]
-directory = "$(joinpath(data_dir, "bdf"))"
+directory = "$bdf_dir"
 raw_data_files = "example1\\\\.bdf"
 layout_file = "biosemi72.csv"
 epoch_condition_file = "epochs.toml"
