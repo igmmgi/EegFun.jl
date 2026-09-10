@@ -140,11 +140,6 @@ using Makie
         result = EegFun.plot_channel_summary(df, :std, display_plot = false)
         @test result.fig isa Figure
         @test first(result.axes) isa Axis
-
-        # Test with display_plot = true (should work since GLMakie is available)
-        result = EegFun.plot_channel_summary(df, :std, display_plot = true)
-        @test result.fig isa Figure
-        @test first(result.axes) isa Axis
     end
 
     @testset "plot_channel_summary different columns" begin

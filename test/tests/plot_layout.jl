@@ -192,16 +192,6 @@ using Makie
         result = EegFun.plot_layout_2d(layout, display_plot = false)
         @test result.fig isa Figure
         @test first(result.axes) isa Axis
-
-        # Test display_plot = true (might throw in headless environment)
-        try
-            result = EegFun.plot_layout_2d(layout, display_plot = true)
-            @test result.fig isa Figure
-            @test first(result.axes) isa Axis
-        catch e
-            # Expected in headless test environment
-            @test e isa MethodError
-        end
     end
 
     @testset "edge cases and boundary conditions" begin

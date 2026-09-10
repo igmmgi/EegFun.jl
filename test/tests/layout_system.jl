@@ -221,19 +221,19 @@ using DataFrames
         erp_data = EegFun.create_test_erp_data(participant = 1, condition = 1)
 
         # Test single layout
-        fig, axes = EegFun.plot_erp(erp_data, layout = :single)
+        fig, axes = EegFun.plot_erp(erp_data, layout = :single, display_plot = false)
         @test length(axes) == 1
 
         # Test grid layout
-        fig, axes = EegFun.plot_erp(erp_data, layout = :grid)
+        fig, axes = EegFun.plot_erp(erp_data, layout = :grid, display_plot = false)
         @test length(axes) == 3  # 4 channels
 
         # Test topo layout
-        fig, axes = EegFun.plot_erp(erp_data, layout = :topo)
+        fig, axes = EegFun.plot_erp(erp_data, layout = :topo, display_plot = false)
         @test length(axes) == 3  # 4 channels
 
         # Test custom grid dimensions via grid_dims parameter
-        fig, axes = EegFun.plot_erp(erp_data, layout = :grid, layout_grid_dims = (2, 2))
+        fig, axes = EegFun.plot_erp(erp_data, layout = :grid, layout_grid_dims = (2, 2), display_plot = false)
         @test length(axes) == 3
     end
 end
