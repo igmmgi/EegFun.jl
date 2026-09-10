@@ -8,8 +8,6 @@ PrecompileTools.@compile_workload begin
     layout_file_path = joinpath(pkg_dir, "resources", "layouts", "biosemi", "biosemi72.csv")
 
     if isfile(data_file) && isfile(layout_file_path)
-        println("Precompiling EegFun...")
-
         # 1. Reading raw data files (all formats) and opening databrowser
         # BDF
         dat = EegFun.read_raw_data(data_file)
@@ -161,12 +159,8 @@ PrecompileTools.@compile_workload begin
         EegFun.global_dissimilarity(erp[1])
         EegFun.lrp(erp[1], erp_fake2; channel_selection = EegFun.channels([:C3, :C4]))
         EegFun.jackknife_average([erp[1], erp_fake2])
-
-        println("Precompilation complete!")
     else
-        println("Skipping precompilation workload (example data files not found)")
-        println("  Expected data file: $data_file")
-        println("  Expected layout file: $layout_file_path")
+        @debug "Skipping precompilation workload (example data files not found)" data_file layout_file_path
     end
 
 end
