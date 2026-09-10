@@ -22,8 +22,6 @@ using KernelAbstractions
 # Plotting and visualization
 using Makie
 using GeometryBasics
-using CairoMakie
-using GLMakie
 using ScatteredInterpolation
 
 # Utilities

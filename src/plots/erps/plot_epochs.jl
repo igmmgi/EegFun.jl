@@ -1179,8 +1179,7 @@ function _show_epochs_context_menu!(selection_state, data, condition_checked_ref
         end
     end
 
-    new_screen = GLMakie.Screen()
-    display(new_screen, menu_fig)
+    _display_in_screen(menu_fig)
 end
 
 """

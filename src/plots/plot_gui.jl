@@ -506,7 +506,7 @@ function _plot_databrowser(gui_state)
                 if dat isa Vector
                     plot_databrowser(dat)
                 else
-                    new_screen = GLMakie.Screen()
+                    new_screen = _create_screen()
                     plot_databrowser(dat; screen = new_screen)
                 end
             end
@@ -527,7 +527,7 @@ function _plot_databrowser(gui_state)
             # Update electrode menu with actual channel labels from the loaded data
             gui_state.channel_menu.options = vcat(["Select"], string.(channel_labels(dat)))
             @async begin
-                new_screen = GLMakie.Screen()
+                new_screen = _create_screen()
                 plot_databrowser(dat; screen = new_screen)
             end
         end

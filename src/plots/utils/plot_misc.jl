@@ -251,7 +251,7 @@ function _open_save_settings_dialog(fig)
 
                     try
                         if filter_ext in (".pdf", ".svg")
-                            Makie.save(path, fig; backend = CairoMakie, pt_per_unit = 1.0)
+                            _save_vector_figure(path, fig; pt_per_unit = 1.0)
                         else
                             Makie.save(path, fig; px_per_unit = dpi_val / 72.0)
                         end
@@ -277,7 +277,81 @@ function _open_save_settings_dialog(fig)
     display(fig_settings)
 end
 
+# === MAKIE BACKEND EXTENSION STATE ===
+mutable struct MakieExtensionState
+    glmakie_active::Bool
+    cairomakie_active::Bool
+    create_screen::Function
+    display_screen::Function
+    save_vector::Function
+    set_title::Function
+end
 
+const MAKIE_EXT_STATE = MakieExtensionState(
+    false,
+    false,
+    (; size = nothing) -> error("Opening interactive windows requires GLMakie. Please run `using GLMakie`."),
+    (fig; size = nothing) -> begin
+        try
+            screen = MAKIE_EXT_STATE.create_screen(; size = size)
+            display(screen, fig)
+            return screen
+        catch
+            display(fig)
+            return nothing
+        end
+    end,
+    (path, fig; pt_per_unit = 1.0) -> begin
+        if string(Makie.current_backend()) == "CairoMakie"
+            Makie.save(path, fig; pt_per_unit = pt_per_unit)
+        else
+            @minimal_warning "Saving vector figures (.pdf/.svg) with optimal quality requires CairoMakie. Please run `using CairoMakie`. Falling back to default Makie save."
+            Makie.save(path, fig; pt_per_unit = pt_per_unit)
+        end
+    end,
+    (title::String) -> begin
+        backend = Makie.current_backend()
+        if string(backend) == "GLMakie" && hasproperty(backend, :activate!)
+            try
+                backend.activate!(title = title)
+            catch
+            end
+        end
+    end,
+)
+
+"""
+    _create_screen(; size = nothing)
+
+Create an interactive Makie screen. If GLMakie is loaded, creates a `GLMakie.Screen`.
+Otherwise, provides an informative error.
+"""
+function _create_screen(; size = nothing)
+    return MAKIE_EXT_STATE.create_screen(; size = size)
+end
+
+"""
+    _display_in_screen(fig; size = nothing)
+
+Display a figure in an interactive screen. If GLMakie is loaded, displays in a `GLMakie.Screen`.
+Otherwise, falls back to standard `display(fig)`.
+"""
+function _display_in_screen(fig; size = nothing)
+    return MAKIE_EXT_STATE.display_screen(fig; size = size)
+end
+
+"""
+    _save_vector_figure(path, fig; pt_per_unit = 1.0)
+
+Save a figure as vector graphics (.pdf or .svg). If CairoMakie is loaded, uses CairoMakie backend.
+Otherwise, warns the user to load CairoMakie and falls back to standard Makie save.
+"""
+function _save_vector_figure(path, fig; pt_per_unit = 1.0)
+    return MAKIE_EXT_STATE.save_vector(path, fig; pt_per_unit = pt_per_unit)
+end
+
+_is_glmakie_available() = MAKIE_EXT_STATE.glmakie_active
+_is_cairomakie_available() = MAKIE_EXT_STATE.cairomakie_active
 
 function _display_figure(fig)
     # Register keyboard shortcut for saving the figure
@@ -287,27 +361,16 @@ function _display_figure(fig)
         end
     end
 
-    backend = Makie.current_backend()
-    screen = if backend == GLMakie
-        GLMakie.Screen()
-    elseif backend == CairoMakie
-        CairoMakie.Screen()
-    else
-        @minimal_error "Unsupported Makie backend: $backend"
-    end
-    display(screen, fig)
+    _display_in_screen(fig)
 end
 
 """
     _set_window_title(title::String)
 
-Set the window title for GLMakie. Does nothing for CairoMakie (which doesn't support window titles).
+Set the window title for the active backend if supported (e.g., GLMakie).
 """
 function _set_window_title(title::String)
-    if Makie.current_backend() == GLMakie
-        Makie.current_backend().activate!(title = title)
-    end
-    # Note: CairoMakie doesn't support window titles.
+    return MAKIE_EXT_STATE.set_title(title)
 end
 
 """
