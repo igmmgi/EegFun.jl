@@ -6,3 +6,6 @@ DocumenterVitepress = "4710194d-e776-4893-9690-8d956a29c365"
 EegFun = "aa15e9e4-a77e-4972-a32b-58bceaaa184b"
 JuliaFormatter = "98e50ef6-434e-11e9-1051-2b60c6c9e899"
 LiveServer = "16fef848-5104-11e9-1b77-fb7a48bbb589"
+
+[compat]
+Documenter = "~1.17"

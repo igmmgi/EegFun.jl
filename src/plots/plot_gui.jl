@@ -148,7 +148,7 @@ function plot_gui()
     colsize!(main_layout, 2, Auto())
     colsize!(main_layout, 3, Auto())
 
-    _display_popup(gui_fig)
+    _display_in_screen(gui_fig)
     _set_window_title("Makie")
 
     return nothing

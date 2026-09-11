@@ -48,10 +48,6 @@ CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
 
-[sources]
-AnovaFun = {rev = "main", url = "https://github.com/igmmgi/AnovaFun.jl"}
-BiosemiDataFormat = {rev = "master", url = "https://github.com/igmmgi/BiosemiDataFormat.jl.git"}
-BrainVisionDataFormat = {rev = "main", url = "https://github.com/igmmgi/BrainVisionDataFormat.jl.git"}
 
 [extensions]
 EegFunAMDGPUExt = "AMDGPU"
