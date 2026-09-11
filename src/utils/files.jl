@@ -1,3 +1,8 @@
+"""
+    get_files(directory::String, files::String; recursive::Bool = false)
+
+Get files from a directory matching a pattern.
+"""
 function get_files(directory::String, files::String; recursive::Bool = false)
     if recursive
         # Walk subdirectories (e.g., BIDS sub-XX/eeg/ structure)
@@ -18,6 +23,11 @@ function get_files(directory::String, files::String; recursive::Bool = false)
     end
 end
 
+"""
+    get_files(directory::String, files::Vector{String})
+
+Get files from a directory matching a list of filenames.
+"""
 function get_files(directory::String, files::Vector{String})
     return [joinpath(directory, file) for file in files]
 end

@@ -552,7 +552,7 @@ function print_layout_neighbours(layout::Layout)
     end
     nneighbours = average_number_of_neighbours(layout.neighbours)
     toml_data = _format_neighbours_toml(layout.neighbours, nneighbours)
-    TOML.print(stdout, toml_data, sorted = true)
+    TOML.print(x -> x isa Symbol ? string(x) : x, stdout, toml_data, sorted = true)
 end
 
 """

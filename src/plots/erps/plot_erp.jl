@@ -2,7 +2,9 @@
 const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
     :display_plot => (true, "Display the plot (true/false)"),
-    :figure_title => ("ERP Plot", "Title for the plot window"),
+    :window_title => ("", "Title for the OS plot window. If empty, it's generated automatically."),
+    :figure_title => ("", "Title drawn at the top of the entire figure canvas"),
+    :figure_title_fontsize => (24, "Font size for figure title"),
     :interactive => (true, "Enable interactive features (true/false)"),
     :zoom_step => (0.2, "Fractional zoom step for arrow keys (e.g. 0.2 means 20% zoom in/out)"),
     :selection_color => (:blue, "Color for interactive selection rectangles"),
@@ -23,8 +25,13 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     ),
 
     # Title
-    :title => ("", "Plot title"),
-    :show_title => (true, "Show title (true/false)"),
+    :plot_title => (nothing, "Plot title"),
+    :plot_title_fontsize => (16, "Font size for plot titles"),
+    :plot_title_position => (
+        nothing,
+        "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis.",
+    ),
+    :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
 
     # Line styling
     :linewidth => (2, "Line width for ERPs"),
@@ -61,17 +68,8 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :scale_x_value => (nothing, "X-axis scale value/step size (e.g. 0.1 for 100 ms)"),
     :scale_y_value => (nothing, "Y-axis scale value/step size (e.g. 5.0 for 5 μV)"),
 
-    # Layout parameters (for topo and other layouts)
-    :layout_topo_plot_width => (0.05, "Width of individual plots (fraction of figure width)"),
-    :layout_topo_plot_height => (0.05, "Height of individual plots (fraction of figure height)"),
-    :layout_topo_scale_offset => (0.1, "Offset factor for scale plot position"),
-    :layout_topo_scale_pos => ((0.8, -0.8), "Fallback position for scale plot in topo layout as (x, y) tuple"),
-
-    # Grid layout parameters
-    :layout_grid_rowgap => (10, "Gap between rows (in pixels)"),
-    :layout_grid_colgap => (10, "Gap between columns (in pixels)"),
-    :layout_grid_dims => (nothing, "Grid dimensions as (rows, cols) tuple for grid layouts. If nothing, automatically determined"),
-    :layout_grid_skip_positions => (nothing, "Positions to skip in grid layout as vector of (row, col) tuples, e.g., [(2,1), (2,3)]"),
+    # Layout parameters - dynamically pull all layout options
+    [Symbol("layout_$(attr)") => val for (attr, val) in LAYOUT_KWARGS]...,
 
     # General layout parameters
     :figure_padding => ((10, 30, 10, 10), "Padding around entire figure as (left, right, bottom, top) tuple (in pixels)"),
@@ -281,9 +279,14 @@ function plot_erp(
     )
 end
 
+"""
+    plot_erp_errorbar(datasets::Vector{ErpData}; kwargs...)
+
+Plot ERP errorbars for multiple datasets.
+"""
 function plot_erp_errorbar(
     filepath::String;
-    input_dir::String = "",
+    input_dir::String = pwd(),
     participant_selection::Function = participants(),
     layout::Union{Symbol,PlotLayout} = :single,
     condition_selection::Function = conditions(),
@@ -337,6 +340,39 @@ function plot_erp_errorbar(
     )
 end
 
+"""
+    plot_erp_errorbar(dataset::ErpData; kwargs...)
+
+Plot ERP errorbars for a single dataset.
+"""
+function plot_erp_errorbar(
+    dat::ErpData;
+    layout::Union{Symbol,PlotLayout} = :single,
+    channel_selection::Function = channels(),
+    channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
+    sample_selection::Function = samples(),
+    interval_selection::Interval = times(),
+    baseline_interval::Interval = nothing,
+    kwargs...,
+)
+    return plot_erp_errorbar(
+        [dat];
+        layout = layout,
+        condition_selection = conditions(),
+        channel_selection = channel_selection,
+        channel_plot_order = channel_plot_order,
+        sample_selection = sample_selection,
+        interval_selection = interval_selection,
+        baseline_interval = baseline_interval,
+        kwargs...,
+    )
+end
+
+"""
+    plot_erp_errorbar(datasets::Vector{ErpData}; kwargs...)
+
+Plot ERP errorbars for multiple datasets.
+"""
 function plot_erp_errorbar(
     datasets::Vector{ErpData};
     layout::Union{Symbol,PlotLayout} = :single,
@@ -413,15 +449,19 @@ function _plot_erp_core(
 
     # set default plot title only for single layouts
     # For grid/topo layouts, we want individual channel names, not a global title
-    if plot_kwargs[:show_title] && plot_kwargs[:title] == "" && layout == :single
-        plot_kwargs[:title] = length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(_print_vector(all_plot_channels))"
+    if isnothing(plot_kwargs[:plot_title]) && layout == :single
+        plot_kwargs[:plot_title] = length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(_print_vector(all_plot_channels))"
         if plot_kwargs[:average_channels]
-            plot_kwargs[:title] = "Avg: $(_print_vector(original_channels))"
+            plot_kwargs[:plot_title] = "Avg: $(_print_vector(original_channels))"
         end
     end
 
-    # Generate window title from datasets
-    title_str = _generate_window_title(dat_subset)
+    # Generate window title from datasets or use provided window_title
+    if !isempty(plot_kwargs[:window_title])
+        title_str = plot_kwargs[:window_title]
+    else
+        title_str = _generate_window_title(dat_subset)
+    end
     _set_window_title(title_str)
 
     # Extract layout_* parameters, remove prefix, and pass to create_layout
@@ -429,7 +469,9 @@ function _plot_erp_core(
 
     # Create figure and apply layout system
     set_theme!(fontsize = plot_kwargs[:theme_fontsize])
-    fig = Figure(title = plot_kwargs[:figure_title], figure_padding = plot_kwargs[:figure_padding])
+    fig = Figure(title = title_str, figure_padding = plot_kwargs[:figure_padding])
+
+
 
     plot_layout = create_layout(layout, all_plot_channels, first(dat_subset).layout; layout_kwargs...)
 
@@ -519,6 +561,11 @@ function _plot_erp_core(
 
     end
 
+    # Draw supertitle if user explicitly provided a figure_title
+    if !isempty(plot_kwargs[:figure_title])
+        Label(fig[0, :], plot_kwargs[:figure_title], fontsize = plot_kwargs[:figure_title_fontsize], font = :bold, tellwidth = false)
+    end
+
     if plot_kwargs[:display_plot]
         _display_figure(fig)
     end
@@ -596,6 +643,11 @@ end
 Plot grand-averaged ERP data with error ribbons on an existing axis, mutating the figure and axis.
 """
 plot_erp_errorbar!(fig::Figure, ax::Axis, dat::ErpData; kwargs...) = plot_erp_errorbar!(fig, ax, [dat]; kwargs...)
+"""
+    plot_erp_errorbar!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
+
+Plot ERP errorbars for multiple datasets into an existing figure and axis.
+"""
 function plot_erp_errorbar!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
     # Extract special parameters before validation (like plot_erp does)
     baseline_interval = get(kwargs, :baseline_interval, nothing)
@@ -1435,7 +1487,7 @@ function _setup_erp_control_panel!(
                 end
             end
 
-            display(control_fig[])
+            _display_popup(control_fig[])
 
         end
     end

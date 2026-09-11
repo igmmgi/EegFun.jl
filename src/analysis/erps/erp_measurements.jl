@@ -38,12 +38,6 @@ const MEASUREMENT_TYPE_LABELS = [
     "Fractional Peak Latency" => "fractional_peak_latency",
 ]
 
-"""Set of measurement types that return latency values (seconds) rather than amplitudes (μV)."""
-const _LATENCY_MEASUREMENT_TYPES =
-    Set(["max_peak_latency", "min_peak_latency", "peak_to_peak_latency", "fractional_area_latency", "fractional_peak_latency"])
-
-"""Check whether a measurement type returns a latency value."""
-_is_latency_measurement(t::String) = t in _LATENCY_MEASUREMENT_TYPES
 
 # === DEFAULT KEYWORD ARGUMENTS ===
 const ERP_MEASUREMENTS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
@@ -784,6 +778,12 @@ end
 # === MAIN API FUNCTION ===
 
 
+"""
+    erp_measurements(data::Vector{<:Union{ErpData,EpochData}}, analysis_type::String; kwargs...)
+    erp_measurements(data::Union{ErpData,EpochData}, analysis_type::String; kwargs...)
+
+Non-mutating version of `erp_measurements!`.
+"""
 function erp_measurements(
     file_pattern::String,
     analysis_type::String;

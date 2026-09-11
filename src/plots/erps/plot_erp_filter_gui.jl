@@ -29,12 +29,22 @@ Perfect for:
 - For batch filtering, use `lowpass_filter` or `highpass_filter` functions
 """
 # No arguments - load example data
+"""
+    plot_erp_filter_gui(; kwargs...)
+
+Launch a GUI for interactively filtering ERP data.
+"""
 function plot_erp_filter_gui(; kwargs...)
     data = read_data(example_path("data/julia/erps/example1_erps.jld2"))
     return plot_erp_filter_gui(data[1]; kwargs...)
 end
 
 # String filepath - load data and dispatch
+"""
+    plot_erp_filter_gui(filepath::String; kwargs...)
+
+Launch a GUI for interactively filtering ERP data from a file.
+"""
 function plot_erp_filter_gui(filepath::String; kwargs...)
     data = read_data(filepath)
     if isnothing(data)
@@ -44,12 +54,26 @@ function plot_erp_filter_gui(filepath::String; kwargs...)
 end
 
 # Single ErpData/ContinuousData - dispatch to vector version
-function plot_erp_filter_gui(erp::Union{ErpData, ContinuousData}; channel::Union{Symbol,Nothing} = nothing)
+"""
+    plot_erp_filter_gui(erp::Union{ErpData,ContinuousData}; channel::Union{Symbol,Nothing} = nothing)
+
+Launch a GUI for interactively filtering a single dataset.
+"""
+function plot_erp_filter_gui(erp::Union{ErpData,ContinuousData}; channel::Union{Symbol,Nothing} = nothing)
     return plot_erp_filter_gui([erp]; channel)
 end
 
 # Vector of ErpData/ContinuousData - main implementation
-function plot_erp_filter_gui(erp_vec::Vector{<:Union{ErpData, ContinuousData}}; channel::Union{Symbol,Nothing} = nothing, display_plot::Bool = true)
+"""
+    plot_erp_filter_gui(erps::Vector{<:Union{ErpData,ContinuousData}}; channel::Union{Symbol,Nothing} = nothing)
+
+Launch a GUI for interactively filtering multiple datasets.
+"""
+function plot_erp_filter_gui(
+    erp_vec::Vector{<:Union{ErpData,ContinuousData}};
+    channel::Union{Symbol,Nothing} = nothing,
+    display_plot::Bool = true,
+)
 
     # Get available channels from first ERP
     first_erp = erp_vec[1]
@@ -226,7 +250,7 @@ function plot_erp_filter_gui(erp_vec::Vector{<:Union{ErpData, ContinuousData}}; 
             if erp_vec[idx] isa ErpData
                 plot_erp!(fig, ax, [erp_vec[idx]], channel_selection = channels(selected_channel[]), legend = false)
             else
-                t = (0:size(erp_vec[idx].data, 1)-1) ./ erp_vec[idx].sample_rate
+                t = (0:(size(erp_vec[idx].data, 1)-1)) ./ erp_vec[idx].sample_rate
                 lines!(ax, t, erp_vec[idx].data[!, selected_channel[]], color = :black)
             end
 
@@ -271,7 +295,7 @@ function plot_erp_filter_gui(erp_vec::Vector{<:Union{ErpData, ContinuousData}}; 
                     if filtered_erp isa ErpData
                         plot_erp!(fig, ax, [filtered_erp], channel_selection = channels(selected_channel[]), legend = false, color = :red)
                     else
-                        t_filt = (0:size(filtered_erp.data, 1)-1) ./ filtered_erp.sample_rate
+                        t_filt = (0:(size(filtered_erp.data, 1)-1)) ./ filtered_erp.sample_rate
                         lines!(ax, t_filt, filtered_erp.data[!, selected_channel[]], color = :red)
                     end
 

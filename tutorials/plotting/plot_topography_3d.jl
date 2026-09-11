@@ -8,8 +8,7 @@
 using EegFun
 
 # Important: To interact with 3D plots (rotate, pan, zoom), you should use GLMakie!
-# using GLMakie
-# GLMakie.activate!()
+using GLMakie
 
 # read raw data
 dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"));

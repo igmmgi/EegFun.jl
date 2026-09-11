@@ -148,6 +148,7 @@ The databrowser is essential for interactive EEG exploration and quality control
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 using JLD2
 
 const DEMO_OUTPUT = "./tutorials/output/"

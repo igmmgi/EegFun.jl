@@ -177,7 +177,7 @@ using EegFun
         dat = EegFun.create_test_continuous_data(n = 100, n_channels = 4)
 
         # Test unknown method
-        @test_throws ArgumentError EegFun.repair_channels!(dat, [:Ch2], method = :unknown_method)
+        @test_throws EegFun.EegFunError EegFun.repair_channels!(dat, [:Ch2], method = :unknown_method)
     end
 
     # Custom parameters for spherical spline

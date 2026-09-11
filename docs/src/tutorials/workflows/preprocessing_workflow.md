@@ -57,6 +57,7 @@ The demo produces both "original" (lightly preprocessed) and "good" (fully clean
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 using JLD2
 
 const DEMO_OUTPUT = "./tutorials/output/"

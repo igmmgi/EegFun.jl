@@ -2,6 +2,7 @@
 # Shows filter frequency response and impulse response visualization.
 
 using EegFun
+using GLMakie
 
 # Create lowpass IIR filter using create_filter
 filter_info = EegFun.create_lowpass_filter(30.0, 256.0; filter_method = "iir")

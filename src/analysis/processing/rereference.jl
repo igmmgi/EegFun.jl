@@ -120,6 +120,11 @@ function _get_reference_channels(dat::EegData, reference_channel::Symbol)
 end
 
 # Single method for all EEG data types
+"""
+    rereference!(dat::EegData, reference_selection::Union{Symbol,Vector{Symbol}}; channel_selection::Function = channels())
+
+Rereference EEG data to a specified channel or combination of channels.
+"""
 function rereference!(dat::EegData, reference_selection::Union{Symbol,Vector{Symbol}}; channel_selection::Function = channels())
 
     reference_channels = _get_reference_channels(dat, reference_selection)
@@ -163,7 +168,16 @@ function rereference!(dat::Vector{ErpData}, reference_selection::Union{Symbol,Ve
 end
 
 # generates all non-mutating versions
-@add_nonmutating rereference!
+"""
+    rereference(dat, args...; kwargs...)
+
+Non-mutating version of `rereference!`.
+"""
+function rereference(dat, args...; kwargs...)
+    dat_copy = copy(dat)
+    rereference!(dat_copy, args...; kwargs...)
+    return dat_copy
+end
 
 
 
@@ -206,7 +220,7 @@ function _process_rereference_file(filepath::String, output_path::String, refere
     end
 
     # Apply rereferencing (mutates data in-place)
-    rereference!.(data, reference_selection)
+    rereference!.(data, Ref(reference_selection))
 
     # Save (always use "data" as variable name since read_data finds by type)
     jldsave(output_path; data = data)

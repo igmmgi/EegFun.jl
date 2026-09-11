@@ -246,9 +246,9 @@ using DataFrames
         doc = EegFun._generate_kwargs_doc(kwargs_dict)
 
         @test contains(doc, "# Keyword Arguments")
-        @test contains(doc, "param1::Int64=1")
+        @test contains(doc, "param1::Int64 = 1")
         @test contains(doc, "First parameter")
-        @test contains(doc, "param2::Float64=2.0")
+        @test contains(doc, "param2::Float64 = 2.0")
         @test contains(doc, "Second parameter")
     end
 

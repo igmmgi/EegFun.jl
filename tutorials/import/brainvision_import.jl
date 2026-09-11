@@ -8,6 +8,7 @@
 # dat = EegFun.read_raw_data("/path/to/your/data.vhdr")
 
 using EegFun
+using GLMakie
 
 # Load raw BrainVision data
 # read_raw_data automatically detects BrainVision files (.vhdr, .eeg, or .vmrk)

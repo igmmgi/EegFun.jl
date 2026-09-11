@@ -86,6 +86,7 @@ This demo shows re-referencing workflows:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 
 # read raw data
 dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"));
@@ -106,6 +107,11 @@ dat.data
 # Rereference to :AF7
 EegFun.rereference!(dat, :AF7)
 dat.data
+
+# Rereference to :AF7
+EegFun.rereference!(dat, [:Fp1, :AF7])
+dat.data
+
 
 # We can also see the influence of reference using the databrowser
 EegFun.plot_databrowser(dat)

@@ -36,6 +36,7 @@ Epoching is the process of extracting specific time intervals around events (e.g
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 
 # Read raw data
 dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"));

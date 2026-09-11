@@ -143,6 +143,12 @@ function resample!(dat::EpochData, target_rate::Real)::Nothing
     return nothing
 end
 
+"""
+    resample(dat::EegData, target_rate::Real)
+    resample(data_vec::Vector{<:EegData}, target_rate::Real)
+
+Non-mutating version of `resample!`.
+"""
 function resample(dat::T, target_rate::Real)::T where {T<:EegData}
     dat_copy = copy(dat)
     resample!(dat_copy, target_rate)

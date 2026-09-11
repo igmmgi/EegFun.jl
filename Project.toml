@@ -1,6 +1,6 @@
 name = "EegFun"
 uuid = "aa15e9e4-a77e-4972-a32b-58bceaaa184b"
-version = "0.6.0"
+version = "0.8.0"
 authors = ["igmmgi <ian.mackenzie@uni-tuebingen.de>", "carolin.dudschig@uni-tuebingen.de"]
 
 [deps]
@@ -63,7 +63,6 @@ EegFunMetalExt = "Metal"
 [compat]
 AMDGPU = "2.7.0"
 AnovaFun = "0.4"
-Aqua = "0.8.16"
 BiosemiDataFormat = "0.2.0"
 BrainVisionDataFormat = "0.1.0"
 CSV = "0.10.0"
@@ -107,6 +106,7 @@ Coverage = "a2441757-f6aa-5fb2-8edb-039e3f45d037"
 CoverageTools = "c36e975a-824b-4404-a568-ef97ca766997"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 DocumenterTools = "35a29f4d-8980-5a13-9543-d66fff28ecb8"
+GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 JuliaFormatter = "98e50ef6-434e-11e9-1051-2b60c6c9e899"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

@@ -7,6 +7,35 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-13
+
+### Changed
+
+- Refactor of the plotting API to standardize title arguments across all plots: `window_title` controls the OS window, `figure_title` (and `figure_title_fontsize`) controls the main super-title, and `plot_title` (and `plot_title_fontsize`) controls individual subplot titles.
+- Added `plot_title_position` and `plot_title_align` to allow rendering subplot titles *inside* the axis (e.g., `plot_title_position=(0.5, 0.95)`), which saves vertical space for dense EEG channel grids.
+- Increased the default distance criterion for spatial layout neighbours (`neighbour_criterion`) from `0.25` to `0.35` to better support standard 10-20/10-10 electrode layouts and prevent empty connectivity matrices during cluster permutation tests.
+- Formatted the entire codebase using `JuliaFormatter.jl` to adhere strictly to `.JuliaFormatter.toml` styling rules.
+- 100% of the public API is now fully documented with comprehensive docstrings.
+
+### Fixed
+
+- Fixed an issue where `EegFun.conditions(...)` array subsets (like `conditions([3, 1])`) would discard the requested array order and always extract conditions numerically/alphabetically. This ensures paired statistics (`prepare_stats`) and plotting functions accurately reflect the requested data order.
+- Fixed messy legends in `plot_erp_stats` by hiding redundant labels for channels.
+- Added a warning in `plot_erp_stats` when `average_channels=true` is passed, as spatial averaging is statistically invalid for cluster permutation statistics.
+- Fixed `DimensionMismatch` bug in `rereference` when using array-based reference selections (like `[:M1, :M2]`).
+- Fixed default arguments and added a missing dispatch for `plot_erp_errorbar(dat::ErpData)`.
+- Removed invalid keyword arguments in `apply_analysis_settings` and `apply_analysis_settings!`.
+- Cleaned up unused variables and arguments across `erp_measurements.jl` and `jackknife_average.jl`.
+
+## [0.7.0] - 2026-08-07
+
+### Changed
+
+- Made `EegFun.jl` plotting backend-agnostic by removing direct `GLMakie` and `CairoMakie` dependencies. Users must now explicitly load their preferred Makie backend (e.g., `using GLMakie`) alongside `EegFun.jl`.
+- Updated all documentation, tutorials, and quickstart examples to reflect the new `using GLMakie` requirement for interactive plotting.
+- Transitioned filter configurations and keyword arguments to use Julia `Symbol`s instead of strings for better performance and consistency.
+- Minor code tidy and formatting improvements.
+
 ## [0.6.0] - 2026-08-03
 
 ### Added

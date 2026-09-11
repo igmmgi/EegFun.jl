@@ -235,6 +235,11 @@ plot_layout_2d(dat::EegFunData; kwargs...) = plot_layout_2d(dat.layout; kwargs..
 Aliases for `plot_layout_2d` and `plot_layout_2d!` to maintain backwards compatibility and consistency with `plot_topography` (which is 2D by default).
 """
 plot_layout(args...; kwargs...) = plot_layout_2d(args...; kwargs...)
+"""
+    plot_layout!(args...; kwargs...)
+
+Plot a 2D sensor layout in an existing Makie axis.
+"""
 plot_layout!(args...; kwargs...) = plot_layout_2d!(args...; kwargs...)
 
 

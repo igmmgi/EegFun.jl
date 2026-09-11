@@ -20,6 +20,7 @@ Demonstrates FIF Import functionality.
 # dat = EegFun.read_raw_data("/path/to/your/data.fif")
 
 using EegFun
+using GLMakie
 
 # Load raw FIF data
 raw_fif = EegFun.read_raw_data(EegFun.example_path("data/fif/test_raw.fif"))

@@ -122,15 +122,15 @@ function plot_topography_3d(
     ax = LScene(fig[1, 1], show_axis = false)
 
     # Add title
-    if plot_kwargs[:show_title]
-        if plot_kwargs[:title] != ""
-            title_str = plot_kwargs[:title]
+    if !isnothing(plot_kwargs[:plot_title]) && !isempty(plot_kwargs[:plot_title])
+        if plot_kwargs[:plot_title] != ""
+            title_str = plot_kwargs[:plot_title]
         else
             time_min, time_max = extrema(dat_subset.data.time)
             time_unit = get(plot_kwargs, :time_unit, :s)
             title_str = _format_time_range(time_min, time_max, time_unit)
         end
-        Label(fig[1, 1, Top()], title_str, fontsize = plot_kwargs[:title_fontsize], font = :bold)
+        Label(fig[1, 1, Top()], title_str, fontsize = plot_kwargs[:plot_title_fontsize], font = :bold)
     end
 
     # Load 3D head mesh and extract vertices
@@ -191,8 +191,8 @@ function plot_topography_3d(
     colorbar_plot = pop!(plot_kwargs, :colorbar_plot, true)
     if colorbar_plot
         colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
-        colorbar_position = pop!(plot_kwargs, :colorbar_position, (1, 2))
-        Colorbar(fig[colorbar_position...], m; colorbar_kwargs...)
+        cb_pos = _get_colorbar_position(pop!(plot_kwargs, :colorbar_position, :right), 1:1, 1:1)
+        Colorbar(fig[cb_pos...], m; colorbar_kwargs...)
     end
 
     # Configure initial camera view if requested

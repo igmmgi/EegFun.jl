@@ -7,9 +7,13 @@ const PLOT_CORRELATION_HEATMAP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :display_plot => (true, "Whether to display the plot"),
 
     # Title and labels
-    :title => ("", "Plot title"),
-    :title_fontsize => (16, "Font size for the title"),
-    :show_title => (true, "Whether to show the title"),
+    :plot_title => (nothing, "Plot title"),
+    :plot_title_position => (
+        nothing,
+        "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis.",
+    ),
+    :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
+    :plot_title_fontsize => (16, "Font size for the title"),
 
     # Heatmap styling
     :colormap => (:jet, "Colormap for the heatmap"),
@@ -30,12 +34,16 @@ const PLOT_CORRELATION_HEATMAP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :xminorgrid => (false, "Whether to show x-axis minor grid"),
     :yminorgrid => (false, "Whether to show y-axis minor grid"),
 
-    # Colorbar parameters
+    # Colorbar parameters - get all Colorbar attributes with their actual defaults
+    [
+        Symbol("colorbar_$(attr)") => (get(COLORBAR_DEFAULTS, attr, nothing), "Colorbar $(attr) parameter") for
+        attr in propertynames(Colorbar)
+    ]...,
+
+    # Specific colorbar overrides for correlation heatmap
     :colorbar_plot => (true, "Whether to display the colorbar"),
-    :colorbar_position => ((1, 2), "Position of the colorbar as (row, col) tuple"),
-    :colorbar_width => (30, "Width of the colorbar"),
+    :colorbar_position => (:right, "Position of the colorbar (:right, :left, :top, :bottom, or tuple)"),
     :colorbar_label => ("Correlation", "Label for the colorbar"),
-    :colorbar_fontsize => (12, "Font size for colorbar label"),
 )
 
 """
@@ -120,9 +128,9 @@ function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kw
     ax.yticklabelsize = plot_kwargs[:tick_fontsize]
 
     # Set title
-    if plot_kwargs[:show_title] && !isempty(plot_kwargs[:title])
-        ax.title = plot_kwargs[:title]
-        ax.titlesize = plot_kwargs[:title_fontsize]
+    if !isnothing(plot_kwargs[:plot_title]) && !isempty(plot_kwargs[:plot_title])
+        ax.title = plot_kwargs[:plot_title]
+        ax.titlesize = plot_kwargs[:plot_title_fontsize]
     end
 
     # Configure grid using the new axis styling function
@@ -140,15 +148,13 @@ function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kw
     heatmap!(ax, corr_matrix', colormap = plot_kwargs[:colormap], colorrange = colorrange, nan_color = plot_kwargs[:nan_color])
 
     # Add a colorbar if requested
-    if plot_kwargs[:colorbar_plot]
-        Colorbar(
-            fig[plot_kwargs[:colorbar_position]...],
-            colormap = plot_kwargs[:colormap],
-            limits = colorrange,
-            label = plot_kwargs[:colorbar_label],
-            width = plot_kwargs[:colorbar_width],
-            labelsize = plot_kwargs[:colorbar_fontsize],
-        )
+    colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
+    colorbar_plot = pop!(plot_kwargs, :colorbar_plot, true)
+
+    if colorbar_plot
+        cb_pos = _get_colorbar_position(plot_kwargs[:colorbar_position], 1:1, 1:1)
+        sg = ax.layoutobservables.gridcontent[].parent
+        Colorbar(sg[cb_pos...]; colormap = plot_kwargs[:colormap], limits = colorrange, colorbar_kwargs...)
     end
 
     return nothing

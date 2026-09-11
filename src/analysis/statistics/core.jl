@@ -224,13 +224,13 @@ function _validate_permutation_inputs(
     # Auto-compute neighbours if missing (only when needed for spatial clustering)
     if cluster_type ∈ (:spatial, :spatiotemporal)
         if isnothing(prepared.data[1].layout.neighbours)
-            @minimal_warning "Layout.neighbours is not set. Computing with default distance criterion (0.25)."
-            # Compute neighbours if missing (using default criterion)
-            get_neighbours_xy!(prepared.data[1].layout, 0.25)
-            # Also update the other condition's layout if it's a different layout object
-            if length(prepared.data) > 1 && prepared.data[2].layout !== prepared.data[1].layout
-                # Different layout object, update it too
-                get_neighbours_xy!(prepared.data[2].layout, 0.25)
+            @minimal_warning "Layout.neighbours is not set. Computing with default distance criterion (0.35)."
+            # Need to update layout.neighbours for both conditions
+            get_neighbours_xy!(prepared.data[1].layout, 0.35)
+            if length(prepared.data) > 1
+                # Ensure they match if they have separate layouts
+                # They should share the layout anyway!
+                get_neighbours_xy!(prepared.data[2].layout, 0.35)
             end
         end
     end
@@ -366,9 +366,9 @@ function _compute_t_matrix(
 
         @inbounds for t_idx = 1:n_time
             @inbounds for e_idx = 1:n_electrodes
-                sum1 = 0.0;
-                sum2 = 0.0;
-                sum1_sq = 0.0;
+                sum1 = 0.0
+                sum2 = 0.0
+                sum1_sq = 0.0
                 sum2_sq = 0.0
 
                 @simd for p_idx = 1:n_A

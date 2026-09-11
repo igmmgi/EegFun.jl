@@ -43,6 +43,7 @@ This demo shows how to plot power spectra from `SpectrumData` objects.
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 
 #######################################################################
 # LOAD AND PREPARE DATA

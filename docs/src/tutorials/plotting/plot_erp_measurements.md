@@ -56,6 +56,7 @@ This demo covers:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 
 dat = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps_final.jld2"))
 

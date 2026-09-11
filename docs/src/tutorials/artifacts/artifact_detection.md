@@ -67,6 +67,7 @@ This demo offers a walkthrough of artifact handling in EegFun: continuous-data a
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 
 #######################################################################
 # LOAD AND PREPROCESS DATA

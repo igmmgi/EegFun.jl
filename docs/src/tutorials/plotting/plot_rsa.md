@@ -46,6 +46,7 @@ This demo shows how to visualise Representational Similarity Analysis (RSA) resu
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 
 #######################################################################
 # LOAD DATA AND COMPUTE RSA

@@ -42,11 +42,8 @@ function print_config(config, io::IO = stdout)
     config_with_meta = OrderedDict{String,Any}()
 
     # Always add fresh metadata first
-    config_with_meta["metadata"] = OrderedDict(
-        "julia_version" => string(VERSION),
-        "EegFun_version" => string(pkgversion(@__MODULE__)),
-        "date" => string(now()),
-    )
+    config_with_meta["metadata"] =
+        OrderedDict("julia_version" => string(VERSION), "EegFun_version" => string(pkgversion(@__MODULE__)), "date" => string(now()))
 
     # Copy config content, ensuring string keys and skipping any existing metadata
     for (key, value) in config
@@ -54,7 +51,7 @@ function print_config(config, io::IO = stdout)
             config_with_meta[string(key)] = value
         end
     end
-    TOML.print(io, config_with_meta)
+    TOML.print(x -> x isa Symbol ? string(x) : x, io, config_with_meta)
 end
 
 # Convenience method for printing to a file

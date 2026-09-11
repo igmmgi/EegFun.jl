@@ -257,79 +257,6 @@ _natural_sort_key(s::String)::String = replace(s, r"\d+" => m -> lpad(String(m),
 
 
 
-"""
-    @add_nonmutating function_name!
-
-Create non-mutating versions of all methods of a function that ends with !.
-Preserves method signatures and documentation.
-
-Example:
-@add_nonmutating baseline!
-"""
-macro add_nonmutating(func)
-
-    func_name = string(func)
-    if !endswith(func_name, "!")
-        error("Function name must end with !")
-    end
-
-    # base names
-    non_mut_name = Symbol(func_name[1:(end-1)])
-    mut_name = Symbol(func_name)
-
-    # expressions for each method
-    exprs = Expr(:block)
-
-    # Collect all method signatures first
-    methods_list = String[]
-    method_exprs = []
-
-    # all methods
-    for method in methods(eval(func))
-
-        sig = method.sig
-        types = sig.parameters[2:end]
-
-        # original parameter names
-        params = Base.method_argnames(method)[2:end]
-        if isempty(params) || any(==(nothing), params)
-            params = [Symbol("arg", i) for i = 1:length(types)]
-        end
-
-        # signature string
-        sig_str = "$non_mut_name(" * join(["$p::$t" for (p, t) in zip(params, types)], ", ") * "; kwargs...)"
-        push!(methods_list, sig_str)
-
-        # method definition without docstring
-        method_expr = quote
-            function $non_mut_name($([:($p::$t) for (p, t) in zip(params, types)]...); kwargs...)
-                data_copy = copy($(params[1]))
-                $mut_name(data_copy, $(params[2:end]...); kwargs...)
-                return data_copy
-            end
-        end
-
-        push!(method_exprs, method_expr)
-
-    end
-
-    # Create the main docstring 
-    doc = """
-        $(join(methods_list, "\n    "))
-
-    Non-mutating version of `$mut_name`. Creates a copy of the input data
-    and applies the operation to the copy.
-    """
-
-    push!(exprs.args, :(Base.@doc $doc $non_mut_name))
-
-    # add all method definitions
-    append!(exprs.args, method_exprs)
-
-    return esc(exprs)
-
-end
-
 
 """
     Base.copy(dat::ContinuousData) -> ContinuousData
@@ -533,10 +460,65 @@ function _generate_kwargs_doc(kwargs_dict::Dict{Symbol,Tuple{Any,String}})::Stri
         "All keyword arguments below have sensible defaults. You can override any by passing the corresponding keyword argument.",
     )
     push!(doc_lines, "")
-    for (param_name, (default_val, desc)) in kwargs_dict
-        type_info = typeof(default_val)
-        push!(doc_lines, "- `$(param_name)::$(type_info)=$(default_val)`: $(desc)")
+
+    # Define which legend arguments are actually useful to show in the main docs
+    allowed_legend_keys = [:legend, :legend_position, :legend_label, :legend_channel, :legend_nbanks]
+
+    legend_keys = Symbol[]
+    layout_keys = Symbol[]
+    main_keys = Symbol[]
+
+    for k in keys(kwargs_dict)
+        str_k = string(k)
+        if startswith(str_k, "legend")
+            if k in allowed_legend_keys
+                push!(legend_keys, k)
+            end
+        elseif startswith(str_k, "layout_")
+            push!(layout_keys, k)
+        else
+            push!(main_keys, k)
+        end
     end
+
+    sort!(legend_keys)
+    sort!(layout_keys)
+    sort!(main_keys)
+
+    function _format_default(val)
+        str = repr(val)
+        if length(str) > 80
+            return str[1:77] * "..."
+        end
+        return str
+    end
+
+    function _add_section(title, keys_list)
+        if !isempty(keys_list)
+            push!(doc_lines, "### $(title)")
+            for k in keys_list
+                default_val, desc = kwargs_dict[k]
+                type_info = typeof(default_val)
+                formatted_val = _format_default(default_val)
+                push!(doc_lines, "- `$(k)::$(type_info) = $(formatted_val)`: $(desc)")
+            end
+            push!(doc_lines, "")
+        end
+    end
+
+    _add_section("General Plot Settings", main_keys)
+    _add_section("Layout Options", layout_keys)
+    _add_section("Legend Options", legend_keys)
+
+    # Append note for the hidden Makie kwargs
+    push!(doc_lines, "> **Further Legend Options**")
+    push!(doc_lines, "> `EegFun.jl` passes any argument prefixed with `legend_` directly to Makie's legend system.")
+    push!(
+        doc_lines,
+        "> While only the most common options are listed above, you can pass **any** standard Makie legend attribute (e.g., `legend_bgcolor`, `legend_patchsize`).",
+    )
+    push!(doc_lines, "> See the Makie.jl documentation for a full list of discoverable arguments.")
+
     return join(doc_lines, "\n")
 end
 

@@ -7,6 +7,7 @@
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 
 # Load raw BDF data
 # read_raw_data automatically detects the .bdf extension

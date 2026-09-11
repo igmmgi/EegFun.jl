@@ -5,6 +5,11 @@
 
 # === BASIC T-TEST RESULT ===
 
+"""
+    TTestResult(df::Float64, t::Float64, p::Float64)
+
+Struct containing the results of a basic t-test.
+"""
 struct TTestResult
     df::Float64
     t::Float64

@@ -15,7 +15,7 @@ A struct to define configuration parameters with type and validation constraints
 @kwdef struct ConfigParameter{T}
     description::String
     default::Union{Nothing,T} = nothing
-    allowed::Union{Nothing,Vector{String}} = nothing
+    allowed::Union{Nothing,Vector} = nothing
     min::Union{Nothing,T} = nothing
     max::Union{Nothing,T} = nothing
 end
@@ -31,6 +31,8 @@ end
 string_param(desc, default = ""; allowed = nothing) = _param(Union{Vector{String},String}, desc, default, allowed = allowed)
 """Create a simple `String` parameter."""
 simple_string_param(desc, default = ""; allowed = nothing) = _param(String, desc, default, allowed = allowed)
+"""Create a Symbol parameter."""
+symbol_param(desc, default; allowed = nothing) = _param(Symbol, desc, default, allowed = allowed)
 """Create a `Bool` parameter."""
 bool_param(desc, default = false) = _param(Bool, desc, default)
 """Create a numeric parameter with optional min/max bounds."""
@@ -43,12 +45,12 @@ channel_groups_param(desc, default) = _param(Vector{Vector{String}}, desc, defau
 """Generate the standard set of filter parameters (apply, type, method, func, freq, order) for a given prefix."""
 function _filter_param_spec(prefix, apply, type, freq, min_freq, max_freq, order, min_order, max_order)
     Dict(
-        "$prefix.apply"  => bool_param("Apply: true/false", apply),
-        "$prefix.type"   => string_param("Filter type identifier", type, allowed = ["hp", "lp"]),
-        "$prefix.method" => string_param("Filter type", "iir", allowed = ["fir", "iir"]),
-        "$prefix.func"   => string_param("Filter function", "filtfilt", allowed = ["filt", "filtfilt"]),
-        "$prefix.freq"   => number_param("Cutoff frequency (Hz)", freq, min_freq, max_freq),
-        "$prefix.order"  => number_param("Filter order", order, min_order, max_order),
+        "$prefix.apply" => bool_param("Apply: true/false", apply),
+        "$prefix.type" => symbol_param("Filter type identifier", type, allowed = [:hp, :lp]),
+        "$prefix.method" => symbol_param("Filter method", :iir, allowed = [:fir, :iir]),
+        "$prefix.func" => symbol_param("Filter function", :filtfilt, allowed = [:filt, :filtfilt]),
+        "$prefix.freq" => number_param("Cutoff frequency (Hz)", freq, min_freq, max_freq),
+        "$prefix.order" => number_param("Filter order", order, min_order, max_order),
     )
 end
 
@@ -59,12 +61,12 @@ end
 const PARAMETERS = Dict{String,ConfigParameter}(
 
     # File paths and settings
-    "files.input.directory"            => simple_string_param("Directory containing raw data files.", "."),
-    "files.input.raw_data_files"       => string_param("Pattern (regex or explicit list) for raw data files to process.", "\\.bdf"),
-    "files.input.recursive"            => bool_param("Search subdirectories recursively for raw data files (e.g., BIDS).", false),
-    "files.input.layout_file"          => simple_string_param("Electrode layout file name (\"*.csv\")", "biosemi72.csv"),
+    "files.input.directory" => simple_string_param("Directory containing raw data files.", "."),
+    "files.input.raw_data_files" => string_param("Pattern (regex or explicit list) for raw data files to process.", "\\.bdf"),
+    "files.input.recursive" => bool_param("Search subdirectories recursively for raw data files (e.g., BIDS).", false),
+    "files.input.layout_file" => simple_string_param("Electrode layout file name (\"*.csv\")", "biosemi72.csv"),
     "files.input.epoch_condition_file" => simple_string_param("TOML file that defines the condition epochs.", ""),
-    "files.output.directory"           => simple_string_param("Directory for processed output files", "./preprocessed_files"),
+    "files.output.directory" => simple_string_param("Directory for processed output files", "./preprocessed_files"),
 
     # What data should we save?
     "files.output.save_continuous_data_raw" => bool_param("Save continuous data original?", false),
@@ -78,47 +80,57 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "files.output.save_erp_data" => bool_param("Save ERP data good?", true),
 
     # Preprocessing settings
-    "preprocess.interactive_continuous"           => bool_param("Pause execution to interactively review continuous data", false),
-    "preprocess.interactive_ica"                  => bool_param("Pause execution to interactively review ICA components", false),
-    "preprocess.interactive_epochs"               => bool_param("Pause execution to interactively review epoch rejection", false),
-    "preprocess.epoch_start"                      => number_param("Epoch start (seconds).", -1),
-    "preprocess.epoch_end"                        => number_param("Epoch end (seconds).", 1),
-    "preprocess.reference_channel"                => simple_string_param("Channels(s) to use as reference", "avg"),
-    "preprocess.layout.neighbour_criterion"       => number_param("Distance criterion (normalized) for channel neighbour definition.", 0.25, 0),
-    "preprocess.eog.vEOG_channels"                => channel_groups_param("Channels used in the calculation of vertical eye movements (vEOG).", [["Fp1", "Fp2"], ["IO1", "IO2"], ["vEOG"]]),
-    "preprocess.eog.hEOG_channels"                => channel_groups_param("Channels used in the calculation of horizontal eye movements (hEOG).", [["F9"], ["F10"], ["hEOG"]]),
-    "preprocess.eog.vEOG_criterion"               => number_param("Distance criterion for vertical EOG channel definition.", 50, 0),
-    "preprocess.eog.hEOG_criterion"               => number_param("Distance criterion for horizontal EOG channel definition.", 30, 0),
-    "preprocess.eeg.extreme_value_abs_criterion"  => number_param("Value (mV) for defining data section as an extreme value.", 500),
-    "preprocess.eeg.artifact_value_abs_criterion" => number_param("Value (mV) for defining data section (or epoch) as an artifact value.", 100),
-    "preprocess.eeg.artifact_value_z_criterion"   => number_param("Value (z) for defining data section (or epoch) as an artifact value (NB. various statistics with 0 being off!).", 0),
-    "preprocess.eeg.artifact_interval_start"      => number_param("Start time (s) for artifact rejection (optional).", nothing),
-    "preprocess.channel_repair.method"            => simple_string_param("Method for bad channel interpolation (:spherical_spline or :neighbor_interpolation)", "spherical_spline"),
+    "preprocess.interactive_continuous" => bool_param("Pause execution to interactively review continuous data", false),
+    "preprocess.interactive_ica" => bool_param("Pause execution to interactively review ICA components", false),
+    "preprocess.interactive_epochs" => bool_param("Pause execution to interactively review epoch rejection", false),
+    "preprocess.epoch_start" => number_param("Epoch start (seconds).", -1),
+    "preprocess.epoch_end" => number_param("Epoch end (seconds).", 1),
+    "preprocess.reference_channel" => simple_string_param("Channels(s) to use as reference", "avg"),
+    "preprocess.layout.neighbour_criterion" =>
+        number_param("Distance criterion (normalized) for channel neighbour definition.", 0.25, 0),
+    "preprocess.eog.vEOG_channels" => channel_groups_param(
+        "Channels used in the calculation of vertical eye movements (vEOG).",
+        [["Fp1", "Fp2"], ["IO1", "IO2"], ["vEOG"]],
+    ),
+    "preprocess.eog.hEOG_channels" =>
+        channel_groups_param("Channels used in the calculation of horizontal eye movements (hEOG).", [["F9"], ["F10"], ["hEOG"]]),
+    "preprocess.eog.vEOG_criterion" => number_param("Distance criterion for vertical EOG channel definition.", 50, 0),
+    "preprocess.eog.hEOG_criterion" => number_param("Distance criterion for horizontal EOG channel definition.", 30, 0),
+    "preprocess.eeg.extreme_value_abs_criterion" => number_param("Value (mV) for defining data section as an extreme value.", 500),
+    "preprocess.eeg.artifact_value_abs_criterion" =>
+        number_param("Value (mV) for defining data section (or epoch) as an artifact value.", 100),
+    "preprocess.eeg.artifact_value_z_criterion" => number_param(
+        "Value (z) for defining data section (or epoch) as an artifact value (NB. various statistics with 0 being off!).",
+        0,
+    ),
+    "preprocess.eeg.artifact_interval_start" => number_param("Start time (s) for artifact rejection (optional).", nothing),
+    "preprocess.channel_repair.method" =>
+        simple_string_param("Method for bad channel interpolation (:spherical_spline or :neighbor_interpolation)", "spherical_spline"),
 
     # ICA settings
-    "preprocess.ica.apply"              => bool_param("Independent Component Analysis (ICA) true/false.", true),
+    "preprocess.ica.apply" => bool_param("Independent Component Analysis (ICA) true/false.", true),
     "preprocess.ica.percentage_of_data" => number_param("Percentage of data to use for ICA (0-100).", 100.0, 0.0, 100.0),
 
     # CleanLine settings
-    "preprocess.cleanline.apply"              => bool_param("Apply CleanLine algorithm to remove line noise?", false),
-    "preprocess.cleanline.line_frequencies"   => number_vector_param("Line noise frequencies to target (e.g. [50.0])", [50.0]),
-    "preprocess.cleanline.bandwidth"          => number_param("Bandwidth for scanning frequencies around the line frequency.", 2.0),
+    "preprocess.cleanline.apply" => bool_param("Apply CleanLine algorithm to remove line noise?", false),
+    "preprocess.cleanline.line_frequencies" => number_vector_param("Line noise frequencies to target (e.g. [50.0])", [50.0]),
+    "preprocess.cleanline.bandwidth" => number_param("Bandwidth for scanning frequencies around the line frequency.", 2.0),
     "preprocess.cleanline.sliding_win_length" => number_param("Sliding window length (seconds) for multi-taper regression.", 4.0),
-    "preprocess.cleanline.sliding_win_step"   => number_param("Sliding window step (seconds) for multi-taper regression.", 2.0),
-    "preprocess.cleanline.time_bandwidth"     => number_param("Time-bandwidth product (TW) for tapers.", 3.0),
-    "preprocess.cleanline.k_tapers"           => number_param("Number of tapers (usually 2*TW-1).", 5),
-    "preprocess.cleanline.p_value"            => number_param("Significance threshold for F-test.", 0.05),
-    "preprocess.cleanline.pad"                => number_param("Padding factor for FFT.", 2),
+    "preprocess.cleanline.sliding_win_step" => number_param("Sliding window step (seconds) for multi-taper regression.", 2.0),
+    "preprocess.cleanline.time_bandwidth" => number_param("Time-bandwidth product (TW) for tapers.", 3.0),
+    "preprocess.cleanline.k_tapers" => number_param("Number of tapers (usually 2*TW-1).", 5),
+    "preprocess.cleanline.p_value" => number_param("Significance threshold for F-test.", 0.05),
+    "preprocess.cleanline.pad" => number_param("Padding factor for FFT.", 2),
 
     # Resampling settings
-    "preprocess.resample.apply"       => bool_param("Apply resampling/downsampling?", false),
+    "preprocess.resample.apply" => bool_param("Apply resampling/downsampling?", false),
     "preprocess.resample.target_rate" => number_param("Target sampling rate in Hz (e.g. 512, 256).", 512),
 
     # Filtering settings - using helper function
-    _filter_param_spec("preprocess.filter.highpass", true, "hp", 0.1, 0.01, 20.0, 1, 1, 4)...,
-    _filter_param_spec("preprocess.filter.lowpass", false, "lp", 30.0, 5.00, 500.0, 3, 1, 8)...,
-    _filter_param_spec("preprocess.filter.ica_highpass", true, "hp", 1.0, 1.00, 20.0, 1, 1, 4)...,
-    _filter_param_spec("preprocess.filter.ica_lowpass", false, "lp", 30.0, 5.00, 500.0, 3, 1, 8)...,
+    _filter_param_spec("preprocess.filter.highpass", true, :hp, 0.1, 0.01, 20.0, 1, 1, 4)...,
+    _filter_param_spec("preprocess.filter.lowpass", false, :lp, 30.0, 5.00, 500.0, 3, 1, 8)...,
+    _filter_param_spec("preprocess.filter.ica_highpass", true, :hp, 1.0, 1.00, 20.0, 1, 1, 4)...,
+    _filter_param_spec("preprocess.filter.ica_lowpass", false, :lp, 30.0, 5.00, 500.0, 3, 1, 8)...,
 )
 # fmt: on
 
@@ -173,6 +185,11 @@ function _generate_default_config()
     return config
 end
 
+"""
+    read_config(config_file::String)
+
+Read a TOML configuration file into a dictionary.
+"""
 function read_config(config_file::String)
     default_config = _generate_default_config()
 
@@ -239,6 +256,8 @@ function _convert_any_arrays!(config::Dict; path = "")
                 catch e
                     @minimal_warning "Failed to convert $new_path from Any array to $param_type: $e"
                 end
+            elseif param_type == Symbol && isa(value, AbstractString)
+                config[key] = Symbol(value)
             elseif (param_type <: Vector || param_type == Vector{Real}) && isa(value, Vector)
                 # Handle other Vector types (including Vector{Real})
                 try
@@ -676,6 +695,8 @@ Recursively format a value for TOML output.
 function _format_toml_value(value)
     if value isa String
         return "\"$(replace(value, "\\" => "\\\\"))\""
+    elseif value isa Symbol
+        return "\"$(value)\""
     elseif value isa Vector
         return isempty(value) ? "[]" : "[" * join([_format_toml_value(v) for v in value], ", ") * "]"
     elseif value isa Bool

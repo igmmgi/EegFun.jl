@@ -64,6 +64,7 @@ Addresses the multiple comparisons problem in ERP analysis:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 
 input_dir = EegFun.example_path("data/julia/erps")
 file_pattern = "erps"

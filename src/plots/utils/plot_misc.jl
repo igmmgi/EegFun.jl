@@ -274,7 +274,7 @@ function _open_save_settings_dialog(fig)
         end
     end
 
-    display(fig_settings)
+    _display_popup(fig_settings)
 end
 
 # === MAKIE BACKEND EXTENSION STATE ===
@@ -362,6 +362,16 @@ function _display_figure(fig)
     end
 
     _display_in_screen(fig)
+end
+
+"""
+    _display_popup(fig; size = nothing)
+
+Display a figure in a new, independent popup window if the backend supports it (e.g., GLMakie).
+Otherwise, falls back to standard `display(fig)`.
+"""
+function _display_popup(fig; size = nothing)
+    return _display_in_screen(fig; size = size)
 end
 
 """
@@ -481,6 +491,29 @@ function _extract_colorbar_kwargs!(plot_kwargs::Dict{Symbol,Any})
     pop!(colorbar_kwargs, :lowclip, nothing)
 
     return colorbar_kwargs
+end
+
+"""
+    _get_colorbar_position(pos::Union{Symbol, Tuple}, row_span, col_span)
+
+Converts a symbolic position (:right, :left, :top, :bottom) into a (row, col) grid coordinate
+relative to the given row and column spans of the main plot(s). 
+Returns a tuple (row, col) suitable for indexing into a Makie Figure (e.g. fig[row, col]).
+"""
+function _get_colorbar_position(pos, row_span, col_span)
+    if pos isa Tuple
+        return pos
+    elseif pos == :right
+        return (row_span, last(col_span) + 1)
+    elseif pos == :left
+        return (row_span, first(col_span) - 1)
+    elseif pos == :bottom
+        return (last(row_span) + 1, col_span)
+    elseif pos == :top
+        return (first(row_span) - 1, col_span)
+    else
+        return (row_span, last(col_span) + 1) # Default to right
+    end
 end
 
 """

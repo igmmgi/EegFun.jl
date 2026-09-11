@@ -20,6 +20,7 @@ Demonstrates EDF Import functionality.
 # dat = EegFun.read_raw_data("/path/to/your/data.edf")
 
 using EegFun
+using GLMakie
 
 # Load raw EDF data
 raw_edf = EegFun.read_raw_data(EegFun.example_path("data/edf/test.edf"))

@@ -65,7 +65,7 @@ Pkg.add(url="https://github.com/igmmgi/EegFun.jl")
 
 ```julia
 using EegFun
-
+using GLMakie
 # raw data file and channel coordinates
 dat = EegFun.read_raw_data("my_raw_file.bdf");
 layout_file = EegFun.read_layout("my_layout.csv");
@@ -88,7 +88,7 @@ EegFun.plot_databrowser(dat);
 
 ```julia
 using EegFun
-
+using GLMakie
 # raw data file and channel coordinates
 dat = EegFun.read_raw_data("my_raw_file.bdf");
 

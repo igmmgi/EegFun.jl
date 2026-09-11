@@ -59,6 +59,7 @@ This demo shows how to apply temporal filters to EEG data to remove unwanted fre
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 
 #######################################################################
 # LOAD DATA
@@ -76,6 +77,7 @@ dat = EegFun.create_eegfun_data(dat, layout)
 
 # Remove slow drifts with a 0.1 Hz high-pass (standard for ERPs)
 EegFun.highpass_filter!(dat, 0.1)
+# EegFun.highpass_filter!(dat, 0.1, filter_method="fir")
 
 # Stronger high-pass for ICA preprocessing (1 Hz)
 dat_ica = copy(dat)

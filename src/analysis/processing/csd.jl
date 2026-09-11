@@ -116,4 +116,13 @@ function _apply_csd!(data::ErpData, filter_matrix::Matrix{Float64}, channels::Ve
     data.data[:, channels] = filtered_matrix'
 end
 
-@add_nonmutating compute_csd!
+"""
+    compute_csd(dat, args...; kwargs...)
+
+Non-mutating version of `compute_csd!`.
+"""
+function compute_csd(dat, args...; kwargs...)
+    dat_copy = copy(dat)
+    compute_csd!(dat_copy, args...; kwargs...)
+    return dat_copy
+end

@@ -91,6 +91,7 @@ EegFun.plot_databrowser("continuous_data.jld2", "ica.jld2")
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 using JLD2
 
 const DEMO_OUTPUT = "./tutorials/output/"

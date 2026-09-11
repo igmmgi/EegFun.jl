@@ -1686,10 +1686,14 @@ end
 function _apply_filter!(state::DataBrowserState{T}, filter_type, freq, method, order, func) where {T<:AbstractDataState}
     # Get the current data, apply filter, then update the observable
     current_data = state.data.current[]
+
+    sym_method = method isa Symbol ? method : Symbol(method)
+    sym_func = func isa Symbol ? func : Symbol(func)
+
     if filter_type == :hp
-        highpass_filter!(current_data, freq; filter_method = method, order = order, filter_func = func)
+        highpass_filter!(current_data, freq; filter_method = sym_method, order = order, filter_func = sym_func)
     elseif filter_type == :lp
-        lowpass_filter!(current_data, freq; filter_method = method, order = order, filter_func = func)
+        lowpass_filter!(current_data, freq; filter_method = sym_method, order = order, filter_func = sym_func)
     end
     state.data.current[] = current_data  # Explicitly update the observable
 end
@@ -2530,7 +2534,7 @@ function plot_databrowser(
 end
 
 """Open a separate data browser window for each dataset in the vector."""
-function plot_databrowser(data::Vector{<:EegData}, ica = nothing; screen = nothing, kwargs...)
+function plot_databrowser(data::Vector{<:EegData}, ica = nothing; kwargs...)
     @info "Vector of $(length(data)) datasets provided — opening a browser for each"
     for dat in data
         _set_window_title(_generate_window_title(dat))  # must be before Screen()

@@ -130,7 +130,16 @@ function channel_average!(
     return nothing
 end
 
-@add_nonmutating channel_average!
+"""
+    channel_average(dat, args...; kwargs...)
+
+Non-mutating version of `channel_average!`.
+"""
+function channel_average(dat, args...; kwargs...)
+    dat_copy = copy(dat)
+    channel_average!(dat_copy, args...; kwargs...)
+    return dat_copy
+end
 
 # Handle collections of EEG data by broadcasting
 function channel_average(

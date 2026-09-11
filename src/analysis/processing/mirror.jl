@@ -26,7 +26,7 @@ Always call [`unmirror!`](@ref) after processing to restore the original length.
 # Examples
 ```julia
 mirror!(epochs, :both)
-filter!(epochs, 1.0, filter_type = "hp")
+filter!(epochs, 1.0, filter_type = :hp)
 unmirror!(epochs, :both)
 ```
 """
@@ -130,7 +130,7 @@ Must be called with the same `side` as the preceding `mirror!` call.
 # Examples
 ```julia
 mirror!(epochs, :both)
-filter!(epochs, 1.0, filter_type = "hp")
+filter!(epochs, 1.0, filter_type = :hp)
 unmirror!(epochs, :both)  # restores original length
 ```
 """

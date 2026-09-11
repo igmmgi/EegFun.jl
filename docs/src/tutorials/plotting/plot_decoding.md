@@ -38,6 +38,7 @@ This demo shows how to visualise MVPA (multivariate pattern analysis) decoding r
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 
 # LOAD DATA AND PREPARE FOR DECODING
 dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"))

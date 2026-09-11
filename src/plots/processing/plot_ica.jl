@@ -1,13 +1,10 @@
-# Currently I have settings with :right, :below, :same for colorbar_position
-# or offset positions (e.g., 1, 2). Actually, the whole colorbar stuff feels a bit off!
-# MUST BE BETTER WAY TO HANDLE THIS!!!
-
 # Single shared kwargs for all topography plots (both ICA and standard)
 const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Display parameters
     :display_plot => (true, "Whether to display the plot"),
-    :figure_title => ("Topography Plot", "Title for the plot window"),
+    :figure_title => ("", "Title drawn at the top of the entire figure canvas"),
+    :figure_title_fontsize => (24, "Font size for figure title"),
     :interactive => (true, "Whether to enable interactive features"),
     :theme_fontsize => (24, "Font size for theme"),
     :zoom_step => (0.2, "Fractional zoom step for arrow keys (e.g. 0.2 means 20% zoom in/out)"),
@@ -25,9 +22,13 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :num_levels => (20, "Number of contour levels (for ICA plots). For standard plots, use ylim instead."),
 
     # Title parameters
-    :title => ("", "Plot title"),
-    :title_fontsize => (16, "Font size for the title"),
-    :show_title => (true, "Whether to show the title"),
+    :plot_title => (nothing, "Plot title"),
+    :plot_title_position => (
+        nothing,
+        "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis.",
+    ),
+    :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
+    :plot_title_fontsize => (16, "Font size for the title"),
     :time_unit =>
         (:s, "Time unit for display labels (:s or :ms). Only affects title strings — all intervals and selections remain in seconds."),
 
@@ -56,9 +57,9 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     ]...,
 
     # Override specific colorbar parameters with custom defaults
-    :colorbar_plot => (true, "Whether to display the colorbar"),
-    :colorbar_position => ((1, 2), "Colorbar position as (row, col) tuple, or :right, :below"),
-    :colorbar_label => ("μV", "Label for the colorbar"),
+    :colorbar_plot => (true, "Whether to show the colorbar"),
+    :colorbar_position => (:right, "Position of the colorbar (:right, :left, :top, :bottom, or tuple)"),
+    :colorbar_label => ("", "Label for the colorbar"),
     :colorbar_plot_numbers => ([], "Plot indices for which to show colorbars. Empty list shows colorbars for all plots."),
 
     # Channel highlighting
@@ -125,8 +126,9 @@ function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; 
     should_show_colorbar = plot_kwargs[:colorbar_plot] && (isempty(colorbar_plot_numbers) || component in colorbar_plot_numbers)
     if should_show_colorbar
         colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
-        colorbar_position = pop!(plot_kwargs, :colorbar_position, (1, 2))
-        Colorbar(fig[colorbar_position...], co; colorbar_kwargs..., tellwidth = true, tellheight = false)
+        cb_pos = _get_colorbar_position(plot_kwargs[:colorbar_position], 1:1, 1:1)
+        sg = ax.layoutobservables.gridcontent[].parent
+        Colorbar(sg[cb_pos...], co; colorbar_kwargs..., tellwidth = true, tellheight = false)
     end
 
     # Draw smooth circle to hide jagged interpolation edge
@@ -227,65 +229,16 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
         # Calculate base row/col indices
         base_row, base_col = divrem(i - 1, dims[2]) .+ (1, 1)
 
-        # Get colorbar position for this component
-        colorbar_position = get(plot_kwargs, :colorbar_position, :right)
-
-        # Convert symbol to tuple or use tuple directly
-        if colorbar_position isa Symbol
-            if colorbar_position == :right
-                colorbar_offset = (1, 2)
-            elseif colorbar_position == :below
-                colorbar_offset = (2, 1)
-            elseif colorbar_position == :same
-                colorbar_offset = (1, 1)
-            else
-                throw(ArgumentError("colorbar_position must be :right, :below, :same, or a tuple (row, col), got: $colorbar_position"))
-            end
-        elseif colorbar_position isa Tuple
-            # User provided tuple directly (row_offset, col_offset)
-            colorbar_offset = colorbar_position
-        else
-            throw(ArgumentError("colorbar_position must be :right, :below, :same, or a tuple (row, col), got: $colorbar_position"))
-        end
-
-        # Calculate plot and colorbar positions
         if colorbar_plot
-            if colorbar_offset[1] < colorbar_offset[2]
-                # Colorbars to the right: each component needs 2 columns
-                plot_row = base_row
-                plot_col = (base_col - 1) * 2 + 1
-                colorbar_row = plot_row + colorbar_offset[1] - 1
-                colorbar_col = plot_col + colorbar_offset[2] - 1
-            else
-                # Colorbars below: each component needs 2 rows
-                plot_row = (base_row - 1) * 2 + 1
-                plot_col = base_col
-                colorbar_row = plot_row + colorbar_offset[1] - 1
-                colorbar_col = plot_col + colorbar_offset[2] - 1
-            end
-        else
-            plot_col = base_col
-            colorbar_row = base_row
-            colorbar_col = base_col
-        end
-
-        # Create axis with title
-        if colorbar_plot
-            ax = Axis(fig[plot_row, plot_col], title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100))
+            # Create a subgrid for this cell
+            sg = GridLayout(fig[base_row, base_col])
+            ax = Axis(sg[1, 1], title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100))
         else
             ax = Axis(fig[base_row, base_col], title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100))
         end
 
-        # Use the internal plotting function with colorbar position
-        _plot_topography!(
-            fig,
-            ax,
-            ica,
-            comps[i];
-            plot_kwargs...,
-            colorbar_plot = colorbar_plot,
-            colorbar_position = (colorbar_row, colorbar_col),
-        )
+        # Use the internal plotting function (colorbar positioning is handled internally)
+        _plot_topography!(fig, ax, ica, comps[i]; plot_kwargs..., colorbar_plot = colorbar_plot)
     end
 
     # Add keyboard event handling for scaling
@@ -1454,7 +1407,7 @@ const PLOT_ICA_QUALITY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :min_peak_ratio => (0.7, "Minimum peak ratio for ECG detection"),
 
     # Plot styling
-    :title_fontsize => (16, "Font size for plot titles"),
+    :plot_title_fontsize => (16, "Font size for plot titles"),
     :label_fontsize => (14, "Font size for axis labels"),
     :tick_fontsize => (12, "Font size for tick labels"),
     :legend_fontsize => (12, "Font size for legend"),

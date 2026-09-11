@@ -55,6 +55,7 @@ plot_erp(ga_results, labels = ["Standard", "Target"])
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 
 const DEMO_OUTPUT = "./tutorials/output/"
 mkpath(DEMO_OUTPUT)

@@ -531,13 +531,7 @@ using Logging
 
             # Test serial batch_process
             res_serial = with_logger(NullLogger()) do
-                EegFun.batch_process(
-                    "epochs",
-                    bp_input_dir,
-                    bp_output_dir,
-                    EegFun.participants(),
-                    "Test batch engine",
-                ) do in_path, out_path
+                EegFun.batch_process("epochs", bp_input_dir, bp_output_dir, EegFun.participants(), "Test batch engine") do in_path, out_path
                     d = load(in_path, "data")
                     jldsave(out_path; data = d .* 2)
                     return EegFun.BatchResult(true, basename(in_path), "OK")

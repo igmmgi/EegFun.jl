@@ -91,8 +91,7 @@ end
 
 function baseline!(dat::EegData; channel_selection::Function = channels())
     # Use entire time range for baseline
-    time_vec = time_vector(dat)
-    baseline!(dat, (first(time_vec), last(time_vec)); channel_selection = channel_selection)
+    baseline!(dat, times(); channel_selection = channel_selection)
     return nothing
 end
 
@@ -120,7 +119,16 @@ end
 
 # NOTE: Non-mutating version kept for consistency with other processing functions,
 # though baseline correction is typically fast enough to be done in-place.
-@add_nonmutating baseline!
+"""
+    baseline(dat, args...; kwargs...)
+
+Non-mutating version of `baseline!`.
+"""
+function baseline(dat, args...; kwargs...)
+    dat_copy = copy(dat)
+    baseline!(dat_copy, args...; kwargs...)
+    return dat_copy
+end
 
 
 # === BASELINE-SPECIFIC HELPERS ===
@@ -166,6 +174,9 @@ Converts ranges to tuples.
 function _validate_baseline_interval(baseline_interval::Interval)::Tuple{Real,Real}
     return _to_interval(baseline_interval)
 end
+
+# Special case for AllSelection: simply use the entire time vector
+_validate_baseline_interval(time::AbstractVector, ::AllSelection)::Tuple{Int,Int} = (1, length(time))
 
 """
     _validate_baseline_interval(time::AbstractVector, baseline_interval::Interval) -> Tuple{Int,Int}

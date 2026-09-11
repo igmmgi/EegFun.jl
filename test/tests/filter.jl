@@ -11,25 +11,25 @@ using JLD2
         # IIR low-pass
         fi_iir = EegFun.create_lowpass_filter(40.0, fs; order = 4, transition_width = 0.1)
         @test fi_iir isa EegFun.FilterInfo
-        @test fi_iir.filter_type == "lp"
-        @test fi_iir.filter_method == "iir"
+        @test fi_iir.filter_type == :lp
+        @test fi_iir.filter_method == :iir
         @test fi_iir.cutoff_freq == 40.0
         @test fi_iir.sample_rate == fs
         @test fi_iir.order == 4
         @test isnothing(fi_iir.n_taps)
 
         # FIR high-pass
-        fi_fir = EegFun.create_highpass_filter(1.0, fs; filter_method = "fir", transition_width = 0.25)
+        fi_fir = EegFun.create_highpass_filter(1.0, fs; filter_method = :fir, transition_width = 0.25)
         @test fi_fir isa EegFun.FilterInfo
-        @test fi_fir.filter_type == "hp"
-        @test fi_fir.filter_method == "fir"
+        @test fi_fir.filter_type == :hp
+        @test fi_fir.filter_method == :fir
         @test !isnothing(fi_fir.n_taps)
         @test fi_fir.n_taps % 2 == 1  # odd taps
         @test fi_fir.n_taps >= 101
 
         # FIR low-pass and tap sizing monotonicity
-        fi_lp_wide = EegFun.create_lowpass_filter(40.0, fs; filter_method = "fir", transition_width = 0.2)
-        fi_lp_narrow = EegFun.create_lowpass_filter(40.0, fs; filter_method = "fir", transition_width = 0.05)
+        fi_lp_wide = EegFun.create_lowpass_filter(40.0, fs; filter_method = :fir, transition_width = 0.2)
+        fi_lp_narrow = EegFun.create_lowpass_filter(40.0, fs; filter_method = :fir, transition_width = 0.05)
         @test !isnothing(fi_lp_wide.n_taps) && !isnothing(fi_lp_narrow.n_taps)
         @test fi_lp_narrow.n_taps > fi_lp_wide.n_taps
 
@@ -40,7 +40,7 @@ using JLD2
         dat_orig = copy(dat)
 
         # High-pass to remove DC; check mean is reduced towards ~0 for channel Ch1
-        EegFun.highpass_filter!(dat, 1.0; order = 1, filter_method = "iir", channel_selection = EegFun.channels([:Ch1]))
+        EegFun.highpass_filter!(dat, 1.0; order = 1, filter_method = :iir, channel_selection = EegFun.channels([:Ch1]))
         @test abs(mean(dat.data.Ch1)) < abs(mean(dat_orig.data.Ch1))
         # Only selected channel modified
         @test !all(dat.data.Ch1 .== dat_orig.data.Ch1)
@@ -49,7 +49,7 @@ using JLD2
         @test dat.analysis_info.hp_filter == 1.0
 
         # Low-pass; update lp field and modify both channels when selecting both
-        EegFun.lowpass_filter!(dat, 30.0; order = 3, filter_method = "iir", channel_selection = EegFun.channels([:Ch1, :Ch2]))
+        EegFun.lowpass_filter!(dat, 30.0; order = 3, filter_method = :iir, channel_selection = EegFun.channels([:Ch1, :Ch2]))
         @test dat.analysis_info.lp_filter == 30.0
         @test !all(dat.data.Ch2 .== dat_orig.data.Ch2)
     end
@@ -80,8 +80,8 @@ using JLD2
         dat1 = EegFun.create_test_continuous_data()
         dat2 = copy(dat1)
         # Single-pass introduces phase; zero-phase differs from single-pass
-        EegFun.lowpass_filter!(dat1, 20.0; filter_func = "filt")
-        EegFun.lowpass_filter!(dat2, 20.0; filter_func = "filtfilt")
+        EegFun.lowpass_filter!(dat1, 20.0; filter_func = :filt)
+        EegFun.lowpass_filter!(dat2, 20.0; filter_func = :filtfilt)
         @test !all(dat1.data.Ch1 .== dat2.data.Ch1)
     end
 
@@ -131,7 +131,7 @@ using JLD2
         fs = 1000.0
         fi = EegFun.create_lowpass_filter(40.0, fs; order = 4, transition_width = 0.1)
         chars = EegFun.get_filter_characteristics(fi; npoints = 256)
-        @test chars.filter_type == "lp"
+        @test chars.filter_type == :lp
         @test isapprox(chars.transition_band, 4.0; atol = 1e-6)  # 40 Hz * 0.1 = 4.0 Hz
         @test any(abs.(chars.cutoff_freq_3db .- 40.0) .< 5.0)  # near cutoff
         @test chars.stopband_atten < -10  # should be attenuated

@@ -4,8 +4,9 @@
 Clean trigger data by detecting only the onset (first occurrence) of each trigger value.
 
 Convert sustained trigger signals into single onset events.
-When a trigger is held for multiple samples, only the first sample is retained, 
-with subsequent samples set to zero.
+When a trigger is held for multiple samples, only the first sample is retained,
+with subsequent samples set to zero. A new onset is also detected when the trigger
+value changes to a different non-zero value (even if lower than the previous value).
 
 # Arguments
 - `trigger_data::Vector{<:Integer}`: Raw trigger data vector
@@ -17,6 +18,10 @@ with subsequent samples set to zero.
 ```julia
 # Input:  [0, 1, 1, 0, 0, 2, 2, 2, 0, 0]
 # Output: [0, 1, 0, 0, 0, 2, 0, 0, 0, 0]
+
+# Decreasing value transition also detected:
+# Input:  [0, 5, 5, 3, 3, 0]
+# Output: [0, 5, 0, 3, 0, 0]
 ```
 """
 function _clean_triggers(trigger_data::Vector{<:Integer})::Vector{<:Integer}
@@ -31,13 +36,14 @@ function _clean_triggers(trigger_data::Vector{<:Integer})::Vector{<:Integer}
     end
 
     @inbounds for i = 2:n
-        if trigger_data[i] > trigger_data[i-1]
+        if trigger_data[i] > 0 && trigger_data[i] != trigger_data[i-1]
             cleaned[i] = trigger_data[i]
         end
     end
 
     return cleaned
 end
+
 
 
 """

@@ -7,6 +7,7 @@
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 
 #######################################################################
 @info EegFun.section("TEST 1: Synthetic Signal with Known Frequencies")

@@ -244,7 +244,16 @@ function channel_repairable!(repair_info::ContinuousRepairInfo, bad_channels::Ve
     return repair_info
 end
 
-@add_nonmutating channel_repairable!
+"""
+    channel_repairable(dat, args...; kwargs...)
+
+Non-mutating version of `channel_repairable!`.
+"""
+function channel_repairable(dat, args...; kwargs...)
+    dat_copy = copy(dat)
+    channel_repairable!(dat_copy, args...; kwargs...)
+    return dat_copy
+end
 
 # === CONTINUOUS DATA REPAIR FUNCTIONS ===
 

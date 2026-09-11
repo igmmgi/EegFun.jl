@@ -95,6 +95,7 @@ Cohen, M. X. (2014). *Analyzing Neural Time Series Data: Theory and Practice*. C
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 
 #######################################################################
 @info EegFun.section("TEST 1: Synthetic Signal with Known Frequencies")

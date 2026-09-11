@@ -20,6 +20,7 @@ Demonstrates XDF Import functionality.
 # dat = EegFun.read_raw_data("/path/to/your/data.xdf")
 
 using EegFun
+using GLMakie
 
 # Load raw XDF data
 raw_xdf = EegFun.read_raw_data(EegFun.example_path("data/xdf/test1.xdf"))

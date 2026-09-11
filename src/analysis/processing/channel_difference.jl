@@ -100,7 +100,16 @@ function channel_difference!(
 end
 
 # generates all non-mutating versions
-@add_nonmutating channel_difference!
+"""
+    channel_difference(dat, args...; kwargs...)
+
+Non-mutating version of `channel_difference!`.
+"""
+function channel_difference(dat, args...; kwargs...)
+    dat_copy = copy(dat)
+    channel_difference!(dat_copy, args...; kwargs...)
+    return dat_copy
+end
 
 """
     calculate_eog_channels!(dat::EegData, eog_cfg::EogConfig)

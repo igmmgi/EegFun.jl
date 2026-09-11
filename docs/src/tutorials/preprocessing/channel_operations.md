@@ -52,6 +52,7 @@ This demo shows how to manipulate channels by averaging groups together, computi
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 
 #######################################################################
 # LOAD DATA

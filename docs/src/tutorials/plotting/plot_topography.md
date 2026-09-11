@@ -136,6 +136,7 @@ This demo shows topographic visualization workflows:
 # dat = EegFun.read_raw_data("/path/to/your/data.bdf")
 
 using EegFun
+using GLMakie
 
 # read raw data
 dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"));
@@ -193,7 +194,7 @@ epochs = EegFun.extract_epochs(dat, epoch_cfg, (-2, 4))
 # Separate plots
 EegFun.plot_topography(epochs[1], 1) # Condition 1, Epoch 1
 EegFun.plot_topography(epochs[2], 1) # Condition 2, Epoch 1
-EegFun.plot_topography(epochs, ylim = (-0.1, 0.1)) # TODO: aspect ration?; global scale?
+EegFun.plot_topography(epochs, ylim = (-0.1, 0.1)) # NOTE: Consider adding aspect ratio and global scale controls in the future
 EegFun.plot_topography(epochs, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6)
 
 
