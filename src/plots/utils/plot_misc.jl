@@ -274,7 +274,7 @@ function _open_save_settings_dialog(fig)
         end
     end
 
-    _display_popup(fig_settings)
+    _display_in_screen(fig_settings)
 end
 
 # === MAKIE BACKEND EXTENSION STATE ===
@@ -364,15 +364,6 @@ function _display_figure(fig)
     _display_in_screen(fig)
 end
 
-"""
-    _display_popup(fig; size = nothing)
-
-Display a figure in a new, independent popup window if the backend supports it (e.g., GLMakie).
-Otherwise, falls back to standard `display(fig)`.
-"""
-function _display_popup(fig; size = nothing)
-    return _display_in_screen(fig; size = size)
-end
 
 """
     _set_window_title(title::String)

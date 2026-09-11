@@ -1113,7 +1113,7 @@ function _setup_epochs_control_panel!(
                 end
             end
 
-            _display_popup(control_fig[])
+            _display_in_screen(control_fig[])
 
         end
     end
