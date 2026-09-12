@@ -43,6 +43,8 @@ using Pkg
 Pkg.add("EegFun")
 ```
 
+**Note for plotting:** To display plots or use the interactive GUIs, you must also install a Makie backend of your choice (e.g., `Pkg.add("GLMakie")` for interactive plots, or `Pkg.add("CairoMakie")` for static plots).
+
 Read and preprocess EEG data:
 
 ```julia

@@ -40,6 +40,10 @@ using Pkg
 Pkg.add("EegFun")
 ```
 
+**Note for plotting:** `EegFun.jl` uses [Makie.jl](https://docs.makie.org/) for visualizations. To display plots or use the interactive GUIs, you must also install a Makie backend of your choice:
+*   `add GLMakie` (Recommended for interactive GUIs and the Data Browser)
+*   `add CairoMakie` (Recommended for static, publication-quality plots or headless servers)
+
 ### Development Version (vía GitHub)
 
 To install the latest development version directly from GitHub:
