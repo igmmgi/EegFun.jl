@@ -338,6 +338,7 @@ function lowpass_filter(dat, args...; kwargs...)
     lowpass_filter!(dat_copy, args...; kwargs...)
     return dat_copy
 end
+
 """
     highpass_filter(dat, args...; kwargs...)
 
@@ -348,6 +349,7 @@ function highpass_filter(dat, args...; kwargs...)
     highpass_filter!(dat_copy, args...; kwargs...)
     return dat_copy
 end
+
 """Apply lowpass filter using settings from a `FilterConfig` section."""
 function lowpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :lowpass)
     sec = getfield(filter_cfg, section)
@@ -355,6 +357,7 @@ function lowpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol
         lowpass_filter!(dat, sec.freq; order = sec.order, filter_method = sec.method, filter_func = sec.func)
     end
 end
+
 """Apply highpass filter using settings from a `FilterConfig` section."""
 function highpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :highpass)
     sec = getfield(filter_cfg, section)

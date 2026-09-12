@@ -1005,6 +1005,7 @@ function epochs_table(epochs::Vector{EpochData}; print_table::Bool = true, kwarg
 
     return df
 end
+
 """
     epochs_table(epochs_raw::Vector{EpochData}, epochs_corrected::Vector{EpochData}; print_table::Bool = true, kwargs...)
 

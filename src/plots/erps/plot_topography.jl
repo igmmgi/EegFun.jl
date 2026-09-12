@@ -270,6 +270,7 @@ function plot_topography(filepath::String; input_dir::String = pwd(), participan
         return results
     end
 end
+
 """Create a topographic plot for a single `SingleDataFrameEeg`; supports `n_topo` time bins."""
 function plot_topography(
     dat::SingleDataFrameEeg;
@@ -384,6 +385,7 @@ function plot_topography!(
     _plot_topography!(fig, ax, dat_subset.data, dat_subset.layout; plot_kwargs...)
 
 end
+
 """Create a multi-panel topographic plot for a vector of datasets, one subplot per condition."""
 function plot_topography(
     dat::Vector{<:SingleDataFrameEeg};
@@ -619,6 +621,7 @@ function plot_topography(
     _set_window_title("Makie")
     return (fig = fig, axes = axes)
 end
+
 """Average epochs per condition, then delegate to the `Vector{ErpData}` topography method."""
 function plot_topography(dat::Vector{EpochData}; kwargs...)
     # Average trials within each condition to create ERPs

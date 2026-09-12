@@ -486,6 +486,7 @@ function _show_trigger_menu(state, ax, marker_symbol)
 
     _display_in_screen(menu_fig)
 end
+
 """Popup: select filter cutoff frequency for a specific filter."""
 function _show_single_filter_menu(state, dat, filter_type::Symbol)
     menu_fig = Figure(size = (450, 350))

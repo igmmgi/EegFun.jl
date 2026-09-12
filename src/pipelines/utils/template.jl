@@ -183,6 +183,7 @@ function _generate_processing_loop(num_steps::Int, subsections_per_step::Int)
                 close_logging()
             end
         end
+
 """
     return content
 end
@@ -217,6 +218,7 @@ function _generate_error_handling()
         close_global_logging()
     end
 end
+
 """
 end
 
