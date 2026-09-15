@@ -160,6 +160,7 @@ include("pipelines/pipeline.jl")
 
 # Plotting functions
 include("plots/utils/plot_misc.jl")
+include("plots/utils/themes.jl")
 include("plots/utils/plot_ui_utils.jl")
 
 # Layout system (must be included before other plotting functions)
@@ -226,6 +227,9 @@ include("demos/machine_learning/signal_example_decoding.jl")
 include("precompile.jl")
 
 function __init__()
+    # Set the default visual aesthetic for EegFun
+    Makie.set_theme!(theme_eegfun())
+
     register(
         DataDep(
             "TutorialDataSets",

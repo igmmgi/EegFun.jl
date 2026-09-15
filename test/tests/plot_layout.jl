@@ -333,10 +333,10 @@ using Makie
         @test haskey(EegFun.PLOT_LAYOUT_ROI_KWARGS, :roi_fill)
 
         # Test default values
-        @test EegFun.PLOT_LAYOUT_HEAD_KWARGS[:head_color][1] == :black
+        @test EegFun.PLOT_LAYOUT_HEAD_KWARGS[:head_color][1] == nothing
         @test EegFun.PLOT_LAYOUT_HEAD_KWARGS[:head_linewidth][1] == 2
         @test EegFun.PLOT_LAYOUT_POINT_KWARGS[:point_plot][1] == true
-        @test EegFun.PLOT_LAYOUT_POINT_KWARGS[:point_color][1] == :black
+        @test EegFun.PLOT_LAYOUT_POINT_KWARGS[:point_color][1] == nothing
         @test EegFun.PLOT_LAYOUT_LABEL_KWARGS[:label_plot][1] == true
         @test EegFun.PLOT_LAYOUT_LABEL_KWARGS[:label_fontsize][1] == 20
     end

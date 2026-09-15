@@ -117,8 +117,8 @@ function plot_topography_3d(
 
     # Set up Figure and 3D Axis (LScene)
     _set_window_title(_generate_window_title(dat))
-    set_theme!(fontsize = plot_kwargs[:theme_fontsize])
-    fig = Figure(figure_padding = plot_kwargs[:figure_padding])
+    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
+    fig = Figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
     ax = LScene(fig[1, 1], show_axis = false)
 
     # Add title
@@ -160,18 +160,25 @@ function plot_topography_3d(
     itp = ScatteredInterpolation.interpolate(ScatteredInterpolation.ThinPlate(), pts, Float64.(channel_data))
     vertex_colors = Float32.(ScatteredInterpolation.evaluate(itp, grid))
 
+    actual_colormap = _resolve_theme_colormap(ax, colormap)
     # Render continuous mesh
-    m = mesh!(ax, head_mesh, color = vertex_colors, colormap = colormap, colorrange = ylim, shading = true)
+    m = mesh!(ax, head_mesh, color = vertex_colors, colormap = actual_colormap, colorrange = ylim, shading = true)
 
     # Extract point and label kwargs
     point_plot = get(plot_kwargs, :point_plot, true)
     # Scale 2D markersize down for 3D world space coordinates
     point_markersize = get(plot_kwargs, :point_markersize, 12) * 0.0003
     point_color = get(plot_kwargs, :point_color, :black)
+    if isnothing(point_color)
+        point_color = _resolve_theme_textcolor(ax, point_color)
+    end
 
     label_plot = get(plot_kwargs, :label_plot, true)
     label_fontsize = get(plot_kwargs, :label_fontsize, 20)
     label_color = get(plot_kwargs, :label_color, :black)
+    if isnothing(label_color)
+        label_color = _resolve_theme_textcolor(ax, label_color)
+    end
 
     # Render Points
     if point_plot

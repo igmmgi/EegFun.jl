@@ -9,7 +9,7 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :zoom_step => (0.2, "Fractional zoom step for arrow keys (e.g. 0.2 means 20% zoom in/out)"),
     :selection_color => (:blue, "Color for interactive selection rectangles"),
     :selection_alpha => (0.3, "Alpha (transparency) for interactive selection rectangles"),
-    :theme_fontsize => (24, "Font size for theme"),
+    :theme_fontsize => (nothing, "Font size for theme"),
 
     # Axis limits and labels
     :xlim => (nothing, "X-axis limits as (min, max) tuple. If nothing, automatically determined"),
@@ -34,10 +34,10 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
 
     # Line styling
-    :linewidth => (2, "Line width for ERPs"),
-    :color => (:black, "Color for ERPs (single color or a vector of colors, one per dataset)"),
-    :linestyle => (:solid, "Line style for ERPs (single style or a vector of styles, one per dataset)"),
-    :colormap => (:jet, "Colormap for multi-channel plots"),
+    :linewidth => (nothing, "Line width for ERPs"),
+    :color => (nothing, "Color for ERPs (single color or a vector of colors, one per dataset)"),
+    :linestyle => (nothing, "Line style for ERPs (single style or a vector of styles, one per dataset)"),
+    :colormap => (nothing, "Colormap for multi-channel plots"),
 
     # Plot configuration
     :average_channels => (false, "Average across channels (true/false)"),
@@ -468,8 +468,8 @@ function _plot_erp_core(
     layout_kwargs = _extract_layout_kwargs(plot_kwargs)
 
     # Create figure and apply layout system
-    set_theme!(fontsize = plot_kwargs[:theme_fontsize])
-    fig = Figure(title = title_str, figure_padding = plot_kwargs[:figure_padding])
+    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
+    fig = Figure(; title = title_str, figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
 
 
 
@@ -729,8 +729,10 @@ function _plot_erp!(
     end
 
     # Compute colors and linestyles for each dataset
+    color_cycle = haskey(Makie.current_default_theme(), :palette) ? Makie.current_default_theme()[:palette][:color][] : Makie.wong_colors()
+    resolved_colormap = _resolve_theme_colormap(ax, plot_kwargs[:colormap], nothing)
     all_colors =
-        _compute_dataset_colors(plot_kwargs[:color], length(datasets), length(channels), plot_kwargs[:colormap], user_provided_color)
+        _compute_dataset_colors(plot_kwargs[:color], length(datasets), length(channels), resolved_colormap, user_provided_color, color_cycle)
     all_linestyles = _compute_dataset_linestyles(plot_kwargs[:linestyle], length(datasets))
 
     # Plot each dataset for ALL channels in this subplot
@@ -775,7 +777,7 @@ function _plot_erp!(
                 ax,
                 dat.data[!, :time],
                 y_obs,
-                linewidth = plot_kwargs[:linewidth],
+                linewidth = _resolve_theme_linewidth(ax, plot_kwargs[:linewidth], 2),
                 color = all_colors[color_idx],
                 linestyle = all_linestyles[dataset_idx],
                 label = label,
@@ -1261,7 +1263,7 @@ Compute colors for each dataset-channel combination.
 Returns a vector of colors with length n_datasets * n_channels.
 Colors cycle across all channel-dataset combinations.
 """
-function _compute_dataset_colors(color_val, n_datasets::Int, n_channels::Int, colormap, user_provided_color::Bool)
+function _compute_dataset_colors(color_val, n_datasets::Int, n_channels::Int, colormap, user_provided_color::Bool, color_cycle)
     n_total = n_datasets * n_channels
 
     # If user provided a vector of colors, use those (cycle if needed)
@@ -1270,17 +1272,17 @@ function _compute_dataset_colors(color_val, n_datasets::Int, n_channels::Int, co
     end
 
     # If user provided a single color, use it for all items
-    if user_provided_color
+    if user_provided_color && !isnothing(color_val)
         return [color_val for _ = 1:n_total]
     end
 
-    # User didn't provide color: use colormap for multiple items, default color for single item
-    if n_total > 1
+    # User didn't provide color explicitly (or it's nothing/automatic):
+    if n_total > 1 && !isnothing(colormap) && colormap != Makie.automatic
         # Makie.cgrad returns a gradient, convert to vector of colors
         gradient = Makie.cgrad(colormap, n_total, categorical = true)
         return [gradient[i] for i = 1:n_total]
     else
-        return [color_val for _ = 1:n_total]  # Use default color for single item
+        return [color_cycle[(i-1)%length(color_cycle)+1] for i = 1:n_total]
     end
 end
 
@@ -1293,6 +1295,8 @@ Returns a vector of linestyles, one per dataset.
 function _compute_dataset_linestyles(linestyle_val, n_datasets::Int)
     if linestyle_val isa Vector # User specified linestyles per dataset - wrap if needed
         return [linestyle_val[(i-1)%length(linestyle_val)+1] for i = 1:n_datasets]
+    elseif isnothing(linestyle_val) || linestyle_val == Makie.automatic
+        return [nothing for _ = 1:n_datasets]
     else # Single linestyle - use for all datasets
         return [linestyle_val for _ = 1:n_datasets]
     end

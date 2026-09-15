@@ -22,11 +22,11 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :yreversed => (false, "Whether to reverse the y-axis"),
 
     # Line styling
-    :linewidth => (1, "Line width for epoch traces"),
+    :linewidth => (nothing, "Line width for epoch traces"),
     :avg_linewidth_multiplier => (2.0, "Multiplier for average line width."),
     :trial_alpha => (0.25, "Alpha (transparency) for individual trial traces"),
-    :color => (:black, "Color for epoch traces (can be a single color or a vector of colors, one per condition)"),
-    :colormap => (:jet, "Colormap for multi-condition plots"),
+    :color => (nothing, "Color for epoch traces (can be a single color or a vector of colors, one per condition)"),
+    :colormap => (nothing, "Colormap for multi-condition plots"),
 
     # Layout configuration
     :layout => (:single, "Layout type: :single, :grid, or :topo"),
@@ -35,7 +35,7 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     [Symbol("layout_$(attr)") => val for (attr, val) in LAYOUT_KWARGS]...,
 
     # Display options
-    :theme_fontsize => (24, "Font size for theme"),
+    :theme_fontsize => (nothing, "Font size for theme"),
 
     # Grid
     :xgrid => (false, "Whether to show x-axis grid"),
@@ -215,8 +215,10 @@ function plot_epochs(
     # Compute colors - need to account for number of channels when in :single layout
     n_conditions = length(dat_subset)
     n_channels_for_colors = (layout == :single && length(all_plot_channels) > 1) ? length(all_plot_channels) : 1
+    color_cycle = haskey(Makie.current_default_theme(), :palette) ? Makie.current_default_theme()[:palette][:color][] : Makie.wong_colors()
+    resolved_colormap = isnothing(plot_kwargs[:colormap]) ? (haskey(Makie.current_default_theme(), :colormap) ? Makie.current_default_theme()[:colormap][] : nothing) : plot_kwargs[:colormap]
     condition_colors_list =
-        _compute_dataset_colors(plot_kwargs[:color], n_conditions, n_channels_for_colors, plot_kwargs[:colormap], user_provided_color)
+        _compute_dataset_colors(plot_kwargs[:color], n_conditions, n_channels_for_colors, resolved_colormap, user_provided_color, color_cycle)
 
     @info "plot_epochs: Plotting $(length(all_plot_channels)) channels across $(n_conditions) conditions"
 
@@ -227,11 +229,12 @@ function plot_epochs(
     plot_layout = create_layout(layout, all_plot_channels, first(dat_subset).layout; layout_kwargs...)
 
     # Create figure with padding (guaranteed to be in plot_kwargs)
-    fig = Figure(figure_padding = plot_kwargs[:figure_padding])
+    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
+    fig = Figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
     axes = Axis[]
 
-    # Apply theme font size early
-    set_theme!(fontsize = plot_kwargs[:theme_fontsize])
+    # Ensure layout size handles title properly
+    layout_kwargs = _extract_layout_kwargs(plot_kwargs)
 
     # Initialize line references for control panel if interactive
     line_refs = nothing
@@ -457,7 +460,8 @@ function _plot_epochs!(ax, dat, channels, plot_kwargs; label::Union{String,Nothi
     time_vec = dat.data[1][!, :time]
     # Color is passed as single value or from color cycle, not array
     trial_color = plot_kwargs[:color] isa Vector ? plot_kwargs[:color][1] : plot_kwargs[:color]
-    trial_linewidth = plot_kwargs[:linewidth] isa Vector ? plot_kwargs[:linewidth][1] : plot_kwargs[:linewidth]
+    actual_lw = _resolve_theme_linewidth(ax, plot_kwargs[:linewidth], 1)
+    trial_linewidth = actual_lw isa Vector ? actual_lw[1] : actual_lw
 
     # Concatenate trials efficiently
     time_cat = _build_time_cat(length(dat.data), time_vec)
@@ -495,7 +499,8 @@ function _plot_erp_average!(
     time_vec = erp_dat.data[!, :time]
     # Color is passed as single value or from color cycle, not array
     avg_color = plot_kwargs[:color] isa Vector ? plot_kwargs[:color][1] : plot_kwargs[:color]
-    base_linewidth = plot_kwargs[:linewidth] isa Vector ? plot_kwargs[:linewidth][1] : plot_kwargs[:linewidth]
+    actual_lw = _resolve_theme_linewidth(ax, plot_kwargs[:linewidth], 1)
+    base_linewidth = actual_lw isa Vector ? actual_lw[1] : actual_lw
     avg_linewidth = base_linewidth * plot_kwargs[:avg_linewidth_multiplier]
 
     # Use Observable for y-data to allow updates for baseline changes

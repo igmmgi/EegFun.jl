@@ -1,6 +1,6 @@
 # === DEFAULT KEYWORD ARGUMENTS ===
 const PLOT_LAYOUT_HEAD_KWARGS = Dict{Symbol,Tuple{Any,String}}(
-    :head_color => (:black, "Color of the head shape outline."),
+    :head_color => (nothing, "Color of the head shape outline."),
     :head_linewidth => (2, "Line width of the head shape outline."),
     :head_radius => (1, "Radius of the head shape (normalized units)."),
 )
@@ -9,13 +9,13 @@ const PLOT_LAYOUT_POINT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :point_plot => (true, "Whether to plot electrode points."),
     :point_marker => (:circle, "Marker style for electrode points."),
     :point_markersize => (12, "Size of electrode point markers."),
-    :point_color => (:black, "Color of electrode points."),
+    :point_color => (nothing, "Color of electrode points."),
 )
 
 const PLOT_LAYOUT_LABEL_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :label_plot => (true, "Whether to plot electrode labels."),
     :label_fontsize => (20, "Font size for electrode labels."),
-    :label_color => (:black, "Color of electrode labels."),
+    :label_color => (nothing, "Color of electrode labels."),
     :label_xoffset => (0, "X-axis offset for electrode labels."),
     :label_yoffset => (0, "Y-axis offset for electrode labels."),
     :label_zoffset => (0, "Z-axis offset for electrode labels (3D only)."),
@@ -24,7 +24,7 @@ const PLOT_LAYOUT_LABEL_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
 const PLOT_LAYOUT_ROI_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :roi_border_size => (10, "Size of the border around ROI points."),
-    :roi_linecolor => (:black, "Color of ROI outline."),
+    :roi_linecolor => (nothing, "Color of ROI outline."),
     :roi_linewidth => (2, "Line width of ROI outline."),
     :roi_fill => (false, "Whether to fill the ROI area."),
     :roi_fillcolor => (:gray, "Color of ROI fill."),
@@ -87,16 +87,20 @@ function plot_layout_2d!(
     xoffset = label_kwargs[:label_xoffset]
     yoffset = label_kwargs[:label_yoffset]
 
+    actual_head_color = _resolve_theme_linecolor(ax, head_kwargs[:head_color])
+    actual_point_color = _resolve_theme_textcolor(ax, point_kwargs[:point_color])
+    actual_label_color = _resolve_theme_textcolor(ax, label_kwargs[:label_color])
+
     # Head shape - Use kwargs
     radius = head_kwargs[:head_radius]
-    arc!(ax, Point2f(0), radius, -π, π; color = head_kwargs[:head_color], linewidth = head_kwargs[:head_linewidth]) # head
+    arc!(ax, Point2f(0), radius, -π, π; color = actual_head_color, linewidth = head_kwargs[:head_linewidth]) # head
     arc!(
         ax,
         Point2f(radius, 0),
         radius * (1 / 7),
         -π / 2,
         π / 2;
-        color = head_kwargs[:head_color],
+        color = actual_head_color,
         linewidth = head_kwargs[:head_linewidth],
     )
     arc!(
@@ -105,13 +109,13 @@ function plot_layout_2d!(
         -radius * (1 / 7),
         π / 2,
         -π / 2;
-        color = head_kwargs[:head_color],
+        color = actual_head_color,
         linewidth = head_kwargs[:head_linewidth],
     )
     lines!(
         ax,
         Point2f[(-0.1, 1.0), (0.0, 1.15), (0.1, 1.0)] .* radius;
-        color = head_kwargs[:head_color],
+        color = actual_head_color,
         linewidth = head_kwargs[:head_linewidth],
     )
 
@@ -140,7 +144,7 @@ function plot_layout_2d!(
                 layout.data[!, :y2];
                 marker = point_kwargs[:point_marker],
                 markersize = point_kwargs[:point_markersize],
-                color = point_kwargs[:point_color],
+                color = actual_point_color,
             )
         end
 
@@ -154,7 +158,7 @@ function plot_layout_2d!(
                     position = (x_coords[i], y_coords[i]),
                     labels[i];
                     fontsize = label_kwargs[:label_fontsize],
-                    color = label_kwargs[:label_color],
+                    color = actual_label_color,
                     align = label_kwargs[:label_align],
                 )
             end
@@ -414,6 +418,9 @@ function plot_layout_3d!(fig::Figure, ax::Axis3, layout::Layout; neighbours::Boo
     yoffset = label_kwargs[:label_yoffset]
     zoffset = label_kwargs[:label_zoffset]
 
+    actual_point_color = _resolve_theme_textcolor(ax, point_kwargs[:point_color])
+    actual_label_color = _resolve_theme_textcolor(ax, label_kwargs[:label_color])
+
     # Regular points
     if plot_points
         scatter!(
@@ -423,7 +430,7 @@ function plot_layout_3d!(fig::Figure, ax::Axis3, layout::Layout; neighbours::Boo
             layout.data[!, :z3];
             marker = point_kwargs[:point_marker],
             markersize = point_kwargs[:point_markersize],
-            color = point_kwargs[:point_color],
+            color = actual_point_color,
         )
     end
 
@@ -438,7 +445,7 @@ function plot_layout_3d!(fig::Figure, ax::Axis3, layout::Layout; neighbours::Boo
                 position = (x_coords[i], y_coords[i], z_coords[i]),
                 labels[i];
                 fontsize = label_kwargs[:label_fontsize],
-                color = label_kwargs[:label_color],
+                color = actual_label_color,
                 align = label_kwargs[:label_align],
             )
         end
@@ -554,7 +561,7 @@ function _add_interactive_points!(
     new_lines = is_3d ? Vector{Point3f}(undef, max_neighbors * 2) : Vector{Point2f}(undef, max_neighbors * 2)
 
     # Add interactive scatter points
-    p = scatter!(ax, positions; color = :black, markersize = sizes, inspectable = true, markerspace = :pixel)
+    p = scatter!(ax, positions; color = _resolve_theme_textcolor(ax, nothing), markersize = sizes, inspectable = true, markerspace = :pixel)
 
     # Initialize line segments
     linesegments = Observable(is_3d ? Point3f[] : Point2f[])  # Observable for reactivity
@@ -714,7 +721,7 @@ function _add_interactive_correlation_points!(
                     position = (pos[1], pos[2]),
                     string(round(corr_val, digits = 2));
                     fontsize = 16,
-                    color = :black,
+                    color = _resolve_theme_textcolor(ax, nothing),
                     align = label_kwargs[:label_align],
                 )
                 push!(current_text_labels[], text_obj)

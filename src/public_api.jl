@@ -359,6 +359,7 @@ public plot_topography!
 public plot_topography_stats
 public plot_trigger_overview
 public plot_trigger_timing
+public theme_eegfun
 
 # === Plot helpers (user-facing selection helpers) ===
 public add_topo_rois!

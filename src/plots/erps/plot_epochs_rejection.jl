@@ -14,10 +14,10 @@ const PLOT_EPOCHS_REJECTION_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Plot styling
     :spine_width => (2, "Width of axis spines"),
-    :theme_fontsize => (20, "Font size for theme"),
+    :theme_fontsize => (nothing, "Font size for theme"),
 
     # Line styling
-    :linewidth => (1, "Line width for epoch traces"),
+    :linewidth => (nothing, "Line width for epoch traces"),
 
     # Origin lines
     :add_xy_origin => (true, "Whether to add origin lines at x=0 and y=0"),
@@ -29,7 +29,7 @@ const PLOT_EPOCHS_REJECTION_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :yminorgrid => (false, "Whether to show y-axis minor grid"),
 
     # Color scheme
-    :colormap => (:jet, "Colormap for channel traces"),
+    :colormap => (nothing, "Colormap for channel traces"),
     :good_epoch_color => (:green, "Color for good epoch spines"),
     :bad_epoch_color => (:red, "Color for bad epoch spines"),
 
@@ -184,7 +184,8 @@ function detect_bad_epochs_interactive(
     rejected = fill(false, n_total_epochs)
 
     # Create figure sized to fit typical screens
-    fig = Figure(figure_padding = 50)
+    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
+    fig = Figure(; figure_padding = 50, fontsize_kw...)
 
     # Performance optimizations
     selected_channels_set = Set(selected_channels)
@@ -285,11 +286,7 @@ function _create_rejection_interface!(
             ax.yminorgridvisible = plot_kwargs[:yminorgrid]
 
             # Set font sizes (only need to do this once)
-            ax.titlesize = plot_kwargs[:theme_fontsize]
-            ax.xlabelsize = plot_kwargs[:theme_fontsize]
-            ax.ylabelsize = plot_kwargs[:theme_fontsize]
-            ax.xticklabelsize = plot_kwargs[:theme_fontsize]
-            ax.yticklabelsize = plot_kwargs[:theme_fontsize]
+
 
             on(t.active) do active
                 color = active ? plot_kwargs[:bad_epoch_color] : plot_kwargs[:good_epoch_color]
@@ -436,7 +433,7 @@ function _plot_single_epoch!(ax::Axis, state::EpochRejectionState, epoch_idx::In
 
     for (ch_idx, ch) in enumerate(channels_to_plot)
         color = state.colors[mod1(ch_idx, length(state.colors))]
-        lines!(ax, t, epoch[!, ch], color = color, linewidth = plot_kwargs[:linewidth])
+        lines!(ax, t, epoch[!, ch], color = color, linewidth = _resolve_theme_linewidth(ax, plot_kwargs[:linewidth], 1))
     end
 
     # Add origin lines using shared helper

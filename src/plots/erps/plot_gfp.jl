@@ -24,8 +24,8 @@ const PLOT_GFP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Line styling
     :linewidth => (2, "Line width for GFP/dissimilarity traces"),
-    :color => (:black, "Color for traces"),
-    :linestyle => (:solid, "Line style for traces"),
+    :color => (nothing, "Color for traces"),
+    :linestyle => (nothing, "Line style for traces"),
 
     # Plot configuration
     :show_erp_traces => (false, "Whether to show individual ERP channel traces in top panel"),

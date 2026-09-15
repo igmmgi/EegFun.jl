@@ -262,12 +262,13 @@ function _plot_erp_stats_channel!(
     difference_offset::Real = 0.0,
     significance_position::Union{Symbol,Real} = :auto,
     significance_color = (:gray, 0.6),
-    linewidth::Int = 2,
+    linewidth = 2,
     legend_labels::Vector = [],
     add_labels::Bool = true,
 )
     time_points = result.time_points
     t_values = result.stat_matrix.t[channel_idx, :]
+    linewidth = _resolve_theme_linewidth(ax, linewidth, 2)
 
     plotted_erps = subset(collect(result.data); condition_selection = condition_selection)
 
@@ -517,7 +518,7 @@ function plot_stat_heatmap(result::StatsResult; kwargs...)
         time_points,
         1:length(electrodes),
         transpose(t_values),
-        colormap = get(kwargs, :colormap, :RdBu_r),
+        colormap = _resolve_theme_colormap(ax, get(kwargs, :colormap, nothing)),
         colorrange = get(kwargs, :colorrange, (-max_t, max_t)),
     )
 

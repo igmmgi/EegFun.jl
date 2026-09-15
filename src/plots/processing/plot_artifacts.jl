@@ -42,8 +42,8 @@ end
 
 Get the styling parameters for a channel based on its state.
 """
-function _get_channel_styling(ch, is_rejected, is_selected, rejected_color_map, plot_kwargs; is_repaired = false)
-    color = is_rejected ? rejected_color_map[ch] : :black
+function _get_channel_styling(ax, ch, is_rejected, is_selected, rejected_color_map, plot_kwargs; is_repaired = false)
+    color = is_rejected ? rejected_color_map[ch] : _resolve_theme_linecolor(ax, nothing)
     alpha = is_rejected ? plot_kwargs[:alpha_rejected] : plot_kwargs[:alpha_normal]
     base_linewidth = is_rejected ? plot_kwargs[:linewidth_rejected] : plot_kwargs[:linewidth_normal]
     linewidth = is_selected ? base_linewidth * 2 : base_linewidth
@@ -78,7 +78,7 @@ function _plot_channels!(
         is_rejected = ch in rejected_channels
         is_selected = ch in selected_channels_set
 
-        styling = _get_channel_styling(ch, is_rejected, is_selected, rejected_color_map, plot_kwargs; is_repaired = is_repaired)
+        styling = _get_channel_styling(ax, ch, is_rejected, is_selected, rejected_color_map, plot_kwargs; is_repaired = is_repaired)
 
         lines!(
             ax,
@@ -160,7 +160,7 @@ const PLOT_ARTIFACT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :display_plot => (true, "Display plot."),
 
     # line settings
-    :colormap_name => (:jet, "Colormap name (e.g., :Set1_9, :tab20)."),
+    :colormap_name => (nothing, "Colormap name (e.g., :Set1_9, :tab20)."),
     :linewidth_normal => (1, "Line width for normal channels."),
     :linewidth_rejected => (2, "Line width for rejected channels."),
     :alpha_normal => (0.2, "Transparency for normal channels."),
@@ -258,7 +258,8 @@ function plot_artifact_detection(epochs::EpochData, artifacts::EpochRejectionInf
 
     # Create color map for rejected channels
     rejected_channels = [r.channel for r in artifacts.rejected]
-    rejected_color_map = _create_rejected_color_map(rejected_channels, plot_kwargs[:colormap_name])
+    actual_cmap = _resolve_theme_colormap(ax, plot_kwargs[:colormap_name])
+    rejected_color_map = _create_rejected_color_map(rejected_channels, actual_cmap)
 
     # Function to update plot based on epoch
     function update_plot!(epoch_idx_val)
@@ -428,7 +429,8 @@ function plot_artifact_repair(
 
     # Create color map for rejected channels
     rejected_channels = [r.channel for r in artifacts.rejected]
-    rejected_color_map = _create_rejected_color_map(rejected_channels, plot_kwargs[:colormap_name])
+    actual_cmap = _resolve_theme_colormap(ax1, plot_kwargs[:colormap_name])
+    rejected_color_map = _create_rejected_color_map(rejected_channels, actual_cmap)
 
     # Function to update comparison plot
     function update_comparison_plot!(epoch_idx_val)
@@ -627,7 +629,8 @@ function plot_artifact_rejection(
 
     # Create color map for rejected channels
     rejected_channels = [r.channel for r in artifacts.rejected]
-    rejected_color_map = _create_rejected_color_map(rejected_channels, plot_kwargs[:colormap_name])
+    actual_cmap = _resolve_theme_colormap(ax1, plot_kwargs[:colormap_name])
+    rejected_color_map = _create_rejected_color_map(rejected_channels, actual_cmap)
 
     # Build a lookup map from epoch number to index in epochs_rejected
     epoch_number_to_idx = Dict{Int,Int}()
@@ -668,8 +671,8 @@ function plot_artifact_rejection(
 
         # Reset spine colors to default
         for spline in (:leftspinecolor, :rightspinecolor, :bottomspinecolor, :topspinecolor)
-            setproperty!(ax1, spline, :black)
-            setproperty!(ax2, spline, :black)
+            setproperty!(ax1, spline, _resolve_theme_linecolor(ax1, nothing))
+            setproperty!(ax2, spline, _resolve_theme_linecolor(ax2, nothing))
         end
 
         # Plot original epoch

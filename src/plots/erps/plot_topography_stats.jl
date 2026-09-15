@@ -273,7 +273,8 @@ function plot_topography_stats(
 
     # Add shared colorbar and include in return value
     cb_label = topo_data == :tvalues ? "t-statistic" : "Difference (μV)"
-    cb = Colorbar(fig[1:n_rows, n_cols+1]; colorbar_kwargs..., colormap = colormap, colorrange = ylim, label = cb_label)
+    actual_colormap = _resolve_theme_colormap(fig, colormap)
+    cb = Colorbar(fig[1:n_rows, n_cols+1]; colorbar_kwargs..., colormap = actual_colormap, colorrange = ylim, label = cb_label)
 
     if display_plot
         _display_figure(fig)

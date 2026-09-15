@@ -16,7 +16,7 @@ const PLOT_CORRELATION_HEATMAP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :plot_title_fontsize => (16, "Font size for the title"),
 
     # Heatmap styling
-    :colormap => (:jet, "Colormap for the heatmap"),
+    :colormap => (nothing, "Colormap for the heatmap"),
     :colorrange => ((-1, 1), "Color range for the heatmap and colorbar (should be -1 to 1 for correlations)"),
     :nan_color => (:transparent, "Color for NaN values"),
 
@@ -145,7 +145,8 @@ function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kw
     # Create the heatmap
     # Makie's heatmap! displays matrices transposed (rows become columns), so we transpose
     # to ensure DataFrame rows appear as plot rows and DataFrame columns as plot columns
-    heatmap!(ax, corr_matrix', colormap = plot_kwargs[:colormap], colorrange = colorrange, nan_color = plot_kwargs[:nan_color])
+    actual_cmap = _resolve_theme_colormap(ax, plot_kwargs[:colormap])
+    heatmap!(ax, corr_matrix', colormap = actual_cmap, colorrange = colorrange, nan_color = plot_kwargs[:nan_color])
 
     # Add a colorbar if requested
     colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
@@ -154,7 +155,7 @@ function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kw
     if colorbar_plot
         cb_pos = _get_colorbar_position(plot_kwargs[:colorbar_position], 1:1, 1:1)
         sg = ax.layoutobservables.gridcontent[].parent
-        Colorbar(sg[cb_pos...]; colormap = plot_kwargs[:colormap], limits = colorrange, colorbar_kwargs...)
+        Colorbar(sg[cb_pos...]; colormap = actual_cmap, limits = colorrange, colorbar_kwargs...)
     end
 
     return nothing

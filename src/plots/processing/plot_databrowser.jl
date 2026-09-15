@@ -8,7 +8,7 @@ const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :ylabel => ("Amplitude (μV)", "Y-axis label"),
 
     # UI styling
-    :theme_fontsize => (18, "Font size for theme and UI elements"),
+    :theme_fontsize => (nothing, "Font size for theme and UI elements"),
 
     # Line styling
     :channel_line_width => (1, "Line width for channel lines"),
@@ -383,7 +383,6 @@ function _setup_ui(fig, ax, state::DataBrowserState{<:AbstractDataState}, dat, i
     _build_grid_components!(fig, dat, state, toggles, labels_menu, reference_menu, ica_menu, extra_menu, epoch_menu)
 
     # Apply theme
-    update_theme!(Theme(fontsize = plot_kwargs[:theme_fontsize]))
     hideydecorations!(ax, label = true)
 
     return state
@@ -2359,7 +2358,8 @@ function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs.
     plot_kwargs = _merge_plot_kwargs(PLOT_DATABROWSER_KWARGS, kwargs)
 
     # Common fig/ax/state/ui setup
-    fig = Figure(figure_padding = plot_kwargs[:figure_padding])
+    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
+    fig = Figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
     ax = Axis(fig[1, 1], xlabel = plot_kwargs[:xlabel], ylabel = plot_kwargs[:ylabel], title = _get_title(dat))
 
     state = _create_browser_state(dat, dat.layout.data.label, ax, ica, plot_kwargs)

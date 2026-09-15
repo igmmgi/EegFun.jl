@@ -6,14 +6,14 @@ Time-frequency plotting functions for visualizing TimeFreqData.
 const PLOT_TF_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display
     :display_plot => (true, "Whether to display the plot"),
-    :theme_fontsize => (24, "Font size for theme"),
+    :theme_fontsize => (nothing, "Font size for theme"),
 
     # Layout
     :layout => (:single, "Layout type: :single, :grid, or :topo"),
     :figure_padding => ((10, 30, 10, 10), "Padding around entire figure as (left, right, bottom, top) tuple (in pixels)"),
 
     # Colormap and color range
-    :colormap => (:viridis, "Colormap for the heatmap"),
+    :colormap => (nothing, "Colormap for the heatmap"),
     :colorrange => (nothing, "Color range as (min, max) tuple. If nothing, automatically determined from data"),
     # Colorbar parameters - get all Colorbar attributes with their actual defaults
     [
@@ -95,7 +95,7 @@ function plot_tf(
     colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
     layout_kwargs = _extract_layout_kwargs(plot_kwargs)
 
-    colormap = plot_kwargs[:colormap]
+    colormap = _resolve_theme_colormap(ax, plot_kwargs[:colormap])
     colorrange = plot_kwargs[:colorrange]
     colorbar = pop!(plot_kwargs, :colorbar_plot, true)
     ylogscale = plot_kwargs[:ylogscale]
@@ -109,8 +109,8 @@ function plot_tf(
 
     n = length(tf_data)
     rows, cols = isnothing(grid_dims) ? _best_rect(n) : grid_dims
-    set_theme!(fontsize = plot_kwargs[:theme_fontsize])
-    fig = Figure(size = (max(600, cols * 400), max(400, rows * 350)), figure_padding = plot_kwargs[:figure_padding])
+    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
+    fig = Figure(; size = (max(600, cols * 400), max(400, rows * 350)), figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
     _set_window_title("$(basename(first(tf_data).file)) — Time-Frequency ($(n) conditions)")
 
     # Apply baseline to all conditions
@@ -216,7 +216,7 @@ function plot_tf(
     layout_kwargs   = _extract_layout_kwargs(plot_kwargs)
 
     layout                  = plot_kwargs[:layout]
-    colormap                = plot_kwargs[:colormap]
+    colormap                = _resolve_theme_colormap(ax, plot_kwargs[:colormap])
     colorrange              = plot_kwargs[:colorrange]
     title                   = plot_kwargs[:plot_title]
     colorbar                = pop!(plot_kwargs, :colorbar_plot, true)
@@ -286,8 +286,8 @@ function plot_tf(
     end
 
     _set_window_title("$(basename(tf_data.file)) — $(tf_data.condition_name) — Time-Frequency")
-    set_theme!(fontsize = plot_kwargs[:theme_fontsize])
-    fig = Figure(size = fig_size, figure_padding = plot_kwargs[:figure_padding])
+    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
+    fig = Figure(; size = fig_size, figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
 
     eeg_layout = hasproperty(tf_data, :layout) ? tf_data.layout : nothing
     plot_layout = create_layout(layout, plot_channels, eeg_layout; layout_kwargs...)
@@ -406,7 +406,7 @@ function _plot_tf_heatmap!(
     channel::Symbol,
     freqs_vec::Vector{Float64},
     times::Vector{Float64};
-    colormap = :viridis,
+    colormap = nothing,
     colorrange::Tuple{Real,Real} = (-1.0, 1.0),
     ylogscale::Bool = false,
     xlim::Union{Nothing,Tuple{Real,Real}} = nothing,
@@ -444,7 +444,7 @@ function _plot_tf_heatmap!(
         times,
         freqs_vec,
         transpose(power_mat),
-        colormap = colormap,
+        colormap = _resolve_theme_colormap(ax, colormap),
         colorrange = colorrange,
         nan_color = :transparent,
         interpolate = interpolate,

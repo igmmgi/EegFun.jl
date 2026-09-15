@@ -27,15 +27,15 @@ const PLOT_RSA_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Line styling
     :linewidth => (2, "Line width"),
-    :color => (:blue, "Color"),
-    :linestyle => (:solid, "Line style"),
+    :color => (nothing, "Color"),
+    :linestyle => (nothing, "Line style"),
 
     # Grid
     :xgrid => (true, "Show x-axis grid (true/false)"),
     :ygrid => (true, "Show y-axis grid (true/false)"),
 
     # RDM heatmap
-    :colormap => (:viridis, "Colormap for RDM heatmap"),
+    :colormap => (nothing, "Colormap for RDM heatmap"),
     :show_colorbar => (true, "Show colorbar for RDM (true/false)"),
 )
 
@@ -122,7 +122,7 @@ function plot_rdm_heatmap(rsa_data::RsaData; time_point::Union{Float64,Int,Nothi
     ax.yticks = (1:n_conditions, rsa_data.condition_names)
 
     # Plot heatmap
-    colormap_val = _get_val(:colormap)
+    colormap_val = _resolve_theme_colormap(ax, _get_val(:colormap))
     hm = heatmap!(ax, 1:n_conditions, 1:n_conditions, rdm_to_plot, colormap = colormap_val)
 
     # Add colorbar if requested

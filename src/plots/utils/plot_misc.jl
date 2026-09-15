@@ -399,6 +399,17 @@ function _create_figure_with_axis(data; title_suffix::String = "", figure_kwargs
     return (fig = fig, axes = [ax])
 end
 
+# --- Theme Resolution Helpers ---
+# Shared helper: resolve a theme attribute from a Makie scene
+_resolve_from_scene(scene, attr::Symbol, user_val, default_val) =
+    isnothing(user_val) ? (haskey(Makie.theme(scene), attr) ? Makie.theme(scene)[attr][] : default_val) : user_val
+
+_resolve_theme_colormap(obj, user_cmap, default_cmap = DEFAULT_COLORMAP) = _resolve_from_scene(obj.scene, :colormap, user_cmap, default_cmap)
+_resolve_theme_linewidth(obj, user_lw, default_lw = 2) = _resolve_from_scene(obj.scene, :linewidth, user_lw, default_lw)
+_resolve_theme_textcolor(obj, user_color, default_color = :black) = _resolve_from_scene(obj.scene, :textcolor, user_color, default_color)
+_resolve_theme_linecolor(obj, user_color, default_color = :black) = _resolve_from_scene(obj.scene, :linecolor, user_color, default_color)
+
+
 """
     _get_colorbar_defaults()
 
@@ -706,8 +717,10 @@ function _add_origin_scale_indicator!(
         # No, for crosshair axes, the origin lines themselves ARE the axes.
         # We can just keep the hlines! and vlines! from _set_origin_lines! (which are already drawn)
         # But we'll add our own thick crosshair lines if we want them to stand out
-        hlines!(ax, 0, color = :black, linewidth = 1, overdraw = true)
-        vlines!(ax, 0, color = :black, linewidth = 1, overdraw = true)
+        linecolor = _resolve_theme_linecolor(ax, nothing)
+        textcolor = _resolve_theme_textcolor(ax, nothing)
+        hlines!(ax, 0, color = linecolor, linewidth = 1, overdraw = true)
+        vlines!(ax, 0, color = linecolor, linewidth = 1, overdraw = true)
 
         # Compute tick positions dynamically based on scale_x_value and scale_y_value
         x_ticks_obs = lift(ax.finallimits) do lims
@@ -740,8 +753,8 @@ function _add_origin_scale_indicator!(
         y_pts_obs = lift(y_ticks_obs) do ticks
             [Point2f(0.0, t) for t in ticks if abs(t) > 1e-9]
         end
-        scatter!(ax, x_pts_obs, marker = '|', markersize = 10, color = :black, overdraw = true, xautolimits = false, yautolimits = false)
-        scatter!(ax, y_pts_obs, marker = '-', markersize = 10, color = :black, overdraw = true, xautolimits = false, yautolimits = false)
+        scatter!(ax, x_pts_obs, marker = '|', markersize = 10, color = linecolor, overdraw = true, xautolimits = false, yautolimits = false)
+        scatter!(ax, y_pts_obs, marker = '-', markersize = 10, color = linecolor, overdraw = true, xautolimits = false, yautolimits = false)
 
         # Text labels
         x_lbls = lift(x_labels_obs, x_ticks_obs) do labels, ticks
@@ -756,7 +769,7 @@ function _add_origin_scale_indicator!(
             text = x_lbls,
             align = (:center, :top),
             offset = (0, -8),
-            color = :black,
+            color = textcolor,
             fontsize = 12,
             overdraw = true,
             xautolimits = false,
@@ -768,7 +781,7 @@ function _add_origin_scale_indicator!(
             text = y_lbls,
             align = (:right, :center),
             offset = (-8, 0),
-            color = :black,
+            color = textcolor,
             fontsize = 12,
             overdraw = true,
             xautolimits = false,
@@ -788,7 +801,7 @@ function _add_origin_scale_indicator!(
             x_axis_label_pos,
             text = string(" ", xlabel),
             align = (:left, :center),
-            color = :black,
+            color = textcolor,
             fontsize = 14,
             overdraw = true,
             xautolimits = false,
@@ -799,7 +812,7 @@ function _add_origin_scale_indicator!(
             y_axis_label_pos,
             text = string(ylabel, " "),
             align = (:center, :bottom),
-            color = :black,
+            color = textcolor,
             fontsize = 14,
             overdraw = true,
             xautolimits = false,

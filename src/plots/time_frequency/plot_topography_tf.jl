@@ -326,7 +326,8 @@ function plot_topography(
     end
 
     cb_label = _tf_colorbar_label(tf_plots[1], baseline_interval, baseline_method)
-    cb = Colorbar(fig[1:n_rows, n_cols+1]; colorbar_kwargs..., colormap = colormap, colorrange = ylim, label = cb_label)
+    actual_colormap = _resolve_theme_colormap(fig, colormap)
+    cb = Colorbar(fig[1:n_rows, n_cols+1]; colorbar_kwargs..., colormap = actual_colormap, colorrange = ylim, label = cb_label)
 
     if display_plot
         _display_figure(fig)
@@ -592,7 +593,8 @@ function plot_topography_stats(
 
     # Shared colorbar
     cb_label = topo_data == :tvalues ? "t-statistic" : "Power Difference"
-    cb = Colorbar(fig[1:n_rows, n_cols+1]; colorbar_kwargs..., colormap = colormap, colorrange = ylim, label = cb_label)
+    actual_colormap = _resolve_theme_colormap(fig, colormap)
+    cb = Colorbar(fig[1:n_rows, n_cols+1]; colorbar_kwargs..., colormap = actual_colormap, colorrange = ylim, label = cb_label)
 
     if display_plot
         _display_figure(fig)

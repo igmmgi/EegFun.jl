@@ -27,7 +27,7 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
 
     # Image styling
-    :colormap => (:jet, "Colormap for the image"),
+    :colormap => (nothing, "Colormap for the image"),
     :colorrange => (nothing, "Color range for the image. If nothing, automatically determined"),
     :interpolate => (false, "Whether to interpolate the heatmap pixels for smoother appearance"),
 
@@ -254,7 +254,7 @@ function plot_erp_image(
             dat_subset.data[1].time,
             1:length(dat_subset.data),
             transpose(data),
-            colormap = plot_kwargs[:colormap],
+            colormap = _resolve_theme_colormap(ax, plot_kwargs[:colormap]),
             colorrange = plot_kwargs[:colorrange],
             interpolate = plot_kwargs[:interpolate],
         )

@@ -415,7 +415,7 @@ function plot_erp_measurement_gui(
             return
         end
 
-        colors = length(erp_vec) > 1 ? Makie.cgrad(:jet, length(erp_vec), categorical = true) : [:black]
+        colors = length(erp_vec) > 1 ? Makie.cgrad(DEFAULT_COLORMAP, length(erp_vec), categorical = true) : [:black]
 
         for (idx, result) in enumerate(results)
             if haskey(result, :error) || !haskey(result, :value) || isnothing(result.value) || isnan(result.value)

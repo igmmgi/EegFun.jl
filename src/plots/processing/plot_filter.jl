@@ -30,7 +30,7 @@ const PLOT_FILTER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Line styling
     :linewidth => (4, "Line width for response curves"),
-    :color => (:blue, "Color for response curves"),
+    :color => (nothing, "Color for response curves"),
 
     # Reference lines
     :reference_lines => ([-3, -6], "Reference lines in dB to display"),

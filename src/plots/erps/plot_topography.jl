@@ -32,7 +32,7 @@ conversion (`_ensure_coordinates_2d!`, `_ensure_coordinates_3d!`) before calling
 - `layout::Layout`: Electrode layout with 2D coordinates
 - `method::Symbol`: Interpolation method (default: `:thin_plate`)
 - `gridscale::Int`: Grid resolution (default: 75)
-- `colormap`: Colormap for contourf (default: `:jet`)
+- `colormap`: Colormap for contourf (default: `nothing`, falls back to theme)
 - `ylim`: Color range as `(min, max)` tuple, or `nothing` for auto-symmetric (default: `nothing`)
 - `num_levels::Int`: Number of contour levels (default: 20)
 
@@ -48,7 +48,7 @@ function _render_topo_surface!(
     layout::Layout;
     method::Symbol = :thin_plate,
     gridscale::Int = 75,
-    colormap = :jet,
+    colormap = nothing,
     ylim = nothing,
     num_levels::Int = 20,
     kwargs...,
@@ -90,7 +90,7 @@ function _render_topo_surface!(
         range(y_bounds[1], y_bounds[2], length = gridscale),
         data_interp,
         levels = range(ylim[1], ylim[2], length = num_levels);
-        colormap = colormap,
+        colormap = _resolve_theme_colormap(ax, colormap),
         extendlow = :auto,
         extendhigh = :auto,
         nan_color = :transparent,
@@ -126,6 +126,7 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
     colorbar_position = pop!(plot_kwargs, :colorbar_position)
+    cb_pos = _get_colorbar_position(colorbar_position, 1:1, 1:1)
     ylim = pop!(plot_kwargs, :ylim)
     colormap = pop!(plot_kwargs, :colormap)
     num_levels = pop!(plot_kwargs, :num_levels)
@@ -173,7 +174,7 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
 
     # colorbar
     if colorbar_plot
-        Colorbar(fig[colorbar_position...], co; colorbar_kwargs...)
+        Colorbar(fig[cb_pos...], co; colorbar_kwargs...)
     end
 
     return (fig = fig, axes = [ax])
@@ -336,8 +337,8 @@ function plot_topography(
     _set_window_title(_generate_window_title(dat))
 
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
-    set_theme!(fontsize = plot_kwargs[:theme_fontsize])
-    fig = Figure(figure_padding = plot_kwargs[:figure_padding])
+    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
+    fig = Figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
     ax = Axis(fig[1, 1], aspect = DataAspect())
 
     plot_topography!(
@@ -521,8 +522,8 @@ function plot_topography(
     # Create single figure with subplots
     _set_window_title(_generate_window_title(dat))
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
-    set_theme!(fontsize = plot_kwargs[:theme_fontsize])
-    fig = Figure(figure_padding = plot_kwargs[:figure_padding])
+    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
+    fig = Figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
     axes = Axis[]
 
     # Plot each dataset in its own subplot
@@ -673,8 +674,8 @@ function plot_topography(
 
     _set_window_title(_generate_window_title(dat) * " - Epoch $epoch")
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
-    set_theme!(fontsize = plot_kwargs[:theme_fontsize])
-    fig = Figure(figure_padding = plot_kwargs[:figure_padding])
+    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
+    fig = Figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
     ax = Axis(fig[1, 1], aspect = DataAspect())
 
     plot_topography!(

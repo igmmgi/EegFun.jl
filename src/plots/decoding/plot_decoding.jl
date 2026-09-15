@@ -27,8 +27,8 @@ const PLOT_DECODING_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Line styling
     :linewidth => (2, "Line width for decoding curve"),
-    :color => (:blue, "Color for decoding curve"),
-    :linestyle => (:solid, "Line style"),
+    :color => (nothing, "Color for decoding curve"),
+    :linestyle => (nothing, "Line style"),
 
     # Chance level
     :chance_color => (:gray, "Color for chance level line"),
@@ -534,7 +534,7 @@ function plot_confusion_matrix(decoded::DecodedData; time_point::Union{Float64,I
     ax = Axis(fig[1, 1], title = title_text, xlabel = "Predicted", ylabel = "True")
 
     # Create heatmap
-    heatmap!(ax, confusion, colormap = :jet, colorrange = (0, 1))
+    heatmap!(ax, confusion, colormap = _resolve_theme_colormap(ax, nothing), colorrange = (0, 1))
 
     # Add text labels
     n_classes = size(confusion, 1)

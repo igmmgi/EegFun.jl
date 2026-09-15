@@ -36,7 +36,16 @@ EegFun.plot_erp(erps, layout = :grid)
 EegFun.plot_erp(erps[1], layout = :topo)
 
 
+with_theme(theme_ggplot2()) do
+
+with_theme(Theme(colormap=:coolwarm)) do
+EegFun.plot_erp(erps, layout = :grid, channel_selection = EegFun.channels([:Fp1, :M2]), 
+legend_channel = [:Fp1, :M2], yreversed = true, theme_fontsize=30)
+end
+
+with_theme(theme_dark()) do
 EegFun.plot_erp(erps, layout = :grid, legend_channel = [:Fp1, :M2], yreversed = true)
+end
 
 EegFun.plot_erp(
     erps,

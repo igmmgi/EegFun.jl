@@ -6,7 +6,7 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :figure_title => ("", "Title drawn at the top of the entire figure canvas"),
     :figure_title_fontsize => (24, "Font size for figure title"),
     :interactive => (true, "Whether to enable interactive features"),
-    :theme_fontsize => (24, "Font size for theme"),
+    :theme_fontsize => (nothing, "Font size for theme"),
     :zoom_step => (0.2, "Fractional zoom step for arrow keys (e.g. 0.2 means 20% zoom in/out)"),
     :figure_padding => ((10, 30, 10, 10), "Padding around entire figure as (left, right, bottom, top) tuple (in pixels)"),
 
@@ -15,7 +15,7 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
         :thin_plate,
         "Interpolation method: :multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest, :spherical_spline. See https://eljungsk.github.io/ScatteredInterpolation.jl/dev/methods/ for details on methods.",
     ),
-    :colormap => (:jet, "Colormap for the topography"),
+    :colormap => (nothing, "Colormap for the topography"),
     :gridscale => (75, "Grid resolution for interpolation"),
     :dims => (nothing, "Grid dimensions (rows, cols). If nothing, calculates best square-ish grid"),
     :ylim => (nothing, "Y-axis limits (nothing for auto). For ICA plots, use num_levels instead."),
@@ -33,7 +33,7 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
         (:s, "Time unit for display labels (:s or :ms). Only affects title strings — all intervals and selections remain in seconds."),
 
     # Head shape parameters
-    :head_color => (:black, "Color of the head shape outline."),
+    :head_color => (nothing, "Color of the head shape outline."),
     :head_linewidth => (2, "Line width of the head shape outline."),
     :head_radius => (1.0, "Radius of the head shape in mm."),
 
@@ -41,12 +41,12 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :point_plot => (true, "Whether to plot electrode points."),
     :point_marker => (:circle, "Marker style for electrode points."),
     :point_markersize => (12, "Size of electrode point markers."),
-    :point_color => (:black, "Color of electrode points."),
+    :point_color => (nothing, "Color of electrode points."),
 
     # Electrode label parameters
     :label_plot => (true, "Whether to plot electrode labels."),
     :label_fontsize => (20, "Font size for electrode labels."),
-    :label_color => (:black, "Color of electrode labels."),
+    :label_color => (nothing, "Color of electrode labels."),
     :label_xoffset => (0, "X-axis offset for electrode labels."),
     :label_yoffset => (0, "Y-axis offset for electrode labels."),
 
@@ -108,6 +108,8 @@ function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; 
     # Calculate levels
     levels = _calculate_topo_levels(data; num_levels = pop!(plot_kwargs, :num_levels))
 
+    actual_cmap = _resolve_theme_colormap(ax, pop!(plot_kwargs, :colormap))
+
     # Create contour plot with adaptive bounds
     co = contourf!(
         ax,
@@ -115,7 +117,7 @@ function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; 
         range(y_bounds[1], y_bounds[2], length = size(data, 2)),
         data,
         levels = levels;
-        colormap = pop!(plot_kwargs, :colormap),
+        colormap = actual_cmap,
         nan_color = :transparent,
     )
 
@@ -199,16 +201,15 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
     # Get selected components using the helper function
     comps = get_selected_components(ica, component_selection)
     if isempty(comps)
-        @minimal_warning "No components selected for topography plot"
-        return (fig = Figure(figure_padding = plot_kwargs[:figure_padding]),)
+        fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
+        return (fig = Figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...),)
     end
 
     # Get colorbar settings to adjust grid if needed
     colorbar_plot = pop!(plot_kwargs, :colorbar_plot)
 
-    # Create figure
-    set_theme!(fontsize = plot_kwargs[:theme_fontsize])
-    fig = Figure(figure_padding = plot_kwargs[:figure_padding])
+    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
+    fig = Figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
 
     # Deal with plot dimensions
     isnothing(dims) && (dims = _best_rect(length(comps)))
@@ -475,7 +476,8 @@ function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; artifa
     )
 
     # Create figure and UI
-    fig = Figure(figure_padding = plot_kwargs[:figure_padding])
+    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
+    fig = Figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
     _create_component_activation_plots!(fig, state)
     _add_navigation_controls!(fig, state)
     _add_navigation_sliders!(fig, state)
@@ -591,7 +593,7 @@ Draws the topographic contour plot and head shape onto a specified `Axis`.
 
 # Keyword Arguments
 - `gridscale::Int=300`: Resolution of the interpolation grid.
-- `colormap=:jet`: Colormap for the contour plot.
+- `colormap=:coolwarm`: Colormap for the contour plot.
 - `head_kwargs=Dict()`: Keyword arguments passed to `plot_layout_2d!` for the head outline.
 - `point_kwargs=Dict()`: Keyword arguments passed to `plot_layout_2d!` for channel points.
 - `label_kwargs=Dict()`: Keyword arguments passed to `plot_layout_2d!` for channel labels.
@@ -606,17 +608,17 @@ function _plot_topo_on_axis!(
     layout::Layout,
     levels;
     gridscale = 75,
-    colormap = :jet,
-    head_color = :black,
+    colormap = nothing,
+    head_color = nothing,
     head_linewidth = 2,
     head_radius = 1.0,
     point_plot = false,
     point_marker = :circle,
     point_markersize = 12,
-    point_color = :black,
+    point_color = nothing,
     label_plot = false,
     label_fontsize = 20,
-    label_color = :black,
+    label_color = nothing,
     label_xoffset = 0,
     label_yoffset = 0,
     kwargs...,
@@ -630,7 +632,8 @@ function _plot_topo_on_axis!(
     y_bounds = kwargs[:y_bounds]
     x_range = range(x_bounds[1], x_bounds[2], length = size(data, 1))
     y_range = range(y_bounds[1], y_bounds[2], length = size(data, 2))
-    co = contourf!(ax, x_range, y_range, data; levels = levels, colormap = colormap, nan_color = :transparent)
+    actual_cmap = _resolve_theme_colormap(ax, colormap)
+    co = contourf!(ax, x_range, y_range, data; levels = levels, colormap = actual_cmap, nan_color = :transparent)
 
     # Draw smooth circle to hide jagged interpolation edge
     _draw_smooth_circle_mask!(ax, x_bounds, y_bounds)
@@ -667,7 +670,7 @@ function _plot_ica_topo_in_viewer!(
     comp_idx;
     use_global_scale = false,
     gridscale = 100,
-    colormap = :jet,
+    colormap = nothing,
     num_levels = 20,
     head_kwargs = Dict(),
     point_kwargs = Dict(),
@@ -821,7 +824,7 @@ function _create_component_activation_plots!(fig, state)
         push!(state.lines_obs, lines_obs)
 
         # Component line plot
-        lines!(ax, @lift(state.dat.data.time[$(state.xrange)]), @lift($(lines_obs)[$(state.xrange)]), color = :black)
+        lines!(ax, @lift(state.dat.data.time[$(state.xrange)]), @lift($(lines_obs)[$(state.xrange)]), color = _resolve_theme_linecolor(ax, nothing))
 
         # Set initial x-axis limits for component plot
         xlims!(ax, (state.dat.data.time[first(state.xrange[])], state.dat.data.time[last(state.xrange[])]))
