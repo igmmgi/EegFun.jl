@@ -2486,3 +2486,31 @@ function Base.vcat(dats::EpochData...)
         copy(first_dat.analysis_info)
     )
 end
+
+# === Base Tensor Conversion Interface ===
+function Base.Matrix(dat::SingleDataFrameEeg)
+    cols = channel_labels(dat)
+    return Matrix(dat.data[!, cols])
+end
+
+function Base.Array(dat::MultiDataFrameEeg)
+    cols = channel_labels(dat)
+    n_ep = n_epochs(dat)
+    n_samp = n_samples(dat)
+    n_chan = length(cols)
+    
+    # Preallocate 3D array: (epochs x samples x channels)
+    # matching the size(dat) output of (epochs, samples, channels)
+    A = Array{Float64, 3}(undef, n_ep, n_samp, n_chan)
+    
+    for e in 1:n_ep
+        A[e, :, :] .= Matrix(dat.data[e][!, cols])
+    end
+    
+    return A
+end
+
+# === StatsBase Integration ===
+StatsBase.mean(dat::EpochData) = average_epochs(dat)
+StatsBase.mean(dats::Vector{EpochData}) = average_epochs(dats)
+
