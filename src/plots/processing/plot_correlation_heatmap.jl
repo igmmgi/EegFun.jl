@@ -34,11 +34,11 @@ const PLOT_CORRELATION_HEATMAP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :xminorgrid => (false, "Whether to show x-axis minor grid"),
     :yminorgrid => (false, "Whether to show y-axis minor grid"),
 
-    # Colorbar parameters - get all Colorbar attributes with their actual defaults
-    [
-        Symbol("colorbar_$(attr)") => (get(COLORBAR_DEFAULTS, attr, nothing), "Colorbar $(attr) parameter") for
-        attr in propertynames(Colorbar)
-    ]...,
+    # Colorbar parameters
+    :colorbar_kwargs => (
+        NamedTuple(),
+        "Additional kwargs passed directly to the Makie Colorbar block (see Makie's [Colorbar documentation](https://docs.makie.org/stable/reference/blocks/colorbar/) for available attributes).",
+    ),
 
     # Specific colorbar overrides for correlation heatmap
     :colorbar_plot => (true, "Whether to display the colorbar"),
@@ -149,7 +149,7 @@ function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kw
     heatmap!(ax, corr_matrix', colormap = actual_cmap, colorrange = colorrange, nan_color = plot_kwargs[:nan_color])
 
     # Add a colorbar if requested
-    colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
+    colorbar_kwargs = pop!(plot_kwargs, :colorbar_kwargs, (;))
     colorbar_plot = pop!(plot_kwargs, :colorbar_plot, true)
 
     if colorbar_plot

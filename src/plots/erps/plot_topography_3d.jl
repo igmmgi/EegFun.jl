@@ -197,7 +197,7 @@ function plot_topography_3d(
     # Add Colorbar
     colorbar_plot = pop!(plot_kwargs, :colorbar_plot, true)
     if colorbar_plot
-        colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
+        colorbar_kwargs = pop!(plot_kwargs, :colorbar_kwargs, (;))
         cb_pos = _get_colorbar_position(pop!(plot_kwargs, :colorbar_position, :right), 1:1, 1:1)
         Colorbar(fig[cb_pos...], m; colorbar_kwargs...)
     end

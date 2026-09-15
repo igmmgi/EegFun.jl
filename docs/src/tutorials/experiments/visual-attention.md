@@ -616,7 +616,7 @@ EegFun.plot_erp("grand_average_erps_final.jld2", channel_selection = EegFun.chan
 EegFun.plot_erp("grand_average_erps_final.jld2", channel_selection = EegFun.channels([:PO7, :PO8]), baseline_interval = (-0.2, 0))
 
 # and lets make separate plot for each channel
-EegFun.plot_erp("grand_average_erps_final.jld2", channel_selection = EegFun.channels([:PO7, :PO8]), baseline_interval = (-0.2, 0), layout = :grid, layout_grid_dims = (1,2))
+EegFun.plot_erp("grand_average_erps_final.jld2", channel_selection = EegFun.channels([:PO7, :PO8]), baseline_interval = (-0.2, 0), layout = :grid, layout_kwargs = (; grid_dims = (1,2)))
 ```
 
 ![Grand average ERP waveforms at PO7 and PO8](../../public/demos/experiments/visual-attention/erp_plot1.png)
@@ -796,7 +796,7 @@ EegFun.plot_erp_stats(
     legend_labels = ["Valid", "Invalid"],
     xticks = -0.2:0.2:0.6,
     time_unit = :ms, 
-    legend_framevisible = false
+    legend_kwargs = (; framevisible = false)
 )
 
 # Topographies with significance
@@ -1048,7 +1048,7 @@ EegFun.plot_erp_stats(
     legend_labels = ["Valid", "Invalid"],
     xticks = -0.2:0.2:0.6,
     time_unit = :ms,
-    legend_framevisible = false
+    legend_kwargs = (; framevisible = false)
 )
 
 # Topographies with significance

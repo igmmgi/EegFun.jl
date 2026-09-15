@@ -31,9 +31,6 @@ function theme_eegfun()
         linewidth = 2,
         colormap = DEFAULT_COLORMAP,
         palette = (color = Makie.wong_colors(),),
-        Axis = (
-            xgridvisible = false,
-            ygridvisible = false,
-        )
+        Axis = (xgridvisible = false, ygridvisible = false),
     )
 end

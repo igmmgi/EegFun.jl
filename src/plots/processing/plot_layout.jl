@@ -94,30 +94,9 @@ function plot_layout_2d!(
     # Head shape - Use kwargs
     radius = head_kwargs[:head_radius]
     arc!(ax, Point2f(0), radius, -π, π; color = actual_head_color, linewidth = head_kwargs[:head_linewidth]) # head
-    arc!(
-        ax,
-        Point2f(radius, 0),
-        radius * (1 / 7),
-        -π / 2,
-        π / 2;
-        color = actual_head_color,
-        linewidth = head_kwargs[:head_linewidth],
-    )
-    arc!(
-        ax,
-        Point2f(-radius, 0),
-        -radius * (1 / 7),
-        π / 2,
-        -π / 2;
-        color = actual_head_color,
-        linewidth = head_kwargs[:head_linewidth],
-    )
-    lines!(
-        ax,
-        Point2f[(-0.1, 1.0), (0.0, 1.15), (0.1, 1.0)] .* radius;
-        color = actual_head_color,
-        linewidth = head_kwargs[:head_linewidth],
-    )
+    arc!(ax, Point2f(radius, 0), radius * (1 / 7), -π / 2, π / 2; color = actual_head_color, linewidth = head_kwargs[:head_linewidth])
+    arc!(ax, Point2f(-radius, 0), -radius * (1 / 7), π / 2, -π / 2; color = actual_head_color, linewidth = head_kwargs[:head_linewidth])
+    lines!(ax, Point2f[(-0.1, 1.0), (0.0, 1.15), (0.1, 1.0)] .* radius; color = actual_head_color, linewidth = head_kwargs[:head_linewidth])
 
     positions = Point2f.(layout.data.x2, layout.data.y2)
 

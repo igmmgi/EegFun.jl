@@ -157,7 +157,7 @@ EegFun.plot_epochs(epochs, layout = :grid)
 EegFun.plot_epochs(epochs, layout = :grid, channel_selection = EegFun.channels([:Fp1, :Fp2, :PO7, :PO8]))
 
 EegFun.plot_epochs(epochs, layout = :topo)
-EegFun.plot_epochs(epochs, layout = :topo, add_xy_origin = false, theme_fontsize = 10, layout_topo_show_scale = true)
+EegFun.plot_epochs(epochs, layout = :topo, add_xy_origin = false, theme_fontsize = 10, layout_kwargs = (; topo_show_scale = true))
 
 EegFun.plot_epochs(epochs, channel_selection = EegFun.channels([:Fp1, :Fp2, :Cz]))
 EegFun.plot_epochs(epochs, channel_selection = EegFun.channels([:Fp1, :Fp2, :Cz]); layout = :topo)

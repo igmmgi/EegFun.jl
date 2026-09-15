@@ -233,7 +233,7 @@ using DataFrames
         @test length(axes) == 3  # 4 channels
 
         # Test custom grid dimensions via grid_dims parameter
-        fig, axes = EegFun.plot_erp(erp_data, layout = :grid, layout_grid_dims = (2, 2), display_plot = false)
+        fig, axes = EegFun.plot_erp(erp_data, layout = :grid, layout_kwargs = (; grid_dims = (2, 2)), display_plot = false)
         @test length(axes) == 3
     end
 end

@@ -153,7 +153,10 @@ EegFun.rereference!(dat, :avg)
 EegFun.highpass_filter!(dat, 1)
 
 # visually selected blink like artifact via interval selection times
+with_theme(Theme(colormap=:coolwarm)) do
 EegFun.plot_topography(dat, interval_selection = EegFun.times(5.973, 6.02), ylim = (-200, 200))
+end
+
 EegFun.plot_topography(dat, interval_selection = EegFun.times(6), ylim = (-200, 200))
 
 # blink like artifact via sample selection predicate
@@ -175,11 +178,11 @@ EegFun.plot_topography(dat, colorbar_plot = false, head_radius = 1.25)
 EegFun.plot_topography(dat, gridscale = 250)
 EegFun.plot_topography(dat, colormap = :inferno)
 EegFun.plot_topography(dat, colormap = :redblue)
-EegFun.plot_topography(dat, title = "Custom Title", title_fontsize = 30)
+EegFun.plot_topography(dat, plot_title = "Custom Title", plot_title_fontsize = 30)
 EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6)
 EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6, method = :spherical_spline)
 EegFun.plot_topography(dat, channel_selection = EegFun.channels([:Fp1, :Fp2, :Cz]))
-EegFun.plot_topography(dat, colorbar_size = 20, colorbar_position = (2, 1), colorbar_vertical = false)
+EegFun.plot_topography(dat, colorbar_kwargs = (; size = 20, position = (2, 1), vertical = false))
 
 #################################
 # Epoched DataFrameEeg
@@ -214,8 +217,7 @@ EegFun.plot_topography(
     interval_selection = (0.4, 0.6),
     ylim = (-2, 2),
     colorbar_plot = true,
-    colorbar_position = (2, 1),
-    colorbar_vertical = false,
+    colorbar_kwargs = (; position = (2, 1), vertical = false),
 )
 
 EegFun.plot_topography(erps)
@@ -224,7 +226,7 @@ EegFun.plot_topography(erps[2])
 EegFun.plot_topography(erps[1], gridscale = 50)
 EegFun.plot_topography(erps[2], gridscale = 1000)
 EegFun.plot_topography(erps[1], colormap = :inferno)
-EegFun.plot_topography(erps[2], title = "Custom Title", title_fontsize = 30)
+EegFun.plot_topography(erps[2], plot_title = "Custom Title", plot_title_fontsize = 30)
 
 ```
 

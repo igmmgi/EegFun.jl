@@ -203,7 +203,7 @@ function plot_topography_stats(
     Label(fig[0, 1:n_cols], fig_title, fontsize = 18, font = :bold)
 
     # Extract colorbar kwargs before render loop (removes colorbar_* keys from plot_kwargs)
-    colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
+    colorbar_kwargs = Dict{Symbol,Any}(pairs(pop!(plot_kwargs, :colorbar_kwargs, (;))))
     pop!(colorbar_kwargs, :colorrange, nothing)
     pop!(colorbar_kwargs, :label, nothing)
     pop!(plot_kwargs, :colorbar_plot, nothing)

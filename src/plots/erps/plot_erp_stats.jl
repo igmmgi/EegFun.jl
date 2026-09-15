@@ -158,7 +158,7 @@ function plot_erp_stats(
     end
 
     # Extract layout_* parameters for layout system
-    layout_kwargs = _extract_layout_kwargs(plot_kwargs)
+    layout_kwargs = pop!(plot_kwargs, :layout_kwargs, (;))
 
     # Get the EEG layout from the result data (for topo positioning)
     eeg_layout = result.data[1].layout

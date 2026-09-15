@@ -50,11 +50,11 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :label_xoffset => (0, "X-axis offset for electrode labels."),
     :label_yoffset => (0, "Y-axis offset for electrode labels."),
 
-    # Colorbar parameters - get all Colorbar attributes with their actual defaults
-    [
-        Symbol("colorbar_$(attr)") => (get(COLORBAR_DEFAULTS, attr, nothing), "Colorbar $(attr) parameter") for
-        attr in propertynames(Colorbar)
-    ]...,
+    # Colorbar parameters
+    :colorbar_kwargs => (
+        NamedTuple(),
+        "Additional kwargs passed directly to the Makie Colorbar block (see Makie's [Colorbar documentation](https://docs.makie.org/stable/reference/blocks/colorbar/) for available attributes).",
+    ),
 
     # Override specific colorbar parameters with custom defaults
     :colorbar_plot => (true, "Whether to show the colorbar"),
@@ -127,7 +127,7 @@ function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; 
     colorbar_plot_numbers = plot_kwargs[:colorbar_plot_numbers]
     should_show_colorbar = plot_kwargs[:colorbar_plot] && (isempty(colorbar_plot_numbers) || component in colorbar_plot_numbers)
     if should_show_colorbar
-        colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
+        colorbar_kwargs = pop!(plot_kwargs, :colorbar_kwargs, (;))
         cb_pos = _get_colorbar_position(plot_kwargs[:colorbar_position], 1:1, 1:1)
         sg = ax.layoutobservables.gridcontent[].parent
         Colorbar(sg[cb_pos...], co; colorbar_kwargs..., tellwidth = true, tellheight = false)
@@ -824,7 +824,12 @@ function _create_component_activation_plots!(fig, state)
         push!(state.lines_obs, lines_obs)
 
         # Component line plot
-        lines!(ax, @lift(state.dat.data.time[$(state.xrange)]), @lift($(lines_obs)[$(state.xrange)]), color = _resolve_theme_linecolor(ax, nothing))
+        lines!(
+            ax,
+            @lift(state.dat.data.time[$(state.xrange)]),
+            @lift($(lines_obs)[$(state.xrange)]),
+            color = _resolve_theme_linecolor(ax, nothing),
+        )
 
         # Set initial x-axis limits for component plot
         xlims!(ax, (state.dat.data.time[first(state.xrange[])], state.dat.data.time[last(state.xrange[])]))

@@ -7,5 +7,8 @@ EegFun = "aa15e9e4-a77e-4972-a32b-58bceaaa184b"
 JuliaFormatter = "98e50ef6-434e-11e9-1051-2b60c6c9e899"
 LiveServer = "16fef848-5104-11e9-1b77-fb7a48bbb589"
 
+[sources]
+EegFun = {path = "/home/ian/Documents/Julia/EegFun.jl"}
+
 [compat]
 Documenter = "~1.17"

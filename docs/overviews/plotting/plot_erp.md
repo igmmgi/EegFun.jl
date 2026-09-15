@@ -62,7 +62,7 @@ plot_erp(erps, layout = :grid)
 plot_erp(erps,
     channel_selection = channels([:F3, :Cz, :PO7, :PO8, :Fp1, :Fp2]),
     layout = :grid,
-    layout_grid_dims = (3, 2)  # 3 rows × 2 columns
+    layout_kwargs = (; grid_dims = (3, 2))  # 3 rows × 2 columns
 )
 ```
 
@@ -70,8 +70,7 @@ plot_erp(erps,
 
 ```julia
 plot_erp(erps,
-    layout_grid_dims = (3, 4),
-    layout_grid_skip_positions = [(2, 1), (2, 3)]  # Leave empty
+    layout_kwargs = (; grid_dims = (3, 4), grid_skip_positions = [(2, 1), (2, 3)])  # Leave empty
 )
 ```
 
@@ -82,8 +81,7 @@ Creates custom layouts with empty spaces.
 ```julia
 plot_erp(erps,
     layout = :grid,
-    layout_grid_rowgap = 0,  # No vertical gap
-    layout_grid_colgap = 0   # No horizontal gap
+    layout_kwargs = (; grid_rowgap = 0, grid_colgap = 0)
 )
 ```
 

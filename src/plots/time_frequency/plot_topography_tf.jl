@@ -151,7 +151,7 @@ function plot_topography(
     _ensure_coordinates_3d!(layout)
 
     # Extract colorbar kwargs
-    colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
+    colorbar_kwargs = Dict{Symbol,Any}(pairs(pop!(plot_kwargs, :colorbar_kwargs, (;))))
     colorbar_plot = pop!(plot_kwargs, :colorbar_plot)
     pop!(plot_kwargs, :colorbar_position, nothing)
     pop!(plot_kwargs, :colorbar_plot_numbers, nothing)
@@ -295,7 +295,7 @@ function plot_topography(
     freq_str = "$(round(Int, freq_range[1]))-$(round(Int, freq_range[2])) Hz"
     fig = Figure(size = (250 * n_cols + 100, 250 * n_rows + 50))
 
-    colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
+    colorbar_kwargs = Dict{Symbol,Any}(pairs(pop!(plot_kwargs, :colorbar_kwargs, (;))))
     pop!(colorbar_kwargs, :colorrange, nothing)
     pop!(colorbar_kwargs, :label, nothing)
     pop!(plot_kwargs, :colorbar_plot, nothing)
@@ -523,7 +523,7 @@ function plot_topography_stats(
     Label(fig[0, 1:n_cols], fig_title, fontsize = 18, font = :bold)
 
     # Extract colorbar kwargs
-    colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
+    colorbar_kwargs = Dict{Symbol,Any}(pairs(pop!(plot_kwargs, :colorbar_kwargs, (;))))
     pop!(colorbar_kwargs, :colorrange, nothing)
     pop!(colorbar_kwargs, :label, nothing)
     pop!(plot_kwargs, :colorbar_plot, nothing)

@@ -143,7 +143,7 @@ tf_data = EegFun.tf_morlet(data_cohen, frequencies = logrange(2, 80, length = 80
 EegFun.plot_tf(
     tf_data;
     title = "3-cycle wavelets",
-    colorbar_label = "dB change from baseline",
+    colorbar_kwargs = (; label = "dB change from baseline"),
     baseline_interval = (-0.5, -0.2),
     baseline_method = :db,
     xlim = (-0.2, 1.0),

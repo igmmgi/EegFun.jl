@@ -15,11 +15,11 @@ const PLOT_TF_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Colormap and color range
     :colormap => (nothing, "Colormap for the heatmap"),
     :colorrange => (nothing, "Color range as (min, max) tuple. If nothing, automatically determined from data"),
-    # Colorbar parameters - get all Colorbar attributes with their actual defaults
-    [
-        Symbol("colorbar_$(attr)") => (get(COLORBAR_DEFAULTS, attr, nothing), "Colorbar $(attr) parameter") for
-        attr in propertynames(Colorbar)
-    ]...,
+    # Colorbar parameters
+    :colorbar_kwargs => (
+        NamedTuple(),
+        "Additional kwargs passed directly to the Makie Colorbar block (see Makie's [Colorbar documentation](https://docs.makie.org/stable/reference/blocks/colorbar/) for available attributes).",
+    ),
 
     # Specific colorbar overrides for tf
     :colorbar_plot => (true, "Whether to show the colorbar"),
@@ -47,8 +47,11 @@ const PLOT_TF_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Baseline
     :baseline_method => (:db, "Baseline correction method: :db, :absolute, :relative, :relchange, :percent, :zscore"),
 
-    # Layout parameters - dynamically pull all layout options
-    [Symbol("layout_$(attr)") => val for (attr, val) in LAYOUT_KWARGS]...,
+    # Layout parameters
+    :layout_kwargs => (
+        NamedTuple(),
+        "Additional parameters to configure grid or topographical layouts (e.g., grid_dims, topo_plot_width, grid_rowgap)",
+    ),
 )
 
 
@@ -92,8 +95,8 @@ function plot_tf(
     plot_kwargs = _merge_plot_kwargs(PLOT_TF_KWARGS, kwargs)
 
     # Extract colorbar/layout kwargs
-    colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
-    layout_kwargs = _extract_layout_kwargs(plot_kwargs)
+    colorbar_kwargs = pop!(plot_kwargs, :colorbar_kwargs, (;))
+    layout_kwargs = pop!(plot_kwargs, :layout_kwargs, (;))
 
     colormap = _resolve_theme_colormap(ax, plot_kwargs[:colormap])
     colorrange = plot_kwargs[:colorrange]
@@ -212,8 +215,8 @@ function plot_tf(
     plot_kwargs = _merge_plot_kwargs(PLOT_TF_KWARGS, kwargs)
 
     # Extract colorbar/layout kwargs
-    colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
-    layout_kwargs   = _extract_layout_kwargs(plot_kwargs)
+    colorbar_kwargs = pop!(plot_kwargs, :colorbar_kwargs, (;))
+    layout_kwargs   = pop!(plot_kwargs, :layout_kwargs, (;))
 
     layout                  = plot_kwargs[:layout]
     colormap                = _resolve_theme_colormap(ax, plot_kwargs[:colormap])

@@ -31,8 +31,11 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Layout configuration
     :layout => (:single, "Layout type: :single, :grid, or :topo"),
 
-    # Layout parameters - dynamically pull all layout options
-    [Symbol("layout_$(attr)") => val for (attr, val) in LAYOUT_KWARGS]...,
+    # Layout parameters
+    :layout_kwargs => (
+        NamedTuple(),
+        "Additional parameters to configure grid or topographical layouts (e.g., grid_dims, topo_plot_width, grid_rowgap)",
+    ),
 
     # Display options
     :theme_fontsize => (nothing, "Font size for theme"),
@@ -55,9 +58,11 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :selection_color => (:blue, "Color for interactive selection rectangles"),
     :selection_alpha => (0.3, "Alpha (transparency) for interactive selection rectangles"),
 
-    # Legend parameters - get all Legend attributes with their actual defaults
-    # This allows users to control any Legend parameter
-    [Symbol("legend_$(attr)") => (get(LEGEND_DEFAULTS, attr, nothing), "Legend $(attr) parameter") for attr in propertynames(Legend)]...,
+    # Legend parameters
+    :legend_kwargs => (
+        NamedTuple(),
+        "Additional kwargs passed directly to the Makie Legend block (see Makie's [Legend documentation](https://docs.makie.org/stable/reference/blocks/legend/) for available attributes).",
+    ),
 
     # Override specific legend parameters with custom defaults
     :legend => (true, "Whether to show the legend"),
@@ -216,14 +221,22 @@ function plot_epochs(
     n_conditions = length(dat_subset)
     n_channels_for_colors = (layout == :single && length(all_plot_channels) > 1) ? length(all_plot_channels) : 1
     color_cycle = haskey(Makie.current_default_theme(), :palette) ? Makie.current_default_theme()[:palette][:color][] : Makie.wong_colors()
-    resolved_colormap = isnothing(plot_kwargs[:colormap]) ? (haskey(Makie.current_default_theme(), :colormap) ? Makie.current_default_theme()[:colormap][] : nothing) : plot_kwargs[:colormap]
-    condition_colors_list =
-        _compute_dataset_colors(plot_kwargs[:color], n_conditions, n_channels_for_colors, resolved_colormap, user_provided_color, color_cycle)
+    resolved_colormap =
+        isnothing(plot_kwargs[:colormap]) ?
+        (haskey(Makie.current_default_theme(), :colormap) ? Makie.current_default_theme()[:colormap][] : nothing) : plot_kwargs[:colormap]
+    condition_colors_list = _compute_dataset_colors(
+        plot_kwargs[:color],
+        n_conditions,
+        n_channels_for_colors,
+        resolved_colormap,
+        user_provided_color,
+        color_cycle,
+    )
 
     @info "plot_epochs: Plotting $(length(all_plot_channels)) channels across $(n_conditions) conditions"
 
     # Extract layout_* parameters, remove prefix, and pass to create_layout
-    layout_kwargs = _extract_layout_kwargs(plot_kwargs)
+    layout_kwargs = pop!(plot_kwargs, :layout_kwargs, (;))
 
     # Create plot_layout object for unified selection system
     plot_layout = create_layout(layout, all_plot_channels, first(dat_subset).layout; layout_kwargs...)
@@ -234,7 +247,7 @@ function plot_epochs(
     axes = Axis[]
 
     # Ensure layout size handles title properly
-    layout_kwargs = _extract_layout_kwargs(plot_kwargs)
+    layout_kwargs = pop!(plot_kwargs, :layout_kwargs, (;))
 
     # Initialize line references for control panel if interactive
     line_refs = nothing
@@ -804,7 +817,7 @@ function _add_epochs_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vecto
     if isnothing(kwargs[:legend_nbanks])
         kwargs[:legend_nbanks] = length(channels) > 10 ? cld(length(channels), 10) : 1
     end
-    legend_kwargs = _extract_legend_kwargs(kwargs)
+    legend_kwargs = pop!(kwargs, :legend_kwargs, (;))
 
     # Add legend with position and optional label
     if legend_label != ""

@@ -176,7 +176,15 @@ function plot_tf_stats(
 
         # Plot heatmap (Makie expects data as [n_x × n_y], where x=time, y=freq)
         # data_mat is [n_freqs × n_time], need to transpose
-        hm = heatmap!(ax, time_points, frequencies, data_mat', colormap = _resolve_theme_colormap(ax, colormap), colorrange = cr, nan_color = :transparent)
+        hm = heatmap!(
+            ax,
+            time_points,
+            frequencies,
+            data_mat',
+            colormap = _resolve_theme_colormap(ax, colormap),
+            colorrange = cr,
+            nan_color = :transparent,
+        )
         last_hm = hm
 
         # Significance overlay

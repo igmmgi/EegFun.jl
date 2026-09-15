@@ -35,11 +35,11 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :plot_erp => (true, "Whether to plot ERP average overlay"),
     :boxcar_average => (1, "Boxcar average window size for smoothing the ERP image (1 = no smoothing)"),
 
-    # Colorbar parameters - get all Colorbar attributes with their actual defaults
-    [
-        Symbol("colorbar_$(attr)") => (get(COLORBAR_DEFAULTS, attr, nothing), "Colorbar $(attr) parameter") for
-        attr in propertynames(Colorbar)
-    ]...,
+    # Colorbar parameters
+    :colorbar_kwargs => (
+        NamedTuple(),
+        "Additional kwargs passed directly to the Makie Colorbar block (see Makie's [Colorbar documentation](https://docs.makie.org/stable/reference/blocks/colorbar/) for available attributes).",
+    ),
 
     # Specific colorbar overrides for erp_image
     :colorbar_plot => (true, "Whether to show the colorbar"),
@@ -56,8 +56,11 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Origin lines
     :add_xy_origin => (true, "Add origin lines at x=0 and y=0 (true/false)"),
 
-    # Layout parameters - dynamically pull all layout options
-    [Symbol("layout_$(attr)") => val for (attr, val) in LAYOUT_KWARGS]...,
+    # Layout parameters
+    :layout_kwargs => (
+        NamedTuple(),
+        "Additional parameters to configure grid or topographical layouts (e.g., grid_dims, topo_plot_width, grid_rowgap)",
+    ),
 
     # General layout parameters
     :figure_padding => ((10, 30, 10, 10), "Padding around entire figure as (left, right, bottom, top) tuple (in pixels)"),
@@ -183,10 +186,10 @@ function plot_erp_image(
     colorbar_plot_numbers = plot_kwargs[:colorbar_plot_numbers]
 
     # Extract layout_* parameters, remove prefix, and pass to create_layout
-    layout_kwargs = _extract_layout_kwargs(plot_kwargs)
+    layout_kwargs = pop!(plot_kwargs, :layout_kwargs, (;))
 
     # Extract colorbar kwargs
-    colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
+    colorbar_kwargs = pop!(plot_kwargs, :colorbar_kwargs, (;))
 
     # Create figure and apply layout system
     fig = Figure()

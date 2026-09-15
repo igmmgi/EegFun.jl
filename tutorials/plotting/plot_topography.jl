@@ -52,7 +52,7 @@ EegFun.plot_topography(dat, plot_title = "Custom Title", plot_title_fontsize = 3
 EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6)
 EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6, method = :spherical_spline)
 EegFun.plot_topography(dat, channel_selection = EegFun.channels([:Fp1, :Fp2, :Cz]))
-EegFun.plot_topography(dat, colorbar_size = 20, colorbar_position = (2, 1), colorbar_vertical = false)
+EegFun.plot_topography(dat, colorbar_kwargs = (; size = 20, position = (2, 1), vertical = false))
 
 #################################
 # Epoched DataFrameEeg
@@ -87,8 +87,7 @@ EegFun.plot_topography(
     interval_selection = (0.4, 0.6),
     ylim = (-2, 2),
     colorbar_plot = true,
-    colorbar_position = (2, 1),
-    colorbar_vertical = false,
+    colorbar_kwargs = (; position = (2, 1), vertical = false),
 )
 
 EegFun.plot_topography(erps)

@@ -43,9 +43,11 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :average_channels => (false, "Average across channels (true/false)"),
     :error_bars => (:none, "Error bars type to plot: :none, :sem, :within_sem, :ci95"),
 
-    # Legend parameters - get all Legend attributes with their actual defaults
-    # This allows users to control any Legend parameter
-    [Symbol("legend_$(attr)") => (get(LEGEND_DEFAULTS, attr, nothing), "Legend $(attr) parameter") for attr in propertynames(Legend)]...,
+    # Legend parameters
+    :legend_kwargs => (
+        NamedTuple(),
+        "Additional kwargs passed directly to the Makie Legend block (see Makie's [Legend documentation](https://docs.makie.org/stable/reference/blocks/legend/) for available attributes).",
+    ),
 
     # Override specific legend parameters with custom defaults
     :legend => (true, "Show the legend (true/false)"),
@@ -68,8 +70,11 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :scale_x_value => (nothing, "X-axis scale value/step size (e.g. 0.1 for 100 ms)"),
     :scale_y_value => (nothing, "Y-axis scale value/step size (e.g. 5.0 for 5 μV)"),
 
-    # Layout parameters - dynamically pull all layout options
-    [Symbol("layout_$(attr)") => val for (attr, val) in LAYOUT_KWARGS]...,
+    # Layout parameters
+    :layout_kwargs => (
+        NamedTuple(),
+        "Additional parameters to configure grid or topographical layouts (e.g., grid_dims, topo_plot_width, grid_rowgap)",
+    ),
 
     # General layout parameters
     :figure_padding => ((10, 30, 10, 10), "Padding around entire figure as (left, right, bottom, top) tuple (in pixels)"),
@@ -465,7 +470,7 @@ function _plot_erp_core(
     _set_window_title(title_str)
 
     # Extract layout_* parameters, remove prefix, and pass to create_layout
-    layout_kwargs = _extract_layout_kwargs(plot_kwargs)
+    layout_kwargs = pop!(plot_kwargs, :layout_kwargs, (;))
 
     # Create figure and apply layout system
     fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
@@ -731,8 +736,14 @@ function _plot_erp!(
     # Compute colors and linestyles for each dataset
     color_cycle = haskey(Makie.current_default_theme(), :palette) ? Makie.current_default_theme()[:palette][:color][] : Makie.wong_colors()
     resolved_colormap = _resolve_theme_colormap(ax, plot_kwargs[:colormap], nothing)
-    all_colors =
-        _compute_dataset_colors(plot_kwargs[:color], length(datasets), length(channels), resolved_colormap, user_provided_color, color_cycle)
+    all_colors = _compute_dataset_colors(
+        plot_kwargs[:color],
+        length(datasets),
+        length(channels),
+        resolved_colormap,
+        user_provided_color,
+        color_cycle,
+    )
     all_linestyles = _compute_dataset_linestyles(plot_kwargs[:linestyle], length(datasets))
 
     # Plot each dataset for ALL channels in this subplot
@@ -1325,7 +1336,7 @@ function _add_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vector{ErpDa
     if isnothing(kwargs[:legend_nbanks])
         kwargs[:legend_nbanks] = length(channels) > 10 ? cld(length(channels), 10) : 1
     end
-    legend_kwargs = _extract_legend_kwargs(kwargs)
+    legend_kwargs = pop!(kwargs, :legend_kwargs, (;))
 
     # Add legend with position and optional label
     if legend_label != ""

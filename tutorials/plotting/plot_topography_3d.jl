@@ -82,5 +82,5 @@ EegFun.plot_topography_3d(
     interval_selection = (0.4, 0.6),
     ylim = (-2, 2),
     colorbar_plot = true,
-    colorbar_position = (1, 2), # Note: GLMakie LScene placement
+    colorbar_kwargs = (; position = (1, 2)), # Note: GLMakie LScene placement
 )

@@ -64,7 +64,7 @@ plot_erp(erps, layout = :grid)
 plot_erp(erps,
     channel_selection = channels([:F3, :Cz, :PO7, :PO8, :Fp1, :Fp2]),
     layout = :grid,
-    layout_grid_dims = (3, 2)  # 3 rows × 2 columns
+    layout_kwargs = (; grid_dims = (3, 2))  # 3 rows × 2 columns
 )
 ```
 
@@ -72,8 +72,7 @@ plot_erp(erps,
 
 ```julia
 plot_erp(erps,
-    layout_grid_dims = (3, 4),
-    layout_grid_skip_positions = [(2, 1), (2, 3)]  # Leave empty
+    layout_kwargs = (; grid_dims = (3, 4), grid_skip_positions = [(2, 1), (2, 3)])  # Leave empty
 )
 ```
 
@@ -84,8 +83,7 @@ Creates custom layouts with empty spaces.
 ```julia
 plot_erp(erps,
     layout = :grid,
-    layout_grid_rowgap = 0,  # No vertical gap
-    layout_grid_colgap = 0   # No horizontal gap
+    layout_kwargs = (; grid_rowgap = 0, grid_colgap = 0)
 )
 ```
 
@@ -235,21 +233,29 @@ EegFun.plot_erp(erps, layout = :grid)
 EegFun.plot_erp(erps[1], layout = :topo)
 
 
+with_theme(theme_ggplot2()) do
+
+with_theme(Theme(colormap=:coolwarm)) do
+EegFun.plot_erp(erps, layout = :grid, channel_selection = EegFun.channels([:Fp1, :M2]), 
+legend_channel = [:Fp1, :M2], yreversed = true, theme_fontsize=30)
+end
+
+with_theme(theme_dark()) do
 EegFun.plot_erp(erps, layout = :grid, legend_channel = [:Fp1, :M2], yreversed = true)
+end
 
 EegFun.plot_erp(
     erps,
     channel_selection = EegFun.channels([:F3, :Cz, :PO7, :PO8, :Fp1, :Fp2]),
     layout = :grid,
-    layout_grid_dims = (3, 2),
-    layout_grid_skip_positions = [(2, 1)],
+    layout_kwargs = (; grid_dims = (3, 2), grid_skip_positions = [(2, 1)]),
 )
 
 EegFun.plot_erp(
     erps,
     channel_selection = EegFun.channels([:Cz, :PO7, :PO8, :Fp1, :Fp2, :F3]),
     layout = :grid,
-    layout_grid_dims = (2, 3),
+    layout_kwargs = (; grid_dims = (2, 3)),
     axis_type = :origin,
     scale_x_value = 0.5,
     scale_y_value = 5.0,
@@ -263,18 +269,14 @@ EegFun.plot_erp(
     erps,
     channel_selection = EegFun.channels([:Cz, :PO7, :PO8, :Fp1, :Fp2, :F3, :T8, :F4]),
     layout = :grid,
-    layout_grid_dims = (3, 4),
-    layout_grid_skip_positions = [(2, 1), (2, 3)],
+    layout_kwargs = (; grid_dims = (3, 4), grid_skip_positions = [(2, 1), (2, 3)]),
 )
 
 EegFun.plot_erp(
     erps,
     channel_selection = EegFun.channels([:Cz, :PO7, :PO8, :Fp1, :Fp2, :F3]),
     layout = :grid,
-    layout_grid_dims = (2, 4),
-    layout_grid_skip_positions = [(2, 1), (2, 3)],
-    layout_grid_rowgap = 0,
-    layout_grid_colgap = 0,
+    layout_kwargs = (; grid_dims = (2, 4), grid_skip_positions = [(2, 1), (2, 3)], grid_rowgap = 0, grid_colgap = 0),
     figure_padding = (150, 150, 150, 150),
 )
 
@@ -310,14 +312,15 @@ EegFun.plot_topography!(
     point_plot = false,
     label_plot = false,
     colorbar_plot = true,
-    colorbar_width = Relative(0.03),
-    colorbar_height = Relative(0.2),
-    colorbar_tellheight = false,
-    colorbar_tellwidth = false,
-    colorbar_position = (1, 1),
-    colorbar_halign = 0.25,
-    colorbar_valign = 0,
-    colorbar_flipaxis = true,
+    colorbar_kwargs = (; width = Relative(0.03),
+        height = Relative(0.2),
+        tellheight = false,
+        tellwidth = false,
+        position = (1, 1),
+        halign = 0.25,
+        valign = 0,
+        flipaxis = true
+    ),
 )
 fig
 

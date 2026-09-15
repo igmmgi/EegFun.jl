@@ -404,96 +404,13 @@ end
 _resolve_from_scene(scene, attr::Symbol, user_val, default_val) =
     isnothing(user_val) ? (haskey(Makie.theme(scene), attr) ? Makie.theme(scene)[attr][] : default_val) : user_val
 
-_resolve_theme_colormap(obj, user_cmap, default_cmap = DEFAULT_COLORMAP) = _resolve_from_scene(obj.scene, :colormap, user_cmap, default_cmap)
+_resolve_theme_colormap(obj, user_cmap, default_cmap = DEFAULT_COLORMAP) =
+    _resolve_from_scene(obj.scene, :colormap, user_cmap, default_cmap)
 _resolve_theme_linewidth(obj, user_lw, default_lw = 2) = _resolve_from_scene(obj.scene, :linewidth, user_lw, default_lw)
 _resolve_theme_textcolor(obj, user_color, default_color = :black) = _resolve_from_scene(obj.scene, :textcolor, user_color, default_color)
 _resolve_theme_linecolor(obj, user_color, default_color = :black) = _resolve_from_scene(obj.scene, :linecolor, user_color, default_color)
 
 
-"""
-    _get_colorbar_defaults()
-
-Get all default values for Colorbar attributes by creating a single Colorbar instance.
-Returns a dictionary mapping attribute names to their default values.
-"""
-function _get_colorbar_defaults()
-    # Create a minimal figure
-    fig = Figure()
-    cb = Colorbar(fig)
-
-    # Get all attribute values at once
-    defaults = Dict{Symbol,Any}()
-    for attr in propertynames(Colorbar)
-        defaults[attr] = getproperty(cb, attr)
-    end
-
-    return defaults
-end
-
-# Cache the colorbar defaults
-const COLORBAR_DEFAULTS = _get_colorbar_defaults()
-
-"""
-    _get_legend_defaults()
-
-Get all default values for Legend attributes by creating a temporary Legend instance.
-Returns a dictionary mapping attribute names to their default values.
-"""
-function _get_legend_defaults()
-    # Create a minimal figure and axis with a dummy plot that has labels
-    # This is necessary because axislegend() requires plots with labels
-    fig = Figure()
-    ax = Axis(fig[1, 1])
-    lines!(ax, [1, 2], [1, 2], label = "dummy")  # Create a plot with a label
-    leg = axislegend(ax)
-
-    # Get all attribute values at once
-    defaults = Dict{Symbol,Any}()
-    for attr in propertynames(Legend)
-        defaults[attr] = getproperty(leg, attr)
-    end
-
-    return defaults
-end
-
-# Cache the legend defaults
-const LEGEND_DEFAULTS = _get_legend_defaults()
-
-"""
-    _extract_colorbar_kwargs!(plot_kwargs::Dict{Symbol, Any})
-
-Extract all colorbar-related parameters from plot_kwargs and return a clean dictionary
-suitable for passing to Colorbar constructor.
-
-# Arguments
-- `plot_kwargs`: Dictionary of plot parameters (modified in-place)
-
-# Returns
-- `Dict{Symbol, Any}`: Cleaned colorbar parameters with invalid attributes removed
-"""
-function _extract_colorbar_kwargs!(plot_kwargs::Dict{Symbol,Any})
-    colorbar_kwargs = Dict{Symbol,Any}()
-    colorbar_attrs = propertynames(Colorbar)
-
-    for attr in colorbar_attrs
-        colorbar_key = Symbol("colorbar_$(attr)")
-        if haskey(plot_kwargs, colorbar_key)
-            value = pop!(plot_kwargs, colorbar_key)
-            if !isnothing(value)  # Only add if not the default nothing
-                colorbar_kwargs[attr] = value
-            end
-        end
-    end
-
-    # Note: These attributes conflict with internal Makie colorbar creation if passed directly.
-    # These cannot be passed to colorbar kwargs
-    pop!(colorbar_kwargs, :colormap, nothing)
-    pop!(colorbar_kwargs, :limits, nothing)
-    pop!(colorbar_kwargs, :highclip, nothing)
-    pop!(colorbar_kwargs, :lowclip, nothing)
-
-    return colorbar_kwargs
-end
 
 """
     _get_colorbar_position(pos::Union{Symbol, Tuple}, row_span, col_span)
@@ -516,81 +433,6 @@ function _get_colorbar_position(pos, row_span, col_span)
     else
         return (row_span, last(col_span) + 1) # Default to right
     end
-end
-
-"""
-    _extract_legend_kwargs(plot_kwargs::Dict{Symbol, Any}; exclude_positioning::Bool=false)
-
-Extract legend-related parameters from plot_kwargs and return a new dictionary
-suitable for passing to axislegend().
-
-Does not mutate plot_kwargs - only reads from it.
-
-# Arguments
-- `plot_kwargs`: Dictionary of plot parameters (read-only)
-- `exclude_positioning`: If true, exclude positioning attributes (halign, valign, alignmode) 
-  that conflict with the `position` parameter in axislegend()
-
-# Returns
-- `Dict{Symbol, Any}`: New dictionary containing extracted legend parameters (with legend_ prefix removed)
-"""
-function _extract_legend_kwargs(plot_kwargs::Dict{Symbol,Any}; exclude_positioning::Bool = false)
-    legend_kwargs = Dict{Symbol,Any}()
-    legend_attrs = propertynames(Legend)
-
-    for attr in legend_attrs
-        legend_key = Symbol("legend_$(attr)")
-        if haskey(plot_kwargs, legend_key)
-            value = plot_kwargs[legend_key]
-            if !isnothing(value)
-                legend_kwargs[attr] = value
-            end
-        end
-    end
-
-    # axislegend() uses its own `position` parameter for placement. If halign/valign/alignmode
-    # are also present, they conflict and `position` is silently ignored. Remove them so that
-    # legend_position works as expected.
-    for attr in (:halign, :valign, :alignmode)
-        pop!(legend_kwargs, attr, nothing)
-    end
-
-    return legend_kwargs
-end
-
-"""
-    _extract_layout_kwargs(plot_kwargs::Dict{Symbol, Any})
-
-Extract layout-related parameters from plot_kwargs and return a new dictionary
-suitable for passing to create_layout().
-
-Does not mutate plot_kwargs - only reads from it.
-
-# Arguments
-- `plot_kwargs`: Dictionary of plot parameters (read-only)
-
-# Returns
-- `Dict{Symbol, Any}`: New dictionary containing extracted layout parameters (with layout_ prefix removed)
-"""
-function _extract_layout_kwargs(plot_kwargs::Dict{Symbol,Any})
-    layout_kwargs = Dict{Symbol,Any}()
-
-    # Get all layout parameter names from LAYOUT_KWARGS
-    # These are the base names (keys in LAYOUT_KWARGS, e.g., :topo_plot_width, :grid_rowgap)
-    layout_param_names = keys(LAYOUT_KWARGS)
-
-    # For each known layout parameter, check if it exists with layout_ prefix
-    for param_name in layout_param_names
-        layout_key = Symbol("layout_$(param_name)")
-        if haskey(plot_kwargs, layout_key)
-            value = plot_kwargs[layout_key]
-            if !isnothing(value)
-                layout_kwargs[param_name] = value
-            end
-        end
-    end
-
-    return layout_kwargs
 end
 
 # === AXIS STYLING FUNCTIONS ===

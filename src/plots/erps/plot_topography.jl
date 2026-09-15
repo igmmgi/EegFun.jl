@@ -147,7 +147,7 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
     channel_data = mean.(eachcol(dat[!, layout.data.label]))
 
     # Extract colorbar kwargs before calling render helper (removes colorbar_* keys)
-    colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
+    colorbar_kwargs = pop!(plot_kwargs, :colorbar_kwargs, (;))
     colorbar_plot = pop!(plot_kwargs, :colorbar_plot)
 
     # Extract highlight_channels before passing remaining kwargs
