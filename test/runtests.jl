@@ -86,6 +86,7 @@ end
     include("tests/triggers.jl")
     include("tests/types.jl")
     include("tests/utils.jl")
+    include("tests/tables.jl")
     include("tests/bids_export.jl")
 
 end

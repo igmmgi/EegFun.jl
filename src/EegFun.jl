@@ -68,6 +68,7 @@ include("utils/logging.jl")
 include("utils/misc.jl")
 include("utils/viewer.jl")
 include("utils/print.jl")
+include("utils/tables.jl")
 include("utils/extern/read_fieldtrip_csv.jl")
 
 # Layout handling
@@ -241,4 +242,4 @@ function __init__()
     )
 end
 
-end # module EegFun 
+end # module EegFun
