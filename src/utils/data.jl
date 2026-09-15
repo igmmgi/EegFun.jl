@@ -2409,3 +2409,37 @@ function create_eegfun_data(dat::FunctionalImageFormat.FifEpochs)
     layout = _create_layout_from_labels(channel_labels)
     return create_eegfun_data(dat, layout)
 end
+
+# === Base Array Interface ===
+# size
+Base.size(dat::SingleDataFrameEeg) = (n_samples(dat), length(channel_labels(dat)))
+Base.size(dat::SingleDataFrameEeg, d::Int) = d == 1 ? n_samples(dat) : (d == 2 ? length(channel_labels(dat)) : 1)
+Base.size(dat::MultiDataFrameEeg) = (n_epochs(dat), n_samples(dat), length(channel_labels(dat)))
+Base.size(dat::MultiDataFrameEeg, d::Int) = d == 1 ? n_epochs(dat) : (d == 2 ? n_samples(dat) : (d == 3 ? length(channel_labels(dat)) : 1))
+
+Base.lastindex(dat::EegData, d::Int) = Base.size(dat, d)
+
+# getindex helpers
+_to_sample_func(::Colon) = samples()
+_to_sample_func(f::Function) = f
+_to_sample_func(idx::Integer) = x -> [i == idx for i in 1:nrow(x)]
+_to_sample_func(idx) = x -> [i in idx for i in 1:nrow(x)]
+
+_to_channel_func(::Colon) = channels()
+_to_channel_func(f::Function) = f
+_to_channel_func(idx::AbstractString) = channels(Symbol(idx))
+_to_channel_func(idx::AbstractVector{<:AbstractString}) = channels(Symbol.(idx))
+_to_channel_func(idx) = channels(idx)
+
+_to_epoch_func(::Colon) = epochs()
+_to_epoch_func(f::Function) = f
+_to_epoch_func(idx) = epochs(idx)
+
+# getindex implementation
+function Base.getindex(dat::SingleDataFrameEeg, time_idx, chan_idx)
+    return subset(dat, sample_selection=_to_sample_func(time_idx), channel_selection=_to_channel_func(chan_idx))
+end
+
+function Base.getindex(dat::MultiDataFrameEeg, epoch_idx, time_idx, chan_idx)
+    return subset(dat, epoch_selection=_to_epoch_func(epoch_idx), sample_selection=_to_sample_func(time_idx), channel_selection=_to_channel_func(chan_idx))
+end
