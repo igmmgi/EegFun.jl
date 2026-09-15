@@ -317,7 +317,7 @@ end
 """Create reduced DataFrames (one per epoch) containing only metadata and averaged channel columns."""
 function _build_reduced_df(dat::MultiDataFrameEeg, channel_groups::Vector{Vector{Symbol}}, labels::Vector{Symbol})
     meta_cols = meta_labels(dat)
-    new_epochs = Vector{DataFrame}(undef, length(dat.data))
+    new_epochs = Vector{DataFrame}(undef, n_epochs(dat))
     for (i, df) in pairs(dat.data)
         new_df = isempty(meta_cols) ? DataFrame() : df[!, meta_cols]
         for (grp, lbl) in zip(channel_groups, labels)

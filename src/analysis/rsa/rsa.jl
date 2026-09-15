@@ -30,7 +30,7 @@ function _prepare_rsa_data(epochs::Vector{EpochData})
     n_trials_per_condition = Int[]
 
     for epoch_data in epochs
-        n_trials = length(epoch_data.data)
+        n_trials = n_epochs(epoch_data)
         push!(n_trials_per_condition, n_trials)
 
         # Preallocate: [channels × time × trials]

@@ -292,7 +292,7 @@ function _bids_write_eeg_sidecar(
         "SoftwareFilters" => "n/a",
         "HardwareFilters" => "n/a",
         "RecordingType" => "continuous",
-        "RecordingDuration" => round(nrow(dat.data) / dat.sample_rate, digits = 2),
+        "RecordingDuration" => round(n_samples(dat) / dat.sample_rate, digits = 2),
         "SubjectArtefactDescription" => "n/a",
     )
 

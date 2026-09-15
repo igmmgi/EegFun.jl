@@ -280,7 +280,7 @@ function Base.copy(dat::EpochData)::EpochData
         dat.file,
         dat.condition,
         dat.condition_name,
-        [copy(epoch, copycols = true) for epoch in dat.data],
+        [copy(epoch, copycols = true) for epoch in dat],
         copy(dat.layout),
         dat.sample_rate,
         copy(dat.analysis_info),

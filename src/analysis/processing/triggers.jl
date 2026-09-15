@@ -443,7 +443,7 @@ info = trigger_info(epochs_final)
 """
 function trigger_info(dat::EpochData)
     unique_seqs = NamedTuple{(:sequence, :t0),Tuple{Vector{Int},Int}}[]
-    for epoch in dat.data
+    for epoch in dat
         if hasproperty(epoch, :trigger) && hasproperty(epoch, :time)
             # Find the active trigger right at time = 0
             zero_idx = find_closest_time_index(epoch.time, 0.0)

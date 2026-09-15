@@ -243,8 +243,8 @@ function plot_artifact_detection(epochs::EpochData, artifacts::EpochRejectionInf
     sort!(epochs_with_artifacts)
 
     # Create controls
-    n_epochs = length(epochs.data)
-    controls = _create_artifact_controls(fig[2, 1], n_epochs, epochs_with_artifacts)
+    n_eps = n_epochs(epochs)
+    controls = _create_artifact_controls(fig[2, 1], n_eps, epochs_with_artifacts)
 
     # Set row sizes
     rowsize!(fig.layout, 1, Relative(0.9))  # Plot area
@@ -412,8 +412,8 @@ function plot_artifact_repair(
     sort!(epochs_with_artifacts)
 
     # Create controls
-    n_epochs = length(epochs_raw.data)
-    controls = _create_artifact_controls(fig[3, 1], n_epochs, epochs_with_artifacts)
+    n_eps = n_epochs(epochs_raw)
+    controls = _create_artifact_controls(fig[3, 1], n_eps, epochs_with_artifacts)
 
     # Set row sizes
     rowsize!(fig.layout, 1, Relative(0.45))  # Original plot
@@ -612,8 +612,8 @@ function plot_artifact_rejection(
     sort!(epochs_with_artifacts)
 
     # Create controls
-    n_epochs = length(epochs_raw.data)
-    controls = _create_artifact_controls(fig[3, 1], n_epochs, epochs_with_artifacts)
+    n_eps = n_epochs(epochs_raw)
+    controls = _create_artifact_controls(fig[3, 1], n_eps, epochs_with_artifacts)
 
     # Set row sizes
     rowsize!(fig.layout, 1, Relative(0.45))  # Original plot

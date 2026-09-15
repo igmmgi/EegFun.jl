@@ -40,7 +40,7 @@ function calculate_trigger_interval!(
 
     n_missing = 0
 
-    for epoch in dat.data
+    for epoch in dat
         start_idx = findfirst(x -> x in start_triggers, epoch.trigger)
         end_idx = findfirst(x -> x in end_triggers, epoch.trigger)
 
@@ -54,7 +54,7 @@ function calculate_trigger_interval!(
     end
 
     if n_missing > 0
-        @minimal_warning "Missing start or end trigger pair in $n_missing / $(length(dat.data)) epochs (set to NaN)."
+        @minimal_warning "Missing start or end trigger pair in $n_missing / $(n_epochs(dat)) epochs (set to NaN)."
     end
 
     return nothing
@@ -92,7 +92,7 @@ function calculate_trigger_interval(
         dat.file,
         dat.condition,
         dat.condition_name,
-        [copy(epoch, copycols = true) for epoch in dat.data],
+        [copy(epoch, copycols = true) for epoch in dat],
         copy(dat.layout),
         dat.sample_rate,
         copy(dat.analysis_info),
@@ -202,7 +202,7 @@ function realign(dat::EpochData, realignment_triggers::Vector{Int})::EpochData
         dat.file,
         dat.condition,
         dat.condition_name,
-        [copy(epoch, copycols = true) for epoch in dat.data],
+        [copy(epoch, copycols = true) for epoch in dat],
         copy(dat.layout),
         dat.sample_rate,
         copy(dat.analysis_info),
@@ -257,7 +257,7 @@ function realign!(
         # Pre-calculate global strict n_samples
         all_n_samples = Int[]
         for dat in dat_vec
-            for epoch in dat.data
+            for epoch in dat
                 s_idx = find_closest_time_index(epoch.time, global_interval[1])
                 e_idx = find_closest_time_index(epoch.time, global_interval[2])
                 push!(all_n_samples, e_idx - s_idx + 1)
@@ -302,7 +302,7 @@ function realign(
             dat.file,
             dat.condition,
             dat.condition_name,
-            [copy(epoch, copycols = true) for epoch in dat.data],
+            [copy(epoch, copycols = true) for epoch in dat],
             copy(dat.layout),
             dat.sample_rate,
             copy(dat.analysis_info),
@@ -350,9 +350,9 @@ function _find_common_time_window(dat::EpochData)::Tuple{Float64,Float64}
     # Since time is sorted, [1] is minimum and [end] is maximum (O(1) vs O(T))
 
     # Latest start time
-    common_start = maximum(epoch.time[1] for epoch in dat.data)
+    common_start = maximum(epoch.time[1] for epoch in dat)
     # Earliest end time
-    common_end = minimum(epoch.time[end] for epoch in dat.data)
+    common_end = minimum(epoch.time[end] for epoch in dat)
 
     if common_start >= common_end
         @minimal_error(
@@ -378,7 +378,7 @@ function _crop_epochs_to_window!(dat::EpochData, window::Tuple{Float64,Float64},
 
     # First pass: find start and end indices for each epoch
     indices = []
-    for epoch in dat.data
+    for epoch in dat
         start_idx = find_closest_time_index(epoch.time, start_time)
         end_idx = find_closest_time_index(epoch.time, end_time)
         push!(indices, (start_idx, end_idx))
@@ -415,7 +415,7 @@ function _crop_epochs_to_window!(dat::EpochData, window::Tuple{Float64,Float64},
     # This ensures all epochs have identical time vectors
     uniform_time = range(start_time, stop = end_time, length = n_samples)
 
-    for epoch in dat.data
+    for epoch in dat
         epoch[!, :time] = collect(uniform_time)
     end
 end
@@ -474,13 +474,13 @@ function _process_realign_file(
         jldsave(output_path; data = realigned_epochs)
 
         if realigned_epochs isa Vector
-            n_epochs = sum(length(cond.data) for cond in realigned_epochs)
+            n_eps = sum(n_epochs(cond) for cond in realigned_epochs)
             n_samples = isempty(realigned_epochs) || isempty(realigned_epochs[1].data) ? 0 : nrow(realigned_epochs[1].data[1])
         else
-            n_epochs = length(realigned_epochs.data)
+            n_eps = n_epochs(realigned_epochs)
             n_samples = isempty(realigned_epochs.data) ? 0 : nrow(realigned_epochs.data[1])
         end
-        return BatchResult(true, filename, "Realigned $n_epochs total epochs to $n_samples samples each")
+        return BatchResult(true, filename, "Realigned $n_eps total epochs to $n_samples samples each")
     catch e
         return BatchResult(false, filename, "Error: $(sprint(showerror, e))")
     end
@@ -561,7 +561,7 @@ function realign(
                 vec_data = epochs_data isa Vector ? epochs_data : [epochs_data]
                 for dat in vec_data
                     _realign_epochs!(dat, realignment_triggers)
-                    for epoch in dat.data
+                    for epoch in dat
                         s_idx = find_closest_time_index(epoch.time, global_interval[1])
                         e_idx = find_closest_time_index(epoch.time, global_interval[2])
                         push!(grand_n_samples, e_idx - s_idx + 1)
@@ -636,11 +636,11 @@ function _process_calculate_trigger_interval_file(
         jldsave(output_path; data = epochs_with_interval)
 
         if epochs_with_interval isa Vector
-            n_epochs = sum(length(cond.data) for cond in epochs_with_interval)
+            n_eps = sum(n_epochs(cond) for cond in epochs_with_interval)
         else
-            n_epochs = length(epochs_with_interval.data)
+            n_eps = n_epochs(epochs_with_interval)
         end
-        return BatchResult(true, filename, "Appended interval column (:$column_name) to $n_epochs total epochs")
+        return BatchResult(true, filename, "Appended interval column (:$column_name) to $n_eps total epochs")
     catch e
         return BatchResult(false, filename, "Error: $(sprint(showerror, e))")
     end

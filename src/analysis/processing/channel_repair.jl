@@ -578,7 +578,7 @@ function repair_channels_per_epoch!(
     epochs_repaired = 0
 
     for (condition_idx, epoch_data) in enumerate(epochs_list)
-        for epoch_idx = 1:length(epoch_data.data)
+        for epoch_idx = 1:n_epochs(epoch_data)
             epoch_df = epoch_data.data[epoch_idx]
 
             if hasproperty(epoch_df, artifact_col)

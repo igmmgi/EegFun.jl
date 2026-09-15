@@ -105,11 +105,11 @@ function resample!(dat::SingleDataFrameEeg, target_rate::Real)::Nothing
     dat.data = _resample_dataframe(dat.data, dat.sample_rate, target_rate, chans, :trigger)
 
     if hasproperty(dat.data, :sample)
-        dat.data.sample = 1:nrow(dat.data)
+        dat.data.sample = 1:n_samples(dat)
     end
 
     dat.sample_rate = Float64(target_rate)
-    @info "Resampling complete. New sample rate: $(dat.sample_rate) Hz, $(nrow(dat.data)) samples"
+    @info "Resampling complete. New sample rate: $(dat.sample_rate) Hz, $(n_samples(dat)) samples"
 
     return nothing
 end
@@ -124,7 +124,7 @@ function resample!(dat::EpochData, target_rate::Real)::Nothing
         return nothing
     end
 
-    @info "Resampling $(length(dat.data)) epochs from $(dat.sample_rate) Hz to $(target_rate) Hz"
+    @info "Resampling $(n_epochs(dat)) epochs from $(dat.sample_rate) Hz to $(target_rate) Hz"
 
     chans = channel_labels(dat)
     for (i, epoch) in enumerate(dat.data)

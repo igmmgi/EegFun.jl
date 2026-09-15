@@ -957,7 +957,7 @@ function _compute_dynamic_grand_averages(datasets::Vector{ErpData}, error_bars::
         metadata_cols = meta_labels(first_erp)
         all_channel_sets = [setdiff(propertynames(erp.data), metadata_cols) for erp in datasets]
         eeg_channels = collect(intersect(all_channel_sets...))
-        n_points = nrow(first_erp.data)
+        n_points = n_samples(first_erp)
 
         for (pid, erplist) in participant_erps
             df_mean = DataFrames.DataFrame()

@@ -105,7 +105,7 @@ function channel_summary(
     include_extra::Bool = false,
 )::DataFrame
     # Input validation
-    nrow(dat.data) == 0 && @minimal_error("Cannot compute channel summary: data is empty")
+    n_samples(dat) == 0 && @minimal_error("Cannot compute channel summary: data is empty")
 
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = include_meta, include_extra = include_extra)
 

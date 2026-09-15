@@ -490,7 +490,7 @@ function _calculate_global_ylim(dat::EpochData, selected_channels::Vector{Symbol
     global_min = Inf
     global_max = -Inf
 
-    for epoch in dat.data
+    for epoch in dat
         for ch in selected_channels
             if hasproperty(epoch, ch)
                 ch_data = epoch[!, ch]

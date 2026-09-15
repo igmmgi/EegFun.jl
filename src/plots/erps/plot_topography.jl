@@ -1518,7 +1518,7 @@ function _convert_to_erp_for_plotting(datasets, time_interval::Interval = times(
                 dat.layout,
                 dat.sample_rate,
                 dat.analysis_info,
-                length(dat.data),
+                n_epochs(dat),
             )
         end
     end
@@ -1570,7 +1570,7 @@ function _show_topo_context_menu!(datasets::Union{EpochData,Vector{EpochData}}, 
             dat.layout,
             dat.sample_rate,
             dat.analysis_info,
-            length(dat.data),  # n_epochs from original epoch count
+            n_epochs(dat),  # n_epochs from original epoch count
         )
     end
 

@@ -172,7 +172,7 @@ Ensures that the FIR filter transition width is wide enough to avoid crashing ba
 Returns the required transition width.
 """
 function _ensure_fir_transition_width(dat::EegData, transition_width::Real, cutoff_freq::Real)
-    min_length = dat.data isa Vector ? minimum(nrow.(dat.data)) : nrow(dat.data)
+    min_length = dat.data isa Vector ? minimum(nrow.(dat.data)) : n_samples(dat)
     min_required_transition_band = 12.0 * dat.sample_rate / min_length
     min_required_transition_width = min_required_transition_band / cutoff_freq
 

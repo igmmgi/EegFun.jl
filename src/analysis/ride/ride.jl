@@ -7,7 +7,7 @@ Returns a Dictionary mapping component names to `ErpData` objects containing the
 function extract_ride(epochs::EpochData, comps::Vector{RideComponent}; kwargs...)
     isempty(epochs.data) && error("EpochData contains no trials.")
 
-    n_trials = length(epochs.data)
+    n_trials = n_epochs(epochs)
     n_samples = nrow(epochs.data[1])
     channels = String.(epochs.layout.data.label)
     n_channels = length(channels)

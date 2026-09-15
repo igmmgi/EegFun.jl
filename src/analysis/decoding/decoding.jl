@@ -24,7 +24,7 @@ function _prepare_decoding_data(epochs::Vector{EpochData})
     n_trials_per_condition = Vector{Int}(undef, length(epochs))
 
     for (cond_idx, epoch_data) in enumerate(epochs)
-        n_trials = length(epoch_data.data)
+        n_trials = n_epochs(epoch_data)
         n_trials_per_condition[cond_idx] = n_trials
 
         # [channels × time × trials]

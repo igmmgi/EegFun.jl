@@ -674,8 +674,8 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
 
     for (epoch, (pre, zero, post)) in enumerate(zip(pre_idx, zero_idx, post_idx))
         # Bounds checking to prevent out-of-bounds errors
-        if pre < 1 || post > nrow(dat.data)
-            @minimal_warning "Epoch $epoch extends beyond data bounds (pre=$pre, post=$post, data_length=$(nrow(dat.data))) - skipping"
+        if pre < 1 || post > n_samples(dat)
+            @minimal_warning "Epoch $epoch extends beyond data bounds (pre=$pre, post=$post, data_length=$(n_samples(dat))) - skipping"
             continue
         end
 
@@ -769,10 +769,10 @@ function average_epochs(dat::EpochData)
         end
 
         # Average EEG channels across epochs by row index
-        n_epochs = length(dat.data)
+        n_eps = n_epochs(dat)
         for ch in eeg_channels
             avg_col = zeros(Float64, n_timepoints)
-            for epoch in dat.data
+            for epoch in dat
                 col = epoch[!, ch]
                 if col isa Vector{Float64}
                     col_f64 = col::Vector{Float64}
@@ -783,12 +783,12 @@ function average_epochs(dat::EpochData)
                     avg_col .+= col
                 end
             end
-            avg_col ./= n_epochs
+            avg_col ./= n_eps
             erp[!, ch] = avg_col
         end
 
         # Count epochs
-        n_epochs = length(dat.data)
+        n_eps = n_epochs(dat)
 
         return ErpData(
             dat.file,
@@ -798,7 +798,7 @@ function average_epochs(dat::EpochData)
             copy(dat.layout),
             dat.sample_rate,
             copy(dat.analysis_info),
-            n_epochs,
+            n_eps,
         )
     catch e
         @minimal_error("Failed to average epochs: $(e)")
@@ -832,9 +832,9 @@ function reject_epochs!(dat::EpochData, info::EpochRejectionInfo)::EpochData
         return dat
     end
 
-    n_epochs = length(dat.data)
+    n_eps = n_epochs(dat)
     rejected_indices = unique([r.epoch for r in info.rejected])
-    epochs_to_keep = setdiff(1:n_epochs, rejected_indices)
+    epochs_to_keep = setdiff(1:n_eps, rejected_indices)
     dat.data = dat.data[epochs_to_keep]
 
     @info "Condition $(dat.condition) ($(dat.condition_name)) - Rejected $(length(rejected_indices)) of $(info.info.n) epochs."
@@ -896,13 +896,13 @@ function reject_epochs(dat::EpochData, bad_columns::Vector{Symbol})
     end
 
     # Pre-allocate for better performance
-    n_epochs = length(dat.data)
+    n_eps = n_epochs(dat)
     good_epochs = DataFrame[]
-    sizehint!(good_epochs, n_epochs)  # Performance hint
+    sizehint!(good_epochs, n_eps)  # Performance hint
 
     n_removed = 0
 
-    for epoch_df in dat.data
+    for epoch_df in dat
         # Check if any sample in this epoch has any true value in any bad column
         has_bad_samples = false
 

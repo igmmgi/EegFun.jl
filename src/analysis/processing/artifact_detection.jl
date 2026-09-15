@@ -27,8 +27,8 @@ function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Sy
     eog_diff = diff(dat.data[1:step_samples:end, channel_in])
     eog_idx = findall(x -> abs(x) >= criterion, eog_diff)
     eog_idx = [idx for (i, idx) in enumerate(eog_idx) if i == 1 || (idx - eog_idx[i-1] > 2)] .* step_samples
-    filter!(idx -> idx <= nrow(dat.data), eog_idx)
-    dat.data[!, channel_out] = falses(nrow(dat.data))
+    filter!(idx -> idx <= n_samples(dat), eog_idx)
+    dat.data[!, channel_out] = falses(n_samples(dat))
     dat.data[eog_idx, channel_out] .= true
     return nothing
 end
@@ -153,7 +153,7 @@ function is_extreme_value!(
 
     if mode == :combined  # any channel
         channel_out = something(channel_out, Symbol("is_extreme_value_$(threshold)"))
-        dat.data[!, channel_out] = falses(nrow(dat.data))
+        dat.data[!, channel_out] = falses(n_samples(dat))
         for (_, extreme_mask) in results
             dat.data[!, channel_out] .|= extreme_mask
         end
@@ -310,10 +310,10 @@ function is_step_value!(
 
     if mode == :combined
         # Initialize combined output column
-        dat.data[!, channel_out] = falses(nrow(dat.data))
+        dat.data[!, channel_out] = falses(n_samples(dat))
 
         # Build boolean sample mask from indices
-        sample_mask = falses(nrow(dat.data))
+        sample_mask = falses(n_samples(dat))
         sample_mask[selected_samples] .= true
 
         # Check each channel and combine results
@@ -323,7 +323,7 @@ function is_step_value!(
         end
     elseif mode == :separate
         # Build boolean sample mask from indices
-        sample_mask = falses(nrow(dat.data))
+        sample_mask = falses(n_samples(dat))
         sample_mask[selected_samples] .= true
 
         # Create separate column for each channel
@@ -451,8 +451,8 @@ function is_step_value(
     selected_samples = get_selected_samples(dat.data, combined_sel)
 
     if mode == :combined
-        combined_mask = falses(nrow(dat.data))
-        sample_mask = falses(nrow(dat.data))
+        combined_mask = falses(n_samples(dat))
+        sample_mask = falses(n_samples(dat))
         sample_mask[selected_samples] .= true
         for ch in selected_channels
             step_mask = _is_step_value(dat.data[!, ch], threshold) .& sample_mask
@@ -519,11 +519,11 @@ function n_step_value(
 
     combined_sel = _combine_interval_sample(interval_selection, sample_selection)
     selected_samples = get_selected_samples(dat.data, combined_sel)
-    sample_mask = falses(nrow(dat.data))
+    sample_mask = falses(n_samples(dat))
     sample_mask[selected_samples] .= true
 
     if mode == :combined
-        combined_mask = falses(nrow(dat.data))
+        combined_mask = falses(n_samples(dat))
         for ch in selected_channels
             step_mask = _is_step_value(dat.data[!, ch], threshold) .& sample_mask
             combined_mask .|= step_mask
@@ -594,7 +594,7 @@ function is_extreme_value(
 
     if mode == :combined
 
-        combined_mask = Vector{Bool}(falses(nrow(dat.data)))
+        combined_mask = Vector{Bool}(falses(n_samples(dat)))
         # Combine results from all channels (OR operation)
         for (_, extreme_mask) in results
             combined_mask .|= extreme_mask
@@ -664,7 +664,7 @@ function n_extreme_value(
     results = _detect_extreme_values(dat, threshold; channel_selection, sample_selection = combined_sel)
 
     if mode == :combined
-        combined_mask = Vector{Bool}(falses(nrow(dat.data)))
+        combined_mask = Vector{Bool}(falses(n_samples(dat)))
         for (_, extreme_mask) in results
             combined_mask .|= extreme_mask
         end
@@ -693,7 +693,7 @@ end
 n_values(dat::SingleDataFrameEeg, column::Symbol) = n_values(dat.data, column)
 
 function n_values(dat::MultiDataFrameEeg, column::Symbol)
-    return sum(n_values(epoch, column) for epoch in dat.data)
+    return sum(n_values(epoch, column) for epoch in dat)
 end
 
 n_values(dat::Vector{<:EegData}, column::Symbol) = sum(n_values(d, column) for d in dat)
@@ -780,8 +780,8 @@ function is_flatline!(
     channel_out = something(channel_out, :is_flatline)
 
     if mode == :combined
-        dat.data[!, channel_out] = falses(nrow(dat.data))
-        sample_mask = falses(nrow(dat.data))
+        dat.data[!, channel_out] = falses(n_samples(dat))
+        sample_mask = falses(n_samples(dat))
         sample_mask[selected_samples] .= true
 
         for ch in selected_channels
@@ -789,7 +789,7 @@ function is_flatline!(
             dat.data[!, channel_out] .|= flat_mask
         end
     elseif mode == :separate
-        sample_mask = falses(nrow(dat.data))
+        sample_mask = falses(n_samples(dat))
         sample_mask[selected_samples] .= true
 
         for ch in selected_channels
@@ -902,12 +902,12 @@ function n_flatline(
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
     combined_sel = _combine_interval_sample(interval_selection, sample_selection)
     selected_samples = get_selected_samples(dat.data, combined_sel)
-    sample_mask = falses(nrow(dat.data))
+    sample_mask = falses(n_samples(dat))
     sample_mask[selected_samples] .= true
     window_samples = round(Int, window_size * dat.sample_rate)
 
     if mode == :combined
-        combined_mask = falses(nrow(dat.data))
+        combined_mask = falses(n_samples(dat))
         for ch in selected_channels
             flat_mask = _is_flatline(dat.data[!, ch], threshold, window_samples) .& sample_mask
             combined_mask .|= flat_mask
@@ -976,8 +976,8 @@ function is_peak_to_peak!(
     channel_out = something(channel_out, :is_peak_to_peak)
 
     if mode == :combined
-        dat.data[!, channel_out] = falses(nrow(dat.data))
-        sample_mask = falses(nrow(dat.data))
+        dat.data[!, channel_out] = falses(n_samples(dat))
+        sample_mask = falses(n_samples(dat))
         sample_mask[selected_samples] .= true
 
         for ch in selected_channels
@@ -985,7 +985,7 @@ function is_peak_to_peak!(
             dat.data[!, channel_out] .|= p2p_mask
         end
     elseif mode == :separate
-        sample_mask = falses(nrow(dat.data))
+        sample_mask = falses(n_samples(dat))
         sample_mask[selected_samples] .= true
 
         for ch in selected_channels
@@ -1099,12 +1099,12 @@ function n_peak_to_peak(
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
     combined_sel = _combine_interval_sample(interval_selection, sample_selection)
     selected_samples = get_selected_samples(dat.data, combined_sel)
-    sample_mask = falses(nrow(dat.data))
+    sample_mask = falses(n_samples(dat))
     sample_mask[selected_samples] .= true
     window_samples = round(Int, window_size * dat.sample_rate)
 
     if mode == :combined
-        combined_mask = falses(nrow(dat.data))
+        combined_mask = falses(n_samples(dat))
         for ch in selected_channels
             p2p_mask = _is_peak_to_peak(dat.data[!, ch], threshold, window_samples) .& sample_mask
             combined_mask .|= p2p_mask
@@ -1167,7 +1167,7 @@ function find_bridged_channels(dat::MultiDataFrameEeg, correlation_threshold::Re
         flattened_data[ch] = Float64[]
     end
 
-    for epoch_df in dat.data
+    for epoch_df in dat
         for ch in selected_channels
             append!(flattened_data[ch], epoch_df[!, ch])
         end
@@ -1502,7 +1502,7 @@ function detect_bad_epochs_automatic(
     z_rejections = z_criterion > 0 ? ZScoreRejectionInfo(z_measures, z_variance, z_max, z_min, z_abs, z_range, z_kurtosis) : nothing
 
     # Create rejection info
-    info = EpochInfo(dat.condition, dat.condition_name, length(dat.data))
+    info = EpochInfo(dat.condition, dat.condition_name, n_epochs(dat))
 
     rejection_info = EpochRejectionInfo(
         name,
@@ -1559,7 +1559,7 @@ function _calculate_epoch_metrics(
 
     Threads.@threads for ch in selected_channels
         # subset the data by the selected sample interval for the metric calculation
-        channel_data_all = [epoch[selected_samples, ch]::Vector{Float64} for epoch in dat.data]
+        channel_data_all = [epoch[selected_samples, ch]::Vector{Float64} for epoch in dat]
 
         if abs_criterion > 0
             abs_threshold_violations = findall(epoch_data -> maximum(abs, epoch_data) > abs_criterion, channel_data_all)

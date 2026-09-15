@@ -43,7 +43,7 @@ function _condition_combine_process_file(filepath::String, output_path::String, 
     jldsave(output_path; data = combined_data)
 
     n_groups = length(condition_groups)
-    total_epochs = sum(length(cond.data) for cond in combined_data)
+    total_epochs = sum(n_epochs(cond) for cond in combined_data)
     return BatchResult(true, filename, "Combined into $n_groups group(s) with $total_epochs total epochs")
 end
 

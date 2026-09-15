@@ -146,7 +146,7 @@ function run_ica(
     end
 
     final_samples = size(concatenated_matrix, 2)
-    total_epochs = sum(length(epoch_data.data) for epoch_data in epoched_data)
+    total_epochs = sum(n_epochs(epoch_data) for epoch_data in epoched_data)
 
     @info "Running ICA on concatenated epochs: $(length(selected_channels)) channels x $final_samples samples (from $total_epochs epochs) -> $n_components components"
 

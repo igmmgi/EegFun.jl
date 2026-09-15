@@ -229,13 +229,13 @@ function plot_erp_image(
     for (ax, channel) in zip(axes, channels)
         if plot_layout.type == :single
             # For single layout: average across all selected channels
-            data = zeros(length(dat_subset.data), nrow(dat_subset.data[1]))
+            data = zeros(n_epochs(dat_subset), nrow(dat_subset.data[1]))
             for epoch in eachindex(dat_subset.data)
                 data[epoch, :] = _colmeans(dat_subset.data[epoch], all_plot_channels)
             end
         else
             # For grid/topo layouts: show individual channel
-            data = zeros(length(dat_subset.data), nrow(dat_subset.data[1]))
+            data = zeros(n_epochs(dat_subset), nrow(dat_subset.data[1]))
             for epoch in eachindex(dat_subset.data)
                 data[epoch, :] = dat_subset.data[epoch][!, channel]
             end
@@ -255,7 +255,7 @@ function plot_erp_image(
         hm = heatmap!(
             ax,
             dat_subset.data[1].time,
-            1:length(dat_subset.data),
+            1:n_epochs(dat_subset),
             transpose(data),
             colormap = _resolve_theme_colormap(ax, plot_kwargs[:colormap]),
             colorrange = plot_kwargs[:colorrange],
@@ -287,7 +287,7 @@ function plot_erp_image(
         end
 
         # Set y-axis limits for ERP image (always 1 to number of epochs)
-        ylims!(ax, (1, length(dat_subset.data)))
+        ylims!(ax, (1, n_epochs(dat_subset)))
 
         # Add colorbar if requested
         if plot_kwargs[:colorbar_plot]
@@ -383,13 +383,13 @@ function plot_erp_image(
         else
             xlims!(scale_ax, (tmin, tmax))
         end
-        ylims!(scale_ax, (1, length(dat_subset.data)))
+        ylims!(scale_ax, (1, n_epochs(dat_subset)))
 
         # Use _set_axis_properties! like plot_epochs does
         _set_axis_properties!(
             scale_ax;
             xlim = isnothing(plot_kwargs[:xlim]) ? (tmin, tmax) : plot_kwargs[:xlim],
-            ylim = (1, length(dat_subset.data)),
+            ylim = (1, n_epochs(dat_subset)),
             xlabel = plot_kwargs[:xlabel],
             ylabel = plot_kwargs[:ylabel],
             yreversed = plot_kwargs[:yreversed],

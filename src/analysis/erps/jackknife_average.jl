@@ -43,7 +43,7 @@ function _create_jackknife_averages(erps::Vector{ErpData})::Vector{ErpData}
     first_erp = erps[1]
     metadata_cols = meta_labels(first_erp)
     eeg_channels = setdiff(propertynames(first_erp.data), metadata_cols)
-    n_timepoints = nrow(first_erp.data)
+    n_timepoints = n_samples(first_erp)
 
     # Pre-allocate result vector
     jackknife_erps = ErpData[]

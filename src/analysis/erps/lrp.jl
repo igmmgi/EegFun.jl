@@ -326,7 +326,7 @@ For a channel pair (C3, C4):
 """
 function _calculate_lrp(erp_left::ErpData, erp_right::ErpData, pairs::Vector{Tuple{Symbol,Symbol}})::ErpData
 
-    n_timepoints = nrow(erp_left.data)
+    n_timepoints = n_samples(erp_left)
 
     # Pre-allocate matrix for LRP data (2 channels per pair)
     lrp_matrix = zeros(n_timepoints, 2 * length(pairs))

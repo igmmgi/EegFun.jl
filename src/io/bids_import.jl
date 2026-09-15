@@ -82,7 +82,7 @@ function read_bids(dataset_dir::String; subject::String, task::String, session::
         for row in eachrow(events_df)
             if hasproperty(row, :onset) && !ismissing(row.onset)
                 samp_idx = Int(round(row.onset * sr)) + 1
-                if 1 <= samp_idx <= nrow(dat.data)
+                if 1 <= samp_idx <= n_samples(dat)
                     val = 1
                     info = "event"
 

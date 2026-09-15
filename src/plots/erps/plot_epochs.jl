@@ -477,7 +477,7 @@ function _plot_epochs!(ax, dat, channels, plot_kwargs; label::Union{String,Nothi
     trial_linewidth = actual_lw isa Vector ? actual_lw[1] : actual_lw
 
     # Concatenate trials efficiently
-    time_cat = _build_time_cat(length(dat.data), time_vec)
+    time_cat = _build_time_cat(n_epochs(dat), time_vec)
     y_cat = _concatenate_trials(dat.data, channels[1], time_vec)
 
     # Use Observable for y-data to allow updates (e.g., for baseline changes)

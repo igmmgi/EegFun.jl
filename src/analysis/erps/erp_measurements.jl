@@ -721,7 +721,7 @@ function erp_measurements!(
     _apply_baseline_correction!(dat.data, baseline_interval, all_channels)
 
     # Add condition metadata if not present
-    for df in dat.data
+    for df in dat
         if !hasproperty(df, :condition)
             insertcols!(df, 1, :condition => dat.condition)
         end
@@ -732,7 +732,7 @@ function erp_measurements!(
 
     # Process each epoch DataFrame
     results = Vector{NamedTuple}()
-    for df in dat.data
+    for df in dat
         row_data = _process_dataframe_measurements(
             df,
             selected_channels,

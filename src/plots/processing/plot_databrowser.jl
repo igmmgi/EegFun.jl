@@ -312,8 +312,8 @@ function _create_browser_state(dat::T, channel_labels, ax, ica, plot_kwargs) whe
 end
 
 """Return the initial x-range window size for the data browser."""
-_get_initial_window_size(dat::ContinuousData) = min(5000, nrow(dat.data))
-_get_initial_window_size(dat::ErpData) = nrow(dat.data)
+_get_initial_window_size(dat::ContinuousData) = min(5000, n_samples(dat))
+_get_initial_window_size(dat::ErpData) = n_samples(dat)
 _get_initial_window_size(dat::EpochData) = nrow(dat.data[1])
 
 """Map an `EegData` subtype to its corresponding `AbstractDataState` type."""
