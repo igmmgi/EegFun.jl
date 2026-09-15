@@ -18,7 +18,7 @@ describe(dat::SingleDataFrameEeg; kwargs...) = describe(dat.data; kwargs...)
 nrow(dat::MultiDataFrameEeg) = isempty(dat.data) ? 0 : sum(nrow, dat.data)
 ncol(dat::MultiDataFrameEeg) = isempty(dat.data) ? 0 : ncol(first(dat.data))
 names(dat::MultiDataFrameEeg) = isempty(dat.data) ? String[] : names(first(dat.data))
-describe(dat::MultiDataFrameEeg; kwargs...) = isempty(dat.data) ? DataFrame() : describe(vcat(dat.data...; source=nothing); kwargs...)
+describe(dat::MultiDataFrameEeg; kwargs...) = isempty(dat.data) ? DataFrame() : describe(vcat(dat.data...; source = nothing); kwargs...)
 
 # 2. Expose the column-based interface (since we wrap DataFrames)
 Tables.columnaccess(::Type{<:EegData}) = true
@@ -29,7 +29,7 @@ function _inject_metadata!(res::DataFrame, dat::ContinuousData, n_rows::Int)
     return res
 end
 
-function _inject_metadata!(res::DataFrame, dat::Union{ErpData, EpochData}, n_rows::Int)
+function _inject_metadata!(res::DataFrame, dat::Union{ErpData,EpochData}, n_rows::Int)
     res.file = fill(dat.file, n_rows)
     res.condition = fill(dat.condition, n_rows)
     res.condition_name = fill(dat.condition_name, n_rows)
@@ -39,7 +39,7 @@ function _inject_metadata!(res::DataFrame, dat::Union{ErpData, EpochData}, n_row
     return res
 end
 
-function _inject_metadata!(res::DataFrame, dat::Union{TimeFreqData, TimeFreqEpochData, SpectrumData}, n_rows::Int)
+function _inject_metadata!(res::DataFrame, dat::Union{TimeFreqData,TimeFreqEpochData,SpectrumData}, n_rows::Int)
     res.file = fill(dat.file, n_rows)
     res.condition = fill(dat.condition, n_rows)
     res.condition_name = fill(dat.condition_name, n_rows)
@@ -55,27 +55,27 @@ end
 # 4. Implement column access for SingleDataFrameEeg (ContinuousData, ErpData, etc.)
 function Tables.columns(dat::SingleDataFrameEeg)
     df = dat.data
-    
+
     # Create a shallow copy so we can insert metadata columns without modifying the original
-    res = copy(df, copycols=false)
-    
+    res = copy(df, copycols = false)
+
     # Inject standard metadata via dispatch
     _inject_metadata!(res, dat, nrow(df))
-    
+
     return Tables.columns(res)
 end
 
 # 5. Implement column access for MultiDataFrameEeg (EpochData, etc.)
 function Tables.columns(dat::MultiDataFrameEeg)
     # Concatenate all DataFrames in the vector (epoch column is already present internally)
-    df = vcat(dat.data...; source=nothing)
-    
+    df = vcat(dat.data...; source = nothing)
+
     # Create a shallow copy for metadata injection
-    res = copy(df, copycols=false)
-    
+    res = copy(df, copycols = false)
+
     # Inject standard metadata via dispatch
     _inject_metadata!(res, dat, nrow(df))
-    
+
     return Tables.columns(res)
 end
 
@@ -87,5 +87,5 @@ function Tables.columns(dats::AbstractVector{<:EegData})
     # Convert each object to a DataFrame (which goes through our Tables interface above)
     # and then efficiently concatenate them all together.
     dfs = [DataFrame(d) for d in dats]
-    return Tables.columns(vcat(dfs...; cols=:union))
+    return Tables.columns(vcat(dfs...; cols = :union))
 end

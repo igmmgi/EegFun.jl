@@ -14,7 +14,7 @@ import Tables
         @test Tables.istable(dat)
         @test Tables.istable(typeof(dat))
         @test Tables.columnaccess(typeof(dat))
-        
+
         df_cont = DataFrame(dat)
         @test "file" in names(df_cont)
         @test "time" in names(df_cont)
@@ -25,10 +25,10 @@ import Tables
     @testset "EpochData & ErpData" begin
         epoch_cfg = [EegFun.EpochCondition(name = "Test", trigger_sequences = [[1]])]
         epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.1, 0.2))
-        
+
         @test Tables.istable(epochs[1])
         df_epoch = DataFrame(epochs[1])
-        
+
         @test "file" in names(df_epoch)
         @test "condition" in names(df_epoch)
         @test "condition_name" in names(df_epoch)
@@ -38,10 +38,10 @@ import Tables
         @test nrow(df_epoch) == sum(nrow.(epochs[1].data))
 
         erp = EegFun.average_epochs(epochs)
-        
+
         @test Tables.istable(erp[1])
         df_erp = DataFrame(erp[1])
-        
+
         @test "file" in names(df_erp)
         @test "condition" in names(df_erp)
         @test "condition_name" in names(df_erp)
