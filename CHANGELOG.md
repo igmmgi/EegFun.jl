@@ -9,8 +9,18 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 
 ## [0.8.0] - 2026-08-13
 
+### Added
+
+- Implemented `Base` Array interface, conversions, iteration, and `vcat` methods for EEG data types.
+- Implemented `StatsBase.mean` methods for EEG data types.
+- Implemented `Tables.jl` interface for EEG data types.
+
 ### Changed
 
+- Refactored internal code to replace direct data field access with `n_epochs` and `n_samples` helper functions.
+- Consolidated layout, legend, and colorbar parameters into kwargs named tuples.
+- Improved theme kwarg integration and removed the default jet colormap.
+- Updated documentation and README to include Makie backend requirements.
 - Refactor of the plotting API to standardize title arguments across all plots: `window_title` controls the OS window, `figure_title` (and `figure_title_fontsize`) controls the main super-title, and `plot_title` (and `plot_title_fontsize`) controls individual subplot titles.
 - Added `plot_title_position` and `plot_title_align` to allow rendering subplot titles *inside* the axis (e.g., `plot_title_position=(0.5, 0.95)`), which saves vertical space for dense EEG channel grids.
 - Increased the default distance criterion for spatial layout neighbours (`neighbour_criterion`) from `0.25` to `0.35` to better support standard 10-20/10-10 electrode layouts and prevent empty connectivity matrices during cluster permutation tests.
