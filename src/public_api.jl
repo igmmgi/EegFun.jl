@@ -45,6 +45,7 @@ public IcaPrms
 public InfoIca
 public Interval
 public Layout
+public LmmStatsResult
 public MultiDataFrameEeg
 public Neighbours
 public NoiseCeiling
@@ -148,6 +149,7 @@ public detrend
 public epochs_count
 public epochs_table
 public extract_epochs
+public extract_predictor_stats
 public find_times
 public get_filter_characteristics
 public highpass_filter
