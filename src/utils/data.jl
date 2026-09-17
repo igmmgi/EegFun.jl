@@ -2411,7 +2411,11 @@ function create_eegfun_data(dat::FunctionalImageFormat.FifEpochs)
 end
 
 # === Base Array Interface ===
-# size
+Base.IndexStyle(::Type{<:EegData}) = IndexCartesian()
+
+# size & axes
+Base.axes(dat::SingleDataFrameEeg) = (Base.OneTo(n_samples(dat)), Base.OneTo(length(channel_labels(dat))))
+Base.axes(dat::MultiDataFrameEeg) = (Base.OneTo(n_epochs(dat)), Base.OneTo(n_samples(dat)), Base.OneTo(length(channel_labels(dat))))
 Base.size(dat::SingleDataFrameEeg) = (n_samples(dat), length(channel_labels(dat)))
 Base.size(dat::SingleDataFrameEeg, d::Int) = d == 1 ? n_samples(dat) : (d == 2 ? length(channel_labels(dat)) : 1)
 Base.size(dat::MultiDataFrameEeg) = (n_epochs(dat), n_samples(dat), length(channel_labels(dat)))
@@ -2447,6 +2451,17 @@ function Base.getindex(dat::MultiDataFrameEeg, epoch_idx, time_idx, chan_idx)
         sample_selection = _to_sample_func(time_idx),
         channel_selection = _to_channel_func(chan_idx),
     )
+end
+
+# setindex! implementation
+function Base.setindex!(dat::SingleDataFrameEeg, val, time_idx, chan_idx)
+    dat.data[time_idx, channel_labels(dat)[chan_idx]] = val
+    return dat
+end
+
+function Base.setindex!(dat::MultiDataFrameEeg, val, epoch_idx, time_idx, chan_idx)
+    dat.data[epoch_idx][time_idx, channel_labels(dat)[chan_idx]] = val
+    return dat
 end
 
 # === Base Iteration Interface ===
@@ -2509,7 +2524,13 @@ function Base.Array(dat::MultiDataFrameEeg)
     A = Array{Float64,3}(undef, n_ep, n_samp, n_chan)
 
     for e = 1:n_ep
-        A[e, :, :] .= Matrix(dat.data[e][!, cols])
+        df = dat.data[e]
+        for (c_idx, c) in enumerate(cols)
+            col_data = df[!, c]
+            for t = 1:n_samp
+                A[e, t, c_idx] = col_data[t]
+            end
+        end
     end
 
     return A

@@ -206,6 +206,7 @@ include("plots/rsa/plot_rsa.jl")
 include("plots/plot_gui.jl")
 include("plots/plot_gui_helpers.jl")
 include("plots/utils/help_system.jl")
+include("plots/utils/makie_recipes.jl")
 
 # Demos
 include("demos/signal_processing/signal_example_sampling.jl")
