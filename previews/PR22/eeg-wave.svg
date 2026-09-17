@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none">
+  <!-- ERP waveform - classic N1-P2-N2-P300 pattern -->
+  <!-- Axis -->
+  <line x1="2" y1="12" x2="22" y2="12" stroke="#cccccc" stroke-width="0.3"/>
+  <line x1="6" y1="3" x2="6" y2="21" stroke="#cccccc" stroke-width="0.3"/>
+  
+  <!-- ERP waveform 1 - larger effect -->
+  <path d="M2,12 
+           C3,12 4,12 5,12 
+           L6,12 
+           C7,12 7.5,16 8,18 
+           C8.5,20 9,15 9.5,8 
+           C10,3 10.5,6 11,12 
+           C11.5,18 12,21 13,19 
+           C14,17 15,5 16,3 
+           C17,1 18,3 19,7 
+           C20,10 21,12 22,12" 
+        stroke="#CB3C33" stroke-width="0.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- ERP waveform 2 - smaller effect, more separated -->
+  <path d="M2,12 
+           C3,12 4,12 5,12 
+           L6,12 
+           C7,12 7.5,14 8,15 
+           C8.5,16 9,13 9.5,10 
+           C10,7 10.5,9 11,12 
+           C11.5,15 12,16 13,15 
+           C14,14 15,9 16,7 
+           C17,5 18,7 19,9 
+           C20,11 21,12 22,12" 
+        stroke="#389826" stroke-width="0.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- ERP waveform 3 - even smaller effect -->
+  <path d="M2,12 
+           C3,12 4,12 5,12 
+           L6,12 
+           C7,12 7.5,13 8,13.5 
+           C8.5,14 9,12.5 9.5,11 
+           C10,9 10.5,10 11,12 
+           C11.5,14 12,14.5 13,14 
+           C14,13.5 15,10 16,9 
+           C17,8 18,9 19,10.5 
+           C20,11.5 21,12 22,12" 
+        stroke="#9558B2" stroke-width="0.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
