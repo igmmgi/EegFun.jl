@@ -48,59 +48,59 @@ function extract_predictor_stats(result::LmmStatsResult, coef_name::String; alph
     pos_stats = EegFun._compute_cluster_statistics(pos_clusters, t_map, electrode_to_idx; return_clusters=false)
     neg_stats = EegFun._compute_cluster_statistics(neg_clusters, t_map, electrode_to_idx; return_clusters=false)
     
-    # Compute p-values based on null distribution
+    # Compute p-values based on null distribution using corrected formula (Phipson & Smyth, 2010)
     null_dist = result.max_cluster_mass_null[:, coef_idx]
+    n_perms = length(null_dist)
     
+    # Reconstruct Cluster objects with computed p-values (Cluster is immutable)
+    updated_pos_clusters = Cluster[]
     for (i, c) in enumerate(pos_clusters)
-        p_val = count(>=(pos_stats[i]), null_dist) / length(null_dist)
-        c.p_value = p_val
-        c.is_significant = p_val <= alpha
+        p_val = (count(>=(pos_stats[i]), null_dist) + 1) / (n_perms + 1)
+        push!(updated_pos_clusters, Cluster(
+            c.id, c.electrodes, c.time_indices, c.time_range,
+            pos_stats[i], p_val, p_val <= alpha, c.polarity, c.members
+        ))
     end
     
+    updated_neg_clusters = Cluster[]
     for (i, c) in enumerate(neg_clusters)
-        p_val = count(>=(abs(neg_stats[i])), null_dist) / length(null_dist)
-        c.p_value = p_val
-        c.is_significant = p_val <= alpha
+        p_val = (count(>=(abs(neg_stats[i])), null_dist) + 1) / (n_perms + 1)
+        push!(updated_neg_clusters, Cluster(
+            c.id, c.electrodes, c.time_indices, c.time_range,
+            neg_stats[i], p_val, p_val <= alpha, c.polarity, c.members
+        ))
     end
     
-    # Create significance masks based on cluster p-values
+    # Create significance masks based on cluster p-values using members (electrode_idx, time_idx)
     final_mask_pos = zeros(Bool, n_electrodes, n_time_points)
     final_mask_neg = zeros(Bool, n_electrodes, n_time_points)
     
-    for c in pos_clusters
+    for c in updated_pos_clusters
         if c.is_significant
-            for pt in c.points
-                ch_idx = electrode_to_idx[pt.electrode]
-                t_idx = findfirst(==(pt.time), result.time_points)
-                final_mask_pos[ch_idx, t_idx] = true
+            for (e_idx, t_idx) in c.members
+                final_mask_pos[e_idx, t_idx] = true
             end
         end
     end
     
-    for c in neg_clusters
+    for c in updated_neg_clusters
         if c.is_significant
-            for pt in c.points
-                ch_idx = electrode_to_idx[pt.electrode]
-                t_idx = findfirst(==(pt.time), result.time_points)
-                final_mask_neg[ch_idx, t_idx] = true
+            for (e_idx, t_idx) in c.members
+                final_mask_neg[e_idx, t_idx] = true
             end
         end
     end
     
-    # Fake standard error (we just use t-values to infer se_diff if we really need it, but LMM doesn't export se directly in the struct right now)
-    # se_diff = beta / t_value
-    beta_map = result.beta[:, :, coef_idx]
-    se_diff = abs.(beta_map ./ t_map)
-    se_diff[isnan.(se_diff)] .= 0.0
-    se_diff[isinf.(se_diff)] .= 0.0
+    # Use stored standard errors directly from the LmmStatsResult
+    se_diff = result.se[:, :, coef_idx]
     
     # Construct PermutationResult
     test_info = TestInfo(:LMM, 0.0, alpha, :both, :cluster_permutation, 
-        ClusterInfo(:parametric, :spatiotemporal, length(null_dist)))
+        ClusterInfo(:parametric, :spatiotemporal, n_perms))
         
     stat_matrix = StatMatrix(t_map, nothing)
     masks = Masks(final_mask_pos, final_mask_neg)
-    clusters = Clusters(pos_clusters, neg_clusters)
+    clusters = Clusters(updated_pos_clusters, updated_neg_clusters)
     perm_dist = PermutationDistribution(null_dist, null_dist)
     
     # ERP Data: we can just provide the average of epochs as dummy data for plotting
@@ -122,3 +122,4 @@ function extract_predictor_stats(result::LmmStatsResult, coef_name::String; alph
         se_diff
     )
 end
+
