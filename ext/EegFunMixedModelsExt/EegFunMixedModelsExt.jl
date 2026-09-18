@@ -59,6 +59,7 @@ function fit_mass_lmm(epochs::EegFun.EpochData, f::FormulaTerm; n_perms=0, use_c
     @info "Fitting $(n_channels * n_timepoints) Mixed Models across $n_epochs epochs (n_perms=$n_perms)..."
     
     # Generate sign flips for Freedman-Lane permutation with controlled RNG
+    # Standard trial-level permutations for mass-univariate single-trial LMMs
     signs = [rand(rng, [-1, 1], n_epochs) for _ in 1:n_perms]
     
     n_threads_max = isdefined(Threads, :maxthreadid) ? Threads.maxthreadid() : Threads.nthreads()
@@ -127,6 +128,13 @@ function fit_mass_lmm(epochs::EegFun.EpochData, f::FormulaTerm; n_perms=0, use_c
             # Extract fitted values and residuals for Freedman-Lane permutations
             copyto!(y_hat, fitted(m_thread))
             copyto!(res_buf, residuals(m_thread))
+            
+            # Form null y_hat by subtracting fixed effects (except intercept)
+            X = modelmatrix(m_thread)
+            beta_est = coef(m_thread)
+            if length(beta_est) > 1
+                y_hat .-= X[:, 2:end] * beta_est[2:end]
+            end
             
             for perm_idx in 1:n_perms
                 @. y_perm = y_hat + (signs[perm_idx] * res_buf)
