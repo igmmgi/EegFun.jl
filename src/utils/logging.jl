@@ -250,3 +250,22 @@ macro log_call(func_name)
         @info "Function call: $call_str"
     end
 end
+
+# === ASYNC PROGRESS TRACKING ===
+
+"""
+    track_progress_async(prog::ProgressMeter.Progress, counter::Base.Threads.Atomic{Int}, total::Int)
+
+Tracks progress of a multithreaded loop without lock contention.
+Worker threads should increment `counter` via `Threads.atomic_add!(counter, 1)`.
+This function spins up a lightweight async task to securely update `prog` twice a second.
+"""
+function track_progress_async(prog, counter::Base.Threads.Atomic{Int}, total::Int)
+    @async begin
+        while counter[] < total
+            ProgressMeter.update!(prog, counter[])
+            sleep(0.5)
+        end
+        ProgressMeter.update!(prog, total)
+    end
+end

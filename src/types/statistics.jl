@@ -393,3 +393,33 @@ function Base.show(io::IO, result::AnalyticResult)
     println(io, "├─ Data dimensions: $n_electrodes electrodes × $n_time_points time points ($time_range)")
     println(io, "└─ Significant points: $n_sig_pos positive, $n_sig_neg negative")
 end
+
+"""
+    LmmStatsResult
+
+Stores the result of a massive univariate linear mixed model fit across a spatial-temporal grid.
+
+# Fields
+- `coefficients::Vector{String}`: Predictor names (e.g., "(Intercept)", "Condition")
+- `channels::Vector{Symbol}`: Electrode labels
+- `time_points::Vector{Float64}`: Time points in seconds
+- `beta::Array{Float64, 3}`: Beta coefficients [electrodes × time × coefficients]
+- `se::Array{Float64, 3}`: Standard errors [electrodes × time × coefficients]
+- `t_values::Array{Float64, 3}`: T-statistics [electrodes × time × coefficients]
+- `p_values::Array{Float64, 3}`: Raw p-values [electrodes × time × coefficients]
+- `max_t_null::Array{Float64, 2}`: Null distribution of max-t values [permutations × coefficients]
+- `max_cluster_mass_null::Array{Float64, 2}`: Null distribution of max cluster mass [permutations × coefficients]
+- `epochs::EpochData`: The original EpochData (useful for extracting grand averages for ERP plots)
+"""
+struct LmmStatsResult <: EegFunData
+    coefficients::Vector{String}
+    channels::Vector{Symbol}
+    time_points::Vector{Float64}
+    beta::Array{Float64, 3}
+    se::Array{Float64, 3}
+    t_values::Array{Float64, 3}
+    p_values::Array{Float64, 3}
+    max_t_null::Array{Float64, 2}
+    max_cluster_mass_null::Array{Float64, 2}
+    epochs::EpochData
+end
