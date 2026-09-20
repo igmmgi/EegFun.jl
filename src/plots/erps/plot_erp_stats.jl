@@ -492,7 +492,7 @@ end
 Plots a 2D heatmap of the t-statistics (Channels x Time).
 """
 function plot_stat_heatmap(result::StatsResult; kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs; validate=false)
     plot_kwargs[:window_title] = get(kwargs, :window_title, "T-Statistic Heatmap")
     plot_kwargs[:xlabel] = get(kwargs, :xlabel, "Time (s)")
     plot_kwargs[:ylabel] = get(kwargs, :ylabel, "Channels")
@@ -511,16 +511,52 @@ function plot_stat_heatmap(result::StatsResult; kwargs...)
 
     ax = Axis(fig[1, 1], yticks = yticks)
 
+    mask_style = get(kwargs, :mask_style, :alpha)
+    
+    # Extract masks if available
+    has_masks = hasproperty(result, :masks) && !isnothing(result.masks)
+    if has_masks
+        mask = result.masks.positive .| result.masks.negative
+    else
+        mask = trues(size(t_values))
+        mask_style = :none
+    end
+    
     max_t = maximum(abs.(t_values))
+    cmap = _resolve_theme_colormap(ax, get(kwargs, :colormap, nothing))
+    clims = get(kwargs, :colorrange, (-max_t, max_t))
 
-    hm = heatmap!(
-        ax,
-        time_points,
-        1:length(electrodes),
-        transpose(t_values),
-        colormap = _resolve_theme_colormap(ax, get(kwargs, :colormap, nothing)),
-        colorrange = get(kwargs, :colorrange, (-max_t, max_t)),
-    )
+    if mask_style == :alpha
+        # Plot base transparent layer
+        heatmap!(ax, time_points, 1:length(electrodes), transpose(t_values), 
+                 colormap = cmap, colorrange = clims, alpha = 0.15)
+        
+        # Plot opaque layer over significant regions
+        highlight = copy(t_values)
+        highlight[.!mask] .= NaN
+        hm = heatmap!(ax, time_points, 1:length(electrodes), transpose(highlight), 
+                      colormap = cmap, colorrange = clims)
+                      
+    elseif mask_style == :hide
+        highlight = copy(t_values)
+        highlight[.!mask] .= NaN
+        hm = heatmap!(ax, time_points, 1:length(electrodes), transpose(highlight), 
+                      colormap = cmap, colorrange = clims)
+                      
+    elseif mask_style == :contour
+        hm = heatmap!(ax, time_points, 1:length(electrodes), transpose(t_values), 
+                      colormap = cmap, colorrange = clims)
+                      
+        if has_masks && any(mask)
+            # Overlay contour boundary (x, y, z)
+            contour!(ax, time_points, 1:length(electrodes), Float64.(transpose(mask)), 
+                     levels = [0.5], color = :black, linewidth = 2)
+        end
+    else
+        # :none or unrecognized
+        hm = heatmap!(ax, time_points, 1:length(electrodes), transpose(t_values), 
+                      colormap = cmap, colorrange = clims)
+    end
 
     Colorbar(fig[1, 2], hm, label = "t-value")
 
