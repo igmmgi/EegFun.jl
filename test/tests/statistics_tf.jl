@@ -623,14 +623,14 @@ end
         end
     end
 
-    @testset "plot_tf_stats - significance modes" begin
+    @testset "plot_tf_stats - mask_style modes" begin
         Random.seed!(93)
         tfs = _build_tf_test_data(n_participants = 6, offset_cond1 = 5.0, offset_cond2 = 3.0, noise = 0.05)
         prepared = EegFun.prepare_stats(tfs; design = :paired)
         result = EegFun.analytic_test(prepared)
 
-        for mode in [:contour, :stipple, :opacity, :none]
-            out = EegFun.plot_tf_stats(result; significance = mode, display_plot = false)
+        for mode in [:contour, :alpha, :hide, :none]
+            out = EegFun.plot_tf_stats(result; mask_style = mode, display_plot = false)
             @test out.fig isa Figure
         end
     end
