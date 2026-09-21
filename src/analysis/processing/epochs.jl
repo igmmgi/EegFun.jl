@@ -914,7 +914,7 @@ function reject_epochs(dat::EpochData, bad_columns::Vector{Symbol})
 
     # Log removal statistics
     if n_removed > 0
-        @info "Condition $(dat.condition) ($(dat.condition_name)) removed $n_removed of $n_epochs epochs ($(round(100*n_removed/n_epochs, digits=1))%)"
+        @info "Condition $(dat.condition) ($(dat.condition_name)) removed $n_removed of $n_eps epochs ($(round(100*n_removed/n_eps, digits=1))%)"
     end
 
     # Return new EpochData with only good epochs (preserve struct fields)
