@@ -137,9 +137,11 @@ function _collect_permutation_t_matrices(prepared::StatisticalData, n_permutatio
     # Pre-allocate array for all t-matrices
     permutation_t_matrices = Array{Float64,3}(undef, n_electrodes, n_time, n_permutations)
 
-    # Progress bar
+    local completed = nothing
     if show_progress
         progress = Progress(n_permutations, desc = "Collecting permutation t-matrices: ", showspeed = true)
+        completed = Base.Threads.Atomic{Int}(0)
+        EegFun.track_progress_async(progress, completed, n_permutations)
     end
 
     # Pre-allocate buffers per thread to reuse memory safely across concurrent threads
@@ -187,7 +189,7 @@ function _collect_permutation_t_matrices(prepared::StatisticalData, n_permutatio
         permutation_t_matrices[:, :, perm_idx] = t_matrix_perm
 
         if show_progress
-            next!(progress)
+            Base.Threads.atomic_add!(completed::Base.Threads.Atomic{Int}, 1)
         end
     end
 
@@ -373,9 +375,11 @@ function _run_permutations(
     # Pre-allocate electrode lookup (reused across all permutations)
     electrode_to_idx = Dict(e => i for (i, e) in enumerate(electrodes))
 
-    # Progress bar
+    local completed = nothing
     if show_progress
         progress = Progress(n_permutations, desc = "Permutations: ", showspeed = true)
+        completed = Base.Threads.Atomic{Int}(0)
+        EegFun.track_progress_async(progress, completed, n_permutations)
     end
 
     Threads.@threads for perm_idx = 1:n_permutations
@@ -459,7 +463,7 @@ function _run_permutations(
         permutation_max_negative[perm_idx] = max_neg
 
         if show_progress
-            next!(progress)
+            Base.Threads.atomic_add!(completed::Base.Threads.Atomic{Int}, 1)
         end
     end
 
@@ -590,8 +594,11 @@ function _run_permutations_tf(
 
     electrode_to_idx = Dict(e => i for (i, e) in enumerate(electrodes))
 
+    local completed = nothing
     if show_progress
         progress = Progress(n_permutations, desc = "TF Permutations: ", showspeed = true)
+        completed = Base.Threads.Atomic{Int}(0)
+        EegFun.track_progress_async(progress, completed, n_permutations)
     end
 
     Threads.@threads for perm_idx = 1:n_permutations
@@ -653,7 +660,7 @@ function _run_permutations_tf(
         permutation_max_negative[perm_idx] = max_neg
 
         if show_progress
-            next!(progress)
+            Base.Threads.atomic_add!(completed::Base.Threads.Atomic{Int}, 1)
         end
     end
 

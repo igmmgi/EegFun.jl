@@ -45,6 +45,7 @@ public IcaPrms
 public InfoIca
 public Interval
 public Layout
+public LmmStatsResult
 public MultiDataFrameEeg
 public Neighbours
 public NoiseCeiling
@@ -78,20 +79,24 @@ public channel_data
 public channel_labels
 public channels
 public channels_not
+public coef
 public components
 public components_not
 public conditions
 public conditions_not
+public confint
 public create_eegfun_data
 public extra_data
 public file_name
 public head
 public meta_data
 public n_values
+public nobs
 public epochs
 public epochs_not
 public participants
 public participants_not
+public pvalue
 public sample_rate
 public samples
 public samples_and
@@ -100,6 +105,7 @@ public samples_not
 public samples_or
 public samples_or_not
 public section
+public stderror
 public subset
 public subset_bad_data
 public tail
@@ -148,6 +154,7 @@ public detrend
 public epochs_count
 public epochs_table
 public extract_epochs
+public extract_predictor_stats
 public find_times
 public get_filter_characteristics
 public highpass_filter
@@ -269,6 +276,7 @@ public realign!
 
 # === Statistics ===
 public analytic_test
+public fit_mass_lmm
 public permutation_test
 public prepare_stats
 
@@ -350,6 +358,8 @@ public plot_layout_2d!
 public plot_layout_3d
 public plot_layout_3d!
 public plot_line_noise_components
+public plot_lmm_heatmap
+public plot_lmm_topomap
 public plot_spatial_kurtosis_components
 public plot_tf_stats
 public plot_tf

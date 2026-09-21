@@ -10,15 +10,13 @@ with configurable significance overlays.
                   channel_selection::Function = channels(),
                   channel_plot_order::Union{Nothing, Vector{Symbol}} = nothing,
                   content::Symbol = :tvalues,
-                  significance::Symbol = :contour,
+                  mask_style::Symbol = :alpha,
                   colormap = nothing,
                   colorrange = nothing,
                   ylogscale::Bool = false,
                   colorbar::Bool = true,
                   significance_color = :black,
                   significance_linewidth::Real = 2.0,
-                  stipple_alpha::Real = 0.4,
-                  opacity_alpha::Real = 0.3,
                   figure_size = nothing,
                   display_plot::Bool = true)
 
@@ -35,10 +33,10 @@ Works with both `TFClusterPermutationResult` (from `permutation_test`) and
   - `:difference` - power difference (condition A - B)
   - `:power_a` - grand average power for condition A
   - `:power_b` - grand average power for condition B
-- `significance::Symbol`: How to visualize significant regions:
-  - `:contour` (default) - black contour lines around significant regions
-  - `:stipple` - semi-transparent dots over non-significant regions
-  - `:opacity` - dim non-significant regions
+- `mask_style::Symbol`: How to visualize significant regions:
+  - `:alpha` (default) - dim non-significant regions
+  - `:contour` - black contour lines around significant regions
+  - `:hide` - hide non-significant regions
   - `:none` - no significance overlay
 - `colormap`: Colormap (default: `:RdBu`)
 - `colorrange`: Color range tuple or `nothing` for auto (auto-symmetric for t-values)
@@ -46,8 +44,6 @@ Works with both `TFClusterPermutationResult` (from `permutation_test`) and
 - `colorbar::Bool`: Show colorbar (default: true)
 - `significance_color`: Color for contour lines (default: `:black`)
 - `significance_linewidth::Real`: Width of contour lines (default: 2.0)
-- `stipple_alpha::Real`: Alpha for stipple dots (default: 0.4)
-- `opacity_alpha::Real`: Alpha for dimming non-significant regions (default: 0.3)
 - `figure_size`: Figure size tuple or `nothing` for auto
 - `display_plot::Bool`: Display the plot (default: true)
 
@@ -60,15 +56,15 @@ Named tuple `(fig, axes)` with Makie Figure and vector of Axes.
 result = permutation_test(prepared; n_permutations=1000, cluster_type=:temporal)
 plot_tf_stats(result, channel_selection=channels(:Cz))
 
-# Power difference with stipple overlay
-plot_tf_stats(result, content=:difference, significance=:stipple)
+# Power difference with hide mask
+plot_tf_stats(result, content=:difference, mask_style=:hide)
 
 # Multiple channels in grid
 plot_tf_stats(result, channel_selection=channels([:Cz, :Fz, :Pz, :Oz]))
 
 # With analytic test results
 result_analytic = analytic_test(prepared)
-plot_tf_stats(result_analytic, significance=:opacity, colormap=:viridis)
+plot_tf_stats(result_analytic, mask_style=:alpha, colormap=:viridis)
 ```
 """
 function plot_tf_stats(
@@ -76,23 +72,21 @@ function plot_tf_stats(
     channel_selection::Function = channels(),
     channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
     content::Symbol = :tvalues,
-    significance::Symbol = :contour,
+    mask_style::Symbol = :alpha,
     colormap = nothing,
     colorrange::Union{Nothing,Tuple{Real,Real}} = nothing,
     ylogscale::Bool = false,
     colorbar::Bool = true,
     significance_color = :black,
     significance_linewidth::Real = 2.0,
-    stipple_alpha::Real = 0.4,
-    opacity_alpha::Real = 0.3,
     figure_size::Union{Nothing,Tuple{Int,Int}} = nothing,
     display_plot::Bool = true,
 )
     # Validate arguments
     content in (:tvalues, :difference, :power_a, :power_b) ||
         error("content must be :tvalues, :difference, :power_a, or :power_b, got :$content")
-    significance in (:contour, :stipple, :opacity, :none) ||
-        error("significance must be :contour, :stipple, :opacity, or :none, got :$significance")
+    mask_style in (:alpha, :contour, :hide, :none) ||
+        error("mask_style must be :alpha, :contour, :hide, or :none, got :$mask_style")
 
     # Select channels
     all_electrodes = result.electrodes
@@ -174,37 +168,40 @@ function plot_tf_stats(
             end
         end
 
-        # Plot heatmap (Makie expects data as [n_x × n_y], where x=time, y=freq)
-        # data_mat is [n_freqs × n_time], need to transpose
-        hm = heatmap!(
-            ax,
-            time_points,
-            frequencies,
-            data_mat',
-            colormap = _resolve_theme_colormap(ax, colormap),
-            colorrange = cr,
-            nan_color = :transparent,
-        )
-        last_hm = hm
-
-        # Significance overlay
-        if significance != :none
+        # Plot heatmap based on mask_style
+        has_mask = false
+        local sig_mask = nothing
+        if mask_style != :none
             sig_mask = _extract_tf_significance_mask(result, ch_idx)
-
-            if significance == :contour
-                _render_significance_contour!(
-                    ax,
-                    time_points,
-                    frequencies,
-                    sig_mask;
-                    color = significance_color,
-                    linewidth = significance_linewidth,
-                )
-            elseif significance == :stipple
-                _render_significance_stipple!(ax, time_points, frequencies, sig_mask; alpha = stipple_alpha)
-            elseif significance == :opacity
-                _render_significance_opacity!(ax, time_points, frequencies, sig_mask; alpha = opacity_alpha)
-            end
+            has_mask = !isnothing(sig_mask) && any(sig_mask)
+        end
+        
+        cmap = _resolve_theme_colormap(ax, colormap)
+        
+        if !has_mask || mask_style == :none
+            hm = heatmap!(ax, time_points, frequencies, data_mat', 
+                          colormap = cmap, colorrange = cr, nan_color = :transparent)
+            last_hm = hm
+        elseif mask_style == :alpha
+            heatmap!(ax, time_points, frequencies, data_mat', 
+                     colormap = cmap, colorrange = cr, alpha = 0.15, nan_color = :transparent)
+            
+            highlight = copy(data_mat)
+            highlight[.!sig_mask] .= NaN
+            hm = heatmap!(ax, time_points, frequencies, highlight', 
+                          colormap = cmap, colorrange = cr, nan_color = :transparent)
+            last_hm = hm
+        elseif mask_style == :hide
+            highlight = copy(data_mat)
+            highlight[.!sig_mask] .= NaN
+            hm = heatmap!(ax, time_points, frequencies, highlight', 
+                          colormap = cmap, colorrange = cr, nan_color = :transparent)
+            last_hm = hm
+        elseif mask_style == :contour
+            hm = heatmap!(ax, time_points, frequencies, data_mat', 
+                          colormap = cmap, colorrange = cr, nan_color = :transparent)
+            last_hm = hm
+            _render_significance_contour!(ax, time_points, frequencies, sig_mask; color = significance_color, linewidth = significance_linewidth)
         end
     end
 
@@ -296,60 +293,4 @@ function _render_significance_contour!(
     # sig_mask is [n_freqs × n_time], transpose for contour!(ax, x, y, z)
     sig_float = Float64.(sig_mask)'  # [n_time × n_freqs]
     contour!(ax, time_points, frequencies, sig_float, levels = [0.5], color = color, linewidth = linewidth)
-end
-
-"""
-    _render_significance_stipple!(ax, time_points, frequencies, sig_mask; alpha)
-
-Render stipple dots over non-significant regions using a single scatter! call.
-"""
-function _render_significance_stipple!(
-    ax::Axis,
-    time_points::Vector{Float64},
-    frequencies::Vector{Float64},
-    sig_mask::AbstractMatrix;
-    alpha::Real = 0.4,
-)
-    n_freqs, n_time = size(sig_mask)
-    n_nonsig = count(!, sig_mask)
-    n_nonsig == 0 && return
-
-    # Pre-allocate coordinate vectors
-    xs = Vector{Float64}(undef, n_nonsig)
-    ys = Vector{Float64}(undef, n_nonsig)
-    idx = 0
-    for fi = 1:n_freqs
-        for ti = 1:n_time
-            if !sig_mask[fi, ti]
-                idx += 1
-                xs[idx] = time_points[ti]
-                ys[idx] = frequencies[fi]
-            end
-        end
-    end
-
-    scatter!(ax, xs, ys, markersize = 3, color = (:white, alpha), strokewidth = 0)
-end
-
-"""
-    _render_significance_opacity!(ax, time_points, frequencies, sig_mask; alpha)
-
-Dim non-significant regions by overlaying a single semi-transparent heatmap.
-Uses an RGBA alpha matrix rendered as one heatmap! call (O(1) draw calls).
-"""
-function _render_significance_opacity!(
-    ax::Axis,
-    time_points::Vector{Float64},
-    frequencies::Vector{Float64},
-    sig_mask::AbstractMatrix;
-    alpha::Real = 0.3,
-)
-    n_freqs, n_time = size(sig_mask)
-    (n_time < 2 || n_freqs < 2) && return
-
-    # Build RGBA overlay: non-significant → white with alpha, significant → transparent
-    # sig_mask is [n_freqs × n_time], heatmap wants [n_time × n_freqs] after transpose
-    overlay = [sig_mask[fi, ti] ? RGBAf(1, 1, 1, 0) : RGBAf(1, 1, 1, Float32(alpha)) for ti = 1:n_time, fi = 1:n_freqs]
-
-    heatmap!(ax, time_points, frequencies, overlay)
 end

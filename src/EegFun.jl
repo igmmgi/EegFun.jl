@@ -39,6 +39,7 @@ using ProgressMeter
 using Random
 using SparseArrays
 using Statistics
+using StatsAPI
 using StatsBase
 using TOML
 
@@ -129,6 +130,8 @@ include("analysis/statistics/clustering.jl")
 include("analysis/statistics/permutations.jl")
 include("analysis/statistics/inference.jl")
 include("analysis/statistics/statistics.jl")
+include("analysis/statistics/mixed_models_stub.jl")
+include("analysis/statistics/statsapi.jl")
 
 # time-frequency analysis
 include("analysis/time_frequency/tf_utils.jl")
@@ -191,6 +194,7 @@ include("plots/erps/plot_erp_filter_gui.jl")
 include("plots/erps/plot_gfp.jl")
 include("plots/erps/plot_erp_stats.jl")
 include("plots/erps/plot_topography_stats.jl")
+include("plots/statistics/plot_lmm_stats.jl")
 include("plots/erps/plot_topography.jl")
 include("plots/erps/plot_topography_3d.jl")
 
