@@ -134,4 +134,4 @@ DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 [targets]
 dev = ["Revise"]
 docs = ["Documenter", "DocumenterTools"]
-test = ["Test", "Coverage", "CoverageTools", "BenchmarkTools", "Aqua", "CairoMakie", "GLMakie", "MixedModels", "StatsModels", "DataFrames"]
+test = ["Test", "Coverage", "CoverageTools", "BenchmarkTools", "Aqua", "CairoMakie", "MixedModels", "StatsModels", "DataFrames"]
