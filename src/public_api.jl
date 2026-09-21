@@ -96,7 +96,6 @@ public epochs
 public epochs_not
 public participants
 public participants_not
-public pvalue
 public sample_rate
 public samples
 public samples_and
