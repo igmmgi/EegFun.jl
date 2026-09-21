@@ -65,8 +65,13 @@ function fit_mass_lmm(epochs::EegFun.EpochData, f::FormulaTerm; n_perms=0, use_c
     
     @info "Fitting $(n_channels * n_timepoints) Mixed Models across $n_epochs epochs (n_perms=$n_perms) on $(nprocs()) processes..."
     
-    signs = [rand(rng, [-1, 1], n_epochs) for _ in 1:n_perms]
-    
+    if isempty(m_initial.reterms)
+        error("Model has no random effects. fit_mass_lmm requires a mixed model.")
+    end
+    # Extract the primary grouping factor (e.g., subject) to respect exchangeability blocks
+    group_refs = m_initial.reterms[1].refs
+    n_groups = length(m_initial.reterms[1].levels)
+    signs = [rand(rng, [-1, 1], n_groups) for _ in 1:n_perms]    
     if use_clusters
         t_perm_matrix = SharedArray{Float64}((n_channels, n_timepoints, n_perms, n_coefs))
     else
@@ -98,13 +103,12 @@ function fit_mass_lmm(epochs::EegFun.EpochData, f::FormulaTerm; n_perms=0, use_c
             y_perm = zeros(n_epochs)
             coef_buf = zeros(n_coefs)
             se_buf = zeros(n_coefs)
-            y_hat = zeros(n_epochs)
             res_buf = zeros(n_epochs)
             t_perm_buf = zeros(n_coefs)
             
-            (m_thread, y_true, y_perm, coef_buf, se_buf, y_hat, res_buf, t_perm_buf)
+            (m_thread, y_true, y_perm, coef_buf, se_buf, res_buf, t_perm_buf)
         end
-        (m_thread, y_true, y_perm, coef_buf, se_buf, y_hat, res_buf, t_perm_buf) = buffers
+        (m_thread, y_true, y_perm, coef_buf, se_buf, res_buf, t_perm_buf) = buffers
         
         y_true .= @view eeg_tensor[c_idx, t_idx, :]
         
@@ -112,6 +116,9 @@ function fit_mass_lmm(epochs::EegFun.EpochData, f::FormulaTerm; n_perms=0, use_c
             m_thread.optsum.maxfeval = 1000
             m_thread.optsum.maxtime = 1.0
             refit!(m_thread, y_true; progress=false)
+            
+            # Extract optimal theta to use as frozen rulebook or warm start
+            true_theta = copy(m_thread.theta)
             
             copyto!(coef_buf, m_thread.beta)
             copyto!(se_buf, stderror(m_thread))
@@ -128,37 +135,30 @@ function fit_mass_lmm(epochs::EegFun.EpochData, f::FormulaTerm; n_perms=0, use_c
             if n_perms > 0
                 fitted_vals = fitted(m_thread)
                 for i in 1:n_epochs
-                    y_hat[i] = fitted_vals[i]
                     res_buf[i] = y_true[i] - fitted_vals[i]
                 end
                 
                 X = X_fixed
-                if n_coefs > 1
-                    for i in 1:n_epochs
-                        sum_fx = 0.0
-                        for j in 2:n_coefs
-                            sum_fx += X[i, j] * coef_buf[j]
-                        end
-                        y_hat[i] -= sum_fx
-                    end
-                end
                 
                 for perm_idx in 1:n_perms
                     curr_signs = signs[perm_idx]
-                    for i in 1:n_epochs
-                        y_perm[i] = y_hat[i] + curr_signs[i] * res_buf[i]
-                    end
                     
-                    m_thread.optsum.ftol_rel = 1e-5
-                    m_thread.optsum.maxfeval = fast ? 0 : 1000
-                    m_thread.optsum.maxtime = 1.0
-                    refit!(m_thread, y_perm; progress=false)
-                    
-                    copyto!(coef_buf, m_thread.beta)
-                    copyto!(se_buf, stderror(m_thread))
-                    
-                    for coef_idx in 1:n_coefs
-                        t_perm_buf[coef_idx] = coef_buf[coef_idx] / se_buf[coef_idx]
+                    # ter Braak method: Permute for each partial effect separately
+                    for test_coef in 1:n_coefs
+                        for i in 1:n_epochs
+                            # y* = y_hat_{reduced} + permuted_residuals
+                            # where y_hat_{reduced} = y_hat - X_k * beta_k
+                            y_perm[i] = (fitted_vals[i] - X[i, test_coef] * coef_buf[test_coef]) + curr_signs[group_refs[i]] * res_buf[i]
+                        end
+                        
+                        m_thread.optsum.initial .= true_theta
+                        m_thread.optsum.ftol_rel = 1e-5
+                        m_thread.optsum.maxfeval = fast ? 0 : 1000
+                        m_thread.optsum.maxtime = 1.0
+                        refit!(m_thread, y_perm; progress=false)
+                        
+                        # Extract permuted t-value for this specific coefficient
+                        t_perm_buf[test_coef] = m_thread.beta[test_coef] / stderror(m_thread)[test_coef]
                     end
                     
                     if use_clusters
@@ -210,7 +210,7 @@ function fit_mass_lmm(epochs::EegFun.EpochData, f::FormulaTerm; n_perms=0, use_c
                 end
             end
         else
-            for wid in workers()
+            for wid in 1:size(worker_max_t, 1)
                 for perm_idx in 1:n_perms
                     for coef_idx in 1:n_coefs
                         if worker_max_t[wid, perm_idx, coef_idx] > max_t_null[perm_idx, coef_idx]
