@@ -196,6 +196,10 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
             m_thread.optsum.ftol_rel = 1e-12
             refit!(m_thread, y_true; progress=false)
             
+            # CRITICAL FAST PLS FIX: Inject the optimized theta into the initial state 
+            # so the downstream maxfeval=0 permutations evaluate at the correct variance components!
+            m_thread.optsum.initial .= m_thread.theta
+            
             singular_fits[c_idx, t_idx] = issingular(m_thread)
             
             copyto!(coef_buf, m_thread.beta)
