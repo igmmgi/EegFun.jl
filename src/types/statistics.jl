@@ -409,6 +409,7 @@ Stores the result of a massive univariate linear mixed model fit across a spatia
 - `p_values::Array{Float64, 3}`: Raw p-values [electrodes × time × coefficients]
 - `max_t_null::Array{Float64, 2}`: Null distribution of max-t values [permutations × coefficients]
 - `max_cluster_mass_null::Array{Float64, 2}`: Null distribution of max cluster mass [permutations × coefficients]
+- `singular_fits::Matrix{Bool}`: Boolean matrix [channels × timepoints] indicating if the initial Grand Null model hit a singular boundary.
 - `epochs::EpochData`: The original EpochData (useful for extracting grand averages for ERP plots)
 """
 struct LmmStatsResult <: EegFunData
@@ -421,5 +422,6 @@ struct LmmStatsResult <: EegFunData
     p_values::Array{Float64, 3}
     max_t_null::Array{Float64, 2}
     max_cluster_mass_null::Array{Float64, 2}
+    singular_fits::Matrix{Bool}
     epochs::EpochData
 end

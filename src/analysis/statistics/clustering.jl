@@ -372,7 +372,7 @@ Consolidated version that can either return full Cluster objects or just statist
 """
 function _compute_cluster_statistics(
     clusters::Vector{Cluster},
-    t_matrix::Array{Float64,2},
+    t_matrix::AbstractMatrix{<:AbstractFloat},
     electrode_to_idx::Dict{Symbol,Int};
     return_clusters::Bool = true,
 )
@@ -423,7 +423,7 @@ end
 
 Compute cluster-level statistics (maxsum).
 """
-function _compute_cluster_statistics(clusters::Vector{Cluster}, t_matrix::Array{Float64,2}, electrodes::Vector{Symbol})
+function _compute_cluster_statistics(clusters::Vector{Cluster}, t_matrix::AbstractMatrix{<:AbstractFloat}, electrodes::Vector{Symbol})
     # Create electrode index lookup
     electrode_to_idx = Dict(e => i for (i, e) in enumerate(electrodes))
     return _compute_cluster_statistics(clusters, t_matrix, electrode_to_idx, return_clusters = true)
@@ -752,4 +752,59 @@ end
 
 function _compute_cluster_statistics_tf(clusters::Vector{TFCluster}, t_matrix::Array{Float64,3}, electrodes::Vector{Symbol})
     return _compute_cluster_statistics_tf(clusters, t_matrix, true)
+end
+
+# === THRESHOLD-FREE CLUSTER ENHANCEMENT (TFCE) ===
+
+"""
+    _compute_tfce(t_map, electrodes, time_points, spatial_connectivity, cluster_type; E, H, dh)
+
+Compute the Threshold-Free Cluster Enhancement (TFCE) map for a 2D t-statistic matrix.
+"""
+function _compute_tfce(
+    t_map::AbstractMatrix{<:AbstractFloat},
+    electrodes::Vector{Symbol},
+    time_points::Vector{Float64},
+    spatial_connectivity::SparseMatrixCSC{Bool},
+    cluster_type::Symbol;
+    E::Float64=0.5,
+    H::Float64=2.0,
+    dh::Float64=0.1
+)
+    n_electrodes, n_time = size(t_map)
+    tfce_map = zeros(Float64, n_electrodes, n_time)
+    
+    # Process positive values
+    max_val = maximum(t_map)
+    if max_val > 0.0
+        for h in dh:dh:max_val
+            mask = t_map .>= h
+            clusters = _find_clusters_connected_components(mask, electrodes, time_points, spatial_connectivity, cluster_type)
+            for c in clusters
+                extent = length(c.members)
+                tfce_val = (extent^E) * (h^H) * dh
+                for (e_idx, t_idx) in c.members
+                    tfce_map[e_idx, t_idx] += tfce_val
+                end
+            end
+        end
+    end
+    
+    # Process negative values
+    min_val = minimum(t_map)
+    if min_val < 0.0
+        for h in -dh:-dh:min_val
+            mask = t_map .<= h
+            clusters = _find_clusters_connected_components(mask, electrodes, time_points, spatial_connectivity, cluster_type)
+            for c in clusters
+                extent = length(c.members)
+                tfce_val = (extent^E) * (abs(h)^H) * dh
+                for (e_idx, t_idx) in c.members
+                    tfce_map[e_idx, t_idx] -= tfce_val
+                end
+            end
+        end
+    end
+    
+    return tfce_map
 end
