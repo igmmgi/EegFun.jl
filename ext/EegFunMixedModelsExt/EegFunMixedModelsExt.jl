@@ -16,7 +16,7 @@ using SharedArrays
 import EegFun: fit_mass_lmm
 
 
-function fit_mass_lmm(epochs::EegFun.EpochData, f::FormulaTerm; n_perms=0, permute_block=nothing, use_clusters=false, cluster_threshold=2.0, rng::AbstractRNG=Random.GLOBAL_RNG, use_tfce=false, tfce_E=0.5, tfce_H=2.0, tfce_dh=0.1)
+function fit_mass_lmm(epochs::EegFun.EpochData, f::FormulaTerm; n_perms=0, permute_block=nothing, fast=true, use_clusters=false, cluster_threshold=2.0, rng::AbstractRNG=Random.GLOBAL_RNG, use_tfce=false, tfce_E=0.5, tfce_H=2.0, tfce_dh=0.1)
     dfs = epochs.data
     n_epochs = length(dfs)
     
@@ -47,6 +47,7 @@ function fit_mass_lmm(epochs::EegFun.EpochData, f::FormulaTerm; n_perms=0, permu
     res = fit_mass_lmm(eeg_data, meta_df, f; 
         n_perms=n_perms, 
         permute_block=permute_block,
+        fast=fast,
         use_clusters=use_clusters, 
         cluster_threshold=cluster_threshold,
         channel_names=all_channels,
@@ -76,6 +77,7 @@ end
 function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTerm;
     n_perms::Int=1000,
     permute_block::Union{Symbol, Nothing}=nothing,
+    fast::Bool=true,
     use_clusters::Bool=false,
     cluster_threshold::Float64=2.0,
     spatial_connectivity::Union{AbstractMatrix{Bool}, Nothing}=nothing,
@@ -223,8 +225,14 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
                         y_perm .= y_true .* signs[perm_idx]
                     end
                     
-                    m_thread.optsum.ftol_rel = 1e-5
-                    m_thread.optsum.maxfeval = 0
+                    if fast
+                        m_thread.optsum.ftol_rel = 1e-5
+                        m_thread.optsum.maxfeval = 0
+                    else
+                        m_thread.optsum.ftol_rel = 1e-12
+                        m_thread.optsum.maxfeval = 1000
+                    end
+                    
                     refit!(m_thread, y_perm; progress=false)
                     
                     # Extract the t-values for all coefficients
@@ -258,15 +266,7 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
     
     if n_perms > 0
         if use_clusters
-            spatial_connectivity = nothing
-            # Attempt to build connectivity if channel names are standard and we can infer a layout
-            # However, since we don't have the Layout object here, we will just use a dummy or skip spatial clustering
-            # Wait, EegFun._build_connectivity_matrix requires a Layout object!
-            # The generic function doesn't have it. We should pass layout in or just use no spatial connectivity.
-            # Actually, the original code had a bug where it referenced `epochs.layout` inside the generic function which doesn't have `epochs`!
-            # Let's just create an empty spatial connectivity matrix so it clusters temporally only if spatial layout is missing
             spatial_connectivity = EegFun.sparse(Int[], Int[], Bool[], n_channels, n_channels)
-            
             electrode_to_idx = Dict(e => i for (i, e) in enumerate(channel_names))
             
             if use_tfce
