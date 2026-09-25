@@ -16,7 +16,7 @@ using SharedArrays
 import EegFun: fit_mass_lmm
 
 
-function fit_mass_lmm(epochs::EegFun.EpochData, f::FormulaTerm; n_perms=0, permute_block=nothing, fast=true, use_clusters=false, cluster_threshold=2.0, rng::AbstractRNG=Random.GLOBAL_RNG, use_tfce=false, tfce_E=0.5, tfce_H=2.0, tfce_dh=0.1)
+function fit_mass_lmm(epochs::EegFun.EpochData, f::FormulaTerm; n_perms=0, permute_block=nothing, perm_matrix=nothing, fast=true, use_clusters=false, cluster_threshold=2.0, rng::AbstractRNG=Random.GLOBAL_RNG, use_tfce=false, tfce_E=0.5, tfce_H=2.0, tfce_dh=0.1)
     dfs = epochs.data
     n_epochs = length(dfs)
     
@@ -47,6 +47,7 @@ function fit_mass_lmm(epochs::EegFun.EpochData, f::FormulaTerm; n_perms=0, permu
     res = fit_mass_lmm(eeg_data, meta_df, f; 
         n_perms=n_perms, 
         permute_block=permute_block,
+        perm_matrix=perm_matrix,
         fast=fast,
         use_clusters=use_clusters, 
         cluster_threshold=cluster_threshold,
@@ -77,6 +78,7 @@ end
 function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTerm;
     n_perms::Int=1000,
     permute_block::Union{Symbol, Nothing}=nothing,
+    perm_matrix::Union{AbstractMatrix{Int}, Nothing}=nothing,
     fast::Bool=true,
     use_clusters::Bool=false,
     cluster_threshold::Float64=2.0,
@@ -144,7 +146,17 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
     signs = Vector{Vector{Float64}}(undef, max(1, n_perms))
     perm_indices = Vector{Vector{Int}}(undef, max(1, n_perms))
     
-    if !isnothing(permute_block)
+    if !isnothing(perm_matrix)
+        if size(perm_matrix, 1) != n_epochs
+            error("perm_matrix must have exactly $n_epochs rows (one for each epoch).")
+        end
+        n_perms = size(perm_matrix, 2)
+        @info "Using user-provided permutation matrix with $n_perms permutations."
+        # Store columns of perm_matrix in perm_indices
+        for p in 1:max(1, n_perms)
+            perm_indices[p] = perm_matrix[:, p]
+        end
+    elseif !isnothing(permute_block)
         block_col = meta_df[!, permute_block]
         unique_blocks = unique(block_col)
         block_idxs = [findall(==(b), block_col) for b in unique_blocks]
@@ -219,7 +231,7 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
             if n_perms > 0
                 for perm_idx in 1:n_perms
                     # Sign flipping for exchangeability or subject-level exact shuffling
-                    if !isnothing(permute_block)
+                    if !isnothing(perm_matrix) || !isnothing(permute_block)
                         y_perm .= y_true[perm_indices[perm_idx]]
                     else
                         y_perm .= y_true .* signs[perm_idx]
@@ -331,5 +343,72 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
     )
 end
 
+"""
+    generate_permutation_matrix(df::DataFrame, block_col::Symbol; sync_col::Union{Symbol, Nothing}=nothing, n_perms::Int=1000, type::Symbol=:within, rng::AbstractRNG=Random.GLOBAL_RNG)
+
+Helper tool for end-users to generate mathematically valid permutation matrices for `fit_mass_lmm`.
+Returns an `N × n_perms` matrix of integer indices.
+
+Types:
+- `:within`: Independent shuffling within blocks (e.g. within Subjects). Standard for uncrossed designs.
+- `:synchronized`: Shuffles the `block_col` (e.g. Items) and perfectly synchronizes that shuffle across `sync_col` (e.g. Subjects). 
+  Requires perfectly balanced crossed designs where every subject sees every item.
+"""
+function generate_permutation_matrix(df::DataFrame, block_col::Symbol; sync_col::Union{Symbol, Nothing}=nothing, n_perms::Int=1000, type::Symbol=:within, rng::AbstractRNG=Random.GLOBAL_RNG)
+    N = nrow(df)
+    perm_matrix = zeros(Int, N, n_perms)
+    blocks = df[!, block_col]
+    unique_blocks = unique(blocks)
+    
+    if type == :within
+        block_idxs = [findall(==(b), blocks) for b in unique_blocks]
+        for p in 1:n_perms
+            idx = collect(1:N)
+            for b_idx in block_idxs
+                idx[b_idx] .= shuffle(rng, b_idx)
+            end
+            perm_matrix[:, p] = idx
+        end
+    elseif type == :synchronized
+        if isnothing(sync_col)
+            error("Synchronized shuffling requires a `sync_col` to synchronize across (e.g. sync_col=:Subject, block_col=:Item).")
+        end
+        
+        syncs = df[!, sync_col]
+        unique_blocks = unique(blocks)
+        n_blocks = length(unique_blocks)
+        
+        # Build lookup table: (Sync, Block) -> RowIndex
+        lookup = Dict{Tuple{Any, Any}, Int}()
+        for i in 1:N
+            lookup[(syncs[i], blocks[i])] = i
+        end
+        
+        for p in 1:n_perms
+            shuffled_blocks = shuffle(rng, unique_blocks)
+            block_map = Dict(unique_blocks[i] => shuffled_blocks[i] for i in 1:n_blocks)
+            
+            idx = zeros(Int, N)
+            for i in 1:N
+                sync_val = syncs[i]
+                old_block = blocks[i]
+                new_block = block_map[old_block]
+                
+                if haskey(lookup, (sync_val, new_block))
+                    idx[i] = lookup[(sync_val, new_block)]
+                else
+                    error("Synchronized shuffling failed! Synchronizing `\$block_col` across `\$sync_col` requires a fully balanced crossed design. Row \$i (Sync: \$sync_val, Block: \$old_block) mapped to new Block '\$new_block', but Subject '\$sync_val' never saw Item '\$new_block'. For unbalanced designs, please supply a custom `perm_matrix`.")
+                end
+            end
+            perm_matrix[:, p] = idx
+        end
+    else
+        error("Unknown permutation type: \$type")
+    end
+    
+    return perm_matrix
+end
+
+export generate_permutation_matrix
 
 end
