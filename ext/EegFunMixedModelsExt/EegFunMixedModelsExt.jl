@@ -199,9 +199,12 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
             y_perm = zeros(n_epochs)
             coef_buf = zeros(n_coefs)
             se_buf = zeros(n_coefs)
-            (m_thread, y_true, y_perm, coef_buf, se_buf)
+            fitted_buf = zeros(n_epochs)
+            nuisance_fitted = zeros(n_epochs, n_coefs)
+            partial_resid_fl = zeros(n_epochs, n_coefs)
+            (m_thread, y_true, y_perm, coef_buf, se_buf, fitted_buf, nuisance_fitted, partial_resid_fl)
         end
-        (m_thread, y_true, y_perm, coef_buf, se_buf) = buffers
+        (m_thread, y_true, y_perm, coef_buf, se_buf, fitted_buf, nuisance_fitted, partial_resid_fl) = buffers
         
         y_true .= @view eeg_tensor[c_idx, t_idx, :]
         
@@ -228,38 +231,55 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
                 p_matrix[c_idx, t_idx, coef_idx] = 2.0 * ccdf(Normal(), abs(z))
             end
             
+            # Freedman-Lane: compute partial residuals for each coefficient.
+            # For coefficient j: nuisance_j = ŷ - X[:,j]*β[j]  (everything EXCEPT tested effect)
+            #                    partial_resid_j = y - nuisance_j = ε̂ + X[:,j]*β[j]
+            # During permutation, only partial_resid_j is shuffled; nuisance stays fixed.
+            # This correctly tests each predictor while holding others constant.
             if n_perms > 0
-                for perm_idx in 1:n_perms
-                    # Sign flipping for exchangeability or subject-level exact shuffling
-                    if !isnothing(perm_matrix) || !isnothing(permute_block)
-                        y_perm .= y_true[perm_indices[perm_idx]]
-                    else
-                        y_perm .= y_true .* signs[perm_idx]
+                X_mat = modelmatrix(m_thread)
+                # Compute marginal fitted values (fixed effects only). 
+                # This ensures random effects are left in the permutable residuals.
+                mul!(fitted_buf, X_mat, coef_buf)
+                for j in 1:n_coefs
+                    @inbounds for i in 1:n_epochs
+                        nuisance_fitted[i, j] = fitted_buf[i] - X_mat[i, j] * coef_buf[j]
+                        partial_resid_fl[i, j] = y_true[i] - nuisance_fitted[i, j]
                     end
-                    
-                    if fast
-                        m_thread.optsum.ftol_rel = 1e-5
-                        m_thread.optsum.maxfeval = 0
-                    else
-                        m_thread.optsum.ftol_rel = 1e-12
-                        m_thread.optsum.maxfeval = 1000
-                    end
-                    
-                    refit!(m_thread, y_perm; progress=false)
-                    
-                    # Extract the t-values for all coefficients
-                    copyto!(coef_buf, m_thread.beta)
-                    copyto!(se_buf, stderror(m_thread))
-                    
-                    if use_clusters
-                        for coef_idx in 1:n_coefs
-                            z = coef_buf[coef_idx] / se_buf[coef_idx]
-                            t_perm_matrix[c_idx, t_idx, perm_idx, coef_idx] = z
+                end
+                
+                for coef_idx in 1:n_coefs
+                    for perm_idx in 1:n_perms
+                        # Freedman-Lane: permute partial residuals for tested coefficient
+                        if !isnothing(perm_matrix) || !isnothing(permute_block)
+                            perm_vec = perm_indices[perm_idx]
+                            @inbounds for i in 1:n_epochs
+                                y_perm[i] = nuisance_fitted[i, coef_idx] + partial_resid_fl[perm_vec[i], coef_idx]
+                            end
+                        else
+                            sign_vec = signs[perm_idx]
+                            @inbounds for i in 1:n_epochs
+                                y_perm[i] = nuisance_fitted[i, coef_idx] + partial_resid_fl[i, coef_idx] * sign_vec[i]
+                            end
                         end
-                    else
-                        wid = myid()
-                        for coef_idx in 1:n_coefs
-                            z = coef_buf[coef_idx] / se_buf[coef_idx]
+                        
+                        if fast
+                            m_thread.optsum.ftol_rel = 1e-5
+                            m_thread.optsum.maxfeval = 0
+                        else
+                            m_thread.optsum.ftol_rel = 1e-12
+                            m_thread.optsum.maxfeval = 1000
+                        end
+                        
+                        refit!(m_thread, y_perm; progress=false)
+                        
+                        # Store only the tested coefficient's t-value for its null distribution
+                        z = m_thread.beta[coef_idx] / stderror(m_thread)[coef_idx]
+                        
+                        if use_clusters
+                            t_perm_matrix[c_idx, t_idx, perm_idx, coef_idx] = z
+                        else
+                            wid = myid()
                             if abs(z) > abs(worker_max_t[wid, perm_idx, coef_idx])
                                 worker_max_t[wid, perm_idx, coef_idx] = z
                             end
