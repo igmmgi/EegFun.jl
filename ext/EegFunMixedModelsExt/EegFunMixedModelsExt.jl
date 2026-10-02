@@ -168,8 +168,15 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
     
     @info "Fitting $(n_channels * n_timepoints) Mixed Models across $n_epochs epochs (n_perms=$n_perms) on $(nprocs()) processes..."
     
-    signs = Vector{Vector{Float64}}(undef, max(1, n_perms))
-    perm_indices = Vector{Vector{Int}}(undef, max(1, n_perms))
+    is_permutation = !isnothing(perm_matrix) || !isnothing(permute_block) || !isnothing(permute_crossed)
+    
+    if is_permutation
+        perm_indices = SharedArray{Int}((n_epochs, max(1, n_perms)))
+        signs = SharedArray{Float32}((0, 0))
+    else
+        perm_indices = SharedArray{Int}((0, 0))
+        signs = SharedArray{Float32}((n_epochs, max(1, n_perms)))
+    end
     
     if !isnothing(perm_matrix)
         if size(perm_matrix, 1) != n_epochs
@@ -177,10 +184,7 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
         end
         n_perms = size(perm_matrix, 2)
         @info "Using user-provided permutation matrix with $n_perms permutations."
-        # Store columns of perm_matrix in perm_indices
-        for p in 1:max(1, n_perms)
-            perm_indices[p] = perm_matrix[:, p]
-        end
+        perm_indices .= perm_matrix
     elseif !isnothing(permute_crossed)
         # Synchronized crossed permutation across subjects
         sub_sym = permute_crossed[1]
@@ -227,7 +231,7 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
                     error("Synchronized shuffling failed! The dataset is unbalanced. Subject '$sync_val' lacks Item '$new_item'. Mathematically, a perfect synchronized crossed permutation requires all subjects to have all items.")
                 end
             end
-            perm_indices[p] = idx
+            perm_indices[:, p] .= idx
         end
     elseif !isnothing(permute_block)
         block_col = meta_df[!, permute_block]
@@ -239,11 +243,11 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
             for b_idx in block_idxs
                 idx[b_idx] .= shuffle(rng, b_idx)
             end
-            perm_indices[p] = idx
+            perm_indices[:, p] .= idx
         end
     else
         for p in 1:max(1, n_perms)
-            signs[p] = rand(rng, [-1.0, 1.0], n_epochs)
+            signs[:, p] .= rand(rng, Float32[-1.0, 1.0], n_epochs)
         end
     end
     
@@ -269,15 +273,15 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
             LinearAlgebra.BLAS.set_num_threads(1)
             m_thread = LinearMixedModel(f, meta_df)
             y_true = zeros(n_epochs)
-            y_perm = zeros(n_epochs)
             coef_buf = zeros(n_coefs)
             se_buf = zeros(n_coefs)
+            theta_buf = zeros(length(m_thread.theta))
             fitted_buf = zeros(n_epochs)
             nuisance_fitted = zeros(n_epochs, n_coefs)
             partial_resid_fl = zeros(n_epochs, n_coefs)
-            (m_thread, y_true, y_perm, coef_buf, se_buf, fitted_buf, nuisance_fitted, partial_resid_fl)
+            (m_thread, y_true, coef_buf, se_buf, theta_buf, fitted_buf, nuisance_fitted, partial_resid_fl)
         end
-        (m_thread, y_true, y_perm, coef_buf, se_buf, fitted_buf, nuisance_fitted, partial_resid_fl) = buffers
+        (m_thread, y_true, coef_buf, se_buf, theta_buf, fitted_buf, nuisance_fitted, partial_resid_fl) = buffers
         
         y_true .= @view eeg_tensor[c_idx, t_idx, :]
         
@@ -286,14 +290,13 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
             m_thread.optsum.ftol_rel = 1e-12
             refit!(m_thread, y_true; progress=false)
             
-            # CRITICAL FAST PLS FIX: Inject the optimized theta into the initial state 
-            # so the downstream maxfeval=0 permutations evaluate at the correct variance components!
-            m_thread.optsum.initial .= m_thread.theta
+            # Save the fitted variance components (theta) for Fast-PLS permutations
+            copyto!(theta_buf, m_thread.theta)
             
             singular_fits[c_idx, t_idx] = issingular(m_thread)
             
             copyto!(coef_buf, m_thread.beta)
-            copyto!(se_buf, stderror(m_thread))
+            MixedModels.stderror!(se_buf, m_thread)
             
             beta_matrix[c_idx, t_idx, :] .= coef_buf
             se_matrix[c_idx, t_idx, :] .= se_buf
@@ -321,34 +324,43 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
                     end
                 end
                 
+                m_y = m_thread.y
+                s_orig = MixedModels.sdest(m_thread)
+                
                 for coef_idx in 1:n_coefs
+                    nuisance_col = @view nuisance_fitted[:, coef_idx]
+                    resid_col = @view partial_resid_fl[:, coef_idx]
+                    c_factor = se_buf[coef_idx] / s_orig
+                    
                     for perm_idx in 1:n_perms
-                        # Freedman-Lane: permute partial residuals for tested coefficient
-                        if !isnothing(perm_matrix) || !isnothing(permute_block) || !isnothing(permute_crossed)
-                            perm_vec = perm_indices[perm_idx]
+                        # Freedman-Lane: write permuted partial residuals directly into m_y
+                        if is_permutation
+                            perm_vec = @view perm_indices[:, perm_idx]
                             @inbounds for i in 1:n_epochs
-                                y_perm[i] = nuisance_fitted[i, coef_idx] + partial_resid_fl[perm_vec[i], coef_idx]
+                                m_y[i] = nuisance_col[i] + resid_col[perm_vec[i]]
                             end
                         else
-                            sign_vec = signs[perm_idx]
-                            @inbounds for i in 1:n_epochs
-                                y_perm[i] = nuisance_fitted[i, coef_idx] + partial_resid_fl[i, coef_idx] * sign_vec[i]
+                            sign_vec = @view signs[:, perm_idx]
+                            @inbounds @simd for i in 1:n_epochs
+                                m_y[i] = nuisance_col[i] + resid_col[i] * sign_vec[i]
                             end
                         end
                         
                         if fast
-                            m_thread.optsum.ftol_rel = 1e-5
-                            m_thread.optsum.maxfeval = 0
+                            # Fast-PLS: Direct linear algebra bypass (reevaluate RHS + Cholesky solve)
+                            MixedModels.reevaluateAend!(m_thread)
+                            MixedModels.objective!(m_thread, theta_buf)
+                            # Instant standard error scaling: se = sdest(m) * c_factor (exact to 0.0)
+                            z = m_thread.beta[coef_idx] / (MixedModels.sdest(m_thread) * c_factor)
                         else
                             m_thread.optsum.ftol_rel = 1e-12
                             m_thread.optsum.maxfeval = 1000
+                            refit!(m_thread; progress=false)
+                            MixedModels.stderror!(se_buf, m_thread)
+                            z = m_thread.beta[coef_idx] / se_buf[coef_idx]
                         end
                         
-                        refit!(m_thread, y_perm; progress=false)
-                        
                         # Store only the tested coefficient's t-value for its null distribution
-                        z = m_thread.beta[coef_idx] / stderror(m_thread)[coef_idx]
-                        
                         if use_clusters
                             t_perm_matrix[c_idx, t_idx, perm_idx, coef_idx] = z
                         else
