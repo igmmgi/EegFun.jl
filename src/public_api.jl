@@ -276,6 +276,7 @@ public realign!
 # === Statistics ===
 public analytic_test
 public fit_mass_lmm
+public generate_permutation_matrix
 public permutation_test
 public prepare_stats
 

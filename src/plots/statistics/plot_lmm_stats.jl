@@ -33,7 +33,7 @@ function plot_lmm_heatmap(result::LmmStatsResult; coef_idx::Int=2, threshold_p=n
     ax.yticks = (1:length(result.channels), string.(result.channels))
     
     coef_name = result.coefficients[coef_idx]
-    ax.title = get(plot_kwargs, :plot_title, "LMM Heatmap: \$(coef_name)")
+    ax.title = get(plot_kwargs, :plot_title, "LMM Heatmap: $(coef_name)")
     
     # Add colorbar
     Colorbar(fig[1, 2], hm, label="t-value")
@@ -70,7 +70,7 @@ function plot_lmm_topomap(result::LmmStatsResult, time_point::Real; coef_idx::In
     
     coef_name = result.coefficients[coef_idx]
     if !haskey(plot_kwargs, :plot_title)
-        plot_kwargs[:plot_title] = "LMM Topomap: \$(coef_name) at \$(round(result.time_points[t_idx], digits=3))s"
+        plot_kwargs[:plot_title] = "LMM Topomap: $(coef_name) at $(round(result.time_points[t_idx], digits=3))s"
     end
     
     if !haskey(plot_kwargs, :ylim)

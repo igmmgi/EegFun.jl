@@ -16,6 +16,23 @@ function fit_mass_lmm(args...; kwargs...)
 end
 
 """
+    generate_permutation_matrix(args...; kwargs...)
+
+Helper tool for end-users to generate mathematically valid permutation matrices for `fit_mass_lmm`.
+
+**Requires `MixedModels.jl` and `StatsModels.jl` to be loaded.**
+
+To use this function, you must first import the required packages:
+```julia
+using EegFun
+using MixedModels, StatsModels
+```
+"""
+function generate_permutation_matrix(args...; kwargs...)
+    error("To use Mass-Univariate Mixed Models, you must first load the packages: `using MixedModels, StatsModels`")
+end
+
+"""
     extract_predictor_stats(result::LmmStatsResult, coef_name::String; alpha::Float64=0.05, cluster_threshold::Float64=2.0)
 
 Extracts the cluster-corrected statistics for a specific LMM predictor and formats them as a standard `PermutationResult`.
@@ -31,7 +48,7 @@ function extract_predictor_stats(result::LmmStatsResult, coef_name::String;
 )
     coef_idx = findfirst(==(coef_name), result.coefficients)
     if isnothing(coef_idx)
-        error("Coefficient '\$coef_name' not found in model.")
+        error("Coefficient '$coef_name' not found in model.")
     end
 
     n_electrodes = length(result.channels)

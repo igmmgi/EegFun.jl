@@ -14,8 +14,7 @@ using Distributed
 using SharedArrays
 using SparseArrays
 
-import EegFun: fit_mass_lmm
-
+import EegFun: fit_mass_lmm, generate_permutation_matrix
 
 function fit_mass_lmm(epochs::EegFun.EpochData, f::FormulaTerm; 
     n_perms=0, 
@@ -184,8 +183,6 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
         end
     elseif !isnothing(permute_crossed)
         # Synchronized crossed permutation across subjects
-        # Uses global item ranking to preserve item covariance while ensuring
-        # an exact 1-to-1 permutation (no duplicates or drops) for every subject.
         sub_sym = permute_crossed[1]
         item_sym = permute_crossed[2]
         sub_col = meta_df[!, sub_sym]
@@ -193,17 +190,42 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
         unique_items = unique(item_col)
         n_items = length(unique_items)
         unique_subs = unique(sub_col)
-        sub_rows = [findall(==(s), sub_col) for s in unique_subs]
+        
+        lookup = Dict{Tuple{Any, Any}, Vector{Int}}()
+        for i in 1:n_epochs
+            key = (sub_col[i], item_col[i])
+            if !haskey(lookup, key)
+                lookup[key] = Int[]
+            end
+            push!(lookup[key], i)
+        end
         
         @info "Generating $n_perms synchronized crossed permutations for $(length(unique_subs)) $(sub_sym)s and $n_items $(item_sym)s..."
         for p in 1:max(1, n_perms)
             shuffled_items = shuffle(rng, unique_items)
-            item_rank = Dict(shuffled_items[k] => k for k in 1:n_items)
+            item_map = Dict(unique_items[k] => shuffled_items[k] for k in 1:n_items)
             
-            idx = collect(1:n_epochs)
-            for s_rows in sub_rows
-                perm_s = sortperm(s_rows, by = r -> item_rank[item_col[r]], alg=Base.Sort.MergeSort)
-                idx[s_rows] .= s_rows[perm_s]
+            # Create a fresh copy of the lookup counters for this permutation
+            cell_counters = Dict{Tuple{Any, Any}, Int}()
+            
+            idx = zeros(Int, n_epochs)
+            for i in 1:n_epochs
+                sync_val = sub_col[i]
+                old_item = item_col[i]
+                new_item = item_map[old_item]
+                
+                key = (sync_val, new_item)
+                if haskey(lookup, key)
+                    count = get(cell_counters, key, 0) + 1
+                    if count <= length(lookup[key])
+                        idx[i] = lookup[key][count]
+                        cell_counters[key] = count
+                    else
+                        error("Synchronized shuffling failed! Subject '$sync_val' has fewer trials for Item '$new_item' than required. The design is unbalanced.")
+                    end
+                else
+                    error("Synchronized shuffling failed! The dataset is unbalanced. Subject '$sync_val' lacks Item '$new_item'. Mathematically, a perfect synchronized crossed permutation requires all subjects to have all items.")
+                end
             end
             perm_indices[p] = idx
         end
@@ -242,7 +264,7 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
     @async while take!(prog_channel)
         next!(prog)
     end
-    @distributed for (c_idx, t_idx) in tasks
+    @sync @distributed for (c_idx, t_idx) in tasks
         buffers = get!(task_local_storage(), :lmm_buffers) do
             LinearAlgebra.BLAS.set_num_threads(1)
             m_thread = LinearMixedModel(f, meta_df)
@@ -449,37 +471,47 @@ function generate_permutation_matrix(df::DataFrame, block_col::Symbol; sync_col:
         unique_blocks = unique(blocks)
         n_blocks = length(unique_blocks)
         
-        # Build lookup table: (Sync, Block) -> RowIndex
-        lookup = Dict{Tuple{Any, Any}, Int}()
+        # Build lookup table: (Sync, Block) -> Vector of RowIndices
+        lookup = Dict{Tuple{Any, Any}, Vector{Int}}()
         for i in 1:N
-            lookup[(syncs[i], blocks[i])] = i
+            key = (syncs[i], blocks[i])
+            if !haskey(lookup, key)
+                lookup[key] = Int[]
+            end
+            push!(lookup[key], i)
         end
         
         for p in 1:n_perms
             shuffled_blocks = shuffle(rng, unique_blocks)
             block_map = Dict(unique_blocks[i] => shuffled_blocks[i] for i in 1:n_blocks)
             
+            cell_counters = Dict{Tuple{Any, Any}, Int}()
             idx = zeros(Int, N)
             for i in 1:N
                 sync_val = syncs[i]
                 old_block = blocks[i]
                 new_block = block_map[old_block]
                 
-                if haskey(lookup, (sync_val, new_block))
-                    idx[i] = lookup[(sync_val, new_block)]
+                key = (sync_val, new_block)
+                if haskey(lookup, key)
+                    count = get(cell_counters, key, 0) + 1
+                    if count <= length(lookup[key])
+                        idx[i] = lookup[key][count]
+                        cell_counters[key] = count
+                    else
+                        error("Synchronized shuffling failed! Subject '$sync_val' has fewer trials for Block '$new_block' than required. The design is unbalanced.")
+                    end
                 else
-                    error("Synchronized shuffling failed! Synchronizing `\$block_col` across `\$sync_col` requires a fully balanced crossed design. Row \$i (Sync: \$sync_val, Block: \$old_block) mapped to new Block '\$new_block', but Subject '\$sync_val' never saw Item '\$new_block'. For unbalanced designs, please supply a custom `perm_matrix`.")
+                    error("Synchronized shuffling failed! Synchronizing `$block_col` across `$sync_col` requires a fully balanced crossed design. Row $i (Sync: $sync_val, Block: $old_block) mapped to new Block '$new_block', but Subject '$sync_val' never saw Item '$new_block'. For unbalanced designs, please supply a custom `perm_matrix`.")
                 end
             end
             perm_matrix[:, p] = idx
         end
     else
-        error("Unknown permutation type: \$type")
+        error("Unknown permutation type: $type")
     end
     
     return perm_matrix
 end
-
-export generate_permutation_matrix
 
 end
