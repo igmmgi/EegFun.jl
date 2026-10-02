@@ -12,11 +12,26 @@ using LinearAlgebra
 using Logging
 using Distributed
 using SharedArrays
+using SparseArrays
 
 import EegFun: fit_mass_lmm
 
 
-function fit_mass_lmm(epochs::EegFun.EpochData, f::FormulaTerm; n_perms=0, permute_block=nothing, perm_matrix=nothing, fast=true, use_clusters=false, cluster_threshold=2.0, rng::AbstractRNG=Random.GLOBAL_RNG, use_tfce=false, tfce_E=0.5, tfce_H=2.0, tfce_dh=0.1)
+function fit_mass_lmm(epochs::EegFun.EpochData, f::FormulaTerm; 
+    n_perms=0, 
+    permute_block=nothing, 
+    permute_crossed=nothing,
+    perm_matrix=nothing, 
+    fast=true, 
+    use_clusters=false, 
+    cluster_threshold=2.0, 
+    spatial_connectivity=nothing,
+    rng::AbstractRNG=Random.GLOBAL_RNG, 
+    use_tfce=false, 
+    tfce_E=0.5, 
+    tfce_H=2.0, 
+    tfce_dh=0.1
+)
     dfs = epochs.data
     n_epochs = length(dfs)
     
@@ -43,14 +58,24 @@ function fit_mass_lmm(epochs::EegFun.EpochData, f::FormulaTerm; n_perms=0, permu
         end
     end
     
+    spatial_conn = if !isnothing(spatial_connectivity)
+        spatial_connectivity
+    elseif use_clusters && !isnothing(epochs.layout)
+        EegFun._build_connectivity_matrix(all_channels, epochs.layout, :spatiotemporal)
+    else
+        nothing
+    end
+    
     # 4. Call generic method
     res = fit_mass_lmm(eeg_data, meta_df, f; 
         n_perms=n_perms, 
         permute_block=permute_block,
+        permute_crossed=permute_crossed,
         perm_matrix=perm_matrix,
         fast=fast,
         use_clusters=use_clusters, 
         cluster_threshold=cluster_threshold,
+        spatial_connectivity=spatial_conn,
         channel_names=all_channels,
         time_points=first_df.time,
         dim_order=(:channels, :timepoints, :epochs),
@@ -78,6 +103,7 @@ end
 function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTerm;
     n_perms::Int=1000,
     permute_block::Union{Symbol, Nothing}=nothing,
+    permute_crossed::Union{Tuple{Symbol, Symbol}, Vector{Symbol}, Nothing}=nothing,
     perm_matrix::Union{AbstractMatrix{Int}, Nothing}=nothing,
     fast::Bool=true,
     use_clusters::Bool=false,
@@ -155,6 +181,31 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
         # Store columns of perm_matrix in perm_indices
         for p in 1:max(1, n_perms)
             perm_indices[p] = perm_matrix[:, p]
+        end
+    elseif !isnothing(permute_crossed)
+        # Synchronized crossed permutation across subjects
+        # Uses global item ranking to preserve item covariance while ensuring
+        # an exact 1-to-1 permutation (no duplicates or drops) for every subject.
+        sub_sym = permute_crossed[1]
+        item_sym = permute_crossed[2]
+        sub_col = meta_df[!, sub_sym]
+        item_col = meta_df[!, item_sym]
+        unique_items = unique(item_col)
+        n_items = length(unique_items)
+        unique_subs = unique(sub_col)
+        sub_rows = [findall(==(s), sub_col) for s in unique_subs]
+        
+        @info "Generating $n_perms synchronized crossed permutations for $(length(unique_subs)) $(sub_sym)s and $n_items $(item_sym)s..."
+        for p in 1:max(1, n_perms)
+            shuffled_items = shuffle(rng, unique_items)
+            item_rank = Dict(shuffled_items[k] => k for k in 1:n_items)
+            
+            idx = collect(1:n_epochs)
+            for s_rows in sub_rows
+                perm_s = sortperm(s_rows, by = r -> item_rank[item_col[r]], alg=Base.Sort.MergeSort)
+                idx[s_rows] .= s_rows[perm_s]
+            end
+            perm_indices[p] = idx
         end
     elseif !isnothing(permute_block)
         block_col = meta_df[!, permute_block]
@@ -251,7 +302,7 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
                 for coef_idx in 1:n_coefs
                     for perm_idx in 1:n_perms
                         # Freedman-Lane: permute partial residuals for tested coefficient
-                        if !isnothing(perm_matrix) || !isnothing(permute_block)
+                        if !isnothing(perm_matrix) || !isnothing(permute_block) || !isnothing(permute_crossed)
                             perm_vec = perm_indices[perm_idx]
                             @inbounds for i in 1:n_epochs
                                 y_perm[i] = nuisance_fitted[i, coef_idx] + partial_resid_fl[perm_vec[i], coef_idx]
@@ -298,7 +349,7 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
     
     if n_perms > 0
         if use_clusters
-            spatial_connectivity = EegFun.sparse(Int[], Int[], Bool[], n_channels, n_channels)
+            spatial_connectivity = isnothing(spatial_connectivity) ? EegFun.sparse(Int[], Int[], Bool[], n_channels, n_channels) : SparseMatrixCSC{Bool}(spatial_connectivity)
             electrode_to_idx = Dict(e => i for (i, e) in enumerate(channel_names))
             
             if use_tfce
