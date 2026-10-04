@@ -24,39 +24,36 @@ Returns the number of observations (epochs) used in the mass-univariate fit.
 StatsAPI.nobs(res::LmmStatsResult) = length(res.epochs.data)
 
 """
-    StatsAPI.pvalue(res::LmmStatsResult; corrected::Bool=false)
+    StatsAPI.pvalue(res::LmmStatsResult; corrected::Bool = !isnothing(res.p_corrected))
 
 Returns the p-values for the fitted linear mixed models as a 3D array 
 of dimensions [channels × time × coefficients].
 
-If `corrected=true`, computes permutation-corrected max-t p-values by 
-comparing the observed t-values against the permuted max-t null distribution.
-Uses the formula `(count + 1) / (n_perms + 1)` (Phipson & Smyth, 2010).
+If permutations were performed (`res.p_corrected !== nothing`), `corrected` defaults 
+to `true` and returns the FWER max-t permutation-corrected p-values.
+Otherwise, returns the asymptotic uncorrected Normal p-values.
 """
-function StatsAPI.pvalue(res::LmmStatsResult; corrected::Bool=false)
-    if !corrected
-        return res.p_values
-    else
-        if isempty(res.max_t_null)
-            error("Cannot compute permutation-corrected p-values: max_t_null is empty. Run fit_mass_lmm with n_perms > 0 and use_clusters=false.")
-        end
-        n_perms, n_coefs = size(res.max_t_null)
-        p_corrected = similar(res.p_values)
-        
-        for c in 1:n_coefs
-            # Sort the null distribution once for O(log n) lookups
-            null_sorted = sort(res.max_t_null[:, c])
-            for t in 1:size(res.t_values, 2)
-                for ch in 1:size(res.t_values, 1)
+function StatsAPI.pvalue(res::LmmStatsResult; corrected::Bool = !isnothing(res.p_corrected))
+    if corrected
+        if !isnothing(res.p_corrected)
+            return res.p_corrected
+        elseif !isempty(res.max_t_null) && any(!=(0), res.max_t_null)
+            n_perms, n_coefs = size(res.max_t_null)
+            p_corrected = similar(res.p_values)
+            for c in 1:min(n_coefs, size(res.t_values, 3))
+                null_sorted = sort(res.max_t_null[:, c])
+                for t in 1:size(res.t_values, 2), ch in 1:size(res.t_values, 1)
                     obs_t = abs(res.t_values[ch, t, c])
-                    # Number of null values >= obs_t, using sorted search
                     n_exceeding = n_perms - searchsortedlast(null_sorted, obs_t - eps(obs_t))
-                    # Phipson & Smyth (2010) corrected formula
                     p_corrected[ch, t, c] = (n_exceeding + 1) / (n_perms + 1)
                 end
             end
+            return p_corrected
+        else
+            error("Cannot compute permutation-corrected p-values: max_t_null is empty. Run fit_mass_lmm with n_perms > 0 and use_clusters=false.")
         end
-        return p_corrected
+    else
+        return res.p_uncorrected
     end
 end
 

@@ -1,15 +1,31 @@
 """
-    fit_mass_lmm(args...; kwargs...)
+    fit_mass_lmm(epochs::EpochData, f::FormulaTerm; kwargs...)
+    fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTerm; kwargs...)
 
 Fit a mass-univariate linear mixed model across all channels and timepoints.
 
-**Requires `MixedModels.jl` and `StatsModels.jl` to be loaded.**
+# Keyword Arguments
+- `n_perms::Int=1000`: Number of permutations for null hypothesis cluster testing.
+- `tested_coefs=nothing`: Which fixed effect coefficients to permute for cluster null distributions.
+  - `nothing` or `:effects`: Tests all non-intercept predictors (default).
+  - `:all`: Tests all predictors including the intercept.
+  - `Symbol`, `String`, or `Vector`: Test specific predictor(s) by name, substring, or index (e.g., `:condition`, `"condition"`, or `[:condition, :rt]`).
+- `test_intercept::Bool=false`: If `true`, tests the intercept coefficient. Defaults to `false` because in ERP research, testing the baseline against zero is rarely meaningful, and skipping it yields an immediate ~2× speedup.
 
-To use this function, you must first import the required packages:
-```julia
-using EegFun
-using MixedModels, StatsModels
-```
+- `use_clusters::Bool=false`: Use spatio-temporal cluster-mass testing.
+- `cluster_threshold::Float64=2.0`: T-statistic threshold for clustering.
+- `permute_block`: Factor for independent shuffling within blocks (e.g., `:Subject`).
+- `permute_crossed`: Tuple `(Subject, Item)` for synchronized crossed permutations.
+- `perm_matrix`: Explicit precomputed permutation matrix (`n_epochs × n_perms`).
+
+# Rank-deficient designs
+If the fixed-effects design matrix is rank deficient (e.g. a predictor that is constant in the
+data, an empty design cell combined with an interaction, or exactly collinear predictors), the
+aliased coefficient(s) cannot be estimated. A single warning names them; their `beta`, `se`,
+`t`, `p`, `p_uncorrected` and `p_corrected` values are `NaN`, and they are excluded from
+permutation testing. All estimable coefficients are fitted and tested as usual.
+
+**Requires `MixedModels.jl` and `StatsModels.jl` to be loaded.**
 """
 function fit_mass_lmm(args...; kwargs...)
     error("To use Mass-Univariate Mixed Models, you must first load the packages: `using MixedModels, StatsModels`")
@@ -58,6 +74,9 @@ function extract_predictor_stats(result::LmmStatsResult, coef_name::String;
     
     null_dist = result.max_cluster_mass_null[:, coef_idx]
     n_perms = length(null_dist)
+    if n_perms > 0 && all(==(0), null_dist)
+        error("Coefficient '$coef_name' was not permuted during fit_mass_lmm (e.g., intercept was skipped). To test this coefficient, run fit_mass_lmm with `test_intercept=true` or include it in `tested_coefs`.")
+    end
     
     spatial_connectivity = EegFun._build_connectivity_matrix(result.channels, result.epochs.layout, :spatiotemporal)
     

@@ -406,7 +406,9 @@ Stores the result of a massive univariate linear mixed model fit across a spatia
 - `beta::Array{Float64, 3}`: Beta coefficients [electrodes × time × coefficients]
 - `se::Array{Float64, 3}`: Standard errors [electrodes × time × coefficients]
 - `t_values::Array{Float64, 3}`: T-statistics [electrodes × time × coefficients]
-- `p_values::Array{Float64, 3}`: Raw p-values [electrodes × time × coefficients]
+- `p_values::Array{Float64, 3}`: Primary p-values [electrodes × time × coefficients]. If `n_perms > 0`, this contains the FWER max-t permutation-corrected p-values. If `n_perms == 0`, contains raw asymptotic p-values.
+- `p_uncorrected::Array{Float64, 3}`: Raw asymptotic Normal p-values [electrodes × time × coefficients]
+- `p_corrected::Union{Array{Float64, 3}, Nothing}`: Permutation-corrected max-t p-values (or `nothing` if `n_perms == 0`)
 - `max_t_null::Array{Float64, 2}`: Null distribution of max-t values [permutations × coefficients]
 - `max_cluster_mass_null::Array{Float64, 2}`: Null distribution of max cluster mass [permutations × coefficients]
 - `singular_fits::Matrix{Bool}`: Boolean matrix [channels × timepoints] indicating if the initial Grand Null model hit a singular boundary.
@@ -420,8 +422,53 @@ struct LmmStatsResult <: EegFunData
     se::Array{Float64, 3}
     t_values::Array{Float64, 3}
     p_values::Array{Float64, 3}
+    p_uncorrected::Array{Float64, 3}
+    p_corrected::Union{Array{Float64, 3}, Nothing}
     max_t_null::Array{Float64, 2}
     max_cluster_mass_null::Array{Float64, 2}
     singular_fits::Matrix{Bool}
     epochs::EpochData
+end
+
+# Backwards compatible constructor for 11 arguments
+function LmmStatsResult(
+    coefficients::Vector{String},
+    channels::Vector{Symbol},
+    time_points::Vector{Float64},
+    beta::Array{Float64, 3},
+    se::Array{Float64, 3},
+    t_values::Array{Float64, 3},
+    p_values::Array{Float64, 3},
+    max_t_null::Array{Float64, 2},
+    max_cluster_mass_null::Array{Float64, 2},
+    singular_fits::Matrix{Bool},
+    epochs::EpochData
+)
+    n_perms = size(max_t_null, 1)
+    if n_perms > 0 && any(!=(0), max_t_null)
+        n_channels, n_timepoints, n_coefs = size(t_values)
+        p_corr = copy(p_values)
+        for c in 1:min(n_coefs, size(max_t_null, 2))
+            null_col = max_t_null[:, c]
+            if any(!=(0), null_col)
+                null_sorted = sort(null_col)
+                for t in 1:n_timepoints, ch in 1:n_channels
+                    obs_t = abs(t_values[ch, t, c])
+                    n_exceeding = n_perms - searchsortedlast(null_sorted, obs_t - eps(obs_t))
+                    p_corr[ch, t, c] = (n_exceeding + 1) / (n_perms + 1)
+                end
+            end
+        end
+        return LmmStatsResult(
+            coefficients, channels, time_points, beta, se, t_values,
+            p_corr, p_values, p_corr,
+            max_t_null, max_cluster_mass_null, singular_fits, epochs
+        )
+    else
+        return LmmStatsResult(
+            coefficients, channels, time_points, beta, se, t_values,
+            p_values, p_values, nothing,
+            max_t_null, max_cluster_mass_null, singular_fits, epochs
+        )
+    end
 end

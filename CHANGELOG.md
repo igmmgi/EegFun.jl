@@ -7,6 +7,10 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 
 ## [Unreleased]
 
+### Added
+
+- Mixed models permutations (`fit_mass_lmm`).
+
 ## [0.8.0] - 2026-08-13
 
 ### Added
