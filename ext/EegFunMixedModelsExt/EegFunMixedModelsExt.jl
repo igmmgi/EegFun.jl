@@ -4,7 +4,6 @@ using EegFun
 using MixedModels
 using StatsModels
 using DataFrames
-using Base.Threads
 using Random
 using ProgressMeter
 using Distributions
@@ -149,7 +148,8 @@ function fit_mass_lmm(epochs::EegFun.EpochData, f::FormulaTerm;
         use_tfce=use_tfce,
         tfce_E=tfce_E,
         tfce_H=tfce_H,
-        tfce_dh=tfce_dh
+        tfce_dh=tfce_dh,
+        rng=rng
     )
     
     return EegFun.LmmStatsResult(
@@ -185,7 +185,8 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
     use_tfce::Bool=false,
     tfce_E::Float64=0.5,
     tfce_H::Float64=2.0,
-    tfce_dh::Float64=0.1
+    tfce_dh::Float64=0.1,
+    rng::AbstractRNG=Random.GLOBAL_RNG
 )
 
     if dim_order != (:channels, :timepoints, :epochs)
@@ -250,8 +251,6 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
         @info "Permutation testing will be computed for $(length(tested_coef_indices)) of $n_coefs coefficients: $(join(coef_names[tested_coef_indices], ", ")) (test_intercept=$test_intercept)"
     end
     
-    rng = Random.GLOBAL_RNG
-    
     if !(eeg_data isa SharedArray)
         @info "Copying EEG data tensor to SharedArray for Distributed processing..."
         eeg_tensor = SharedArray{Float64}(size(eeg_data))
@@ -286,65 +285,13 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
         @info "Using user-provided permutation matrix with $n_perms permutations."
         perm_indices .= perm_matrix
     elseif !isnothing(permute_crossed)
-        # Synchronized crossed permutation across subjects
         sub_sym = permute_crossed[1]
         item_sym = permute_crossed[2]
-        sub_col = meta_df[!, sub_sym]
-        item_col = meta_df[!, item_sym]
-        unique_items = unique(item_col)
-        n_items = length(unique_items)
-        unique_subs = unique(sub_col)
-        
-        lookup = Dict{Tuple{Any, Any}, Vector{Int}}()
-        for i in 1:n_epochs
-            key = (sub_col[i], item_col[i])
-            if !haskey(lookup, key)
-                lookup[key] = Int[]
-            end
-            push!(lookup[key], i)
-        end
-        
-        @info "Generating $n_perms synchronized crossed permutations for $(length(unique_subs)) $(sub_sym)s and $n_items $(item_sym)s..."
-        for p in 1:max(1, n_perms)
-            shuffled_items = shuffle(rng, unique_items)
-            item_map = Dict(unique_items[k] => shuffled_items[k] for k in 1:n_items)
-            
-            # Create a fresh copy of the lookup counters for this permutation
-            cell_counters = Dict{Tuple{Any, Any}, Int}()
-            
-            idx = zeros(Int, n_epochs)
-            for i in 1:n_epochs
-                sync_val = sub_col[i]
-                old_item = item_col[i]
-                new_item = item_map[old_item]
-                
-                key = (sync_val, new_item)
-                if haskey(lookup, key)
-                    count = get(cell_counters, key, 0) + 1
-                    if count <= length(lookup[key])
-                        idx[i] = lookup[key][count]
-                        cell_counters[key] = count
-                    else
-                        error("Synchronized shuffling failed! Subject '$sync_val' has fewer trials for Item '$new_item' than required. The design is unbalanced.")
-                    end
-                else
-                    error("Synchronized shuffling failed! The dataset is unbalanced. Subject '$sync_val' lacks Item '$new_item'. Mathematically, a perfect synchronized crossed permutation requires all subjects to have all items.")
-                end
-            end
-            perm_indices[:, p] .= idx
-        end
+        @info "Generating $n_perms synchronized crossed permutations for $(sub_sym) and $(item_sym)..."
+        perm_indices .= generate_permutation_matrix(meta_df, item_sym; sync_col=sub_sym, n_perms=n_perms, type=:synchronized, rng=rng)
     elseif !isnothing(permute_block)
-        block_col = meta_df[!, permute_block]
-        unique_blocks = unique(block_col)
-        block_idxs = [findall(==(b), block_col) for b in unique_blocks]
-        
-        for p in 1:max(1, n_perms)
-            idx = collect(1:n_epochs)
-            for b_idx in block_idxs
-                idx[b_idx] .= shuffle(rng, b_idx)
-            end
-            perm_indices[:, p] .= idx
-        end
+        @info "Generating $n_perms within-block permutations for $(permute_block)..."
+        perm_indices .= generate_permutation_matrix(meta_df, permute_block; n_perms=n_perms, type=:within, rng=rng)
     else
         for p in 1:max(1, n_perms)
             signs[:, p] .= rand(rng, Float32[-1.0, 1.0], n_epochs)
@@ -368,6 +315,7 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
         next!(prog)
     end
     @sync @distributed for (c_idx, t_idx) in tasks
+        Logging.with_logger(Logging.NullLogger()) do
         buffers = get!(task_local_storage(), :lmm_buffers) do
             LinearAlgebra.BLAS.set_num_threads(1)
             m_thread = Logging.with_logger(Logging.NullLogger()) do
@@ -394,15 +342,13 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
         m_thread.optsum.ftol_rel = 1e-12
         m_thread.optsum.maxfeval = 1000
         
-        Logging.with_logger(Logging.NullLogger()) do
-            refit!(m_thread, y_true; progress=false)
-        end
+        refit!(m_thread, y_true; progress=false)
         
 
         
         singular_fits[c_idx, t_idx] = issingular(m_thread)
         
-        copyto!(coef_buf, m_thread.beta)
+        MixedModels.fixef!(coef_buf, m_thread)
         MixedModels.stderror!(se_buf, m_thread)
         
         beta_matrix[c_idx, t_idx, :] .= coef_buf
@@ -456,11 +402,10 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
                         end
                         
                         # Every permutation is a full refit: all variance components are re-estimated.
-                        Logging.with_logger(Logging.NullLogger()) do
-                            refit!(m_thread, m_y; progress=false)
-                        end
+                        refit!(m_thread, m_y; progress=false)
                         MixedModels.stderror!(se_buf, m_thread)
-                        z = m_thread.beta[coef_idx] / se_buf[coef_idx]
+                        MixedModels.fixef!(coef_buf, m_thread)
+                        z = coef_buf[coef_idx] / se_buf[coef_idx]
                         
                         # Store only the tested coefficient's t-value for its null distribution
                         if use_clusters
@@ -475,6 +420,7 @@ function fit_mass_lmm(eeg_data::AbstractArray, meta_df::DataFrame, f::FormulaTer
                 end
             end
         put!(prog_channel, true)
+        end # logger
     end 
     put!(prog_channel, false)
     end # sync
@@ -596,13 +542,14 @@ Types:
 """
 function generate_permutation_matrix(df::DataFrame, block_col::Symbol; sync_col::Union{Symbol, Nothing}=nothing, n_perms::Int=1000, type::Symbol=:within, rng::AbstractRNG=Random.GLOBAL_RNG)
     N = nrow(df)
-    perm_matrix = zeros(Int, N, n_perms)
+    actual_perms = max(1, n_perms)
+    perm_matrix = zeros(Int, N, actual_perms)
     blocks = df[!, block_col]
     unique_blocks = unique(blocks)
     
     if type == :within
         block_idxs = [findall(==(b), blocks) for b in unique_blocks]
-        for p in 1:n_perms
+        for p in 1:actual_perms
             idx = collect(1:N)
             for b_idx in block_idxs
                 idx[b_idx] .= shuffle(rng, b_idx)
@@ -628,7 +575,7 @@ function generate_permutation_matrix(df::DataFrame, block_col::Symbol; sync_col:
             push!(lookup[key], i)
         end
         
-        for p in 1:n_perms
+        for p in 1:actual_perms
             shuffled_blocks = shuffle(rng, unique_blocks)
             block_map = Dict(unique_blocks[i] => shuffled_blocks[i] for i in 1:n_blocks)
             
