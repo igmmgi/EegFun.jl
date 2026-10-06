@@ -130,7 +130,7 @@ include("analysis/statistics/clustering.jl")
 include("analysis/statistics/permutations.jl")
 include("analysis/statistics/inference.jl")
 include("analysis/statistics/statistics.jl")
-include("analysis/statistics/mixed_models_stub.jl")
+include("analysis/statistics/lmm_stats.jl")
 include("analysis/statistics/statsapi.jl")
 
 # time-frequency analysis
