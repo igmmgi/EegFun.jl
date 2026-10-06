@@ -666,3 +666,128 @@ function _run_permutations_tf(
 
     return permutation_max_positive, permutation_max_negative
 end
+
+"""
+    generate_permutation_matrix(df, block_col; sync_col=nothing, n_perms=1000, type=:within, rng=Random.GLOBAL_RNG)
+
+Generate a mathematically valid `N × n_perms` permutation matrix of integer row indices for Monte Carlo / permutation tests.
+
+# Arguments
+- `df`: A `DataFrame` containing the experimental design / trial metadata.
+- `block_col`: Column identifier (Symbol or String) for the grouping block (e.g. `:Subject` or `:Item`).
+
+# Keyword Arguments
+- `sync_col=nothing`: Column identifier to synchronize across for crossed designs (e.g. `sync_col=:Subject, block_col=:Item`).
+- `n_perms=1000`: Number of permutations to generate.
+- `type=:within`: Permutation scheme:
+  - `:within`: Independent shuffling within blocks (e.g. within Subjects). Standard for uncrossed repeated measures.
+  - `:synchronized`: Shuffles `block_col` (e.g. Items) and perfectly synchronizes that shuffle across `sync_col` (e.g. Subjects).
+    Requires a balanced crossed design where every subject sees the items.
+  - `:global`: Unrestricted random permutation across all rows.
+- `rng=Random.GLOBAL_RNG`: Random number generator for reproducibility.
+
+# Returns
+- `Matrix{Int}`: An `N × n_perms` matrix where each column is a valid permutation of `1:N`.
+"""
+function _permute_within!(perm_matrix::Matrix{Int}, block_idxs::Vector{Vector{Int}}, n_perms::Int, rng)
+    scratch_bufs = [copy(b) for b in block_idxs]
+    for p in 1:n_perms
+        for (k, b_idx) in enumerate(block_idxs)
+            buf = scratch_bufs[k]
+            m = length(buf)
+            for i in m:-1:2
+                j = rand(rng, 1:i)
+                buf[i], buf[j] = buf[j], buf[i]
+            end
+            @inbounds for i in 1:m
+                perm_matrix[b_idx[i], p] = buf[i]
+            end
+        end
+    end
+end
+
+function _permute_synchronized!(perm_matrix::Matrix{Int}, grid::Matrix{Vector{Int}}, cell_len::Int, n_perms::Int, rng)
+    n_syncs, n_blocks = size(grid)
+    shuffled_idx = collect(1:n_blocks)
+    for p in 1:n_perms
+        for i in n_blocks:-1:2
+            j = rand(rng, 1:i)
+            shuffled_idx[i], shuffled_idx[j] = shuffled_idx[j], shuffled_idx[i]
+        end
+        for s in 1:n_syncs
+            for b in 1:n_blocks
+                target_b = shuffled_idx[b]
+                orig_rows = grid[s, b]
+                target_rows = grid[s, target_b]
+                @inbounds for r in 1:cell_len
+                    perm_matrix[orig_rows[r], p] = target_rows[r]
+                end
+            end
+        end
+    end
+end
+
+function _permute_global!(perm_matrix::Matrix{Int}, n_perms::Int, rng)
+    N = size(perm_matrix, 1)
+    for p in 1:n_perms
+        col = @view perm_matrix[:, p]
+        for i in 1:N
+            col[i] = i
+        end
+        for i in N:-1:2
+            j = rand(rng, 1:i)
+            col[i], col[j] = col[j], col[i]
+        end
+    end
+end
+
+function generate_permutation_matrix(df, block_col; sync_col=nothing, n_perms=1000, type=:within, rng=Random.GLOBAL_RNG)
+    N = nrow(df)
+    n_perms <= 0 && return zeros(Int, N, 0)
+    
+    perm_matrix = zeros(Int, N, n_perms)
+    b_col = Symbol(block_col)
+    hasproperty(df, b_col) || error("Column '$b_col' not found in DataFrame. Available columns: $(names(df))")
+    blocks = df[!, b_col]
+    unique_blocks = unique(blocks)
+    n_blocks = length(unique_blocks)
+    
+    if type == :within
+        block_idxs = [findall(==(b), blocks) for b in unique_blocks]
+        _permute_within!(perm_matrix, block_idxs, n_perms, rng)
+    elseif type == :synchronized
+        isnothing(sync_col) && error("Synchronized shuffling requires `sync_col` (e.g. sync_col=:Subject, block_col=:Item).")
+        s_col = Symbol(sync_col)
+        hasproperty(df, s_col) || error("Column '$s_col' not found in DataFrame. Available columns: $(names(df))")
+        
+        syncs = df[!, s_col]
+        unique_syncs = unique(syncs)
+        n_syncs = length(unique_syncs)
+        
+        sync_map = Dict(s => i for (i, s) in enumerate(unique_syncs))
+        block_map = Dict(b => i for (i, b) in enumerate(unique_blocks))
+        
+        grid = [Int[] for _ in 1:n_syncs, _ in 1:n_blocks]
+        for i in 1:N
+            s_idx = sync_map[syncs[i]]
+            b_idx = block_map[blocks[i]]
+            push!(grid[s_idx, b_idx], i)
+        end
+        
+        cell_len = length(grid[1, 1])
+        for s in 1:n_syncs, b in 1:n_blocks
+            if length(grid[s, b]) != cell_len
+                error("Synchronized shuffling requires a balanced design where every sync group sees all items with equal trial count. Row maps unbalanced cell count for Sync: $(unique_syncs[s]), Block: $(unique_blocks[b]). For unbalanced designs, please supply a custom `perm_matrix`.")
+            end
+        end
+        
+        _permute_synchronized!(perm_matrix, grid, cell_len, n_perms, rng)
+    elseif type == :global
+        _permute_global!(perm_matrix, n_perms, rng)
+    else
+        error("Unknown permutation type: $type. Supported types: :within, :synchronized, :global")
+    end
+    
+    return perm_matrix
+end
+
