@@ -388,6 +388,8 @@ public signal_example_tf
 public signal_to_data
 public simulate_erp
 public signal_example_decoding
+public signal_example_eog
+public signal_example_heog
 
 # === Misc ===
 public example_path
