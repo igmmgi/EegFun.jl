@@ -40,9 +40,25 @@ The human eye functions as a steady electrical dipole:
 | **▶ Play Saccade** | Plays an animated real-time saccade sequence (0° → target angle → 0°) with live cursor sweep. |
 | **Toggle Field Lines** | Shows/hides electric dipole field lines looping around the eye dipole. |
 
+## Interactive Backend (GLMakie)
+
+This interactive demo requires **GLMakie** for real-time reactivity, dragging sliders,
+clicking preset buttons, and smooth saccadic playback animations:
+
+```julia
+using GLMakie
+using EegFun
+
+signal_example_eog()
+```
+
+If `CairoMakie` is active, a friendly warning will prompt you to activate `GLMakie`.
+
 # Example
 ```julia
+using GLMakie
 using EegFun
+
 signal_example_eog()
 ```
 
@@ -52,6 +68,15 @@ signal_example_eog()
 - `ax_eog::Axis`: The potential vs. time signal recording axis.
 """
 function signal_example_eog()
+    # Check for GLMakie interactivity
+    if string(Makie.current_backend()) == "CairoMakie"
+        @minimal_warning "CairoMakie detected. Interactive demos require GLMakie for full interactivity (sliders, buttons, animations). Run `using GLMakie; GLMakie.activate!()`."
+    elseif !_is_glmakie_available()
+        @minimal_warning "GLMakie is required for full interactivity. Please run `using GLMakie` before launching `signal_example_eog()`."
+    end
+
+    _set_window_title("Interactive Bipolar hEOG Recording Simulator")
+
     fig = Figure(
         size = (1280, 800),
         title = "Interactive Bipolar hEOG Recording Simulator",
@@ -412,7 +437,7 @@ function signal_example_eog()
     rowsize!(fig.layout, 1, Relative(0.80))
     rowsize!(fig.layout, 2, Relative(0.20))
 
-    display(fig)
+    _display_in_screen(fig; size = (1280, 800))
 
     return fig, ax_eyes, ax_eog
 end
