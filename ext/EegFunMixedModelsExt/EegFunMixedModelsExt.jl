@@ -13,7 +13,7 @@ using Distributed
 using SharedArrays
 using SparseArrays
 
-import EegFun: fit_mass_lmm
+import EegFun: fit_mass_lmm, generate_permutation_matrix
 
 # Relative objective tolerance for the optimizer in permutation refits 
 const PERMUTATION_FTOL_REL = 1e-8
@@ -283,8 +283,12 @@ function _setup_lmm_design(f, meta_df, n_epochs, tested_coefs, test_intercept, n
 end
 
 function _setup_permutations(meta_df, n_epochs, n_perms, perm_matrix, permute_block, permute_crossed, rng)
+    if n_perms == 0 && isnothing(perm_matrix)
+        return _alloc(Int, 0, 0), _alloc(Float32, 0, 0), false, 0
+    end
+    
     is_permutation = !isnothing(perm_matrix) || !isnothing(permute_block) || !isnothing(permute_crossed)
-    actual_perms = max(1, n_perms)
+    actual_perms = isnothing(perm_matrix) ? n_perms : size(perm_matrix, 2)
     
     if is_permutation
         perm_indices = _alloc(Int, n_epochs, actual_perms)
@@ -297,11 +301,11 @@ function _setup_permutations(meta_df, n_epochs, n_perms, perm_matrix, permute_bl
             perm_indices .= perm_matrix
         elseif !isnothing(permute_crossed)
             sub_sym, item_sym = permute_crossed[1], permute_crossed[2]
-            @info "Generating $n_perms synchronized crossed permutations for $sub_sym and $item_sym..."
-            perm_indices .= generate_permutation_matrix(meta_df, item_sym; sync_col=sub_sym, n_perms=n_perms, type=:synchronized, rng=rng)
+            @info "Generating $actual_perms synchronized crossed permutations for $sub_sym and $item_sym..."
+            perm_indices .= generate_permutation_matrix(meta_df, item_sym; sync_col=sub_sym, n_perms=actual_perms, type=:synchronized, rng=rng)
         elseif !isnothing(permute_block)
-            @info "Generating $n_perms within-block permutations for $permute_block..."
-            perm_indices .= generate_permutation_matrix(meta_df, permute_block; n_perms=n_perms, type=:within, rng=rng)
+            @info "Generating $actual_perms within-block permutations for $permute_block..."
+            perm_indices .= generate_permutation_matrix(meta_df, permute_block; n_perms=actual_perms, type=:within, rng=rng)
         end
     else
         perm_indices = _alloc(Int, 0, 0)
@@ -487,8 +491,8 @@ function fit_mass_lmm(eeg_data, meta_df, f;
     p_matrix = _alloc(Float64, n_channels, n_timepoints, n_coefs)
     singular_fits = _alloc(Bool, n_channels, n_timepoints)
     
-    t_perm_matrix = use_clusters ? _alloc(Float32, n_channels, n_timepoints, max(1, n_perms), n_coefs) : _alloc(Float32, 0, 0, 0, 0)
-    worker_max_t = !use_clusters ? _alloc(Float32, maximum(workers()), max(1, n_perms), n_coefs) : _alloc(Float32, 0, 0, 0)
+    t_perm_matrix = (use_clusters && n_perms > 0) ? _alloc(Float32, n_channels, n_timepoints, n_perms, n_coefs) : _alloc(Float32, 0, 0, 0, 0)
+    worker_max_t = (!use_clusters && n_perms > 0) ? _alloc(Float32, maximum(workers()), n_perms, n_coefs) : _alloc(Float32, 0, 0, 0)
 
     @info "Fitting $(n_channels * n_timepoints) Mixed Models across $n_epochs epochs (n_perms=$n_perms) on $(nprocs()) processes..."
 
