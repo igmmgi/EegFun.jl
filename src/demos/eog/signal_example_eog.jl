@@ -1,5 +1,5 @@
 """
-    signal_example_eog()
+    signal_example_heog()
 
 Interactive Horizontal Electrooculography (hEOG) Simulator — Bipolar Recording & Corneo-Retinal Dipole Demo.
 
@@ -33,12 +33,9 @@ The human eye functions as a steady electrical dipole:
 | Control | Description |
 |:---|:---|
 | **Gaze Angle Slider** | Adjusts rotation angle from -45° (left) to +45° (right). Real-time update of dipoles & waveform. |
-| **Noise Slider** | Injects realistic physiological baseline noise (0–5 µV). |
-| **30° Right Preset** | Recreates the textbook +30° rightward saccade (+150 µV step). |
-| **15° Left Preset** | Recreates the textbook -15° leftward saccade (-75 µV step). |
-| **Center (0°) Preset** | Returns eyes to baseline resting position (0 µV). |
+| **Duration Slider** | Adjusts fixation / saccade hold duration (100–1200 ms). |
+| **Noise Slider** | Injects realistic physiological baseline noise (0–100 µV). |
 | **▶ Play Saccade** | Plays an animated real-time saccade sequence (0° → target angle → 0°) with live cursor sweep. |
-| **Toggle Field Lines** | Shows/hides electric dipole field lines looping around the eye dipole. |
 
 ## Interactive Backend (GLMakie)
 
@@ -49,7 +46,7 @@ clicking preset buttons, and smooth saccadic playback animations:
 using GLMakie
 using EegFun
 
-signal_example_eog()
+signal_example_heog()
 ```
 
 If `CairoMakie` is active, a friendly warning will prompt you to activate `GLMakie`.
@@ -59,7 +56,7 @@ If `CairoMakie` is active, a friendly warning will prompt you to activate `GLMak
 using GLMakie
 using EegFun
 
-signal_example_eog()
+signal_example_heog()
 ```
 
 # Returns
@@ -67,18 +64,29 @@ signal_example_eog()
 - `ax_eyes::Axis`: The anatomical dipole & circuit schematic axis.
 - `ax_eog::Axis`: The potential vs. time signal recording axis.
 """
-function signal_example_eog()
-    # Check for GLMakie interactivity
-    if string(Makie.current_backend()) == "CairoMakie"
-        @minimal_warning "CairoMakie detected. Interactive demos require GLMakie for full interactivity (sliders, buttons, animations). Run `using GLMakie; GLMakie.activate!()`."
-    elseif !_is_glmakie_available()
-        @minimal_warning "GLMakie is required for full interactivity. Please run `using GLMakie` before launching `signal_example_eog()`."
+function signal_example_heog()
+    # Explicitly activate GLMakie before constructing the Figure to prevent CairoMakie from capturing it
+    if isdefined(Main, :GLMakie)
+        try
+            Main.GLMakie.activate!(inline = false)
+        catch
+        end
+    end
+
+    if string(Makie.current_backend()) == "CairoMakie" || (!_is_glmakie_available() && !isdefined(Main, :GLMakie))
+        @minimal_warning """
+        Interactive demo requires GLMakie for live sliders, buttons, and animations.
+        Currently active backend: $(Makie.current_backend())
+        Please activate GLMakie in your session:
+            using GLMakie
+            GLMakie.activate!(inline = false)
+        """
     end
 
     _set_window_title("Interactive Bipolar hEOG Recording Simulator")
 
     fig = Figure(
-        size = (1280, 800),
+        size = (1350, 850),
         title = "Interactive Bipolar hEOG Recording Simulator",
         backgroundcolor = :white,
     )
@@ -91,7 +99,7 @@ function signal_example_eog()
         btn_font = Observable(13)
 
         on(fig.scene.viewport) do area
-            scale = area.widths[1] / 1280
+            scale = area.widths[1] / 1350
             title_font[] = max(14, round(Int, 18 * scale))
             label_font[] = max(11, round(Int, 14 * scale))
             tick_font[]  = max(10, round(Int, 12 * scale))
@@ -106,57 +114,84 @@ function signal_example_eog()
     # ── Observables ──────────────────────────────────────────────────────────
     angle_deg = Observable(30.0)             # Target gaze angle in degrees
     current_display_angle = Observable(30.0) # Angle currently rendered (for animation)
-    noise_amp = Observable(0.5)              # Additive noise standard deviation [µV]
+    duration_ms = Observable(700.0)          # Saccade fixation / hold duration in milliseconds
+    noise_amp = Observable(2.0)              # Additive noise standard deviation [µV]
     show_fields = Observable(true)           # Electric field lines toggle
     playback_time = Observable(-1.0)         # < 0: static, >= 0: time cursor position [s]
 
     # ── Geometry Constants ───────────────────────────────────────────────────
-    CL = Point2f(-2.1, 0.4) # Left Eye center
-    CR = Point2f(2.1, 0.4)  # Right Eye center
+    CL = Point2f(-2.2, 0.5) # Left Eye center
+    CR = Point2f(2.2, 0.5)  # Right Eye center
     R = 1.15                # Eyeball radius
 
     n_pts = 64
     theta_circ = range(0, 2π, length = n_pts)
 
-    # ── Left Axis: Anatomy & Circuit Schematic ──────────────────────────────
+    # ── Left Column [1, 1]: Anatomy & Circuit Schematic ─────────────────────
     ax_eyes = Axis(
         fig[1, 1],
-        title = "Corneo-Retinal Dipoles & Bipolar Difference Circuit",
+        title = "Corneo-Retinal Dipoles & Bipolar Amplifier Circuit",
         titlesize = title_font,
         aspect = DataAspect(),
     )
     hidedecorations!(ax_eyes)
     hidespines!(ax_eyes)
     xlims!(ax_eyes, -5.2, 5.2)
-    ylims!(ax_eyes, -2.8, 2.5)
+    ylims!(ax_eyes, -3.2, 2.5)
 
-    # Eyeball sclera bases
-    poly!(
-        ax_eyes,
-        [CL .+ Point2f(R * cos(t), R * sin(t)) for t in theta_circ],
-        color = "#f8fafc",
-        strokewidth = 1.5,
-        strokecolor = "#334155",
-    )
-    poly!(
-        ax_eyes,
-        [CR .+ Point2f(R * cos(t), R * sin(t)) for t in theta_circ],
-        color = "#f8fafc",
-        strokewidth = 1.5,
-        strokecolor = "#334155",
-    )
+    # ── Corneo-Retinal Potential Gradient (Deep Blue -> Purple -> Bright Red) ─
+    eog_colormap = cgrad([RGBf(0.05, 0.22, 0.95), RGBf(0.55, 0.10, 0.75), RGBf(0.95, 0.08, 0.20)])
+
+    function get_gradient_polys(C, deg)
+        rad = deg * π / 180.0
+        u = Point2f(sin(rad), cos(rad))    # dipole axis pointing from retina to cornea
+        v = Point2f(cos(rad), -sin(rad))   # perpendicular axis
+
+        n_slices = 64
+        s_vals = range(-R, R, length = n_slices + 1)
+        polys = Vector{Point2f}[]
+        colors = RGBf[]
+
+        for i in 1:n_slices
+            s1 = s_vals[i]
+            s2 = s_vals[i + 1]
+            w1 = sqrt(max(0.0f0, Float32(R^2 - s1^2)))
+            w2 = sqrt(max(0.0f0, Float32(R^2 - s2^2)))
+
+            p1 = C .+ s1 .* u .- w1 .* v
+            p2 = C .+ s1 .* u .+ w1 .* v
+            p3 = C .+ s2 .* u .+ w2 .* v
+            p4 = C .+ s2 .* u .- w2 .* v
+
+            push!(polys, [p1, p2, p3, p4])
+            t_color = (s1 + s2 + 2*R) / (4*R)
+            push!(colors, eog_colormap[clamp(t_color, 0.0f0, 1.0f0)])
+        end
+        return polys, colors
+    end
+
+    slices_L = lift(current_display_angle) do deg
+        get_gradient_polys(CL, deg)
+    end
+    slices_R = lift(current_display_angle) do deg
+        get_gradient_polys(CR, deg)
+    end
+
+    # Render dynamic gradient slices for both eyeballs (64 thin polygons for smooth color transition)
+    for i in 1:64
+        poly!(ax_eyes, lift(s -> s[1][i], slices_L), color = lift(s -> s[2][i], slices_L), strokewidth = 0)
+        poly!(ax_eyes, lift(s -> s[1][i], slices_R), color = lift(s -> s[2][i], slices_R), strokewidth = 0)
+    end
+
+    # Eyeball boundary circle rings
+    poly!(ax_eyes, [CL .+ Point2f(R * cos(t), R * sin(t)) for t in theta_circ], color = :transparent, strokewidth = 2.0, strokecolor = "#1e293b")
+    poly!(ax_eyes, [CR .+ Point2f(R * cos(t), R * sin(t)) for t in theta_circ], color = :transparent, strokewidth = 2.0, strokecolor = "#1e293b")
 
     # Feature generator function for each eye at rotation `deg`
     function get_eye_features(C, deg)
         rad = deg * π / 180.0
-        u = Point2f(sin(rad), cos(rad)) # gaze direction vector
+        u = Point2f(sin(rad), cos(rad))
 
-        # Retinal backing (rear semicircle opposite gaze direction)
-        ret_angles = range(deg - 90, deg + 90, length = 32)
-        ret_pts = [C .- Point2f(R * sin(a * π / 180), R * cos(a * π / 180)) for a in ret_angles]
-        push!(ret_pts, C)
-
-        # Cornea bulge (protruding convex dome along gaze vector)
         cornea_angles = range(-45.0, 45.0, length = 25)
         cornea_pts = Point2f[]
         for ca in cornea_angles
@@ -176,7 +211,7 @@ function signal_example_eog()
         plus_pos     = C .+ 1.62 * R .* u
         minus_pos    = C .- 1.20 * R .* u
 
-        return (; ret_pts, cornea_pts, iris_center, pupil_center, dipole_start, dipole_end, plus_pos, minus_pos, u)
+        return (; cornea_pts, iris_center, pupil_center, dipole_start, dipole_end, plus_pos, minus_pos, u)
     end
 
     feat_L = lift(current_display_angle) do deg
@@ -186,17 +221,13 @@ function signal_example_eog()
         get_eye_features(CR, deg)
     end
 
-    # Retinal backing (electronegative indigo/violet shell)
-    poly!(ax_eyes, lift(f -> f.ret_pts, feat_L), color = "#4338ca", strokewidth = 0)
-    poly!(ax_eyes, lift(f -> f.ret_pts, feat_R), color = "#4338ca", strokewidth = 0)
-
     # Cornea bulge (electropositive translucent cyan dome)
-    poly!(ax_eyes, lift(f -> f.cornea_pts, feat_L), color = RGBAf(0.2, 0.8, 0.95, 0.7), strokecolor = "#0284c7", strokewidth = 2.0)
-    poly!(ax_eyes, lift(f -> f.cornea_pts, feat_R), color = RGBAf(0.2, 0.8, 0.95, 0.7), strokecolor = "#0284c7", strokewidth = 2.0)
+    poly!(ax_eyes, lift(f -> f.cornea_pts, feat_L), color = RGBAf(0.2, 0.85, 0.98, 0.75), strokecolor = "#0284c7", strokewidth = 2.0)
+    poly!(ax_eyes, lift(f -> f.cornea_pts, feat_R), color = RGBAf(0.2, 0.85, 0.98, 0.75), strokecolor = "#0284c7", strokewidth = 2.0)
 
     # Irises and pupils
-    poly!(ax_eyes, lift(f -> [f.iris_center .+ Point2f(0.38 * cos(t), 0.38 * sin(t)) for t in theta_circ], feat_L), color = "#374151")
-    poly!(ax_eyes, lift(f -> [f.iris_center .+ Point2f(0.38 * cos(t), 0.38 * sin(t)) for t in theta_circ], feat_R), color = "#374151")
+    poly!(ax_eyes, lift(f -> [f.iris_center .+ Point2f(0.38 * cos(t), 0.38 * sin(t)) for t in theta_circ], feat_L), color = "#1e293b")
+    poly!(ax_eyes, lift(f -> [f.iris_center .+ Point2f(0.38 * cos(t), 0.38 * sin(t)) for t in theta_circ], feat_R), color = "#1e293b")
     poly!(ax_eyes, lift(f -> [f.pupil_center .+ Point2f(0.18 * cos(t), 0.18 * sin(t)) for t in theta_circ], feat_L), color = :black)
     poly!(ax_eyes, lift(f -> [f.pupil_center .+ Point2f(0.18 * cos(t), 0.18 * sin(t)) for t in theta_circ], feat_R), color = :black)
 
@@ -205,10 +236,10 @@ function signal_example_eog()
     linesegments!(ax_eyes, lift(f -> [f.dipole_start, f.dipole_end], feat_R), color = "#10b981", linewidth = 2.5)
 
     # Dipole charge signs: (+) at cornea, (–) at retina
-    text!(ax_eyes, lift(f -> f.plus_pos[1], feat_L), lift(f -> f.plus_pos[2], feat_L), text = "+", align = (:center, :center), font = :bold, fontsize = 18, color = "#e11d48")
-    text!(ax_eyes, lift(f -> f.plus_pos[1], feat_R), lift(f -> f.plus_pos[2], feat_R), text = "+", align = (:center, :center), font = :bold, fontsize = 18, color = "#e11d48")
-    text!(ax_eyes, lift(f -> f.minus_pos[1], feat_L), lift(f -> f.minus_pos[2], feat_L), text = "–", align = (:center, :center), font = :bold, fontsize = 20, color = "#2563eb")
-    text!(ax_eyes, lift(f -> f.minus_pos[1], feat_R), lift(f -> f.minus_pos[2], feat_R), text = "–", align = (:center, :center), font = :bold, fontsize = 20, color = "#2563eb")
+    text!(ax_eyes, lift(f -> f.plus_pos[1], feat_L), lift(f -> f.plus_pos[2], feat_L), text = "+", align = (:center, :center), font = :bold, fontsize = 20, color = "#e11d48")
+    text!(ax_eyes, lift(f -> f.plus_pos[1], feat_R), lift(f -> f.plus_pos[2], feat_R), text = "+", align = (:center, :center), font = :bold, fontsize = 20, color = "#e11d48")
+    text!(ax_eyes, lift(f -> f.minus_pos[1], feat_L), lift(f -> f.minus_pos[2], feat_L), text = "–", align = (:center, :center), font = :bold, fontsize = 22, color = "#2563eb")
+    text!(ax_eyes, lift(f -> f.minus_pos[1], feat_R), lift(f -> f.minus_pos[2], feat_R), text = "–", align = (:center, :center), font = :bold, fontsize = 22, color = "#2563eb")
 
     # Vertical reference lines (0° straight ahead)
     lines!(ax_eyes, [CL[1], CL[1]], [CL[2], CL[2] + 1.8 * R], color = :gray60, linestyle = :dash, linewidth = 1.2)
@@ -264,33 +295,45 @@ function signal_example_eog()
     lines!(ax_eyes, field_lines, color = RGBAf(0.2, 0.5, 0.35, 0.45), linestyle = :dash, linewidth = 1.2)
 
     # Outer Canthi Temple Electrodes
-    poly!(ax_eyes, Rect2f(-4.3, 0.1, 0.22, 0.6), color = "#334155", strokewidth = 1, strokecolor = :black)
-    text!(ax_eyes, -4.3, 0.9, text = "[-] Left Temple", align = (:center, :center), font = :bold, fontsize = 12, color = "#334155")
+    poly!(ax_eyes, Rect2f(-4.3, 0.2, 0.22, 0.6), color = "#334155", strokewidth = 1, strokecolor = :black)
+    text!(ax_eyes, -4.3, 1.0, text = "[-] Left Temple", align = (:center, :center), font = :bold, fontsize = 12, color = "#334155")
 
-    poly!(ax_eyes, Rect2f(4.08, 0.1, 0.22, 0.6), color = "#334155", strokewidth = 1, strokecolor = :black)
-    text!(ax_eyes, 4.19, 0.9, text = "[+] Right Temple", align = (:center, :center), font = :bold, fontsize = 12, color = "#334155")
+    poly!(ax_eyes, Rect2f(4.08, 0.2, 0.22, 0.6), color = "#334155", strokewidth = 1, strokecolor = :black)
+    text!(ax_eyes, 4.19, 1.0, text = "[+] Right Temple", align = (:center, :center), font = :bold, fontsize = 12, color = "#334155")
 
-    # Difference Amplifier Triangle
-    amp_tri = [Point2f(0.6, -0.85), Point2f(0.6, -1.95), Point2f(2.1, -1.40)]
+    # ── DIFFERENCE AMPLIFIER: Directly Below Both Eyes (Centered at x = 0.0) ──
+    amp_tri = [Point2f(-0.7, -1.2), Point2f(-0.7, -2.2), Point2f(0.7, -1.7)]
     poly!(ax_eyes, amp_tri, color = "#f8fafc", strokewidth = 2.0, strokecolor = "#1e293b")
-    text!(ax_eyes, 0.85, -1.05, text = "+", align = (:center, :center), font = :bold, fontsize = 18, color = "#dc2626")
-    text!(ax_eyes, 0.85, -1.75, text = "–", align = (:center, :center), font = :bold, fontsize = 20, color = "#2563eb")
-    text!(ax_eyes, 1.35, -0.62, text = "Difference Amplifier", align = (:center, :center), font = :bold, fontsize = 13, color = "#1e293b")
+    text!(ax_eyes, -0.45, -1.40, text = "+", align = (:center, :center), font = :bold, fontsize = 18, color = "#dc2626")
+    text!(ax_eyes, -0.45, -2.00, text = "–", align = (:center, :center), font = :bold, fontsize = 20, color = "#2563eb")
+    text!(ax_eyes, 0.0, -0.55, text = "Difference Amplifier", align = (:center, :center), font = :bold, fontsize = 16, color = "#1e293b")
 
-    # Amplifier output lead & terminal
-    lines!(ax_eyes, [Point2f(2.1, -1.40), Point2f(2.6, -1.40)], color = "#1e293b", linewidth = 2.0)
-    scatter!(ax_eyes, [Point2f(2.65, -1.40)], marker = :circle, markersize = 10, color = :white, strokecolor = "#1e293b", strokewidth = 2.0)
+    # Output lead
+    lines!(ax_eyes, [Point2f(0.7, -1.7), Point2f(1.2, -1.7)], color = "#1e293b", linewidth = 2.0)
+    scatter!(ax_eyes, [Point2f(1.25, -1.7)], marker = :circle, markersize = 10, color = :white, strokecolor = "#1e293b", strokewidth = 2.0)
 
-    # Lead wires
-    # Right temple lead (red wire to non-inverting + input)
-    wire_R = [Point2f(4.08, 0.4), Point2f(3.6, 0.4), Point2f(3.6, -1.05), Point2f(0.6, -1.05)]
+    # Lead wires routing cleanly into the centered amplifier:
+    # Right wire to (+) input at (-0.7, -1.40), routing above the amplifier:
+    wire_R = [
+        Point2f(4.08, 0.5),
+        Point2f(3.5, 0.5),
+        Point2f(3.5, -0.85),
+        Point2f(-1.0, -0.85),
+        Point2f(-1.0, -1.40),
+        Point2f(-0.70, -1.40),
+    ]
     lines!(ax_eyes, wire_R, color = "#dc2626", linewidth = 2.0)
 
-    # Left temple lead (blue wire to inverting - input)
-    wire_L = [Point2f(-4.08, 0.4), Point2f(-3.6, 0.4), Point2f(-3.6, -2.25), Point2f(0.6, -2.25), Point2f(0.6, -1.75)]
+    # Left wire to (–) input at (-0.7, -2.00):
+    wire_L = [
+        Point2f(-4.08, 0.5),
+        Point2f(-3.5, 0.5),
+        Point2f(-3.5, -2.00),
+        Point2f(-0.70, -2.00),
+    ]
     lines!(ax_eyes, wire_L, color = "#2563eb", linewidth = 2.0)
 
-    # Live Voltage Calculations and Readout Box
+    # Live Voltage Calculations and Readout Box (centered below the amplifier)
     v_calc = lift(current_display_angle) do deg
         v_diff = 5.0 * deg
         v_r = +(v_diff / 2.0)
@@ -302,16 +345,38 @@ function signal_example_eog()
         sr = vr >= 0 ? "+" : ""
         sl = vl >= 0 ? "+" : ""
         sd = vd >= 0 ? "+" : ""
-        "V(+) = $(sr)$(round(vr, digits=1)) µV\n" *
-        "V(–) = $(sl)$(round(vl, digits=1)) µV\n" *
-        "─────────────────────\n" *
-        "Vout = V(+) – V(–) = $(sd)$(round(vd, digits=1)) µV"
+        "V(+) = $(sr)$(round(vr, digits=1)) µV   |   V(–) = $(sl)$(round(vl, digits=1)) µV   |   Vout = $(sd)$(round(vd, digits=1)) µV"
     end
-    text!(ax_eyes, -1.8, -1.50, text = box_text, align = (:center, :center), font = :bold, fontsize = 12, color = "#1e293b")
+    poly!(ax_eyes, Rect2f(-3.3, -2.88, 6.6, 0.56), color = "#f8fafc", strokewidth = 1.2, strokecolor = "#cbd5e1")
+    text!(ax_eyes, 0.0, -2.60, text = box_text, align = (:center, :center), font = :bold, fontsize = 15.5, color = "#0f172a")
 
-    # ── Right Axis: Signal Potential vs Time ─────────────────────────────────
+    # ── Left Column [2, 1]: Controls directly underneath both eyes ───────────
+    ctrl_layout = fig[2, 1] = GridLayout(tellwidth = false, halign = :center)
+
+    slider_sub = ctrl_layout[1, 1] = GridLayout(tellwidth = false, halign = :center)
+    Label(slider_sub[1, 1], text = "Gaze:", font = :bold, fontsize = label_font)
+    sl_angle = Slider(slider_sub[1, 2], range = -45.0:1.0:45.0, startvalue = 30.0, width = 75)
+    lbl_angle = Label(slider_sub[1, 3], text = lift(v -> "$(round(v, digits=1))°", sl_angle.value), width = 58, fontsize = label_font)
+
+    Label(slider_sub[1, 5], text = "Duration:", font = :bold, fontsize = label_font)
+    sl_dur = Slider(slider_sub[1, 6], range = 100.0:25.0:1200.0, startvalue = 700.0, width = 70)
+    lbl_dur = Label(slider_sub[1, 7], text = lift(v -> "$(round(Int, v)) ms", sl_dur.value), width = 68, fontsize = label_font)
+
+    Label(slider_sub[1, 9], text = "Noise:", font = :bold, fontsize = label_font)
+    sl_noise = Slider(slider_sub[1, 10], range = 0.0:1.0:100.0, startvalue = 2.0, width = 70)
+    lbl_noise = Label(slider_sub[1, 11], text = lift(v -> "$(round(Int, v)) µV", sl_noise.value), width = 58, fontsize = label_font)
+
+    colgap!(slider_sub, 6)
+    colsize!(slider_sub, 4, Fixed(60))
+    colsize!(slider_sub, 8, Fixed(60))
+
+    rowgap!(ctrl_layout, 12)
+
+    btn_play = Button(ctrl_layout[2, 1], label = "▶ Play Saccade", buttoncolor = "#dcfce7", fontsize = btn_font, width = 240, height = 38)
+
+    # ── Right Column [1:2, 2]: Recording Signal Axis spanning full height ────
     ax_eog = Axis(
-        fig[1, 2],
+        fig[1:2, 2],
         title = "Bipolar hEOG Recording [µV]",
         xlabel = "Time [s]",
         ylabel = "Potential [µV]",
@@ -322,30 +387,32 @@ function signal_example_eog()
         yticklabelsize = tick_font,
     )
     xlims!(ax_eog, 0.0, 2.0)
-    ylims!(ax_eog, -220, 240)
+    ylims!(ax_eog, -300, 320)
     hlines!(ax_eog, [0.0], color = :gray70, linestyle = :dash, linewidth = 1.2)
 
     t_vec = range(0.0, 2.0, length = 600)
-    base_noise = 0.3 .* randn(length(t_vec))
+    base_noise = 0.8 .* randn(length(t_vec))
 
     # Real-time waveform update
-    waveform = lift(angle_deg, noise_amp) do deg, n_amp
+    waveform = lift(angle_deg, noise_amp, duration_ms) do deg, n_amp, dur_ms
         amp = 5.0 * deg
-        sig_on  = @. 1.0 / (1.0 + exp(-(t_vec - 0.45) / 0.015))
-        sig_off = @. 1.0 / (1.0 + exp((t_vec - 1.15) / 0.015))
+        t_on = 0.40
+        t_off = t_on + dur_ms / 1000.0
+        sig_on  = @. 1.0 / (1.0 + exp(-(t_vec - t_on) / 0.015))
+        sig_off = @. 1.0 / (1.0 + exp((t_vec - t_off) / 0.015))
         pulse = sig_on .* sig_off
         return @. amp * pulse + n_amp * base_noise
     end
-    lines!(ax_eog, t_vec, waveform, color = "#2563eb", linewidth = 2.5)
+    lines!(ax_eog, t_vec, waveform, color = :black, linewidth = 2.2)
 
     # Time cursor line during playback
     cursor_x = lift(playback_time) do pt
-        pt < 0 ? [Point2f(NaN, NaN)] : [Point2f(pt, -220), Point2f(pt, 240)]
+        pt < 0 ? [Point2f(NaN, NaN)] : [Point2f(pt, -300), Point2f(pt, 320)]
     end
     lines!(ax_eog, cursor_x, color = "#e11d48", linewidth = 2.0, linestyle = :dash)
 
     # Step guide line & amplitude label
-    hlines!(ax_eog, lift(deg -> [5.0 * deg], angle_deg), color = "#93c5fd", linestyle = :dot, linewidth = 1.5)
+    hlines!(ax_eog, lift(deg -> [5.0 * deg], angle_deg), color = :gray60, linestyle = :dot, linewidth = 1.2)
     v_text = lift(angle_deg) do deg
         val = round(5.0 * deg, digits = 1)
         sign_str = val >= 0 ? "+" : ""
@@ -353,35 +420,14 @@ function signal_example_eog()
     end
     text!(
         ax_eog,
-        0.8,
+        lift(d -> 0.40 + (d / 2000.0), duration_ms),
         lift(deg -> 5.0 * deg + (deg >= 0 ? 25.0 : -35.0), angle_deg),
         text = v_text,
         align = (:center, :center),
         font = :bold,
         fontsize = 14,
-        color = "#1e40af",
+        color = :black,
     )
-
-    # ── Controls Layout ──────────────────────────────────────────────────────
-    ctrl_layout = fig[2, 1:2] = GridLayout()
-
-    # Preset Buttons Row
-    btn_sub = ctrl_layout[1, 1] = GridLayout()
-    btn_right30 = Button(btn_sub[1, 1], label = "30° Right (+150 µV)", buttoncolor = "#e0f2fe", fontsize = btn_font)
-    btn_left15  = Button(btn_sub[1, 2], label = "15° Left (-75 µV)", buttoncolor = "#fce7f3", fontsize = btn_font)
-    btn_center  = Button(btn_sub[1, 3], label = "Center (0°)", buttoncolor = "#f1f5f9", fontsize = btn_font)
-    btn_play    = Button(btn_sub[1, 4], label = "▶ Play Saccade", buttoncolor = "#dcfce7", fontsize = btn_font)
-    btn_fields  = Button(btn_sub[1, 5], label = "Toggle Field Lines", buttoncolor = "#f8fafc", fontsize = btn_font)
-
-    # Sliders Row
-    slider_sub = ctrl_layout[2, 1] = GridLayout()
-    Label(slider_sub[1, 1], text = "Gaze Angle:", font = :bold, fontsize = label_font)
-    sl_angle = Slider(slider_sub[1, 2], range = -45.0:1.0:45.0, startvalue = 30.0, width = 240)
-    lbl_angle = Label(slider_sub[1, 3], text = lift(v -> "$(round(v, digits=1))°", sl_angle.value), width = 60, fontsize = label_font)
-
-    Label(slider_sub[1, 4], text = "Noise (µV):", font = :bold, fontsize = label_font)
-    sl_noise = Slider(slider_sub[1, 5], range = 0.0:0.1:5.0, startvalue = 0.5, width = 150)
-    lbl_noise = Label(slider_sub[1, 6], text = lift(v -> "$(round(v, digits=1)) µV", sl_noise.value), width = 60, fontsize = label_font)
 
     # ── Callback Connections ─────────────────────────────────────────────────
     on(sl_angle.value) do val
@@ -389,43 +435,29 @@ function signal_example_eog()
         current_display_angle[] = val
     end
 
+    on(sl_dur.value) do val
+        duration_ms[] = val
+    end
+
     on(sl_noise.value) do val
         noise_amp[] = val
-    end
-
-    on(btn_right30.clicks) do _
-        set_close_to!(sl_angle, 30.0)
-        angle_deg[] = 30.0
-        current_display_angle[] = 30.0
-    end
-
-    on(btn_left15.clicks) do _
-        set_close_to!(sl_angle, -15.0)
-        angle_deg[] = -15.0
-        current_display_angle[] = -15.0
-    end
-
-    on(btn_center.clicks) do _
-        set_close_to!(sl_angle, 0.0)
-        angle_deg[] = 0.0
-        current_display_angle[] = 0.0
-    end
-
-    on(btn_fields.clicks) do _
-        show_fields[] = !show_fields[]
     end
 
     on(btn_play.clicks) do _
         @async begin
             target = angle_deg[]
+            dur = duration_ms[] / 1000.0
+            t_on = 0.40
+            t_off = t_on + dur
+            t_total = 2.0
             n_frames = 60
             fps = 30.0
-            dt = 2.0 / n_frames
+            dt = t_total / n_frames
             for frame in 0:n_frames
                 t_curr = frame * dt
                 playback_time[] = t_curr
-                sig_on  = 1.0 / (1.0 + exp(-(t_curr - 0.45) / 0.015))
-                sig_off = 1.0 / (1.0 + exp((t_curr - 1.15) / 0.015))
+                sig_on  = 1.0 / (1.0 + exp(-(t_curr - t_on) / 0.015))
+                sig_off = 1.0 / (1.0 + exp((t_curr - t_off) / 0.015))
                 current_display_angle[] = target * sig_on * sig_off
                 sleep(1.0 / fps)
             end
@@ -436,11 +468,10 @@ function signal_example_eog()
 
     rowsize!(fig.layout, 1, Relative(0.80))
     rowsize!(fig.layout, 2, Relative(0.20))
+    colsize!(fig.layout, 1, Relative(0.55))
+    colsize!(fig.layout, 2, Relative(0.45))
 
-    _display_in_screen(fig; size = (1280, 800))
+    display(fig)
 
     return fig, ax_eyes, ax_eog
 end
-
-# Alias for convenience
-const signal_example_heog = signal_example_eog
