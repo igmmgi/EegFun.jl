@@ -487,82 +487,209 @@ function _get_amp_max(plot_erp, plot_difference, cond_A_avg, cond_B_avg, diff_wa
 end
 
 """
-    plot_stat_heatmap(result::StatsResult; kwargs...)
+    _plot_stat_heatmap_core!(fig, ax, time_points, electrodes, t_values, mask; kwargs...)
 
-Plots a 2D heatmap of the t-statistics (Channels x Time).
+Internal rendering engine for 2D spatiotemporal statistical heatmaps (Channels x Time).
+Supports multiple mask styles (:alpha, :hide, :contour, :none), smart high-density channel decimation,
+and baseline window shading.
 """
-function plot_stat_heatmap(result::StatsResult; kwargs...)
+function _plot_stat_heatmap_core!(
+    fig::Union{Figure, Nothing},
+    ax::Axis,
+    time_points::AbstractVector{<:Real},
+    electrodes::AbstractVector,
+    t_values::AbstractMatrix{<:Real},
+    mask::AbstractMatrix{Bool};
+    kwargs...
+)
     plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs; validate=false)
-    plot_kwargs[:window_title] = get(kwargs, :window_title, "T-Statistic Heatmap")
-    plot_kwargs[:xlabel] = get(kwargs, :xlabel, "Time (s)")
-    plot_kwargs[:ylabel] = get(kwargs, :ylabel, "Channels")
 
-    time_points = result.time_points
-    electrodes = result.electrodes
-    t_values = result.stat_matrix.t
+    time_unit = get(kwargs, :time_unit, :s)
+    t_scale = time_unit == :ms ? 1000.0 : 1.0
+    x_times = time_points .* t_scale
 
-    fig = Figure(size = (800, 600), title = plot_kwargs[:window_title], figure_padding = plot_kwargs[:figure_padding])
+    n_chans = length(electrodes)
+    plot_kwargs[:ylabel] = get(kwargs, :ylabel, "Electrode (1 to $(n_chans))")
+    plot_kwargs[:xlabel] = get(kwargs, :xlabel, time_unit == :ms ? "Time (ms)" : "Time (s)")
+    pop!(plot_kwargs, :time_unit, nothing)
 
-    if length(electrodes) > 40
-        yticks = (1:5:length(electrodes), String.(electrodes)[1:5:end])
-    else
-        yticks = (1:length(electrodes), String.(electrodes))
+    # Smart electrode ticks if not explicitly provided
+    if isnothing(get(kwargs, :yticks, nothing))
+        if n_chans > 40
+            step = max(1, div(n_chans, 14)) # e.g. every 5 channels for 70
+            y_indices = [1, step:step:n_chans...]
+            y_labels = ["$(i): $(electrodes[i])" for i in y_indices]
+            plot_kwargs[:yticks] = (y_indices, y_labels)
+            ax.yminorticks = IntervalsBetween(step)
+            ax.yminorticksvisible = true
+        else
+            plot_kwargs[:yticks] = (1:n_chans, String.(electrodes))
+        end
     end
 
-    ax = Axis(fig[1, 1], yticks = yticks)
+    # Baseline window shading
+    baseline_window = get(kwargs, :baseline_window, nothing)
+    if !isnothing(baseline_window)
+        bw_start = baseline_window[1] * t_scale
+        bw_end = baseline_window[2] * t_scale
+        vspan!(ax, bw_start, bw_end, color = (:gray85, 0.25))
+        vlines!(ax, [0.0], color = (:black, 0.75), linestyle = :solid, linewidth = 1.2)
+    end
+
+    # Colormap and symmetric limits
+    max_t = maximum(abs, filter(!isnan, t_values); init = 1.0)
+    if max_t ≈ 0.0
+        max_t = 1.0
+    end
+    cmap = _resolve_theme_colormap(ax, get(kwargs, :colormap, :coolwarm))
+    clims = get(kwargs, :colorrange, (-max_t, max_t))
+    alpha_subdued = get(kwargs, :alpha_subdued, 0.20)
 
     mask_style = get(kwargs, :mask_style, :alpha)
-    
-    # Extract masks if available
-    has_masks = hasproperty(result, :masks) && !isnothing(result.masks)
-    if has_masks
-        mask = result.masks.positive .| result.masks.negative
-    else
-        mask = trues(size(t_values))
-        mask_style = :none
-    end
-    
-    max_t = maximum(abs.(t_values))
-    cmap = _resolve_theme_colormap(ax, get(kwargs, :colormap, nothing))
-    clims = get(kwargs, :colorrange, (-max_t, max_t))
-
+    local hm
     if mask_style == :alpha
-        # Plot base transparent layer
-        heatmap!(ax, time_points, 1:length(electrodes), transpose(t_values), 
-                 colormap = cmap, colorrange = clims, alpha = 0.15)
-        
-        # Plot opaque layer over significant regions
+        # Base transparent layer
+        heatmap!(ax, x_times, 1:n_chans, transpose(t_values),
+                 colormap = cmap, colorrange = clims, alpha = alpha_subdued)
+
+        # Opaque layer over significant regions
         highlight = copy(t_values)
         highlight[.!mask] .= NaN
-        hm = heatmap!(ax, time_points, 1:length(electrodes), transpose(highlight), 
-                      colormap = cmap, colorrange = clims)
-                      
+        hm = heatmap!(ax, x_times, 1:n_chans, transpose(highlight),
+                      colormap = cmap, colorrange = clims, nan_color = :transparent)
     elseif mask_style == :hide
         highlight = copy(t_values)
         highlight[.!mask] .= NaN
-        hm = heatmap!(ax, time_points, 1:length(electrodes), transpose(highlight), 
-                      colormap = cmap, colorrange = clims)
-                      
+        hm = heatmap!(ax, x_times, 1:n_chans, transpose(highlight),
+                      colormap = cmap, colorrange = clims, nan_color = :transparent)
     elseif mask_style == :contour
-        hm = heatmap!(ax, time_points, 1:length(electrodes), transpose(t_values), 
+        hm = heatmap!(ax, x_times, 1:n_chans, transpose(t_values),
                       colormap = cmap, colorrange = clims)
-                      
-        if has_masks && any(mask)
-            # Overlay contour boundary (x, y, z)
-            contour!(ax, time_points, 1:length(electrodes), Float64.(transpose(mask)), 
-                     levels = [0.5], color = :black, linewidth = 2)
+        if any(mask)
+            contour!(ax, x_times, 1:n_chans, Float64.(transpose(mask)),
+                     levels = [0.5], color = :black, linewidth = 1.8)
         end
-    else
-        # :none or unrecognized
-        hm = heatmap!(ax, time_points, 1:length(electrodes), transpose(t_values), 
+    else # :none
+        hm = heatmap!(ax, x_times, 1:n_chans, transpose(t_values),
                       colormap = cmap, colorrange = clims)
     end
 
-    Colorbar(fig[1, 2], hm, label = "t-value")
+    xlims!(ax, extrema(x_times))
+    ylims!(ax, 0.5, n_chans + 0.5)
+
+    # Colorbar
+    show_colorbar = get(kwargs, :colorbar, true)
+    if show_colorbar && !isnothing(fig)
+        cb_label = get(kwargs, :colorbar_label, "t-value")
+        Colorbar(fig[1, 2], hm, label = cb_label)
+    end
 
     _apply_axis_properties!(ax; plot_kwargs...)
 
-    # Draw supertitle if user explicitly provided a figure_title
+    return (hm = hm, ax = ax)
+end
+
+"""
+    plot_stat_heatmap!(fig, ax, result::StatsResult; kwargs...)
+
+Mutating variant of `plot_stat_heatmap` to draw a 2D statistical heatmap into an existing Axis.
+"""
+function plot_stat_heatmap!(fig::Union{Figure, Nothing}, ax::Axis, result::StatsResult; kwargs...)
+    time_points = result.time_points
+    electrodes = result.electrodes
+    t_values = result.stat_matrix.t
+    has_masks = hasproperty(result, :masks) && !isnothing(result.masks)
+    mask = has_masks ? (result.masks.positive .| result.masks.negative) : trues(size(t_values))
+
+    return _plot_stat_heatmap_core!(fig, ax, time_points, electrodes, t_values, mask; kwargs...)
+end
+
+"""
+    plot_stat_heatmap(result::StatsResult; kwargs...)
+
+Plots a 2D heatmap of the t-statistics (Channels x Time) from a classical permutation test.
+"""
+function plot_stat_heatmap(result::StatsResult; kwargs...)
+    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs; validate=false)
+    window_title = get(kwargs, :window_title, "T-Statistic Heatmap")
+    xlabel_def = get(kwargs, :time_unit, :s) == :ms ? "Time (ms)" : "Time (s)"
+    xlabel = get(kwargs, :xlabel, xlabel_def)
+    ylabel = get(kwargs, :ylabel, "Channels")
+
+    fig = Figure(size = (850, 600), title = window_title, figure_padding = plot_kwargs[:figure_padding])
+    ax = Axis(fig[1, 1], xlabel = xlabel, ylabel = ylabel)
+
+    plot_stat_heatmap!(fig, ax, result; kwargs...)
+
+    if !isempty(plot_kwargs[:figure_title])
+        Label(fig[0, :], plot_kwargs[:figure_title], fontsize = plot_kwargs[:figure_title_fontsize], font = :bold, tellwidth = false)
+    end
+
+    if plot_kwargs[:display_plot]
+        _display_figure(fig)
+    end
+
+    return (fig = fig, axes = [ax])
+end
+
+"""
+    plot_stat_heatmap!(fig, ax, result::LmmStatsResult; coef_idx::Int=2, cluster_thresh::Real=2.0, threshold_p=nothing, kwargs...)
+
+Mutating variant of `plot_stat_heatmap` for `LmmStatsResult`.
+"""
+function plot_stat_heatmap!(
+    fig::Union{Figure, Nothing},
+    ax::Axis,
+    result::LmmStatsResult;
+    coef_idx::Int = 2,
+    cluster_thresh::Real = 2.0,
+    threshold_p = nothing,
+    kwargs...
+)
+    time_points = result.time_points
+    electrodes = result.channels
+    t_values = result.t_values[:, :, coef_idx]
+
+    mask = if !isnothing(threshold_p)
+        if hasproperty(result, :p_corrected) && !isnothing(result.p_corrected) && any(result.p_corrected[:, :, coef_idx] .<= threshold_p)
+            result.p_corrected[:, :, coef_idx] .<= threshold_p
+        elseif hasproperty(result, :p_values) && !isnothing(result.p_values)
+            result.p_values[:, :, coef_idx] .<= threshold_p
+        else
+            abs.(t_values) .>= cluster_thresh
+        end
+    else
+        abs.(t_values) .>= cluster_thresh
+    end
+
+    return _plot_stat_heatmap_core!(fig, ax, time_points, electrodes, t_values, mask; kwargs...)
+end
+
+"""
+    plot_stat_heatmap(result::LmmStatsResult; coef_idx::Int=2, cluster_thresh::Real=2.0, threshold_p=nothing, kwargs...)
+
+Plots a 2D spatiotemporal heatmap of t-statistics (Channels x Time) for a Linear Mixed-Effects Model effect.
+"""
+function plot_stat_heatmap(
+    result::LmmStatsResult;
+    coef_idx::Int = 2,
+    cluster_thresh::Real = 2.0,
+    threshold_p = nothing,
+    kwargs...
+)
+    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs; validate=false)
+    coef_name = result.coefficients[coef_idx]
+    window_title = get(kwargs, :window_title, "LMM Heatmap: $(coef_name)")
+    xlabel_def = get(kwargs, :time_unit, :s) == :ms ? "Time (ms)" : "Time (s)"
+    xlabel = get(kwargs, :xlabel, xlabel_def)
+    ylabel = get(kwargs, :ylabel, "Electrode (1 to $(length(result.channels)))")
+    title_str = get(kwargs, :plot_title, "LMM Heatmap: $(coef_name)")
+
+    fig = Figure(size = (900, 600), title = window_title, figure_padding = plot_kwargs[:figure_padding])
+    ax = Axis(fig[1, 1], xlabel = xlabel, ylabel = ylabel, title = title_str)
+
+    plot_stat_heatmap!(fig, ax, result; coef_idx = coef_idx, cluster_thresh = cluster_thresh, threshold_p = threshold_p, kwargs...)
+
     if !isempty(plot_kwargs[:figure_title])
         Label(fig[0, :], plot_kwargs[:figure_title], fontsize = plot_kwargs[:figure_title_fontsize], font = :bold, tellwidth = false)
     end

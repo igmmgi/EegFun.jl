@@ -194,7 +194,6 @@ include("plots/erps/plot_erp_filter_gui.jl")
 include("plots/erps/plot_gfp.jl")
 include("plots/erps/plot_erp_stats.jl")
 include("plots/erps/plot_topography_stats.jl")
-include("plots/statistics/plot_lmm_stats.jl")
 include("plots/erps/plot_topography.jl")
 include("plots/erps/plot_topography_3d.jl")
 

@@ -344,6 +344,7 @@ public plot_erp_measurement_gui
 public plot_erp_measurements
 public plot_erp_stats
 public plot_stat_heatmap
+public plot_stat_heatmap!
 public plot_filter_response
 public plot_gfp
 public plot_gui
@@ -358,8 +359,6 @@ public plot_layout_2d!
 public plot_layout_3d
 public plot_layout_3d!
 public plot_line_noise_components
-public plot_lmm_heatmap
-public plot_lmm_topomap
 public plot_spatial_kurtosis_components
 public plot_tf_stats
 public plot_tf

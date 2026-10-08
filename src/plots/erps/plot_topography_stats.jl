@@ -199,8 +199,14 @@ function plot_topography_stats(
     data_label = topo_data == :tvalues ? "t-statistic" : "Difference (μV)"
     fig_title = isempty(figure_title) ? "$test_type Test — $data_label" : figure_title
 
-    fig = Figure(size = (200 * n_cols + 100, 200 * n_rows + 50))
-    Label(fig[0, 1:n_cols], fig_title, fontsize = 18, font = :bold)
+    fig = Figure(size = (max(220 * n_cols + 140, 600), 220 * n_rows + 70))
+    gl_topos = fig[1, 1] = GridLayout()
+    if !isempty(fig_title)
+        Label(gl_topos[0, 1:n_cols], fig_title, fontsize = 16, font = :bold)
+    end
+    for c = 1:n_cols
+        colsize!(gl_topos, c, Aspect(1, 1.0))
+    end
 
     # Extract colorbar kwargs before render loop (removes colorbar_* keys from plot_kwargs)
     colorbar_kwargs = Dict{Symbol,Any}(pairs(pop!(plot_kwargs, :colorbar_kwargs, (;))))
@@ -216,7 +222,7 @@ function plot_topography_stats(
         row = div(i - 1, n_cols) + 1
         col = mod1(i, n_cols)
 
-        ax = Axis(fig[row, col], aspect = DataAspect(), title = bin_time_labels[i], titlesize = plot_kwargs[:plot_title_fontsize])
+        ax = Axis(gl_topos[row, col], aspect = DataAspect(), title = bin_time_labels[i], titlesize = plot_kwargs[:plot_title_fontsize])
         push!(axes, ax)
 
         # Map electrode values to layout order
@@ -274,7 +280,7 @@ function plot_topography_stats(
     # Add shared colorbar and include in return value
     cb_label = topo_data == :tvalues ? "t-statistic" : "Difference (μV)"
     actual_colormap = _resolve_theme_colormap(fig, colormap)
-    cb = Colorbar(fig[1:n_rows, n_cols+1]; colorbar_kwargs..., colormap = actual_colormap, colorrange = ylim, label = cb_label)
+    cb = Colorbar(fig[1, 2]; colorbar_kwargs..., colormap = actual_colormap, colorrange = ylim, label = cb_label)
 
     if display_plot
         _display_figure(fig)
@@ -284,6 +290,221 @@ function plot_topography_stats(
 end
 
 
+
+"""
+    plot_topography_stats(result::LmmStatsResult;
+                          coef_idx::Int = 2,
+                          cluster_thresh::Real = 2.0,
+                          threshold_p = nothing,
+                          n_topos::Int = 10,
+                          interval_selection::Interval = times(),
+                          highlight_significant::Bool = true,
+                          highlight_color = :white,
+                          highlight_marker::Symbol = :circle,
+                          highlight_size::Real = 8,
+                          highlight_threshold::Real = 0.5,
+                          kwargs...)
+
+Plot a grid of topographic maps showing LMM statistical results across time windows with significant channels highlighted.
+"""
+function plot_topography_stats(
+    result::LmmStatsResult;
+    coef_idx::Int = 2,
+    cluster_thresh::Real = 2.0,
+    threshold_p = nothing,
+    n_topos::Int = 10,
+    interval_selection::Interval = times(),
+    highlight_significant::Bool = true,
+    highlight_color = :white,
+    highlight_marker::Symbol = :circle,
+    highlight_size::Real = 8,
+    highlight_threshold::Real = 0.5,
+    kwargs...,
+)
+    # Merge user kwargs with shared topography defaults
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+
+    # Extract topography-specific parameters
+    method = pop!(plot_kwargs, :method)
+    gridscale = pop!(plot_kwargs, :gridscale)
+    colormap = pop!(plot_kwargs, :colormap)
+    ylim = pop!(plot_kwargs, :ylim)
+    display_plot = pop!(plot_kwargs, :display_plot)
+    figure_title = pop!(plot_kwargs, :figure_title)
+    num_levels = pop!(plot_kwargs, :num_levels)
+
+    pop!(plot_kwargs, :interactive, nothing)
+    pop!(plot_kwargs, :use_global_scale, nothing)
+    pop!(plot_kwargs, :component_selection, nothing)
+
+    plot_kwargs[:label_plot] = get(kwargs, :label_plot, false)
+    plot_kwargs[:point_plot] = get(kwargs, :point_plot, false)
+
+    all_time_points = result.time_points
+    if isnothing(interval_selection) || interval_selection isa AllSelection
+        t_start, t_end = first(all_time_points), last(all_time_points)
+    else
+        t_start = interval_selection isa TimeSelection ? interval_selection.start : interval_selection[1]
+        t_end = interval_selection isa TimeSelection ? interval_selection.stop : interval_selection[2]
+    end
+
+    time_mask = t_start .<= all_time_points .<= t_end
+    time_indices = findall(time_mask)
+    if isempty(time_indices)
+        error("No time points found in range ($t_start, $t_end). Data range: $(first(all_time_points)) to $(last(all_time_points))")
+    end
+
+    n_topos = min(n_topos, length(time_indices))
+    bins = _partition_indices(time_indices, n_topos)
+
+    layout = result.epochs.layout
+    electrodes = result.channels
+
+    if !has_valid_coordinates(layout)
+        error("Cannot create topographic plot: layout has no spatial coordinates.")
+    end
+
+    _ensure_coordinates_2d!(layout)
+    _ensure_coordinates_3d!(layout)
+
+    layout_labels = layout.data.label
+
+    t_matrix = result.t_values[:, :, coef_idx]
+    sig_combined_full = if !isnothing(threshold_p)
+        if hasproperty(result, :p_corrected) && !isnothing(result.p_corrected) && any(result.p_corrected[:, :, coef_idx] .<= threshold_p)
+            result.p_corrected[:, :, coef_idx] .<= threshold_p
+        elseif hasproperty(result, :p_values) && !isnothing(result.p_values)
+            result.p_values[:, :, coef_idx] .<= threshold_p
+        else
+            abs.(t_matrix) .>= cluster_thresh
+        end
+    else
+        abs.(t_matrix) .>= cluster_thresh
+    end
+
+    topo_values = Vector{Vector{Float64}}(undef, n_topos)
+    sig_masks = Vector{BitVector}(undef, n_topos)
+    bin_time_labels = Vector{String}(undef, n_topos)
+
+    for (i, bin_indices) in enumerate(bins)
+        bin_time_start = all_time_points[first(bin_indices)]
+        bin_time_end = all_time_points[last(bin_indices)]
+        bin_time_labels[i] = @sprintf("%.0f – %.0f ms", bin_time_start * 1000, bin_time_end * 1000)
+
+        topo_values[i] = vec(mean(t_matrix[:, bin_indices], dims = 2))
+
+        n_bin_points = length(bin_indices)
+        sig_in_bin = sig_combined_full[:, bin_indices]
+        sig_proportion = vec(sum(sig_in_bin, dims = 2)) ./ n_bin_points
+        sig_masks[i] = sig_proportion .>= highlight_threshold
+    end
+
+    all_vals = vcat(topo_values...)
+    max_abs = maximum(abs, all_vals)
+    if max_abs ≈ 0.0
+        max_abs = 1.0
+    end
+    if isnothing(ylim)
+        ylim = (-max_abs, max_abs)
+    end
+
+    dims = pop!(plot_kwargs, :dims, nothing)
+    if isnothing(dims)
+        n_rows, n_cols = _best_rect(n_topos)
+    else
+        n_rows, n_cols = dims
+        if n_rows * n_cols < n_topos
+            error("Grid dimensions ($n_rows × $n_cols) provide $(n_rows * n_cols) cells but need $n_topos")
+        end
+    end
+
+    coef_name = result.coefficients[coef_idx]
+    fig_title = isempty(figure_title) ? "LMM: $(coef_name) — t-statistic" : figure_title
+
+    fig = Figure(size = (max(220 * n_cols + 140, 600), 220 * n_rows + 70))
+    gl_topos = fig[1, 1] = GridLayout()
+    if !isempty(fig_title)
+        Label(gl_topos[0, 1:n_cols], fig_title, fontsize = 16, font = :bold)
+    end
+    for c = 1:n_cols
+        colsize!(gl_topos, c, Aspect(1, 1.0))
+    end
+
+    colorbar_kwargs = Dict{Symbol,Any}(pairs(pop!(plot_kwargs, :colorbar_kwargs, (;))))
+    pop!(colorbar_kwargs, :colorrange, nothing)
+    pop!(colorbar_kwargs, :label, nothing)
+    pop!(plot_kwargs, :colorbar_plot, nothing)
+    pop!(plot_kwargs, :colorbar_position, nothing)
+    pop!(plot_kwargs, :colorbar_plot_numbers, nothing)
+
+    axes = Axis[]
+
+    for i = 1:n_topos
+        row = div(i - 1, n_cols) + 1
+        col = mod1(i, n_cols)
+
+        ax = Axis(gl_topos[row, col], aspect = DataAspect(), title = bin_time_labels[i], titlesize = plot_kwargs[:plot_title_fontsize])
+        push!(axes, ax)
+
+        channel_data = topo_values[i]
+        layout_values = Float64[
+            let ch_idx = findfirst(==(lbl), electrodes)
+                !isnothing(ch_idx) ? channel_data[ch_idx] : 0.0
+            end for lbl in layout_labels
+        ]
+
+        _render_topo_surface!(
+            fig,
+            ax,
+            layout_values,
+            layout;
+            method = method,
+            gridscale = gridscale,
+            colormap = colormap,
+            ylim = ylim,
+            num_levels = num_levels,
+            plot_kwargs...,
+        )
+
+        if highlight_significant && any(sig_masks[i])
+            sig_channel_indices = findall(sig_masks[i])
+            sig_x = Float64[]
+            sig_y = Float64[]
+            for ch_idx in sig_channel_indices
+                ch_sym = electrodes[ch_idx]
+                row_idx = findfirst(==(ch_sym), layout.data.label)
+                if !isnothing(row_idx)
+                    push!(sig_x, layout.data.x2[row_idx])
+                    push!(sig_y, layout.data.y2[row_idx])
+                end
+            end
+            if !isempty(sig_x)
+                scatter!(
+                    ax,
+                    sig_x,
+                    sig_y,
+                    color = highlight_color,
+                    marker = highlight_marker,
+                    markersize = highlight_size,
+                    strokewidth = 1,
+                    strokecolor = :black,
+                )
+            end
+        end
+
+        hidedecorations!(ax)
+    end
+
+    cb_label = "t-statistic"
+    actual_colormap = _resolve_theme_colormap(fig, colormap)
+    cb = Colorbar(fig[1, 2]; colorbar_kwargs..., colormap = actual_colormap, colorrange = ylim, label = cb_label)
+
+    if display_plot
+        _display_figure(fig)
+    end
+
+    return (fig = fig, axes = axes, colorbar = cb)
+end
 
 """
     _partition_indices(indices::Vector{Int}, n::Int) -> Vector{UnitRange{Int}}
