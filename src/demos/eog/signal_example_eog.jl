@@ -36,6 +36,8 @@ The human eye functions as a steady electrical dipole:
 | **Duration Slider** | Adjusts fixation / saccade hold duration (100–1200 ms). |
 | **Noise Slider** | Injects realistic physiological baseline noise (0–100 µV). |
 | **▶ Play Saccade** | Plays an animated real-time saccade sequence (0° → target angle → 0°) with live cursor sweep. |
+| **Field Lines Checkbox** | Toggles bilateral electric field lines around both corneo-retinal dipoles. |
+| **Monopolar (CMR) Checkbox** | Displays unipolar \$V_{(+)}\$ (Right Temple, red) and \$V_{(-)}\$ (Left Temple, blue) traces demonstrating Common-Mode Rejection of background EEG in the bipolar difference. |
 
 ## Interactive Backend (GLMakie)
 
@@ -117,6 +119,7 @@ function signal_example_heog()
     duration_ms = Observable(700.0)          # Saccade fixation / hold duration in milliseconds
     noise_amp = Observable(2.0)              # Additive noise standard deviation [µV]
     show_fields = Observable(true)           # Electric field lines toggle
+    show_monopolar = Observable(false)       # Monopolar (CMR) vs bipolar toggle
     playback_time = Observable(-1.0)         # < 0: static, >= 0: time cursor position [s]
 
     # ── Geometry Constants ───────────────────────────────────────────────────
@@ -269,7 +272,7 @@ function signal_example_heog()
         color = "#1e293b",
     )
 
-    # Dipole Electric Field Lines (looping around Left Eye dipole)
+    # Dipole Electric Field Lines (looping around both Left and Right Eye dipoles)
     field_lines = lift(current_display_angle, show_fields) do deg, show
         !show && return Point2f[]
         pts = Point2f[]
@@ -277,17 +280,19 @@ function signal_example_heog()
         r0_list = [1.35, 1.85, 2.45]
         phi_range = range(0.12π, 0.88π, length = 35)
 
-        for r0 in r0_list
-            for sign in [1.0, -1.0]
-                for phi in phi_range
-                    r_val = r0 * sin(phi)^2
-                    x_prime = sign * r_val * sin(phi)
-                    y_prime = r_val * cos(phi)
-                    xr = x_prime * cos(rad) + y_prime * sin(rad)
-                    yr = -x_prime * sin(rad) + y_prime * cos(rad)
-                    push!(pts, CL .+ Point2f(xr, yr))
+        for C in [CL, CR]
+            for r0 in r0_list
+                for sign in [1.0, -1.0]
+                    for phi in phi_range
+                        r_val = r0 * sin(phi)^2
+                        x_prime = sign * r_val * sin(phi)
+                        y_prime = r_val * cos(phi)
+                        xr = x_prime * cos(rad) + y_prime * sin(rad)
+                        yr = -x_prime * sin(rad) + y_prime * cos(rad)
+                        push!(pts, C .+ Point2f(xr, yr))
+                    end
+                    push!(pts, Point2f(NaN, NaN))
                 end
-                push!(pts, Point2f(NaN, NaN))
             end
         end
         return pts
@@ -372,7 +377,20 @@ function signal_example_heog()
 
     rowgap!(ctrl_layout, 12)
 
-    btn_play = Button(ctrl_layout[2, 1], label = "▶ Play Saccade", buttoncolor = "#dcfce7", fontsize = btn_font, width = 240, height = 38)
+    # Button and Checkbox Sub-Layout
+    btn_sub = ctrl_layout[2, 1] = GridLayout(tellwidth = false, halign = :center)
+
+    btn_play = Button(btn_sub[1, 1], label = "Play Saccade", buttoncolor = "#dcfce7", fontsize = btn_font, width = 150, height = 36)
+
+    chk_fields = Checkbox(btn_sub[1, 3], checked = true)
+    lbl_fields = Label(btn_sub[1, 4], text = "Field Lines", fontsize = label_font)
+
+    chk_mono = Checkbox(btn_sub[1, 6], checked = false)
+    lbl_mono = Label(btn_sub[1, 7], text = "Monopolar (CMR)", fontsize = label_font)
+
+    colgap!(btn_sub, 6)
+    colsize!(btn_sub, 2, Fixed(18))
+    colsize!(btn_sub, 5, Fixed(18))
 
     # ── Right Column [1:2, 2]: Recording Signal Axis spanning full height ────
     ax_eog = Axis(
@@ -392,6 +410,7 @@ function signal_example_heog()
 
     t_vec = range(0.0, 2.0, length = 600)
     base_noise = 0.8 .* randn(length(t_vec))
+    common_eeg = @. 18.0 * sin(2π * 10.0 * t_vec) + 6.0 * cos(2π * 3.5 * t_vec)
 
     # Real-time waveform update
     waveform = lift(angle_deg, noise_amp, duration_ms) do deg, n_amp, dur_ms
@@ -403,7 +422,37 @@ function signal_example_heog()
         pulse = sig_on .* sig_off
         return @. amp * pulse + n_amp * base_noise
     end
-    lines!(ax_eog, t_vec, waveform, color = :black, linewidth = 2.2)
+
+    waveform_R = lift(angle_deg, noise_amp, duration_ms) do deg, n_amp, dur_ms
+        amp = 5.0 * deg
+        t_on = 0.40
+        t_off = t_on + dur_ms / 1000.0
+        sig_on  = @. 1.0 / (1.0 + exp(-(t_vec - t_on) / 0.015))
+        sig_off = @. 1.0 / (1.0 + exp((t_vec - t_off) / 0.015))
+        pulse = sig_on .* sig_off
+        return @. 0.5 * amp * pulse + 0.5 * n_amp * base_noise + common_eeg
+    end
+
+    waveform_L = lift(angle_deg, noise_amp, duration_ms) do deg, n_amp, dur_ms
+        amp = 5.0 * deg
+        t_on = 0.40
+        t_off = t_on + dur_ms / 1000.0
+        sig_on  = @. 1.0 / (1.0 + exp(-(t_vec - t_on) / 0.015))
+        sig_off = @. 1.0 / (1.0 + exp((t_vec - t_off) / 0.015))
+        pulse = sig_on .* sig_off
+        return @. -0.5 * amp * pulse - 0.5 * n_amp * base_noise + common_eeg
+    end
+
+    # Monopolar lines (Right Temple in red, Left Temple in blue)
+    line_R = lines!(ax_eog, t_vec, waveform_R, color = "#dc2626", linewidth = 1.8, label = "V(+) Right Temple", visible = false)
+    line_L = lines!(ax_eog, t_vec, waveform_L, color = "#2563eb", linewidth = 1.8, label = "V(–) Left Temple", visible = false)
+
+    # Bipolar difference output line
+    lines!(ax_eog, t_vec, waveform, color = :black, linewidth = 2.4, label = "Vout Bipolar Diff")
+
+    # Legend for CMR demonstration
+    leg = axislegend(ax_eog, position = :lt, labelsize = 12, patchsize = (20, 10), backgroundcolor = RGBAf(1, 1, 1, 0.85))
+    leg.blockscene.visible[] = false
 
     # Time cursor line during playback
     cursor_x = lift(playback_time) do pt
@@ -430,9 +479,13 @@ function signal_example_heog()
     )
 
     # ── Callback Connections ─────────────────────────────────────────────────
+    is_animating = Ref(false)
+
     on(sl_angle.value) do val
         angle_deg[] = val
-        current_display_angle[] = val
+        if !is_animating[]
+            current_display_angle[] = val
+        end
     end
 
     on(sl_dur.value) do val
@@ -443,26 +496,44 @@ function signal_example_heog()
         noise_amp[] = val
     end
 
+    on(chk_fields.checked) do val
+        show_fields[] = val
+    end
+
+    on(chk_mono.checked) do val
+        show_monopolar[] = val
+        line_R.visible = val
+        line_L.visible = val
+        leg.blockscene.visible[] = val
+    end
+
     on(btn_play.clicks) do _
+        is_animating[] && return
+        is_animating[] = true
+
         @async begin
-            target = angle_deg[]
-            dur = duration_ms[] / 1000.0
-            t_on = 0.40
-            t_off = t_on + dur
-            t_total = 2.0
-            n_frames = 60
-            fps = 30.0
-            dt = t_total / n_frames
-            for frame in 0:n_frames
-                t_curr = frame * dt
-                playback_time[] = t_curr
-                sig_on  = 1.0 / (1.0 + exp(-(t_curr - t_on) / 0.015))
-                sig_off = 1.0 / (1.0 + exp((t_curr - t_off) / 0.015))
-                current_display_angle[] = target * sig_on * sig_off
-                sleep(1.0 / fps)
+            try
+                target = angle_deg[]
+                dur = duration_ms[] / 1000.0
+                t_on = 0.40
+                t_off = t_on + dur
+                t_total = 2.0
+                n_frames = 60
+                fps = 30.0
+                dt = t_total / n_frames
+                for frame in 0:n_frames
+                    t_curr = frame * dt
+                    playback_time[] = t_curr
+                    sig_on  = 1.0 / (1.0 + exp(-(t_curr - t_on) / 0.015))
+                    sig_off = 1.0 / (1.0 + exp((t_curr - t_off) / 0.015))
+                    current_display_angle[] = target * sig_on * sig_off
+                    sleep(1.0 / fps)
+                end
+                playback_time[] = -1.0
+                current_display_angle[] = target
+            finally
+                is_animating[] = false
             end
-            playback_time[] = -1.0
-            current_display_angle[] = target
         end
     end
 
