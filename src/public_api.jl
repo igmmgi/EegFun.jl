@@ -389,6 +389,7 @@ public signal_to_data
 public simulate_erp
 public signal_example_decoding
 public signal_example_heog
+public signal_example_emg
 
 # === Misc ===
 public example_path
