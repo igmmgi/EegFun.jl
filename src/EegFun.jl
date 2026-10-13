@@ -225,6 +225,8 @@ include("demos/erp/simulate_erp.jl")
 include("demos/machine_learning/signal_example_decoding.jl")
 include("demos/eog/signal_example_eog.jl")
 include("demos/emg/signal_example_emg.jl")
+include("demos/ecg/signal_example_ecg_einthoven.jl")
+include("demos/ecg/signal_example_ecg_hrv.jl")
 
 # Precompilation
 include("precompile.jl")
