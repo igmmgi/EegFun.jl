@@ -6,6 +6,9 @@
 # but remain accessible via EegFun.TypeName if needed.
 # Alphabetically sorted within each category.
 
+# TODO: seems far too many in here!
+# We need to trim this!
+
 # === Types — User-facing data, result, and config types ===
 public AnalysisData
 public AnalysisSettings
