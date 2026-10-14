@@ -195,6 +195,19 @@ end
         @test count(mask_neg) == 0
     end
 
+    @testset "parametric thresholding (TF) - left tail" begin
+        t_matrix = zeros(2, 2, 2)
+        t_matrix[1, 1, 1] = 3.0
+        t_matrix[2, 2, 2] = -3.0
+
+        critical_t = fill(-2.0, 2, 2, 2)
+        mask_pos, mask_neg = EegFun._threshold_t_matrix_parametric_tf(t_matrix, critical_t, :left)
+
+        @test mask_pos[1, 1, 1] == false
+        @test mask_neg[2, 2, 2] == true
+        @test count(mask_pos) == 0
+    end
+
     @testset "parametric thresholding (TF) - in-place" begin
         t_matrix = zeros(2, 2, 3)
         t_matrix[1, 1, 1] = 5.0
@@ -545,6 +558,19 @@ end
         @test thresh_pos > 0
         @test thresh_neg > 0
         @test thresh_pos == thresh_neg  # symmetric for :both
+
+        # Right tail
+        tp_r, tn_r = EegFun._compute_nonparametric_threshold_common_tf(perm_t, 0.05, :right)
+        @test isfinite(tp_r) && tp_r > 0
+        @test isnan(tn_r)
+
+        # Left tail
+        tp_l, tn_l = EegFun._compute_nonparametric_threshold_common_tf(perm_t, 0.05, :left)
+        @test isnan(tp_l)
+        @test isfinite(tn_l) && tn_l > 0
+
+        # Invalid tail
+        @test_throws ErrorException EegFun._compute_nonparametric_threshold_common_tf(perm_t, 0.05, :invalid)
     end
 
     @testset "nonparametric thresholding in-place (TF)" begin
@@ -561,6 +587,28 @@ end
         @test mask_neg[2, 2, 2] == true   # -5.0 < -2.0
         @test count(mask_pos) == 1
         @test count(mask_neg) == 1
+
+        # Right tail
+        fill!(mask_pos, false)
+        fill!(mask_neg, false)
+        EegFun._threshold_t_matrix_nonparametric_tf!(mask_pos, mask_neg, t_matrix, 2.0, 2.0, :right)
+        @test mask_pos[1, 1, 1] == true
+        @test count(mask_neg) == 0
+
+        # Left tail
+        fill!(mask_pos, false)
+        fill!(mask_neg, false)
+        EegFun._threshold_t_matrix_nonparametric_tf!(mask_pos, mask_neg, t_matrix, 2.0, 2.0, :left)
+        @test count(mask_pos) == 0
+        @test mask_neg[2, 2, 2] == true
+
+        # Matrix thresholds
+        t_thresh = fill(2.0, 2, 2, 2)
+        fill!(mask_pos, false)
+        fill!(mask_neg, false)
+        EegFun._threshold_t_matrix_nonparametric_tf!(mask_pos, mask_neg, t_matrix, t_thresh, t_thresh, :both)
+        @test mask_pos[1, 1, 1] == true
+        @test mask_neg[2, 2, 2] == true
     end
 
 

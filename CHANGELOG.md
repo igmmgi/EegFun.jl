@@ -11,6 +11,7 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 
 - Fixed `BoundsError` in `tf_morlet`, `tf_stft` and `tf_multitaper` when using `return_trials=true` with `filter_edges=true`.
 - `tf_multitaper` now averages (not sums) power over trials when `return_trials=false`, matching `tf_morlet`/`tf_stft`. Values are now `n_trials` times smaller than before.
+- Fixed `MethodError` in out-of-place `channel_repairable` by implementing `Base.copy(::ContinuousRepairInfo)`.
 
 ### Changed
 
@@ -18,6 +19,10 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 - Remaining raw `@warn` calls now use `@minimal_warning` for consistent log output.
 - Removed an unused `_create_menu` helper and renamed two internal helpers (`_prepare_ica_plot_matrix`, `_apply_browser_filter!`) that shared names with unrelated functions.
 - `tf_morlet` is faster and allocates ~99% less (output unchanged).
+
+### Added
+
+- Comprehensive unit tests for previously untested modules: CleanLine, CSD, RIDE, Welch frequency spectrum, decoding preparation, FieldTrip CSV import, and pipeline channel repairs.
 
 ## [0.8.0] - 2026-08-13
 

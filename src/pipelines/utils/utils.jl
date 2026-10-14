@@ -55,6 +55,8 @@ mutable struct ContinuousRepairInfo
     skipped::Vector{Symbol}
 end
 
+Base.copy(info::ContinuousRepairInfo) = ContinuousRepairInfo(info.name, info.method, copy(info.repaired), copy(info.skipped))
+
 """
     EpochRepairInfo
 

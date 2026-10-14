@@ -104,6 +104,74 @@ using DataFrames
     end
 
     # ────────────────────────────────────────────────────────────
+    # 5b. Continuous Channel Repair and Repairable Analysis
+    # ────────────────────────────────────────────────────────────
+    @testset "Continuous channel repair" begin
+        c_dat = EegFun.create_test_continuous_data(n = 200, fs = 256, n_channels = 4, seed = 1)
+        c_dat.layout.data.x3 = [0.0, 0.1, 0.0, -0.1]
+        c_dat.layout.data.y3 = [0.1, 0.0, -0.1, 0.0]
+        c_dat.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
+        EegFun.get_neighbours_xyz!(c_dat.layout, 0.5)
+
+        # In-place channel_repairable!
+        rep_info = EegFun.create_continuous_repair_info(:neighbor_interpolation)
+        EegFun.channel_repairable!(rep_info, [:Ch2], c_dat.layout)
+        @test rep_info.repaired == [:Ch2]
+        @test isempty(rep_info.skipped)
+
+        # Out-of-place channel_repairable
+        rep_info2 = EegFun.create_continuous_repair_info(:neighbor_interpolation)
+        rep_res = EegFun.channel_repairable(rep_info2, [:Ch2], c_dat.layout)
+        @test isempty(rep_info2.repaired)
+        @test rep_res.repaired == [:Ch2]
+
+        # Empty bad channels
+        rep_empty = EegFun.create_continuous_repair_info(:neighbor_interpolation)
+        EegFun.channel_repairable!(rep_empty, Symbol[], c_dat.layout)
+        @test isempty(rep_empty.repaired)
+        @test isempty(rep_empty.skipped)
+
+        # Perform repair_channels! (neighbor)
+        c_dat_copy = copy(c_dat)
+        EegFun.repair_channels!(c_dat, rep_info; method = :neighbor_interpolation)
+        @test c_dat.data.Ch2 != c_dat_copy.data.Ch2
+        @test c_dat.data.Ch1 == c_dat_copy.data.Ch1
+
+        # Perform repair_channels! (spherical)
+        c_dat_sph = copy(c_dat_copy)
+        rep_info_sph = EegFun.create_continuous_repair_info(:spherical_spline)
+        EegFun.channel_repairable!(rep_info_sph, [:Ch2], c_dat.layout)
+        EegFun.repair_channels!(c_dat_sph, rep_info_sph; method = :spherical_spline)
+        @test c_dat_sph.data.Ch2 != c_dat_copy.data.Ch2
+
+        # Invalid method throws ArgumentError
+        @test_throws ArgumentError EegFun.repair_channels!(c_dat, rep_info; method = :invalid_method)
+
+        # Summarize repairs
+        summ_df = EegFun.summarize_electrode_repairs([rep_info])
+        @test summ_df isa DataFrame
+        @test :electrode in propertynames(summ_df)
+        @test :n_participants in propertynames(summ_df)
+        @test :Ch2 in summ_df.electrode
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # 5c. Compare Rejections
+    # ────────────────────────────────────────────────────────────
+    @testset "compare_rejections" begin
+        ep_dat1, _ = EegFun.create_test_epoch_data_with_artifacts(n_channels = 3, fs = 256, n_timepoints = 200, n_epochs = 5)
+        ep_dat2 = copy(ep_dat1)
+        rej1 = [EegFun.detect_bad_epochs_automatic(ep_dat1, abs_criterion = 50.0)]
+        rej2 = [EegFun.detect_bad_epochs_automatic(ep_dat2, abs_criterion = 100.0)]
+
+        comp_df = EegFun.compare_rejections(rej1, rej2)
+        @test comp_df isa DataFrame
+        @test nrow(comp_df) == 1
+        @test :condition in propertynames(comp_df)
+        @test :pct_final_kept in propertynames(comp_df)
+    end
+
+    # ────────────────────────────────────────────────────────────
     # 6. Pipeline template generation
     # ────────────────────────────────────────────────────────────
     @testset "generate_pipeline_template" begin

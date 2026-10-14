@@ -40,4 +40,38 @@ using DataFrames
             @test :time in propertynames(dat.data[1])
         end
     end
+
+    @testset "read_fieldtrip_csv" begin
+        using CSV
+        mktempdir() do tmpdir
+            # 1. Missing file error
+            @test_throws ErrorException EegFun.read_fieldtrip_csv(tmpdir)
+
+            # 2. Write valid epochs_data.csv
+            csv_path = joinpath(tmpdir, "epochs_data.csv")
+            df = DataFrame(
+                trial = [1, 1, 1, 2, 2, 2],
+                time = [0.0, 0.01, 0.02, 0.0, 0.01, 0.02],
+                Cz = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+                Pz = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+            )
+            CSV.write(csv_path, df)
+
+            ep = EegFun.read_fieldtrip_csv(tmpdir; fsample = 100)
+            @test ep isa EegFun.EpochData
+            @test length(ep.data) == 2
+            @test :Cz in EegFun.channel_labels(ep)
+            @test :Pz in EegFun.channel_labels(ep)
+            @test ep.sample_rate == 100
+
+            # Test automatic sample rate estimation
+            ep_auto = EegFun.read_fieldtrip_csv(tmpdir)
+            @test ep_auto.sample_rate == 100
+
+            # 3. Invalid CSV header
+            bad_csv = joinpath(tmpdir, "epochs_data.csv")
+            CSV.write(bad_csv, DataFrame(a = [1], b = [2]))
+            @test_throws ErrorException EegFun.read_fieldtrip_csv(tmpdir)
+        end
+    end
 end

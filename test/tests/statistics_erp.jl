@@ -219,6 +219,19 @@ end
         @test count(mask_neg) == 0
     end
 
+    @testset "parametric thresholding - left tail" begin
+        t_matrix = zeros(2, 2)
+        t_matrix[1, 1] = 3.0
+        t_matrix[2, 2] = -3.0
+
+        critical_t = fill(-2.0, 2, 2)
+        mask_pos, mask_neg = EegFun._threshold_t_matrix_parametric(t_matrix, critical_t, :left)
+
+        @test mask_pos[1, 1] == false
+        @test mask_neg[2, 2] == true
+        @test count(mask_pos) == 0
+    end
+
     @testset "parametric thresholding - in-place" begin
         t_matrix = zeros(2, 3)
         t_matrix[1, 1] = 5.0
@@ -419,6 +432,39 @@ end
         @test thresh_pos > 0
         @test thresh_neg > 0
         @test thresh_pos == thresh_neg  # symmetric for :both
+    end
+
+    @testset "nonparametric threshold individual" begin
+        Random.seed!(81)
+        perm_t = randn(3, 5, 50)
+
+        # Both tails
+        thresh_pos, thresh_neg = EegFun._compute_nonparametric_threshold_individual(perm_t, 0.05, :both)
+        @test size(thresh_pos) == (3, 5)
+        @test size(thresh_neg) == (3, 5)
+        @test all(thresh_pos .> 0)
+        @test thresh_pos == thresh_neg
+
+        # Right tail
+        thresh_pos_r, thresh_neg_r = EegFun._compute_nonparametric_threshold_individual(perm_t, 0.05, :right)
+        @test all(isfinite.(thresh_pos_r))
+        @test all(isnan.(thresh_neg_r))
+
+        # Left tail
+        thresh_pos_l, thresh_neg_l = EegFun._compute_nonparametric_threshold_individual(perm_t, 0.05, :left)
+        @test all(isnan.(thresh_pos_l))
+        @test all(isfinite.(thresh_neg_l))
+
+        # Test thresholding with individual matrix thresholds
+        t_mat = zeros(3, 5)
+        t_mat[1, 1] = 100.0
+        t_mat[3, 5] = -100.0
+        m_pos, m_neg = EegFun._threshold_t_matrix_nonparametric(t_mat, thresh_pos, thresh_neg, :both)
+        @test m_pos[1, 1] == true
+        @test m_neg[3, 5] == true
+
+        # Invalid tail error
+        @test_throws ErrorException EegFun._compute_nonparametric_threshold_individual(perm_t, 0.05, :invalid)
     end
 
     @testset "nonparametric thresholding in-place" begin
