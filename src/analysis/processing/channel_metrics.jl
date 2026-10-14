@@ -668,3 +668,6 @@ function check_channel_neighbors(bad_channels::Vector{Symbol}, layout::Layout)::
 
     return repairable_channels
 end
+
+# UK spelling alias
+const check_channel_neighbours = check_channel_neighbors

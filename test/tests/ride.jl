@@ -86,30 +86,30 @@ using DataFrames
         end
 
         # Pre-defined S component
-        comp_s = RideComponent(:S, zeros(Int, n_trials))
+        comp_s = EegFun.RideComponent(:S, zeros(Int, n_trials))
         @test comp_s.name == :S
         @test comp_s.latencies == zeros(Int, n_trials)
         @test comp_s.window_radius == 0
 
         # Estimated C component
-        comp_c = RideComponent(:C, 10)
+        comp_c = EegFun.RideComponent(:C, 10)
         @test comp_c.name == :C
         @test comp_c.latencies === nothing
         @test comp_c.window_radius == 10
 
         # Run decomposition
-        res = ride_decompose(data, [comp_s]; outer_iters = 2, inner_iters = 10, method = :mean)
+        res = EegFun.ride_decompose(data, [comp_s]; outer_iters = 2, inner_iters = 10, method = :mean)
         @test res isa EegFun.RideResult
         @test res.components == [:S]
         @test size(res.templates) == (n_samples, n_channels, 1)
         @test size(res.residue) == size(data)
 
         # Median method
-        res_med = ride_decompose(data, [comp_s]; outer_iters = 2, inner_iters = 10, method = :median)
+        res_med = EegFun.ride_decompose(data, [comp_s]; outer_iters = 2, inner_iters = 10, method = :median)
         @test res_med isa EegFun.RideResult
 
         # Error handling
-        @test_throws ErrorException ride_decompose(data, [RideComponent(:S, zeros(Int, n_trials + 2))])
+        @test_throws ErrorException EegFun.ride_decompose(data, [EegFun.RideComponent(:S, zeros(Int, n_trials + 2))])
     end
 
     # 4. extract_ride (EpochData interface)
@@ -119,7 +119,7 @@ using DataFrames
         n_channels = 3
         epochs = EegFun.create_test_epoch_data(n = n_samples, fs = 100, n_epochs = n_trials, n_channels = n_channels, seed = 1)
 
-        comps = [RideComponent(:S, zeros(Int, n_trials))]
+        comps = [EegFun.RideComponent(:S, zeros(Int, n_trials))]
         ride_dict = EegFun.extract_ride(epochs, comps; outer_iters = 1, inner_iters = 5)
 
         @test haskey(ride_dict, :S)

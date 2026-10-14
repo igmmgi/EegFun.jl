@@ -20,6 +20,9 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 - Removed an unused `_create_menu` helper and renamed two internal helpers (`_prepare_ica_plot_matrix`, `_apply_browser_filter!`) that shared names with unrelated functions.
 - `tf_morlet` is faster and allocates ~99% less (output unchanged).
 - Modularized `ica.jl` (3,985 lines) into `src/analysis/processing/ica/` (`api.jl`, `infomax.jl`, `picard.jl`, `amica.jl`, `components.jl`, `artifact_id.jl`).
+- Removed rogue `export` in `decompose.jl`, aligning RIDE with EegFun's zero-namespace-pollution policy.
+- Expanded `public_api.jl` to declare 45 previously omitted public functions, structs, and mutating `!` pairs.
+- Added non-breaking British English aliases: `check_channel_neighbours`, `repair_artifacts_neighbour!`, `repair_channels_neighbour!`.
 
 ### Added
 

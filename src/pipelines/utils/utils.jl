@@ -289,6 +289,9 @@ function repair_channels_neighbor!(data::ContinuousData, repair_info::Continuous
     return nothing
 end
 
+# UK spelling alias
+const repair_channels_neighbour! = repair_channels_neighbor!
+
 """
     repair_channels_spherical!(data::ContinuousData, repair_info::ContinuousRepairInfo; m::Int=4, lambda::Real=1e-5)
 

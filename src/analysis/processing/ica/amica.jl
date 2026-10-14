@@ -569,7 +569,7 @@ function amica_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String; n
 
             if iter > 1
                 if isnan(LL[iter])
-                    @warn("Got NaN! Exiting ...")
+                    @minimal_warning("Got NaN! Exiting ...")
                     break
                 end
                 if calculate_amica_lrate!(LL, iter, newt_start_iter, do_newton, lrate)
@@ -804,7 +804,7 @@ function _amica_optimize_gpu!(
 
         if iter > 1
             if isnan(LL[iter])
-                @warn("Got NaN! Exiting ...")
+                @minimal_warning("Got NaN! Exiting ...")
                 break
             end
             if calculate_amica_lrate!(LL, iter, newt_start_iter, do_newton, lrate)

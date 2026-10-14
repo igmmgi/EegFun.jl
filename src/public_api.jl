@@ -15,6 +15,7 @@ public ArtifactInfo
 public BaselineInfo
 public BatchResult
 public ChannelRepairInfo
+public CleanLineConfig
 public Cluster
 public ClusterInfo
 public Clusters
@@ -27,6 +28,7 @@ public DecodingStatisticsResult
 public EegConfig
 public EegData
 public EegFunData
+public EegFunError
 public EogConfig
 public EpochData
 public EpochInfo
@@ -48,11 +50,17 @@ public Layout
 public MultiDataFrameEeg
 public Neighbours
 public NoiseCeiling
+public OutputFilesConfig
 public PermutationDistribution
 public PermutationResult
 public PipelineConfig
+public PipelineTemplateOptions
 public PreprocessConfig
 public Rejection
+public ResampleConfig
+public RideComponent
+public RideResult
+public RsaData
 public SingleDataFrameEeg
 public SpectrumData
 public StatisticalData
@@ -70,28 +78,43 @@ public TimeFreqData
 public TimeFreqEpochData
 public TriggerInfo
 public TTestResult
+public ValidationResult
 public ZScoreRejectionInfo
 
 # === Data access and utilities ===
 public all_data
+public all_labels
 public channel_data
 public channel_labels
 public channels
 public channels_not
+public common_channels
 public components
 public components_not
+public condition_name
+public condition_number
 public conditions
 public conditions_not
 public create_eegfun_data
-public extra_data
-public file_name
-public head
-public meta_data
-public n_values
+public duration
+public epoch_to_continuous
 public epochs
 public epochs_not
+public extra_data
+public extra_labels
+public file_name
+public group_by_condition
+public has_channels
+public head
+public meta_data
+public meta_labels
+public n_channels
+public n_epochs
+public n_samples
+public n_values
 public participants
 public participants_not
+public reference
 public sample_rate
 public samples
 public samples_and
@@ -103,6 +126,7 @@ public section
 public subset
 public subset_bad_data
 public tail
+public time_vector
 public times
 public to_data_frame
 public viewer
@@ -124,13 +148,24 @@ public read_xdf
 # === Layout ===
 public average_number_of_neighbours
 public check_channel_neighbors
+public check_channel_neighbours
+public clear_neighbours!
 public create_custom_layout
 public create_layout
 public get_neighbours_xy!
 public get_neighbours_xyz!
+public has_2d_coords
+public has_3d_coords
+public has_neighbours
 public has_valid_coordinates
+public n_layout
+public neighbour_criterion
+public neighbours
 public polar_to_cartesian_xy!
 public polar_to_cartesian_xyz!
+public positions_2D
+public positions_3D
+public positions_polar
 public print_layout_neighbours
 public subset_layout
 public subset_layout!
@@ -153,7 +188,6 @@ public get_filter_characteristics
 public highpass_filter
 public highpass_filter!
 public log_epochs_table
-
 public lowpass_filter
 public lowpass_filter!
 public mark_epoch_intervals!
@@ -209,30 +243,43 @@ public rsa_crossvalidated
 
 # === Artifact detection and repair ===
 public compare_rejections
+public compute_csd
+public compute_csd!
 public consecutive
 public create_continuous_repair_info
 public create_epoch_repair_info
 public detect_bad_epochs_automatic
 public detect_bad_epochs_interactive
+public find_bridged_channels
 public get_rejected_epochs
 public identify_bad_channels
 public is_extreme_value
 public is_extreme_value!
+public is_flatline
+public is_flatline!
+public is_peak_to_peak
+public is_peak_to_peak!
 public is_step_value
 public is_step_value!
 public n_extreme_value
+public n_flatline
+public n_peak_to_peak
 public n_step_value
 public repair_artifacts
 public repair_artifacts!
 public repair_artifacts_neighbor!
+public repair_artifacts_neighbour!
 public repair_artifacts_spherical_spline!
 public repair_channels
+public repair_channels!
+public repair_channels_neighbour!
 public summarize_electrode_repairs
 public unique_rejections
-public compute_csd
-public compute_csd!
 
 # === ICA ===
+public add_ica_components
+public add_ica_components!
+public amica_ica
 public calculate_eog_channels!
 public combine_artifact_components
 public detect_eog_onsets!
@@ -247,25 +294,33 @@ public identify_spatial_kurtosis_components
 public infomax_extended_ica
 public infomax_ica
 public partition_channels_by_eog_correlation
-public subtract_ica_components
-public add_ica_components
+public picard_ica
 public run_ica
+public subtract_ica_components
+public subtract_ica_components!
 public summarize_ica_components
 
-# === ERP analysis ===
+# === ERP analysis and RIDE ===
 public calculate_trigger_interval
 public calculate_trigger_interval!
 public erp_measurements
 public erp_measurements!
+public extract_ride
+public find_nearest_peak
 public gfp
 public gfp_and_dissimilarity
 public global_dissimilarity
-public extract_ride
 public grand_average
 public jackknife_average
 public lrp
 public realign
 public realign!
+public ride_decompose
+public shift_matrix
+public shift_matrix!
+public shift_signal
+public shift_signal!
+public woody_filter
 
 # === Statistics ===
 public analytic_test
@@ -304,11 +359,10 @@ public from_dict
 public generate_config_template
 public generate_pipeline_template
 public preprocess
-public read_bids
-public validate_config
-
 public print_config
+public read_bids
 public show_parameter_info
+public validate_config
 
 # === Plotting ===
 public plot_artifact_components
@@ -327,15 +381,14 @@ public plot_ecg_component_features
 public plot_eog_component_features
 public plot_epochs
 public plot_erp
+public plot_erp!
 public plot_erp_errorbar
 public plot_erp_errorbar!
-public plot_erp!
 public plot_erp_filter_gui
 public plot_erp_image
 public plot_erp_measurement_gui
 public plot_erp_measurements
 public plot_erp_stats
-public plot_stat_heatmap
 public plot_filter_response
 public plot_gfp
 public plot_gui
@@ -350,12 +403,17 @@ public plot_layout_2d!
 public plot_layout_3d
 public plot_layout_3d!
 public plot_line_noise_components
+public plot_model_correlations
+public plot_rdm_heatmap
+public plot_rdm_timecourse
+public plot_rsa
 public plot_spatial_kurtosis_components
-public plot_tf_stats
+public plot_stat_heatmap
 public plot_tf
+public plot_tf_stats
 public plot_topography
-public plot_topography_3d
 public plot_topography!
+public plot_topography_3d
 public plot_topography_stats
 public plot_trigger_overview
 public plot_trigger_timing
@@ -369,29 +427,40 @@ public get_selected_epochs
 public get_selected_samples
 
 # === Logging ===
+public close_global_logging
 public close_logging
+public setup_global_logging
 public setup_logging
+
+# === Test data generators ===
+public create_synthetic_epochs
+public create_test_continuous_data
+public create_test_epoch_data
+public create_test_erp_data
+public create_test_layout
+public create_test_tf_data
+public create_test_tf_epoch_data
 
 # === Demos ===
 public generate_signal
 public signal_example_composition
 public signal_example_convolution
+public signal_example_decoding
 public signal_example_dotproduct
-public signal_example_ica_mixture
-public signal_example_ica_separation
-public signal_example_ica_geometry
+public signal_example_ecg_einthoven
+public signal_example_ecg_hrv
+public signal_example_emg
+public signal_example_heog
 public signal_example_ica_clt
-public signal_example_ica_sphering
+public signal_example_ica_geometry
+public signal_example_ica_mixture
 public signal_example_ica_optimization
+public signal_example_ica_separation
+public signal_example_ica_sphering
 public signal_example_sampling
 public signal_example_tf
 public signal_to_data
 public simulate_erp
-public signal_example_decoding
-public signal_example_heog
-public signal_example_emg
-public signal_example_ecg_einthoven
-public signal_example_ecg_hrv
 
 # === Misc ===
 public example_path
