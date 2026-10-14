@@ -445,7 +445,10 @@ function _process_tf_channel!(
         )
     end
 
-    lock(df_lock) do
+    # Explicit lock/unlock (not `lock(...) do`): a closure would capture the output buffers above,
+    # forcing them to be boxed and making the accumulation loop type-unstable.
+    lock(df_lock)
+    try
         if return_trials # Store each trial separately
             for trial_idx = 1:n_trials
                 power_df[trial_idx][!, channel] = copy(vec(@view eegpower_trials[trial_idx, :, :]))
@@ -469,6 +472,8 @@ function _process_tf_channel!(
                 phase_df[!, channel] = fill(NaN, num_frex * n_times_out)
             end
         end
+    finally
+        unlock(df_lock)
     end
     return nothing
 end

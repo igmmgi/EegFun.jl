@@ -17,6 +17,7 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 - Shared argument validation for `tf_morlet`, `tf_stft` and `tf_multitaper` (pad, frequencies, window length, time grid, GPU fallback, subsetting) now lives in `tf_utils.jl`. Error messages are unchanged.
 - Remaining raw `@warn` calls now use `@minimal_warning` for consistent log output.
 - Removed an unused `_create_menu` helper and renamed two internal helpers (`_prepare_ica_plot_matrix`, `_apply_browser_filter!`) that shared names with unrelated functions.
+- `tf_morlet` is faster and allocates ~99% less (output unchanged).
 
 ## [0.8.0] - 2026-08-13
 
