@@ -19,6 +19,7 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 - Remaining raw `@warn` calls now use `@minimal_warning` for consistent log output.
 - Removed an unused `_create_menu` helper and renamed two internal helpers (`_prepare_ica_plot_matrix`, `_apply_browser_filter!`) that shared names with unrelated functions.
 - `tf_morlet` is faster and allocates ~99% less (output unchanged).
+- Modularized `ica.jl` (3,985 lines) into `src/analysis/processing/ica/` (`api.jl`, `infomax.jl`, `picard.jl`, `amica.jl`, `components.jl`, `artifact_id.jl`).
 
 ### Added
 
