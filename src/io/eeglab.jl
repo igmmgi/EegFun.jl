@@ -70,7 +70,7 @@ function read_eeglab(filepath::String; preserve_radial_distance::Bool = true)
         ch_names = _extract_channel_names(eeg["chanlocs"])
         layout = _parse_channel_locations(eeg["chanlocs"], ch_names)
         if isnothing(layout)
-            @warn "No valid coordinate system found for ICA. Layout will contain only channel names."
+            @minimal_warning "No valid coordinate system found for ICA. Layout will contain only channel names."
             layout = Layout(DataFrame(label = ch_names), nothing, nothing, nothing)
         else
             polar_to_cartesian_xy!(layout, preserve_radial_distance = preserve_radial_distance)
@@ -109,7 +109,7 @@ function _load_common_eeglab_components(eeg::Dict, filepath::String, preserve_ra
 
     layout = _parse_channel_locations(eeg["chanlocs"], ch_names)
     if isnothing(layout)
-        @warn "No complete coordinate system found. Layout will contain only channel names."
+        @minimal_warning "No complete coordinate system found. Layout will contain only channel names."
         layout = Layout(DataFrame(label = ch_names), nothing, nothing, nothing)
     else
         polar_to_cartesian_xy!(layout, preserve_radial_distance = preserve_radial_distance)
@@ -213,7 +213,7 @@ function _eeglab_to_continuousdata(eeg::Dict, filepath::String, preserve_radial_
             positions = !isnothing(pos_idx) ? events.values[pos_idx] : nothing
 
             if isnothing(positions)
-                @warn "No 'position' field found in EEGLAB events. Integer trigger codes will be 0; trigger type strings are preserved in :trigger_info."
+                @minimal_warning "No 'position' field found in EEGLAB events. Integer trigger codes will be 0; trigger type strings are preserved in :trigger_info."
             end
 
             @info "Extracted $(length(latencies)) events"

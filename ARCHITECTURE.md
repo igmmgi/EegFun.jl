@@ -9,7 +9,7 @@ All core structures inherit from `EegData` and wrap signal data (via a `DataFram
 - **`TimeFreqData` / `SpectrumData`**: Frequency-domain data.
 - **`Layout`**: Sensor array coordinates and meshes (2D/3D).
 
-## 2. Directory Structure (`src/`)A
+## 2. Directory Structure (`src/`)
 
 - `types/`: Struct definitions.
 - `io/`: Parsers (EEGLAB, FieldTrip, BDF, BIDS).

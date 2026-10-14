@@ -794,7 +794,7 @@ function check_raw_data(directory::String; raw_data_files::String = "\\.(bdf|edf
                 data_size = filesize(f) - hdr_size
                 bps = n_chan_total * sr * 3
                 num_records = floor(Int, data_size / bps)
-                @warn "File $(basename(f)) has invalid duration in header. Estimated $(num_records) records from file size."
+                @minimal_warning "File $(basename(f)) has invalid duration in header. Estimated $(num_records) records from file size."
             end
             duration_sec = num_records * hdr.duration_data_records
         else
@@ -852,15 +852,15 @@ function check_raw_data(directory::String; raw_data_files::String = "\\.(bdf|edf
     # Check for discrepancies
     if length(unique(n_chans)) > 1
         bad_files = df.file[df.n_channels .!= mode_chans]
-        @warn "Discrepancy detected! Files have different numbers of channels: $(join(bad_files, ", "))"
+        @minimal_warning "Discrepancy detected! Files have different numbers of channels: $(join(bad_files, ", "))"
     end
     if length(unique(sampling_rates)) > 1
         bad_files = df.file[df.sampling_rate .!= mode_sr]
-        @warn "Discrepancy detected! Files have different sampling rates: $(join(bad_files, ", "))"
+        @minimal_warning "Discrepancy detected! Files have different sampling rates: $(join(bad_files, ", "))"
     end
     if length(unique(chan_labels_hash)) > 1
         bad_files = df.file[df.labels_hash .!= mode_hash]
-        @warn "Discrepancy detected! Files have different channel labels: $(join(bad_files, ", "))"
+        @minimal_warning "Discrepancy detected! Files have different channel labels: $(join(bad_files, ", "))"
     end
 
     # Flag files that are unusually short or small (e.g. < 50% of median)
@@ -868,7 +868,7 @@ function check_raw_data(directory::String; raw_data_files::String = "\\.(bdf|edf
         med_dur = median(durations_min)
         for i = 1:nrow(df)
             if df.duration_min[i] < med_dur * 0.5
-                @warn "File $(df.file[i]) is unusually short ($(df.duration_min[i]) min compared to median $(med_dur) min)."
+                @minimal_warning "File $(df.file[i]) is unusually short ($(df.duration_min[i]) min compared to median $(med_dur) min)."
             end
         end
     end

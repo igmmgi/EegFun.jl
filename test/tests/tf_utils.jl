@@ -1,5 +1,6 @@
 using Test
 using DataFrames
+using Statistics
 
 @testset "TF Utils" begin
 
@@ -109,5 +110,68 @@ using DataFrames
         @test mat2[1, 1] == 10.0
         @test mat1[2, 2] == 4.0
         @test mat2[2, 2] == 40.0
+    end
+
+    @testset "_filter_edges! 3D layout is [trial, freq, time]" begin
+        n_trials, n_f, n_t = 4, 3, 10
+        time_indices = collect(1:n_t)
+        n_samples = 10
+        windows = [4, 6, 8]  # samples, per frequency
+
+        power2d = ones(n_f, n_t)
+        EegFun._filter_edges!(power2d, nothing, n_f, time_indices, windows, n_samples)
+        @test any(isnan, power2d)
+        @test !all(isnan, power2d)
+
+        power3d = ones(n_trials, n_f, n_t)
+        conv3d = ones(ComplexF64, n_trials, n_f, n_t)
+        EegFun._filter_edges!(power3d, conv3d, n_f, time_indices, windows, n_samples)
+
+        # Every trial must get exactly the same edge mask as the averaged (2D) case
+        for trial = 1:n_trials
+            @test isequal(power3d[trial, :, :], power2d)
+            @test isequal(isnan.(conv3d[trial, :, :]), isnan.(power2d))
+        end
+
+        # Without eegconv
+        power3d_only = ones(n_trials, n_f, n_t)
+        EegFun._filter_edges!(power3d_only, nothing, n_f, time_indices, windows, n_samples)
+        @test isequal(power3d_only, power3d)
+    end
+
+    @testset "return_trials with filter_edges (default) for all TF methods" begin
+        fixture() = EegFun.create_test_epoch_data(n = 256, fs = 256, n_epochs = 6, n_channels = 3, seed = 1)
+        freqs = 2:4:30
+        runners = [
+            "tf_morlet" => (; kw...) -> EegFun.tf_morlet(fixture(); frequencies = freqs, cycles = 5, kw...),
+            "tf_stft" => (; kw...) -> EegFun.tf_stft(fixture(); frequencies = freqs, window_length = 0.3, kw...),
+            "tf_multitaper" => (; kw...) -> EegFun.tf_multitaper(fixture(); frequencies = freqs, cycles = 5, kw...),
+        ]
+
+        for (name, run) in runners
+            @testset "$name" begin
+                avg = run()
+                trials = run(return_trials = true, return_phase = true)
+
+                @test trials.data_power isa Vector{DataFrame}
+                @test length(trials.data_power) == 6
+
+                for ch in (:Ch1, :Ch2, :Ch3)
+                    avg_power = avg.data_power[!, ch]
+                    @test any(isnan, avg_power)  # edges are actually exercised
+
+                    for (df_pow, df_phase) in zip(trials.data_power, trials.data_phase)
+                        # Same edge mask in every trial as in the averaged result
+                        @test isequal(isnan.(df_pow[!, ch]), isnan.(avg_power))
+                        @test isequal(isnan.(df_phase[!, ch]), isnan.(avg_power))
+                    end
+
+                    # Away from the edges, the mean over trials equals the averaged power
+                    valid = .!isnan.(avg_power)
+                    trial_mean = vec(mean(reduce(hcat, [df[!, ch] for df in trials.data_power]), dims = 2))
+                    @test isapprox(trial_mean[valid], avg_power[valid]; rtol = 1e-8)
+                end
+            end
+        end
     end
 end

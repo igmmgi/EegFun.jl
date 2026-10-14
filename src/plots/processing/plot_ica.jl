@@ -324,7 +324,7 @@ mutable struct IcaComponentState
         kwargs...,
     )
         # Prepare data matrix
-        dat_matrix = _prepare_ica_data_matrix(dat, ica)
+        dat_matrix = _prepare_ica_plot_matrix(dat, ica)
         component_data = ica.unmixing * dat_matrix
         total_components = size(component_data, 1)
 
@@ -505,7 +505,7 @@ end
 
 
 """
-    _prepare_ica_data_matrix(dat::ContinuousData, ica::InfoIca)
+    _prepare_ica_plot_matrix(dat::ContinuousData, ica::InfoIca)
 
 Selects, centers, scales, and transposes data for ICA unmixing.
 
@@ -516,7 +516,7 @@ Selects, centers, scales, and transposes data for ICA unmixing.
 # Returns
 - `Matrix{Float64}`: Data matrix ready for `ica.unmixing * dat_matrix`. (channels x samples)
 """
-function _prepare_ica_data_matrix(dat::ContinuousData, ica::InfoIca)
+function _prepare_ica_plot_matrix(dat::ContinuousData, ica::InfoIca)
     dat_matrix = permutedims(Matrix(dat.data[!, ica.layout.data.label]))
     dat_matrix .-= mean(dat_matrix, dims = 2)
     dat_matrix ./= ica.scale

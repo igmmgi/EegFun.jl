@@ -269,7 +269,7 @@ function _open_save_settings_dialog(fig)
                     end
                 end
             catch err
-                @warn "Failed to save figure: $err"
+                @minimal_warning "Failed to save figure: $err"
             end
         end
     end

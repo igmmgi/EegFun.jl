@@ -83,18 +83,12 @@ function tf_multitaper(
     use_gpu::Bool = false,
 )
     # Validate padding parameter
-    if !isnothing(pad) && pad ∉ [:pre, :post, :both]
-        error("`pad` must be `nothing`, `:pre`, `:post`, or `:both`, got :$pad")
-    end
+    _validate_tf_pad(pad)
 
-    gpu_active = use_gpu && is_gpu_available()
-    if use_gpu && !gpu_active
-        @warn "GPU requested but CUDA is not available or functional. Falling back to CPU."
-    end
+    gpu_active = _tf_gpu_active(use_gpu)
 
     # Subset data with channel and interval selection
-    dat = subset(dat; channel_selection = channel_selection, interval_selection = interval_selection)
-    isempty(dat.data) && error("No data remaining after subsetting")
+    dat = _subset_tf_data(dat, channel_selection, interval_selection)
 
     # Get selected channels (after subsetting)
     selected_channels = channel_labels(dat)
@@ -103,12 +97,7 @@ function tf_multitaper(
     num_frex = length(frequencies)
 
     # Validate frequencies
-    if num_frex == 0
-        error("`frequencies` must contain at least one frequency")
-    end
-    if any(f -> f <= 0, frequencies)
-        error("All frequencies in `frequencies` must be positive")
-    end
+    _validate_tf_frequencies(frequencies)
 
     # Validate cycles parameter (adaptive window only)
     if cycles <= 0
@@ -124,15 +113,8 @@ function tf_multitaper(
     end
 
     # Get time points and determine output time grid
-    times = time_vector(dat)
     n_samples_per_epoch = n_samples(dat)
-    time_min = minimum(times)
-    time_max = maximum(times)
-    time_steps_range = time_min:time_steps:time_max
-    time_indices, times_out = find_times(times, time_steps_range)
-    if isempty(time_indices)
-        error("No valid time points found with step size $time_steps in range ($time_min to $time_max seconds)")
-    end
+    time_indices, times_out = _tf_time_grid(dat, time_steps)
 
     # Get number of trials/epochs
     n_trials = n_epochs(dat)
@@ -146,10 +128,7 @@ function tf_multitaper(
 
     # Convert window lengths from seconds to samples (per frequency)
     n_window_samples_per_freq = [Int(round(wl * dat.sample_rate)) for wl in window_lengths_sec]
-    if any(n -> n < 2, n_window_samples_per_freq)
-        min_samples = minimum(n_window_samples_per_freq)
-        error("Window length is too short. Minimum window size is 2 samples, got $min_samples samples.")
-    end
+    _validate_tf_window_samples(n_window_samples_per_freq)
 
     n_times = length(times_out)
 
@@ -414,6 +393,7 @@ function tf_multitaper(
             n_window_samples = n_window_samples_per_freq[fi]
             n_tapers = n_tapers_per_freq[fi]
             inv_n_tapers = inv_n_tapers_per_freq[fi]
+            inv_n_trials = 1.0 / n_trials
 
             if gpu_active
                 half_window = n_window_samples ÷ 2
@@ -522,9 +502,9 @@ function tf_multitaper(
                         @views eegconv_trials_gpu[:, fi, :] .= complex_accum_trials_gpu .* inv_n_tapers
                     end
                 else
-                    @views eegpower_avg_gpu[fi, :] .= power_accum_avg_gpu .* inv_n_tapers
+                    @views eegpower_avg_gpu[fi, :] .= power_accum_avg_gpu .* (inv_n_tapers * inv_n_trials)
                     if return_phase
-                        @views eegconv_avg_gpu[fi, :] .= complex_accum_avg_gpu .* inv_n_tapers
+                        @views eegconv_avg_gpu[fi, :] .= complex_accum_avg_gpu .* (inv_n_tapers * inv_n_trials)
                     end
                 end
             else
@@ -537,9 +517,9 @@ function tf_multitaper(
                     end
                 else
                     @inbounds for ti_idx = 1:n_times
-                        eegpower_avg[fi, ti_idx] = power_accum_avg[ti_idx] * inv_n_tapers
+                        eegpower_avg[fi, ti_idx] = power_accum_avg[ti_idx] * inv_n_tapers * inv_n_trials
                         if return_phase
-                            eegconv_avg[fi, ti_idx] = complex_accum_avg[ti_idx] * inv_n_tapers
+                            eegconv_avg[fi, ti_idx] = complex_accum_avg[ti_idx] * inv_n_tapers * inv_n_trials
                         end
                     end
                 end

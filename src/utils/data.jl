@@ -861,7 +861,7 @@ function _interval_to_samples(sel::TimeSelection)
             mask = fill(false, nrow(x))
             mask[idx] = true
         else
-            @warn "times(): No samples found in range $(start_time)s–$(stop_time)s"
+            @minimal_warning "times(): No samples found in range $(start_time)s–$(stop_time)s"
         end
         mask
     end

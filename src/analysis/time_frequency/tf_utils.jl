@@ -106,10 +106,10 @@ function _filter_edges!(
         for ti in eachindex(time_indices)
             sample_idx = time_indices[ti]
             if !(sample_idx >= min_valid_threshold && sample_idx < max_valid_threshold)
-                if ndims(eegpower) == 3  # return_trials = true
-                    @views eegpower[fi, ti, :] .= NaN
+                if ndims(eegpower) == 3  # return_trials = true, layout is [trial, freq, time]
+                    @views eegpower[:, fi, ti] .= NaN
                     if !isnothing(eegconv)
-                        @views eegconv[fi, ti, :] .= NaN * im
+                        @views eegconv[:, fi, ti] .= NaN * im
                     end
                 else  # return_trials = false
                     eegpower[fi, ti] = NaN
@@ -120,4 +120,87 @@ function _filter_edges!(
             end
         end
     end
+end
+
+"""
+    _validate_tf_pad(pad)
+
+Throw an error unless `pad` is `nothing`, `:pre`, `:post` or `:both`.
+"""
+function _validate_tf_pad(pad)
+    if !isnothing(pad) && pad ∉ [:pre, :post, :both]
+        error("`pad` must be `nothing`, `:pre`, `:post`, or `:both`, got :$pad")
+    end
+    return nothing
+end
+
+"""
+    _tf_gpu_active(use_gpu::Bool) -> Bool
+
+Return whether the GPU should be used. Warns and returns `false` if a GPU was
+requested but CUDA is not available or functional.
+"""
+function _tf_gpu_active(use_gpu::Bool)
+    gpu_active = use_gpu && is_gpu_available()
+    if use_gpu && !gpu_active
+        @minimal_warning "GPU requested but CUDA is not available or functional. Falling back to CPU."
+    end
+    return gpu_active
+end
+
+"""
+    _subset_tf_data(dat::EpochData, channel_selection, interval_selection) -> EpochData
+
+Subset `dat` by channel and interval selection, erroring if no data remain.
+"""
+function _subset_tf_data(dat::EpochData, channel_selection::Function, interval_selection::Interval)
+    dat = subset(dat; channel_selection = channel_selection, interval_selection = interval_selection)
+    isempty(dat.data) && error("No data remaining after subsetting")
+    return dat
+end
+
+"""
+    _validate_tf_frequencies(frequencies)
+
+Throw an error unless `frequencies` is non-empty and strictly positive.
+"""
+function _validate_tf_frequencies(frequencies)
+    if length(frequencies) == 0
+        error("`frequencies` must contain at least one frequency")
+    end
+    if any(f -> f <= 0, frequencies)
+        error("All frequencies in `frequencies` must be positive")
+    end
+    return nothing
+end
+
+"""
+    _validate_tf_window_samples(n_window_samples)
+
+Throw an error if any window (given in samples, scalar or vector) is shorter than 2 samples.
+"""
+function _validate_tf_window_samples(n_window_samples)
+    min_samples = minimum(n_window_samples)
+    if min_samples < 2
+        error("Window length is too short. Minimum window size is 2 samples, got $min_samples samples.")
+    end
+    return nothing
+end
+
+"""
+    _tf_time_grid(dat::EpochData, time_steps::Real) -> (time_indices, times_out)
+
+Determine the output time grid (sample indices and time values) for a step size of
+`time_steps` seconds. Errors if no valid time points are found.
+"""
+function _tf_time_grid(dat::EpochData, time_steps::Real)
+    times = time_vector(dat)
+    time_min = minimum(times)
+    time_max = maximum(times)
+    time_steps_range = time_min:time_steps:time_max
+    time_indices, times_out = find_times(times, time_steps_range)
+    if isempty(time_indices)
+        error("No valid time points found with step size $time_steps in range ($time_min to $time_max seconds)")
+    end
+    return time_indices, times_out
 end

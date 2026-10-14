@@ -12,18 +12,12 @@ function tf_morlet(
 )
 
     # Validate padding parameter
-    if !isnothing(pad) && pad ∉ [:pre, :post, :both]
-        error("`pad` must be `nothing`, `:pre`, `:post`, or `:both`, got :$pad")
-    end
+    _validate_tf_pad(pad)
 
-    gpu_active = use_gpu && is_gpu_available()
-    if use_gpu && !gpu_active
-        @warn "GPU requested but CUDA is not available or functional. Falling back to CPU."
-    end
+    gpu_active = _tf_gpu_active(use_gpu)
 
     # Subset data with channel and interval selection
-    dat = subset(dat; channel_selection = channel_selection, interval_selection = interval_selection)
-    isempty(dat.data) && error("No data remaining after subsetting")
+    dat = _subset_tf_data(dat, channel_selection, interval_selection)
 
     # Get original data time range (before padding) - these are the time points we want in output
     n_samples_original_unpadded = n_samples(dat)  # Store original unpadded length for edge filtering
@@ -38,12 +32,7 @@ function tf_morlet(
     num_frex = length(frequencies)
 
     # Validate frequencies
-    if num_frex == 0
-        error("`frequencies` must contain at least one frequency")
-    end
-    if any(f -> f <= 0, frequencies)
-        error("All frequencies in `frequencies` must be positive")
-    end
+    _validate_tf_frequencies(frequencies)
 
     # Define cycles/sigma
     if cycles isa Tuple

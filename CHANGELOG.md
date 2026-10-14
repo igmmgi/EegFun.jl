@@ -7,6 +7,17 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed `BoundsError` in `tf_morlet`, `tf_stft` and `tf_multitaper` when using `return_trials=true` with `filter_edges=true`.
+- `tf_multitaper` now averages (not sums) power over trials when `return_trials=false`, matching `tf_morlet`/`tf_stft`. Values are now `n_trials` times smaller than before.
+
+### Changed
+
+- Shared argument validation for `tf_morlet`, `tf_stft` and `tf_multitaper` (pad, frequencies, window length, time grid, GPU fallback, subsetting) now lives in `tf_utils.jl`. Error messages are unchanged.
+- Remaining raw `@warn` calls now use `@minimal_warning` for consistent log output.
+- Removed an unused `_create_menu` helper and renamed two internal helpers (`_prepare_ica_plot_matrix`, `_apply_browser_filter!`) that shared names with unrelated functions.
+
 ## [0.8.0] - 2026-08-13
 
 ### Added

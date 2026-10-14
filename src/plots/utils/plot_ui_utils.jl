@@ -1,14 +1,4 @@
 """
-    _create_menu(fig, options, default, label; kwargs...)
-
-Create a dropdown menu with an adjacent label.
-"""
-function _create_menu(fig, options, default, label; kwargs...)
-    menu = Menu(fig, options = options, default = default, direction = :down, fontsize = 18, width = Auto(), tellwidth = false, kwargs...)
-    return hcat(menu, Label(fig, label, fontsize = 22, halign = :left, tellwidth = false))
-end
-
-"""
     _build_checkbox_grid!(grid, items, cols, checked_fn; fontsize = 14, label_fn = string)
 
 Build a labelled checkbox grid into `grid`. Returns `Vector{Checkbox}`.

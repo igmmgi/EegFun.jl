@@ -81,18 +81,12 @@ function tf_stft(
 )
 
     # Validate padding parameter
-    if !isnothing(pad) && pad ∉ [:pre, :post, :both]
-        error("`pad` must be `nothing`, `:pre`, `:post`, or `:both`, got :$pad")
-    end
+    _validate_tf_pad(pad)
 
-    gpu_active = use_gpu && is_gpu_available()
-    if use_gpu && !gpu_active
-        @warn "GPU requested but CUDA is not available or functional. Falling back to CPU."
-    end
+    gpu_active = _tf_gpu_active(use_gpu)
 
     # Subset data with channel and interval selection
-    dat = subset(dat; channel_selection = channel_selection, interval_selection = interval_selection)
-    isempty(dat.data) && error("No data remaining after subsetting")
+    dat = _subset_tf_data(dat, channel_selection, interval_selection)
 
     # Get selected channels (after subsetting)
     selected_channels = channel_labels(dat)
@@ -101,12 +95,7 @@ function tf_stft(
     num_frex = length(frequencies)
 
     # Validate frequencies
-    if num_frex == 0
-        error("`frequencies` must contain at least one frequency")
-    end
-    if any(f -> f <= 0, frequencies)
-        error("All frequencies in `frequencies` must be positive")
-    end
+    _validate_tf_frequencies(frequencies)
 
     # Validate window_length and cycles - exactly one must be provided
     if isnothing(window_length) && isnothing(cycles)
@@ -123,14 +112,7 @@ function tf_stft(
     end
 
     # Get time points and determine output time grid
-    times = time_vector(dat)
-    time_min = minimum(times)
-    time_max = maximum(times)
-    time_steps_range = time_min:time_steps:time_max
-    time_indices, times_out = find_times(times, time_steps_range)
-    if isempty(time_indices)
-        error("No valid time points found with step size $time_steps in range ($time_min to $time_max seconds)")
-    end
+    time_indices, times_out = _tf_time_grid(dat, time_steps)
 
     # Get number of trials/epochs
     n_trials = n_epochs(dat)
@@ -143,9 +125,7 @@ function tf_stft(
     if !isnothing(window_length)
         # Fixed window mode: same window length for all frequencies
         n_window_samples = Int(round(window_length * dat.sample_rate))
-        if n_window_samples < 2
-            error("Window length is too short. Minimum window size is 2 samples, got $n_window_samples samples.")
-        end
+        _validate_tf_window_samples(n_window_samples)
         n_window_samples_per_freq = fill(n_window_samples, num_frex)
         is_fixed = true
     else
@@ -153,10 +133,7 @@ function tf_stft(
         cycles_vec = fill(Float64(cycles), num_frex)
         window_lengths_sec = cycles_vec ./ freqs  # Window length in seconds 
         n_window_samples_per_freq = [Int(round(wl * dat.sample_rate)) for wl in window_lengths_sec]
-        if any(n -> n < 2, n_window_samples_per_freq)
-            min_samples = minimum(n_window_samples_per_freq)
-            error("Window length is too short. Minimum window size is 2 samples, got $min_samples samples.")
-        end
+        _validate_tf_window_samples(n_window_samples_per_freq)
         is_fixed = false
     end
 
