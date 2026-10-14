@@ -28,6 +28,7 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 ### Added
 
 - Comprehensive unit tests for previously untested modules: CleanLine, CSD, RIDE, Welch frequency spectrum, decoding preparation, FieldTrip CSV import, and pipeline channel repairs.
+- Comprehensive unit tests for independent-design statistics (ERP and TF), directional non-parametric permutation thresholding, and epoched artifact detection/repair (spherical spline interpolation, bridging detection, flatline, and peak-to-peak).
 
 ## [0.8.0] - 2026-08-13
 

@@ -47,6 +47,56 @@ function _build_erp_test_data(;
     return erps
 end
 
+function _build_erp_independent_test_data(;
+    n_group1 = 4,
+    n_group2 = 5,
+    n_channels = 3,
+    fs = 256,
+    offset_g1 = 2.0,
+    offset_g2 = 0.0,
+    noise = 0.05,
+    signal_freq = 10.0,
+)
+    erps = EegFun.ErpData[]
+    time = collect(-0.2:(1/fs):0.8)
+    n_time = length(time)
+    layout = EegFun.create_test_layout(n_channels = n_channels)
+    channel_labels = [Symbol("Ch$i") for i = 1:n_channels]
+
+    # Group 1: condition 1
+    for p = 1:n_group1
+        df = DataFrame(
+            time = time,
+            sample = 1:n_time,
+            condition = fill(1, n_time),
+            condition_name = fill("condition_1", n_time),
+            participant = fill(p, n_time),
+        )
+        Random.seed!(100 * p + 1)
+        for ch in channel_labels
+            df[!, ch] = offset_g1 .* sin.(2π * signal_freq .* time) .+ noise .* randn(n_time)
+        end
+        push!(erps, EegFun.ErpData("participant$p", 1, "condition_1", df, layout, fs, EegFun.AnalysisInfo(), 20))
+    end
+
+    # Group 2: condition 2
+    for p = (n_group1 + 1):(n_group1 + n_group2)
+        df = DataFrame(
+            time = time,
+            sample = 1:n_time,
+            condition = fill(2, n_time),
+            condition_name = fill("condition_2", n_time),
+            participant = fill(p, n_time),
+        )
+        Random.seed!(100 * p + 2)
+        for ch in channel_labels
+            df[!, ch] = offset_g2 .* sin.(2π * signal_freq .* time) .+ noise .* randn(n_time)
+        end
+        push!(erps, EegFun.ErpData("participant$p", 2, "condition_2", df, layout, fs, EegFun.AnalysisInfo(), 20))
+    end
+    return erps
+end
+
 # ============================================================
 @testset "ERP Statistics" begin
     # ============================================================
@@ -683,6 +733,113 @@ end
         output = String(take!(io))
 
         @test contains(output, "AnalyticResult")
+    end
+
+
+    # ────────────────────────────────────────────────────────────
+    # 10. Independent Design (ERP)
+    # ────────────────────────────────────────────────────────────
+    @testset "Independent Design - ERP Statistics" begin
+        Random.seed!(80)
+        n_group1 = 4
+        n_group2 = 5
+        erps = _build_erp_independent_test_data(n_group1 = n_group1, n_group2 = n_group2, n_channels = 3)
+
+        # Basic preparation
+        prepared = EegFun.prepare_stats(erps; design = :independent)
+        @test prepared isa EegFun.StatisticalData
+        @test prepared.analysis.design == :independent
+        @test length(prepared.data) == 2
+        @test size(prepared.analysis.data[1], 1) == n_group1
+        @test size(prepared.analysis.data[2], 1) == n_group2
+
+        # Validation: invalid design symbol
+        @test_throws EegFun.EegFunError EegFun.prepare_stats(erps; design = :invalid)
+
+        # Validation: < 2 participants in a group
+        erps_too_few = filter(erp -> erp.file in ["participant1", "participant5", "participant6"], erps)
+        @test_throws EegFun.EegFunError EegFun.prepare_stats(erps_too_few; design = :independent)
+
+        # _compute_t_matrix with independent design
+        t_mat, df, p_mat, se_diff = EegFun._compute_t_matrix(
+            prepared.analysis.data[1],
+            prepared.analysis.data[2],
+            :independent;
+            compute_p_values = true,
+        )
+        expected_df = Float64(n_group1 + n_group2 - 2)
+        @test df == expected_df
+        @test size(t_mat) == (3, length(prepared.analysis.time_points))
+        @test size(p_mat) == size(t_mat)
+        @test all(0.0 .<= p_mat .<= 1.0)
+        @test all(se_diff .> 0.0)
+
+        # Analytic test
+        res_an = EegFun.analytic_test(prepared)
+        @test res_an isa EegFun.AnalyticResult
+        @test res_an.test_info.df == expected_df
+        @test size(res_an.masks.positive) == (3, length(prepared.analysis.time_points))
+
+        # Permutation test
+        res_perm = EegFun.permutation_test(prepared; n_permutations = 25, cluster_type = :temporal)
+        @test res_perm isa EegFun.PermutationResult
+        @test res_perm.test_info.df == expected_df
+    end
+
+
+    # ────────────────────────────────────────────────────────────
+    # 11. Nonparametric thresholding - tails and matrix thresholds
+    # ────────────────────────────────────────────────────────────
+    @testset "Nonparametric thresholding - tails and matrix thresholds" begin
+        Random.seed!(81)
+        perm_t = randn(2, 3, 50)
+
+        # _compute_nonparametric_threshold_individual: :right tail
+        thresh_pos_r, thresh_neg_r = EegFun._compute_nonparametric_threshold_individual(perm_t, 0.05, :right)
+        @test size(thresh_pos_r) == (2, 3)
+        @test all(!isnan, thresh_pos_r)
+        @test all(isnan, thresh_neg_r)
+
+        # _compute_nonparametric_threshold_individual: :left tail
+        thresh_pos_l, thresh_neg_l = EegFun._compute_nonparametric_threshold_individual(perm_t, 0.05, :left)
+        @test size(thresh_neg_l) == (2, 3)
+        @test all(!isnan, thresh_neg_l)
+        @test all(isnan, thresh_pos_l)
+
+        # _compute_nonparametric_threshold_individual: invalid tail
+        @test_throws ErrorException EegFun._compute_nonparametric_threshold_individual(perm_t, 0.05, :invalid)
+
+        # Matrix thresholding in-place
+        t_matrix = [3.0 -3.0; -4.0 4.0]
+        pos_mat = fill(2.0, 2, 2)
+        neg_mat = fill(2.0, 2, 2)
+
+        # :right tail with matrix thresholds
+        m_pos_r, m_neg_r = EegFun._threshold_t_matrix_nonparametric(t_matrix, pos_mat, neg_mat, :right)
+        @test m_pos_r[1, 1] == true
+        @test m_pos_r[1, 2] == false
+        @test all(.!m_neg_r)
+
+        # :left tail with matrix thresholds
+        m_pos_l, m_neg_l = EegFun._threshold_t_matrix_nonparametric(t_matrix, pos_mat, neg_mat, :left)
+        @test m_neg_l[1, 2] == true
+        @test m_neg_l[1, 1] == false
+        @test all(.!m_pos_l)
+
+        # Invalid tail error
+        @test_throws ErrorException EegFun._threshold_t_matrix_nonparametric(t_matrix, pos_mat, neg_mat, :invalid)
+
+        # Permutation tests with one-tailed non-parametric thresholding
+        erps = _build_erp_test_data(n_participants = 4, offset_cond1 = 3.0, offset_cond2 = 0.0, noise = 0.05)
+        prepared = EegFun.prepare_stats(erps; design = :paired)
+
+        res_right = EegFun.permutation_test(prepared; threshold_method = :nonparametric_common, tail = :right, n_permutations = 20, cluster_type = :temporal)
+        @test res_right isa EegFun.PermutationResult
+        @test res_right.test_info.tail == :right
+
+        res_left = EegFun.permutation_test(prepared; threshold_method = :nonparametric_common, tail = :left, n_permutations = 20, cluster_type = :temporal)
+        @test res_left isa EegFun.PermutationResult
+        @test res_left.test_info.tail == :left
     end
 
 end # @testset "ERP Statistics"
