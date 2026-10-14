@@ -12,6 +12,7 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 - Fixed `BoundsError` in `tf_morlet`, `tf_stft` and `tf_multitaper` when using `return_trials=true` with `filter_edges=true`.
 - `tf_multitaper` now averages (not sums) power over trials when `return_trials=false`, matching `tf_morlet`/`tf_stft`. Values are now `n_trials` times smaller than before.
 - Fixed `MethodError` in out-of-place `channel_repairable` by implementing `Base.copy(::ContinuousRepairInfo)`.
+- Fixed documentation build failure on CI by pinning `@nolebase/vitepress-plugin-enhanced-readabilities` to `~2.18.2` (preventing upstream peer dependency conflict with VitePress 1.x).
 
 ### Changed
 
