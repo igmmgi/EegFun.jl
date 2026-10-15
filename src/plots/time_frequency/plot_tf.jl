@@ -238,8 +238,8 @@ function plot_tf(
 
     # Apply baseline if requested, but only if data hasn't already been baselined
     if !isnothing(baseline_interval) && !isnothing(tf_data.baseline)
-        @warn "Data has already been baselined (method: $(tf_data.baseline.method), window: $(tf_data.baseline.window)). " *
-              "Ignoring baseline_interval parameter. Use the data as-is or create a new TimeFreqData without baseline."
+        @minimal_warning "Data has already been baselined (method: $(tf_data.baseline.method), window: $(tf_data.baseline.window)). " *
+                         "Ignoring baseline_interval parameter. Use the data as-is or create a new TimeFreqData without baseline."
         tf_plot = tf_data
     elseif !isnothing(baseline_interval)
         tf_plot = tf_baseline(tf_data, baseline_interval; method = baseline_method)

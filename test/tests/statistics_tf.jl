@@ -36,6 +36,51 @@ function _build_tf_test_data(;
     return tfs
 end
 
+function _build_tf_independent_test_data(;
+    n_group1 = 3,
+    n_group2 = 4,
+    n_channels = 3,
+    frequencies = [4.0, 8.0, 12.0, 16.0],
+    time_points = [0.0, 0.1, 0.2, 0.3, 0.4],
+    offset_g1 = 5.0,
+    offset_g2 = 2.0,
+    noise = 0.05,
+    fs = 256,
+)
+    tfs = EegFun.TimeFreqData[]
+    # Group 1: condition 1
+    for p = 1:n_group1
+        tf = EegFun.create_test_tf_data(
+            file = "participant$p",
+            condition = 1,
+            condition_name = "cond_1",
+            n_channels = n_channels,
+            frequencies = frequencies,
+            time_points = time_points,
+            power_offset = offset_g1,
+            noise = noise,
+            fs = fs,
+        )
+        push!(tfs, tf)
+    end
+    # Group 2: condition 2
+    for p = (n_group1 + 1):(n_group1 + n_group2)
+        tf = EegFun.create_test_tf_data(
+            file = "participant$p",
+            condition = 2,
+            condition_name = "cond_2",
+            n_channels = n_channels,
+            frequencies = frequencies,
+            time_points = time_points,
+            power_offset = offset_g2,
+            noise = noise,
+            fs = fs,
+        )
+        push!(tfs, tf)
+    end
+    return tfs
+end
+
 # ============================================================
 @testset "TF Statistics" begin
     # ============================================================
@@ -193,6 +238,19 @@ end
         @test mask_pos[1, 1, 1] == true
         @test mask_neg[2, 2, 2] == false  # ignored for right tail
         @test count(mask_neg) == 0
+    end
+
+    @testset "parametric thresholding (TF) - left tail" begin
+        t_matrix = zeros(2, 2, 2)
+        t_matrix[1, 1, 1] = 3.0
+        t_matrix[2, 2, 2] = -3.0
+
+        critical_t = fill(-2.0, 2, 2, 2)
+        mask_pos, mask_neg = EegFun._threshold_t_matrix_parametric_tf(t_matrix, critical_t, :left)
+
+        @test mask_pos[1, 1, 1] == false
+        @test mask_neg[2, 2, 2] == true
+        @test count(mask_pos) == 0
     end
 
     @testset "parametric thresholding (TF) - in-place" begin
@@ -545,6 +603,19 @@ end
         @test thresh_pos > 0
         @test thresh_neg > 0
         @test thresh_pos == thresh_neg  # symmetric for :both
+
+        # Right tail
+        tp_r, tn_r = EegFun._compute_nonparametric_threshold_common_tf(perm_t, 0.05, :right)
+        @test isfinite(tp_r) && tp_r > 0
+        @test isnan(tn_r)
+
+        # Left tail
+        tp_l, tn_l = EegFun._compute_nonparametric_threshold_common_tf(perm_t, 0.05, :left)
+        @test isnan(tp_l)
+        @test isfinite(tn_l) && tn_l > 0
+
+        # Invalid tail
+        @test_throws ErrorException EegFun._compute_nonparametric_threshold_common_tf(perm_t, 0.05, :invalid)
     end
 
     @testset "nonparametric thresholding in-place (TF)" begin
@@ -561,6 +632,28 @@ end
         @test mask_neg[2, 2, 2] == true   # -5.0 < -2.0
         @test count(mask_pos) == 1
         @test count(mask_neg) == 1
+
+        # Right tail
+        fill!(mask_pos, false)
+        fill!(mask_neg, false)
+        EegFun._threshold_t_matrix_nonparametric_tf!(mask_pos, mask_neg, t_matrix, 2.0, 2.0, :right)
+        @test mask_pos[1, 1, 1] == true
+        @test count(mask_neg) == 0
+
+        # Left tail
+        fill!(mask_pos, false)
+        fill!(mask_neg, false)
+        EegFun._threshold_t_matrix_nonparametric_tf!(mask_pos, mask_neg, t_matrix, 2.0, 2.0, :left)
+        @test count(mask_pos) == 0
+        @test mask_neg[2, 2, 2] == true
+
+        # Matrix thresholds
+        t_thresh = fill(2.0, 2, 2, 2)
+        fill!(mask_pos, false)
+        fill!(mask_neg, false)
+        EegFun._threshold_t_matrix_nonparametric_tf!(mask_pos, mask_neg, t_matrix, t_thresh, t_thresh, :both)
+        @test mask_pos[1, 1, 1] == true
+        @test mask_neg[2, 2, 2] == true
     end
 
 
@@ -676,6 +769,81 @@ end
         @test prepared isa EegFun.TFStatisticalData
         @test length(prepared.data) == 2  # 2 conditions
         @test size(prepared.analysis.data[1], 1) == 2  # 2 participants
+    end
+
+
+    # ────────────────────────────────────────────────────────────
+    # 12. Independent Design (TF)
+    # ────────────────────────────────────────────────────────────
+    @testset "Independent Design - TF Statistics" begin
+        Random.seed!(90)
+        n_group1 = 3
+        n_group2 = 4
+        tfs = _build_tf_independent_test_data(n_group1 = n_group1, n_group2 = n_group2, n_channels = 3)
+
+        # Basic preparation
+        prepared = EegFun.prepare_stats(tfs; design = :independent)
+        @test prepared isa EegFun.TFStatisticalData
+        @test prepared.analysis.design == :independent
+        @test length(prepared.data) == 2
+        @test size(prepared.analysis.data[1], 1) == n_group1
+        @test size(prepared.analysis.data[2], 1) == n_group2
+
+        # Validation: invalid design symbol
+        @test_throws EegFun.EegFunError EegFun.prepare_stats(tfs; design = :invalid)
+
+        # Validation: < 2 participants in a group
+        tfs_too_few = filter(tf -> tf.file in ["participant1", "participant4", "participant5"], tfs)
+        @test_throws EegFun.EegFunError EegFun.prepare_stats(tfs_too_few; design = :independent)
+
+        # _compute_t_matrix_tf with independent design
+        t_mat, df, p_mat = EegFun._compute_t_matrix_tf(
+            prepared.analysis.data[1],
+            prepared.analysis.data[2],
+            :independent;
+            compute_p_values = true,
+        )
+        expected_df = Float64(n_group1 + n_group2 - 2)
+        @test df == expected_df
+        @test size(t_mat) == (3, 4, 5)  # n_channels × n_freqs × n_times
+        @test size(p_mat) == size(t_mat)
+        @test all(0.0 .<= p_mat .<= 1.0)
+
+        # Analytic test
+        res_an = EegFun.analytic_test(prepared)
+        @test res_an isa EegFun.TFAnalyticResult
+        @test res_an.test_info.df == expected_df
+        @test size(res_an.masks.positive) == (3, 4, 5)
+
+        # Permutation test
+        res_perm = EegFun.permutation_test(prepared; n_permutations = 20, cluster_type = :temporal)
+        @test res_perm isa EegFun.TFClusterPermutationResult
+        @test res_perm.test_info.df == expected_df
+    end
+
+
+    # ────────────────────────────────────────────────────────────
+    # 13. Nonparametric thresholding with directional tails (TF)
+    # ────────────────────────────────────────────────────────────
+    @testset "TF Permutation test with nonparametric thresholding and tails" begin
+        Random.seed!(91)
+        tfs = _build_tf_test_data(n_participants = 4, offset_cond1 = 5.0, offset_cond2 = 2.0, noise = 0.05)
+        prepared = EegFun.prepare_stats(tfs; design = :paired)
+
+        # Non-parametric common thresholding with :both tails
+        res_both = EegFun.permutation_test(prepared; threshold_method = :nonparametric_common, tail = :both, n_permutations = 15, cluster_type = :temporal)
+        @test res_both isa EegFun.TFClusterPermutationResult
+        @test res_both.test_info.tail == :both
+
+        # Non-parametric common thresholding with :right tail
+        res_right = EegFun.permutation_test(prepared; threshold_method = :nonparametric_common, tail = :right, n_permutations = 15, cluster_type = :temporal)
+        @test res_right isa EegFun.TFClusterPermutationResult
+        @test res_right.test_info.tail == :right
+
+        # Non-parametric common thresholding with :left tail
+        res_left = EegFun.permutation_test(prepared; threshold_method = :nonparametric_common, tail = :left, n_permutations = 15, cluster_type = :temporal)
+        @test res_left isa EegFun.TFClusterPermutationResult
+        @test res_left.test_info.tail == :left
     end
 
 

@@ -90,6 +90,12 @@ end
     include("tests/tables.jl")
     include("tests/bids_export.jl")
     include("tests/mme_validation.jl")
+    include("tests/cleanline.jl")
+    include("tests/csd.jl")
+    include("tests/freq_spectrum.jl")
+    include("tests/ride.jl")
+    include("tests/decoding_preparation.jl")
+
 
 end
 

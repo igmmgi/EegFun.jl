@@ -1049,4 +1049,96 @@ using EegFun
         @test (:Ch1 in res.channel_1 && :Ch2 in res.channel_2) || (:Ch2 in res.channel_1 && :Ch1 in res.channel_2)
     end
 
+    @testset "find_bridged_channels on EpochData" begin
+        epochs = EegFun.create_test_epoch_data(n = 200, n_epochs = 4, n_channels = 3)
+        # Make Ch1 and Ch2 correlated across all epochs
+        for ep in epochs
+            ep[!, :Ch2] = ep[!, :Ch1] .+ 0.001 .* randn(nrow(ep))
+        end
+
+        res = EegFun.find_bridged_channels(epochs, 0.99)
+        @test nrow(res) >= 1
+        @test (:Ch1 in res.channel_1 && :Ch2 in res.channel_2) || (:Ch2 in res.channel_1 && :Ch1 in res.channel_2)
+
+        # Less than 2 channels selected returns empty DataFrame
+        res_empty = EegFun.find_bridged_channels(epochs, 0.99; channel_selection = EegFun.channels([:Ch1]))
+        @test nrow(res_empty) == 0
+        @test names(res_empty) == ["channel_1", "channel_2", "correlation"]
+    end
+
+    @testset "all_data for EpochRejectionInfo" begin
+        epochs = EegFun.create_test_epoch_data(n = 200, n_epochs = 5, n_channels = 2)
+        epochs.data[2][!, :Ch1] .= 200.0
+
+        rejection_info = EegFun.detect_bad_epochs_automatic(epochs, abs_criterion = 150.0, z_criterion = 3.0)
+
+        # Single EpochRejectionInfo
+        df_all = EegFun.all_data(rejection_info)
+        @test df_all isa DataFrame
+        @test names(df_all) == ["condition_number", "condition_name", "epoch", "channel", "reason"]
+        @test nrow(df_all) >= 1
+        @test 2 in df_all.epoch
+        @test :Ch1 in df_all.channel
+
+        # Vector of EpochRejectionInfo
+        df_list = EegFun.all_data([rejection_info, rejection_info])
+        @test df_list isa DataFrame
+        @test nrow(df_list) == 2 * nrow(df_all)
+    end
+
+    @testset "repair_artifacts_spherical_spline!" begin
+        dat = EegFun.create_test_epoch_data(n = 100, n_epochs = 3, n_channels = 4)
+        dat.layout.data.x3 = [0.0, 0.1, 0.0, -0.1]
+        dat.layout.data.y3 = [0.1, 0.0, -0.1, 0.0]
+        dat.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
+
+        # Artifact on Ch2 in epoch 2
+        dat.data[2][!, :Ch2] .= 300.0
+        rejection_info = EegFun.detect_bad_epochs_automatic(dat, abs_criterion = 150.0, z_criterion = 0)
+
+        original_ep1 = copy(dat.data[1])
+        EegFun.repair_artifacts_spherical_spline!(dat, rejection_info)
+
+        # Epoch 2 Ch2 should be repaired (no longer 300.0)
+        @test all(dat.data[2][!, :Ch2] .!= 300.0)
+        # Epoch 1 was clean and should remain unchanged
+        @test isapprox(dat.data[1].Ch2, original_ep1.Ch2, rtol = 1e-10)
+    end
+
+    @testset "is_flatline! and is_peak_to_peak! on EpochData" begin
+        # Flatline on EpochData
+        epochs = EegFun.create_test_epoch_data(n = 200, n_epochs = 3, n_channels = 3)
+        epochs.data[2][!, :Ch1] .= 5.0
+
+        EegFun.is_flatline!(epochs, 0.01, 0.05)
+        @test :is_flatline in propertynames(epochs.data[1])
+        @test count(epochs.data[2].is_flatline) == 200
+        @test count(epochs.data[1].is_flatline) == 0
+
+        # Separate mode
+        epochs_sep = EegFun.create_test_epoch_data(n = 200, n_epochs = 3, n_channels = 3)
+        epochs_sep.data[2][!, :Ch1] .= 5.0
+        EegFun.is_flatline!(epochs_sep, 0.01, 0.05; mode = :separate)
+        @test :is_flatline_Ch1 in propertynames(epochs_sep.data[2])
+        @test count(epochs_sep.data[2].is_flatline_Ch1) == 200
+
+        # Peak-to-peak on EpochData
+        epochs2 = EegFun.create_test_epoch_data(n = 200, n_epochs = 3, n_channels = 3)
+        epochs2.data[1][50, :Ch1] = 500.0
+        epochs2.data[1][51, :Ch1] = -500.0
+
+        EegFun.is_peak_to_peak!(epochs2, 800.0, 0.05)
+        @test :is_peak_to_peak in propertynames(epochs2.data[1])
+        @test count(epochs2.data[1].is_peak_to_peak) > 0
+        @test count(epochs2.data[2].is_peak_to_peak) == 0
+
+        # Separate mode for peak-to-peak
+        epochs2_sep = EegFun.create_test_epoch_data(n = 200, n_epochs = 3, n_channels = 3)
+        epochs2_sep.data[1][50, :Ch1] = 500.0
+        epochs2_sep.data[1][51, :Ch1] = -500.0
+        EegFun.is_peak_to_peak!(epochs2_sep, 800.0, 0.05; mode = :separate)
+        @test :is_peak_to_peak_Ch1 in propertynames(epochs2_sep.data[1])
+        @test count(epochs2_sep.data[1].is_peak_to_peak_Ch1) > 0
+    end
+
 end

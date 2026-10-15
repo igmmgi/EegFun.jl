@@ -4,8 +4,6 @@
 High-level interface to run the Residue Iteration DEcomposition (RIDE) on EEG data.
 """
 
-export RideComponent, ride_decompose
-
 """
     RideComponent
 

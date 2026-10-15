@@ -49,7 +49,7 @@ function plot_topography(
 )
     # Apply baseline correction if requested
     if !isnothing(baseline_interval) && !isnothing(tf.baseline)
-        @warn "Data has already been baselined (method: $(tf.baseline.method)). " * "Ignoring baseline_interval parameter."
+        @minimal_warning "Data has already been baselined (method: $(tf.baseline.method)). " * "Ignoring baseline_interval parameter."
         tf_plot = tf
     elseif !isnothing(baseline_interval)
         tf_plot = tf_baseline(tf, baseline_interval; method = baseline_method)
@@ -197,7 +197,7 @@ function plot_topography(
     if !isnothing(baseline_interval)
         tf_plots = map(tfs) do tf
             if !isnothing(tf.baseline)
-                @warn "$(tf.condition_name) already baselined, skipping."
+                @minimal_warning "$(tf.condition_name) already baselined, skipping."
                 tf
             else
                 tf_baseline(tf, baseline_interval; method = baseline_method)

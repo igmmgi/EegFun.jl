@@ -1836,6 +1836,9 @@ function repair_artifacts_neighbor!(dat::EpochData, artifacts::EpochRejectionInf
     return nothing
 end
 
+# UK spelling alias
+const repair_artifacts_neighbour! = repair_artifacts_neighbor!
+
 """
     repair_artifacts_spherical_spline!(dat::EpochData, artifacts::EpochRejectionInfo; m::Int=4, lambda::Real=1e-5)
 

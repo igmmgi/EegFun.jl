@@ -10,6 +10,28 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 ### Added
 
 - Mixed models permutations (`fit_mass_lmm`).
+- Comprehensive unit tests for previously untested modules: CleanLine, CSD, RIDE, Welch frequency spectrum, decoding preparation, FieldTrip CSV import, and pipeline channel repairs.
+- Comprehensive unit tests for independent-design statistics (ERP and TF), directional non-parametric permutation thresholding, and epoched artifact detection/repair (spherical spline interpolation, bridging detection, flatline, and peak-to-peak).
+
+### Fixed
+
+- Fixed `BoundsError` in `tf_morlet`, `tf_stft` and `tf_multitaper` when using `return_trials=true` with `filter_edges=true`.
+- `tf_multitaper` now averages (not sums) power over trials when `return_trials=false`, matching `tf_morlet`/`tf_stft`. Values are now `n_trials` times smaller than before.
+- Fixed `MethodError` in out-of-place `channel_repairable` by implementing `Base.copy(::ContinuousRepairInfo)`.
+- Fixed documentation build failure on CI by pinning `@nolebase/vitepress-plugin-enhanced-readabilities` to `~2.18.2` (preventing upstream peer dependency conflict with VitePress 1.x).
+
+### Changed
+
+- Shared argument validation for `tf_morlet`, `tf_stft` and `tf_multitaper` (pad, frequencies, window length, time grid, GPU fallback, subsetting) now lives in `tf_utils.jl`. Error messages are unchanged.
+- Remaining raw `@warn` calls now use `@minimal_warning` for consistent log output.
+- Removed an unused `_create_menu` helper and renamed two internal helpers (`_prepare_ica_plot_matrix`, `_apply_browser_filter!`) that shared names with unrelated functions.
+- `tf_morlet` is faster and allocates ~99% less (output unchanged).
+- `tf_stft` and `tf_multitaper` are faster and allocate ~48–58% less memory through thread-local buffer reuse and type-stable processing loops (output unchanged).
+- Modularized `ica.jl` (3,985 lines) into `src/analysis/processing/ica/` (`api.jl`, `infomax.jl`, `picard.jl`, `amica.jl`, `components.jl`, `artifact_id.jl`).
+- Removed rogue `export` in `decompose.jl`, aligning RIDE with EegFun's zero-namespace-pollution policy.
+- Expanded `public_api.jl` to declare 45 previously omitted public functions, structs, and mutating `!` pairs.
+- Added non-breaking British English aliases: `check_channel_neighbours`, `repair_artifacts_neighbour!`, `repair_channels_neighbour!`.
+
 
 ## [0.8.0] - 2026-08-13
 

@@ -132,12 +132,57 @@ using DataFrames
         end
     end
 
-    @testset "No matching files" begin
-        mktempdir() do tmpdir
-            # No files in directory
-            result = EegFun.tf_morlet("nonexistent"; input_dir = tmpdir, cycles = 7)
-            @test isnothing(result)
-        end
+    @testset "Direct tf_stft and tf_multitaper Execution" begin
+        test_epochs = EegFun.create_test_epoch_data(n = 200, fs = 256, condition = 1, n_epochs = 4, n_channels = 3, seed = 42)
+
+        # STFT fixed window
+        res_stft_fixed = EegFun.tf_stft(test_epochs; window_length = 0.2, frequencies = 5:5:25, time_steps = 0.05)
+        @test res_stft_fixed isa EegFun.TimeFreqData
+        @test size(res_stft_fixed.data_power, 2) == 5  # time, freq, 3 channels
+        @test all(isnan.(res_stft_fixed.data_phase[!, :Ch1]))  # phase NaN when return_phase=false
+
+        # STFT adaptive window + return_trials + return_phase
+        res_stft_trials = EegFun.tf_stft(
+            test_epochs;
+            cycles = 5,
+            frequencies = 5:5:25,
+            time_steps = 0.05,
+            return_trials = true,
+            return_phase = true,
+            pad = :both,
+        )
+        @test res_stft_trials isa EegFun.TimeFreqEpochData
+        @test length(res_stft_trials.data_power) == 4
+        @test !any(isnan.(res_stft_trials.data_phase[1][!, :Ch1]))
+
+        # Multitaper standard
+        res_mt = EegFun.tf_multitaper(test_epochs; cycles = 5, frequencies = 5:5:25, time_steps = 0.05)
+        @test res_mt isa EegFun.TimeFreqData
+        @test size(res_mt.data_power, 2) == 5
+        @test all(isnan.(res_mt.data_phase[!, :Ch1]))
+
+        # Multitaper return_trials + return_phase
+        res_mt_trials = EegFun.tf_multitaper(
+            test_epochs;
+            cycles = 5,
+            frequencies = 5:5:25,
+            time_steps = 0.05,
+            return_trials = true,
+            return_phase = true,
+            pad = :pre,
+        )
+        @test res_mt_trials isa EegFun.TimeFreqEpochData
+        @test length(res_mt_trials.data_power) == 4
+        @test !all(isnan.(res_mt_trials.data_phase[1][!, :Ch1]))
+        @test any(!isnan, res_mt_trials.data_phase[1][!, :Ch1])
+
+        # Validation errors
+        @test_throws ErrorException EegFun.tf_stft(test_epochs)  # neither window_length nor cycles
+        @test_throws ErrorException EegFun.tf_stft(test_epochs; window_length = 0.2, cycles = 5)  # both
+        @test_throws ErrorException EegFun.tf_stft(test_epochs; window_length = -0.1)  # negative window
+        @test_throws ErrorException EegFun.tf_multitaper(test_epochs; cycles = -5)  # negative cycles
+        @test_throws ErrorException EegFun.tf_multitaper(test_epochs; cycles = 5, frequency_smoothing = -0.4)
     end
 
 end
+

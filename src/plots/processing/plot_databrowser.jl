@@ -710,8 +710,8 @@ end
 """Re-apply active filters without resetting data (used after ICA reset to preserve filter state)."""
 function _reapply_active_filters!(state)
     fs = state.data.filter_state
-    fs.hp_active[] && _apply_filter!(state, :hp, fs.hp_freq[], fs.hp_method[], fs.hp_order[], fs.hp_func[])
-    fs.lp_active[] && _apply_filter!(state, :lp, fs.lp_freq[], fs.lp_method[], fs.lp_order[], fs.lp_func[])
+    fs.hp_active[] && _apply_browser_filter!(state, :hp, fs.hp_freq[], fs.hp_method[], fs.hp_order[], fs.hp_func[])
+    fs.lp_active[] && _apply_browser_filter!(state, :lp, fs.lp_freq[], fs.lp_method[], fs.lp_order[], fs.lp_func[])
 end
 
 """Apply the isolated artifact of a single ICA component linearly to a Continuous dataset."""
@@ -1683,7 +1683,7 @@ end
 # Filtering
 ############
 """Apply a single HP or LP filter to the current data in-place."""
-function _apply_filter!(state::DataBrowserState{T}, filter_type, freq, method, order, func) where {T<:AbstractDataState}
+function _apply_browser_filter!(state::DataBrowserState{T}, filter_type, freq, method, order, func) where {T<:AbstractDataState}
     # Get the current data, apply filter, then update the observable
     current_data = state.data.current[]
 
