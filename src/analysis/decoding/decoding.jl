@@ -519,8 +519,11 @@ function _decode_core(
 
     # Initialize progress bar
     total_steps = n_iterations * n_timepoints
+    local completed = nothing
     if show_progress
         progress = Progress(total_steps, desc = progress_desc, showspeed = true)
+        completed = Base.Threads.Atomic{Int}(0)
+        EegFun.track_progress_async(progress, completed, total_steps)
     end
 
     # Initialize atomic flag to safely abort all threads on Ctrl-C
@@ -595,7 +598,7 @@ function _decode_core(
                 end
 
                 if show_progress && !should_stop[]
-                    next!(progress)
+                    Base.Threads.atomic_add!(completed::Base.Threads.Atomic{Int}, 1)
                 end
 
                 # Yield to scheduler to allow Ctrl-C (InterruptException) to be processed

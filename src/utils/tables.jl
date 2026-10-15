@@ -4,6 +4,9 @@ import Tables
 
 # 1. Declare that all EegData types are Tables
 Tables.istable(::Type{<:EegData}) = true
+Tables.rowaccess(::Type{<:EegData}) = true
+Tables.rows(dat::EegData) = Tables.rows(Tables.columns(dat))
+Tables.schema(dat::EegData) = Tables.schema(Tables.columns(dat))
 
 # 1.5 DataAPI / DataFrames Base Interface Forwarding
 # We forward standard DataFrame functions to the internal `.data` so users don't have to extract it.
@@ -82,6 +85,9 @@ end
 # 6. Support vectors of EegData (e.g., from extract_epochs or average_epochs)
 Tables.istable(::Type{<:AbstractVector{<:EegData}}) = true
 Tables.columnaccess(::Type{<:AbstractVector{<:EegData}}) = true
+Tables.rowaccess(::Type{<:AbstractVector{<:EegData}}) = true
+Tables.rows(dats::AbstractVector{<:EegData}) = Tables.rows(Tables.columns(dats))
+Tables.schema(dats::AbstractVector{<:EegData}) = Tables.schema(Tables.columns(dats))
 
 function Tables.columns(dats::AbstractVector{<:EegData})
     # Convert each object to a DataFrame (which goes through our Tables interface above)
