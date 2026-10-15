@@ -280,7 +280,6 @@ end
 # === MAKIE BACKEND EXTENSION STATE ===
 mutable struct MakieExtensionState
     glmakie_active::Bool
-    cairomakie_active::Bool
     create_screen::Function
     display_screen::Function
     save_vector::Function
@@ -289,8 +288,7 @@ end
 
 const MAKIE_EXT_STATE = MakieExtensionState(
     false,
-    false,
-    (; size = nothing) -> error("Opening interactive windows requires GLMakie. Please run `using GLMakie`."),
+    (; size = nothing) -> @minimal_error("Opening interactive windows requires GLMakie. Please run `using GLMakie`."),
     (fig; size = nothing) -> begin
         try
             screen = MAKIE_EXT_STATE.create_screen(; size = size)
@@ -351,7 +349,6 @@ function _save_vector_figure(path, fig; pt_per_unit = 1.0)
 end
 
 _is_glmakie_available() = MAKIE_EXT_STATE.glmakie_active
-_is_cairomakie_available() = MAKIE_EXT_STATE.cairomakie_active
 
 function _display_figure(fig)
     # Register keyboard shortcut for saving the figure

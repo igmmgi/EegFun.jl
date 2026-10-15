@@ -90,7 +90,7 @@ function plot_tf(
     baseline_interval::Union{Nothing,Tuple{Real,Real}} = nothing,
     kwargs...,
 )
-    isempty(tf_data) && error("Empty TimeFreqData vector")
+    isempty(tf_data) && @minimal_error("Empty TimeFreqData vector")
 
     plot_kwargs = _merge_plot_kwargs(PLOT_TF_KWARGS, kwargs)
 
@@ -131,7 +131,7 @@ function plot_tf(
     all_channels = channel_labels(first(tf_plots))
     selected_mask = channel_selection(all_channels)
     selected_channels = all_channels[selected_mask]
-    isempty(selected_channels) && error("No channels matched. Available: $(all_channels)")
+    isempty(selected_channels) && @minimal_error("No channels matched. Available: $(all_channels)")
     channel = first(selected_channels)
 
     # Shared times/freqs (assume consistent across conditions)
@@ -251,7 +251,7 @@ function plot_tf(
     all_channels = channel_labels(tf_plot)
     selected_mask = channel_selection(all_channels)
     selected_channels = all_channels[selected_mask]
-    isempty(selected_channels) && error("No channels matched. Available: $(all_channels)")
+    isempty(selected_channels) && @minimal_error("No channels matched. Available: $(all_channels)")
 
     # Apply user-specified plotting order if provided
     if !isnothing(channel_plot_order)

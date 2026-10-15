@@ -143,6 +143,39 @@ using Dates
         @test EegFun._format_duration(Millisecond(3661000)) == "1 hour, 1 minute, 1 second"
     end
 
+    @testset "@minimal_error logging behaviour" begin
+        @test !EegFun._file_logging_active()
+
+        # Always throws an EegFunError whose message is shown without extra decoration
+        err = try
+            EegFun.@minimal_error "boom"
+        catch e
+            e
+        end
+        @test err isa EegFun.EegFunError
+        @test err.msg == "boom"
+        @test sprint(showerror, err) == "boom"
+
+        # No log file active: exception only, nothing logged
+        @test_logs (@test_throws EegFun.EegFunError EegFun.@minimal_error "no log file")
+
+        # GUI handler reports the error itself when no log file is capturing it
+        @test_logs (:error, "Error: from gui") EegFun._handle_plot_error(EegFun.EegFunError("from gui"), "Test")
+
+        # Log file active: error is also written to the log file, and the GUI handler stays quiet
+        log_file = joinpath(test_dir, "minimal_error.log")
+        EegFun.setup_global_logging(log_file)
+        try
+            @test EegFun._file_logging_active()
+            @test_throws EegFun.EegFunError EegFun.@minimal_error "logged to file"
+            @test_logs EegFun._handle_plot_error(EegFun.EegFunError("already logged"), "Test")
+        finally
+            EegFun.close_global_logging()
+        end
+        @test !EegFun._file_logging_active()
+        @test occursin("Error: logged to file", read(log_file, String))
+    end
+
     # Clean up
     rm(test_dir, recursive = true, force = true)
 end

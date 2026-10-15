@@ -99,16 +99,16 @@ function tf_stft(
 
     # Validate window_length and cycles - exactly one must be provided
     if isnothing(window_length) && isnothing(cycles)
-        error("Either `window_length` (fixed window) or `cycles` (adaptive window) must be specified")
+        @minimal_error("Either `window_length` (fixed window) or `cycles` (adaptive window) must be specified")
     end
     if !isnothing(window_length) && !isnothing(cycles)
-        error("Only one of `window_length` or `cycles` can be specified, not both")
+        @minimal_error("Only one of `window_length` or `cycles` can be specified, not both")
     end
     if !isnothing(window_length) && window_length <= 0
-        error("`window_length` must be positive, got $window_length")
+        @minimal_error("`window_length` must be positive, got $window_length")
     end
     if !isnothing(cycles) && cycles <= 0
-        error("`cycles` must be positive, got $cycles")
+        @minimal_error("`cycles` must be positive, got $cycles")
     end
 
     # Get time points and determine output time grid

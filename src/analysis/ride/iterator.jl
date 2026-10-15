@@ -149,7 +149,7 @@ function ride_iteration!(
                         templates[s, c, k] = val / n_trials
                     end
                 else
-                    error("Unknown method: $method. Use :median or :mean")
+                    @minimal_error("Unknown method: $method. Use :median or :mean")
                 end
 
                 # Apply Tukey window/detrending here if needed (as per MATLAB implementation)

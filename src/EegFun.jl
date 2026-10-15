@@ -59,9 +59,9 @@ include("types/decoding.jl")
 include("types/rsa.jl")
 
 # Utility functions
+include("utils/error.jl")
 include("utils/gpu.jl")
 include("utils/create_data.jl")
-include("utils/error.jl")
 include("utils/batch.jl")
 include("utils/data.jl")
 include("utils/files.jl")
@@ -159,6 +159,9 @@ include("analysis/rsa/rsa_crossvalidation.jl")
 
 # analysis pipelines
 include("pipelines/utils/utils.jl")
+include("pipelines/utils/repair_info.jl")
+include("pipelines/utils/repair.jl")
+include("pipelines/utils/summaries.jl")
 include("pipelines/utils/template.jl")
 include("pipelines/pipeline.jl")
 

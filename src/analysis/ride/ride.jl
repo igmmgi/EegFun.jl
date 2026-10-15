@@ -5,7 +5,7 @@ Extract RIDE components from `EpochData`.
 Returns a Dictionary mapping component names to `ErpData` objects containing the decomposed components.
 """
 function extract_ride(epochs::EpochData, comps::Vector{RideComponent}; kwargs...)
-    isempty(epochs.data) && error("EpochData contains no trials.")
+    isempty(epochs.data) && @minimal_error("EpochData contains no trials.")
 
     n_trials = n_epochs(epochs)
     n_samples = nrow(epochs.data[1])

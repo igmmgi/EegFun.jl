@@ -315,7 +315,7 @@ function create_test_layout(; n_channels::Int = 4, layout_type::Symbol = :grid)
         )
         return EegFun.Layout(layout_data, nothing, nothing, nothing)
     else
-        error("Unknown layout_type: $layout_type")
+        @minimal_error("Unknown layout_type: $layout_type")
     end
 end
 

@@ -84,15 +84,15 @@ function plot_tf_stats(
 )
     # Validate arguments
     content in (:tvalues, :difference, :power_a, :power_b) ||
-        error("content must be :tvalues, :difference, :power_a, or :power_b, got :$content")
+        @minimal_error("content must be :tvalues, :difference, :power_a, or :power_b, got :$content")
     mask_style in (:alpha, :contour, :hide, :none) ||
-        error("mask_style must be :alpha, :contour, :hide, or :none, got :$mask_style")
+        @minimal_error("mask_style must be :alpha, :contour, :hide, or :none, got :$mask_style")
 
     # Select channels
     all_electrodes = result.electrodes
     selected_mask = channel_selection(all_electrodes)
     selected_channels = all_electrodes[selected_mask]
-    isempty(selected_channels) && error("No channels matched. Available: $(all_electrodes)")
+    isempty(selected_channels) && @minimal_error("No channels matched. Available: $(all_electrodes)")
 
     # Apply user-specified plotting order if provided
     if !isnothing(channel_plot_order)

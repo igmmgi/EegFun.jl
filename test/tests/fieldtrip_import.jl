@@ -45,7 +45,7 @@ using DataFrames
         using CSV
         mktempdir() do tmpdir
             # 1. Missing file error
-            @test_throws ErrorException EegFun.read_fieldtrip_csv(tmpdir)
+            @test_throws EegFun.EegFunError EegFun.read_fieldtrip_csv(tmpdir)
 
             # 2. Write valid epochs_data.csv
             csv_path = joinpath(tmpdir, "epochs_data.csv")
@@ -71,7 +71,7 @@ using DataFrames
             # 3. Invalid CSV header
             bad_csv = joinpath(tmpdir, "epochs_data.csv")
             CSV.write(bad_csv, DataFrame(a = [1], b = [2]))
-            @test_throws ErrorException EegFun.read_fieldtrip_csv(tmpdir)
+            @test_throws EegFun.EegFunError EegFun.read_fieldtrip_csv(tmpdir)
         end
     end
 end

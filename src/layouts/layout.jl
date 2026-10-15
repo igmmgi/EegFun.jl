@@ -132,7 +132,7 @@ Auto-generated layouts have all zeros which cannot be used for spatial visualiza
 # Examples
 ```julia
 if !has_valid_coordinates(layout)
-    error("Cannot create topographic plot without a proper electrode layout")
+    @minimal_error("Cannot create topographic plot without a proper electrode layout")
 end
 ```
 """

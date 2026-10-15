@@ -66,7 +66,7 @@ function _build_connectivity_matrix(electrodes::Vector{Symbol}, layout::Layout, 
         return sparse(Int[], Int[], Bool[], n_electrodes, n_electrodes)
 
     else
-        error("cluster_type must be :spatial, :temporal, :spectral, :spatiotemporal, :spectrotemporal, or :full, got :$cluster_type")
+        @minimal_error("cluster_type must be :spatial, :temporal, :spectral, :spatiotemporal, :spectrotemporal, or :full, got :$cluster_type")
     end
 end
 

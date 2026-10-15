@@ -63,7 +63,7 @@ function read_fieldtrip(filepath::String, layout::Layout)
             dt = time_vec[2] - time_vec[1]
             sample_rate = Int(round(1.0 / dt))
         else
-            error("Invalid ERP data: time vector has only $(length(time_vec)) point(s). Cannot infer sample rate.")
+            @minimal_error("Invalid ERP data: time vector has only $(length(time_vec)) point(s). Cannot infer sample rate.")
         end
         @info "Detected averaged ERP data, inferred sample rate: $sample_rate Hz"
         return _fieldtrip_to_erpdata(ft, filepath, layout, sample_rate)

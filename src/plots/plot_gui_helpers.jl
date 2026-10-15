@@ -44,7 +44,9 @@ end
 Standardized error handling for plot functions.
 """
 function _handle_plot_error(e, plot_type::String)
-    if e isa EegFunError # Already logged by @minimal_error inside the plot function — don't repeat it
+    if e isa EegFunError
+        # @minimal_error only logs while a log file is active; otherwise report it here
+        _file_logging_active() || _log_error(e.msg)
         return
     end
     # Unexpected exception: one clean line, no stacktrace

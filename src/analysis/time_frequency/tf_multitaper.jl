@@ -101,7 +101,7 @@ function tf_multitaper(
 
     # Validate cycles parameter (adaptive window only)
     if cycles <= 0
-        error("`cycles` must be positive, got $cycles")
+        @minimal_error("`cycles` must be positive, got $cycles")
     end
 
     # Default frequency smoothing 
@@ -109,7 +109,7 @@ function tf_multitaper(
         frequency_smoothing = 0.4
     end
     if frequency_smoothing <= 0
-        error("`frequency_smoothing` must be positive, got $frequency_smoothing")
+        @minimal_error("`frequency_smoothing` must be positive, got $frequency_smoothing")
     end
 
     # Get time points and determine output time grid
@@ -170,7 +170,7 @@ function tf_multitaper(
 
         # Ensure NW is valid (must be > 0 and < n_window_samples/2)
         if NW <= 0 || NW >= n_window_samples / 2
-            error(
+            @minimal_error(
                 "Invalid time-bandwidth product NW=$NW for frequency $freq Hz. NW must be > 0 and < $(n_window_samples/2). Window length: $window_length_sec s, tapsmofrq: $tapsmofrq Hz",
             )
         end

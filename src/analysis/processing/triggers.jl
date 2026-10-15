@@ -383,7 +383,7 @@ end
 _search_single_trigger(array, trigger::Integer, ignore_values::Vector{Int} = [0]) =
     search_sequence(array, trigger; ignore_values = ignore_values)
 _search_single_trigger(array, trigger::UnitRange, ignore_values::Vector{Int} = [0]) = search_sequence(array, [trigger])
-_search_single_trigger(array, trigger::Symbol, ignore_values::Vector{Int} = [0]) = error("Single wildcard sequences not supported")
+_search_single_trigger(array, trigger::Symbol, ignore_values::Vector{Int} = [0]) = @minimal_error("Single wildcard sequences not supported")
 # Set match: find onset positions of ANY value in the vector (e.g., [101, 103])
 _search_single_trigger(array, trigger::Vector{<:Integer}, ignore_values::Vector{Int} = [0]) =
     sort(vcat([search_sequence(array, Int(v); ignore_values = ignore_values) for v in trigger]...))
@@ -422,7 +422,7 @@ _matches_expected(actual::Real, expected::Real) = actual == expected
 _matches_expected(actual::Real, expected::Symbol) = expected == :any  # Wildcard matches anything
 _matches_expected(actual::Real, expected::UnitRange) = actual in expected
 _matches_expected(actual::Real, expected::Vector{<:Integer}) = actual in expected  # Set match: [101, 103]
-_matches_expected(actual, expected) = error("Unsupported sequence type: $expected")
+_matches_expected(actual, expected) = @minimal_error("Unsupported sequence type: $expected")
 
 # === EPOChed TRIGGER SEQ DISCOVERY ===
 

@@ -76,7 +76,7 @@ function ride_decompose(
     for k = 1:n_components
         if !isnothing(comps[k].latencies)
             if length(comps[k].latencies) != n_trials
-                error(
+                @minimal_error(
                     "Component $(comps[k].name) latencies length ($(length(comps[k].latencies))) does not match number of trials ($n_trials)",
                 )
             end

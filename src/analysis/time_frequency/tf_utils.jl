@@ -129,7 +129,7 @@ Throw an error unless `pad` is `nothing`, `:pre`, `:post` or `:both`.
 """
 function _validate_tf_pad(pad)
     if !isnothing(pad) && pad ∉ [:pre, :post, :both]
-        error("`pad` must be `nothing`, `:pre`, `:post`, or `:both`, got :$pad")
+        @minimal_error("`pad` must be `nothing`, `:pre`, `:post`, or `:both`, got :$pad")
     end
     return nothing
 end
@@ -155,7 +155,7 @@ Subset `dat` by channel and interval selection, erroring if no data remain.
 """
 function _subset_tf_data(dat::EpochData, channel_selection::Function, interval_selection::Interval)
     dat = subset(dat; channel_selection = channel_selection, interval_selection = interval_selection)
-    isempty(dat.data) && error("No data remaining after subsetting")
+    isempty(dat.data) && @minimal_error("No data remaining after subsetting")
     return dat
 end
 
@@ -166,10 +166,10 @@ Throw an error unless `frequencies` is non-empty and strictly positive.
 """
 function _validate_tf_frequencies(frequencies)
     if length(frequencies) == 0
-        error("`frequencies` must contain at least one frequency")
+        @minimal_error("`frequencies` must contain at least one frequency")
     end
     if any(f -> f <= 0, frequencies)
-        error("All frequencies in `frequencies` must be positive")
+        @minimal_error("All frequencies in `frequencies` must be positive")
     end
     return nothing
 end
@@ -182,7 +182,7 @@ Throw an error if any window (given in samples, scalar or vector) is shorter tha
 function _validate_tf_window_samples(n_window_samples)
     min_samples = minimum(n_window_samples)
     if min_samples < 2
-        error("Window length is too short. Minimum window size is 2 samples, got $min_samples samples.")
+        @minimal_error("Window length is too short. Minimum window size is 2 samples, got $min_samples samples.")
     end
     return nothing
 end
@@ -200,7 +200,7 @@ function _tf_time_grid(dat::EpochData, time_steps::Real)
     time_steps_range = time_min:time_steps:time_max
     time_indices, times_out = find_times(times, time_steps_range)
     if isempty(time_indices)
-        error("No valid time points found with step size $time_steps in range ($time_min to $time_max seconds)")
+        @minimal_error("No valid time points found with step size $time_steps in range ($time_min to $time_max seconds)")
     end
     return time_indices, times_out
 end

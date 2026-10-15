@@ -82,7 +82,7 @@ signal_example_emg()
 - `ax_integ::Axis`: The cumulative integrated EMG (iEMG) axis.
 """
 function signal_example_emg()
-    # Explicitly activate GLMakie before constructing the Figure to prevent CairoMakie from capturing it
+    # Explicitly activate GLMakie before constructing the Figure, in case another backend (e.g. CairoMakie) is active
     if isdefined(Main, :GLMakie)
         try
             Main.GLMakie.activate!(inline = false)

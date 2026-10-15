@@ -60,7 +60,7 @@ function _threshold_t_matrix_parametric!(
             end
         end
     else
-        error("tail must be :both, :left, or :right, got :$tail")
+        @minimal_error("tail must be :both, :left, or :right, got :$tail")
     end
 end
 
@@ -151,7 +151,7 @@ function _compute_nonparametric_threshold_common(permutation_t_matrices::Array{F
         all_t_values = _collect_valid_t_values(permutation_t_matrices, t -> true, abs)
 
         if isempty(all_t_values)
-            error("No valid t-values found in permutation distribution")
+            @minimal_error("No valid t-values found in permutation distribution")
         end
 
         # Compute (1 - alpha) percentile for two-tailed on absolute values
@@ -166,7 +166,7 @@ function _compute_nonparametric_threshold_common(permutation_t_matrices::Array{F
         all_t_values = _collect_valid_t_values(permutation_t_matrices, t -> t > 0, identity)
 
         if isempty(all_t_values)
-            error("No valid positive t-values found in permutation distribution")
+            @minimal_error("No valid positive t-values found in permutation distribution")
         end
 
         percentile_level = 1.0 - alpha
@@ -179,7 +179,7 @@ function _compute_nonparametric_threshold_common(permutation_t_matrices::Array{F
         all_t_values = _collect_valid_t_values(permutation_t_matrices, t -> t < 0, abs)
 
         if isempty(all_t_values)
-            error("No valid negative t-values found in permutation distribution")
+            @minimal_error("No valid negative t-values found in permutation distribution")
         end
 
         percentile_level = 1.0 - alpha
@@ -188,7 +188,7 @@ function _compute_nonparametric_threshold_common(permutation_t_matrices::Array{F
         return NaN, threshold
 
     else
-        error("tail must be :both, :left, or :right, got :$tail")
+        @minimal_error("tail must be :both, :left, or :right, got :$tail")
     end
 end
 
@@ -289,7 +289,7 @@ function _compute_nonparametric_threshold_individual(permutation_t_matrices::Arr
             end
         end
     else
-        error("tail must be :both, :left, or :right, got :$tail")
+        @minimal_error("tail must be :both, :left, or :right, got :$tail")
     end
 
     return thresholds_positive, thresholds_negative
@@ -375,7 +375,7 @@ function _threshold_t_matrix_nonparametric!(
             end
         end
     else
-        error("tail must be :both, :left, or :right, got :$tail")
+        @minimal_error("tail must be :both, :left, or :right, got :$tail")
     end
 end
 
@@ -475,7 +475,7 @@ function _threshold_t_matrix_parametric_tf!(
             end
         end
     else
-        error("tail must be :both, :left, or :right, got :$tail")
+        @minimal_error("tail must be :both, :left, or :right, got :$tail")
     end
 end
 
@@ -537,7 +537,7 @@ function _compute_nonparametric_threshold_common_tf(permutation_t_matrices::Arra
         threshold = quantile(all_t_values, percentile_level)
         return NaN, threshold
     else
-        error("tail must be :both, :left, or :right, got :$tail")
+        @minimal_error("tail must be :both, :left, or :right, got :$tail")
     end
 end
 
@@ -596,6 +596,6 @@ function _threshold_t_matrix_nonparametric_tf!(
             end
         end
     else
-        error("tail must be :both, :left, or :right, got :$tail")
+        @minimal_error("tail must be :both, :left, or :right, got :$tail")
     end
 end

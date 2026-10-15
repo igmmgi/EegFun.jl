@@ -109,7 +109,7 @@ using DataFrames
         @test res_med isa EegFun.RideResult
 
         # Error handling
-        @test_throws ErrorException EegFun.ride_decompose(data, [EegFun.RideComponent(:S, zeros(Int, n_trials + 2))])
+        @test_throws EegFun.EegFunError EegFun.ride_decompose(data, [EegFun.RideComponent(:S, zeros(Int, n_trials + 2))])
     end
 
     # 4. extract_ride (EpochData interface)
@@ -131,6 +131,6 @@ using DataFrames
         # Empty epochs
         empty_epochs = copy(epochs)
         empty_epochs.data = DataFrame[]
-        @test_throws ErrorException EegFun.extract_ride(empty_epochs, comps)
+        @test_throws EegFun.EegFunError EegFun.extract_ride(empty_epochs, comps)
     end
 end

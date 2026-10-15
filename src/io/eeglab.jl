@@ -311,7 +311,7 @@ function _read_eeglab_data(eeg_dict::Dict, filepath::String)
         fdt_path = joinpath(set_dir, fdt_filename)
 
         if !isfile(fdt_path)
-            error("External data file not found: $fdt_path")
+            @minimal_error("External data file not found: $fdt_path")
         end
 
         @info "Loading external data from: $fdt_filename"
@@ -336,7 +336,7 @@ function _read_eeglab_data(eeg_dict::Dict, filepath::String)
             return reshape(data_vec, n_channels, n_timepoints)
         end
     else
-        error("Unexpected data field type: $(typeof(data_field))")
+        @minimal_error("Unexpected data field type: $(typeof(data_field))")
     end
 end
 
@@ -349,7 +349,7 @@ Extract channel names from EEGLAB chanlocs structure.
 """
 function _extract_channel_names(chanlocs)
     if isempty(chanlocs)
-        error("No channel location information found in .set file")
+        @minimal_error("No channel location information found in .set file")
     end
 
     # Extract labels
@@ -362,7 +362,7 @@ function _extract_channel_names(chanlocs)
         # Sometimes it's stored as a matrix
         return Symbol.(vec(labels))
     else
-        error("Unexpected chanlocs.labels format")
+        @minimal_error("Unexpected chanlocs.labels format")
     end
 end
 

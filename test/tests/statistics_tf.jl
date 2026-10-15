@@ -615,7 +615,7 @@ end
         @test isfinite(tn_l) && tn_l > 0
 
         # Invalid tail
-        @test_throws ErrorException EegFun._compute_nonparametric_threshold_common_tf(perm_t, 0.05, :invalid)
+        @test_throws EegFun.EegFunError EegFun._compute_nonparametric_threshold_common_tf(perm_t, 0.05, :invalid)
     end
 
     @testset "nonparametric thresholding in-place (TF)" begin

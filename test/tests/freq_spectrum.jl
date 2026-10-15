@@ -57,8 +57,8 @@ using DataFrames
     @test :freq in propertynames(spec_erp.data)
 
     # 5. Parameter validation
-    @test_throws ErrorException EegFun.freq_spectrum(c_dat; overlap = -0.1)
-    @test_throws ErrorException EegFun.freq_spectrum(c_dat; overlap = 1.0)
-    @test_throws ErrorException EegFun.freq_spectrum(c_dat; overlap = 1.5)
-    @test_throws ErrorException EegFun.freq_spectrum(c_dat; channel_selection = EegFun.channels(Symbol[]))
+    @test_throws EegFun.EegFunError EegFun.freq_spectrum(c_dat; overlap = -0.1)
+    @test_throws EegFun.EegFunError EegFun.freq_spectrum(c_dat; overlap = 1.0)
+    @test_throws EegFun.EegFunError EegFun.freq_spectrum(c_dat; overlap = 1.5)
+    @test_throws EegFun.EegFunError EegFun.freq_spectrum(c_dat; channel_selection = EegFun.channels(Symbol[]))
 end
