@@ -692,7 +692,7 @@ function decode_libsvm(
 
     # Subset epochs by channel and interval selection
     epochs = subset(epochs; channel_selection = channel_selection, interval_selection = interval_selection, include_extra = false)
-    isempty(channel_labels(epochs[1])) && @minimal_error("Channel selection produced no channels")
+    n_channels(epochs[1]) == 0 && @minimal_error("Channel selection produced no channels")
     isempty(time_vector(epochs[1])) && @minimal_error("Interval selection produced no time points")
 
     # Prepare data from subsetted epochs
@@ -700,7 +700,7 @@ function decode_libsvm(
     time_points = time_vector(epochs)
 
     # Log decoding parameters
-    @info "Starting decoding analysis" file = epochs[1].file n_conditions = length(epochs) n_channels = length(channel_labels(epochs)) n_timepoints =
+    @info "Starting decoding analysis" file = epochs[1].file n_conditions = length(epochs) n_channels = n_channels(epochs[1]) n_timepoints =
         length(time_points) time_range = (first(time_points), last(time_points)) n_iterations = n_iterations n_folds = n_folds trials_per_condition =
         n_trials_per_condition
 
@@ -743,7 +743,7 @@ function decode_libsvm(
 
     # Subset epochs by channel and interval selection
     epochs = subset(epochs; channel_selection = channel_selection, interval_selection = interval_selection)
-    isempty(channel_labels(epochs[1])) && @minimal_error("Channel selection produced no channels")
+    n_channels(epochs[1]) == 0 && @minimal_error("Channel selection produced no channels")
 
     # Prepare data from subsetted epochs
     data_arrays, n_trials_per_condition = _prepare_decoding_data(epochs)
@@ -752,10 +752,10 @@ function decode_libsvm(
     unique_time_points = sort(unique(epochs[1].data_power[1].time))
 
     # Log decoding parameters
-    n_channels = length(channel_labels(epochs))
+    n_chans = n_channels(epochs[1])
     n_features = size(data_arrays[1], 1)
-    n_freqs = n_features ÷ n_channels
-    @info "Starting TF decoding analysis" file = epochs[1].file n_conditions = length(epochs) n_channels = n_channels n_frequencies =
+    n_freqs = n_features ÷ n_chans
+    @info "Starting TF decoding analysis" file = epochs[1].file n_conditions = length(epochs) n_channels = n_chans n_frequencies =
         n_freqs n_features = n_features n_timepoints = length(unique_time_points) time_range =
         (first(unique_time_points), last(unique_time_points)) n_iterations = n_iterations n_folds = n_folds trials_per_condition =
         n_trials_per_condition

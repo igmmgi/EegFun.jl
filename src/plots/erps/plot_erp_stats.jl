@@ -275,7 +275,7 @@ function _plot_erp_stats_channel!(
     # Get condition averages for this channel (index by Symbol, not integer position)
     cond_A_erp = result.data[1]
     cond_B_erp = result.data[2]
-    !(channel_sym in channel_labels(cond_A_erp)) && @minimal_error("Channel $channel_sym not found in result data")
+    channel_sym ∉ cond_A_erp && @minimal_error("Channel $channel_sym not found in result data")
     cond_A_avg = cond_A_erp.data[!, channel_sym]
     cond_B_avg = cond_B_erp.data[!, channel_sym]
     erp_time_points = cond_A_erp.data[!, :time]

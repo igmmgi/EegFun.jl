@@ -137,6 +137,7 @@ function _collect_permutation_t_matrices(prepared::StatisticalData, n_permutatio
     # Pre-allocate array for all t-matrices
     permutation_t_matrices = Array{Float64,3}(undef, n_electrodes, n_time, n_permutations)
 
+    # Progress bar
     local completed = nothing
     if show_progress
         progress = Progress(n_permutations, desc = "Collecting permutation t-matrices: ", showspeed = true)
@@ -375,6 +376,7 @@ function _run_permutations(
     # Pre-allocate electrode lookup (reused across all permutations)
     electrode_to_idx = Dict(e => i for (i, e) in enumerate(electrodes))
 
+    # Progress bar
     local completed = nothing
     if show_progress
         progress = Progress(n_permutations, desc = "Permutations: ", showspeed = true)

@@ -407,7 +407,7 @@ Check if the EEG data contains all specified channels.
 # Returns
 - `Bool`: True if all channels are present
 """
-has_channels(dat::EegData, chans::Vector{Symbol})::Bool = all(in(channel_labels(dat)), chans)
+has_channels(dat::EegData, chans::Vector{Symbol})::Bool = all(ch -> ch in dat, chans)
 
 """
     common_channels(dat1::EegData, dat2::EegData) -> Vector{Symbol}
@@ -436,10 +436,10 @@ other `MultiDataFrameEeg` subtype.
 """
 function to_data_frame(dat::MultiDataFrameEeg)
     isempty(dat.data) && return DataFrame()
-    return vcat(dat.data...)
+    return reduce(vcat, dat.data)
 end
 function to_data_frame(dat::Vector{<:MultiDataFrameEeg})
     isempty(dat) && return DataFrame()
     isempty(dat[1].data) && return DataFrame()
-    return vcat([vcat(dat[idx].data[:]...) for idx in eachindex(dat)]...)
+    return reduce(vcat, [reduce(vcat, d.data) for d in dat])
 end

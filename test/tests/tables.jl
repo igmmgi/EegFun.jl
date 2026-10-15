@@ -60,4 +60,30 @@ import Tables
         df_erp_vec = DataFrame(erp)
         @test nrow(df_erp_vec) == sum(nrow.(DataFrame.(erp)))
     end
+
+    @testset "Tables.rowaccess and DataAPI forwarding" begin
+        @test Tables.rowaccess(dat)
+        @test Tables.rowaccess(typeof(dat))
+        rows = collect(Tables.rows(dat))
+        @test length(rows) == nrow(dat.data)
+        @test Tables.schema(dat) !== nothing
+
+        # Test first and last
+        @test nrow(first(dat, 5)) == 5
+        @test nrow(last(dat, 3)) == 3
+        @test first(dat) isa DataFrameRow
+        @test last(dat) isa DataFrameRow
+
+        # Test eachcol and eachrow
+        @test length(eachcol(dat)) == ncol(dat.data)
+        @test length(eachrow(dat)) == nrow(dat.data)
+
+        # Test convert and parent
+        @test convert(DataFrame, dat) isa DataFrame
+        @test nrow(convert(DataFrame, dat)) == nrow(dat.data)
+        @test parent(dat) === dat.data
+
+        # Test names with cols selector
+        @test names(dat, r"^time") == ["time"]
+    end
 end

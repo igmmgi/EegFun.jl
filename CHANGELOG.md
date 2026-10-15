@@ -35,7 +35,14 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 - `preprocess` is split into `_pipeline_setup`, `_pipeline_process_file!`, `_pipeline_final_summary` and `_pipeline_finalize_log` (same log output).
 - `preprocess(...; dry_run = true)` no longer creates the output directory or writes `config.toml` and `neighbours.toml`.
 - Consistent error handling: the ~70 remaining plain `error()` calls for user-facing problems now use `@minimal_error` and throw `EegFunError` instead of `ErrorException`. `@minimal_error` only logs while a log file is active, so interactive use no longer prints each error twice.
+- Optimized tensor conversions (`Base.Matrix`, `Base.Array`), ERP array extraction, and RSA/decoding data preparation using typed function barriers, reducing allocations by up to 99.9%.
 
+### Added
+
+- Complete `Base` array and `Tables.jl` interface for `EegData` (indexing, dimensions, equality, conversions, and shorthand `dat[:Cz]` channel subsetting).
+- Thread-safe async progress tracking (`track_progress_async`) to eliminate progress bar lock contention during parallel decoding and permutation testing.
+- Comprehensive unit tests for previously untested modules: CleanLine, CSD, RIDE, Welch frequency spectrum, decoding preparation, FieldTrip CSV import, and pipeline channel repairs.
+- Comprehensive unit tests for independent-design statistics (ERP and TF), directional non-parametric permutation thresholding, and epoched artifact detection/repair (spherical spline interpolation, bridging detection, flatline, and peak-to-peak).
 
 ## [0.8.0] - 2026-08-13
 

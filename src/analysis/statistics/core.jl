@@ -173,17 +173,27 @@ end
 Extract ERP data into a 3D array [participants × electrodes × time].
 Pre-allocates the target array to avoid slow Splatting/Catting operations.
 """
+@inline function _fill_erp_slice!(data::Array{Float64,3}, p::Int, e::Int, col::Vector{Float64}, n_time::Int)
+    @inbounds @simd for t = 1:n_time
+        data[p, e, t] = col[t]
+    end
+end
+
+@inline function _fill_erp_slice!(data::Array{Float64,3}, p::Int, e::Int, col::AbstractVector, n_time::Int)
+    @inbounds for t = 1:n_time
+        data[p, e, t] = Float64(col[t])
+    end
+end
+
 function _extract_erp_array(erps::Vector{ErpData}, electrodes::Vector{Symbol}, n_time::Int)
     n_participants = length(erps)
     n_electrodes = length(electrodes)
     data = Array{Float64,3}(undef, n_participants, n_electrodes, n_time)
 
     for (p, erp) in enumerate(erps)
-        mat = Matrix{Float64}(erp.data[!, electrodes])
-        for e = 1:n_electrodes
-            @inbounds for t = 1:n_time
-                data[p, e, t] = mat[t, e]
-            end
+        df = erp.data
+        for (e, el) in enumerate(electrodes)
+            _fill_erp_slice!(data, p, e, df[!, el], n_time)
         end
     end
 

@@ -71,8 +71,8 @@ function Base.show(io::IO, data::StatisticalData)
     n_participants2 = size(data.analysis.data[2], 1)
 
     # Get summary info from grand averages
-    n_electrodes1 = length(channel_labels(data.data[1]))
-    n_electrodes2 = length(channel_labels(data.data[2]))
+    n_electrodes1 = n_channels(data.data[1])
+    n_electrodes2 = n_channels(data.data[2])
     time_range1_str = time_range_str(data.data[1].data[!, :time])
     time_range2_str = time_range_str(data.data[2].data[!, :time])
     analysis_time_range = time_range_str(data.analysis.time_points)
