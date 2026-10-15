@@ -631,12 +631,42 @@ using OrderedCollections
         cont_copy[CartesianIndex(1, 1)] = 99.0
         @test cont_copy.data[1, :Fz] == 99.0
 
-        # Tensor conversions
+        # Tensor conversions & vec
         @test size(Array(cont)) == (3, 2)
         @test size(Array(ep)) == (2, 2, 2)
         @test convert(Matrix, cont) == Matrix(cont)
         @test convert(Array, cont) == Array(cont)
         @test convert(Array, ep) == Array(ep)
+        @test length(vec(cont)) == 6
+        @test length(vec(ep)) == 8
+
+        # Channel membership & keys
+        @test :Cz in cont
+        @test !(:Oz in cont)
+        @test "Cz" in cont
+        @test haskey(cont, :Cz)
+        @test !haskey(cont, :Oz)
+        @test keys(cont) == [:Fz, :Cz]
+        @test :Cz in ep
+        @test keys(ep) == [:Fz, :Cz]
+
+        # Equality & isapprox
+        @test cont == copy(cont)
+        @test isequal(cont, copy(cont))
+        @test ep == copy(ep)
+        @test isequal(ep, copy(ep))
+        @test cont ≈ copy(cont)
+        @test ep ≈ copy(ep)
+
+        cont_diff = copy(cont)
+        cont_diff.data[1, :Fz] += 1e-8
+        @test cont != cont_diff
+        @test isapprox(cont, cont_diff; atol = 1e-6)
+        @test !isapprox(cont, ep)
+
+        # summary
+        @test summary(cont) == "3 timepoints × 2 channels ContinuousData (\"test\")"
+        @test summary(ep) == "2 epochs × 2 timepoints × 2 channels EpochData (\"test\")"
     end
 end
 

@@ -1670,7 +1670,7 @@ function _subset_selected_data(state::EpochedDataBrowserState, clicked_region_id
     )
 
     # Check if we have data before converting
-    if isempty(epoch_data.data) || isempty(epoch_data.data[1])
+    if isempty(epoch_data)
         @minimal_warning "Selected region contains no data"
         return nothing
     end

@@ -32,7 +32,7 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 
 ### Added
 
-- Complete `Base` array and `Tables.jl` interface for `EegData` (indexing, dimensions, conversions, and shorthand `dat[:Cz]` channel subsetting).
+- Complete `Base` array and `Tables.jl` interface for `EegData` (indexing, dimensions, equality, conversions, and shorthand `dat[:Cz]` channel subsetting).
 - Thread-safe async progress tracking (`track_progress_async`) to eliminate progress bar lock contention during parallel decoding and permutation testing.
 - Comprehensive unit tests for previously untested modules: CleanLine, CSD, RIDE, Welch frequency spectrum, decoding preparation, FieldTrip CSV import, and pipeline channel repairs.
 - Comprehensive unit tests for independent-design statistics (ERP and TF), directional non-parametric permutation thresholding, and epoched artifact detection/repair (spherical spline interpolation, bridging detection, flatline, and peak-to-peak).

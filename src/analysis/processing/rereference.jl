@@ -138,7 +138,7 @@ function rereference!(dat::EegData, reference_selection::Union{Symbol,Vector{Sym
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
 
     # Verify reference channels exist in the data
-    missing_channels = [ch for ch in reference_channels if ch ∉ channel_labels(dat)]
+    missing_channels = [ch for ch in reference_channels if ch ∉ dat]
     if !isempty(missing_channels)
         @minimal_error "Missing reference channels in data: $(missing_channels)"
     end

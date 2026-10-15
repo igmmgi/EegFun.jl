@@ -129,6 +129,18 @@ end
 
 Base.Array(dat::SingleDataFrameEeg) = Base.Matrix(dat)
 
+@inline function _fill_slice!(A::Array{Float64,3}, e::Int, c_idx::Int, col::Vector{Float64}, n_samp::Int)
+    @inbounds @simd for t = 1:n_samp
+        A[e, t, c_idx] = col[t]
+    end
+end
+
+@inline function _fill_slice!(A::Array{Float64,3}, e::Int, c_idx::Int, col::AbstractVector, n_samp::Int)
+    @inbounds for t = 1:n_samp
+        A[e, t, c_idx] = Float64(col[t])
+    end
+end
+
 function Base.Array(dat::MultiDataFrameEeg)
     cols = channel_labels(dat)
     n_ep = n_epochs(dat)
@@ -142,10 +154,7 @@ function Base.Array(dat::MultiDataFrameEeg)
     for e = 1:n_ep
         df = dat.data[e]
         for (c_idx, c) in enumerate(cols)
-            col_data = df[!, c]
-            for t = 1:n_samp
-                A[e, t, c_idx] = col_data[t]
-            end
+            _fill_slice!(A, e, c_idx, df[!, c], n_samp)
         end
     end
 
@@ -161,3 +170,57 @@ Base.convert(::Type{Matrix}, dat::SingleDataFrameEeg) = Base.Matrix(dat)
 Base.convert(::Type{Matrix{Float64}}, dat::SingleDataFrameEeg) = Base.Matrix(dat)
 Base.convert(::Type{Array}, dat::EegData) = Base.Array(dat)
 Base.convert(::Type{DataFrame}, dat::EegData) = DataFrame(dat)
+Base.vec(dat::EegData) = vec(Base.Array(dat))
+Base.parent(dat::SingleDataFrameEeg) = dat.data
+Base.parent(dat::MultiDataFrameEeg) = dat.data
+
+
+# === Channel Membership & Keys ===
+Base.in(chan::Union{Symbol, AbstractString}, dat::EegData) = Symbol(chan) in channel_labels(dat)
+Base.haskey(dat::EegData, chan::Union{Symbol, AbstractString}) = Symbol(chan) in channel_labels(dat)
+Base.keys(dat::EegData) = channel_labels(dat)
+
+# === Equality and Approximations ===
+function Base.:(==)(a::Layout, b::Layout)
+    for f in fieldnames(Layout)
+        getfield(a, f) == getfield(b, f) || return false
+    end
+    return true
+end
+
+function Base.:(==)(a::AnalysisInfo, b::AnalysisInfo)
+    for f in fieldnames(AnalysisInfo)
+        getfield(a, f) == getfield(b, f) || return false
+    end
+    return true
+end
+
+function Base.:(==)(a::T, b::T) where {T<:EegData}
+    for f in fieldnames(T)
+        getfield(a, f) == getfield(b, f) || return false
+    end
+    return true
+end
+Base.:(==)(::EegData, ::EegData) = false
+
+Base.isequal(a::T, b::T) where {T<:EegData} = a == b
+
+function Base.isapprox(a::T, b::T; kwargs...) where {T<:SingleDataFrameEeg}
+    channel_labels(a) == channel_labels(b) || return false
+    size(a) == size(b) || return false
+    return isapprox(Matrix(a), Matrix(b); kwargs...)
+end
+
+function Base.isapprox(a::T, b::T; kwargs...) where {T<:MultiDataFrameEeg}
+    channel_labels(a) == channel_labels(b) || return false
+    size(a) == size(b) || return false
+    return isapprox(Array(a), Array(b); kwargs...)
+end
+Base.isapprox(::EegData, ::EegData; kwargs...) = false
+
+# === Base.summary ===
+Base.summary(dat::SingleDataFrameEeg) = "$(n_samples(dat)) timepoints × $(n_channels(dat)) channels $(nameof(typeof(dat))) (\"$(dat.file)\")"
+Base.summary(dat::MultiDataFrameEeg) = "$(n_epochs(dat)) epochs × $(n_samples(dat)) timepoints × $(n_channels(dat)) channels $(nameof(typeof(dat))) (\"$(dat.file)\")"
+
+
+

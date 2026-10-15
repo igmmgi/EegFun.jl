@@ -407,7 +407,7 @@ Check if the EEG data contains all specified channels.
 # Returns
 - `Bool`: True if all channels are present
 """
-has_channels(dat::EegData, chans::Vector{Symbol})::Bool = all(in(channel_labels(dat)), chans)
+has_channels(dat::EegData, chans::Vector{Symbol})::Bool = all(ch -> ch in dat, chans)
 
 """
     common_channels(dat1::EegData, dat2::EegData) -> Vector{Symbol}
