@@ -436,10 +436,10 @@ other `MultiDataFrameEeg` subtype.
 """
 function to_data_frame(dat::MultiDataFrameEeg)
     isempty(dat.data) && return DataFrame()
-    return vcat(dat.data...)
+    return reduce(vcat, dat.data)
 end
 function to_data_frame(dat::Vector{<:MultiDataFrameEeg})
     isempty(dat) && return DataFrame()
     isempty(dat[1].data) && return DataFrame()
-    return vcat([vcat(dat[idx].data[:]...) for idx in eachindex(dat)]...)
+    return reduce(vcat, [reduce(vcat, d.data) for d in dat])
 end

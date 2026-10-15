@@ -637,6 +637,11 @@ using OrderedCollections
         @test convert(Matrix, cont) == Matrix(cont)
         @test convert(Array, cont) == Array(cont)
         @test convert(Array, ep) == Array(ep)
+        @test Matrix{Float64}(cont) == Matrix(cont)
+        @test Array{Float64}(cont) == Array(cont)
+        @test Array{Float64}(ep) == Array(ep)
+        @test Array{Float64, 2}(cont) == Matrix(cont)
+        @test Array{Float64, 3}(ep) == Array(ep)
         @test length(vec(cont)) == 6
         @test length(vec(ep)) == 8
 

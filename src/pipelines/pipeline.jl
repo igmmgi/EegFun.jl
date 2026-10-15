@@ -683,7 +683,7 @@ function _pipeline_ica!(
         # Calculate rank to prevent ICA crash from rank-deficient data
         n_repaired = isnothing(continuous_repair_info) ? 0 : length(continuous_repair_info.repaired)
         n_ref = preprocess_cfg.reference_channel == :avg ? 1 : 0
-        n_comps = length(channel_labels(dat_ica)) - n_repaired - n_ref
+        n_comps = n_channels(dat_ica) - n_repaired - n_ref
 
         ica = run_ica(
             dat_ica;

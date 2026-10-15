@@ -24,27 +24,37 @@ Returns arrays ready for RSA computation.
 function _prepare_rsa_data(epochs::Vector{EpochData})
     channels = channel_labels(epochs)
     times = time_vector(epochs)
+    n_channels = length(channels)
+    n_times = length(times)
 
     # Prepare data arrays for each condition
-    data_arrays = Vector{Array{Float64,3}}()
-    n_trials_per_condition = Int[]
+    data_arrays = Vector{Array{Float64,3}}(undef, length(epochs))
+    n_trials_per_condition = Vector{Int}(undef, length(epochs))
 
-    for epoch_data in epochs
+    for (cond_idx, epoch_data) in enumerate(epochs)
         n_trials = n_epochs(epoch_data)
-        push!(n_trials_per_condition, n_trials)
+        n_trials_per_condition[cond_idx] = n_trials
 
         # Preallocate: [channels × time × trials]
-        condition_data = zeros(Float64, length(channels), length(times), n_trials)
+        condition_data = Array{Float64,3}(undef, n_channels, n_times, n_trials)
 
         for (trial_idx, trial_df) in enumerate(epoch_data.data)
-            # Extract channel data (data is already subsetted)
             for (ch_idx, ch_name) in enumerate(channels)
-                ch_data = trial_df[!, ch_name]
-                condition_data[ch_idx, :, trial_idx] = ch_data
+                col = trial_df[!, ch_name]
+                if col isa Vector{Float64}
+                    col_f64 = col::Vector{Float64}
+                    @inbounds @simd for t = 1:n_times
+                        condition_data[ch_idx, t, trial_idx] = col_f64[t]
+                    end
+                else
+                    @inbounds for t = 1:n_times
+                        condition_data[ch_idx, t, trial_idx] = Float64(col[t])
+                    end
+                end
             end
         end
 
-        push!(data_arrays, condition_data)
+        data_arrays[cond_idx] = condition_data
     end
 
     return data_arrays, times, n_trials_per_condition
@@ -831,11 +841,11 @@ function _prepare_and_validate_rsa(epochs, channel_selection, sample_selection)
     # Subset epochs by channel and sample selection
     epochs_subset = subset(epochs; channel_selection = channel_selection, sample_selection = sample_selection, include_extra = false)
 
-    if isempty(epochs_subset) || isempty(channel_labels(epochs_subset[1]))
+    if isempty(epochs_subset) || n_channels(epochs_subset[1]) == 0
         @minimal_error("Channel selection produced no channels")
     end
 
-    if isempty(epochs_subset[1].data) || isempty(epochs_subset[1].data[1][!, :time])
+    if isempty(epochs_subset[1]) || isempty(time_vector(epochs_subset[1]))
         @minimal_error("Sample selection produced no time points")
     end
 

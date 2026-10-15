@@ -2,14 +2,14 @@
 Base.IndexStyle(::Type{<:EegData}) = IndexCartesian()
 
 # size & axes & dims
-Base.axes(dat::SingleDataFrameEeg) = (Base.OneTo(n_samples(dat)), Base.OneTo(length(channel_labels(dat))))
-Base.axes(dat::MultiDataFrameEeg) = (Base.OneTo(n_epochs(dat)), Base.OneTo(n_samples(dat)), Base.OneTo(length(channel_labels(dat))))
+Base.axes(dat::SingleDataFrameEeg) = (Base.OneTo(n_samples(dat)), Base.OneTo(n_channels(dat)))
+Base.axes(dat::MultiDataFrameEeg) = (Base.OneTo(n_epochs(dat)), Base.OneTo(n_samples(dat)), Base.OneTo(n_channels(dat)))
 Base.axes(dat::EegData, d::Int) = d <= length(axes(dat)) ? axes(dat)[d] : Base.OneTo(1)
 
-Base.size(dat::SingleDataFrameEeg) = (n_samples(dat), length(channel_labels(dat)))
-Base.size(dat::SingleDataFrameEeg, d::Int) = d == 1 ? n_samples(dat) : (d == 2 ? length(channel_labels(dat)) : 1)
-Base.size(dat::MultiDataFrameEeg) = (n_epochs(dat), n_samples(dat), length(channel_labels(dat)))
-Base.size(dat::MultiDataFrameEeg, d::Int) = d == 1 ? n_epochs(dat) : (d == 2 ? n_samples(dat) : (d == 3 ? length(channel_labels(dat)) : 1))
+Base.size(dat::SingleDataFrameEeg) = (n_samples(dat), n_channels(dat))
+Base.size(dat::SingleDataFrameEeg, d::Int) = d == 1 ? n_samples(dat) : (d == 2 ? n_channels(dat) : 1)
+Base.size(dat::MultiDataFrameEeg) = (n_epochs(dat), n_samples(dat), n_channels(dat))
+Base.size(dat::MultiDataFrameEeg, d::Int) = d == 1 ? n_epochs(dat) : (d == 2 ? n_samples(dat) : (d == 3 ? n_channels(dat) : 1))
 
 Base.ndims(::Type{<:SingleDataFrameEeg}) = 2
 Base.ndims(::Type{<:MultiDataFrameEeg}) = 3
@@ -122,12 +122,35 @@ function Base.vcat(dats::EpochData...)
 end
 
 # === Base Tensor Conversion Interface ===
+@inline function _fill_col!(M::Matrix{Float64}, c_idx::Int, col::Vector{Float64}, n_samp::Int)
+    @inbounds @simd for t = 1:n_samp
+        M[t, c_idx] = col[t]
+    end
+end
+
+@inline function _fill_col!(M::Matrix{Float64}, c_idx::Int, col::AbstractVector, n_samp::Int)
+    @inbounds for t = 1:n_samp
+        M[t, c_idx] = Float64(col[t])
+    end
+end
+
 function Base.Matrix(dat::SingleDataFrameEeg)
     cols = channel_labels(dat)
-    return Matrix(dat.data[!, cols])
+    n_samp = n_samples(dat)
+    n_chan = length(cols)
+    M = Matrix{Float64}(undef, n_samp, n_chan)
+    df = dat.data
+    for (c_idx, c) in enumerate(cols)
+        _fill_col!(M, c_idx, df[!, c], n_samp)
+    end
+    return M
 end
 
 Base.Array(dat::SingleDataFrameEeg) = Base.Matrix(dat)
+Base.Array{Float64}(dat::SingleDataFrameEeg) = Base.Matrix(dat)
+Base.Array{Float64}(dat::MultiDataFrameEeg) = Base.Array(dat)
+Base.Array{Float64,2}(dat::SingleDataFrameEeg) = Base.Matrix(dat)
+Base.Array{Float64,3}(dat::MultiDataFrameEeg) = Base.Array(dat)
 
 @inline function _fill_slice!(A::Array{Float64,3}, e::Int, c_idx::Int, col::Vector{Float64}, n_samp::Int)
     @inbounds @simd for t = 1:n_samp
