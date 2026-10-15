@@ -416,7 +416,7 @@ function _compute_critical_t_values_tf(df::Float64, matrix_size::Tuple{Int,Int,I
         crit_t = quantile(dist, alpha)
         fill!(critical_t_values, crit_t)
     else
-        error("tail must be :both, :left, or :right, got :$tail")
+        @minimal_error("tail must be :both, :left, or :right, got :$tail")
     end
 
     return critical_t_values

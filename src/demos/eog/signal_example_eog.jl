@@ -67,7 +67,7 @@ signal_example_heog()
 - `ax_eog::Axis`: The potential vs. time signal recording axis.
 """
 function signal_example_heog()
-    # Explicitly activate GLMakie before constructing the Figure to prevent CairoMakie from capturing it
+    # Explicitly activate GLMakie before constructing the Figure, in case another backend (e.g. CairoMakie) is active
     if isdefined(Main, :GLMakie)
         try
             Main.GLMakie.activate!(inline = false)

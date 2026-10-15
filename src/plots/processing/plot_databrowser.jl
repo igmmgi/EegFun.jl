@@ -2498,7 +2498,7 @@ function _read_any_eeg_file(filepath::String, layout::Union{Nothing,Layout} = no
         end
     end
 
-    isnothing(dat_eeg) && error("Unsupported file format or failed to read: $filepath")
+    isnothing(dat_eeg) && @minimal_error("Unsupported file format or failed to read: $filepath")
     return (dat_eeg, ica_data)
 end
 

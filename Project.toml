@@ -49,13 +49,6 @@ CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
 
-[sources]
-AnovaFun = {rev = "main", url = "https://github.com/igmmgi/AnovaFun.jl"}
-BiosemiDataFormat = {rev = "master", url = "https://github.com/igmmgi/BiosemiDataFormat.jl.git"}
-BrainVisionDataFormat = {rev = "main", url = "https://github.com/igmmgi/BrainVisionDataFormat.jl.git"}
-ExtensibleDataFormat = {rev = "main", url = "https://github.com/igmmgi/ExtensibleDataFormat.jl.git"}
-FunctionalImageFormat = {rev = "main", url = "https://github.com/igmmgi/FunctionalImageFormat.jl.git"}
-
 [extensions]
 EegFunAMDGPUExt = "AMDGPU"
 EegFunCUDAExt = "CUDA"
@@ -65,9 +58,9 @@ EegFunMetalExt = "Metal"
 
 [compat]
 AMDGPU = "2.7.0"
-AnovaFun = "0.4"
-BiosemiDataFormat = "0.2.0"
-BrainVisionDataFormat = "0.1.0"
+AnovaFun = "0.5"
+BiosemiDataFormat = "0.2"
+BrainVisionDataFormat = "0.1"
 CSV = "0.10.0"
 CUDA = "5, 6.2"
 CairoMakie = "0.15.8"
@@ -77,9 +70,9 @@ DataFrames = "1.7.0"
 Distributions = "0.25.120"
 DocStringExtensions = "0.9.5"
 EuropeanDataFormat = "0.1.1"
-ExtensibleDataFormat = "0.1.0"
+ExtensibleDataFormat = "0.1"
 FFTW = "1.0.0"
-FunctionalImageFormat = "0.1.0"
+FunctionalImageFormat = "0.1"
 GLMakie = "0.13.8"
 GeometryBasics = "0.5.11"
 JLD2 = "0.5.15, 0.6"

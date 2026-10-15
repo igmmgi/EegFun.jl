@@ -32,7 +32,8 @@ Preprocess EEG data according to the specified configuration file.
   already exists in the output directory. Useful for resuming after a crash (default: `false`).
 - `dry_run::Bool`: If `true`, validate the configuration, resolve all paths, check that all
   input files exist, and report what *would* happen — without actually processing any data.
-  This also serves as a standalone config validator (default: `false`).
+  This also serves as a standalone config validator. A dry run does not write any files
+  (no output directory, `config.toml` or `neighbours.toml` is created) (default: `false`).
 
 # Notes
 - Relative paths in the TOML config file are resolved relative to `base_dir`
@@ -63,90 +64,32 @@ function preprocess(
     # set up the global log for overall processing
     setup_global_logging(log_filename, log_level = log_level)
 
-    # initialize variable for outer scope
-    output_directory = ""
+    # Resolved as soon as possible during setup (so the log file can be moved there, even if setup fails)
+    output_directory_ref = Ref("")
     all_epoch_counts = DataFrame[]  # Vector to store all epoch counts
 
     try
 
         # Setup for all analyses files:
-        # This involves loading the end-user config file, merging it with the default config, 
-        # and creating the PreprocessConfig struct.
-        @info section("Setup")
-        @info "Configuration Files:"
-        cfg = read_config(config)
-        isnothing(cfg) && @minimal_error "Failed to load configuration from: $config"
-
-        # Resolve relative paths in config relative to base_dir
-        resolve_path(path::String) = isabspath(path) ? path : joinpath(base_dir, path)
-
-        # Create unified PipelineConfig object for typed access
-        pipeline_cfg = PipelineConfig(cfg)
-        preprocess_cfg = pipeline_cfg.preprocess
-        files_cfg = pipeline_cfg.files
-
-        # Resolve input directory
-        input_directory = resolve_path(files_cfg.input.directory)
-        !isdir(input_directory) && @minimal_error "Input directory does not exist: $input_directory"
-
-        # Resolve output directory
-        output_directory = resolve_path(files_cfg.output.directory)
-        !isdir(output_directory) && mkpath(output_directory)
-
-        # Resolve layout file path - try resolved path first, then fall back to package layouts
-        layout_file_path = resolve_path(files_cfg.input.layout_file)
-        if !isfile(layout_file_path)
-            # Fall back to searching in package layouts directory
-            layout_file = find_file(files_cfg.input.layout_file, joinpath(@__DIR__, "..", "..", "resources", "layouts"))
-            if !isnothing(layout_file)
-                layout_file_path = layout_file
-            end
-        end
-        !isfile(layout_file_path) && @minimal_error "Layout file not found: $layout_file_path"
-        layout = read_layout(layout_file_path)
-
-        # Resolve epoch condition file path
-        epoch_condition_file = resolve_path(files_cfg.input.epoch_condition_file)
-
-        # check if all requested raw data files exist
-        raw_data_files = get_files(input_directory, files_cfg.input.raw_data_files; recursive = files_cfg.input.recursive)
-        raw_data_files_exist = check_files_exist(raw_data_files)
-        !raw_data_files_exist && @minimal_error "Missing raw data files requested within TOML file!"
-        isempty(raw_data_files) &&
-            @minimal_error "No files found in '$input_directory' matching pattern '$(files_cfg.input.raw_data_files)'. Check the 'directory' and 'raw_data_files' settings in your pipeline.toml."
-        @info "Found $(length(raw_data_files)) files: $(_print_vector(basename.(raw_data_files)))"
-
-        # Read the epoch conditions defined within the toml file
-        !isfile(epoch_condition_file) && @minimal_error "File missing: $epoch_condition_file"
-        epoch_cfgs = condition_parse_epoch(TOML.parsefile(epoch_condition_file))
-        @info "Loading/parsing epoch file: $epoch_condition_file"
-
-        # Output directory was already set early, just log it
-        @info "Output directory: $output_directory"
-
-        # print config to output directory
-        print_config(cfg, joinpath(output_directory, "config.toml"))
-
-        # Layout coordinates and calculation of channel neighbours (2D/3D)
-        polar_to_cartesian_xy!(layout)
-        polar_to_cartesian_xyz!(layout)
-        get_neighbours_xy!(layout, preprocess_cfg.neighbour_criterion)
-        print_layout_neighbours(layout, joinpath(output_directory, "neighbours.toml"))
+        # Load the config, resolve paths, read layout/conditions/file list (see _pipeline_setup)
+        setup = _pipeline_setup(config, base_dir, dry_run, output_directory_ref)
+        output_directory = setup.output_directory
+        raw_data_files = setup.raw_data_files
 
         # ────────────────────────────────────────────────────────
         # DRY RUN: Report what would happen and return early
         # ────────────────────────────────────────────────────────
         if dry_run
             _pipeline_dry_run_summary(
-                input_directory,
+                setup.input_directory,
                 output_directory,
-                layout_file_path,
-                layout,
-                epoch_condition_file,
-                epoch_cfgs,
+                setup.layout_file_path,
+                setup.layout,
+                setup.epoch_condition_file,
+                setup.epoch_cfgs,
                 raw_data_files,
-                preprocess_cfg,
-                files_cfg,
+                setup.preprocess_cfg,
+                setup.files_cfg,
             )
             return nothing
         end
@@ -185,87 +128,14 @@ function preprocess(
             @info "Processing file $file_idx/$(length(raw_data_files)): $(basename(data_file)) (ETA: $eta_str)"
 
             try
-
-                # Individual file processing
-                @info section("Processing")
-                @info "File: $data_file"
-
-                # Set up per-file logging (temporarily replaces global logger)
-                setup_logging(joinpath(output_directory, "$(basename_without_ext(data_file))_log.txt"), log_level = log_level)
-
-                ################### LOAD RAW DATA FILE ###################
-                @info section("Raw Data")
-                dat = create_eegfun_data(read_raw_data(data_file), layout)
-
-                # Check if the data file contains all channels required by the layout
-                missing_channels = setdiff(layout.data.label, channel_labels(dat))
-                if !isempty(missing_channels)
-                    @minimal_error "Data file is missing channels defined in layout: $(join(missing_channels, ", "))"
-                end
-
-                # Save the original data in Julia format
-                if files_cfg.output.save_continuous_data_raw
-                    @info "Saving continuous data (original)"
-                    jldsave(_make_output_filename(output_directory, data_file, "_continuous_raw"); data = dat)
-                end
-
-                # Mark epoch intervals
-                # This is useful for x (time/sample) subsetting within the preprocessing pipeline
-                @info section("Marking epoch intervals")
-                @info "Epoch intervals: $([preprocess_cfg.epoch_start, preprocess_cfg.epoch_end])"
-                mark_epoch_intervals!(dat, epoch_cfgs, [preprocess_cfg.epoch_start, preprocess_cfg.epoch_end])
-
-                ################### APPLY INITIAL FILTERS ###################
-                _pipeline_initial_filters!(dat, preprocess_cfg)
-
-                #################### CALCULATE EOG CHANNELS ###################
-                hEOG_vEOG_cm_epoch = _pipeline_eog!(dat, preprocess_cfg)
-
-                ############################### INITIAL ARTIFACT DETECTION ###############################
-                continuous_repair_info = _pipeline_continuous_artifacts!(dat, preprocess_cfg, hEOG_vEOG_cm_epoch)
-                ################### REREFERENCE DATA ###################
-                if preprocess_cfg.reference_channel != :none
-                    @info section("Rereference")
-                    rereference!(dat, preprocess_cfg.reference_channel)
-                else
-                    @info section("Rereference")
-                    @info "Skipping rereferencing (reference_channel = none)"
-                end
-
-                #################### INITIAL EPOCH and ERP EXTRACTION ###################
-                # This is just the initial epoch extraction and not the cleaned epoched data.
-                # Here, preprocessing (rereferencing and channel repair) has been applied, but
-                # no ICA artifact correction has been performed.
-                @info section("Initial Epoch Extraction (Pre-ICA)")
-                epochs_raw = extract_epochs(dat, epoch_cfgs, (preprocess_cfg.epoch_start, preprocess_cfg.epoch_end))
-                erps_raw = average_epochs(epochs_raw)
-
-                if files_cfg.output.save_epoch_data_raw
-                    @info "Saving epoch data (original)"
-                    jldsave(_make_output_filename(output_directory, data_file, "_epochs_raw"); data = epochs_raw)
-                end
-
-                if files_cfg.output.save_erp_data_raw
-                    @info "Saving ERP data (original)"
-                    jldsave(_make_output_filename(output_directory, data_file, "_erps_raw"); data = erps_raw)
-                end
-
-                #################### Independent Component Analysis (ICA) ###################
-                # We perform the ica on "continuous" data (clean sections) that usually has a 
-                # more extreme high-pass filter applied. 
-                component_artifacts = _pipeline_ica!(dat, preprocess_cfg, continuous_repair_info, output_directory, data_file, files_cfg)
-
-                #################### RECALCULATE EOG CHANNELS AFTER ICA AND REPAIR ###################
-                _pipeline_epoch_and_reject!(
-                    dat,
-                    preprocess_cfg,
-                    epoch_cfgs,
-                    continuous_repair_info,
-                    component_artifacts,
-                    output_directory,
+                _pipeline_process_file!(
                     data_file,
-                    files_cfg,
-                    epochs_raw,
+                    setup.layout,
+                    setup.preprocess_cfg,
+                    setup.files_cfg,
+                    setup.epoch_cfgs,
+                    output_directory,
+                    log_level,
                     all_epoch_counts,
                 )
 
@@ -284,68 +154,288 @@ function preprocess(
             end
         end
 
-        #################### FINAL SUMMARY ###################
-        @info section("Summary")
-        @info "$processed_files success, $(length(failed_files)) fail$(skipped_files > 0 ? ", $skipped_files skipped" : "")"
-        !isempty(failed_files) && @info "Failed files: $(join(failed_files, ", "))"
-
-        # Print electrode repair summary (load from saved artifact info files)
-        @info subsection("Electrode Repair Summary Across All Participants (Continuous Level Only)")
-        electrode_per_file, electrode_summary = summarize_electrode_repairs("_artifact_info", input_dir = output_directory)
-        if !isempty(electrode_per_file)
-            log_pretty_table(electrode_per_file; title = "Electrode Repairs per Participant:")
-        end
-        if !isempty(electrode_summary)
-            log_pretty_table(electrode_summary; title = "Electrode Repairs: Number of Participants Affected")
-        end
-
-        # Print ICA component summary (load from saved artifact info files)
-        @info subsection("ICA Component Removal Summary")
-        ica_per_file, ica_avg = summarize_ica_components("_artifact_info", input_dir = output_directory)
-        if !isempty(ica_per_file)
-            log_pretty_table(
-                ica_per_file;
-                title = "ICA Components Removed per Participant",
-                alignment = [:l, :r, :r, :r, :r, :r, :r],  # First column left, rest right
-            )
-            log_pretty_table(
-                ica_avg;
-                title = "Average ICA Components Removed per Participant",
-                alignment = [:l, :r],  # First column left, second right
-            )
-        end
-
-        # Print combined epoch counts
-        if !isempty(all_epoch_counts)
-            epoch_summary, file_summary = _epoch_and_file_summary(all_epoch_counts)
-            # Merge with existing summaries (replaces data for files that already exist)
-            merged_epoch_summary, merged_file_summary = _merge_summaries(epoch_summary, file_summary, output_directory)
-            log_pretty_table(merged_epoch_summary, title = "Combined epoch counts across all files:", alignment = [:l, :r, :l, :r, :r, :r])
-            log_pretty_table(
-                merged_file_summary,
-                title = "Average percentage per condition (averaged across conditions):",
-                alignment = [:l, :r],
-            )
-            @info "Mean percentage (averaged across all conditions and files): $(round(mean(merged_file_summary.percentage), digits = 1)) %"
-            jldsave(joinpath(output_directory, "epoch_summary.jld2"); data = merged_epoch_summary)
-            jldsave(joinpath(output_directory, "file_summary.jld2"); data = merged_file_summary)
-        end
+        _pipeline_final_summary(processed_files, skipped_files, failed_files, output_directory, all_epoch_counts)
 
     finally
         close_global_logging()
-        if !isempty(output_directory) && isdir(output_directory) && isfile(log_filename)
-            log_destination = joinpath(output_directory, log_filename)
-            if log_filename != log_destination
-                mv(log_filename, log_destination, force = true)
-            end
-        elseif isfile(log_filename)
-            rm(log_filename, force = true)
-        end
+        _pipeline_finalize_log(log_filename, output_directory_ref[])
     end
 
 end
 
 # === PIPELINE INTERNAL STAGES ===
+
+"""
+    _pipeline_setup(config, base_dir, dry_run, output_directory_ref) -> NamedTuple
+
+Load and validate the pipeline configuration, resolve all paths, and read the layout,
+epoch conditions and raw data file list. When `dry_run` is `false`, also creates the
+output directory and writes `config.toml` and `neighbours.toml` into it; a dry run never
+touches the disk.
+
+`output_directory_ref` is set as soon as the output directory is resolved, so that the
+caller can still move the log file there if a later setup step fails.
+"""
+function _pipeline_setup(config::String, base_dir::String, dry_run::Bool, output_directory_ref::Ref{String})
+    @info section("Setup")
+    @info "Configuration Files:"
+    cfg = read_config(config)
+    isnothing(cfg) && @minimal_error "Failed to load configuration from: $config"
+
+    # Resolve relative paths in config relative to base_dir
+    resolve_path(path::String) = isabspath(path) ? path : joinpath(base_dir, path)
+
+    # Create unified PipelineConfig object for typed access
+    pipeline_cfg = PipelineConfig(cfg)
+    preprocess_cfg = pipeline_cfg.preprocess
+    files_cfg = pipeline_cfg.files
+
+    # Resolve input directory
+    input_directory = resolve_path(files_cfg.input.directory)
+    !isdir(input_directory) && @minimal_error "Input directory does not exist: $input_directory"
+
+    # Resolve output directory (only created for real runs)
+    output_directory = resolve_path(files_cfg.output.directory)
+    output_directory_ref[] = output_directory
+    !dry_run && !isdir(output_directory) && mkpath(output_directory)
+
+    # Resolve layout file path - try resolved path first, then fall back to package layouts
+    layout_file_path = resolve_path(files_cfg.input.layout_file)
+    if !isfile(layout_file_path)
+        # Fall back to searching in package layouts directory
+        layout_file = find_file(files_cfg.input.layout_file, joinpath(@__DIR__, "..", "..", "resources", "layouts"))
+        if !isnothing(layout_file)
+            layout_file_path = layout_file
+        end
+    end
+    !isfile(layout_file_path) && @minimal_error "Layout file not found: $layout_file_path"
+    layout = read_layout(layout_file_path)
+
+    # Resolve epoch condition file path
+    epoch_condition_file = resolve_path(files_cfg.input.epoch_condition_file)
+
+    # check if all requested raw data files exist
+    raw_data_files = get_files(input_directory, files_cfg.input.raw_data_files; recursive = files_cfg.input.recursive)
+    raw_data_files_exist = check_files_exist(raw_data_files)
+    !raw_data_files_exist && @minimal_error "Missing raw data files requested within TOML file!"
+    isempty(raw_data_files) &&
+        @minimal_error "No files found in '$input_directory' matching pattern '$(files_cfg.input.raw_data_files)'. Check the 'directory' and 'raw_data_files' settings in your pipeline.toml."
+    @info "Found $(length(raw_data_files)) files: $(_print_vector(basename.(raw_data_files)))"
+
+    # Read the epoch conditions defined within the toml file
+    !isfile(epoch_condition_file) && @minimal_error "File missing: $epoch_condition_file"
+    epoch_cfgs = condition_parse_epoch(TOML.parsefile(epoch_condition_file))
+    @info "Loading/parsing epoch file: $epoch_condition_file"
+
+    # Output directory was already set early, just log it
+    @info "Output directory: $output_directory"
+
+    # print config to output directory
+    !dry_run && print_config(cfg, joinpath(output_directory, "config.toml"))
+
+    # Layout coordinates and calculation of channel neighbours (2D/3D)
+    polar_to_cartesian_xy!(layout)
+    polar_to_cartesian_xyz!(layout)
+    get_neighbours_xy!(layout, preprocess_cfg.neighbour_criterion)
+    !dry_run && print_layout_neighbours(layout, joinpath(output_directory, "neighbours.toml"))
+
+    return (;
+        cfg,
+        preprocess_cfg,
+        files_cfg,
+        input_directory,
+        output_directory,
+        layout_file_path,
+        layout,
+        epoch_condition_file,
+        epoch_cfgs,
+        raw_data_files,
+    )
+end
+
+"""
+    _pipeline_process_file!(data_file, layout, preprocess_cfg, files_cfg, epoch_cfgs,
+                            output_directory, log_level, all_epoch_counts)
+
+Run the complete preprocessing pipeline for a single raw data file. Sets up the per-file log
+(the caller is responsible for `close_logging()`), and appends this file's epoch counts to
+`all_epoch_counts`.
+"""
+function _pipeline_process_file!(
+    data_file::String,
+    layout::Layout,
+    preprocess_cfg::PreprocessConfig,
+    files_cfg::FilesConfig,
+    epoch_cfgs,
+    output_directory::String,
+    log_level::Symbol,
+    all_epoch_counts::Vector{DataFrame},
+)
+    # Individual file processing
+    @info section("Processing")
+    @info "File: $data_file"
+
+    # Set up per-file logging (temporarily replaces global logger)
+    setup_logging(joinpath(output_directory, "$(basename_without_ext(data_file))_log.txt"), log_level = log_level)
+
+    ################### LOAD RAW DATA FILE ###################
+    @info section("Raw Data")
+    dat = create_eegfun_data(read_raw_data(data_file), layout)
+
+    # Check if the data file contains all channels required by the layout
+    missing_channels = setdiff(layout.data.label, channel_labels(dat))
+    if !isempty(missing_channels)
+        @minimal_error "Data file is missing channels defined in layout: $(join(missing_channels, ", "))"
+    end
+
+    # Save the original data in Julia format
+    if files_cfg.output.save_continuous_data_raw
+        @info "Saving continuous data (original)"
+        jldsave(_make_output_filename(output_directory, data_file, "_continuous_raw"); data = dat)
+    end
+
+    # Mark epoch intervals
+    # This is useful for x (time/sample) subsetting within the preprocessing pipeline
+    @info section("Marking epoch intervals")
+    @info "Epoch intervals: $([preprocess_cfg.epoch_start, preprocess_cfg.epoch_end])"
+    mark_epoch_intervals!(dat, epoch_cfgs, [preprocess_cfg.epoch_start, preprocess_cfg.epoch_end])
+
+    ################### APPLY INITIAL FILTERS ###################
+    _pipeline_initial_filters!(dat, preprocess_cfg)
+
+    #################### CALCULATE EOG CHANNELS ###################
+    hEOG_vEOG_cm_epoch = _pipeline_eog!(dat, preprocess_cfg)
+
+    ############################### INITIAL ARTIFACT DETECTION ###############################
+    continuous_repair_info = _pipeline_continuous_artifacts!(dat, preprocess_cfg, hEOG_vEOG_cm_epoch)
+
+    ################### REREFERENCE DATA ###################
+    @info section("Rereference")
+    if preprocess_cfg.reference_channel != :none
+        rereference!(dat, preprocess_cfg.reference_channel)
+    else
+        @info "Skipping rereferencing (reference_channel = none)"
+    end
+
+    #################### INITIAL EPOCH and ERP EXTRACTION ###################
+    # This is just the initial epoch extraction and not the cleaned epoched data.
+    # Here, preprocessing (rereferencing and channel repair) has been applied, but
+    # no ICA artifact correction has been performed.
+    @info section("Initial Epoch Extraction (Pre-ICA)")
+    epochs_raw = extract_epochs(dat, epoch_cfgs, (preprocess_cfg.epoch_start, preprocess_cfg.epoch_end))
+    erps_raw = average_epochs(epochs_raw)
+
+    if files_cfg.output.save_epoch_data_raw
+        @info "Saving epoch data (original)"
+        jldsave(_make_output_filename(output_directory, data_file, "_epochs_raw"); data = epochs_raw)
+    end
+
+    if files_cfg.output.save_erp_data_raw
+        @info "Saving ERP data (original)"
+        jldsave(_make_output_filename(output_directory, data_file, "_erps_raw"); data = erps_raw)
+    end
+
+    #################### Independent Component Analysis (ICA) ###################
+    # We perform the ica on "continuous" data (clean sections) that usually has a
+    # more extreme high-pass filter applied.
+    component_artifacts = _pipeline_ica!(dat, preprocess_cfg, continuous_repair_info, output_directory, data_file, files_cfg)
+
+    #################### RECALCULATE EOG CHANNELS AFTER ICA AND REPAIR ###################
+    _pipeline_epoch_and_reject!(
+        dat,
+        preprocess_cfg,
+        epoch_cfgs,
+        continuous_repair_info,
+        component_artifacts,
+        output_directory,
+        data_file,
+        files_cfg,
+        epochs_raw,
+        all_epoch_counts,
+    )
+
+    return nothing
+end
+
+"""
+    _pipeline_final_summary(processed_files, skipped_files, failed_files, output_directory, all_epoch_counts)
+
+Log the end-of-run summary (success/fail counts, electrode repairs, ICA components removed, epoch counts)
+and save the merged `epoch_summary.jld2` and `file_summary.jld2` to `output_directory`.
+"""
+function _pipeline_final_summary(
+    processed_files::Int,
+    skipped_files::Int,
+    failed_files::Vector{String},
+    output_directory::String,
+    all_epoch_counts::Vector{DataFrame},
+)
+    @info section("Summary")
+    @info "$processed_files success, $(length(failed_files)) fail$(skipped_files > 0 ? ", $skipped_files skipped" : "")"
+    !isempty(failed_files) && @info "Failed files: $(join(failed_files, ", "))"
+
+    # Print electrode repair summary (load from saved artifact info files)
+    @info subsection("Electrode Repair Summary Across All Participants (Continuous Level Only)")
+    electrode_per_file, electrode_summary = summarize_electrode_repairs("_artifact_info", input_dir = output_directory)
+    if !isempty(electrode_per_file)
+        log_pretty_table(electrode_per_file; title = "Electrode Repairs per Participant:")
+    end
+    if !isempty(electrode_summary)
+        log_pretty_table(electrode_summary; title = "Electrode Repairs: Number of Participants Affected")
+    end
+
+    # Print ICA component summary (load from saved artifact info files)
+    @info subsection("ICA Component Removal Summary")
+    ica_per_file, ica_avg = summarize_ica_components("_artifact_info", input_dir = output_directory)
+    if !isempty(ica_per_file)
+        log_pretty_table(
+            ica_per_file;
+            title = "ICA Components Removed per Participant",
+            alignment = [:l, :r, :r, :r, :r, :r, :r],  # First column left, rest right
+        )
+        log_pretty_table(
+            ica_avg;
+            title = "Average ICA Components Removed per Participant",
+            alignment = [:l, :r],  # First column left, second right
+        )
+    end
+
+    # Print combined epoch counts
+    if !isempty(all_epoch_counts)
+        epoch_summary, file_summary = _epoch_and_file_summary(all_epoch_counts)
+        # Merge with existing summaries (replaces data for files that already exist)
+        merged_epoch_summary, merged_file_summary = _merge_summaries(epoch_summary, file_summary, output_directory)
+        log_pretty_table(merged_epoch_summary, title = "Combined epoch counts across all files:", alignment = [:l, :r, :l, :r, :r, :r])
+        log_pretty_table(
+            merged_file_summary,
+            title = "Average percentage per condition (averaged across conditions):",
+            alignment = [:l, :r],
+        )
+        @info "Mean percentage (averaged across all conditions and files): $(round(mean(merged_file_summary.percentage), digits = 1)) %"
+        jldsave(joinpath(output_directory, "epoch_summary.jld2"); data = merged_epoch_summary)
+        jldsave(joinpath(output_directory, "file_summary.jld2"); data = merged_file_summary)
+    end
+
+    return nothing
+end
+
+"""
+    _pipeline_finalize_log(log_filename, output_directory)
+
+Move the global preprocessing log into `output_directory` if it exists, otherwise delete it.
+"""
+function _pipeline_finalize_log(log_filename::String, output_directory::String)
+    if !isempty(output_directory) && isdir(output_directory) && isfile(log_filename)
+        log_destination = joinpath(output_directory, log_filename)
+        if log_filename != log_destination
+            mv(log_filename, log_destination, force = true)
+        end
+    elseif isfile(log_filename)
+        rm(log_filename, force = true)
+    end
+    return nothing
+end
+
 function _pipeline_dry_run_summary(
     input_directory,
     output_directory,

@@ -22,9 +22,13 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 - `tf_morlet` is faster and allocates ~99% less (output unchanged).
 - `tf_stft` and `tf_multitaper` are faster and allocate ~48–58% less memory through thread-local buffer reuse and type-stable processing loops (output unchanged).
 - Modularized `ica.jl` (3,985 lines) into `src/analysis/processing/ica/` (`api.jl`, `infomax.jl`, `picard.jl`, `amica.jl`, `components.jl`, `artifact_id.jl`).
+- Modularized `utils/data.jl` (2,520 lines) into `src/utils/data/`, `artifact_detection.jl` (1,961 lines) into `src/analysis/processing/artifact_detection/`, and `pipelines/utils/utils.jl` into `repair_info.jl`, `repair.jl` and `summaries.jl`. Pure file moves, no behaviour change.
 - Removed rogue `export` in `decompose.jl`, aligning RIDE with EegFun's zero-namespace-pollution policy.
 - Expanded `public_api.jl` to declare 45 previously omitted public functions, structs, and mutating `!` pairs.
-- Added non-breaking British English aliases: `check_channel_neighbours`, `repair_artifacts_neighbour!`, `repair_channels_neighbour!`.
+- Updated to `AnovaFun` 0.5, which no longer loads CairoMakie. Load a Makie backend explicitly (`using GLMakie` or `using CairoMakie`) before plotting.
+- `preprocess` is split into `_pipeline_setup`, `_pipeline_process_file!`, `_pipeline_final_summary` and `_pipeline_finalize_log` (same log output).
+- `preprocess(...; dry_run = true)` no longer creates the output directory or writes `config.toml` and `neighbours.toml`.
+- Consistent error handling: the ~70 remaining plain `error()` calls for user-facing problems now use `@minimal_error` and throw `EegFunError` instead of `ErrorException`. `@minimal_error` only logs while a log file is active, so interactive use no longer prints each error twice.
 
 ### Added
 

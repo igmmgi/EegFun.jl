@@ -63,7 +63,7 @@ signal_example_ecg_einthoven()
 - `ax_ecg::Axis`: High-resolution calibrated ECG strip axis.
 """
 function signal_example_ecg_einthoven()
-    # Explicitly activate GLMakie before constructing the Figure to prevent CairoMakie from capturing it
+    # Explicitly activate GLMakie before constructing the Figure, in case another backend (e.g. CairoMakie) is active
     if isdefined(Main, :GLMakie)
         try
             Main.GLMakie.activate!(inline = false)

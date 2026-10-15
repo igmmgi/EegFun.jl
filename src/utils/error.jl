@@ -4,6 +4,11 @@
 Custom exception type for EegFun errors. Try and display a cleaner, user-friendly
 error message without Julia's overly verbose stacktrace spew.
 
+# Error handling policy
+- Problems a user can fix (bad input, configuration, files, selections, parameter values)
+  are raised with [`@minimal_error`](@ref), which throws an `EegFunError`.
+- Internal invariant violations (bugs, "this should never happen") use plain `error()`.
+
 # Example
 ```julia
 throw(EegFunError("No data found matching pattern 'xyz'"))
@@ -15,17 +20,24 @@ end
 
 Base.showerror(io::IO, e::EegFunError) = print(io, e.msg)
 
+# Log an error message without module/file/line metadata.
+_log_error(msg::AbstractString) = @error "Error: " * msg _module = nothing _file = nothing _line = nothing
+
 
 """
     @minimal_error(msg)
 
 Throws an `EegFunError` with a clean user-facing error message.
-Also logs the error via `@error` for diagnostics.
+
+The message is also written with `@error` only while a log file is active (see
+[`setup_logging`](@ref)), so batch/pipeline runs record failures in their log file.
+Otherwise (REPL, scripts, tests) the exception alone is reported, to avoid printing
+the same message twice.
 """
 macro minimal_error(msg)
     quote
         local _msg = string($(esc(msg)))
-        @error "Error: " * _msg _module = nothing _file = nothing _line = nothing
+        _file_logging_active() && _log_error(_msg)
         throw(EegFunError(_msg))
     end
 end

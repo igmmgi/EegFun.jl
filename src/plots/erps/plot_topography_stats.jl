@@ -73,7 +73,7 @@ function plot_topography_stats(
     kwargs...,
 )
     # Validate topo_data
-    topo_data in (:tvalues, :difference) || error("topo_data must be :tvalues or :difference, got :$topo_data")
+    topo_data in (:tvalues, :difference) || @minimal_error("topo_data must be :tvalues or :difference, got :$topo_data")
 
     # Merge user kwargs with shared topography defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
@@ -110,7 +110,7 @@ function plot_topography_stats(
     time_mask = t_start .<= all_time_points .<= t_end
     time_indices = findall(time_mask)
     if isempty(time_indices)
-        error("No time points found in range ($t_start, $t_end). Data range: $(first(all_time_points)) to $(last(all_time_points))")
+        @minimal_error("No time points found in range ($t_start, $t_end). Data range: $(first(all_time_points)) to $(last(all_time_points))")
     end
 
     # Divide time indices into n_topos equal bins
@@ -123,7 +123,7 @@ function plot_topography_stats(
 
     # Validate layout
     if !has_valid_coordinates(layout)
-        error("Cannot create topographic plot: layout has no spatial coordinates.")
+        @minimal_error("Cannot create topographic plot: layout has no spatial coordinates.")
     end
 
     # Ensure coordinates
@@ -190,7 +190,7 @@ function plot_topography_stats(
     else
         n_rows, n_cols = dims
         if n_rows * n_cols < n_topos
-            error("Grid dimensions ($n_rows × $n_cols) provide $(n_rows * n_cols) cells but need $n_topos")
+            @minimal_error("Grid dimensions ($n_rows × $n_cols) provide $(n_rows * n_cols) cells but need $n_topos")
         end
     end
 

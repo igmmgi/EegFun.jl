@@ -37,7 +37,7 @@ function read_fieldtrip_csv(
 
     data_file = joinpath(data_dir, "epochs_data.csv")
     if !isfile(data_file)
-        error("Data file not found: $data_file")
+        @minimal_error("Data file not found: $data_file")
     end
     all_data = CSV.read(data_file, DataFrame)
 
@@ -47,7 +47,7 @@ function read_fieldtrip_csv(
     # First two columns should be 'trial' and 'time'
     # CSV.read returns column names as strings, so compare with strings
     if length(actual_cols) < 2 || actual_cols[1] != "trial" || actual_cols[2] != "time"
-        error("Expected first two columns to be 'trial' and 'time', got: $(actual_cols[1:min(2, length(actual_cols))])")
+        @minimal_error("Expected first two columns to be 'trial' and 'time', got: $(actual_cols[1:min(2, length(actual_cols))])")
     end
 
     channel_labels = [Symbol(col) for col in actual_cols[3:end]]
@@ -64,7 +64,7 @@ function read_fieldtrip_csv(
             fsample = Int(round(1.0 / median_dt))
             @info "Estimated sample rate from time column: $fsample Hz"
         else
-            error("Cannot estimate sample rate. Please provide fsample parameter.")
+            @minimal_error("Cannot estimate sample rate. Please provide fsample parameter.")
         end
     end
 

@@ -52,7 +52,7 @@ function freq_spectrum(
 )
     # Get selected channels
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
-    isempty(selected_channels) && error("No channels selected. Available channels: $(channel_labels(dat))")
+    isempty(selected_channels) && @minimal_error("No channels selected. Available channels: $(channel_labels(dat))")
 
     # Get frequency vector from first channel's first signal
     first_channel = selected_channels[1]
@@ -62,7 +62,7 @@ function freq_spectrum(
     actual_window_size = isnothing(window_size) ? min(2048, length(first_signal)) : window_size
 
     # Validate overlap
-    (overlap < 0 || overlap >= 1) && error("`overlap` must be in range [0, 1), got $overlap")
+    (overlap < 0 || overlap >= 1) && @minimal_error("`overlap` must be in range [0, 1), got $overlap")
 
     noverlap = Int(round(actual_window_size * overlap))
 

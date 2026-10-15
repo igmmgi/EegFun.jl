@@ -514,7 +514,7 @@ end
         @test m_neg[3, 5] == true
 
         # Invalid tail error
-        @test_throws ErrorException EegFun._compute_nonparametric_threshold_individual(perm_t, 0.05, :invalid)
+        @test_throws EegFun.EegFunError EegFun._compute_nonparametric_threshold_individual(perm_t, 0.05, :invalid)
     end
 
     @testset "nonparametric thresholding in-place" begin
@@ -807,7 +807,7 @@ end
         @test all(isnan, thresh_pos_l)
 
         # _compute_nonparametric_threshold_individual: invalid tail
-        @test_throws ErrorException EegFun._compute_nonparametric_threshold_individual(perm_t, 0.05, :invalid)
+        @test_throws EegFun.EegFunError EegFun._compute_nonparametric_threshold_individual(perm_t, 0.05, :invalid)
 
         # Matrix thresholding in-place
         t_matrix = [3.0 -3.0; -4.0 4.0]
@@ -827,7 +827,7 @@ end
         @test all(.!m_pos_l)
 
         # Invalid tail error
-        @test_throws ErrorException EegFun._threshold_t_matrix_nonparametric(t_matrix, pos_mat, neg_mat, :invalid)
+        @test_throws EegFun.EegFunError EegFun._threshold_t_matrix_nonparametric(t_matrix, pos_mat, neg_mat, :invalid)
 
         # Permutation tests with one-tailed non-parametric thresholding
         erps = _build_erp_test_data(n_participants = 4, offset_cond1 = 3.0, offset_cond2 = 0.0, noise = 0.05)

@@ -177,11 +177,11 @@ using DataFrames
         @test any(!isnan, res_mt_trials.data_phase[1][!, :Ch1])
 
         # Validation errors
-        @test_throws ErrorException EegFun.tf_stft(test_epochs)  # neither window_length nor cycles
-        @test_throws ErrorException EegFun.tf_stft(test_epochs; window_length = 0.2, cycles = 5)  # both
-        @test_throws ErrorException EegFun.tf_stft(test_epochs; window_length = -0.1)  # negative window
-        @test_throws ErrorException EegFun.tf_multitaper(test_epochs; cycles = -5)  # negative cycles
-        @test_throws ErrorException EegFun.tf_multitaper(test_epochs; cycles = 5, frequency_smoothing = -0.4)
+        @test_throws EegFun.EegFunError EegFun.tf_stft(test_epochs)  # neither window_length nor cycles
+        @test_throws EegFun.EegFunError EegFun.tf_stft(test_epochs; window_length = 0.2, cycles = 5)  # both
+        @test_throws EegFun.EegFunError EegFun.tf_stft(test_epochs; window_length = -0.1)  # negative window
+        @test_throws EegFun.EegFunError EegFun.tf_multitaper(test_epochs; cycles = -5)  # negative cycles
+        @test_throws EegFun.EegFunError EegFun.tf_multitaper(test_epochs; cycles = 5, frequency_smoothing = -0.4)
     end
 
 end

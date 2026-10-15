@@ -308,12 +308,8 @@ epoch_end = 0.5
                 end
 
                 @test isnothing(result)
-                # Output directory may be created (for the config copy), but no data files
-                out_dir = joinpath(temp_dir, "output")
-                if isdir(out_dir)
-                    jld2_files = filter(f -> endswith(f, ".jld2"), readdir(out_dir))
-                    @test isempty(jld2_files)
-                end
+                # dry_run must not touch the disk: no output directory, config copy or data files
+                @test !isdir(joinpath(temp_dir, "output"))
             end
         else
             EegFun.@minimal_warning "Test file not found: $test_file (skipping dry_run test)"

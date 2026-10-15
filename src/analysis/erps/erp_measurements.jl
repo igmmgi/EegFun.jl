@@ -898,8 +898,8 @@ function erp_measurements(
                 end
             catch e
                 # Re-throw invalid window errors (user errors that should propagate)
-                # @minimal_error throws ErrorException
-                if e isa ErrorException
+                # @minimal_error throws EegFunError
+                if e isa EegFunError
                     error_msg = e.msg
                     if occursin("invalid", lowercase(error_msg)) && occursin("window", lowercase(error_msg))
                         rethrow(e)

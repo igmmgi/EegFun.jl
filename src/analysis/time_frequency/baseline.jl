@@ -26,7 +26,7 @@ tf_baseline!(tf_data, (-0.3, 0.1); method=:db)
 function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
     # Check if baseline has already been applied
     if !isnothing(tf_data.baseline)
-        error(
+        @minimal_error(
             "Baseline correction has already been applied to this data (method: $(tf_data.baseline.method), window: $(tf_data.baseline.window)). " *
             "Baseline corrections are non-linear and cannot be chained. Use the original data to apply a different baseline.",
         )
@@ -49,7 +49,7 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}
     base_mask = falses(n_times)
     base_mask[baseline_start_idx:baseline_end_idx] .= true
     if !any(base_mask)
-        error("Baseline window $(baseline_interval) does not overlap with data times")
+        @minimal_error("Baseline window $(baseline_interval) does not overlap with data times")
     end
 
     # Get channel columns
@@ -125,7 +125,7 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}
         safe_bm = max.(bm, 1e-30)
         power_3d .= 100 .* (power_3d .- bm) ./ safe_bm
     else
-        error(
+        @minimal_error(
             "Unknown baseline method: $method. Use :absolute, :relative, :relchange, :normchange, :db, :vssum (alias for :normchange), :zscore, or :percent",
         )
     end

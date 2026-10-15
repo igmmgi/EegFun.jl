@@ -235,7 +235,7 @@ using EegFun
     @test isapprox(epochs.data[3].Ch1, original_epoch_ch1_3 .- baseline_mean_epoch_3; atol = 1e-9)
 
     # Test error handling - invalid interval (start > stop)
-    # validate_baseline_interval throws ErrorException for invalid intervals
+    # validate_baseline_interval throws an EegFunError for invalid intervals
     dat = EegFun.create_test_continuous_data(n = 10)
     @test_throws Exception EegFun.baseline!(dat, (0.005, 0.001))
 

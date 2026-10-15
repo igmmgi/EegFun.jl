@@ -10,18 +10,13 @@
 # We need to trim this!
 
 # === Types — User-facing data, result, and config types ===
-public AnalysisData
 public AnalysisSettings
 public AnalyticResult
 public ArtifactComponents
 public ArtifactInfo
 public BaselineInfo
 public BatchResult
-public ChannelRepairInfo
 public CleanLineConfig
-public Cluster
-public ClusterInfo
-public Clusters
 public Component
 public ContinuousData
 public ContinuousRepairInfo
@@ -34,12 +29,10 @@ public EegFunData
 public EegFunError
 public EogConfig
 public EpochData
-public EpochInfo
 public EpochRejectionInfo
 public EpochRepairInfo
 public ErpData
 public ErpMeasurementsResult
-public ExtraChannelInfo
 public FilesConfig
 public FilterConfig
 public FilterInfo
@@ -54,35 +47,26 @@ public MultiDataFrameEeg
 public Neighbours
 public NoiseCeiling
 public OutputFilesConfig
-public PermutationDistribution
 public PermutationResult
 public PipelineConfig
 public PipelineTemplateOptions
 public PreprocessConfig
 public Rejection
 public ResampleConfig
-public RideComponent
 public RideResult
 public RsaData
 public SingleDataFrameEeg
 public SpectrumData
 public StatisticalData
 public StatsResult
-public TemporalCluster
-public TestInfo
-public TFAnalysisData
 public TFAnalyticResult
-public TFCluster
 public TFClusterPermutationResult
-public TFClusters
 public TFStatisticalData
 public TFStatsResult
 public TimeFreqData
 public TimeFreqEpochData
 public TriggerInfo
-public TTestResult
 public ValidationResult
-public ZScoreRejectionInfo
 
 # === Data access and utilities ===
 public all_data
@@ -151,7 +135,6 @@ public read_xdf
 # === Layout ===
 public average_number_of_neighbours
 public check_channel_neighbors
-public check_channel_neighbours
 public clear_neighbours!
 public create_custom_layout
 public create_layout
@@ -271,11 +254,10 @@ public n_step_value
 public repair_artifacts
 public repair_artifacts!
 public repair_artifacts_neighbor!
-public repair_artifacts_neighbour!
 public repair_artifacts_spherical_spline!
 public repair_channels
 public repair_channels!
-public repair_channels_neighbour!
+public repair_channels_neighbor!
 public summarize_electrode_repairs
 public unique_rejections
 
@@ -435,17 +417,11 @@ public close_logging
 public setup_global_logging
 public setup_logging
 
-# === Test data generators ===
-public create_synthetic_epochs
-public create_test_continuous_data
-public create_test_epoch_data
-public create_test_erp_data
-public create_test_layout
-public create_test_tf_data
-public create_test_tf_epoch_data
+# === Synthetic signal generation ===
+public generate_signal
+public signal_to_data
 
 # === Demos ===
-public generate_signal
 public signal_example_composition
 public signal_example_convolution
 public signal_example_decoding
@@ -462,7 +438,6 @@ public signal_example_ica_separation
 public signal_example_ica_sphering
 public signal_example_sampling
 public signal_example_tf
-public signal_to_data
 public simulate_erp
 
 # === Misc ===

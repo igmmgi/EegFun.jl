@@ -599,6 +599,6 @@ layout = read_layout(EegFun.example_path("layouts/biosemi/biosemi72.csv"))
 """
 function example_path(relative_path::String)
     path = joinpath(pkgdir(EegFun), "resources", relative_path)
-    isfile(path) || isdir(path) || error("Example resource not found: $relative_path\nExpected at: $path")
+    isfile(path) || isdir(path) || @minimal_error("Example resource not found: $relative_path\nExpected at: $path")
     return path
 end

@@ -92,7 +92,7 @@ function plot_erp_stats(
 
     # Validate that at least something is being plotted
     if !plot_erp && !plot_difference && !plot_tvalues
-        error("At least one of plot_erp, plot_difference, or plot_tvalues must be true")
+        @minimal_error("At least one of plot_erp, plot_difference, or plot_tvalues must be true")
     end
 
     # Prepare kwargs (reuse PLOT_ERP_KWARGS, override stats-specific defaults)
@@ -118,14 +118,14 @@ function plot_erp_stats(
     selected_channels = all_electrodes[selected_mask]
 
     if isempty(selected_channels)
-        error("No channels matched the selection. Available channels: $(all_electrodes)")
+        @minimal_error("No channels matched the selection. Available channels: $(all_electrodes)")
     end
 
     # Apply user-specified plotting order if provided
     if !isnothing(channel_plot_order)
         ordered = Symbol[ch for ch in channel_plot_order if ch in selected_channels]
         if isempty(ordered)
-            error(
+            @minimal_error(
                 "No channels in channel_plot_order matched the selection. Selected: $(selected_channels), Requested order: $(channel_plot_order)",
             )
         end
@@ -275,7 +275,7 @@ function _plot_erp_stats_channel!(
     # Get condition averages for this channel (index by Symbol, not integer position)
     cond_A_erp = result.data[1]
     cond_B_erp = result.data[2]
-    !(channel_sym in channel_labels(cond_A_erp)) && error("Channel $channel_sym not found in result data")
+    !(channel_sym in channel_labels(cond_A_erp)) && @minimal_error("Channel $channel_sym not found in result data")
     cond_A_avg = cond_A_erp.data[!, channel_sym]
     cond_B_avg = cond_B_erp.data[!, channel_sym]
     erp_time_points = cond_A_erp.data[!, :time]

@@ -18,6 +18,9 @@ const LOG_STATE = LoggingState(
     Logging.Info,          # log_level
 )
 
+# True while a local or global log file is active (i.e. messages are being captured to disk)
+_file_logging_active() = !isnothing(LOG_STATE.log_handle) || !isnothing(LOG_STATE.global_log_handle)
+
 """
     _format_duration(duration::Millisecond)
 

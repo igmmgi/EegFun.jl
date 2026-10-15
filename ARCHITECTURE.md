@@ -3,6 +3,7 @@
 ## 1. Core Data Structures (`src/types/`)
 
 All core structures inherit from `EegData` and wrap signal data (via a `DataFrame` in the `.data` field), spatial layouts, and metadata.
+
 - **`ContinuousData`**: Continuous time-series data.
 - **`EpochData`**: Trial-segmented data grouped by condition. 
 - **`ErpData`**: Averaged trials (Event-Related Potentials).
@@ -30,6 +31,8 @@ All core structures inherit from `EegData` and wrap signal data (via a `DataFram
 - **Mutating Defaults (`!`):** Core algorithms are implemented as in-place mutating functions (e.g., `filter!(dat, ...)`). Non-mutating wrappers (`filter(...)`) are automatically generated via the internal `@add_nonmutating` macro.
 - **Predicate Selection:** Data subsetting uses predicate functions instead of array indices (e.g., `channels(:Fz)`, `epochs(1:5)`).
 - **Fail-Fast Error Handling:** Data integrity and types are validated immediately at function entry, throwing domain-specific errors before propagating to lower-level libraries.
+  - Problems a user can fix (bad input, config, files, selections, parameter values) use `@minimal_error`, which throws an `EegFunError`. It also logs the message, but only while a log file is active (batch/pipeline runs), so interactive use doesn't print it twice.
+  - Internal invariant violations (bugs) use plain `error()`. Never use plain `error()` for user-facing problems.
 
 ## 4. Pipeline Data Flow (`src/pipelines/`)
 

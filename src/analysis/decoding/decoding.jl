@@ -401,7 +401,7 @@ function libsvm_classifier(
     n_classes = length(classes)
 
     if n_classes < 2
-        error("Need at least 2 classes, got $(n_classes)")
+        @minimal_error("Need at least 2 classes, got $(n_classes)")
     end
 
     # Fast path for binary classification with standard labels [1, 2]

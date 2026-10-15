@@ -402,7 +402,7 @@ function plot_topography_stats(
     kwargs...,
 )
     # Validate
-    topo_data in (:tvalues, :difference) || error("topo_data must be :tvalues or :difference, got :$topo_data")
+    topo_data in (:tvalues, :difference) || @minimal_error("topo_data must be :tvalues or :difference, got :$topo_data")
 
     # Merge user kwargs with shared topography defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
@@ -433,7 +433,7 @@ function plot_topography_stats(
     freq_mask = freq_range[1] .<= all_frequencies .<= freq_range[2]
     freq_indices = findall(freq_mask)
     isempty(freq_indices) &&
-        error("No frequencies found in range $(freq_range). Data range: $(first(all_frequencies)) to $(last(all_frequencies)) Hz")
+        @minimal_error("No frequencies found in range $(freq_range). Data range: $(first(all_frequencies)) to $(last(all_frequencies)) Hz")
 
     # Find time indices in the selected range
     if isnothing(interval_selection) || interval_selection isa AllSelection
@@ -445,7 +445,7 @@ function plot_topography_stats(
     time_mask = t_start .<= all_time_points .<= t_end
     time_indices = findall(time_mask)
     isempty(time_indices) &&
-        error("No time points found in range ($t_start, $t_end). Data range: $(first(all_time_points)) to $(last(all_time_points))")
+        @minimal_error("No time points found in range ($t_start, $t_end). Data range: $(first(all_time_points)) to $(last(all_time_points))")
 
     # Divide time into bins
     n_topos = min(n_topos, length(time_indices))
@@ -454,7 +454,7 @@ function plot_topography_stats(
     # Get layout and validate
     layout = result.data[1].layout
     if !has_valid_coordinates(layout)
-        error("Cannot create topographic plot: layout has no spatial coordinates.")
+        @minimal_error("Cannot create topographic plot: layout has no spatial coordinates.")
     end
     _ensure_coordinates_2d!(layout)
     _ensure_coordinates_3d!(layout)
@@ -510,7 +510,7 @@ function plot_topography_stats(
         n_rows, n_cols = _best_rect(n_topos)
     else
         n_rows, n_cols = dims
-        n_rows * n_cols < n_topos && error("Grid dimensions ($n_rows × $n_cols) provide $(n_rows * n_cols) cells but need $n_topos")
+        n_rows * n_cols < n_topos && @minimal_error("Grid dimensions ($n_rows × $n_cols) provide $(n_rows * n_cols) cells but need $n_topos")
     end
 
     # Create figure
