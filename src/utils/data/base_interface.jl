@@ -1,15 +1,30 @@
 # === Base Array Interface ===
 Base.IndexStyle(::Type{<:EegData}) = IndexCartesian()
 
-# size & axes
+# size & axes & dims
 Base.axes(dat::SingleDataFrameEeg) = (Base.OneTo(n_samples(dat)), Base.OneTo(length(channel_labels(dat))))
 Base.axes(dat::MultiDataFrameEeg) = (Base.OneTo(n_epochs(dat)), Base.OneTo(n_samples(dat)), Base.OneTo(length(channel_labels(dat))))
+Base.axes(dat::EegData, d::Int) = d <= length(axes(dat)) ? axes(dat)[d] : Base.OneTo(1)
+
 Base.size(dat::SingleDataFrameEeg) = (n_samples(dat), length(channel_labels(dat)))
 Base.size(dat::SingleDataFrameEeg, d::Int) = d == 1 ? n_samples(dat) : (d == 2 ? length(channel_labels(dat)) : 1)
 Base.size(dat::MultiDataFrameEeg) = (n_epochs(dat), n_samples(dat), length(channel_labels(dat)))
 Base.size(dat::MultiDataFrameEeg, d::Int) = d == 1 ? n_epochs(dat) : (d == 2 ? n_samples(dat) : (d == 3 ? length(channel_labels(dat)) : 1))
 
+Base.ndims(::Type{<:SingleDataFrameEeg}) = 2
+Base.ndims(::Type{<:MultiDataFrameEeg}) = 3
+Base.ndims(dat::EegData) = ndims(typeof(dat))
+
+Base.eltype(::Type{<:EegData}) = Float64
+Base.eltype(dat::EegData) = Float64
+
+Base.isempty(dat::SingleDataFrameEeg) = isempty(dat.data)
+Base.isempty(dat::MultiDataFrameEeg) = isempty(dat.data)
+
+Base.firstindex(::EegData, d::Int) = 1
+Base.firstindex(::EegData) = 1
 Base.lastindex(dat::EegData, d::Int) = Base.size(dat, d)
+Base.lastindex(dat::EegData) = prod(size(dat))
 
 # getindex helpers
 _to_sample_func(::Colon) = samples()
@@ -51,6 +66,17 @@ function Base.setindex!(dat::MultiDataFrameEeg, val, epoch_idx, time_idx, chan_i
     dat.data[epoch_idx][time_idx, channel_labels(dat)[chan_idx]] = val
     return dat
 end
+
+Base.setindex!(dat::SingleDataFrameEeg, val, ci::CartesianIndex{2}) = (dat[ci[1], ci[2]] = val; dat)
+Base.setindex!(dat::MultiDataFrameEeg, val, ci::CartesianIndex{3}) = (dat[ci[1], ci[2], ci[3]] = val; dat)
+
+# CartesianIndex getindex
+Base.getindex(dat::SingleDataFrameEeg, ci::CartesianIndex{2}) = dat[ci[1], ci[2]]
+Base.getindex(dat::MultiDataFrameEeg, ci::CartesianIndex{3}) = dat[ci[1], ci[2], ci[3]]
+
+# Shorthand channel subsetting
+Base.getindex(dat::EegData, chan::Union{Symbol, AbstractString}) = subset(dat, channel_selection = channels(Symbol(chan)))
+Base.getindex(dat::EegData, chans::AbstractVector{<:Union{Symbol, AbstractString}}) = subset(dat, channel_selection = channels(Symbol.(chans)))
 
 # === Base Iteration Interface ===
 Base.iterate(dat::MultiDataFrameEeg, state = 1) = state > length(dat.data) ? nothing : (dat.data[state], state + 1)
@@ -101,6 +127,8 @@ function Base.Matrix(dat::SingleDataFrameEeg)
     return Matrix(dat.data[!, cols])
 end
 
+Base.Array(dat::SingleDataFrameEeg) = Base.Matrix(dat)
+
 function Base.Array(dat::MultiDataFrameEeg)
     cols = channel_labels(dat)
     n_ep = n_epochs(dat)
@@ -127,3 +155,9 @@ end
 # === StatsBase Integration ===
 StatsBase.mean(dat::EpochData) = average_epochs(dat)
 StatsBase.mean(dats::Vector{EpochData}) = average_epochs(dats)
+
+# === Base Type Conversion Interface ===
+Base.convert(::Type{Matrix}, dat::SingleDataFrameEeg) = Base.Matrix(dat)
+Base.convert(::Type{Matrix{Float64}}, dat::SingleDataFrameEeg) = Base.Matrix(dat)
+Base.convert(::Type{Array}, dat::EegData) = Base.Array(dat)
+Base.convert(::Type{DataFrame}, dat::EegData) = DataFrame(dat)

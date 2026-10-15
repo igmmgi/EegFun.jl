@@ -584,4 +584,59 @@ using OrderedCollections
         @test ylims_epoch isa Tuple{Float64,Float64}
         @test ylims_epoch[1] < ylims_epoch[2]
     end
+
+    @testset "Base Array Interface and Conversions" begin
+        df = DataFrame(time = [0.1, 0.2, 0.3], sample = [1, 2, 3], Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0])
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
+        analysis_info = EegFun.AnalysisInfo()
+        cont = EegFun.ContinuousData("test", df, layout, 250, analysis_info)
+
+        epoch1 = DataFrame(time = [0.1, 0.2], sample = [1, 2], Fz = [1.0, 2.0], Cz = [3.0, 4.0])
+        epoch2 = DataFrame(time = [0.1, 0.2], sample = [1, 2], Fz = [5.0, 6.0], Cz = [7.0, 8.0])
+        ep = EegFun.EpochData("test", 1, "cond", [epoch1, epoch2], layout, 250, analysis_info)
+
+        # ndims, eltype, isempty
+        @test ndims(cont) == 2
+        @test ndims(ep) == 3
+        @test eltype(cont) == Float64
+        @test eltype(ep) == Float64
+        @test !isempty(cont)
+        @test !isempty(ep)
+
+        # firstindex, lastindex, axes
+        @test firstindex(cont) == 1
+        @test firstindex(cont, 1) == 1
+        @test firstindex(cont, 2) == 1
+        @test lastindex(cont, 1) == 3
+        @test lastindex(cont, 2) == 2
+        @test lastindex(cont) == 6
+        @test axes(cont, 1) == Base.OneTo(3)
+        @test axes(cont, 2) == Base.OneTo(2)
+        @test axes(ep, 1) == Base.OneTo(2)
+
+        # begin indexing
+        @test size(cont[begin:2, :]) == (2, 2)
+        @test size(ep[begin:1, :, :]) == (1, 2, 2)
+
+        # Shorthand channel subsetting
+        @test EegFun.channel_labels(cont[:Cz]) == [:Cz]
+        @test EegFun.channel_labels(cont[[:Fz, :Cz]]) == [:Fz, :Cz]
+        @test EegFun.channel_labels(cont["Cz"]) == [:Cz]
+        @test EegFun.channel_labels(cont[["Fz", "Cz"]]) == [:Fz, :Cz]
+        @test EegFun.channel_labels(ep[:Cz]) == [:Cz]
+
+        # CartesianIndex getindex & setindex!
+        @test cont[CartesianIndex(2, 2)] isa EegFun.ContinuousData
+        cont_copy = copy(cont)
+        cont_copy[CartesianIndex(1, 1)] = 99.0
+        @test cont_copy.data[1, :Fz] == 99.0
+
+        # Tensor conversions
+        @test size(Array(cont)) == (3, 2)
+        @test size(Array(ep)) == (2, 2, 2)
+        @test convert(Matrix, cont) == Matrix(cont)
+        @test convert(Array, cont) == Array(cont)
+        @test convert(Array, ep) == Array(ep)
+    end
 end
+

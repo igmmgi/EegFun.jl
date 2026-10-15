@@ -10,18 +10,26 @@ Tables.schema(dat::EegData) = Tables.schema(Tables.columns(dat))
 
 # 1.5 DataAPI / DataFrames Base Interface Forwarding
 # We forward standard DataFrame functions to the internal `.data` so users don't have to extract it.
-import DataFrames: nrow, ncol, describe
-import Base: names
+import DataFrames: nrow, ncol, describe, eachcol, eachrow
+import Base: names, first, last
 
 nrow(dat::SingleDataFrameEeg) = nrow(dat.data)
 ncol(dat::SingleDataFrameEeg) = ncol(dat.data)
 names(dat::SingleDataFrameEeg) = names(dat.data)
 describe(dat::SingleDataFrameEeg; kwargs...) = describe(dat.data; kwargs...)
+eachcol(dat::SingleDataFrameEeg) = eachcol(dat.data)
+eachrow(dat::SingleDataFrameEeg) = eachrow(dat.data)
+first(dat::SingleDataFrameEeg, n::Integer) = first(dat.data, n)
+last(dat::SingleDataFrameEeg, n::Integer) = last(dat.data, n)
+first(dat::SingleDataFrameEeg) = first(dat.data)
+last(dat::SingleDataFrameEeg) = last(dat.data)
 
 nrow(dat::MultiDataFrameEeg) = isempty(dat.data) ? 0 : sum(nrow, dat.data)
 ncol(dat::MultiDataFrameEeg) = isempty(dat.data) ? 0 : ncol(first(dat.data))
 names(dat::MultiDataFrameEeg) = isempty(dat.data) ? String[] : names(first(dat.data))
 describe(dat::MultiDataFrameEeg; kwargs...) = isempty(dat.data) ? DataFrame() : describe(vcat(dat.data...; source = nothing); kwargs...)
+first(dat::MultiDataFrameEeg, n::Integer) = first(dat.data, n)
+last(dat::MultiDataFrameEeg, n::Integer) = last(dat.data, n)
 
 # 2. Expose the column-based interface (since we wrap DataFrames)
 Tables.columnaccess(::Type{<:EegData}) = true
