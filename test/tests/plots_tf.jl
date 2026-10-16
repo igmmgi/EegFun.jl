@@ -112,4 +112,53 @@ using CairoMakie
         @test_throws Exception EegFun.plot_topography_stats(tf_analytic_result, freq_range = (100.0, 200.0), display_plot = false)
     end
 
+    # ────────────────────────────────────────────────────────────
+    # 4. plot_tf — single TimeFreqData & Vector{TimeFreqData}
+    # ────────────────────────────────────────────────────────────
+    @testset "plot_tf (single TF)" begin
+        tf = tf_participant1[1]
+
+        # Single layout
+        out_single = EegFun.plot_tf(tf; layout = :single, display_plot = false)
+        @test out_single.fig isa Figure
+        @test length(out_single.axes) == 1
+
+        # Grid layout with channel subset
+        out_grid = EegFun.plot_tf(tf; channel_selection = EegFun.channels(:Oz, :Pz, :Cz), layout = :grid, display_plot = false)
+        @test out_grid.fig isa Figure
+        @test length(out_grid.axes) == 3
+
+        # Baseline and custom colorrange
+        out_bl = EegFun.plot_tf(
+            tf;
+            channel_selection = EegFun.channels(:Oz),
+            baseline_interval = (-0.5, 0.0),
+            baseline_method = :db,
+            colorrange = (-2.0, 2.0),
+            display_plot = false,
+        )
+        @test out_bl.fig isa Figure
+    end
+
+    @testset "plot_tf (multi TF)" begin
+        # Vector of conditions
+        out_multi = EegFun.plot_tf(tf_participant1; channel_selection = EegFun.channels(:Oz), display_plot = false)
+        @test out_multi.fig isa Figure
+        @test length(out_multi.axes) == length(tf_participant1)
+
+        # Multi with baseline
+        out_multi_bl = EegFun.plot_tf(
+            tf_participant1;
+            channel_selection = EegFun.channels(:Oz),
+            baseline_interval = (-0.5, 0.0),
+            baseline_method = :percent,
+            display_plot = false,
+        )
+        @test out_multi_bl.fig isa Figure
+    end
+
+    @testset "plot_tf - invalid" begin
+        @test_throws Exception EegFun.plot_tf(EegFun.TimeFreqData[])
+    end
+
 end # @testset "TF Plots"

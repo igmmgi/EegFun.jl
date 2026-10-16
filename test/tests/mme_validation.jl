@@ -5,7 +5,6 @@ using EegFun
 using MixedModels
 using StatsModels
 using DataFrames
-using BenchmarkTools
 using Random
 using Logging
 
@@ -85,8 +84,22 @@ using Logging
     
     @info "Mathematical equivalence verified!"
     
-    # 4. Benchmarking
-    # @btime fit_mass_lmm($epochs, $f)
+    # Test LmmStatsResult accessors and show methods
+    @test EegFun.channel_labels(result) == [Symbol("Ch$j") for j in 1:4]
+    @test EegFun.n_channels(result) == 4
+    @test EegFun.n_samples(result) == 10
+    @test length(EegFun.time_vector(result)) == 10
+
+    io = IOBuffer()
+    show(io, result)
+    str = String(take!(io))
+    @test occursin("LmmStatsResult", str)
+    @test occursin("4 channels", str)
+
+    show(io, MIME"text/plain"(), result)
+    plain_str = String(take!(io))
+    @test occursin("LmmStatsResult", plain_str)
+    @test occursin("Significant points", plain_str)
 end
 
 @testset "fit_mass_lmm: rank-deficient designs" begin
@@ -143,5 +156,40 @@ end
         @test res_rd.max_t_null[:, i_rd] ≈ res_fr.max_t_null[:, i_fr] rtol = 1e-5
         @test res_rd.p_corrected[:, :, i_rd] == res_fr.p_corrected[:, :, i_fr]
     end
+end
+
+@testset "fit_mass_lmm: input validation and error handling" begin
+    # Empty EpochData
+    empty_epochs = EegFun.EpochData(
+        "empty", 1, "empty", DataFrame[], 
+        EegFun.Layout(DataFrame(label=[:Ch1]), nothing, nothing, nothing), 
+        100, EegFun.AnalysisInfo()
+    )
+    f_dummy = @formula(amplitude ~ condition + (1 | subject))
+    @test_throws EegFun.EegFunError EegFun.fit_mass_lmm(empty_epochs, f_dummy)
+
+    # Mismatched meta_df and eeg tensor
+    eeg_bad = zeros(2, 2, 5)
+    meta_bad = DataFrame(a = 1:10)
+    @test_throws EegFun.EegFunError EegFun.fit_mass_lmm(eeg_bad, meta_bad, @formula(amplitude ~ a))
+end
+
+@testset "fit_mass_lmm: cluster-based permutations" begin
+    rng = Random.MersenneTwister(42)
+    meta = DataFrame(
+        Subject = repeat(1:10, inner = 4),
+        Condition = repeat([0.0, 1.0], 20),
+    )
+    n_epochs = nrow(meta)
+    n_ch, n_tp = 2, 3
+    eeg = randn(rng, n_ch, n_tp, n_epochs)
+    f = @formula(amplitude ~ 1 + Condition + (1 | Subject))
+    perms = EegFun.generate_permutation_matrix(meta, :Subject; n_perms = 5, rng = rng)
+
+    res = EegFun.fit_mass_lmm(eeg, meta, f; n_perms = 5, perm_matrix = perms, use_clusters = true, cluster_threshold = 1.0)
+    @test size(res.max_cluster_mass_null) == (5, length(res.coef_names))
+    @test all(res.max_cluster_mass_null .>= 0.0)
+    @test !isnothing(res.p_corrected)
+    @test all(0.0 .<= res.p_corrected .<= 1.0)
 end
 

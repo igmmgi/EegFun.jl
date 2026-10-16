@@ -28,7 +28,7 @@ permutation testing. All estimable coefficients are fitted and tested as usual.
 **Requires `MixedModels.jl` and `StatsModels.jl` to be loaded.**
 """
 function fit_mass_lmm(args...; kwargs...)
-    error("To use Mass-Univariate Mixed Models, you must first load the packages: `using MixedModels, StatsModels`")
+    @minimal_error "To use Mass-Univariate Mixed Models, you must first load the packages: `using MixedModels, StatsModels`"
 end
 
 function _update_clusters(clusters, stats, null_dist, alpha, n_perms, dims)
@@ -65,7 +65,7 @@ function extract_predictor_stats(result::LmmStatsResult, coef_name;
     coef_str = String(coef_name)
     coef_idx = findfirst(==(coef_str), result.coefficients)
     if isnothing(coef_idx)
-        error("Coefficient '$coef_str' not found in model. Available: $(result.coefficients)")
+        @minimal_error "Coefficient '$coef_str' not found in model. Available: $(result.coefficients)"
     end
 
     n_electrodes = length(result.channels)
@@ -76,7 +76,7 @@ function extract_predictor_stats(result::LmmStatsResult, coef_name;
     null_dist = result.max_cluster_mass_null[:, coef_idx]
     n_perms = length(null_dist)
     if n_perms > 0 && all(==(0), null_dist)
-        error("Coefficient '$coef_str' was not permuted during fit_mass_lmm (e.g., intercept was skipped). To test this coefficient, run fit_mass_lmm with `test_intercept=true` or include it in `tested_coefs`.")
+        @minimal_error "Coefficient '$coef_str' was not permuted during fit_mass_lmm (e.g., intercept was skipped). To test this coefficient, run fit_mass_lmm with `test_intercept=true` or include it in `tested_coefs`."
     end
     
     spatial_connectivity = EegFun._build_connectivity_matrix(result.channels, result.epochs.layout, :spatiotemporal)
@@ -101,9 +101,8 @@ function extract_predictor_stats(result::LmmStatsResult, coef_name;
             result.channels, result.time_points, spatial_connectivity, :spatiotemporal
         )
         
-        electrode_to_idx = Dict(e => i for (i, e) in enumerate(result.channels))
-        pos_stats = EegFun._compute_cluster_statistics(pos_clusters, t_map, electrode_to_idx; return_clusters=false)
-        neg_stats = EegFun._compute_cluster_statistics(neg_clusters, t_map, electrode_to_idx; return_clusters=false)
+        pos_stats = EegFun._compute_cluster_statistics(pos_clusters, t_map; return_clusters = false)
+        neg_stats = EegFun._compute_cluster_statistics(neg_clusters, t_map; return_clusters = false)
         
         dims = (n_electrodes, n_time_points)
         updated_pos_clusters, final_mask_pos = _update_clusters(pos_clusters, pos_stats, null_dist, alpha, n_perms, dims)

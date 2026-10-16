@@ -87,28 +87,77 @@ fig, ax = plot_channel_spectrum(dat;
 ```
 """
 
-function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{Symbol}, fs::Real; kwargs...)
+function _plot_power_spectrum!(
+    fig,
+    ax,
+    signals::AbstractVector{<:AbstractVector},
+    channels_to_plot::Vector{Symbol},
+    fs::Real;
+    kwargs...,
+)
+    isempty(signals) && return
+
     plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
     window_size = plot_kwargs[:window_size]
     overlap = plot_kwargs[:overlap]
     window_function = plot_kwargs[:window_function]
 
-    n_samples = nrow(df)
+    n_samples = length(first(signals))
     effective_window_size = min(window_size, n_samples)
     effective_window_size = max(4, effective_window_size)
     noverlap = Int(round(effective_window_size * overlap))
 
-    freq_data = Vector{Vector{Float64}}()
-    power_raw_data = Vector{Vector{Float64}}()
+    n_ch = length(channels_to_plot)
 
-    @views for ch in channels_to_plot
-        signal = df[!, ch]
-        pgram = DSP.welch_pgram(signal, effective_window_size, noverlap; fs = fs, window = window_function)
-        push!(freq_data, DSP.freq(pgram))
-        push!(power_raw_data, DSP.power(pgram))
+    # Ensure consistent floating point type across all signals for WelchConfig reuse
+    first_sig = first(signals)
+    T = float(eltype(first_sig))
+    uniform_type = all(s -> eltype(s) === T, signals)
+    sig_list = uniform_type ? signals : [Float64.(s) for s in signals]
+    target_sig = first(sig_list)
+
+    cfg = DSP.WelchConfig(target_sig; n = effective_window_size, noverlap = noverlap, fs = Float64(fs), window = window_function)
+
+    # First channel gives the shared frequencies
+    pgram_first = DSP.welch_pgram(target_sig, cfg)
+    shared_freq = DSP.freq(pgram_first)
+    freq_data = fill(shared_freq, n_ch)
+
+    first_power = DSP.power(pgram_first)
+    power_raw_data = Vector{typeof(first_power)}(undef, n_ch)
+    power_raw_data[1] = first_power
+
+    for i in 2:n_ch
+        pgram = DSP.welch_pgram(sig_list[i], cfg)
+        power_raw_data[i] = DSP.power(pgram)
     end
 
     _plot_power_spectrum_data!(fig, ax, freq_data, power_raw_data, channels_to_plot; kwargs...)
+end
+
+function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{Symbol}, fs::Real; kwargs...)
+    signals = [df[!, ch] for ch in channels_to_plot]
+    _plot_power_spectrum!(fig, ax, signals, channels_to_plot, fs; kwargs...)
+end
+
+function _calc_power_extrema(power_data::Vector{<:AbstractVector})
+    min_val = Inf
+    max_val = -Inf
+    pos_min = Inf
+    @inbounds for vec in power_data
+        for x in vec
+            if x < min_val
+                min_val = x
+            end
+            if x > max_val
+                max_val = x
+            end
+            if x > 0 && x < pos_min
+                pos_min = x
+            end
+        end
+    end
+    return (min_val, max_val, pos_min)
 end
 
 function _plot_power_spectrum_data!(
@@ -258,9 +307,7 @@ function _plot_power_spectrum_data!(
     # Apply initial y-axis scale settings (after data is calculated)
     # This will be handled by update_y_scale, but we need to set initial state
     initial_power_data = get_current_power_data(unit)
-    all_initial_powers = vcat(initial_power_data...)
-    initial_max = maximum(all_initial_powers)
-    initial_min = minimum(all_initial_powers)
+    initial_min, initial_max, init_pos_min = _calc_power_extrema(initial_power_data)
 
     if y_scale == :log10
         # Calculate valid limits first
@@ -270,11 +317,10 @@ function _plot_power_spectrum_data!(
             ylims!(ax, (initial_min - 5, initial_max + 5))
         else
             # For linear units, use log scale
-            positive_powers = filter(x -> x > 0, all_initial_powers)
-            if isempty(positive_powers)
+            if isinf(init_pos_min)
                 log_min, log_max = 0.001, 1.0
             else
-                log_min = max(0.001, minimum(positive_powers))
+                log_min = max(0.001, init_pos_min)
                 log_max = max(log_min * 10, initial_max)
             end
             # Set valid limits BEFORE changing scale to avoid validation errors
@@ -349,16 +395,13 @@ function _plot_power_spectrum_data!(
         ax.ylabel = new_unit == :dB ? "Power Spectral Density (dB)" : plot_kwargs[:ylabel]
 
         # 3. Update y-axis scale and limits
-        all_powers = vcat(converted_power_data...)
-        new_max_power = maximum(all_powers)
-        new_min_power = minimum(all_powers)
+        new_min_power, new_max_power, new_pos_min = _calc_power_extrema(converted_power_data)
 
         if new_y_scale == :log10
-            positive_powers = filter(x -> x > 0, all_powers)
-            if isempty(positive_powers)
+            if isinf(new_pos_min)
                 log_min, log_max = 0.001, 1.0
             else
-                log_min = max(0.001, minimum(positive_powers))
+                log_min = max(0.001, new_pos_min)
                 log_max = max(log_min * 10, new_max_power)
             end
             ylims!(ax, (log_min, log_max))
@@ -578,23 +621,15 @@ function plot_ica_component_spectrum(
     components = ica_result.unmixing * dat_matrix
     fs = dat.sample_rate
 
-    # Create a DataFrame to store all component signals
-    component_df = DataFrame(:time => dat.data.time[selected_samples])
-
-    # Add each component to the DataFrame with consistent naming
-    for comp_idx in selected_components
-        component_name = Symbol("IC_$(comp_idx)")
-        component_df[!, component_name] = components[comp_idx, :]
-    end
-
-    # Create list of component symbols to plot
+    # Prepare component signals and symbols directly without allocating temporary DataFrame
     components_to_plot = [Symbol("IC_$(comp_idx)") for comp_idx in selected_components]
+    component_signals = [components[comp_idx, :] for comp_idx in selected_components]
 
     # Create figure and axis
     fig = Figure()
     ax = Axis(fig[1, 1])
 
-    _plot_power_spectrum!(fig, ax, component_df, components_to_plot, sample_rate(dat); kwargs...)
+    _plot_power_spectrum!(fig, ax, component_signals, components_to_plot, sample_rate(dat); kwargs...)
 
     # Add custom legend with component variance percentages if requested
     if plot_kwargs[:show_legend]

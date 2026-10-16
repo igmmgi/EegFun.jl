@@ -29,7 +29,7 @@ nrow(dat::MultiDataFrameEeg) = isempty(dat.data) ? 0 : sum(nrow, dat.data)
 ncol(dat::MultiDataFrameEeg) = isempty(dat.data) ? 0 : ncol(first(dat.data))
 names(dat::MultiDataFrameEeg) = isempty(dat.data) ? String[] : names(first(dat.data))
 names(dat::MultiDataFrameEeg, cols) = isempty(dat.data) ? String[] : names(first(dat.data), cols)
-describe(dat::MultiDataFrameEeg; kwargs...) = isempty(dat.data) ? DataFrame() : describe(vcat(dat.data...; source = nothing); kwargs...)
+describe(dat::MultiDataFrameEeg; kwargs...) = isempty(dat.data) ? DataFrame() : describe(reduce(vcat, dat.data; source = nothing); kwargs...)
 first(dat::MultiDataFrameEeg, n::Integer) = first(dat.data, n)
 last(dat::MultiDataFrameEeg, n::Integer) = last(dat.data, n)
 
@@ -81,7 +81,7 @@ end
 # 5. Implement column access for MultiDataFrameEeg (EpochData, etc.)
 function Tables.columns(dat::MultiDataFrameEeg)
     # Concatenate all DataFrames in the vector (epoch column is already present internally)
-    df = vcat(dat.data...; source = nothing)
+    df = reduce(vcat, dat.data; source = nothing)
 
     # Create a shallow copy for metadata injection
     res = copy(df, copycols = false)
@@ -103,5 +103,5 @@ function Tables.columns(dats::AbstractVector{<:EegData})
     # Convert each object to a DataFrame (which goes through our Tables interface above)
     # and then efficiently concatenate them all together.
     dfs = [DataFrame(d) for d in dats]
-    return Tables.columns(vcat(dfs...; cols = :union))
+    return Tables.columns(reduce(vcat, dfs; cols = :union))
 end

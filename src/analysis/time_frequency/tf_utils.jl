@@ -6,14 +6,43 @@ Uses `round(x, digits=6)` for robust floating-point matching.
 """
 function _tf_build_row_index(df::DataFrame)
     idx = Dict{Tuple{Float64,Float64},Int}()
-    sizehint!(idx, nrow(df))
-    for i = 1:nrow(df)
-        key = (round(df.freq[i], digits = 6), round(df.time[i], digits = 6))
+    n = nrow(df)
+    sizehint!(idx, n)
+    freq_col = df.freq
+    time_col = df.time
+    for i = 1:n
+        key = (round(freq_col[i], digits = 6), round(time_col[i], digits = 6))
         if !haskey(idx, key)
             idx[key] = i
         end
     end
     return idx
+end
+
+"""
+    _tf_df_to_matrix!(mat, df, channel, rounded_freqs, rounded_times, row_index)
+
+In-place extraction of a `[n_freqs × n_time]` power matrix for one channel from a TF DataFrame.
+Writes into pre-allocated `mat` which should be initialized (e.g. with `fill!(mat, NaN)`).
+"""
+function _tf_df_to_matrix!(
+    mat::AbstractMatrix{Float64},
+    df::DataFrame,
+    channel::Symbol,
+    rounded_freqs::Vector{Float64},
+    rounded_times::Vector{Float64},
+    row_index::Dict{Tuple{Float64,Float64},Int},
+)
+    col_data = df[!, channel]::Vector{Float64}
+    @inbounds for (ti, rt) in enumerate(rounded_times)
+        for (fi, rf) in enumerate(rounded_freqs)
+            row = get(row_index, (rf, rt), nothing)
+            if !isnothing(row)
+                mat[fi, ti] = col_data[row]
+            end
+        end
+    end
+    return mat
 end
 
 """
@@ -32,26 +61,12 @@ function _tf_df_to_matrix(
     channel::Symbol,
     frequencies::Vector{Float64},
     time_points::Vector{Float64},
-    row_index::Dict{Tuple{Float64,Float64},Int} = _tf_build_row_index(df),
+    row_index::Dict{Tuple{Float64,Float64},Int} = _tf_build_row_index(df);
+    rounded_freqs::Vector{Float64} = round.(frequencies, digits = 6),
+    rounded_times::Vector{Float64} = round.(time_points, digits = 6),
 )
-    n_freqs = length(frequencies)
-    n_time = length(time_points)
-    mat = fill(NaN, n_freqs, n_time)
-
-    col_data = df[!, channel]::Vector{Float64}
-    rounded_freqs = round.(frequencies, digits = 6)
-    rounded_times = round.(time_points, digits = 6)
-
-    @inbounds for (ti, rt) in enumerate(rounded_times)
-        for (fi, rf) in enumerate(rounded_freqs)
-            row = get(row_index, (rf, rt), nothing)
-            if !isnothing(row)
-                mat[fi, ti] = col_data[row]
-            end
-        end
-    end
-
-    return mat
+    mat = fill(NaN, length(frequencies), length(time_points))
+    return _tf_df_to_matrix!(mat, df, channel, rounded_freqs, rounded_times, row_index)
 end
 
 """

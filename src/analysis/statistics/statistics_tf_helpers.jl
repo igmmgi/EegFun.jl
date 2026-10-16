@@ -171,14 +171,24 @@ function _extract_tf_array(
     n_freqs = length(frequencies)
     n_time = length(time_points)
 
-    data = Array{Float64,4}(undef, n_participants, n_electrodes, n_freqs, n_time)
+    data = fill(NaN, n_participants, n_electrodes, n_freqs, n_time)
+    rounded_freqs = round.(frequencies, digits = 6)
+    rounded_times = round.(time_points, digits = 6)
 
     for (p_idx, tf) in enumerate(tfs)
         # Build row index once per participant, reuse for all channels
         row_index = _tf_build_row_index(tf.data_power)
 
         for (e_idx, elec) in enumerate(electrodes)
-            data[p_idx, e_idx, :, :] = _tf_df_to_matrix(tf.data_power, elec, frequencies, time_points, row_index)
+            col_data = tf.data_power[!, elec]::Vector{Float64}
+            @inbounds for (ti, rt) in enumerate(rounded_times)
+                for (fi, rf) in enumerate(rounded_freqs)
+                    row = get(row_index, (rf, rt), nothing)
+                    if !isnothing(row)
+                        data[p_idx, e_idx, fi, ti] = col_data[row]
+                    end
+                end
+            end
         end
     end
 
@@ -372,16 +382,20 @@ In-place computation of p-values from 3D t-statistics matrix.
 """
 function _compute_p_matrix_tf!(p_matrix::Array{Float64,3}, t_matrix::Array{Float64,3}, df::Float64, tail::Symbol)
     dist = TDist(df)
-    @inbounds for i in eachindex(t_matrix)
-        t_val = t_matrix[i]
-        p_matrix[i] = if isnan(t_val) || isinf(t_val)
-            NaN
-        elseif tail == :both
-            2 * (1 - cdf(dist, abs(t_val)))
-        elseif tail == :left
-            cdf(dist, t_val)
-        else  # :right
-            1 - cdf(dist, t_val)
+    if tail == :both
+        @inbounds @simd for i in eachindex(t_matrix)
+            t_val = t_matrix[i]
+            p_matrix[i] = (isnan(t_val) || isinf(t_val)) ? NaN : 2.0 * ccdf(dist, abs(t_val))
+        end
+    elseif tail == :left
+        @inbounds @simd for i in eachindex(t_matrix)
+            t_val = t_matrix[i]
+            p_matrix[i] = (isnan(t_val) || isinf(t_val)) ? NaN : cdf(dist, t_val)
+        end
+    else  # :right
+        @inbounds @simd for i in eachindex(t_matrix)
+            t_val = t_matrix[i]
+            p_matrix[i] = (isnan(t_val) || isinf(t_val)) ? NaN : ccdf(dist, t_val)
         end
     end
     return p_matrix

@@ -31,6 +31,31 @@ const PLOT_LAYOUT_ROI_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :roi_fillalpha => (0.2, "Transparency of ROI fill."),
 )
 
+# Pre-computed 2D unit head outline (head circle, right ear, left ear, nose) separated by NaNs
+const _UNIT_HEAD_OUTLINE = let
+    n_circle = 100
+    circle_pts = [Point2f(cos(θ), sin(θ)) for θ in range(-Float32(π), Float32(π), length = n_circle)]
+
+    n_ear = 30
+    ear_r = 1.0f0 / 7.0f0
+    right_ear = [Point2f(1.0f0 + ear_r * cos(θ), ear_r * sin(θ)) for θ in range(-Float32(π) / 2, Float32(π) / 2, length = n_ear)]
+    left_ear = [Point2f(-1.0f0 - ear_r * cos(θ), ear_r * sin(θ)) for θ in range(-Float32(π) / 2, Float32(π) / 2, length = n_ear)]
+
+    nose = Point2f[(-0.1f0, 1.0f0), (0.0f0, 1.15f0), (0.1f0, 1.0f0)]
+    nan_pt = Point2f(NaN32, NaN32)
+
+    pts = Point2f[]
+    sizehint!(pts, n_circle + 2 * n_ear + 3 + 3)
+    append!(pts, circle_pts)
+    push!(pts, nan_pt)
+    append!(pts, right_ear)
+    push!(pts, nan_pt)
+    append!(pts, left_ear)
+    push!(pts, nan_pt)
+    append!(pts, nose)
+    pts
+end
+
 ########################################################
 # Layout plotting functions
 ########################################################
@@ -91,12 +116,10 @@ function plot_layout_2d!(
     actual_point_color = _resolve_theme_textcolor(ax, point_kwargs[:point_color])
     actual_label_color = _resolve_theme_textcolor(ax, label_kwargs[:label_color])
 
-    # Head shape - Use kwargs
+    # Head shape - consolidated single lines! call
     radius = head_kwargs[:head_radius]
-    arc!(ax, Point2f(0), radius, -π, π; color = actual_head_color, linewidth = head_kwargs[:head_linewidth]) # head
-    arc!(ax, Point2f(radius, 0), radius * (1 / 7), -π / 2, π / 2; color = actual_head_color, linewidth = head_kwargs[:head_linewidth])
-    arc!(ax, Point2f(-radius, 0), -radius * (1 / 7), π / 2, -π / 2; color = actual_head_color, linewidth = head_kwargs[:head_linewidth])
-    lines!(ax, Point2f[(-0.1, 1.0), (0.0, 1.15), (0.1, 1.0)] .* radius; color = actual_head_color, linewidth = head_kwargs[:head_linewidth])
+    head_pts = radius == 1 ? _UNIT_HEAD_OUTLINE : (_UNIT_HEAD_OUTLINE .* Float32(radius))
+    lines!(ax, head_pts; color = actual_head_color, linewidth = head_kwargs[:head_linewidth])
 
     positions = Point2f.(layout.data.x2, layout.data.y2)
 
@@ -119,8 +142,7 @@ function plot_layout_2d!(
         if plot_points
             scatter!(
                 ax,
-                layout.data[!, :x2],
-                layout.data[!, :y2];
+                positions;
                 marker = point_kwargs[:point_marker],
                 markersize = point_kwargs[:point_markersize],
                 color = actual_point_color,
@@ -131,11 +153,12 @@ function plot_layout_2d!(
             x_coords = layout.data[!, :x2] .+ xoffset
             y_coords = layout.data[!, :y2] .+ yoffset
             labels = String.(layout.data[!, :label])
-            for i in eachindex(labels)
+            if !isempty(labels)
+                label_positions = Point2f.(x_coords, y_coords)
                 text!(
                     ax,
-                    position = (x_coords[i], y_coords[i]),
-                    labels[i];
+                    label_positions;
+                    text = labels,
                     fontsize = label_kwargs[:label_fontsize],
                     color = actual_label_color,
                     align = label_kwargs[:label_align],
@@ -418,11 +441,12 @@ function plot_layout_3d!(fig::Figure, ax::Axis3, layout::Layout; neighbours::Boo
         y_coords = layout.data[!, :y3] .+ yoffset
         z_coords = layout.data[!, :z3] .+ zoffset
         labels = String.(layout.data[!, :label])
-        for i in eachindex(labels)
+        if !isempty(labels)
+            label_positions = Point3f.(x_coords, y_coords, z_coords)
             text!(
                 ax,
-                position = (x_coords[i], y_coords[i], z_coords[i]),
-                labels[i];
+                label_positions;
+                text = labels,
                 fontsize = label_kwargs[:label_fontsize],
                 color = actual_label_color,
                 align = label_kwargs[:label_align],

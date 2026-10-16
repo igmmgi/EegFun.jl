@@ -46,6 +46,9 @@ function _render_topo_surface!(
     ax::Axis,
     channel_data::AbstractVector{<:Real},
     layout::Layout;
+    data_interp = nothing,
+    x_bounds = nothing,
+    y_bounds = nothing,
     method::Symbol = :thin_plate,
     gridscale::Int = 75,
     colormap = nothing,
@@ -57,19 +60,21 @@ function _render_topo_surface!(
     supported_methods =
         [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
 
-    if method ∈ supported_methods
-        data_interp, x_bounds, y_bounds = _data_interpolation_topo(channel_data, layout, gridscale; method = method)
-    elseif method == :spherical_spline
-        data_interp = _data_interpolation_topo_spherical_spline(channel_data, layout, gridscale)
-        x_coords = layout.data.x2
-        y_coords = layout.data.y2
-        max_radius = maximum(sqrt.(x_coords .^ 2 .+ y_coords .^ 2))
-        margin = max_radius * 0.05
-        plot_radius = max_radius + margin
-        x_bounds = (-plot_radius, plot_radius)
-        y_bounds = (-plot_radius, plot_radius)
-    else
-        throw(ArgumentError("Unknown interpolation method: $method. Supported: $supported_methods, :spherical_spline"))
+    if isnothing(data_interp)
+        if method ∈ supported_methods
+            data_interp, x_bounds, y_bounds = _data_interpolation_topo(channel_data, layout, gridscale; method = method)
+        elseif method == :spherical_spline
+            data_interp = _data_interpolation_topo_spherical_spline(channel_data, layout, gridscale)
+            x_coords = layout.data.x2
+            y_coords = layout.data.y2
+            max_radius = maximum(sqrt.(x_coords .^ 2 .+ y_coords .^ 2))
+            margin = max_radius * 0.05
+            plot_radius = max_radius + margin
+            x_bounds = (-plot_radius, plot_radius)
+            y_bounds = (-plot_radius, plot_radius)
+        else
+            throw(ArgumentError("Unknown interpolation method: $method. Supported: $supported_methods, :spherical_spline"))
+        end
     end
 
     # Compute symmetric ylim if not provided
@@ -107,7 +112,16 @@ function _render_topo_surface!(
 end
 
 """Internal topography renderer: validates layout, subsets data, and calls `_render_topo_surface!`."""
-function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout; kwargs...)
+function _plot_topography!(
+    fig::Figure,
+    ax::Axis,
+    dat::DataFrame,
+    layout::Layout;
+    data_interp = nothing,
+    x_bounds = nothing,
+    y_bounds = nothing,
+    kwargs...,
+)
 
     # Validate that layout has non-zero coordinates for spatial interpolation
     if !has_valid_coordinates(layout)
@@ -159,6 +173,9 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
         ax,
         channel_data,
         layout;
+        data_interp = data_interp,
+        x_bounds = x_bounds,
+        y_bounds = y_bounds,
         method = method,
         gridscale = gridscale,
         colormap = colormap,
@@ -217,18 +234,16 @@ function _draw_highlight_channels!(ax::Axis, groups, layout::Layout)
             scatter!(ax, xs, ys, color = color, marker = marker, markersize = sz, strokewidth = 1, strokecolor = :black)
 
             if show_label
-                for (x, y, lbl) in zip(xs, ys, labels)
-                    text!(
-                        ax,
-                        x,
-                        y,
-                        text = string(lbl),
-                        align = (:center, :bottom),
-                        fontsize = label_fontsize,
-                        color = color,
-                        offset = (0, sz/2 + 2),
-                    )
-                end
+                label_pts = Point2f.(xs, ys)
+                text!(
+                    ax,
+                    label_pts;
+                    text = string.(labels),
+                    align = (:center, :bottom),
+                    fontsize = label_fontsize,
+                    color = color,
+                    offset = (0, sz / 2 + 2),
+                )
             end
         end
     end
@@ -376,6 +391,9 @@ function plot_topography!(
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     interval_selection::Interval = times(),
+    data_interp = nothing,
+    x_bounds = nothing,
+    y_bounds = nothing,
     kwargs...,
 )
     # Merge user kwargs with defaults to get all parameters
@@ -383,7 +401,16 @@ function plot_topography!(
 
     dat_subset =
         subset(dat, channel_selection = channel_selection, sample_selection = sample_selection, interval_selection = interval_selection)
-    _plot_topography!(fig, ax, dat_subset.data, dat_subset.layout; plot_kwargs...)
+    _plot_topography!(
+        fig,
+        ax,
+        dat_subset.data,
+        dat_subset.layout;
+        data_interp = data_interp,
+        x_bounds = x_bounds,
+        y_bounds = y_bounds,
+        plot_kwargs...,
+    )
 
 end
 
@@ -526,8 +553,59 @@ function plot_topography(
     fig = Figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
     axes = Axis[]
 
+    # Pre-subset datasets once
+    subsets = [
+        subset(
+            dataset;
+            channel_selection = channel_selection,
+            sample_selection = sample_selection,
+            interval_selection = interval_selection,
+        ) for dataset in dat
+    ]
+
+    first_layout = subsets[1].layout
+    method = plot_kwargs[:method]
+    gridscale = plot_kwargs[:gridscale]
+    supported_methods =
+        [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
+
+    can_batch = n_datasets > 1 &&
+                has_valid_coordinates(first_layout) &&
+                all(s -> has_valid_coordinates(s.layout) && s.layout.data.label == first_layout.data.label, subsets) &&
+                (method in supported_methods || method == :spherical_spline)
+
+    batched_interp = nothing
+    xb_shared = nothing
+    yb_shared = nothing
+
+    if can_batch
+        _ensure_coordinates_2d!(first_layout)
+        _ensure_coordinates_3d!(first_layout)
+        labels = first_layout.data.label
+        channel_mat = Matrix{Float64}(undef, length(labels), n_datasets)
+        for j in 1:n_datasets
+            df = subsets[j].data
+            for (i, lbl) in enumerate(labels)
+                channel_mat[i, j] = mean(df[!, lbl])
+            end
+        end
+
+        if method in supported_methods
+            batched_interp, xb_shared, yb_shared = _data_interpolation_topo(channel_mat, first_layout, gridscale; method = method)
+        else # :spherical_spline
+            batched_interp = _data_interpolation_topo_spherical_spline(channel_mat, first_layout, gridscale)
+            x_coords = first_layout.data.x2
+            y_coords = first_layout.data.y2
+            max_radius = maximum(sqrt.(x_coords .^ 2 .+ y_coords .^ 2))
+            margin = max_radius * 0.05
+            plot_radius = max_radius + margin
+            xb_shared = (-plot_radius, plot_radius)
+            yb_shared = (-plot_radius, plot_radius)
+        end
+    end
+
     # Plot each dataset in its own subplot
-    for (idx, dataset) in enumerate(dat)
+    for (idx, dataset) in enumerate(subsets)
         base_row = div(idx - 1, plot_cols) + 1
         base_col = mod1(idx, plot_cols)
 
@@ -581,15 +659,26 @@ function plot_topography(
         end
 
         # Plot the topography in this subplot
-        plot_topography!(
-            fig,
-            ax,
-            dataset;
-            channel_selection = channel_selection,
-            sample_selection = sample_selection,
-            interval_selection = interval_selection,
-            subplot_kwargs...,
-        )
+        if can_batch
+            _plot_topography!(
+                fig,
+                ax,
+                dataset.data,
+                dataset.layout;
+                data_interp = batched_interp[idx],
+                x_bounds = xb_shared,
+                y_bounds = yb_shared,
+                subplot_kwargs...,
+            )
+        else
+            _plot_topography!(
+                fig,
+                ax,
+                dataset.data,
+                dataset.layout;
+                subplot_kwargs...,
+            )
+        end
     end
 
     # Set column sizes only if colorbars are enabled and to the right (default)
@@ -805,7 +894,7 @@ https://eljungsk.github.io/ScatteredInterpolation.jl/dev/methods/
 # Returns
 - `Matrix{Float64}`: Interpolated data on a regular grid
 """
-function _data_interpolation_topo(dat::Vector{<:AbstractFloat}, layout::Layout, grid_scale::Int; method::Symbol = :thin_plate)
+function _data_interpolation_topo(dat::Union{Vector{<:AbstractFloat}, Matrix{<:AbstractFloat}}, layout::Layout, grid_scale::Int; method::Symbol = :thin_plate)
 
     if any(isnan, dat) || any(isinf, dat)
         throw(ArgumentError("Input data contains NaN or Inf values"))
@@ -857,10 +946,22 @@ function _data_interpolation_topo(dat::Vector{<:AbstractFloat}, layout::Layout, 
     end
 
     itp = ScatteredInterpolation.interpolate(method_obj, points, dat)
-    result = reshape(ScatteredInterpolation.evaluate(itp, grid_points), grid_scale, grid_scale)
-    _circle_mask!(result, grid_scale)
+    eval_res = ScatteredInterpolation.evaluate(itp, grid_points)
 
-    return result, (-plot_radius, plot_radius), (-plot_radius, plot_radius)
+    if dat isa Vector
+        result = reshape(eval_res, grid_scale, grid_scale)
+        _circle_mask!(result, grid_scale)
+        return result, (-plot_radius, plot_radius), (-plot_radius, plot_radius)
+    else
+        n_comps = size(dat, 2)
+        results = Vector{Matrix{Float64}}(undef, n_comps)
+        for c in 1:n_comps
+            res = reshape(eval_res[:, c], grid_scale, grid_scale)
+            _circle_mask!(res, grid_scale)
+            results[c] = res
+        end
+        return results, (-plot_radius, plot_radius), (-plot_radius, plot_radius)
+    end
 end
 
 """
@@ -879,13 +980,13 @@ Implementation follows MNE-Python exactly.
 # Returns
 - `Matrix{Float64}`: Interpolated data on a regular grid
 """
-function _data_interpolation_topo_spherical_spline(dat::Vector{<:AbstractFloat}, layout::Layout, grid_scale::Int;)
+function _data_interpolation_topo_spherical_spline(dat::Union{Vector{<:AbstractFloat}, Matrix{<:AbstractFloat}}, layout::Layout, grid_scale::Int;)
 
     # Ensure 3D coordinates exist
     _ensure_coordinates_3d!(layout)
 
     # Extract 3D coordinates efficiently from DataFrame
-    n_channels = length(dat)
+    n_channels = size(dat, 1)
     x3_col = layout.data.x3::Vector{Float64}
     y3_col = layout.data.y3::Vector{Float64}
     z3_col = layout.data.z3::Vector{Float64}
@@ -918,7 +1019,7 @@ function _data_interpolation_topo_spherical_spline(dat::Vector{<:AbstractFloat},
     end
 
     # Step 1: Solve for weights
-    cosang = coords_unit * coords_unit'
+    cosang = coords_unit * transpose(coords_unit)
     G = _calc_g_matrix(cosang)
 
     G_extended = Matrix{Float64}(undef, n_channels + 1, n_channels + 1)
@@ -932,13 +1033,26 @@ function _data_interpolation_topo_spherical_spline(dat::Vector{<:AbstractFloat},
     end
     G_extended[n_channels+1, n_channels+1] = 0.0
 
-    data_vector = Vector{Float64}(undef, n_channels + 1)
-    @inbounds for i = 1:n_channels
-        data_vector[i] = dat[i]
-    end
-    data_vector[n_channels+1] = 0.0
+    if dat isa Vector
+        data_vector = Vector{Float64}(undef, n_channels + 1)
+        @inbounds for i = 1:n_channels
+            data_vector[i] = dat[i]
+        end
+        data_vector[n_channels+1] = 0.0
 
-    weights = G_extended \ data_vector
+        weights = G_extended \ data_vector
+    else
+        n_comps = size(dat, 2)
+        data_matrix = Matrix{Float64}(undef, n_channels + 1, n_comps)
+        @inbounds for j = 1:n_comps, i = 1:n_channels
+            data_matrix[i, j] = dat[i, j]
+        end
+        @inbounds for j = 1:n_comps
+            data_matrix[n_channels+1, j] = 0.0
+        end
+
+        weights = G_extended \ data_matrix
+    end
 
     # Step 2: Prepare grid points for interpolation
     x_range = range(-1.0, 1.0, length = grid_scale)
@@ -980,7 +1094,7 @@ function _data_interpolation_topo_spherical_spline(dat::Vector{<:AbstractFloat},
     end
 
     # Step 3: Compute G matrix between valid grid points and channels using BLAS
-    cosang_grid = grid_points_unit * coords_unit'
+    cosang_grid = grid_points_unit * transpose(coords_unit)
 
     # Step 4: Apply g-function in-place with pre-calculated factors
     factors = _get_g_factors(15)
@@ -988,20 +1102,43 @@ function _data_interpolation_topo_spherical_spline(dat::Vector{<:AbstractFloat},
         cosang_grid[i] = _legendre_val(clamp(cosang_grid[i], -1.0, 1.0), factors)
     end
 
-    # Step 5: Compute final interpolation values using BLAS
-    w_channels = @view weights[1:n_channels]
-    interpolated_valid = cosang_grid * w_channels
-    interpolated_valid .+= weights[n_channels+1]
+    # Step 5 & 6: Compute final interpolation values and map back to 2D grid
+    if dat isa Vector
+        w_channels = @view weights[1:n_channels]
+        interpolated_valid = cosang_grid * w_channels
+        interpolated_valid .+= weights[n_channels+1]
 
-    # Step 6: Map back to 2D grid
-    result = fill(NaN, grid_scale, grid_scale)
-    @inbounds for i = 1:n_valid
-        ix, iy = valid_indices[i]
-        result[ix, iy] = interpolated_valid[i]
+        result = fill(NaN, grid_scale, grid_scale)
+        @inbounds for i = 1:n_valid
+            ix, iy = valid_indices[i]
+            result[ix, iy] = interpolated_valid[i]
+        end
+
+        _circle_mask!(result, grid_scale)
+        return result
+    else
+        n_comps = size(dat, 2)
+        w_channels = @view weights[1:n_channels, :]
+        interpolated_valid = cosang_grid * w_channels
+        @inbounds for j = 1:n_comps
+            c_offset = weights[n_channels+1, j]
+            for i = 1:n_valid
+                interpolated_valid[i, j] += c_offset
+            end
+        end
+
+        results = Vector{Matrix{Float64}}(undef, n_comps)
+        for c = 1:n_comps
+            res = fill(NaN, grid_scale, grid_scale)
+            @inbounds for i = 1:n_valid
+                ix, iy = valid_indices[i]
+                res[ix, iy] = interpolated_valid[i, c]
+            end
+            _circle_mask!(res, grid_scale)
+            results[c] = res
+        end
+        return results
     end
-
-    _circle_mask!(result, grid_scale)
-    return result
 end
 
 

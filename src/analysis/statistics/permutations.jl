@@ -186,6 +186,8 @@ function _collect_permutation_t_matrices(prepared::StatisticalData, n_permutatio
             mean_diff_buffer = mean_diff_buffer,
             std_diff_buffer = std_diff_buffer,
             t_matrix_buffer = t_matrix_buffer,
+            compute_p_values = false,
+            compute_se = false,
         )
         permutation_t_matrices[:, :, perm_idx] = t_matrix_perm
 
@@ -368,13 +370,12 @@ function _run_permutations(
         mean1_buffers = mean2_buffers = mean_diff_buffers = std_diff_buffers = nothing
     end
     t_matrix_buffers = [Array{Float64,2}(undef, n_electrodes, n_time) for _ = 1:n_threads]
+    cluster_labels_buffers = [zeros(Int, n_electrodes, n_time) for _ = 1:n_threads]
+    cluster_queue_buffers = [Vector{Tuple{Int,Int}}(undef, n_electrodes * n_time) for _ = 1:n_threads]
 
     # Extract commonly used fields from grand_average ErpData
     electrodes = channel_labels(prepared.data[1])
     time_points = prepared.analysis.time_points
-
-    # Pre-allocate electrode lookup (reused across all permutations)
-    electrode_to_idx = Dict(e => i for (i, e) in enumerate(electrodes))
 
     # Progress bar
     local completed = nothing
@@ -420,6 +421,7 @@ function _run_permutations(
                 std_diff_buffer = std_diff_buffer,
                 t_matrix_buffer = t_matrix_buffer,
                 compute_p_values = false,
+                compute_se = false,
             )
         end
 
@@ -440,26 +442,25 @@ function _run_permutations(
             _prefilter_mask_by_neighbors!(mask_neg_buffer, spatial_connectivity, min_num_neighbors)
         end
 
-        # Find clusters
-        pos_clusters_perm, neg_clusters_perm =
-            _find_clusters(mask_pos_buffer, mask_neg_buffer, electrodes, time_points, spatial_connectivity, cluster_type)
-
-        # Compute statistics without creating new Cluster objects (use pre-allocated lookup)
-        if !isempty(pos_clusters_perm)
-            pos_stats_perm = _compute_cluster_statistics(pos_clusters_perm, t_matrix_perm, electrode_to_idx, return_clusters = false)
-            max_pos = isempty(pos_stats_perm) ? 0.0 : maximum(pos_stats_perm)
-        else
-            max_pos = 0.0
-        end
-
-        if !isempty(neg_clusters_perm)
-            neg_stats_perm = _compute_cluster_statistics(neg_clusters_perm, t_matrix_perm, electrode_to_idx, return_clusters = false)
-            # For negative clusters, the statistic is negative (sum of negative t-values)
-            # The most extreme negative value is the MINIMUM (most negative), not maximum
-            max_neg = isempty(neg_stats_perm) ? 0.0 : minimum(neg_stats_perm)
-        else
-            max_neg = 0.0
-        end
+        # Find extreme cluster statistics directly (zero allocation)
+        max_pos = _max_cluster_stat(
+            mask_pos_buffer,
+            t_matrix_perm,
+            spatial_connectivity,
+            cluster_type,
+            cluster_labels_buffers[tid],
+            cluster_queue_buffers[tid];
+            is_negative = false,
+        )
+        max_neg = _max_cluster_stat(
+            mask_neg_buffer,
+            t_matrix_perm,
+            spatial_connectivity,
+            cluster_type,
+            cluster_labels_buffers[tid],
+            cluster_queue_buffers[tid];
+            is_negative = true,
+        )
 
         permutation_max_positive[perm_idx] = max_pos
         permutation_max_negative[perm_idx] = max_neg
@@ -593,8 +594,8 @@ function _run_permutations_tf(
     shuffled_A_buffers = [similar(prepared.analysis.data[1]) for _ = 1:n_threads]
     shuffled_B_buffers = [similar(prepared.analysis.data[2]) for _ = 1:n_threads]
     t_matrix_buffers = [Array{Float64,3}(undef, n_electrodes, n_freqs, n_time) for _ = 1:n_threads]
-
-    electrode_to_idx = Dict(e => i for (i, e) in enumerate(electrodes))
+    cluster_labels_buffers = [zeros(Int, n_electrodes, n_freqs, n_time) for _ = 1:n_threads]
+    cluster_queue_buffers = [Vector{Tuple{Int,Int,Int}}(undef, n_electrodes * n_freqs * n_time) for _ = 1:n_threads]
 
     local completed = nothing
     if show_progress
@@ -638,25 +639,25 @@ function _run_permutations_tf(
             _prefilter_mask_by_neighbors_tf!(mask_neg_buffer, spatial_connectivity, min_num_neighbors)
         end
 
-        # Find clusters
-        pos_clusters_perm, neg_clusters_perm =
-            _find_clusters_tf(mask_pos_buffer, mask_neg_buffer, electrodes, frequencies, time_points, spatial_connectivity, cluster_type)
-
-        # Get max cluster stat (positive)
-        if !isempty(pos_clusters_perm)
-            pos_stats = _compute_cluster_statistics_tf(pos_clusters_perm, t_matrix_perm, false)
-            max_pos = isempty(pos_stats) ? 0.0 : maximum(pos_stats)
-        else
-            max_pos = 0.0
-        end
-
-        # Get max cluster stat (negative)
-        if !isempty(neg_clusters_perm)
-            neg_stats = _compute_cluster_statistics_tf(neg_clusters_perm, t_matrix_perm, false)
-            max_neg = isempty(neg_stats) ? 0.0 : minimum(neg_stats)
-        else
-            max_neg = 0.0
-        end
+        # Find extreme cluster statistics directly (zero allocation)
+        max_pos = _max_cluster_stat_tf(
+            mask_pos_buffer,
+            t_matrix_perm,
+            spatial_connectivity,
+            cluster_type,
+            cluster_labels_buffers[tid],
+            cluster_queue_buffers[tid];
+            is_negative = false,
+        )
+        max_neg = _max_cluster_stat_tf(
+            mask_neg_buffer,
+            t_matrix_perm,
+            spatial_connectivity,
+            cluster_type,
+            cluster_labels_buffers[tid],
+            cluster_queue_buffers[tid];
+            is_negative = true,
+        )
 
         permutation_max_positive[perm_idx] = max_pos
         permutation_max_negative[perm_idx] = max_neg

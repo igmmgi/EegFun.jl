@@ -16,4 +16,20 @@ using EegFun
         @test result.fig isa Figure
     end
 
+    @testset "grid layout" begin
+        result = EegFun.plot_erp_image(dat; layout = :grid, display_plot = false)
+        @test result.fig isa Figure
+        @test length(result.axes) >= 3
+    end
+
+    @testset "topo layout" begin
+        result = EegFun.plot_erp_image(dat; layout = :topo, display_plot = false)
+        @test result.fig isa Figure
+        @test length(result.axes) >= 3
+    end
+
+    @testset "boxcar average" begin
+        result = EegFun.plot_erp_image(dat; boxcar_average = 3, display_plot = false)
+        @test result.fig isa Figure
+    end
 end

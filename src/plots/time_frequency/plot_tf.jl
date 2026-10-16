@@ -98,7 +98,6 @@ function plot_tf(
     colorbar_kwargs = pop!(plot_kwargs, :colorbar_kwargs, (;))
     layout_kwargs = pop!(plot_kwargs, :layout_kwargs, (;))
 
-    colormap = _resolve_theme_colormap(ax, plot_kwargs[:colormap])
     colorrange = plot_kwargs[:colorrange]
     colorbar = pop!(plot_kwargs, :colorbar_plot, true)
     ylogscale = plot_kwargs[:ylogscale]
@@ -114,6 +113,7 @@ function plot_tf(
     rows, cols = isnothing(grid_dims) ? _best_rect(n) : grid_dims
     fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
     fig = Figure(; size = (max(600, cols * 400), max(400, rows * 350)), figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+    colormap = _resolve_theme_colormap(fig, plot_kwargs[:colormap])
     _set_window_title("$(basename(first(tf_data).file)) — Time-Frequency ($(n) conditions)")
 
     # Apply baseline to all conditions
@@ -138,20 +138,36 @@ function plot_tf(
     all_times = Float64.(sort(unique(first(tf_plots).data_power.time)))
     freqs_vec = Float64.(sort(unique(first(tf_plots).data_power.freq)))
 
-    # Pre-compute shared color range across all conditions
+    # Pre-extract power matrices and compute shared color range across all conditions
+    power_mats = Matrix{Float64}[]
+    rounded_freqs = round.(freqs_vec, digits = 6)
+    rounded_times = round.(all_times, digits = 6)
+    for tf in tf_plots
+        row_idx = _tf_build_row_index(tf.data_power)
+        pmat = _tf_df_to_matrix(
+            tf.data_power,
+            channel,
+            freqs_vec,
+            all_times,
+            row_idx;
+            rounded_freqs = rounded_freqs,
+            rounded_times = rounded_times,
+        )
+        push!(power_mats, pmat)
+    end
+
     if isnothing(colorrange)
         global_min = Inf
         global_max = -Inf
-        for tf in tf_plots
-            power_mat = _tf_df_to_matrix(tf.data_power, channel, freqs_vec, all_times)
-            valid = filter(!isnan, power_mat)
-            if !isempty(valid)
-                cmin, cmax = extrema(valid)
-                global_min = min(global_min, cmin)
-                global_max = max(global_max, cmax)
+        for pmat in power_mats
+            for v in pmat
+                if !isnan(v)
+                    global_min = min(global_min, v)
+                    global_max = max(global_max, v)
+                end
             end
         end
-        shared_colorrange = (global_min, global_max)
+        shared_colorrange = isinf(global_min) ? (-1.0, 1.0) : (global_min, global_max)
     else
         shared_colorrange = colorrange
     end
@@ -171,6 +187,7 @@ function plot_tf(
             channel,
             freqs_vec,
             all_times;
+            power_mat = power_mats[idx],
             colormap = colormap,
             colorrange = shared_colorrange,
             ylogscale = ylogscale,
@@ -219,7 +236,6 @@ function plot_tf(
     layout_kwargs   = pop!(plot_kwargs, :layout_kwargs, (;))
 
     layout                  = plot_kwargs[:layout]
-    colormap                = _resolve_theme_colormap(ax, plot_kwargs[:colormap])
     colorrange              = plot_kwargs[:colorrange]
     title                   = plot_kwargs[:plot_title]
     colorbar                = pop!(plot_kwargs, :colorbar_plot, true)
@@ -291,26 +307,44 @@ function plot_tf(
     _set_window_title("$(basename(tf_data.file)) — $(tf_data.condition_name) — Time-Frequency")
     fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
     fig = Figure(; size = fig_size, figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+    colormap = _resolve_theme_colormap(fig, plot_kwargs[:colormap])
 
     eeg_layout = hasproperty(tf_data, :layout) ? tf_data.layout : nothing
     plot_layout = create_layout(layout, plot_channels, eeg_layout; layout_kwargs...)
 
     axes, layout_channels = _apply_layout!(fig, plot_layout; xgrid = false, ygrid = false, xminorgrid = false, yminorgrid = false)
 
-    # Pre-compute shared color range across all channels if not specified
+    # Pre-compute shared row index and extract power matrices across all channels
+    row_idx = _tf_build_row_index(tf_plot.data_power)
+    rounded_freqs = round.(freqs_vec, digits = 6)
+    rounded_times = round.(all_times, digits = 6)
+    cached_mats = Dict{Symbol,Matrix{Float64}}()
+
+    for ch in plot_channels
+        cached_mats[ch] = _tf_df_to_matrix(
+            tf_plot.data_power,
+            ch,
+            freqs_vec,
+            all_times,
+            row_idx;
+            rounded_freqs = rounded_freqs,
+            rounded_times = rounded_times,
+        )
+    end
+
     if isnothing(colorrange)
         global_min = Inf
         global_max = -Inf
         for ch in plot_channels
-            power_mat = _tf_df_to_matrix(tf_plot.data_power, ch, freqs_vec, all_times)
-            valid = filter(!isnan, power_mat)
-            if !isempty(valid)
-                cmin, cmax = extrema(valid)
-                global_min = min(global_min, cmin)
-                global_max = max(global_max, cmax)
+            pmat = cached_mats[ch]
+            for v in pmat
+                if !isnan(v)
+                    global_min = min(global_min, v)
+                    global_max = max(global_max, v)
+                end
             end
         end
-        shared_colorrange = (global_min, global_max)
+        shared_colorrange = isinf(global_min) ? (-1.0, 1.0) : (global_min, global_max)
     else
         shared_colorrange = colorrange
     end
@@ -318,12 +352,24 @@ function plot_tf(
     # Plot heatmap on each axis
     last_hm = nothing
     for (ax_idx, (ax, channel)) in enumerate(zip(axes, layout_channels))
+        pmat = get(cached_mats, channel) do
+            _tf_df_to_matrix(
+                tf_plot.data_power,
+                channel,
+                freqs_vec,
+                all_times,
+                row_idx;
+                rounded_freqs = rounded_freqs,
+                rounded_times = rounded_times,
+            )
+        end
         hm = _plot_tf_heatmap!(
             ax,
             tf_plot,
             channel,
             freqs_vec,
             all_times;
+            power_mat = pmat,
             colormap = colormap,
             colorrange = shared_colorrange,
             ylogscale = ylogscale,
@@ -409,6 +455,8 @@ function _plot_tf_heatmap!(
     channel::Symbol,
     freqs_vec::Vector{Float64},
     times::Vector{Float64};
+    power_mat::Union{Nothing,Matrix{Float64}} = nothing,
+    row_index::Union{Nothing,Dict{Tuple{Float64,Float64},Int}} = nothing,
     colormap = nothing,
     colorrange::Tuple{Real,Real} = (-1.0, 1.0),
     ylogscale::Bool = false,
@@ -420,7 +468,13 @@ function _plot_tf_heatmap!(
 )
 
     # Extract power matrix: [n_freqs × n_times]
-    power_mat = _tf_df_to_matrix(tf_plot.data_power, channel, freqs_vec, times)
+    mat = if !isnothing(power_mat)
+        power_mat
+    elseif !isnothing(row_index)
+        _tf_df_to_matrix(tf_plot.data_power, channel, freqs_vec, times, row_index)
+    else
+        _tf_df_to_matrix(tf_plot.data_power, channel, freqs_vec, times)
+    end
 
     # Configure axis
     if time_unit == :ms
@@ -446,7 +500,7 @@ function _plot_tf_heatmap!(
         ax,
         times,
         freqs_vec,
-        transpose(power_mat),
+        transpose(mat),
         colormap = _resolve_theme_colormap(ax, colormap),
         colorrange = colorrange,
         nan_color = :transparent,

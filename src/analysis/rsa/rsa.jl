@@ -81,28 +81,25 @@ which provides a robust estimate of the noise covariance structure.
 """
 function _compute_pooled_covariance(data_arrays::Vector{Array{Float64,3}}, time_idx::Int)
     n_features = size(data_arrays[1], 1)  # Number of channels
+    total_trials = sum(size(c, 3) for c in data_arrays)
 
-    # Collect all trials across conditions at this time point
-    all_trials = Matrix{Float64}[]
-
+    # Pre-allocate [features × total_trials] and write in-place
+    all_data = Matrix{Float64}(undef, n_features, total_trials)
+    col_offset = 0
     for cond_data in data_arrays
-        n_trials = size(cond_data, 3)
-        # Extract [features × trials] at time_idx
-        timepoint_data = @view cond_data[:, time_idx, :]  # [channels × trials]
-        push!(all_trials, timepoint_data)
+        n_tr = size(cond_data, 3)
+        @views all_data[:, (col_offset + 1):(col_offset + n_tr)] .= cond_data[:, time_idx, :]
+        col_offset += n_tr
     end
 
-    # Compute pooled covariance
-    # Pool all trials together for robust covariance estimation
-    all_data = hcat(all_trials...)  # [features × total_trials]
+    # Compute covariance directly across trials (dimension 2) without transposing
+    pooled_cov = cov(all_data; dims = 2)
 
-    # Compute covariance matrix
-    pooled_cov = cov(all_data', corrected = true)  # Transpose to [trials × features]
-
-    # Add small regularization for numerical stability
-    # This helps with near-singular matrices
+    # Add small regularization for numerical stability directly to diagonal
     λ = 1e-6 * tr(pooled_cov) / n_features
-    pooled_cov += λ * I(n_features)
+    @inbounds for i in 1:n_features
+        pooled_cov[i, i] += λ
+    end
 
     return pooled_cov
 end
@@ -168,7 +165,7 @@ function _compute_dissimilarity(
         diff = pattern1 .- pattern2
 
         try
-            mahal_dist = sqrt(max(0.0, dot(diff, inv_covariance_matrix * diff)))
+            mahal_dist = sqrt(max(0.0, dot(diff, inv_covariance_matrix, diff)))
             return mahal_dist
         catch e
             @minimal_warning "Mahalanobis distance computation failed, using Euclidean instead"

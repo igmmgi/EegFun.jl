@@ -224,21 +224,27 @@ function plot_erp_image(
         end
     end
 
+    # Cache invariant values across channels
+    first_df = first(dat_subset.data)
+    time_vec = first_df.time
+    t_limits = !isnothing(plot_kwargs[:xlim]) ? plot_kwargs[:xlim] : (first(time_vec), last(time_vec))
+    n_eps = n_epochs(dat_subset)
+    epoch_range = 1:n_eps
+    cb_pos = _get_colorbar_position(plot_kwargs[:colorbar_position], 1:1, 1:1)
+
+    single_col_indices = plot_layout.type == :single ?
+        [DataFrames.columnindex(first_df, ch) for ch in all_plot_channels] : Int[]
+
     # Plot ERP images for each channel
     heatmaps = Heatmap[]
-    for (ax, channel) in zip(axes, channels)
+    for (idx, (ax, channel)) in enumerate(zip(axes, channels))
         if plot_layout.type == :single
             # For single layout: average across all selected channels
-            data = zeros(n_epochs(dat_subset), nrow(dat_subset.data[1]))
-            for epoch in eachindex(dat_subset.data)
-                data[epoch, :] = _colmeans(dat_subset.data[epoch], all_plot_channels)
-            end
+            data = _extract_erp_image_single(dat_subset.data, single_col_indices)
         else
             # For grid/topo layouts: show individual channel
-            data = zeros(n_epochs(dat_subset), nrow(dat_subset.data[1]))
-            for epoch in eachindex(dat_subset.data)
-                data[epoch, :] = dat_subset.data[epoch][!, channel]
-            end
+            col_idx = DataFrames.columnindex(first_df, channel)
+            data = _extract_erp_image_channel(dat_subset.data, col_idx)
         end
 
         # Apply boxcar average if requested
@@ -254,8 +260,8 @@ function plot_erp_image(
         # Create heatmap
         hm = heatmap!(
             ax,
-            dat_subset.data[1].time,
-            1:n_epochs(dat_subset),
+            time_vec,
+            epoch_range,
             transpose(data),
             colormap = _resolve_theme_colormap(ax, plot_kwargs[:colormap]),
             colorrange = plot_kwargs[:colorrange],
@@ -280,14 +286,10 @@ function plot_erp_image(
         ax.yreversed = plot_kwargs[:yreversed]
 
         # Set x-axis limits if provided, otherwise use data limits
-        if !isnothing(plot_kwargs[:xlim])
-            xlims!(ax, plot_kwargs[:xlim])
-        else
-            xlims!(ax, extrema(dat_subset.data[1].time))
-        end
+        xlims!(ax, t_limits)
 
         # Set y-axis limits for ERP image (always 1 to number of epochs)
-        ylims!(ax, (1, n_epochs(dat_subset)))
+        ylims!(ax, (1, n_eps))
 
         # Add colorbar if requested
         if plot_kwargs[:colorbar_plot]
@@ -297,27 +299,17 @@ function plot_erp_image(
             should_show_colorbar = if plot_layout.type == :single
                 true
             elseif plot_layout.type == :grid
-                idx = findfirst(==(channel), channels)
                 isempty(colorbar_plot_numbers) || idx in colorbar_plot_numbers
             else
                 false
             end
 
             if should_show_colorbar
-                cb_pos = _get_colorbar_position(plot_kwargs[:colorbar_position], 1:1, 1:1)
-
                 if plot_layout.type == :single
                     # Single layout
                     Colorbar(fig[cb_pos...], hm; colorbar_kwargs...)
                 elseif plot_layout.type == :grid
                     # Grid layout: fetch the subgrid we created
-                    rows, cols = plot_layout.dims
-                    idx = findfirst(==(channel), channels)
-                    base_row = div(idx - 1, cols) + 1
-                    base_col = mod1(idx, cols)
-
-                    # The subgrid is at fig.layout.content matching base_row, base_col
-                    # An easier way is just to grab the parent of the axis
                     sg = ax.layoutobservables.gridcontent[].parent
 
                     Colorbar(sg[cb_pos...], hm; colorbar_kwargs...)
@@ -355,8 +347,8 @@ function plot_erp_image(
     # This matches how plot_epochs does it and won't interfere with the topo plot layout
     scale_pos = nothing
     if plot_layout.type == :topo
-        # Get scale position from kwargs
-        scale_pos = plot_kwargs[:layout_topo_scale_pos]
+        # Get scale position from kwargs or layout metadata fallback
+        scale_pos = get(plot_kwargs, :layout_topo_scale_pos, get(plot_layout.metadata, :topo_scale_pos, (0.8, -0.8)))
 
         # Use the same width/height as the channel plots (from layout metadata)
         # This ensures consistency - channel plots use plot_layout.metadata[:topo_plot_width]
@@ -375,7 +367,7 @@ function plot_erp_image(
         # Set up scale axis properties (show time and epoch labels)
         # Use the same approach as plot_epochs
         scale_ax.title = ""
-        tmin, tmax = extrema(dat_subset.data[1].time)
+        tmin, tmax = first(time_vec), last(time_vec)
 
         # Set axis limits first
         if !isnothing(plot_kwargs[:xlim])
@@ -632,6 +624,80 @@ function _apply_boxcar_average(data::Matrix{Float64}, window_size::Int)
         end
     end
     return smoothed_data
+end
+
+"""
+    _extract_erp_image_single(epochs_data::Vector{DataFrame}, col_indices::Vector{Int}) -> Matrix{Float64}
+
+Extract and average all requested channels across epochs directly into an (n_epochs × n_samples) matrix.
+"""
+function _extract_erp_image_single(epochs_data::Vector{DataFrame}, col_indices::Vector{Int})
+    n_epochs = length(epochs_data)
+    first_df = first(epochs_data)
+    n_samples = nrow(first_df)
+    data = Matrix{Float64}(undef, n_epochs, n_samples)
+    n_cols = length(col_indices)
+    inv_cols = 1.0 / n_cols
+
+    for (ep, df) in enumerate(epochs_data)
+        first_col = df[!, col_indices[1]]
+        if first_col isa Vector{Float64}
+            first_f64 = first_col::Vector{Float64}
+            @inbounds @simd for s = 1:n_samples
+                data[ep, s] = first_f64[s]
+            end
+        else
+            @inbounds @simd for s = 1:n_samples
+                data[ep, s] = Float64(first_col[s])
+            end
+        end
+
+        for c = 2:n_cols
+            col = df[!, col_indices[c]]
+            if col isa Vector{Float64}
+                col_f64 = col::Vector{Float64}
+                @inbounds @simd for s = 1:n_samples
+                    data[ep, s] += col_f64[s]
+                end
+            else
+                @inbounds @simd for s = 1:n_samples
+                    data[ep, s] += Float64(col[s])
+                end
+            end
+        end
+
+        @inbounds @simd for s = 1:n_samples
+            data[ep, s] *= inv_cols
+        end
+    end
+    return data
+end
+
+"""
+    _extract_erp_image_channel(epochs_data::Vector{DataFrame}, col_idx::Int) -> Matrix{Float64}
+
+Extract a single channel across epochs directly into an (n_epochs × n_samples) matrix.
+"""
+function _extract_erp_image_channel(epochs_data::Vector{DataFrame}, col_idx::Int)
+    n_epochs = length(epochs_data)
+    first_df = first(epochs_data)
+    n_samples = nrow(first_df)
+    data = Matrix{Float64}(undef, n_epochs, n_samples)
+
+    for (ep, df) in enumerate(epochs_data)
+        col = df[!, col_idx]
+        if col isa Vector{Float64}
+            col_f64 = col::Vector{Float64}
+            @inbounds @simd for s = 1:n_samples
+                data[ep, s] = col_f64[s]
+            end
+        else
+            @inbounds @simd for s = 1:n_samples
+                data[ep, s] = Float64(col[s])
+            end
+        end
+    end
+    return data
 end
 
 # Vector dispatch: plot each condition separately

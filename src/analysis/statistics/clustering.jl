@@ -372,8 +372,7 @@ Consolidated version that can either return full Cluster objects or just statist
 """
 function _compute_cluster_statistics(
     clusters::Vector{Cluster},
-    t_matrix::AbstractMatrix{<:AbstractFloat},
-    electrode_to_idx::Dict{Symbol,Int};
+    t_matrix::AbstractMatrix{<:AbstractFloat};
     return_clusters::Bool = true,
 )
     if isempty(clusters)
@@ -418,15 +417,233 @@ function _compute_cluster_statistics(
     return return_clusters ? (updated_clusters, cluster_stats) : cluster_stats
 end
 
-"""
-    _compute_cluster_statistics(clusters, t_matrix, electrodes)
+# Backwards-compatible overloads accepting electrode metadata
+_compute_cluster_statistics(clusters::Vector{Cluster}, t_matrix::AbstractMatrix{<:AbstractFloat}, electrode_to_idx::Dict{Symbol,Int}; return_clusters::Bool = true) =
+    _compute_cluster_statistics(clusters, t_matrix; return_clusters = return_clusters)
 
-Compute cluster-level statistics (maxsum).
+_compute_cluster_statistics(clusters::Vector{Cluster}, t_matrix::AbstractMatrix{<:AbstractFloat}, electrodes::Vector{Symbol}; return_clusters::Bool = true) =
+    _compute_cluster_statistics(clusters, t_matrix; return_clusters = return_clusters)
+
 """
-function _compute_cluster_statistics(clusters::Vector{Cluster}, t_matrix::AbstractMatrix{<:AbstractFloat}, electrodes::Vector{Symbol})
-    # Create electrode index lookup
-    electrode_to_idx = Dict(e => i for (i, e) in enumerate(electrodes))
-    return _compute_cluster_statistics(clusters, t_matrix, electrode_to_idx, return_clusters = true)
+    _max_cluster_stat(mask::BitArray{2}, t_matrix::AbstractMatrix{Float64}, spatial_connectivity::SparseMatrixCSC{Bool}, cluster_type::Symbol, labels_buf::Matrix{Int}, queue_buf::Vector{Tuple{Int,Int}}; is_negative::Bool=false) -> Float64
+
+Fast, zero-allocation cluster extreme statistic computation for permutation testing.
+Traverses connected components in `mask` using preallocated BFS queue and labels buffers,
+directly accumulating cluster t-value sums without allocating `Cluster` objects, Sets, or arrays.
+"""
+function _max_cluster_stat(
+    mask::BitArray{2},
+    t_matrix::AbstractMatrix{<:AbstractFloat},
+    spatial_connectivity::SparseMatrixCSC{Bool},
+    cluster_type::Symbol,
+    labels_buf::Matrix{Int},
+    queue_buf::Vector{Tuple{Int,Int}};
+    is_negative::Bool = false,
+)::Float64
+    n_electrodes, n_time = size(mask)
+    if !any(mask)
+        return 0.0
+    end
+
+    fill!(labels_buf, 0)
+    current_cluster_id = 0
+    extreme_stat = 0.0
+
+    rv = rowvals(spatial_connectivity)
+    has_spatial = cluster_type in (:spatial, :spatiotemporal, :full)
+    has_temporal = cluster_type in (:temporal, :spatiotemporal, :full)
+
+    @inbounds for e_idx = 1:n_electrodes
+        for t_idx = 1:n_time
+            if !mask[e_idx, t_idx] || labels_buf[e_idx, t_idx] > 0
+                continue
+            end
+
+            current_cluster_id += 1
+            labels_buf[e_idx, t_idx] = current_cluster_id
+            t0 = t_matrix[e_idx, t_idx]
+            cluster_stat = (isnan(t0) || isinf(t0)) ? 0.0 : t0
+
+            q_head = 1
+            q_tail = 1
+            queue_buf[1] = (e_idx, t_idx)
+
+            while q_head <= q_tail
+                curr_e, curr_t = queue_buf[q_head]
+                q_head += 1
+
+                if has_spatial
+                    for ptr in nzrange(spatial_connectivity, curr_e)
+                        ne = rv[ptr]
+                        if mask[ne, curr_t] && labels_buf[ne, curr_t] == 0
+                            labels_buf[ne, curr_t] = current_cluster_id
+                            val = t_matrix[ne, curr_t]
+                            if !isnan(val) && !isinf(val)
+                                cluster_stat += val
+                            end
+                            q_tail += 1
+                            queue_buf[q_tail] = (ne, curr_t)
+                        end
+                    end
+                end
+
+                if has_temporal
+                    if curr_t > 1 && mask[curr_e, curr_t-1] && labels_buf[curr_e, curr_t-1] == 0
+                        labels_buf[curr_e, curr_t-1] = current_cluster_id
+                        val = t_matrix[curr_e, curr_t-1]
+                        if !isnan(val) && !isinf(val)
+                            cluster_stat += val
+                        end
+                        q_tail += 1
+                        queue_buf[q_tail] = (curr_e, curr_t-1)
+                    end
+                    if curr_t < n_time && mask[curr_e, curr_t+1] && labels_buf[curr_e, curr_t+1] == 0
+                        labels_buf[curr_e, curr_t+1] = current_cluster_id
+                        val = t_matrix[curr_e, curr_t+1]
+                        if !isnan(val) && !isinf(val)
+                            cluster_stat += val
+                        end
+                        q_tail += 1
+                        queue_buf[q_tail] = (curr_e, curr_t+1)
+                    end
+                end
+            end
+
+            if is_negative
+                if cluster_stat < extreme_stat
+                    extreme_stat = cluster_stat
+                end
+            else
+                if cluster_stat > extreme_stat
+                    extreme_stat = cluster_stat
+                end
+            end
+        end
+    end
+
+    return extreme_stat
+end
+
+"""
+    _max_cluster_stat_tf(mask::BitArray{3}, t_matrix::Array{Float64,3}, spatial_connectivity::SparseMatrixCSC{Bool}, cluster_type::Symbol, labels_buf::Array{Int,3}, queue_buf::Vector{Tuple{Int,Int,Int}}; is_negative::Bool=false) -> Float64
+
+Fast, zero-allocation 3D (channel × frequency × time) cluster extreme statistic computation for permutation testing.
+"""
+function _max_cluster_stat_tf(
+    mask::BitArray{3},
+    t_matrix::AbstractArray{<:AbstractFloat,3},
+    spatial_connectivity::SparseMatrixCSC{Bool},
+    cluster_type::Symbol,
+    labels_buf::Array{Int,3},
+    queue_buf::Vector{Tuple{Int,Int,Int}};
+    is_negative::Bool = false,
+)::Float64
+    n_electrodes, n_freqs, n_time = size(mask)
+    if !any(mask)
+        return 0.0
+    end
+
+    fill!(labels_buf, 0)
+    current_cluster_id = 0
+    extreme_stat = 0.0
+
+    rv = rowvals(spatial_connectivity)
+    use_spatial = cluster_type in (:spatial, :spatiotemporal, :full)
+    use_spectral = cluster_type in (:spectral, :spectrotemporal, :full)
+    use_temporal = cluster_type in (:temporal, :spatiotemporal, :spectrotemporal, :full)
+
+    @inbounds for e_idx = 1:n_electrodes
+        for f_idx = 1:n_freqs
+            for t_idx = 1:n_time
+                if !mask[e_idx, f_idx, t_idx] || labels_buf[e_idx, f_idx, t_idx] > 0
+                    continue
+                end
+
+                current_cluster_id += 1
+                labels_buf[e_idx, f_idx, t_idx] = current_cluster_id
+                t0 = t_matrix[e_idx, f_idx, t_idx]
+                cluster_stat = (isnan(t0) || isinf(t0)) ? 0.0 : t0
+
+                q_head = 1
+                q_tail = 1
+                queue_buf[1] = (e_idx, f_idx, t_idx)
+
+                while q_head <= q_tail
+                    curr_e, curr_f, curr_t = queue_buf[q_head]
+                    q_head += 1
+
+                    if use_spatial
+                        for ptr in nzrange(spatial_connectivity, curr_e)
+                            ne = rv[ptr]
+                            if mask[ne, curr_f, curr_t] && labels_buf[ne, curr_f, curr_t] == 0
+                                labels_buf[ne, curr_f, curr_t] = current_cluster_id
+                                val = t_matrix[ne, curr_f, curr_t]
+                                if !isnan(val) && !isinf(val)
+                                    cluster_stat += val
+                                end
+                                q_tail += 1
+                                queue_buf[q_tail] = (ne, curr_f, curr_t)
+                            end
+                        end
+                    end
+
+                    if use_spectral
+                        if curr_f > 1 && mask[curr_e, curr_f-1, curr_t] && labels_buf[curr_e, curr_f-1, curr_t] == 0
+                            labels_buf[curr_e, curr_f-1, curr_t] = current_cluster_id
+                            val = t_matrix[curr_e, curr_f-1, curr_t]
+                            if !isnan(val) && !isinf(val)
+                                cluster_stat += val
+                            end
+                            q_tail += 1
+                            queue_buf[q_tail] = (curr_e, curr_f-1, curr_t)
+                        end
+                        if curr_f < n_freqs && mask[curr_e, curr_f+1, curr_t] && labels_buf[curr_e, curr_f+1, curr_t] == 0
+                            labels_buf[curr_e, curr_f+1, curr_t] = current_cluster_id
+                            val = t_matrix[curr_e, curr_f+1, curr_t]
+                            if !isnan(val) && !isinf(val)
+                                cluster_stat += val
+                            end
+                            q_tail += 1
+                            queue_buf[q_tail] = (curr_e, curr_f+1, curr_t)
+                        end
+                    end
+
+                    if use_temporal
+                        if curr_t > 1 && mask[curr_e, curr_f, curr_t-1] && labels_buf[curr_e, curr_f, curr_t-1] == 0
+                            labels_buf[curr_e, curr_f, curr_t-1] = current_cluster_id
+                            val = t_matrix[curr_e, curr_f, curr_t-1]
+                            if !isnan(val) && !isinf(val)
+                                cluster_stat += val
+                            end
+                            q_tail += 1
+                            queue_buf[q_tail] = (curr_e, curr_f, curr_t-1)
+                        end
+                        if curr_t < n_time && mask[curr_e, curr_f, curr_t+1] && labels_buf[curr_e, curr_f, curr_t+1] == 0
+                            labels_buf[curr_e, curr_f, curr_t+1] = current_cluster_id
+                            val = t_matrix[curr_e, curr_f, curr_t+1]
+                            if !isnan(val) && !isinf(val)
+                                cluster_stat += val
+                            end
+                            q_tail += 1
+                            queue_buf[q_tail] = (curr_e, curr_f, curr_t+1)
+                        end
+                    end
+                end
+
+                if is_negative
+                    if cluster_stat < extreme_stat
+                        extreme_stat = cluster_stat
+                    end
+                else
+                    if cluster_stat > extreme_stat
+                        extreme_stat = cluster_stat
+                    end
+                end
+            end
+        end
+    end
+
+    return extreme_stat
 end
 
 

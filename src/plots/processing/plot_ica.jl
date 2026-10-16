@@ -91,7 +91,7 @@ $(_generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
 # Returns
 - `co`: The contour plot object returned by `contourf!`.
 """
-function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; kwargs...)
+function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; precomputed_topo = nothing, kwargs...)
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
 
     # Extract commonly used kwargs
@@ -103,7 +103,11 @@ function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; 
     _ensure_coordinates_3d!(ica.layout)
 
     # Prepare data for this component (now returns bounds too)
-    data, x_bounds, y_bounds = _prepare_ica_topo_data(ica, component, method, gridscale)
+    if isnothing(precomputed_topo)
+        data, x_bounds, y_bounds = _prepare_ica_topo_data(ica, component, method, gridscale)
+    else
+        data, x_bounds, y_bounds = precomputed_topo
+    end
 
     # Calculate levels
     levels = _calculate_topo_levels(data; num_levels = pop!(plot_kwargs, :num_levels))
@@ -225,6 +229,9 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
         throw(ArgumentError("Grid dimensions $dims provide $total_cells cells but need $(length(comps))."))
     end
 
+    # Pre-interpolate all selected components in a single batched operation
+    all_data, x_bounds, y_bounds = _prepare_ica_topo_data(ica, comps, plot_kwargs[:method], plot_kwargs[:gridscale])
+
     # Create axes and plot each component
     for i in eachindex(comps)
         # Calculate base row/col indices
@@ -238,8 +245,16 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
             ax = Axis(fig[base_row, base_col], title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100))
         end
 
-        # Use the internal plotting function (colorbar positioning is handled internally)
-        _plot_topography!(fig, ax, ica, comps[i]; plot_kwargs..., colorbar_plot = colorbar_plot)
+        # Use the internal plotting function with pre-interpolated data
+        _plot_topography!(
+            fig,
+            ax,
+            ica,
+            comps[i];
+            plot_kwargs...,
+            colorbar_plot = colorbar_plot,
+            precomputed_topo = (all_data[i], x_bounds, y_bounds),
+        )
     end
 
     # Add keyboard event handling for scaling
@@ -677,10 +692,15 @@ function _plot_ica_topo_in_viewer!(
     label_kwargs = Dict(),
     method = :spherical_spline,
     pre_calculated_levels = nothing,
+    precomputed_topo = nothing,
     kwargs...,
 )
-    # Prepare data using the new internal function (returns tuple: data, x_bounds, y_bounds)
-    topo_data, x_bounds, y_bounds = _prepare_ica_topo_data(ica, comp_idx, method, gridscale)
+    # Use precomputed topo data if provided, otherwise calculate
+    if isnothing(precomputed_topo)
+        topo_data, x_bounds, y_bounds = _prepare_ica_topo_data(ica, comp_idx, method, gridscale)
+    else
+        topo_data, x_bounds, y_bounds = precomputed_topo
+    end
 
     # Use pre-calculated levels if provided, otherwise calculate levels
     if isnothing(pre_calculated_levels)
@@ -1256,72 +1276,73 @@ function _update_components!(state)
         num_plots = length(state.components)  # Update all components in the subset
     end
 
-    # Pre-allocate data vector
-    all_data = Vector{Matrix{Float64}}(undef, num_plots)
-    data_count = 0
-
+    # Find all valid components to display
+    valid_comp_indices = Int[]
+    plot_indices = Int[]
     for i = 1:num_plots
         comp_idx = _get_component_index(state, i)
         if comp_idx <= size(state.component_data, 1)
-            data_count += 1
-            all_data[data_count], _, _ =
-                _prepare_ica_topo_data(state.ica, comp_idx, state.plot_kwargs[:method], state.plot_kwargs[:gridscale])
+            push!(valid_comp_indices, comp_idx)
+            push!(plot_indices, i)
         end
     end
 
-    # Resize to actual count
-    resize!(all_data, data_count)
+    all_data, x_bounds, y_bounds =
+        _prepare_ica_topo_data(state.ica, valid_comp_indices, state.plot_kwargs[:method], state.plot_kwargs[:gridscale])
 
     # Calculate levels using the simplified function
     levels_result = _calculate_ica_topo_levels(all_data, state.use_global_scale[], state.plot_kwargs[:num_levels])
 
-    for i = 1:num_plots
+    for (k, i) in enumerate(plot_indices)
+        comp_idx = valid_comp_indices[k]
 
-        comp_idx = _get_component_index(state, i)
-
-        if comp_idx <= size(state.component_data, 1)
-            # Update component time series data with possible inversion
-            component_data = state.component_data[comp_idx, :]
-            if state.invert_scale[]
-                component_data = -component_data
-            end
-            # Check if lines_obs exists for this index before updating
-            if i <= length(state.lines_obs)
-                state.lines_obs[i][] = component_data
-            else
-                @minimal_warning "Trying to update non-existent lines_obs at index $i"
-            end
-
-            # Clear and redraw topography using the viewer function
-            if i <= length(state.topo_axs)
-                topo_ax = state.topo_axs[i]
-                # Determine which level to use for this component
-                if state.use_global_scale[]
-                    level_to_use = levels_result  # Use global levels for all components
-                else
-                    level_to_use = levels_result[i]  # Use local levels for this specific component
-                end
-
-                _plot_ica_topo_in_viewer!(
-                    topo_ax.parent, # Pass the figure associated with the axis
-                    topo_ax,
-                    state.ica,
-                    comp_idx;
-                    use_global_scale = state.use_global_scale[],
-                    pre_calculated_levels = level_to_use,
-                    state.plot_kwargs...,
-                )
-                topo_ax.ylabel = @sprintf("IC %d\n(%.1f%%)", comp_idx, state.ica.variance[comp_idx] * 100)
-                topo_ax.ylabelvisible = true
-            else
-                @minimal_warning "Trying to update non-existent topo_axs at index $i"
-            end
-            # Update y-axis label
-            if i <= length(state.axs)
-                state.axs[i].ylabel = @sprintf("IC %d", comp_idx)
-            end
+        # Update component time series data with possible inversion
+        component_data = state.component_data[comp_idx, :]
+        if state.invert_scale[]
+            component_data = -component_data
+        end
+        # Check if lines_obs exists for this index before updating
+        if i <= length(state.lines_obs)
+            state.lines_obs[i][] = component_data
         else
-            # Handle invalid comp_idx: clear plots and labels
+            @minimal_warning "Trying to update non-existent lines_obs at index $i"
+        end
+
+        # Clear and redraw topography using the viewer function with precomputed data
+        if i <= length(state.topo_axs)
+            topo_ax = state.topo_axs[i]
+            # Determine which level to use for this component
+            if state.use_global_scale[]
+                level_to_use = levels_result  # Use global levels for all components
+            else
+                level_to_use = levels_result[k]  # Use local levels for this specific component
+            end
+
+            _plot_ica_topo_in_viewer!(
+                topo_ax.parent, # Pass the figure associated with the axis
+                topo_ax,
+                state.ica,
+                comp_idx;
+                use_global_scale = state.use_global_scale[],
+                pre_calculated_levels = level_to_use,
+                precomputed_topo = (all_data[k], x_bounds, y_bounds),
+                state.plot_kwargs...,
+            )
+            topo_ax.ylabel = @sprintf("IC %d\n(%.1f%%)", comp_idx, state.ica.variance[comp_idx] * 100)
+            topo_ax.ylabelvisible = true
+        else
+            @minimal_warning "Trying to update non-existent topo_axs at index $i"
+        end
+        # Update y-axis label
+        if i <= length(state.axs)
+            state.axs[i].ylabel = @sprintf("IC %d", comp_idx)
+        end
+    end
+
+    # Handle invalid indices if any
+    for i = 1:num_plots
+        if i ∉ plot_indices
+            comp_idx = _get_component_index(state, i)
             if i <= length(state.lines_obs)
                 state.lines_obs[i][] = zeros(Float64, size(state.component_data, 2)) # Clear line
             end
@@ -1356,6 +1377,33 @@ function _prepare_ica_topo_data(ica::InfoIca, comp_idx::Int, method::Symbol, gri
         margin = max_radius * 0.05
         plot_radius = max_radius + margin
         return data, (-plot_radius, plot_radius), (-plot_radius, plot_radius)
+    else
+        throw(ArgumentError("Unknown interpolation method: $method. Supported: $supported_methods"))
+    end
+end
+
+"""Interpolate multiple ICA mixing weights onto 2-D grids in a single batched operation."""
+function _prepare_ica_topo_data(ica::InfoIca, comp_indices::AbstractVector{Int}, method::Symbol, gridscale::Int)
+    supported_methods =
+        [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
+    if isempty(comp_indices)
+        return Vector{Matrix{Float64}}(), (-1.0, 1.0), (-1.0, 1.0)
+    end
+    if length(comp_indices) == 1
+        data, x_bounds, y_bounds = _prepare_ica_topo_data(ica, comp_indices[1], method, gridscale)
+        return [data], x_bounds, y_bounds
+    end
+    if method ∈ supported_methods
+        data_vec, x_bounds, y_bounds = _data_interpolation_topo(ica.mixing[:, comp_indices], ica.layout, gridscale, method = method)
+        return data_vec, x_bounds, y_bounds
+    elseif method == :spherical_spline
+        data_vec = _data_interpolation_topo_spherical_spline(ica.mixing[:, comp_indices], ica.layout, gridscale)
+        x_coords = ica.layout.data.x2
+        y_coords = ica.layout.data.y2
+        max_radius = maximum(sqrt.(x_coords .^ 2 .+ y_coords .^ 2))
+        margin = max_radius * 0.05
+        plot_radius = max_radius + margin
+        return data_vec, (-plot_radius, plot_radius), (-plot_radius, plot_radius)
     else
         throw(ArgumentError("Unknown interpolation method: $method. Supported: $supported_methods"))
     end

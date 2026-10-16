@@ -283,6 +283,7 @@ function _compute_t_matrix(
     std_diff_buffer::Union{Nothing,Array{Float64,2}} = nothing,
     t_matrix_buffer::Union{Nothing,Array{Float64,2}} = nothing,
     compute_p_values::Bool = true,
+    compute_se::Bool = true,
 )
     n_participants, n_electrodes, n_time = size(data1)
 
@@ -355,8 +356,8 @@ function _compute_t_matrix(
             end
         end
 
-        # Compute SE for returned array
-        se_matrix = std_diff ./ sqrt(n_participants)
+        # Compute SE for returned array if requested
+        se_matrix = compute_se ? (std_diff ./ sqrt(n_participants)) : Array{Float64,2}(undef, 0, 0)
 
         # Degrees of freedom (same for all points in paired design)
         df = Float64(n_participants - 1)
@@ -369,7 +370,7 @@ function _compute_t_matrix(
 
     else
         # Independent design: need to loop (but df is constant across all points)
-        se_matrix = Array{Float64,2}(undef, n_electrodes, n_time)
+        se_matrix = compute_se ? Array{Float64,2}(undef, n_electrodes, n_time) : Array{Float64,2}(undef, 0, 0)
         n_A = size(data1, 1)
         n_B = size(data2, 1)
         df = Float64(n_A + n_B - 2)
@@ -403,7 +404,9 @@ function _compute_t_matrix(
                 se = sqrt(pooled_var * (1.0 / n_A + 1.0 / n_B))
 
                 t_matrix[e_idx, t_idx] = (mean1 - mean2) / se
-                se_matrix[e_idx, t_idx] = se
+                if compute_se
+                    se_matrix[e_idx, t_idx] = se
+                end
             end
         end
 
@@ -416,9 +419,12 @@ function _compute_t_matrix(
 end
 
 """Convenience wrapper: extract arrays from `StatisticalData` and call the raw-array `_compute_t_matrix`."""
-function _compute_t_matrix(prepared::StatisticalData; tail::Symbol = :both)
+function _compute_t_matrix(prepared::StatisticalData; tail::Symbol = :both, compute_p_values::Bool = true, compute_se::Bool = true)
     t_matrix, df, p_matrix, se_matrix =
-        _compute_t_matrix(prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design, tail = tail)
+        _compute_t_matrix(
+            prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design;
+            tail = tail, compute_p_values = compute_p_values, compute_se = compute_se
+        )
     return t_matrix, df, p_matrix, se_matrix
 end
 
@@ -489,16 +495,20 @@ function _compute_p_matrix(
         p_matrix = Array{Float64,2}(undef, size(t_matrix))
     end
     dist = TDist(df)
-    @inbounds for i in eachindex(t_matrix)
-        t_val = t_matrix[i]
-        p_matrix[i] = if isnan(t_val) || isinf(t_val)
-            NaN
-        elseif tail == :both
-            2 * (1 - cdf(dist, abs(t_val)))
-        elseif tail == :left
-            cdf(dist, t_val)
-        else  # :right
-            1 - cdf(dist, t_val)
+    if tail == :both
+        @inbounds @simd for i in eachindex(t_matrix)
+            t_val = t_matrix[i]
+            p_matrix[i] = (isnan(t_val) || isinf(t_val)) ? NaN : 2.0 * ccdf(dist, abs(t_val))
+        end
+    elseif tail == :left
+        @inbounds @simd for i in eachindex(t_matrix)
+            t_val = t_matrix[i]
+            p_matrix[i] = (isnan(t_val) || isinf(t_val)) ? NaN : cdf(dist, t_val)
+        end
+    else  # :right
+        @inbounds @simd for i in eachindex(t_matrix)
+            t_val = t_matrix[i]
+            p_matrix[i] = (isnan(t_val) || isinf(t_val)) ? NaN : ccdf(dist, t_val)
         end
     end
     return p_matrix

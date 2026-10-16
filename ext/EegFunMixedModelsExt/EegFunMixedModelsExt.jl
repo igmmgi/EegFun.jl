@@ -13,7 +13,7 @@ using Distributed
 using SharedArrays
 using SparseArrays
 
-import EegFun: fit_mass_lmm, generate_permutation_matrix
+import EegFun: fit_mass_lmm, generate_permutation_matrix, @minimal_error
 
 # Relative objective tolerance for the optimizer in permutation refits 
 const PERMUTATION_FTOL_REL = 1e-8
@@ -51,15 +51,15 @@ function _resolve_tested_coefs(coef_names, tested_coefs, test_intercept)
     
     for t in targets
         if t isa Integer
-            (1 <= t <= n) || error("Index $t out of bounds (1:$n)")
+            (1 <= t <= n) || @minimal_error "Index $t out of bounds (1:$n)"
             push!(idxs, t)
         elseif t isa Union{AbstractString, Symbol}
             target_str = lowercase(String(t))
             matching = findall(x -> occursin(target_str, lowercase(x)), coef_names)
-            isempty(matching) && error("No model coefficient matches '$t'. Available: $coef_names")
+            isempty(matching) && @minimal_error "No model coefficient matches '$t'. Available: $coef_names"
             append!(idxs, matching)
         else
-            error("Unsupported type for tested_coefs: $(typeof(t))")
+            @minimal_error "Unsupported type for tested_coefs: $(typeof(t))"
         end
     end
     
@@ -70,24 +70,34 @@ end
 # 2. HIGH-LEVEL WRAPPER FOR EpochData
 # ============================================================================
 
+@inline function _fill_lmm_epoch_slice!(eeg_data::Array{Float64,3}, c_idx::Int, ep_idx::Int, col::Vector{Float64}, n_samp::Int)
+    @inbounds @simd for t = 1:n_samp
+        eeg_data[c_idx, t, ep_idx] = col[t]
+    end
+end
+@inline function _fill_lmm_epoch_slice!(eeg_data::Array{Float64,3}, c_idx::Int, ep_idx::Int, col::AbstractVector, n_samp::Int)
+    @inbounds for t = 1:n_samp
+        eeg_data[c_idx, t, ep_idx] = Float64(col[t])
+    end
+end
+
 function fit_mass_lmm(epochs::EegFun.EpochData, f::FormulaTerm; n_perms=0, kwargs...)
+    isempty(epochs) && @minimal_error "EpochData is empty."
+    
     dfs = epochs.data
     n_epochs = length(dfs)
-    n_epochs == 0 && error("EpochData is empty.")
     
-    first_df = dfs[1]
-    all_channels = intersect(propertynames(first_df), epochs.layout.data.label)
-    meta_cols = setdiff(propertynames(first_df), all_channels)
-    
-    n_timepoints = size(first_df, 1)
+    all_channels = EegFun.channel_labels(epochs)
     n_channels = length(all_channels)
+    n_timepoints = EegFun.n_samples(epochs)
+    meta_cols = setdiff(EegFun.all_labels(epochs), all_channels)
     
-    meta_df = reduce(vcat, [df[1:1, meta_cols] for df in dfs])
+    meta_df = DataFrame([col => [df[1, col] for df in dfs] for col in meta_cols])
     
-    eeg_data = zeros(Float64, (n_channels, n_timepoints, n_epochs))
-    for (c_idx, c_name) in enumerate(all_channels)
-        for (i, df) in enumerate(dfs)
-            eeg_data[c_idx, :, i] .= df[!, c_name]
+    eeg_data = Array{Float64, 3}(undef, n_channels, n_timepoints, n_epochs)
+    for (i, df) in enumerate(dfs)
+        for (c_idx, c_name) in enumerate(all_channels)
+            _fill_lmm_epoch_slice!(eeg_data, c_idx, i, df[!, c_name], n_timepoints)
         end
     end
     
@@ -98,9 +108,12 @@ function fit_mass_lmm(epochs::EegFun.EpochData, f::FormulaTerm; n_perms=0, kwarg
         spatial_conn = EegFun._build_connectivity_matrix(all_channels, epochs.layout, :spatiotemporal)
     end
     
+    tvec = EegFun.time_vector(epochs)
+    time_pts = isempty(tvec) ? Vector(1:n_timepoints) : tvec
+
     res = fit_mass_lmm(eeg_data, meta_df, f; 
         channel_names = all_channels,
-        time_points = first_df.time,
+        time_points = time_pts,
         dim_order = (:channels, :timepoints, :epochs),
         n_perms = n_perms,
         kwargs...,
@@ -295,7 +308,7 @@ function _setup_permutations(meta_df, n_epochs, n_perms, perm_matrix, permute_bl
         signs = _alloc(Float32, 0, 0)
         
         if !isnothing(perm_matrix)
-            size(perm_matrix, 1) == n_epochs || error("perm_matrix must have exactly $n_epochs rows (one for each epoch).")
+            size(perm_matrix, 1) == n_epochs || @minimal_error "perm_matrix must have exactly $n_epochs rows (one for each epoch)."
             actual_perms = size(perm_matrix, 2)
             @info "Using user-provided permutation matrix with $actual_perms permutations."
             perm_indices .= perm_matrix
@@ -380,19 +393,23 @@ function _extract_null_distributions!(
         end
     else
         @info "Extracting Spatio-Temporal Clusters (threshold = $cluster_threshold)..."
+        n_channels, n_timepoints = length(channel_names), length(time_points)
+        labels_buf = zeros(Int, n_channels, n_timepoints)
+        queue_buf = Vector{Tuple{Int,Int}}(undef, n_channels * n_timepoints)
+        pos_mask = BitArray{2}(undef, n_channels, n_timepoints)
+        neg_mask = BitArray{2}(undef, n_channels, n_timepoints)
+        t_map = Array{Float64,2}(undef, n_channels, n_timepoints)
         for perm_idx in 1:n_perms
             for coef_idx in tested_coef_indices
-                t_map = Array(t_perm_matrix[:, :, perm_idx, coef_idx])
-                pos_clusters, neg_clusters = EegFun._find_clusters(
-                    t_map .> cluster_threshold, t_map .< -cluster_threshold,
-                    channel_names, Float64.(time_points), spatial_conn, :spatiotemporal
-                )
-                pos_stats = EegFun._compute_cluster_statistics(pos_clusters, t_map, electrode_to_idx; return_clusters=false)
-                neg_stats = EegFun._compute_cluster_statistics(neg_clusters, t_map, electrode_to_idx; return_clusters=false)
-                
-                max_pos = maximum(pos_stats, init=0.0)
-                max_neg = maximum(abs, neg_stats, init=0.0)
-                max_cluster_mass_null[perm_idx, coef_idx] = max(max_pos, max_neg)
+                copyto!(t_map, view(t_perm_matrix, :, :, perm_idx, coef_idx))
+                @inbounds for i in eachindex(t_map)
+                    val = t_map[i]
+                    pos_mask[i] = val > cluster_threshold
+                    neg_mask[i] = val < -cluster_threshold
+                end
+                max_pos = EegFun._max_cluster_stat(pos_mask, t_map, spatial_conn, :spatiotemporal, labels_buf, queue_buf; is_negative = false)
+                min_neg = EegFun._max_cluster_stat(neg_mask, t_map, spatial_conn, :spatiotemporal, labels_buf, queue_buf; is_negative = true)
+                max_cluster_mass_null[perm_idx, coef_idx] = max(max_pos, abs(min_neg))
             end
         end
     end
@@ -462,11 +479,11 @@ function fit_mass_lmm(eeg_data, meta_df, f;
     if dim_order != (:channels, :timepoints, :epochs)
         target = (:channels, :timepoints, :epochs)
         perm = [findfirst(==(t), dim_order) for t in target]
-        any(isnothing, perm) && error("dim_order must contain :channels, :timepoints, and :epochs")
+        any(isnothing, perm) && @minimal_error "dim_order must contain :channels, :timepoints, and :epochs"
         eeg_data = permutedims(eeg_data, tuple(perm...))
     end
     n_channels, n_timepoints, n_epochs = size(eeg_data)
-    nrow(meta_df) == n_epochs || error("Number of rows in meta_df ($(nrow(meta_df))) must match number of epochs in eeg_data ($n_epochs).")
+    nrow(meta_df) == n_epochs || @minimal_error "Number of rows in meta_df ($(nrow(meta_df))) must match number of epochs in eeg_data ($n_epochs)."
     
     channel_names = isnothing(channel_names) ? [Symbol("Ch$i") for i in 1:n_channels] : channel_names
     time_points = isnothing(time_points) ? Vector(1:n_timepoints) : time_points

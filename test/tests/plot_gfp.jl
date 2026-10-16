@@ -21,4 +21,22 @@ using EegFun
         @test fig isa Figure
     end
 
+    @testset "show_erp_traces" begin
+        fig = EegFun.plot_gfp(dat; show_erp_traces = true, display_plot = false)
+        @test fig isa Figure
+        @test length(fig.content) >= 2
+    end
+
+    @testset "show_dissimilarity" begin
+        fig = EegFun.plot_gfp(dat; show_dissimilarity = true, display_plot = false)
+        @test fig isa Figure
+        @test length(fig.content) >= 2
+    end
+
+    @testset "all panels" begin
+        fig = EegFun.plot_gfp(dat; show_erp_traces = true, show_dissimilarity = true, display_plot = false)
+        @test fig isa Figure
+        @test length(fig.content) >= 3
+    end
+
 end

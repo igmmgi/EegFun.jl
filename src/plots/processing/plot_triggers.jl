@@ -144,15 +144,27 @@ end
 Helper function to plot vertical lines for trigger events.
 """
 function _plot_trigger_vertical_lines!(ax::Axis, times::Vector{Float64}, y_positions::Vector{Int})
-    for (xpos, ypos) in zip(times, y_positions)
-        lines!(
-            ax,
-            [xpos, xpos],
-            [ypos - PLOT_TRIGGERS_KWARGS[:line_offset][1], ypos + PLOT_TRIGGERS_KWARGS[:line_offset][1]],
-            color = :black,
-            linewidth = PLOT_TRIGGERS_KWARGS[:linewidth_trigger][1],
-        )
+    isempty(times) && return
+    N = length(times)
+    xs = Vector{Float64}(undef, 3 * N)
+    ys = Vector{Float64}(undef, 3 * N)
+    offset = PLOT_TRIGGERS_KWARGS[:line_offset][1]
+    @inbounds for (i, (xpos, ypos)) in enumerate(zip(times, y_positions))
+        idx = 3 * i - 2
+        xs[idx] = xpos
+        xs[idx + 1] = xpos
+        xs[idx + 2] = NaN
+        ys[idx] = ypos - offset
+        ys[idx + 1] = ypos + offset
+        ys[idx + 2] = NaN
     end
+    lines!(
+        ax,
+        xs,
+        ys,
+        color = :black,
+        linewidth = PLOT_TRIGGERS_KWARGS[:linewidth_trigger][1],
+    )
 end
 
 """
@@ -519,16 +531,62 @@ function _plot_trigger_events!(
     # Plot horizontal timeline — span the full visible window
     lines!(ax, [timeline_start, timeline_end], [0, 0], color = :black, linewidth = timeline_width)
 
-    # Plot vertical lines for each event
-    for (time, code_str, time_str) in zip(trigger_times, code_strings, time_strings)
-        _plot_single_trigger_line!(ax, time)
-        _add_trigger_text!(ax, time, event_line_height, code_str, (:center, :bottom), font_size)
-        _add_trigger_text!(ax, time, time_label_offset, time_str, (:center, :top), font_size)
+    # Vectorized vertical lines and labels for all events
+    N = length(trigger_times)
+    if N > 0
+        xs = Vector{Float64}(undef, 3 * N)
+        ys = Vector{Float64}(undef, 3 * N)
+        @inbounds for (i, t) in enumerate(trigger_times)
+            idx = 3 * i - 2
+            xs[idx] = t
+            xs[idx + 1] = t
+            xs[idx + 2] = NaN
+            ys[idx] = 0.0
+            ys[idx + 1] = event_line_height
+            ys[idx + 2] = NaN
+        end
+        lines!(
+            ax,
+            xs,
+            ys,
+            color = :black,
+            linewidth = PLOT_TRIGGERS_KWARGS[:event_line_width][1],
+        )
+
+        # Vectorized trigger code text
+        text!(
+            ax,
+            trigger_times,
+            fill(event_line_height, N);
+            text = code_strings,
+            align = (:center, :bottom),
+            color = :black,
+            fontsize = font_size,
+        )
+
+        # Vectorized trigger time label text
+        text!(
+            ax,
+            trigger_times,
+            fill(time_label_offset, N);
+            text = time_strings,
+            align = (:center, :top),
+            color = :black,
+            fontsize = font_size,
+        )
     end
 
-    # Plot intervals as text
-    for (x, interval_str) in zip(interval_positions, interval_strings)
-        text!(ax, x, 0, text = interval_str, align = (:center, :top), color = :black, fontsize = font_size)
+    # Vectorized interval text
+    if !isempty(interval_positions)
+        text!(
+            ax,
+            interval_positions,
+            fill(0.0, length(interval_positions));
+            text = interval_strings,
+            align = (:center, :top),
+            color = :black,
+            fontsize = font_size,
+        )
     end
 end
 

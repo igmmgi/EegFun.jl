@@ -472,3 +472,34 @@ function LmmStatsResult(
         )
     end
 end
+
+function Base.show(io::IO, result::LmmStatsResult)
+    n_chans = length(result.channels)
+    n_times = length(result.time_points)
+    n_coefs = length(result.coefficients)
+    time_range = isempty(result.time_points) ? "N/A" : "$(first(result.time_points)) to $(last(result.time_points)) s"
+    n_perms = size(result.max_t_null, 1)
+    n_singular = count(result.singular_fits)
+    total_fits = n_chans * n_times
+
+    println(io, "LmmStatsResult")
+    println(io, "├─ Dimensions: $n_chans channels × $n_times time points ($time_range) × $n_coefs coefficients")
+    println(io, "├─ Predictors: ", join(result.coefficients, ", "))
+    println(io, "├─ Permutations: $n_perms")
+    if result.p_corrected !== nothing
+        println(io, "├─ Multiple comparison correction: FWER max-t permutation test")
+    else
+        println(io, "├─ Multiple comparison correction: none (raw asymptotic p-values)")
+    end
+    sing_pct = total_fits > 0 ? round(100 * n_singular / total_fits, digits = 1) : 0.0
+    println(io, "├─ Singular fits: $n_singular / $total_fits ($sing_pct%)")
+    sig_strs = String[]
+    for i in 1:n_coefs
+        n_sig = count(<(0.05), @view(result.p_values[:, :, i]))
+        push!(sig_strs, "$(result.coefficients[i]): $n_sig")
+    end
+    print(io, "└─ Significant points (p < 0.05): ", join(sig_strs, ", "))
+end
+
+Base.show(io::IO, ::MIME"text/plain", result::LmmStatsResult) = show(io, result)
+

@@ -178,17 +178,16 @@ function _detect_extreme_values(
     selected_samples = get_selected_samples(dat, sample_selection)
     isempty(selected_samples) && @minimal_error("No samples selected for extreme value detection")
 
+    n_samp = n_samples(dat)
+    sample_mask = falses(n_samp)
+    sample_mask[selected_samples] .= true
+
     results = Dict{Symbol,Vector{Bool}}()
+    thresh_f = Float64(threshold)
 
     for ch in selected_channels
-        extreme_mask = _is_extreme_value(dat.data[!, ch], Float64(threshold))
-
-        # Apply sample selection - only keep extreme values for selected samples
-        sample_mask = falses(length(extreme_mask))
-        sample_mask[selected_samples] .= true
-        extreme_mask = extreme_mask .& sample_mask
-
-        results[ch] = extreme_mask
+        extreme_mask = _is_extreme_value(dat.data[!, ch], thresh_f)
+        results[ch] = extreme_mask .& sample_mask
     end
 
     return results

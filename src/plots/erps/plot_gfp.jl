@@ -165,15 +165,35 @@ function plot_gfp(
     if show_erp_traces
         ax_erp = Axis(fig[panel_idx, 1])
 
-        # Plot all channel traces for each dataset
-        for (dataset_idx, dat) in enumerate(datasets_filtered)
-            # Get selected channels
+        # Vectorized background ERP traces: single NaN-separated lines! call per dataset
+        for dat in datasets_filtered
             selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
+            isempty(selected_channels) && continue
 
-            # Plot each channel
-            for ch in selected_channels
-                lines!(ax_erp, dat.data.time, dat.data[!, ch], color = (:gray, 0.5), linewidth = 0.5)
+            time_vec = dat.data.time
+            n_samples = length(time_vec)
+            n_chs = length(selected_channels)
+            total_len = n_chs * n_samples + (n_chs - 1)
+
+            x_vec = Vector{Float64}(undef, total_len)
+            y_vec = Vector{Float64}(undef, total_len)
+
+            pos = 1
+            for (ch_i, ch) in enumerate(selected_channels)
+                col_idx = ch isa Int ? ch : DataFrames.columnindex(dat.data, ch)
+                ch_data = dat.data[!, col_idx]::Vector{Float64}
+                @simd for s = 1:n_samples
+                    x_vec[pos+s-1] = time_vec[s]
+                    y_vec[pos+s-1] = ch_data[s]
+                end
+                pos += n_samples
+                if ch_i != n_chs
+                    x_vec[pos] = NaN
+                    y_vec[pos] = NaN
+                    pos += 1
+                end
             end
+            lines!(ax_erp, x_vec, y_vec, color = (:gray, 0.5), linewidth = 0.5)
         end
 
         ax_erp.xlabel = ""

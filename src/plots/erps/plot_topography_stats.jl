@@ -218,6 +218,38 @@ function plot_topography_stats(
 
     axes = Axis[]
 
+    # Pre-interpolate all panels when possible
+    supported_methods =
+        [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
+    can_batch = n_topos > 1 && (method in supported_methods || method == :spherical_spline)
+    batched_interp = nothing
+    xb_shared = nothing
+    yb_shared = nothing
+
+    if can_batch
+        all_layout_mat = Matrix{Float64}(undef, length(layout_labels), n_topos)
+        for i = 1:n_topos
+            channel_data = topo_values[i]
+            for (k, lbl) in enumerate(layout_labels)
+                ch_idx = findfirst(==(lbl), electrodes)
+                v = !isnothing(ch_idx) ? channel_data[ch_idx] : 0.0
+                all_layout_mat[k, i] = isfinite(v) ? v : 0.0
+            end
+        end
+        if method in supported_methods
+            batched_interp, xb_shared, yb_shared = _data_interpolation_topo(all_layout_mat, layout, gridscale; method = method)
+        else # :spherical_spline
+            batched_interp = _data_interpolation_topo_spherical_spline(all_layout_mat, layout, gridscale)
+            x_coords = layout.data.x2
+            y_coords = layout.data.y2
+            max_radius = maximum(sqrt.(x_coords .^ 2 .+ y_coords .^ 2))
+            margin = max_radius * 0.05
+            plot_radius = max_radius + margin
+            xb_shared = (-plot_radius, plot_radius)
+            yb_shared = (-plot_radius, plot_radius)
+        end
+    end
+
     for i = 1:n_topos
         row = div(i - 1, n_cols) + 1
         col = mod1(i, n_cols)
@@ -239,6 +271,9 @@ function plot_topography_stats(
             ax,
             layout_values,
             layout;
+            data_interp = can_batch ? batched_interp[i] : nothing,
+            x_bounds = can_batch ? xb_shared : nothing,
+            y_bounds = can_batch ? yb_shared : nothing,
             method = method,
             gridscale = gridscale,
             colormap = colormap,
@@ -439,6 +474,38 @@ function plot_topography_stats(
 
     axes = Axis[]
 
+    # Pre-interpolate all panels when possible
+    supported_methods =
+        [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
+    can_batch = n_topos > 1 && (method in supported_methods || method == :spherical_spline)
+    batched_interp = nothing
+    xb_shared = nothing
+    yb_shared = nothing
+
+    if can_batch
+        all_layout_mat = Matrix{Float64}(undef, length(layout_labels), n_topos)
+        for i = 1:n_topos
+            channel_data = topo_values[i]
+            for (k, lbl) in enumerate(layout_labels)
+                ch_idx = findfirst(==(lbl), electrodes)
+                v = !isnothing(ch_idx) ? channel_data[ch_idx] : 0.0
+                all_layout_mat[k, i] = isfinite(v) ? v : 0.0
+            end
+        end
+        if method in supported_methods
+            batched_interp, xb_shared, yb_shared = _data_interpolation_topo(all_layout_mat, layout, gridscale; method = method)
+        else # :spherical_spline
+            batched_interp = _data_interpolation_topo_spherical_spline(all_layout_mat, layout, gridscale)
+            x_coords = layout.data.x2
+            y_coords = layout.data.y2
+            max_radius = maximum(sqrt.(x_coords .^ 2 .+ y_coords .^ 2))
+            margin = max_radius * 0.05
+            plot_radius = max_radius + margin
+            xb_shared = (-plot_radius, plot_radius)
+            yb_shared = (-plot_radius, plot_radius)
+        end
+    end
+
     for i = 1:n_topos
         row = div(i - 1, n_cols) + 1
         col = mod1(i, n_cols)
@@ -458,6 +525,9 @@ function plot_topography_stats(
             ax,
             layout_values,
             layout;
+            data_interp = can_batch ? batched_interp[i] : nothing,
+            x_bounds = can_batch ? xb_shared : nothing,
+            y_bounds = can_batch ? yb_shared : nothing,
             method = method,
             gridscale = gridscale,
             colormap = colormap,

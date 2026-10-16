@@ -10,13 +10,56 @@ function _is_flatline(signal::AbstractVector{<:Real}, threshold::Real, window_sa
     n = length(signal)
     mask = falses(n)
     w = max(1, window_samples)
+    if w >= n
+        return (std(signal) < threshold ? trues(n) : falses(n))
+    end
+    if w <= 1
+        return falses(n)
+    end
 
-    @inbounds for i = 1:(n-w+1)
-        w_view = view(signal, i:(i+w-1))
-        if std(w_view) < threshold
-            mask[i:(i+w-1)] .= true
+    # Initial window 1:w
+    w_view = view(signal, 1:w)
+    μ = mean(w_view)
+    M2 = var(w_view) * (w - 1)
+
+    inv_w = 1.0 / w
+    inv_w_minus_1 = 1.0 / (w - 1)
+    thresh_sq = Float64(threshold)^2
+
+    last_marked = 0
+    if (M2 * inv_w_minus_1) < thresh_sq
+        mask[1:w] .= true
+        last_marked = w
+    end
+
+    anchor_interval = 256
+
+    @inbounds for i = 2:(n - w + 1)
+        x_out = Float64(signal[i - 1])
+        x_in  = Float64(signal[i + w - 1])
+
+        if (i % anchor_interval) == 0
+            cur_view = view(signal, i:(i+w-1))
+            μ = mean(cur_view)
+            M2 = var(cur_view) * (w - 1)
+        else
+            d = x_in - x_out
+            old_μ = μ
+            μ = old_μ + d * inv_w
+            M2 = max(0.0, M2 + d * ((x_in - μ) + (x_out - old_μ)))
+        end
+
+        cur_var = M2 * inv_w_minus_1
+        if cur_var < thresh_sq
+            s_idx = max(last_marked + 1, i)
+            e_idx = i + w - 1
+            if s_idx <= e_idx
+                mask[s_idx:e_idx] .= true
+                last_marked = e_idx
+            end
         end
     end
+
     return mask
 end
 

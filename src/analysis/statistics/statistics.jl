@@ -61,7 +61,7 @@ function permutation_test(
 
     # Compute observed t-matrix and df
     @info "Computing t-statistics..."
-    t_matrix, df, _, se_matrix = _compute_t_matrix(prepared)
+    t_matrix, df, _, se_matrix = _compute_t_matrix(prepared; compute_p_values = false)
 
     # Handle different thresholding methods
     if threshold_method == :parametric

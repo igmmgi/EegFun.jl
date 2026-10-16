@@ -1,4 +1,5 @@
 using Test
+using EegFun
 using DataFrames
 using OrderedCollections
 
@@ -672,6 +673,57 @@ using OrderedCollections
         # summary
         @test summary(cont) == "3 timepoints × 2 channels ContinuousData (\"test\")"
         @test summary(ep) == "2 epochs × 2 timepoints × 2 channels EpochData (\"test\")"
+    end
+
+    @testset "Polymorphic Accessors (Layout, TF, Stats)" begin
+        layout_df = DataFrame(
+            label = [:Fz, :Cz, :Pz],
+            x = [0.0, 0.0, 0.0],
+            y = [1.0, 0.0, -1.0],
+            z = [0.0, 1.0, 0.0],
+        )
+        layout = EegFun.Layout(layout_df, nothing, nothing, nothing)
+        @test EegFun.channel_labels(layout) == [:Fz, :Cz, :Pz]
+        @test EegFun.n_channels(layout) == 3
+
+        # TF Data frequency_vector
+        tf_df = DataFrame(
+            freq = [4.0, 4.0, 8.0, 8.0, 12.0, 12.0],
+            time = [0.0, 0.1, 0.0, 0.1, 0.0, 0.1],
+            Fz = fill(1.0, 6),
+            Cz = fill(2.0, 6),
+        )
+        tf_data = EegFun.TimeFreqData(
+            "test_tf", 1, "Cond1", tf_df, copy(tf_df), layout, 100, :wavelet, nothing, EegFun.AnalysisInfo()
+        )
+        @test EegFun.frequency_vector(tf_data) == [4.0, 8.0, 12.0]
+        @test EegFun.channel_labels(tf_data) == [:Fz, :Cz]
+        @test EegFun.n_channels(tf_data) == 2
+
+        tf_epoch = EegFun.TimeFreqEpochData(
+            "test_tf_ep", 1, "Cond1", [tf_df, copy(tf_df)], [copy(tf_df), copy(tf_df)],
+            layout, 100, :wavelet, nothing, EegFun.AnalysisInfo()
+        )
+        @test EegFun.frequency_vector(tf_epoch) == [4.0, 8.0, 12.0]
+
+        spec_df = DataFrame(
+            freq = [2.0, 4.0, 6.0],
+            Fz = [1.0, 2.0, 3.0],
+            Cz = [2.0, 3.0, 4.0],
+        )
+        spec_data = EegFun.SpectrumData(
+            "test_spec", 1, "Cond1", spec_df, layout, 100, :welch, EegFun.AnalysisInfo()
+        )
+        @test EegFun.frequency_vector(spec_data) == [2.0, 4.0, 6.0]
+
+        # TFStatisticalData
+        tf_analysis = EegFun.TFAnalysisData(:paired, [zeros(2, 2, 3, 2), zeros(2, 2, 3, 2)], [4.0, 8.0, 12.0], [0.0, 0.1])
+        tf_stat = EegFun.TFStatisticalData([tf_data, tf_data], tf_analysis)
+        @test EegFun.time_vector(tf_stat) == [0.0, 0.1]
+        @test EegFun.frequency_vector(tf_stat) == [4.0, 8.0, 12.0]
+        @test EegFun.channel_labels(tf_stat) == [:Fz, :Cz]
+        @test EegFun.n_channels(tf_stat) == 2
+        @test EegFun.n_samples(tf_stat) == 2
     end
 end
 

@@ -121,26 +121,21 @@ function _infomax_optimize_cpu!(work::WorkArrays, dat_ica::Matrix{Float64}, para
             # forward pass & weight update
             if block_size < block
                 mul!(view(work.u, :, 1:block_size), work.weights, view(work.data_block, :, 1:block_size))
+                len = n_components * block_size
+                @fastmath @inbounds @simd for k = 1:len
+                    work.y[k] = 1.0 - 2.0 / (1.0 + exp(-work.u[k]))
+                end
+                mul!(work.wu_term, view(work.y, :, 1:block_size), transpose(view(work.u, :, 1:block_size)))
             else
                 mul!(work.u, work.weights, work.data_block)
-            end
-
-            @fastmath @inbounds for i = 1:n_components
-                @simd for j = 1:block_size
-                    work.y[i, j] = 1.0 - 2.0 / (1.0 + exp(-work.u[i, j]))
+                @fastmath @inbounds @simd for k in eachindex(work.y)
+                    work.y[k] = 1.0 - 2.0 / (1.0 + exp(-work.u[k]))
                 end
+                mul!(work.wu_term, work.y, transpose(work.u))
             end
 
-            # update weights 
-            if block_size < block
-                mul!(work.wu_term, view(work.y, :, 1:block_size), transpose(view(work.u, :, 1:block_size)))
-                mul!(work.weights_temp, work.wu_term, work.weights)
-                @. work.weights += params.l_rate * (block_size * work.weights + work.weights_temp)
-            else
-                mul!(work.wu_term, work.y, transpose(work.u))
-                mul!(work.weights_temp, work.wu_term, work.weights)
-                @. work.weights += params.l_rate * (block_size * work.weights + work.weights_temp)
-            end
+            mul!(work.weights_temp, work.wu_term, work.weights)
+            @. work.weights += params.l_rate * (block_size * work.weights + work.weights_temp)
 
             # boom?
             if maximum(abs, work.weights) > params.max_weight
@@ -336,6 +331,12 @@ function _infomax_extended_optimize_cpu!(
 
     permute_indices = Vector{Int}(undef, n_samples)
 
+    # Pre-allocate kurtosis estimation buffers
+    kurtsize = min(2000, n_samples)
+    kurt_data = Matrix{Float64}(undef, n_channels, kurtsize)
+    activations = Matrix{Float64}(undef, n_channels, kurtsize)
+    kurtosis_values = Vector{Float64}(undef, n_channels)
+
     n_super = n_channels
     n_sub = 0
 
@@ -357,33 +358,50 @@ function _infomax_extended_optimize_cpu!(
             # forward pass
             if block_size < block
                 mul!(view(work.u, :, 1:block_size), work.weights, view(work.data_block, :, 1:block_size))
-            else
-                mul!(work.u, work.weights, work.data_block)
-            end
-
-            # Extended Infomax: use different nonlinearities based on kurtosis sign
-            @fastmath @inbounds for i = 1:n_channels
-                if !is_sub_gaussian[i] # Super-Gaussian
-                    @simd for j = 1:block_size
-                        work.y[i, j] = 1.0 - 2.0 / (1.0 + exp(-work.u[i, j]))
+                # Extended Infomax: fast flat SIMD when all channels super-Gaussian, else vectorized per-channel
+                if !any(is_sub_gaussian)
+                    len = n_channels * block_size
+                    @fastmath @inbounds @simd for k = 1:len
+                        work.y[k] = 1.0 - 2.0 / (1.0 + exp(-work.u[k]))
                     end
-                else # Sub-Gaussian
-                    @simd for j = 1:block_size
-                        work.y[i, j] = -tanh(work.u[i, j])
+                else
+                    @fastmath @inbounds for i = 1:n_channels
+                        if !is_sub_gaussian[i]
+                            @simd for j = 1:block_size
+                                work.y[i, j] = 1.0 - 2.0 / (1.0 + exp(-work.u[i, j]))
+                            end
+                        else
+                            @simd for j = 1:block_size
+                                work.y[i, j] = -tanh(work.u[i, j])
+                            end
+                        end
                     end
                 end
+                mul!(work.wu_term, view(work.y, :, 1:block_size), transpose(view(work.u, :, 1:block_size)))
+            else
+                mul!(work.u, work.weights, work.data_block)
+                if !any(is_sub_gaussian)
+                    @fastmath @inbounds @simd for k in eachindex(work.y)
+                        work.y[k] = 1.0 - 2.0 / (1.0 + exp(-work.u[k]))
+                    end
+                else
+                    @fastmath @inbounds for i = 1:n_channels
+                        if !is_sub_gaussian[i]
+                            @simd for j = 1:block_size
+                                work.y[i, j] = 1.0 - 2.0 / (1.0 + exp(-work.u[i, j]))
+                            end
+                        else
+                            @simd for j = 1:block_size
+                                work.y[i, j] = -tanh(work.u[i, j])
+                            end
+                        end
+                    end
+                end
+                mul!(work.wu_term, work.y, transpose(work.u))
             end
 
-            # update weights 
-            if block_size < block
-                mul!(work.wu_term, view(work.y, :, 1:block_size), transpose(view(work.u, :, 1:block_size)))
-                mul!(work.weights_temp, work.wu_term, work.weights)
-                @. work.weights += params.l_rate * (block_size * work.weights + work.weights_temp)
-            else
-                mul!(work.wu_term, work.y, transpose(work.u))
-                mul!(work.weights_temp, work.wu_term, work.weights)
-                @. work.weights += params.l_rate * (block_size * work.weights + work.weights_temp)
-            end
+            mul!(work.weights_temp, work.wu_term, work.weights)
+            @. work.weights += params.l_rate * (block_size * work.weights + work.weights_temp)
 
             if maximum(abs, work.weights) > params.max_weight
                 wts_blowup = true
@@ -411,24 +429,18 @@ function _infomax_extended_optimize_cpu!(
 
         # Extended Infomax: update kurtosis signs periodically
         if step > 10 && step % 10 == 0
-            kurtsize = min(2000, n_samples)
             n_switched = 0
-            kurtosis_values = Vector{Float64}(undef, n_channels)
 
-            # CPU Kurtosis logic
-            activations = Matrix{Float64}(undef, n_channels, kurtsize)
+            # Vectorized BLAS GEMM activation extraction
             if kurtsize < n_samples
                 rp = randperm(n_samples)[1:kurtsize]
                 @inbounds for j = 1:kurtsize
                     idx = rp[j]
-                    for i = 1:n_channels
-                        sum_val = 0.0
-                        @simd for k = 1:n_channels
-                            sum_val += work.weights[i, k] * dat_ica[k, idx]
-                        end
-                        activations[i, j] = sum_val
+                    @simd for k = 1:n_channels
+                        kurt_data[k, j] = dat_ica[k, idx]
                     end
                 end
+                mul!(activations, work.weights, kurt_data)
             else
                 mul!(activations, work.weights, dat_ica)
             end

@@ -25,17 +25,20 @@ function compute_csd!(data; m::Int = 4, lambda::Float64 = 1e-5, n_legendre_terms
     channels = Symbol.(data.layout.data.label)
     n_channels = length(channels)
 
-    # 2. Extract coordinates
+    # 2. Extract coordinates and normalize to unit sphere
     coords = zeros(Float64, n_channels, 3)
-    for (i, ch) in enumerate(channels)
-        idx = findfirst(x -> x == ch, data.layout.data.label)
-        coords[i, :] = [data.layout.data.x3[idx], data.layout.data.y3[idx], data.layout.data.z3[idx]]
-    end
+    x3 = data.layout.data.x3
+    y3 = data.layout.data.y3
+    z3 = data.layout.data.z3
 
-    # Normalize to unit sphere
-    for i = 1:n_channels
-        norm_val = sqrt(sum(coords[i, :] .^ 2))
-        coords[i, :] ./= norm_val
+    for i in 1:n_channels
+        x = Float64(x3[i])
+        y = Float64(y3[i])
+        z = Float64(z3[i])
+        inv_norm = 1.0 / sqrt(x^2 + y^2 + z^2)
+        coords[i, 1] = x * inv_norm
+        coords[i, 2] = y * inv_norm
+        coords[i, 3] = z * inv_norm
     end
 
     # 3. Calculate cosine angles between all electrodes
@@ -92,28 +95,50 @@ end
 # --- Type-specific application methods ---
 
 function _apply_csd!(data::ContinuousData, filter_matrix::Matrix{Float64}, channels::Vector{Symbol})
-    # Extract data matrix (channels x timepoints)
-    data_matrix = Matrix(data.data[:, channels])'
-
-    # Apply spatial filter
-    filtered_matrix = filter_matrix * data_matrix
-
-    # Update data
-    data.data[:, channels] = filtered_matrix'
+    n_samples = nrow(data.data)
+    n_chans = length(channels)
+    X = Matrix{Float64}(undef, n_samples, n_chans)
+    for (c, ch) in enumerate(channels)
+        X[:, c] = data.data[!, ch]
+    end
+    FT = collect(transpose(filter_matrix))
+    Y = Matrix{Float64}(undef, n_samples, n_chans)
+    mul!(Y, X, FT)
+    for (c, ch) in enumerate(channels)
+        data.data[!, ch] = Y[:, c]
+    end
 end
 
 function _apply_csd!(data::EpochData, filter_matrix::Matrix{Float64}, channels::Vector{Symbol})
-    for epoch_df in data.data
-        data_matrix = Matrix(epoch_df[:, channels])'
-        filtered_matrix = filter_matrix * data_matrix
-        epoch_df[:, channels] = filtered_matrix'
+    FT = collect(transpose(filter_matrix))
+    n_chans = length(channels)
+    Threads.@threads for epoch_df in data.data
+        n_samples = nrow(epoch_df)
+        X = Matrix{Float64}(undef, n_samples, n_chans)
+        for (c, ch) in enumerate(channels)
+            X[:, c] = epoch_df[!, ch]
+        end
+        Y = Matrix{Float64}(undef, n_samples, n_chans)
+        mul!(Y, X, FT)
+        for (c, ch) in enumerate(channels)
+            epoch_df[!, ch] = Y[:, c]
+        end
     end
 end
 
 function _apply_csd!(data::ErpData, filter_matrix::Matrix{Float64}, channels::Vector{Symbol})
-    data_matrix = Matrix(data.data[:, channels])'
-    filtered_matrix = filter_matrix * data_matrix
-    data.data[:, channels] = filtered_matrix'
+    n_samples = nrow(data.data)
+    n_chans = length(channels)
+    X = Matrix{Float64}(undef, n_samples, n_chans)
+    for (c, ch) in enumerate(channels)
+        X[:, c] = data.data[!, ch]
+    end
+    FT = collect(transpose(filter_matrix))
+    Y = Matrix{Float64}(undef, n_samples, n_chans)
+    mul!(Y, X, FT)
+    for (c, ch) in enumerate(channels)
+        data.data[!, ch] = Y[:, c]
+    end
 end
 
 """

@@ -1,4 +1,5 @@
 using Test
+using EegFun
 using Random
 using SparseArrays
 using CairoMakie

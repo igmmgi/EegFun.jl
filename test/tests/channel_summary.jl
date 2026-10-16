@@ -1,4 +1,5 @@
 using Test
+using EegFun
 using DataFrames
 using JLD2
 using Statistics

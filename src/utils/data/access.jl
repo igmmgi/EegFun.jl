@@ -14,7 +14,7 @@ all_data(dat::SingleDataFrameEeg)::DataFrame = dat.data # single data frame
 all_data(dat::MultiDataFrameEeg)::DataFrame = to_data_frame(dat) # single data frame with all epochs
 all_data(dat::Vector{<:MultiDataFrameEeg})::DataFrame = to_data_frame(dat) # single data frame with all epochs from all objects
 all_data(dat::DataFrame)::DataFrame = dat
-all_data(dat::Vector{DataFrame})::DataFrame = isempty(dat) ? DataFrame() : vcat(dat...)
+all_data(dat::Vector{DataFrame})::DataFrame = isempty(dat) ? DataFrame() : reduce(vcat, dat)
 
 function all_data(dat::Vector{<:SingleDataFrameEeg})::DataFrame
     isempty(dat) && return DataFrame()
@@ -23,7 +23,7 @@ function all_data(dat::Vector{<:SingleDataFrameEeg})::DataFrame
         insertcols!(df, 1, :condition => condition_number(d), :condition_name => condition_name(d); makeunique = true)
         df
     end
-    return vcat(dfs...)
+    return reduce(vcat, dfs)
 end
 
 all_data(dat::Layout)::DataFrame = dat.data
@@ -105,6 +105,23 @@ time_vector(dat::MultiDataFrameEeg, epoch::Int)::Vector{Float64} =
     hasproperty(dat.data[epoch], :time) ? dat.data[epoch][!, :time] : Float64[]
 time_vector(dat::Vector{T}) where {T<:EegData} = isempty(dat) ? Float64[] : time_vector(dat[1])
 time_vector(df::DataFrame)::Vector{Float64} = hasproperty(df, :time) ? df[!, :time] : Float64[]
+time_vector(dat::StatisticalData)::Vector{Float64} = dat.analysis.time_points
+time_vector(dat::TFStatisticalData)::Vector{Float64} = dat.analysis.time_points
+time_vector(res::StatsResult)::Vector{Float64} = res.time_points
+time_vector(res::LmmStatsResult)::Vector{Float64} = res.time_points
+
+"""
+    frequency_vector(dat) -> Vector{Float64}
+
+Get the frequency vector in Hz from a time-frequency or spectrum data object or statistical result.
+"""
+frequency_vector(dat::TimeFreqData)::Vector{Float64} = Float64.(sort(unique(dat.data_power.freq)))
+frequency_vector(dat::TimeFreqEpochData)::Vector{Float64} = isempty(dat.data_power) ? Float64[] : Float64.(sort(unique(first(dat.data_power).freq)))
+frequency_vector(dat::SpectrumData)::Vector{Float64} = Float64.(sort(unique(dat.data.freq)))
+frequency_vector(dat::TFStatisticalData)::Vector{Float64} = dat.analysis.frequencies
+frequency_vector(res::TFStatsResult)::Vector{Float64} = res.frequencies
+frequency_vector(dat::Vector{<:TimeFreqData})::Vector{Float64} = isempty(dat) ? Float64[] : frequency_vector(first(dat))
+
 
 
 """
@@ -133,7 +150,7 @@ end
 
 function _get_cols_data(dat::MultiDataFrameEeg, group::Symbol)
     cols = _get_cols_by_group(dat, group)
-    return isempty(cols) ? DataFrame() : vcat([df[!, cols] for df in dat.data]...)
+    return isempty(cols) ? DataFrame() : reduce(vcat, [df[!, cols] for df in dat.data])
 end
 
 """
@@ -159,6 +176,10 @@ channel_labels(dat::EegData, channel_numbers::Int)::Vector{Symbol} = channel_lab
 # Handle collections of EEG data
 # NOTE: Assumes all EegData objects in the collection have identical channel labels.
 channel_labels(dat::Vector{<:EegData})::Vector{Symbol} = channel_labels(first(dat))
+channel_labels(dat::StatisticalData)::Vector{Symbol} = channel_labels(first(dat.data))
+channel_labels(dat::TFStatisticalData)::Vector{Symbol} = channel_labels(first(dat.data))
+channel_labels(res::StatsResult)::Vector{Symbol} = res.electrodes
+channel_labels(res::LmmStatsResult)::Vector{Symbol} = res.channels
 
 
 """
@@ -252,6 +273,10 @@ n_samples(dat::SingleDataFrameEeg)::Int = nrow(dat.data)
 n_samples(dat::MultiDataFrameEeg)::Int = nrow(dat.data[1])
 n_samples(dat::MultiDataFrameEeg, epoch::Int)::Int = nrow(dat.data[epoch])
 n_samples(dat::DataFrame)::Int = nrow(dat)
+n_samples(dat::StatisticalData)::Int = length(dat.analysis.time_points)
+n_samples(dat::TFStatisticalData)::Int = length(dat.analysis.time_points)
+n_samples(res::StatsResult)::Int = length(res.time_points)
+n_samples(res::LmmStatsResult)::Int = length(res.time_points)
 
 
 """
@@ -266,6 +291,11 @@ Get the number of channels in the EEG data.
 - `Int`: Number of channels
 """
 n_channels(dat::EegData)::Int = length(channel_labels(dat))
+n_channels(layout::Layout)::Int = nrow(layout.data)
+n_channels(dat::StatisticalData)::Int = n_channels(first(dat.data))
+n_channels(dat::TFStatisticalData)::Int = n_channels(first(dat.data))
+n_channels(res::StatsResult)::Int = length(channel_labels(res))
+n_channels(res::LmmStatsResult)::Int = length(res.channels)
 
 """
     n_layout(layout::Layout) -> Int

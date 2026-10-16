@@ -10,13 +10,98 @@ function _is_peak_to_peak(signal::AbstractVector{<:Real}, threshold::Real, windo
     n = length(signal)
     mask = falses(n)
     w = max(1, window_samples)
-
-    @inbounds for i = 1:(n-w+1)
-        w_view = view(signal, i:(i+w-1))
-        if (maximum(w_view) - minimum(w_view)) > threshold
-            mask[i:(i+w-1)] .= true
-        end
+    if w >= n
+        return (maximum(signal) - minimum(signal) > threshold ? trues(n) : falses(n))
     end
+    if w == 1
+        return falses(n)
+    end
+
+    n_blocks = cld(n, w)
+    pref_max = Vector{Float64}(undef, w)
+    pref_min = Vector{Float64}(undef, w)
+    suff_max_prev = Vector{Float64}(undef, w)
+    suff_min_prev = Vector{Float64}(undef, w)
+    suff_max_curr = Vector{Float64}(undef, w)
+    suff_min_curr = Vector{Float64}(undef, w)
+
+    last_marked = 0
+    thresh_f = Float64(threshold)
+
+    @inbounds for b in 1:n_blocks
+        b_start = (b - 1) * w + 1
+        b_end = min(b_start + w - 1, n)
+        b_len = b_end - b_start + 1
+
+        p_max = Float64(signal[b_start])
+        p_min = Float64(signal[b_start])
+        pref_max[1] = p_max
+        pref_min[1] = p_min
+        for k in 2:b_len
+            s_val = Float64(signal[b_start + k - 1])
+            p_max = max(p_max, s_val)
+            p_min = min(p_min, s_val)
+            pref_max[k] = p_max
+            pref_min[k] = p_min
+        end
+
+        s_max = Float64(signal[b_end])
+        s_min = Float64(signal[b_end])
+        suff_max_curr[b_len] = s_max
+        suff_min_curr[b_len] = s_min
+        for k in (b_len - 1):-1:1
+            s_val = Float64(signal[b_start + k - 1])
+            s_max = max(s_max, s_val)
+            s_min = min(s_min, s_val)
+            suff_max_curr[k] = s_max
+            suff_min_curr[k] = s_min
+        end
+
+        if b == 1
+            if b_len == w
+                w_max = pref_max[w]
+                w_min = pref_min[w]
+                if (w_max - w_min) > thresh_f
+                    mask[1:w] .= true
+                    last_marked = w
+                end
+            end
+        else
+            for k in 2:w
+                j_global = (b - 1) * w + k - 1
+                if j_global > n
+                    break
+                end
+                i_global = j_global - w + 1
+                w_max = max(suff_max_prev[k], pref_max[k - 1])
+                w_min = min(suff_min_prev[k], pref_min[k - 1])
+                if (w_max - w_min) > thresh_f
+                    s_idx = max(last_marked + 1, i_global)
+                    if s_idx <= j_global
+                        mask[s_idx:j_global] .= true
+                        last_marked = j_global
+                    end
+                end
+            end
+            if b_len == w
+                i_global = b_start
+                j_global = b_end
+                w_max = pref_max[w]
+                w_min = pref_min[w]
+                if (w_max - w_min) > thresh_f
+                    s_idx = max(last_marked + 1, i_global)
+                    if s_idx <= j_global
+                        mask[s_idx:j_global] .= true
+                        last_marked = j_global
+                    end
+                end
+            end
+        end
+
+        suff_max_prev, suff_max_curr = suff_max_curr, suff_max_prev
+        suff_min_prev, suff_min_curr = suff_min_curr, suff_min_prev
+    end
+
     return mask
 end
 

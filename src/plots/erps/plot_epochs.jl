@@ -217,6 +217,9 @@ function plot_epochs(
     # Create dat_subset_avg: average over trials (ERP data) for the average overlay
     dat_subset_avg = [average_epochs(dat) for dat in dat_subset]
 
+    # Precompute time_cat vectors once per condition for all channels
+    time_cat_list = [_build_time_cat(n_epochs(dat), dat.data[1][!, :time]) for dat in dat_subset]
+
     # Compute colors - need to account for number of channels when in :single layout
     n_conditions = length(dat_subset)
     n_channels_for_colors = (layout == :single && length(all_plot_channels) > 1) ? length(all_plot_channels) : 1
@@ -266,7 +269,15 @@ function plot_epochs(
             cond_plot_kwargs = merge(plot_kwargs, Dict(:color => condition_colors_list[cond_idx]))
             label = _get_condition_label(dat, cond_idx, plot_kwargs[:legend_labels])
 
-            trial_line, trial_y_obs = _plot_epochs!(ax, dat, [:avg], cond_plot_kwargs; label = label, line_refs = ax_line_refs)
+            trial_line, trial_y_obs = _plot_epochs!(
+                ax,
+                dat,
+                [:avg],
+                cond_plot_kwargs;
+                time_cat = time_cat_list[cond_idx],
+                label = label,
+                line_refs = ax_line_refs,
+            )
 
             if plot_kwargs[:interactive]
                 _store_line_ref!(ax_line_refs, cond_idx, :avg, trial_line, trial_y_obs)
@@ -335,14 +346,22 @@ function plot_epochs(
                     color_idx = length(all_plot_channels) > 1 ? ((cond_idx - 1) * length(all_plot_channels) + ch_idx) : cond_idx
                     cond_plot_kwargs = merge(plot_kwargs, Dict(:color => condition_colors_list[color_idx]))
 
-                    trial_line, trial_y_obs = _plot_epochs!(ax, dat, [ch], cond_plot_kwargs; label = label, line_refs = ax_line_refs)
+                    trial_line, trial_y_obs = _plot_epochs!(
+                        ax,
+                        dat,
+                        [ch],
+                        cond_plot_kwargs;
+                        time_cat = time_cat_list[cond_idx],
+                        label = label,
+                        line_refs = ax_line_refs,
+                    )
 
                     if plot_kwargs[:interactive]
                         _store_line_ref!(ax_line_refs, cond_idx, ch, trial_line, trial_y_obs)
                     end
 
                     if plot_kwargs[:plot_avg_trials]
-                        erp_dat = average_epochs(dat)
+                        erp_dat = dat_subset_avg[cond_idx]
                         avg_label = label * " (avg)"
                         avg_line, y_obs =
                             _plot_erp_average!(ax, erp_dat, [ch], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
@@ -386,11 +405,33 @@ function plot_epochs(
 
         elseif layout == :grid
             # Use layout_grid_dims if provided, otherwise calculate best rectangle
-            grid_dims = !isnothing(plot_kwargs[:layout_grid_dims]) ? plot_kwargs[:layout_grid_dims] : _best_rect(length(all_plot_channels))
-            _plot_epochs_grid_multi!(fig, axes, dat_subset, all_plot_channels, grid_dims, condition_colors_list, plot_kwargs, line_refs)
+            grid_dims = plot_layout.type == :grid ? Tuple(plot_layout.dims) : _best_rect(length(all_plot_channels))
+            _plot_epochs_grid_multi!(
+                fig,
+                axes,
+                dat_subset,
+                all_plot_channels,
+                grid_dims,
+                condition_colors_list,
+                plot_kwargs,
+                line_refs;
+                dat_subset_avg = dat_subset_avg,
+                time_cat_list = time_cat_list,
+            )
 
         elseif layout == :topo
-            _plot_epochs_topo_multi!(fig, axes, dat_subset, all_plot_channels, condition_colors_list, plot_kwargs, line_refs)
+            _plot_epochs_topo_multi!(
+                fig,
+                axes,
+                dat_subset,
+                all_plot_channels,
+                condition_colors_list,
+                plot_kwargs,
+                line_refs;
+                dat_subset_avg = dat_subset_avg,
+                time_cat_list = time_cat_list,
+                plot_layout = plot_layout,
+            )
         end
     end
 
@@ -464,7 +505,15 @@ function plot_epochs(
 end
 
 """Plot single-channel epoch traces (NaN-separated trials) onto an axis."""
-function _plot_epochs!(ax, dat, channels, plot_kwargs; label::Union{String,Nothing} = nothing, line_refs = nothing)::Tuple{Lines,Observable}
+function _plot_epochs!(
+    ax,
+    dat,
+    channels,
+    plot_kwargs;
+    time_cat::Union{Vector{Float64},Nothing} = nothing,
+    label::Union{String,Nothing} = nothing,
+    line_refs = nothing,
+)::Tuple{Lines,Observable}
 
     @info "plot_epochs: $(_print_vector(channels))"
     @assert length(channels) == 1 "_plot_epochs! expects a single channel"
@@ -477,7 +526,7 @@ function _plot_epochs!(ax, dat, channels, plot_kwargs; label::Union{String,Nothi
     trial_linewidth = actual_lw isa Vector ? actual_lw[1] : actual_lw
 
     # Concatenate trials efficiently
-    time_cat = _build_time_cat(n_epochs(dat), time_vec)
+    tc = isnothing(time_cat) ? _build_time_cat(n_epochs(dat), time_vec) : time_cat
     y_cat = _concatenate_trials(dat.data, channels[1], time_vec)
 
     # Use Observable for y-data to allow updates (e.g., for baseline changes)
@@ -485,7 +534,7 @@ function _plot_epochs!(ax, dat, channels, plot_kwargs; label::Union{String,Nothi
 
     line = lines!(
         ax,
-        time_cat,
+        tc,
         y_obs,
         color = trial_color,
         linewidth = trial_linewidth,
@@ -532,10 +581,12 @@ function _plot_epochs_grid_multi!(
     axes::Vector{Axis},
     datasets::Vector{EpochData},
     all_plot_channels::Vector{Symbol},
-    grid_dims::Tuple{Int,Int},
+    grid_dims::Union{Tuple{Int,Int},Vector{Int}},
     condition_colors::Vector,
     plot_kwargs::Dict,
-    line_refs = nothing,
+    line_refs = nothing;
+    dat_subset_avg::Union{Vector{ErpData},Nothing} = nothing,
+    time_cat_list::Union{Vector{Vector{Float64}},Nothing} = nothing,
 )
     rows, cols = grid_dims
 
@@ -559,16 +610,26 @@ function _plot_epochs_grid_multi!(
         for (cond_idx, dat) in enumerate(datasets)
             label = _get_condition_label(dat, cond_idx, plot_kwargs[:legend_labels])
             cond_plot_kwargs = merge(plot_kwargs, Dict(:color => condition_colors[cond_idx]))
-            trial_line, trial_y_obs = _plot_epochs!(ax, dat, [channel], cond_plot_kwargs; label = label, line_refs = ax_line_refs)
+            tc = isnothing(time_cat_list) ? nothing : time_cat_list[cond_idx]
+            trial_line, trial_y_obs = _plot_epochs!(
+                ax,
+                dat,
+                [channel],
+                cond_plot_kwargs;
+                time_cat = tc,
+                label = label,
+                line_refs = ax_line_refs,
+            )
 
             if !isnothing(ax_line_refs)
                 _store_line_ref!(ax_line_refs, cond_idx, channel, trial_line, trial_y_obs)
             end
 
             if plot_kwargs[:plot_avg_trials]
-                erp_dat = average_epochs(dat)
+                erp_dat = !isnothing(dat_subset_avg) ? dat_subset_avg[cond_idx] : average_epochs(dat)
                 avg_label = label * " (avg)"
-                avg_line, y_obs = _plot_erp_average!(ax, erp_dat, [channel], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
+                avg_line, y_obs =
+                    _plot_erp_average!(ax, erp_dat, [channel], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
                 if !isnothing(ax_line_refs)
                     _store_avg_line_ref!(ax_line_refs, cond_idx, channel, avg_line, y_obs)
                 end
@@ -638,7 +699,10 @@ function _plot_epochs_topo_multi!(
     all_plot_channels::Vector{Symbol},
     condition_colors::Vector,
     plot_kwargs::Dict,
-    line_refs = nothing,
+    line_refs = nothing;
+    dat_subset_avg::Union{Vector{ErpData},Nothing} = nothing,
+    time_cat_list::Union{Vector{Vector{Float64}},Nothing} = nothing,
+    plot_layout = nothing,
 )
     # Use first dataset for layout (all should have same layout after subsetting)
     dat = datasets[1]
@@ -655,8 +719,8 @@ function _plot_epochs_topo_multi!(
         ylim = (yr[1], yr[2])
     end
 
-    plot_w = plot_kwargs[:layout_topo_plot_width]
-    plot_h = plot_kwargs[:layout_topo_plot_height]
+    plot_w = get(plot_kwargs, :layout_topo_plot_width, !isnothing(plot_layout) ? get(plot_layout.metadata, :topo_plot_width, 0.1) : 0.1)
+    plot_h = get(plot_kwargs, :layout_topo_plot_height, !isnothing(plot_layout) ? get(plot_layout.metadata, :topo_plot_height, 0.1) : 0.1)
 
     # Normalize positions to [0,1] based on ALL channels in the layout
     # This ensures positions match the layout file regardless of which channels are selected
@@ -693,16 +757,26 @@ function _plot_epochs_topo_multi!(
         for (cond_idx, dat_cond) in enumerate(datasets)
             label = _get_condition_label(dat_cond, cond_idx, plot_kwargs[:legend_labels])
             cond_plot_kwargs = merge(plot_kwargs, Dict(:color => condition_colors[cond_idx]))
-            trial_line, trial_y_obs = _plot_epochs!(ax, dat_cond, [ch], cond_plot_kwargs; label = label, line_refs = ax_line_refs)
+            tc = isnothing(time_cat_list) ? nothing : time_cat_list[cond_idx]
+            trial_line, trial_y_obs = _plot_epochs!(
+                ax,
+                dat_cond,
+                [ch],
+                cond_plot_kwargs;
+                time_cat = tc,
+                label = label,
+                line_refs = ax_line_refs,
+            )
 
             if !isnothing(ax_line_refs)
                 _store_line_ref!(ax_line_refs, cond_idx, ch, trial_line, trial_y_obs)
             end
 
             if plot_kwargs[:plot_avg_trials]
-                erp_dat = average_epochs(dat_cond)
+                erp_dat = !isnothing(dat_subset_avg) ? dat_subset_avg[cond_idx] : average_epochs(dat_cond)
                 avg_label = label * " (avg)"
-                avg_line, y_obs = _plot_erp_average!(ax, erp_dat, [ch], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
+                avg_line, y_obs =
+                    _plot_erp_average!(ax, erp_dat, [ch], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
                 if !isnothing(ax_line_refs)
                     _store_avg_line_ref!(ax_line_refs, cond_idx, ch, avg_line, y_obs)
                 end
@@ -748,16 +822,14 @@ function _plot_epochs_topo_multi!(
         hidespines!(ax)
     end
 
-    # Optional extra scale axis in bottom-right
-    # Note: This is a custom feature for plot_epochs, not present in plot_erp
-    # Using layout_topo_scale_pos for consistency with the layout system
-    if plot_kwargs[:layout_topo_show_scale]
+    show_scale = get(plot_kwargs, :layout_topo_show_scale, !isnothing(plot_layout) ? get(plot_layout.metadata, :topo_show_scale, false) : false)
+    if show_scale
         @info "Showing scale axis"
-        scale_pos = plot_kwargs[:layout_topo_scale_pos]
+        scale_pos = get(plot_kwargs, :layout_topo_scale_pos, !isnothing(plot_layout) ? get(plot_layout.metadata, :topo_scale_pos, (0.8, -0.8)) : (0.8, -0.8))
         scale_ax = Axis(
             fig[1, 1],
-            width = Relative(plot_kwargs[:layout_topo_plot_width]),
-            height = Relative(plot_kwargs[:layout_topo_plot_height]),
+            width = Relative(plot_w),
+            height = Relative(plot_h),
             halign = scale_pos[1],
             valign = scale_pos[2],
         )
@@ -887,9 +959,10 @@ function _concatenate_trials(trials, ch, time_vec)
     n = length(time_vec)
     total_len = m * n + (m - 1)
     y_cat = Vector{Float64}(undef, total_len)
+    col_idx = ch isa Int ? ch : DataFrames.columnindex(trials[1], ch)
     pos = 1
     @inbounds for t = 1:m
-        y = trials[t][!, ch]::Vector{Float64}
+        y = trials[t][!, col_idx]::Vector{Float64}
         @simd for i = 1:n
             y_cat[pos+i-1] = y[i]
         end

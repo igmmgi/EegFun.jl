@@ -395,23 +395,53 @@ function libsvm_classifier(
     n_train == 0 && return Int[]
     n_test == 0 && return Int[]
 
-    # Get unique classes
-    classes = unique(y_train)
-    sort!(classes)
+    # Fast check for standard binary classification [1, 2]
+    # avoids unique() and sort!() allocations
+    is_binary_1_2 = true
+    has_1 = false
+    has_2 = false
+    @inbounds for y in y_train
+        if y == 1
+            has_1 = true
+        elseif y == 2
+            has_2 = true
+        else
+            is_binary_1_2 = false
+            break
+        end
+    end
+
+    if is_binary_1_2 && has_1 && has_2
+        LIBSVM.LIBLINEAR.set_print(false)
+        model = LIBSVM.LIBLINEAR.linear_train(
+            y_train,
+            transpose(X_train);
+            solver_type = Int32(LIBSVM.Linearsolver.L2R_L2LOSS_SVC),
+            C = cost,
+        )
+        w = model.w
+        l1 = model.labels[1]
+        l2 = model.labels[2]
+        n_features = size(X_test, 2)
+        y_pred = Vector{Int}(undef, n_test)
+        @inbounds for i = 1:n_test
+            val = 0.0
+            for f = 1:n_features
+                val += w[f] * X_test[i, f]
+            end
+            y_pred[i] = val > 0.0 ? l1 : l2
+        end
+        return y_pred
+    end
+
+    # General path for multi-class or non-standard labels
+    classes = sort!(unique(y_train))
     n_classes = length(classes)
 
     if n_classes < 2
         @minimal_error("Need at least 2 classes, got $(n_classes)")
     end
 
-    # Fast path for binary classification with standard labels [1, 2]
-    if classes == [1, 2]
-        model = LIBSVM.fit!(LIBSVM.LinearSVC(cost = cost, solver = LIBSVM.Linearsolver.L2R_L2LOSS_SVC), X_train, y_train)
-        y_pred = LIBSVM.predict(model, X_test)
-        return y_pred
-    end
-
-    # General path for multi-class or non-standard labels
     # Create class mapping (LIBSVM expects labels starting from 1)
     max_class = maximum(classes)
     class_to_label = zeros(Int, max_class)
@@ -436,6 +466,93 @@ function libsvm_classifier(
     end
 
     return y_pred
+end
+
+
+# === PRE-ALLOCATED LIBLINEAR WORKSPACE ===
+
+"""
+Pre-allocated workspace for LIBLINEAR in the inner decoding loop.
+Eliminates all per-fold/timepoint memory allocations during training.
+"""
+struct LiblinearWorkspace
+    nodes::Matrix{LIBSVM.LIBLINEAR.FeatureNode}
+    nodeptrs::Vector{Ptr{LIBSVM.LIBLINEAR.FeatureNode}}
+    y_double::Vector{Float64}
+    param::Vector{LIBSVM.LIBLINEAR.Parameter}
+    problem::Vector{LIBSVM.LIBLINEAR.Problem}
+    labels_buf::Vector{Cint}
+    w_buf::Vector{Float64}
+end
+
+function LiblinearWorkspace(max_features::Int, max_samples::Int, cost::Float64)
+    nodes = Matrix{LIBSVM.LIBLINEAR.FeatureNode}(undef, max_features + 1, max_samples)
+    for i in 1:max_samples
+        for j in 1:max_features
+            nodes[j, i] = LIBSVM.LIBLINEAR.FeatureNode(Cint(j), 0.0)
+        end
+        nodes[max_features + 1, i] = LIBSVM.LIBLINEAR.FeatureNode(Cint(-1), NaN)
+    end
+    nodeptrs = [pointer(nodes, (i - 1) * (max_features + 1) + 1) for i in 1:max_samples]
+    y_double = Vector{Float64}(undef, max_samples)
+
+    solver_type = Int32(LIBSVM.Linearsolver.L2R_L2LOSS_SVC)
+    eps = 0.01
+    param = [LIBSVM.LIBLINEAR.Parameter(
+        solver_type, eps, cost, Cint(0),
+        convert(Ptr{Cint}, C_NULL), convert(Ptr{Float64}, C_NULL), 0.1, 0.5,
+        convert(Ptr{Float64}, C_NULL), Cint(1)
+    )]
+    problem = [LIBSVM.LIBLINEAR.Problem(
+        Cint(max_samples), Cint(max_features),
+        pointer(y_double), pointer(nodeptrs), -1.0
+    )]
+    labels_buf = Vector{Cint}(undef, 2)
+    w_buf = Vector{Float64}(undef, max_features)
+    return LiblinearWorkspace(nodes, nodeptrs, y_double, param, problem, labels_buf, w_buf)
+end
+
+"""
+Zero-allocation C training call using the pre-allocated workspace.
+Directly loads model weights and label assignments without wrapping in Julia arrays.
+"""
+function _train_prealloc_zero!(ws::LiblinearWorkspace, X_tr::AbstractMatrix{Float64}, y_tr::AbstractVector{Int})
+    n_feat = size(X_tr, 1)
+    n_samp = size(X_tr, 2)
+
+    @inbounds for i in 1:n_samp
+        for j in 1:n_feat
+            ws.nodes[j, i] = LIBSVM.LIBLINEAR.FeatureNode(Cint(j), X_tr[j, i])
+        end
+        ws.y_double[i] = Float64(y_tr[i])
+    end
+
+    ws.problem[1] = LIBSVM.LIBLINEAR.Problem(
+        Cint(n_samp), Cint(n_feat),
+        pointer(ws.y_double), pointer(ws.nodeptrs), -1.0
+    )
+
+    ptr = ccall(
+        (:train, LIBSVM.LIBLINEAR.liblinear), Ptr{LIBSVM.LIBLINEAR.Model},
+        (Ptr{LIBSVM.LIBLINEAR.Problem}, Ptr{LIBSVM.LIBLINEAR.Parameter}),
+        ws.problem, ws.param
+    )
+    m = unsafe_load(ptr)
+
+    w_dim = Int(m.nr_feature)
+    unsafe_copyto!(pointer(ws.w_buf), m.w, w_dim)
+
+    ws.labels_buf .= -1
+    ccall(
+        (:get_labels, LIBSVM.LIBLINEAR.liblinear), Cvoid,
+        (Ptr{LIBSVM.LIBLINEAR.Model}, Ptr{Cint}),
+        ptr, pointer(ws.labels_buf)
+    )
+    ccall(
+        (:free_model_content, LIBSVM.LIBLINEAR.liblinear), Cvoid,
+        (Ptr{LIBSVM.LIBLINEAR.Model},), ptr
+    )
+    return ws.w_buf, ws.labels_buf[1], ws.labels_buf[2]
 end
 
 
@@ -484,6 +601,7 @@ function _decode_core(
     show_progress::Bool,
     progress_desc::String,
 )
+    LIBSVM.LIBLINEAR.set_print(false)
     n_classes = length(data_arrays)
     n_timepoints = length(time_points)
 
@@ -548,6 +666,8 @@ function _decode_core(
             y_train_buf = Vector{Int}(undef, local_max_train)
             y_test_buf = Vector{Int}(undef, local_max_test)
 
+            ws = n_classes == 2 ? LiblinearWorkspace(n_features, local_max_train, cost) : nothing
+
             shuffled_indices = _shuffle_trials(data_arrays)
 
             for t = 1:n_timepoints
@@ -576,24 +696,39 @@ function _decode_core(
                         y_test_buf[i] = labels[idx]
                     end
 
-                    # Views of contiguous columns are contiguous in memory!
-                    X_train_contig = transpose(@view X_train_buf[:, 1:n_train])
-                    y_train_contig = @view y_train_buf[1:n_train]
-                    X_test_contig = transpose(@view X_test_buf[:, 1:n_test])
-                    y_test_contig = @view y_test_buf[1:n_test]
+                    if n_classes == 2
+                        w, l1, l2 = _train_prealloc_zero!(ws, @view(X_train_buf[:, 1:n_train]), @view(y_train_buf[1:n_train]))
+                        n_correct = 0
+                        @inbounds for i = 1:n_test
+                            val = 0.0
+                            for f = 1:n_features
+                                val += w[f] * X_test_buf[f, i]
+                            end
+                            pred = val > 0.0 ? l1 : l2
+                            n_correct += (y_test_buf[i] == pred)
+                            all_predictions[iter, fold, t, i] = pred
+                            all_targets[iter, fold, t, i] = y_test_buf[i]
+                        end
+                        all_accuracies[iter, fold, t] = n_correct / n_test
+                    else
+                        # Views of contiguous columns are contiguous in memory!
+                        X_train_contig = transpose(@view X_train_buf[:, 1:n_train])
+                        y_train_contig = @view y_train_buf[1:n_train]
+                        X_test_contig = transpose(@view X_test_buf[:, 1:n_test])
+                        y_test_contig = @view y_test_buf[1:n_test]
 
-                    y_pred = libsvm_classifier(X_train_contig, y_train_contig, X_test_contig; cost = cost)
+                        y_pred = libsvm_classifier(X_train_contig, y_train_contig, X_test_contig; cost = cost)
 
-                    n_correct = 0
-                    @inbounds for i = 1:n_test
-                        n_correct += (y_test_contig[i] == y_pred[i])
-                    end
-                    accuracy = n_correct / n_test
-                    all_accuracies[iter, fold, t] = accuracy
+                        n_correct = 0
+                        @inbounds for i = 1:n_test
+                            n_correct += (y_test_contig[i] == y_pred[i])
+                        end
+                        all_accuracies[iter, fold, t] = n_correct / n_test
 
-                    @inbounds for i = 1:n_test
-                        all_predictions[iter, fold, t, i] = y_pred[i]
-                        all_targets[iter, fold, t, i] = y_test_contig[i]
+                        @inbounds for i = 1:n_test
+                            all_predictions[iter, fold, t, i] = y_pred[i]
+                            all_targets[iter, fold, t, i] = y_test_contig[i]
+                        end
                     end
                 end
 

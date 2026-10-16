@@ -847,12 +847,12 @@ function _create_epoch_menu(fig, ax, state)
     # Handle slider input
     on(slider_epoch.value) do epoch_num
         if !updating_from_keyboard[]
-            _clear_and_save_limits!(ax, state)
             state.data.current_epoch[] = epoch_num
             ax.title = "Epoch $(epoch_num)/$(n_epochs(state.data.original))"
             _update_markers!(ax, state)
-            _draw(ax, state)
-            _draw_extra_channel!(ax, state)
+            if !isempty(state.extra_channel.channels)
+                _draw_extra_channel!(ax, state)
+            end
         end
     end
 
@@ -1203,14 +1203,16 @@ _step_epoch_forward(ax, state::EpochedDataBrowserState) = _step_epoch!(ax, state
 
 """Change the current epoch by `direction` (+1 or -1) and redraw."""
 function _step_epoch!(ax, state::EpochedDataBrowserState, direction::Int)
-    _clear_and_save_limits!(ax, state)
     current = state.data.current_epoch[]
     total = n_epochs(state.data.original)
-    state.data.current_epoch[] = clamp(current + direction, 1, total)
-    ax.title = "Epoch $(state.data.current_epoch[])/$total"
+    new_epoch = clamp(current + direction, 1, total)
+    new_epoch == current && return
+    state.data.current_epoch[] = new_epoch
+    ax.title = "Epoch $(new_epoch)/$total"
     _update_markers!(ax, state)
-    _draw(ax, state)
-    _draw_extra_channel!(ax, state)
+    if !isempty(state.extra_channel.channels)
+        _draw_extra_channel!(ax, state)
+    end
 end
 
 """Zoom y-axis out / in."""
@@ -1918,8 +1920,10 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
     # Get data access functions based on type
     get_data, get_time, get_label_y = _get_data_accessors(state.data)
 
+    epoch_obs = state.data isa EpochedDataState ? state.data.current_epoch : Observable(1)
+
     # Pre-compute shared observables
-    visible_time_obs = @lift(get_time($(state.data.current), $(state.view.xrange)))
+    visible_time_obs = @lift(get_time($(state.data.current), $(epoch_obs), $(state.view.xrange)))
     time_start_obs   = @lift($(visible_time_obs)[1])  # Fix 6: derived from visible_time_obs
 
     ch_idx_map = state.ica.is_active ? Dict(lbl => i for (i, lbl) in enumerate(state.ica.original.layout.data.label)) : Dict{Symbol,Int}()
@@ -1929,6 +1933,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
             win   = $(state.view.xrange)
             comps = state.ica.removed_components
             n_win = length(win)
+            ep    = $(epoch_obs)
             if isempty(comps)
                 zeros(Float64, 0, n_win)
             else
@@ -1936,7 +1941,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                 for (k, comp) in enumerate(comps)
                     unmix_vec = state.ica.original.unmixing[comp, :]
                     for (ci, col_sym) in enumerate(state.ica.original.layout.data.label)
-                        norm_ch = (get_data(state.data.original, win, col_sym) .- state.ica.original.mean[ci]) ./ state.ica.original.scale
+                        norm_ch = (get_data(state.data.original, ep, win, col_sym) .- state.ica.original.mean[ci]) ./ state.ica.original.scale
                         @views acts[k, :] .+= unmix_vec[ci] .* norm_ch
                     end
                 end
@@ -1953,7 +1958,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
             is_selected = state.channels.selected[idx]
 
             # Channel data (compute once)
-            channel_data_obs = @lift(get_data($(state.data.current), $(state.view.xrange), col))
+            channel_data_obs = @lift(get_data($(state.data.current), $(epoch_obs), $(state.view.xrange), col))
             channel_data_with_offset = @lift($(channel_data_obs) .* $(state.view.amplitude_scale) .+ state.view.offset[idx])
 
             # Ghost lines data
@@ -1961,7 +1966,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                 ch_row = ch_idx_map[col]
 
                 original_data_with_offset = @lift(if $(state.view.show_original_ica)
-                    current_raw  = get_data($(state.data.current), $(state.view.xrange), col)
+                    current_raw  = get_data($(state.data.current), $(epoch_obs), $(state.view.xrange), col)
                     original_raw = copy(current_raw)
                     acts         = $(ica_activations_obs)
                     if size(acts, 2) == length(current_raw)
@@ -1978,7 +1983,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                 end)
 
                 subtracted_data_obs = @lift(if $(state.view.show_subtracted_ica)
-                    current_raw  = get_data($(state.data.current), $(state.view.xrange), col)
+                    current_raw  = get_data($(state.data.current), $(epoch_obs), $(state.view.xrange), col)
                     original_raw = copy(current_raw)
                     acts         = $(ica_activations_obs)
                     if size(acts, 2) == length(current_raw)
@@ -2060,7 +2065,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
 
             # Handle labels
             if !state.view.butterfly[]
-                label_y_obs = @lift(get_label_y($(state.data.current), $col, state.view.offset[idx]))
+                label_y_obs = @lift(get_label_y($(state.data.current), $(epoch_obs), $col, state.view.offset[idx]))
                 _create_label!(state.channels.data_labels, col, ax, time_start_obs, label_y_obs, is_selected)
             else
                 _hide_channel_label!(state.channels.data_labels, col)
@@ -2094,17 +2099,17 @@ end
 # Data accessor functions
 """Return `(get_data, get_time, get_label_y)` closures for continuous data."""
 function _get_data_accessors(data::ContinuousDataState) # data used for dispatch
-    get_data = (current, range, col) -> @view current.data[!, col][range]
-    get_time = (current, range) -> @view current.data.time[range]
-    get_label_y = (current, col, offset) -> current.data[1, col] .+ offset
+    get_data = (current, ep, range, col) -> @view current.data[!, col][range]
+    get_time = (current, ep, range) -> @view current.data.time[range]
+    get_label_y = (current, ep, col, offset) -> current.data[1, col] .+ offset
     return get_data, get_time, get_label_y
 end
 
 """Return `(get_data, get_time, get_label_y)` closures for epoched data."""
 function _get_data_accessors(state::EpochedDataState)
-    get_data = (current, range, col) -> @view current.data[state.current_epoch[]][!, col][range]
-    get_time = (current, range) -> @view current.data[state.current_epoch[]].time[range]
-    get_label_y = (current, col, offset) -> current.data[state.current_epoch[]][!, col][1] .+ offset
+    get_data = (current, ep, range, col) -> @view current.data[ep][!, col][range]
+    get_time = (current, ep, range) -> @view current.data[ep].time[range]
+    get_label_y = (current, ep, col, offset) -> current.data[ep][!, col][1] .+ offset
     return get_data, get_time, get_label_y
 end
 
@@ -2169,6 +2174,8 @@ function _draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
         legend_elements = Any[]
         legend_labels   = String[]
 
+        epoch_obs = state.data isa EpochedDataState ? state.data.current_epoch : Observable(1)
+
         for (idx, channel) in enumerate(state.extra_channel.channels)
             # Calculate specific offset for this channel to prevent overlapping
             channel_offset = current_offset
@@ -2180,8 +2187,8 @@ function _draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
 
             line_color = :black
 
-            if eltype(get_data(state.data.current[], 1:1, channel)) == Bool # Boolean data - vspan + legend entry only
-                highlight_data = @views _splitgroups(findall(get_data(state.data.current[], :, channel)))
+            if eltype(get_data(state.data.current[], epoch_obs[], 1:1, channel)) == Bool # Boolean data - vspan + legend entry only
+                highlight_data = @views _splitgroups(findall(get_data(state.data.current[], epoch_obs[], :, channel)))
                 if !isempty(highlight_data[1])
                     # Widen single-sample regions so they're visible (per-region, not global)
                     end_indices = copy(highlight_data[2])
@@ -2192,8 +2199,8 @@ function _draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
                     end
                     state.extra_channel.data_lines[channel] = vspan!(
                         ax,
-                        get_time(state.data.current[], highlight_data[1]),
-                        get_time(state.data.current[], end_indices),
+                        get_time(state.data.current[], epoch_obs[], highlight_data[1]),
+                        get_time(state.data.current[], epoch_obs[], end_indices),
                         color = line_color,
                         alpha = 0.5,
                         visible = true,
@@ -2205,15 +2212,15 @@ function _draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
             else # Regular channel - in-plot label is sufficient, skip legend
                 state.extra_channel.data_lines[channel] = lines!(
                     ax,
-                    @lift(get_time($(state.data.current), :)),
-                    @lift(get_data($(state.data.current), :, $channel) .* $(state.view.amplitude_scale) .+ $channel_offset),
+                    @lift(get_time($(state.data.current), $(epoch_obs), :)),
+                    @lift(get_data($(state.data.current), $(epoch_obs), :, $channel) .* $(state.view.amplitude_scale) .+ $channel_offset),
                     color = :black,
                     linewidth = 2,
                 )
                 state.extra_channel.data_labels[channel] = text!(
                     ax,
-                    @lift(get_time($(state.data.current), $(state.view.xrange)[1:1])[1]),
-                    @lift(get_label_y($(state.data.current), $channel, $channel_offset)),
+                    @lift(get_time($(state.data.current), $(epoch_obs), $(state.view.xrange)[1:1])[1]),
+                    @lift(get_label_y($(state.data.current), $(epoch_obs), $channel, $channel_offset)),
                     text = String(channel),
                     align = (:left, :center),
                     color = :black,

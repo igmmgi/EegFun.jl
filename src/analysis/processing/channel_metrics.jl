@@ -48,8 +48,23 @@ Internal function to calculate correlation matrix for specified channels.
 - `DataFrame`: Correlation matrix with channel names as both row and column names
 """
 function _correlation_matrix(dat::DataFrame, selected_samples::Vector{Int}, selected_channels::Vector{Symbol})::DataFrame
-    selected_data = select(dat, selected_channels)[selected_samples, :]
-    df = DataFrame(cor(Matrix(selected_data)), selected_channels)
+    n_s = length(selected_samples)
+    n_ch = length(selected_channels)
+    X = Matrix{Float64}(undef, n_s, n_ch)
+    for (c, ch) in enumerate(selected_channels)
+        col = dat[!, ch]
+        if col isa Vector{Float64}
+            col_f = col::Vector{Float64}
+            @inbounds @simd for s in 1:n_s
+                X[s, c] = col_f[selected_samples[s]]
+            end
+        else
+            @inbounds for s in 1:n_s
+                X[s, c] = Float64(col[selected_samples[s]])
+            end
+        end
+    end
+    df = DataFrame(cor(X), selected_channels)
     insertcols!(df, 1, :row => selected_channels)
     return df
 end
@@ -149,16 +164,42 @@ function _correlation_matrix_dual_selection(
     selected_channels1::Vector{Symbol},
     selected_channels2::Vector{Symbol},
 )::DataFrame
-    # Get data for both channel sets using the same sample selection
-    data1 = select(dat, selected_channels1)[selected_samples, :]
-    data2 = select(dat, selected_channels2)[selected_samples, :]
+    n_s = length(selected_samples)
+    n_ch1 = length(selected_channels1)
+    n_ch2 = length(selected_channels2)
 
-    # Convert to matrices and calculate correlations
-    matrix1 = Matrix(data1)  # channels1 × samples
-    matrix2 = Matrix(data2)  # channels2 × samples
+    matrix1 = Matrix{Float64}(undef, n_s, n_ch1)
+    for (c, ch) in enumerate(selected_channels1)
+        col = dat[!, ch]
+        if col isa Vector{Float64}
+            col_f = col::Vector{Float64}
+            @inbounds @simd for s in 1:n_s
+                matrix1[s, c] = col_f[selected_samples[s]]
+            end
+        else
+            @inbounds for s in 1:n_s
+                matrix1[s, c] = Float64(col[selected_samples[s]])
+            end
+        end
+    end
 
-    # Calculate correlation matrix: cor(X,Y) returns Y×X, so we transpose to get channels1 × channels2
-    corr_matrix = cor(matrix2, matrix1)'  # Transpose to get correct orientation
+    matrix2 = Matrix{Float64}(undef, n_s, n_ch2)
+    for (c, ch) in enumerate(selected_channels2)
+        col = dat[!, ch]
+        if col isa Vector{Float64}
+            col_f = col::Vector{Float64}
+            @inbounds @simd for s in 1:n_s
+                matrix2[s, c] = col_f[selected_samples[s]]
+            end
+        else
+            @inbounds for s in 1:n_s
+                matrix2[s, c] = Float64(col[selected_samples[s]])
+            end
+        end
+    end
+
+    # Calculate correlation matrix: cor(X,Y) returns Y×X, so transpose to get channels1 × channels2
+    corr_matrix = collect(cor(matrix2, matrix1)')
 
     # Create DataFrame with proper column and row names
     df = DataFrame(corr_matrix, selected_channels2)

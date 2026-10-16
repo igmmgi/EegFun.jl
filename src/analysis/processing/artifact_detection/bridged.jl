@@ -11,31 +11,49 @@ function find_bridged_channels(dat::SingleDataFrameEeg, correlation_threshold::R
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
     n_ch = length(selected_channels)
 
-    pairs = Tuple{Symbol,Symbol}[]
-    correlations = Float64[]
-
     if n_ch < 2
         return DataFrame(channel_1 = Symbol[], channel_2 = Symbol[], correlation = Float64[])
     end
 
-    # Calculate pairwise correlation
-    for i = 1:(n_ch-1)
-        for j = (i+1):n_ch
-            ch1 = selected_channels[i]
-            ch2 = selected_channels[j]
-            corr = cor(dat.data[!, ch1], dat.data[!, ch2])
-            if corr > correlation_threshold
-                push!(pairs, (ch1, ch2))
-                push!(correlations, corr)
+    n_samp = n_samples(dat)
+    X = Matrix{Float64}(undef, n_samp, n_ch)
+    for (c, ch) in enumerate(selected_channels)
+        col = dat.data[!, ch]
+        if col isa Vector{Float64}
+            col_f = col::Vector{Float64}
+            @inbounds @simd for s in 1:n_samp
+                X[s, c] = col_f[s]
+            end
+        else
+            @inbounds for s in 1:n_samp
+                X[s, c] = Float64(col[s])
             end
         end
     end
 
-    return DataFrame(channel_1 = first.(pairs), channel_2 = last.(pairs), correlation = correlations)
+    R = cor(X; dims = 1)
+
+    pairs_1 = Symbol[]
+    pairs_2 = Symbol[]
+    corrs = Float64[]
+
+    for i in 1:(n_ch - 1)
+        ch1 = selected_channels[i]
+        for j in (i + 1):n_ch
+            r = R[i, j]
+            if r > correlation_threshold
+                push!(pairs_1, ch1)
+                push!(pairs_2, selected_channels[j])
+                push!(corrs, r)
+            end
+        end
+    end
+
+    return DataFrame(channel_1 = pairs_1, channel_2 = pairs_2, correlation = corrs)
 end
 
 function find_bridged_channels(dat::MultiDataFrameEeg, correlation_threshold::Real = 0.99; channel_selection::Function = channels())
-    # For epoched data, we flatten the data vertically and compute correlation across all epochs
+    # For epoched data, flatten across epochs and compute correlation via single matrix
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
     n_ch = length(selected_channels)
 
@@ -43,33 +61,46 @@ function find_bridged_channels(dat::MultiDataFrameEeg, correlation_threshold::Re
         return DataFrame(channel_1 = Symbol[], channel_2 = Symbol[], correlation = Float64[])
     end
 
-    # Extract channel data across all epochs
-    flattened_data = Dict{Symbol,Vector{Float64}}()
-    for ch in selected_channels
-        flattened_data[ch] = Float64[]
-    end
+    n_total = sum(nrow, dat.data)
+    X = Matrix{Float64}(undef, n_total, n_ch)
 
-    for epoch_df in dat
-        for ch in selected_channels
-            append!(flattened_data[ch], epoch_df[!, ch])
+    row_offset = 0
+    for epoch_df in dat.data
+        n_ep = nrow(epoch_df)
+        for (c, ch) in enumerate(selected_channels)
+            col = epoch_df[!, ch]
+            if col isa Vector{Float64}
+                col_f = col::Vector{Float64}
+                @inbounds @simd for s in 1:n_ep
+                    X[row_offset + s, c] = col_f[s]
+                end
+            else
+                @inbounds for s in 1:n_ep
+                    X[row_offset + s, c] = Float64(col[s])
+                end
+            end
         end
+        row_offset += n_ep
     end
 
-    pairs = Tuple{Symbol,Symbol}[]
-    correlations = Float64[]
+    R = cor(X; dims = 1)
 
-    for i = 1:(n_ch-1)
-        for j = (i+1):n_ch
-            ch1 = selected_channels[i]
-            ch2 = selected_channels[j]
-            corr = cor(flattened_data[ch1], flattened_data[ch2])
-            if corr > correlation_threshold
-                push!(pairs, (ch1, ch2))
-                push!(correlations, corr)
+    pairs_1 = Symbol[]
+    pairs_2 = Symbol[]
+    corrs = Float64[]
+
+    for i in 1:(n_ch - 1)
+        ch1 = selected_channels[i]
+        for j in (i + 1):n_ch
+            r = R[i, j]
+            if r > correlation_threshold
+                push!(pairs_1, ch1)
+                push!(pairs_2, selected_channels[j])
+                push!(corrs, r)
             end
         end
     end
 
-    return DataFrame(channel_1 = first.(pairs), channel_2 = last.(pairs), correlation = correlations)
+    return DataFrame(channel_1 = pairs_1, channel_2 = pairs_2, correlation = corrs)
 end
 

@@ -2,6 +2,7 @@ using Test
 using DataFrames
 using OrderedCollections
 using Makie
+using EegFun
 
 
 @testset "plot_triggers" begin

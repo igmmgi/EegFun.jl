@@ -94,6 +94,7 @@ public epochs_not
 public extra_data
 public extra_labels
 public file_name
+public frequency_vector
 public group_by_condition
 public has_channels
 public head

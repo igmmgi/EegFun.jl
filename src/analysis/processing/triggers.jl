@@ -114,7 +114,7 @@ function _trigger_count_impl(
     trigger_info::Union{Nothing,Vector{String}} = nothing,
 )
     # Get unique non-zero trigger values from all datasets
-    all_triggers = vcat(trigger_datasets...)
+    all_triggers = isempty(trigger_datasets) ? Int[] : reduce(vcat, trigger_datasets)
     non_zero_triggers = sort(unique(filter(x -> x != 0, all_triggers)))
 
     if isempty(non_zero_triggers)
@@ -386,7 +386,7 @@ _search_single_trigger(array, trigger::UnitRange, ignore_values::Vector{Int} = [
 _search_single_trigger(array, trigger::Symbol, ignore_values::Vector{Int} = [0]) = @minimal_error("Single wildcard sequences not supported")
 # Set match: find onset positions of ANY value in the vector (e.g., [101, 103])
 _search_single_trigger(array, trigger::Vector{<:Integer}, ignore_values::Vector{Int} = [0]) =
-    sort(vcat([search_sequence(array, Int(v); ignore_values = ignore_values) for v in trigger]...))
+    isempty(trigger) ? Int[] : sort(reduce(vcat, [search_sequence(array, Int(v); ignore_values = ignore_values) for v in trigger]))
 
 # Helper function to collect the actual sample positions for a matched sequence
 """

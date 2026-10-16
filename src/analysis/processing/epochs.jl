@@ -282,25 +282,34 @@ function _mark_windows_at_indices!(
     channel_out::Symbol,
 )::Int
 
+    times = dat.data.time
+    col_out = dat.data[!, channel_out]
+    n_samples = length(times)
+    w_start_offset = time_window[1]
+    w_end_offset = time_window[2]
+
     n_marked = 0
     for idx in reference_indices
         # Bounds check
-        if idx < 1 || idx > length(dat.data.time)
+        if idx < 1 || idx > n_samples
             @minimal_warning "Reference index $idx is out of bounds, skipping"
             continue
         end
 
-        reference_time = dat.data.time[idx]
+        reference_time = times[idx]
 
         # Calculate window bounds
-        window_start = reference_time + time_window[1]
-        window_end = reference_time + time_window[2]
+        window_start = reference_time + w_start_offset
+        window_end = reference_time + w_end_offset
 
-        # Mark samples within the window (vectorized for efficiency)
-        in_window = (dat.data.time .>= window_start) .& (dat.data.time .<= window_end)
-        dat.data[in_window, channel_out] .= true
+        # Binary search for window boundary indices in sorted time vector
+        s_idx = searchsortedfirst(times, window_start)
+        e_idx = searchsortedlast(times, window_end)
 
-        n_marked += sum(in_window)
+        if s_idx <= e_idx
+            col_out[s_idx:e_idx] .= true
+            n_marked += (e_idx - s_idx + 1)
+        end
     end
 
     return n_marked
@@ -768,22 +777,31 @@ function average_epochs(dat::EpochData)
             end
         end
 
-        # Average EEG channels across epochs by row index
+        # Average EEG channels across epochs by row index (single pass over epochs for cache locality)
         n_eps = n_epochs(dat)
-        for ch in eeg_channels
-            avg_col = zeros(Float64, n_timepoints)
-            for epoch in dat
+        n_chans = length(eeg_channels)
+        avg_matrix = zeros(Float64, n_timepoints, n_chans)
+
+        for epoch in dat.data
+            for (ch_idx, ch) in enumerate(eeg_channels)
                 col = epoch[!, ch]
                 if col isa Vector{Float64}
                     col_f64 = col::Vector{Float64}
-                    @inbounds for i = 1:n_timepoints
-                        avg_col[i] += col_f64[i]
+                    @inbounds @simd for i = 1:n_timepoints
+                        avg_matrix[i, ch_idx] += col_f64[i]
                     end
                 else
-                    avg_col .+= col
+                    @inbounds for i = 1:n_timepoints
+                        avg_matrix[i, ch_idx] += col[i]
+                    end
                 end
             end
-            avg_col ./= n_eps
+        end
+
+        inv_n_eps = 1.0 / n_eps
+        for (ch_idx, ch) in enumerate(eeg_channels)
+            avg_col = avg_matrix[:, ch_idx]
+            avg_col .*= inv_n_eps
             erp[!, ch] = avg_col
         end
 

@@ -168,7 +168,7 @@ function channel_summary(
     isempty(results) && @minimal_error("No valid epochs found for channel summary")
 
     # Combine all results
-    return vcat(results...)
+    return isempty(results) ? DataFrame() : reduce(vcat, results)
 end
 
 channel_summary(dat::Vector{<:MultiDataFrameEeg}; kwargs...) = channel_summary.(dat; kwargs...)
@@ -320,7 +320,7 @@ function channel_summary(
 
         # Save combined results to single CSV
         if !isempty(all_summaries)
-            combined_df = vcat(all_summaries...)
+            combined_df = reduce(vcat, all_summaries)
             output_path = joinpath(output_dir, "$(output_file).csv")
             CSV.write(output_path, combined_df)
             @info "Combined results saved to: $output_path"

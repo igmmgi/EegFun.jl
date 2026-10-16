@@ -85,20 +85,16 @@ function plot_topography(
         @minimal_error("No time points found in interval. Data range: $(first(all_times)) to $(last(all_times)) s")
 
     selected_times = all_times[time_mask]
+    selected_freqs = all_freqs[freq_mask]
+
+    # Fast row-filtered power average across the selected time-freq window
+    row_indices = _tf_filter_row_indices(tf_plot.data_power, selected_freqs, selected_times)
 
     # Get channel labels
     channels_list = channel_labels(tf_plot)
 
     # Compute average power per channel across the selected time-freq window
-    channel_data = Float64[]
-    for ch in channels_list
-        power_mat = _tf_df_to_matrix(tf_plot.data_power, ch, all_freqs, all_times)  # [freqs × time]
-        # Subset to selected freq and time ranges; filter non-finite values
-        # (dB baseline can produce -Inf for near-zero power)
-        vals = filter(isfinite, vec(power_mat[freq_mask, time_mask]))
-        avg_power = isempty(vals) ? 0.0 : mean(vals)
-        push!(channel_data, avg_power)
-    end
+    channel_data = _tf_extract_channel_means(tf_plot.data_power, channels_list, row_indices)
 
     # Map channel data onto layout order
     layout_labels = layout.data.label
@@ -249,6 +245,9 @@ function plot_topography(
         time_mask = t_start .<= all_times .<= t_stop
     end
 
+    selected_freqs = all_freqs[freq_mask]
+    selected_times = all_times[time_mask]
+
     # Compute per-condition channel averages
     channels_list = channel_labels(tf_plots[1])
     layout_labels = layout.data.label
@@ -256,12 +255,8 @@ function plot_topography(
 
     global_min, global_max = Inf, -Inf
     for (idx, tf) in enumerate(tf_plots)
-        channel_data = Float64[]
-        for ch in channels_list
-            power_mat = _tf_df_to_matrix(tf.data_power, ch, all_freqs, all_times)
-            vals = filter(isfinite, vec(power_mat[freq_mask, time_mask]))
-            push!(channel_data, isempty(vals) ? 0.0 : mean(vals))
-        end
+        row_indices = _tf_filter_row_indices(tf.data_power, selected_freqs, selected_times)
+        channel_data = _tf_extract_channel_means(tf.data_power, channels_list, row_indices)
         layout_values = Float64[
             let ch_idx = findfirst(==(lbl), channels_list)
                 !isnothing(ch_idx) ? channel_data[ch_idx] : 0.0
@@ -292,6 +287,33 @@ function plot_topography(
     _ensure_coordinates_2d!(layout)
     _ensure_coordinates_3d!(layout)
 
+    # Pre-interpolate all panels when possible
+    supported_methods =
+        [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
+    can_batch = n > 1 && (method in supported_methods || method == :spherical_spline)
+    batched_interp = nothing
+    xb_shared = nothing
+    yb_shared = nothing
+
+    if can_batch
+        val_matrix = Matrix{Float64}(undef, length(layout_labels), n)
+        for j = 1:n
+            val_matrix[:, j] = all_layout_values[j]
+        end
+        if method in supported_methods
+            batched_interp, xb_shared, yb_shared = _data_interpolation_topo(val_matrix, layout, gridscale; method = method)
+        else # :spherical_spline
+            batched_interp = _data_interpolation_topo_spherical_spline(val_matrix, layout, gridscale)
+            x_coords = layout.data.x2
+            y_coords = layout.data.y2
+            max_radius = maximum(sqrt.(x_coords .^ 2 .+ y_coords .^ 2))
+            margin = max_radius * 0.05
+            plot_radius = max_radius + margin
+            xb_shared = (-plot_radius, plot_radius)
+            yb_shared = (-plot_radius, plot_radius)
+        end
+    end
+
     freq_str = "$(round(Int, freq_range[1]))-$(round(Int, freq_range[2])) Hz"
     fig = Figure(size = (250 * n_cols + 100, 250 * n_rows + 50))
 
@@ -315,6 +337,9 @@ function plot_topography(
             ax,
             all_layout_values[idx],
             layout;
+            data_interp = can_batch ? batched_interp[idx] : nothing,
+            x_bounds = can_batch ? xb_shared : nothing,
+            y_bounds = can_batch ? yb_shared : nothing,
             method = method,
             gridscale = gridscale,
             colormap = colormap,
@@ -477,15 +502,15 @@ function plot_topography_stats(
             topo_values[i] = replace(raw, NaN => 0.0, Inf => 0.0, -Inf => 0.0)
         else  # :difference
             # Compute power difference from grand average TF data per electrode
-            diff_per_electrode = Vector{Float64}(undef, length(electrodes))
-            for (j, ch_sym) in enumerate(electrodes)
-                power_a = _tf_power_matrix(result.data[1], ch_sym, all_frequencies, all_time_points)
-                power_b = _tf_power_matrix(result.data[2], ch_sym, all_frequencies, all_time_points)
-                diff_mat = power_a .- power_b  # [freqs × time]
-                vals = filter(isfinite, vec(diff_mat[freq_indices, bin_indices]))
-                diff_per_electrode[j] = isempty(vals) ? 0.0 : mean(vals)
-            end
-            topo_values[i] = diff_per_electrode
+            bin_freqs = all_frequencies[freq_indices]
+            bin_times = all_time_points[bin_indices]
+            row_indices = _tf_filter_row_indices(result.data[1].data_power, bin_freqs, bin_times)
+            topo_values[i] = _tf_extract_channel_difference_means(
+                result.data[1].data_power,
+                result.data[2].data_power,
+                electrodes,
+                row_indices,
+            )
         end
 
         # Significance: proportion of significant freq×time bins per channel in this window
@@ -532,6 +557,38 @@ function plot_topography_stats(
 
     axes = Axis[]
 
+    # Pre-interpolate all panels when possible
+    supported_methods =
+        [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
+    can_batch = n_topos > 1 && (method in supported_methods || method == :spherical_spline)
+    batched_interp = nothing
+    xb_shared = nothing
+    yb_shared = nothing
+
+    if can_batch
+        all_layout_mat = Matrix{Float64}(undef, length(layout_labels), n_topos)
+        for i = 1:n_topos
+            channel_data = topo_values[i]
+            for (k, lbl) in enumerate(layout_labels)
+                ch_idx = findfirst(==(lbl), electrodes)
+                v = !isnothing(ch_idx) ? channel_data[ch_idx] : 0.0
+                all_layout_mat[k, i] = isfinite(v) ? v : 0.0
+            end
+        end
+        if method in supported_methods
+            batched_interp, xb_shared, yb_shared = _data_interpolation_topo(all_layout_mat, layout, gridscale; method = method)
+        else # :spherical_spline
+            batched_interp = _data_interpolation_topo_spherical_spline(all_layout_mat, layout, gridscale)
+            x_coords = layout.data.x2
+            y_coords = layout.data.y2
+            max_radius = maximum(sqrt.(x_coords .^ 2 .+ y_coords .^ 2))
+            margin = max_radius * 0.05
+            plot_radius = max_radius + margin
+            xb_shared = (-plot_radius, plot_radius)
+            yb_shared = (-plot_radius, plot_radius)
+        end
+    end
+
     for i = 1:n_topos
         row = div(i - 1, n_cols) + 1
         col = mod1(i, n_cols)
@@ -553,6 +610,9 @@ function plot_topography_stats(
             ax,
             layout_values,
             layout;
+            data_interp = can_batch ? batched_interp[i] : nothing,
+            x_bounds = can_batch ? xb_shared : nothing,
+            y_bounds = can_batch ? yb_shared : nothing,
             method = method,
             gridscale = gridscale,
             colormap = colormap,
@@ -601,4 +661,118 @@ function plot_topography_stats(
     end
 
     return (fig = fig, axes = axes, colorbar = cb)
+end
+
+
+# === HIGH-PERFORMANCE TF TOPOGRAPHY EXTRACTION HELPERS ===
+
+"""
+    _tf_filter_row_indices(df::DataFrame, selected_freqs::AbstractVector{Float64}, selected_times::AbstractVector{Float64}) -> Vector{Int}
+
+Find row indices in `df` whose `time` and `freq` fall within the bounding intervals of `selected_times` and `selected_freqs`.
+"""
+function _tf_filter_row_indices(
+    df::DataFrame,
+    selected_freqs::AbstractVector{Float64},
+    selected_times::AbstractVector{Float64},
+)::Vector{Int}
+    f_min, f_max = extrema(selected_freqs)
+    t_min, t_max = extrema(selected_times)
+    times = df.time
+    freqs = df.freq
+
+    row_indices = Int[]
+    @inbounds for i in eachindex(times)
+        t = times[i]
+        f = freqs[i]
+        if (t_min <= t <= t_max) && (f_min <= f <= f_max)
+            push!(row_indices, i)
+        end
+    end
+    return row_indices
+end
+
+"""
+    _tf_extract_channel_means(df::DataFrame, channels::Vector{Symbol}, row_indices::Vector{Int}) -> Vector{Float64}
+
+Compute average power per channel across `row_indices` in `df`, ignoring non-finite (`NaN`, `Inf`, `-Inf`) values.
+"""
+function _tf_extract_channel_means(df::DataFrame, channels::Vector{Symbol}, row_indices::Vector{Int})::Vector{Float64}
+    channel_data = Vector{Float64}(undef, length(channels))
+    for (ci, ch) in enumerate(channels)
+        col = df[!, ch]
+        if col isa Vector{Float64}
+            col_f64 = col::Vector{Float64}
+            sum_val = 0.0
+            n_finite = 0
+            @inbounds @simd for idx in eachindex(row_indices)
+                r = row_indices[idx]
+                v = col_f64[r]
+                if isfinite(v)
+                    sum_val += v
+                    n_finite += 1
+                end
+            end
+            channel_data[ci] = n_finite == 0 ? 0.0 : sum_val / n_finite
+        else
+            sum_val = 0.0
+            n_finite = 0
+            @inbounds for idx in eachindex(row_indices)
+                r = row_indices[idx]
+                v = Float64(col[r])
+                if isfinite(v)
+                    sum_val += v
+                    n_finite += 1
+                end
+            end
+            channel_data[ci] = n_finite == 0 ? 0.0 : sum_val / n_finite
+        end
+    end
+    return channel_data
+end
+
+"""
+    _tf_extract_channel_difference_means(df_a::DataFrame, df_b::DataFrame, channels::Vector{Symbol}, row_indices::Vector{Int}) -> Vector{Float64}
+
+Compute average power difference (`df_a - df_b`) per channel across `row_indices`, ignoring non-finite values.
+"""
+function _tf_extract_channel_difference_means(
+    df_a::DataFrame,
+    df_b::DataFrame,
+    channels::Vector{Symbol},
+    row_indices::Vector{Int},
+)::Vector{Float64}
+    diff_data = Vector{Float64}(undef, length(channels))
+    for (ci, ch) in enumerate(channels)
+        col_a = df_a[!, ch]
+        col_b = df_b[!, ch]
+        if col_a isa Vector{Float64} && col_b isa Vector{Float64}
+            col_a_f64 = col_a::Vector{Float64}
+            col_b_f64 = col_b::Vector{Float64}
+            sum_val = 0.0
+            n_finite = 0
+            @inbounds @simd for idx in eachindex(row_indices)
+                r = row_indices[idx]
+                v = col_a_f64[r] - col_b_f64[r]
+                if isfinite(v)
+                    sum_val += v
+                    n_finite += 1
+                end
+            end
+            diff_data[ci] = n_finite == 0 ? 0.0 : sum_val / n_finite
+        else
+            sum_val = 0.0
+            n_finite = 0
+            @inbounds for idx in eachindex(row_indices)
+                r = row_indices[idx]
+                v = Float64(col_a[r]) - Float64(col_b[r])
+                if isfinite(v)
+                    sum_val += v
+                    n_finite += 1
+                end
+            end
+            diff_data[ci] = n_finite == 0 ? 0.0 : sum_val / n_finite
+        end
+    end
+    return diff_data
 end
