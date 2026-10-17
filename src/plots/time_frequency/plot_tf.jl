@@ -216,7 +216,9 @@ function plot_tf(
         Colorbar(fig[cb_pos...], last_hm; label = cb_label, colorbar_kwargs...)
     end
 
-    _display_figure(fig)
+    if plot_kwargs[:display_plot]
+        _display_figure(fig)
+    end
     _set_window_title("Makie")
     return (fig = fig, axes = axes)
 end
@@ -436,7 +438,9 @@ function plot_tf(
         end
     end
 
-    _display_figure(fig)
+    if plot_kwargs[:display_plot]
+        _display_figure(fig)
+    end
     _set_window_title("Makie")
     return (fig = fig, axes = axes)
 end

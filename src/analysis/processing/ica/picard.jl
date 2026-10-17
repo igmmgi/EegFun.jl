@@ -102,14 +102,14 @@ function _picard_regularize_hessian!(h::Matrix{T}, lambda_min::T) where {T<:Abst
 end
 
 # Pre-allocated circular buffer for L-BFGS history (avoids push!/popfirst!/copy! allocations)
-mutable struct LBFGSBuffer{T<:AbstractFloat}
-    s_buf::Vector{Matrix{T}}   # pre-allocated direction history
-    y_buf::Vector{Matrix{T}}   # pre-allocated gradient diff history
-    r_buf::Vector{T}           # pre-allocated curvature scalars
-    a_buf::Vector{T}           # pre-allocated alpha coefficients
-    m::Int                     # max history length
-    len::Int                   # current number of stored entries
-    head::Int                  # next write position (1-indexed)
+mutable struct LBFGSBuffer{T<:AbstractFloat, MatT<:AbstractMatrix{T}}
+    s_buf::Vector{MatT}   # pre-allocated direction history
+    y_buf::Vector{MatT}   # pre-allocated gradient diff history
+    r_buf::Vector{T}      # pre-allocated curvature scalars
+    a_buf::Vector{T}      # pre-allocated alpha coefficients
+    m::Int                # max history length
+    len::Int              # current number of stored entries
+    head::Int             # next write position (1-indexed)
 end
 
 function LBFGSBuffer(T::Type{<:AbstractFloat}, N::Int, m::Int)
@@ -117,7 +117,20 @@ function LBFGSBuffer(T::Type{<:AbstractFloat}, N::Int, m::Int)
     y_buf = [zeros(T, N, N) for _ = 1:m]
     r_buf = zeros(T, m)
     a_buf = zeros(T, m)
-    return LBFGSBuffer{T}(s_buf, y_buf, r_buf, a_buf, m, 0, 1)
+    return LBFGSBuffer{T, Matrix{T}}(s_buf, y_buf, r_buf, a_buf, m, 0, 1)
+end
+
+function LBFGSBuffer(sample_mat::MatT, m::Int) where {T<:AbstractFloat, MatT<:AbstractMatrix{T}}
+    N = size(sample_mat, 1)
+    s_buf = [similar(sample_mat, N, N) for _ = 1:m]
+    y_buf = [similar(sample_mat, N, N) for _ = 1:m]
+    for k = 1:m
+        fill!(s_buf[k], zero(T))
+        fill!(y_buf[k], zero(T))
+    end
+    r_buf = zeros(T, m)
+    a_buf = zeros(T, m)
+    return LBFGSBuffer{T, MatT}(s_buf, y_buf, r_buf, a_buf, m, 0, 1)
 end
 
 @inline function _lbfgs_reset!(buf::LBFGSBuffer)
@@ -125,7 +138,7 @@ end
     buf.head = 1
 end
 
-function _lbfgs_push!(buf::LBFGSBuffer{T}, direction::Matrix{T}, y_diff::Matrix{T}, r_val::T) where {T}
+function _lbfgs_push!(buf::LBFGSBuffer{T, MatT}, direction::MatT, y_diff::MatT, r_val::T) where {T, MatT<:AbstractMatrix{T}}
     idx = buf.head
     copyto!(buf.s_buf[idx], direction)
     copyto!(buf.y_buf[idx], y_diff)
@@ -142,7 +155,13 @@ end
 end
 
 # L-BFGS two-loop recursion with Hessian preconditioning
-function _picard_l_bfgs_direction!(Z::Matrix{T}, q::Matrix{T}, G::Matrix{T}, h::Matrix{T}, buf::LBFGSBuffer{T}) where {T<:AbstractFloat}
+function _picard_l_bfgs_direction!(
+    Z::MatT,
+    q::MatT,
+    G::MatT,
+    h::MatT,
+    buf::LBFGSBuffer{T, MatT},
+) where {T<:AbstractFloat, MatT<:AbstractMatrix{T}}
     copyto!(q, G)
 
     m_len = buf.len
@@ -499,20 +518,35 @@ end
 # === GPU versions of Picard ===
 
 # GPU versions of Picard
-# GPU native implementation of Picard Y-dependent loss
-function _picard_y_loss_gpu(Y_gpu::AbstractMatrix{T}, signs_gpu::AbstractVector{T}, extended::Bool) where {T<:AbstractFloat}
+# GPU native implementation of Picard Y-dependent loss (supports optional preallocated loss_tmp buffer)
+function _picard_y_loss_gpu(
+    Y_gpu::AbstractMatrix{T},
+    signs_gpu::AbstractVector{T},
+    extended::Bool,
+    loss_tmp::Union{AbstractMatrix{T}, Nothing} = nothing,
+) where {T<:AbstractFloat}
     N, T_len = size(Y_gpu)
     s = reshape(signs_gpu, N, 1)
 
-    if extended
-        val = sum(@. s * (abs(Y_gpu) + log1p(exp(T(-2.0) * abs(Y_gpu)))) + T(0.5) * Y_gpu^2)
+    if loss_tmp === nothing
+        if extended
+            val = sum(@. s * (abs(Y_gpu) + log1p(exp(T(-2.0) * abs(Y_gpu)))) + T(0.5) * Y_gpu^2)
+        else
+            val = sum(@. s * (abs(Y_gpu) + log1p(exp(T(-2.0) * abs(Y_gpu)))))
+        end
     else
-        val = sum(@. s * (abs(Y_gpu) + log1p(exp(T(-2.0) * abs(Y_gpu)))))
+        if extended
+            @. loss_tmp = s * (abs(Y_gpu) + log1p(exp(T(-2.0) * abs(Y_gpu)))) + T(0.5) * Y_gpu^2
+        else
+            @. loss_tmp = s * (abs(Y_gpu) + log1p(exp(T(-2.0) * abs(Y_gpu))))
+        end
+        val = sum(loss_tmp)
     end
 
     return val / T(T_len)
 end
-# List-based overload for GPU path (GPU arrays can't use the pre-allocated LBFGSBuffer)
+
+# List-based overload for backwards compatibility
 function _picard_l_bfgs_direction!(
     Z,
     q,
@@ -551,6 +585,56 @@ function _picard_l_bfgs_direction!(
 
     @. Z = -Z
 end
+
+# GPU line search helper with pre-allocated CPU logdet calculation
+function _picard_line_search_gpu!(
+    Y::AbstractMatrix{T},
+    W::AbstractMatrix{T},
+    Y_new::AbstractMatrix{T},
+    W_new::AbstractMatrix{T},
+    DY::AbstractMatrix{T},
+    DW::AbstractMatrix{T},
+    direction::AbstractMatrix{T},
+    direction_cpu::Matrix{T},
+    transform_cpu::Matrix{T},
+    signs::AbstractVector{T},
+    loss_tmp::AbstractMatrix{T},
+    current_loss::T,
+    logdetW::T,
+    ls_tries::Int,
+    extended::Bool,
+) where {T<:AbstractFloat}
+    N = size(Y, 1)
+    alpha = one(T)
+
+    copyto!(direction_cpu, direction)
+    mul!(DY, direction, Y)
+    mul!(DW, direction, W)
+
+    for _ = 1:ls_tries
+        @. transform_cpu = alpha * direction_cpu
+        for i = 1:N
+            transform_cpu[i, i] += one(T)
+        end
+        step_logdet, _ = logabsdet(transform_cpu)
+        logdet_total = logdetW + T(step_logdet)
+
+        @. Y_new = Y + alpha * DY
+        y_loss = _picard_y_loss_gpu(Y_new, signs, extended, loss_tmp)
+        trial_loss = -logdet_total + y_loss
+
+        if isfinite(trial_loss) && trial_loss < current_loss
+            @. W_new = W + alpha * DW
+            return true, trial_loss, alpha, logdet_total
+        end
+        alpha /= T(2.0)
+    end
+
+    copyto!(Y_new, Y)
+    copyto!(W_new, W)
+    return false, current_loss, alpha, logdetW
+end
+
 # GPU Optimization Loop
 # =============================================================================
 
@@ -562,53 +646,58 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
     ls_tries = params.picard_ls_tries
     max_iter = params.max_iter
 
-    Y = gpu_array(dat_ica_cpu)
-    W = gpu_array(W_cpu)
+    Y = gpu_array(copy(dat_ica_cpu))
+    W = gpu_array(copy(W_cpu))
 
-    Y_new = gpu_array(zeros(Float32, N, T_len))
-    W_new = gpu_array(zeros(Float32, N, N))
-    DY = gpu_array(zeros(Float32, N, T_len))
-    DW = gpu_array(zeros(Float32, N, N))
-    transform = gpu_array(zeros(Float32, N, N))
+    Y_new = similar(Y)
+    W_new = similar(W)
+    DY = similar(Y)
+    DW = similar(W)
+    loss_tmp = similar(Y)
 
-    psiY = gpu_array(zeros(Float32, N, T_len))
-    psidY = gpu_array(zeros(Float32, N, T_len))
-    Y_square = gpu_array(zeros(Float32, N, T_len))
+    psiY = similar(Y)
+    psidY = similar(Y)
+    Y_square = similar(Y)
 
-    G     = gpu_array(zeros(Float32, N, N))
-    G_old = gpu_array(zeros(Float32, N, N))
-    h     = gpu_array(zeros(Float32, N, N))
+    G     = similar(W)
+    G_old = similar(W)
+    h     = similar(W)
 
-    direction = gpu_array(zeros(Float32, N, N))
-    q = gpu_array(zeros(Float32, N, N))
-    Z = gpu_array(zeros(Float32, N, N))
+    direction = similar(W)
+    q = similar(W)
+    y_diff = similar(W)
 
     signs     = gpu_array(ones(Float32, N))
     old_signs = gpu_array(ones(Float32, N))
 
-    s_list = typeof(G)[]
-    y_list = typeof(G)[]
-    r_list = Float32[]
-    a_list = Float32[]
-
-    # Pre-allocated thread_sums buffer for _picard_y_loss (GPU path calls it with Array'd data)
-    thread_sums = zeros(Float64, Threads.nthreads())
-
+    # Pre-allocated CPU buffers to eliminate per-iteration host/device allocations
+    h_cpu = zeros(Float32, N, N)
+    G_cpu = zeros(Float32, N, N)
+    direction_cpu = zeros(Float32, N, N)
+    transform_cpu = zeros(Float32, N, N)
     W_cpu_tmp = copy(W_cpu)
+    signs_cpu = extended ? ones(Float32, N) : Float32[]
+    old_signs_cpu = extended ? ones(Float32, N) : Float32[]
+    mean_psid_gpu = extended ? gpu_array(zeros(Float32, N, 1)) : nothing
+    mean_psid_cpu = extended ? zeros(Float32, N) : Float32[]
+    C_cpu = extended ? zeros(Float32, N, N) : Matrix{Float32}(undef, 0, 0)
+
+    # Pre-allocated L-BFGS circular buffer (avoids push!/popfirst!/copy! GPU allocations)
+    lbfgs = LBFGSBuffer(G, m)
+
     logdetW_val, _ = logabsdet(W_cpu_tmp)
     logdetW = Float32(logdetW_val)
-    current_loss = Float32(-logdetW + _picard_y_loss_gpu(Y, signs, extended))
+    current_loss = Float32(-logdetW + _picard_y_loss_gpu(Y, signs, extended, loss_tmp))
     sign_change = false
 
-    C = extended ? gpu_array(zeros(Float32, N, N)) : gpu_array(zeros(Float32, 0, 0))
+    C = extended ? similar(W) : gpu_array(zeros(Float32, 0, 0))
+    C_tmp = extended ? similar(W) : gpu_array(zeros(Float32, 0, 0))
     C_orig_cpu = extended ? zeros(Float32, N, N) : zeros(Float32, 0, 0)
     if extended
         mul!(C_orig_cpu, dat_ica_cpu, transpose(dat_ica_cpu))
         C_orig_cpu ./= Float32(T_len)
     end
     C_orig = gpu_array(C_orig_cpu)
-    K = extended ? gpu_array(zeros(Float32, N)) : gpu_array(zeros(Float32, 0))
-    C_tmp = extended ? gpu_array(zeros(Float32, N, N)) : gpu_array(zeros(Float32, 0, 0))
 
     if extended
         mul!(C_tmp, W, C_orig)
@@ -623,44 +712,41 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
         G ./= Float32(T_len)
 
         if extended
-            mean_psid = vec(sum(psidY, dims = 2) ./ Float32(T_len))
-            mean_psid_cpu = Array(mean_psid)
-            C_cpu = Array(C)
-            G_cpu = Array(G)
-            K_cpu = zeros(Float32, N)
+            sum!(mean_psid_gpu, psidY)
+            copyto!(mean_psid_cpu, mean_psid_gpu)
+            copyto!(C_cpu, C)
+            copyto!(G_cpu, G)
 
+            sign_change = false
             for i = 1:N
-                K_cpu[i] = mean_psid_cpu[i] * C_cpu[i, i] - G_cpu[i, i]
+                k_val = (mean_psid_cpu[i] / Float32(T_len)) * C_cpu[i, i] - G_cpu[i, i]
+                s_val = sign(k_val)
+                if n > 1 && s_val != old_signs_cpu[i]
+                    sign_change = true
+                end
+                signs_cpu[i] = s_val
+                old_signs_cpu[i] = s_val
             end
 
-            K .= gpu_array(K_cpu)
-            @. signs = sign(K)
+            copyto!(signs, signs_cpu)
 
-            if n > 1
-                sign_change = any(Array(signs) .!= Array(old_signs))
-            end
-            copyto!(old_signs, signs)
-
-            @. G = G * signs
-            @. psidY = psidY * signs
-
-            @. G += C
-            @. psidY += 1.0f0
+            @. G = G * signs + C
+            @. psidY = psidY * signs + 1.0f0
         end
 
         @. Y_square = Y^2
         mul!(h, psidY, transpose(Y_square))
         h ./= Float32(T_len)
 
-        h_cpu = Array(h)
+        copyto!(h_cpu, h)
         _picard_regularize_hessian!(h_cpu, lambda_min)
-        h .= gpu_array(h_cpu)
+        copyto!(h, h_cpu)
 
-        G_cpu = Array(G)
+        copyto!(G_cpu, G)
         for i = 1:N
             G_cpu[i, i] -= 1.0f0
         end
-        G .= gpu_array(G_cpu)
+        copyto!(G, G_cpu)
 
         gradient_norm = maximum(abs, G_cpu)
         if gradient_norm < tol
@@ -669,83 +755,34 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
         end
 
         if n > 1
-            push!(s_list, copy(direction))
-            push!(y_list, G .- G_old)
-            push!(r_list, 1.0f0 / dot(direction, G .- G_old))
-
-            if length(s_list) > m
-                popfirst!(s_list)
-                popfirst!(y_list)
-                popfirst!(r_list)
-            end
+            @. y_diff = G - G_old
+            r_val = 1.0f0 / dot(direction, y_diff)
+            _lbfgs_push!(lbfgs, direction, y_diff, r_val)
         end
         copyto!(G_old, G)
 
         if extended && sign_change
-            current_loss = Float32(-logdetW + _picard_y_loss_gpu(Y, signs, extended))
-            empty!(s_list)
-            empty!(y_list)
-            empty!(r_list)
+            current_loss = Float32(-logdetW + _picard_y_loss_gpu(Y, signs, extended, loss_tmp))
+            _lbfgs_reset!(lbfgs)
         end
 
-        _picard_l_bfgs_direction!(Z, q, G, h, s_list, y_list, r_list, a_list)
-        copyto!(direction, Z)
+        _picard_l_bfgs_direction!(direction, q, G, h, lbfgs)
 
-        mul!(DY, direction, Y)
-        mul!(DW, direction, W)
-
-        converged = false
-        alpha = 1.0f0
-        new_loss = current_loss
-        for _ = 1:ls_tries
-            @. transform = alpha * direction
-            transform[diagind(transform)] .+= 1.0f0
-            step_logdet, _ = logabsdet(Array(transform))
-            logdet_total = logdetW + Float32(step_logdet)
-
-            @. Y_new = Y + alpha * DY
-            y_loss = _picard_y_loss_gpu(Y_new, signs, extended)
-            trial_loss = -logdet_total + y_loss
-
-            if isfinite(trial_loss) && trial_loss < current_loss
-                @. W_new = W + alpha * DW
-                converged = true
-                new_loss = trial_loss
-                logdetW = logdet_total
-                break
-            end
-            alpha /= 2.0f0
-        end
+        converged, new_loss, alpha, logdetW = _picard_line_search_gpu!(
+            Y, W, Y_new, W_new, DY, DW, direction,
+            direction_cpu, transform_cpu, signs, loss_tmp,
+            current_loss, logdetW, ls_tries, extended,
+        )
 
         if !converged
             @. direction = -G
-            empty!(s_list)
-            empty!(y_list)
-            empty!(r_list)
+            _lbfgs_reset!(lbfgs)
 
-            mul!(DY, direction, Y)
-            mul!(DW, direction, W)
-            alpha = 1.0f0
-
-            for _ = 1:ls_tries
-                @. transform = alpha * direction
-                transform[diagind(transform)] .+= 1.0f0
-                step_logdet, _ = logabsdet(Array(transform))
-                logdet_total = logdetW + Float32(step_logdet)
-
-                @. Y_new = Y + alpha * DY
-                y_loss = _picard_y_loss_gpu(Y_new, signs, extended)
-                trial_loss = -logdet_total + y_loss
-
-                if isfinite(trial_loss) && trial_loss < current_loss
-                    @. W_new = W + alpha * DW
-                    converged = true
-                    new_loss = trial_loss
-                    logdetW = logdet_total
-                    break
-                end
-                alpha /= 2.0f0
-            end
+            converged, new_loss, alpha, logdetW = _picard_line_search_gpu!(
+                Y, W, Y_new, W_new, DY, DW, direction,
+                direction_cpu, transform_cpu, signs, loss_tmp,
+                current_loss, logdetW, ls_tries, extended,
+            )
 
             if !converged
                 @info "Line search failed to find an improvement. Stopping early."
@@ -770,6 +807,6 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
         end
     end
 
-    copyto!(W_cpu, Array(W))
+    copyto!(W_cpu, W)
 end
 

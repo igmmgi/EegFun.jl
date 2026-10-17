@@ -527,48 +527,61 @@ function _infomax_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float64}, para
     angledelta = 0.0
 
     permute_indices = Vector{Int}(undef, n_samples)
+    perm_gpu = gpu_array(zeros(Int, n_samples))
 
     dat_ica_gpu = gpu_array(Float32.(dat_ica))
+    dat_ica_gpu_shuffled = gpu_array(zeros(Float32, n_channels, n_samples))
     weights_gpu = gpu_array(Float32.(work.weights))
+    weights_f32_cpu = Matrix{Float32}(undef, n_components, n_components)
+    startweights_f32 = Float32.(work.startweights)
+
     u_gpu = gpu_array(zeros(Float32, n_components, block))
     y_gpu = gpu_array(zeros(Float32, n_components, block))
     wu_gpu = gpu_array(zeros(Float32, n_components, n_components))
     wtemp_gpu = gpu_array(zeros(Float32, n_components, n_components))
 
+    # Pre-construct reusable views outside the loop
+    u_view_full = view(u_gpu, :, 1:block)
+    y_view_full = view(y_gpu, :, 1:block)
+    u_view_full_t = transpose(u_view_full)
+    block_f32 = Float32(block)
+
+    last_block_size = rem(n_samples, block)
+    has_remainder = last_block_size > 0
+    u_view_last = has_remainder ? view(u_gpu, :, 1:last_block_size) : u_view_full
+    y_view_last = has_remainder ? view(y_gpu, :, 1:last_block_size) : y_view_full
+    u_view_last_t = transpose(u_view_last)
+    last_block_f32 = Float32(last_block_size)
+
+    # Pre-construct data block views into preallocated dat_ica_gpu_shuffled
+    block_starts = 1:block:n_samples
+    data_block_views = [view(dat_ica_gpu_shuffled, :, t:min(t + block - 1, n_samples)) for t in block_starts]
+    n_blocks = length(block_starts)
+
     @inbounds while step < params.max_iter
         randperm!(permute_indices)
 
-        perm_gpu = gpu_array(permute_indices)
-        dat_ica_gpu_shuffled = dat_ica_gpu[:, perm_gpu]
+        copyto!(perm_gpu, permute_indices)
+        dat_ica_gpu_shuffled .= view(dat_ica_gpu, :, perm_gpu)
 
-        u_view_full = view(u_gpu, :, 1:block)
-        y_view_full = view(y_gpu, :, 1:block)
-        u_view_full_t = transpose(u_view_full)
+        l_rate_f32 = Float32(params.l_rate)
 
-        for t = 1:block:n_samples
-            block_end = min(t + block - 1, n_samples)
-            block_size = block_end - t + 1
+        for b_idx = 1:n_blocks
+            data_block_gpu = data_block_views[b_idx]
+            block_size = size(data_block_gpu, 2)
 
-            try
-                data_block_gpu = view(dat_ica_gpu_shuffled, :, t:block_end)
-
-                if block_size == block
-                    mul!(u_view_full, weights_gpu, data_block_gpu)
-                    @. y_view_full = 1.0f0 - 2.0f0 / (1.0f0 + exp(-u_view_full))
-                    mul!(wu_gpu, y_view_full, u_view_full_t)
-                else
-                    u_view = view(u_gpu, :, 1:block_size)
-                    y_view = view(y_gpu, :, 1:block_size)
-                    mul!(u_view, weights_gpu, data_block_gpu)
-                    @. y_view = 1.0f0 - 2.0f0 / (1.0f0 + exp(-u_view))
-                    mul!(wu_gpu, y_view, transpose(u_view))
-                end
-
+            if block_size == block
+                mul!(u_view_full, weights_gpu, data_block_gpu)
+                @. y_view_full = 1.0f0 - 2.0f0 / (1.0f0 + exp(-u_view_full))
+                mul!(wu_gpu, y_view_full, u_view_full_t)
                 mul!(wtemp_gpu, wu_gpu, weights_gpu)
-                @. weights_gpu += Float32(params.l_rate) * (Float32(block_size) * weights_gpu + wtemp_gpu)
-            catch e
-                @error "GPU processing failed in inner loop, throwing error." exception = (e, catch_backtrace())
-                rethrow(e)
+                @. weights_gpu += l_rate_f32 * (block_f32 * weights_gpu + wtemp_gpu)
+            else
+                mul!(u_view_last, weights_gpu, data_block_gpu)
+                @. y_view_last = 1.0f0 - 2.0f0 / (1.0f0 + exp(-u_view_last))
+                mul!(wu_gpu, y_view_last, u_view_last_t)
+                mul!(wtemp_gpu, wu_gpu, weights_gpu)
+                @. weights_gpu += l_rate_f32 * (last_block_f32 * weights_gpu + wtemp_gpu)
             end
         end
 
@@ -579,7 +592,8 @@ function _infomax_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float64}, para
         end
 
         if !wts_blowup
-            work.weights .= Array(weights_gpu)
+            copyto!(weights_f32_cpu, weights_gpu)
+            work.weights .= weights_f32_cpu
             work.oldweights .-= work.weights
             step += 1
             work.delta .= work.oldweights
@@ -593,7 +607,7 @@ function _infomax_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float64}, para
             params.l_rate *= params.restart_factor
             work.weights .= work.startweights
             work.oldweights .= work.startweights
-            weights_gpu .= gpu_array(Float32.(work.weights))
+            copyto!(weights_gpu, startweights_f32)
             continue
         end
 
@@ -624,7 +638,8 @@ function _infomax_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float64}, para
         end
     end
 
-    work.weights .= Array(weights_gpu)
+    copyto!(weights_f32_cpu, weights_gpu)
+    work.weights .= weights_f32_cpu
 end
 
 function _infomax_extended_optimize_gpu!(
@@ -650,51 +665,94 @@ function _infomax_extended_optimize_gpu!(
     n_super = n_channels
     n_sub = 0
 
+    perm_gpu = gpu_array(zeros(Int, n_samples))
     dat_ica_gpu = gpu_array(Float32.(dat_ica))
+    dat_ica_gpu_shuffled = gpu_array(zeros(Float32, n_channels, n_samples))
+
     weights_gpu = gpu_array(Float32.(work.weights))
+    weights_f32_cpu = Matrix{Float32}(undef, n_components, n_components)
+    startweights_f32 = Float32.(work.startweights)
+
     u_gpu = gpu_array(zeros(Float32, n_components, block))
     y_gpu = gpu_array(zeros(Float32, n_components, block))
     wu_gpu = gpu_array(zeros(Float32, n_components, n_components))
     wtemp_gpu = gpu_array(zeros(Float32, n_components, n_components))
-    is_sub_gaussian_gpu = gpu_array(is_sub_gaussian)
+    is_sub_gaussian_gpu = gpu_array(copy(is_sub_gaussian))
 
     kurtsize = min(2000, n_samples)
     activations_gpu = gpu_array(zeros(Float32, n_channels, kurtsize))
+    rp_gpu = gpu_array(zeros(Int, kurtsize))
+    act_sq = gpu_array(zeros(Float32, n_channels, kurtsize))
+    u2_sum = gpu_array(zeros(Float32, n_channels, 1))
+    u4_sum = gpu_array(zeros(Float32, n_channels, 1))
+    u2_mean_sq_cpu = Vector{Float32}(undef, n_channels)
+    u4_mean_cpu = Vector{Float32}(undef, n_channels)
+    inv_kurtsize = 1.0f0 / Float32(kurtsize)
+
+    # Pre-construct reusable views outside the loop
+    u_view_full = view(u_gpu, :, 1:block)
+    y_view_full = view(y_gpu, :, 1:block)
+    u_view_full_t = transpose(u_view_full)
+    block_f32 = Float32(block)
+
+    last_block_size = rem(n_samples, block)
+    has_remainder = last_block_size > 0
+    u_view_last = has_remainder ? view(u_gpu, :, 1:last_block_size) : u_view_full
+    y_view_last = has_remainder ? view(y_gpu, :, 1:last_block_size) : y_view_full
+    u_view_last_t = transpose(u_view_last)
+    last_block_f32 = Float32(last_block_size)
+
+    # Pre-construct data block views into preallocated dat_ica_gpu_shuffled
+    block_starts = 1:block:n_samples
+    data_block_views = [view(dat_ica_gpu_shuffled, :, t:min(t + block - 1, n_samples)) for t in block_starts]
+    n_blocks = length(block_starts)
 
     @inbounds while step < params.max_iter
         randperm!(permute_indices)
 
-        perm_gpu = gpu_array(permute_indices)
-        dat_ica_gpu_shuffled = dat_ica_gpu[:, perm_gpu]
+        copyto!(perm_gpu, permute_indices)
+        dat_ica_gpu_shuffled .= view(dat_ica_gpu, :, perm_gpu)
 
-        u_view_full = view(u_gpu, :, 1:block)
-        y_view_full = view(y_gpu, :, 1:block)
-        u_view_full_t = transpose(u_view_full)
+        l_rate_f32 = Float32(params.l_rate)
+        has_sub = any(is_sub_gaussian)
 
-        for t = 1:block:n_samples
-            block_end = min(t + block - 1, n_samples)
-            block_size = block_end - t + 1
+        if !has_sub
+            for b_idx = 1:n_blocks
+                data_block_gpu = data_block_views[b_idx]
+                block_size = size(data_block_gpu, 2)
 
-            try
-                data_block_gpu = view(dat_ica_gpu_shuffled, :, t:block_end)
+                if block_size == block
+                    mul!(u_view_full, weights_gpu, data_block_gpu)
+                    @. y_view_full = 1.0f0 - 2.0f0 / (1.0f0 + exp(-u_view_full))
+                    mul!(wu_gpu, y_view_full, u_view_full_t)
+                    mul!(wtemp_gpu, wu_gpu, weights_gpu)
+                    @. weights_gpu += l_rate_f32 * (block_f32 * weights_gpu + wtemp_gpu)
+                else
+                    mul!(u_view_last, weights_gpu, data_block_gpu)
+                    @. y_view_last = 1.0f0 - 2.0f0 / (1.0f0 + exp(-u_view_last))
+                    mul!(wu_gpu, y_view_last, u_view_last_t)
+                    mul!(wtemp_gpu, wu_gpu, weights_gpu)
+                    @. weights_gpu += l_rate_f32 * (last_block_f32 * weights_gpu + wtemp_gpu)
+                end
+            end
+        else
+            for b_idx = 1:n_blocks
+                data_block_gpu = data_block_views[b_idx]
+                block_size = size(data_block_gpu, 2)
 
                 if block_size == block
                     mul!(u_view_full, weights_gpu, data_block_gpu)
                     @. y_view_full = ifelse(is_sub_gaussian_gpu, -tanh(u_view_full), 1.0f0 - 2.0f0 / (1.0f0 + exp(-u_view_full)))
                     mul!(wu_gpu, y_view_full, u_view_full_t)
+                    mul!(wtemp_gpu, wu_gpu, weights_gpu)
+                    @. weights_gpu += l_rate_f32 * (block_f32 * weights_gpu + wtemp_gpu)
                 else
-                    u_view = view(u_gpu, :, 1:block_size)
-                    y_view = view(y_gpu, :, 1:block_size)
-                    mul!(u_view, weights_gpu, data_block_gpu)
-                    @. y_view = ifelse(is_sub_gaussian_gpu, -tanh(u_view), 1.0f0 - 2.0f0 / (1.0f0 + exp(-u_view)))
-                    mul!(wu_gpu, y_view, transpose(u_view))
+                    mul!(u_view_last, weights_gpu, data_block_gpu)
+                    @. y_view_last = ifelse(is_sub_gaussian_gpu, -tanh(u_view_last), 1.0f0 - 2.0f0 / (1.0f0 + exp(-u_view_last)))
+                    mul!(wu_gpu, y_view_last, u_view_last_t)
+                    mul!(wtemp_gpu, wu_gpu, weights_gpu)
+                    @. weights_gpu += l_rate_f32 * (last_block_f32 * weights_gpu + wtemp_gpu)
                 end
-
-                mul!(wtemp_gpu, wu_gpu, weights_gpu)
-                @. weights_gpu += Float32(params.l_rate) * (Float32(block_size) * weights_gpu + wtemp_gpu)
-            catch e
-                @error "GPU processing failed in inner loop, throwing error." exception = (e, catch_backtrace())
-                rethrow(e)
             end
         end
 
@@ -705,7 +763,8 @@ function _infomax_extended_optimize_gpu!(
         end
 
         if !wts_blowup
-            work.weights .= Array(weights_gpu)
+            copyto!(weights_f32_cpu, weights_gpu)
+            work.weights .= weights_f32_cpu
             work.oldweights .-= work.weights
             step += 1
             work.delta .= work.oldweights
@@ -719,28 +778,29 @@ function _infomax_extended_optimize_gpu!(
             params.l_rate *= params.restart_factor
             work.weights .= work.startweights
             work.oldweights .= work.startweights
-            weights_gpu .= gpu_array(Float32.(work.weights))
+            copyto!(weights_gpu, startweights_f32)
             continue
         end
 
         # Extended Infomax: update kurtosis signs periodically
         if step > 10 && step % 10 == 0
             rp_cpu = randperm(n_samples)[1:kurtsize]
-            rp_gpu = gpu_array(rp_cpu)
+            copyto!(rp_gpu, rp_cpu)
             dat_subset = dat_ica_gpu[:, rp_gpu]
             mul!(activations_gpu, weights_gpu, dat_subset)
 
             # Compute raw kurtosis entirely on the GPU using mapreduce patterns or broadcasting
-            act_sq = activations_gpu .^ 2
-            u2_sum = sum(act_sq, dims = 2)
-            u2_mean_sq = (u2_sum ./ kurtsize) .^ 2
-
-            act_quad = act_sq .^ 2
-            u4_mean = sum(act_quad, dims = 2) ./ kurtsize
+            @. act_sq = activations_gpu^2
+            sum!(u2_sum, act_sq)
+            @. act_sq = act_sq^2
+            sum!(u4_sum, act_sq)
 
             # Fetch back to CPU for momentum smoothing
-            u2_mean_sq_cpu = Array(u2_mean_sq)
-            u4_mean_cpu = Array(u4_mean)
+            copyto!(u2_mean_sq_cpu, u2_sum)
+            copyto!(u4_mean_cpu, u4_sum)
+
+            @. u2_mean_sq_cpu = (u2_mean_sq_cpu * inv_kurtsize)^2
+            @. u4_mean_cpu = u4_mean_cpu * inv_kurtsize
 
             n_switched = 0
 
@@ -765,8 +825,10 @@ function _infomax_extended_optimize_gpu!(
                 end
             end
 
-            # Push updated boolean vector to GPU
-            is_sub_gaussian_gpu .= gpu_array(is_sub_gaussian)
+            # Push updated boolean vector to GPU if any changed
+            if n_switched > 0
+                copyto!(is_sub_gaussian_gpu, is_sub_gaussian)
+            end
 
             # Update kurtosis counts
             n_sub = count(is_sub_gaussian)
@@ -802,7 +864,8 @@ function _infomax_extended_optimize_gpu!(
         end
     end
 
-    work.weights .= Array(weights_gpu)
+    copyto!(weights_f32_cpu, weights_gpu)
+    work.weights .= weights_f32_cpu
 end
 
 
