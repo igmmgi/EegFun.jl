@@ -12,22 +12,31 @@ Internal function that applies baseline correction to specified channels in a Da
 - Subtracts the mean of the baseline interval from each specified channel
 - Modifies the input DataFrame in-place
 """
-function _apply_baseline!(dat::DataFrame, channels::Vector{Symbol}, baseline_interval::Tuple{Int,Int})
-    # Compute mean baseline interval and apply to each channel individually to avoid allocating a DataFrame
+function _apply_baseline!(dat::DataFrame, ch_indices::Vector{Int}, baseline_interval::Tuple{Int,Int})
     start_idx, end_idx = baseline_interval
-    for channel in channels
-        col = dat[!, channel]
+    inv_len = 1.0 / (end_idx - start_idx + 1)
+    for col_idx in ch_indices
+        col = dat[!, col_idx]
         if col isa Vector{Float64}
             col_f64 = col::Vector{Float64}
-            mean_val = mean(view(col_f64, start_idx:end_idx))
-            @inbounds for i in eachindex(col_f64)
+            s = 0.0
+            @inbounds @simd for i = start_idx:end_idx
+                s += col_f64[i]
+            end
+            mean_val = s * inv_len
+            @inbounds @simd for i in eachindex(col_f64)
                 col_f64[i] -= mean_val
             end
         else
             mean_val = mean(view(col, start_idx:end_idx))
-            dat[!, channel] = col .- mean_val
+            dat[!, col_idx] = col .- mean_val
         end
     end
+end
+
+function _apply_baseline!(dat::DataFrame, channels::Vector{Symbol}, baseline_interval::Tuple{Int,Int})
+    ch_indices = [columnindex(dat, ch) for ch in channels]
+    _apply_baseline!(dat, ch_indices, baseline_interval)
 end
 
 """
@@ -36,8 +45,10 @@ end
 Internal function that applies baseline correction to each DataFrame in a vector using broadcasting.
 """
 function _apply_baseline!(dat::Vector{DataFrame}, channels::Vector{Symbol}, baseline_interval::Tuple{Int,Int})
+    isempty(dat) && return nothing
+    ch_indices = [columnindex(dat[1], ch) for ch in channels]
     Threads.@threads for df in dat
-        _apply_baseline!(df, channels, baseline_interval)
+        _apply_baseline!(df, ch_indices, baseline_interval)
     end
 end
 

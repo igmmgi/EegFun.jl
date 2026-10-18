@@ -715,17 +715,37 @@ end
 
 
 
-"""
-    average_epochs(dat::EpochData)
+function _accumulate_epoch_average!(
+    avg_matrix::Matrix{Float64},
+    data::Vector{DataFrame},
+    ch_col_indices::Vector{Int},
+    n_timepoints::Int,
+)
+    for epoch in data
+        for (ch_idx, col_idx) in enumerate(ch_col_indices)
+            col = epoch[!, col_idx]
+            if col isa Vector{Float64}
+                col_f64 = col::Vector{Float64}
+                @inbounds @simd for i = 1:n_timepoints
+                    avg_matrix[i, ch_idx] += col_f64[i]
+                end
+            else
+                @inbounds for i = 1:n_timepoints
+                    avg_matrix[i, ch_idx] += col[i]
+                end
+            end
+        end
+    end
+    return nothing
+end
 
-Average epochs to create an ERP. Specifically:
-1. Concatenates all epochs
-2. Groups by time point and condition
-3. Averages the EEG channels at each time point
-4. Adds a count of how many epochs went into each average
+"""
+    average_epochs(dat::EpochData) -> ErpData
+
+Average EEG data across epochs to produce Event-Related Potentials (ERPs).
 
 # Arguments
-- `dat::EpochData`: The epoched data to average
+- `dat::EpochData`: Epoched EEG data to average
 
 # Returns
 - `ErpData`: The averaged ERP data with epoch counts
@@ -781,22 +801,9 @@ function average_epochs(dat::EpochData)
         n_eps = n_epochs(dat)
         n_chans = length(eeg_channels)
         avg_matrix = zeros(Float64, n_timepoints, n_chans)
+        ch_col_indices = [columnindex(first_epoch, ch) for ch in eeg_channels]
 
-        for epoch in dat.data
-            for (ch_idx, ch) in enumerate(eeg_channels)
-                col = epoch[!, ch]
-                if col isa Vector{Float64}
-                    col_f64 = col::Vector{Float64}
-                    @inbounds @simd for i = 1:n_timepoints
-                        avg_matrix[i, ch_idx] += col_f64[i]
-                    end
-                else
-                    @inbounds for i = 1:n_timepoints
-                        avg_matrix[i, ch_idx] += col[i]
-                    end
-                end
-            end
-        end
+        _accumulate_epoch_average!(avg_matrix, dat.data, ch_col_indices, n_timepoints)
 
         inv_n_eps = 1.0 / n_eps
         for (ch_idx, ch) in enumerate(eeg_channels)

@@ -9,17 +9,20 @@ Internal function that applies rereferencing to specified channels in a DataFram
 - `reference_selection::Vector{Symbol}`: Names of channels to use for reference calculation
 """
 function _apply_rereference!(dat::DataFrame, channel_selection::Vector{Symbol}, reference_selection::Vector{Symbol})
-    reference = zeros(n_samples(dat))
-    _calculate_reference!(reference, dat, reference_selection)
-    n = length(reference)
-    for ch in channel_selection
-        col = dat[!, ch]
+    n = n_samples(dat)
+    reference = Vector{Float64}(undef, n)
+    ref_indices = [columnindex(dat, ch) for ch in reference_selection]
+    ch_indices = [columnindex(dat, ch) for ch in channel_selection]
+    _calculate_reference!(reference, dat, ref_indices)
+    for col_idx in ch_indices
+        col = dat[!, col_idx]
         if col isa Vector{Float64}
+            col_f64 = col::Vector{Float64}
             @inbounds @simd for i = 1:n
-                col[i] -= reference[i]
+                col_f64[i] -= reference[i]
             end
         else
-            dat[!, ch] .-= reference
+            dat[!, col_idx] .-= reference
         end
     end
     return nothing
@@ -35,19 +38,27 @@ function _apply_rereference!(dat::Vector{DataFrame}, channel_selection::Vector{S
         return nothing
     end
 
-    n = n_samples(dat[1])
+    first_df = dat[1]
+    n = n_samples(first_df)
+    ref_indices = [columnindex(first_df, ch) for ch in reference_selection]
+    ch_indices = [columnindex(first_df, ch) for ch in channel_selection]
+
+    n_threads = Threads.maxthreadid()
+    ref_buffers = [Vector{Float64}(undef, n) for _ in 1:n_threads]
 
     Threads.@threads for df in dat
-        reference = Vector{Float64}(undef, n)
-        _calculate_reference!(reference, df, reference_selection)
-        for ch in channel_selection
-            col = df[!, ch]
+        tid = Threads.threadid()
+        reference = ref_buffers[tid]
+        _calculate_reference!(reference, df, ref_indices)
+        for col_idx in ch_indices
+            col = df[!, col_idx]
             if col isa Vector{Float64}
+                col_f64 = col::Vector{Float64}
                 @inbounds @simd for i = 1:n
-                    col[i] -= reference[i]
+                    col_f64[i] -= reference[i]
                 end
             else
-                df[!, ch] .-= reference
+                df[!, col_idx] .-= reference
             end
         end
     end
@@ -55,7 +66,7 @@ function _apply_rereference!(dat::Vector{DataFrame}, channel_selection::Vector{S
 end
 
 """
-    _calculate_reference(dat::DataFrame, reference_channels)
+    _calculate_reference!(reference::Vector{Float64}, dat::DataFrame, reference_channels)
 
 Calculate reference signal from specified channels.
 
@@ -66,25 +77,31 @@ Calculate reference signal from specified channels.
 # Returns
 - Vector containing the average of specified reference channels
 """
-function _calculate_reference!(reference::Vector{Float64}, dat::DataFrame, reference_channels)
+function _calculate_reference!(reference::Vector{Float64}, dat::DataFrame, ref_indices::AbstractVector{<:Integer})
     fill!(reference, 0.0)
     n = length(reference)
-    @inbounds for channel in reference_channels
-        col = dat[!, channel]
+    @inbounds for col_idx in ref_indices
+        col = dat[!, col_idx]
         if col isa Vector{Float64}
+            col_f64 = col::Vector{Float64}
             @simd for i = 1:n
-                reference[i] += col[i]
+                reference[i] += col_f64[i]
             end
         else
             reference .+= col
         end
     end
 
-    n_refs = Float64(length(reference_channels))
+    inv_refs = 1.0 / length(ref_indices)
     @inbounds @simd for i = 1:n
-        reference[i] /= n_refs
+        reference[i] *= inv_refs
     end
     return reference
+end
+
+function _calculate_reference!(reference::Vector{Float64}, dat::DataFrame, reference_channels::AbstractVector{Symbol})
+    ref_indices = [columnindex(dat, ch) for ch in reference_channels]
+    return _calculate_reference!(reference, dat, ref_indices)
 end
 
 

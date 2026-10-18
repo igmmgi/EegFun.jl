@@ -211,10 +211,24 @@ function _calculate_epoch_metrics(
 
     metric_keys = [:z_variance, :z_max, :z_min, :z_abs, :z_range, :z_kurtosis, :absolute_threshold]
     metrics = Dict(k => Dict(ch => Int[] for ch in selected_channels) for k in metric_keys)
+    isempty(dat.data) && return metrics
+
+    first_epoch = first(dat.data)
+    col_map = Dict(ch => columnindex(first_epoch, ch) for ch in selected_channels)
+
+    # Use a UnitRange when sample indices are contiguous 
+    samples_idx = if selected_samples isa AbstractUnitRange
+        selected_samples
+    elseif length(selected_samples) > 1 && issorted(selected_samples) && (selected_samples[end] - selected_samples[1] + 1 == length(selected_samples))
+        selected_samples[1]:selected_samples[end]
+    else
+        selected_samples
+    end
 
     Threads.@threads for ch in selected_channels
-        # subset the data by the selected sample interval for the metric calculation
-        channel_data_all = [epoch[selected_samples, ch]::Vector{Float64} for epoch in dat]
+        col_idx = col_map[ch]
+        # Zero-allocation views into each epoch's column
+        channel_data_all = [@views(epoch[!, col_idx][samples_idx]) for epoch in dat]
 
         if abs_criterion > 0
             abs_threshold_violations = findall(epoch_data -> maximum(abs, epoch_data) > abs_criterion, channel_data_all)
