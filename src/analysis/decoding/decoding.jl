@@ -30,18 +30,22 @@ function _prepare_decoding_data(epochs::Vector{EpochData})
         # [channels × time × trials]
         condition_data = Array{Float64}(undef, n_channels, n_times, n_trials)
 
-        # Pre-allocate references to columns to avoid dictionary lookups in the inner loop
-        cols = Vector{Vector{Float64}}(undef, n_channels)
+        # Pre-resolve column indices outside trial loop
+        first_epoch = epoch_data.data[1]
+        ch_indices = [columnindex(first_epoch, ch) for ch in channels]
 
         for (trial_idx, trial_df) in enumerate(epoch_data.data)
-            for (ch_idx, ch) in enumerate(channels)
-                cols[ch_idx] = trial_df[!, ch]::Vector{Float64}
-            end
-
-            for ch_idx = 1:n_channels
-                col = cols[ch_idx]
-                @inbounds @simd for t = 1:n_times
-                    condition_data[ch_idx, t, trial_idx] = col[t]
+            for (ch_idx, col_idx) in enumerate(ch_indices)
+                col = trial_df[!, col_idx]
+                if col isa Vector{Float64}
+                    col_f64 = col::Vector{Float64}
+                    @inbounds @simd for t = 1:n_times
+                        condition_data[ch_idx, t, trial_idx] = col_f64[t]
+                    end
+                else
+                    @inbounds @simd for t = 1:n_times
+                        condition_data[ch_idx, t, trial_idx] = Float64(col[t])
+                    end
                 end
             end
         end
@@ -91,23 +95,42 @@ function _prepare_decoding_data(epochs::Vector{TimeFreqEpochData})
         # [(channels×frequencies) × time × trials]
         condition_data = Array{Float64}(undef, n_features, n_times, n_trials)
 
+        first_df_cond = epoch_data.data_power[1]
+        ch_indices = [columnindex(first_df_cond, ch) for ch in channels]
+        freq_varies_fastest = length(first_df_cond.time) > 1 && (first_df_cond.time[1] == first_df_cond.time[2])
+
         # Pre-allocate references to columns
         cols = Vector{Vector{Float64}}(undef, n_channels)
 
         for (trial_idx, trial_df) in enumerate(epoch_data.data_power)
-            for (ch_idx, ch) in enumerate(channels)
-                cols[ch_idx] = trial_df[!, ch]::Vector{Float64}
+            for (ch_idx, col_idx) in enumerate(ch_indices)
+                cols[ch_idx] = trial_df[!, col_idx]::Vector{Float64}
             end
 
             # Reshape: each timepoint gets all channel-frequency pairs as features
-            @inbounds for t_idx = 1:n_times
-                feature_idx = 1
-                for f_idx = 1:n_freqs
-                    # Row in the DataFrame for this (time, freq) combination
-                    row_idx = (f_idx - 1) * n_times + t_idx
-                    for ch_idx = 1:n_channels
-                        condition_data[feature_idx, t_idx, trial_idx] = cols[ch_idx][row_idx]
-                        feature_idx += 1
+            if freq_varies_fastest
+                # Standard TF layout: time outer, freq inner (tf_morlet/multitaper/stft)
+                @inbounds for t_idx = 1:n_times
+                    base_row = (t_idx - 1) * n_freqs
+                    feature_idx = 1
+                    for f_idx = 1:n_freqs
+                        row_idx = base_row + f_idx
+                        for ch_idx = 1:n_channels
+                            condition_data[feature_idx, t_idx, trial_idx] = cols[ch_idx][row_idx]
+                            feature_idx += 1
+                        end
+                    end
+                end
+            else
+                # Legacy / freq outer, time inner layout
+                @inbounds for t_idx = 1:n_times
+                    feature_idx = 1
+                    for f_idx = 1:n_freqs
+                        row_idx = (f_idx - 1) * n_times + t_idx
+                        for ch_idx = 1:n_channels
+                            condition_data[feature_idx, t_idx, trial_idx] = cols[ch_idx][row_idx]
+                            feature_idx += 1
+                        end
                     end
                 end
             end

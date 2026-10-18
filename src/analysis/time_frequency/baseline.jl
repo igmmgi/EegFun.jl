@@ -58,86 +58,175 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}
 
     @info "Applying $(method) baseline correction ($(baseline_interval[1])s to $(baseline_interval[2])s)"
 
-    # Build row index once
-    row_index = _tf_build_row_index(tf_data.data_power)
-
-    # Extract ALL channels into a 3D array [n_channels × n_freqs × n_times] in one pass
-    power_3d = Array{Float64,3}(undef, n_channels, n_freqs, n_times)
-    for (fi, f) in enumerate(freqs_unique)
-        rf = round(f, digits = 6)
-        for (ti, t) in enumerate(times)
-            row = get(row_index, (rf, round(t, digits = 6)), nothing)
-            if !isnothing(row)
-                for (ci, ch) in enumerate(ch_labels)
-                    power_3d[ci, fi, ti] = tf_data.data_power[row, ch]
-                end
-            else
-                power_3d[:, fi, ti] .= NaN
-            end
-        end
-    end
-
-    # Compute baseline statistics per channel × frequency
-    # baseline_mean: [n_channels × n_freqs]
-    baseline_mean = zeros(n_channels, n_freqs)
-    baseline_std_mat = nothing  # only computed for :zscore
-
-    for ci = 1:n_channels
-        for fi = 1:n_freqs
-            vals = @view power_3d[ci, fi, base_mask]
-            valid = vals[.!isnan.(vals)]
-            baseline_mean[ci, fi] = isempty(valid) ? NaN : mean(valid)
-        end
-    end
-
-    if method == :zscore
-        baseline_std_mat = zeros(n_channels, n_freqs)
-        for ci = 1:n_channels
-            for fi = 1:n_freqs
-                vals = @view power_3d[ci, fi, base_mask]
-                valid = vals[.!isnan.(vals)]
-                baseline_std_mat[ci, fi] = (isempty(valid) || length(valid) < 2) ? NaN : std(valid, corrected = false)
-            end
-        end
-    end
-
-    # Apply baseline correction to entire 3D array at once (no per-channel loop)
-    # Reshape baseline_mean to [n_channels × n_freqs × 1] for broadcasting over time
-    bm = reshape(baseline_mean, n_channels, n_freqs, 1)
-
-    if method == :absolute
-        power_3d .-= bm
-    elseif method == :relative
-        safe_bm = max.(bm, 1e-30)
-        power_3d ./= safe_bm
-    elseif method == :relchange
-        safe_bm = max.(bm, 1e-30)
-        power_3d .= (power_3d .- bm) ./ safe_bm
-    elseif method == :normchange || method == :vssum
-        power_3d .= (power_3d .- bm) ./ (power_3d .+ bm)
-    elseif method == :db
-        safe_bm = max.(bm, 1e-30)
-        power_3d .= 10 .* log10.(max.(power_3d, 1e-30) ./ safe_bm)
-    elseif method == :zscore
-        safe_std = reshape(max.(baseline_std_mat, 1e-30), n_channels, n_freqs, 1)
-        power_3d .= (power_3d .- bm) ./ safe_std
-    elseif method == :percent
-        safe_bm = max.(bm, 1e-30)
-        power_3d .= 100 .* (power_3d .- bm) ./ safe_bm
-    else
+    valid_methods = (:absolute, :relative, :relchange, :normchange, :vssum, :db, :zscore, :percent)
+    if method ∉ valid_methods
         @minimal_error(
             "Unknown baseline method: $method. Use :absolute, :relative, :relchange, :normchange, :db, :vssum (alias for :normchange), :zscore, or :percent",
         )
     end
 
-    # Write all channels back to DataFrame in one pass
-    for (fi, f) in enumerate(freqs_unique)
-        rf = round(f, digits = 6)
-        for (ti, t) in enumerate(times)
-            row = get(row_index, (rf, round(t, digits = 6)), nothing)
-            if !isnothing(row)
-                for (ci, ch) in enumerate(ch_labels)
-                    tf_data.data_power[row, ch] = power_3d[ci, fi, ti]
+    # Check if the data follows the standard regular grid (time outer, freq inner)
+    is_regular_grid = (nrow(tf_data.data_power) == n_freqs * n_times) &&
+                      (n_freqs > 0 && n_times > 0) &&
+                      (tf_data.data_power.time[1] == tf_data.data_power.time[min(n_freqs, end)])
+
+    if is_regular_grid
+        base_range = baseline_start_idx:baseline_end_idx
+        n_base = length(base_range)
+        inv_n_base = 1.0 / n_base
+
+        Threads.@threads for ch in ch_labels
+            col = tf_data.data_power[!, ch]
+            if col isa Vector{Float64}
+                mat = reshape(col::Vector{Float64}, n_freqs, n_times)
+                for fi = 1:n_freqs
+                    base_vals = @view mat[fi, base_range]
+                    bm = if any(isnan, base_vals)
+                        valid = filter(!isnan, base_vals)
+                        isempty(valid) ? NaN : mean(valid)
+                    else
+                        s = 0.0
+                        @inbounds @simd for ti in base_range
+                            s += mat[fi, ti]
+                        end
+                        s * inv_n_base
+                    end
+
+                    if isnan(bm)
+                        @inbounds for ti = 1:n_times
+                            mat[fi, ti] = NaN
+                        end
+                        continue
+                    end
+
+                    safe_bm = max(bm, 1e-30)
+
+                    if method == :absolute
+                        @inbounds @simd for ti = 1:n_times
+                            mat[fi, ti] -= bm
+                        end
+                    elseif method == :relative
+                        inv_bm = 1.0 / safe_bm
+                        @inbounds @simd for ti = 1:n_times
+                            mat[fi, ti] *= inv_bm
+                        end
+                    elseif method == :relchange
+                        inv_bm = 1.0 / safe_bm
+                        @inbounds @simd for ti = 1:n_times
+                            mat[fi, ti] = (mat[fi, ti] - bm) * inv_bm
+                        end
+                    elseif method == :normchange || method == :vssum
+                        @inbounds for ti = 1:n_times
+                            p = mat[fi, ti]
+                            mat[fi, ti] = (p - bm) / (p + bm)
+                        end
+                    elseif method == :db
+                        inv_bm = 1.0 / safe_bm
+                        @inbounds for ti = 1:n_times
+                            mat[fi, ti] = 10.0 * log10(max(mat[fi, ti], 1e-30) * inv_bm)
+                        end
+                    elseif method == :zscore
+                        bstd = if any(isnan, base_vals)
+                            valid = filter(!isnan, base_vals)
+                            (isempty(valid) || length(valid) < 2) ? NaN : std(valid, corrected = false)
+                        else
+                            std(base_vals, corrected = false)
+                        end
+                        if isnan(bstd)
+                            @inbounds for ti = 1:n_times
+                                mat[fi, ti] = NaN
+                            end
+                        else
+                            inv_std = 1.0 / max(bstd, 1e-30)
+                            @inbounds @simd for ti = 1:n_times
+                                mat[fi, ti] = (mat[fi, ti] - bm) * inv_std
+                            end
+                        end
+                    elseif method == :percent
+                        inv_bm = 100.0 / safe_bm
+                        @inbounds @simd for ti = 1:n_times
+                            mat[fi, ti] = (mat[fi, ti] - bm) * inv_bm
+                        end
+                    end
+                end
+            end
+        end
+    else
+        # Fallback for irregular grids using dictionary row indexing
+        row_index = _tf_build_row_index(tf_data.data_power)
+
+        # Extract ALL channels into a 3D array [n_channels × n_freqs × n_times] in one pass
+        power_3d = Array{Float64,3}(undef, n_channels, n_freqs, n_times)
+        for (fi, f) in enumerate(freqs_unique)
+            rf = round(f, digits = 6)
+            for (ti, t) in enumerate(times)
+                row = get(row_index, (rf, round(t, digits = 6)), nothing)
+                if !isnothing(row)
+                    for (ci, ch) in enumerate(ch_labels)
+                        power_3d[ci, fi, ti] = tf_data.data_power[row, ch]
+                    end
+                else
+                    power_3d[:, fi, ti] .= NaN
+                end
+            end
+        end
+
+        # Compute baseline statistics per channel × frequency
+        baseline_mean = zeros(n_channels, n_freqs)
+        baseline_std_mat = nothing  # only computed for :zscore
+
+        for ci = 1:n_channels
+            for fi = 1:n_freqs
+                vals = @view power_3d[ci, fi, base_mask]
+                valid = vals[.!isnan.(vals)]
+                baseline_mean[ci, fi] = isempty(valid) ? NaN : mean(valid)
+            end
+        end
+
+        if method == :zscore
+            baseline_std_mat = zeros(n_channels, n_freqs)
+            for ci = 1:n_channels
+                for fi = 1:n_freqs
+                    vals = @view power_3d[ci, fi, base_mask]
+                    valid = vals[.!isnan.(vals)]
+                    baseline_std_mat[ci, fi] = (isempty(valid) || length(valid) < 2) ? NaN : std(valid, corrected = false)
+                end
+            end
+        end
+
+        # Apply baseline correction to entire 3D array at once
+        bm = reshape(baseline_mean, n_channels, n_freqs, 1)
+
+        if method == :absolute
+            power_3d .-= bm
+        elseif method == :relative
+            safe_bm = max.(bm, 1e-30)
+            power_3d ./= safe_bm
+        elseif method == :relchange
+            safe_bm = max.(bm, 1e-30)
+            power_3d .= (power_3d .- bm) ./ safe_bm
+        elseif method == :normchange || method == :vssum
+            power_3d .= (power_3d .- bm) ./ (power_3d .+ bm)
+        elseif method == :db
+            safe_bm = max.(bm, 1e-30)
+            power_3d .= 10 .* log10.(max.(power_3d, 1e-30) ./ safe_bm)
+        elseif method == :zscore
+            safe_std = reshape(max.(baseline_std_mat, 1e-30), n_channels, n_freqs, 1)
+            power_3d .= (power_3d .- bm) ./ safe_std
+        elseif method == :percent
+            safe_bm = max.(bm, 1e-30)
+            power_3d .= 100 .* (power_3d .- bm) ./ safe_bm
+        end
+
+        # Write all channels back to DataFrame in one pass
+        for (fi, f) in enumerate(freqs_unique)
+            rf = round(f, digits = 6)
+            for (ti, t) in enumerate(times)
+                row = get(row_index, (rf, round(t, digits = 6)), nothing)
+                if !isnothing(row)
+                    for (ci, ch) in enumerate(ch_labels)
+                        tf_data.data_power[row, ch] = power_3d[ci, fi, ti]
+                    end
                 end
             end
         end

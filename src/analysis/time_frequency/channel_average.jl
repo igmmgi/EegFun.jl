@@ -67,9 +67,9 @@ function channel_average!(
 
         new_power = isempty(meta_cols) ? DataFrame() : dat.data_power[:, meta_cols]
         new_phase = isempty(meta_cols) ? DataFrame() : dat.data_phase[:, meta_cols]
-        for (grp, lbl) in zip(selected_channel_groups, labels)
-            new_power[!, lbl] = _colmeans(dat.data_power, grp)
-            new_phase[!, lbl] = _colmeans(dat.data_phase, grp)
+        for lbl in labels
+            new_power[!, lbl] = dat.data_power[!, lbl]
+            new_phase[!, lbl] = dat.data_phase[!, lbl]
         end
         dat.data_power = new_power
         dat.data_phase = new_phase

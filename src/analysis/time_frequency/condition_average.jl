@@ -26,8 +26,17 @@ function _create_tf_average_wave(tfs::Vector{TimeFreqData}, conditions::Vector{I
     for ch in eeg_channels
         all_have_ch = all(hasproperty(tf.data_power, ch) for tf in tfs)
         if all_have_ch
-            avg_power[!, ch] = sum(tf.data_power[!, ch] for tf in tfs) ./ n
-            avg_phase[!, ch] = sum(tf.data_phase[!, ch] for tf in tfs) ./ n
+            pow_col = copy(tfs[1].data_power[!, ch])
+            phase_col = copy(tfs[1].data_phase[!, ch])
+            for i = 2:n
+                pow_col .+= tfs[i].data_power[!, ch]
+                phase_col .+= tfs[i].data_phase[!, ch]
+            end
+            inv_n = 1.0 / n
+            pow_col .*= inv_n
+            phase_col .*= inv_n
+            avg_power[!, ch] = pow_col
+            avg_phase[!, ch] = phase_col
         else
             @minimal_warning "Channel $ch not found in all conditions, keeping values from first condition"
         end

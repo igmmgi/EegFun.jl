@@ -85,12 +85,13 @@ function _tf_matrix_to_df!(
     time_points::Vector{Float64},
     row_index::Dict{Tuple{Float64,Float64},Int} = _tf_build_row_index(df),
 )
+    col = df[!, channel]::Vector{Float64}
     for (ti, t) in enumerate(time_points)
         rt = round(t, digits = 6)
         for (fi, f) in enumerate(frequencies)
             row = get(row_index, (round(f, digits = 6), rt), nothing)
             if !isnothing(row)
-                df[row, channel] = mat[fi, ti]
+                col[row] = mat[fi, ti]
             end
         end
     end

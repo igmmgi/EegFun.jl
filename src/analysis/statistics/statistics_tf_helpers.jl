@@ -175,6 +175,24 @@ function _extract_tf_array(
     rounded_freqs = round.(frequencies, digits = 6)
     rounded_times = round.(time_points, digits = 6)
 
+    # Fast path: if all TFs follow standard regular grid (time outer, freq inner) matching requested axes
+    first_df = tfs[1].data_power
+    is_standard_grid = (nrow(first_df) == n_freqs * n_time) &&
+                       (length(first_df.time) > 1 && first_df.time[1] == first_df.time[min(n_freqs, end)]) &&
+                       (round(first_df.time[1], digits = 6) == rounded_times[1]) &&
+                       (round(first_df.freq[1], digits = 6) == rounded_freqs[1]) &&
+                       all(nrow(tf.data_power) == n_freqs * n_time for tf in tfs)
+
+    if is_standard_grid
+        for (p_idx, tf) in enumerate(tfs)
+            for (e_idx, elec) in enumerate(electrodes)
+                col_data = tf.data_power[!, elec]::Vector{Float64}
+                copyto!(@view(data[p_idx, e_idx, :, :]), col_data)
+            end
+        end
+        return data
+    end
+
     for (p_idx, tf) in enumerate(tfs)
         # Build row index once per participant, reuse for all channels
         row_index = _tf_build_row_index(tf.data_power)

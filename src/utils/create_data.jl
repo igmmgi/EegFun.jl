@@ -629,9 +629,9 @@ function create_test_tf_epoch_data(;
     n_time = length(time_points)
     n_rows = n_freqs * n_time
 
-    # Build time and freq columns (time varies fastest within each freq block)
-    time_col = repeat(time_points, outer = n_freqs)
-    freq_col = repeat(frequencies, inner = n_time)
+    # Build time and freq columns: time outer, freq inner (matches tf_morlet/multitaper/stft)
+    time_col = repeat(time_points, inner = n_freqs)
+    freq_col = repeat(frequencies, outer = n_time)
 
     layout = create_test_layout(n_channels = n_channels)
 
