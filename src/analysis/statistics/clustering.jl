@@ -39,6 +39,7 @@ function _build_connectivity_matrix(electrodes::Vector{Symbol}, layout::Layout, 
         # Build adjacency matrix
         I = Int[]
         J = Int[]
+        elec_to_idx = Dict{Symbol, Int}(e => i for (i, e) in enumerate(electrodes))
 
         for (e_idx, electrode) in enumerate(electrodes)
             # Get neighbours from layout
@@ -46,8 +47,8 @@ function _build_connectivity_matrix(electrodes::Vector{Symbol}, layout::Layout, 
                 neighbours = layout.neighbours[electrode]
                 for neighbour in neighbours.channels
                     # Find index of neighbour in electrodes list
-                    n_idx = findfirst(==(neighbour), electrodes)
-                    if !isnothing(n_idx)
+                    n_idx = get(elec_to_idx, neighbour, 0)
+                    if n_idx > 0
                         push!(I, e_idx)
                         push!(J, n_idx)
                         # Also add reverse
@@ -93,8 +94,9 @@ function _prefilter_mask_by_neighbors!(mask::BitArray{2}, spatial_connectivity::
 
     n_electrodes, n_time = size(mask)
 
-    # Make spatial connectivity symmetric
-    spatial_conn_sym = spatial_connectivity .| spatial_connectivity'
+    # Ensure spatial connectivity is symmetric (zero allocation if already symmetric)
+    spatial_conn_sym = issymmetric(spatial_connectivity) ? spatial_connectivity : (spatial_connectivity .| copy(transpose(spatial_connectivity)))
+    rv = rowvals(spatial_conn_sym)
 
     # removing a channel may cause its neighbors to now have too few neighbors
     nremoved = 1
@@ -108,7 +110,6 @@ function _prefilter_mask_by_neighbors!(mask::BitArray{2}, spatial_connectivity::
 
                 # Count significant spatial neighbours (NOT counting self)
                 neighbor_count = 0
-                rv = rowvals(spatial_conn_sym)
                 for ptr in nzrange(spatial_conn_sym, e_idx)
                     n_e_idx = rv[ptr]
                     if e_idx != n_e_idx && mask[n_e_idx, t_idx]
@@ -453,8 +454,8 @@ function _max_cluster_stat(
     has_spatial = cluster_type in (:spatial, :spatiotemporal, :full)
     has_temporal = cluster_type in (:temporal, :spatiotemporal, :full)
 
-    @inbounds for e_idx = 1:n_electrodes
-        for t_idx = 1:n_time
+    @inbounds for t_idx = 1:n_time
+        for e_idx = 1:n_electrodes
             if !mask[e_idx, t_idx] || labels_buf[e_idx, t_idx] > 0
                 continue
             end
@@ -552,9 +553,9 @@ function _max_cluster_stat_tf(
     use_spectral = cluster_type in (:spectral, :spectrotemporal, :full)
     use_temporal = cluster_type in (:temporal, :spatiotemporal, :spectrotemporal, :full)
 
-    @inbounds for e_idx = 1:n_electrodes
+    @inbounds for t_idx = 1:n_time
         for f_idx = 1:n_freqs
-            for t_idx = 1:n_time
+            for e_idx = 1:n_electrodes
                 if !mask[e_idx, f_idx, t_idx] || labels_buf[e_idx, f_idx, t_idx] > 0
                     continue
                 end
@@ -660,7 +661,8 @@ function _prefilter_mask_by_neighbors_tf!(mask::BitArray{3}, spatial_connectivit
     end
 
     n_electrodes, n_freqs, n_time = size(mask)
-    spatial_conn_sym = spatial_connectivity .| spatial_connectivity'
+    spatial_conn_sym = issymmetric(spatial_connectivity) ? spatial_connectivity : (spatial_connectivity .| copy(transpose(spatial_connectivity)))
+    rv = rowvals(spatial_conn_sym)
 
     nremoved = 1
     while nremoved > 0
@@ -673,7 +675,6 @@ function _prefilter_mask_by_neighbors_tf!(mask::BitArray{3}, spatial_connectivit
                     end
                     # Count significant spatial neighbours (NOT counting self)
                     neighbor_count = 0
-                    rv = rowvals(spatial_conn_sym)
                     for ptr in nzrange(spatial_conn_sym, e_idx)
                         n_e_idx = rv[ptr]
                         if e_idx != n_e_idx && mask[n_e_idx, f_idx, t_idx]

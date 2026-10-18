@@ -810,6 +810,7 @@ function average_epochs(dat::EpochData)
 
         return ErpData(dat.file, dat.condition, dat.condition_name, erp, copy(dat.layout), dat.sample_rate, copy(dat.analysis_info), n_eps)
     catch e
+        e isa EegFunError && rethrow(e)
         @minimal_error("Failed to average epochs: $(e)")
     end
 end

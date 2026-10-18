@@ -31,11 +31,9 @@ function _create_grand_average(erps::Vector{ErpData}, cond_num::Int)
     grand_avg_data = copy(first_erp.data)
 
     # Remove condition/condition_name/n_epochs columns if they exist (they're in struct now)
-    cols_to_remove = [:condition, :condition_name, :n_epochs]
-    for col in cols_to_remove
-        if hasproperty(grand_avg_data, col)
-            select!(grand_avg_data, Not(col))
-        end
+    cols_to_remove = filter(col -> hasproperty(grand_avg_data, col), [:condition, :condition_name, :n_epochs])
+    if !isempty(cols_to_remove)
+        select!(grand_avg_data, Not(cols_to_remove))
     end
 
     n_points = nrow(grand_avg_data)

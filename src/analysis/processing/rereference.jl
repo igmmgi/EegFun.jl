@@ -104,19 +104,23 @@ rereference!(epochs, [:M1, :M2])
 ```
 """
 # helper function to handle special reference cases such as :avg and :mastoid
-function _get_reference_channels(dat, reference_channel::Vector{Symbol})
-    if reference_channel[1] == :none
+function _get_reference_channels(dat::EegData, reference_channel::Symbol)
+    if reference_channel == :none
         return Symbol[]  # No reference channels for :none
-    elseif reference_channel[1] == :avg # all channels
+    elseif reference_channel == :avg # all channels
         return channel_labels(dat)
-    elseif reference_channel[1] == :mastoid
+    elseif reference_channel == :mastoid
         return [:M1, :M2]
     end
-    return reference_channel
+    return [reference_channel]
 end
 
-function _get_reference_channels(dat::EegData, reference_channel::Symbol)
-    return _get_reference_channels(dat, [reference_channel])
+function _get_reference_channels(dat, reference_channel::Vector{Symbol})
+    isempty(reference_channel) && return Symbol[]
+    if length(reference_channel) == 1
+        return _get_reference_channels(dat, reference_channel[1])
+    end
+    return reference_channel
 end
 
 # Single method for all EEG data types

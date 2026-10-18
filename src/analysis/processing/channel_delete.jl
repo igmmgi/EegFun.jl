@@ -39,8 +39,7 @@ function channel_delete!(dat::EegData, channels_to_delete::Union{Symbol,Vector{S
 
     # Remove channels from layout (only if they exist in layout)
     if !isempty(channels_in_layout)
-        layout_mask = [label ∉ channels_in_layout for label in dat.layout.data.label]
-        dat.layout.data = dat.layout.data[layout_mask, :]
+        filter!(:label => ∉(channels_in_layout), dat.layout.data)
 
         # Clear neighbours if they exist (since channels have changed)
         if has_neighbours(dat.layout)
@@ -59,11 +58,9 @@ channel_delete!(dat::EegData, channel::Symbol) = channel_delete!(dat, [channel])
 
 # Multiple dispatch for different EEG data types
 function _delete_data_columns!(df::DataFrame, channels_to_delete::Set{Symbol})
-    existing_cols = Set(propertynames(df))
-    cols_to_remove = intersect(existing_cols, channels_to_delete)
-
+    cols_to_remove = [c for c in propertynames(df) if c in channels_to_delete]
     if !isempty(cols_to_remove)
-        select!(df, Not(collect(cols_to_remove)))
+        select!(df, Not(cols_to_remove))
     end
     return nothing
 end
@@ -73,7 +70,14 @@ function _delete_data_columns!(dat::SingleDataFrameEeg, channels_to_delete::Set{
 end
 
 function _delete_data_columns!(dat::MultiDataFrameEeg, channels_to_delete::Set{Symbol})
-    _delete_data_columns!.(dat.data, Ref(channels_to_delete))
+    isempty(dat.data) && return nothing
+    cols_to_remove = [c for c in propertynames(dat.data[1]) if c in channels_to_delete]
+    if !isempty(cols_to_remove)
+        for df in dat.data
+            select!(df, Not(cols_to_remove))
+        end
+    end
+    return nothing
 end
 
 """

@@ -384,7 +384,7 @@ function _extract_null_distributions!(
 
     if use_tfce
         @info "Extracting TFCE Maps..."
-        for perm_idx in 1:n_perms
+        Threads.@threads for perm_idx in 1:n_perms
             for coef_idx in tested_coef_indices
                 t_map = Array(t_perm_matrix[:, :, perm_idx, coef_idx])
                 tfce_map = EegFun._compute_tfce(t_map, channel_names, Float64.(time_points), spatial_conn, :spatiotemporal; E=tfce_E, H=tfce_H, dh=tfce_dh)
@@ -394,12 +394,20 @@ function _extract_null_distributions!(
     else
         @info "Extracting Spatio-Temporal Clusters (threshold = $cluster_threshold)..."
         n_channels, n_timepoints = length(channel_names), length(time_points)
-        labels_buf = zeros(Int, n_channels, n_timepoints)
-        queue_buf = Vector{Tuple{Int,Int}}(undef, n_channels * n_timepoints)
-        pos_mask = BitArray{2}(undef, n_channels, n_timepoints)
-        neg_mask = BitArray{2}(undef, n_channels, n_timepoints)
-        t_map = Array{Float64,2}(undef, n_channels, n_timepoints)
-        for perm_idx in 1:n_perms
+        n_threads = Threads.maxthreadid()
+        labels_bufs = [zeros(Int, n_channels, n_timepoints) for _ in 1:n_threads]
+        queue_bufs = [Vector{Tuple{Int,Int}}(undef, n_channels * n_timepoints) for _ in 1:n_threads]
+        pos_masks = [BitArray{2}(undef, n_channels, n_timepoints) for _ in 1:n_threads]
+        neg_masks = [BitArray{2}(undef, n_channels, n_timepoints) for _ in 1:n_threads]
+        t_maps = [Array{Float64,2}(undef, n_channels, n_timepoints) for _ in 1:n_threads]
+
+        Threads.@threads for perm_idx in 1:n_perms
+            tid = Threads.threadid()
+            labels_buf = labels_bufs[tid]
+            queue_buf = queue_bufs[tid]
+            pos_mask = pos_masks[tid]
+            neg_mask = neg_masks[tid]
+            t_map = t_maps[tid]
             for coef_idx in tested_coef_indices
                 copyto!(t_map, view(t_perm_matrix, :, :, perm_idx, coef_idx))
                 @inbounds for i in eachindex(t_map)
@@ -607,6 +615,7 @@ function fit_mass_lmm(eeg_data, meta_df, f;
     # 7. Extract null distribution & compute corrected p-values
     if n_perms > 0
         spatial_conn = isnothing(spatial_connectivity) ? EegFun.sparse(Int[], Int[], Bool[], n_channels, n_channels) : SparseMatrixCSC{Bool}(spatial_connectivity)
+        spatial_conn = issymmetric(spatial_conn) ? spatial_conn : (spatial_conn .| copy(transpose(spatial_conn)))
         electrode_to_idx = Dict(e => i for (i, e) in enumerate(channel_names))
         
         _extract_null_distributions!(

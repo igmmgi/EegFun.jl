@@ -17,6 +17,29 @@ function _subset_dataframe(df::DataFrame, selected_channels::Vector{Symbol}, sel
     return df[selected_samples, selected_channels]
 end
 
+"""
+    _subset_dataframes(dataframes::Vector{DataFrame}, selected_epochs::Vector{Int}, selected_channels::Vector{Symbol}, selected_samples::Vector{Int}) -> Vector{DataFrame}
+
+Create subsets of multiple DataFrames by selecting specific epochs, channels, and samples.
+
+# Arguments
+- `dataframes::Vector{DataFrame}`: Vector of DataFrames to subset
+- `selected_epochs::Vector{Int}`: Indices of epochs (DataFrames) to include
+- `selected_channels::Vector{Symbol}`: Column names to include in each DataFrame
+- `selected_samples::Vector{Int}`: Row indices to include in each DataFrame
+
+# Returns
+- `Vector{DataFrame}`: Vector of subset DataFrames
+"""
+function _subset_dataframes(
+    dataframes::Vector{DataFrame},
+    selected_epochs::Vector{Int},
+    selected_channels::Vector{Symbol},
+    selected_samples::Vector{Int},
+)::Vector{DataFrame}
+    return [_subset_dataframe(dataframes[ep], selected_channels, selected_samples) for ep in selected_epochs]
+end
+
 
 
 # === INTERNAL SUBSET HELPERS ===

@@ -34,14 +34,14 @@ end
     _colmeans(df::Matrix) -> Vector{Float64}
     _colmeans(df::Matrix, cols) -> Vector{Float64}
 
-Calculate the mean of specified columns in a DataFrame.
+Calculate the row-wise mean across specified columns (channel-average waveform).
 
 # Arguments
 - `df::DataFrame`: The DataFrame containing the data.
-- `cols`: The columns for which to calculate the mean. This can be a vector of column names or indices.
+- `cols`: The columns across which to average for each row. Can be a vector of column names or indices.
 
 # Returns
-- `Vector{Float64}`: A vector containing the mean of each specified column.
+- `Vector{Float64}`: A vector of length `nrow(df)` containing the mean across the specified columns at each sample.
 """
 function _colmeans(df::DataFrame, cols)::Vector{Float64}
     isempty(cols) && return Float64[]
@@ -207,30 +207,4 @@ function _ylimits(
     min_val = minimum(lim[1] for lim in limits)
     max_val = maximum(lim[2] for lim in limits)
     return (min_val, max_val)
-end
-
-
-
-
-"""
-    _subset_dataframes(dataframes::Vector{DataFrame}, selected_epochs::Vector{Int}, selected_channels::Vector{Symbol}, selected_samples::Vector{Int}) -> Vector{DataFrame}
-
-Create subsets of multiple DataFrames by selecting specific epochs, channels, and samples.
-
-# Arguments
-- `dataframes::Vector{DataFrame}`: Vector of DataFrames to subset
-- `selected_epochs::Vector{Int}`: Indices of epochs (DataFrames) to include
-- `selected_channels::Vector{Symbol}`: Column names to include in each DataFrame
-- `selected_samples::Vector{Int}`: Row indices to include in each DataFrame
-
-# Returns
-- `Vector{DataFrame}`: Vector of subset DataFrames
-"""
-function _subset_dataframes(
-    dataframes::Vector{DataFrame},
-    selected_epochs::Vector{Int},
-    selected_channels::Vector{Symbol},
-    selected_samples::Vector{Int},
-)::Vector{DataFrame}
-    return _subset_dataframe.(dataframes[selected_epochs], Ref(selected_channels), Ref(selected_samples))
 end

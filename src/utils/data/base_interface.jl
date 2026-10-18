@@ -98,7 +98,7 @@ function Base.vcat(dats::EpochData...)
 
         for df in dat.data
             new_df = copy(df)
-            if "epoch" in names(new_df)
+            if hasproperty(new_df, :epoch)
                 new_df.epoch .= epoch_counter
             end
             push!(new_data, new_df)

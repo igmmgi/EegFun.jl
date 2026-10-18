@@ -405,7 +405,7 @@ function _have_same_structure(dat1::EegData, dat2::EegData)::Bool
     # Check time vectors match (if they exist)
     time1 = time_vector(dat1)
     time2 = time_vector(dat2)
-    if !isempty(time1) && !isempty(time2) && !all(time1 .≈ time2)
+    if !isempty(time1) && !isempty(time2) && !isapprox(time1, time2)
         @minimal_error("Time vectors do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
         return false
     end
@@ -470,6 +470,7 @@ function to_data_frame(dat::MultiDataFrameEeg)
 end
 function to_data_frame(dat::Vector{<:MultiDataFrameEeg})
     isempty(dat) && return DataFrame()
-    isempty(dat[1].data) && return DataFrame()
-    return reduce(vcat, [reduce(vcat, d.data) for d in dat])
+    all_dfs = [df for d in dat for df in d.data]
+    isempty(all_dfs) && return DataFrame()
+    return reduce(vcat, all_dfs)
 end

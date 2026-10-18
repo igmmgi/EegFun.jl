@@ -377,6 +377,9 @@ function _run_permutations(
     electrodes = channel_labels(prepared.data[1])
     time_points = prepared.analysis.time_points
 
+    # Ensure spatial connectivity is symmetric once outside permutation loop
+    spatial_conn_sym = issymmetric(spatial_connectivity) ? spatial_connectivity : (spatial_connectivity .| copy(transpose(spatial_connectivity)))
+
     # Progress bar
     local completed = nothing
     if show_progress
@@ -438,15 +441,15 @@ function _run_permutations(
 
         # Pre-filter masks (modify in place)
         if min_num_neighbors > 0
-            _prefilter_mask_by_neighbors!(mask_pos_buffer, spatial_connectivity, min_num_neighbors)
-            _prefilter_mask_by_neighbors!(mask_neg_buffer, spatial_connectivity, min_num_neighbors)
+            _prefilter_mask_by_neighbors!(mask_pos_buffer, spatial_conn_sym, min_num_neighbors)
+            _prefilter_mask_by_neighbors!(mask_neg_buffer, spatial_conn_sym, min_num_neighbors)
         end
 
         # Find extreme cluster statistics directly (zero allocation)
         max_pos = _max_cluster_stat(
             mask_pos_buffer,
             t_matrix_perm,
-            spatial_connectivity,
+            spatial_conn_sym,
             cluster_type,
             cluster_labels_buffers[tid],
             cluster_queue_buffers[tid];
@@ -455,7 +458,7 @@ function _run_permutations(
         max_neg = _max_cluster_stat(
             mask_neg_buffer,
             t_matrix_perm,
-            spatial_connectivity,
+            spatial_conn_sym,
             cluster_type,
             cluster_labels_buffers[tid],
             cluster_queue_buffers[tid];
@@ -597,6 +600,9 @@ function _run_permutations_tf(
     cluster_labels_buffers = [zeros(Int, n_electrodes, n_freqs, n_time) for _ = 1:n_threads]
     cluster_queue_buffers = [Vector{Tuple{Int,Int,Int}}(undef, n_electrodes * n_freqs * n_time) for _ = 1:n_threads]
 
+    # Ensure spatial connectivity is symmetric once outside permutation loop
+    spatial_conn_sym = issymmetric(spatial_connectivity) ? spatial_connectivity : (spatial_connectivity .| copy(transpose(spatial_connectivity)))
+
     local completed = nothing
     if show_progress
         progress = Progress(n_permutations, desc = "TF Permutations: ", showspeed = true)
@@ -635,15 +641,15 @@ function _run_permutations_tf(
 
         # Pre-filter
         if min_num_neighbors > 0
-            _prefilter_mask_by_neighbors_tf!(mask_pos_buffer, spatial_connectivity, min_num_neighbors)
-            _prefilter_mask_by_neighbors_tf!(mask_neg_buffer, spatial_connectivity, min_num_neighbors)
+            _prefilter_mask_by_neighbors_tf!(mask_pos_buffer, spatial_conn_sym, min_num_neighbors)
+            _prefilter_mask_by_neighbors_tf!(mask_neg_buffer, spatial_conn_sym, min_num_neighbors)
         end
 
         # Find extreme cluster statistics directly (zero allocation)
         max_pos = _max_cluster_stat_tf(
             mask_pos_buffer,
             t_matrix_perm,
-            spatial_connectivity,
+            spatial_conn_sym,
             cluster_type,
             cluster_labels_buffers[tid],
             cluster_queue_buffers[tid];
@@ -652,7 +658,7 @@ function _run_permutations_tf(
         max_neg = _max_cluster_stat_tf(
             mask_neg_buffer,
             t_matrix_perm,
-            spatial_connectivity,
+            spatial_conn_sym,
             cluster_type,
             cluster_labels_buffers[tid],
             cluster_queue_buffers[tid];

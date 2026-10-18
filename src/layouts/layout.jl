@@ -103,7 +103,7 @@ Check if the layout has 2D Cartesian coordinates.
 # Returns
 - `Bool`: True if x2 and y2 columns exist
 """
-has_2d_coords(layout::Layout) = all(col -> col in propertynames(layout.data), [:x2, :y2])
+has_2d_coords(layout::Layout) = hasproperty(layout.data, :x2) && hasproperty(layout.data, :y2)
 
 """
     has_3d_coords(layout::Layout) -> Bool
@@ -116,7 +116,7 @@ Check if the layout has 3D Cartesian coordinates.
 # Returns
 - `Bool`: True if x3, y3, and z3 columns exist
 """
-has_3d_coords(layout::Layout) = all(col -> col in propertynames(layout.data), [:x3, :y3, :z3])
+has_3d_coords(layout::Layout) = hasproperty(layout.data, :x3) && hasproperty(layout.data, :y3) && hasproperty(layout.data, :z3)
 """
     has_valid_coordinates(layout::Layout) -> Bool
 
@@ -455,7 +455,7 @@ function _find_neighbours(labels, coords, distance_criterion)
         nb_indices, dists = adj[i]
 
         if isempty(nb_indices)
-            neighbour_dict[label] = Neighbours([], [], [])
+            neighbour_dict[label] = Neighbours(Symbol[], Float64[], Float64[])
             continue
         end
 

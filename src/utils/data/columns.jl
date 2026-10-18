@@ -18,10 +18,9 @@ Get columns by group type for EegData objects using layout-based identification.
 """
 function _get_cols_by_group(dat::EegData, group::Symbol)
 
-    if !(group in [:channels, :metadata, :extra])
+    if group ∉ (:channels, :metadata, :extra)
         @minimal_error "Unknown group type: $group"
     end
-
 
     labels = all_labels(dat)
     layout_channels = dat.layout.data.label
@@ -32,13 +31,13 @@ function _get_cols_by_group(dat::EegData, group::Symbol)
         isempty(layout_channels) && return Symbol[]
         valid_channels = intersect(layout_channels, labels)
         isempty(valid_channels) && return Symbol[]
-        first_channel_idx = findfirst(col -> col == valid_channels[1], labels)
+        first_channel_idx = findfirst(==(valid_channels[1]), labels)
         return labels[1:(first_channel_idx-1)]
     elseif group == :extra
         isempty(layout_channels) && return Symbol[]
         valid_channels = intersect(layout_channels, labels)
         isempty(valid_channels) && return Symbol[]
-        last_channel_idx = findlast(col -> col == valid_channels[end], labels)
+        last_channel_idx = findlast(==(valid_channels[end]), labels)
         return labels[(last_channel_idx+1):end]
     end
 end

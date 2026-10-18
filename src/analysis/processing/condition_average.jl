@@ -29,11 +29,9 @@ function _create_average_wave(erps::Vector{<:ErpData}, conditions::Vector{Int}, 
     avg_data = copy(erps[1].data)
 
     # Remove condition/condition_name/n_epochs columns if they exist (they're in struct now)
-    cols_to_remove = [:condition, :condition_name, :n_epochs]
-    for col in cols_to_remove
-        if hasproperty(avg_data, col)
-            select!(avg_data, Not(col))
-        end
+    cols_to_remove = filter(col -> hasproperty(avg_data, col), [:condition, :condition_name, :n_epochs])
+    if !isempty(cols_to_remove)
+        select!(avg_data, Not(cols_to_remove))
     end
 
     # Average EEG channels across conditions

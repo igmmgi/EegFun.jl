@@ -94,7 +94,7 @@ end
 
 # --- Type-specific application methods ---
 
-function _apply_csd!(data::ContinuousData, filter_matrix::Matrix{Float64}, channels::Vector{Symbol})
+function _apply_csd!(data::SingleDataFrameEeg, filter_matrix::Matrix{Float64}, channels::Vector{Symbol})
     n_samples = nrow(data.data)
     n_chans = length(channels)
     X = Matrix{Float64}(undef, n_samples, n_chans)
@@ -123,21 +123,6 @@ function _apply_csd!(data::EpochData, filter_matrix::Matrix{Float64}, channels::
         for (c, ch) in enumerate(channels)
             epoch_df[!, ch] = Y[:, c]
         end
-    end
-end
-
-function _apply_csd!(data::ErpData, filter_matrix::Matrix{Float64}, channels::Vector{Symbol})
-    n_samples = nrow(data.data)
-    n_chans = length(channels)
-    X = Matrix{Float64}(undef, n_samples, n_chans)
-    for (c, ch) in enumerate(channels)
-        X[:, c] = data.data[!, ch]
-    end
-    FT = collect(transpose(filter_matrix))
-    Y = Matrix{Float64}(undef, n_samples, n_chans)
-    mul!(Y, X, FT)
-    for (c, ch) in enumerate(channels)
-        data.data[!, ch] = Y[:, c]
     end
 end
 
