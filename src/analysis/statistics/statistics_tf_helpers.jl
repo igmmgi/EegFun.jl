@@ -240,9 +240,9 @@ function _create_tf_grand_average(
     n_freqs = length(frequencies)
     n_time = length(time_points)
 
-    # Create time and freq columns (time varies fastest within each freq)
-    time_col = repeat(time_points, outer = n_freqs)
-    freq_col = repeat(frequencies, inner = n_time)
+    # Create time and freq columns (all frequencies for time 1, all frequencies for time 2, etc.)
+    time_col = repeat(time_points, inner = n_freqs)
+    freq_col = repeat(frequencies, outer = n_time)
 
     # Build DataFrame with zero-initialized channel columns
     power_df = DataFrame(time = time_col, freq = freq_col, copycols = false)

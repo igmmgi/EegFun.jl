@@ -1141,4 +1141,34 @@ using EegFun
         @test count(epochs2_sep.data[1].is_peak_to_peak_Ch1) > 0
     end
 
+    @testset "Empty Signal Edge Cases & Return Values" begin
+        # Empty signals should not throw BoundsError or ArgumentError
+        @test isempty(EegFun._is_step_value(Float64[], 50.0))
+        @test isempty(EegFun._is_peak_to_peak(Float64[], 50.0, 10))
+        @test isempty(EegFun._is_flatline(Float64[], 0.1, 10))
+        @test isempty(EegFun._is_extreme_value(Float64[], 50.0))
+
+        # Float32 support in extreme value
+        @test EegFun._is_extreme_value(Float32[10.0, 60.0], 50.0) == [false, true]
+        mask = falses(2)
+        EegFun._is_extreme_value!(mask, Float32[10.0, 60.0], 50.0)
+        @test mask == [false, true]
+
+        # repair_artifacts_neighbor! returns dat
+        layout_df = DataFrame(label = [:Ch1, :Ch2, :Ch3], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0])
+        neighbours_dict = EegFun.OrderedDict(
+            :Ch1 => EegFun.Neighbours([:Ch2, :Ch3], [1.0, 1.0], [0.5, 0.5]),
+            :Ch2 => EegFun.Neighbours([:Ch1, :Ch3], [1.0, 1.0], [0.5, 0.5]),
+            :Ch3 => EegFun.Neighbours([:Ch1, :Ch2], [1.0, 1.0], [0.5, 0.5]),
+        )
+        layout = EegFun.Layout(layout_df, neighbours_dict, nothing, nothing)
+        epochs = EegFun.create_test_epoch_data(n_epochs = 3, n_channels = 3)
+        epochs.layout = layout
+        epochs.data[2][!, :Ch1] .= 200.0
+        info = EegFun.detect_bad_epochs_automatic(epochs, abs_criterion = 150.0, z_criterion = 0)
+        EegFun.channel_repairable!(info, layout)
+        @test EegFun.repair_artifacts_neighbor!(epochs, info) === epochs
+    end
+
 end
+

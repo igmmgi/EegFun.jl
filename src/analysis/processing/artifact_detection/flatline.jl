@@ -8,6 +8,7 @@ Returns a boolean mask where all samples within any window whose std dev is belo
 """
 function _is_flatline(signal::AbstractVector{<:Real}, threshold::Real, window_samples::Int)
     n = length(signal)
+    n == 0 && return falses(0)
     mask = falses(n)
     w = max(1, window_samples)
     if w >= n

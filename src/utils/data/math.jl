@@ -24,8 +24,9 @@ Calculate the range of data (maximum - minimum).
 - `Float64`: Difference between maximum and minimum values
 """
 function _datarange(x::AbstractVector)::Float64
+    isempty(x) && return 0.0
     mn, mx = extrema(x)
-    return mx - mn
+    return Float64(mx - mn)
 end
 
 
@@ -137,7 +138,7 @@ Get the value range across multiple specified columns.
 - `Nothing`: If the DataFrame is empty
 """
 function _data_limits_y(dat::DataFrame, cols::Vector{Symbol})
-    isempty(dat) && return nothing
+    (isempty(dat) || isempty(cols)) && return nothing
     global_min, global_max = Inf, -Inf
     @inbounds for col in cols
         mn, mx = extrema(dat[!, col])
@@ -152,13 +153,12 @@ end
 
 # === DEFAULT Y-RANGE HELPERS ===
 """
-    yrange(dat::ErpData; channel_selection::Function = channels(), sample_selection::Function = samples(), include_extra::Bool = false, buffer::Float64 = 0.1)
+    _ylimits(dat::Union{ErpData, ContinuousData}; channel_selection::Function = channels(), sample_selection::Function = samples(), interval_selection::Interval = times(), include_extra::Bool = false)
 
-Compute a padded y-range for ERP data using channel selection predicate.
-Returns (min, max) padded by `buffer` proportion.
+Compute y-limits (min, max) for single-dataframe EEG data (ERP or Continuous) using channel and time selection predicates.
 """
 function _ylimits(
-    dat::ErpData;
+    dat::Union{ErpData, ContinuousData};
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     interval_selection::Interval = times(),
@@ -173,14 +173,14 @@ function _ylimits(
     )
     chs = channel_labels(dat_sub)
     lims = _data_limits_y(dat_sub.data, chs)
+    isnothing(lims) && return (0.0, 1.0)
     return (lims[1], lims[2])
 end
 
 """
-    yrange(dat::EpochData; channel_selection::Function = channels(), sample_selection::Function = samples(), include_extra::Bool = false, buffer::Float64 = 0.1, average_only::Bool = false)
+    _ylimits(dat::EpochData; channel_selection::Function = channels(), sample_selection::Function = samples(), interval_selection::Interval = times(), include_extra::Bool = false)
 
-Compute a padded y-range for epoch data using channel selection predicate.
-If `average_only=true`, uses the averaged waveform across epochs.
+Compute y-limits (min, max) for epoch data using channel and time selection predicates.
 """
 function _ylimits(
     dat::EpochData;

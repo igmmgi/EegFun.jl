@@ -255,6 +255,23 @@ function tf_baseline(tf_data::Vector{TimeFreqData}, baseline_interval::Tuple{Rea
     return [tf_baseline(tf, baseline_interval; method = method) for tf in tf_data]
 end
 
+# Overloads for baseline! and baseline for TimeFreqData (unifying with EegData baseline interface)
+function baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
+    tf_baseline!(tf_data, baseline_interval; method = method)
+end
+
+function baseline!(tf_data::Vector{TimeFreqData}, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
+    tf_baseline!(tf_data, baseline_interval; method = method)
+end
+
+function baseline(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
+    tf_baseline(tf_data, baseline_interval; method = method)
+end
+
+function baseline(tf_data::Vector{TimeFreqData}, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
+    tf_baseline(tf_data, baseline_interval; method = method)
+end
+
 """
     tf_baseline(file_pattern::String, baseline_interval;
                 method=:db, input_dir=pwd(), output_dir=nothing,

@@ -15,16 +15,16 @@ Detect extreme values in a signal using threshold crossing.
 extreme_mask = _is_extreme_value(signal, 50.0) # Detect values ±50 μV
 ```
 """
-_is_extreme_value(signal::AbstractVector{Float64}, threshold::Real) = abs.(signal) .> threshold
+_is_extreme_value(signal::AbstractVector{<:Real}, threshold::Real) = abs.(signal) .> threshold
 
 """
-    _is_extreme_value!(mask::Vector{Bool}, signal::AbstractVector{Float64}, threshold::Real)
+    _is_extreme_value!(mask::AbstractVector{Bool}, signal::AbstractVector{<:Real}, threshold::Real)
 
 Detect extreme values in a signal and store results in a pre-allocated mask.
 
 # Arguments
-- `mask::Vector{Bool}`: Pre-allocated boolean vector to store results
-- `signal::AbstractVector{Float64}`: Input signal vector
+- `mask::AbstractVector{Bool}`: Pre-allocated boolean vector to store results
+- `signal::AbstractVector{<:Real}`: Input signal vector
 - `threshold::Float64`: Threshold for extreme value detection
 
 # Modifies
@@ -37,7 +37,7 @@ mask = Vector{Bool}(undef, length(signal))
 _is_extreme_value!(mask, signal, 50.0)
 ```
 """
-function _is_extreme_value!(mask::Vector{Bool}, signal::AbstractVector{Float64}, threshold::Real)
+function _is_extreme_value!(mask::AbstractVector{Bool}, signal::AbstractVector{<:Real}, threshold::Real)
     length(mask) == length(signal) ||
         @minimal_error "Mask and signal must have the same length (mask: $(length(mask)), signal: $(length(signal)))"
     @inbounds for i in eachindex(signal)

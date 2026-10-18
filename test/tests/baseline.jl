@@ -301,4 +301,25 @@ using EegFun
     @test isapprox(epochs_baselined.data[1].Ch1, original_epoch_ch1 .- baseline_mean_epoch; atol = 1e-9)
     @test epochs_baselined !== epochs  # Should be different object
 
+    # Test baseline! and baseline on TimeFreqData
+    tf = EegFun.create_test_tf_data(n_channels = 2, power_offset = 5.0, noise = 0.0)
+    tf_base = EegFun.baseline(tf, (0.0, 0.2); method = :db)
+    @test tf_base isa EegFun.TimeFreqData
+    @test tf_base !== tf
+    @test !isnothing(tf_base.baseline)
+    @test tf_base.baseline.method == :db
+
+    EegFun.baseline!(tf, (0.0, 0.2); method = :db)
+    @test !isnothing(tf.baseline)
+    @test isapprox(tf.data_power.Ch1, tf_base.data_power.Ch1)
+
+    # Vector{TimeFreqData}
+    tf_vec = [EegFun.create_test_tf_data(condition = 1), EegFun.create_test_tf_data(condition = 2)]
+    tf_vec_base = EegFun.baseline(tf_vec, (0.0, 0.2); method = :relative)
+    @test length(tf_vec_base) == 2
+    @test tf_vec_base[1].baseline.method == :relative
+
+    EegFun.baseline!(tf_vec, (0.0, 0.2); method = :relative)
+    @test tf_vec[1].baseline.method == :relative
 end
+

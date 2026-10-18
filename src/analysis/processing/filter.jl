@@ -350,6 +350,28 @@ function highpass_filter(dat, args...; kwargs...)
     return dat_copy
 end
 
+function lowpass_filter!(dat::Vector{<:EegData}, cutoff_freq::Real; kwargs...)
+    for d in dat
+        lowpass_filter!(d, cutoff_freq; kwargs...)
+    end
+    return dat
+end
+
+function highpass_filter!(dat::Vector{<:EegData}, cutoff_freq::Real; kwargs...)
+    for d in dat
+        highpass_filter!(d, cutoff_freq; kwargs...)
+    end
+    return dat
+end
+
+function lowpass_filter(dat::Vector{<:EegData}, cutoff_freq::Real; kwargs...)
+    return [lowpass_filter(d, cutoff_freq; kwargs...) for d in dat]
+end
+
+function highpass_filter(dat::Vector{<:EegData}, cutoff_freq::Real; kwargs...)
+    return [highpass_filter(d, cutoff_freq; kwargs...) for d in dat]
+end
+
 """Apply lowpass filter using settings from a `FilterConfig` section."""
 function lowpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :lowpass)
     sec = getfield(filter_cfg, section)

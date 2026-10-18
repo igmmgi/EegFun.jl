@@ -584,6 +584,15 @@ using OrderedCollections
         ylims_epoch = EegFun._ylimits(epoch_data)
         @test ylims_epoch isa Tuple{Float64,Float64}
         @test ylims_epoch[1] < ylims_epoch[2]
+
+        # Test _ylimits for ContinuousData
+        cont_data = EegFun.ContinuousData("test_data", df, layout, 250, analysis_info)
+        ylims_cont = EegFun._ylimits(cont_data)
+        @test ylims_cont == ylims
+
+        # Test empty data and guards
+        @test isnothing(EegFun._data_limits_y(df, Symbol[]))
+        @test EegFun._datarange(Float64[]) == 0.0
     end
 
     @testset "Base Array Interface and Conversions" begin

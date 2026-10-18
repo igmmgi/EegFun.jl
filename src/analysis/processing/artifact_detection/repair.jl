@@ -183,7 +183,7 @@ function repair_artifacts_neighbor!(dat::EpochData, artifacts::EpochRejectionInf
         @info "" # formatting
     end
 
-    return nothing
+    return dat
 end
 
 """

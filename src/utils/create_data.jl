@@ -568,9 +568,9 @@ function create_test_tf_data(;
     n_time = length(time_points)
     n_rows = n_freqs * n_time
 
-    # Build time and freq columns (time varies fastest within each freq block)
-    time_col = repeat(time_points, outer = n_freqs)
-    freq_col = repeat(frequencies, inner = n_time)
+    # Build time and freq columns (all frequencies for time 1, all frequencies for time 2, etc.)
+    time_col = repeat(time_points, inner = n_freqs)
+    freq_col = repeat(frequencies, outer = n_time)
 
     # Build power DataFrame
     power_df = DataFrame(time = time_col, freq = freq_col)

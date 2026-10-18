@@ -244,7 +244,8 @@ function channel_joint_probability(
 )::DataFrame
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
     isempty(selected_channels) && @minimal_error "No channels selected for joint probability calculation"
-    selected_samples = get_selected_samples(dat, sample_selection)
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+    selected_samples = get_selected_samples(dat, combined_sel)
 
     return _channel_joint_probability(
         dat.data,

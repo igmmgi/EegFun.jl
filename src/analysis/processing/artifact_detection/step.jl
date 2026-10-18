@@ -26,6 +26,7 @@ step_mask = _is_step_value(signal, 50.0) # Detect jumps > 50 μV between samples
 """
 function _is_step_value(signal::AbstractVector{<:Real}, threshold::Real)
     n = length(signal)
+    n == 0 && return Bool[]
     mask = Vector{Bool}(undef, n)
     mask[1] = false  # First sample has no previous sample
 

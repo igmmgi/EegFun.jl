@@ -127,6 +127,22 @@ using JLD2
         @test erp2.analysis_info.hp_filter == 0.5
     end
 
+    @testset "Vector of EegData filtering" begin
+        base1 = EegFun.create_test_continuous_data(; n = 1000, fs = 500)
+        base2 = EegFun.create_test_continuous_data(; n = 1000, fs = 500)
+        vec_dats = [base1, base2]
+        
+        filtered_vec = EegFun.lowpass_filter(vec_dats, 30.0)
+        @test length(filtered_vec) == 2
+        @test filtered_vec[1].analysis_info.lp_filter == 30.0
+        @test filtered_vec[2].analysis_info.lp_filter == 30.0
+        @test vec_dats[1].analysis_info.lp_filter == 0.0
+
+        EegFun.highpass_filter!(vec_dats, 1.0)
+        @test vec_dats[1].analysis_info.hp_filter == 1.0
+        @test vec_dats[2].analysis_info.hp_filter == 1.0
+    end
+
     @testset "filter characteristics" begin
         fs = 1000.0
         fi = EegFun.create_lowpass_filter(40.0, fs; order = 4, transition_width = 0.1)

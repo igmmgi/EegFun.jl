@@ -22,7 +22,7 @@ channel_delete!(dat, [:Fp1, :Fp2, :Diode]) # Delete multiple channels
 - Updates both the data columns and the layout rows
 - Clears any cached neighbour information in the layout since channels have changed
 """
-function channel_delete!(dat::EegData, channels_to_delete::Union{Symbol,Vector{Symbol}})
+function channel_delete!(dat::EegData, channels_to_delete::Vector{Symbol})
 
     # Check which channels exist in the data columns (includes extra channels)
     existing_data_channels = Set(all_labels(dat))
@@ -55,6 +55,13 @@ function channel_delete!(dat::EegData, channels_to_delete::Union{Symbol,Vector{S
     return nothing
 end
 channel_delete!(dat::EegData, channel::Symbol) = channel_delete!(dat, [channel])
+
+function channel_delete!(dat::Vector{<:EegData}, channels_to_delete::Union{Symbol,Vector{Symbol}})
+    for d in dat
+        channel_delete!(d, channels_to_delete)
+    end
+    return dat
+end
 
 # Multiple dispatch for different EEG data types
 function _delete_data_columns!(df::DataFrame, channels_to_delete::Set{Symbol})
@@ -104,8 +111,13 @@ new_dat = channel_delete(dat, [:Fp1, :Fp2, :Diode]) # Delete multiple channels
 - Clears any cached neighbour information in the layout since channels have changed
 - The original data is not modified
 """
-function channel_delete(dat::EegData, channels_to_delete::Union{Symbol,Vector{Symbol}})
+function channel_delete(dat::EegData, channels_to_delete::Vector{Symbol})
     new_dat = copy(dat)
     channel_delete!(new_dat, channels_to_delete)
     return new_dat
+end
+channel_delete(dat::EegData, channel::Symbol) = channel_delete(dat, [channel])
+
+function channel_delete(dat::Vector{<:EegData}, channels_to_delete::Union{Symbol,Vector{Symbol}})
+    return [channel_delete(d, channels_to_delete) for d in dat]
 end

@@ -27,17 +27,18 @@ function _get_cols_by_group(dat::EegData, group::Symbol)
 
     if group == :channels
         return intersect(layout_channels, labels)
-    elseif group == :metadata
-        isempty(layout_channels) && return Symbol[]
-        valid_channels = intersect(layout_channels, labels)
-        isempty(valid_channels) && return Symbol[]
-        first_channel_idx = findfirst(==(valid_channels[1]), labels)
+    end
+
+    isempty(layout_channels) && return Symbol[]
+    channel_indices = [i for (i, l) in enumerate(labels) if l in layout_channels]
+    isempty(channel_indices) && return Symbol[]
+
+    first_channel_idx = minimum(channel_indices)
+    last_channel_idx = maximum(channel_indices)
+
+    if group == :metadata
         return labels[1:(first_channel_idx-1)]
     elseif group == :extra
-        isempty(layout_channels) && return Symbol[]
-        valid_channels = intersect(layout_channels, labels)
-        isempty(valid_channels) && return Symbol[]
-        last_channel_idx = findlast(==(valid_channels[end]), labels)
         return labels[(last_channel_idx+1):end]
     end
 end
