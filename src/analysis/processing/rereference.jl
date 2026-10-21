@@ -175,7 +175,7 @@ function rereference!(dat::EegData, reference_selection::Union{Symbol,Vector{Sym
 end
 
 
-function rereference!(dat::Vector{<:Union{EpochData,ErpData}}, reference_selection::Union{Symbol,Vector{Symbol}}; channel_selection::Function = channels())
+function rereference!(dat::Vector{<:EegData}, reference_selection::Union{Symbol,Vector{Symbol}}; channel_selection::Function = channels())
     for d in dat
         rereference!(d, reference_selection; channel_selection = channel_selection)
     end

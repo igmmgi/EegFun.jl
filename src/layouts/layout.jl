@@ -70,7 +70,7 @@ columns for EEG layout operations.
 - `Layout`: The validated layout object
 
 # Throws
-- `ArgumentError`: If required columns are missing
+- `EegFunError`: If required columns are missing
 
 # Required Columns
 - `:label`: Electrode labels (Symbol type)
@@ -87,7 +87,7 @@ function validate_layout(layout::Layout)
     required_cols = [:label, :inc, :azi]
     missing_cols = setdiff(required_cols, propertynames(layout.data))
     if !isempty(missing_cols)
-        throw(ArgumentError("Layout missing required columns: $missing_cols"))
+        @minimal_error "Layout missing required columns: $missing_cols"
     end
     return layout
 end
@@ -193,6 +193,7 @@ function _ensure_coordinates_2d!(layout::Layout)
         @info "Converting polar coordinates to 2D Cartesian coordinates"
         polar_to_cartesian_xy!(layout)
     end
+    return layout
 end
 
 """
@@ -217,6 +218,7 @@ function _ensure_coordinates_3d!(layout::Layout)
         @info "Converting polar coordinates to 3D Cartesian coordinates"
         polar_to_cartesian_xyz!(layout)
     end
+    return layout
 end
 
 """
@@ -230,14 +232,14 @@ Converts polar coordinates (incidence and azimuth angles) from a layout into Car
 - `preserve_radial_distance::Bool`: If true, preserves true radial distances from polar coordinates, allowing electrodes with inc>90° to appear outside the unit circle (default: true). When false, normalizes all electrodes to fit within normalization_radius.
 
 # Throws
-- `ArgumentError`: If required `:inc` and `:azi` columns are missing or contain non-numeric values.
+- `EegFunError`: If required `:inc` and `:azi` columns are missing or contain non-numeric values.
 
 # Modifies
 - The input `layout` is modified in place to include new columns `x2` and `y2`, which represent the Cartesian coordinates calculated from the polar coordinates.
 - Clears any existing neighbour information since coordinates have changed.
 
 # Returns
-- Nothing. The function modifies the `layout` directly.
+- `Layout`: The modified layout object with `x2` and `y2` columns added.
 
 # Notes
 - When `preserve_radial_distance=true`, electrodes imported from EEGLAB with inc>90° (e.g., eye electrodes beyond the scalp) will appear outside the standard head circle, matching EEGLAB's topoplot rendering.
@@ -247,10 +249,10 @@ function polar_to_cartesian_xy!(layout::Layout; normalization_radius::Real = 1.0
 
     # Check for required columns and numeric types
     if !all(col -> col in propertynames(df), [:inc, :azi])
-        throw(ArgumentError("Layout must contain :inc and :azi columns"))
+        @minimal_error "Layout must contain :inc and :azi columns"
     end
     if !(eltype(df.inc) <: Number && eltype(df.azi) <: Number)
-        throw(ArgumentError(":inc and :azi columns must contain numeric values"))
+        @minimal_error ":inc and :azi columns must contain numeric values"
     end
 
     # Vectorized conversion (degrees to radians + polar to cartesian)
@@ -288,8 +290,10 @@ function polar_to_cartesian_xy!(layout::Layout; normalization_radius::Real = 1.0
     end
 
     clear_neighbours!(layout)
-    return nothing
+    return layout
 end
+
+polar_to_cartesian_xy!(dat::EegFunData; kwargs...) = (polar_to_cartesian_xy!(dat.layout; kwargs...); dat)
 
 """
     polar_to_cartesian_xyz!(layout::Layout)
@@ -300,23 +304,23 @@ Converts polar coordinates (incidence and azimuth angles) from a layout into Car
 - `layout::Layout`: A Layout containing the layout information with columns for incidence angles (`:inc`) and azimuth angles (`:azi`).
 
 # Throws
-- `ArgumentError`: If required `:inc` and `:azi` columns are missing or contain non-numeric values.
+- `EegFunError`: If required `:inc` and `:azi` columns are missing or contain non-numeric values.
 
 # Modifies
 - The input `layout` is modified in place to include new columns `x3`, `y3`, and `z3`, which represent the Cartesian coordinates calculated from the polar coordinates.
 - Clears any existing neighbour information since coordinates have changed.
 
 # Returns
-- Nothing. The function modifies the `layout` directly.
+- `Layout`: The modified layout object with `x3`, `y3`, and `z3` columns added.
 """
 function polar_to_cartesian_xyz!(layout::Layout)
     df = layout.data
 
     if !all(col -> col in propertynames(df), [:inc, :azi])
-        throw(ArgumentError("Layout must contain :inc and :azi columns"))
+        @minimal_error "Layout must contain :inc and :azi columns"
     end
     if !(eltype(df.inc) <: Number && eltype(df.azi) <: Number)
-        throw(ArgumentError(":inc and :azi columns must contain numeric values"))
+        @minimal_error ":inc and :azi columns must contain numeric values"
     end
 
     rad_factor = pi / 180
@@ -346,8 +350,10 @@ function polar_to_cartesian_xyz!(layout::Layout)
     end
 
     clear_neighbours!(layout)
-    return nothing
+    return layout
 end
+
+polar_to_cartesian_xyz!(dat::EegFunData) = (polar_to_cartesian_xyz!(dat.layout); dat)
 
 # === DISTANCE CALCULATIONS ===
 """
@@ -938,7 +944,7 @@ Modifies the layout in place.
 - `channel_selection::Function`: Channel selection predicate function (default: all channels)
 
 # Returns
-- `nothing` (modifies the layout in place)
+- `Layout`: The modified layout object (modified in place)
 """
 function subset_layout!(layout::Layout; channel_selection = channels())
 
@@ -960,7 +966,10 @@ function subset_layout!(layout::Layout; channel_selection = channels())
     end
 
     @info "subset_layout!: Subset layout from $n_channels_before to $n_channels_after channels"
+    return layout
 end
+
+subset_layout!(dat::EegFunData; kwargs...) = (subset_layout!(dat.layout; kwargs...); dat)
 
 """
     subset_layout(layout::Layout; channel_selection = channels())
@@ -975,8 +984,5 @@ Create a subset copy of a Layout object using channel selection predicates.
 - `Layout`: A new subset layout object
 """
 function subset_layout(layout::Layout; channel_selection = channels())
-    # Create a copy of the layout preserving neighbours and criterion
-    new_layout = copy(layout)
-    subset_layout!(new_layout, channel_selection = channel_selection)
-    return new_layout
+    return subset_layout!(copy(layout); channel_selection = channel_selection)
 end

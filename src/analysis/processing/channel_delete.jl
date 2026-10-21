@@ -34,7 +34,7 @@ function channel_delete!(dat::EegData, channels_to_delete::Vector{Symbol})
 
     if isempty(channels_in_data)
         @info "channel_delete!: No channels found to delete in data"
-        return nothing
+        return dat
     end
 
     # Remove channels from layout (only if they exist in layout)
@@ -52,7 +52,7 @@ function channel_delete!(dat::EegData, channels_to_delete::Vector{Symbol})
     _delete_data_columns!(dat, channels_in_data)
 
     @info "channel_delete!: Deleted $(length(channels_in_data)) channel(s): $(join(string.(channels_in_data), ", "))"
-    return nothing
+    return dat
 end
 channel_delete!(dat::EegData, channel::Symbol) = channel_delete!(dat, [channel])
 
@@ -111,11 +111,7 @@ new_dat = channel_delete(dat, [:Fp1, :Fp2, :Diode]) # Delete multiple channels
 - Clears any cached neighbour information in the layout since channels have changed
 - The original data is not modified
 """
-function channel_delete(dat::EegData, channels_to_delete::Vector{Symbol})
-    new_dat = copy(dat)
-    channel_delete!(new_dat, channels_to_delete)
-    return new_dat
-end
+channel_delete(dat::EegData, channels_to_delete::Vector{Symbol}) = channel_delete!(copy(dat), channels_to_delete)
 channel_delete(dat::EegData, channel::Symbol) = channel_delete(dat, [channel])
 
 function channel_delete(dat::Vector{<:EegData}, channels_to_delete::Union{Symbol,Vector{Symbol}})

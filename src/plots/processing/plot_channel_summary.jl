@@ -51,7 +51,7 @@ $(SIGNATURES)
 $(_generate_kwargs_doc(PLOT_CHANNEL_SUMMARY_KWARGS))
 
 # Returns
-- **Mutating version**: `nothing` (modifies the provided figure and axis in-place)
+- **Mutating version**: `ax::Axis` - The modified Makie Axis object
 - **Non-mutating version**: `(fig::Figure, ax::Axis)` - The created figure and axis objects
 
 # Examples
@@ -147,7 +147,7 @@ function plot_channel_summary!(fig::Figure, ax::Axis, dat::DataFrame, col::Symbo
         )
     end
 
-    return nothing
+    return ax
 end
 
 """

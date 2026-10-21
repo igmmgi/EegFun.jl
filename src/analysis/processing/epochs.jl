@@ -1011,7 +1011,7 @@ end
 Display a pretty table showing epoch information to console and return the DataFrame.
 """
 function epochs_table(epochs::Vector{EpochData}; print_table::Bool = true, kwargs...)
-    isempty(epochs) && throw(ArgumentError("epochs vector cannot be empty"))
+    isempty(epochs) && @minimal_error("epochs vector cannot be empty")
 
     df = _build_base_epochs_df(epochs)
     df.n_epochs = [n_epochs(epoch) for epoch in epochs]
@@ -1031,7 +1031,7 @@ Display a before/after comparison table of epoch counts — `epochs_raw` versus
 Typically called after artifact rejection to log how many epochs were removed per condition.
 """
 function epochs_table(epochs_raw::Vector{EpochData}, epochs_corrected::Vector{EpochData}; print_table::Bool = true, kwargs...)
-    length(epochs_raw) != length(epochs_corrected) && throw(ArgumentError("epochs_raw and epochs_corrected must have same length"))
+    length(epochs_raw) != length(epochs_corrected) && @minimal_error("epochs_raw and epochs_corrected must have same length")
 
     df = _build_base_epochs_df(epochs_raw)
     df.n_epochs_raw = [n_epochs(epoch) for epoch in epochs_raw]

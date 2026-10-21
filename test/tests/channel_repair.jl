@@ -223,4 +223,28 @@ using EegFun
         @test isapprox(dat.data[3].Ch2, original_data[3].Ch2, rtol = 1e-10)
     end
 
+    @testset "Vector{<:EegData} methods" begin
+        dat1 = EegFun.create_test_continuous_data(n = 100, n_channels = 4)
+        dat2 = EegFun.create_test_continuous_data(n = 100, n_channels = 4)
+        for d in [dat1, dat2]
+            d.layout.data.x3 = [0.0, 0.1, 0.0, -0.1]
+            d.layout.data.y3 = [0.1, 0.0, -0.1, 0.0]
+            d.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
+            EegFun.get_neighbours_xyz!(d.layout, 0.5)
+        end
+        orig1_Ch2 = copy(dat1.data.Ch2)
+        orig2_Ch2 = copy(dat2.data.Ch2)
+
+        # non-mutating
+        repaired_vec = EegFun.repair_channels([dat1, dat2], [:Ch2], method = :neighbor_interpolation)
+        @test isapprox(dat1.data.Ch2, orig1_Ch2, rtol = 1e-10)
+        @test !isapprox(repaired_vec[1].data.Ch2, orig1_Ch2, rtol = 1e-10)
+        @test !isapprox(repaired_vec[2].data.Ch2, orig2_Ch2, rtol = 1e-10)
+
+        # mutating
+        EegFun.repair_channels!([dat1, dat2], [:Ch2], method = :neighbor_interpolation)
+        @test !isapprox(dat1.data.Ch2, orig1_Ch2, rtol = 1e-10)
+        @test !isapprox(dat2.data.Ch2, orig2_Ch2, rtol = 1e-10)
+    end
+
 end

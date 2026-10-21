@@ -2,7 +2,7 @@
     channel_average!(dat::EegData; channel_selections::AbstractVector{<:Function} = [channels()],
                      output_labels = nothing,
                      include_extra::Bool = false,
-                     reduce::Bool = false) -> Nothing
+                     reduce::Bool = false) -> EegData
 
 Create averaged channels for each provided channel-selection predicate and add them to `dat`.
 
@@ -42,7 +42,7 @@ function channel_average!(
     output_labels = nothing,
     include_extra::Bool = false,
     reduce::Bool = false,
-)::Nothing
+)
 
     # Validate that all channel_selections are callable
     for (i, sel) in enumerate(channel_selections)
@@ -127,7 +127,14 @@ function channel_average!(
         dat.layout = _append_layouts(dat.layout, avg_layout)
     end
 
-    return nothing
+    return dat
+end
+
+function channel_average!(dat::Vector{<:EegData}; kwargs...)
+    for d in dat
+        channel_average!(d; kwargs...)
+    end
+    return dat
 end
 
 """
@@ -135,27 +142,12 @@ end
 
 Non-mutating version of `channel_average!`.
 """
-function channel_average(dat, args...; kwargs...)
-    dat_copy = copy(dat)
-    channel_average!(dat_copy, args...; kwargs...)
-    return dat_copy
+function channel_average(dat::EegData, args...; kwargs...)
+    return channel_average!(copy(dat), args...; kwargs...)
 end
 
-# Handle collections of EEG data by broadcasting
-function channel_average(
-    dat::Vector{<:EegData};
-    channel_selections::AbstractVector = [channels()],
-    output_labels = nothing,
-    include_extra::Bool = false,
-    reduce::Bool = false,
-)
-    return channel_average.(
-        dat;
-        channel_selections = channel_selections,
-        output_labels = output_labels,
-        include_extra = include_extra,
-        reduce = reduce,
-    )
+function channel_average(dat::Vector{<:EegData}; kwargs...)
+    return [channel_average(d; kwargs...) for d in dat]
 end
 
 # === BATCH PROCESSING (FILE PATTERN) ===
@@ -367,7 +359,7 @@ end
 function _ensure_all_coordinates!(layout::Layout)
     _ensure_coordinates_3d!(layout)
     _ensure_coordinates_2d!(layout)
-    return nothing
+    return layout
 end
 
 """Average 3D Cartesian coordinates across rows and convert to polar (inc, azi)."""

@@ -53,12 +53,12 @@ function _apply_baseline!(dat::Vector{DataFrame}, channels::Vector{Symbol}, base
 end
 
 """
-    baseline!(dat::EegData, baseline_interval::Interval; channel_selection = channels()) -> Nothing
-    baseline!(dat::EegData; channel_selection = channels()) -> Nothing
-    baseline!(dat::Vector{EpochData}, baseline_interval::Interval; channel_selection = channels()) -> Nothing
-    baseline!(dat::Vector{EpochData}; channel_selection = channels()) -> Nothing
-    baseline!(dat::Vector{ErpData}, baseline_interval::Interval; channel_selection = channels()) -> Nothing
-    baseline!(dat::Vector{ErpData}; channel_selection = channels()) -> Nothing
+    baseline!(dat::EegData, baseline_interval::Interval; channel_selection = channels()) -> EegData
+    baseline!(dat::EegData; channel_selection = channels()) -> EegData
+    baseline!(dat::Vector{EpochData}, baseline_interval::Interval; channel_selection = channels()) -> Vector{EpochData}
+    baseline!(dat::Vector{EpochData}; channel_selection = channels()) -> Vector{EpochData}
+    baseline!(dat::Vector{ErpData}, baseline_interval::Interval; channel_selection = channels()) -> Vector{ErpData}
+    baseline!(dat::Vector{ErpData}; channel_selection = channels()) -> Vector{ErpData}
 
 Apply baseline correction in-place. Subtracts the mean amplitude over `baseline_interval`
 from each selected channel. Omitting `baseline_interval` uses the full time range.
@@ -175,7 +175,7 @@ Converts ranges to tuples.
 - `Tuple{Real,Real}`: Normalized (start, stop) tuple
 
 # Throws
-- `ArgumentError`: If interval structure is invalid
+- `EegFunError`: If interval structure is invalid
 """
 function _validate_baseline_interval(baseline_interval::Interval)::Tuple{Real,Real}
     return _to_interval(baseline_interval)
@@ -197,7 +197,7 @@ Validate and convert baseline interval to (start_idx, stop_idx) tuple with bound
 - `Tuple{Int,Int}`: Validated (start_idx, stop_idx) tuple
 
 # Throws
-- `ArgumentError`: If interval is invalid
+- `EegFunError`: If interval is invalid
 """
 function _validate_baseline_interval(time::AbstractVector, baseline_interval::Interval)::Tuple{Int,Int}
     # First normalize (convert tuple/range, validate structure) using multiple dispatch

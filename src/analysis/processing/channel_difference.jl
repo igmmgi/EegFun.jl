@@ -113,6 +113,17 @@ function channel_difference(dat::EegData, args...; kwargs...)
     return channel_difference!(copy(dat), args...; kwargs...)
 end
 
+function channel_difference!(dat::Vector{<:EegData}, args...; kwargs...)
+    for d in dat
+        channel_difference!(d, args...; kwargs...)
+    end
+    return dat
+end
+
+function channel_difference(dat::Vector{<:EegData}, args...; kwargs...)
+    return [channel_difference(d, args...; kwargs...) for d in dat]
+end
+
 """
     calculate_eog_channels!(dat::EegData, eog_cfg::EogConfig)
     calculate_eog_channels!(dat::EegData, eog_cfg::Dict)
@@ -169,9 +180,23 @@ function calculate_eog_channels!(dat::EegData, eog_cfg::EogConfig)
     return dat
 end
 
-# Convenience method for Dict input
 function calculate_eog_channels!(dat::EegData, eog_cfg::Dict)
     return calculate_eog_channels!(dat, EogConfig(eog_cfg))
+end
+
+function calculate_eog_channels!(dat::Vector{<:EegData}, eog_cfg)
+    for d in dat
+        calculate_eog_channels!(d, eog_cfg)
+    end
+    return dat
+end
+
+function calculate_eog_channels(dat::EegData, args...; kwargs...)
+    return calculate_eog_channels!(copy(dat), args...; kwargs...)
+end
+
+function calculate_eog_channels(dat::Vector{<:EegData}, args...; kwargs...)
+    return [calculate_eog_channels(d, args...; kwargs...) for d in dat]
 end
 
 """

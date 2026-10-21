@@ -10,7 +10,7 @@ Detects EOG (electrooculogram) onsets in the EEG data based on a specified crite
 - `channel_out::Symbol`: The channel where the detected EOG onsets will be recorded as boolean values, indicating the presence of an EOG event.
 
 # Returns
-Nothing. The function modifies the input data in place.
+- `ContinuousData`: The modified data object (modified in place)
 
 # Examples
 ```julia
@@ -18,7 +18,6 @@ detect_eog_onsets!(dat, 50.0, :vEOG, :is_vEOG) # Detect vertical EOG onsets
 detect_eog_onsets!(dat, 30.0, :hEOG, :is_hEOG) # Detect horizontal EOG onsets
 ```
 """
-
 function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Symbol, channel_out::Symbol; step_size::Int = 20)
     @info "Detecting EOG onsets in channel $(channel_in) with stepsize criterion $(criterion) μV"
     channel_in ∉ propertynames(dat.data) && @minimal_error("channel $(channel_in) not found in data")
@@ -30,7 +29,7 @@ function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Sy
     filter!(idx -> idx <= n_samples(dat), eog_idx)
     dat.data[!, channel_out] = falses(n_samples(dat))
     dat.data[eog_idx, channel_out] .= true
-    return nothing
+    return dat
 end
 
 
@@ -59,6 +58,33 @@ function detect_eog_onsets!(dat::EegData, eog_cfg::Dict)
     detect_eog_onsets!(dat, eog_cfg["vEOG_criterion"], Symbol(vEOG_cfg[3][1]), Symbol("is_" * vEOG_cfg[3][1]))
     hEOG_cfg = eog_cfg["hEOG_channels"]
     detect_eog_onsets!(dat, eog_cfg["hEOG_criterion"], Symbol(hEOG_cfg[3][1]), Symbol("is_" * hEOG_cfg[3][1]))
+    return dat
 end
+
+# Non-mutating and vector versions
+"""
+    detect_eog_onsets(dat, args...; kwargs...)
+
+Non-mutating version of `detect_eog_onsets!`.
+"""
+detect_eog_onsets(dat::ContinuousData, args...; kwargs...) = detect_eog_onsets!(copy(dat), args...; kwargs...)
+detect_eog_onsets(dat::EegData, eog_cfg::Dict) = detect_eog_onsets!(copy(dat), eog_cfg)
+
+function detect_eog_onsets!(dat_vec::Vector{<:ContinuousData}, args...; kwargs...)
+    for d in dat_vec
+        detect_eog_onsets!(d, args...; kwargs...)
+    end
+    return dat_vec
+end
+
+function detect_eog_onsets!(dat_vec::Vector{<:EegData}, eog_cfg::Dict)
+    for d in dat_vec
+        detect_eog_onsets!(d, eog_cfg)
+    end
+    return dat_vec
+end
+
+detect_eog_onsets(dat_vec::Vector{<:ContinuousData}, args...; kwargs...) = [detect_eog_onsets(d, args...; kwargs...) for d in dat_vec]
+detect_eog_onsets(dat_vec::Vector{<:EegData}, eog_cfg::Dict) = [detect_eog_onsets(d, eog_cfg) for d in dat_vec]
 
 

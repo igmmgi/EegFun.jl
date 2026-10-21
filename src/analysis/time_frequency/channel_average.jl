@@ -10,7 +10,7 @@ function channel_average!(
     channel_selections::AbstractVector = [channels()],
     output_labels = nothing,
     reduce::Bool = false,
-)::Nothing
+)
 
     # Validate that all channel_selections are callable
     for (i, sel) in enumerate(channel_selections)
@@ -80,14 +80,18 @@ function channel_average!(
         dat.layout = _append_layouts(dat.layout, avg_layout)
     end
 
-    return nothing
+    return dat
 end
 
+function channel_average!(dat::Vector{TimeFreqData}; kwargs...)
+    for d in dat
+        channel_average!(d; kwargs...)
+    end
+    return dat
+end
 
 function channel_average(dat::TimeFreqData; kwargs...)
-    data_copy = copy(dat)
-    channel_average!(data_copy; kwargs...)
-    return data_copy
+    return channel_average!(copy(dat); kwargs...)
 end
 
 # Handle Vector{TimeFreqData}

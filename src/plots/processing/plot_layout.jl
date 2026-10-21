@@ -76,7 +76,7 @@ $(_generate_kwargs_doc(PLOT_LAYOUT_POINT_KWARGS))
 $(_generate_kwargs_doc(PLOT_LAYOUT_LABEL_KWARGS))
 
 # Returns
-- `nothing` (modifies the provided figure and axis in-place)
+- `ax::Axis`: The modified Makie Axis object
 
 # Example
     layout = Layout("biosemi64.csv")
@@ -178,7 +178,7 @@ function plot_layout_2d!(
     hidedecorations!(ax)
     hidespines!(ax)
 
-    return nothing
+    return ax
 end
 
 plot_layout_2d!(fig, ax, dat::EegFunData; kwargs...) = plot_layout_2d!(fig, ax, dat.layout; kwargs...)
@@ -341,7 +341,7 @@ function add_topo_rois!(ax::Axis, layout::Layout, rois::Vector{<:Vector{Symbol}}
         if !isa(value, Vector)
             merged_kwargs[key] = fill(value, n_rois)
         elseif length(value) != n_rois
-            throw(ArgumentError("Length of $(key) ($(length(value))) must match number of ROIs ($n_rois)"))
+            @minimal_error "Length of $(key) ($(length(value))) must match number of ROIs ($n_rois)"
         else
             merged_kwargs[key] = value
         end
@@ -395,7 +395,7 @@ $(_generate_kwargs_doc(PLOT_LAYOUT_POINT_KWARGS))
 $(_generate_kwargs_doc(PLOT_LAYOUT_LABEL_KWARGS))
 
 # Returns
-- `nothing` (modifies the provided figure and axis in-place)
+- `ax::Axis3`: The modified Makie Axis3 object
 
 # Example
     layout = Layout("biosemi64.csv")
@@ -466,8 +466,10 @@ function plot_layout_3d!(fig::Figure, ax::Axis3, layout::Layout; neighbours::Boo
     hidedecorations!(ax)
     hidespines!(ax)
 
-    return nothing
+    return ax
 end
+
+plot_layout_3d!(fig, ax, dat::EegFunData; kwargs...) = plot_layout_3d!(fig, ax, dat.layout; kwargs...)
 
 
 """
@@ -507,8 +509,9 @@ function plot_layout_3d(layout::Layout; neighbours::Bool = false, display_plot::
     end
 
     return (fig = fig, axes = [ax])
-
 end
+
+plot_layout_3d(dat::EegFunData; kwargs...) = plot_layout_3d(dat.layout; kwargs...)
 
 
 

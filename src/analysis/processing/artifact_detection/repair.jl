@@ -22,7 +22,7 @@ Nothing (mutates dat in-place)
 function repair_artifacts!(dat::EpochData, artifacts::EpochRejectionInfo; method::Symbol = :neighbor_interpolation, kwargs...)
 
     if method ∉ [:neighbor_interpolation, :spherical_spline]
-        throw(ArgumentError("Unknown repair method: $method. Available: :neighbor_interpolation, :spherical_spline"))
+        @minimal_error "Unknown repair method: $method. Available: :neighbor_interpolation, :spherical_spline"
     end
 
     @info "--------------------------------"
@@ -160,7 +160,7 @@ Uses `dat.layout.neighbours` for neighbor information.
 function repair_artifacts_neighbor!(dat::EpochData, artifacts::EpochRejectionInfo)
     # Check if repaired has been populated
     if isnothing(artifacts.repaired)
-        throw(ArgumentError("repaired not populated. Call channel_repairable! first."))
+        @minimal_error "repaired not populated. Call channel_repairable! first."
     end
 
     if isempty(artifacts.repaired)

@@ -606,7 +606,7 @@ using EegFun
         @test isnothing(rejection_info3.repaired)
 
         # Should throw error when calling repair_artifacts_neighbor! directly with repaired = nothing
-        @test_throws ArgumentError EegFun.repair_artifacts_neighbor!(epochs3, rejection_info3)
+        @test_throws EegFun.EegFunError EegFun.repair_artifacts_neighbor!(epochs3, rejection_info3)
 
         # Note: repair_artifacts! automatically calls channel_repairable! if needed, so it won't throw
         # But we can test that it works correctly
@@ -625,7 +625,7 @@ using EegFun
         epochs5.data[1][!, :Ch1] .= 200.0
         rejection_info5 = EegFun.detect_bad_epochs_automatic(epochs5, abs_criterion = 150.0, z_criterion = 0)
         EegFun.channel_repairable!(rejection_info5, layout)
-        @test_throws ArgumentError EegFun.repair_artifacts!(epochs5, rejection_info5, method = :unknown_method)
+        @test_throws EegFun.EegFunError EegFun.repair_artifacts!(epochs5, rejection_info5, method = :unknown_method)
     end
 
     @testset "detect_eog_onsets! step_size parameter" begin

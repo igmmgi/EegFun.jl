@@ -10,7 +10,7 @@ function channel_difference!(
     channel_selection1::Function = channels(),
     channel_selection2::Function = channels(),
     channel_out::Symbol = :diff,
-)::Nothing
+)
     # Resolve predicates
     channels_in1 = get_selected_channels(dat, channel_selection1, include_meta = false)
     channels_in2 = get_selected_channels(dat, channel_selection2, include_meta = false)
@@ -32,14 +32,18 @@ function channel_difference!(
     _calculate_channel_difference!(dat.data_power, channels_in1, channels_in2, channel_out)
     _calculate_channel_difference!(dat.data_phase, channels_in1, channels_in2, channel_out)
 
-    return nothing
+    return dat
 end
 
+function channel_difference!(dat::Vector{TimeFreqData}; kwargs...)
+    for d in dat
+        channel_difference!(d; kwargs...)
+    end
+    return dat
+end
 
 function channel_difference(dat::TimeFreqData; kwargs...)
-    data_copy = copy(dat)
-    channel_difference!(data_copy; kwargs...)
-    return data_copy
+    return channel_difference!(copy(dat); kwargs...)
 end
 
 # Handle Vector{TimeFreqData}

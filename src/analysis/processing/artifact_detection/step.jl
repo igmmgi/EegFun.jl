@@ -105,7 +105,7 @@ function is_step_value!(
         end
     end
 
-    return nothing
+    return dat
 end
 
 
@@ -162,11 +162,16 @@ function is_step_value!(
         end
     end
 
-    return nothing
+    return dat
 end
 
 
-is_step_value!(dat::Vector{EpochData}, threshold::Real; kwargs...) = is_step_value!.(dat, threshold; kwargs...)
+function is_step_value!(dat::Vector{EpochData}, threshold::Real; kwargs...)
+    for d in dat
+        is_step_value!(d, threshold; kwargs...)
+    end
+    return dat
+end
 
 
 """

@@ -12,7 +12,7 @@ Updates `repair_info` during repair to track actual repairs vs skips.
 - `repair_info::ContinuousRepairInfo`: Repair tracking struct with `repaired` channels already populated
 
 # Returns
-- `Nothing`: All modifications are in-place
+- `ContinuousData`: The repaired data (modified in-place)
 
 # See also
 - `channel_repairable!`: Analyze which channels can be repaired before calling this function
@@ -20,14 +20,14 @@ Updates `repair_info` during repair to track actual repairs vs skips.
 function repair_channels_neighbor!(data::ContinuousData, repair_info::ContinuousRepairInfo)
     if isempty(repair_info.repaired)
         @info "No channels to repair (all bad channels were skipped)"
-        return nothing
+        return data
     end
 
     @info "Repairing $(length(repair_info.repaired)) channels: $(repair_info.repaired) using neighbor interpolation"
 
     repair_channels!(data, repair_info.repaired; method = :neighbor_interpolation, repair_info = repair_info)
 
-    return nothing
+    return data
 end
 
 """
@@ -44,7 +44,7 @@ Updates `repair_info` during repair to track actual repairs vs skips.
 - `lambda::Real`: Regularization parameter (default: 1e-5)
 
 # Returns
-- `Nothing`: All modifications are in-place
+- `ContinuousData`: The repaired data (modified in-place)
 
 # See also
 - `channel_repairable!`: Analyze which channels can be repaired before calling this function
@@ -52,14 +52,14 @@ Updates `repair_info` during repair to track actual repairs vs skips.
 function repair_channels_spherical!(data::ContinuousData, repair_info::ContinuousRepairInfo; m::Int = 4, lambda::Real = 1e-5)
     if isempty(repair_info.repaired)
         @info "No channels to repair (all bad channels were skipped)"
-        return nothing
+        return data
     end
 
     @info "Repairing $(length(repair_info.repaired)) channels: $(repair_info.repaired) using spherical spline interpolation"
 
     repair_channels!(data, repair_info.repaired; method = :spherical_spline, repair_info = repair_info, m = m, lambda = lambda)
 
-    return nothing
+    return data
 end
 
 """
@@ -85,7 +85,7 @@ function repair_channels!(data::ContinuousData, repair_info::ContinuousRepairInf
     elseif method == :spherical_spline
         repair_channels_spherical!(data, repair_info; kwargs...)
     else
-        throw(ArgumentError("Unknown repair method: $method. Available: :neighbor_interpolation, :spherical_spline"))
+        @minimal_error "Unknown repair method: $method. Available: :neighbor_interpolation, :spherical_spline"
     end
-    return nothing
+    return data
 end

@@ -53,7 +53,7 @@ Assumes the DataFrame `dat` contains at least two columns:
 $(_generate_kwargs_doc(PLOT_JOINT_PROBABILITY_KWARGS))
 
 # Returns
-- `nothing` (modifies the provided figure and axis in-place)
+- `ax::Axis`: The modified Makie Axis object
 
 # Example
     # Basic usage
@@ -114,7 +114,7 @@ function plot_joint_probability!(fig::Figure, ax::Axis, dat::DataFrame; kwargs..
         alpha = plot_kwargs[:bar_alpha],
     )
 
-    return nothing
+    return ax
 end
 
 """
@@ -132,8 +132,7 @@ Assumes the DataFrame `dat` contains at least two columns:
 $(_generate_kwargs_doc(PLOT_JOINT_PROBABILITY_KWARGS))
 
 # Returns
-- `Figure`: The Makie Figure object.
-- `Axis`: The Makie Axis object for the bar plot.
+- `(fig = fig, axes = [ax])`
 
 # Example
     # Basic usage

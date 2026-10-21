@@ -6,17 +6,15 @@ Provides functions to mirror (reverse and append) EEG data before and/or after e
 # === CORE MIRRORING FUNCTIONS ===
 
 """
-    mirror!(dat::EpochData, side::Symbol = :both) -> Nothing
-    mirror!(dat::ErpData, side::Symbol = :both) -> Nothing
-    mirror!(data_vec::Vector{EpochData}, side::Symbol = :both) -> Nothing
-    mirror!(data_vec::Vector{ErpData}, side::Symbol = :both) -> Nothing
+    mirror!(dat::EegData, side::Symbol = :both)
+    mirror!(data_vec::Vector{<:EegData}, side::Symbol = :both)
 
 Mirror data in-place by appending time-reversed copies before and/or after the data.
 Reduces edge artifacts when filtering by creating smooth continuity at boundaries.
 Always call [`unmirror!`](@ref) after processing to restore the original length.
 
 # Arguments
-- `dat` / `data_vec`: `EpochData`, `ErpData`, or a `Vector` of either
+- `dat` / `data_vec`: `EpochData`, `ErpData`, `ContinuousData`, or a `Vector` of them
 - `side`: `:pre`, `:post`, or `:both` (default: `:both`)
 
 # Notes
@@ -30,101 +28,54 @@ filter!(epochs, 1.0, filter_type = :hp)
 unmirror!(epochs, :both)
 ```
 """
-function mirror!(dat::EpochData, side::Symbol = :both)::Nothing
+function mirror!(dat::SingleDataFrameEeg, side::Symbol = :both)
+    if side ∉ [:pre, :post, :both]
+        @minimal_error("side must be :pre, :post, or :both, got :$side")
+    end
+    @info "Mirroring data on side: $side"
+    dat.data = _mirror_dataframe!(dat.data, side)
+    return dat
+end
 
-    # Validate side parameter
+function mirror!(dat::EpochData, side::Symbol = :both)
     if side ∉ [:pre, :post, :both]
         @minimal_error("side must be :pre, :post, or :both, got :$side")
     end
     @info "Mirroring epoched data on side: $side"
-
     for epoch_idx in eachindex(dat.data)
         dat.data[epoch_idx] = _mirror_dataframe!(dat.data[epoch_idx], side)
     end
-
-    return nothing
+    return dat
 end
 
+function mirror!(data_vec::Vector{<:EegData}, side::Symbol = :both)
+    for dat in data_vec
+        mirror!(dat, side)
+    end
+    return data_vec
+end
 
 """
-    mirror(dat::EpochData, side::Symbol = :both) -> EpochData
-    mirror(dat::ErpData, side::Symbol = :both) -> ErpData
-    mirror(data_vec::Vector{EpochData}, side::Symbol = :both) -> Vector{EpochData}
-    mirror(data_vec::Vector{ErpData}, side::Symbol = :both) -> Vector{ErpData}
+    mirror(dat::EegData, side::Symbol = :both)
+    mirror(data_vec::Vector{<:EegData}, side::Symbol = :both)
 
 Non-mutating version of [`mirror!`](@ref). Returns a new object with mirrored data,
 leaving the original unchanged.
-
-# Arguments
-- `dat` / `data_vec`: `EpochData`, `ErpData`, or a `Vector` of either
-- `side`: `:pre`, `:post`, or `:both` (default: `:both`)
 """
-function mirror(dat::EpochData, side::Symbol = :both)::EpochData
-    dat_copy = copy(dat)
-    mirror!(dat_copy, side)
-    return dat_copy
-end
-
-
-function mirror!(dat::ErpData, side::Symbol = :both)::Nothing
-
-    if side ∉ [:pre, :post, :both]
-        @minimal_error("side must be :pre, :post, or :both, got :$side")
-    end
-    @info "Mirroring ERP data on side: $side"
-
-    dat.data = _mirror_dataframe!(dat.data, side)
-
-    return nothing
-end
-
-
-function mirror(dat::ErpData, side::Symbol = :both)::ErpData
-    dat_copy = copy(dat)
-    mirror!(dat_copy, side)
-    return dat_copy
-end
-
-
-function mirror!(data_vec::Vector{EpochData}, side::Symbol = :both)::Nothing
-    for dat in data_vec
-        mirror!(dat, side)
-    end
-    return nothing
-end
-
-
-function mirror(data_vec::Vector{EpochData}, side::Symbol = :both)::Vector{EpochData}
-    return [mirror(dat, side) for dat in data_vec]
-end
-
-
-function mirror!(data_vec::Vector{ErpData}, side::Symbol = :both)::Nothing
-    for dat in data_vec
-        mirror!(dat, side)
-    end
-    return nothing
-end
-
-
-function mirror(data_vec::Vector{ErpData}, side::Symbol = :both)::Vector{ErpData}
-    return [mirror(dat, side) for dat in data_vec]
-end
-
+mirror(dat::EegData, side::Symbol = :both) = mirror!(copy(dat), side)
+mirror(data_vec::Vector{<:EegData}, side::Symbol = :both) = [mirror(dat, side) for dat in data_vec]
 
 # === UNMIRRORING FUNCTIONS ===
 
 """
-    unmirror!(dat::EpochData, side::Symbol = :both) -> Nothing
-    unmirror!(dat::ErpData, side::Symbol = :both) -> Nothing
-    unmirror!(data_vec::Vector{EpochData}, side::Symbol = :both) -> Nothing
-    unmirror!(data_vec::Vector{ErpData}, side::Symbol = :both) -> Nothing
+    unmirror!(dat::EegData, side::Symbol = :both)
+    unmirror!(data_vec::Vector{<:EegData}, side::Symbol = :both)
 
 Remove mirrored sections from data in-place, restoring the original length.
 Must be called with the same `side` as the preceding `mirror!` call.
 
 # Arguments
-- `dat` / `data_vec`: `EpochData`, `ErpData`, or a `Vector` of either
+- `dat` / `data_vec`: `EpochData`, `ErpData`, `ContinuousData`, or a `Vector` of them
 - `side`: `:pre`, `:post`, or `:both` (default: `:both`)
 
 # Examples
@@ -134,86 +85,42 @@ filter!(epochs, 1.0, filter_type = :hp)
 unmirror!(epochs, :both)  # restores original length
 ```
 """
-function unmirror!(dat::EpochData, side::Symbol = :both)::Nothing
+function unmirror!(dat::SingleDataFrameEeg, side::Symbol = :both)
+    if side ∉ [:pre, :post, :both]
+        @minimal_error("side must be :pre, :post, or :both, got :$side")
+    end
+    @info "Unmirroring data on side: $side"
+    dat.data = _unmirror_dataframe!(dat.data, side)
+    return dat
+end
 
+function unmirror!(dat::EpochData, side::Symbol = :both)
     if side ∉ [:pre, :post, :both]
         @minimal_error("side must be :pre, :post, or :both, got :$side")
     end
     @info "Unmirroring epoched data on side: $side"
-
     for epoch_idx in eachindex(dat.data)
         dat.data[epoch_idx] = _unmirror_dataframe!(dat.data[epoch_idx], side)
     end
-
-    return nothing
+    return dat
 end
 
-
-function unmirror(dat::EpochData, side::Symbol = :both)::EpochData
-    dat_copy = copy(dat)
-    unmirror!(dat_copy, side)
-    return dat_copy
-end
-
-
-function unmirror!(dat::ErpData, side::Symbol = :both)::Nothing
-
-    if side ∉ [:pre, :post, :both]
-        @minimal_error("side must be :pre, :post, or :both, got :$side")
-    end
-    @info "Unmirroring ERP data on side: $side"
-
-    dat.data = _unmirror_dataframe!(dat.data, side)
-
-    return nothing
-end
-
-
-function unmirror(dat::ErpData, side::Symbol = :both)::ErpData
-    dat_copy = copy(dat)
-    unmirror!(dat_copy, side)
-    return dat_copy
-end
-
-
-function unmirror!(data_vec::Vector{EpochData}, side::Symbol = :both)::Nothing
+function unmirror!(data_vec::Vector{<:EegData}, side::Symbol = :both)
     for dat in data_vec
         unmirror!(dat, side)
     end
-    return nothing
+    return data_vec
 end
 
-
 """
-    unmirror(dat::EpochData, side::Symbol = :both) -> EpochData
-    unmirror(dat::ErpData, side::Symbol = :both) -> ErpData
-    unmirror(data_vec::Vector{EpochData}, side::Symbol = :both) -> Vector{EpochData}
-    unmirror(data_vec::Vector{ErpData}, side::Symbol = :both) -> Vector{ErpData}
+    unmirror(dat::EegData, side::Symbol = :both)
+    unmirror(data_vec::Vector{<:EegData}, side::Symbol = :both)
 
 Non-mutating version of [`unmirror!`](@ref). Returns a new object with mirrored
 sections removed, leaving the original unchanged.
-
-# Arguments
-- `dat` / `data_vec`: `EpochData`, `ErpData`, or a `Vector` of either
-- `side`: `:pre`, `:post`, or `:both` (default: `:both`) — must match the original `mirror!` call
 """
-function unmirror(data_vec::Vector{EpochData}, side::Symbol = :both)::Vector{EpochData}
-    return [unmirror(dat, side) for dat in data_vec]
-end
-
-
-function unmirror!(data_vec::Vector{ErpData}, side::Symbol = :both)::Nothing
-    for dat in data_vec
-        unmirror!(dat, side)
-    end
-    return nothing
-end
-
-
-function unmirror(data_vec::Vector{ErpData}, side::Symbol = :both)::Vector{ErpData}
-    return [unmirror(dat, side) for dat in data_vec]
-end
-
+unmirror(dat::EegData, side::Symbol = :both) = unmirror!(copy(dat), side)
+unmirror(data_vec::Vector{<:EegData}, side::Symbol = :both) = [unmirror(dat, side) for dat in data_vec]
 
 # === INTERNAL HELPER FUNCTIONS ===
 
@@ -270,7 +177,6 @@ function _mirror_dataframe!(df::DataFrame, side::Symbol)
     end
 end
 
-
 """
 Unmirror a DataFrame in-place by removing the mirrored sections.
 Used for both epoch and continuous/ERP data.
@@ -304,58 +210,4 @@ function _unmirror_dataframe!(df::DataFrame, side::Symbol)
         df_new = df[start_idx:end_idx, :]
         return df_new
     end
-end
-
-# === CONTINUOUS DATA SUPPORT ===
-
-function mirror!(dat::ContinuousData, side::Symbol = :both)::Nothing
-    if side ∉ [:pre, :post, :both]
-        @minimal_error("side must be :pre, :post, or :both, got :$side")
-    end
-    @info "Mirroring continuous data on side: $side"
-    dat.data = _mirror_dataframe!(dat.data, side)
-    return nothing
-end
-
-function mirror!(data_vec::Vector{ContinuousData}, side::Symbol = :both)::Nothing
-    for dat in data_vec
-        mirror!(dat, side)
-    end
-    return nothing
-end
-
-function unmirror!(dat::ContinuousData, side::Symbol = :both)::Nothing
-    if side ∉ [:pre, :post, :both]
-        @minimal_error("side must be :pre, :post, or :both, got :$side")
-    end
-    @info "Unmirroring continuous data on side: $side"
-    dat.data = _unmirror_dataframe!(dat.data, side)
-    return nothing
-end
-
-function unmirror!(data_vec::Vector{ContinuousData}, side::Symbol = :both)::Nothing
-    for dat in data_vec
-        unmirror!(dat, side)
-    end
-    return nothing
-end
-
-function mirror(dat::ContinuousData, side::Symbol = :both)::ContinuousData
-    dat_copy = copy(dat)
-    mirror!(dat_copy, side)
-    return dat_copy
-end
-
-function mirror(data_vec::Vector{ContinuousData}, side::Symbol = :both)::Vector{ContinuousData}
-    return [mirror(dat, side) for dat in data_vec]
-end
-
-function unmirror(dat::ContinuousData, side::Symbol = :both)::ContinuousData
-    dat_copy = copy(dat)
-    unmirror!(dat_copy, side)
-    return dat_copy
-end
-
-function unmirror(data_vec::Vector{ContinuousData}, side::Symbol = :both)::Vector{ContinuousData}
-    return [unmirror(dat, side) for dat in data_vec]
 end

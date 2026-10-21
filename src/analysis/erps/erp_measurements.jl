@@ -365,7 +365,7 @@ function _compute_measurement(
         return _fractional_peak_latency(chan_data, selected_times, peak_idx, fraction, direction)
     end
 
-    return nothing
+    @minimal_error "Unknown analysis_type: '$analysis_type'. Valid types: $(join(VALID_MEASUREMENT_TYPES, ", "))"
 end
 
 """

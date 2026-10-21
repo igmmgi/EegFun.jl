@@ -220,13 +220,13 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
 
     # Validate dimensions
     if length(dims) != 2 || any(dims .<= 0)
-        throw(ArgumentError("Invalid dimensions: $dims. Expected [rows, cols] with positive values."))
+        @minimal_error "Invalid dimensions: $dims. Expected [rows, cols] with positive values."
     end
 
     # Ensure we have enough grid cells
     total_cells = dims[1] * dims[2]
     if total_cells < length(comps)
-        throw(ArgumentError("Grid dimensions $dims provide $total_cells cells but need $(length(comps))."))
+        @minimal_error "Grid dimensions $dims provide $total_cells cells but need $(length(comps))."
     end
 
     # Pre-interpolate all selected components in a single batched operation
@@ -567,7 +567,7 @@ function _calculate_topo_levels(
     num_levels = 20,
 )
     # Input validation
-    num_levels <= 0 && throw(ArgumentError("num_levels must be positive, got $num_levels"))
+    num_levels <= 0 && @minimal_error("num_levels must be positive, got $num_levels")
 
     # Find local min/max, ignoring NaNs
     local_min, local_max = -1.0, 1.0
@@ -640,7 +640,7 @@ function _plot_topo_on_axis!(
 )
 
     # Validate gridscale
-    gridscale <= 0 && throw(ArgumentError("gridscale must be positive, got $gridscale"))
+    gridscale <= 0 && @minimal_error("gridscale must be positive, got $gridscale")
 
     # Use adaptive bounds from prepare_ica_topo_data
     x_bounds = kwargs[:x_bounds]
@@ -1378,7 +1378,7 @@ function _prepare_ica_topo_data(ica::InfoIca, comp_idx::Int, method::Symbol, gri
         plot_radius = max_radius + margin
         return data, (-plot_radius, plot_radius), (-plot_radius, plot_radius)
     else
-        throw(ArgumentError("Unknown interpolation method: $method. Supported: $supported_methods"))
+        @minimal_error "Unknown interpolation method: $method. Supported: $supported_methods"
     end
 end
 
@@ -1405,7 +1405,7 @@ function _prepare_ica_topo_data(ica::InfoIca, comp_indices::AbstractVector{Int},
         plot_radius = max_radius + margin
         return data_vec, (-plot_radius, plot_radius), (-plot_radius, plot_radius)
     else
-        throw(ArgumentError("Unknown interpolation method: $method. Supported: $supported_methods"))
+        @minimal_error "Unknown interpolation method: $method. Supported: $supported_methods"
     end
 end
 
@@ -1433,7 +1433,7 @@ function _calculate_ica_topo_levels(
                 num_levels = num_levels,
             )
         else
-            throw(ArgumentError("No valid (non-NaN) data. Cannot calculate topographic levels."))
+            @minimal_error "No valid (non-NaN) data. Cannot calculate topographic levels."
         end
     else # Calculate local levels for each component
         return [_calculate_topo_levels(data; num_levels = num_levels) for data in all_data]

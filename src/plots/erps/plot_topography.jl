@@ -73,7 +73,7 @@ function _render_topo_surface!(
             x_bounds = (-plot_radius, plot_radius)
             y_bounds = (-plot_radius, plot_radius)
         else
-            throw(ArgumentError("Unknown interpolation method: $method. Supported: $supported_methods, :spherical_spline"))
+            @minimal_error "Unknown interpolation method: $method. Supported: $supported_methods, :spherical_spline"
         end
     end
 
@@ -512,13 +512,13 @@ function plot_topography(
         plot_rows, plot_cols = _best_rect(n_datasets)
     else
         if length(dims) != 2 || any(dims .<= 0)
-            throw(ArgumentError("Invalid dimensions: $dims. Expected [rows, cols] with positive values."))
+            @minimal_error "Invalid dimensions: $dims. Expected [rows, cols] with positive values."
         end
         plot_rows, plot_cols = dims
         # Validate dimensions
         total_cells = plot_rows * plot_cols
         if total_cells < n_datasets
-            throw(ArgumentError("Grid dimensions $dims provide $total_cells cells but need $n_datasets."))
+            @minimal_error "Grid dimensions $dims provide $total_cells cells but need $n_datasets."
         end
     end
 
@@ -797,15 +797,14 @@ the circle to NaN.
 - `grid_scale::Int`: Size of the grid (must be square matrix)
 
 # Throws
-- `ArgumentError`: If grid_scale is not positive
-- `DimensionMismatch`: If matrix is not square
+- `EegFunError`: If grid_scale is not positive or data matrix is not square
 """
 function _circle_mask!(dat::Matrix{<:AbstractFloat}, grid_scale::Int)
     if grid_scale <= 0
-        throw(ArgumentError("grid_scale must be positive"))
+        @minimal_error "grid_scale must be positive"
     end
     if size(dat) != (grid_scale, grid_scale)
-        throw(DimensionMismatch("Data matrix must be $(grid_scale)×$(grid_scale)"))
+        @minimal_error "Data matrix must be $(grid_scale)×$(grid_scale)"
     end
 
     center = (grid_scale + 1) / 2
@@ -897,7 +896,7 @@ https://eljungsk.github.io/ScatteredInterpolation.jl/dev/methods/
 function _data_interpolation_topo(dat::Union{Vector{<:AbstractFloat}, Matrix{<:AbstractFloat}}, layout::Layout, grid_scale::Int; method::Symbol = :thin_plate)
 
     if any(isnan, dat) || any(isinf, dat)
-        throw(ArgumentError("Input data contains NaN or Inf values"))
+        @minimal_error "Input data contains NaN or Inf values"
     end
 
     points = permutedims(Matrix(layout.data[!, [:x2, :y2]]))
@@ -942,7 +941,7 @@ function _data_interpolation_topo(dat::Union{Vector{<:AbstractFloat}, Matrix{<:A
     elseif method == :nearest
         ScatteredInterpolation.NearestNeighbor()
     else
-        throw(ArgumentError("Unknown method: $method. Supported: $supported_methods"))
+        @minimal_error "Unknown method: $method. Supported: $supported_methods"
     end
 
     itp = ScatteredInterpolation.interpolate(method_obj, points, dat)

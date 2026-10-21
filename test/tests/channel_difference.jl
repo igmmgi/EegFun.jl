@@ -366,4 +366,31 @@ end
         # Same columns
         @test propertynames(tf.data_power) == propertynames(tf.data_phase)
     end
+
+    @testset "Vector{<:EegData} methods" begin
+        dat1 = EegFun.create_test_continuous_data(n = 100)
+        dat2 = EegFun.create_test_continuous_data(n = 100)
+        vec_dat = [dat1, dat2]
+
+        EegFun.channel_difference!(
+            vec_dat;
+            channel_selection1 = EegFun.channels([:Ch1]),
+            channel_selection2 = EegFun.channels([:Ch2]),
+            channel_out = :diff12,
+        )
+        @test :diff12 ∈ propertynames(vec_dat[1].data)
+        @test :diff12 ∈ propertynames(vec_dat[2].data)
+
+        # non-mutating
+        orig1 = EegFun.create_test_continuous_data(n = 100)
+        orig2 = EegFun.create_test_continuous_data(n = 100)
+        vec_res = EegFun.channel_difference(
+            [orig1, orig2];
+            channel_selection1 = EegFun.channels([:Ch1]),
+            channel_selection2 = EegFun.channels([:Ch2]),
+            channel_out = :diff_out,
+        )
+        @test :diff_out ∉ propertynames(orig1.data)
+        @test :diff_out ∈ propertynames(vec_res[1].data)
+    end
 end

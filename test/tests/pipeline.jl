@@ -144,8 +144,8 @@ using DataFrames
         EegFun.repair_channels!(c_dat_sph, rep_info_sph; method = :spherical_spline)
         @test c_dat_sph.data.Ch2 != c_dat_copy.data.Ch2
 
-        # Invalid method throws ArgumentError
-        @test_throws ArgumentError EegFun.repair_channels!(c_dat, rep_info; method = :invalid_method)
+        # Invalid method throws EegFunError
+        @test_throws EegFun.EegFunError EegFun.repair_channels!(c_dat, rep_info; method = :invalid_method)
 
         # Summarize repairs
         summ_df = EegFun.summarize_electrode_repairs([rep_info])

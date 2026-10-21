@@ -13,7 +13,7 @@ Uses spherical spline interpolation according to Perrin et al. (1989).
 - `lambda::Float64`: Regularization parameter (default: 1e-5)
 - `n_legendre_terms::Int`: Number of Legendre polynomial terms (default: 50)
 """
-function compute_csd!(data; m::Int = 4, lambda::Float64 = 1e-5, n_legendre_terms::Int = 50)
+function compute_csd!(data::EegData; m::Int = 4, lambda::Float64 = 1e-5, n_legendre_terms::Int = 50)
     # 1. Ensure 3D coordinates are available
     _ensure_coordinates_3d!(data.layout)
 
@@ -79,6 +79,13 @@ function compute_csd!(data; m::Int = 4, lambda::Float64 = 1e-5, n_legendre_terms
     return data
 end
 
+function compute_csd!(dat::Vector{<:EegData}, args...; kwargs...)
+    for d in dat
+        compute_csd!(d, args...; kwargs...)
+    end
+    return dat
+end
+
 # Internal function for calculating H matrix (second spatial derivative of G)
 function _calc_h(cosang::AbstractArray, m::Int = 4, n_legendre_terms::Int = 50)
     # H(cos θ) = - (1 / 4π) * Σ[ (2n+1) / (n^(m-1) * (n+1)^(m-1)) * P_n(cos θ) ]
@@ -131,8 +138,10 @@ end
 
 Non-mutating version of `compute_csd!`.
 """
-function compute_csd(dat, args...; kwargs...)
-    dat_copy = copy(dat)
-    compute_csd!(dat_copy, args...; kwargs...)
-    return dat_copy
+function compute_csd(dat::EegData, args...; kwargs...)
+    return compute_csd!(copy(dat), args...; kwargs...)
+end
+
+function compute_csd(dat::Vector{<:EegData}, args...; kwargs...)
+    return [compute_csd(d, args...; kwargs...) for d in dat]
 end

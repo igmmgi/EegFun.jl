@@ -330,7 +330,7 @@ function plot_artifact_detection(
     kwargs...,
 )
     length(epochs) == length(artifacts) ||
-        throw(ArgumentError("epochs and artifacts must have the same length (got $(length(epochs)) and $(length(artifacts)))"))
+        @minimal_error("epochs and artifacts must have the same length (got $(length(epochs)) and $(length(artifacts)))")
     return [plot_artifact_detection(epochs[i], artifacts[i]; channel_selection = channel_selection, kwargs...) for i in eachindex(epochs)]
 end
 

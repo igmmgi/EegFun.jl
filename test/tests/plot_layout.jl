@@ -10,17 +10,17 @@ using Makie
         ax = Axis(fig[1, 1])
 
         # Test basic functionality
-        @test isnothing(EegFun.plot_layout_2d!(fig, ax, layout, display_plot = false))
+        @test EegFun.plot_layout_2d!(fig, ax, layout, display_plot = false) === ax
 
         # Test with neighbours
-        @test isnothing(EegFun.plot_layout_2d!(fig, ax, layout, neighbours = true, display_plot = false))
+        @test EegFun.plot_layout_2d!(fig, ax, layout, neighbours = true, display_plot = false) === ax
     end
 
     @testset "plot_layout! basic functionality" begin
         fig = Figure()
         ax = Axis(fig[1, 1])
-        @test isnothing(EegFun.plot_layout!(fig, ax, layout, display_plot = false))
-        @test isnothing(EegFun.plot_layout!(fig, ax, layout, neighbours = true, display_plot = false))
+        @test EegFun.plot_layout!(fig, ax, layout, display_plot = false) === ax
+        @test EegFun.plot_layout!(fig, ax, layout, neighbours = true, display_plot = false) === ax
     end
 
     @testset "plot_layout_2d basic functionality" begin
@@ -68,10 +68,10 @@ using Makie
         ax = Axis3(fig[1, 1])
 
         # Test basic functionality
-        @test isnothing(EegFun.plot_layout_3d!(fig, ax, layout, display_plot = false))
+        @test EegFun.plot_layout_3d!(fig, ax, layout, display_plot = false) === ax
 
         # Test with neighbours
-        @test isnothing(EegFun.plot_layout_3d!(fig, ax, layout, neighbours = true, display_plot = false))
+        @test EegFun.plot_layout_3d!(fig, ax, layout, neighbours = true, display_plot = false) === ax
     end
 
     @testset "plot_layout_3d basic functionality" begin
@@ -166,7 +166,7 @@ using Makie
         @test isnothing(EegFun.add_topo_rois!(ax, layout, [[:NonExistent]], roi_border_size = 10))
 
         # Test with mismatched array lengths (should throw error)
-        @test_throws ArgumentError EegFun.add_topo_rois!(
+        @test_throws EegFun.EegFunError EegFun.add_topo_rois!(
             ax,
             layout,
             [[:Fp1], [:Fp2]],

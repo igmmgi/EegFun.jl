@@ -203,8 +203,8 @@ using DataFrames
     @testset "Edge Cases" begin
         test_layout = EegFun.create_test_layout()
 
-        # Test empty channel list - should throw ArgumentError for empty channels
-        @test_throws ArgumentError EegFun.create_layout(:grid, Symbol[], test_layout; grid_dims = (1, 1))
+        # Test empty channel list - should throw EegFunError for empty channels
+        @test_throws EegFun.EegFunError EegFun.create_layout(:grid, Symbol[], test_layout; grid_dims = (1, 1))
 
         # Test single channel
         layout = EegFun.create_layout(:grid, [:Ch1], test_layout; grid_dims = (1, 1))

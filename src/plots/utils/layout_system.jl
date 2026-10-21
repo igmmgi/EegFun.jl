@@ -127,7 +127,7 @@ If not specified, dimensions are calculated automatically.
 - `kwargs...`: Layout parameters including `grid_dims` (vector/tuple of (rows, cols)), `grid_rowgap`, `grid_colgap`,
 """
 function _create_grid_layout(channels::Vector{Symbol}; kwargs...)
-    isempty(channels) && throw(ArgumentError("Cannot create grid layout with empty channel list"))
+    isempty(channels) && @minimal_error("Cannot create grid layout with empty channel list")
     metadata = _merge_plot_kwargs(LAYOUT_KWARGS, kwargs; validate = false)
 
     # Get skip positions if provided
@@ -137,7 +137,7 @@ function _create_grid_layout(channels::Vector{Symbol}; kwargs...)
         # Validate skip positions are tuples
         for pos in skip_positions
             if !isa(pos, Tuple) || length(pos) != 2
-                throw(ArgumentError("grid_skip_positions must be a vector of (row, col) tuples, got: $pos"))
+                @minimal_error "grid_skip_positions must be a vector of (row, col) tuples, got: $pos"
             end
         end
         # Convert to Set for faster lookup
@@ -159,7 +159,7 @@ function _create_grid_layout(channels::Vector{Symbol}; kwargs...)
         if !isnothing(skip_positions)
             for (row, col) in skip_positions
                 if row < 1 || row > rows || col < 1 || col > cols
-                    throw(ArgumentError("Skip position ($row, $col) is outside grid bounds ($rows×$cols)"))
+                    @minimal_error "Skip position ($row, $col) is outside grid bounds ($rows×$cols)"
                 end
             end
         end
@@ -167,11 +167,7 @@ function _create_grid_layout(channels::Vector{Symbol}; kwargs...)
         # Final check: ensure we have enough available positions after skipping
         available_positions = rows * cols - skip_count
         if available_positions < n_channels
-            throw(
-                ArgumentError(
-                    "Grid size ($rows×$cols) with $skip_count skipped positions has only $available_positions available positions, but need $n_channels",
-                ),
-            )
+            @minimal_error "Grid size ($rows×$cols) with $skip_count skipped positions has only $available_positions available positions, but need $n_channels"
         end
     else
         # Auto-calculate dimensions for n_channels + skip_count total positions
@@ -181,7 +177,7 @@ function _create_grid_layout(channels::Vector{Symbol}; kwargs...)
         if !isnothing(skip_positions)
             for (row, col) in skip_positions
                 if row < 1 || row > rows || col < 1 || col > cols
-                    throw(ArgumentError("Skip position ($row, $col) is outside auto-calculated grid bounds ($rows×$cols)"))
+                    @minimal_error "Skip position ($row, $col) is outside auto-calculated grid bounds ($rows×$cols)"
                 end
             end
         end
@@ -268,7 +264,7 @@ function create_layout(layout_spec::Union{Symbol,PlotLayout}, channels::Vector{S
     elseif layout_spec isa PlotLayout
         return layout_spec
     else
-        throw(ArgumentError("Invalid layout specification: $layout_spec. Must be :single, :grid, :topo, or a PlotLayout object."))
+        @minimal_error "Invalid layout specification: $layout_spec. Must be :single, :grid, :topo, or a PlotLayout object."
     end
 end
 
@@ -279,7 +275,7 @@ Create a custom layout with specific positions for each channel.
 """
 function create_custom_layout(positions::Vector{Tuple{Float64,Float64}}, channels::Vector{Symbol})
     if length(positions) != length(channels)
-        throw(ArgumentError("n positions ($(length(positions))) must match n channels ($(length(channels)))"))
+        @minimal_error "n positions ($(length(positions))) must match n channels ($(length(channels)))"
     end
     return PlotLayout(:custom, [0, 0], positions, channels, Dict{Symbol,Any}())
 end
@@ -303,7 +299,7 @@ function _validate_dims(dims, n_items::Int)
 
     isnothing(dims) && return _best_rect(n_items)
 
-    length(dims) !== 2 && throw(ArgumentError("dims must be a tuple of two positive integers (rows, cols), got: $dims"))
+    length(dims) !== 2 && @minimal_error("dims must be a tuple of two positive integers (rows, cols), got: $dims")
 
     # If grid is too small, use best_rect instead
     if dims[1] * dims[2] < n_items
@@ -328,7 +324,7 @@ square-like arrangements even if they have a few extra spaces.
 function _best_rect(n::Int)
 
     # Handle edge cases
-    n <= 0 && throw(ArgumentError("n must be positive"))
+    n <= 0 && @minimal_error("n must be positive")
     n == 1 && return (1, 1)
 
     # Find exact factors of n
@@ -411,7 +407,7 @@ function _apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
 
         # Compute bounds for normalization
         positions = plot_layout.positions
-        isempty(positions) && throw(ArgumentError("Cannot create topo layout with empty positions. Problem with layout creation!"))
+        isempty(positions) && @minimal_error("Cannot create topo layout with empty positions. Problem with layout creation!")
 
         minx, maxx = extrema(pos[1] for pos in positions)
         miny, maxy = extrema(pos[2] for pos in positions)

@@ -113,8 +113,8 @@ using OrderedCollections
     @testset "Error Handling" begin
         # Test missing columns
         invalid_layout = EegFun.Layout(DataFrame(label = [:Fp1, :Fp2]), nothing, nothing, nothing)
-        @test_throws ArgumentError EegFun.polar_to_cartesian_xy!(invalid_layout)
-        @test_throws ArgumentError EegFun.polar_to_cartesian_xyz!(invalid_layout)
+        @test_throws EegFun.EegFunError EegFun.polar_to_cartesian_xy!(invalid_layout)
+        @test_throws EegFun.EegFunError EegFun.polar_to_cartesian_xyz!(invalid_layout)
 
         # Test invalid data types
         invalid_types = EegFun.Layout(
@@ -123,8 +123,8 @@ using OrderedCollections
             nothing,
             nothing,
         )
-        @test_throws ArgumentError EegFun.polar_to_cartesian_xy!(invalid_types)
-        @test_throws ArgumentError EegFun.polar_to_cartesian_xyz!(invalid_types)
+        @test_throws EegFun.EegFunError EegFun.polar_to_cartesian_xy!(invalid_types)
+        @test_throws EegFun.EegFunError EegFun.polar_to_cartesian_xyz!(invalid_types)
     end
 
     @testset "Layout Functions" begin
@@ -170,14 +170,14 @@ using OrderedCollections
 
             # Test error handling for missing columns
             invalid_layout = EegFun.Layout(DataFrame(label = [:Fp1, :Fp2]), nothing, nothing, nothing)
-            @test_throws ArgumentError EegFun.polar_to_cartesian_xy!(invalid_layout)
-            @test_throws ArgumentError EegFun.polar_to_cartesian_xyz!(invalid_layout)
+            @test_throws EegFun.EegFunError EegFun.polar_to_cartesian_xy!(invalid_layout)
+            @test_throws EegFun.EegFunError EegFun.polar_to_cartesian_xyz!(invalid_layout)
 
             # Test error handling for non-numeric values
             invalid_layout =
                 EegFun.Layout(DataFrame(label = [:Fp1, :Fp2], inc = ["90", "90"], azi = ["0", "180"]), nothing, nothing, nothing)
-            @test_throws ArgumentError EegFun.polar_to_cartesian_xy!(invalid_layout)
-            @test_throws ArgumentError EegFun.polar_to_cartesian_xyz!(invalid_layout)
+            @test_throws EegFun.EegFunError EegFun.polar_to_cartesian_xy!(invalid_layout)
+            @test_throws EegFun.EegFunError EegFun.polar_to_cartesian_xyz!(invalid_layout)
         end
 
         # Test distance calculations

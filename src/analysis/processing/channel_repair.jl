@@ -64,6 +64,17 @@ function repair_channels(dat, args...; kwargs...)
     return repair_channels!(copy(dat), args...; kwargs...)
 end
 
+function repair_channels!(dat::Vector{<:EegData}, args...; kwargs...)
+    for d in dat
+        repair_channels!(d, args...; kwargs...)
+    end
+    return dat
+end
+
+function repair_channels(dat::Vector{<:EegData}, args...; kwargs...)
+    return [repair_channels(d, args...; kwargs...) for d in dat]
+end
+
 # Helper function for neighbor interpolation
 function _repair_channels_neighbor!(data, channels_to_repair; neighbours_dict = nothing, repair_info = nothing, kwargs...)
     if isnothing(neighbours_dict)

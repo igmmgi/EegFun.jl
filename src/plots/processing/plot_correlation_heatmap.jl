@@ -61,7 +61,7 @@ This is the mutating version that plots directly on the provided `fig` and `ax` 
 $(_generate_kwargs_doc(PLOT_CORRELATION_HEATMAP_KWARGS))
 
 # Returns
-- **Mutating version**: `nothing` (modifies the provided figure and axis in-place)
+- **Mutating version**: `ax::Axis` - The modified Makie Axis object
 - **Non-mutating version**: `(fig::Figure, ax::Axis)` - The created figure and axis objects
 
 # Examples
@@ -158,7 +158,7 @@ function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kw
         Colorbar(sg[cb_pos...]; colormap = actual_cmap, limits = colorrange, colorbar_kwargs...)
     end
 
-    return nothing
+    return ax
 end
 
 """

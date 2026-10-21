@@ -35,7 +35,7 @@ function calculate_trigger_interval!(
     start_triggers::Vector{Int},
     end_triggers::Vector{Int};
     column_name::Symbol = :interval,
-)::Nothing
+)
     @info "Calculating trigger intervals for EpochData (condition: $(dat.condition_name))"
 
     n_missing = 0
@@ -57,7 +57,7 @@ function calculate_trigger_interval!(
         @minimal_warning "Missing start or end trigger pair in $n_missing / $(n_epochs(dat)) epochs (set to NaN)."
     end
 
-    return nothing
+    return dat
 end
 
 """
@@ -70,11 +70,11 @@ function calculate_trigger_interval!(
     start_triggers::Vector{Int},
     end_triggers::Vector{Int};
     column_name::Symbol = :interval,
-)::Nothing
+)
     for dat in dat_vec
         calculate_trigger_interval!(dat, start_triggers, end_triggers; column_name = column_name)
     end
-    return nothing
+    return dat_vec
 end
 
 """
@@ -88,17 +88,7 @@ function calculate_trigger_interval(
     end_triggers::Vector{Int};
     column_name::Symbol = :interval,
 )::EpochData
-    dat_copy = EpochData(
-        dat.file,
-        dat.condition,
-        dat.condition_name,
-        [copy(epoch, copycols = true) for epoch in dat],
-        copy(dat.layout),
-        dat.sample_rate,
-        copy(dat.analysis_info),
-    )
-    calculate_trigger_interval!(dat_copy, start_triggers, end_triggers; column_name = column_name)
-    return dat_copy
+    return calculate_trigger_interval!(copy(dat), start_triggers, end_triggers; column_name = column_name)
 end
 
 """
@@ -120,7 +110,7 @@ end
 
 
 """
-    realign!(dat::EpochData, realignment_triggers::Vector{Int})::Nothing
+    realign!(dat::EpochData, realignment_triggers::Vector{Int}) -> EpochData
 
 Realign epoched data in-place to an event specified by trigger codes.
 
@@ -135,6 +125,9 @@ dropped from the dataset to prevent silent mismatches.
 # Arguments
 - `dat::EpochData`: Epoched EEG data to realign
 - `realignment_triggers::Vector{Int}`: A list of trigger codes to align to.
+
+# Returns
+- `EpochData`: The realigned epoched dataset
 
 # Effects
 - Modifies the input data in-place (drops invalid epochs)
@@ -155,7 +148,7 @@ realign!(epochs, [127, 191, 223, 239])
 # Notes
 - After realignment, epoch length may be shorter due to cropping to common interval.
 """
-function realign!(dat::EpochData, realignment_triggers::Vector{Int})::Nothing
+function realign!(dat::EpochData, realignment_triggers::Vector{Int})
 
     @info "Realigning epoched data to triggers: $realignment_triggers"
 
@@ -165,7 +158,7 @@ function realign!(dat::EpochData, realignment_triggers::Vector{Int})::Nothing
 
     if isempty(dat.data)
         @minimal_warning "All epochs were dropped due to missing realignment triggers!"
-        return nothing
+        return dat
     end
 
     # Step 2: Find common time interval across all realigned epochs
@@ -187,7 +180,7 @@ function realign!(dat::EpochData, realignment_triggers::Vector{Int})::Nothing
 
     @info "Realignment complete. Final epoch length: $(nrow(dat.data[1])) samples"
 
-    return nothing
+    return dat
 end
 
 
@@ -197,20 +190,7 @@ end
 Non-mutating version of realign!. Returns a new EpochData object with realigned epochs.
 """
 function realign(dat::EpochData, realignment_triggers::Vector{Int})::EpochData
-    # Create a deep copy of the data (preserve struct fields)
-    dat_copy = EpochData(
-        dat.file,
-        dat.condition,
-        dat.condition_name,
-        [copy(epoch, copycols = true) for epoch in dat],
-        copy(dat.layout),
-        dat.sample_rate,
-        copy(dat.analysis_info),
-    )
-
-    realign!(dat_copy, realignment_triggers)
-
-    return dat_copy
+    return realign!(copy(dat), realignment_triggers)
 end
 
 """
@@ -225,7 +205,7 @@ function realign!(
     realignment_triggers::Vector{Int};
     global_interval::Union{Tuple{Float64,Float64},Nothing} = nothing,
     global_n_samples::Union{Int,Nothing} = nothing,
-)::Nothing
+)
     @info "Realigning $(length(dat_vec)) conditions in Vector{EpochData}..."
 
     # Step 1: Validate and realign all epochs individually
@@ -249,7 +229,7 @@ function realign!(
 
         if isempty(common_starts)
             @info "No data to realign."
-            return nothing
+            return dat_vec
         end
 
         global_interval = (maximum(common_starts), minimum(common_ends))
@@ -283,7 +263,7 @@ function realign!(
         end
     end
 
-    return nothing
+    return dat_vec
 end
 
 """
@@ -297,19 +277,7 @@ function realign(
     global_interval::Union{Tuple{Float64,Float64},Nothing} = nothing,
     global_n_samples::Union{Int,Nothing} = nothing,
 )::Vector{EpochData}
-    dat_vec_copy = [
-        EpochData(
-            dat.file,
-            dat.condition,
-            dat.condition_name,
-            [copy(epoch, copycols = true) for epoch in dat],
-            copy(dat.layout),
-            dat.sample_rate,
-            copy(dat.analysis_info),
-        ) for dat in dat_vec
-    ]
-    realign!(dat_vec_copy, realignment_triggers; global_interval = global_interval, global_n_samples = global_n_samples)
-    return dat_vec_copy
+    return realign!([copy(d) for d in dat_vec], realignment_triggers; global_interval = global_interval, global_n_samples = global_n_samples)
 end
 
 

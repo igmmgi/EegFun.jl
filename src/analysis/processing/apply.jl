@@ -11,7 +11,7 @@ function apply_analysis_settings!(dat::EegData, settings::AnalysisSettings)
     !isempty(settings.repaired_channels) && repair_channels!(dat, settings.repaired_channels, method = settings.repair_method)
     !isempty(settings.selected_regions) && _add_selected_regions!(dat, settings.selected_regions)
 
-    return nothing
+    return dat
 end
 apply_analysis_settings!(dat::EegData, settings::Observable{AnalysisSettings}) = apply_analysis_settings!(dat, settings[])
 function apply_analysis_settings!(dat::EegData, ica::InfoIca, settings::AnalysisSettings)
@@ -24,7 +24,7 @@ function apply_analysis_settings!(dat::EegData, ica::InfoIca, settings::Analysis
         subtract_ica_components!(dat, ica, component_selection = components(settings.removed_ica_components))
     end
 
-    return nothing
+    return dat
 end
 apply_analysis_settings!(dat::EegData, ica::InfoIca, settings::Observable{AnalysisSettings}) =
     apply_analysis_settings!(dat, ica, settings[])
@@ -34,8 +34,6 @@ apply_analysis_settings!(dat::EegData, ica::InfoIca, settings::Observable{Analys
 
 Non-mutating version of `apply_analysis_settings!`.
 """
-function apply_analysis_settings(dat::EegData, args...)
-    dat_copy = copy(dat)
-    apply_analysis_settings!(dat_copy, args...)
-    return dat_copy
+function apply_analysis_settings(dat::EegData, args...; kwargs...)
+    return apply_analysis_settings!(copy(dat), args...; kwargs...)
 end
