@@ -147,6 +147,7 @@ include("analysis/time_frequency/channel_average.jl")
 include("analysis/time_frequency/channel_difference.jl")
 
 # decoding analysis via libsvm
+include("analysis/decoding/liblinear.jl")
 include("analysis/decoding/decoding.jl")
 include("analysis/decoding/preparation.jl")
 include("analysis/decoding/decoding_statistics.jl")

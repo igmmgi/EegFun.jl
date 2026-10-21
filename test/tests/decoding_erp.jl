@@ -122,6 +122,51 @@ using Statistics
         @test all(0.01 .<= result.times .<= 0.05)
     end
 
+    @testset "decode_libsvm (ERP) - multiclass (3 conditions)" begin
+        Random.seed!(314)
+        cond1 = EegFun.create_test_epoch_data(condition = 1, n_epochs = 12, n_channels = 3, n = 30, fs = 1000)
+        cond2 = EegFun.create_test_epoch_data(condition = 2, n_epochs = 12, n_channels = 3, n = 30, fs = 1000)
+        cond3 = EegFun.create_test_epoch_data(condition = 3, n_epochs = 12, n_channels = 3, n = 30, fs = 1000)
+
+        result = EegFun.decode_libsvm([cond1, cond2, cond3]; n_iterations = 2, n_folds = 2)
+
+        @test result isa EegFun.DecodedData
+        @test length(result.times) == 30
+        @test length(result.average_score) == 30
+        @test result.parameters.n_classes == 3
+        @test result.parameters.class_coding == :one_vs_all
+        @test result.parameters.chance_level ≈ 1 / 3
+        @test all(0 .<= result.average_score .<= 1)
+        @test !isnothing(result.confusion_matrix)
+        @test size(result.confusion_matrix) == (30, 3, 3)
+        # Confusion matrix rows should sum to 1.0
+        for t = 1:30, c = 1:3
+            @test sum(result.confusion_matrix[t, c, :]) ≈ 1.0
+        end
+        @test !isnothing(result.raw_predictions)
+        @test size(result.raw_predictions, 1) == 2
+        @test size(result.raw_predictions, 2) == 2
+        @test size(result.raw_predictions, 3) == 30
+    end
+
+    @testset "decode_libsvm (ERP) - multiclass (4 conditions) & save_raw_predictions=false" begin
+        Random.seed!(315)
+        conds = [EegFun.create_test_epoch_data(condition = i, n_epochs = 12, n_channels = 3, n = 20, fs = 1000) for i = 1:4]
+
+        result = EegFun.decode_libsvm(conds; n_iterations = 2, n_folds = 2, save_raw_predictions = false)
+
+        @test result isa EegFun.DecodedData
+        @test result.parameters.n_classes == 4
+        @test result.parameters.class_coding == :one_vs_all
+        @test result.parameters.chance_level ≈ 0.25
+        @test isnothing(result.raw_predictions)
+        @test !isnothing(result.confusion_matrix)
+        @test size(result.confusion_matrix) == (20, 4, 4)
+        for t = 1:20, c = 1:4
+            @test sum(result.confusion_matrix[t, c, :]) ≈ 1.0
+        end
+    end
+
     @testset "decode_libsvm (ERP) - error cases" begin
         Random.seed!(313)
         cond1 = EegFun.create_test_epoch_data(condition = 1, n_epochs = 10, n_channels = 3, n = 50, fs = 1000)
