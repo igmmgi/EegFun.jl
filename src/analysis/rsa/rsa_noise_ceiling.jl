@@ -22,27 +22,13 @@ Compute correlation between two RDMs using upper triangle values.
 # Returns
 - `correlation::Float64`: Correlation coefficient between the two RDMs
 """
-function _correlate_rdms(rdm1::Matrix{Float64}, rdm2::Matrix{Float64}; method::Symbol = :spearman)
-    n = size(rdm1, 1)
-
+function _correlate_rdms(rdm1::AbstractMatrix{Float64}, rdm2::AbstractMatrix{Float64}; method::Symbol = :spearman)
     # Validate dimensions
     if size(rdm1) != size(rdm2)
         @minimal_error("RDMs must have the same dimensions, got $(size(rdm1)) and $(size(rdm2))")
     end
 
-    # Extract upper triangle (excluding diagonal)
-    upper_indices = [CartesianIndex(i, j) for i = 1:n for j = (i+1):n]
-    vec1 = [rdm1[idx] for idx in upper_indices]
-    vec2 = [rdm2[idx] for idx in upper_indices]
-
-    # Compute correlation
-    if method == :spearman
-        return StatsBase.corspearman(vec1, vec2)
-    elseif method == :pearson
-        return cor(vec1, vec2)
-    else
-        @minimal_error("Unknown correlation method: $method. Use :spearman or :pearson")
-    end
+    return _correlate_vectors(_extract_upper_triangular(rdm1), _extract_upper_triangular(rdm2), method)
 end
 
 # === NOISE CEILING COMPUTATION ===
@@ -127,51 +113,59 @@ function compute_noise_ceiling(rsa_data_list::Vector{RsaData}; correlation_metho
 
     n_participants = length(rsa_data_list)
 
-    # Preallocate arrays for bounds
+    # Preallocate arrays for bounds and upper-triangle vectors
     lower_bound = zeros(Float64, n_times)
     upper_bound = zeros(Float64, n_times)
 
+    n_upper = (n_conditions * (n_conditions - 1)) ÷ 2
+    participant_vecs = [Vector{Float64}(undef, n_upper) for _ = 1:n_participants]
+    sum_vec = Vector{Float64}(undef, n_upper)
+    avg_vec_all = Vector{Float64}(undef, n_upper)
+    avg_vec_others = Vector{Float64}(undef, n_upper)
+    inv_n_minus_1 = 1.0 / (n_participants - 1)
+
     # Compute noise ceiling at each time point
     for t = 1:n_times
-        # Collect RDMs at this time point from all participants
-        rdms_at_t = [rsa_data.rdm[t, :, :] for rsa_data in rsa_data_list]
+        fill!(sum_vec, 0.0)
 
-        # Compute average RDM across all participants
-        avg_rdm_all = zeros(Float64, n_conditions, n_conditions)
-        for rdm in rdms_at_t
-            avg_rdm_all .+= rdm
-        end
-        avg_rdm_all ./= n_participants
-
-        # Leave-one-out cross-validation
-        lower_corrs = Float64[]
-        upper_corrs = Float64[]
-
-        for left_out_idx = 1:n_participants
-            # Get left-out participant's RDM
-            left_out_rdm = rdms_at_t[left_out_idx]
-
-            # Compute average RDM of remaining participants (for lower bound)
-            avg_rdm_others = zeros(Float64, n_conditions, n_conditions)
-            for (idx, rdm) in enumerate(rdms_at_t)
-                if idx != left_out_idx
-                    avg_rdm_others .+= rdm
+        # Extract upper-triangular elements for all participants and accumulate sum
+        for p = 1:n_participants
+            v = participant_vecs[p]
+            rdm_p = @view rsa_data_list[p].rdm[t, :, :]
+            k = 1
+            @inbounds for i = 1:n_conditions
+                for j = (i+1):n_conditions
+                    val = rdm_p[i, j]
+                    v[k] = val
+                    sum_vec[k] += val
+                    k += 1
                 end
             end
-            avg_rdm_others ./= (n_participants - 1)
-
-            # Lower bound: correlate with average of others
-            lower_corr = _correlate_rdms(left_out_rdm, avg_rdm_others; method = correlation_method)
-            push!(lower_corrs, lower_corr)
-
-            # Upper bound: correlate with average of all (including self)
-            upper_corr = _correlate_rdms(left_out_rdm, avg_rdm_all; method = correlation_method)
-            push!(upper_corrs, upper_corr)
         end
 
-        # Average correlations across participants
-        lower_bound[t] = mean(lower_corrs)
-        upper_bound[t] = mean(upper_corrs)
+        # Grand average upper triangle across all participants
+        @inbounds @simd for k = 1:n_upper
+            avg_vec_all[k] = sum_vec[k] / n_participants
+        end
+
+        # Leave-one-out cross-validation
+        sum_lower = 0.0
+        sum_upper = 0.0
+
+        for left_out_idx = 1:n_participants
+            left_vec = participant_vecs[left_out_idx]
+
+            # Leave-one-out mean: (sum_all - left_out) / (n - 1)
+            @inbounds @simd for k = 1:n_upper
+                avg_vec_others[k] = (sum_vec[k] - left_vec[k]) * inv_n_minus_1
+            end
+
+            sum_lower += _correlate_vectors(left_vec, avg_vec_others, correlation_method)
+            sum_upper += _correlate_vectors(left_vec, avg_vec_all, correlation_method)
+        end
+
+        lower_bound[t] = sum_lower / n_participants
+        upper_bound[t] = sum_upper / n_participants
     end
 
     return NoiseCeiling(lower_bound, upper_bound, n_participants)

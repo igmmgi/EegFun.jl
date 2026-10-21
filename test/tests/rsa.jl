@@ -119,11 +119,11 @@ using EegFun
     end
 
     # ────────────────────────────────────────────────────────────
-    # 5. Model RDM helpers
+    # 5. Model RDM helpers (create_rdm)
     # ────────────────────────────────────────────────────────────
-    @testset "create_rdm_from_reaction_times" begin
+    @testset "create_rdm - scalar values / reaction times" begin
         rts = [0.3, 0.5, 0.4]
-        rdm = EegFun.create_rdm_from_reaction_times(rts)
+        rdm = EegFun.create_rdm(rts)
 
         @test size(rdm) == (3, 3)
         @test all(diag(rdm) .≈ 0.0)
@@ -133,22 +133,43 @@ using EegFun
         @test issymmetric(rdm)
     end
 
-    @testset "create_rdm_from_categorical" begin
+    @testset "create_rdm - categorical" begin
+        # Integer categories
         cats = [1, 1, 2, 2, 3]
-        rdm = EegFun.create_rdm_from_categorical(cats)
+        rdm = EegFun.create_rdm(cats)
 
         @test size(rdm) == (5, 5)
         @test rdm[1, 2] ≈ 0.0  # same category
         @test rdm[1, 3] ≈ 1.0  # different category
         @test rdm[3, 4] ≈ 0.0  # same category
         @test issymmetric(rdm)
+
+        # Symbol categories
+        cats_sym = [:face, :face, :scene, :tool]
+        rdm_sym = EegFun.create_rdm(cats_sym)
+        @test size(rdm_sym) == (4, 4)
+        @test rdm_sym[1, 2] == 0.0
+        @test rdm_sym[1, 3] == 1.0
+        @test issymmetric(rdm_sym)
+
+        # String categories
+        cats_str = ["A", "A", "B"]
+        rdm_str = EegFun.create_rdm(cats_str)
+        @test size(rdm_str) == (3, 3)
+        @test rdm_str[1, 2] == 0.0
+        @test rdm_str[1, 3] == 1.0
+
+        # Integer categories with method=:difference
+        cats_diff = EegFun.create_rdm([1, 2, 4]; method = :difference)
+        @test cats_diff[1, 2] == 1.0
+        @test cats_diff[1, 3] == 3.0
     end
 
-    @testset "create_rdm_from_vectors" begin
+    @testset "create_rdm - feature vectors" begin
         Random.seed!(503)
         vecs = [randn(20) for _ = 1:3]
 
-        rdm = EegFun.create_rdm_from_vectors(vecs; dissimilarity_measure = :euclidean)
+        rdm = EegFun.create_rdm(vecs; dissimilarity_measure = :euclidean)
 
         @test size(rdm) == (3, 3)
         @test all(diag(rdm) .≈ 0.0)
@@ -156,20 +177,20 @@ using EegFun
         @test all(rdm .>= 0.0)
     end
 
-    @testset "create_rdm_from_matrix" begin
+    @testset "create_rdm - feature matrix" begin
         Random.seed!(504)
         mat = randn(3, 10)  # 3 conditions, 10 features
 
-        rdm = EegFun.create_rdm_from_matrix(mat; dissimilarity_measure = :correlation)
+        rdm = EegFun.create_rdm(mat; dissimilarity_measure = :correlation)
 
         @test size(rdm) == (3, 3)
         @test all(diag(rdm) .≈ 0.0)
         @test issymmetric(rdm)
     end
 
-    @testset "create_rdm_from_distances" begin
+    @testset "create_rdm - condensed distances" begin
         dists = [0.2, 0.1, 0.1]  # (1,2), (1,3), (2,3)
-        rdm = EegFun.create_rdm_from_distances(dists, 3)
+        rdm = EegFun.create_rdm(dists, 3)
 
         @test size(rdm) == (3, 3)
         @test rdm[1, 2] ≈ 0.2
@@ -177,13 +198,13 @@ using EegFun
         @test rdm[2, 3] ≈ 0.1
 
         # Wrong length → error
-        @test_throws Exception EegFun.create_rdm_from_distances([0.1, 0.2], 3)
+        @test_throws Exception EegFun.create_rdm([0.1, 0.2], 3)
     end
 
-    @testset "create_rdm_from_similarity_ratings" begin
+    @testset "create_rdm - similarity ratings matrix" begin
         sim = [1.0 2.0 5.0; 2.0 1.0 4.0; 5.0 4.0 1.0]
 
-        rdm = EegFun.create_rdm_from_similarity_ratings(sim; convert_to_dissimilarity = true)
+        rdm = EegFun.create_rdm(sim; is_similarity = true)
 
         @test size(rdm) == (3, 3)
         @test all(diag(rdm) .≈ 0.0)
@@ -288,7 +309,7 @@ using EegFun
         rsa_result = EegFun.rsa([cond1, cond2, cond3])
 
         # Create a model RDM
-        model_rdm = EegFun.create_rdm_from_reaction_times([0.3, 0.5, 0.4])
+        model_rdm = EegFun.create_rdm([0.3, 0.5, 0.4])
 
         result = EegFun.compare_models(rsa_result, [model_rdm]; model_names = ["RT"], n_permutations = 0)
 
@@ -306,7 +327,7 @@ using EegFun
         cond3 = EegFun.create_test_epoch_data(condition = 3, n_epochs = 10, n_channels = 3, n = 20, fs = 1000)
 
         rsa_result = EegFun.rsa([cond1, cond2, cond3])
-        model_rdm = EegFun.create_rdm_from_reaction_times([0.3, 0.5, 0.4])
+        model_rdm = EegFun.create_rdm([0.3, 0.5, 0.4])
 
         result = EegFun.compare_models(rsa_result, [model_rdm]; model_names = ["RT"], n_permutations = 20)
 
@@ -455,13 +476,13 @@ using EegFun
     # ────────────────────────────────────────────────────────────
     # 12. Timeseries RDM creation
     # ────────────────────────────────────────────────────────────
-    @testset "create_rdm_from_timeseries" begin
+    @testset "create_rdm - timeseries" begin
         Random.seed!(570)
         # 3 conditions, 4 features, 10 timepoints
         data = randn(3, 4, 10)
         times = collect(0.0:0.1:0.9)
 
-        rdms = EegFun.create_rdm_from_timeseries(data, times; dissimilarity_measure = :euclidean)
+        rdms = EegFun.create_rdm(data, times; dissimilarity_measure = :euclidean)
 
         @test size(rdms) == (10, 3, 3)
         # Diagonal should be zero at each time
@@ -473,7 +494,7 @@ using EegFun
     # ────────────────────────────────────────────────────────────
     # 13. create_model_rdms dispatch
     # ────────────────────────────────────────────────────────────
-    @testset "create_model_rdms" begin
+    @testset "create_model_rdms / create_rdm(dict)" begin
         model_data = Dict{String,Any}("RTs" => [0.3, 0.5, 0.4], "Categories" => [1, 1, 2])
 
         rdms, names = EegFun.create_model_rdms(model_data)
@@ -481,6 +502,11 @@ using EegFun
         @test length(rdms) == 2
         @test length(names) == 2
         @test all(rdm -> size(rdm) == (3, 3), rdms)
+
+        # Also test via create_rdm(dict)
+        rdms2, names2 = EegFun.create_rdm(model_data)
+        @test length(rdms2) == 2
+        @test names2 == names
     end
 
     # ────────────────────────────────────────────────────────────

@@ -158,13 +158,11 @@ function _cv_splithalf(
     n_iterations::Int,
 )
     rdms_sum = zeros(Float64, n_timepoints, n_conditions, n_conditions)
+    half1_data = Vector{Array{Float64,3}}(undef, n_conditions)
+    half2_data = Vector{Array{Float64,3}}(undef, n_conditions)
 
     for iter = 1:n_iterations
-        # For each condition, randomly split trials into two halves
-        half1_data = Vector{Array{Float64,3}}()
-        half2_data = Vector{Array{Float64,3}}()
-
-        for cond_data in data_arrays
+        for (c, cond_data) in enumerate(data_arrays)
             n_trials = size(cond_data, 3)
             n_half = div(n_trials, 2)
 
@@ -173,8 +171,8 @@ function _cv_splithalf(
             half1_indices = perm[1:n_half]
             half2_indices = perm[(n_half+1):end]
 
-            push!(half1_data, cond_data[:, :, half1_indices])
-            push!(half2_data, cond_data[:, :, half2_indices])
+            half1_data[c] = cond_data[:, :, half1_indices]
+            half2_data[c] = cond_data[:, :, half2_indices]
         end
 
         # Compute RDMs for each half
@@ -182,7 +180,9 @@ function _cv_splithalf(
         rdm_half2 = _compute_rdms_from_data(half2_data, n_timepoints, n_conditions, selected_channels, dissimilarity_measure)
 
         # Average the two halves
-        rdms_sum .+= (rdm_half1 .+ rdm_half2) ./ 2
+        @inbounds @simd for idx in eachindex(rdms_sum)
+            rdms_sum[idx] += (rdm_half1[idx] + rdm_half2[idx]) * 0.5
+        end
     end
 
     # Average across iterations
@@ -203,20 +203,16 @@ function _cv_leaveoneout(
 )
     min_trials = minimum([size(d, 3) for d in data_arrays])
     rdms_sum = zeros(Float64, n_timepoints, n_conditions, n_conditions)
+    loo_data = Vector{Array{Float64,3}}(undef, n_conditions)
 
     for trial_idx = 1:min_trials
-        # Create data arrays excluding this trial
-        loo_data = Vector{Array{Float64,3}}()
-
-        for cond_data in data_arrays
+        for (c, cond_data) in enumerate(data_arrays)
             n_trials = size(cond_data, 3)
             if trial_idx <= n_trials
-                # Exclude trial_idx
-                indices = [i for i = 1:n_trials if i != trial_idx]
-                push!(loo_data, cond_data[:, :, indices])
+                indices = [1:(trial_idx-1); (trial_idx+1):n_trials]
+                loo_data[c] = cond_data[:, :, indices]
             else
-                # Use all trials if this condition has fewer trials
-                push!(loo_data, cond_data)
+                loo_data[c] = cond_data
             end
         end
 
@@ -243,16 +239,15 @@ function _cv_kfold(
     n_folds::Int,
 )
     rdms_sum = zeros(Float64, n_timepoints, n_conditions, n_conditions)
+    fold_data = Vector{Array{Float64,3}}(undef, n_conditions)
+
+    # Partition trials for each condition once
+    cond_perms = [randperm(size(d, 3)) for d in data_arrays]
 
     for fold = 1:n_folds
-        # For each condition, select trials for this fold
-        fold_data = Vector{Array{Float64,3}}()
-
-        for cond_data in data_arrays
+        for (c, cond_data) in enumerate(data_arrays)
             n_trials = size(cond_data, 3)
-
-            # Random permutation
-            perm = randperm(n_trials)
+            perm = cond_perms[c]
 
             # Select trials NOT in this fold
             fold_size = div(n_trials, n_folds)
@@ -261,8 +256,7 @@ function _cv_kfold(
 
             # Use all trials except those in current fold
             indices = [perm[i] for i = 1:n_trials if i < fold_start || i > fold_end]
-
-            push!(fold_data, cond_data[:, :, indices])
+            fold_data[c] = cond_data[:, :, indices]
         end
 
         # Compute RDM for this fold

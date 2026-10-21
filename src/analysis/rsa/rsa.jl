@@ -38,17 +38,22 @@ function _prepare_rsa_data(epochs::Vector{EpochData})
         # Preallocate: [channels × time × trials]
         condition_data = Array{Float64,3}(undef, n_channels, n_times, n_trials)
 
-        for (trial_idx, trial_df) in enumerate(epoch_data.data)
-            for (ch_idx, ch_name) in enumerate(channels)
-                col = trial_df[!, ch_name]
-                if col isa Vector{Float64}
-                    col_f64 = col::Vector{Float64}
-                    @inbounds @simd for t = 1:n_times
-                        condition_data[ch_idx, t, trial_idx] = col_f64[t]
-                    end
-                else
-                    @inbounds for t = 1:n_times
-                        condition_data[ch_idx, t, trial_idx] = Float64(col[t])
+        if n_trials > 0
+            first_df = epoch_data.data[1]
+            ch_indices = [columnindex(first_df, ch) for ch in channels]
+
+            for (trial_idx, trial_df) in enumerate(epoch_data.data)
+                for (ch_idx, col_idx) in enumerate(ch_indices)
+                    col = trial_df[!, col_idx]
+                    if col isa Vector{Float64}
+                        col_f64 = col::Vector{Float64}
+                        @inbounds @simd for t = 1:n_times
+                            condition_data[ch_idx, t, trial_idx] = col_f64[t]
+                        end
+                    else
+                        @inbounds for t = 1:n_times
+                            condition_data[ch_idx, t, trial_idx] = Float64(col[t])
+                        end
                     end
                 end
             end
@@ -417,6 +422,11 @@ function rsa(
         # This approach is more robust to noise and outliers
         # Preallocate RDM array: [time × condition × condition]
         rdms = zeros(Float64, n_timepoints, n_conditions, n_conditions)
+        avg_rdm = zeros(Float64, n_conditions, n_conditions)
+        trial_rdm_buffer = zeros(Float64, n_conditions, n_conditions)
+        condition_patterns = Vector{AbstractVector{Float64}}(undef, n_conditions)
+        n_trials = minimum(n_trials_per_condition)
+
         for t = 1:n_timepoints
             # Compute inverse pooled covariance if using Mahalanobis distance
             inv_pooled_cov = nothing
@@ -426,11 +436,7 @@ function rsa(
             end
 
             # Compute RDM for each trial
-            n_trials = minimum(n_trials_per_condition)
-
-            avg_rdm = zeros(Float64, n_conditions, n_conditions)
-            trial_rdm_buffer = zeros(Float64, n_conditions, n_conditions)
-            condition_patterns = Vector{AbstractVector{Float64}}(undef, n_conditions)
+            fill!(avg_rdm, 0.0)
             valid_trials = 0
 
             for trial_idx = 1:n_trials
@@ -514,9 +520,9 @@ with optional permutation-based significance testing.
    - Must have same number of timepoints as `rsa_data.times`
    - Example: Eye tracking RDM, EDA RDM
 
-**Note**: Convert your raw data to RDMs first using helper functions:
-- Static: `create_rdm_from_reaction_times()`, `create_rdm_from_vectors()`, etc.
-- Temporal: `create_rdm_from_timeseries()` (handles temporal alignment automatically)
+**Note**: Convert your raw data to RDMs first using [`create_rdm`](@ref):
+- Static: `create_rdm(rts)`, `create_rdm(vectors)`, `create_rdm(matrix)`
+- Temporal: `create_rdm(data, times; align_to=neural_rsa)` (handles temporal alignment automatically)
 
 # Arguments
 - `rsa_data::RsaData`: RSA results from neural data (temporal)
@@ -538,7 +544,7 @@ with optional permutation-based significance testing.
 ```julia
 # Step 1: Convert your data to RDM
 rts = [0.3, 0.5, 0.4]  # Your reaction time data
-rt_rdm = create_rdm_from_reaction_times(rts)
+rt_rdm = create_rdm(rts)
 
 # Step 2: Compare
 neural_rsa = rsa(epochs)
@@ -549,9 +555,9 @@ rsa_with_model = compare_models(neural_rsa, [rt_rdm], model_names=["RTs"])
 
 ```julia
 # Step 1: Convert your data to temporal RDM (with automatic alignment)
-eye_data = Array{Float64, 3}  # [conditions × features × time] - your format
-eye_times = Vector{Float64}     # Your time vector
-eye_rdms = create_rdm_from_timeseries(eye_data, eye_times; align_to=neural_rsa)
+eye_data = randn(3, 2, 50)     # [conditions × features × time]
+eye_times = collect(0.0:0.01:0.49) # Time vector
+eye_rdms = create_rdm(eye_data, eye_times; align_to=neural_rsa)
 
 # Step 2: Compare
 neural_rsa = rsa(epochs)
@@ -562,9 +568,9 @@ rsa_with_model = compare_models(neural_rsa, [eye_rdms], model_names=["Eye Tracki
 
 ```julia
 # Convert all your model data to RDMs
-rt_rdm = create_rdm_from_reaction_times(rts)
-eye_rdms = create_rdm_from_timeseries(eye_data, eye_times; align_to=neural_rsa)
-eda_rdms = create_rdm_from_timeseries(eda_data, eda_times; align_to=neural_rsa)
+rt_rdm = create_rdm(rts)
+eye_rdms = create_rdm(eye_data, eye_times; align_to=neural_rsa)
+eda_rdms = create_rdm(eda_data, eda_times; align_to=neural_rsa)
 
 # Compare all at once
 rsa_with_models = compare_models(
@@ -648,13 +654,10 @@ function grand_average(rsa_data_list::Vector{RsaData}; compute_noise_ceiling::Bo
 
     # Average RDMs across participants
     grand_rdm = zeros(Float64, n_times, n_conditions, n_conditions)
-    for t = 1:n_times
-        for i = 1:n_conditions
-            for j = 1:n_conditions
-                grand_rdm[t, i, j] = mean([rsa_data.rdm[t, i, j] for rsa_data in rsa_data_list])
-            end
-        end
+    for rsa_data in rsa_data_list
+        grand_rdm .+= rsa_data.rdm
     end
+    grand_rdm ./= length(rsa_data_list)
 
     # Compute noise ceiling if requested
     noise_ceiling = nothing
@@ -740,22 +743,31 @@ function _compute_model_correlations(
     correlations = zeros(Float64, n_times, n_models)
     p_values = n_permutations > 0 ? zeros(Float64, n_times, n_models) : nothing
 
+    # Pre-extract upper triangular vectors for static models
+    static_model_vecs = Vector{Union{Nothing,Vector{Float64}}}(undef, n_models)
+    for model_idx = 1:n_models
+        if !is_temporal[model_idx]
+            static_model_vecs[model_idx] = _extract_upper_triangular(model_rdms[model_idx])
+        else
+            static_model_vecs[model_idx] = nothing
+        end
+    end
+
     for t = 1:n_times
         neural_rdm = @view rsa_data.rdm[t, :, :]
         neural_vec = _extract_upper_triangular(neural_rdm)
 
         for (model_idx, model_rdm) in enumerate(model_rdms)
-            # Get model RDM for this time point
+            # Get model RDM vector for this time point
             if is_temporal[model_idx]
                 model_rdm_t = @view model_rdm[t, :, :]
                 if !issymmetric(model_rdm_t)
                     model_rdm_t = (model_rdm_t + model_rdm_t') / 2
                 end
+                model_vec = _extract_upper_triangular(model_rdm_t)
             else
-                model_rdm_t = model_rdm
+                model_vec = static_model_vecs[model_idx]::Vector{Float64}
             end
-
-            model_vec = _extract_upper_triangular(model_rdm_t)
 
             # Compute correlation
             corr = _correlate_vectors(neural_vec, model_vec, correlation_type)
@@ -777,13 +789,36 @@ end
 Perform permutation testing for model correlations.
 """
 function _run_model_permutations(neural_vec, model_vec, observed_corr, correlation_type, n_permutations)
-    permuted_corrs = zeros(Float64, n_permutations)
-    for perm_idx = 1:n_permutations
-        shuffled_model = shuffle(model_vec)
-        permuted_corrs[perm_idx] = _correlate_vectors(neural_vec, shuffled_model, correlation_type)
+    abs_observed = abs(observed_corr)
+    extreme_count = 0
+
+    if correlation_type == :spearman
+        neural_ranks = StatsBase.tiedrank(neural_vec)
+        model_ranks = StatsBase.tiedrank(model_vec)
+        shuffled_ranks = copy(model_ranks)
+
+        for _ = 1:n_permutations
+            shuffle!(shuffled_ranks)
+            perm_corr = cor(neural_ranks, shuffled_ranks)
+            if abs(perm_corr) >= abs_observed
+                extreme_count += 1
+            end
+        end
+    elseif correlation_type == :pearson
+        shuffled_model = copy(model_vec)
+        for _ = 1:n_permutations
+            shuffle!(shuffled_model)
+            perm_corr = cor(neural_vec, shuffled_model)
+            if abs(perm_corr) >= abs_observed
+                extreme_count += 1
+            end
+        end
+    else
+        @minimal_error("Unknown correlation type: $correlation_type. Use :spearman or :pearson")
     end
+
     # Two-tailed p-value
-    return sum(abs.(permuted_corrs) .>= abs(observed_corr)) / n_permutations
+    return extreme_count / n_permutations
 end
 
 """
@@ -892,8 +927,26 @@ function _compute_rdms_from_data(
 
     # Pre-allocate buffers
     n_channels = length(selected_channels)
-    condition_patterns = [zeros(Float64, n_channels) for _ = 1:n_conditions]
     rdm_buffer = zeros(Float64, n_conditions, n_conditions)
+
+    # Precompute trial means for each condition: [channels × timepoints]
+    cond_means = [zeros(Float64, n_channels, n_timepoints) for _ = 1:n_conditions]
+    for (i, cond_data) in enumerate(data_arrays)
+        n_trials = size(cond_data, 3)
+        cm = cond_means[i]
+        if n_trials > 0
+            @inbounds for trial = 1:n_trials
+                for t = 1:n_timepoints
+                    @simd for ch = 1:n_channels
+                        cm[ch, t] += cond_data[ch, t, trial]
+                    end
+                end
+            end
+            cm ./= n_trials
+        end
+    end
+
+    condition_patterns = [Vector{Float64}(undef, n_channels) for _ = 1:n_conditions]
 
     for t = 1:n_timepoints
         # Compute inverse pooled covariance if using Mahalanobis distance
@@ -903,16 +956,12 @@ function _compute_rdms_from_data(
             inv_pooled_cov = pinv(pooled_cov)
         end
 
-        # Average across trials first, then compute RDM
-        for (i, cond_data) in enumerate(data_arrays)
-            n_trials = size(cond_data, 3)
-            fill!(condition_patterns[i], 0.0)
-            for trial = 1:n_trials
-                @inbounds @simd for ch = 1:n_channels
-                    condition_patterns[i][ch] += cond_data[ch, t, trial]
-                end
+        for i = 1:n_conditions
+            cp = condition_patterns[i]
+            cm = cond_means[i]
+            @inbounds @simd for ch = 1:n_channels
+                cp[ch] = cm[ch, t]
             end
-            condition_patterns[i] ./= n_trials
         end
 
         _compute_rdm!(rdm_buffer, condition_patterns, dissimilarity_measure; inv_covariance_matrix = inv_pooled_cov)

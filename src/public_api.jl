@@ -222,13 +222,7 @@ public add_noise_ceiling!
 public compare_models
 public compute_noise_ceiling
 public create_model_rdms
-public create_rdm_from_categorical
-public create_rdm_from_distances
-public create_rdm_from_matrix
-public create_rdm_from_reaction_times
-public create_rdm_from_similarity_ratings
-public create_rdm_from_timeseries
-public create_rdm_from_vectors
+public create_rdm
 public create_temporal_model_rdms
 public normalize_rdm
 public rsa

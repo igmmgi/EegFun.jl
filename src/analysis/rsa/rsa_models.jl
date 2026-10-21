@@ -2,52 +2,41 @@
 #
 # Converts different types of "other" data (behavioral, computational, 
 # theoretical) into Representational Dissimilarity Matrices (RDMs) for 
-# comparison with neural RDMs.
+# comparison with neural RDMs via a unified `create_rdm` multiple-dispatch interface.
 #
 # Input Format Specifications
 #
 # **Important**: Model RDMs expect **summarized/averaged values per condition**, not trial-by-trial data.
 # You should average or summarize your behavioral/model data across trials BEFORE creating model RDMs.
-
+#
 # ## Static Models (Single Timepoint)
 # 
 # For data with **one summary value per condition** (e.g., mean reaction times):
+# - Expected: `Vector{Float64}` [n_conditions]
+# - Example: `create_rdm([0.302, 0.501, 0.403])`
 # 
-# **Expected Format**: `Vector{Float64}` [n_conditions]
-# - One **averaged/representative** value per condition
-# - Example: `[0.302, 0.501, 0.403]` = mean RTs for 3 conditions (already averaged across trials)
+# For data with **categorical labels per condition**:
+# - Expected: `Vector{Int}`, `Vector{Symbol}`, or `Vector{String}`
+# - Example: `create_rdm([1, 1, 2, 2, 3])` or `create_rdm([:face, :face, :scene])`
 # 
-# **Helper Function**: `create_rdm_from_reaction_times(rts)`
+# For data with **multiple features per condition** (e.g., word embeddings, image features):
+# - Expected: `Vector{Vector{Float64}}` or `Matrix{Float64}` [n_conditions × n_features]
+# - Example: `create_rdm(feature_matrix, dissimilarity_measure=:correlation)`
 # 
-# ---
+# For **similarity rating matrices**:
+# - Expected: square symmetric `Matrix{Float64}`
+# - Example: `create_rdm(similarity_matrix; is_similarity=true)`
 # 
-# For data with **multiple features per condition** (e.g., word embeddings):
-# 
-# **Expected Format**: `Vector{Vector{Float64}}` or `Matrix{Float64}`
-# - `Vector{Vector{Float64}}`: Each inner vector is one condition's features
-# - `Matrix{Float64}`: [n_conditions × n_features] - each row is one condition
-# 
-# **Helper Functions**: 
-# - `create_rdm_from_vectors(vectors)`
-# - `create_rdm_from_matrix(data_matrix)`
-# 
-# ---
+# For **condensed pairwise distance vectors**:
+# - Expected: upper-triangular vector [n*(n-1)/2] + condition count
+# - Example: `create_rdm(distances, 3)`
 # 
 # ## Temporal Models (Multiple Timepoints)
 # 
 # For data with **many values per condition over time** (e.g., eye tracking, EDA):
-# 
-# **Expected Format**: `Array{Float64, 3}` [n_conditions × n_features × n_timepoints]
-# - Dimension 1: Conditions (e.g., Face, Object, Scene)
-# - Dimension 2: Features (e.g., x_position, y_position, pupil_size for eye tracking)
-# - Dimension 3: Time points
-# - **Plus**: `Vector{Float64}` [n_timepoints] - time vector in seconds
-# 
-# **Helper Function**: `create_rdm_from_timeseries(data, times; align_to=neural_times)`
-# 
-# **Key Feature**: Automatic temporal alignment! If your model data has different
-# sampling rate than neural data, use `align_to` parameter to automatically resample.
-# 
+# - Expected: `Array{Float64, 3}` [n_conditions × n_features × n_timepoints] + time vector
+# - Example: `create_rdm(data, times; align_to=neural_times)`
+#
 # ---
 
 # === HELPER FUNCTIONS ===
@@ -70,43 +59,39 @@ function _fill_rdm_from_dissimilarities!(rdm::Matrix{Float64}, compute_dissim::F
     return rdm
 end
 
-# === STATIC MODEL RDMs (ONE VALUE PER CONDITION) ===
+function _categorical_rdm(categories::AbstractVector)
+    n_conditions = length(categories)
+    rdm = zeros(Float64, n_conditions, n_conditions)
+    for i = 1:n_conditions
+        rdm[i, i] = 0.0
+        for j = (i+1):n_conditions
+            dissim = categories[i] == categories[j] ? 0.0 : 1.0
+            rdm[i, j] = dissim
+            rdm[j, i] = dissim
+        end
+    end
+    return rdm
+end
+
+# === UNIFIED RDM CREATION INTERFACE (create_rdm) ===
 
 """
-    create_rdm_from_vectors(
-        vectors::Vector{Vector{Float64}};
-        dissimilarity_measure::Symbol = :correlation,
-    )
+    create_rdm(vectors::AbstractVector{<:AbstractVector{<:Real}}; dissimilarity_measure::Symbol = :correlation)
 
 Create an RDM from feature vectors (e.g., word embeddings, image features).
 
 # Input Format
-
-**Expected**: `Vector{Vector{Float64}}`
 - Outer vector: one element per condition
-- Inner vector: feature values for that condition
-- All inner vectors must have the same length (same number of features)
+- Inner vector: feature values for that condition (all inner vectors must have the same length)
 
 # Arguments
-- `vectors::Vector{Vector{Float64}}`: Vector of feature vectors, one per condition
+- `vectors`: Vector of feature vectors, one per condition
 - `dissimilarity_measure::Symbol`: Measure to use (:correlation, :spearman, :euclidean, :mahalanobis)
 
 # Returns
 - `rdm::Matrix{Float64}`: RDM matrix [condition × condition]
-
-# Examples
-
-```julia
-# Word embeddings: 3 conditions, each with 100-dimensional embedding
-word_embeddings = [
-    [0.1, 0.2, 0.3, ..., 0.9],  # Condition 1: 100 features
-    [0.2, 0.3, 0.4, ..., 1.0],  # Condition 2: 100 features
-    [0.5, 0.6, 0.7, ..., 1.2],  # Condition 3: 100 features
-]
-rdm = create_rdm_from_vectors(word_embeddings, dissimilarity_measure=:euclidean)
-```
 """
-function create_rdm_from_vectors(vectors::Vector{Vector{Float64}}; dissimilarity_measure::Symbol = :correlation)
+function create_rdm(vectors::AbstractVector{<:AbstractVector{<:Real}}; dissimilarity_measure::Symbol = :correlation)
     n_conditions = length(vectors)
     rdm = zeros(Float64, n_conditions, n_conditions)
     _fill_rdm_from_dissimilarities!(rdm, (i, j) -> _compute_dissimilarity(vectors[i], vectors[j], dissimilarity_measure))
@@ -114,70 +99,63 @@ function create_rdm_from_vectors(vectors::Vector{Vector{Float64}}; dissimilarity
 end
 
 """
-    create_rdm_from_matrix(
-        data_matrix::Matrix{Float64};
+    create_rdm(
+        data_matrix::AbstractMatrix{<:Real};
         dissimilarity_measure::Symbol = :correlation,
+        is_similarity::Bool = false,
     )
 
-Create an RDM from a data matrix where each row is a condition.
-
-# Input Format
-
-**Expected**: `Matrix{Float64}` [n_conditions × n_features]
-- Each row: one condition
-- Each column: one feature
-- Example: Image features where rows are images, columns are feature dimensions
+Create an RDM from a feature matrix [conditions × features] or a similarity matrix [conditions × conditions].
 
 # Arguments
-- `data_matrix::Matrix{Float64}`: Data matrix [conditions × features]
+- `data_matrix`: Matrix of condition features [conditions × features] or similarity ratings [conditions × conditions]
 - `dissimilarity_measure::Symbol`: Measure to use (:correlation, :spearman, :euclidean, :mahalanobis)
+- `is_similarity::Bool`: If true, converts similarity ratings to dissimilarity [0, 1] with zero diagonal
 
 # Returns
 - `rdm::Matrix{Float64}`: RDM matrix [condition × condition]
-
-# Examples
-
-```julia
-# Image features: 3 conditions (images), 4 features per image
-image_features = [
-    0.1  0.2  0.3  0.4;  # Image 1 (condition 1)
-    0.2  0.3  0.4  0.5;  # Image 2 (condition 2)
-    0.5  0.6  0.7  0.8   # Image 3 (condition 3)
-]
-rdm = create_rdm_from_matrix(image_features, dissimilarity_measure=:correlation)
-```
 """
-function create_rdm_from_matrix(data_matrix::Matrix{Float64}; dissimilarity_measure::Symbol = :correlation)
-    n_conditions = size(data_matrix, 1)
-    rdm = zeros(Float64, n_conditions, n_conditions)
-    _fill_rdm_from_dissimilarities!(rdm, (i, j) -> _compute_dissimilarity(data_matrix[i, :], data_matrix[j, :], dissimilarity_measure))
-    return rdm
+function create_rdm(
+    data_matrix::AbstractMatrix{<:Real};
+    dissimilarity_measure::Symbol = :correlation,
+    is_similarity::Bool = false,
+)
+    if is_similarity
+        # Normalize to [0, 1] and invert (similarity -> dissimilarity)
+        max_val = maximum(data_matrix)
+        min_val = minimum(data_matrix)
+        if max_val == min_val
+            return zeros(Float64, size(data_matrix))
+        end
+        normalized = (data_matrix .- min_val) ./ (max_val - min_val)
+        rdm = 1.0 .- normalized
+        for i in 1:size(rdm, 1)
+            rdm[i, i] = 0.0
+        end
+        return rdm
+    elseif size(data_matrix, 1) == size(data_matrix, 2) && issymmetric(data_matrix)
+        if all(diag(data_matrix) .== 0.0) && all(data_matrix .>= 0.0)
+            return Matrix{Float64}(data_matrix)
+        else
+            return create_rdm(data_matrix; is_similarity = true)
+        end
+    else
+        n_conditions = size(data_matrix, 1)
+        rdm = zeros(Float64, n_conditions, n_conditions)
+        _fill_rdm_from_dissimilarities!(
+            rdm,
+            (i, j) -> _compute_dissimilarity(@view(data_matrix[i, :]), @view(data_matrix[j, :]), dissimilarity_measure),
+        )
+        return rdm
+    end
 end
 
 """
-    create_rdm_from_distances(distances::Vector{Float64}, n_conditions::Int)
+    create_rdm(distances::AbstractVector{<:Real}, n_conditions::Integer)
 
-Create an RDM from a vector of pairwise distances.
-
-The distances vector should contain all unique pairwise distances in the order:
-(1,2), (1,3), ..., (1,n), (2,3), ..., (2,n), ..., (n-1,n)
-
-# Arguments
-- `distances::Vector{Float64}`: Vector of pairwise distances (upper triangular)
-- `n_conditions::Int`: Number of conditions
-
-# Returns
-- `rdm::Matrix{Float64}`: RDM matrix [condition × condition]
-
-# Examples
-```julia
-# Create RDM from reaction times (dissimilarity = difference in RT)
-rts = [0.3, 0.5, 0.4]  # RTs for 3 conditions
-distances = [abs(rts[1] - rts[2]), abs(rts[1] - rts[3]), abs(rts[2] - rts[3])]
-rdm = create_rdm_from_distances(distances, 3)
-```
+Create an RDM from a vector of condensed pairwise distances (upper triangular, length = n*(n-1)/2).
 """
-function create_rdm_from_distances(distances::Vector{Float64}, n_conditions::Int)
+function create_rdm(distances::AbstractVector{<:Real}, n_conditions::Integer)
     expected_length = div(n_conditions * (n_conditions - 1), 2)
     if length(distances) != expected_length
         @minimal_error("Distances vector has length $(length(distances)), expected $expected_length for $n_conditions conditions")
@@ -185,7 +163,6 @@ function create_rdm_from_distances(distances::Vector{Float64}, n_conditions::Int
 
     rdm = zeros(Float64, n_conditions, n_conditions)
     idx = 1
-
     for i = 1:n_conditions
         for j = (i+1):n_conditions
             rdm[i, j] = distances[idx]
@@ -193,146 +170,65 @@ function create_rdm_from_distances(distances::Vector{Float64}, n_conditions::Int
             idx += 1
         end
     end
-
     return rdm
 end
 
 """
-    create_rdm_from_similarity_ratings(
-        similarity_matrix::Matrix{Float64};
-        convert_to_dissimilarity::Bool = true,
-    )
+    create_rdm(values::AbstractVector{<:AbstractFloat}; method::Symbol = :difference)
 
-Create an RDM from a similarity matrix (e.g., from behavioral ratings).
+Create an RDM from 1D scalar values per condition (e.g., reaction times, subjective ratings).
 
 # Arguments
-- `similarity_matrix::Matrix{Float64}`: Similarity matrix [condition × condition]. Higher values mean more similar.
-- `convert_to_dissimilarity::Bool`: Whether to convert similarity to dissimilarity (default: true)
-
-# Returns
-- `rdm::Matrix{Float64}`: RDM matrix [condition × condition]
-
-# Examples
-```julia
-# Create RDM from similarity ratings (1 = very similar, 7 = very different)
-similarity = [
-    1.0 2.0 5.0;
-    2.0 1.0 4.0;
-    5.0 4.0 1.0
-]
-rdm = create_rdm_from_similarity_ratings(similarity, convert_to_dissimilarity=true)
-```
+- `values`: Float vector of summary values, one per condition
+- `method::Symbol`: `:difference` (default: absolute difference |v_i - v_j|) or `:categorical`
 """
-function create_rdm_from_similarity_ratings(similarity_matrix::Matrix{Float64}; convert_to_dissimilarity::Bool = true)
-    if convert_to_dissimilarity
-        # Normalize to [0, 1] and invert (similarity -> dissimilarity)
-        max_val = maximum(similarity_matrix)
-        min_val = minimum(similarity_matrix)
-        if max_val == min_val
-            # All values are the same
-            return zeros(Float64, size(similarity_matrix))
+function create_rdm(values::AbstractVector{<:AbstractFloat}; method::Symbol = :difference)
+    if method == :difference
+        n_conditions = length(values)
+        rdm = zeros(Float64, n_conditions, n_conditions)
+        for i = 1:n_conditions
+            rdm[i, i] = 0.0
+            for j = (i+1):n_conditions
+                dissim = abs(values[i] - values[j])
+                rdm[i, j] = dissim
+                rdm[j, i] = dissim
+            end
         end
-        normalized = (similarity_matrix .- min_val) ./ (max_val - min_val)
-        rdm = 1.0 .- normalized
+        return rdm
+    elseif method == :categorical
+        return _categorical_rdm(values)
     else
-        rdm = copy(similarity_matrix)
+        @minimal_error("Unknown method: :$method for float vector. Use :difference or :categorical")
     end
-
-    # Ensure diagonal is zero
-    n = size(rdm, 1)
-    for i = 1:n
-        rdm[i, i] = 0.0
-    end
-
-    return rdm
 end
 
 """
-    create_rdm_from_reaction_times(rts::Vector{Float64})
+    create_rdm(categories::AbstractVector{<:Union{Integer,Symbol,AbstractString}}; method::Symbol = :categorical)
 
-Create an RDM from reaction times (or any single-value-per-condition data).
-
-# Input Format
-
-**Expected**: `Vector{Float64}` [n_conditions]
-- One value per condition
-- Order must match condition order in neural data
+Create an RDM from categorical labels (integers, symbols, or strings).
 
 # Arguments
-- `rts::Vector{Float64}`: Reaction times (or other single values) for each condition
-
-# Returns
-- `rdm::Matrix{Float64}`: RDM matrix [condition × condition]
-  - Dissimilarity = absolute difference between values
-  - Diagonal = 0.0 (condition vs itself)
-
-# Examples
-
-```julia
-# Reaction times: 3 conditions
-rts = [0.3, 0.5, 0.4]  # Face=0.3s, Object=0.5s, Scene=0.4s
-rdm = create_rdm_from_reaction_times(rts)
-
-# Resulting RDM:
-#            Face  Object  Scene
-# Face       0.0   0.2    0.1
-# Object     0.2   0.0    0.1
-# Scene      0.1   0.1    0.0
-```
+- `categories`: Category labels for each condition (e.g. `[1, 1, 2]`, `[:face, :face, :scene]`)
+- `method::Symbol`: `:categorical` (default: 0 if same, 1 if different) or `:difference` (for integers)
 """
-function create_rdm_from_reaction_times(rts::Vector{Float64})
-    n_conditions = length(rts)
-    rdm = zeros(Float64, n_conditions, n_conditions)
-
-    # Only compute upper triangle for efficiency
-    for i = 1:n_conditions
-        rdm[i, i] = 0.0
-        for j = (i+1):n_conditions
-            dissim = abs(rts[i] - rts[j])
-            rdm[i, j] = dissim
-            rdm[j, i] = dissim  # Symmetric
+function create_rdm(categories::AbstractVector{<:Union{Integer,Symbol,AbstractString}}; method::Symbol = :categorical)
+    if method == :categorical
+        return _categorical_rdm(categories)
+    elseif method == :difference && categories isa AbstractVector{<:Integer}
+        n_conditions = length(categories)
+        rdm = zeros(Float64, n_conditions, n_conditions)
+        for i = 1:n_conditions
+            rdm[i, i] = 0.0
+            for j = (i+1):n_conditions
+                dissim = abs(Float64(categories[i]) - Float64(categories[j]))
+                rdm[i, j] = dissim
+                rdm[j, i] = dissim
+            end
         end
+        return rdm
+    else
+        @minimal_error("Unsupported method: :$method for $(typeof(categories)). Use :categorical")
     end
-
-    return rdm
-end
-
-
-"""
-    create_rdm_from_categorical(categories::Vector{Int})
-
-Create an RDM from categorical labels.
-
-Dissimilarity is 0 if conditions are in the same category, 1 otherwise.
-
-# Arguments
-- `categories::Vector{Int}`: Category label for each condition
-
-# Returns
-- `rdm::Matrix{Float64}`: RDM matrix [condition × condition]
-
-# Examples
-```julia
-# Create RDM from category labels
-categories = [1, 1, 2, 2, 3]  # 5 conditions in 3 categories
-rdm = create_rdm_from_categorical(categories)
-```
-"""
-function create_rdm_from_categorical(categories::Vector{Int})
-    n_conditions = length(categories)
-    rdm = zeros(Float64, n_conditions, n_conditions)
-
-    # Only compute upper triangle for efficiency
-    for i = 1:n_conditions
-        rdm[i, i] = 0.0
-        for j = (i+1):n_conditions
-            dissim = categories[i] == categories[j] ? 0.0 : 1.0
-            rdm[i, j] = dissim
-            rdm[j, i] = dissim  # Symmetric
-        end
-    end
-
-    return rdm
 end
 
 # === TEMPORAL ALIGNMENT AND RESAMPLING ===
@@ -471,13 +367,12 @@ function resample_temporal_data(
 
     return resampled_data, target_times
 end
-
 """
-    create_rdm_from_timeseries(
-        temporal_data::Array{Float64, 3},
-        times::Vector{Float64};
+    create_rdm(
+        temporal_data::AbstractArray{<:Real, 3},
+        times::AbstractVector{<:Real};
         dissimilarity_measure::Symbol = :correlation,
-        align_to::Union{Vector{Float64}, RsaData, Nothing} = nothing,
+        align_to::Union{AbstractVector{<:Real}, RsaData, Nothing} = nothing,
         interpolation_method::Symbol = :linear,
     )
 
@@ -487,60 +382,50 @@ Create temporal RDMs from temporal model data (e.g., eye tracking, EDA, other ph
 use `align_to` to automatically resample to match neural timepoints.
 
 # Input Format
-
-**Expected**: 
-- `temporal_data::Array{Float64, 3}`: [n_conditions × n_features × n_timepoints]
-  - Dimension 1: Conditions (e.g., Face, Object, Scene)
-  - Dimension 2: Features (e.g., x_position, y_position, pupil_size for eye tracking)
-  - Dimension 3: Time points
-- `times::Vector{Float64}`: Time vector in seconds [n_timepoints]
-  - Must match length of dimension 3 in `temporal_data`
+- `temporal_data`: [conditions × features × timepoints]
+- `times`: Time vector in seconds [timepoints]
 
 # Arguments
-- `temporal_data::Array{Float64, 3}`: Temporal data [conditions × features × time]
-- `times::Vector{Float64}`: Time points in seconds for temporal_data
+- `temporal_data`: Temporal data [conditions × features × time]
+- `times`: Time points in seconds for temporal_data
 - `dissimilarity_measure::Symbol`: Measure to use (:correlation, :spearman, :euclidean, :mahalanobis)
-- `align_to::Union{Vector{Float64}, RsaData, Nothing}`: Target timepoints to align to
-  - `Vector{Float64}`: Time vector (e.g., `neural_rsa.times`)
-  - `RsaData`: Automatically uses `neural_rsa.times`
-  - `nothing`: Use model's own timepoints (no alignment)
+- `align_to`: Target timepoints to align to (`Vector{Float64}` or `RsaData`, or `nothing`)
 - `interpolation_method::Symbol`: Interpolation method for resampling (:linear, :nearest, :cubic)
 
 # Returns
 - `rdms::Array{Float64, 3}`: Temporal RDMs [time × condition × condition]
-  - If `align_to` provided: matches length of `align_to` timepoints
-  - If `align_to` is `nothing`: matches length of input `times`
-
 """
-function create_rdm_from_timeseries(
-    temporal_data::Array{Float64,3},
-    times::Vector{Float64};
+function create_rdm(
+    temporal_data::AbstractArray{<:Real,3},
+    times::AbstractVector{<:Real};
     dissimilarity_measure::Symbol = :correlation,
-    align_to::Union{Vector{Float64},RsaData,Nothing} = nothing,
+    align_to::Union{AbstractVector{<:Real},RsaData,Nothing} = nothing,
     interpolation_method::Symbol = :linear,
 )
-    # Handle align_to parameter - accept RsaData or Vector{Float64}
+    # Handle align_to parameter - accept RsaData or AbstractVector{<:Real}
     target_times = nothing
     if !isnothing(align_to)
         if isa(align_to, RsaData)
             target_times = align_to.times
-        elseif isa(align_to, Vector{Float64})
-            target_times = align_to
+        elseif isa(align_to, AbstractVector{<:Real})
+            target_times = Vector{Float64}(align_to)
         else
-            @minimal_error("align_to must be Vector{Float64} or RsaData, got $(typeof(align_to))")
+            @minimal_error("align_to must be Vector{<:Real} or RsaData, got $(typeof(align_to))")
         end
     end
 
     # Resample if alignment is requested
+    t_data = Array{Float64,3}(temporal_data)
+    t_times = Vector{Float64}(times)
     if !isnothing(target_times)
         @info "Resampling temporal model data from $(length(times)) to $(length(target_times)) timepoints"
-        temporal_data, times = resample_temporal_data(temporal_data, times, target_times; method = interpolation_method)
+        t_data, t_times = resample_temporal_data(t_data, t_times, target_times; method = interpolation_method)
     end
 
-    n_conditions, n_features, n_timepoints = size(temporal_data)
+    n_conditions, n_features, n_timepoints = size(t_data)
 
-    if length(times) != n_timepoints
-        @minimal_error("Time vector length ($(length(times))) doesn't match temporal data time dimension ($n_timepoints)")
+    if length(t_times) != n_timepoints
+        @minimal_error("Time vector length ($(length(t_times))) doesn't match temporal data time dimension ($n_timepoints)")
     end
 
     # Preallocate RDMs: [time × condition × condition]
@@ -548,42 +433,31 @@ function create_rdm_from_timeseries(
 
     # Compute RDM at each time point
     for t = 1:n_timepoints
-        # Extract data at time t: [conditions × features]
-        timepoint_data = @view temporal_data[:, :, t]
-
-        # Compute RDM for this time point
-        condition_patterns = Vector{Float64}[]
-        for cond_idx = 1:n_conditions
-            # Extract feature vector for this condition at time t
-            pattern = vec(timepoint_data[cond_idx, :])
-            push!(condition_patterns, pattern)
-        end
-
+        timepoint_data = @view t_data[:, :, t]
+        condition_patterns = [vec(timepoint_data[cond_idx, :]) for cond_idx = 1:n_conditions]
         rdms[t, :, :] = _compute_rdm(condition_patterns, dissimilarity_measure)
     end
 
     return rdms
 end
 
-function create_rdm_from_timeseries(
-    temporal_vectors::Vector{Vector{Vector{Float64}}},
-    times::Vector{Float64};
+function create_rdm(
+    temporal_vectors::AbstractVector{<:AbstractVector{<:AbstractVector{<:Real}}},
+    times::AbstractVector{<:Real};
     dissimilarity_measure::Symbol = :correlation,
+    align_to::Union{AbstractVector{<:Real},RsaData,Nothing} = nothing,
+    interpolation_method::Symbol = :linear,
 )
     n_conditions = length(temporal_vectors)
     n_timepoints = length(times)
 
-    # Validate structure
     for (cond_idx, cond_data) in enumerate(temporal_vectors)
         if length(cond_data) != n_timepoints
             @minimal_error("Condition $cond_idx has $(length(cond_data)) timepoints, expected $n_timepoints")
         end
     end
 
-    # Get number of features from first condition, first timepoint
     n_features = length(temporal_vectors[1][1])
-
-    # Convert to array format: [conditions × features × time]
     temporal_data = zeros(Float64, n_conditions, n_features, n_timepoints)
     for cond_idx = 1:n_conditions
         for t = 1:n_timepoints
@@ -591,15 +465,21 @@ function create_rdm_from_timeseries(
         end
     end
 
-    return create_rdm_from_timeseries(temporal_data, times; dissimilarity_measure = dissimilarity_measure)
+    return create_rdm(
+        temporal_data,
+        times;
+        dissimilarity_measure = dissimilarity_measure,
+        align_to = align_to,
+        interpolation_method = interpolation_method,
+    )
 end
 
 """
     create_temporal_model_rdms(
-        temporal_model_data::Dict{String, Any},
-        times::Vector{Float64};
+        temporal_model_data::AbstractDict{<:AbstractString, Any},
+        times::AbstractVector{<:Real};
         dissimilarity_measure::Symbol = :correlation,
-        align_to::Union{Vector{Float64}, RsaData, Nothing} = nothing,
+        align_to::Union{AbstractVector{<:Real}, RsaData, Nothing} = nothing,
         interpolation_method::Symbol = :linear,
     )
 
@@ -609,16 +489,13 @@ Automatically detects the format and converts to temporal RDMs. If `align_to` is
 model data will be resampled to match those timepoints (handles different sampling rates).
 
 # Arguments
-- `temporal_model_data::Dict{String, Any}`: Dictionary mapping model names to temporal data
-  - `Tuple{Array{Float64, 3}, Vector{Float64}}`: (data, times) - data with its own timepoints
-  - `Array{Float64, 3}`: Direct temporal data (uses `times` parameter)
-  - `Vector{Vector{Vector{Float64}}}`: Temporal vectors (see `create_rdm_from_timeseries`)
-- `times::Vector{Float64}`: Time points in seconds (used if model data doesn't provide its own)
+- `temporal_model_data`: Dictionary mapping model names to temporal data
+  - `Tuple{Array{<:Real, 3}, Vector{<:Real}}`: (data, times) - data with its own timepoints
+  - `Array{<:Real, 3}`: Direct temporal data (uses `times` parameter)
+  - `Vector{Vector{Vector{Float64}}}`: Temporal vectors
+- `times`: Time points in seconds (used if model data doesn't provide its own)
 - `dissimilarity_measure::Symbol`: Measure to use
-- `align_to::Union{Vector{Float64}, RsaData, Nothing}`: Target timepoints to align to
-  - `Vector{Float64}`: Time vector (e.g., `neural_rsa.times`)
-  - `RsaData`: Automatically uses `neural_rsa.times`
-  - `nothing`: Use model's own timepoints (no alignment)
+- `align_to`: Target timepoints to align to (`Vector{Float64}` or `RsaData`, or `nothing`)
 - `interpolation_method::Symbol`: Interpolation method for resampling (:linear, :nearest, :cubic)
 
 # Returns
@@ -626,10 +503,10 @@ model data will be resampled to match those timepoints (handles different sampli
 - `model_names::Vector{String}`: Vector of model names
 """
 function create_temporal_model_rdms(
-    temporal_model_data::Dict{String,Any},
-    times::Vector{Float64};
+    temporal_model_data::AbstractDict{<:AbstractString,Any},
+    times::AbstractVector{<:Real};
     dissimilarity_measure::Symbol = :correlation,
-    align_to::Union{Vector{Float64},RsaData,Nothing} = nothing,
+    align_to::Union{AbstractVector{<:Real},RsaData,Nothing} = nothing,
     interpolation_method::Symbol = :linear,
 )
     model_rdms = Array{Float64,3}[]
@@ -640,50 +517,23 @@ function create_temporal_model_rdms(
         model_times = times  # Default to provided times
 
         if isa(data, Tuple) && length(data) == 2
-            # Tuple: (data, times) - model has its own timepoints
             model_data, model_times = data
-            if !isa(model_data, Array{Float64,3})
-                @minimal_error("Model '$name': Tuple first element must be Array{Float64, 3}, got $(typeof(model_data))")
+            if !isa(model_data, AbstractArray{<:Real,3})
+                @minimal_error("Model '$name': Tuple first element must be Array{<:Real, 3}, got $(typeof(model_data))")
             end
-            if !isa(model_times, Vector{Float64})
-                @minimal_error("Model '$name': Tuple second element must be Vector{Float64}, got $(typeof(model_times))")
+            if !isa(model_times, AbstractVector{<:Real})
+                @minimal_error("Model '$name': Tuple second element must be Vector{<:Real}, got $(typeof(model_times))")
             end
-            # Use align_to if provided, otherwise use model's own times
-            rdm = create_rdm_from_timeseries(
+            rdm = create_rdm(
                 model_data,
                 model_times;
                 dissimilarity_measure = dissimilarity_measure,
                 align_to = align_to,
                 interpolation_method = interpolation_method,
             )
-        elseif isa(data, Array{Float64,3})
-            # Direct temporal data [conditions × features × time]
-            # Use align_to if provided
-            rdm = create_rdm_from_timeseries(
+        elseif isa(data, AbstractArray{<:Real,3}) || isa(data, AbstractVector{<:AbstractVector{<:AbstractVector{<:Real}}})
+            rdm = create_rdm(
                 data,
-                times;
-                dissimilarity_measure = dissimilarity_measure,
-                align_to = align_to,
-                interpolation_method = interpolation_method,
-            )
-        elseif isa(data, Vector{Vector{Vector{Float64}}})
-            # Temporal vectors - convert to array first
-            @minimal_warning(
-                "Model '$name': Vector{Vector{Vector{Float64}}} format doesn't support " *
-                "different timepoints. Converting assuming times match."
-            )
-            # Convert to array format
-            n_conditions = length(data)
-            n_timepoints = length(data[1])
-            n_features = length(data[1][1])
-            model_data = zeros(Float64, n_conditions, n_features, n_timepoints)
-            for cond_idx = 1:n_conditions
-                for t = 1:n_timepoints
-                    model_data[cond_idx, :, t] = data[cond_idx][t]
-                end
-            end
-            rdm = create_rdm_from_timeseries(
-                model_data,
                 times;
                 dissimilarity_measure = dissimilarity_measure,
                 align_to = align_to,
@@ -699,7 +549,7 @@ function create_temporal_model_rdms(
         end
 
         push!(model_rdms, rdm)
-        push!(model_names, name)
+        push!(model_names, String(name))
     end
 
     return model_rdms, model_names
@@ -707,62 +557,47 @@ end
 
 # === CONVENIENCE FUNCTION FOR MULTIPLE MODEL TYPES ===
 
-# Helper functions using multiple dispatch for type detection
-_create_single_rdm(data::Vector{Vector{Float64}}) = create_rdm_from_vectors(data)
-_create_single_rdm(data::Vector{Float64}) = create_rdm_from_reaction_times(data)
-_create_single_rdm(data::Vector{Int}) = create_rdm_from_categorical(data)
-
-function _create_single_rdm(data::Matrix{Float64})
-    # Check if it's already an RDM or similarity matrix
-    if size(data, 1) == size(data, 2) && issymmetric(data)
-        if all(diag(data) .== 0.0) && all(data .>= 0.0)
-            # Looks like an RDM already
-            return copy(data)
-        else
-            # Treat as similarity matrix
-            return create_rdm_from_similarity_ratings(data)
-        end
-    else
-        # Data matrix (conditions × features)
-        return create_rdm_from_matrix(data)
-    end
-end
-
 """
-    create_model_rdms(model_data::Dict{String, Any})
+    create_model_rdms(model_data::AbstractDict{<:AbstractString, Any})
 
 Create multiple model RDMs from a dictionary of different model types.
 
-This function automatically detects the type of each model and converts it to an RDM.
+This function automatically detects the type of each model and converts it to an RDM using `create_rdm`.
 
 # Arguments
-- `model_data::Dict{String, Any}`: Dictionary mapping model names to their data
-  - `Vector{Vector{Float64}}`: Feature vectors → RDM via `create_rdm_from_vectors`
-  - `Matrix{Float64}`: Data matrix → RDM via `create_rdm_from_matrix`
-  - `Vector{Float64}`: Reaction times (one value per condition)
-  - `Vector{Int}`: Categorical labels
-  - Symmetric `Matrix{Float64}`: Treated as similarity matrix or pre-computed RDM
+- `model_data`: Dictionary mapping model names to their data
+  - `Vector{<:AbstractVector}`: Feature vectors → RDM
+  - `Matrix{<:Real}`: Data matrix [conditions × features] or similarity matrix
+  - `Vector{<:Real}`: 1D values (reaction times, ratings, or category labels)
+  - `Vector{<:Union{Symbol, AbstractString}}`: Categorical labels
 
 # Returns
 - `model_rdms::Vector{Matrix{Float64}}`: Vector of model RDMs
 - `model_names::Vector{String}`: Vector of model names
 """
-function create_model_rdms(model_data::Dict{String,Any})
+function create_model_rdms(model_data::AbstractDict{<:AbstractString,Any})
     model_rdms = Matrix{Float64}[]
     model_names = String[]
 
     for (name, data) in model_data
         try
-            rdm = _create_single_rdm(data)
+            rdm = create_rdm(data)
             push!(model_rdms, rdm)
-            push!(model_names, name)
+            push!(model_names, String(name))
         catch e
             @minimal_error(
                 "Failed to create RDM for model '$name' with data type $(typeof(data)). " *
-                "Supported types: Vector{Vector{Float64}}, Matrix{Float64}, Vector{Float64}, Vector{Int}"
+                "Supported types: Vector{<:AbstractVector}, Matrix, Vector{Float}, Vector{Int/Symbol/String}"
             )
         end
     end
 
     return model_rdms, model_names
 end
+
+"""
+    create_rdm(model_data::AbstractDict{<:AbstractString, <:Any})
+
+Batch-create model RDMs from a dictionary of models. Alias for `create_model_rdms`.
+"""
+create_rdm(model_data::AbstractDict{<:AbstractString,<:Any}) = create_model_rdms(model_data)
