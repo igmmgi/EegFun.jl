@@ -43,14 +43,14 @@ function rename_channel!(dat::EegData, rename_dict::Dict{Symbol,Symbol})
 
     if isempty(channels_found)
         @info "rename_channel!: No channels found to rename in data"
-        return nothing
+        return dat
     end
 
     # Now rename the corresponding data columns using multiple dispatch
     _rename_data_columns!(dat, rename_dict, original_channels)
 
     @info "rename_channel!: Renamed $(length(channels_found)) channels in data and layout"
-    return nothing
+    return dat
 end
 
 """Rename DataFrame columns using a two-phase swap-safe approach."""
@@ -153,8 +153,5 @@ new_dat = rename_channel(dat, rename_dict)
 - Properly handles swaps (e.g., Dict(:A => :B, :B => :A) correctly exchanges the channels)
 """
 function rename_channel(dat::EegData, rename_dict::Dict{Symbol,Symbol})
-    # Create a copy of the data using the existing copy function
-    new_dat = copy(dat)
-    rename_channel!(new_dat, rename_dict)
-    return new_dat
+    return rename_channel!(copy(dat), rename_dict)
 end

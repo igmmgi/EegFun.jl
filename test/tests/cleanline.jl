@@ -56,11 +56,11 @@ using Statistics
         bandwidth = 2.0,
         channel_selection = EegFun.channels(ch1),
     )
-    @test res === nothing
+    @test res === mut_dat
     @test isapprox(mut_dat.data[!, ch1], cl_dat.data[!, ch1], atol = 1e-10)
 
-    # 4. Empty channel selection returns nothing and does nothing
+    # 4. Empty channel selection returns dat and does nothing
     no_ch_dat = copy(dat)
-    @test EegFun.cleanline!(no_ch_dat, channel_selection = EegFun.channels(Symbol[])) === nothing
+    @test EegFun.cleanline!(no_ch_dat, channel_selection = EegFun.channels(Symbol[])) === no_ch_dat
     @test no_ch_dat.data == dat.data
 end

@@ -69,7 +69,7 @@ using JLD2
         dat_orig = copy(dat)
         # channel_selection picks none
         result = EegFun.highpass_filter!(dat, 1.0; channel_selection = EegFun.channels(Symbol[]))
-        @test isnothing(result)
+        @test result === dat
         # Data and analysis_info unchanged
         @test all(dat.data.Ch1 .== dat_orig.data.Ch1)
         @test dat.analysis_info.hp_filter == dat_orig.analysis_info.hp_filter

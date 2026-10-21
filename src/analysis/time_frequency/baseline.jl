@@ -235,20 +235,20 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}
     # Store baseline information
     tf_data.baseline = BaselineInfo(method = method, window = (Float64(baseline_interval[1]), Float64(baseline_interval[2])))
 
-    return nothing
+    return tf_data
 end
 
 # Non-mutating version
 function tf_baseline(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
-    tf_copy = copy(tf_data)  # Use custom copy method instead of deepcopy
-    tf_baseline!(tf_copy, baseline_interval; method = method)
-    return tf_copy
+    return tf_baseline!(copy(tf_data), baseline_interval; method = method)
 end
 
 # Vector version
 function tf_baseline!(tf_data::Vector{TimeFreqData}, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
-    tf_baseline!.(tf_data, Ref(baseline_interval); method = method)
-    return nothing
+    for tf in tf_data
+        tf_baseline!(tf, baseline_interval; method = method)
+    end
+    return tf_data
 end
 
 function tf_baseline(tf_data::Vector{TimeFreqData}, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
@@ -257,19 +257,19 @@ end
 
 # Overloads for baseline! and baseline for TimeFreqData (unifying with EegData baseline interface)
 function baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
-    tf_baseline!(tf_data, baseline_interval; method = method)
+    return tf_baseline!(tf_data, baseline_interval; method = method)
 end
 
 function baseline!(tf_data::Vector{TimeFreqData}, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
-    tf_baseline!(tf_data, baseline_interval; method = method)
+    return tf_baseline!(tf_data, baseline_interval; method = method)
 end
 
 function baseline(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
-    tf_baseline(tf_data, baseline_interval; method = method)
+    return tf_baseline(tf_data, baseline_interval; method = method)
 end
 
 function baseline(tf_data::Vector{TimeFreqData}, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
-    tf_baseline(tf_data, baseline_interval; method = method)
+    return tf_baseline(tf_data, baseline_interval; method = method)
 end
 
 """

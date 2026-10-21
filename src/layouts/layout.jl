@@ -662,6 +662,7 @@ function clear_neighbours!(layout::Layout)
     layout.neighbours = nothing
     layout.criterion = nothing
     layout.criterion_type = nothing
+    return layout
 end
 
 """Filter a Neighbours struct to only include channels in `keep_set`, recomputing IDW weights."""
@@ -748,9 +749,9 @@ function get_neighbours_xy!(layout::Layout, distance_criterion::Real)
         layout.criterion = Float64(distance_criterion)
         layout.criterion_type = :xy
     end
-    return nothing
+    return layout
 end
-get_neighbours_xy!(dat::EegFunData, distance_criterion::Real) = get_neighbours_xy!(dat.layout, distance_criterion)
+get_neighbours_xy!(dat::EegFunData, distance_criterion::Real) = (get_neighbours_xy!(dat.layout, distance_criterion); dat)
 
 """
     get_neighbours_xyz!(layout::Layout, distance_criterion::Real)
@@ -780,9 +781,9 @@ function get_neighbours_xyz!(layout::Layout, distance_criterion::Real)
         layout.criterion = Float64(distance_criterion)
         layout.criterion_type = :xyz
     end
-    return nothing
+    return layout
 end
-get_neighbours_xyz!(dat::EegFunData, distance_criterion::Real) = get_neighbours_xyz!(dat.layout, distance_criterion)
+get_neighbours_xyz!(dat::EegFunData, distance_criterion::Real) = (get_neighbours_xyz!(dat.layout, distance_criterion); dat)
 
 # === LAYOUT VALIDATION AND MANIPULATION ===
 """
@@ -823,7 +824,7 @@ function rename_channel!(layout::Layout, rename_dict::Dict{Symbol,Symbol})
 
     if isempty(channels_found)
         @info "rename!: No channels found to rename"
-        return nothing
+        return layout
     end
 
     # Check for potential duplicate names before applying any renames
@@ -866,7 +867,7 @@ function rename_channel!(layout::Layout, rename_dict::Dict{Symbol,Symbol})
     end
 
     @info "rename!: Renamed $(length(channels_found)) channels"
-    return nothing
+    return layout
 end
 
 """
@@ -896,10 +897,7 @@ new_layout = rename_channel(layout, rename_dict)
 - The original layout is not modified
 """
 function rename_channel(layout::Layout, rename_dict::Dict{Symbol,Symbol})
-    # Create a copy of the layout and apply renaming
-    renamed_layout = Layout(copy(layout.data), nothing, nothing, nothing)
-    rename_channel!(renamed_layout, rename_dict)
-    return renamed_layout
+    return rename_channel!(copy(layout), rename_dict)
 end
 
 # === LAYOUT SUBSETTING ===

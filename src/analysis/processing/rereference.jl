@@ -153,7 +153,7 @@ function rereference!(dat::EegData, reference_selection::Union{Symbol,Vector{Sym
     # If no reference channels (e.g., :none), return early without rereferencing
     if isempty(reference_channels)
         @info "No rereferencing applied (reference: $(reference_selection))"
-        return
+        return dat
     end
 
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
@@ -171,21 +171,15 @@ function rereference!(dat::EegData, reference_selection::Union{Symbol,Vector{Sym
     # Store reference info
     dat.analysis_info.reference = reference_selection isa Symbol ? reference_selection : Symbol(join(reference_selection, '_'))
 
-
-    return nothing
-
+    return dat
 end
 
 
-function rereference!(dat::Vector{EpochData}, reference_selection::Union{Symbol,Vector{Symbol}}; channel_selection::Function = channels())
-    rereference!.(dat, Ref(reference_selection); channel_selection = channel_selection)
-    return nothing
-end
-
-
-function rereference!(dat::Vector{ErpData}, reference_selection::Union{Symbol,Vector{Symbol}}; channel_selection::Function = channels())
-    rereference!.(dat, Ref(reference_selection); channel_selection = channel_selection)
-    return nothing
+function rereference!(dat::Vector{<:Union{EpochData,ErpData}}, reference_selection::Union{Symbol,Vector{Symbol}}; channel_selection::Function = channels())
+    for d in dat
+        rereference!(d, reference_selection; channel_selection = channel_selection)
+    end
+    return dat
 end
 
 # generates all non-mutating versions
@@ -194,10 +188,12 @@ end
 
 Non-mutating version of `rereference!`.
 """
-function rereference(dat, args...; kwargs...)
-    dat_copy = copy(dat)
-    rereference!(dat_copy, args...; kwargs...)
-    return dat_copy
+function rereference(dat::EegData, args...; kwargs...)
+    return rereference!(copy(dat), args...; kwargs...)
+end
+
+function rereference(dat::Vector{T}, args...; kwargs...) where {T<:EegData}
+    return [rereference(d, args...; kwargs...) for d in dat]
 end
 
 

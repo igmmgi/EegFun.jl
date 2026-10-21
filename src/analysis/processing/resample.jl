@@ -89,14 +89,14 @@ end
 Resample EEG data to a specific `target_rate` using DSP.jl's polyphase filtering.
 Automatically applies an anti-aliasing filter. Supports fractional resampling.
 """
-function resample!(dat::SingleDataFrameEeg, target_rate::Real)::Nothing
+function resample!(dat::SingleDataFrameEeg, target_rate::Real)
     if target_rate <= 0
         @minimal_error("Target rate must be positive, got $target_rate")
     end
 
     if target_rate == dat.sample_rate
         @info "Target rate matches current sample rate, no resampling needed"
-        return nothing
+        return dat
     end
 
     @info "Resampling data from $(dat.sample_rate) Hz to $(target_rate) Hz"
@@ -111,17 +111,17 @@ function resample!(dat::SingleDataFrameEeg, target_rate::Real)::Nothing
     dat.sample_rate = Float64(target_rate)
     @info "Resampling complete. New sample rate: $(dat.sample_rate) Hz, $(n_samples(dat)) samples"
 
-    return nothing
+    return dat
 end
 
-function resample!(dat::EpochData, target_rate::Real)::Nothing
+function resample!(dat::EpochData, target_rate::Real)
     if target_rate <= 0
         @minimal_error("Target rate must be positive, got $target_rate")
     end
 
     if target_rate == dat.sample_rate
         @info "Target rate matches current sample rate, no resampling needed"
-        return nothing
+        return dat
     end
 
     @info "Resampling $(n_epochs(dat)) epochs from $(dat.sample_rate) Hz to $(target_rate) Hz"
@@ -140,7 +140,7 @@ function resample!(dat::EpochData, target_rate::Real)::Nothing
     dat.sample_rate = Float64(target_rate)
     @info "Resampling complete. New sample rate: $(dat.sample_rate) Hz, $(nrow(dat.data[1])) samples per epoch"
 
-    return nothing
+    return dat
 end
 
 """
@@ -150,20 +150,18 @@ end
 Non-mutating version of `resample!`.
 """
 function resample(dat::T, target_rate::Real)::T where {T<:EegData}
-    dat_copy = copy(dat)
-    resample!(dat_copy, target_rate)
-    return dat_copy
+    return resample!(copy(dat), target_rate)
 end
 
 function resample(data_vec::Vector{T}, target_rate::Real)::Vector{T} where {T<:EegData}
     return [resample(dat, target_rate) for dat in data_vec]
 end
 
-function resample!(data_vec::Vector{T}, target_rate::Real)::Nothing where {T<:EegData}
+function resample!(data_vec::Vector{T}, target_rate::Real)::Vector{T} where {T<:EegData}
     for dat in data_vec
         resample!(dat, target_rate)
     end
-    return nothing
+    return data_vec
 end
 
 

@@ -100,7 +100,7 @@ function is_extreme_value!(
         end
     end
 
-    return nothing
+    return dat
 end
 
 
@@ -158,11 +158,16 @@ function is_extreme_value!(
         end
     end
 
-    return nothing
+    return dat
 end
 
 
-is_extreme_value!(dat::Vector{EpochData}, threshold::Real; kwargs...) = is_extreme_value!.(dat, threshold; kwargs...)
+function is_extreme_value!(dat::Vector{EpochData}, threshold::Real; kwargs...)
+    for d in dat
+        is_extreme_value!(d, threshold; kwargs...)
+    end
+    return dat
+end
 
 
 """Detect extreme values for selected channels and return a `Dict{Symbol, Vector{Bool}}`."""

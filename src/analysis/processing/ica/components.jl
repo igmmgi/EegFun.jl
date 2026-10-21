@@ -56,12 +56,12 @@ function subtract_ica_components!(dat::DataFrame, ica::InfoIca; component_select
     # Update DataFrame in-place
     dat[!, ica.layout.data.label] .= permutedims(cleaned_data)
 
-    return nothing
+    return dat
 end
 
 """Contiguous 2D matrix BLAS unmixing for epoched DataFrames (Vector{DataFrame})."""
 function subtract_ica_components!(dfs::Vector{DataFrame}, ica::InfoIca; component_selection::Function = components())
-    isempty(dfs) && return nothing
+    isempty(dfs) && return dfs
     components_to_remove = get_selected_components(ica, component_selection)
     n_components = size(ica.unmixing, 1)
     if !all(1 .<= components_to_remove .<= n_components)
@@ -115,7 +115,7 @@ function subtract_ica_components!(dfs::Vector{DataFrame}, ica::InfoIca; componen
         end
     end
 
-    return nothing
+    return dfs
 end
 
 """
@@ -143,7 +143,7 @@ function subtract_ica_components!(dat::ContinuousData, ica::InfoIca; component_s
     components_to_subtract = get_selected_components(ica, component_selection)
     dat.analysis_info.n_ica_components_removed += length(components_to_subtract)
 
-    return nothing
+    return dat
 end
 
 
@@ -209,7 +209,7 @@ function add_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::
         delete!(ica.removed_activations, comp)
     end
 
-    return nothing
+    return dat
 end
 
 
@@ -240,7 +240,7 @@ function add_ica_components!(dat::ContinuousData, ica::InfoIca; component_select
     components_to_add = get_selected_components(ica, component_selection)
     dat.analysis_info.n_ica_components_removed -= length(components_to_add)
 
-    return nothing
+    return dat
 end
 
 

@@ -160,7 +160,7 @@ function is_peak_to_peak!(
         end
     end
 
-    return nothing
+    return dat
 end
 
 function is_peak_to_peak!(
@@ -210,11 +210,15 @@ function is_peak_to_peak!(
             end
         end
     end
-    return nothing
+    return dat
 end
 
-is_peak_to_peak!(dat::Vector{EpochData}, threshold::Real, window_size::Real; kwargs...) =
-    is_peak_to_peak!.(dat, threshold, window_size; kwargs...)
+function is_peak_to_peak!(dat::Vector{EpochData}, threshold::Real, window_size::Real; kwargs...)
+    for d in dat
+        is_peak_to_peak!(d, threshold, window_size; kwargs...)
+    end
+    return dat
+end
 
 """
     is_peak_to_peak(dat::SingleDataFrameEeg, threshold::Real, window_size::Real;

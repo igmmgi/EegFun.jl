@@ -261,7 +261,7 @@ function lowpass_filter!(
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
     if isempty(selected_channels)
         @minimal_warning "No channels selected for lowpass filtering"
-        return nothing
+        return dat
     end
     @debug "lowpass_filter! applying lp filter at $cutoff_freq Hz to $(length(selected_channels)) channels"
 
@@ -278,6 +278,7 @@ function lowpass_filter!(
     )
     _update_filter_info!(dat, filter_info)
     _apply_filter!(dat.data, selected_channels, filter_info, filter_func = filter_func)
+    return dat
 end
 
 """
@@ -308,7 +309,7 @@ function highpass_filter!(
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
     if isempty(selected_channels)
         @minimal_warning "No channels selected for highpass filtering"
-        return nothing
+        return dat
     end
     @debug "highpass_filter! applying hp filter at $cutoff_freq Hz to $(length(selected_channels)) channels"
 
@@ -325,6 +326,7 @@ function highpass_filter!(
     )
     _update_filter_info!(dat, filter_info)
     _apply_filter!(dat.data, selected_channels, filter_info, filter_func = filter_func)
+    return dat
 end
 
 # Generate non-mutating versions
@@ -333,10 +335,8 @@ end
 
 Non-mutating version of `lowpass_filter!`.
 """
-function lowpass_filter(dat, args...; kwargs...)
-    dat_copy = copy(dat)
-    lowpass_filter!(dat_copy, args...; kwargs...)
-    return dat_copy
+function lowpass_filter(dat::EegData, args...; kwargs...)
+    return lowpass_filter!(copy(dat), args...; kwargs...)
 end
 
 """
@@ -344,10 +344,8 @@ end
 
 Non-mutating version of `highpass_filter!`.
 """
-function highpass_filter(dat, args...; kwargs...)
-    dat_copy = copy(dat)
-    highpass_filter!(dat_copy, args...; kwargs...)
-    return dat_copy
+function highpass_filter(dat::EegData, args...; kwargs...)
+    return highpass_filter!(copy(dat), args...; kwargs...)
 end
 
 function lowpass_filter!(dat::Vector{<:EegData}, cutoff_freq::Real; kwargs...)
@@ -378,6 +376,7 @@ function lowpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol
     if sec.apply
         lowpass_filter!(dat, sec.freq; order = sec.order, filter_method = sec.method, filter_func = sec.func)
     end
+    return dat
 end
 
 """Apply highpass filter using settings from a `FilterConfig` section."""
@@ -386,6 +385,7 @@ function highpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbo
     if sec.apply
         highpass_filter!(dat, sec.freq; order = sec.order, filter_method = sec.method, filter_func = sec.func)
     end
+    return dat
 end
 
 

@@ -119,7 +119,7 @@ function is_flatline!(
         end
     end
 
-    return nothing
+    return dat
 end
 
 function is_flatline!(
@@ -169,10 +169,15 @@ function is_flatline!(
             end
         end
     end
-    return nothing
+    return dat
 end
 
-is_flatline!(dat::Vector{EpochData}, threshold::Real, window_size::Real; kwargs...) = is_flatline!.(dat, threshold, window_size; kwargs...)
+function is_flatline!(dat::Vector{EpochData}, threshold::Real, window_size::Real; kwargs...)
+    for d in dat
+        is_flatline!(d, threshold, window_size; kwargs...)
+    end
+    return dat
+end
 
 """
     is_flatline(dat::SingleDataFrameEeg, threshold::Real, window_size::Real;

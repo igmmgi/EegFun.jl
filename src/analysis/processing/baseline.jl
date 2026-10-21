@@ -88,7 +88,7 @@ function baseline!(dat::EegData, baseline_interval::Interval; channel_selection:
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
     if isempty(selected_channels)
         @minimal_warning "No channels selected for baseline correction"
-        return
+        return dat
     end
 
     time = time_vector(dat)
@@ -96,36 +96,29 @@ function baseline!(dat::EegData, baseline_interval::Interval; channel_selection:
     t_end = round(time[baseline_interval[2]], digits = 3)
     @info "Applying baseline correction to $(length(selected_channels)) channels over interval $(baseline_interval[1]):$(baseline_interval[2]) ($(t_start) to $(t_end) s)"
     _apply_baseline!(dat.data, selected_channels, baseline_interval)
-    return nothing
+    return dat
 end
 
 
 function baseline!(dat::EegData; channel_selection::Function = channels())
     # Use entire time range for baseline
     baseline!(dat, times(); channel_selection = channel_selection)
-    return nothing
+    return dat
 end
 
-function baseline!(dat::Vector{EpochData}, baseline_interval::Interval; channel_selection::Function = channels())
-    baseline!.(dat, Ref(baseline_interval); channel_selection = channel_selection)
-    return nothing
-end
-
-
-function baseline!(dat::Vector{EpochData}; channel_selection::Function = channels())
-    baseline!.(dat; channel_selection = channel_selection)
-    return nothing
-end
-
-function baseline!(dat::Vector{ErpData}, baseline_interval::Interval; channel_selection::Function = channels())
-    baseline!.(dat, Ref(baseline_interval); channel_selection = channel_selection)
-    return nothing
+function baseline!(dat::Vector{<:Union{EpochData,ErpData}}, baseline_interval::Interval; channel_selection::Function = channels())
+    for d in dat
+        baseline!(d, baseline_interval; channel_selection = channel_selection)
+    end
+    return dat
 end
 
 
-function baseline!(dat::Vector{ErpData}; channel_selection::Function = channels())
-    baseline!.(dat; channel_selection = channel_selection)
-    return nothing
+function baseline!(dat::Vector{<:Union{EpochData,ErpData}}; channel_selection::Function = channels())
+    for d in dat
+        baseline!(d; channel_selection = channel_selection)
+    end
+    return dat
 end
 
 # NOTE: Non-mutating version kept for consistency with other processing functions,
@@ -135,10 +128,12 @@ end
 
 Non-mutating version of `baseline!`.
 """
-function baseline(dat, args...; kwargs...)
-    dat_copy = copy(dat)
-    baseline!(dat_copy, args...; kwargs...)
-    return dat_copy
+function baseline(dat::EegData, args...; kwargs...)
+    return baseline!(copy(dat), args...; kwargs...)
+end
+
+function baseline(dat::Vector{T}, args...; kwargs...) where {T<:EegData}
+    return [baseline(d, args...; kwargs...) for d in dat]
 end
 
 

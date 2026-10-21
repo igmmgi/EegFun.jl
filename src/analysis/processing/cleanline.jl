@@ -61,11 +61,15 @@ function cleanline!(
 )
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
     if isempty(selected_channels)
-        return nothing
+        return dat
     end
 
     Fs = dat.sample_rate
     Nwin = round(Int, sliding_win_length * Fs)
+    if nrow(dat.data) < Nwin
+        @minimal_warning "Data length ($(nrow(dat.data)) samples) is shorter than CleanLine window length ($Nwin samples). CleanLine skipped."
+        return dat
+    end
     Nstep = round(Int, sliding_win_step * Fs)
     Noverlap = Nwin - Nstep
     nfft = max(nextpow(2, Nwin) * (2^pad), Nwin)
@@ -129,7 +133,7 @@ function cleanline!(
         )
     end
 
-    return nothing
+    return dat
 end
 
 """
@@ -137,10 +141,8 @@ end
 
 Non-mutating version of `cleanline!`.
 """
-function cleanline(dat, args...; kwargs...)
-    dat_copy = copy(dat)
-    cleanline!(dat_copy, args...; kwargs...)
-    return dat_copy
+function cleanline(dat::ContinuousData, args...; kwargs...)
+    return cleanline!(copy(dat), args...; kwargs...)
 end
 
 function _cleanline_channel!(

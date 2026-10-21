@@ -51,6 +51,8 @@ function repair_channels!(data, channels_to_repair; method::Symbol = :neighbor_i
             end
         end
     end
+
+    return data
 end
 
 """
@@ -59,9 +61,7 @@ end
 Non-mutating version of `repair_channels!`.
 """
 function repair_channels(dat, args...; kwargs...)
-    dat_copy = copy(dat)
-    repair_channels!(dat_copy, args...; kwargs...)
-    return dat_copy
+    return repair_channels!(copy(dat), args...; kwargs...)
 end
 
 # Helper function for neighbor interpolation

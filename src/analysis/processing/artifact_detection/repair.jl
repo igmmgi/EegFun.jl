@@ -36,7 +36,7 @@ function repair_artifacts!(dat::EpochData, artifacts::EpochRejectionInfo; method
     elseif method == :spherical_spline
         repair_artifacts_spherical_spline!(dat, artifacts; kwargs...)
     end
-    return nothing
+    return dat
 end
 
 
@@ -69,9 +69,7 @@ clean_epochs = reject_epochs(epochs, artifacts)
 ```
 """
 function repair_artifacts(dat::EpochData, artifacts::EpochRejectionInfo; method::Symbol = :neighbor_interpolation, kwargs...)
-    dat_copy = copy(dat)
-    repair_artifacts!(dat_copy, artifacts; method, kwargs...)
-    return dat_copy
+    return repair_artifacts!(copy(dat), artifacts; method = method, kwargs...)
 end
 
 function repair_artifacts(dat::Vector{EpochData}, artifacts::Vector{EpochRejectionInfo}; kwargs...)
@@ -79,8 +77,10 @@ function repair_artifacts(dat::Vector{EpochData}, artifacts::Vector{EpochRejecti
 end
 
 function repair_artifacts!(dat::Vector{EpochData}, artifacts::Vector{EpochRejectionInfo}; kwargs...)
-    repair_artifacts!.(dat, artifacts; kwargs...)
-    return nothing
+    for (d, a) in zip(dat, artifacts)
+        repair_artifacts!(d, a; kwargs...)
+    end
+    return dat
 end
 
 

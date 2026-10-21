@@ -100,7 +100,7 @@ function channel_difference!(
     # Calculate channel difference (dispatch handles DataFrame vs Vector{DataFrame})
     _calculate_channel_difference!(dat.data, channels_in1_selected, channels_in2_selected, channel_out)
 
-    return nothing
+    return dat
 end
 
 # generates all non-mutating versions
@@ -109,10 +109,8 @@ end
 
 Non-mutating version of `channel_difference!`.
 """
-function channel_difference(dat, args...; kwargs...)
-    dat_copy = copy(dat)
-    channel_difference!(dat_copy, args...; kwargs...)
-    return dat_copy
+function channel_difference(dat::EegData, args...; kwargs...)
+    return channel_difference!(copy(dat), args...; kwargs...)
 end
 
 """
@@ -168,11 +166,12 @@ function calculate_eog_channels!(dat::EegData, eog_cfg::EogConfig)
         channel_selection2 = channels(Symbol.(hEOG_cfg[2])),
         channel_out = Symbol(hEOG_cfg[3][1]),
     )
+    return dat
 end
 
 # Convenience method for Dict input
 function calculate_eog_channels!(dat::EegData, eog_cfg::Dict)
-    calculate_eog_channels!(dat, EogConfig(eog_cfg))
+    return calculate_eog_channels!(dat, EogConfig(eog_cfg))
 end
 
 """
@@ -203,4 +202,5 @@ function detect_eog_onsets!(dat::EegData, eog_cfg::EogConfig)
     # Detect horizontal EOG onsets
     hEOG_cfg = eog_cfg.hEOG_channels
     detect_eog_onsets!(dat, eog_cfg.hEOG_criterion, Symbol(hEOG_cfg[3][1]), Symbol("is_" * hEOG_cfg[3][1]))
+    return dat
 end
