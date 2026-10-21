@@ -648,16 +648,13 @@ function plot_stat_heatmap!(
 )
     time_points = result.time_points
     electrodes = result.channels
-    t_values = result.t_values[:, :, coef_idx]
+    t_values = result.z_values[:, :, coef_idx]
 
+    # threshold_p masks on the corrected p-values when permutation inference was run, otherwise on
+    # the uncorrected Wald p-values (never silently mixing the two)
     mask = if !isnothing(threshold_p)
-        if hasproperty(result, :p_corrected) && !isnothing(result.p_corrected) && any(result.p_corrected[:, :, coef_idx] .<= threshold_p)
-            result.p_corrected[:, :, coef_idx] .<= threshold_p
-        elseif hasproperty(result, :p_values) && !isnothing(result.p_values)
-            result.p_values[:, :, coef_idx] .<= threshold_p
-        else
-            abs.(t_values) .>= cluster_thresh
-        end
+        p = isnothing(result.p_corrected) ? result.p_parametric : result.p_corrected
+        p[:, :, coef_idx] .<= threshold_p
     else
         abs.(t_values) .>= cluster_thresh
     end

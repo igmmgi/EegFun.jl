@@ -7,35 +7,32 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 
 ## [Unreleased]
 
-*Many Gemini guided refactor + optimisations.*
-
 ### Added
 
-- Mixed models permutations (`fit_mass_lmm`).
-- Full `Base` array and `Tables.jl` interface for `EegData` (indexing, conversions, shorthand `dat[:Cz]` channel subsetting).
+- Freedman–Lane whole-subject sign-flipping permutation engine and closed-form Woodbury GLS solver in `fit_mass_lmm`, supporting multithreading and `Distributed` multiprocessing.
+- Extended `LmmStatsResult` with parametric inference fields (`z_values`, `p_parametric`, `p_corrected`, `inference`).
+- Full `Base` array and `Tables.jl` interfaces for `EegData` (indexing, conversions, `dat[:Cz]` channel subsetting).
 - Canonical accessors (`time_vector`, `frequency_vector`, etc.) and `Base.show` across stats and data types.
 - Thread-safe async progress tracking (`track_progress_async`) for parallel decoding and permutation testing.
-- Comprehensive unit tests covering CleanLine, CSD, RIDE, Welch spectrum, decoding, FieldTrip CSV import, pipeline repairs, independent-design stats, and artifact detection.
+- Expanded unit test coverage across signal processing, statistics, and decoding.
 
 ### Fixed
 
 - Fixed `BoundsError` and trial power averaging in time-frequency pipelines (`tf_morlet`, `tf_stft`, `tf_multitaper`).
 - Fixed `MethodError` in out-of-place `channel_repairable` by implementing `Base.copy(::ContinuousRepairInfo)`.
 - Fixed documentation CI build failure by pinning `@nolebase/vitepress-plugin-enhanced-readabilities`.
-- `plot_tf` now respects `display_plot = false` during tests and non-interactive use.
+- Respected `display_plot = false` in `plot_tf` during tests and non-interactive use.
 
 ### Changed
 
-- Modularized monolithic source files into clean subpackages (`src/analysis/processing/ica/`, `src/utils/data/`, `src/analysis/processing/artifact_detection/`, and pipeline helpers).
+- Replaced iterative permutation refits in mass-univariate LMMs with closed-form Woodbury GLS, reducing execution time from CPU-hours to seconds.
+- Modularized source files into subpackages (`ica/`, `utils/data/`, `artifact_detection/`).
 - Declared 45 previously omitted functions in `public_api.jl`, and standardized error handling on `@minimal_error` / `EegFunError`.
 - Updated to `AnovaFun` 0.5 (Makie backends must now be loaded explicitly, e.g. `using GLMakie`).
 - Split `preprocess` into modular pipeline stages; `dry_run = true` no longer creates output files.
-- Optimized time-frequency pipelines (`tf_morlet`, `tf_stft`, `tf_multitaper`), reducing allocations by ~48–99%, and parallelized epoched CSD (~3× faster).
-- Accelerated cluster permutations (~12× faster, zero heap allocations) and mass-univariate $t$-tests (~10× faster).
-- Accelerated linear mixed models (`fit_mass_lmm`, ~10× faster, ~94% less memory) and SVM decoding inner-loop allocations by 99.4%.
-- Accelerated artifact detection: sliding peak-to-peak (~8×), flatline detection (~13× via $O(1)$ Welford variance), and bridging detection (~3–4×).
-- Gemini-guided GPU ICA optimizations (Infomax and Picard): pre-allocated scratch buffers, cutting GPU memory allocations by 85–96% with bit-for-bit identical results (along with vectorized CPU SIMD).
-- Optimized plotting and Makie rendering: batched topography interpolation (~9× faster), vectorized layout and trigger scene objects (60–99% fewer objects, ~2.5–40× faster rendering), bound `plot_databrowser` directly to observables (>1,000× faster epoch stepping), and optimized Time-Frequency heatmap extraction (~24× faster).
+- Optimized performance and memory allocations across time-frequency transforms, epoched CSD, cluster permutations, mass-univariate $t$-tests, SVM decoding, and artifact detection routines.
+- Accelerated GPU ICA algorithms (Infomax and Picard) via pre-allocated scratch buffers.
+- Accelerated Makie rendering: batched topography interpolation, reduced scene objects, and bound `plot_databrowser` directly to observables.
 
 ## [0.8.0] - 2026-08-13
 

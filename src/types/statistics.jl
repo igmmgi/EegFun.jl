@@ -397,22 +397,26 @@ end
 """
     LmmStatsResult
 
-Stores the result of a massive univariate linear mixed model fit across a spatial-temporal grid.
+Result of a mass-univariate linear mixed model fit across a channels × time grid
+(see [`fit_mass_lmm`](@ref)).
 
 # Fields
-- `coefficients::Vector{String}`: Predictor names (e.g., "(Intercept)", "Condition")
+- `coefficients::Vector{String}`: Fixed-effect names (e.g. "(Intercept)", "condition: B")
 - `channels::Vector{Symbol}`: Electrode labels
-- `time_points::Vector{Float64}`: Time points in seconds
-- `beta::Array{Float64, 3}`: Beta coefficients [electrodes × time × coefficients]
-- `se::Array{Float64, 3}`: Standard errors [electrodes × time × coefficients]
-- `t_values::Array{Float64, 3}`: T-statistics [electrodes × time × coefficients]
-- `p_values::Array{Float64, 3}`: Primary p-values [electrodes × time × coefficients]. If `n_perms > 0`, this contains the FWER max-t permutation-corrected p-values. If `n_perms == 0`, contains raw asymptotic p-values.
-- `p_uncorrected::Array{Float64, 3}`: Raw asymptotic Normal p-values [electrodes × time × coefficients]
-- `p_corrected::Union{Array{Float64, 3}, Nothing}`: Permutation-corrected max-t p-values (or `nothing` if `n_perms == 0`)
-- `max_t_null::Array{Float64, 2}`: Null distribution of max-t values [permutations × coefficients]
-- `max_cluster_mass_null::Array{Float64, 2}`: Null distribution of max cluster mass [permutations × coefficients]
-- `singular_fits::Matrix{Bool}`: Boolean matrix [channels × timepoints] indicating if the initial Grand Null model hit a singular boundary.
-- `epochs::EpochData`: The original EpochData (useful for extracting grand averages for ERP plots)
+- `time_points::Vector{Float64}`: Time points
+- `beta::Array{Float64,3}`: Fixed-effect estimates [channels × time × coefficients]
+- `se::Array{Float64,3}`: Standard errors [channels × time × coefficients]
+- `z_values::Array{Float64,3}`: Wald z-statistics (β̂ / SE) [channels × time × coefficients]
+- `p_parametric::Array{Float64,3}`: Uncorrected two-sided Wald p-values (Normal reference)
+- `p_corrected::Union{Array{Float64,3},Nothing}`: Permutation FWER-corrected p-values (max-statistic,
+  cluster-mass or TFCE, see `inference.correction`); `NaN` for untested coefficients; `nothing` without permutations
+- `null_max::Matrix{Float64}`: Null distribution of the maximum statistic [permutations × coefficients]
+  (`NaN` columns for untested coefficients)
+- `tested::Vector{Int}`: Indices of the permutation-tested coefficients
+- `singular_fits::Matrix{Bool}`: Whether the fit at each [channel, time] point is singular
+- `inference::NamedTuple`: Settings used for inference (`correction`, `n_perms`, `exhaustive`, `flip_by`,
+  `n_blocks`, `cluster_threshold`, `tfce`, `spatial_connectivity`, `REML`, `n_obs`, `formula`)
+- `epochs::Union{EpochData,Nothing}`: The input epochs (EpochData method only; used for plotting)
 """
 struct LmmStatsResult <: EegFunData
     coefficients::Vector{String}
@@ -420,57 +424,14 @@ struct LmmStatsResult <: EegFunData
     time_points::Vector{Float64}
     beta::Array{Float64, 3}
     se::Array{Float64, 3}
-    t_values::Array{Float64, 3}
-    p_values::Array{Float64, 3}
-    p_uncorrected::Array{Float64, 3}
+    z_values::Array{Float64, 3}
+    p_parametric::Array{Float64, 3}
     p_corrected::Union{Array{Float64, 3}, Nothing}
-    max_t_null::Array{Float64, 2}
-    max_cluster_mass_null::Array{Float64, 2}
+    null_max::Matrix{Float64}
+    tested::Vector{Int}
     singular_fits::Matrix{Bool}
-    epochs::EpochData
-end
-
-# Backwards compatible constructor for 11 arguments
-function LmmStatsResult(
-    coefficients::Vector{String},
-    channels::Vector{Symbol},
-    time_points::Vector{Float64},
-    beta::Array{Float64, 3},
-    se::Array{Float64, 3},
-    t_values::Array{Float64, 3},
-    p_values::Array{Float64, 3},
-    max_t_null::Array{Float64, 2},
-    max_cluster_mass_null::Array{Float64, 2},
-    singular_fits::Matrix{Bool},
-    epochs::EpochData
-)
-    n_perms = size(max_t_null, 1)
-    if n_perms > 0 && any(!=(0), max_t_null)
-        n_channels, n_timepoints, n_coefs = size(t_values)
-        p_corr = copy(p_values)
-        for c in 1:min(n_coefs, size(max_t_null, 2))
-            null_col = max_t_null[:, c]
-            if any(!=(0), null_col)
-                null_sorted = sort(null_col)
-                for t in 1:n_timepoints, ch in 1:n_channels
-                    obs_t = abs(t_values[ch, t, c])
-                    n_exceeding = n_perms - searchsortedlast(null_sorted, obs_t - eps(obs_t))
-                    p_corr[ch, t, c] = (n_exceeding + 1) / (n_perms + 1)
-                end
-            end
-        end
-        return LmmStatsResult(
-            coefficients, channels, time_points, beta, se, t_values,
-            p_corr, p_values, p_corr,
-            max_t_null, max_cluster_mass_null, singular_fits, epochs
-        )
-    else
-        return LmmStatsResult(
-            coefficients, channels, time_points, beta, se, t_values,
-            p_values, p_values, nothing,
-            max_t_null, max_cluster_mass_null, singular_fits, epochs
-        )
-    end
+    inference::NamedTuple
+    epochs::Union{EpochData, Nothing}
 end
 
 function Base.show(io::IO, result::LmmStatsResult)
@@ -478,27 +439,24 @@ function Base.show(io::IO, result::LmmStatsResult)
     n_times = length(result.time_points)
     n_coefs = length(result.coefficients)
     time_range = isempty(result.time_points) ? "N/A" : "$(first(result.time_points)) to $(last(result.time_points)) s"
-    n_perms = size(result.max_t_null, 1)
+    inf = result.inference
     n_singular = count(result.singular_fits)
     total_fits = n_chans * n_times
 
     println(io, "LmmStatsResult")
     println(io, "├─ Dimensions: $n_chans channels × $n_times time points ($time_range) × $n_coefs coefficients")
     println(io, "├─ Predictors: ", join(result.coefficients, ", "))
-    println(io, "├─ Permutations: $n_perms")
-    if result.p_corrected !== nothing
-        println(io, "├─ Multiple comparison correction: FWER max-t permutation test")
-    else
-        println(io, "├─ Multiple comparison correction: none (raw asymptotic p-values)")
-    end
     sing_pct = total_fits > 0 ? round(100 * n_singular / total_fits, digits = 1) : 0.0
     println(io, "├─ Singular fits: $n_singular / $total_fits ($sing_pct%)")
-    sig_strs = String[]
-    for i in 1:n_coefs
-        n_sig = count(<(0.05), @view(result.p_values[:, :, i]))
-        push!(sig_strs, "$(result.coefficients[i]): $n_sig")
+    if isnothing(result.p_corrected)
+        println(io, "└─ Inference: Wald z only (no permutation correction; p_parametric is uncorrected)")
+        return
     end
-    print(io, "└─ Significant points (p < 0.05): ", join(sig_strs, ", "))
+    method = inf.correction === :maxt ? "max-|z|" : inf.correction === :cluster ? "cluster mass (threshold $(inf.cluster_threshold))" : "TFCE"
+    perms = inf.exhaustive ? "all $(inf.n_perms) sign-flip patterns" : "$(inf.n_perms) random sign flips"
+    println(io, "├─ Inference: FWER $method, whole-block sign flipping by :$(inf.flip_by) ($(inf.n_blocks) blocks, $perms)")
+    sig_strs = ["$(result.coefficients[i]): $(count(<(0.05), @view(result.p_corrected[:, :, i])))" for i in result.tested]
+    print(io, "└─ Significant points (corrected p < 0.05): ", join(sig_strs, ", "))
 end
 
 Base.show(io::IO, ::MIME"text/plain", result::LmmStatsResult) = show(io, result)

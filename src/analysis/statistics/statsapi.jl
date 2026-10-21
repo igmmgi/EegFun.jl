@@ -21,40 +21,25 @@ StatsAPI.stderror(res::LmmStatsResult) = res.se
 
 Returns the number of observations (epochs) used in the mass-univariate fit.
 """
-StatsAPI.nobs(res::LmmStatsResult) = length(res.epochs.data)
+StatsAPI.nobs(res::LmmStatsResult) = res.inference.n_obs
 
 """
     StatsAPI.pvalue(res::LmmStatsResult; corrected::Bool = !isnothing(res.p_corrected))
 
-Returns the p-values for the fitted linear mixed models as a 3D array 
+Returns the p-values for the fitted linear mixed models as a 3D array
 of dimensions [channels × time × coefficients].
 
-If permutations were performed (`res.p_corrected !== nothing`), `corrected` defaults 
-to `true` and returns the FWER max-t permutation-corrected p-values.
-Otherwise, returns the asymptotic uncorrected Normal p-values.
+If permutations were performed, `corrected` defaults to `true` and returns the FWER-corrected
+permutation p-values (method in `res.inference.correction`; `NaN` for untested coefficients).
+Otherwise, or with `corrected = false`, returns the uncorrected Wald (Normal) p-values.
 """
 function StatsAPI.pvalue(res::LmmStatsResult; corrected::Bool = !isnothing(res.p_corrected))
     if corrected
-        if !isnothing(res.p_corrected)
-            return res.p_corrected
-        elseif !isempty(res.max_t_null) && any(!=(0), res.max_t_null)
-            n_perms, n_coefs = size(res.max_t_null)
-            p_corrected = similar(res.p_values)
-            for c in 1:min(n_coefs, size(res.t_values, 3))
-                null_sorted = sort(res.max_t_null[:, c])
-                for t in 1:size(res.t_values, 2), ch in 1:size(res.t_values, 1)
-                    obs_t = abs(res.t_values[ch, t, c])
-                    n_exceeding = n_perms - searchsortedlast(null_sorted, obs_t - eps(obs_t))
-                    p_corrected[ch, t, c] = (n_exceeding + 1) / (n_perms + 1)
-                end
-            end
-            return p_corrected
-        else
-            error("Cannot compute permutation-corrected p-values: max_t_null is empty. Run fit_mass_lmm with n_perms > 0 and use_clusters=false.")
-        end
-    else
-        return res.p_uncorrected
+        isnothing(res.p_corrected) &&
+            @minimal_error "No permutation-corrected p-values: run fit_mass_lmm with n_perms > 0, or use corrected = false."
+        return res.p_corrected
     end
+    return res.p_parametric
 end
 
 """

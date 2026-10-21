@@ -392,6 +392,7 @@ function plot_topography_stats(
     n_topos = min(n_topos, length(time_indices))
     bins = _partition_indices(time_indices, n_topos)
 
+    isnothing(result.epochs) && @minimal_error "plot_topography_stats needs a layout: use a result from the EpochData method of fit_mass_lmm."
     layout = result.epochs.layout
     electrodes = result.channels
 
@@ -404,15 +405,11 @@ function plot_topography_stats(
 
     layout_labels = layout.data.label
 
-    t_matrix = result.t_values[:, :, coef_idx]
+    t_matrix = result.z_values[:, :, coef_idx]
+    # threshold_p masks on corrected p-values when available, otherwise on uncorrected Wald p-values
     sig_combined_full = if !isnothing(threshold_p)
-        if hasproperty(result, :p_corrected) && !isnothing(result.p_corrected) && any(result.p_corrected[:, :, coef_idx] .<= threshold_p)
-            result.p_corrected[:, :, coef_idx] .<= threshold_p
-        elseif hasproperty(result, :p_values) && !isnothing(result.p_values)
-            result.p_values[:, :, coef_idx] .<= threshold_p
-        else
-            abs.(t_matrix) .>= cluster_thresh
-        end
+        p = isnothing(result.p_corrected) ? result.p_parametric : result.p_corrected
+        p[:, :, coef_idx] .<= threshold_p
     else
         abs.(t_matrix) .>= cluster_thresh
     end
