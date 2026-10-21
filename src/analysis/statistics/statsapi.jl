@@ -81,7 +81,7 @@ end
 
 Returns the standard error of the mean difference for standard ERP stats.
 """
-StatsAPI.stderror(res::StatsResult) = hasfield(typeof(res), :se_diff) ? res.se_diff : error("Standard error not stored for this test type.")
+StatsAPI.stderror(res::StatsResult) = hasfield(typeof(res), :se_diff) ? res.se_diff : @minimal_error("Standard error not stored for this test type.")
 
 """
     StatsAPI.pvalue(res::Union{StatsResult, TFStatsResult})

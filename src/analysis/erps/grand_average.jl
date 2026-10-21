@@ -164,23 +164,11 @@ function grand_average(
     output_dir::Union{String,Nothing} = nothing,
 )
 
-    # Setup logging
-    log_file = "grand_average.log"
-    setup_global_logging(log_file)
-
-    try
-        @info "Batch grand averaging started at $(now())"
+    _with_batch_logging("grand averaging", "grand_average.log", input_dir, output_dir) do ctx
         @log_call "grand_average"
 
-        # Validation (early return on error)
-        error_msg = _validate_input_dir(input_dir)
-        if !isnothing(error_msg)
-            @minimal_error(error_msg)
-        end
-
         # Setup directories
-        output_dir = something(output_dir, _default_grand_average_output_dir(input_dir, file_pattern))
-        mkpath(output_dir)
+        output_dir = _prepare_output_dir!(ctx, _default_grand_average_output_dir(input_dir, file_pattern))
 
         # Find files
         files = _find_batch_files(file_pattern, input_dir, participant_selection)
@@ -219,8 +207,5 @@ function grand_average(
 
         @info "Grand averaging complete! Created $(length(grand_averages)) grand averages"
         @info "Output saved to: $output_path"
-
-    finally
-        _cleanup_logging(log_file, output_dir)
     end
 end

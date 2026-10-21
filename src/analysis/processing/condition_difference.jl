@@ -83,13 +83,9 @@ function _condition_difference_process_file(
 
     # Dispatch to the appropriate in-memory condition_difference based on data type
     if file_data isa Vector{<:ErpData} || file_data isa Vector{<:TimeFreqData}
-        try
-            difference_waves = condition_difference(file_data, condition_pairs)
-            jldsave(output_path; data = difference_waves)
-            return BatchResult(true, filename, "Created $(length(difference_waves)) difference(s)")
-        catch e
-            return BatchResult(false, filename, "$(sprint(showerror, e))")
-        end
+        difference_waves = condition_difference(file_data, condition_pairs)
+        jldsave(output_path; data = difference_waves)
+        return BatchResult(true, filename, "Created $(length(difference_waves)) difference(s)")
     else
         return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{TimeFreqData}, got $(typeof(file_data))")
     end
@@ -170,22 +166,10 @@ function condition_difference(
     output_dir::Union{String,Nothing} = nothing,
 )
 
-    # Setup logging
-    log_file = "condition_difference.log"
-    setup_global_logging(log_file)
-
-    result = (success = 0, errors = 0)  # Default return value
-    try
-        @info "Batch condition differencing started at $(now())"
+    _with_batch_logging("condition differencing", "condition_difference.log", input_dir, output_dir) do ctx
         @log_call "condition_difference"
 
-        # Validation (early return on error)
-        error_msg = _validate_input_dir(input_dir)
-        if !isnothing(error_msg)
-            @minimal_error(error_msg)
-        end
-
-
+        # Validation
 
         error_msg = _validate_condition_pairs(condition_pairs)
         if !isnothing(error_msg)
@@ -193,15 +177,9 @@ function condition_difference(
         end
 
         # Setup directories
-        output_dir = something(output_dir, _condition_difference_default_output_dir(input_dir, file_pattern, condition_pairs))
-        mkpath(output_dir)
+        output_dir = _prepare_output_dir!(ctx, _condition_difference_default_output_dir(input_dir, file_pattern, condition_pairs))
 
         process_fn = (input_path, output_path) -> _condition_difference_process_file(input_path, output_path, condition_pairs)
         result = batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Creating differences")
-
-    finally
-        _cleanup_logging(log_file, output_dir)
     end
-
-    return result
 end

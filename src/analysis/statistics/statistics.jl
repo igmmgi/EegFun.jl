@@ -141,12 +141,12 @@ function permutation_test(
 
     if !isempty(positive_clusters)
         @info "Computing cluster statistics for $(length(positive_clusters)) positive clusters..."
-        positive_clusters, cluster_stats_positive = _compute_cluster_statistics(positive_clusters, t_matrix, electrodes)
+        positive_clusters, cluster_stats_positive = _compute_cluster_statistics(positive_clusters, t_matrix)
     end
 
     if !isempty(negative_clusters)
         @info "Computing cluster statistics for $(length(negative_clusters)) negative clusters..."
-        negative_clusters, cluster_stats_negative = _compute_cluster_statistics(negative_clusters, t_matrix, electrodes)
+        negative_clusters, cluster_stats_negative = _compute_cluster_statistics(negative_clusters, t_matrix)
     end
 
     # Run permutations for cluster-level inference

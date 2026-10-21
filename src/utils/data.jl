@@ -8,8 +8,8 @@
 # - columns.jl:        Column identification (metadata, channel, extra columns)
 # - access.jl:         Data access, convenience functions, data viewing
 # - math.jl:           Mathematical utilities (_datarange, _colmeans, data_limits, y-ranges)
-# - subset.jl:         Subsetting EEG data objects
-# - subset_files.jl:   File-based subsetting, selection helpers, epoch_to_continuous
+# - subset.jl:         Subsetting EEG data objects, selection helpers, epoch_to_continuous
+# - subset_files.jl:   File-based (batch) subsetting
 # - rename.jl:         Renaming channels
 # - from_raw.jl:       create_eegfun_data constructors from raw readers
 # - base_interface.jl: Base interface extensions

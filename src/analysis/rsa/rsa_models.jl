@@ -586,7 +586,7 @@ function create_model_rdms(model_data::AbstractDict{<:AbstractString,Any})
             push!(model_names, String(name))
         catch e
             @minimal_error(
-                "Failed to create RDM for model '$name' with data type $(typeof(data)). " *
+                "Failed to create RDM for model '$name' with data type $(typeof(data)): $(sprint(showerror, e)). " *
                 "Supported types: Vector{<:AbstractVector}, Matrix, Vector{Float}, Vector{Int/Symbol/String}"
             )
         end

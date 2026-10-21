@@ -1622,7 +1622,7 @@ end
 
 """Return a subset of the current continuous data within the selected region."""
 function _subset_selected_data(state::ContinuousDataBrowserState, clicked_region_idx = nothing)
-    # Use the clicked region if specified, otherwise use the most recent region, or fall back to bounds
+    # Use the clicked region if specified, otherwise use the most recent region
     if !isnothing(clicked_region_idx) && 1 <= clicked_region_idx <= length(state.selection.selected_regions[])
         # Use the specific clicked region
         x_min, x_max = state.selection.selected_regions[][clicked_region_idx]
@@ -1630,8 +1630,8 @@ function _subset_selected_data(state::ContinuousDataBrowserState, clicked_region
         # Use the last (most recent) selected region
         x_min, x_max = state.selection.selected_regions[][end]
     else
-        # Fall back to the old bounds format for backward compatibility
-        x_min, x_max = minmax(state.selection.bounds[]...)
+        @minimal_warning "No region selected"
+        return nothing
     end
 
     selected_channels = state.channels.labels[state.channels.visible]

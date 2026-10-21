@@ -228,7 +228,7 @@ macro log_call(func_name)
 
         # Append remaining arguments and kwargs
         for (k, v) in local_vars
-            if k == :dat || k == :data || k == Symbol("#self#") || startswith(string(k), "#")
+            if k == :dat || k == :data || k == Symbol("#self#") || startswith(string(k), "#") || v isa BatchContext
                 continue
             end
 

@@ -775,51 +775,42 @@ function average_epochs(dat::EpochData)
     isempty(eeg_channels) && @minimal_error("No EEG channels found to average")
 
     # Average epochs directly by row index (all epochs have same length and time values)
-    try
-        first_epoch = first(dat.data)
-        n_timepoints = nrow(first_epoch)
+    n_timepoints = nrow(first_epoch)
 
-        # Verify all epochs have the same length
-        for (idx, epoch) in enumerate(dat.data)
-            if nrow(epoch) != n_timepoints
-                @minimal_error("Epoch $idx has $(nrow(epoch)) timepoints, expected $n_timepoints. All epochs must have the same length.")
-            end
+    # Verify all epochs have the same length
+    for (idx, epoch) in enumerate(dat.data)
+        if nrow(epoch) != n_timepoints
+            @minimal_error("Epoch $idx has $(nrow(epoch)) timepoints, expected $n_timepoints. All epochs must have the same length.")
         end
-
-        # Create result DataFrame with metadata columns from first epoch
-        erp = DataFrame()
-
-        # Copy metadata columns (only :time should be kept for an average)
-        metadata_cols = filter(c -> c == :time, meta_labels(dat))
-        for col in metadata_cols
-            if hasproperty(first_epoch, col)
-                erp[!, col] = first_epoch[!, col]
-            end
-        end
-
-        # Average EEG channels across epochs by row index (single pass over epochs for cache locality)
-        n_eps = n_epochs(dat)
-        n_chans = length(eeg_channels)
-        avg_matrix = zeros(Float64, n_timepoints, n_chans)
-        ch_col_indices = [columnindex(first_epoch, ch) for ch in eeg_channels]
-
-        _accumulate_epoch_average!(avg_matrix, dat.data, ch_col_indices, n_timepoints)
-
-        inv_n_eps = 1.0 / n_eps
-        for (ch_idx, ch) in enumerate(eeg_channels)
-            avg_col = avg_matrix[:, ch_idx]
-            avg_col .*= inv_n_eps
-            erp[!, ch] = avg_col
-        end
-
-        # Count epochs
-        n_eps = n_epochs(dat)
-
-        return ErpData(dat.file, dat.condition, dat.condition_name, erp, copy(dat.layout), dat.sample_rate, copy(dat.analysis_info), n_eps)
-    catch e
-        e isa EegFunError && rethrow(e)
-        @minimal_error("Failed to average epochs: $(e)")
     end
+
+    # Create result DataFrame with metadata columns from first epoch
+    erp = DataFrame()
+
+    # Copy metadata columns (only :time should be kept for an average)
+    metadata_cols = filter(c -> c == :time, meta_labels(dat))
+    for col in metadata_cols
+        if hasproperty(first_epoch, col)
+            erp[!, col] = first_epoch[!, col]
+        end
+    end
+
+    # Average EEG channels across epochs by row index (single pass over epochs for cache locality)
+    n_eps = n_epochs(dat)
+    n_chans = length(eeg_channels)
+    avg_matrix = zeros(Float64, n_timepoints, n_chans)
+    ch_col_indices = [columnindex(first_epoch, ch) for ch in eeg_channels]
+
+    _accumulate_epoch_average!(avg_matrix, dat.data, ch_col_indices, n_timepoints)
+
+    inv_n_eps = 1.0 / n_eps
+    for (ch_idx, ch) in enumerate(eeg_channels)
+        avg_col = avg_matrix[:, ch_idx]
+        avg_col .*= inv_n_eps
+        erp[!, ch] = avg_col
+    end
+
+    return ErpData(dat.file, dat.condition, dat.condition_name, erp, copy(dat.layout), dat.sample_rate, copy(dat.analysis_info), n_eps)
 end
 
 
@@ -1129,29 +1120,17 @@ function average_epochs(
     output_dir::Union{String,Nothing} = nothing,
 )
 
-    # Setup logging
-    log_file = "average_epochs.log"
-    setup_global_logging(log_file)
-
-    try
-        @info "Batch epoch averaging started at $(now())"
-        @info "average_epochs"
+    _with_batch_logging("epoch averaging", "average_epochs.log", input_dir, output_dir) do ctx
         @log_call "average_epochs"
 
-        # Validation (early return on error)
-        error_msg = _validate_input_dir(input_dir)
-        if !isnothing(error_msg)
-            @minimal_error(error_msg)
-        end
-
+        # Validation
         error_msg = _validate_epochs_pattern(file_pattern)
         if !isnothing(error_msg)
             @minimal_error(error_msg)
         end
 
         # Setup directories
-        output_dir = something(output_dir, _default_average_output_dir(input_dir, file_pattern))
-        mkpath(output_dir)
+        output_dir = _prepare_output_dir!(ctx, _default_average_output_dir(input_dir, file_pattern))
 
         process_fn = (input_path, output_path) -> _process_average_file(input_path, output_path, condition_selection)
         batch_process(
@@ -1163,7 +1142,5 @@ function average_epochs(
             "Averaging";
             filename_modifier = fn -> replace(fn, "epochs" => "erps"),
         )
-    finally
-        _cleanup_logging(log_file, output_dir)
     end
 end

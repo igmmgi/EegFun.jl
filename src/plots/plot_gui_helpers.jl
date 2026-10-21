@@ -53,6 +53,32 @@ function _handle_plot_error(e, plot_type::String)
     @minimal_warning "Unexpected error creating $plot_type plot: $(sprint(showerror, e))"
 end
 
+"""
+    _guarded(f, plot_type::String)
+
+Run `f()`, routing any exception through `_handle_plot_error`. Note that `return`
+inside the `do` block only leaves the block.
+"""
+function _guarded(f, plot_type::String)
+    try
+        f()
+    catch e
+        _handle_plot_error(e, plot_type)
+    end
+    return nothing
+end
+
+"""
+    _guarded_async(f, plot_type::String)
+
+Run `f()` in a new task (so the GUI stays responsive), routing any exception through
+`_handle_plot_error`.
+"""
+function _guarded_async(f, plot_type::String)
+    @async _guarded(f, plot_type)
+    return nothing
+end
+
 """Convert a `(lo, hi)` GUI observable pair to `Union{Nothing, Tuple{Real,Real}}`."""
 _gui_lim(tup) = (!isnothing(tup[1]) && !isnothing(tup[2])) ? (tup[1], tup[2]) : nothing
 
@@ -63,21 +89,14 @@ Boilerplate for bridges that just load a .jld2 file and call a single-argument p
 """
 function _simple_jld2_plot(gui_state, plot_fn, plot_type::String)
     isnothing(_validate_file(gui_state, ".jld2")) && return
-    try
-        data = read_data(gui_state.filename[])
+    fname = gui_state.filename[]
+    _guarded_async(plot_type) do
+        data = read_data(fname)
         if isnothing(data)
             @minimal_warning "Requested plot settings incompatible: recheck!"
             return
         end
-        @async begin
-            try
-                plot_fn(data)
-            catch e
-                _handle_plot_error(e, plot_type)
-            end
-        end
-    catch e
-        _handle_plot_error(e, plot_type)
+        plot_fn(data)
     end
 end
 
@@ -275,40 +294,36 @@ function _plot_erp_image(gui_state)
     is_pattern = _is_pattern(fname)
     selected_channels = _gui_selected_channels(gui_state)
 
-    @async begin
-        try
-            layout_sym = Symbol(gui_state.layout_type[])
-            z = gui_state.zlim[]
-            extra_kwargs = (!isnothing(z[1]) && !isnothing(z[2])) ? (colorrange = z,) : NamedTuple()
+    _guarded_async("ERP Image") do
+        layout_sym = Symbol(gui_state.layout_type[])
+        z = gui_state.zlim[]
+        extra_kwargs = (!isnothing(z[1]) && !isnothing(z[2])) ? (colorrange = z,) : NamedTuple()
 
-            if is_pattern
-                # Pattern mode — delegate directly; batch discovery handled by string dispatch
-                plot_erp_image(
-                    fname;
-                    input_dir = _gui_dir(gui_state),
-                    layout = layout_sym,
-                    channel_selection = selected_channels,
-                    xlim = gui_state.xlim[],
-                    yreversed = gui_state.invert_y[],
-                    extra_kwargs...,
-                )
-            else
-                # .jld2 mode — load data and apply GUI filters
-                dat = read_data(fname)
-                isnothing(dat) && return
-                dat = _apply_gui_filters(dat, gui_state)
-                isnothing(dat) && return
-                plot_erp_image(
-                    dat;
-                    layout = layout_sym,
-                    channel_selection = selected_channels,
-                    xlim = gui_state.xlim[],
-                    yreversed = gui_state.invert_y[],
-                    extra_kwargs...,
-                )
-            end
-        catch e
-            _handle_plot_error(e, "ERP Image")
+        if is_pattern
+            # Pattern mode — delegate directly; batch discovery handled by string dispatch
+            plot_erp_image(
+                fname;
+                input_dir = _gui_dir(gui_state),
+                layout = layout_sym,
+                channel_selection = selected_channels,
+                xlim = gui_state.xlim[],
+                yreversed = gui_state.invert_y[],
+                extra_kwargs...,
+            )
+        else
+            # .jld2 mode — load data and apply GUI filters
+            dat = read_data(fname)
+            isnothing(dat) && return
+            dat = _apply_gui_filters(dat, gui_state)
+            isnothing(dat) && return
+            plot_erp_image(
+                dat;
+                layout = layout_sym,
+                channel_selection = selected_channels,
+                xlim = gui_state.xlim[],
+                yreversed = gui_state.invert_y[],
+                extra_kwargs...,
+            )
         end
     end
 end
@@ -353,57 +368,49 @@ function _plot_time_frequency(gui_state)
         isnothing(res) && return
         files, _, input_dir = res
 
-        @async begin
-            try
-                for file in sort(files, by = _natural_sort_key)
-                    @info "Plotting TF: $file"
-                    data = read_data(joinpath(input_dir, file))
-                    isnothing(data) && continue
-                    tf_vec = _apply_tf_conditions(data)
-                    isempty(tf_vec) && continue
-                    tf = length(tf_vec) == 1 ? only(tf_vec) : tf_vec
-                    layout_kw = tf isa TimeFreqData ? (layout = layout_sym,) : (;)
-                    plot_tf(
-                        tf;
-                        layout_kw...,
-                        channel_selection = selected_channels,
-                        xlim              = xlim_val,
-                        colorrange        = zlim_val,
-                        baseline_interval = baseline_val,
-                        baseline_method   = baseline_method_sym,
-                    )
-                end
-            catch e
-                _handle_plot_error(e, "Time-Frequency")
+        _guarded_async("Time-Frequency") do
+            for file in sort(files, by = _natural_sort_key)
+                @info "Plotting TF: $file"
+                data = read_data(joinpath(input_dir, file))
+                isnothing(data) && continue
+                tf_vec = _apply_tf_conditions(data)
+                isempty(tf_vec) && continue
+                tf = length(tf_vec) == 1 ? only(tf_vec) : tf_vec
+                layout_kw = tf isa TimeFreqData ? (layout = layout_sym,) : (;)
+                plot_tf(
+                    tf;
+                    layout_kw...,
+                    channel_selection = selected_channels,
+                    xlim              = xlim_val,
+                    colorrange        = zlim_val,
+                    baseline_interval = baseline_val,
+                    baseline_method   = baseline_method_sym,
+                )
             end
         end
         return
     end
 
     # .jld2 direct mode
-    @async begin
-        try
-            data = read_data(fname)
-            if isnothing(data)
-                @minimal_warning "Requested plot settings incompatible: recheck!"
-                return
-            end
-            tf_vec = _apply_tf_conditions(data)
-            isempty(tf_vec) && return
-            tf = length(tf_vec) == 1 ? only(tf_vec) : tf_vec
-            layout_kw = tf isa TimeFreqData ? (layout = layout_sym,) : (;)
-            plot_tf(
-                tf;
-                layout_kw...,
-                channel_selection = selected_channels,
-                xlim              = xlim_val,
-                colorrange        = zlim_val,
-                baseline_interval = baseline_val,
-                baseline_method   = baseline_method_sym,
-            )
-        catch e
-            _handle_plot_error(e, "Time-Frequency")
+    _guarded_async("Time-Frequency") do
+        data = read_data(fname)
+        if isnothing(data)
+            @minimal_warning "Requested plot settings incompatible: recheck!"
+            return
         end
+        tf_vec = _apply_tf_conditions(data)
+        isempty(tf_vec) && return
+        tf = length(tf_vec) == 1 ? only(tf_vec) : tf_vec
+        layout_kw = tf isa TimeFreqData ? (layout = layout_sym,) : (;)
+        plot_tf(
+            tf;
+            layout_kw...,
+            channel_selection = selected_channels,
+            xlim              = xlim_val,
+            colorrange        = zlim_val,
+            baseline_interval = baseline_val,
+            baseline_method   = baseline_method_sym,
+        )
     end
 end
 
@@ -428,20 +435,19 @@ function _plot_ica(gui_state)
         isnothing(res) && return
         files, part_sel, input_dir = res
 
-        @async begin
+        _guarded_async("ICA Components") do
             for file in sort(files, by = _natural_sort_key)
                 @info "Plotting ICA: $file"
-                try
+                # Per-file guard so one bad file does not stop the rest
+                _guarded("ICA Components ($file)") do
                     data = read_data(joinpath(input_dir, file))
-                    isnothing(data) && continue
+                    isnothing(data) && return
                     if !(data isa InfoIca)
                         @minimal_warning "Skipping $file — not an InfoIca file"
-                        continue
+                        return
                     end
                     _set_window_title("ICA Components — " * basename(file))
                     plot_topography(data; component_selection = comp_sel)
-                catch e
-                    _handle_plot_error(e, "ICA Components ($file)")
                 end
             end
         end
@@ -449,7 +455,7 @@ function _plot_ica(gui_state)
     else
         # ── Single .jld2 mode ─────────────────────────────────────────────────
         isnothing(_validate_file(gui_state, ".jld2")) && return
-        try
+        _guarded_async("ICA Components") do
             data = read_data(fname)
             if isnothing(data)
                 @minimal_warning "Requested plot settings incompatible: recheck!"
@@ -459,16 +465,8 @@ function _plot_ica(gui_state)
                 @minimal_warning "ICA Components requires an InfoIca file. Select a file produced by run_ica()."
                 return
             end
-            @async begin
-                try
-                    _set_window_title("ICA Components — " * basename(fname))
-                    plot_topography(data; component_selection = comp_sel)
-                catch e
-                    _handle_plot_error(e, "ICA Components")
-                end
-            end
-        catch e
-            _handle_plot_error(e, "ICA Components")
+            _set_window_title("ICA Components — " * basename(fname))
+            plot_topography(data; component_selection = comp_sel)
         end
     end
 end
@@ -497,7 +495,7 @@ Load one InfoIca .jld2, locate its source EEG file, preprocess (for raw files),
 and call `plot_ica_component_activation`. Used by both single and batch modes.
 """
 function _plot_one_ica_activation(ica_path::String, comp_sel, layout, gui_dir::String)
-    try
+    _guarded("Component Activation ($(basename(ica_path)))") do
         ica = read_data(ica_path)
         isnothing(ica) && return
         if !(ica isa InfoIca)
@@ -537,8 +535,6 @@ function _plot_one_ica_activation(ica_path::String, comp_sel, layout, gui_dir::S
         end
         _set_window_title("Component Activation — " * basename(ica_path))
         plot_ica_component_activation(dat, ica; component_selection = comp_sel)
-    catch e
-        _handle_plot_error(e, "Component Activation ($(basename(ica_path)))")
     end
 end
 
@@ -585,31 +581,27 @@ function _plot_channel_summary(gui_state)
     file_ext = lowercase(splitext(fname)[2])
     layout   = gui_state.layout_object[]
 
-    @async begin
-        try
-            dat = if file_ext ∈ (".bdf", ".set", ".vhdr")
-                raw = read_raw_data(fname)
-                d = isnothing(layout) ? create_eegfun_data(raw) : create_eegfun_data(raw, layout)
-                @info "Applying preprocessing: highpass 0.1 Hz + average rereference"
-                highpass_filter!(d, 0.1)
-                rereference!(d, :avg)
-                d
-            else
-                read_data(fname)
-            end
-            isnothing(dat) && return
-            df = channel_summary(dat)
-            # channel_summary returns DataFrame or Vector{DataFrame} (epoch data)
-            non_plot = (:channel, :epoch, :file, :condition)
-            df_ref = df isa AbstractVector ? first(df) : df
-            plot_cols = Symbol[c for c in propertynames(df_ref) if c ∉ non_plot]
-            isempty(plot_cols) && return
-            # If epoch column present, average across epochs and show 95% CI
-            avg_kw = :epoch ∈ propertynames(df_ref) ? (average_over = :epoch,) : (;)
-            plot_channel_summary(df, plot_cols; avg_kw...)
-        catch e
-            _handle_plot_error(e, "Channel Summary")
+    _guarded_async("Channel Summary") do
+        dat = if file_ext ∈ (".bdf", ".set", ".vhdr")
+            raw = read_raw_data(fname)
+            d = isnothing(layout) ? create_eegfun_data(raw) : create_eegfun_data(raw, layout)
+            @info "Applying preprocessing: highpass 0.1 Hz + average rereference"
+            highpass_filter!(d, 0.1)
+            rereference!(d, :avg)
+            d
+        else
+            read_data(fname)
         end
+        isnothing(dat) && return
+        df = channel_summary(dat)
+        # channel_summary returns DataFrame or Vector{DataFrame} (epoch data)
+        non_plot = (:channel, :epoch, :file, :condition)
+        df_ref = df isa AbstractVector ? first(df) : df
+        plot_cols = Symbol[c for c in propertynames(df_ref) if c ∉ non_plot]
+        isempty(plot_cols) && return
+        # If epoch column present, average across epochs and show 95% CI
+        avg_kw = :epoch ∈ propertynames(df_ref) ? (average_over = :epoch,) : (;)
+        plot_channel_summary(df, plot_cols; avg_kw...)
     end
 end
 
@@ -621,16 +613,8 @@ function _plot_layout(gui_state)
         @minimal_warning "Requested plot settings incompatible: recheck!"
         return
     end
-    try
-        layout = read_layout(gui_state.layout_file[])
-        @async begin
-            try
-                plot_layout_2d(layout)
-            catch e
-                _handle_plot_error(e, "Layout")
-            end
-        end
-    catch e
-        _handle_plot_error(e, "Layout")
+    layout_file = gui_state.layout_file[]
+    _guarded_async("Layout") do
+        plot_layout_2d(read_layout(layout_file))
     end
 end

@@ -370,6 +370,39 @@ using Logging
         @test isfile(log_file_same)  # Should still exist (not moved to itself)
     end
 
+    @testset "_with_batch_logging / _prepare_output_dir!" begin
+        out = joinpath(test_dir, "wbl_out")
+        log_name = "wbl_test.log"
+        push!(created_log_files, log_name)
+
+        # Body value is returned, output dir is created and the log is moved into it
+        ret = EegFun._with_batch_logging("wbl", log_name, test_dir, nothing) do ctx
+            @test ctx isa EegFun.BatchContext
+            @test isnothing(ctx.output_dir)
+            od = EegFun._prepare_output_dir!(ctx, out)
+            @test od == out
+            @test ctx.output_dir == out
+            42
+        end
+        @test ret == 42
+        @test isdir(out)
+        @test isfile(joinpath(out, log_name))
+        filter!(f -> f != log_name, created_log_files)
+
+        # A user-supplied output_dir takes precedence over the default
+        custom = joinpath(test_dir, "wbl_custom")
+        EegFun._with_batch_logging("wbl", log_name, test_dir, custom) do ctx
+            @test EegFun._prepare_output_dir!(ctx, out * "_ignored") == custom
+        end
+        @test isdir(custom)
+        @test !isdir(out * "_ignored")
+
+        # Missing input directory raises an EegFunError and cleans up
+        @test_throws EegFun.EegFunError EegFun._with_batch_logging("wbl", log_name, joinpath(test_dir, "nope"), nothing) do ctx
+            nothing
+        end
+        push!(created_log_files, log_name)  # no output_dir was set, so the log stays in the cwd
+    end
 
     @testset "@log_call macro" begin
         # Test @log_call with function name only (current simplified form)

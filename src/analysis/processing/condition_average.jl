@@ -81,13 +81,9 @@ function _condition_average_process_file(filepath::String, output_path::String, 
 
     # Dispatch to the appropriate in-memory condition_average based on data type
     if file_data isa Vector{<:ErpData} || file_data isa Vector{<:TimeFreqData}
-        try
-            average_waves = condition_average(file_data, condition_groups)
-            jldsave(output_path; data = average_waves)
-            return BatchResult(true, filename, "Created $(length(average_waves)) average(s)")
-        catch e
-            return BatchResult(false, filename, "$(sprint(showerror, e))")
-        end
+        average_waves = condition_average(file_data, condition_groups)
+        jldsave(output_path; data = average_waves)
+        return BatchResult(true, filename, "Created $(length(average_waves)) average(s)")
     else
         return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{TimeFreqData}, got $(typeof(file_data))")
     end
@@ -175,21 +171,10 @@ function condition_average(
     output_dir::Union{String,Nothing} = nothing,
 )
 
-    # Setup logging
-    log_file = "condition_average.log"
-    setup_global_logging(log_file)
-
-    result = (success = 0, errors = 0)  # Default return value
-    try
-        @info "Batch condition averaging started at $(now())"
+    _with_batch_logging("condition averaging", "condition_average.log", input_dir, output_dir) do ctx
         @log_call "condition_average"
 
-        # Validation (early return on error)
-        error_msg = _validate_input_dir(input_dir)
-        if !isnothing(error_msg)
-            @minimal_error(error_msg)
-        end
-
+        # Validation
 
         error_msg = _validate_condition_groups(condition_groups)
         if !isnothing(error_msg)
@@ -197,15 +182,9 @@ function condition_average(
         end
 
         # Setup directories
-        output_dir = something(output_dir, _condition_average_default_output_dir(input_dir, file_pattern, condition_groups))
-        mkpath(output_dir)
+        output_dir = _prepare_output_dir!(ctx, _condition_average_default_output_dir(input_dir, file_pattern, condition_groups))
 
         process_fn = (input_path, output_path) -> _condition_average_process_file(input_path, output_path, condition_groups)
         result = batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Creating averages")
-
-    finally
-        _cleanup_logging(log_file, output_dir)
     end
-
-    return result
 end

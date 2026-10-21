@@ -219,17 +219,13 @@ function _process_lrp_file(filepath::String, output_path::String, condition_pair
         return BatchResult(false, filename, "Empty erps array")
     end
 
-    # Calculate LRP for all condition pairs
-    try
-        lrp_results = lrp(erps_data, condition_pairs; channel_selection = channel_selection)
+    # Calculate LRP for all condition pairs (exceptions are handled by _run_batch_operation)
+    lrp_results = lrp(erps_data, condition_pairs; channel_selection = channel_selection)
 
-        # Save results
-        jldsave(output_path; data = lrp_results)
+    # Save results
+    jldsave(output_path; data = lrp_results)
 
-        return BatchResult(true, filename, "Calculated LRP for $(length(lrp_results)) pair(s)")
-    catch e
-        return BatchResult(false, filename, "Error: $(sprint(showerror, e))")
-    end
+    return BatchResult(true, filename, "Calculated LRP for $(length(lrp_results)) pair(s)")
 end
 
 # === MAIN API FUNCTION FOR BATCH PROCESSING ===
@@ -244,34 +240,20 @@ function lrp(
     output_dir::Union{String,Nothing} = nothing,
 )
 
-    # Setup logging
-    log_file = "lrp.log"
-    setup_global_logging(log_file)
-
-    try
-        @info "Batch LRP calculation started at $(now())"
+    _with_batch_logging("LRP calculation", "lrp.log", input_dir, output_dir) do ctx
         @log_call "lrp"
 
         # Validation
-        error_msg = _validate_input_dir(input_dir)
-        if !isnothing(error_msg)
-            @minimal_error(error_msg)
-        end
-
         error_msg = _validate_lrp_params(condition_pairs)
         if !isnothing(error_msg)
             @minimal_error(error_msg)
         end
 
         # Setup directories
-        output_dir = something(output_dir, _default_lrp_output_dir(input_dir, condition_pairs))
-        mkpath(output_dir)
+        output_dir = _prepare_output_dir!(ctx, _default_lrp_output_dir(input_dir, condition_pairs))
 
         process_fn = (input_path, output_path) -> _process_lrp_file(input_path, output_path, condition_pairs, channel_selection)
         result = batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Calculating LRP")
-
-    finally
-        _cleanup_logging(log_file, output_dir)
     end
 end
 

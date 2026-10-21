@@ -771,20 +771,10 @@ function tf_multitaper(
     condition_selection::Function = conditions(),
     kwargs...,
 )
-    log_file = "tf_multitaper.log"
-    setup_global_logging(log_file)
-
-    try
-        @info "Batch tf_multitaper started at $(now())"
+    _with_batch_logging("tf_multitaper", "tf_multitaper.log", input_dir, output_dir) do ctx
         @log_call "tf_multitaper"
 
-        error_msg = _validate_input_dir(input_dir)
-        if !isnothing(error_msg)
-            @minimal_error(error_msg)
-        end
-
-        output_dir = something(output_dir, joinpath(input_dir, "tf_multitaper_$(clean_pattern(file_pattern))"))
-        mkpath(output_dir)
+        output_dir = _prepare_output_dir!(ctx, joinpath(input_dir, "tf_multitaper_$(clean_pattern(file_pattern))"))
 
         process_fn =
             (input_path, output_path) -> begin
@@ -800,8 +790,5 @@ function tf_multitaper(
             end
 
         batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "TF multitaper")
-
-    finally
-        _cleanup_logging(log_file, output_dir)
     end
 end

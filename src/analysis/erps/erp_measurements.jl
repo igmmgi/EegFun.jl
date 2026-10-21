@@ -568,13 +568,8 @@ function _apply_baseline_correction!(dfs::Vector{DataFrame}, baseline_interval::
         start_idx, stop_idx = _find_idx_start_end(time_col, baseline_int[1], baseline_int[2])
         baseline_idx = (start_idx, stop_idx)
 
-        # Try to apply baseline - don't fail measurements if baseline fails
-        try
-            @info "Applying baseline correction to $(length(eeg_channels)) channels using interval: $baseline_int"
-            _apply_baseline!(dfs, eeg_channels, baseline_idx)
-        catch e
-            @minimal_warning "Baseline correction failed: $(sprint(showerror, e)). Continuing without baseline."
-        end
+        @info "Applying baseline correction to $(length(eeg_channels)) channels using interval: $baseline_int"
+        _apply_baseline!(dfs, eeg_channels, baseline_idx)
     else
         @minimal_warning "No EEG channels found for baseline correction"
     end
@@ -799,20 +794,10 @@ function erp_measurements(
     kwargs...,
 )
 
-    # Setup logging
-    log_file = "$(output_file).log"
-    setup_global_logging(log_file)
-
-    try
-
-        @info "ERP measurement analysis started at $(now())"
+    _with_batch_logging("ERP measurement analysis", "$(output_file).log", input_dir, output_dir) do ctx
         @log_call "erp_measurements"
 
         # Validation 
-        error_msg = _validate_input_dir(input_dir)
-        if !isnothing(error_msg)
-            @minimal_error error_msg
-        end
         error_msg = _validate_analysis_type(analysis_type)
         if !isnothing(error_msg)
             @minimal_error error_msg
@@ -851,8 +836,7 @@ function erp_measurements(
         end
 
         # Setup directories
-        output_dir = something(output_dir, _default_measurements_output_dir(input_dir, analysis_type))
-        mkpath(output_dir)
+        output_dir = _prepare_output_dir!(ctx, _default_measurements_output_dir(input_dir, analysis_type))
 
         # Log analysis parameters
         @info "Analysis type: $analysis_type"
@@ -897,14 +881,6 @@ function erp_measurements(
                     @minimal_warning "  ✗ No measurements extracted from $file"
                 end
             catch e
-                # Re-throw invalid window errors (user errors that should propagate)
-                # @minimal_error throws EegFunError
-                if e isa EegFunError
-                    error_msg = e.msg
-                    if occursin("invalid", lowercase(error_msg)) && occursin("window", lowercase(error_msg))
-                        rethrow(e)
-                    end
-                end
                 @minimal_warning "Error processing $file: $(sprint(showerror, e))"
                 error_count += 1
             end
@@ -937,8 +913,5 @@ function erp_measurements(
 
         # Return as ErpMeasurementsResult with metadata
         return ErpMeasurementsResult(results_df, analysis_type, analysis_interval, baseline_interval)
-
-    finally
-        _cleanup_logging(log_file, output_dir)
     end
 end

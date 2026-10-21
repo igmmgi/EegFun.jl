@@ -97,7 +97,6 @@ function _prepare_decoding_data(epochs::Vector{TimeFreqEpochData})
 
         first_df_cond = epoch_data.data_power[1]
         ch_indices = [columnindex(first_df_cond, ch) for ch in channels]
-        freq_varies_fastest = length(first_df_cond.time) > 1 && (first_df_cond.time[1] == first_df_cond.time[2])
 
         # Pre-allocate references to columns
         cols = Vector{Vector{Float64}}(undef, n_channels)
@@ -107,30 +106,16 @@ function _prepare_decoding_data(epochs::Vector{TimeFreqEpochData})
                 cols[ch_idx] = trial_df[!, col_idx]::Vector{Float64}
             end
 
-            # Reshape: each timepoint gets all channel-frequency pairs as features
-            if freq_varies_fastest
-                # Standard TF layout: time outer, freq inner (tf_morlet/multitaper/stft)
-                @inbounds for t_idx = 1:n_times
-                    base_row = (t_idx - 1) * n_freqs
-                    feature_idx = 1
-                    for f_idx = 1:n_freqs
-                        row_idx = base_row + f_idx
-                        for ch_idx = 1:n_channels
-                            condition_data[feature_idx, t_idx, trial_idx] = cols[ch_idx][row_idx]
-                            feature_idx += 1
-                        end
-                    end
-                end
-            else
-                # Legacy / freq outer, time inner layout
-                @inbounds for t_idx = 1:n_times
-                    feature_idx = 1
-                    for f_idx = 1:n_freqs
-                        row_idx = (f_idx - 1) * n_times + t_idx
-                        for ch_idx = 1:n_channels
-                            condition_data[feature_idx, t_idx, trial_idx] = cols[ch_idx][row_idx]
-                            feature_idx += 1
-                        end
+            # Reshape: each timepoint gets all channel-frequency pairs as features.
+            # TF layout: time outer, freq inner (tf_morlet/multitaper/stft)
+            @inbounds for t_idx = 1:n_times
+                base_row = (t_idx - 1) * n_freqs
+                feature_idx = 1
+                for f_idx = 1:n_freqs
+                    row_idx = base_row + f_idx
+                    for ch_idx = 1:n_channels
+                        condition_data[feature_idx, t_idx, trial_idx] = cols[ch_idx][row_idx]
+                        feature_idx += 1
                     end
                 end
             end

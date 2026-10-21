@@ -320,19 +320,19 @@ n_epochs(dat::MultiDataFrameEeg)::Int = length(dat.data)
 n_epochs(dat::ErpData)::Int = dat.n_epochs
 
 """
-    condition_number(dat::EegFunData) -> Union{Int, String}
+    condition_number(dat::EegData) -> Union{Int, String}
 
-Get the condition number or identifier.
+Get the condition number (`"Raw Data"` for [`ContinuousData`](@ref), which has no condition).
 """
-condition_number(dat::EegFunData) = hasproperty(dat, :condition) ? dat.condition : "N/A"
+condition_number(dat::EegData)::Int = dat.condition
 condition_number(dat::ContinuousData)::String = "Raw Data"
 
 """
-    condition_name(dat::EegFunData) -> String
+    condition_name(dat::EegData) -> String
 
-Get the condition name.
+Get the condition name (`"Raw Data"` for [`ContinuousData`](@ref), which has no condition).
 """
-condition_name(dat::EegFunData) = hasproperty(dat, :condition_name) ? dat.condition_name : "N/A"
+condition_name(dat::EegData)::String = dat.condition_name
 condition_name(dat::ContinuousData)::String = "Raw Data"
 
 """

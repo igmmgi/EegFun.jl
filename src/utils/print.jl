@@ -87,3 +87,54 @@ function version_info()
         "timestamp" => string(now()),
     )
 end
+
+"""
+    log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
+
+Log a pretty table with specified log level. For general DataFrame logging.
+Sets show_row_number=false and show_subheader=false by default for cleaner logs.
+
+# Arguments
+- `df::DataFrame`: The DataFrame to log
+- `log_level::Symbol`: Log level (:debug, :info, :warn, :error) (default: :info)
+- `kwargs...`: Additional arguments passed to pretty_table
+
+# Examples
+```julia
+# Log with default info level
+log_pretty_table(df; title = "My Table")
+
+# Log with debug level
+log_pretty_table(df; log_level = :debug, title = "Debug Table")
+
+# Log with warn level
+log_pretty_table(df; log_level = :warn, title = "Warning Table")
+```
+"""
+function log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
+
+    table_output = sprint() do output_io
+        # Set a large display size to avoid terminal limitations (i.e., cropping)
+        # when capturing the table string output.
+        io_context = IOContext(output_io, :displaysize => (2000, 2000), :color => true)
+        # Default column_labels to column names only — this suppresses the auto-generated
+        # type subheader row that PrettyTables adds when given a DataFrame directly.
+        # Callers can still override by passing their own column_labels kwarg.
+        kw = Dict{Symbol,Any}(kwargs)
+        get!(kw, :column_labels, names(df))
+        pretty_table(io_context, df; kw...)
+    end
+
+    # Map symbol to standard LogLevel
+    levels = Dict(:debug => Logging.Debug, :info => Logging.Info, :warn => Logging.Warn, :error => Logging.Error)
+
+    lvl = get(levels, log_level, Logging.Info)
+    if !haskey(levels, log_level)
+        @minimal_warning "Unknown log level: $log_level, using :info instead"
+    end
+
+    # Log with minimal metadata (no file/line noise)
+    @logmsg lvl "\n\n$table_output\n" _module=nothing _file=nothing _line=nothing
+
+    return nothing
+end

@@ -756,7 +756,7 @@ function generate_permutation_matrix(df, block_col; sync_col=nothing, n_perms=10
     
     perm_matrix = zeros(Int, N, n_perms)
     b_col = Symbol(block_col)
-    hasproperty(df, b_col) || error("Column '$b_col' not found in DataFrame. Available columns: $(names(df))")
+    hasproperty(df, b_col) || @minimal_error("Column '$b_col' not found in DataFrame. Available columns: $(names(df))")
     blocks = df[!, b_col]
     unique_blocks = unique(blocks)
     n_blocks = length(unique_blocks)
@@ -765,9 +765,9 @@ function generate_permutation_matrix(df, block_col; sync_col=nothing, n_perms=10
         block_idxs = [findall(==(b), blocks) for b in unique_blocks]
         _permute_within!(perm_matrix, block_idxs, n_perms, rng)
     elseif type == :synchronized
-        isnothing(sync_col) && error("Synchronized shuffling requires `sync_col` (e.g. sync_col=:Subject, block_col=:Item).")
+        isnothing(sync_col) && @minimal_error("Synchronized shuffling requires `sync_col` (e.g. sync_col=:Subject, block_col=:Item).")
         s_col = Symbol(sync_col)
-        hasproperty(df, s_col) || error("Column '$s_col' not found in DataFrame. Available columns: $(names(df))")
+        hasproperty(df, s_col) || @minimal_error("Column '$s_col' not found in DataFrame. Available columns: $(names(df))")
         
         syncs = df[!, s_col]
         unique_syncs = unique(syncs)
@@ -786,7 +786,7 @@ function generate_permutation_matrix(df, block_col; sync_col=nothing, n_perms=10
         cell_len = length(grid[1, 1])
         for s in 1:n_syncs, b in 1:n_blocks
             if length(grid[s, b]) != cell_len
-                error("Synchronized shuffling requires a balanced design where every sync group sees all items with equal trial count. Row maps unbalanced cell count for Sync: $(unique_syncs[s]), Block: $(unique_blocks[b]). For unbalanced designs, please supply a custom `perm_matrix`.")
+                @minimal_error("Synchronized shuffling requires a balanced design where every sync group sees all items with equal trial count. Row maps unbalanced cell count for Sync: $(unique_syncs[s]), Block: $(unique_blocks[b]). For unbalanced designs, please supply a custom `perm_matrix`.")
             end
         end
         
@@ -794,7 +794,7 @@ function generate_permutation_matrix(df, block_col; sync_col=nothing, n_perms=10
     elseif type == :global
         _permute_global!(perm_matrix, n_perms, rng)
     else
-        error("Unknown permutation type: $type. Supported types: :within, :synchronized, :global")
+        @minimal_error("Unknown permutation type: $type. Supported types: :within, :synchronized, :global")
     end
     
     return perm_matrix

@@ -546,46 +546,6 @@ function _picard_y_loss_gpu(
     return val / T(T_len)
 end
 
-# List-based overload for backwards compatibility
-function _picard_l_bfgs_direction!(
-    Z,
-    q,
-    G,
-    h,
-    s_list::Vector,
-    y_list::Vector,
-    r_list::Vector{T},
-    a_list::Vector{T},
-) where {T<:AbstractFloat}
-    copyto!(q, G)
-    empty!(a_list)
-
-    m_len = length(s_list)
-    for k = m_len:-1:1
-        s = s_list[k]
-        y = y_list[k]
-        r = r_list[k]
-
-        a = r * dot(s, q)
-        push!(a_list, a)
-        @. q -= a * y
-    end
-
-    _picard_solve_hessian!(Z, h, q)
-
-    for k = 1:m_len
-        s = s_list[k]
-        y = y_list[k]
-        r = r_list[k]
-        a = a_list[m_len-k+1]
-
-        beta = r * dot(y, Z)
-        @. Z += (a - beta) * s
-    end
-
-    @. Z = -Z
-end
-
 # GPU line search helper with pre-allocated CPU logdet calculation
 function _picard_line_search_gpu!(
     Y::AbstractMatrix{T},

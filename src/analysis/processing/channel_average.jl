@@ -254,19 +254,8 @@ function channel_average(
     reduce::Bool = false,
 )
 
-    # Setup logging
-    log_file = "channel_average.log"
-    setup_global_logging(log_file)
-
-    try
-        @info "Batch channel averaging started at $(now())"
+    _with_batch_logging("channel averaging", "channel_average.log", input_dir, output_dir) do ctx
         @log_call "channel_average"
-
-        # Validation (early return on error)
-        error_msg = _validate_input_dir(input_dir)
-        if !isnothing(error_msg)
-            @minimal_error(error_msg)
-        end
 
         # Generate output labels if not provided
         if isnothing(output_labels)
@@ -281,17 +270,13 @@ function channel_average(
         end
 
         # Setup directories
-        output_dir = something(output_dir, _default_channel_average_output_dir(input_dir, file_pattern))
-        mkpath(output_dir)
+        output_dir = _prepare_output_dir!(ctx, _default_channel_average_output_dir(input_dir, file_pattern))
 
         process_fn =
             (input_path, output_path) ->
                 _process_channel_average_file(input_path, output_path, channel_selections, output_labels, condition_selection, reduce)
 
         return batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Averaging channels")
-
-    finally
-        _cleanup_logging(log_file, output_dir)
     end
 end
 

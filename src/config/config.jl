@@ -202,7 +202,7 @@ function read_config(config_file::String)
     try
         user_config = TOML.parsefile(config_file)
     catch e
-        @minimal_error "Error parsing TOML file: $e"
+        @minimal_error "Error parsing TOML file: $(sprint(showerror, e))"
     end
 
     # Merge, convert types, and validate
@@ -254,7 +254,7 @@ function _convert_any_arrays!(config::Dict; path = "")
                     end
                     config[key] = converted_value
                 catch e
-                    @minimal_warning "Failed to convert $new_path from Any array to $param_type: $e"
+                    @minimal_error "Failed to convert $new_path from Any array to $param_type: $(sprint(showerror, e))"
                 end
             elseif param_type == Symbol && isa(value, AbstractString)
                 config[key] = Symbol(value)
@@ -264,7 +264,7 @@ function _convert_any_arrays!(config::Dict; path = "")
                     inner_type = param_type == Vector{Real} ? Float64 : param_type.parameters[1]
                     config[key] = inner_type.(value)
                 catch e
-                    @minimal_warning "Failed to convert $new_path from $(typeof(value)) to $param_type: $e"
+                    @minimal_error "Failed to convert $new_path from $(typeof(value)) to $param_type: $(sprint(showerror, e))"
                 end
             end
         end
@@ -578,7 +578,7 @@ function generate_config_template(; filename::String = "config_template.toml")
         end
         @info "Configuration template saved to: $filename"
     catch e
-        @minimal_error "Failed to save configuration template: $e"
+        @minimal_error "Failed to save configuration template: $(sprint(showerror, e))"
     end
 end
 

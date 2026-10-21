@@ -192,20 +192,16 @@ function _process_resample_file(filepath::String, output_path::String, target_ra
         return BatchResult(false, filename, "Data is not a recognized EEG data type")
     end
 
-    # Resample
-    try
-        old_rate = loaded_data.sample_rate
-        resampled_data = resample(loaded_data, target_rate)
-        new_rate = resampled_data.sample_rate
+    # Resample (exceptions are handled by _run_batch_operation)
+    old_rate = loaded_data.sample_rate
+    resampled_data = resample(loaded_data, target_rate)
+    new_rate = resampled_data.sample_rate
 
-        # Save results (always use "data" as variable name since read_data finds by type)
-        jldsave(output_path; data = resampled_data)
+    # Save results (always use "data" as variable name since read_data finds by type)
+    jldsave(output_path; data = resampled_data)
 
-        message = "Resampled from $old_rate Hz to $new_rate Hz (target rate: $target_rate)"
-        return BatchResult(true, filename, message)
-    catch e
-        return BatchResult(false, filename, "Error: $(sprint(showerror, e))")
-    end
+    message = "Resampled from $old_rate Hz to $new_rate Hz (target rate: $target_rate)"
+    return BatchResult(true, filename, message)
 end
 
 
@@ -218,32 +214,17 @@ function resample(
     output_dir::Union{String,Nothing} = nothing,
 )
 
-    # Setup logging
-    log_file = "resample.log"
-    setup_global_logging(log_file)
-
-    try
-        @info "Batch resampling started at $(now())"
+    _with_batch_logging("resampling", "resample.log", input_dir, output_dir) do ctx
         @log_call "resample"
-
-        # Validation
-        error_msg = _validate_input_dir(input_dir)
-        if !isnothing(error_msg)
-            @minimal_error(error_msg)
-        end
 
         if target_rate <= 0
             @minimal_error("Target rate must be positive, got $target_rate")
         end
 
         # Setup directories
-        output_dir = something(output_dir, _default_resample_output_dir(input_dir, file_pattern, target_rate))
-        mkpath(output_dir)
+        output_dir = _prepare_output_dir!(ctx, _default_resample_output_dir(input_dir, file_pattern, target_rate))
 
         process_fn = (input_path, output_path) -> _process_resample_file(input_path, output_path, target_rate)
         result = batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Resampling")
-
-    finally
-        _cleanup_logging(log_file, output_dir)
     end
 end

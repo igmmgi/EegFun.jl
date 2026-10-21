@@ -294,7 +294,8 @@ const MAKIE_EXT_STATE = MakieExtensionState(
             screen = MAKIE_EXT_STATE.create_screen(; size = size)
             display(screen, fig)
             return screen
-        catch
+        catch e
+            @debug "Could not open interactive screen, falling back to display()" exception = e
             display(fig)
             return nothing
         end
@@ -312,7 +313,8 @@ const MAKIE_EXT_STATE = MakieExtensionState(
         if string(backend) == "GLMakie" && hasproperty(backend, :activate!)
             try
                 backend.activate!(title = title)
-            catch
+            catch e
+                @debug "Could not set window title" exception = e
             end
         end
     end,
@@ -963,12 +965,13 @@ Returns (start, stop) tuple or (-Inf, Inf) for empty strings, or (nothing, nothi
 """
 function _parse_baseline_values(start_str::String, stop_str::String)
     (start_str == " " || stop_str == " ") && return -Inf, Inf
-    try
-        return parse(Float64, start_str), parse(Float64, stop_str)
-    catch e
-        @minimal_warning "Invalid baseline values: $e"
+    start_val = tryparse(Float64, start_str)
+    stop_val = tryparse(Float64, stop_str)
+    if isnothing(start_val) || isnothing(stop_val)
+        @minimal_warning "Invalid baseline values: \"$start_str\", \"$stop_str\""
         return nothing, nothing
     end
+    return start_val, stop_val
 end
 
 """

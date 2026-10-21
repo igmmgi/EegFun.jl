@@ -22,6 +22,8 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 - Fixed `MethodError` in out-of-place `channel_repairable` by implementing `Base.copy(::ContinuousRepairInfo)`.
 - Fixed documentation CI build failure by pinning `@nolebase/vitepress-plugin-enhanced-readabilities`.
 - Respected `display_plot = false` in `plot_tf` during tests and non-interactive use.
+- The continuous data browser region subset now warns when nothing is selected instead of silently falling back to `bounds`.
+- GUI plot errors are routed through a single `_guarded` helper, so failures are logged consistently.
 
 ### Changed
 
@@ -33,6 +35,17 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 - Optimized performance and memory allocations across time-frequency transforms, epoched CSD, cluster permutations, mass-univariate $t$-tests, SVM decoding, and artifact detection routines.
 - Accelerated GPU ICA algorithms (Infomax and Picard) via pre-allocated scratch buffers.
 - Accelerated Makie rendering: batched topography interpolation, reduced scene objects, and bound `plot_databrowser` directly to observables.
+- Invalid config values now raise an `EegFunError` instead of only warning.
+- A failed baseline in `erp_measurements` now propagates instead of being swallowed; the Mahalanobis → Euclidean fallback is removed and now throws.
+- User-facing input errors in permutations, `StatsAPI.stderror`, and topography/Makie plotting now use `@minimal_error` (`EegFunError`) instead of plain `error()`.
+- `condition_number` / `condition_name` no longer return `"N/A"` for data without a condition (only `ContinuousData` returns `"Raw Data"`).
+- Batch entry points share one internal `_with_batch_logging` helper; redundant per-file try/catch wrappers were removed (`_run_batch_operation` already catches).
+- Moved selection helpers (`get_selected_*`, `epoch_to_continuous`) from `subset_files.jl` to `subset.jl`, and `log_pretty_table` to `utils/print.jl`.
+
+### Removed
+
+- Misleading `realign!(::String, ...)` and `calculate_trigger_interval!(::String, ...)` aliases; use the non-mutating `realign` / `calculate_trigger_interval` batch functions.
+- Legacy compatibility code: old-`Layout` JLD2 conversion, the list-based `picard` overload, the frequency-outer decoding layout, and the internal electrode-argument `_compute_cluster_statistics` overloads.
 
 ## [0.8.0] - 2026-08-13
 

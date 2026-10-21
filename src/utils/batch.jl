@@ -450,3 +450,53 @@ function _cleanup_logging(log_file::String, output_dir::Union{String,Nothing})
         end
     end
 end
+
+"""
+    BatchContext
+
+Mutable state shared between [`_with_batch_logging`](@ref) and the body of a batch entry
+point. Holds the resolved output directory so the log file can be moved there on cleanup.
+"""
+mutable struct BatchContext
+    output_dir::Union{String,Nothing}
+end
+
+"""
+    _with_batch_logging(f, description, log_file, input_dir, output_dir)
+
+Run the body `f(ctx)` of a batch entry point with global logging active:
+
+1. starts logging to `log_file` and logs `"Batch <description> started at <time>"`,
+2. validates `input_dir` (raising an `EegFunError` on failure),
+3. calls `f(ctx)` and returns its value,
+4. always closes logging and moves `log_file` into `ctx.output_dir` (if one was set).
+
+Inside `f`, call [`_prepare_output_dir!`](@ref) to resolve and create the output directory.
+`@log_call` can still be used in `f`, since it reads the captured local variables.
+"""
+function _with_batch_logging(f::Function, description::AbstractString, log_file::AbstractString, input_dir::AbstractString, output_dir)
+    setup_global_logging(log_file)
+    ctx = BatchContext(output_dir)
+    try
+        @info "Batch $description started at $(now())"
+        error_msg = _validate_input_dir(input_dir)
+        if !isnothing(error_msg)
+            @minimal_error(error_msg)
+        end
+        return f(ctx)
+    finally
+        _cleanup_logging(String(log_file), ctx.output_dir)
+    end
+end
+
+"""
+    _prepare_output_dir!(ctx::BatchContext, default_dir) -> String
+
+Resolve the output directory (the user-supplied one, else `default_dir`), create it, and
+record it in `ctx` so the log file is moved there on cleanup.
+"""
+function _prepare_output_dir!(ctx::BatchContext, default_dir::AbstractString)
+    ctx.output_dir = something(ctx.output_dir, String(default_dir))
+    mkpath(ctx.output_dir)
+    return ctx.output_dir
+end

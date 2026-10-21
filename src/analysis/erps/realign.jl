@@ -421,37 +421,33 @@ function _process_realign_file(
         return BatchResult(false, filename, "Data is not EpochData type")
     end
 
-    # Realign
-    try
-        if epochs_data isa EpochData
-            # For a single EpochData object, we cannot enforce multi-condition constraints directly through the simple API
-            # But in this batch mode we are passing global interval/n_samples.
-            # So we manually apply them here to ensure batch adherence:
-            _realign_epochs!(epochs_data, realignment_triggers)
-            if isempty(epochs_data.data)
-                return BatchResult(true, filename, "All epochs dropped (missing trigger).")
-            end
-            _crop_epochs_to_window!(epochs_data, global_interval, global_n_samples)
-            realigned_epochs = epochs_data
-        else
-            realigned_epochs =
-                realign(epochs_data, realignment_triggers; global_interval = global_interval, global_n_samples = global_n_samples)
+    # Realign (exceptions are handled by _run_batch_operation)
+    if epochs_data isa EpochData
+        # For a single EpochData object, we cannot enforce multi-condition constraints directly through the simple API
+        # But in this batch mode we are passing global interval/n_samples.
+        # So we manually apply them here to ensure batch adherence:
+        _realign_epochs!(epochs_data, realignment_triggers)
+        if isempty(epochs_data.data)
+            return BatchResult(true, filename, "All epochs dropped (missing trigger).")
         end
-
-        # Save results
-        jldsave(output_path; data = realigned_epochs)
-
-        if realigned_epochs isa Vector
-            n_eps = sum(n_epochs(cond) for cond in realigned_epochs)
-            n_samples = isempty(realigned_epochs) || isempty(realigned_epochs[1].data) ? 0 : nrow(realigned_epochs[1].data[1])
-        else
-            n_eps = n_epochs(realigned_epochs)
-            n_samples = isempty(realigned_epochs.data) ? 0 : nrow(realigned_epochs.data[1])
-        end
-        return BatchResult(true, filename, "Realigned $n_eps total epochs to $n_samples samples each")
-    catch e
-        return BatchResult(false, filename, "Error: $(sprint(showerror, e))")
+        _crop_epochs_to_window!(epochs_data, global_interval, global_n_samples)
+        realigned_epochs = epochs_data
+    else
+        realigned_epochs =
+            realign(epochs_data, realignment_triggers; global_interval = global_interval, global_n_samples = global_n_samples)
     end
+
+    # Save results
+    jldsave(output_path; data = realigned_epochs)
+
+    if realigned_epochs isa Vector
+        n_eps = sum(n_epochs(cond) for cond in realigned_epochs)
+        n_samples = isempty(realigned_epochs) || isempty(realigned_epochs[1].data) ? 0 : nrow(realigned_epochs[1].data[1])
+    else
+        n_eps = n_epochs(realigned_epochs)
+        n_samples = isempty(realigned_epochs.data) ? 0 : nrow(realigned_epochs.data[1])
+    end
+    return BatchResult(true, filename, "Realigned $n_eps total epochs to $n_samples samples each")
 end
 
 function realign(
@@ -462,23 +458,11 @@ function realign(
     output_dir::Union{String,Nothing} = nothing,
 )
 
-    # Setup logging
-    log_file = "realign.log"
-    setup_global_logging(log_file)
-
-    try
-        @info "Batch realignment started at $(now())"
+    _with_batch_logging("realignment", "realign.log", input_dir, output_dir) do ctx
         @log_call "realign"
 
-        # Validation
-        error_msg = _validate_input_dir(input_dir)
-        if !isnothing(error_msg)
-            @minimal_error(error_msg)
-        end
-
         # Setup directories
-        output_dir = something(output_dir, _default_realign_output_dir(input_dir, file_pattern))
-        mkpath(output_dir)
+        output_dir = _prepare_output_dir!(ctx, _default_realign_output_dir(input_dir, file_pattern))
 
         # Find files
         files = _find_batch_files(file_pattern, input_dir, participant_selection)
@@ -553,15 +537,7 @@ function realign(
         results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Realigning epochs")
 
         _log_batch_summary(results, output_dir)
-
-    finally
-        _cleanup_logging(log_file, output_dir)
     end
-end
-
-# Alias for string pattern since users often write realign!("pattern", ...) intuitively wanting to batch process
-function realign!(file_pattern::String, realignment_triggers::Vector{Int}; kwargs...)
-    realign(file_pattern, realignment_triggers; kwargs...)
 end
 
 
@@ -596,27 +572,22 @@ function _process_calculate_trigger_interval_file(
         return BatchResult(false, filename, "Data is not EpochData type")
     end
 
-    # Calculate Interval
-    try
-        epochs_with_interval = calculate_trigger_interval(epochs_data, start_triggers, end_triggers; column_name = column_name)
+    # Calculate Interval (exceptions are handled by _run_batch_operation)
+    epochs_with_interval = calculate_trigger_interval(epochs_data, start_triggers, end_triggers; column_name = column_name)
 
-        # Save results
-        jldsave(output_path; data = epochs_with_interval)
+    # Save results
+    jldsave(output_path; data = epochs_with_interval)
 
-        if epochs_with_interval isa Vector
-            n_eps = sum(n_epochs(cond) for cond in epochs_with_interval)
-        else
-            n_eps = n_epochs(epochs_with_interval)
-        end
-        return BatchResult(true, filename, "Appended interval column (:$column_name) to $n_eps total epochs")
-    catch e
-        return BatchResult(false, filename, "Error: $(sprint(showerror, e))")
+    if epochs_with_interval isa Vector
+        n_eps = sum(n_epochs(cond) for cond in epochs_with_interval)
+    else
+        n_eps = n_epochs(epochs_with_interval)
     end
+    return BatchResult(true, filename, "Appended interval column (:$column_name) to $n_eps total epochs")
 end
 
 
 """
-    calculate_trigger_interval!(file_pattern::String, start_triggers::Vector{Int}, end_triggers::Vector{Int}; kwargs...)
     calculate_trigger_interval(file_pattern::String, start_triggers::Vector{Int}, end_triggers::Vector{Int}; kwargs...)
 
 Batch process JLD2 files that match `file_pattern`, automatically computing time intervals 
@@ -631,36 +602,16 @@ function calculate_trigger_interval(
     output_dir::Union{String,Nothing} = nothing,
     column_name::Symbol = :interval,
 )
-    # Setup logging
-    log_file = "calculate_trigger_interval.log"
-    setup_global_logging(log_file)
-
-    try
-        @info "Batch calculate_trigger_interval started at $(now())"
+    _with_batch_logging("calculate_trigger_interval", "calculate_trigger_interval.log", input_dir, output_dir) do ctx
         @log_call "calculate_trigger_interval"
 
-        # Validation
-        error_msg = _validate_input_dir(input_dir)
-        if !isnothing(error_msg)
-            @minimal_error(error_msg)
-        end
-
         # Setup directories
-        output_dir = something(output_dir, _default_calculate_trigger_interval_output_dir(input_dir, file_pattern, column_name))
-        mkpath(output_dir)
+        output_dir = _prepare_output_dir!(ctx, _default_calculate_trigger_interval_output_dir(input_dir, file_pattern, column_name))
 
         process_fn =
             (input_path, output_path) ->
                 _process_calculate_trigger_interval_file(input_path, output_path, start_triggers, end_triggers, column_name)
 
         result = batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Calculating trigger intervals")
-
-    finally
-        _cleanup_logging(log_file, output_dir)
     end
-end
-
-# Alias for string pattern
-function calculate_trigger_interval!(file_pattern::String, start_triggers::Vector{Int}, end_triggers::Vector{Int}; kwargs...)
-    calculate_trigger_interval(file_pattern, start_triggers, end_triggers; kwargs...)
 end

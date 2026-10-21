@@ -293,20 +293,10 @@ function tf_baseline(
     participant_selection::Function = participants(),
     condition_selection::Function = conditions(),
 )
-    log_file = "tf_baseline.log"
-    setup_global_logging(log_file)
-
-    try
-        @info "Batch TF baseline started at $(now())"
+    _with_batch_logging("TF baseline", "tf_baseline.log", input_dir, output_dir) do ctx
         @log_call "tf_baseline"
 
-        error_msg = _validate_input_dir(input_dir)
-        if !isnothing(error_msg)
-            @minimal_error(error_msg)
-        end
-
-        output_dir = something(output_dir, joinpath(input_dir, "tf_baseline_$(clean_pattern(file_pattern))"))
-        mkpath(output_dir)
+        output_dir = _prepare_output_dir!(ctx, joinpath(input_dir, "tf_baseline_$(clean_pattern(file_pattern))"))
 
         @info "baseline: $baseline_interval, method: $method"
 
@@ -323,8 +313,5 @@ function tf_baseline(
         end
 
         batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "TF baseline")
-
-    finally
-        _cleanup_logging(log_file, output_dir)
     end
 end

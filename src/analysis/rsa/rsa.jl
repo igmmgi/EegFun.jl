@@ -169,18 +169,7 @@ function _compute_dissimilarity(
         # Compute Mahalanobis distance: sqrt((x-y)' * inv(Σ) * (x-y))
         diff = pattern1 .- pattern2
 
-        try
-            mahal_dist = sqrt(max(0.0, dot(diff, inv_covariance_matrix, diff)))
-            return mahal_dist
-        catch e
-            @minimal_warning "Mahalanobis distance computation failed, using Euclidean instead"
-            d2 = 0.0
-            @inbounds @simd for i in eachindex(pattern1)
-                d = pattern1[i] - pattern2[i]
-                d2 += d * d
-            end
-            return sqrt(d2)
-        end
+        return sqrt(max(0.0, dot(diff, inv_covariance_matrix, diff)))
     else
         @minimal_error("Unknown dissimilarity measure: $measure. Use :correlation, :spearman, :euclidean, or :mahalanobis")
     end

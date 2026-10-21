@@ -395,7 +395,7 @@ end
             [(1, 1), (1, 2), (1, 3)],  # members: Ch1 at t=1,2,3
         )
 
-        updated, stats = EegFun._compute_cluster_statistics([cluster], t_matrix, [:Ch1, :Ch2])
+        updated, stats = EegFun._compute_cluster_statistics([cluster], t_matrix)
 
         @test length(stats) == 1
         @test stats[1] ≈ 6.0   # 3 member points × 2.0

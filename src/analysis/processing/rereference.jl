@@ -289,24 +289,11 @@ function rereference(
     output_dir::Union{String,Nothing} = nothing,
 )
 
-    # Setup logging
-    log_file = "rereference.log"
-    setup_global_logging(log_file)
-
-    result = (success = 0, errors = 0)  # Default return value
-    try
-        @info "Batch rereferencing started at $(now())"
+    _with_batch_logging("rereferencing", "rereference.log", input_dir, output_dir) do ctx
         @log_call "rereference"
 
-        # Validation
-        error_msg = _validate_input_dir(input_dir)
-        if !isnothing(error_msg)
-            @minimal_error(error_msg)
-        end
-
         # Setup directories
-        output_dir = something(output_dir, _default_rereference_output_dir(input_dir, file_pattern, reference_selection))
-        mkpath(output_dir)
+        output_dir = _prepare_output_dir!(ctx, _default_rereference_output_dir(input_dir, file_pattern, reference_selection))
 
         ref_str = reference_selection isa Symbol ? string(reference_selection) : join(reference_selection, ", ")
         @info "Reference settings: $ref_str"
@@ -315,10 +302,5 @@ function rereference(
             (input_path, output_path) -> _process_rereference_file(input_path, output_path, reference_selection, condition_selection)
 
         result = batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Rereferencing")
-
-    finally
-        _cleanup_logging(log_file, output_dir)
     end
-
-    return result
 end

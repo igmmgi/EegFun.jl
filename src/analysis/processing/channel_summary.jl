@@ -255,23 +255,11 @@ function channel_summary(
     output_file::String = "channel_summary",
 )
 
-    # Setup logging
-    log_file = "$(output_file).log"
-    setup_global_logging(log_file)
-
-    try
-        @info "Batch channel summary started at $(now())"
+    _with_batch_logging("channel summary", "$(output_file).log", input_dir, output_dir) do ctx
         @log_call "channel_summary"
 
-        # Validation (early return on error)
-        error_msg = _validate_input_dir(input_dir)
-        if !isnothing(error_msg)
-            @minimal_error(error_msg)
-        end
-
         # Setup directories
-        output_dir = something(output_dir, _default_channel_summary_output_dir(input_dir, file_pattern))
-        mkpath(output_dir)
+        output_dir = _prepare_output_dir!(ctx, _default_channel_summary_output_dir(input_dir, file_pattern))
 
         # Find files
         files = _find_batch_files(file_pattern, input_dir, participant_selection)
@@ -330,8 +318,5 @@ function channel_summary(
 
         @info "Batch operation complete! Processed $n_success files successfully, $n_error errors"
         @info "Output saved to: $output_dir"
-
-    finally
-        _cleanup_logging(log_file, output_dir)
     end
 end

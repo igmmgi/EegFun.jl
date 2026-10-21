@@ -333,32 +333,16 @@ function baseline(
     output_dir::Union{String,Nothing} = nothing,
 )
 
-    # Setup logging
-    log_file = "baseline.log"
-    setup_global_logging(log_file)
-
-    try
-        @info ""
-        @info "Batch baseline correction started at $(now())"
+    _with_batch_logging("baseline correction", "baseline.log", input_dir, output_dir) do ctx
         @log_call "baseline"
-
-        # Validation
-        error_msg = _validate_input_dir(input_dir)
-        if !isnothing(error_msg)
-            @minimal_error(error_msg)
-        end
 
         # Validate and normalize baseline interval (validates tuple structure)
         baseline_interval = _validate_baseline_interval(baseline_interval)
 
         # Setup directories
-        output_dir = something(output_dir, _default_baseline_output_dir(input_dir, file_pattern, baseline_interval))
-        mkpath(output_dir)
+        output_dir = _prepare_output_dir!(ctx, _default_baseline_output_dir(input_dir, file_pattern, baseline_interval))
 
         process_fn = (input_path, output_path) -> _process_baseline_file(input_path, output_path, baseline_interval, condition_selection)
         result = batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Baseline correction")
-
-    finally
-        _cleanup_logging(log_file, output_dir)
     end
 end

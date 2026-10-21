@@ -117,7 +117,6 @@ Load ERP/LRP data from multiple files and organize by condition.
 Returns Dict{Int, Vector{ErpData}} mapping condition number to ERPs from all participants.
 """
 function _load_and_group_for_jackknife(files::Vector{String}, input_dir::String, condition_selection::Function)
-    # data_var parameter kept for backwards compatibility but not used - read_data() finds by type
     all_erps_by_condition = Dict{Int,Vector{ErpData}}()
     participant_ids = Int[]
 
@@ -216,23 +215,11 @@ function jackknife_average(
     condition_selection::Function = conditions(),
     output_dir::Union{String,Nothing} = nothing,
 )
-    # Setup logging
-    log_file = "jackknife.log"
-    setup_global_logging(log_file)
-
-    try
-        @info "Batch jackknife averaging started at $(now())"
+    _with_batch_logging("jackknife averaging", "jackknife.log", input_dir, output_dir) do ctx
         @log_call "jackknife_average"
 
-        # Validation
-        error_msg = _validate_input_dir(input_dir)
-        if !isnothing(error_msg)
-            @minimal_error(error_msg)
-        end
-
         # Setup directories
-        output_dir = something(output_dir, _default_jackknife_output_dir(input_dir, file_pattern))
-        mkpath(output_dir)
+        output_dir = _prepare_output_dir!(ctx, _default_jackknife_output_dir(input_dir, file_pattern))
 
         # Find files
         files = _find_batch_files(file_pattern, input_dir, participant_selection)
@@ -310,8 +297,5 @@ function jackknife_average(
 
         @info "Jackknife averaging complete!"
         @info "Output saved to: $output_dir"
-
-    finally
-        _cleanup_logging(log_file, output_dir)
     end
 end

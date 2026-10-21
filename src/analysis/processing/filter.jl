@@ -621,32 +621,20 @@ function _run_filter_batch(
     condition_selection::Function = conditions(),
     output_dir::Union{String,Nothing} = nothing,
 )
-    log_file = "filter_$(filter_type).log"
-    setup_global_logging(log_file)
-
-    try
-        @info "Batch $(filter_type == :lp ? "lowpass" : "highpass") filtering started at $(now())"
+    _with_batch_logging("$(filter_type == :lp ? "lowpass" : "highpass") filtering", "filter_$(filter_type).log", input_dir, output_dir) do ctx
         @info "  cutoff: $cutoff_freq Hz"
 
-        # Validation
-        error_msg = _validate_input_dir(input_dir)
-        if !isnothing(error_msg)
-            @minimal_error(error_msg)
-        end
         if cutoff_freq <= 0
             @minimal_error("Cutoff frequency must be positive, got: $cutoff_freq")
         end
 
         # Setup directories
-        output_dir = something(output_dir, _default_filter_output_dir(input_dir, file_pattern, filter_type, cutoff_freq))
-        mkpath(output_dir)
+        output_dir = _prepare_output_dir!(ctx, _default_filter_output_dir(input_dir, file_pattern, filter_type, cutoff_freq))
 
         # Execute
         process_fn =
             (input_path, output_path) -> _process_filter_file(input_path, output_path, filter_type, cutoff_freq, condition_selection)
 
         return batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Filtering")
-    finally
-        _cleanup_logging(log_file, output_dir)
     end
 end

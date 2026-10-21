@@ -394,14 +394,14 @@ end
 # 6. NULL DISTRIBUTIONS & CORRECTED P-VALUES
 # ============================================================================
 
-function _build_cluster_stat_map(t_map, channel_names, time_points, spatial_conn, electrode_to_idx, cluster_threshold)
+function _build_cluster_stat_map(t_map, channel_names, time_points, spatial_conn, cluster_threshold)
     n_channels, n_timepoints = size(t_map)
     pos_clusters, neg_clusters = EegFun._find_clusters(
         t_map .> cluster_threshold, t_map .< -cluster_threshold,
         channel_names, Float64.(time_points), spatial_conn, :spatiotemporal
     )
-    pos_stats = EegFun._compute_cluster_statistics(pos_clusters, t_map, electrode_to_idx; return_clusters=false)
-    neg_stats = EegFun._compute_cluster_statistics(neg_clusters, t_map, electrode_to_idx; return_clusters=false)
+    pos_stats = EegFun._compute_cluster_statistics(pos_clusters, t_map; return_clusters=false)
+    neg_stats = EegFun._compute_cluster_statistics(neg_clusters, t_map; return_clusters=false)
 
     smap = zeros(Float64, n_channels, n_timepoints)
     for (i, cluster) in enumerate(pos_clusters)
@@ -457,7 +457,6 @@ function _compute_p_corrected(z, null_max, tested, ctx)
     n_channels, n_timepoints, n_coefs = size(z)
     # Untested coefficients have no permutation p-value: NaN (not 1.0, which reads as "tested, not significant")
     p_corr = fill(NaN, n_channels, n_timepoints, n_coefs)
-    electrode_to_idx = Dict(e => i for (i, e) in enumerate(ctx.channel_names))
     for c in tested
         null_sorted = sort(null_max[:, c])
         zc = z[:, :, c]
@@ -467,7 +466,7 @@ function _compute_p_corrected(z, null_max, tested, ctx)
             abs.(EegFun._compute_tfce(zc, ctx.channel_names, Float64.(ctx.time_points), ctx.spatial_conn, :spatiotemporal;
                 E = ctx.tfce_E, H = ctx.tfce_H, dh = ctx.tfce_dh))
         else
-            _build_cluster_stat_map(zc, ctx.channel_names, ctx.time_points, ctx.spatial_conn, electrode_to_idx, ctx.cluster_threshold)
+            _build_cluster_stat_map(zc, ctx.channel_names, ctx.time_points, ctx.spatial_conn, ctx.cluster_threshold)
         end
         for i in eachindex(stat_map)
             p_corr[i + (c - 1) * n_channels * n_timepoints] = EegFun._lmm_perm_pvalue(null_sorted, stat_map[i], ctx.exhaustive)

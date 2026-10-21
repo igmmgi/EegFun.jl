@@ -124,22 +124,10 @@ function condition_combine(
     output_dir::Union{String,Nothing} = nothing,
 )
 
-    # Setup logging
-    log_file = "condition_combine.log"
-    setup_global_logging(log_file)
-
-    try
-
-        @info ""
-        @info "Batch condition_combine started at $(now())"
+    _with_batch_logging("condition_combine", "condition_combine.log", input_dir, output_dir) do ctx
         @log_call "condition_combine"
 
-        # Validation (early return on error)
-        error_msg = _validate_input_dir(input_dir)
-        if !isnothing(error_msg)
-            @minimal_error(error_msg)
-        end
-
+        # Validation
         error_msg = _validate_epochs_pattern_combine(file_pattern)
         if !isnothing(error_msg)
             @minimal_error(error_msg)
@@ -152,14 +140,10 @@ function condition_combine(
         end
 
         # Setup directories
-        output_dir = something(output_dir, _condition_combine_default_output_dir(input_dir, file_pattern, condition_groups))
-        mkpath(output_dir)
+        output_dir = _prepare_output_dir!(ctx, _condition_combine_default_output_dir(input_dir, file_pattern, condition_groups))
 
         process_fn = (input_path, output_path) -> _condition_combine_process_file(input_path, output_path, condition_groups)
         result = batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Combining conditions")
-
-    finally
-        _cleanup_logging(log_file, output_dir)
     end
 end
 

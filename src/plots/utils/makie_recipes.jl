@@ -17,7 +17,7 @@ function Makie.convert_arguments(P::Type{<:Makie.Series}, dat::MultiDataFrameEeg
     chans = EegFun.channel_labels(dat)
     c_idx = findfirst(==(channel), chans)
     if isnothing(c_idx)
-        error("Channel $channel not found in data.")
+        @minimal_error("Channel $channel not found in data.")
     end
     
     times_vec = dat.data[1].time
@@ -44,7 +44,7 @@ end
 # Allows: scatter(dat.layout) or lines(dat.layout)
 function Makie.convert_arguments(P::Makie.PointBased, layout::EegFun.Layout)
     if !hasproperty(layout.data, :x2) || !hasproperty(layout.data, :y2)
-        error("Layout is missing x2/y2 Cartesian coordinates. Run polar_to_cartesian_xy!(layout) first.")
+        @minimal_error("Layout is missing x2/y2 Cartesian coordinates. Run polar_to_cartesian_xy!(layout) first.")
     end
     x_vec = layout.data.x2
     y_vec = layout.data.y2

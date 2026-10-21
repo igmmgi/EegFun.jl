@@ -708,20 +708,10 @@ function tf_stft(
     condition_selection::Function = conditions(),
     kwargs...,
 )
-    log_file = "tf_stft.log"
-    setup_global_logging(log_file)
-
-    try
-        @info "Batch tf_stft started at $(now())"
+    _with_batch_logging("tf_stft", "tf_stft.log", input_dir, output_dir) do ctx
         @log_call "tf_stft"
 
-        error_msg = _validate_input_dir(input_dir)
-        if !isnothing(error_msg)
-            @minimal_error(error_msg)
-        end
-
-        output_dir = something(output_dir, joinpath(input_dir, "tf_stft_$(clean_pattern(file_pattern))"))
-        mkpath(output_dir)
+        output_dir = _prepare_output_dir!(ctx, joinpath(input_dir, "tf_stft_$(clean_pattern(file_pattern))"))
 
         process_fn =
             (input_path, output_path) -> begin
@@ -737,8 +727,5 @@ function tf_stft(
             end
 
         batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "TF STFT")
-
-    finally
-        _cleanup_logging(log_file, output_dir)
     end
 end

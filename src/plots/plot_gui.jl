@@ -493,12 +493,12 @@ function _plot_databrowser(gui_state)
         return
     end
 
-    try
+    _guarded("Data Browser") do
         if file_ext == ".jld2"
             # Screen must be created for single datasets to open in a separate window.
             # For Vectors, the Vector dispatch handles its own screens — creating one
             # upfront would produce a spurious empty window.
-            @async begin
+            _guarded_async("Data Browser") do
                 dat = read_data(gui_state.filename[])
                 isnothing(dat) && return
                 dat = _apply_gui_filters(dat, gui_state)
@@ -526,13 +526,11 @@ function _plot_databrowser(gui_state)
 
             # Update electrode menu with actual channel labels from the loaded data
             gui_state.channel_menu.options = vcat(["Select"], string.(channel_labels(dat)))
-            @async begin
+            _guarded_async("Data Browser") do
                 new_screen = _create_screen()
                 plot_databrowser(dat; screen = new_screen)
             end
         end
-    catch e
-        _handle_plot_error(e, "Data Browser")
     end
 end
 
@@ -557,60 +555,48 @@ function _plot_epochs(gui_state)
         isnothing(res) && return
         files, part_sel, input_dir_resolved = res
 
-        @async begin
+        _guarded_async("Epochs") do
             layout_sym = Symbol(gui_state.layout_type[])
-            try
-                plot_epochs(
-                    fname;
-                    input_dir             = _gui_dir(gui_state),
-                    participant_selection = part_sel,
-                    condition_selection   = cond_sel,
-                    channel_selection     = selected_channels,
-                    layout                = layout_sym,
-                    xlim                  = gui_state.xlim[],
-                    ylim                  = gui_state.ylim[],
-                    yreversed             = gui_state.invert_y[],
-                )
-            catch e
-                _handle_plot_error(e, "Epochs")
-            end
+            plot_epochs(
+                fname;
+                input_dir             = _gui_dir(gui_state),
+                participant_selection = part_sel,
+                condition_selection   = cond_sel,
+                channel_selection     = selected_channels,
+                layout                = layout_sym,
+                xlim                  = gui_state.xlim[],
+                ylim                  = gui_state.ylim[],
+                yreversed             = gui_state.invert_y[],
+            )
         end
         return
     end
 
     # .jld2 mode — apply condition + epoch filters from GUI
-    try
-        cond_list  = _parse_gui_int_field(gui_state.condition[])
-        epoch_list = _parse_gui_int_field(gui_state.epoch[])
-        if isnothing(cond_list) || isnothing(epoch_list)
-            @minimal_warning "Requested plot settings incompatible: recheck!"
-            return
-        end
-        cond_sel  = isempty(cond_list) ? conditions() : conditions(cond_list)
-        epoch_sel = isempty(epoch_list) ? epochs() : epochs(epoch_list)
+    cond_list  = _parse_gui_int_field(gui_state.condition[])
+    epoch_list = _parse_gui_int_field(gui_state.epoch[])
+    if isnothing(cond_list) || isnothing(epoch_list)
+        @minimal_warning "Requested plot settings incompatible: recheck!"
+        return
+    end
+    cond_sel  = isempty(cond_list) ? conditions() : conditions(cond_list)
+    epoch_sel = isempty(epoch_list) ? epochs() : epochs(epoch_list)
 
-        selected_channels = isempty(gui_state.electrodes[]) ? channels() : channels(Symbol.(gui_state.electrodes[]))
+    selected_channels = isempty(gui_state.electrodes[]) ? channels() : channels(Symbol.(gui_state.electrodes[]))
 
-        @async begin
-            layout_sym = Symbol(gui_state.layout_type[])
-            try
-                plot_epochs(
-                    fname;
-                    channel_selection = selected_channels,
-                    condition_selection = cond_sel,
-                    epoch_selection = epoch_sel,
-                    layout = layout_sym,
-                    average_channels = gui_state.average_channels[],
-                    xlim = gui_state.xlim[],
-                    ylim = gui_state.ylim[],
-                    yreversed = gui_state.invert_y[],
-                )
-            catch e
-                _handle_plot_error(e, "Epochs")
-            end
-        end
-    catch e
-        _handle_plot_error(e, "Epochs")
+    _guarded_async("Epochs") do
+        layout_sym = Symbol(gui_state.layout_type[])
+        plot_epochs(
+            fname;
+            channel_selection = selected_channels,
+            condition_selection = cond_sel,
+            epoch_selection = epoch_sel,
+            layout = layout_sym,
+            average_channels = gui_state.average_channels[],
+            xlim = gui_state.xlim[],
+            ylim = gui_state.ylim[],
+            yreversed = gui_state.invert_y[],
+        )
     end
 end
 
@@ -636,69 +622,57 @@ function _plot_erp(gui_state)
         isnothing(res) && return
         files, part_sel, input_dir_resolved = res
 
-        @async begin
+        _guarded_async("ERP") do
             layout_sym = Symbol(gui_state.layout_type[])
-            try
-                baseline = nothing
-                if !isnothing(gui_state.baseline_start[]) && !isnothing(gui_state.baseline_end[])
-                    baseline = (gui_state.baseline_start[], gui_state.baseline_end[])
-                end
-                plot_erp(
-                    fname;
-                    input_dir = input_dir,
-                    participant_selection = part_sel,
-                    layout = layout_sym,
-                    channel_selection = selected_channels,
-                    condition_selection = cond_sel,
-                    baseline_interval = baseline,
-                    average_channels = gui_state.average_channels[],
-                    xlim = gui_state.xlim[],
-                    ylim = gui_state.ylim[],
-                    yreversed = gui_state.invert_y[],
-                )
-            catch e
-                _handle_plot_error(e, "ERP")
+            baseline = nothing
+            if !isnothing(gui_state.baseline_start[]) && !isnothing(gui_state.baseline_end[])
+                baseline = (gui_state.baseline_start[], gui_state.baseline_end[])
             end
+            plot_erp(
+                fname;
+                input_dir = input_dir,
+                participant_selection = part_sel,
+                layout = layout_sym,
+                channel_selection = selected_channels,
+                condition_selection = cond_sel,
+                baseline_interval = baseline,
+                average_channels = gui_state.average_channels[],
+                xlim = gui_state.xlim[],
+                ylim = gui_state.ylim[],
+                yreversed = gui_state.invert_y[],
+            )
         end
         return
     end
 
     # .jld2 mode — apply condition filter from GUI
-    try
-        cond_list = _parse_gui_int_field(gui_state.condition[])
-        if isnothing(cond_list)
-            @minimal_warning "Requested plot settings incompatible: recheck!"
-            return
-        end
-        cond_sel = isempty(cond_list) ? conditions() : conditions(cond_list)
+    cond_list = _parse_gui_int_field(gui_state.condition[])
+    if isnothing(cond_list)
+        @minimal_warning "Requested plot settings incompatible: recheck!"
+        return
+    end
+    cond_sel = isempty(cond_list) ? conditions() : conditions(cond_list)
 
-        selected_channels = isempty(gui_state.electrodes[]) ? channels() : channels(Symbol.(gui_state.electrodes[]))
+    selected_channels = isempty(gui_state.electrodes[]) ? channels() : channels(Symbol.(gui_state.electrodes[]))
 
-        baseline = nothing
-        if !isnothing(gui_state.baseline_start[]) && !isnothing(gui_state.baseline_end[])
-            baseline = (gui_state.baseline_start[], gui_state.baseline_end[])
-        end
+    baseline = nothing
+    if !isnothing(gui_state.baseline_start[]) && !isnothing(gui_state.baseline_end[])
+        baseline = (gui_state.baseline_start[], gui_state.baseline_end[])
+    end
 
-        @async begin
-            layout_sym = Symbol(gui_state.layout_type[])
-            try
-                plot_erp(
-                    fname;
-                    layout = layout_sym,
-                    condition_selection = cond_sel,
-                    channel_selection = selected_channels,
-                    baseline_interval = baseline,
-                    average_channels = gui_state.average_channels[],
-                    xlim = gui_state.xlim[],
-                    ylim = gui_state.ylim[],
-                    yreversed = gui_state.invert_y[],
-                )
-            catch e
-                _handle_plot_error(e, "ERP")
-            end
-        end
-    catch e
-        _handle_plot_error(e, "ERP")
+    _guarded_async("ERP") do
+        layout_sym = Symbol(gui_state.layout_type[])
+        plot_erp(
+            fname;
+            layout = layout_sym,
+            condition_selection = cond_sel,
+            channel_selection = selected_channels,
+            baseline_interval = baseline,
+            average_channels = gui_state.average_channels[],
+            xlim = gui_state.xlim[],
+            ylim = gui_state.ylim[],
+            yreversed = gui_state.invert_y[],
+        )
     end
 end
 
@@ -733,13 +707,9 @@ function _plot_topography(gui_state)
         if data isa Vector{<:ErpData} || data isa ErpData
             plot_topography(data; channel_selection = selected_channels, interval_selection = interval_sel, extra_kwargs...)
         elseif data isa Vector{<:EpochData} || data isa EpochData
-            epoch_num = try
-                epoch_str = strip(gui_state.epoch[])
-                isempty(epoch_str) ? 1 : parse(Int, epoch_str)
-            catch e
-                @debug "Failed to parse epoch number, defaulting to 1" exception = e
-                1
-            end
+            # Blank or unparseable epoch field defaults to epoch 1
+            epoch_str = strip(gui_state.epoch[])
+            epoch_num = isempty(epoch_str) ? 1 : something(tryparse(Int, epoch_str), 1)
             plot_topography(data, epoch_num; channel_selection = selected_channels, interval_selection = interval_sel, extra_kwargs...)
         else
             @minimal_warning "Requested plot settings incompatible: recheck!"
@@ -757,36 +727,24 @@ function _plot_topography(gui_state)
         isnothing(res) && return
         files, part_sel, input_dir = res
 
-        @async begin
-            try
-                for file in sort(files, by = _natural_sort_key)
-                    @info "Plotting: $file"
-                    data = read_data(joinpath(input_dir, file))
-                    isnothing(data) && continue
-                    _do_topo_plot(data)
-                end
-            catch e
-                _handle_plot_error(e, "Topography")
+        _guarded_async("Topography") do
+            for file in sort(files, by = _natural_sort_key)
+                @info "Plotting: $file"
+                data = read_data(joinpath(input_dir, file))
+                isnothing(data) && continue
+                _do_topo_plot(data)
             end
         end
         return
     end
 
     # .jld2 mode
-    try
+    _guarded_async("Topography") do
         data = read_data(fname)
         if isnothing(data)
             @minimal_warning "Requested plot settings incompatible: recheck!"
             return
         end
-        @async begin
-            try
-                _do_topo_plot(data)
-            catch e
-                _handle_plot_error(e, "Topography")
-            end
-        end
-    catch e
-        _handle_plot_error(e, "Topography")
+        _do_topo_plot(data)
     end
 end

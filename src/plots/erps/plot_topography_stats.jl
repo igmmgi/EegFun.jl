@@ -386,7 +386,7 @@ function plot_topography_stats(
     time_mask = t_start .<= all_time_points .<= t_end
     time_indices = findall(time_mask)
     if isempty(time_indices)
-        error("No time points found in range ($t_start, $t_end). Data range: $(first(all_time_points)) to $(last(all_time_points))")
+        @minimal_error("No time points found in range ($t_start, $t_end). Data range: $(first(all_time_points)) to $(last(all_time_points))")
     end
 
     n_topos = min(n_topos, length(time_indices))
@@ -397,7 +397,7 @@ function plot_topography_stats(
     electrodes = result.channels
 
     if !has_valid_coordinates(layout)
-        error("Cannot create topographic plot: layout has no spatial coordinates.")
+        @minimal_error("Cannot create topographic plot: layout has no spatial coordinates.")
     end
 
     _ensure_coordinates_2d!(layout)
@@ -446,7 +446,7 @@ function plot_topography_stats(
     else
         n_rows, n_cols = dims
         if n_rows * n_cols < n_topos
-            error("Grid dimensions ($n_rows × $n_cols) provide $(n_rows * n_cols) cells but need $n_topos")
+            @minimal_error("Grid dimensions ($n_rows × $n_cols) provide $(n_rows * n_cols) cells but need $n_topos")
         end
     end
 

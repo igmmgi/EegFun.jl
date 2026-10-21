@@ -138,18 +138,9 @@ mutable struct Layout
     criterion_type::Union{Nothing,Symbol}
 end
 
-
 # Empty constructor for quick visualization without layout information
 Layout() = Layout(DataFrame(), nothing, nothing, nothing)
 
-# JLD2 backward compatibility: old Layout files have 3 fields (data, neighbours, criterion)
-# The new Layout adds criterion_type. This convert method allows JLD2 to reconstruct old files.
-function Base.convert(
-    ::Type{Layout},
-    old::JLD2.ReconstructedMutable{Symbol("EegFun.Layout"),(:data, :neighbours, :criterion),Tuple{Any,Any,Any}},
-)
-    return Layout(old.data, old.neighbours, old.criterion, nothing)
-end
 function Base.copy(layout::Layout)::Layout
     return Layout(
         copy(layout.data, copycols = true),
@@ -264,7 +255,7 @@ Stores time-frequency analysis results for a single condition/average.
 - `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
 
 !!! note
-    Accessing `.data` returns `data_power` via a `getproperty` override for backward compatibility.
+    Accessing `.data` returns `data_power` via a `getproperty` override, so the generic accessors (`all_data`, `subset`, ...) work.
 """
 mutable struct TimeFreqData <: SingleDataFrameEeg
     file::String
@@ -279,7 +270,7 @@ mutable struct TimeFreqData <: SingleDataFrameEeg
     analysis_info::AnalysisInfo
 end
 
-# Alias data to data_power for backward compatibility
+# Alias data to data_power so the generic accessors (all_data, subset, ...) work
 function Base.getproperty(tf_data::TimeFreqData, name::Symbol)
     if name === :data
         return getfield(tf_data, :data_power)
@@ -321,7 +312,7 @@ Stores time-frequency analysis results with individual trials preserved.
 - `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
 
 !!! note
-    Accessing `.data` returns `data_power` via a `getproperty` override for backward compatibility.
+    Accessing `.data` returns `data_power` via a `getproperty` override, so the generic accessors (`all_data`, `subset`, ...) work.
 """
 mutable struct TimeFreqEpochData <: MultiDataFrameEeg
     file::String
@@ -336,7 +327,7 @@ mutable struct TimeFreqEpochData <: MultiDataFrameEeg
     analysis_info::AnalysisInfo
 end
 
-# Alias data to data_power for backward compatibility
+# Alias data to data_power so the generic accessors (all_data, subset, ...) work
 function Base.getproperty(tf_data::TimeFreqEpochData, name::Symbol)
     if name === :data
         return getfield(tf_data, :data_power)

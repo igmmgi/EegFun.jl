@@ -355,7 +355,7 @@ end
 # === CLUSTER STATISTICS ===
 
 """
-    _compute_cluster_statistics(clusters, t_matrix, electrode_to_idx; return_clusters)
+    _compute_cluster_statistics(clusters, t_matrix; return_clusters)
 
 Compute cluster-level statistics (maxsum).
 
@@ -364,7 +364,6 @@ Consolidated version that can either return full Cluster objects or just statist
 # Arguments
 - `clusters::Vector{Cluster}`: Clusters to compute statistics for
 - `t_matrix::Array{Float64, 2}`: T-statistics [electrodes × time]
-- `electrode_to_idx::Dict{Symbol,Int}`: Electrode label to index mapping
 - `return_clusters::Bool`: If true, return (clusters, stats); if false, return just stats
 
 # Returns
@@ -417,13 +416,6 @@ function _compute_cluster_statistics(
 
     return return_clusters ? (updated_clusters, cluster_stats) : cluster_stats
 end
-
-# Backwards-compatible overloads accepting electrode metadata
-_compute_cluster_statistics(clusters::Vector{Cluster}, t_matrix::AbstractMatrix{<:AbstractFloat}, electrode_to_idx::Dict{Symbol,Int}; return_clusters::Bool = true) =
-    _compute_cluster_statistics(clusters, t_matrix; return_clusters = return_clusters)
-
-_compute_cluster_statistics(clusters::Vector{Cluster}, t_matrix::AbstractMatrix{<:AbstractFloat}, electrodes::Vector{Symbol}; return_clusters::Bool = true) =
-    _compute_cluster_statistics(clusters, t_matrix; return_clusters = return_clusters)
 
 """
     _max_cluster_stat(mask::BitArray{2}, t_matrix::AbstractMatrix{Float64}, spatial_connectivity::SparseMatrixCSC{Bool}, cluster_type::Symbol, labels_buf::Matrix{Int}, queue_buf::Vector{Tuple{Int,Int}}; is_negative::Bool=false) -> Float64
