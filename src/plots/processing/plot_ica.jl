@@ -1238,7 +1238,7 @@ function _setup_keyboard_interactions!(fig, state)
                         end
                     end
                 else
-                    # HACK! With shift - adjust ONLY channel scale without changing axis limits
+                    # Shift+Up/Down: rescale the plotted channel data only (axis limits stay unchanged)
                     if event.key == Keyboard.up && shift_pressed
                         state.channel_yscale[] = state.channel_yscale[] * 1.1
                     elseif event.key == Keyboard.down && shift_pressed

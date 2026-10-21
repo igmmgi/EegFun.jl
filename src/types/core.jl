@@ -392,8 +392,9 @@ end
 
 
 
-# === TIME INTERVAL TYPE ALIAS ===
-# Intervals are represented as selections or legacy types
+# === SELECTION TYPES AND INTERVAL ALIAS ===
+# Intervals are represented as `TimeSelection` / `AllSelection`; tuples, functions and
+# `nothing` are also accepted as shorthand (see `Interval` below).
 
 abstract type AbstractSelection end
 struct TimeSelection <: AbstractSelection

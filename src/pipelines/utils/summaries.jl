@@ -194,33 +194,33 @@ function summarize_electrode_repairs(file_pattern::String; input_dir::String = p
 
     for file in files
         file_path = joinpath(input_dir, file)
-        try
-            if isfile(file_path)
-                artifact_info = read_data(file_path)
-                base_filename = replace(file, "_artifact_info.jld2" => "")
-                file_repaired = Symbol[]
-                file_skipped  = Symbol[]
-                if !isnothing(artifact_info)
-                    for repair_info in artifact_info.continuous_repairs
-                        append!(file_repaired, repair_info.repaired)
-                        append!(file_skipped, repair_info.skipped)
-                        if !isempty(repair_info.repaired)
-                            push!(continuous_repairs, repair_info)
-                        end
-                    end
-                end
-                push!(
-                    per_file_data,
-                    (
-                        file     = base_filename,
-                        repaired = isempty(file_repaired) ? "none" : join(sort(string.(unique(file_repaired))), ", "),
-                        skipped  = isempty(file_skipped) ? "" : join(sort(string.(unique(file_skipped))), ", "),
-                    ),
-                )
-            end
+        isfile(file_path) || continue
+        artifact_info = try
+            read_data(file_path)
         catch e
-            @minimal_warning "Failed to load artifact info from $file_path: $e"
+            @minimal_warning "Failed to load artifact info from $file_path: $(sprint(showerror, e))"
+            continue
         end
+        base_filename = replace(file, "_artifact_info.jld2" => "")
+        file_repaired = Symbol[]
+        file_skipped  = Symbol[]
+        if !isnothing(artifact_info)
+            for repair_info in artifact_info.continuous_repairs
+                append!(file_repaired, repair_info.repaired)
+                append!(file_skipped, repair_info.skipped)
+                if !isempty(repair_info.repaired)
+                    push!(continuous_repairs, repair_info)
+                end
+            end
+        end
+        push!(
+            per_file_data,
+            (
+                file     = base_filename,
+                repaired = isempty(file_repaired) ? "none" : join(sort(string.(unique(file_repaired))), ", "),
+                skipped  = isempty(file_skipped) ? "" : join(sort(string.(unique(file_skipped))), ", "),
+            ),
+        )
     end
 
     per_file_df  = DataFrame(per_file_data)
@@ -331,16 +331,16 @@ function summarize_ica_components(file_pattern::String; input_dir::String = pwd(
 
     for file in files
         file_path = joinpath(input_dir, file)
-        try
-            if isfile(file_path)
-                artifact_info = read_data(file_path)
-                if !isnothing(artifact_info) && !isnothing(artifact_info.ica_components)
-                    push!(ica_components, artifact_info.ica_components)
-                    push!(filenames, file)
-                end
-            end
+        isfile(file_path) || continue
+        artifact_info = try
+            read_data(file_path)
         catch e
-            @minimal_warning "Failed to load artifact info from $file_path: $e"
+            @minimal_warning "Failed to load artifact info from $file_path: $(sprint(showerror, e))"
+            continue
+        end
+        if !isnothing(artifact_info) && !isnothing(artifact_info.ica_components)
+            push!(ica_components, artifact_info.ica_components)
+            push!(filenames, file)
         end
     end
 
