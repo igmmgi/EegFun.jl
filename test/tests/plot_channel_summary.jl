@@ -12,8 +12,8 @@ using Makie
         fig = Figure()
         ax = Axis(fig[1, 1])
 
-        # Should not throw an error
-        @test isnothing(EegFun.plot_channel_summary!(fig, ax, df, :std))
+        # Should return the modified axis
+        @test EegFun.plot_channel_summary!(fig, ax, df, :std) === ax
 
         # Test that the axis has been modified
         @test ax.title[] == ""  # Default title
@@ -28,18 +28,16 @@ using Makie
         ax = Axis(fig[1, 1])
 
         # Test with custom parameters
-        @test isnothing(
-            EegFun.plot_channel_summary!(
-                fig,
-                ax,
-                df,
-                :range,
-                plot_title = "Custom Title",
-                xlabel = "Custom X Label",
-                bar_color = :red,
-                sort_values = true,
-            ),
-        )
+        @test EegFun.plot_channel_summary!(
+            fig,
+            ax,
+            df,
+            :range,
+            plot_title = "Custom Title",
+            xlabel = "Custom X Label",
+            bar_color = :red,
+            sort_values = true,
+        ) === ax
 
         # Test that custom parameters were applied
         @test ax.title[] == "Custom Title"
@@ -53,7 +51,7 @@ using Makie
         ax = Axis(fig[1, 1])
 
         # Test with averaging over epochs
-        @test isnothing(EegFun.plot_channel_summary!(fig, ax, df, :std, average_over = :epoch, error_color = :blue, error_linewidth = 3))
+        @test EegFun.plot_channel_summary!(fig, ax, df, :std, average_over = :epoch, error_color = :blue, error_linewidth = 3) === ax
 
         # Should have error bars when averaging
         @test ax.ylabel[] == "std (± 95% CI n=3)"
