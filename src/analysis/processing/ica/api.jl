@@ -46,6 +46,7 @@ function run_ica(
     algorithm::Symbol = :infomax,
     use_gpu::Bool = false,
     params::IcaPrms = IcaPrms(),
+    rng::AbstractRNG = Random.default_rng(),
 )
     params.use_gpu = use_gpu || params.use_gpu
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
@@ -76,7 +77,7 @@ function run_ica(
 
     # Subset data if requested
     if percentage_of_data != 100
-        dat_for_ica = _select_subsample!(dat_for_ica, percentage_of_data)
+        dat_for_ica = _select_subsample!(dat_for_ica, percentage_of_data; rng = rng)
     end
 
     # Get filename from the data
@@ -84,7 +85,7 @@ function run_ica(
 
     # Dispatch to the appropriate ICA algorithm
     ica_result =
-        _run_ica_algorithm(dat_for_ica, ica_layout, input_filename; n_components = n_components, algorithm = algorithm, params = params)
+        _run_ica_algorithm(dat_for_ica, ica_layout, input_filename; n_components = n_components, algorithm = algorithm, params = params, rng = rng)
 
     return ica_result
 end
@@ -103,6 +104,7 @@ function run_ica(
     algorithm::Symbol = :infomax,
     use_gpu::Bool = false,
     params::IcaPrms = IcaPrms(),
+    rng::AbstractRNG = Random.default_rng(),
 )
     params.use_gpu = use_gpu || params.use_gpu
     isempty(epoched_data) && @minimal_error("Empty epoched_data vector provided")
@@ -134,7 +136,7 @@ function run_ica(
     # Create data matrix for ICA
     concatenated_matrix = _create_ica_data_matrix(concatenated_df, selected_channels, sample_indices)
     if percentage_of_data != 100
-        concatenated_matrix = _select_subsample!(concatenated_matrix, percentage_of_data)
+        concatenated_matrix = _select_subsample!(concatenated_matrix, percentage_of_data; rng = rng)
     end
 
     # Set n_components if not specified
@@ -164,6 +166,7 @@ function run_ica(
         n_components = n_components,
         algorithm = algorithm,
         params = params,
+        rng = rng,
     )
 
     return ica_result
@@ -260,7 +263,7 @@ Modifies the matrix in place by returning a subsampled view.
 # Returns
 - `Matrix{Float64}`: Subsampled matrix with fewer columns
 """
-function _select_subsample!(data_matrix::Matrix{Float64}, percentage::Real)
+function _select_subsample!(data_matrix::Matrix{Float64}, percentage::Real; rng::AbstractRNG = Random.default_rng())
     (percentage <= 0 || percentage > 100) && @minimal_error("percentage_of_data must be between 0 and 100, got $percentage")
 
     n_original_samples = size(data_matrix, 2)
@@ -272,7 +275,7 @@ function _select_subsample!(data_matrix::Matrix{Float64}, percentage::Real)
     end
 
     # Random sample selection (columns are samples in data_matrix)
-    sample_cols = randperm(n_original_samples)[1:n_target_samples]
+    sample_cols = randperm(rng, n_original_samples)[1:n_target_samples]
     subsampled_matrix = data_matrix[:, sort(sample_cols)]
 
     @info "Random sample: $n_target_samples of $n_original_samples ($(round(percentage, digits=1))%)"
@@ -335,16 +338,17 @@ function _run_ica_algorithm(
     n_components::Int,
     algorithm::Symbol = :infomax,
     params::IcaPrms = IcaPrms(),
+    rng::AbstractRNG = Random.default_rng(),
 )
     if algorithm == :infomax
-        return infomax_ica(dat_ica, layout, filename; n_components = n_components, params = params)
+        return infomax_ica(dat_ica, layout, filename; n_components = n_components, params = params, rng = rng)
     elseif algorithm == :infomax_extended
-        return infomax_extended_ica(dat_ica, layout, filename; n_components = n_components, params = params)
+        return infomax_extended_ica(dat_ica, layout, filename; n_components = n_components, params = params, rng = rng)
     elseif algorithm == :picard || algorithm == :picard_extended
         extended = algorithm == :picard_extended
-        return picard_ica(dat_ica, layout, filename; n_components = n_components, extended = extended, params = params)
+        return picard_ica(dat_ica, layout, filename; n_components = n_components, extended = extended, params = params, rng = rng)
     elseif algorithm == :amica
-        return amica_ica(dat_ica, layout, filename; n_components = n_components, params = params)
+        return amica_ica(dat_ica, layout, filename; n_components = n_components, params = params, rng = rng)
     else
         @minimal_error(
             "Unknown ICA algorithm: $algorithm. Supported algorithms: :infomax, :infomax_extended, :picard, :picard_extended, :amica"

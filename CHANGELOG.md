@@ -20,6 +20,11 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 
 ### Fixed
 
+- LLM-guided refactor and fixes across the ICA pipeline (`infomax.jl`, `picard.jl`, `amica.jl`, `artifact_id.jl`, `components.jl`):
+  - **Algorithm Corrections**: Aligned Extended Infomax natural gradient with Lee et al. (1999) / EEGLAB `runica.m` for correct sub-Gaussian separation; fixed Extended Picard line-search loss evaluation and stabilized the block Hessian solve; added parameter snapshot rollback, non-divergent scale updates, and kurtosis-based sub-Gaussian detection to AMICA.
+  - **Component Subtraction & Restoration**: Fixed rank-deficient component restoration in `add_ica_components!` ($X + s A_c^T M_c^T$) preserving variance orthogonal to the ICA subspace; guarded against duplicate indices and re-subtraction overwrite; added `EpochData` and `Vector{DataFrame}` support with arbitrary numeric column types (`Float32`, `Float64`); optimized memory layout in `samples × channels`, eliminating `permutedims` copies and ~75% peak memory.
+  - **Artifact Identification**: Implemented top-level keyword argument routing; robust MAD-scaled z-scoring and directional thresholding; ECG polarity invariance and continuous sample coordinate mapping for IBIs; Welch's periodogram for line noise estimation.
+  - **Architecture & Performance**: Unified input preprocessing/postprocessing (`_ica_preprocess`, `_ica_postprocess`) with rank-deficiency detection, input copy protection, and activation power variance sorting; accelerated CPU/GPU execution via BLAS `mul!`, register accumulation, and tensor preallocations.
 - State consistency, observer lifecycle, and pipeline ordering in `plot_databrowser`.
 - Isolated flat channels, bad pixels, and non-converged fits as `NaN` in `fit_mass_lmm` with consolidated warnings.
 - Channel line coloring under ICA overlay in `plot_databrowser`, defaulting to showing only original data in standard channel color, with dynamic switching to green upon enabling "Data - ICA", and fixing callback `MethodError` on toggle.

@@ -1,254 +1,511 @@
+# === Downstream ICA Components (Subtraction & Restoration) ===
+
 """
-    subtract_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
-    subtract_ica_components!(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
-    subtract_ica_components(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
-    subtract_ica_components(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
+    subtract_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Union{Function, Nothing} = nothing)
+    subtract_ica_components!(dfs::Vector{DataFrame}, ica::InfoIca; component_selection::Union{Function, Nothing} = nothing)
+    subtract_ica_components!(dat::ContinuousData, ica::InfoIca; component_selection::Union{Function, Nothing} = nothing)
+    subtract_ica_components!(dat::EpochData, ica::InfoIca; component_selection::Union{Function, Nothing} = nothing)
+    subtract_ica_components(dat, ica::InfoIca; component_selection::Union{Function, Nothing} = nothing)
 
 Remove ICA components from data. Mutating (`!`) versions operate in-place; non-mutating versions
 return a copy of the data with components removed along with an updated `InfoIca` object.
 
-# Example
+# Arguments
+- `dat`: `DataFrame`, `Vector{DataFrame}`, `ContinuousData`, or `EpochData`.
+- `ica::InfoIca`: ICA model containing mixing, unmixing, and scale information.
+- `component_selection::Union{Function, Nothing}`: Component selector specifying which components to remove.
+  An explicit selector (e.g. `components([1, 2])` or `components(artifact_indices)`) is required to prevent
+  accidental removal of all components. To intentionally subtract all components, pass `components()`.
+
+# Returns
+- Mutating versions (`!`): Returns the modified input data in-place.
+- Non-mutating versions: Returns `(cleaned_data, ica_updated)`.
+
+# Memory Note
+Stored activations in `ica.removed_activations` occupy `Float64` memory proportional to
+`k * n_samples` (e.g., ~14 MB per component per 30 minutes at 1 kHz). This allows exact lossless
+restoration via `add_ica_components!`. If saving `ica` to disk (e.g., via JLD2 or BSON), calling
+`empty!(ica.removed_activations)` reduces file size if restoration is no longer needed.
+
+# Examples
 ```julia
-# In-place
-subtract_ica_components!(dat, ica_result)
-
-# Non-mutating
-cleaned_dat, ica_updated = subtract_ica_components(dat, ica_result)
-
-# Select specific components
+# Remove artifact components (in-place)
 subtract_ica_components!(dat, ica_result, component_selection = components([1, 3, 5]))
+
+# Non-mutating version
+cleaned_dat, ica_updated = subtract_ica_components(dat, ica_result, component_selection = components([1, 3]))
 ```
 """
-
-
-# === Downstream Components ===
-function subtract_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
-    components_to_remove = get_selected_components(ica, component_selection)
-    n_components = size(ica.unmixing, 1)
-    if !all(1 .<= components_to_remove .<= n_components)
-        @minimal_error("Components must be between 1 and $n_components")
-    end
-
-    # Get data dimensions
-    n_channels = length(ica.layout.data.label)
-
-    # Get data and scale it
-    data = permutedims(Matrix(dat[!, ica.layout.data.label]))
-    data .-= ica.mean
-    data ./= ica.scale
-
-    # Get removed activations before transformation and store individually
-    all_removed_activations = view(ica.unmixing, components_to_remove, :) * data
-
-    # Store each component's activations separately
-    for (i, comp_idx) in enumerate(components_to_remove)
-        ica.removed_activations[comp_idx] = all_removed_activations[i:i, :]
-    end
-
-    # Pre-compute the transformation matrix
-    tra = Matrix(I, n_channels, n_channels) - view(ica.mixing, :, components_to_remove) * view(ica.unmixing, components_to_remove, :)
-
-    # Apply transformation and restore scaling
-    cleaned_data = tra * data
-    cleaned_data .*= ica.scale
-    cleaned_data .+= ica.mean
-
-    # Update DataFrame in-place
-    dat[!, ica.layout.data.label] .= permutedims(cleaned_data)
-
+function subtract_ica_components!(
+    dat::DataFrame,
+    ica::InfoIca;
+    component_selection::Union{Function, Nothing} = nothing,
+)
+    _subtract_ica_components!(dat, ica; component_selection = component_selection)
     return dat
 end
 
-"""Contiguous 2D matrix BLAS unmixing for epoched DataFrames (Vector{DataFrame})."""
-function subtract_ica_components!(dfs::Vector{DataFrame}, ica::InfoIca; component_selection::Function = components())
-    isempty(dfs) && return dfs
-    components_to_remove = get_selected_components(ica, component_selection)
-    n_components = size(ica.unmixing, 1)
-    if !all(1 .<= components_to_remove .<= n_components)
-        @minimal_error("Components must be between 1 and $n_components")
-    end
-
-    labels = ica.layout.data.label
-    n_channels = length(labels)
-    n_epochs = length(dfs)
-    n_samples_per_epoch = nrow(dfs[1])
-    n_total_samples = n_samples_per_epoch * n_epochs
-
-    # Extract all trial samples into a single contiguous matrix (n_channels × n_total_samples)
-    contig_data = Matrix{Float64}(undef, n_channels, n_total_samples)
-    for (ch_idx, ch) in enumerate(labels)
-        for (ep_idx, df) in enumerate(dfs)
-            col = df[!, ch]::Vector{Float64}
-            sample_offset = (ep_idx - 1) * n_samples_per_epoch
-            @inbounds @simd for i = 1:n_samples_per_epoch
-                contig_data[ch_idx, sample_offset+i] = col[i]
-            end
-        end
-    end
-
-    # Scale data
-    contig_data .-= ica.mean
-    contig_data ./= ica.scale
-
-    # Compute and store removed activations
-    all_removed_activations = view(ica.unmixing, components_to_remove, :) * contig_data
-    for (i, comp_idx) in enumerate(components_to_remove)
-        ica.removed_activations[comp_idx] = all_removed_activations[i:i, :]
-    end
-
-    # Pre-compute transformation matrix
-    tra = Matrix(I, n_channels, n_channels) - view(ica.mixing, :, components_to_remove) * view(ica.unmixing, components_to_remove, :)
-
-    # Clean data and restore scaling
-    cleaned_data = tra * contig_data
-    cleaned_data .*= ica.scale
-    cleaned_data .+= ica.mean
-
-    # Copy cleaned values back into trial DataFrames
-    for (ch_idx, ch) in enumerate(labels)
-        for (ep_idx, df) in enumerate(dfs)
-            col = df[!, ch]::Vector{Float64}
-            sample_offset = (ep_idx - 1) * n_samples_per_epoch
-            @inbounds @simd for i = 1:n_samples_per_epoch
-                col[i] = cleaned_data[ch_idx, sample_offset+i]
-            end
-        end
-    end
-
+function subtract_ica_components!(
+    dfs::Vector{DataFrame},
+    ica::InfoIca;
+    component_selection::Union{Function, Nothing} = nothing,
+)
+    _subtract_ica_components!(dfs, ica; component_selection = component_selection)
     return dfs
 end
 
-"""
-    subtract_ica_components(dat, ica::InfoIca; component_selection::Function = components())
-
-Non-mutating version of `subtract_ica_components!`.
-"""
-function subtract_ica_components(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
-    dat_out = copy(dat)
-    ica_out = copy(ica)  # Use our custom copy method
-    subtract_ica_components!(dat_out, ica_out, component_selection = component_selection)
-    return dat_out, ica_out
-end
-
-function subtract_ica_components(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
-    dat_out = copy(dat)
-    ica_out = copy(ica)  # Use our custom copy method
-    subtract_ica_components!(dat_out, ica_out, component_selection = component_selection)
-    return dat_out, ica_out
-end
-
-function subtract_ica_components!(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
-    subtract_ica_components!(dat.data, ica, component_selection = component_selection)
-
-    components_to_subtract = get_selected_components(ica, component_selection)
-    dat.analysis_info.n_ica_components_removed += length(components_to_subtract)
-
+function subtract_ica_components!(
+    dat::ContinuousData,
+    ica::InfoIca;
+    component_selection::Union{Function, Nothing} = nothing,
+)
+    actually_removed = _subtract_ica_components!(dat.data, ica; component_selection = component_selection)
+    dat.analysis_info.n_ica_components_removed += length(actually_removed)
     return dat
 end
 
+function subtract_ica_components!(
+    dat::EpochData,
+    ica::InfoIca;
+    component_selection::Union{Function, Nothing} = nothing,
+)
+    actually_removed = _subtract_ica_components!(dat.data, ica; component_selection = component_selection)
+    dat.analysis_info.n_ica_components_removed += length(actually_removed)
+    return dat
+end
+
+function subtract_ica_components(
+    dat::DataFrame,
+    ica::InfoIca;
+    component_selection::Union{Function, Nothing} = nothing,
+)
+    dat_out = copy(dat)
+    ica_out = copy(ica)
+    subtract_ica_components!(dat_out, ica_out; component_selection = component_selection)
+    return dat_out, ica_out
+end
+
+function subtract_ica_components(
+    dfs::Vector{DataFrame},
+    ica::InfoIca;
+    component_selection::Union{Function, Nothing} = nothing,
+)
+    dfs_out = [copy(df) for df in dfs]
+    ica_out = copy(ica)
+    subtract_ica_components!(dfs_out, ica_out; component_selection = component_selection)
+    return dfs_out, ica_out
+end
+
+function subtract_ica_components(
+    dat::ContinuousData,
+    ica::InfoIca;
+    component_selection::Union{Function, Nothing} = nothing,
+)
+    dat_out = copy(dat)
+    ica_out = copy(ica)
+    subtract_ica_components!(dat_out, ica_out; component_selection = component_selection)
+    return dat_out, ica_out
+end
+
+function subtract_ica_components(
+    dat::EpochData,
+    ica::InfoIca;
+    component_selection::Union{Function, Nothing} = nothing,
+)
+    dat_out = copy(dat)
+    ica_out = copy(ica)
+    subtract_ica_components!(dat_out, ica_out; component_selection = component_selection)
+    return dat_out, ica_out
+end
+
 
 """
-    add_ica_components!(dat::DataFrame, ica::InfoIca; component_selection = components())
-    add_ica_components!(dat::ContinuousData, ica::InfoIca; component_selection = components())
-    add_ica_components(dat::DataFrame, ica::InfoIca; component_selection = components())
-    add_ica_components(dat::ContinuousData, ica::InfoIca; component_selection = components())
+    add_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Union{Function, Nothing} = nothing)
+    add_ica_components!(dfs::Vector{DataFrame}, ica::InfoIca; component_selection::Union{Function, Nothing} = nothing)
+    add_ica_components!(dat::ContinuousData, ica::InfoIca; component_selection::Union{Function, Nothing} = nothing)
+    add_ica_components!(dat::EpochData, ica::InfoIca; component_selection::Union{Function, Nothing} = nothing)
+    add_ica_components(dat, ica::InfoIca; component_selection::Union{Function, Nothing} = nothing)
 
 Restore previously removed ICA components using stored activations.
 Mutating (`!`) versions operate in-place; non-mutating versions return a copy and an updated `InfoIca`.
 Components must have been removed first (activations stored in `ica.removed_activations`).
 
-# Example
+By default (`component_selection = nothing`), all currently removed components stored in
+`ica.removed_activations` are restored. You may also specify a subset (e.g. `components([1])`).
+
+# Arguments
+- `dat`: `DataFrame`, `Vector{DataFrame}`, `ContinuousData`, or `EpochData`.
+- `ica::InfoIca`: The ICA object containing stored component activations.
+- `component_selection::Union{Function, Nothing}`: Selector for components to restore. Defaults to all removed.
+
+# Returns
+- Mutating versions (`!`): Returns the restored input data in-place.
+- Non-mutating versions: Returns `(restored_data, ica_updated)`.
+
+# Examples
 ```julia
-# In-place
+# Restore all removed components
 add_ica_components!(dat, ica_result)
 
-# Non-mutating
-restored_dat, ica_updated = add_ica_components(dat, ica_result)
-
-# Select specific components to restore
-add_ica_components!(dat, ica_result, component_selection = components([1, 3]))
+# Restore specific component
+add_ica_components!(dat, ica_result, component_selection = components([1]))
 ```
 """
-function add_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
-    components_to_restore = get_selected_components(ica, component_selection)
-    n_components = size(ica.unmixing, 1)
-    if !all(1 .<= components_to_restore .<= n_components)
-        @minimal_error("Components must be between 1 and $n_components")
+function add_ica_components!(
+    dat::DataFrame,
+    ica::InfoIca;
+    component_selection::Union{Function, Nothing} = nothing,
+)
+    _add_ica_components!(dat, ica; component_selection = component_selection)
+    return dat
+end
+
+function add_ica_components!(
+    dfs::Vector{DataFrame},
+    ica::InfoIca;
+    component_selection::Union{Function, Nothing} = nothing,
+)
+    _add_ica_components!(dfs, ica; component_selection = component_selection)
+    return dfs
+end
+
+function add_ica_components!(
+    dat::ContinuousData,
+    ica::InfoIca;
+    component_selection::Union{Function, Nothing} = nothing,
+)
+    actually_added = _add_ica_components!(dat.data, ica; component_selection = component_selection)
+    dat.analysis_info.n_ica_components_removed -= length(actually_added)
+    return dat
+end
+
+function add_ica_components!(
+    dat::EpochData,
+    ica::InfoIca;
+    component_selection::Union{Function, Nothing} = nothing,
+)
+    actually_added = _add_ica_components!(dat.data, ica; component_selection = component_selection)
+    dat.analysis_info.n_ica_components_removed -= length(actually_added)
+    return dat
+end
+
+function add_ica_components(
+    dat::DataFrame,
+    ica::InfoIca;
+    component_selection::Union{Function, Nothing} = nothing,
+)
+    dat_out = copy(dat)
+    ica_out = copy(ica)
+    add_ica_components!(dat_out, ica_out; component_selection = component_selection)
+    return dat_out, ica_out
+end
+
+function add_ica_components(
+    dfs::Vector{DataFrame},
+    ica::InfoIca;
+    component_selection::Union{Function, Nothing} = nothing,
+)
+    dfs_out = [copy(df) for df in dfs]
+    ica_out = copy(ica)
+    add_ica_components!(dfs_out, ica_out; component_selection = component_selection)
+    return dfs_out, ica_out
+end
+
+function add_ica_components(
+    dat::ContinuousData,
+    ica::InfoIca;
+    component_selection::Union{Function, Nothing} = nothing,
+)
+    dat_out = copy(dat)
+    ica_out = copy(ica)
+    add_ica_components!(dat_out, ica_out; component_selection = component_selection)
+    return dat_out, ica_out
+end
+
+function add_ica_components(
+    dat::EpochData,
+    ica::InfoIca;
+    component_selection::Union{Function, Nothing} = nothing,
+)
+    dat_out = copy(dat)
+    ica_out = copy(ica)
+    add_ica_components!(dat_out, ica_out; component_selection = component_selection)
+    return dat_out, ica_out
+end
+
+
+# === Internal Core Algorithms ===
+
+"""
+    _subtract_core!(X::Matrix{Float64}, ica::InfoIca, comps::Vector{Int}) -> Matrix{Float64}
+
+In-place subtraction of selected ICA components from `X` (samples × channels).
+Computes activations `acts = (Uc * (X' - mean)) / scale` and performs:
+`X -= scale * acts' * Mc'` using BLAS `mul!`. Returns `acts` (k × samples).
+"""
+function _subtract_core!(X::Matrix{Float64}, ica::InfoIca, comps::Vector{Int})
+    Uc = ica.unmixing[comps, :] # k × n_channels (contiguous copy for BLAS)
+    Mc = ica.mixing[:, comps]   # n_channels × k (contiguous copy for BLAS)
+
+    # Compute component activations: acts has shape k × n_samples
+    acts = Uc * transpose(X)
+    acts .-= Uc * ica.mean
+    acts ./= ica.scale
+
+    # In-place subtract artifact projection: X -= scale * acts' * Mc'
+    mul!(X, transpose(acts), transpose(Mc), -ica.scale, 1.0)
+
+    return acts
+end
+
+"""
+    _add_core!(X::Matrix{Float64}, ica::InfoIca, comps::Vector{Int})
+
+In-place restoration of selected ICA components into `X` (samples × channels)
+using stored activations from `ica.removed_activations`.
+Performs: `X += scale * acts' * Mc'`.
+"""
+function _add_core!(X::Matrix{Float64}, ica::InfoIca, comps::Vector{Int})
+    n_samples = size(X, 1)
+    acts = reduce(vcat, [ica.removed_activations[c] for c in comps]) # k × n_samples
+    if size(acts, 2) != n_samples
+        @minimal_error "Stored activations have $(size(acts, 2)) samples, but data has $n_samples samples."
     end
 
-    # Check that all components to restore have stored activations
-    for comp in components_to_restore
-        if !haskey(ica.removed_activations, comp)
-            @minimal_error("Component $comp has no stored activations to restore")
+    Mc = ica.mixing[:, comps] # n_channels × k
+    mul!(X, transpose(acts), transpose(Mc), ica.scale, 1.0)
+    return nothing
+end
+
+"""Validate and filter components to be subtracted from an ICA model."""
+function _validate_and_filter_subtract_components(
+    ica::InfoIca,
+    component_selection::Union{Function, Nothing},
+)
+    if isnothing(component_selection)
+        @minimal_error "subtract_ica_components! requires an explicit 'component_selection' (e.g., component_selection = components([1, 2]) or components(artifacts)). To subtract all components, pass component_selection = components()."
+    end
+
+    raw_comps = get_selected_components(ica, component_selection)
+    comps = sort!(unique(raw_comps))
+    n_components = size(ica.unmixing, 1)
+    if !all(1 .<= comps .<= n_components)
+        @minimal_error "Selected components must be between 1 and $n_components"
+    end
+
+    already_removed = filter(c -> haskey(ica.removed_activations, c), comps)
+    if !isempty(already_removed)
+        @minimal_warning "Components $(already_removed) have already been removed from this ICA model and are in removed_activations. Skipping to avoid subtracting zeros or corrupting stored activations. Use a fresh copy(ica) or clear ica.removed_activations if applying to a new dataset."
+        comps = filter(c -> !haskey(ica.removed_activations, c), comps)
+    end
+
+    return comps
+end
+
+"""Validate and filter components to be restored to an ICA model."""
+function _validate_and_filter_add_components(
+    ica::InfoIca,
+    component_selection::Union{Function, Nothing},
+)
+    n_components = size(ica.unmixing, 1)
+    comps = if isnothing(component_selection)
+        sort(collect(keys(ica.removed_activations)))
+    else
+        sort!(unique(get_selected_components(ica, component_selection)))
+    end
+
+    if !all(1 .<= comps .<= n_components)
+        @minimal_error "Components must be between 1 and $n_components"
+    end
+
+    # If the user selected all components (1:n_components), interpret as restoring all removed components
+    if length(comps) == n_components && comps == collect(1:n_components)
+        comps = sort(collect(keys(ica.removed_activations)))
+    else
+        for comp in comps
+            if !haskey(ica.removed_activations, comp)
+                @minimal_error "Component $comp has no stored activations to restore."
+            end
         end
     end
 
-    # Get data and scale it
-    data = permutedims(Matrix(dat[!, ica.layout.data.label]))
-    data .-= ica.mean
-    data ./= ica.scale
-
-    # Get current activations
-    activations = ica.unmixing * data
-
-    # Restore each component's stored activations
-    for comp in components_to_restore
-        activations[comp, :] .= vec(ica.removed_activations[comp])
+    if isempty(comps)
+        @minimal_warning "No stored removed activations found to restore."
+        return Int[]
     end
 
-    # Back to channel space and restore scaling
-    restored_data = ica.mixing * activations
-    restored_data .*= ica.scale
-    restored_data .+= ica.mean
+    return comps
+end
 
-    # Update DataFrame in-place
-    dat[!, ica.layout.data.label] .= permutedims(restored_data)
+"""Internal DataFrame implementation of component subtraction."""
+function _subtract_ica_components!(
+    dat::DataFrame,
+    ica::InfoIca;
+    component_selection::Union{Function, Nothing} = nothing,
+)
+    comps = _validate_and_filter_subtract_components(ica, component_selection)
+    isempty(comps) && return Int[]
 
-    # Remove restored components from the removed_activations dictionary
-    for comp in components_to_restore
+    labels = ica.layout.data.label
+    X = Matrix{Float64}(dat[!, labels])
+    acts = _subtract_core!(X, ica, comps)
+
+    for (i, comp_idx) in enumerate(comps)
+        ica.removed_activations[comp_idx] = acts[i:i, :]
+    end
+
+    for (ch_idx, ch) in enumerate(labels)
+        copyto!(dat[!, ch], view(X, :, ch_idx))
+    end
+
+    return comps
+end
+
+"""Internal epoched Vector{DataFrame} implementation of component subtraction."""
+function _subtract_ica_components!(
+    dfs::Vector{DataFrame},
+    ica::InfoIca;
+    component_selection::Union{Function, Nothing} = nothing,
+)
+    isempty(dfs) && return Int[]
+    n_samples_per_epoch = nrow(dfs[1])
+    if !all(nrow(df) == n_samples_per_epoch for df in dfs)
+        @minimal_error "All epochs in Vector{DataFrame} must have the same number of samples ($n_samples_per_epoch)."
+    end
+
+    comps = _validate_and_filter_subtract_components(ica, component_selection)
+    isempty(comps) && return Int[]
+
+    labels = ica.layout.data.label
+    n_channels = length(labels)
+    n_epochs = length(dfs)
+    n_total_samples = n_samples_per_epoch * n_epochs
+
+    X = Matrix{Float64}(undef, n_total_samples, n_channels)
+    for (ch_idx, ch) in enumerate(labels)
+        col_out = view(X, :, ch_idx)
+        for (ep_idx, df) in enumerate(dfs)
+            src = df[!, ch]
+            offset = (ep_idx - 1) * n_samples_per_epoch
+            for s = 1:n_samples_per_epoch
+                col_out[offset + s] = src[s]
+            end
+        end
+    end
+
+    acts = _subtract_core!(X, ica, comps)
+
+    for (i, comp_idx) in enumerate(comps)
+        ica.removed_activations[comp_idx] = acts[i:i, :]
+    end
+
+    for (ch_idx, ch) in enumerate(labels)
+        col_in = view(X, :, ch_idx)
+        for (ep_idx, df) in enumerate(dfs)
+            dst = df[!, ch]
+            offset = (ep_idx - 1) * n_samples_per_epoch
+            for s = 1:n_samples_per_epoch
+                dst[s] = col_in[offset + s]
+            end
+        end
+    end
+
+    return comps
+end
+
+"""Internal DataFrame implementation of component restoration."""
+function _add_ica_components!(
+    dat::DataFrame,
+    ica::InfoIca;
+    component_selection::Union{Function, Nothing} = nothing,
+)
+    comps = _validate_and_filter_add_components(ica, component_selection)
+    isempty(comps) && return Int[]
+
+    labels = ica.layout.data.label
+    X = Matrix{Float64}(dat[!, labels])
+    _add_core!(X, ica, comps)
+
+    for (ch_idx, ch) in enumerate(labels)
+        copyto!(dat[!, ch], view(X, :, ch_idx))
+    end
+
+    for comp in comps
         delete!(ica.removed_activations, comp)
     end
 
-    return dat
+    return comps
 end
 
+"""Internal epoched Vector{DataFrame} implementation of component restoration."""
+function _add_ica_components!(
+    dfs::Vector{DataFrame},
+    ica::InfoIca;
+    component_selection::Union{Function, Nothing} = nothing,
+)
+    isempty(dfs) && return Int[]
+    n_samples_per_epoch = nrow(dfs[1])
+    if !all(nrow(df) == n_samples_per_epoch for df in dfs)
+        @minimal_error "All epochs in Vector{DataFrame} must have the same number of samples ($n_samples_per_epoch)."
+    end
 
-"""
-    add_ica_components(dat, ica::InfoIca; component_selection::Function = components())
+    comps = _validate_and_filter_add_components(ica, component_selection)
+    isempty(comps) && return Int[]
 
-Non-mutating version of `add_ica_components!`.
-"""
-function add_ica_components(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
-    dat_out = copy(dat)
-    ica_out = copy(ica)  # Use our custom copy method
-    add_ica_components!(dat_out, ica_out, component_selection = component_selection)
-    return dat_out, ica_out
-end
+    labels = ica.layout.data.label
+    n_channels = length(labels)
+    n_epochs = length(dfs)
+    n_total_samples = n_samples_per_epoch * n_epochs
 
+    X = Matrix{Float64}(undef, n_total_samples, n_channels)
+    for (ch_idx, ch) in enumerate(labels)
+        col_out = view(X, :, ch_idx)
+        for (ep_idx, df) in enumerate(dfs)
+            src = df[!, ch]
+            offset = (ep_idx - 1) * n_samples_per_epoch
+            for s = 1:n_samples_per_epoch
+                col_out[offset + s] = src[s]
+            end
+        end
+    end
 
-function add_ica_components(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
-    dat_out = copy(dat)
-    ica_out = copy(ica)  # Use our custom copy method
-    add_ica_components!(dat_out, ica_out, component_selection = component_selection)
-    return dat_out, ica_out
-end
+    _add_core!(X, ica, comps)
 
+    for (ch_idx, ch) in enumerate(labels)
+        col_in = view(X, :, ch_idx)
+        for (ep_idx, df) in enumerate(dfs)
+            dst = df[!, ch]
+            offset = (ep_idx - 1) * n_samples_per_epoch
+            for s = 1:n_samples_per_epoch
+                dst[s] = col_in[offset + s]
+            end
+        end
+    end
 
-function add_ica_components!(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
-    add_ica_components!(dat.data, ica, component_selection = component_selection)
+    for comp in comps
+        delete!(ica.removed_activations, comp)
+    end
 
-    components_to_add = get_selected_components(ica, component_selection)
-    dat.analysis_info.n_ica_components_removed -= length(components_to_add)
-
-    return dat
+    return comps
 end
 
 
 # Function barrier forces Julia to compile a fast inner loop for the concrete type of `src`
-function _copy_col_to_matrix!(dst::Matrix{Float64}, col_idx::Int, src::AbstractVector, selected_samples::Vector{Int})
+function _copy_col_to_matrix!(
+    dst::Matrix{Float64},
+    col_idx::Int,
+    src::AbstractVector,
+    selected_samples::Vector{Int},
+)
+    isempty(selected_samples) && return dst
+    min_idx, max_idx = extrema(selected_samples)
+    if min_idx < 1 || max_idx > length(src)
+        @minimal_error "Sample indices out of bounds: range [$min_idx, $max_idx] exceeds column length $(length(src))"
+    end
     @inbounds for (j, sample_idx) in enumerate(selected_samples)
         dst[col_idx, j] = src[sample_idx]
     end
+    return dst
 end
 
 """
@@ -256,7 +513,7 @@ end
 
 Prepare data matrix and calculate ICA components for selected samples.
 
-Extracts relevant channels, permutes to channels × samples format, centers (subtracts mean), 
+Extracts relevant channels, permutes to channels × samples format, centers (subtracts sample mean), 
 scales by ICA scale factor, and applies the unmixing matrix to compute components.
 
 # Arguments
@@ -267,11 +524,24 @@ scales by ICA scale factor, and applies the unmixing matrix to compute component
 # Returns
 - `components::Matrix{Float64}`: ICA components (n_components × n_samples)
 - `n_components::Int`: Number of ICA components
+
+# Note
+`_prepare_ica_data_matrix` centers with the mean of the selected samples (`mean(dat_matrix, dims = 2)`),
+which is appropriate for sample statistics (correlations, spectra, kurtosis). This differs from
+`subtract_ica_components!`, which centers with `ica.mean` (and mathematically cancels when projected back).
 """
 function _prepare_ica_data_matrix(dat::ContinuousData, ica::InfoIca, selected_samples::Vector{Int})
     relevant_cols = ica.layout.data.label
     n_samples = length(selected_samples)
     n_channels = length(relevant_cols)
+    n_data_samples = nrow(dat.data)
+
+    if !isempty(selected_samples)
+        min_idx, max_idx = extrema(selected_samples)
+        if min_idx < 1 || max_idx > n_data_samples
+            @minimal_error "Selected sample indices out of bounds: [$min_idx, $max_idx] vs data length $n_data_samples"
+        end
+    end
 
     # Pre-allocate to avoid huge DataFrame indexing and permutedims overhead
     dat_matrix = Matrix{Float64}(undef, n_channels, n_samples)
@@ -289,4 +559,3 @@ function _prepare_ica_data_matrix(dat::ContinuousData, ica::InfoIca, selected_sa
 
     return components, n_components
 end
-

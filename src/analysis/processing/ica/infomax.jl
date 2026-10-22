@@ -1,97 +1,215 @@
-
-
 # === ICA (Infomax) ===
 # === INFOMAX ICA IMPLEMENTATION ===
 
-"""Standard Infomax ICA implementation (super-Gaussian sources only)."""
-function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String; n_components::Int, params::IcaPrms = IcaPrms())
+"""
+    _ica_preprocess(dat_ica::Matrix{Float64}, n_components::Int, params::IcaPrms)
 
-    # Store original mean before removing it
-    original_mean = vec(mean(dat_ica, dims = 2))
-
+Shared preprocessing helper for Infomax and Extended Infomax ICA:
+- Validates dimensions and sample size
+- Detects rank deficiency (e.g. from average referencing)
+- Centers and scales data without mutating the caller's matrix
+- Copies params to avoid mutating caller parameters
+- Computes PCA reduction and analytic sphering via SVD
+- Configures CPU or GPU work buffers and block size
+"""
+function _ica_preprocess(
+    dat_ica::Matrix{Float64},
+    n_components::Int,
+    params::IcaPrms,
+)
     n_channels, n_samples = size(dat_ica)
 
-    # Center and scale data
-    dat_ica .-= original_mean
-    scale = sqrt(norm((dat_ica * transpose(dat_ica)) / n_samples))
-    dat_ica ./= scale
+    # 1. Guards on n_components
+    if n_components <= 0
+        @minimal_error "n_components must be positive, got $n_components"
+    end
+    if n_components > n_channels
+        @minimal_error "Requested $n_components components but only $n_channels channels available."
+    end
 
-    # PCA reduction using high-precision SVD
-    # This prevents smallest components from degrading into numerical noise
-    F = svd(dat_ica)
+    # 2. Sample size check
+    min_samples = 20 * n_components^2
+    if n_samples < min_samples
+        @minimal_warning "Sample size ($n_samples) is small for $n_components components (< 20 * n_components^2 = $min_samples). ICA decomposition may be unreliable."
+    end
+
+    # 3. Non-mutating copy of inputs
+    dat = copy(dat_ica)
+    prms = deepcopy(params)
+
+    # 4. Center and scale data
+    original_mean = vec(mean(dat, dims = 2))
+    dat .-= original_mean
+    scale = sqrt(norm((dat * transpose(dat)) / n_samples))
+    dat ./= scale
+
+    # 5. SVD and rank check
+    F = svd!(dat)
+    s_max = F.S[1]
+    s_target = F.S[n_components]
+    if s_max > 0 && (s_target / s_max < 1e-7 || s_target < 1e-10)
+        eff_rank = count(s -> (s / s_max) > 1e-7, F.S)
+        @minimal_error "Data is rank-deficient for requested $n_components components (singular value ratio = $(round(s_target / s_max, sigdigits=3))). Estimated rank is $eff_rank. Please set n_components <= $eff_rank (e.g. n_channels - 1 for average-referenced data)."
+    end
+
     pca_components = F.U[:, 1:n_components]
-
-    # Analytic sphering using exact singular values (skips a 260 MiB workspace allocation)
     eigenvalues = (F.S[1:n_components] .^ 2) ./ (n_samples - 1)
     sphere = diagm(1.0 ./ sqrt.(eigenvalues))
 
-    # Apply transform and create final workspace matrix (n_components × n_samples)
-    transform_matrix = sphere * transpose(pca_components)
-    dat_ica_sphered = Matrix{Float64}(undef, n_components, n_samples)
-    mul!(dat_ica_sphered, transform_matrix, dat_ica)
-    dat_ica = dat_ica_sphered
+    # Analytic sphering: sqrt(n_samples - 1) * V^T matches sphere * pca_components' * dat
+    dat_sphered = Matrix{Float64}(undef, n_components, n_samples)
+    dat_sphered .= sqrt(n_samples - 1) .* F.Vt[1:n_components, :]
 
-    # initialize
-    n_channels = size(dat_ica, 1)
-    n_samples = size(dat_ica, 2)
-
-    # Detect GPU hardware backend
+    # 6. GPU backend detection and block sizing
     gpu_active = false
-    if params.use_gpu
+    if prms.use_gpu
         if is_gpu_available()
             gpu_active = true
-            @info "[GPU ACTIVATED] Running Infomax ICA on $(gpu_device_name())..."
-
-            # Dynamically calculate GPU block size
+            @info "[GPU ACTIVATED] Running ICA on $(gpu_device_name())..."
             cpu_block = min(nextpow(2, max(Int(floor(sqrt(n_samples / 3.0))), 1)), 512)
             gpu_block = min(nextpow(2, cpu_block * 4), 1024)
             block = min(n_samples, max(gpu_block, 32))
-
-            work = create_work_arrays(n_channels, block)
+            work = create_work_arrays(n_components, block)
         else
             @minimal_warning "Requested GPU acceleration (use_gpu=true), but no functional GPU package (CUDA.jl, AMDGPU.jl, Metal.jl) has been loaded. Please run 'using CUDA' or 'using AMDGPU' before calling run_ica. Falling back to CPU."
             raw_block = Int(floor(sqrt(n_samples / 3.0)))
             block = min(nextpow(2, max(raw_block, 1)), 512)
-            work = create_work_arrays(n_channels, block)
+            work = create_work_arrays(n_components, block)
         end
     else
         raw_block = Int(floor(sqrt(n_samples / 3.0)))
         block = min(nextpow(2, max(raw_block, 1)), 512)
-        work = create_work_arrays(n_channels, block)
+        work = create_work_arrays(n_components, block)
     end
 
-    if gpu_active
-        _infomax_optimize_gpu!(work, dat_ica, params, block)
-    else
-        _infomax_optimize_cpu!(work, dat_ica, params, block)
-    end
+    return (
+        dat_sphered = dat_sphered,
+        sphere = sphere,
+        pca_components = pca_components,
+        scale = scale,
+        original_mean = original_mean,
+        prms = prms,
+        block = block,
+        gpu_active = gpu_active,
+        work = work,
+        n_samples = n_samples,
+    )
+end
 
-    # Final calculations
-    work.weights = work.weights * sphere * pca_components'
-    mixing = pinv(work.weights)
+"""
+    _ica_postprocess(work, sphere, pca_components, scale, original_mean, n_samples, n_components, filename, layout, is_sub_gaussian)
 
-    # calculate total variance explained and order
-    meanvar = vec(sum(abs2, mixing, dims = 1) .* sum(abs2, dat_ica, dims = 2)' ./ (n_components * n_samples - 1))
+Shared postprocessing helper for Infomax and Extended Infomax ICA:
+- Computes unmixing matrix from sensor space
+- Computes mixing matrix via pseudoinverse
+- Calculates component variance explained from activation power and mixing norms (EEGLAB runica method)
+- Orders components by descending variance explained
+- Constructs and returns the InfoIca result
+"""
+function _ica_postprocess(
+    W_ica::Matrix{Float64},
+    sphere::Matrix{Float64},
+    pca_components::Matrix{Float64},
+    scale::Float64,
+    original_mean::Vector{Float64},
+    n_samples::Int,
+    n_components::Int,
+    filename::String,
+    layout::Layout,
+    is_sub_gaussian::BitVector,
+)
+    # Exact activation power on whitened data (EEGLAB runica method):
+    # Activation variance = (n_samples - 1) * sum(abs2, W_ica, dims=2)
+    act_power = (n_samples - 1) .* vec(sum(abs2, W_ica; dims = 2))
+
+    # Full unmixing matrix from sensor space
+    unmixing = W_ica * sphere * transpose(pca_components)
+    mixing = pinv(unmixing)
+
+    # Total variance explained per component and order descending
+    meanvar = vec(sum(abs2, mixing; dims = 1)) .* act_power ./ (n_components * n_samples - 1)
     meanvar_normalized = meanvar ./ sum(meanvar)
     order = sortperm(meanvar_normalized, rev = true)
 
     return InfoIca(
         filename,
-        work.weights[order, :],
+        unmixing[order, :],
         mixing[:, order],
         sphere,
         meanvar_normalized[order],
         scale,
         original_mean,
-        [Symbol("IC$i") for i = 1:size(work.weights, 1)],
+        [Symbol("IC$i") for i = 1:size(unmixing, 1)],
         Dict{Int,Matrix{Float64}}(),
         layout,
-        falses(size(work.weights, 1)),  # Regular Infomax: all super-Gaussian (all false)
+        is_sub_gaussian[order],
     )
-
 end
 
-function _infomax_optimize_cpu!(work::WorkArrays, dat_ica::Matrix{Float64}, params::IcaPrms, block::Int)
+function _ica_postprocess(
+    work::WorkArrays,
+    sphere::Matrix{Float64},
+    pca_components::Matrix{Float64},
+    scale::Float64,
+    original_mean::Vector{Float64},
+    n_samples::Int,
+    n_components::Int,
+    filename::String,
+    layout::Layout,
+    is_sub_gaussian::BitVector,
+)
+    return _ica_postprocess(
+        work.weights,
+        sphere,
+        pca_components,
+        scale,
+        original_mean,
+        n_samples,
+        n_components,
+        filename,
+        layout,
+        is_sub_gaussian,
+    )
+end
+
+"""Standard Infomax ICA implementation (super-Gaussian sources only)."""
+function infomax_ica(
+    dat_ica::Matrix{Float64},
+    layout::Layout,
+    filename::String;
+    n_components::Int,
+    params::IcaPrms = IcaPrms(),
+    rng::AbstractRNG = Random.default_rng(),
+)
+    prep = _ica_preprocess(dat_ica, n_components, params)
+
+    if prep.gpu_active
+        _infomax_optimize_gpu!(prep.work, prep.dat_sphered, prep.prms, prep.block, rng)
+    else
+        _infomax_optimize_cpu!(prep.work, prep.dat_sphered, prep.prms, prep.block, rng)
+    end
+
+    return _ica_postprocess(
+        prep.work,
+        prep.sphere,
+        prep.pca_components,
+        prep.scale,
+        prep.original_mean,
+        prep.n_samples,
+        n_components,
+        filename,
+        layout,
+        falses(n_components),
+    )
+end
+
+function _infomax_optimize_cpu!(
+    work::WorkArrays,
+    dat_ica::Matrix{Float64},
+    params::IcaPrms,
+    block::Int,
+    rng::AbstractRNG = Random.default_rng(),
+)
     n_channels, n_samples = size(dat_ica)
     n_components = n_channels
 
@@ -100,11 +218,12 @@ function _infomax_optimize_cpu!(work::WorkArrays, dat_ica::Matrix{Float64}, para
     change = 0.0
     oldchange = 0.0
     angledelta = 0.0
+    converged = false
 
     permute_indices = Vector{Int}(undef, n_samples)
 
     @inbounds while step < params.max_iter
-        randperm!(permute_indices)
+        randperm!(rng, permute_indices)
 
         for t = 1:block:n_samples
             block_end = min(t + block - 1, n_samples)
@@ -119,17 +238,18 @@ function _infomax_optimize_cpu!(work::WorkArrays, dat_ica::Matrix{Float64}, para
             end
 
             # forward pass & weight update
+            # Using -tanh(0.5 * u) avoids @fastmath overflow on exp(-u)
             if block_size < block
                 mul!(view(work.u, :, 1:block_size), work.weights, view(work.data_block, :, 1:block_size))
                 len = n_components * block_size
                 @fastmath @inbounds @simd for k = 1:len
-                    work.y[k] = 1.0 - 2.0 / (1.0 + exp(-work.u[k]))
+                    work.y[k] = -tanh(0.5 * work.u[k])
                 end
                 mul!(work.wu_term, view(work.y, :, 1:block_size), transpose(view(work.u, :, 1:block_size)))
             else
                 mul!(work.u, work.weights, work.data_block)
                 @fastmath @inbounds @simd for k in eachindex(work.y)
-                    work.y[k] = 1.0 - 2.0 / (1.0 + exp(-work.u[k]))
+                    work.y[k] = -tanh(0.5 * work.u[k])
                 end
                 mul!(work.wu_term, work.y, transpose(work.u))
             end
@@ -157,6 +277,9 @@ function _infomax_optimize_cpu!(work::WorkArrays, dat_ica::Matrix{Float64}, para
             change = NaN
             wts_blowup = false
             params.l_rate *= params.restart_factor
+            if params.l_rate < 1e-6
+                @minimal_error "Infomax failed to converge: learning rate fell below minimum floor (1e-6) due to repeated weight blow-ups. Check data for rank deficiency or artifacts."
+            end
             work.weights .= work.startweights
             work.oldweights .= work.startweights
             continue
@@ -169,7 +292,10 @@ function _infomax_optimize_cpu!(work::WorkArrays, dat_ica::Matrix{Float64}, para
                 work.olddelta .= work.delta
                 oldchange = change
             end
-            change < params.w_change && break
+            if change < params.w_change
+                converged = true
+                break
+            end
         elseif step == 1
             work.olddelta .= work.delta
             oldchange = change
@@ -188,6 +314,10 @@ function _infomax_optimize_cpu!(work::WorkArrays, dat_ica::Matrix{Float64}, para
             )
         end
     end
+
+    if !converged
+        @minimal_warning "Infomax reached maximum iterations ($(params.max_iter)) without converging (final change = $change, target = $(params.w_change))."
+    end
 end
 
 
@@ -195,19 +325,21 @@ end
 # === EXTENDED INFOMAX ICA IMPLEMENTATION ===
 
 """
-    infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout; n_components::Int, params::IcaPrms = IcaPrms())
+    infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String; n_components::Int, params::IcaPrms = IcaPrms(), rng::AbstractRNG = Random.default_rng())
 
 Extended Infomax algorithm implementation that can separate both sub-Gaussian and super-Gaussian sources.
 
 Extended Infomax is an enhancement of the standard Infomax algorithm that adapts to the statistical
 properties of source signals. It uses kurtosis-based switching to handle both sub-Gaussian (kurtosis < 0)
-and super-Gaussian (kurtosis > 0) sources, making it more versatile than standard Infomax.
+and super-Gaussian (kurtosis > 0) sources, following the natural gradient rule of Lee, Girolami, & Sejnowski (1999).
 
 # Arguments
 - `dat_ica::Matrix{Float64}`: Data matrix (channels × samples), should be preprocessed
 - `layout::Layout`: Layout information for channels
+- `filename::String`: Filename or label for the dataset
 - `n_components::Int`: Number of ICA components to extract
 - `params::IcaPrms`: ICA parameters (uses max_iter, w_change from params)
+- `rng::AbstractRNG`: Random number generator for reproducible permutations
 
 # Returns
 `InfoIca` with unmixing, mixing, sphere, variance, and metadata.
@@ -216,97 +348,38 @@ and super-Gaussian (kurtosis > 0) sources, making it more versatile than standar
 Lee, T. W., Girolami, M., & Sejnowski, T. J. (1999). Independent component analysis using an extended 
 infomax algorithm for mixed subgaussian and supergaussian sources. Neural computation, 11(2), 417-441.
 """
-function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String; n_components::Int, params::IcaPrms = IcaPrms())
+function infomax_extended_ica(
+    dat_ica::Matrix{Float64},
+    layout::Layout,
+    filename::String;
+    n_components::Int,
+    params::IcaPrms = IcaPrms(),
+    rng::AbstractRNG = Random.default_rng(),
+)
+    prep = _ica_preprocess(dat_ica, n_components, params)
+    is_sub_gaussian = falses(n_components)
 
-    # Store original mean before removing it
-    original_mean = vec(mean(dat_ica, dims = 2))
-
-    n_channels, n_samples = size(dat_ica)
-
-    # Center and scale data
-    dat_ica .-= original_mean
-    scale = sqrt(norm((dat_ica * transpose(dat_ica)) / n_samples))
-    dat_ica ./= scale
-
-    # PCA reduction using high-precision SVD
-    # This prevents smallest components from degrading into numerical noise
-    F = svd(dat_ica)
-    pca_components = F.U[:, 1:n_components]
-
-    # Analytic sphering using exact singular values (skips a 260 MiB workspace allocation)
-    eigenvalues = (F.S[1:n_components] .^ 2) ./ (n_samples - 1)
-    sphere = diagm(1.0 ./ sqrt.(eigenvalues))
-
-    # Apply transform and create final workspace matrix (n_components × n_samples)
-    transform_matrix = sphere * transpose(pca_components)
-    dat_ica_sphered = Matrix{Float64}(undef, n_components, n_samples)
-    mul!(dat_ica_sphered, transform_matrix, dat_ica)
-    dat_ica = dat_ica_sphered
-
-    # initialize
-    n_channels = size(dat_ica, 1)
-    n_samples = size(dat_ica, 2)
-
-    # Track kurtosis signs for each component (true = sub-Gaussian, false = super-Gaussian)
-    is_sub_gaussian = falses(n_channels)
-
-    # Detect GPU hardware backend
-    gpu_active = false
-    if params.use_gpu
-        if is_gpu_available()
-            gpu_active = true
-            @info "[GPU ACTIVATED] Running Extended Infomax ICA on $(gpu_device_name())..."
-
-            # Dynamically calculate GPU block size
-            cpu_block = min(nextpow(2, max(Int(floor(sqrt(n_samples / 3.0))), 1)), 512)
-            gpu_block = min(nextpow(2, cpu_block * 4), 1024)
-            block = min(n_samples, max(gpu_block, 32))
-
-            work = create_work_arrays(n_channels, block)
-        else
-            @minimal_warning "Requested GPU acceleration (use_gpu=true), but no functional GPU package (CUDA.jl, AMDGPU.jl, Metal.jl) has been loaded. Please run 'using CUDA' or 'using AMDGPU' before calling run_ica. Falling back to CPU."
-            raw_block = Int(floor(sqrt(n_samples / 3.0)))
-            block = min(nextpow(2, max(raw_block, 1)), 512)
-            work = create_work_arrays(n_channels, block)
-        end
+    if prep.gpu_active
+        _infomax_extended_optimize_gpu!(prep.work, prep.dat_sphered, prep.prms, prep.block, is_sub_gaussian, rng)
     else
-        raw_block = Int(floor(sqrt(n_samples / 3.0)))
-        block = min(nextpow(2, max(raw_block, 1)), 512)
-        work = create_work_arrays(n_channels, block)
+        _infomax_extended_optimize_cpu!(prep.work, prep.dat_sphered, prep.prms, prep.block, is_sub_gaussian, rng)
     end
 
-    if gpu_active
-        _infomax_extended_optimize_gpu!(work, dat_ica, params, block, is_sub_gaussian)
-    else
-        _infomax_extended_optimize_cpu!(work, dat_ica, params, block, is_sub_gaussian)
-    end
-
-    # Final calculations
-    work.weights = work.weights * sphere * pca_components'
-    mixing = pinv(work.weights)
-
-    # Log final kurtosis distribution
     n_sub_final = count(is_sub_gaussian)
-    n_super_final = n_channels - n_sub_final
+    n_super_final = n_components - n_sub_final
     @info "Extended Infomax completed: sup/sub-gauss ($n_super_final/$n_sub_final)"
 
-    # calculate total variance explained and order
-    meanvar = vec(sum(abs2, mixing, dims = 1) .* sum(abs2, dat_ica, dims = 2)' ./ (n_components * n_samples - 1))
-    meanvar_normalized = meanvar ./ sum(meanvar)
-    order = sortperm(meanvar_normalized, rev = true)
-
-    return InfoIca(
+    return _ica_postprocess(
+        prep.work,
+        prep.sphere,
+        prep.pca_components,
+        prep.scale,
+        prep.original_mean,
+        prep.n_samples,
+        n_components,
         filename,
-        work.weights[order, :],
-        mixing[:, order],
-        sphere,
-        meanvar_normalized[order],
-        scale,
-        original_mean,
-        [Symbol("IC$i") for i = 1:size(work.weights, 1)],
-        Dict{Int,Matrix{Float64}}(),
         layout,
-        is_sub_gaussian[order],
+        is_sub_gaussian,
     )
 end
 
@@ -316,6 +389,7 @@ function _infomax_extended_optimize_cpu!(
     params::IcaPrms,
     block::Int,
     is_sub_gaussian::BitVector,
+    rng::AbstractRNG = Random.default_rng(),
 )
     n_channels, n_samples = size(dat_ica)
     n_components = n_channels
@@ -328,6 +402,7 @@ function _infomax_extended_optimize_cpu!(
     change = 0.0
     oldchange = 0.0
     angledelta = 0.0
+    converged = false
 
     permute_indices = Vector{Int}(undef, n_samples)
 
@@ -335,13 +410,12 @@ function _infomax_extended_optimize_cpu!(
     kurtsize = min(2000, n_samples)
     kurt_data = Matrix{Float64}(undef, n_channels, kurtsize)
     activations = Matrix{Float64}(undef, n_channels, kurtsize)
-    kurtosis_values = Vector{Float64}(undef, n_channels)
 
     n_super = n_channels
     n_sub = 0
 
     @inbounds while step < params.max_iter
-        randperm!(permute_indices)
+        randperm!(rng, permute_indices)
 
         for t = 1:block:n_samples
             block_end = min(t + block - 1, n_samples)
@@ -355,53 +429,55 @@ function _infomax_extended_optimize_cpu!(
                 end
             end
 
-            # forward pass
+            # forward pass: u = W * x
             if block_size < block
-                mul!(view(work.u, :, 1:block_size), work.weights, view(work.data_block, :, 1:block_size))
-                # Extended Infomax: fast flat SIMD when all channels super-Gaussian, else vectorized per-channel
-                if !any(is_sub_gaussian)
-                    len = n_channels * block_size
-                    @fastmath @inbounds @simd for k = 1:len
-                        work.y[k] = 1.0 - 2.0 / (1.0 + exp(-work.u[k]))
-                    end
-                else
-                    @fastmath @inbounds for i = 1:n_channels
-                        if !is_sub_gaussian[i]
-                            @simd for j = 1:block_size
-                                work.y[i, j] = 1.0 - 2.0 / (1.0 + exp(-work.u[i, j]))
-                            end
-                        else
-                            @simd for j = 1:block_size
-                                work.y[i, j] = -tanh(work.u[i, j])
-                            end
-                        end
+                u_block = view(work.u, :, 1:block_size)
+                y_block = view(work.y, :, 1:block_size)
+                mul!(u_block, work.weights, view(work.data_block, :, 1:block_size))
+
+                # Lee et al. (1999) update rule:
+                # y = tanh(u)
+                len = n_channels * block_size
+                @fastmath @inbounds @simd for k = 1:len
+                    work.y[k] = tanh(work.u[k])
+                end
+
+                # wu_term = y * u'
+                mul!(work.wu_term, y_block, transpose(u_block))
+
+                # Apply K = -1 for sub-Gaussian sources, K = +1 for super-Gaussian sources
+                for i = 1:n_channels
+                    if is_sub_gaussian[i]
+                        work.wu_term[i, :] .*= -1.0
                     end
                 end
-                mul!(work.wu_term, view(work.y, :, 1:block_size), transpose(view(work.u, :, 1:block_size)))
+
+                # Add u * u' term: wu_term += u * u'
+                mul!(work.wu_term, u_block, transpose(u_block), 1.0, 1.0)
             else
                 mul!(work.u, work.weights, work.data_block)
-                if !any(is_sub_gaussian)
-                    @fastmath @inbounds @simd for k in eachindex(work.y)
-                        work.y[k] = 1.0 - 2.0 / (1.0 + exp(-work.u[k]))
-                    end
-                else
-                    @fastmath @inbounds for i = 1:n_channels
-                        if !is_sub_gaussian[i]
-                            @simd for j = 1:block_size
-                                work.y[i, j] = 1.0 - 2.0 / (1.0 + exp(-work.u[i, j]))
-                            end
-                        else
-                            @simd for j = 1:block_size
-                                work.y[i, j] = -tanh(work.u[i, j])
-                            end
-                        end
+
+                @fastmath @inbounds @simd for k in eachindex(work.y)
+                    work.y[k] = tanh(work.u[k])
+                end
+
+                mul!(work.wu_term, work.y, transpose(work.u))
+
+                for i = 1:n_channels
+                    if is_sub_gaussian[i]
+                        work.wu_term[i, :] .*= -1.0
                     end
                 end
-                mul!(work.wu_term, work.y, transpose(work.u))
+
+                mul!(work.wu_term, work.u, transpose(work.u), 1.0, 1.0)
             end
 
+            # weights_temp = wu_term * weights
             mul!(work.weights_temp, work.wu_term, work.weights)
-            @. work.weights += params.l_rate * (block_size * work.weights + work.weights_temp)
+
+            # weights += l_rate * (block_size * weights - weights_temp)
+            # Note the minus sign according to Lee et al. (1999): ΔW ∝ (B*I - wu_term) * W
+            @. work.weights += params.l_rate * (block_size * work.weights - work.weights_temp)
 
             if maximum(abs, work.weights) > params.max_weight
                 wts_blowup = true
@@ -422,6 +498,9 @@ function _infomax_extended_optimize_cpu!(
             change = NaN
             wts_blowup = false
             params.l_rate *= params.restart_factor
+            if params.l_rate < 1e-6
+                @minimal_error "Extended Infomax failed to converge: learning rate fell below minimum floor (1e-6) due to repeated weight blow-ups. Check data for rank deficiency or artifacts."
+            end
             work.weights .= work.startweights
             work.oldweights .= work.startweights
             continue
@@ -429,13 +508,10 @@ function _infomax_extended_optimize_cpu!(
 
         # Extended Infomax: update kurtosis signs periodically
         if step > 10 && step % 10 == 0
-            n_switched = 0
-
-            # Vectorized BLAS GEMM activation extraction
+            # Sample using already-shuffled permute_indices (zero extra allocations)
             if kurtsize < n_samples
-                rp = randperm(n_samples)[1:kurtsize]
                 @inbounds for j = 1:kurtsize
-                    idx = rp[j]
+                    idx = permute_indices[j]
                     @simd for k = 1:n_channels
                         kurt_data[k, j] = dat_ica[k, idx]
                     end
@@ -465,17 +541,10 @@ function _infomax_extended_optimize_cpu!(
                         kurtosis = kurtosis_raw
                     end
                     old_kurtosis[i] = kurtosis
-                    kurtosis_values[i] = kurtosis
 
                     kurtosis_threshold = 0.05
                     old_is_sub = is_sub_gaussian[i]
                     is_sub_gaussian[i] = kurtosis < -kurtosis_threshold ? true : (kurtosis > kurtosis_threshold ? false : old_is_sub)
-
-                    if old_is_sub != is_sub_gaussian[i]
-                        n_switched += 1
-                    end
-                else
-                    kurtosis_values[i] = 0.0
                 end
             end
 
@@ -491,7 +560,10 @@ function _infomax_extended_optimize_cpu!(
                 work.olddelta .= work.delta
                 oldchange = change
             end
-            change < params.w_change && break
+            if change < params.w_change
+                converged = true
+                break
+            end
         elseif step == 1
             work.olddelta .= work.delta
             oldchange = change
@@ -512,11 +584,21 @@ function _infomax_extended_optimize_cpu!(
             )
         end
     end
+
+    if !converged
+        @minimal_warning "Extended Infomax reached maximum iterations ($(params.max_iter)) without converging (final change = $change, target = $(params.w_change))."
+    end
 end
 
 
 # === GPU versions of above (Infomax) ===
-function _infomax_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float64}, params::IcaPrms, block::Int)
+function _infomax_optimize_gpu!(
+    work::WorkArrays,
+    dat_ica::Matrix{Float64},
+    params::IcaPrms,
+    block::Int,
+    rng::AbstractRNG = Random.default_rng(),
+)
     n_channels, n_samples = size(dat_ica)
     n_components = n_channels
 
@@ -525,6 +607,7 @@ function _infomax_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float64}, para
     change = 0.0
     oldchange = 0.0
     angledelta = 0.0
+    converged = false
 
     permute_indices = Vector{Int}(undef, n_samples)
     perm_gpu = gpu_array(zeros(Int, n_samples))
@@ -559,7 +642,7 @@ function _infomax_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float64}, para
     n_blocks = length(block_starts)
 
     @inbounds while step < params.max_iter
-        randperm!(permute_indices)
+        randperm!(rng, permute_indices)
 
         copyto!(perm_gpu, permute_indices)
         dat_ica_gpu_shuffled .= view(dat_ica_gpu, :, perm_gpu)
@@ -572,13 +655,13 @@ function _infomax_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float64}, para
 
             if block_size == block
                 mul!(u_view_full, weights_gpu, data_block_gpu)
-                @. y_view_full = 1.0f0 - 2.0f0 / (1.0f0 + exp(-u_view_full))
+                @. y_view_full = -tanh(0.5f0 * u_view_full)
                 mul!(wu_gpu, y_view_full, u_view_full_t)
                 mul!(wtemp_gpu, wu_gpu, weights_gpu)
                 @. weights_gpu += l_rate_f32 * (block_f32 * weights_gpu + wtemp_gpu)
             else
                 mul!(u_view_last, weights_gpu, data_block_gpu)
-                @. y_view_last = 1.0f0 - 2.0f0 / (1.0f0 + exp(-u_view_last))
+                @. y_view_last = -tanh(0.5f0 * u_view_last)
                 mul!(wu_gpu, y_view_last, u_view_last_t)
                 mul!(wtemp_gpu, wu_gpu, weights_gpu)
                 @. weights_gpu += l_rate_f32 * (last_block_f32 * weights_gpu + wtemp_gpu)
@@ -605,6 +688,9 @@ function _infomax_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float64}, para
             change = NaN
             wts_blowup = false
             params.l_rate *= params.restart_factor
+            if params.l_rate < 1e-6
+                @minimal_error "Infomax failed to converge on GPU: learning rate fell below minimum floor (1e-6) due to repeated weight blow-ups."
+            end
             work.weights .= work.startweights
             work.oldweights .= work.startweights
             copyto!(weights_gpu, startweights_f32)
@@ -618,7 +704,10 @@ function _infomax_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float64}, para
                 work.olddelta .= work.delta
                 oldchange = change
             end
-            change < params.w_change && break
+            if change < params.w_change
+                converged = true
+                break
+            end
         elseif step == 1
             work.olddelta .= work.delta
             oldchange = change
@@ -638,6 +727,10 @@ function _infomax_optimize_gpu!(work::WorkArrays, dat_ica::Matrix{Float64}, para
         end
     end
 
+    if !converged
+        @minimal_warning "Infomax reached maximum iterations ($(params.max_iter)) without converging (final change = $change, target = $(params.w_change))."
+    end
+
     copyto!(weights_f32_cpu, weights_gpu)
     work.weights .= weights_f32_cpu
 end
@@ -648,6 +741,7 @@ function _infomax_extended_optimize_gpu!(
     params::IcaPrms,
     block::Int,
     is_sub_gaussian::BitVector,
+    rng::AbstractRNG = Random.default_rng(),
 )
     n_channels, n_samples = size(dat_ica)
     n_components = n_channels
@@ -660,6 +754,7 @@ function _infomax_extended_optimize_gpu!(
     change = 0.0
     oldchange = 0.0
     angledelta = 0.0
+    converged = false
 
     permute_indices = Vector{Int}(undef, n_samples)
     n_super = n_channels
@@ -677,11 +772,13 @@ function _infomax_extended_optimize_gpu!(
     y_gpu = gpu_array(zeros(Float32, n_components, block))
     wu_gpu = gpu_array(zeros(Float32, n_components, n_components))
     wtemp_gpu = gpu_array(zeros(Float32, n_components, n_components))
-    is_sub_gaussian_gpu = gpu_array(copy(is_sub_gaussian))
+
+    # K signs vector: +1 for super-Gaussian, -1 for sub-Gaussian
+    signs_cpu = Float32[is_sub_gaussian[i] ? -1.0f0 : 1.0f0 for i in 1:n_channels]
+    signs_gpu = gpu_array(reshape(signs_cpu, n_channels, 1))
 
     kurtsize = min(2000, n_samples)
     activations_gpu = gpu_array(zeros(Float32, n_channels, kurtsize))
-    rp_gpu = gpu_array(zeros(Int, kurtsize))
     act_sq = gpu_array(zeros(Float32, n_channels, kurtsize))
     u2_sum = gpu_array(zeros(Float32, n_channels, 1))
     u4_sum = gpu_array(zeros(Float32, n_channels, 1))
@@ -708,51 +805,33 @@ function _infomax_extended_optimize_gpu!(
     n_blocks = length(block_starts)
 
     @inbounds while step < params.max_iter
-        randperm!(permute_indices)
+        randperm!(rng, permute_indices)
 
         copyto!(perm_gpu, permute_indices)
         dat_ica_gpu_shuffled .= view(dat_ica_gpu, :, perm_gpu)
 
         l_rate_f32 = Float32(params.l_rate)
-        has_sub = any(is_sub_gaussian)
 
-        if !has_sub
-            for b_idx = 1:n_blocks
-                data_block_gpu = data_block_views[b_idx]
-                block_size = size(data_block_gpu, 2)
+        for b_idx = 1:n_blocks
+            data_block_gpu = data_block_views[b_idx]
+            block_size = size(data_block_gpu, 2)
 
-                if block_size == block
-                    mul!(u_view_full, weights_gpu, data_block_gpu)
-                    @. y_view_full = 1.0f0 - 2.0f0 / (1.0f0 + exp(-u_view_full))
-                    mul!(wu_gpu, y_view_full, u_view_full_t)
-                    mul!(wtemp_gpu, wu_gpu, weights_gpu)
-                    @. weights_gpu += l_rate_f32 * (block_f32 * weights_gpu + wtemp_gpu)
-                else
-                    mul!(u_view_last, weights_gpu, data_block_gpu)
-                    @. y_view_last = 1.0f0 - 2.0f0 / (1.0f0 + exp(-u_view_last))
-                    mul!(wu_gpu, y_view_last, u_view_last_t)
-                    mul!(wtemp_gpu, wu_gpu, weights_gpu)
-                    @. weights_gpu += l_rate_f32 * (last_block_f32 * weights_gpu + wtemp_gpu)
-                end
-            end
-        else
-            for b_idx = 1:n_blocks
-                data_block_gpu = data_block_views[b_idx]
-                block_size = size(data_block_gpu, 2)
-
-                if block_size == block
-                    mul!(u_view_full, weights_gpu, data_block_gpu)
-                    @. y_view_full = ifelse(is_sub_gaussian_gpu, -tanh(u_view_full), 1.0f0 - 2.0f0 / (1.0f0 + exp(-u_view_full)))
-                    mul!(wu_gpu, y_view_full, u_view_full_t)
-                    mul!(wtemp_gpu, wu_gpu, weights_gpu)
-                    @. weights_gpu += l_rate_f32 * (block_f32 * weights_gpu + wtemp_gpu)
-                else
-                    mul!(u_view_last, weights_gpu, data_block_gpu)
-                    @. y_view_last = ifelse(is_sub_gaussian_gpu, -tanh(u_view_last), 1.0f0 - 2.0f0 / (1.0f0 + exp(-u_view_last)))
-                    mul!(wu_gpu, y_view_last, u_view_last_t)
-                    mul!(wtemp_gpu, wu_gpu, weights_gpu)
-                    @. weights_gpu += l_rate_f32 * (last_block_f32 * weights_gpu + wtemp_gpu)
-                end
+            if block_size == block
+                mul!(u_view_full, weights_gpu, data_block_gpu)
+                @. y_view_full = tanh(u_view_full)
+                mul!(wu_gpu, y_view_full, u_view_full_t)
+                @. wu_gpu *= signs_gpu
+                mul!(wu_gpu, u_view_full, u_view_full_t, 1.0f0, 1.0f0)
+                mul!(wtemp_gpu, wu_gpu, weights_gpu)
+                @. weights_gpu += l_rate_f32 * (block_f32 * weights_gpu - wtemp_gpu)
+            else
+                mul!(u_view_last, weights_gpu, data_block_gpu)
+                @. y_view_last = tanh(u_view_last)
+                mul!(wu_gpu, y_view_last, u_view_last_t)
+                @. wu_gpu *= signs_gpu
+                mul!(wu_gpu, u_view_last, u_view_last_t, 1.0f0, 1.0f0)
+                mul!(wtemp_gpu, wu_gpu, weights_gpu)
+                @. weights_gpu += l_rate_f32 * (last_block_f32 * weights_gpu - wtemp_gpu)
             end
         end
 
@@ -776,6 +855,9 @@ function _infomax_extended_optimize_gpu!(
             change = NaN
             wts_blowup = false
             params.l_rate *= params.restart_factor
+            if params.l_rate < 1e-6
+                @minimal_error "Extended Infomax failed to converge on GPU: learning rate fell below minimum floor (1e-6) due to repeated weight blow-ups."
+            end
             work.weights .= work.startweights
             work.oldweights .= work.startweights
             copyto!(weights_gpu, startweights_f32)
@@ -784,12 +866,11 @@ function _infomax_extended_optimize_gpu!(
 
         # Extended Infomax: update kurtosis signs periodically
         if step > 10 && step % 10 == 0
-            rp_cpu = randperm(n_samples)[1:kurtsize]
-            copyto!(rp_gpu, rp_cpu)
-            dat_subset = dat_ica_gpu[:, rp_gpu]
-            mul!(activations_gpu, weights_gpu, dat_subset)
+            # dat_ica_gpu_shuffled is already randomized by perm_gpu
+            kurt_view = view(dat_ica_gpu_shuffled, :, 1:kurtsize)
+            mul!(activations_gpu, weights_gpu, kurt_view)
 
-            # Compute raw kurtosis entirely on the GPU using mapreduce patterns or broadcasting
+            # Compute raw kurtosis entirely on the GPU
             @. act_sq = activations_gpu^2
             sum!(u2_sum, act_sq)
             @. act_sq = act_sq^2
@@ -802,7 +883,7 @@ function _infomax_extended_optimize_gpu!(
             @. u2_mean_sq_cpu = (u2_mean_sq_cpu * inv_kurtsize)^2
             @. u4_mean_cpu = u4_mean_cpu * inv_kurtsize
 
-            n_switched = 0
+            signs_changed = false
 
             for i = 1:n_channels
                 if u2_mean_sq_cpu[i] > eps(Float64)
@@ -820,14 +901,15 @@ function _infomax_extended_optimize_gpu!(
                     is_sub_gaussian[i] = kurtosis < -kurtosis_threshold ? true : (kurtosis > kurtosis_threshold ? false : old_is_sub)
 
                     if old_is_sub != is_sub_gaussian[i]
-                        n_switched += 1
+                        signs_changed = true
                     end
                 end
             end
 
-            # Push updated boolean vector to GPU if any changed
-            if n_switched > 0
-                copyto!(is_sub_gaussian_gpu, is_sub_gaussian)
+            # Push updated signs vector to GPU if any changed
+            if signs_changed
+                signs_cpu .= Float32[is_sub_gaussian[i] ? -1.0f0 : 1.0f0 for i in 1:n_channels]
+                copyto!(signs_gpu, reshape(signs_cpu, n_channels, 1))
             end
 
             # Update kurtosis counts
@@ -842,7 +924,10 @@ function _infomax_extended_optimize_gpu!(
                 work.olddelta .= work.delta
                 oldchange = change
             end
-            change < params.w_change && break
+            if change < params.w_change
+                converged = true
+                break
+            end
         elseif step == 1
             work.olddelta .= work.delta
             oldchange = change
@@ -864,8 +949,10 @@ function _infomax_extended_optimize_gpu!(
         end
     end
 
+    if !converged
+        @minimal_warning "Extended Infomax reached maximum iterations ($(params.max_iter)) without converging (final change = $change, target = $(params.w_change))."
+    end
+
     copyto!(weights_f32_cpu, weights_gpu)
     work.weights .= weights_f32_cpu
 end
-
-

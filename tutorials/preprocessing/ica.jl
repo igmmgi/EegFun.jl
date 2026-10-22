@@ -44,13 +44,13 @@ EegFun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 # using Metal (for Apple Silicon GPUs)
 
 # # ICA on continuous data 
-ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax)
+# ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax)
 # @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax, use_gpu = true)
 # 
 # @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax_extended)
 # @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :infomax_extended, use_gpu = true)
 # 
-# @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :picard)
+@time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :picard)
 # @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :picard, use_gpu = true)
 # 
 # @time ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_250), algorithm = :picard_extended)

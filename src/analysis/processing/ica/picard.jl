@@ -1,26 +1,11 @@
 # === Picard ===
 # === PICARD ICA IMPLEMENTATION (Preconditioned ICA for Real Data) ===
 
-# Fast SIMD-friendly approximation of log(1 + exp(-2|y|))
-@inline function _fast_log1p_exp(ax::T) where {T<:AbstractFloat}
-    if ax > T(6.5)
-        return zero(T)
-    elseif ax > T(3.0)
-        return exp(T(-2.0) * ax)
-    else
-        return @evalpoly(
-            ax,
-            T(0.69310808),
-            T(-0.99854606),
-            T(0.48711652),
-            T(0.04765150),
-            T(-0.17336261),
-            T(0.09241291),
-            T(-0.02471741),
-            T(0.00345703),
-            T(-0.00020136)
-        )
-    end
+# Exact log-cosh contrast function: log(cosh(y)) = |y| + log(1 + exp(-2|y|)) - log(2)
+# Omitting constant log(2) preserves the exact gradient: d/dy [|y| + log(1 + exp(-2|y|))] = tanh(y)
+@inline function _log_cosh(y::T) where {T<:AbstractFloat}
+    ay = abs(y)
+    return ay > T(30.0) ? ay : ay + log1p(exp(T(-2.0) * ay))
 end
 
 # Compute the Y-dependent loss terms, optionally fused with a linear step (Y + α*DY).
@@ -48,18 +33,14 @@ function _picard_y_loss(
             @inbounds for j = j_start:j_end
                 for i = 1:N_ch
                     y = fused ? Y[i, j] + alpha * DY[i, j] : Y[i, j]
-                    abs_y = abs(y)
-                    term = _fast_log1p_exp(abs_y)
-                    acc += Float64(signs[i] * (abs_y + term) + T(0.5) * y^2)
+                    acc += Float64(signs[i] * _log_cosh(y) + T(0.5) * y^2)
                 end
             end
         else
             @inbounds for j = j_start:j_end
                 for i = 1:N_ch
                     y = fused ? Y[i, j] + alpha * DY[i, j] : Y[i, j]
-                    abs_y = abs(y)
-                    term = _fast_log1p_exp(abs_y)
-                    acc += Float64(signs[i] * (abs_y + term))
+                    acc += Float64(signs[i] * _log_cosh(y))
                 end
             end
         end
@@ -75,12 +56,17 @@ function _picard_loss(Y::Matrix{T}, W::Matrix{T}, signs::Vector{T}, extended::Bo
     return T(-logdetW + _picard_y_loss(Y, signs, extended, thread_sums))
 end
 
-
-# Solve the 2×2 block Hessian system element-wise.
+# Solve the 2×2 block Hessian system element-wise on CPU.
+# Diagonal (i==j) analytically simplifies from (h_ii*G_ii - G_ii)/(h_ii^2 - 1) to G_ii / (1 + h_ii),
+# avoiding 0/0 and catastrophic cancellation when h_ii ≈ 1.
 function _picard_solve_hessian!(Z::AbstractMatrix{T}, h::AbstractMatrix{T}, G::AbstractMatrix{T}) where {T<:AbstractFloat}
+    N = size(Z, 1)
     ht = transpose(h)
     Gt = transpose(G)
     @. Z = (ht * G - Gt) / (h * ht - one(T))
+    for i = 1:N
+        Z[i, i] = G[i, i] / (h[i, i] + one(T))
+    end
 end
 
 # Regularize off-diagonal Hessian elements
@@ -149,7 +135,6 @@ end
 
 # Get the k-th most recent entry (1 = most recent, len = oldest)
 @inline function _lbfgs_get(buf::LBFGSBuffer, k::Int)
-    # head-1 is the most recently written slot
     idx = mod1(buf.head - k, buf.m)
     return buf.s_buf[idx], buf.y_buf[idx], buf.r_buf[idx]
 end
@@ -185,7 +170,6 @@ function _picard_l_bfgs_direction!(
 
     @. Z = -Z
 end
-
 
 # Line search with fused loss computation and incremental logdet
 function _picard_line_search(
@@ -234,7 +218,6 @@ function _picard_line_search(
     return false, current_loss, alpha, logdetW
 end
 
-# _picard_reset_lbfgs! is now replaced by _lbfgs_reset! on the LBFGSBuffer
 
 # === CPU Optimization Loop ===
 
@@ -278,15 +261,12 @@ function _picard_optimize_cpu!(W::Matrix{T}, dat_ica::Matrix{T}, params::IcaPrms
     logdetW_val, _ = logabsdet(W)
     logdetW = T(logdetW_val)
     current_loss = _picard_loss(Y, W, signs, extended, thread_sums)
-    sign_change = false
+    gradient_norm = zero(T)
 
     # Extended mode covariance: C = W * C_orig * W'
-    # C_orig = (dat_ica * dat_ica') / T_len
     C = extended ? zeros(T, N, N) : zeros(T, 0, 0)
     C_orig = extended ? zeros(T, N, N) : zeros(T, 0, 0)
     K = extended ? zeros(T, N) : zeros(T, 0)
-
-    # Temporary buffer for C = W * C_orig * W'
     C_tmp = extended ? zeros(T, N, N) : zeros(T, 0, 0)
 
     if extended
@@ -312,21 +292,16 @@ function _picard_optimize_cpu!(W::Matrix{T}, dat_ica::Matrix{T}, params::IcaPrms
         G ./= T(T_len)
 
         if extended
+            # Cache-friendly row reduction along contiguous columns
+            mean_psid = vec(sum(psidY, dims = 2)) ./ T(T_len)
             for i = 1:N
-                mean_psid = sum(view(psidY, i, :)) / T_len
-                K[i] = T(mean_psid) * C[i, i] - G[i, i]
+                K[i] = mean_psid[i] * C[i, i] - G[i, i]
+                # Avoid K==0 turning into 0 (Gaussian); map >=0 to +1, <0 to -1
+                signs[i] = K[i] >= zero(T) ? one(T) : -one(T)
             end
 
-            @. signs = sign(K)
-            if n > 1
-                sign_change = false
-                @inbounds for i = 1:N
-                    if signs[i] != old_signs[i]
-                        sign_change = true
-                        break
-                    end
-                end
-            end
+            # Always flag sign_change on step 1 to refresh current_loss with the actual signs
+            sign_change = (n == 1) || any(signs .!= old_signs)
             copyto!(old_signs, signs)
 
             for i = 1:N
@@ -342,6 +317,11 @@ function _picard_optimize_cpu!(W::Matrix{T}, dat_ica::Matrix{T}, params::IcaPrms
                     psidY[i, j] = psidY[i, j] * signs[i] + one(T)
                 end
             end
+
+            if sign_change
+                current_loss = _picard_loss(Y, W, signs, extended, thread_sums)
+                _lbfgs_reset!(lbfgs)
+            end
         end
 
         mul!(h, psidY, transpose(Y_square))
@@ -356,19 +336,20 @@ function _picard_optimize_cpu!(W::Matrix{T}, dat_ica::Matrix{T}, params::IcaPrms
         gradient_norm = maximum(abs, G)
         if gradient_norm < tol
             @info "Picard converged at step $n (gradient norm: $gradient_norm)"
-            return n
+            return true, n, signs, gradient_norm
         end
 
         if n > 1
             @. y_diff = G - G_old
-            _lbfgs_push!(lbfgs, direction, y_diff, one(T) / dot(direction, y_diff))
+            sy = dot(direction, y_diff)
+            # L-BFGS curvature safeguard: verify positive curvature sᵀy > ε ||s|| ||y||
+            if sy > eps(T) * norm(direction) * norm(y_diff)
+                _lbfgs_push!(lbfgs, direction, y_diff, one(T) / sy)
+            else
+                _lbfgs_reset!(lbfgs)
+            end
         end
         copyto!(G_old, G)
-
-        if extended && sign_change
-            current_loss = _picard_loss(Y, W, signs, extended, thread_sums)
-            _lbfgs_reset!(lbfgs)
-        end
 
         _picard_l_bfgs_direction!(Z, q, G, h, lbfgs)
         copyto!(direction, Z)
@@ -391,7 +372,9 @@ function _picard_optimize_cpu!(W::Matrix{T}, dat_ica::Matrix{T}, params::IcaPrms
         )
 
         if !converged
-            @. direction = -G
+            # Preconditioned Hessian fallback direction -solve_hessian(G, h) is better scaled than -G
+            _picard_solve_hessian!(direction, h, G)
+            @. direction = -direction
             _lbfgs_reset!(lbfgs)
             converged, new_loss, alpha, logdetW = _picard_line_search(
                 Y,
@@ -411,8 +394,8 @@ function _picard_optimize_cpu!(W::Matrix{T}, dat_ica::Matrix{T}, params::IcaPrms
             )
 
             if !converged
-                @info "Line search failed to find an improvement. Stopping early."
-                return n
+                @info "Picard line search failed to find an improvement. Stopping early at step $n (gradient norm: $gradient_norm)."
+                return false, n, signs, gradient_norm
             end
         end
 
@@ -424,7 +407,6 @@ function _picard_optimize_cpu!(W::Matrix{T}, dat_ica::Matrix{T}, params::IcaPrms
         current_loss = new_loss
 
         if extended
-            # Exact C update: C = W_new * C_orig * W_new'
             mul!(C_tmp, W, C_orig)
             mul!(C, C_tmp, transpose(W))
         end
@@ -433,13 +415,26 @@ function _picard_optimize_cpu!(W::Matrix{T}, dat_ica::Matrix{T}, params::IcaPrms
             @info Printf.@sprintf("Picard step %d, gradient norm = %.7f, loss = %.7f", n, gradient_norm, current_loss)
         end
     end
-    return max_iter
+
+    return false, max_iter, signs, gradient_norm
 end
 
 # =============================================================================
 
 # === Public API ===
 
+"""
+    picard_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String; n_components::Int, extended::Bool = false, params::IcaPrms = IcaPrms(), rng::AbstractRNG = Random.default_rng())
+
+Run the Picard (Preconditioned ICA for Real Data) algorithm.
+Picard accelerates ICA convergence via an exact 2x2 block Hessian solver combined with L-BFGS.
+
+Supports both standard Picard (super-Gaussian only) and Extended Picard (mixed sub/super-Gaussian sources).
+
+# References
+Ablin, P., Cardoso, J. F., & Gramfort, A. (2018). Faster independent component analysis by preconditioning with Hessian approximations.
+IEEE Transactions on Signal Processing, 66(15), 4040-4049.
+"""
 function picard_ica(
     dat_ica::Matrix{Float64},
     layout::Layout,
@@ -447,78 +442,53 @@ function picard_ica(
     n_components::Int,
     extended::Bool = false,
     params::IcaPrms = IcaPrms(),
+    rng::AbstractRNG = Random.default_rng(),
 )
     ext_str = extended ? "Extended-" : ""
     @info "Running $(ext_str)Picard ICA (use_gpu=$(params.use_gpu)): $(size(dat_ica,1)) channels x $(size(dat_ica,2)) samples -> $n_components components"
 
-    n_samples = size(dat_ica, 2)
+    # Shared preprocessing: rank check, guards, non-mutating copy, and analytic sphering
+    prep = _ica_preprocess(dat_ica, n_components, params)
 
-    original_mean = vec(mean(dat_ica, dims = 2))
-
-    dat_ica .-= original_mean
-    scale = sqrt(norm((dat_ica * transpose(dat_ica)) / n_samples))
-    dat_ica ./= scale
-
-    F = svd(dat_ica)
-    pca_components = F.U[:, 1:n_components]
-
-    eigenvalues = (F.S[1:n_components] .^ 2) ./ (n_samples - 1)
-    sphere = diagm(1.0 ./ sqrt.(eigenvalues))
-
-    transform_matrix = sphere * transpose(pca_components)
-    dat_ica_sphered = Matrix{Float64}(undef, n_components, n_samples)
-    mul!(dat_ica_sphered, transform_matrix, dat_ica)
-    dat_ica = dat_ica_sphered
-
-    gpu_active = false
-    if params.use_gpu
-        if is_gpu_available()
-            gpu_active = true
-            @info "[GPU ACTIVATED] Running Picard ICA on $(gpu_device_name())..."
-        else
-            @minimal_warning "Requested GPU acceleration (use_gpu=true), but no functional GPU package (CUDA.jl, AMDGPU.jl, Metal.jl) has been loaded. Please run 'using CUDA' or 'using AMDGPU' before calling run_ica. Falling back to CPU."
-        end
-    end
-
-    if gpu_active
+    if prep.gpu_active
         # GPU path strictly uses Float32 for memory bandwidth and speed
         W_init = Matrix{Float32}(I, n_components, n_components)
-        dat_ica_f32 = Float32.(dat_ica)
-        _picard_optimize_gpu!(W_init, dat_ica_f32, params, extended)
+        dat_ica_f32 = Float32.(prep.dat_sphered)
+        converged, n_iter, signs_f32, grad_norm = _picard_optimize_gpu!(W_init, dat_ica_f32, prep.prms, extended)
         W_final = Float64.(W_init)
+        signs = Float64.(signs_f32)
     else
         # CPU path uses Float64 to stay consistent with CPU Infomax behavior
         W_init = Matrix{Float64}(I, n_components, n_components)
-        _picard_optimize_cpu!(W_init, dat_ica, params, extended)
+        converged, n_iter, signs, grad_norm = _picard_optimize_cpu!(W_init, prep.dat_sphered, prep.prms, extended)
         W_final = W_init
     end
 
-    unmixing_matrix = W_final * sphere * pca_components'
-    mixing_matrix = pinv(unmixing_matrix)
+    if !converged
+        @minimal_warning "Picard ICA reached maximum iterations or stopped early at iteration $n_iter without meeting tolerance ($(prep.prms.default_stop)) (final gradient norm: $(round(grad_norm, sigdigits=4)))."
+    end
 
-    meanvar = vec(sum(abs2, mixing_matrix, dims = 1) .* sum(abs2, dat_ica, dims = 2)' ./ (n_components * n_samples - 1))
-    meanvar_normalized = meanvar ./ sum(meanvar)
-    order = sortperm(meanvar_normalized, rev = true)
+    # Sub-Gaussian components correspond to signs == -1 (or signs < 0)
+    is_sub_gaussian = extended ? BitVector(signs .< 0.0) : falses(n_components)
 
-    return InfoIca(
+    # Shared postprocessing: activation power variance ordering, mixing matrix, and InfoIca construction
+    return _ica_postprocess(
+        W_final,
+        prep.sphere,
+        prep.pca_components,
+        prep.scale,
+        prep.original_mean,
+        prep.n_samples,
+        n_components,
         filename,
-        unmixing_matrix[order, :],
-        mixing_matrix[:, order],
-        sphere,
-        meanvar_normalized[order],
-        scale,
-        original_mean,
-        [Symbol("IC$i") for i = 1:n_components],
-        Dict{Int,Matrix{Float64}}(),
         layout,
-        falses(n_components),
+        is_sub_gaussian,
     )
 end
 
 # === GPU versions of Picard ===
 
-# GPU versions of Picard
-# GPU native implementation of Picard Y-dependent loss (supports optional preallocated loss_tmp buffer)
+# GPU native implementation of Picard Y-dependent loss with Float64 loss accumulation
 function _picard_y_loss_gpu(
     Y_gpu::AbstractMatrix{T},
     signs_gpu::AbstractVector{T},
@@ -530,9 +500,9 @@ function _picard_y_loss_gpu(
 
     if loss_tmp === nothing
         if extended
-            val = sum(@. s * (abs(Y_gpu) + log1p(exp(T(-2.0) * abs(Y_gpu)))) + T(0.5) * Y_gpu^2)
+            loss_mat = @. s * (abs(Y_gpu) + log1p(exp(T(-2.0) * abs(Y_gpu)))) + T(0.5) * Y_gpu^2
         else
-            val = sum(@. s * (abs(Y_gpu) + log1p(exp(T(-2.0) * abs(Y_gpu)))))
+            loss_mat = @. s * (abs(Y_gpu) + log1p(exp(T(-2.0) * abs(Y_gpu))))
         end
     else
         if extended
@@ -540,10 +510,15 @@ function _picard_y_loss_gpu(
         else
             @. loss_tmp = s * (abs(Y_gpu) + log1p(exp(T(-2.0) * abs(Y_gpu))))
         end
-        val = sum(loss_tmp)
+        loss_mat = loss_tmp
     end
 
-    return val / T(T_len)
+    # Reduce across columns on GPU to (N, 1), copy N values to host, and sum in Float64
+    # to eliminate Float32 summation noise over large sample counts
+    row_sums = sum(loss_mat, dims = 2)
+    val_f64 = sum(Float64, Array(vec(row_sums)))
+
+    return T(val_f64 / Float64(T_len))
 end
 
 # GPU line search helper with pre-allocated CPU logdet calculation
@@ -595,6 +570,18 @@ function _picard_line_search_gpu!(
     return false, current_loss, alpha, logdetW
 end
 
+# Solve the 2×2 block Hessian system on GPU with diagonal mask
+function _picard_solve_hessian_gpu!(
+    Z::AbstractMatrix{T},
+    h::AbstractMatrix{T},
+    G::AbstractMatrix{T},
+    I_diag::AbstractMatrix{Bool},
+) where {T<:AbstractFloat}
+    ht = transpose(h)
+    Gt = transpose(G)
+    @. Z = ifelse(I_diag, G / (h + one(T)), (ht * G - Gt) / (h * ht - one(T)))
+end
+
 # GPU Optimization Loop
 # =============================================================================
 
@@ -606,7 +593,8 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
     ls_tries = params.picard_ls_tries
     max_iter = params.max_iter
 
-    Y = gpu_array(copy(dat_ica_cpu))
+    dat_ica_gpu = gpu_array(copy(dat_ica_cpu))
+    Y = copy(dat_ica_gpu)
     W = gpu_array(copy(W_cpu))
 
     Y_new = similar(Y)
@@ -627,8 +615,8 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
     q = similar(W)
     y_diff = similar(W)
 
-    signs     = gpu_array(ones(Float32, N))
-    old_signs = gpu_array(ones(Float32, N))
+    signs = gpu_array(ones(Float32, N))
+    I_diag = gpu_array(Matrix{Bool}(I, N, N))
 
     # Pre-allocated CPU buffers to eliminate per-iteration host/device allocations
     h_cpu = zeros(Float32, N, N)
@@ -642,13 +630,13 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
     mean_psid_cpu = extended ? zeros(Float32, N) : Float32[]
     C_cpu = extended ? zeros(Float32, N, N) : Matrix{Float32}(undef, 0, 0)
 
-    # Pre-allocated L-BFGS circular buffer (avoids push!/popfirst!/copy! GPU allocations)
+    # Pre-allocated L-BFGS circular buffer
     lbfgs = LBFGSBuffer(G, m)
 
     logdetW_val, _ = logabsdet(W_cpu_tmp)
     logdetW = Float32(logdetW_val)
     current_loss = Float32(-logdetW + _picard_y_loss_gpu(Y, signs, extended, loss_tmp))
-    sign_change = false
+    gradient_norm = zero(Float32)
 
     C = extended ? similar(W) : gpu_array(zeros(Float32, 0, 0))
     C_tmp = extended ? similar(W) : gpu_array(zeros(Float32, 0, 0))
@@ -677,11 +665,12 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
             copyto!(C_cpu, C)
             copyto!(G_cpu, G)
 
-            sign_change = false
+            sign_change = (n == 1)
             for i = 1:N
                 k_val = (mean_psid_cpu[i] / Float32(T_len)) * C_cpu[i, i] - G_cpu[i, i]
-                s_val = sign(k_val)
-                if n > 1 && s_val != old_signs_cpu[i]
+                # Avoid K==0 turning into 0; map >=0 to +1, <0 to -1
+                s_val = k_val >= 0.0f0 ? 1.0f0 : -1.0f0
+                if s_val != old_signs_cpu[i]
                     sign_change = true
                 end
                 signs_cpu[i] = s_val
@@ -692,6 +681,11 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
 
             @. G = G * signs + C
             @. psidY = psidY * signs + 1.0f0
+
+            if sign_change
+                current_loss = Float32(-logdetW + _picard_y_loss_gpu(Y, signs, extended, loss_tmp))
+                _lbfgs_reset!(lbfgs)
+            end
         end
 
         @. Y_square = Y^2
@@ -711,20 +705,22 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
         gradient_norm = maximum(abs, G_cpu)
         if gradient_norm < tol
             @info "Picard converged at step $n (gradient norm: $gradient_norm)"
-            break
+            copyto!(W_cpu, W)
+            return true, n, signs_cpu, gradient_norm
         end
 
         if n > 1
             @. y_diff = G - G_old
-            r_val = 1.0f0 / dot(direction, y_diff)
-            _lbfgs_push!(lbfgs, direction, y_diff, r_val)
+            sy = dot(direction, y_diff)
+            # L-BFGS curvature safeguard
+            if sy > eps(Float32) * norm(direction) * norm(y_diff)
+                r_val = 1.0f0 / sy
+                _lbfgs_push!(lbfgs, direction, y_diff, r_val)
+            else
+                _lbfgs_reset!(lbfgs)
+            end
         end
         copyto!(G_old, G)
-
-        if extended && sign_change
-            current_loss = Float32(-logdetW + _picard_y_loss_gpu(Y, signs, extended, loss_tmp))
-            _lbfgs_reset!(lbfgs)
-        end
 
         _picard_l_bfgs_direction!(direction, q, G, h, lbfgs)
 
@@ -735,7 +731,9 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
         )
 
         if !converged
-            @. direction = -G
+            # Preconditioned Hessian fallback
+            _picard_solve_hessian_gpu!(direction, h, G, I_diag)
+            @. direction = -direction
             _lbfgs_reset!(lbfgs)
 
             converged, new_loss, alpha, logdetW = _picard_line_search_gpu!(
@@ -745,8 +743,9 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
             )
 
             if !converged
-                @info "Line search failed to find an improvement. Stopping early."
-                break
+                @info "Picard line search failed to find an improvement. Stopping early at step $n (gradient norm: $gradient_norm)."
+                copyto!(W_cpu, W)
+                return false, n, signs_cpu, gradient_norm
             end
         end
 
@@ -756,6 +755,11 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
         copyto!(Y, Y_new)
         copyto!(W, W_new)
         current_loss = new_loss
+
+        # Periodic refresh to prevent incremental float32 accumulation drift
+        if n % 20 == 0
+            mul!(Y, W, dat_ica_gpu)
+        end
 
         if extended
             mul!(C_tmp, W, C_orig)
@@ -767,6 +771,7 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
         end
     end
 
+    mul!(Y, W, dat_ica_gpu)
     copyto!(W_cpu, W)
+    return false, max_iter, signs_cpu, gradient_norm
 end
-

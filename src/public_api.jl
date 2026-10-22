@@ -270,6 +270,7 @@ public amica_ica
 public calculate_eog_channels!
 public combine_artifact_components
 public detect_eog_onsets!
+public get_all_components
 public get_all_ica_components
 public get_eog_channels
 public get_selected_components

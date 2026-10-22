@@ -474,6 +474,9 @@ specific settings.
 - `picard_m::Int`: Picard algorithm parameter m
 - `picard_lambda_min::Float64`: Picard algorithm minimum lambda
 - `picard_ls_tries::Int`: Picard algorithm line search tries
+- `amica_lrate::Float64`: AMICA algorithm initial learning rate (default: 0.1)
+- `amica_max_iter::Int`: AMICA algorithm maximum iterations (default: 2000)
+- `amica_m::Int`: AMICA number of mixture components (default: 3)
 """
 @kwdef mutable struct IcaPrms
     l_rate::Float64 = 0.001
@@ -491,6 +494,9 @@ specific settings.
     picard_m::Int = 7
     picard_lambda_min::Float64 = 0.01
     picard_ls_tries::Int = 10
+    amica_lrate::Float64 = 0.1
+    amica_max_iter::Int = 2000
+    amica_m::Int = 3
 end
 
 """
