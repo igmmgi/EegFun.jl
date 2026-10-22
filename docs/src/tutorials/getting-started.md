@@ -2,7 +2,7 @@
 
 ## Installing Julia
 
-EegFun.jl requires [Julia](https://julialang.org/) 1.12.
+EegFun.jl requires [Julia](https://julialang.org/) 1.13.
 
 The recommended way to install and manage Julia versions is with **[juliaup](https://github.com/JuliaLang/juliaup)**.
 Alternatively, download an installer directly from the [Julia Downloads page](https://julialang.org/downloads/).

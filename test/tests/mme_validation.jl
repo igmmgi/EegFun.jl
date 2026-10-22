@@ -144,11 +144,49 @@ end
     @test any(isapprox(maximum(abs, res.z_values[:, :, ic]); rtol = 1e-8), res.null_max[:, ic])
     @test minimum(res.p_corrected[:, :, ic]) >= 1 / 32
 
-    # Sign matrix
+    # --- Sign matrix tests ---
+    # 1. Deterministic tests: exhaustive enumeration and canonical quotient-space mapping
     H, exh = LMM_EXT._sign_flip_matrix(4, 100, rng)
     @test exh && size(H) == (4, 8) && all(H[1, :] .== 1) && length(unique(eachcol(H))) == 8
+
+    # Partition all 2^4 = 16 sign vectors into 2^(4-1) = 8 equivalence classes
+    all_vecs4 = [[(b >> i) & 1 == 1 ? 1.0 : -1.0 for i in 0:3] for b in 0:15]
+    canonical4 = [v[1] > 0 ? v : -v for v in all_vecs4]
+    classes4 = unique(canonical4)
+    @test length(classes4) == 8
+    @test count(==(ones(4)), canonical4) == 2  # [1,1,1,1] and [-1,-1,-1,-1] map to the identity class
+
+    # Excluding both all-1 and all-(-1) eliminates exactly the identity equivalence class
+    non_id_vecs4 = filter(v -> !all(==(1.0), v) && !all(==(-1.0), v), all_vecs4)
+    @test length(non_id_vecs4) == 14
+    non_id_classes4 = unique([v[1] > 0 ? v : -v for v in non_id_vecs4])
+    @test length(non_id_classes4) == 7
+    @test !any(==(ones(4)), non_id_classes4)
+
+    # 2. Monte Carlo rejection sampler: deterministic exclusion of identity patterns
     H, exh = LMM_EXT._sign_flip_matrix(12, 100, rng)
     @test !exh && size(H) == (12, 100)
+    @test !any(all(==(1.0), col) for col in eachcol(H))
+    @test !any(all(==(-1.0), col) for col in eachcol(H))
+
+    # 3. Reproducible seeded test of the rejection sampler
+    H_seed1, exh_seed1 = LMM_EXT._sign_flip_matrix(6, 10, MersenneTwister(42))
+    H_seed2, exh_seed2 = LMM_EXT._sign_flip_matrix(6, 10, MersenneTwister(42))
+    @test !exh_seed1 && size(H_seed1) == (6, 10)
+    @test H_seed1 == H_seed2
+    @test !any(all(==(1.0), col) for col in eachcol(H_seed1))
+    @test !any(all(==(-1.0), col) for col in eachcol(H_seed1))
+
+    # 4. Supplementary diagnostic: empirical goodness-of-fit test across quotient classes
+    # Uniformity is established mathematically on the quotient space; the chi-squared test
+    # serves as a supplementary implementation check that counts are compatible with uniformity.
+    cols_mc = [col[1] > 0 ? col : -col for _ in 1:500 for col in eachcol(LMM_EXT._sign_flip_matrix(6, 30, rng)[1])]
+    unique_mc = unique(cols_mc)
+    @test length(unique_mc) == 31
+    counts_mc = [count(==(u), cols_mc) for u in unique_mc]
+    expected_mc = length(cols_mc) / 31
+    chisq_mc = sum((counts_mc .- expected_mc).^2 ./ expected_mc)
+    @test chisq_mc < 65.0  # Chi-sq(30) critical value at p=0.001 is ~59.7
 
     # Too few blocks
     eeg4, meta4 = _sim_lmm(rng; S = 4, n_s = 10)
@@ -257,6 +295,44 @@ end
     # Unknown correction
     eeg, meta = _sim_lmm(MersenneTwister(7))
     @test_throws EegFun.EegFunError EegFun.fit_mass_lmm(eeg, meta, @formula(amplitude ~ 1 + condition + (1 | subject)); correction = :bogus)
+
+    # Invalid dim_order
+    @test_throws EegFun.EegFunError EegFun.fit_mass_lmm(eeg, meta, @formula(amplitude ~ 1 + condition + (1 | subject)); dim_order = (:channels, :channels, :epochs))
+    @test_throws EegFun.EegFunError EegFun.fit_mass_lmm(eeg, meta, @formula(amplitude ~ 1 + condition + (1 | subject)); dim_order = (:channels, :timepoints))
+
+    # Mismatched channel_names and time_points
+    @test_throws EegFun.EegFunError EegFun.fit_mass_lmm(eeg, meta, @formula(amplitude ~ 1 + condition + (1 | subject)); channel_names = [:OnlyOne])
+    @test_throws EegFun.EegFunError EegFun.fit_mass_lmm(eeg, meta, @formula(amplitude ~ 1 + condition + (1 | subject)); time_points = [1.0])
+    @test_throws EegFun.EegFunError EegFun.fit_mass_lmm(eeg, meta, @formula(amplitude ~ 1 + condition + (1 | subject)); time_points = [1.0, NaN, 3.0])
+
+    # Singular array is initialized to false for flat pixels
+    eeg_flat = copy(eeg)
+    eeg_flat[1, 1, :] .= 0.0 # flat pixel
+    res_flat = quiet(() -> EegFun.fit_mass_lmm(eeg_flat, meta, @formula(amplitude ~ 1 + condition + (1 | subject)); n_perms = 0))
+    @test res_flat.singular_fits isa BitMatrix || res_flat.singular_fits isa Array{Bool}
+    @test res_flat.singular_fits[1, 1] == false
+    @test res_flat.fit_status[1, 1] == LMM_EXT.STATUS_FLAT
+
+    # Identity sign pattern reproduces observed Wald z exactly (to < 1e-10)
+    meta_fit = copy(meta)
+    meta_fit.amplitude = eeg[1, 1, :]
+    for form in (@formula(amplitude ~ 1 + condition + (1 | subject)),
+                 @formula(amplitude ~ 1 + condition + (1 + condition | subject)))
+        m_id = quiet(() -> fit(MixedModel, form, meta_fit; progress = false))
+        X_id = Matrix{Float64}(modelmatrix(m_id)[:, invperm(MixedModels.pivot(m_id))])
+        ids_id = LMM_EXT._block_ids(meta_fit.subject)
+        design_id = LMM_EXT.BlockDesign(m_id, X_id, ids_id)
+        stats_id = LMM_EXT._block_gls_stats(design_id, [Matrix(A.λ) for A in m_id.reterms], m_id.y)
+        S_id = maximum(ids_id)
+        H_id = ones(S_id, 1) # Identity permutation (all +1)
+        ν_id = MixedModels.ssqdenom(m_id)
+        z_obs_vec = coef(m_id) ./ MixedModels.stderror(m_id)
+        for pc in 1:length(coef(m_id))
+            out_z = zeros(1)
+            LMM_EXT._null_z!(out_z, stats_id..., pc, H_id, ν_id)
+            @test isapprox(out_z[1], z_obs_vec[pc]; atol = 1e-10)
+        end
+    end
 end
 
 @testset "fit_mass_lmm: cluster and TFCE corrections" begin
@@ -535,10 +611,17 @@ end
 
 @testset "fit_mass_lmm: Distributed execution" begin
     using Distributed
-    procs = addprocs(2; exeflags = "--project=$(Base.active_project())")
+    procs = addprocs(2; exeflags = ["--project=$(Base.active_project())", "--startup-file=no", "--depwarn=no"])
     try
+        proj = Base.active_project()
         for p in procs
-            Distributed.remotecall_eval(Main, p, :(using EegFun, MixedModels, StatsModels))
+            Distributed.remotecall_eval(Main, p, quote
+                using Pkg
+                Pkg.activate($proj; io = devnull)
+                using Logging
+                Logging.global_logger(Logging.NullLogger())
+                using EegFun, MixedModels, StatsModels, SharedArrays
+            end)
         end
         rng = MersenneTwister(28)
         # S=6 -> 2^(6-1) = 32 exhaustive flips
@@ -549,7 +632,7 @@ end
 
         for corr in (:maxt, :tfce)
             res_dist = quiet(() -> EegFun.fit_mass_lmm(eeg, meta, f; n_perms = 32, correction = corr,
-                spatial_connectivity = conn, rng = MersenneTwister(7)))
+                spatial_connectivity = conn, rng = MersenneTwister(7), progress = false))
             ic = 2
             @test res_dist.fit_status[2, 2] == LMM_EXT.STATUS_FLAT
             @test isnan(res_dist.z_values[2, 2, ic])

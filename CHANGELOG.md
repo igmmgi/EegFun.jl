@@ -26,7 +26,9 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
   - **Artifact Identification**: Implemented top-level keyword argument routing; robust MAD-scaled z-scoring and directional thresholding; ECG polarity invariance and continuous sample coordinate mapping for IBIs; Welch's periodogram for line noise estimation.
   - **Architecture & Performance**: Unified input preprocessing/postprocessing (`_ica_preprocess`, `_ica_postprocess`) with rank-deficiency detection, input copy protection, and activation power variance sorting; accelerated CPU/GPU execution via BLAS `mul!`, register accumulation, and tensor preallocations.
 - State consistency, observer lifecycle, and pipeline ordering in `plot_databrowser`.
-- Isolated flat channels, bad pixels, and non-converged fits as `NaN` in `fit_mass_lmm` with consolidated warnings.
+- Isolated flat channels, bad pixels, and non-converged fits as `NaN` in `fit_mass_lmm`, decoupled fit status from permutation inference eligibility, initialized shared outputs to `NaN`, and added valid-field tracking.
+- Eliminated Windows `mmap: Access is denied` failures by restricting `SharedArray` allocations strictly to multi-process distributed execution (`nprocs() > 1`), using standard Julia `Array`s and zero-copy inputs in single-process mode.
+- Ensured worker processes inherit package directory in `LOAD_PATH` with `--startup-file=no` during distributed mass-univariate LMM inference.
 - Channel line coloring under ICA overlay in `plot_databrowser`, defaulting to showing only original data in standard channel color, with dynamic switching to green upon enabling "Data - ICA", and fixing callback `MethodError` on toggle.
 - `BoundsError` and trial power averaging across time-frequency pipelines.
 - `MethodError` in out-of-place `channel_repairable`.
@@ -36,6 +38,7 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 
 ### Changed
 
+- Bumped minimum supported Julia version to 1.13 across `Project.toml`, GitHub Actions CI, documentation, and badges.
 - Replaced iterative LMM permutation refits with closed-form Woodbury GLS for instant permutation inference.
 - Modularized repository source structure (`ica/`, `utils/data/`, `artifact_detection/`).
 - Exported and documented missing functions in `public_api.jl`, standardizing on `@minimal_error`.

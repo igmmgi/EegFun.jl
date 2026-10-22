@@ -33,6 +33,14 @@ const STATUS_OPTFAIL = 0x03
 const STATUS_FLAT = 0x04    # constant / non-finite data: not fitted
 const STATUS_ERROR = 0x05   # fit threw, or produced non-finite estimates
 
+# Named predicate for statistical inference eligibility.
+# Only successfully converged fits and roundoff-limited fits (which in MixedModels/NLopt
+# indicate convergence at machine precision or on a boundary θ_k -> 0) are eligible to
+# enter the observed statistic map, the permutation null distribution, and cluster/TFCE formation.
+# Fits that reached evaluation limits (STATUS_MAXEVAL), optimizer failures (STATUS_OPTFAIL),
+# flat/constant data (STATUS_FLAT), or threw errors (STATUS_ERROR) are ineligible.
+is_inference_eligible(status::UInt8) = status <= STATUS_ROUNDOFF
+
 # Stored null maps (:cluster / :tfce) are warned about / refused above these fractions of free memory
 const ZPERM_WARN_FRACTION = 0.5
 const ZPERM_ERROR_FRACTION = 0.9
@@ -280,7 +288,18 @@ function _sign_flip_matrix(n_blocks::Int, n_perms::Int, rng)
         end
         return H, true
     end
-    return rand(rng, [-1.0, 1.0], n_blocks, n_perms), false
+    # Monte Carlo sampling: draw independent sign vectors from {-1, 1}^S.
+    # To strictly avoid double-counting the observed identity pattern under
+    # the Phipson & Smyth (2010) formulation p = (n_ge + 1) / (B + 1),
+    # ensure that none of the sampled columns is all +1.0 or all -1.0
+    # (which under two-sided |z| invariance yields the observed statistic).
+    H = rand(rng, [-1.0, 1.0], n_blocks, n_perms)
+    for col in 1:n_perms
+        while all(==(1.0), @view H[:, col]) || all(==(-1.0), @view H[:, col])
+            H[:, col] .= rand(rng, [-1.0, 1.0], n_blocks)
+        end
+    end
+    return H, false
 end
 
 # Pixel-independent per-block design pieces
@@ -353,13 +372,18 @@ function _block_gls_stats(design::BlockDesign, lams::Vector{Matrix{Float64}}, y:
 end
 
 # Frozen-θ Freedman–Lane z-statistics for coefficient position `pc` under every sign pattern in H.
-# With reduced-model GLS nuisance γ̂, per-block w_s = X_s'V_s⁻¹ r_s and d = Σ r_s'V_s⁻¹ r_s:
-#   β̂*_c = (M W η)_c,   pwrss* = d − (Wη)' M (Wη)   (using η_s² = 1),   z* = β̂*_c / sqrt(pwrss*/ν · M_cc)
+# Under Freedman–Lane GLS on pseudo-data y*(η) = X_(-c) γ̂ + r*(η), the nuisance projection satisfies
+# (I - P_X) X_(-c) γ̂ = 0 because X_(-c) ⊆ col(X). Hence the full GLS residual is e*(η) = (I - P_X) r*(η),
+# and because η_s² = 1, r*(η)' V⁻¹ r*(η) = Σ r_s' V_s⁻¹ r_s = d identically for all η.
+# The target coefficient is β̂*_c = (M W η)_c and the penalized residual quadratic form is
+# pwrss*(η) = d − (Wη)' M (Wη) identically for ALL sign patterns η ∈ {-1, +1}^S (machine precision match to dense GLS).
 # At η = 1 this reproduces the LMM's own Wald z exactly.
 function _null_z!(out::AbstractVector, XtVX_s, XtVy_s, ytVy_s, pc::Int, H::Matrix{Float64}, ν::Real)
     p, n_blocks = size(first(XtVX_s), 1), length(XtVy_s)
     XtVX, XtVy = sum(XtVX_s), sum(XtVy_s)
     M = inv(cholesky(Symmetric(XtVX)))
+    (ν > 0 && M[pc, pc] > 0) || return fill!(out, NaN)
+
     idx = [1:(pc - 1); (pc + 1):p]
     γ = isempty(idx) ? Float64[] : cholesky(Symmetric(XtVX[idx, idx])) \ XtVy[idx]
     W = Matrix{Float64}(undef, p, n_blocks)
@@ -372,12 +396,20 @@ function _null_z!(out::AbstractVector, XtVX_s, XtVy_s, ytVy_s, pc::Int, H::Matri
     U = W * H
     MU = M * U
     scale = M[pc, pc] / ν
+    tol = 1e-11 * max(d, 1.0)
     @inbounds for j in axes(H, 2)
         quad = 0.0
         for i in 1:p
             quad += U[i, j] * MU[i, j]
         end
-        out[j] = MU[pc, j] / sqrt(max(d - quad, eps(d)) * scale)
+        diff = d - quad
+        if diff < -tol
+            out[j] = NaN  # Materially negative residual variance indicates numerical breakdown
+        else
+            diff_clamped = max(diff, 0.0)
+            denom = sqrt(diff_clamped * scale)
+            out[j] = (denom > 0 && isfinite(denom)) ? (MU[pc, j] / denom) : NaN
+        end
     end
     return out
 end
@@ -481,15 +513,15 @@ function _compute_pixel!(scr::LmmScratch, ctx)
 end
 
 # Copy a successfully computed pixel into the shared outputs
-function _commit_pixel!(scr::LmmScratch, out, c_idx, t_idx, ctx)
+function _commit_pixel!(scr::LmmScratch, out, c_idx, t_idx, ctx, eligible::Bool)
     out.singular[c_idx, t_idx] = scr.singular[]
-    @inbounds for k in eachindex(scr.se)
+    @inbounds for k in eachindex(scr.beta)
         out.beta[c_idx, t_idx, k] = scr.beta[k]
         out.se[c_idx, t_idx, k] = scr.se[k]
         out.z[c_idx, t_idx, k] = scr.z[k]
         out.p[c_idx, t_idx, k] = scr.p[k]
     end
-    ctx.n_flips == 0 && return
+    (ctx.n_flips == 0 || !eligible) && return
     for j in eachindex(ctx.tested_pos)
         if ctx.store_maps
             @inbounds for p in 1:ctx.n_flips
@@ -514,7 +546,8 @@ function _process_pixel!(scr::LmmScratch, eeg, c_idx, t_idx, out, ctx)
         e isa Union{InterruptException,UndefVarError,BoundsError,TypeError} && rethrow()
         STATUS_ERROR
     end
-    status < STATUS_FLAT && _commit_pixel!(scr, out, c_idx, t_idx, ctx)
+    eligible = is_inference_eligible(status)
+    status < STATUS_FLAT && _commit_pixel!(scr, out, c_idx, t_idx, ctx, eligible)
     out.status[c_idx, t_idx] = status
     return
 end
@@ -625,10 +658,11 @@ end
 # ============================================================================
 
 function fit_mass_lmm(eeg_data::AbstractArray{<:Real,3}, meta_df::DataFrame, f::FormulaTerm; dim_order = (:channels, :timepoints, :epochs), kwargs...)
-    if dim_order != (:channels, :timepoints, :epochs)
-        target = (:channels, :timepoints, :epochs)
+    target = (:channels, :timepoints, :epochs)
+    (length(dim_order) == 3 && Set(dim_order) == Set(target)) ||
+        @minimal_error "dim_order must be a 3-element permutation of (:channels, :timepoints, :epochs), got: $dim_order"
+    if dim_order != target
         perm = [findfirst(==(t), dim_order) for t in target]
-        any(isnothing, perm) && @minimal_error "dim_order must contain :channels, :timepoints, and :epochs"
         eeg_data = permutedims(eeg_data, tuple(perm...))
     end
     return _fit_mass_lmm(eeg_data, meta_df, f, nothing; kwargs...)
@@ -642,9 +676,16 @@ const _WORKER_USING = :(using EegFun, MixedModels, StatsModels, SharedArrays)
 function _ensure_workers_loaded()
     ws = filter(!=(1), workers())
     isempty(ws) && return
+    proj = Base.active_project()
     try
         @sync for p in ws
-            @async remotecall_eval(Main, p, _WORKER_USING)
+            @async remotecall_eval(Main, p, quote
+                using Pkg
+                Pkg.activate($proj; io = devnull)
+                using Logging
+                Logging.global_logger(Logging.NullLogger())
+                using EegFun, MixedModels, StatsModels, SharedArrays
+            end)
         end
     catch e
         @minimal_error "Could not load the required packages on the worker processes: $(sprint(showerror, e)). " *
@@ -699,6 +740,13 @@ function _fit_mass_lmm(eeg_data, meta_df, f, epochs;
     n_perms >= 0 || @minimal_error "n_perms must be ≥ 0"
     n_channels, n_timepoints, n_epochs = size(eeg_data)
     nrow(meta_df) == n_epochs || @minimal_error "Number of rows in meta_df ($(nrow(meta_df))) must match number of epochs in eeg_data ($n_epochs)."
+    if !isnothing(channel_names)
+        length(channel_names) == n_channels || @minimal_error "length(channel_names) ($(length(channel_names))) must match n_channels ($n_channels)."
+    end
+    if !isnothing(time_points)
+        length(time_points) == n_timepoints || @minimal_error "length(time_points) ($(length(time_points))) must match n_timepoints ($n_timepoints)."
+        all(isfinite, time_points) || @minimal_error "time_points must contain finite values."
+    end
     channel_names = isnothing(channel_names) ? [Symbol("Ch$i") for i in 1:n_channels] : Symbol.(channel_names)
     time_points = Float64.(isnothing(time_points) ? (1:n_timepoints) : time_points)
 
@@ -733,33 +781,54 @@ function _fit_mass_lmm(eeg_data, meta_df, f, epochs;
         store_maps && _check_zperm_memory(n_channels, n_timepoints, n_flips, length(tested))
         tested_pos = [findfirst(==(c), est_cols) for c in tested]
 
-        # 2. Worker initialization & Outputs (SharedArrays across workers or single process)
-        if nprocs() > 1
+        # 2. Worker initialization & Outputs (SharedArrays across workers, or regular Arrays if single process)
+        is_distributed = nprocs() > 1
+        if is_distributed
             _ensure_workers_loaded()
             worker_blas = _set_worker_blas_threads!(1)
         end
 
         tasks = [(c, t) for c in 1:n_channels for t in 1:n_timepoints]
-        n_slots = maximum(workers())
-        out = (
-            beta = SharedArray{Float64}(n_channels, n_timepoints, n_coefs),
-            se = SharedArray{Float64}(n_channels, n_timepoints, n_coefs),
-            z = SharedArray{Float64}(n_channels, n_timepoints, n_coefs),
-            p = SharedArray{Float64}(n_channels, n_timepoints, n_coefs),
-            singular = SharedArray{Bool}(n_channels, n_timepoints),
-            status = SharedArray{UInt8}(n_channels, n_timepoints),
-            zperm = store_maps ? SharedArray{Float32}(n_channels, n_timepoints, n_flips, length(tested)) : zeros(Float32, 0, 0, 0, 0),
-            maxabs = (do_perm && !store_maps) ? SharedArray{Float64}(n_slots, n_flips, length(tested)) : zeros(0, 0, 0),
-        )
-        do_perm && !store_maps && fill!(out.maxabs, 0.0)
-        store_maps && fill!(out.zperm, 0.0f0)
-        fill!(out.status, STATUS_FLAT)
-        eeg = (eeg_data isa SharedArray) ? eeg_data : (SharedArray{Float64}(size(eeg_data)) .= eeg_data)
+        n_slots = is_distributed ? maximum(workers()) : 1
+        out = if is_distributed
+            (
+                beta = SharedArray{Float64}(n_channels, n_timepoints, n_coefs),
+                se = SharedArray{Float64}(n_channels, n_timepoints, n_coefs),
+                z = SharedArray{Float64}(n_channels, n_timepoints, n_coefs),
+                p = SharedArray{Float64}(n_channels, n_timepoints, n_coefs),
+                singular = SharedArray{Bool}(n_channels, n_timepoints),
+                status = SharedArray{UInt8}(n_channels, n_timepoints),
+                zperm = store_maps ? SharedArray{Float32}(n_channels, n_timepoints, n_flips, length(tested)) : zeros(Float32, 0, 0, 0, 0),
+                maxabs = (do_perm && !store_maps) ? SharedArray{Float64}(n_slots, n_flips, length(tested)) : zeros(0, 0, 0),
+            )
+        else
+            (
+                beta = fill(NaN, n_channels, n_timepoints, n_coefs),
+                se = fill(NaN, n_channels, n_timepoints, n_coefs),
+                z = fill(NaN, n_channels, n_timepoints, n_coefs),
+                p = fill(NaN, n_channels, n_timepoints, n_coefs),
+                singular = fill(false, n_channels, n_timepoints),
+                status = fill(STATUS_FLAT, n_channels, n_timepoints),
+                zperm = store_maps ? zeros(Float32, n_channels, n_timepoints, n_flips, length(tested)) : zeros(Float32, 0, 0, 0, 0),
+                maxabs = (do_perm && !store_maps) ? zeros(Float64, n_slots, n_flips, length(tested)) : zeros(0, 0, 0),
+            )
+        end
+        if is_distributed
+            fill!(out.beta, NaN)
+            fill!(out.se, NaN)
+            fill!(out.z, NaN)
+            fill!(out.p, NaN)
+            fill!(out.singular, false)
+            do_perm && !store_maps && fill!(out.maxabs, 0.0)
+            store_maps && fill!(out.zperm, 0.0f0)
+            fill!(out.status, STATUS_FLAT)
+        end
+        eeg = is_distributed ? ((eeg_data isa SharedArray) ? eeg_data : (SharedArray{Float64}(size(eeg_data)) .= eeg_data)) : eeg_data
         base_ctx = (REML = REML, n_flips = do_perm ? n_flips : 0, tested_pos = tested_pos, H = H, store_maps = store_maps,
             est_cols = est_cols)
 
         # 3. Mass-univariate fits: one LMM per pixel; the sign-flip null is closed-form at the fitted θ
-        if nprocs() > 1
+        if is_distributed
             progress && @info "Fitting $(length(tasks)) mixed models across $n_epochs epochs on $(nworkers()) worker processes..."
         elseif progress
             @info "Fitting $(length(tasks)) mixed models across $n_epochs epochs on 1 worker. " *
@@ -769,18 +838,28 @@ function _fit_mass_lmm(eeg_data, meta_df, f, epochs;
 
         make_scratch() = _create_scratch(f, meta_df_init, est_cols, block_ids, n_flips, length(tested), contrasts)
         prog = Progress(length(tasks); dt = 1, desc = "Fitting models...", enabled = progress)
-        prog_channel = RemoteChannel(() -> Channel{Bool}(length(tasks)), 1)
-        Logging.with_logger(Logging.NullLogger()) do
-            @sync begin
-                @async while take!(prog_channel)
-                    next!(prog)
+        if is_distributed
+            prog_channel = RemoteChannel(() -> Channel{Bool}(length(tasks)), 1)
+            Logging.with_logger(Logging.NullLogger()) do
+                @sync begin
+                    @async while take!(prog_channel)
+                        next!(prog)
+                    end
+                    @sync @distributed for (c_idx, t_idx) in tasks
+                        scr = get!(make_scratch, task_local_storage(), :lmm_scratch)
+                        _process_pixel!(scr, eeg, c_idx, t_idx, out, base_ctx)
+                        put!(prog_channel, true)
+                    end
+                    put!(prog_channel, false)
                 end
-                @sync @distributed for (c_idx, t_idx) in tasks
-                    scr = get!(make_scratch, task_local_storage(), :lmm_scratch)
+            end
+        else
+            scr = make_scratch()
+            Logging.with_logger(Logging.NullLogger()) do
+                for (c_idx, t_idx) in tasks
                     _process_pixel!(scr, eeg, c_idx, t_idx, out, base_ctx)
-                    put!(prog_channel, true)
+                    progress && next!(prog)
                 end
-                put!(prog_channel, false)
             end
         end
         finish!(prog)
@@ -790,6 +869,7 @@ function _fit_mass_lmm(eeg_data, meta_df, f, epochs;
         first_error = _first_fit_error(fit_status, eeg, make_scratch, base_ctx)
         _report_fit_problems(fit_status, channel_names, first_error)
         unfitted = fit_status .>= STATUS_FLAT
+        ineligible = .!is_inference_eligible.(fit_status)
 
         beta, se, z, p_param = Array(out.beta), Array(out.se), Array(out.z), Array(out.p)
         for arr in (beta, se, z, p_param)
@@ -818,13 +898,15 @@ function _fit_mass_lmm(eeg_data, meta_df, f, epochs;
                     null_max[:, c] .= vec(maximum(view(maxabs, :, :, j); dims = 1))
                 end
             end
-            p_corrected = _compute_p_corrected(z, null_max, tested, ctx, unfitted)
+            p_corrected = _compute_p_corrected(z, null_max, tested, ctx, ineligible)
         end
 
         inference = (
             correction = do_perm ? correction : :none,
             n_perms = n_flips,
             exhaustive = exhaustive,
+            p_value_convention = exhaustive ? :exhaustive_hypercube : :monte_carlo_phipson_smyth,
+            n_unique_classes = isnothing(block_ids) ? 0 : (maximum(block_ids) - 1 < 62 ? 2^(maximum(block_ids) - 1) : -1),
             flip_by = flip_col,
             n_blocks = isnothing(block_ids) ? 0 : maximum(block_ids),
             cluster_threshold = Float64(cluster_threshold),
@@ -834,6 +916,11 @@ function _fit_mass_lmm(eeg_data, meta_df, f, epochs;
             contrasts = contrasts,
             n_obs = n_epochs,
             formula = f,
+            prespecified_field_size = (n_channels, n_timepoints),
+            field_mask_policy = :intersection_of_valid_pixels,
+            n_valid_pixels = count(is_inference_eligible, fit_status),
+            n_ineligible_pixels = count(!is_inference_eligible, fit_status),
+            n_total_pixels = length(fit_status),
         )
         return EegFun.LmmStatsResult(coef_names, channel_names, time_points, beta, se, z, p_param, p_corrected,
             null_max, tested, Array(out.singular), fit_status, inference, epochs)
