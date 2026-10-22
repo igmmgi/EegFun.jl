@@ -680,8 +680,9 @@ function _ensure_workers_loaded()
     try
         @sync for p in ws
             @async remotecall_eval(Main, p, quote
-                using Pkg
-                Pkg.activate($proj; io = devnull)
+                if !isnothing($proj) && Base.active_project() != $proj
+                    Base.set_active_project($proj)
+                end
                 using Logging
                 Logging.global_logger(Logging.NullLogger())
                 using EegFun, MixedModels, StatsModels, SharedArrays

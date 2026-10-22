@@ -616,8 +616,9 @@ end
         proj = Base.active_project()
         for p in procs
             Distributed.remotecall_eval(Main, p, quote
-                using Pkg
-                Pkg.activate($proj; io = devnull)
+                if !isnothing($proj) && Base.active_project() != $proj
+                    Base.set_active_project($proj)
+                end
                 using Logging
                 Logging.global_logger(Logging.NullLogger())
                 using EegFun, MixedModels, StatsModels, SharedArrays
