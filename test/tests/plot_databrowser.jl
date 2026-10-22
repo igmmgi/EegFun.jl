@@ -208,4 +208,169 @@ using EegFun
     @testset "_add_marker! has a docstring" begin
         @test !occursin("No documentation found", string(@doc EegFun._add_marker!))
     end
+
+    @testset "path sanitization" begin
+        @test EegFun._percent_decode("hello%20world") == "hello world"
+        @test EegFun._percent_decode("test%C3%A4%C3%B6%C3%BC") == "testäöü"
+        @test EegFun._sanitize_dropped_path("file:///home/ian/test%20file.jld2") == "/home/ian/test file.jld2"
+        @test EegFun._sanitize_dropped_path("file://localhost/home/ian/test.jld2") == "/home/ian/test.jld2"
+        @test EegFun._sanitize_dropped_path("/path/with%20percent.jld2") == "/path/with%20percent.jld2"
+    end
+
+    @testset "channel repair survives filter toggle" begin
+        cdat = EegFun.create_test_continuous_data(n = 3000, n_channels = 5, seed = 42)
+        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol, Any}())
+        fig = Figure()
+        ax = Axis(fig[1, 1])
+        state = EegFun._create_browser_state(cdat, cdat.layout.data.label, ax, nothing, plot_kwargs)
+        
+        ch_bad = state.channels.labels[2]
+        
+        EegFun._repair_selected_channels!(state, [ch_bad], :spherical_spline, ax)
+        @test length(state.channel_repair_history) == 1
+        repaired_data = copy(state.data.current[].data[!, ch_bad])
+        
+        # Toggle HP filter on
+        EegFun._apply_hp_filter!(state, true)
+        @test state.data.filter_state.hp_active[] == true
+        @test state.analysis_settings[].repaired_channels == [ch_bad]
+        @test state.analysis_settings[].repair_method == :spherical_spline
+        @test state.analysis_settings[].hp_filter > 0.0
+
+        # Toggle HP filter off
+        EegFun._apply_hp_filter!(state, false)
+        @test state.data.filter_state.hp_active[] == false
+        @test state.data.current[].data[!, ch_bad] ≈ repaired_data
+
+        # Undo repair
+        EegFun._undo_last_repair!(state, ax)
+        @test isempty(state.channel_repair_history)
+        @test isempty(state.analysis_settings[].repaired_channels)
+    end
+
+    @testset "ICA with channel subset does not throw KeyError in _draw" begin
+        cdat = EegFun.create_test_continuous_data(n = 3000, n_channels = 4, seed = 7)
+        # Run ICA on a subset of 3 channels
+        ica_res = EegFun.run_ica(cdat; channel_selection = EegFun.channels(1:3))
+        
+        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol, Any}())
+        fig = Figure()
+        ax = Axis(fig[1, 1])
+        # Browser on full data with 4 channels, but ICA on 3 channels
+        state = EegFun._create_browser_state(cdat, cdat.layout.data.label, ax, ica_res, plot_kwargs)
+        state.view.show_original_ica[] = true
+        state.view.show_subtracted_ica[] = true
+        push!(state.ica.removed_components, 1)
+        
+        # _draw must not throw KeyError for the 4th channel
+        @test_nowarn EegFun._draw(ax, state)
+    end
+
+    @testset "ICA component removal with active filter matches filter after removal" begin
+        cdat = EegFun.create_test_continuous_data(n = 3000, n_channels = 4, seed = 123)
+        ica_res = EegFun.run_ica(cdat)
+        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol, Any}())
+        fig = Figure()
+        ax = Axis(fig[1, 1])
+        state = EegFun._create_browser_state(cdat, cdat.layout.data.label, ax, ica_res, plot_kwargs)
+
+        EegFun._apply_hp_filter!(state, true)
+        EegFun._toggle_ica_component!(state, 1)
+
+        cdat_expected = copy(cdat)
+        EegFun._apply_single_ica_removal!(cdat_expected, cdat, ica_res, 1)
+        sym_method = Symbol(state.data.filter_state.hp_method[])
+        sym_func = Symbol(state.data.filter_state.hp_func[])
+        EegFun.highpass_filter!(cdat_expected, state.data.filter_state.hp_freq[]; filter_method = sym_method, order = state.data.filter_state.hp_order[], filter_func = sym_func)
+
+        for col in state.channels.labels
+            diff = maximum(abs.(state.data.current[].data[!, col] .- cdat_expected.data[!, col]))
+            @test diff < 1e-12
+        end
+    end
+
+    @testset "analysis_settings copies mutable state" begin
+        cdat = EegFun.create_test_continuous_data(n = 2000, n_channels = 3, seed = 8)
+        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol, Any}())
+        fig = Figure()
+        ax = Axis(fig[1, 1])
+        state = EegFun._create_browser_state(cdat, cdat.layout.data.label, ax, nothing, plot_kwargs)
+
+        push!(state.selection.selected_regions[], (0.1, 0.5))
+        EegFun._update_analysis_settings!(state)
+        settings = state.analysis_settings[]
+        @test length(settings.selected_regions) == 1
+        push!(state.selection.selected_regions[], (0.6, 0.8))
+        @test length(settings.selected_regions) == 1
+
+        EegFun._clear_all_selected_regions!(ax, state)
+        @test isempty(state.analysis_settings[].selected_regions)
+    end
+
+    @testset "selection zero-width edge case" begin
+        cdat = EegFun.create_test_continuous_data(n = 2000, n_channels = 3, seed = 9)
+        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol, Any}())
+        fig = Figure()
+        ax = Axis(fig[1, 1])
+        state = EegFun._create_browser_state(cdat, cdat.layout.data.label, ax, nothing, plot_kwargs)
+        
+        EegFun._start_selection!(ax, state, 0.5)
+        @test state.selection.active[] == true
+        EegFun._finish_selection!(ax, state, 0.5)
+        @test state.selection.active[] == false
+        @test isempty(state.selection.selected_regions[])
+    end
+
+    @testset "vector of datasets returns results" begin
+        dats = [EegFun.create_test_continuous_data(n = 500, n_channels = 2, seed = i) for i in 1:2]
+        res = EegFun.plot_databrowser(dats; display_plot = false)
+        @test res isa Vector{<:NamedTuple}
+        @test length(res) == 2
+        @test haskey(res[1], :fig)
+        @test haskey(res[1], :analysis_settings)
+    end
+
+    @testset "Data - ICA line color is green with ICA" begin
+        cdat = EegFun.create_test_continuous_data(n = 1000, n_channels = 3, seed = 10)
+        ica_res = EegFun.run_ica(cdat)
+        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol, Any}())
+        fig = Figure()
+        ax = Axis(fig[1, 1])
+        state = EegFun._create_browser_state(cdat, cdat.layout.data.label, ax, ica_res, plot_kwargs)
+        EegFun._draw(ax, state)
+        ch = state.channels.labels[1]
+        line = state.channels.data_lines[ch]
+        # Default with ICA is unselected channel color (only data shown)
+        @test line.colormap[][1] == plot_kwargs[:unselected_channel_color]
+        # When show_cleaned_ica is enabled, line colormap switches to green
+        state.plot_kwargs[:show_cleaned_ica][] = true
+        @test line.colormap[][1] == :green
+    end
+
+    @testset "plot_databrowser with ICA defaults to only data shown" begin
+        cdat = EegFun.create_test_continuous_data(n = 1000, n_channels = 3, seed = 11)
+        ica_res = EegFun.run_ica(cdat)
+        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol, Any}())
+        fig = Figure()
+        ax = Axis(fig[1, 1])
+        state = EegFun._create_browser_state(cdat, cdat.layout.data.label, ax, ica_res, plot_kwargs)
+        EegFun._setup_ui(fig, ax, state, cdat, ica_res, plot_kwargs)
+        EegFun._draw(ax, state)
+        
+        # Default state: only Data is shown, not Data - ICA, nor ICA activations
+        @test state.view.show_original_ica[] == true
+        @test state.plot_kwargs[:show_cleaned_ica][] == false
+        @test state.view.show_subtracted_ica[] == false
+
+        # Visual lines:
+        ch = state.channels.labels[1]
+        data_line = state.channels.data_lines[ch]
+        orig_line = state.channels.original_lines[ch]
+        sub_line = state.channels.subtracted_lines[ch]
+
+        @test data_line.visible[] == true
+        @test data_line.colormap[][1] == plot_kwargs[:unselected_channel_color]
+        @test orig_line.visible[] == false
+        @test sub_line.visible[] == false
+    end
 end

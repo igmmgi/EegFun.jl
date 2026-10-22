@@ -20,8 +20,9 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 
 ### Fixed
 
+- State consistency, observer lifecycle, and pipeline ordering in `plot_databrowser`.
 - Isolated flat channels, bad pixels, and non-converged fits as `NaN` in `fit_mass_lmm` with consolidated warnings.
-- Channel line coloring under ICA overlay in `plot_databrowser`.
+- Channel line coloring under ICA overlay in `plot_databrowser`, defaulting to showing only original data in standard channel color, with dynamic switching to green upon enabling "Data - ICA", and fixing callback `MethodError` on toggle.
 - `BoundsError` and trial power averaging across time-frequency pipelines.
 - `MethodError` in out-of-place `channel_repairable`.
 - CI documentation build failure by pinning readabilities plugin.
