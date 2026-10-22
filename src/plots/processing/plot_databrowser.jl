@@ -140,6 +140,7 @@ mutable struct ChannelState
     data_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}
     original_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}    # ICA ghost: pre-removal signal
     subtracted_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}  # ICA ghost: removed artefact
+    draw_observers::Vector{Any}  # observables/observers created by `_draw`; disconnected on redraw
     function ChannelState(channel_labels::Vector{Symbol})
         new(
             channel_labels,
@@ -150,6 +151,7 @@ mutable struct ChannelState
             Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}(),
             Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}(),
             Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}(),
+            Any[],
         )
     end
 end
@@ -191,14 +193,22 @@ mutable struct ExtraChannelInfo
     ExtraChannelInfo() = new(Symbol[], Dict(), Dict(), nothing, nothing)
 end
 
-"""Visual state tracker for dynamic Independent Component Analysis (ICA) artifact removal."""
+"""
+Visual state tracker for dynamic Independent Component Analysis (ICA) artifact removal.
+
+`activation_cache` holds, per epoch (key `1` for continuous data), the activations of the removed
+components (samples × removed components) for a sample range around the visible window, so scrolling
+does not recompute them. It is invalidated whenever `removed_components` differs from `activation_key`.
+"""
 mutable struct IcaVisualState
     original::Union{Nothing,InfoIca}
     removed_components::Vector{Int}
     is_active::Bool
+    activation_cache::Dict{Int,Tuple{UnitRange{Int},Matrix{Float64}}}
+    activation_key::Vector{Int}
 
     function IcaVisualState(ica::Union{Nothing,InfoIca})
-        new(ica, Int[], !isnothing(ica))
+        new(ica, Int[], !isnothing(ica), Dict{Int,Tuple{UnitRange{Int},Matrix{Float64}}}(), Int[])
     end
 end
 
@@ -1448,8 +1458,7 @@ function _toggle_channel_visibility!(ax, state, channel_idx)
             label_handle.color[] = :red
         else
             base_color = state.plot_kwargs[:unselected_channel_color]
-            line_handle.colormap[] =
-                state.ica.is_active && state.view.show_original_ica[] ? [:black, :black, :red] : [base_color, base_color, :red]
+            line_handle.colormap[] = [base_color, base_color, :red]
             line_handle.linewidth[] = state.plot_kwargs[:channel_line_width]
             label_handle.color[] = :black
         end
@@ -1750,7 +1759,9 @@ end
 
 ########################
 # Drawing
-##################"""Add a vertical marker (trigger/EOG) to the marker list, window-scoped for performance."""
+########################
+
+"""Add a vertical marker (trigger/EOG) to the marker list, window-scoped for performance."""
 function _add_marker!(markers, ax, state, data, col; label = nothing, trial = nothing, visible = false, active_values = nothing)
     if isnothing(trial)
         # More efficient: filter directly without findall
@@ -1914,6 +1925,122 @@ function _butterfly_plot!(ax, state)
     _draw(ax, state)
 end
 
+# ICA ghost-line helpers
+"""Fill `pts` in place with `(x[i], y[i] * scale + offset)`; `pts`, `x` and `y` must have the same length."""
+function _window_points!(pts::Vector{Point2{Float64}}, x, y, scale, offset)
+    @inbounds for i in eachindex(pts)
+        pts[i] = Point2{Float64}(x[i], y[i] * scale + offset)
+    end
+    return pts
+end
+
+"""Fill `pts` in place with NaN y-values (an invisible line segment) at the x-positions `x`."""
+function _nan_points!(pts::Vector{Point2{Float64}}, x)
+    @inbounds for i in eachindex(pts)
+        pts[i] = Point2{Float64}(x[i], NaN)
+    end
+    return pts
+end
+
+"""
+    _points_observable(fill_points!, xrange, deps...)
+
+Observable holding one `Vector{Point2{Float64}}` per line (x and y update together, so Makie sees a single
+notification per change). The vector is reused and mutated in place; it is only reallocated when the window
+length changes. `fill_points!(buf, resized)` fills `buf` and returns `false` if nothing changed (no notification).
+The observer functions it registers are appended to `tracker` (see `_disconnect_draw_observers!`).
+"""
+function _points_observable(fill_points!::F, tracker::Vector{Any}, xrange::Observable, deps::Observable...) where {F<:Function}
+    obs = Observable(Vector{Point2{Float64}}(undef, length(xrange[])))
+    resized = Ref(true)
+    function refresh(_...)
+        n = length(xrange[])
+        buf = obs[]
+        if length(buf) != n
+            buf = Vector{Point2{Float64}}(undef, n)
+            resized[] = true
+        end
+        if fill_points!(buf, resized[])
+            resized[] = false
+            obs[] = buf   # same array mutated in place: Observables always notify on assignment
+        end
+        return nothing
+    end
+    refresh()
+    push!(tracker, onany(refresh, xrange, deps...))   # tracked so a redraw can disconnect them
+    return obs
+end
+
+"""Raw (unfiltered) original series for `col` from the browser's original data."""
+_ica_original_series(data::ContinuousDataState, ep, col) = data.original.data[!, col]
+_ica_original_series(data::EpochedDataState, ep, col) = data.original.data[ep][!, col]
+
+"""Accumulate `u * ((x[i] - m) / scale)` for `i in rng` into column `k` of `acts` (type-stable kernel)."""
+function _accumulate_activation!(acts::Matrix{Float64}, k::Int, x::AbstractVector{<:Real}, rng::UnitRange{Int}, u::Float64, m::Float64, scale::Float64)
+    @inbounds for (j, i) in enumerate(rng)
+        acts[j, k] += u * ((x[i] - m) / scale)
+    end
+    return acts
+end
+
+"""Activations (samples × removed components) of the removed ICA components for sample range `rng`."""
+function _compute_ica_activations(state, ep, rng::UnitRange{Int})
+    ica = state.ica.original::InfoIca
+    comps = state.ica.removed_components
+    acts = zeros(Float64, length(rng), length(comps))
+    for (k, comp) in enumerate(comps), (ci, col_sym) in enumerate(ica.layout.data.label)
+        x = _ica_original_series(state.data, ep, col_sym)
+        _accumulate_activation!(acts, k, x, rng, ica.unmixing[comp, ci], ica.mean[ci], ica.scale)
+    end
+    return acts
+end
+
+"""
+Return `(range, acts)` where `acts` holds the removed-component activations covering `win`.
+
+Results are cached per epoch and extended to a margin of one window width on each side, so
+consecutive scroll steps reuse them. The cache is dropped when the removed components change.
+"""
+function _ica_activations!(state, ep, win::UnitRange{Int})
+    ica = state.ica
+    if ica.activation_key != ica.removed_components
+        empty!(ica.activation_cache)
+        ica.activation_key = copy(ica.removed_components)
+    end
+    entry = get(ica.activation_cache, ep, nothing)
+    if isnothing(entry) || first(win) < first(entry[1]) || last(win) > last(entry[1])
+        n_total = length(_ica_original_series(state.data, ep, first(ica.original.layout.data.label)))
+        w = length(win)
+        rng = max(1, first(win) - w):min(n_total, last(win) + w)
+        entry = (rng, _compute_ica_activations(state, ep, rng))
+        ica.activation_cache[ep] = entry
+    end
+    return entry::Tuple{UnitRange{Int},Matrix{Float64}}
+end
+
+"""Add `mix_weight * scale * acts[:, k]` (rows of `win` offset by `off`) onto `restored` in place."""
+function _add_component!(restored::Vector{Float64}, acts::Matrix{Float64}, k::Int, win::UnitRange{Int}, off::Int, coeff::Float64)
+    @inbounds for (j, i) in enumerate(win)
+        restored[j] += coeff * acts[i-off, k]
+    end
+    return restored
+end
+
+"""Current-window values with the removed components added back (the 'original' ICA signal) for one channel."""
+function _ica_restored_window(state, ep, win::UnitRange{Int}, current_raw, ch_row)
+    restored = collect(Float64, current_raw)
+    comps = state.ica.removed_components
+    isempty(comps) && return restored
+    rng, acts = _ica_activations!(state, ep, win)
+    ica = state.ica.original::InfoIca
+    off = first(rng) - 1
+    for (k, comp) in enumerate(comps)
+        # (mix_weight * scale) first, then times the activation: same operation order as the original code
+        _add_component!(restored, acts, k, win, off, ica.mixing[ch_row, comp] * ica.scale)
+    end
+    return restored
+end
+
 # Single function with data access abstraction
 """Draw all visible channel lines and labels on the axis."""
 function _draw(ax, state::DataBrowserState{<:AbstractDataState})
@@ -1922,35 +2049,15 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
 
     epoch_obs = state.data isa EpochedDataState ? state.data.current_epoch : Observable(1)
 
+    # Every derived observable / observer created below is registered in `state.channels.draw_observers`,
+    # so `_clear_and_save_limits!` can disconnect them from the shared inputs (xrange, current, ...) on redraw.
+    track(x) = (push!(state.channels.draw_observers, x); x)
+
     # Pre-compute shared observables
-    visible_time_obs = @lift(get_time($(state.data.current), $(epoch_obs), $(state.view.xrange)))
-    time_start_obs   = @lift($(visible_time_obs)[1])  # Fix 6: derived from visible_time_obs
+    visible_time_obs = track(@lift(get_time($(state.data.current), $(epoch_obs), $(state.view.xrange))))
+    time_start_obs   = track(@lift($(visible_time_obs)[1]))  # Fix 6: derived from visible_time_obs
 
     ch_idx_map = state.ica.is_active ? Dict(lbl => i for (i, lbl) in enumerate(state.ica.original.layout.data.label)) : Dict{Symbol,Int}()
-
-    ica_activations_obs = if state.ica.is_active
-        @lift begin
-            win   = $(state.view.xrange)
-            comps = state.ica.removed_components
-            n_win = length(win)
-            ep    = $(epoch_obs)
-            if isempty(comps)
-                zeros(Float64, 0, n_win)
-            else
-                acts = zeros(Float64, length(comps), n_win)
-                for (k, comp) in enumerate(comps)
-                    unmix_vec = state.ica.original.unmixing[comp, :]
-                    for (ci, col_sym) in enumerate(state.ica.original.layout.data.label)
-                        norm_ch = (get_data(state.data.original, ep, win, col_sym) .- state.ica.original.mean[ci]) ./ state.ica.original.scale
-                        @views acts[k, :] .+= unmix_vec[ci] .* norm_ch
-                    end
-                end
-                acts
-            end
-        end
-    else
-        Observable(zeros(Float64, 0, 0))
-    end
 
     for (idx, visible) in enumerate(state.channels.visible)
         col = state.channels.labels[idx]
@@ -1958,53 +2065,85 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
             is_selected = state.channels.selected[idx]
 
             # Channel data (compute once)
-            channel_data_obs = @lift(get_data($(state.data.current), $(epoch_obs), $(state.view.xrange), col))
-            channel_data_with_offset = @lift($(channel_data_obs) .* $(state.view.amplitude_scale) .+ state.view.offset[idx])
+            channel_data_obs = track(@lift(get_data($(state.data.current), $(epoch_obs), $(state.view.xrange), col)))
 
-            # Ghost lines data
+            # One Point2 observable per line, updated in place (no per-step allocation of the point array)
+            channel_points_obs = _points_observable(
+                state.channels.draw_observers,
+                state.view.xrange,
+                state.data.current,
+                epoch_obs,
+                state.view.amplitude_scale,
+            ) do buf, _
+                win = state.view.xrange[]
+                ep = epoch_obs[]
+                cur = state.data.current[]
+                _window_points!(buf, get_time(cur, ep, win), get_data(cur, ep, win, col), state.view.amplitude_scale[], state.view.offset[idx])
+                return true
+            end
+
+            # Ghost lines data (activations are only computed while the respective ghost is visible;
+            # while hidden the buffer is set to NaN once and then left untouched)
             if state.ica.is_active
                 ch_row = ch_idx_map[col]
 
-                original_data_with_offset = @lift(if $(state.view.show_original_ica)
-                    current_raw  = get_data($(state.data.current), $(epoch_obs), $(state.view.xrange), col)
-                    original_raw = copy(current_raw)
-                    acts         = $(ica_activations_obs)
-                    if size(acts, 2) == length(current_raw)
-                        for (k, comp) in enumerate(state.ica.removed_components)
-                            if k <= size(acts, 1)
-                                mix_weight = state.ica.original.mixing[ch_row, comp]
-                                @views original_raw .+= mix_weight .* state.ica.original.scale .* acts[k, :]
-                            end
-                        end
+                original_nan = Ref(false)
+                original_points_obs = _points_observable(
+                    state.channels.draw_observers,
+                    state.view.xrange,
+                    state.data.current,
+                    epoch_obs,
+                    state.view.amplitude_scale,
+                    state.view.show_original_ica,
+                ) do buf, resized
+                    win = state.view.xrange[]
+                    ep = epoch_obs[]
+                    cur = state.data.current[]
+                    if state.view.show_original_ica[]
+                        restored = _ica_restored_window(state, ep, win, get_data(cur, ep, win, col), ch_row)
+                        _window_points!(buf, get_time(cur, ep, win), restored, state.view.amplitude_scale[], state.view.offset[idx])
+                        original_nan[] = false
+                        return true
+                    elseif resized || !original_nan[]
+                        _nan_points!(buf, get_time(cur, ep, win))
+                        original_nan[] = true
+                        return true
                     end
-                    original_raw .* $(state.view.amplitude_scale) .+ state.view.offset[idx]
-                else
-                    fill(NaN, length($(state.view.xrange)))
-                end)
+                    return false
+                end
 
-                subtracted_data_obs = @lift(if $(state.view.show_subtracted_ica)
-                    current_raw  = get_data($(state.data.current), $(epoch_obs), $(state.view.xrange), col)
-                    original_raw = copy(current_raw)
-                    acts         = $(ica_activations_obs)
-                    if size(acts, 2) == length(current_raw)
-                        for (k, comp) in enumerate(state.ica.removed_components)
-                            if k <= size(acts, 1)
-                                mix_weight = state.ica.original.mixing[ch_row, comp]
-                                @views original_raw .+= mix_weight .* state.ica.original.scale .* acts[k, :]
-                            end
-                        end
+                subtracted_nan = Ref(false)
+                subtracted_points_obs = _points_observable(
+                    state.channels.draw_observers,
+                    state.view.xrange,
+                    state.data.current,
+                    epoch_obs,
+                    state.view.amplitude_scale,
+                    state.view.show_subtracted_ica,
+                ) do buf, resized
+                    win = state.view.xrange[]
+                    ep = epoch_obs[]
+                    cur = state.data.current[]
+                    if state.view.show_subtracted_ica[]
+                        current_raw = get_data(cur, ep, win, col)
+                        restored = _ica_restored_window(state, ep, win, current_raw, ch_row)
+                        restored .-= current_raw
+                        _window_points!(buf, get_time(cur, ep, win), restored, state.view.amplitude_scale[], state.view.offset[idx])
+                        subtracted_nan[] = false
+                        return true
+                    elseif resized || !subtracted_nan[]
+                        _nan_points!(buf, get_time(cur, ep, win))
+                        subtracted_nan[] = true
+                        return true
                     end
-                    (original_raw .- current_raw) .* $(state.view.amplitude_scale) .+ state.view.offset[idx]
-                else
-                    fill(NaN, length($(state.view.xrange)))
-                end)
+                    return false
+                end
 
                 _create_line!(
                     state.channels.original_lines,
                     col,
                     ax,
-                    visible_time_obs,
-                    original_data_with_offset,
+                    original_points_obs,
                     :grey,
                     [:grey],
                     1, # linewidth
@@ -2016,8 +2155,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                     state.channels.subtracted_lines,
                     col,
                     ax,
-                    visible_time_obs,
-                    subtracted_data_obs,
+                    subtracted_points_obs,
                     :red,
                     [:red],
                     1, # linewidth
@@ -2030,9 +2168,11 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
 
             # Line properties (reuse channel_data_obs for efficiency)
             # Keep line_color as Vector{Bool} observable at all times so GLMakie shader pipeline type is fixed
-            line_color = @lift(
-                ($(state.view.crit_val) > 0.0) ? (abs.($(channel_data_obs)) .>= $(state.view.crit_val)) :
-                fill(false, length($(channel_data_obs)))
+            line_color = track(
+                @lift(
+                    ($(state.view.crit_val) > 0.0) ? (abs.($(channel_data_obs)) .>= $(state.view.crit_val)) :
+                    fill(false, length($(channel_data_obs)))
+                )
             )
 
             if is_repaired || is_selected
@@ -2041,11 +2181,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                 line_width = state.plot_kwargs[:channel_line_width] * 2  # Make repaired/selected channels thicker
             else
                 base_color = state.plot_kwargs[:unselected_channel_color]
-                if !state.ica.is_active
-                    line_colormap = [base_color, base_color, :red]
-                else
-                    line_colormap = @lift($(state.view.show_original_ica) ? [:black, :black, :red] : [base_color, base_color, :red])
-                end
+                line_colormap = [base_color, base_color, :red]
                 line_width = state.plot_kwargs[:channel_line_width]
             end
 
@@ -2054,8 +2190,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                 state.channels.data_lines,
                 col,
                 ax,
-                visible_time_obs,
-                channel_data_with_offset,
+                channel_points_obs,
                 line_color,
                 line_colormap,
                 line_width,
@@ -2065,7 +2200,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
 
             # Handle labels
             if !state.view.butterfly[]
-                label_y_obs = @lift(get_label_y($(state.data.current), $(epoch_obs), $col, state.view.offset[idx]))
+                label_y_obs = track(@lift(get_label_y($(state.data.current), $(epoch_obs), $col, state.view.offset[idx])))
                 _create_label!(state.channels.data_labels, col, ax, time_start_obs, label_y_obs, is_selected)
             else
                 _hide_channel_label!(state.channels.data_labels, col)
@@ -2079,11 +2214,33 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
     _restore_axis_limits!(ax, state)
 end
 
+"""
+    _disconnect_draw_observers!(state)
+
+Disconnect every observable/observer registered by `_draw` from its shared inputs (`xrange`, `current`, ...).
+Without this, each redraw (butterfly toggle, ICA apply, hiding a channel, ...) leaves the previous draw's
+observers attached, and every later scroll step pays for them again.
+"""
+function _disconnect_draw_observers!(state)
+    for o in state.channels.draw_observers
+        if o isa Observable
+            Makie.Observables.clear(o)   # remove the callbacks that feed this derived observable
+        elseif o isa AbstractVector
+            foreach(Makie.off, o)
+        else
+            Makie.off(o)
+        end
+    end
+    empty!(state.channels.draw_observers)
+    return nothing
+end
+
 """Save current axis limits and clear all channel lines/labels."""
 function _clear_and_save_limits!(ax, state)
     state.plot_kwargs[:_saved_xlims] = ax.xaxis.attributes.limits[]
     state.plot_kwargs[:_saved_ylims] = ax.yaxis.attributes.limits[]
     _clear_axes!(ax, _all_line_dicts(state))
+    _disconnect_draw_observers!(state)
 end
 
 """Restore axis limits from saved values (preserves user zoom across redraws)."""
@@ -2113,12 +2270,11 @@ function _get_data_accessors(state::EpochedDataState)
     return get_data, get_time, get_label_y
 end
 
-"""Plot a channel line on the axis and store it."""
-function _create_line!(data_lines, col, ax, x_obs, y_obs, color, colormap, linewidth, alpha; visible = true)
+"""Plot a channel line (from one `Point2` observable) on the axis and store it."""
+function _create_line!(data_lines, col, ax, points_obs, color, colormap, linewidth, alpha; visible = true)
     data_lines[col] = lines!(
         ax,
-        x_obs,
-        y_obs,
+        points_obs,
         color = color,
         colormap = colormap,
         linewidth = linewidth,
