@@ -944,7 +944,23 @@ function _data_interpolation_topo(dat::Union{Vector{<:AbstractFloat}, Matrix{<:A
         @minimal_error "Unknown method: $method. Supported: $supported_methods"
     end
 
-    itp = ScatteredInterpolation.interpolate(method_obj, points, dat)
+    pts = points
+    d = dat
+    if dat isa Vector
+        valid = isfinite.(dat)
+        if !all(valid)
+            if count(valid) < 3
+                @warn "Fewer than 3 valid channels for topography interpolation; returning zero grid."
+                result = zeros(Float64, grid_scale, grid_scale)
+                _circle_mask!(result, grid_scale)
+                return result, (-plot_radius, plot_radius), (-plot_radius, plot_radius)
+            end
+            pts = points[:, valid]
+            d = dat[valid]
+        end
+    end
+
+    itp = ScatteredInterpolation.interpolate(method_obj, pts, d)
     eval_res = ScatteredInterpolation.evaluate(itp, grid_points)
 
     if dat isa Vector

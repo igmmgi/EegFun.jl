@@ -35,12 +35,16 @@ exact permutation scheme and raise an error when `n_perms > 0`; use `n_perms = 0
 - `tfce_E=0.5`, `tfce_H=2.0`, `tfce_dh=0.1`: TFCE parameters (`:tfce`).
 - `spatial_connectivity=nothing`: Channel adjacency for clustering/TFCE (built from the layout for EpochData).
 - `REML::Bool=false`: Use REML instead of ML.
+- `contrasts=Dict{Symbol,Any}()`: Contrast coding of categorical predictors, passed to MixedModels as in
+  `fit(MixedModel, f, df; contrasts = Dict(:condition => EffectsCoding(base = "A")))`. Default: treatment (dummy)
+  coding. Coefficient names in `tested_coefs` refer to the resulting columns.
 - `rng=Random.default_rng()`: Random number generator for the sign flips.
 - Array method only: `channel_names`, `time_points`, `dim_order=(:channels, :timepoints, :epochs)`.
 
 # Parallelism
-Uses Distributed worker processes if any are available (load the packages on them first:
-`@everywhere using EegFun, MixedModels`), otherwise Julia threads (`julia -t auto`).
+Parallelised across Distributed worker processes (`Distributed.jl`). To scale across CPU cores,
+launch Julia with `julia -p auto` or call `addprocs(N)` followed by `@everywhere using EegFun, MixedModels, StatsModels`
+prior to calling `fit_mass_lmm`. If no worker processes are added, fits run sequentially on the main process.
 
 # Rank-deficient designs
 If the fixed-effects design matrix is rank deficient (e.g. a predictor that is constant in the
@@ -48,6 +52,23 @@ data, an empty design cell combined with an interaction, or exactly collinear pr
 aliased coefficient(s) cannot be estimated. A single warning names them; their `beta`, `se`,
 `z_values`, `p_parametric` and `p_corrected` values are `NaN`, and they are excluded from
 permutation testing. All estimable coefficients are fitted and tested as usual.
+
+# Fit failures and convergence
+Each channel × time point is fitted independently, and one bad point never aborts the run:
+- Points whose data are constant (e.g. a flat or dead channel) or contain non-finite values are not fitted;
+  points where the fit throws or yields non-finite estimates are treated the same. Their `beta`, `se`,
+  `z_values`, `p_parametric` and `p_corrected` are `NaN`, and they are excluded from the permutation null
+  distribution and from cluster/TFCE formation. A single warning lists the affected channels and the first
+  error message.
+- The optimizer outcome of every fit is stored in `fit_status` (see [`LmmStatsResult`](@ref)). Fits that hit the
+  evaluation limit or otherwise failed to converge keep their estimates but are reported in one warning;
+  `show(result)` summarises all outcomes.
+
+# Memory and permutation count
+`correction = :cluster` and `:tfce` store the z-map of every permutation (`n_channels × n_timepoints × n_perms ×
+n_tested` single-precision values). A warning is issued when this exceeds half of the free memory, and an
+error before it would exceed ~90%; `:maxt` does not store the maps. With few random sign flips (`n_perms < 100`)
+the p-value resolution is `1/(n_perms+1)`, and a warning is issued; below 19 no point can reach p < 0.05.
 
 Returns an [`LmmStatsResult`](@ref).
 
@@ -61,7 +82,12 @@ end
 # of the null set (p = #{null ≥ obs} / N); with random flips the observed statistic is added (Phipson & Smyth, 2010).
 function _lmm_perm_pvalue(null_sorted::AbstractVector, obs::Real, exhaustive::Bool)
     n = length(null_sorted)
-    n_ge = n - searchsortedlast(null_sorted, obs * (1 - 1e-8))   # tolerance for floating-point ties
+    # Tolerance for floating-point ties, ensuring exact matches (such as the identity flip
+    # in exhaustive enumeration) are included in the null count even with slight roundoff.
+    tol = max(abs(obs) * 1e-8, 1e-12)
+    threshold = obs - tol
+    idx = searchsortedfirst(null_sorted, threshold)
+    n_ge = n - idx + 1
     return exhaustive ? n_ge / n : (n_ge + 1) / (n + 1)
 end
 

@@ -43,6 +43,7 @@ public IcaPrms
 public InfoIca
 public Interval
 public Layout
+public LMM_FIT_STATUS
 public LmmStatsResult
 public MultiDataFrameEeg
 public Neighbours

@@ -9,43 +9,38 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 
 ### Added
 
-- Freedman–Lane whole-subject sign-flipping permutation engine and closed-form Woodbury GLS solver in `fit_mass_lmm`, supporting multithreading and `Distributed` multiprocessing.
-- Extended `LmmStatsResult` with parametric inference fields (`z_values`, `p_parametric`, `p_corrected`, `inference`).
-- Full `Base` array and `Tables.jl` interfaces for `EegData` (indexing, conversions, `dat[:Cz]` channel subsetting).
-- Canonical accessors (`time_vector`, `frequency_vector`, etc.) and `Base.show` across stats and data types.
-- Thread-safe async progress tracking (`track_progress_async`) for parallel decoding and permutation testing.
-- Expanded unit test coverage across signal processing, statistics, and decoding.
+- Closed-form Freedman–Lane permutation engine in `fit_mass_lmm`, parallelized via `Distributed`.
+- Convergence tracking and full parametric statistics (`z_values`, `p_parametric`, `fit_status`) in `LmmStatsResult`.
+- Support for factor contrasts (e.g., `EffectsCoding`) in `fit_mass_lmm`.
+- Permutation memory guard and sample-size validation in `fit_mass_lmm`.
+- Memory leak fixes and performance optimizations in `plot_databrowser` (cached ICA activations, coordinate buffers).
+- Complete `Base` array and `Tables.jl` interfaces for `EegData` types.
+- Canonical accessors (`time_vector`, `frequency_vector`, etc.) and `show` methods across stats types.
+- Expanded unit test suites for statistics, decoding, and signal processing.
 
 ### Fixed
 
-- Fixed `BoundsError` and trial power averaging in time-frequency pipelines (`tf_morlet`, `tf_stft`, `tf_multitaper`).
-- Fixed `MethodError` in out-of-place `channel_repairable` by implementing `Base.copy(::ContinuousRepairInfo)`.
-- Fixed documentation CI build failure by pinning `@nolebase/vitepress-plugin-enhanced-readabilities`.
-- Respected `display_plot = false` in `plot_tf` during tests and non-interactive use.
-- The continuous data browser region subset now warns when nothing is selected instead of silently falling back to `bounds`.
-- GUI plot errors are routed through a single `_guarded` helper, so failures are logged consistently.
+- Isolated flat channels, bad pixels, and non-converged fits as `NaN` in `fit_mass_lmm` with consolidated warnings.
+- Channel line coloring under ICA overlay in `plot_databrowser`.
+- `BoundsError` and trial power averaging across time-frequency pipelines.
+- `MethodError` in out-of-place `channel_repairable`.
+- CI documentation build failure by pinning readabilities plugin.
+- Respected `display_plot = false` in `plot_tf`.
+- Guarded error logging across GUI plotting routines.
 
 ### Changed
 
-- Replaced iterative permutation refits in mass-univariate LMMs with closed-form Woodbury GLS, reducing execution time from CPU-hours to seconds.
-- Modularized source files into subpackages (`ica/`, `utils/data/`, `artifact_detection/`).
-- Declared 45 previously omitted functions in `public_api.jl`, and standardized error handling on `@minimal_error` / `EegFunError`.
-- Updated to `AnovaFun` 0.5 (Makie backends must now be loaded explicitly, e.g. `using GLMakie`).
-- Split `preprocess` into modular pipeline stages; `dry_run = true` no longer creates output files.
-- Optimized performance and memory allocations across time-frequency transforms, epoched CSD, cluster permutations, mass-univariate $t$-tests, SVM decoding, and artifact detection routines.
-- Accelerated GPU ICA algorithms (Infomax and Picard) via pre-allocated scratch buffers.
-- Accelerated Makie rendering: batched topography interpolation, reduced scene objects, and bound `plot_databrowser` directly to observables.
-- Invalid config values now raise an `EegFunError` instead of only warning.
-- A failed baseline in `erp_measurements` now propagates instead of being swallowed; the Mahalanobis → Euclidean fallback is removed and now throws.
-- User-facing input errors in permutations, `StatsAPI.stderror`, and topography/Makie plotting now use `@minimal_error` (`EegFunError`) instead of plain `error()`.
-- `condition_number` / `condition_name` no longer return `"N/A"` for data without a condition (only `ContinuousData` returns `"Raw Data"`).
-- Batch entry points share one internal `_with_batch_logging` helper; redundant per-file try/catch wrappers were removed (`_run_batch_operation` already catches).
-- Moved selection helpers (`get_selected_*`, `epoch_to_continuous`) from `subset_files.jl` to `subset.jl`, and `log_pretty_table` to `utils/print.jl`.
+- Replaced iterative LMM permutation refits with closed-form Woodbury GLS for instant permutation inference.
+- Modularized repository source structure (`ica/`, `utils/data/`, `artifact_detection/`).
+- Exported and documented missing functions in `public_api.jl`, standardizing on `@minimal_error`.
+- Updated to `AnovaFun` 0.5 with explicit Makie backend loading.
+- Optimized allocations across time-frequency, CSD, permutations, decoding, and GPU ICA.
+- Accelerated topography rendering with batched interpolation and observable binding.
 
 ### Removed
 
-- Misleading `realign!(::String, ...)` and `calculate_trigger_interval!(::String, ...)` aliases; use the non-mutating `realign` / `calculate_trigger_interval` batch functions.
-- Legacy compatibility code: old-`Layout` JLD2 conversion, the list-based `picard` overload, the frequency-outer decoding layout, and the internal electrode-argument `_compute_cluster_statistics` overloads.
+- Deprecated mutating batch string aliases (`realign!`, `calculate_trigger_interval!`).
+- Legacy compatibility overloads (old `Layout` JLD2 conversion, obsolete decoding layouts).
 
 ## [0.8.0] - 2026-08-13
 

@@ -395,6 +395,14 @@ function Base.show(io::IO, result::AnalyticResult)
 end
 
 """
+    LMM_FIT_STATUS
+
+Labels of the per-point fit outcome codes stored in `LmmStatsResult.fit_status`:
+`LMM_FIT_STATUS[code + 1]` for `code` in `0:5`.
+"""
+const LMM_FIT_STATUS = (:converged, :roundoff_limited, :max_evals, :optimizer_failure, :flat_response, :fit_error)
+
+"""
     LmmStatsResult
 
 Result of a mass-univariate linear mixed model fit across a channels × time grid
@@ -414,8 +422,18 @@ Result of a mass-univariate linear mixed model fit across a channels × time gri
   (`NaN` columns for untested coefficients)
 - `tested::Vector{Int}`: Indices of the permutation-tested coefficients
 - `singular_fits::Matrix{Bool}`: Whether the fit at each [channel, time] point is singular
+- `fit_status::Matrix{UInt8}`: Fit outcome at each [channel, time] point, as an index into `LMM_FIT_STATUS`
+  (`LMM_FIT_STATUS[fit_status[c, t] + 1]`):
+  - `0` `:converged`: the optimizer met its tolerance.
+  - `1` `:roundoff_limited`: the optimizer stopped at machine precision (the estimates are normally fine).
+  - `2` `:max_evals`: the evaluation limit was reached before convergence; estimates are kept but unreliable.
+  - `3` `:optimizer_failure`: any other optimizer failure; estimates are kept but unreliable.
+  - `4` `:flat_response`: the data were constant or contained non-finite values; not fitted.
+  - `5` `:fit_error`: the fit threw an error or produced non-finite estimates.
+  Points with status `4` or `5` have `NaN` beta, se, z and p, and are excluded from the permutation null
+  distribution and from cluster/TFCE formation.
 - `inference::NamedTuple`: Settings used for inference (`correction`, `n_perms`, `exhaustive`, `flip_by`,
-  `n_blocks`, `cluster_threshold`, `tfce`, `spatial_connectivity`, `REML`, `n_obs`, `formula`)
+  `n_blocks`, `cluster_threshold`, `tfce`, `spatial_connectivity`, `REML`, `contrasts`, `n_obs`, `formula`)
 - `epochs::Union{EpochData,Nothing}`: The input epochs (EpochData method only; used for plotting)
 """
 struct LmmStatsResult <: EegFunData
@@ -430,6 +448,7 @@ struct LmmStatsResult <: EegFunData
     null_max::Matrix{Float64}
     tested::Vector{Int}
     singular_fits::Matrix{Bool}
+    fit_status::Matrix{UInt8}
     inference::NamedTuple
     epochs::Union{EpochData, Nothing}
 end
@@ -448,6 +467,9 @@ function Base.show(io::IO, result::LmmStatsResult)
     println(io, "├─ Predictors: ", join(result.coefficients, ", "))
     sing_pct = total_fits > 0 ? round(100 * n_singular / total_fits, digits = 1) : 0.0
     println(io, "├─ Singular fits: $n_singular / $total_fits ($sing_pct%)")
+    problems = ["$(count(==(UInt8(code - 1)), result.fit_status)) $(LMM_FIT_STATUS[code])" for code in 2:length(LMM_FIT_STATUS)
+                if any(==(UInt8(code - 1)), result.fit_status)]
+    isempty(problems) || println(io, "├─ Fit outcomes other than converged: ", join(problems, ", "))
     if isnothing(result.p_corrected)
         println(io, "└─ Inference: Wald z only (no permutation correction; p_parametric is uncorrected)")
         return

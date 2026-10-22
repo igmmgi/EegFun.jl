@@ -336,3 +336,266 @@ end
     @test LMM_EXT._resolve_tested_coefs(names, "condition: B & rt", false) == [5]
     @test_throws EegFun.EegFunError LMM_EXT._resolve_tested_coefs(names, :nonexistent, false)
 end
+
+@testset "fit_mass_lmm: flat channel and bad pixels are isolated (NaN, one warning)" begin
+    rng = MersenneTwister(21)
+    eeg, meta = _sim_lmm(rng; S = 10, n_s = 12, n_ch = 4, n_tp = 4)
+    f = @formula(amplitude ~ 1 + condition + (1 | subject))
+    conn = sparse(Bool.(I(3)))   # no spatial neighbours: channels are independent, so dropping one changes nothing else
+    eeg_flat = copy(eeg)
+    eeg_flat[2, :, :] .= 0.0     # dead channel
+    keep = [1, 3, 4]
+    ic = 2   # condition coefficient
+
+    for corr in (:maxt, :cluster, :tfce)
+        kw = (n_perms = 30, correction = corr, cluster_threshold = 1.0)
+        res = @test_logs (:warn, r"could not be fitted") match_mode = :any EegFun.fit_mass_lmm(
+            eeg_flat, meta, f; kw..., spatial_connectivity = sparse(Bool.(I(4))), rng = MersenneTwister(5))
+        ref = quiet(() -> EegFun.fit_mass_lmm(eeg[keep, :, :], meta, f; kw..., spatial_connectivity = conn, rng = MersenneTwister(5)))
+        @test all(==(LMM_EXT.STATUS_FLAT), res.fit_status[2, :])
+        for fld in (:beta, :se, :z_values, :p_parametric, :p_corrected)
+            @test all(isnan, getfield(res, fld)[2, :, ic])
+        end
+        # Everything else is exactly what it would be without the dead channel
+        @test res.beta[keep, :, :] ≈ ref.beta atol = 1e-10
+        @test res.z_values[keep, :, :] ≈ ref.z_values atol = 1e-10
+        @test res.null_max[:, ic] ≈ ref.null_max[:, ic] atol = 1e-8
+        @test res.p_corrected[keep, :, ic] == ref.p_corrected[:, :, ic]
+        @test !any(isnan, res.p_corrected[keep, :, ic])
+    end
+
+    # Single constant pixel and a pixel containing NaN
+    eeg_bad = copy(eeg)
+    eeg_bad[1, 2, :] .= 3.0
+    eeg_bad[3, 4, 7] = NaN
+    res = @test_logs (:warn, r"2 of 16 channel") match_mode = :any EegFun.fit_mass_lmm(
+        eeg_bad, meta, f; n_perms = 30, rng = MersenneTwister(5))
+    flat = res.fit_status .== LMM_EXT.STATUS_FLAT
+    @test findall(flat) == [CartesianIndex(1, 2), CartesianIndex(3, 4)]
+    @test all(isnan, res.z_values[1, 2, :]) && all(isnan, res.z_values[3, 4, :])
+    @test all(isnan, res.p_corrected[1, 2, ic]) && all(isnan, res.p_corrected[3, 4, ic])
+    @test !any(isnan, res.z_values[.!flat, ic])
+    @test !any(isnan, res.p_corrected[.!flat, ic])
+    @test occursin("flat_response", sprint(show, res))
+end
+
+@testset "fit_mass_lmm: convergence classification and reporting" begin
+    C = LMM_EXT
+    @test C._classify_returnvalue(:FTOL_REACHED) == C.STATUS_CONVERGED
+    @test C._classify_returnvalue(:XTOL_REACHED) == C.STATUS_CONVERGED
+    @test C._classify_returnvalue(:SUCCESS) == C.STATUS_CONVERGED
+    @test C._classify_returnvalue(:ROUNDOFF_LIMITED) == C.STATUS_ROUNDOFF
+    @test C._classify_returnvalue(:MAXEVAL_REACHED) == C.STATUS_MAXEVAL
+    @test C._classify_returnvalue(:FAILURE) == C.STATUS_OPTFAIL
+    @test C._classify_returnvalue(:SOMETHING_NEW) == C.STATUS_OPTFAIL
+
+    # Normal fits converge
+    rng = MersenneTwister(22)
+    eeg, meta = _sim_lmm(rng; S = 8, n_s = 10, n_ch = 2, n_tp = 3)
+    f = @formula(amplitude ~ 1 + condition + (1 | subject))
+    res = quiet(() -> EegFun.fit_mass_lmm(eeg, meta, f; n_perms = 0))
+    @test all(<=(C.STATUS_ROUNDOFF), res.fit_status)
+    @test size(res.fit_status) == (2, 3)
+
+    # An optimizer that is stopped early is reported, not silently accepted
+    meta_i = copy(meta); meta_i.amplitude = eeg[1, 1, :]
+    scr = C._create_scratch(f, meta_i, [1, 2], nothing, 0, 0, Dict{Symbol,Any}())
+    scr.m.optsum.maxfeval = 2
+    scr.y .= eeg[1, 1, :]
+    @test C._compute_pixel!(scr, (REML = false, n_flips = 0, est_cols = [1, 2], tested_pos = Int[])) == C.STATUS_MAXEVAL
+
+    # Consolidated reporting
+    status = fill(C.STATUS_CONVERGED, 3, 4)
+    status[1, :] .= C.STATUS_FLAT
+    status[2, 2] = C.STATUS_ERROR
+    status[3, 1] = C.STATUS_MAXEVAL
+    status[3, 3] = C.STATUS_OPTFAIL
+    @test_logs (:warn, r"(?s)5 of 12.*Ch1 \(4/4 time points\).*Ch2 \(1/4.*boom.*2 of 12 fits did not converge") C._report_fit_problems(
+        status, [:Ch1, :Ch2, :Ch3], "boom")
+    @test_logs C._report_fit_problems(fill(C.STATUS_CONVERGED, 2, 2), [:A, :B], nothing)        # nothing to say
+    @test_logs C._report_fit_problems(fill(C.STATUS_ROUNDOFF, 2, 2), [:A, :B], nothing)         # roundoff alone is benign
+end
+
+@testset "fit_mass_lmm: power (injected effect is detected, null channel is not)" begin
+    rng = MersenneTwister(23)
+    eeg, meta = _sim_lmm(rng; S = 12, n_s = 20, n_ch = 3, n_tp = 4)
+    eeg[1, 2, :] .+= 1.2 .* meta.condition
+    eeg[1, 3, :] .+= 1.2 .* meta.condition
+    f = @formula(amplitude ~ 1 + condition + (1 | subject))
+    conn = sparse(Bool.(I(3)))
+
+    for corr in (:maxt, :cluster, :tfce)
+        res = quiet(() -> EegFun.fit_mass_lmm(eeg, meta, f; n_perms = 199, correction = corr,
+            cluster_threshold = 1.5, spatial_connectivity = conn, rng = MersenneTwister(10)))
+        ic = findfirst(==("condition"), res.coefficients)
+        # Injected points are significant
+        @test res.p_corrected[1, 2, ic] <= 0.05
+        @test res.p_corrected[1, 3, ic] <= 0.05
+        # Null channels are not
+        @test all(res.p_corrected[2:3, :, ic] .> 0.05)
+    end
+end
+
+@testset "fit_mass_lmm: REML estimation" begin
+    rng = MersenneTwister(24)
+    eeg, meta = _sim_lmm(rng; S = 8, n_s = 10, n_ch = 2, n_tp = 2)
+    f = @formula(amplitude ~ 1 + condition + (1 | subject))
+
+    res_reml = quiet(() -> EegFun.fit_mass_lmm(eeg, meta, f; REML = true, n_perms = 30, rng = MersenneTwister(1)))
+    @test res_reml.inference.REML == true
+
+    # Check against direct MixedModels fit with REML=true
+    meta_11 = copy(meta)
+    meta_11.amplitude = eeg[1, 1, :]
+    m_reml = quiet(() -> fit(MixedModel, f, meta_11; REML = true, progress = false))
+    @test isapprox(res_reml.beta[1, 1, :], coef(m_reml), atol = 1e-5)
+    @test isapprox(res_reml.se[1, 1, :], stderror(m_reml), atol = 1e-5)
+    @test isapprox(res_reml.z_values[1, 1, :], coeftable(m_reml).cols[3], atol = 1e-5)
+end
+
+@testset "fit_mass_lmm: dim_order" begin
+    rng = MersenneTwister(25)
+    eeg, meta = _sim_lmm(rng; S = 8, n_s = 10, n_ch = 2, n_tp = 3)
+    f = @formula(amplitude ~ 1 + condition + (1 | subject))
+
+    # Standard order: (:channels, :timepoints, :epochs) -> size (2, 3, 80)
+    res_std = quiet(() -> EegFun.fit_mass_lmm(eeg, meta, f; n_perms = 0))
+
+    # Permuted order 1: (:timepoints, :channels, :epochs)
+    eeg_p1 = permutedims(eeg, (2, 1, 3))
+    res_p1 = quiet(() -> EegFun.fit_mass_lmm(eeg_p1, meta, f; dim_order = (:timepoints, :channels, :epochs), n_perms = 0))
+    @test res_std.beta == res_p1.beta
+    @test res_std.z_values == res_p1.z_values
+
+    # Permuted order 2: (:epochs, :channels, :timepoints)
+    eeg_p2 = permutedims(eeg, (3, 1, 2))
+    res_p2 = quiet(() -> EegFun.fit_mass_lmm(eeg_p2, meta, f; dim_order = (:epochs, :channels, :timepoints), n_perms = 0))
+    @test res_std.beta == res_p2.beta
+    @test res_std.z_values == res_p2.z_values
+
+    # Invalid dim_order throws
+    @test_throws EegFun.EegFunError EegFun.fit_mass_lmm(eeg, meta, f; dim_order = (:channels, :timepoints, :bad))
+end
+
+@testset "fit_mass_lmm: contrasts" begin
+    rng = MersenneTwister(26)
+    S, n_s = 10, 15
+    n = S * n_s
+    meta = DataFrame(
+        subject = repeat(string.("S", lpad.(1:S, 2, '0')), inner = n_s),
+        cond3 = repeat(["a", "b", "c"], n ÷ 3),
+        amplitude = randn(rng, n)
+    )
+    eeg = reshape(meta.amplitude, 1, 1, n)
+    f = @formula(amplitude ~ 1 + cond3 + (1 | subject))
+
+    # Contrasts dict: EffectsCoding
+    contrasts = Dict(:cond3 => EffectsCoding(base = "a"))
+    res = quiet(() -> EegFun.fit_mass_lmm(eeg, meta, f; contrasts = contrasts, n_perms = 30, rng = MersenneTwister(1)))
+    @test res.inference.contrasts == contrasts
+
+    # Compare with direct fit
+    m_direct = quiet(() -> fit(MixedModel, f, meta; contrasts = contrasts, progress = false))
+    @test isapprox(res.beta[1, 1, :], coef(m_direct), atol = 1e-5)
+    @test isapprox(res.se[1, 1, :], stderror(m_direct), atol = 1e-5)
+
+    # Permutation inference with tested_coefs matching contrast term
+    res_term = quiet(() -> EegFun.fit_mass_lmm(eeg, meta, f; contrasts = contrasts, tested_coefs = :cond3, n_perms = 30, rng = MersenneTwister(1)))
+    @test length(res_term.tested) == 2
+    @test all(0 .< res_term.p_corrected[1, 1, res_term.tested] .<= 1)
+end
+
+@testset "fit_mass_lmm: memory guard and small n_perms warning" begin
+    C = LMM_EXT
+    # Unit tests for _check_zperm_memory
+    # 4 channels * 10 timepoints * 100 flips * 1 tested * 4 bytes = 16,000 bytes
+    @test_logs (:warn, r"The cluster/TFCE null needs") C._check_zperm_memory(4, 10, 100, 1; free = 20_000)
+    # If free memory is 17,000 bytes: fraction = 16000 / 17000 = 0.941 > 0.9 (errors)
+    @test_throws EegFun.EegFunError C._check_zperm_memory(4, 10, 100, 1; free = 17_000)
+    # Safe memory: no logs, no error
+    @test_logs C._check_zperm_memory(4, 10, 100, 1; free = 1_000_000)
+
+    # Unit tests for _warn_small_n_perms
+    # n_flips < 20: 1/(n_flips+1) >= 0.05
+    @test_logs (:warn, r"no point can reach p < 0.05") C._warn_small_n_perms(15, false)
+    # 20 <= n_flips < 100
+    @test_logs (:warn, r"resolution of") C._warn_small_n_perms(50, false)
+    # Exhaustive flips: no warning
+    @test_logs C._warn_small_n_perms(16, true)
+    # n_flips >= 100: no warning
+    @test_logs C._warn_small_n_perms(100, false)
+
+    # End-to-end integration: small n_perms logs warning
+    rng = MersenneTwister(27)
+    eeg, meta = _sim_lmm(rng; S = 12, n_s = 6, n_ch = 1, n_tp = 1)
+    f = @formula(amplitude ~ 1 + condition + (1 | subject))
+    @test_logs (:warn, r"Only 15 random sign flips") match_mode = :any EegFun.fit_mass_lmm(
+        eeg, meta, f; n_perms = 15, rng = MersenneTwister(1))
+end
+
+@testset "fit_mass_lmm: Distributed execution" begin
+    using Distributed
+    procs = addprocs(2; exeflags = "--project=$(Base.active_project())")
+    try
+        for p in procs
+            Distributed.remotecall_eval(Main, p, :(using EegFun, MixedModels, StatsModels))
+        end
+        rng = MersenneTwister(28)
+        # S=6 -> 2^(6-1) = 32 exhaustive flips
+        eeg, meta = _sim_lmm(rng; S = 6, n_s = 8, n_ch = 2, n_tp = 3)
+        eeg[2, 2, :] .= 0.0
+        f = @formula(amplitude ~ 1 + condition + (1 | subject))
+        conn = sparse(Bool.(I(2)))
+
+        for corr in (:maxt, :tfce)
+            res_dist = quiet(() -> EegFun.fit_mass_lmm(eeg, meta, f; n_perms = 32, correction = corr,
+                spatial_connectivity = conn, rng = MersenneTwister(7)))
+            ic = 2
+            @test res_dist.fit_status[2, 2] == LMM_EXT.STATUS_FLAT
+            @test isnan(res_dist.z_values[2, 2, ic])
+            @test isnan(res_dist.p_corrected[2, 2, ic])
+            @test all(isfinite, res_dist.z_values[1, :, ic])
+            @test all(0 .< res_dist.p_corrected[1, :, ic] .<= 1)
+        end
+    finally
+        rmprocs(procs)
+    end
+end
+
+@testset "fit_mass_lmm: all-pixel constant data is safely handled" begin
+    rng = MersenneTwister(99)
+    eeg, meta = _sim_lmm(rng; S = 8, n_s = 6, n_ch = 2, n_tp = 2)
+    eeg .= 0.0  # totally dead recording
+    f = @formula(amplitude ~ 1 + condition + (1 | subject))
+    res = @test_logs (:warn, r"4 of 4 channel") match_mode = :any EegFun.fit_mass_lmm(
+        eeg, meta, f; n_perms = 30, rng = MersenneTwister(1))
+    @test all(==(LMM_EXT.STATUS_FLAT), res.fit_status)
+    @test all(isnan, res.z_values)
+    @test all(isnan, res.p_corrected)
+end
+
+@testset "_lmm_perm_pvalue: edge cases, exact ties, and zeros" begin
+    # Exhaustive mode (identity included in null): p = r / n
+    null = [1.0, 2.0, 3.0, 4.0]
+    @test EegFun._lmm_perm_pvalue(null, 4.0, true) == 1 / 4
+    @test EegFun._lmm_perm_pvalue(null, 3.0, true) == 2 / 4
+    @test EegFun._lmm_perm_pvalue(null, 2.0, true) == 3 / 4
+    @test EegFun._lmm_perm_pvalue(null, 1.0, true) == 4 / 4
+    @test EegFun._lmm_perm_pvalue(null, 0.5, true) == 1.0
+    @test EegFun._lmm_perm_pvalue(null, 5.0, true) == 0.0
+
+    # Random mode (identity added as +1): p = (r + 1) / (P + 1)
+    @test EegFun._lmm_perm_pvalue(null, 4.0, false) == (1 + 1) / (4 + 1)
+    @test EegFun._lmm_perm_pvalue(null, 5.0, false) == (0 + 1) / (4 + 1)
+
+    # Tie-breaking with slight roundoff (identity in null slightly perturbed)
+    null_near = [1.0, 2.0, 3.0 - 1e-11, 4.0]
+    @test EegFun._lmm_perm_pvalue(null_near, 3.0, true) == 2 / 4
+
+    # Zero values in null and zero observed
+    null_zeros = [0.0, 0.0, 0.0, 1.5, 3.0]
+    @test EegFun._lmm_perm_pvalue(null_zeros, 0.0, true) == 1.0
+    @test EegFun._lmm_perm_pvalue(null_zeros, 0.0, false) == 1.0
+end
+
+
