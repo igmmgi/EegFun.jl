@@ -18,6 +18,7 @@ The databrowser is an interactive visualization tool for navigating through EEG 
 - **Zoom in/out**: Adjust time scale for detailed inspection
 - **Channel selection**: Click channels to select for analysis
 - **Region selection**: Drag to select time regions
+- **Topography scrubber**: Right-click any selected region and choose **"Topoplot"** or **"Topoplot 3D"** to open an interactive 2D or 3D scalp topography with a live time scrubber slider and real-time playback
 - **Epoch browsing**: Navigate through individual trials
 
 **Visual Overlays**:

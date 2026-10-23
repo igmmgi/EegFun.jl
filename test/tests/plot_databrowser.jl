@@ -1,6 +1,7 @@
 using Test
 using Makie
 using EegFun
+using DataFrames
 
 @testset "plot_databrowser" begin
     dat = EegFun.create_test_continuous_data(n_channels = 3)
@@ -372,5 +373,30 @@ using EegFun
         @test data_line.colormap[][1] == plot_kwargs[:unselected_channel_color]
         @test orig_line.visible[] == false
         @test sub_line.visible[] == false
+    end
+
+    @testset "topography scrubber on selected data" begin
+        lay = EegFun.read_layout(EegFun.example_path("layouts/biosemi/biosemi72.csv"))
+        EegFun.polar_to_cartesian_xy!(lay)
+        cdat = EegFun.create_test_continuous_data(n = 200, n_channels = 72, seed = 42)
+        cdat.layout = lay
+        names_dict = Dict(Symbol("Ch$i") => Symbol(lay.data.label[i]) for i = 1:72)
+        DataFrames.rename!(cdat.data, names_dict)
+
+        sub = EegFun.subset(cdat, sample_selection = x -> 0.0 .<= x.time .<= 0.5)
+        # 2D scrubber
+        res_2d = EegFun.plot_topography(sub; scrubber = true, display_plot = false)
+        @test res_2d.fig isa Figure
+        @test length(res_2d.axes) == 1
+
+        # 3D scrubber
+        res_3d_scrubber = EegFun.plot_topography_3d(sub; scrubber = true, display_plot = false)
+        @test res_3d_scrubber.fig isa Figure
+        @test length(res_3d_scrubber.axes) == 1
+
+        # 3D static (default)
+        res_3d_static = EegFun.plot_topography_3d(sub; scrubber = false, display_plot = false)
+        @test res_3d_static.fig isa Figure
+        @test length(res_3d_static.axes) == 1
     end
 end

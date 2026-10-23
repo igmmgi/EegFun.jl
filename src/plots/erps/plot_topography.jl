@@ -295,6 +295,7 @@ function plot_topography(
     interval_selection::Interval = times(),
     baseline_interval::Interval = nothing,
     n_topo::Union{Int,Nothing} = nothing,
+    scrubber::Bool = false,
     display_plot = true,
     interactive = true,
     kwargs...,
@@ -302,6 +303,23 @@ function plot_topography(
     # Apply baseline correction if requested
     if !isnothing(baseline_interval)
         dat = baseline(dat, baseline_interval)
+    end
+
+    if scrubber
+        dat_subset = subset(
+            dat,
+            channel_selection = channel_selection,
+            sample_selection = sample_selection,
+            interval_selection = interval_selection,
+        )
+        if nrow(dat_subset.data) > 1
+            return _plot_topography_scrubber(
+                dat_subset;
+                display_plot = display_plot,
+                interactive = interactive,
+                kwargs...,
+            )
+        end
     end
     # If n_topo is requested, split time range into bins and use the Vector method
     if !isnothing(n_topo) && n_topo > 1
@@ -757,9 +775,21 @@ function plot_topography(
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     interval_selection::Interval = times(),
+    scrubber::Bool = false,
     display_plot = true,
     kwargs...,
 )
+    if scrubber
+        return plot_topography(
+            epoch_to_continuous(dat, epoch);
+            channel_selection = channel_selection,
+            sample_selection = sample_selection,
+            interval_selection = interval_selection,
+            scrubber = true,
+            display_plot = display_plot,
+            kwargs...,
+        )
+    end
 
     _set_window_title(_generate_window_title(dat) * " - Epoch $epoch")
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
@@ -1785,3 +1815,217 @@ function _show_topo_context_menu!(
 
     _display_in_screen(menu_fig; size = (400, 200))
 end
+
+"""
+    _plot_topography_scrubber(dat::SingleDataFrameEeg; display_plot = true, interactive = true, kwargs...)
+
+Internal helper to render an interactive 2D scalp topography with a time scrubber slider.
+"""
+function _plot_topography_scrubber(
+    dat::SingleDataFrameEeg;
+    display_plot = true,
+    interactive = true,
+    kwargs...,
+)
+    layout = dat.layout
+    if !has_valid_coordinates(layout)
+        @minimal_warning "Cannot create topographic plot: layout has no spatial coordinates."
+        return
+    end
+
+    _ensure_coordinates_2d!(layout)
+    _ensure_coordinates_3d!(layout)
+
+    df = dat.data
+    available_channels = [ch for ch in Symbol.(layout.data.label) if ch in propertynames(df)]
+    if isempty(available_channels)
+        @minimal_warning "No layout-matched channels found in data."
+        return
+    end
+
+    time_vec = df.time
+    n_samples = length(time_vec)
+    t_min, t_max = extrema(time_vec)
+
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
+    gridscale = get(plot_kwargs, :gridscale, 65)
+    method = get(plot_kwargs, :method, :thin_plate)
+    colormap = get(plot_kwargs, :colormap, nothing)
+    num_levels = get(plot_kwargs, :num_levels, 21)
+    colorbar_plot = get(plot_kwargs, :colorbar_plot, true)
+    colorbar_kwargs = pop!(plot_kwargs, :colorbar_kwargs, (;))
+
+    # Pre-calculate global symmetric amplitude scale across the whole selected segment
+    all_vals = Float64[]
+    for ch in available_channels
+        append!(all_vals, df[!, ch])
+    end
+    q99 = Statistics.quantile(abs.(all_vals), 0.99)
+    clim = max(round(q99, digits = 1), 1.0)
+    ylim_obs = Observable{Tuple{Float64,Float64}}((-clim, clim))
+    levels_obs = lift(lim -> range(lim[1], lim[2], length = num_levels), ylim_obs)
+
+    init_vals = Float64[df[1, ch] for ch in available_channels]
+    init_mat, x_bounds, y_bounds = _data_interpolation_topo(init_vals, layout, gridscale; method = method)
+    mat_obs = Observable(init_mat)
+
+    fig = Figure(size = (650, 720); figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+    _set_window_title("Topography Scrubber | $(_generate_window_title(dat))")
+
+    current_idx = Observable{Int}(1)
+    title_obs = Observable("Topography | Latency: $(@sprintf("%.3f s (%d ms)", time_vec[1], round(Int, time_vec[1] * 1000)))")
+    ax = Axis(fig[1, 1], aspect = DataAspect(), title = title_obs, titlesize = 16)
+    hidedecorations!(ax)
+    hidespines!(ax)
+    deregister_interaction!(ax, :rectanglezoom)
+    deregister_interaction!(ax, :scrollzoom)
+
+    co = contourf!(
+        ax,
+        range(x_bounds[1], x_bounds[2], length = gridscale),
+        range(y_bounds[1], y_bounds[2], length = gridscale),
+        mat_obs,
+        levels = levels_obs,
+        colormap = _resolve_theme_colormap(ax, colormap),
+        extendlow = :auto,
+        extendhigh = :auto,
+        nan_color = :transparent,
+    )
+
+    _draw_smooth_circle_mask!(ax, x_bounds, y_bounds)
+    plot_layout_2d!(fig, ax, layout; point_plot = true, label_plot = false)
+
+    if colorbar_plot
+        Colorbar(fig[1, 2], co; label = "μV", height = Relative(0.75), colorbar_kwargs...)
+    end
+
+    # Controls Panel (Bottom)
+    controls = fig[2, 1:2] = GridLayout(tellwidth = false)
+    Label(controls[1, 1], "Time:", font = :bold)
+    slider = Slider(controls[1, 2], range = 1:n_samples, startvalue = 1)
+    time_label = Label(controls[1, 3], lift(idx -> @sprintf("%.3f s", time_vec[idx]), current_idx), font = :bold, width = 75)
+    btn_prev = Button(controls[1, 4], label = "<", width = 36)
+    btn_play = Button(controls[1, 5], label = "Play", width = 54)
+    btn_next = Button(controls[1, 6], label = ">", width = 36)
+    btn_mean = Button(controls[1, 7], label = "Mean", width = 54)
+
+    function _update_sample(idx::Int)
+        c_idx = clamp(idx, 1, n_samples)
+        current_idx[] = c_idx
+        t = time_vec[c_idx]
+        title_obs[] = @sprintf("Topography | Latency: %.3f s (%d ms)", t, round(Int, t * 1000))
+        vals = Float64[df[c_idx, ch] for ch in available_channels]
+        new_mat, _, _ = _data_interpolation_topo(vals, layout, gridscale; method = method)
+        mat_obs[] = new_mat
+    end
+
+    on(slider.value) do idx
+        if idx != current_idx[]
+            _update_sample(idx)
+        end
+    end
+
+    on(btn_prev.clicks) do _
+        _stop_play()
+        set_close_to!(slider, max(1, current_idx[] - 1))
+    end
+
+    on(btn_next.clicks) do _
+        _stop_play()
+        set_close_to!(slider, min(n_samples, current_idx[] + 1))
+    end
+
+    is_playing = Observable(false)
+    play_task = Ref{Union{Nothing,Task}}(nothing)
+
+    function _start_play()
+        is_playing[] = true
+        btn_play.label[] = "Pause"
+        play_task[] = @async begin
+            t_wall_start = time()
+            t_data_start = time_vec[current_idx[]]
+            if t_data_start >= t_max - 0.002
+                t_data_start = t_min
+                set_close_to!(slider, 1)
+            end
+            while is_playing[] && to_value(events(fig).window_open)
+                elapsed_wall = time() - t_wall_start
+                target_data_time = t_data_start + elapsed_wall
+                if target_data_time > t_max
+                    t_wall_start = time()
+                    t_data_start = t_min
+                    target_data_time = t_min
+                end
+                target_idx = clamp(searchsortedfirst(time_vec, target_data_time), 1, n_samples)
+                if target_idx != current_idx[]
+                    set_close_to!(slider, target_idx)
+                end
+                sleep(0.016)
+            end
+        end
+    end
+
+    function _stop_play()
+        is_playing[] = false
+        btn_play.label[] = "Play"
+    end
+
+    on(events(fig).window_open) do is_open
+        if !is_open
+            _stop_play()
+        end
+    end
+
+    function _toggle_play()
+        if is_playing[]
+            _stop_play()
+        else
+            _start_play()
+        end
+    end
+
+    on(btn_play.clicks) do _
+        _toggle_play()
+    end
+
+    on(btn_mean.clicks) do _
+        _stop_play()
+        mean_vals = Float64[Statistics.mean(df[!, ch]) for ch in available_channels]
+        mean_mat, _, _ = _data_interpolation_topo(mean_vals, layout, gridscale; method = method)
+        mat_obs[] = mean_mat
+        title_obs[] = @sprintf("Topography | Mean over %.3f – %.3f s", t_min, t_max)
+    end
+
+    if interactive
+        on(events(fig).keyboardbutton) do event
+            if event.action == Keyboard.press || event.action == Keyboard.repeat
+                if event.key == Keyboard.left
+                    _stop_play()
+                    set_close_to!(slider, max(1, current_idx[] - 1))
+                elseif event.key == Keyboard.right
+                    _stop_play()
+                    set_close_to!(slider, min(n_samples, current_idx[] + 1))
+                elseif event.key == Keyboard.space
+                    _toggle_play()
+                elseif event.key == Keyboard.up
+                    curr_clim = ylim_obs[][2]
+                    new_clim = max(1.0, curr_clim * 0.8)
+                    ylim_obs[] = (-new_clim, new_clim)
+                elseif event.key == Keyboard.down
+                    curr_clim = ylim_obs[][2]
+                    new_clim = curr_clim * 1.25
+                    ylim_obs[] = (-new_clim, new_clim)
+                end
+            end
+        end
+    end
+
+    screen = nothing
+    if display_plot
+        screen = _display_figure(fig)
+    end
+    _set_window_title("Makie")
+    return (fig = fig, axes = [ax], screen = screen)
+end
+

@@ -13,6 +13,9 @@ using JLD2
 const DEMO_OUTPUT = "./tutorials/output/"
 mkpath(DEMO_OUTPUT)
 
+# Quick demo with bundled raw dataset and full 72-channel layout:
+# EegFun.plot_databrowser()
+
 # read raw data
 dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"));
 dat = EegFun.create_eegfun_data(dat); # works but no layout info available, thus, no topographic plots

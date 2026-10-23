@@ -949,9 +949,9 @@ function _show_additional_menu(state, clicked_region_idx = nothing)
                 selected_data = _subset_selected_data(state, clicked_region_idx)
                 isnothing(selected_data) && return # No data available, just return
                 if btn.label[] == "Topoplot"
-                    plot_topography(selected_data)
+                    plot_topography(selected_data; scrubber = true)
                 elseif btn.label[] == "Topoplot 3D"
-                    plot_topography_3d(selected_data)
+                    plot_topography_3d(selected_data; scrubber = true)
                 elseif btn.label[] == "Spectrum"
                     plot_channel_spectrum(selected_data)
                 end
@@ -2571,40 +2571,71 @@ function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs.
         end
 
         # Display on the provided screen if given, otherwise use default display
+        screen_obj = nothing
         if plot_kwargs[:display_plot]
             if !isnothing(screen)
                 display(screen, fig)
+                screen_obj = screen
             else
-                display(fig)
+                screen_obj = _display_figure(fig)
             end
         end
 
-        return (fig = fig, ax = ax, analysis_settings = state.analysis_settings)
+        return (fig = fig, ax = ax, analysis_settings = state.analysis_settings, screen = screen_obj)
     finally
         _set_window_title("Makie")
     end
 end
 
 """
-    plot_databrowser(; kwargs...)
+    plot_databrowser(; launcher::Bool = false, screen = nothing, kwargs...)
 
-Open a file-selector window that lets you drag-and-drop EEG files.
-Selected files are opened in a full interactive data browser via
-`plot_databrowser(dat::EegData)`. The launcher stays open so you can load
-additional files.
+Launch the interactive continuous EEG data browser.
 
-Supported formats: `.jld2`, `.set`, `.bdf`, `.edf`, `.vhdr`, `.fif`, `.xdf`.
+When called with no arguments, automatically loads the bundled example raw EEG dataset
+(`example1.bdf`) along with its full 72-channel layout (`biosemi72.csv`) for an immediate demonstration.
+
+Pass `launcher = true` to open the drag-and-drop file selector window instead.
+
+# Examples
+```julia
+# Quick demo with bundled raw dataset and layout:
+plot_databrowser()
+
+# Open file drag-and-drop launcher:
+plot_databrowser(launcher = true)
+```
 """
-function plot_databrowser(; kwargs...)
+function plot_databrowser(; launcher::Bool = false, screen = nothing, kwargs...)
+    if launcher
+        return _plot_databrowser_launcher(; screen = screen, kwargs...)
+    end
+    raw_path = example_path("data/bdf/example1.bdf")
+    layout_path = example_path("layouts/biosemi/biosemi72.csv")
+    dat = read_raw_data(raw_path)
+    lay = read_layout(layout_path)
+    polar_to_cartesian_xy!(lay)
+    dat = create_eegfun_data(dat, lay)
+    dat.file = basename(raw_path)
+    return plot_databrowser(dat; screen = screen, kwargs...)
+end
+
+"""
+    _plot_databrowser_launcher(; screen = nothing, kwargs...)
+
+Open a file-selector window that lets you drag-and-drop EEG files or click to load the bundled example data.
+"""
+function _plot_databrowser_launcher(; screen = nothing, kwargs...)
     shared_layout = Ref{Union{Nothing,Layout}}(nothing)
     layout_status = Observable{String}("Layout: NA")
 
-    fig = Figure(size = (400, 220))
+    fig = Figure(size = (420, 260))
     Label(fig[1, 1], "EegFun Data Browser", fontsize = 22, halign = :center)
     Label(fig[2, 1], "Drop EEG file(s) here", fontsize = 14, halign = :center, color = :gray50)
     status_label = Label(fig[3, 1], "", fontsize = 12, halign = :center, color = :gray40)
     btn_layout = Button(fig[4, 1], label = "Select Layout File", width = 180, height = 30, fontsize = 14)
     Label(fig[5, 1], layout_status, fontsize = 12, color = :gray30)
+    btn_example = Button(fig[6, 1], label = "Load Example (example1.bdf)", width = 230, height = 30, fontsize = 14)
     n_loaded = Ref(0)
 
     function _load_layout(filepath::AbstractString)
@@ -2653,15 +2684,35 @@ function plot_databrowser(; kwargs...)
         end
     end
 
+    on(btn_example.clicks) do _
+        status_label.text = "Loading example1.bdf…"
+        try
+            raw_path = example_path("data/bdf/example1.bdf")
+            layout_path = example_path("layouts/biosemi/biosemi72.csv")
+            dat = read_raw_data(raw_path)
+            lay = read_layout(layout_path)
+            polar_to_cartesian_xy!(lay)
+            dat = create_eegfun_data(dat, lay)
+            dat.file = basename(raw_path)
+            _set_window_title(_generate_window_title(dat))
+            plot_databrowser(dat; screen = _create_screen(), kwargs...)
+            n_loaded[] += 1
+            status_label.text = "Opened example1.bdf"
+        catch e
+            @error "Failed to load example data" exception = (e, catch_backtrace())
+            status_label.text = "Error: $(sprint(showerror, e))"
+        end
+    end
+
     on(events(fig).dropped_files) do files
         for f in files
             _load_file(f)
         end
     end
 
-    _display_in_screen(fig)
+    screen_obj = _display_in_screen(fig)
     _set_window_title("EegFun Data Browser")
-    return fig
+    return (fig = fig, screen = screen_obj)
 end
 
 """Decode percent-encoded bytes into a UTF-8 string."""
