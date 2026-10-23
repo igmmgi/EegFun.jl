@@ -10,19 +10,20 @@
 using EegFun
 using GLMakie
 
-dat = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps_final.jld2"))
+# Launch with default demo data (dynamically 30 Hz low-pass filtered, :Cz, 300-500 ms):
+gui = EegFun.plot_erp_measurement_gui()
 
-# All conditions overlaid
-# EegFun.plot_erp_measurement_gui(dat)
-# 
-# # Single condition
-# EegFun.plot_erp_measurement_gui(dat[1])
+# Alternatively, pass custom data or specific initial settings:
+# dat = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps.jld2"))
+# gui = EegFun.plot_erp_measurement_gui(
+#     dat,
+#     channel = :Cz,
+#     analysis_type = "mean_amplitude",
+#     analysis_interval = (0.3, 0.5),
+#     baseline_interval = (-0.2, 0.0),
+# )
 
-# Select some specific initial settings
-EegFun.plot_erp_measurement_gui(
-    dat,
-    channel = :Cz,
-    analysis_type = "mean_amplitude",
-    analysis_interval = (0.3, 0.5),
-    baseline_interval = (-0.2, 0.0),
-)
+# Keep window open when run from terminal
+if !isinteractive() && !isnothing(gui.screen)
+    wait(gui.screen)
+end

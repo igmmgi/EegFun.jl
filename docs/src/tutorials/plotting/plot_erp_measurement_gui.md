@@ -20,16 +20,24 @@ This demo covers:
 
 ## Basic Usage
 
-- Launch the GUI with all conditions overlaid
+- Launch the quick demo with default data and settings (dynamically 30 Hz low-pass filtered, `:Cz`, 300–500 ms):
+  ```julia
+  EegFun.plot_erp_measurement_gui()
+  ```
 
-## Single Condition
+## Custom Data & Settings
 
-- Explore one condition at a time
-
-## Pre-configured Settings
-
-- Open the GUI with specific initial channel, measurement type, and intervals
-
+- Launch the GUI with specific initial channel, measurement type, and intervals:
+  ```julia
+  dat = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps.jld2"))
+  EegFun.plot_erp_measurement_gui(
+      dat,
+      channel = :Cz,
+      analysis_type = "mean_amplitude",
+      analysis_interval = (0.3, 0.5),
+      baseline_interval = (-0.2, 0.0),
+  )
+  ```
 
 ## Code Examples
 
@@ -41,29 +49,21 @@ This demo covers:
 # Useful for teaching, parameter exploration, and visual validation
 # before batch processing with erp_measurements().
 
-# Note: EegFun.example_path() resolves bundled example data paths.
-# When using your own data, simply pass the file path directly, e.g.:
-# dat = EegFun.read_raw_data("/path/to/your/data.bdf")
-
 using EegFun
 using GLMakie
 
-dat = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps_final.jld2"))
+# Launch with default demo data (dynamically 30 Hz low-pass filtered, :Cz, 300-500 ms):
+gui = EegFun.plot_erp_measurement_gui()
 
-# All conditions overlaid
-# EegFun.plot_erp_measurement_gui(dat)
-# 
-# # Single condition
-# EegFun.plot_erp_measurement_gui(dat[1])
-
-# Select some specific initial settings
-EegFun.plot_erp_measurement_gui(
-    dat,
-    channel = :Cz,
-    analysis_type = "mean_amplitude",
-    analysis_interval = (0.3, 0.5),
-    baseline_interval = (-0.2, 0.0),
-)
+# Or pass custom data or specific settings:
+# dat = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps.jld2"))
+# gui = EegFun.plot_erp_measurement_gui(
+#     dat,
+#     channel = :Cz,
+#     analysis_type = "mean_amplitude",
+#     analysis_interval = (0.3, 0.5),
+#     baseline_interval = (-0.2, 0.0),
+# )
 ```
 
 :::

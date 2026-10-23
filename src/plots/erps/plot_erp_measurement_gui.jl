@@ -1,4 +1,5 @@
 """
+    plot_erp_measurement_gui(; kwargs...)
     plot_erp_measurement_gui(filepath::String; kwargs...)
     plot_erp_measurement_gui(erp::ErpData; kwargs...)
     plot_erp_measurement_gui(erps::Vector{ErpData}; kwargs...)
@@ -15,10 +16,11 @@ Useful for:
 - `erp::ErpData` or `erps::Vector{ErpData}`: Single ERP or multiple conditions to overlay
 
 # Keyword Arguments
-- `channel::Union{Symbol,Nothing}`: Initial channel to display (default: first channel)
+- `filter_lp::Union{Real,Nothing}`: Low-pass filter cutoff in Hz applied when loading default demo data (default: 30.0 Hz; pass `nothing` to disable)
+- `channel::Union{Symbol,Nothing}`: Initial channel to display (default: `:Cz` for demo, first channel otherwise)
 - `analysis_type::String`: Initial measurement type (default: "mean_amplitude")
-- `analysis_interval::Union{Tuple{Real,Real},Nothing}`: Initial measurement interval (default: auto)
-- `baseline_interval::Union{Tuple{Real,Real},Nothing}`: Initial baseline interval (default: full range)
+- `analysis_interval::Union{Tuple{Real,Real},Nothing}`: Initial measurement interval (default: `(0.3, 0.5)` for demo, auto otherwise)
+- `baseline_interval::Union{Tuple{Real,Real},Nothing}`: Initial baseline interval (default: `(-0.2, 0.0)` for demo, full range otherwise)
 
 # Interactive Controls
 - **Channel Menu**: Switch between channels
@@ -29,6 +31,9 @@ Useful for:
 
 # Examples
 ```julia
+# Quick demo with default data (dynamically filtered at 30 Hz):
+plot_erp_measurement_gui()
+
 # Load from file
 plot_erp_measurement_gui("participant_1_erps_final.jld2")
 
@@ -51,6 +56,35 @@ plot_erp_measurement_gui(erp,
 - For batch measurement extraction, use `erp_measurements()` function
 - This GUI is designed for visual exploration and teaching, not batch processing
 """
+# No arguments - load default example data with optional dynamic lowpass filter
+"""
+    plot_erp_measurement_gui(; filter_lp = 30.0, channel = :Cz, analysis_type = "mean_amplitude", analysis_interval = (0.3, 0.5), baseline_interval = (-0.2, 0.0), kwargs...)
+
+Launch interactive GUI for exploring ERP measurements using default example data.
+By default, loads `example1_erps.jld2` and dynamically applies a 30 Hz low-pass filter for clean demonstration waveforms.
+"""
+function plot_erp_measurement_gui(;
+    filter_lp::Union{Real,Nothing} = 30.0,
+    channel::Union{Symbol,Vector{Symbol},Nothing} = :Cz,
+    analysis_type::String = "mean_amplitude",
+    analysis_interval::Union{Tuple{Real,Real},Nothing} = (0.3, 0.5),
+    baseline_interval::Union{Tuple{Real,Real},Nothing} = (-0.2, 0.0),
+    kwargs...,
+)
+    data = read_data(example_path("data/julia/erps/example1_erps.jld2"))
+    if !isnothing(filter_lp)
+        data = lowpass_filter(data, filter_lp)
+    end
+    return plot_erp_measurement_gui(
+        data;
+        channel = channel,
+        analysis_type = analysis_type,
+        analysis_interval = analysis_interval,
+        baseline_interval = baseline_interval,
+        kwargs...,
+    )
+end
+
 # String filepath - load data and dispatch
 """
     plot_erp_measurement_gui(filepath::String; kwargs...)
@@ -806,13 +840,15 @@ function plot_erp_measurement_gui(
     # Trigger initial result display 
     notify(measurement_results)
 
+    screen = nothing
     if display_plot
-        _display_figure(fig)
+        screen = _display_figure(fig)
     end
-    return (fig = fig)
+    return (fig = fig, screen = screen)
 
 end
 
+_is_latency_measurement(atype::AbstractString) = endswith(atype, "latency")
 
 """
 Helper function to compute measurements for GUI.
