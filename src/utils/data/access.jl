@@ -108,7 +108,6 @@ time_vector(df::DataFrame)::Vector{Float64} = hasproperty(df, :time) ? df[!, :ti
 time_vector(dat::StatisticalData)::Vector{Float64} = dat.analysis.time_points
 time_vector(dat::TFStatisticalData)::Vector{Float64} = dat.analysis.time_points
 time_vector(res::StatsResult)::Vector{Float64} = res.time_points
-time_vector(res::LmmStatsResult)::Vector{Float64} = res.time_points
 
 """
     frequency_vector(dat) -> Vector{Float64}
@@ -179,7 +178,6 @@ channel_labels(dat::Vector{<:EegData})::Vector{Symbol} = channel_labels(first(da
 channel_labels(dat::StatisticalData)::Vector{Symbol} = channel_labels(first(dat.data))
 channel_labels(dat::TFStatisticalData)::Vector{Symbol} = channel_labels(first(dat.data))
 channel_labels(res::StatsResult)::Vector{Symbol} = res.electrodes
-channel_labels(res::LmmStatsResult)::Vector{Symbol} = res.channels
 
 
 """
@@ -276,7 +274,6 @@ n_samples(dat::DataFrame)::Int = nrow(dat)
 n_samples(dat::StatisticalData)::Int = length(dat.analysis.time_points)
 n_samples(dat::TFStatisticalData)::Int = length(dat.analysis.time_points)
 n_samples(res::StatsResult)::Int = length(res.time_points)
-n_samples(res::LmmStatsResult)::Int = length(res.time_points)
 
 
 """
@@ -295,7 +292,6 @@ n_channels(layout::Layout)::Int = nrow(layout.data)
 n_channels(dat::StatisticalData)::Int = n_channels(first(dat.data))
 n_channels(dat::TFStatisticalData)::Int = n_channels(first(dat.data))
 n_channels(res::StatsResult)::Int = length(channel_labels(res))
-n_channels(res::LmmStatsResult)::Int = length(res.channels)
 
 """
     n_layout(layout::Layout) -> Int

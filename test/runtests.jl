@@ -10,8 +10,7 @@ println("="^40)
         EegFun;
         ambiguities = false,
         persistent_tasks = false,
-        stale_deps = (ignore = [:SharedArrays, :Distributed],),
-        deps_compat = (check_extras = false, ignore = [:Dates, :LinearAlgebra, :Logging, :Printf, :Random, :SparseArrays, :TOML, :Test, :SharedArrays, :Distributed]),
+        deps_compat = (check_extras = false, ignore = [:Dates, :LinearAlgebra, :Logging, :Printf, :Random, :SparseArrays, :TOML, :Test]),
     )
 end
 
@@ -89,7 +88,6 @@ end
     include("tests/utils.jl")
     include("tests/tables.jl")
     include("tests/bids_export.jl")
-    include("tests/mme_validation.jl")
     include("tests/cleanline.jl")
     include("tests/csd.jl")
     include("tests/freq_spectrum.jl")
