@@ -856,28 +856,6 @@ end
 # TOPOGRAPHY INTERPOLATION & OPERATOR CACHING
 # =============================================================================
 
-# ---- Legendre & G-function for Spherical Splines (Perrin et al., 1989) ----
-_g_factors(m::Int, nterms::Int) = [(2n + 1) / (float(n)^m * float(n + 1)^m * 4π) for n = 1:nterms]
-
-@inline function _legendre_series(x::Float64, f::Vector{Float64})
-    x = clamp(x, -1.0, 1.0)
-    p_prev, p = 1.0, x
-    acc = f[1] * x
-    @inbounds for n = 2:length(f)
-        p_next = ((2n - 1) * x * p - (n - 1) * p_prev) / n
-        acc += f[n] * p_next
-        p_prev, p = p, p_next
-    end
-    return acc
-end
-
-function _g_from_cos!(C::Matrix{Float64}, f::Vector{Float64})
-    @inbounds for i in eachindex(C)
-        C[i] = _legendre_series(C[i], f)
-    end
-    return C
-end
-
 # ---- Shared Topography Geometry ----
 function _topo_plot_radius(layout::Layout)
     r = maximum(hypot.(layout.data.x2, layout.data.y2))
@@ -894,30 +872,6 @@ end
 
 const _SPLINE_CACHE = Dict{UInt,SphericalSplineOperator}()
 const _SPLINE_CACHE_LOCK = ReentrantLock()
-
-function _spline_geometry(d, ch::Vector{Int})
-    ρe = hypot.(d.x2[ch], d.y2[ch])
-    if hasproperty(d, :inc) && hasproperty(d, :azi)
-        rad_factor = pi / 180.0
-        inc = Float64.(d.inc[ch]) .* rad_factor
-        azi = Float64.(d.azi[ch]) .* rad_factor
-        U = hcat(sin.(inc) .* cos.(azi), sin.(inc) .* sin.(azi), cos.(inc))
-        θ = abs.(inc)
-        denom = dot(ρe, ρe)
-        k = denom > 0 ? dot(ρe, θ) / denom : (π / 2)
-        if maximum(abs, θ .- k .* ρe) > 1e-3
-            @warn "x2/y2 are not an azimuthal-equidistant image of inc/azi; spline map may be distorted."
-        end
-    else
-        # Fallback: only 2D coords available. Assume azimuthal-equidistant x2/y2 with ρ=1 at equator.
-        @warn "Layout has no :inc/:azi; assuming azimuthal-equidistant x2/y2 with ρ=1 at the equator." maxlog = 1
-        k = π / 2
-        θ = min.(k .* ρe, π)
-        sx = [ρe[i] > 0 ? sin(θ[i]) / ρe[i] : 0.0 for i = 1:length(ρe)]
-        U = hcat(sx .* d.x2[ch], sx .* d.y2[ch], cos.(θ))
-    end
-    return U, k
-end
 
 function _build_spline_operator(layout::Layout, ch::Vector{Int}, gs::Int, m::Int, λ::Float64, nterms::Int)
     d = layout.data

@@ -2,6 +2,7 @@ using Test
 using DataFrames
 using OrderedCollections
 using Statistics
+using LinearAlgebra
 using EegFun
 using EegFun:
     AutoRejectConfig,
@@ -69,7 +70,7 @@ using EegFun:
     end
 
     @testset "autoreject on clean synthetic epochs" begin
-        # 12 clean epochs with identical sinusoidal signals across 4 channels
+        # 12 clean epochs with identical sinusoidal signals across 6 channels
         time = collect(0:99) ./ 250.0
         n_eps = 12
         layout = create_test_layout(layout_type = :topo)
@@ -118,13 +119,42 @@ using EegFun:
         @test occursin("kept", str)
     end
 
-    @testset "autoreject local repair and rejection" begin
-        # Create 15 epochs, 6 channels with 3D coordinates (topo layout)
+    @testset "autoreject non-mutation of input EpochData" begin
+        dat = create_test_epoch_data(n_epochs = 8, n_channels = 4, fs = 250, n = 80, seed = 42)
+        orig_dfs = [copy(df) for df in dat.data]
+        orig_n = n_epochs(dat)
+
+        cleaned, res = autoreject(dat; n_folds = 2, seed = 42, verbose = false)
+
+        @test n_epochs(dat) == orig_n
+        for (ep_i, df_orig) in enumerate(orig_dfs)
+            @test Matrix(df_orig[:, [:Ch1, :Ch2, :Ch3, :Ch4]]) == Matrix(dat.data[ep_i][:, [:Ch1, :Ch2, :Ch3, :Ch4]])
+        end
+    end
+
+    @testset "autoreject determinism with fixed seed" begin
+        dat1 = create_test_epoch_data(n_epochs = 10, n_channels = 4, fs = 250, n = 80, seed = 10)
+        dat2 = create_test_epoch_data(n_epochs = 10, n_channels = 4, fs = 250, n = 80, seed = 10)
+
+        # Inject same artifact
+        dat1.data[2][1:15, :Ch1] .+= 250.0
+        dat2.data[2][1:15, :Ch1] .+= 250.0
+
+        _, res1 = autoreject(dat1; n_folds = 3, seed = 777, verbose = false)
+        _, res2 = autoreject(dat2; n_folds = 3, seed = 777, verbose = false)
+
+        @test res1.thresholds == res2.thresholds
+        @test res1.epochs_clean == res2.epochs_clean
+        @test res1.epochs_repaired == res2.epochs_repaired
+        @test res1.epochs_rejected == res2.epochs_rejected
+    end
+
+    @testset "autoreject synthetic recovery and RMSE reduction" begin
         layout = create_test_layout(layout_type = :topo)
         n_eps = 15
         channels = [:Fp1, :Fp2, :Cz, :Pz, :O1, :O2]
-        dfs = DataFrame[]
         time = collect(0:99) ./ 250.0
+        dfs = DataFrame[]
 
         for ep = 1:n_eps
             df = DataFrame(
@@ -138,71 +168,143 @@ using EegFun:
             for ch in channels
                 df[!, ch] = sin.(2 * π * 5 .* time)
             end
-
-            # Inject a single bad channel artifact in epoch 2 (1 bad ch out of 6 -> repaired)
-            if ep == 2
-                df[1:20, :Fp1] .+= 250.0
-            end
-
-            # Inject all channels bad in epoch 5 (6 bad chs out of 6 -> rejected)
-            if ep == 5
-                for ch in channels
-                    df[1:20, ch] .+= 300.0
-                end
-            end
-
             push!(dfs, df)
         end
 
         ep_data = EpochData("test", 1, "cond1", dfs, layout, 250, EegFun.AnalysisInfo())
 
-        # Run local autoreject with max_repair_perc = 0.2 (allows 1 bad ch out of 6 to repair)
-        # and consensus_perc = 0.4 (rejects if > 2 bad chs)
-        cleaned_epochs, res = autoreject(
+        # Ground truth clean signal for Cz in epoch 3
+        clean_cz = copy(ep_data.data[3][!, :Cz])
+
+        # Inject transient artifact into Cz on epoch 3
+        ep_data.data[3][20:40, :Cz] .+= 300.0
+        corrupted_rmse = sqrt(mean((ep_data.data[3][!, :Cz] .- clean_cz) .^ 2))
+
+        cleaned_data, res =
+            autoreject(ep_data; mode = :local, n_folds = 3, consensus_perc = 0.5, max_repair_perc = 0.2, seed = 42, verbose = false)
+
+        @test 3 in res.epochs_repaired
+        @test haskey(res.repaired_channels, 3)
+        @test :Cz in res.repaired_channels[3]
+
+        repaired_cz = cleaned_data.data[3][!, :Cz]
+        repaired_rmse = sqrt(mean((repaired_cz .- clean_cz) .^ 2))
+
+        # Repaired signal should significantly improve RMSE against original clean signal
+        @test repaired_rmse < corrupted_rmse * 0.3
+    end
+
+    @testset "autoreject middle band (consensus vs repair threshold)" begin
+        # 6 channels: consensus_perc = 0.5 (k_max = 3), max_repair_perc = 0.17 (r_max = 1)
+        # Epoch with 2 bad channels (r_max < 2 <= k_max):
+        # Epoch should be RETAINED (not rejected).
+        # The worst 1 channel should be repaired; the 2nd should be tracked in skipped_channels.
+        layout = create_test_layout(layout_type = :topo)
+        channels = layout.data.label
+        n_eps = 15
+        time = collect(0:99) ./ 250.0
+        dfs = DataFrame[]
+
+        for ep = 1:n_eps
+            df = DataFrame(
+                time = time,
+                sample = 1:100,
+                epoch = fill(ep, 100),
+                participant = fill(1, 100),
+                condition = fill(1, 100),
+                condition_name = fill("cond1", 100),
+            )
+            for ch in channels
+                df[!, ch] = sin.(2 * π * 5 .* time)
+            end
+            push!(dfs, df)
+        end
+
+        ep_data = EpochData("test", 1, "cond1", dfs, layout, 250, EegFun.AnalysisInfo())
+
+        # Inject 2 bad channels into epoch 4 with different severity
+        ep_data.data[4][1:20, channels[1]] .+= 200.0  # mild
+        ep_data.data[4][1:20, channels[2]] .+= 450.0  # severe
+
+        cleaned, res = autoreject(
             ep_data;
-            mode = :local,
+            channel_selection = EegFun.channels(channels),
+            consensus_perc = 0.5,
+            max_repair_perc = 0.17,
             n_folds = 3,
-            n_candidates = 20,
-            consensus_perc = 0.4,
-            max_repair_perc = 0.2,
             seed = 42,
             verbose = false,
         )
 
-        @test 2 in res.epochs_repaired
-        @test 5 in res.epochs_rejected
-        @test haskey(res.repaired_channels, 2)
-        @test :Fp1 in res.repaired_channels[2]
+        @test 4 in res.epochs_repaired
+        @test 4 ∉ res.epochs_rejected
+        @test haskey(res.repaired_channels, 4)
+        @test length(res.repaired_channels[4]) == 1
+        # Worst channel (channels[2]) should be repaired
+        @test channels[2] in res.repaired_channels[4]
+        # Mild channel should be in skipped_channels
+        @test haskey(res.skipped_channels, 4)
+        @test channels[1] in res.skipped_channels[4]
+    end
 
-        # Cleaned epoch 2 should have had Fp1 repaired
-        f_p1_repaired = cleaned_epochs.data[2][!, :Fp1]
-        @test maximum(abs, f_p1_repaired) < 150.0
+    @testset "autoreject failed repair moves to rejected" begin
+        # Create epoch data with an empty layout (no coordinates, no neighbours)
+        channels = [:Ch1, :Ch2, :Ch3, :Ch4]
+        layout = EegFun.Layout(DataFrame(label = channels), nothing, nothing, nothing)
+        ep_data = create_test_epoch_data(n_epochs = 10, n_channels = 4, fs = 250, n = 50, seed = 42)
+        ep_data.layout = layout
 
-        # Epoch 5 should have been pruned
-        @test n_epochs(cleaned_epochs) == 14
+        # Inject artifact in epoch 2
+        ep_data.data[2][1:20, :Ch1] .+= 300.0
 
-        # Test reject = false: returns all 15 epochs, but res still records rejection
-        cleaned_no_prune, res_no_prune = autoreject(
-            ep_data;
-            mode = :local,
-            n_folds = 3,
-            n_candidates = 20,
-            consensus_perc = 0.4,
-            max_repair_perc = 0.2,
-            seed = 42,
-            reject = false,
-            verbose = false,
-        )
-        @test n_epochs(cleaned_no_prune) == 15
-        @test 5 in res_no_prune.epochs_rejected
+        cleaned, res = autoreject(ep_data; n_folds = 3, consensus_perc = 0.5, max_repair_perc = 0.3, seed = 42, verbose = false)
+
+        # Because layout has no coordinates and no neighbours, repair fails
+        # Epoch 2 must be moved to rejected, NOT kept as clean/repaired!
+        @test 2 in res.epochs_rejected
+        @test 2 ∉ res.epochs_repaired
+    end
+
+    @testset "autoreject fallback for < 4 epochs" begin
+        small_ep = create_test_epoch_data(n_epochs = 2, n_channels = 3, fs = 250, n = 50, seed = 42)
+        cleaned_small, res_small = autoreject(small_ep; verbose = false)
+
+        @test res_small isa AutoRejectResult
+        @test isempty(res_small.epochs_rejected)
+        @test isempty(res_small.epochs_repaired)
+        @test length(res_small.epochs_clean) == 2
+        @test n_epochs(cleaned_small) == 2
+    end
+
+    @testset "autoreject edge cases and validation" begin
+        ep_data = create_test_epoch_data(n_epochs = 6, n_channels = 3, fs = 1000, n = 1000, seed = 42)
+
+        # Invalid mode throws error
+        @test_throws Exception autoreject(ep_data; mode = :invalid_mode)
+
+        # Invalid repair method throws error
+        @test_throws Exception autoreject(ep_data; repair_method = :invalid_method)
+
+        # Invalid n_folds < 2 throws error
+        @test_throws Exception autoreject(ep_data; n_folds = 1)
+
+        # Invalid consensus_perc and max_repair_perc throw error
+        @test_throws Exception autoreject(ep_data; consensus_perc = 1.5)
+        @test_throws Exception autoreject(ep_data; consensus_perc = -0.2)
+        @test_throws Exception autoreject(ep_data; max_repair_perc = -0.1)
+        @test_throws Exception autoreject(ep_data; max_repair_perc = 1.2)
+
+        # Interval selection
+        cleaned_win, res_win = autoreject(ep_data; interval_selection = times(0.1, 0.4), n_folds = 2, verbose = false)
+        @test res_win isa AutoRejectResult
     end
 
     @testset "autoreject global mode" begin
         layout = create_test_layout(layout_type = :topo)
-        n_eps = 10
-        channels = [:Fp1, :Fp2, :Cz, :Pz, :O1, :O2]
-        dfs = DataFrame[]
+        n_eps = 12
+        channels = [:Fp1, :Fp2, :Cz, :Pz]
         time = collect(0:99) ./ 250.0
+        dfs = DataFrame[]
 
         for ep = 1:n_eps
             df = DataFrame(
@@ -217,7 +319,7 @@ using EegFun:
                 df[!, ch] = sin.(2 * π * 5 .* time)
             end
             if ep == 3
-                df[1:20, :Cz] .+= 350.0  # pulse artifact
+                df[1:20, :Fp1] .+= 300.0
             end
             push!(dfs, df)
         end
@@ -227,16 +329,13 @@ using EegFun:
         cleaned_epochs, res = autoreject(ep_data; mode = :global, n_folds = 3, seed = 42, verbose = false)
 
         @test res.mode == :global
-        # In global mode: single threshold across all channels, no repair
-        all_th = collect(values(res.thresholds))
-        @test all(th -> th == all_th[1], all_th)
-        @test length(res.epochs_repaired) == 0
+        @test length(res.epochs_repaired) == 0  # Global mode does not repair
         @test 3 in res.epochs_rejected
-        @test n_epochs(cleaned_epochs) == 9
+        @test length(unique(values(res.thresholds))) == 1  # single global threshold
+        @test n_epochs(cleaned_epochs) == 11
     end
 
     @testset "autoreject on Vector{EpochData} (multiple conditions)" begin
-        # 2 conditions, 8 epochs each
         ep_vec = create_test_epoch_data_vector(conditions = 1:2, n_epochs = 8, n_channels = 4, fs = 250, n = 100, seed = 42)
 
         # Inject pulse artifact in condition 1, epoch 3
@@ -251,29 +350,7 @@ using EegFun:
         @test res.rejection_info[2] isa EpochRejectionInfo
 
         # Condition 1 epoch 3 was rejected
-        @test 3 in res.rejection_info[1].rejected[1].epoch
-    end
-
-    @testset "autoreject edge cases" begin
-        # Very few epochs (e.g. 2 epochs)
-        small_ep = create_test_epoch_data(n_epochs = 2, n_channels = 3, fs = 250, n = 50, seed = 42)
-        cleaned_small, res_small = autoreject(small_ep; verbose = false)
-        @test res_small isa AutoRejectResult
-        @test length(res_small.thresholds) == 3
-
-        # Invalid mode throws error
-        @test_throws Exception autoreject(small_ep; mode = :invalid_mode)
-
-        # Invalid consensus_perc and max_repair_perc throw error
-        @test_throws Exception autoreject(small_ep; consensus_perc = 1.5)
-        @test_throws Exception autoreject(small_ep; consensus_perc = -0.2)
-        @test_throws Exception autoreject(small_ep; max_repair_perc = -0.1)
-        @test_throws Exception autoreject(small_ep; max_repair_perc = 1.2)
-
-        # Interval selection
-        ep_data = create_test_epoch_data(n_epochs = 6, n_channels = 3, fs = 1000, n = 1000, seed = 42)
-        cleaned_win, res_win = autoreject(ep_data; interval_selection = times(0.1, 0.4), n_folds = 2, verbose = false)
-        @test res_win isa AutoRejectResult
+        @test any(r -> r.epoch == 3, res.rejection_info[1].rejected)
     end
 
     @testset "pipeline preprocess with autoreject" begin

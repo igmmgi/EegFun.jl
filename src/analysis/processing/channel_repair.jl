@@ -402,67 +402,93 @@ function _repair_channels_spherical!(
     return nothing
 end
 
-# === SPHERICAL SPLINE UTILITIES ===
+# === SPHERICAL SPLINE UTILITIES (Perrin et al., 1989) ===
+
+"""Factors for Legendre polynomial series in spherical spline interpolation."""
+_g_factors(m::Int, nterms::Int) = [(2n + 1) / (float(n)^m * float(n + 1)^m * 4π) for n = 1:nterms]
+
+"""Evaluate Legendre polynomial series using forward 3-term recurrence."""
+@inline function _legendre_series(x::Float64, f::Vector{Float64})
+    x = clamp(x, -1.0, 1.0)
+    p_prev, p = 1.0, x
+    acc = f[1] * x
+    @inbounds for n = 2:length(f)
+        p_next = ((2n - 1) * x * p - (n - 1) * p_prev) / n
+        acc += f[n] * p_next
+        p_prev, p = p, p_next
+    end
+    return acc
+end
+
+"""In-place computation of G matrix from cosine matrix and factors."""
+function _g_from_cos!(C::Matrix{Float64}, f::Vector{Float64})
+    @inbounds for i in eachindex(C)
+        C[i] = _legendre_series(C[i], f)
+    end
+    return C
+end
+
+"""
+    _spline_geometry(d, ch::Vector{Int})
+
+Compute 3D unit-sphere vectors for channels in a layout.
+Prioritizes :inc and :azi spherical coordinates; falls back to 2D equidistant projection.
+"""
+function _spline_geometry(d, ch::Vector{Int})
+    ρe = hypot.(d.x2[ch], d.y2[ch])
+    if hasproperty(d, :inc) && hasproperty(d, :azi)
+        rad_factor = pi / 180.0
+        inc = Float64.(d.inc[ch]) .* rad_factor
+        azi = Float64.(d.azi[ch]) .* rad_factor
+        U = hcat(sin.(inc) .* cos.(azi), sin.(inc) .* sin.(azi), cos.(inc))
+        θ = abs.(inc)
+        denom = dot(ρe, ρe)
+        k = denom > 0 ? dot(ρe, θ) / denom : (π / 2)
+        if maximum(abs, θ .- k .* ρe) > 1e-3
+            @warn "x2/y2 are not an azimuthal-equidistant image of inc/azi; spline map may be distorted." maxlog = 1
+        end
+    else
+        # Fallback: only 2D coords available. Assume azimuthal-equidistant x2/y2 with ρ=1 at equator.
+        @warn "Layout has no :inc/:azi; assuming azimuthal-equidistant x2/y2 with ρ=1 at the equator." maxlog = 1
+        k = π / 2
+        θ = min.(k .* ρe, π)
+        sx = [ρe[i] > 0 ? sin(θ[i]) / ρe[i] : 0.0 for i = 1:length(ρe)]
+        U = hcat(sx .* d.x2[ch], sx .* d.y2[ch], cos.(θ))
+    end
+    return U, k
+end
+
+"""
+    _spline_good_to_bad(U_good::Matrix{Float64}, U_bad::Matrix{Float64}, f::Vector{Float64}, λ::Float64)
+                        -> Matrix{Float64}
+
+Construct spherical spline interpolation matrix (n_bad × n_good) from unit vectors on the sphere
+using LU factorization (Perrin et al., 1989).
+"""
+function _spline_good_to_bad(U_good::Matrix{Float64}, U_bad::Matrix{Float64}, f::Vector{Float64}, λ::Float64)
+    n = size(U_good, 1)
+    A = zeros(Float64, n + 1, n + 1)
+    A[1:n, 1:n] .= _g_from_cos!(U_good * U_good', f)
+    @inbounds for i = 1:n
+        A[i, i] += λ
+        A[i, n+1] = 1.0
+        A[n+1, i] = 1.0
+    end
+    A[n+1, n+1] = 0.0
+    X = lu(A) \ [Matrix{Float64}(I, n, n); zeros(Float64, 1, n)]
+    Gb = _g_from_cos!(U_bad * U_good', f)
+    return Gb * view(X, 1:n, :) .+ view(X, (n+1):(n+1), :)
+end
 
 """
     _calc_g(cosang::AbstractArray, m::Int=4, n_legendre_terms::Int=50)
 
 Calculate spherical spline G function between points on a sphere using Legendre polynomials.
-
-Based on Perrin et al. (1989). Spherical splines for scalp potential and current density mapping.
-Electroencephalography and Clinical Neurophysiology, 72(2):184-187.
-
-# Arguments
-- `cosang`: Cosine of angles between pairs of points (equivalent to dot product of unit vectors)
-- `m`: Stiffness parameter (default: 4)
-- `n_legendre_terms`: Number of Legendre polynomial terms to evaluate (default: 50)
-
-# Returns
-- G matrix values for spherical spline interpolation
 """
 function _calc_g(cosang::AbstractArray, m::Int = 4, n_legendre_terms::Int = 50)
-    # Calculate Legendre polynomial coefficients according to Perrin et al. 1989
-    # G(cos θ) = (1 / 4π) * Σ[(2n+1) / (n^m * (n+1)^m) * P_n(cos θ)]
-    # where P_n are Legendre polynomials of order n
-
-    factors = zeros(n_legendre_terms + 1)
-    factors[1] = 0.0  # P_0 term is zero
-
-    for n = 1:n_legendre_terms
-        factors[n+1] = (2 * n + 1) / (n^m * (n + 1)^m * 4 * π)
-    end
-
-    # Evaluate Legendre polynomial series at cosang using Clenshaw's algorithm
-    # This is equivalent to numpy.polynomial.legendre.legval
-    return _eval_legendre(cosang, factors)
-end
-
-"""
-    _eval_legendre(x, coeffs)
-
-Evaluate Legendre polynomial series using Clenshaw's recurrence algorithm.
-"""
-function _eval_legendre(x::T, coeffs::Vector{Float64}) where {T<:Real}
-    n = length(coeffs)
-    if n == 0
-        return zero(T)
-    elseif n == 1
-        return coeffs[1] * one(T)
-    else
-        # Clenshaw recurrence for Legendre polynomials
-        c0 = coeffs[end-1]
-        c1 = coeffs[end]
-
-        for i = (n-2):-1:1
-            c0, c1 = coeffs[i] - c1 * (i + 1) / (i + 2), c0 + c1 * x * (2 * i + 3) / (i + 2)
-        end
-
-        return c0 + c1 * x
-    end
-end
-
-function _eval_legendre(x::AbstractArray, coeffs::Vector{Float64})
-    return [_eval_legendre(xi, coeffs) for xi in x]
+    f = _g_factors(m, n_legendre_terms)
+    C = Float64.(cosang)
+    return _g_from_cos!(C, f)
 end
 
 """
@@ -495,62 +521,25 @@ function _make_interpolation_matrix(
     pos_to_norm = copy(pos_to)
 
     for i = 1:n_from
-        norm = sqrt(sum(pos_from_norm[i, :] .^ 2))
-        if norm > 1e-12
-            pos_from_norm[i, :] ./= norm
+        norm_v = sqrt(sum(pos_from_norm[i, :] .^ 2))
+        if norm_v > 1e-12
+            pos_from_norm[i, :] ./= norm_v
         else
             pos_from_norm[i, :] .= (0.0, 0.0, 1.0)
         end
     end
 
     for i = 1:n_to
-        norm = sqrt(sum(pos_to_norm[i, :] .^ 2))
-        if norm > 1e-12
-            pos_to_norm[i, :] ./= norm
+        norm_v = sqrt(sum(pos_to_norm[i, :] .^ 2))
+        if norm_v > 1e-12
+            pos_to_norm[i, :] ./= norm_v
         else
             pos_to_norm[i, :] .= (0.0, 0.0, 1.0)
         end
     end
 
-    # Calculate cosine angles (dot products) between positions
-    # cosang_from[i,j] = dot(pos_from[i], pos_from[j])
-    cosang_from = pos_from_norm * pos_from_norm'
-
-    # cosang_to_from[i,j] = dot(pos_to[i], pos_from[j])
-    cosang_to_from = pos_to_norm * pos_from_norm'
-
-    # Calculate G matrices using spherical spline basis functions
-    G_from = _calc_g(cosang_from, m, n_legendre_terms)
-    G_to_from = _calc_g(cosang_to_from, m, n_legendre_terms)
-
-    # Add regularization to diagonal
-    if lambda > 0
-        for i = 1:n_from
-            G_from[i, i] += lambda
-        end
-    end
-
-    # Construct system matrix C with constraint
-    # C = [G_from  ones(n_from)]
-    #     [ones'        0      ]
-    C = zeros(n_from + 1, n_from + 1)
-    C[1:n_from, 1:n_from] = G_from
-    C[1:n_from, n_from+1] .= 1.0
-    C[n_from+1, 1:n_from] .= 1.0
-    C[n_from+1, n_from+1] = 0.0
-
-    # Compute pseudoinverse using SVD for numerical stability
-    C_inv = pinv(C)
-
-    # Compute interpolation matrix
-    # interpolation = [G_to_from  ones(n_to)] * C_inv[:, 1:n_from]
-    G_to_extended = zeros(n_to, n_from + 1)
-    G_to_extended[:, 1:n_from] = G_to_from
-    G_to_extended[:, n_from+1] .= 1.0
-
-    interpolation = G_to_extended * C_inv[:, 1:n_from]
-
-    return interpolation
+    f = _g_factors(m, n_legendre_terms)
+    return _spline_good_to_bad(pos_from_norm, pos_to_norm, f, lambda)
 end
 
 
