@@ -23,8 +23,8 @@ EegFun.rereference!(dat, :avg)
 EegFun.highpass_filter!(dat, 1)
 
 # visually selected blink like artifact via interval selection times
-with_theme(Theme(colormap=:coolwarm)) do
-EegFun.plot_topography(dat, interval_selection = EegFun.times(5.973, 6.02), ylim = (-200, 200))
+with_theme(Theme(colormap = :coolwarm)) do
+    EegFun.plot_topography(dat, interval_selection = EegFun.times(5.973, 6.02), ylim = (-200, 200))
 end
 
 EegFun.plot_topography(dat, interval_selection = EegFun.times(6), ylim = (-200, 200))
@@ -97,4 +97,3 @@ EegFun.plot_topography(erps[1], gridscale = 50)
 EegFun.plot_topography(erps[2], gridscale = 1000)
 EegFun.plot_topography(erps[1], colormap = :inferno)
 EegFun.plot_topography(erps[2], plot_title = "Custom Title", plot_title_fontsize = 30)
-

@@ -57,7 +57,3 @@ EegFun.detect_bad_epochs_interactive(epochs, artifact_info = artifacts, dims = (
 
 # Or combine with automatic artifact detection
 EegFun.detect_bad_epochs_interactive(epochs, artifact_info = artifacts, dims = (4, 4), colormap = :GnBu)
-
-
-
-

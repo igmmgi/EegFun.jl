@@ -31,4 +31,3 @@ erps = EegFun.average_epochs(epochs)
 
 # plot GFP for a single condition
 EegFun.plot_gfp(erps)
-

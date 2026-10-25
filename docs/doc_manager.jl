@@ -71,7 +71,7 @@ function build_documentation(project_root::String; build_pdf::Bool = false)
 
         # Build documentation
         build_jl_path = joinpath(project_root, "docs", "make.jl")
-        
+
         if build_pdf
             print_colored(GREEN, " Building PDF book with DocumenterTypst...")
             ENV["BUILD_PDF"] = "true"
@@ -169,7 +169,7 @@ function check_doc_coverage(project_root::String; skip_build_check::Bool = false
                 # Track functions by name: name => (has_docstring, doc_chars)
                 # This groups multiple-dispatch methods so a function is counted
                 # as documented if ANY of its methods has a docstring.
-                file_func_names = Dict{String,@NamedTuple{has_doc::Bool, doc_chars::Int}}()
+                file_func_names = Dict{String,@NamedTuple{has_doc::Bool,doc_chars::Int}}()
 
                 i = 1
                 while i <= length(lines)
@@ -187,7 +187,7 @@ function check_doc_coverage(project_root::String; skip_build_check::Bool = false
                         # Check if there's a docstring above (look back up to 3 lines)
                         this_doc_chars = 0
                         docstring_found = false
-                        for j = max(1, i - 3):i-1
+                        for j = max(1, i-3):(i-1)
                             if j <= length(lines)
                                 prev_line = strip(lines[j])
                                 if startswith(prev_line, "\"\"\"") || (startswith(prev_line, "\"") && !endswith(prev_line, "\""))
@@ -197,7 +197,7 @@ function check_doc_coverage(project_root::String; skip_build_check::Bool = false
                                     if startswith(prev_line, "\"\"\"")
                                         doc_start = j
                                         doc_end = j
-                                        for k = j+1:length(lines)
+                                        for k = (j+1):length(lines)
                                             if endswith(strip(lines[k]), "\"\"\"")
                                                 doc_end = k
                                                 break
@@ -217,10 +217,8 @@ function check_doc_coverage(project_root::String; skip_build_check::Bool = false
                         # Update: a function is documented if ANY method has a docstring
                         if haskey(file_func_names, fname)
                             prev = file_func_names[fname]
-                            file_func_names[fname] = (
-                                has_doc = prev.has_doc || docstring_found,
-                                doc_chars = prev.doc_chars + this_doc_chars,
-                            )
+                            file_func_names[fname] =
+                                (has_doc = prev.has_doc || docstring_found, doc_chars = prev.doc_chars + this_doc_chars)
                         else
                             file_func_names[fname] = (has_doc = docstring_found, doc_chars = this_doc_chars)
                         end
@@ -519,13 +517,13 @@ function show_interactive_menu(project_root::String)
         choice = readline()
 
         if choice == "1"
-            build_documentation(project_root, build_pdf=false)
+            build_documentation(project_root, build_pdf = false)
             if isfile(joinpath(project_root, "docs", "build", "index.html"))
                 print_colored(GREEN, " Documentation built successfully!")
                 print_colored(CYAN, "Open docs/build/index.html in your browser to view the documentation")
             end
         elseif choice == "2"
-            build_documentation(project_root, build_pdf=true)
+            build_documentation(project_root, build_pdf = true)
             if isfile(joinpath(project_root, "docs", "build_pdf", "EegFun.pdf"))
                 print_colored(GREEN, " PDF built successfully!")
                 print_colored(CYAN, "Your PDF is located at docs/build_pdf/EegFun.pdf")

@@ -151,12 +151,8 @@ pages = [
             "CLT" => "tutorials/teaching/ica/signal_example_ica_clt.md",
             "Infomax" => "tutorials/teaching/ica/signal_example_ica_infomax.md",
         ],
-        "Machine Learning" => [
-            "Decoding" => "tutorials/teaching/machine_learning/signal_example_decoding.md",
-        ],
-        "ERP" => [
-            "Simulate ERP" => "tutorials/teaching/erp/simulate_erp.md",
-        ],
+        "Machine Learning" => ["Decoding" => "tutorials/teaching/machine_learning/signal_example_decoding.md"],
+        "ERP" => ["Simulate ERP" => "tutorials/teaching/erp/simulate_erp.md"],
     ],
     "Cheatsheet" => "cheatsheet.md",
     "Reference" => [
@@ -173,15 +169,15 @@ build_pdf = get(ENV, "BUILD_PDF", "false") == "true"
 
 if build_pdf
     using DocumenterTypst
-    build_format = DocumenterTypst.Typst(platform="none")
+    build_format = DocumenterTypst.Typst(platform = "none")
     build_dir = "build_pdf"
-    
+
     # Create a temporary source directory for the PDF build
     src_dir = "src_pdf"
-    ispath(joinpath(@__DIR__, src_dir)) && rm(joinpath(@__DIR__, src_dir), force=true, recursive=true)
+    ispath(joinpath(@__DIR__, src_dir)) && rm(joinpath(@__DIR__, src_dir), force = true, recursive = true)
     cp(joinpath(@__DIR__, "src"), joinpath(@__DIR__, src_dir))
-    
-    
+
+
     # Fix absolute image paths for Typst
     for (root, dirs, files) in walkdir(joinpath(@__DIR__, src_dir))
         for file in files
@@ -198,11 +194,11 @@ if build_pdf
             end
         end
     end
-    
+
     # Filter out duplicate pages to prevent Typst label errors
     # Explanations contains duplicate files already in Tutorials
     filter!(p -> p[1] != "Explanations", pages)
-    
+
     # Remove Layouts from Tutorials because it is hundreds of images
     for section in pages
         if section[1] == "Tutorials"
@@ -230,7 +226,7 @@ try
     )
 finally
     if build_pdf && ispath(joinpath(@__DIR__, "src_pdf"))
-        rm(joinpath(@__DIR__, "src_pdf"), force=true, recursive=true)
+        rm(joinpath(@__DIR__, "src_pdf"), force = true, recursive = true)
     end
 end
 

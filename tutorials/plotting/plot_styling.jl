@@ -47,13 +47,13 @@ end
 # color cycle (palette) for lines, and its colormap for topographies.
 my_custom_colors = Theme(
     palette = (color = [:purple, :teal, :gold],), # Used by plot_erp
-    colormap = :inferno                           # Used by plot_topography
+    colormap = :inferno,                           # Used by plot_topography
 )
 
 with_theme(my_custom_colors) do
     # This ERP plot will now automatically use purple, teal, and gold for Cond 1, 2, and 3
     EegFun.plot_erp(erps, layout = :single, channel_selection = EegFun.channels([:Fp1]))
-    
+
     # This topoplot will automatically use the :inferno colormap from the theme
     EegFun.plot_topography(dat, interval_selection = EegFun.times(6), ylim = (-200, 200))
 end
@@ -65,14 +65,17 @@ end
 # Kwargs passed directly to EegFun functions ALWAYS take precedence over the theme.
 with_theme(theme_dark()) do
     # Even though theme_dark has its own colors, passing `color` forces it to use these.
-    EegFun.plot_erp(erps, layout = :single, channel_selection = EegFun.channels([:Fp1]),
-        color = [:red, :white, :blue], 
+    EegFun.plot_erp(
+        erps,
+        layout = :single,
+        channel_selection = EegFun.channels([:Fp1]),
+        color = [:red, :white, :blue],
         linewidth = 3,
-        plot_title = "My Override Plot")
+        plot_title = "My Override Plot",
+    )
 
     # Even though we are in a theme, we can force a different colormap directly via kwargs
-    EegFun.plot_topography(dat, interval_selection = EegFun.times(6), 
-        colormap = :inferno, ylim = (-200, 200))
+    EegFun.plot_topography(dat, interval_selection = EegFun.times(6), colormap = :inferno, ylim = (-200, 200))
 end
 
 # ==============================================================================
@@ -81,33 +84,32 @@ end
 
 # If you want to increase the base font size for an entire figure without using 
 # a full theme block, you can use `theme_fontsize`:
-EegFun.plot_erp(erps, layout = :single, channel_selection = EegFun.channels([:Fp1]), 
-    theme_fontsize = 24)
+EegFun.plot_erp(erps, layout = :single, channel_selection = EegFun.channels([:Fp1]), theme_fontsize = 24)
 
 # You can also set specific overrides for elements like the main plot title:
-EegFun.plot_erp(erps, layout = :single, channel_selection = EegFun.channels([:Fp1]),
-    plot_title = "Large Custom Title", 
-    plot_title_fontsize = 36)
+EegFun.plot_erp(
+    erps,
+    layout = :single,
+    channel_selection = EegFun.channels([:Fp1]),
+    plot_title = "Large Custom Title",
+    plot_title_fontsize = 36,
+)
 
 # ==============================================================================
 # 6. Real-world example: A Publication-Ready Plot
 # ==============================================================================
 
 # Combining a clean, minimal theme with specific kwargs to make a nice figure
-publication_theme = Theme(
-    fontsize = 16,
-    palette = (color = [:black, :dodgerblue, :firebrick],),
-    linewidth = 2
-)
+publication_theme = Theme(fontsize = 16, palette = (color = [:black, :dodgerblue, :firebrick],), linewidth = 2)
 
 with_theme(publication_theme) do
     EegFun.plot_erp(
-        erps, 
-        layout = :grid, 
+        erps,
+        layout = :grid,
         channel_selection = EegFun.channels([:Fp1, :Fp2, :F3, :Fz, :F4]),
         legend_channel = [:Fz],
         yreversed = true,                   # Negative up
-        plot_title = "Publication ERPs",    
-        plot_title_fontsize = 20
+        plot_title = "Publication ERPs",
+        plot_title_fontsize = 20,
     )
 end

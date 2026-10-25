@@ -83,11 +83,8 @@ function signal_example_ecg_einthoven()
 
     _set_window_title("Interactive ECG Simulator — Einthoven's Triangle & Vectorcardiogram")
 
-    fig = Figure(
-        size = (1400, 860),
-        title = "Interactive ECG Simulator — Einthoven's Triangle & Vectorcardiogram",
-        backgroundcolor = :white,
-    )
+    fig =
+        Figure(size = (1400, 860), title = "Interactive ECG Simulator — Einthoven's Triangle & Vectorcardiogram", backgroundcolor = :white)
 
     # ── Adaptive Font and UI Sizing ──────────────────────────────────────────
     function setup_adaptive_sizing(fig)
@@ -97,7 +94,7 @@ function signal_example_ecg_einthoven()
         btn_font   = Observable(12.5)
 
         on(fig.scene.viewport) do area
-            scale = area.widths[1] / 1400
+            scale        = area.widths[1] / 1400
             title_font[] = max(13, round(Int, 16 * scale))
             label_font[] = max(11, round(Int, 13.0 * scale))
             tick_font[]  = max(10, round(Int, 11.0 * scale))
@@ -110,14 +107,14 @@ function signal_example_ecg_einthoven()
     title_font, label_font, tick_font, btn_font = setup_adaptive_sizing(fig)
 
     # ── Observables ──────────────────────────────────────────────────────────
-    axis_alpha_deg   = Observable(60.0)      # Mean QRS electrical axis in degrees (-45° to +120°)
-    heart_rate_bpm   = Observable(72.0)      # Heart rate in beats per minute
-    noise_level      = Observable(15.0)      # High-frequency noise level (0-200)
-    selected_lead    = Observable(:lead2)    # :lead1, :lead2, :lead3, :all3
-    show_vcg_loop    = Observable(true)      # Show Vectorcardiogram loop trajectory
-    show_projection  = Observable(true)      # Show orthogonal projection onto active lead
-    playback_time    = Observable(-1.0)      # < 0: static R-peak inspection, >= 0: live time cursor [s]
-    is_playing       = Observable(false)     # Continuous heartbeat playback flag
+    axis_alpha_deg  = Observable(60.0)      # Mean QRS electrical axis in degrees (-45° to +120°)
+    heart_rate_bpm  = Observable(72.0)      # Heart rate in beats per minute
+    noise_level     = Observable(15.0)      # High-frequency noise level (0-200)
+    selected_lead   = Observable(:lead2)    # :lead1, :lead2, :lead3, :all3
+    show_vcg_loop   = Observable(true)      # Show Vectorcardiogram loop trajectory
+    show_projection = Observable(true)      # Show orthogonal projection onto active lead
+    playback_time   = Observable(-1.0)      # < 0: static R-peak inspection, >= 0: live time cursor [s]
+    is_playing      = Observable(false)     # Continuous heartbeat playback flag
 
     # ── Geometry & Anatomical Constants ──────────────────────────────────────
     # Equilateral Einthoven Triangle positions (Standard limb placement)
@@ -132,32 +129,15 @@ function signal_example_ecg_einthoven()
     dipole_scale = 1.35 # Visual vector scale on torso plot
 
     # ── Left Column [1, 1]: Torso, Einthoven Triangle & Vector Schematic ─────
-    ax_torso = Axis(
-        fig[1, 1],
-        title = "Einthoven's Triangle & Vectorcardiogram",
-        titlesize = title_font,
-        aspect = DataAspect(),
-    )
+    ax_torso = Axis(fig[1, 1], title = "Einthoven's Triangle & Vectorcardiogram", titlesize = title_font, aspect = DataAspect())
     hidedecorations!(ax_torso)
     hidespines!(ax_torso)
     xlims!(ax_torso, -3.85, 3.85)
     ylims!(ax_torso, -3.65, 3.45)
 
-    # ── Stylized Human Torso Silhouette ──────────────────────────────────────
-    torso_half = [
-        Point2f(0.55, 3.10),   # neck top
-        Point2f(0.55, 2.70),   # neck base
-        Point2f(1.60, 2.60),   # clavicle slope
-        Point2f(2.90, 2.30),   # shoulder
-        Point2f(3.40, 1.80),   # outer deltoid
-        Point2f(3.20, 0.90),   # armpit outer
-        Point2f(2.55, 0.70),   # armpit inner
-        Point2f(2.40, -0.40),  # ribcage lateral
-        Point2f(2.15, -1.50),  # waist
-        Point2f(2.45, -2.60),  # iliac crest / hip
-        Point2f(2.20, -3.30),  # groin lateral
-        Point2f(0.00, -3.45),  # pubis / perineum
-    ]
+    # Stylized human torso silhouette points:
+    # neck top, neck base, clavicle slope, shoulder, outer deltoid, armpit, ribcage, waist, hip, groin, pubis
+    torso_half = [Point2f(0.55, 3.10), Point2f(0.55, 2.70), Point2f(1.60, 2.60), Point2f(2.90, 2.30), Point2f(3.40, 1.80), Point2f(3.20, 0.90), Point2f(2.55, 0.70), Point2f(2.40, -0.40), Point2f(2.15, -1.50), Point2f(2.45, -2.60), Point2f(2.20, -3.30), Point2f(0.00, -3.45)]
     torso_left = [Point2f(-p[1], p[2]) for p in reverse(torso_half)]
     torso_pts  = [torso_left; torso_half]
 
@@ -171,12 +151,36 @@ function signal_example_ecg_einthoven()
 
     # ── Stylized Anatomical Heart at (0.25, 0.35) ────────────────────────────
     # Great vessels (Aorta arch in crimson, Pulmonary trunk in blue)
-    poly!(ax_torso, [Point2f(0.12, 1.00), Point2f(0.35, 1.35), Point2f(0.60, 1.15), Point2f(0.40, 0.85)], color = "#dc2626", strokecolor = "#991b1b", strokewidth = 1.0)
-    poly!(ax_torso, [Point2f(-0.05, 0.90), Point2f(0.15, 1.15), Point2f(0.30, 0.80), Point2f(0.10, 0.65)], color = "#2563eb", strokecolor = "#1d4ed8", strokewidth = 1.0)
+    poly!(
+        ax_torso,
+        [Point2f(0.12, 1.00), Point2f(0.35, 1.35), Point2f(0.60, 1.15), Point2f(0.40, 0.85)],
+        color = "#dc2626",
+        strokecolor = "#991b1b",
+        strokewidth = 1.0,
+    )
+    poly!(
+        ax_torso,
+        [Point2f(-0.05, 0.90), Point2f(0.15, 1.15), Point2f(0.30, 0.80), Point2f(0.10, 0.65)],
+        color = "#2563eb",
+        strokecolor = "#1d4ed8",
+        strokewidth = 1.0,
+    )
 
     # Atria (upper chambers)
-    poly!(ax_torso, [Point2f(-0.45, 0.85), Point2f(-0.05, 0.90), Point2f(0.00, 0.55), Point2f(-0.35, 0.50)], color = "#fecaca", strokecolor = "#f87171", strokewidth = 1.2) # RA
-    poly!(ax_torso, [Point2f(0.20, 0.85), Point2f(0.70, 0.80), Point2f(0.65, 0.50), Point2f(0.15, 0.55)], color = "#fecaca", strokecolor = "#f87171", strokewidth = 1.2) # LA
+    poly!(
+        ax_torso,
+        [Point2f(-0.45, 0.85), Point2f(-0.05, 0.90), Point2f(0.00, 0.55), Point2f(-0.35, 0.50)],
+        color = "#fecaca",
+        strokecolor = "#f87171",
+        strokewidth = 1.2,
+    ) # RA
+    poly!(
+        ax_torso,
+        [Point2f(0.20, 0.85), Point2f(0.70, 0.80), Point2f(0.65, 0.50), Point2f(0.15, 0.55)],
+        color = "#fecaca",
+        strokecolor = "#f87171",
+        strokewidth = 1.2,
+    ) # LA
 
     # Ventricles (conical muscular myocardium pointing down-left toward apex)
     ventricle_pts = [
@@ -216,25 +220,34 @@ function signal_example_ecg_einthoven()
 
         # Physiological wave timings (in seconds):
         # P wave: ~80-100 ms duration
-        tP = 0.12 * k; wP = 0.022 * k
-        ampP = 0.18; thetaP = 48.0
+        tP = 0.12 * k
+        wP = 0.022 * k
+        ampP = 0.18
+        thetaP = 48.0
 
         # Q wave: septal depolarization (~30-40 ms)
-        tQ = 0.22 * k; wQ = 0.010 * k
-        ampQ = 0.16; thetaQ = -125.0 + (alpha_val - 60.0) * 0.25
+        tQ = 0.22 * k
+        wQ = 0.010 * k
+        ampQ = 0.16
+        thetaQ = -125.0 + (alpha_val - 60.0) * 0.25
 
         # R wave: ventricular apical depolarization (~70-90 ms QRS total)
-        tR = 0.25 * k; wR = 0.014 * k
-        ampR = 1.35; thetaR = alpha_val
+        tR = 0.25 * k
+        wR = 0.014 * k
+        ampR = 1.35
+        thetaR = alpha_val
 
         # S wave: ventricular basal depolarization
-        tS = 0.28 * k; wS = 0.012 * k
-        ampS = 0.32; thetaS = -105.0 + (alpha_val - 60.0) * 0.35
+        tS = 0.28 * k
+        wS = 0.012 * k
+        ampS = 0.32
+        thetaS = -105.0 + (alpha_val - 60.0) * 0.35
 
         # T wave: ventricular repolarization
         tT = (0.25 + 0.18 * qt_scale) * (bpm_val > 72.0 ? k : 1.0)
         wT = 0.045 * qt_scale * (bpm_val > 72.0 ? k : 1.0)
-        ampT = 0.38; thetaT = 45.0 + (alpha_val - 60.0) * 0.70
+        ampT = 0.38
+        thetaT = 45.0 + (alpha_val - 60.0) * 0.70
 
         # Beyond the end of the active beat (diastolic TP pause), dipole is 0
         t_active_end = tT + 3.0 * wT
@@ -274,7 +287,7 @@ function signal_example_ecg_einthoven()
 
         n_vcg = 160
         pts = Point2f[]
-        for i in 0:n_vcg
+        for i = 0:n_vcg
             t_sample = (i / n_vcg) * t_end
             px, py = compute_cardiac_dipole(t_sample, bpm, alpha)
             push!(pts, heart_center .+ Point2f(dipole_scale * px, dipole_scale * py))
@@ -283,15 +296,7 @@ function signal_example_ecg_einthoven()
         return pts
     end
 
-    lines!(
-        ax_torso,
-        vcg_pts,
-        color = "#06b6d4",
-        linewidth = 2.0,
-        linestyle = :solid,
-        visible = show_vcg_loop,
-        label = "Vectorcardiogram",
-    )
+    lines!(ax_torso, vcg_pts, color = "#06b6d4", linewidth = 2.0, linestyle = :solid, visible = show_vcg_loop, label = "Vectorcardiogram")
 
     # ── Active Dipole Vector Arrow ───────────────────────────────────────────
     dipole_tip = lift(current_dipole) do (px, py)
@@ -299,12 +304,7 @@ function signal_example_ecg_einthoven()
     end
 
     # Dipole vector line from heart center to dipole tip
-    linesegments!(
-        ax_torso,
-        lift(tip -> [heart_center, tip], dipole_tip),
-        color = "#e11d48",
-        linewidth = 3.2,
-    )
+    linesegments!(ax_torso, lift(tip -> [heart_center, tip], dipole_tip), color = "#e11d48", linewidth = 3.2)
     scatter!(
         ax_torso,
         lift(tip -> [tip[1]], dipole_tip),
@@ -334,9 +334,36 @@ function signal_example_ecg_einthoven()
     lines!(ax_torso, line_lead3, color = col_lead3, linewidth = lw_lead3)
 
     # Lead direction indicator arrowheads
-    text!(ax_torso, 0.0, pos_la[2] + 0.16, text = "Lead I (0°) ➔", align = (:center, :bottom), font = :bold, fontsize = 10, color = col_lead1)
-    text!(ax_torso, (pos_ra[1] + pos_ll[1])/2 - 0.22, (pos_ra[2] + pos_ll[2])/2, text = "Lead II (+60°) ➔", align = (:right, :center), font = :bold, fontsize = 10, color = col_lead2)
-    text!(ax_torso, (pos_la[1] + pos_ll[1])/2 + 0.22, (pos_la[2] + pos_ll[2])/2, text = "➔ Lead III (+120°)", align = (:left, :center), font = :bold, fontsize = 10, color = col_lead3)
+    text!(
+        ax_torso,
+        0.0,
+        pos_la[2] + 0.16,
+        text = "Lead I (0°) ➔",
+        align = (:center, :bottom),
+        font = :bold,
+        fontsize = 10,
+        color = col_lead1,
+    )
+    text!(
+        ax_torso,
+        (pos_ra[1] + pos_ll[1])/2 - 0.22,
+        (pos_ra[2] + pos_ll[2])/2,
+        text = "Lead II (+60°) ➔",
+        align = (:right, :center),
+        font = :bold,
+        fontsize = 10,
+        color = col_lead2,
+    )
+    text!(
+        ax_torso,
+        (pos_la[1] + pos_ll[1])/2 + 0.22,
+        (pos_la[2] + pos_ll[2])/2,
+        text = "➔ Lead III (+120°)",
+        align = (:left, :center),
+        font = :bold,
+        fontsize = 10,
+        color = col_lead3,
+    )
 
     # ── Orthogonal Vector Projection onto Active Lead Axis ───────────────────
     # Active unit lead vector
@@ -370,13 +397,7 @@ function signal_example_ecg_einthoven()
     )
 
     # Projected scalar vector along the active lead axis
-    linesegments!(
-        ax_torso,
-        lift(pproj -> [heart_center, pproj], proj_point),
-        color = "#2563eb",
-        linewidth = 4.0,
-        visible = show_projection,
-    )
+    linesegments!(ax_torso, lift(pproj -> [heart_center, pproj], proj_point), color = "#2563eb", linewidth = 4.0, visible = show_projection)
     scatter!(
         ax_torso,
         lift(p -> [p[1]], proj_point),
@@ -414,10 +435,46 @@ function signal_example_ecg_einthoven()
         s in (:lead2, :lead3, :all3) ? "LL (+)" : "LL"
     end
 
-    text!(ax_torso, pos_ra[1] - 0.28, pos_ra[2], text = lbl_ra_pol, align = (:right, :center), font = :bold, fontsize = 11, color = "#991b1b")
-    text!(ax_torso, pos_la[1] + 0.28, pos_la[2], text = lbl_la_pol, align = (:left, :center), font = :bold, fontsize = 11, color = "#854d0e")
-    text!(ax_torso, pos_ll[1] + 0.28, pos_ll[2], text = lbl_ll_pol, align = (:left, :center), font = :bold, fontsize = 11, color = "#166534")
-    text!(ax_torso, pos_rl[1] - 0.25, pos_rl[2], text = "RL (GND)", align = (:right, :center), font = :bold, fontsize = 9.5, color = "#475569")
+    text!(
+        ax_torso,
+        pos_ra[1] - 0.28,
+        pos_ra[2],
+        text = lbl_ra_pol,
+        align = (:right, :center),
+        font = :bold,
+        fontsize = 11,
+        color = "#991b1b",
+    )
+    text!(
+        ax_torso,
+        pos_la[1] + 0.28,
+        pos_la[2],
+        text = lbl_la_pol,
+        align = (:left, :center),
+        font = :bold,
+        fontsize = 11,
+        color = "#854d0e",
+    )
+    text!(
+        ax_torso,
+        pos_ll[1] + 0.28,
+        pos_ll[2],
+        text = lbl_ll_pol,
+        align = (:left, :center),
+        font = :bold,
+        fontsize = 11,
+        color = "#166534",
+    )
+    text!(
+        ax_torso,
+        pos_rl[1] - 0.25,
+        pos_rl[2],
+        text = "RL (GND)",
+        align = (:right, :center),
+        font = :bold,
+        fontsize = 9.5,
+        color = "#475569",
+    )
 
     # Standard clinical monitor sweep window (5.0 s)
     t_window = 5.0
@@ -462,7 +519,7 @@ function signal_example_ecg_einthoven()
 
         n_scale = (n_lvl / 100.0) * 0.30
 
-        for i in 1:n_samples
+        for i = 1:n_samples
             t = t_arr[i]
             t_in = mod(t, T)
             px, py = compute_cardiac_dipole(t_in, bpm_val, alpha_val)
@@ -513,13 +570,7 @@ function signal_example_ecg_einthoven()
     end
 
     # Single active lead line
-    lines!(
-        ax_ecg,
-        active_ecg_pts,
-        color = active_ecg_color,
-        linewidth = 2.4,
-        visible = lift(s -> s != :all3, selected_lead),
-    )
+    lines!(ax_ecg, active_ecg_pts, color = active_ecg_color, linewidth = 2.4, visible = lift(s -> s != :all3, selected_lead))
 
     # Multi-lead superimposed lines for "All 3 (I, II, III)" mode
     lines!(
@@ -592,9 +643,18 @@ function signal_example_ecg_einthoven()
     wave_col  = "#1e293b"
 
     text!(ax_ecg, t_P, 0.35, text = "P", align = (:center, :bottom), font = :bold, fontsize = wave_font, color = wave_col)
-    text!(ax_ecg, t_Q, -0.28, text = "Q", align = (:center, :top),    font = :bold, fontsize = wave_font, color = wave_col)
-    text!(ax_ecg, t_R, 1.52, text = "R", align = (:center, :bottom), font = :bold, fontsize = lift(f -> f + 1.5, wave_font), color = wave_col)
-    text!(ax_ecg, t_S, -0.45, text = "S", align = (:center, :top),    font = :bold, fontsize = wave_font, color = wave_col)
+    text!(ax_ecg, t_Q, -0.28, text = "Q", align = (:center, :top), font = :bold, fontsize = wave_font, color = wave_col)
+    text!(
+        ax_ecg,
+        t_R,
+        1.52,
+        text = "R",
+        align = (:center, :bottom),
+        font = :bold,
+        fontsize = lift(f -> f + 1.5, wave_font),
+        color = wave_col,
+    )
+    text!(ax_ecg, t_S, -0.45, text = "S", align = (:center, :top), font = :bold, fontsize = wave_font, color = wave_col)
     text!(ax_ecg, t_T, 0.55, text = "T", align = (:center, :bottom), font = :bold, fontsize = wave_font, color = wave_col)
 
     # ── Bottom Control Panel [2, 1:2]: Sliders, Buttons & Toggles ────────────
@@ -626,10 +686,10 @@ function signal_example_ecg_einthoven()
     btn_play = Button(btn_sub[1, 1], label = "Play Heartbeat", buttoncolor = "#dcfce7", fontsize = btn_font, width = 160, height = 36)
 
     Label(btn_sub[1, 3], text = "Lead:", font = :bold, fontsize = label_font)
-    btn_l1   = Button(btn_sub[1, 4], label = "Lead I", fontsize = btn_font, width = 85, height = 36)
-    btn_l2   = Button(btn_sub[1, 5], label = "Lead II (Std)", buttoncolor = "#fee2e2", fontsize = btn_font, width = 115, height = 36)
-    btn_l3   = Button(btn_sub[1, 6], label = "Lead III", fontsize = btn_font, width = 90, height = 36)
-    btn_all  = Button(btn_sub[1, 7], label = "All 3 (I, II, III)", fontsize = btn_font, width = 140, height = 36)
+    btn_l1  = Button(btn_sub[1, 4], label = "Lead I", fontsize = btn_font, width = 85, height = 36)
+    btn_l2  = Button(btn_sub[1, 5], label = "Lead II (Std)", buttoncolor = "#fee2e2", fontsize = btn_font, width = 115, height = 36)
+    btn_l3  = Button(btn_sub[1, 6], label = "Lead III", fontsize = btn_font, width = 90, height = 36)
+    btn_all = Button(btn_sub[1, 7], label = "All 3 (I, II, III)", fontsize = btn_font, width = 140, height = 36)
 
     chk_vcg = Checkbox(btn_sub[1, 9], checked = true)
     Label(btn_sub[1, 10], text = "Show Vectorcardiogram", fontsize = label_font)
@@ -668,7 +728,7 @@ function signal_example_ecg_einthoven()
         btn_l1.buttoncolor[]  = active_sym == :lead1 ? "#bae6fd" : "#f1f5f9"
         btn_l2.buttoncolor[]  = active_sym == :lead2 ? "#fecdd3" : "#f1f5f9"
         btn_l3.buttoncolor[]  = active_sym == :lead3 ? "#a7f3d0" : "#f1f5f9"
-        btn_all.buttoncolor[] = active_sym == :all3  ? "#fbcfe8" : "#f1f5f9"
+        btn_all.buttoncolor[] = active_sym == :all3 ? "#fbcfe8" : "#f1f5f9"
     end
     set_lead_button_colors(:lead2)
 

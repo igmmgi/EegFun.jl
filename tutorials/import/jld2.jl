@@ -151,4 +151,3 @@ loaded = EegFun.read_data(joinpath(DEMO_OUTPUT, "erps.jld2"))
 EegFun.plot_databrowser(joinpath(DEMO_OUTPUT, "continuous_data.jld2"))
 EegFun.plot_databrowser(joinpath(DEMO_OUTPUT, "epochs_all.jld2"))
 EegFun.plot_databrowser(joinpath(DEMO_OUTPUT, "continuous_data.jld2"), joinpath(DEMO_OUTPUT, "ica_decomposition.jld2"))
-

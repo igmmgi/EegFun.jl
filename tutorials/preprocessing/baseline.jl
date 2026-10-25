@@ -72,4 +72,3 @@ EegFun.plot_erp(erps, channel_selection = EegFun.channels([:Fp1]))
 
 # We can see the influence of baseline interval interactively using the plot_erp_measurement_gui
 EegFun.plot_erp_measurement_gui(erps)
-

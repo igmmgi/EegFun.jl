@@ -51,5 +51,3 @@ EegFun.plot_erp(erps_new, channel_selection = EegFun.channels([:Fp1]))
 
 erps_new = EegFun.mirror(erps, :both)
 EegFun.plot_erp(erps_new, channel_selection = EegFun.channels([:Fp1]))
-
-

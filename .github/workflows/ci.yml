@@ -19,6 +19,34 @@ permissions:
   contents: read
 
 jobs:
+  format:
+    name: Code Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Julia
+        uses: julia-actions/setup-julia@v3
+        with:
+          version: '1.13'
+
+      - uses: julia-actions/cache@v3
+
+      - name: Check Code Formatting
+        run: |
+          julia -e '
+            using Pkg
+            Pkg.activate(; temp = true)
+            Pkg.add("JuliaFormatter")
+            using JuliaFormatter
+            if !format(".", overwrite = false)
+                println(stderr, "Code formatting check failed. Run JuliaFormatter.format(\".\") locally to format.")
+                exit(1)
+            end
+            println("Code formatting check passed.")
+          '
+
   test:
     name: Julia ${{ matrix.version }} - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -41,6 +69,8 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
       
       - uses: julia-actions/julia-runtest@v1
+        env:
+          JULIA_NUM_THREADS: 2
 
       - uses: julia-actions/julia-processcoverage@v1
       

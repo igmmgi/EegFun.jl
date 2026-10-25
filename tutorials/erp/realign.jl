@@ -53,9 +53,4 @@ EegFun.calculate_trigger_interval!(epochs_rt, [101], [201], column_name = :react
 #######################################################################
 
 # Realign all epoch files matching the pattern to response triggers
-EegFun.realign(
-    "epochs",
-    [201, 202],
-    input_dir = EegFun.example_path("data/julia/epochs/"),
-    output_dir = DEMO_OUTPUT
-)
+EegFun.realign("epochs", [201, 202], input_dir = EegFun.example_path("data/julia/epochs/"), output_dir = DEMO_OUTPUT)

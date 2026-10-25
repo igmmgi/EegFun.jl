@@ -49,4 +49,3 @@ EegFun.plot_decoding(grand_avg_synthetic, stats_bonf, title = "Synthetic Data: B
 
 stats_cluster = EegFun.test_against_chance_cluster(decoded_synthetic, alpha = 0.05)
 EegFun.plot_decoding(grand_avg_synthetic, stats_cluster, title = "Synthetic Data: Cluster-based")
-

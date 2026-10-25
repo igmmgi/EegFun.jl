@@ -50,7 +50,7 @@ end
     tf_cpu = EegFun.tf_morlet(epochs_synthetic, frequencies = 1:1:40, cycles = 3, use_gpu = false)
     tf_gpu = EegFun.tf_morlet(epochs_synthetic, frequencies = 1:1:40, cycles = 3, use_gpu = true)
     @test test_equiv(tf_cpu.data_power[!, :Channel1], tf_gpu.data_power[!, :Channel1])
-    
+
     tf_cpu_pad = EegFun.tf_morlet(epochs_synthetic, frequencies = 1:1:40, cycles = 3, pad = :both, use_gpu = false)
     tf_gpu_pad = EegFun.tf_morlet(epochs_synthetic, frequencies = 1:1:40, cycles = 3, pad = :both, use_gpu = true)
     @test test_equiv(tf_cpu_pad.data_power[!, :Channel1], tf_gpu_pad.data_power[!, :Channel1])
@@ -90,5 +90,3 @@ println("tf_stft (CPU):")
 @btime EegFun.tf_stft($epochs_synthetic, frequencies = 1:1:40, window_length = 0.5, use_gpu = false)
 println("tf_stft (GPU):")
 @btime EegFun.tf_stft($epochs_synthetic, frequencies = 1:1:40, window_length = 0.5, use_gpu = true)
-
-

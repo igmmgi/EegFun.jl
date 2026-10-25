@@ -43,9 +43,4 @@ lrp_results = EegFun.lrp(erps, pairs)
 #######################################################################
 
 # Batch calculate LRPs for a list of condition pairs across all participant files
-EegFun.lrp(
-    "erps_final",
-    [(1, 2)],
-    input_dir = EegFun.example_path("data/julia/erps/"),
-    output_dir = DEMO_OUTPUT
-)
+EegFun.lrp("erps_final", [(1, 2)], input_dir = EegFun.example_path("data/julia/erps/"), output_dir = DEMO_OUTPUT)
