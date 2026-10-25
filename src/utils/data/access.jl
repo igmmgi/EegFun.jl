@@ -115,7 +115,8 @@ time_vector(res::StatsResult)::Vector{Float64} = res.time_points
 Get the frequency vector in Hz from a time-frequency or spectrum data object or statistical result.
 """
 frequency_vector(dat::TimeFreqData)::Vector{Float64} = Float64.(sort(unique(dat.data_power.freq)))
-frequency_vector(dat::TimeFreqEpochData)::Vector{Float64} = isempty(dat.data_power) ? Float64[] : Float64.(sort(unique(first(dat.data_power).freq)))
+frequency_vector(dat::TimeFreqEpochData)::Vector{Float64} =
+    isempty(dat.data_power) ? Float64[] : Float64.(sort(unique(first(dat.data_power).freq)))
 frequency_vector(dat::SpectrumData)::Vector{Float64} = Float64.(sort(unique(dat.data.freq)))
 frequency_vector(dat::TFStatisticalData)::Vector{Float64} = dat.analysis.frequencies
 frequency_vector(res::TFStatsResult)::Vector{Float64} = res.frequencies

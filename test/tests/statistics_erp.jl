@@ -81,7 +81,7 @@ function _build_erp_independent_test_data(;
     end
 
     # Group 2: condition 2
-    for p = (n_group1 + 1):(n_group1 + n_group2)
+    for p = (n_group1+1):(n_group1+n_group2)
         df = DataFrame(
             time = time,
             sample = 1:n_time,
@@ -762,12 +762,8 @@ end
         @test_throws EegFun.EegFunError EegFun.prepare_stats(erps_too_few; design = :independent)
 
         # _compute_t_matrix with independent design
-        t_mat, df, p_mat, se_diff = EegFun._compute_t_matrix(
-            prepared.analysis.data[1],
-            prepared.analysis.data[2],
-            :independent;
-            compute_p_values = true,
-        )
+        t_mat, df, p_mat, se_diff =
+            EegFun._compute_t_matrix(prepared.analysis.data[1], prepared.analysis.data[2], :independent; compute_p_values = true)
         expected_df = Float64(n_group1 + n_group2 - 2)
         @test df == expected_df
         @test size(t_mat) == (3, length(prepared.analysis.time_points))
@@ -834,11 +830,23 @@ end
         erps = _build_erp_test_data(n_participants = 4, offset_cond1 = 3.0, offset_cond2 = 0.0, noise = 0.05)
         prepared = EegFun.prepare_stats(erps; design = :paired)
 
-        res_right = EegFun.permutation_test(prepared; threshold_method = :nonparametric_common, tail = :right, n_permutations = 20, cluster_type = :temporal)
+        res_right = EegFun.permutation_test(
+            prepared;
+            threshold_method = :nonparametric_common,
+            tail = :right,
+            n_permutations = 20,
+            cluster_type = :temporal,
+        )
         @test res_right isa EegFun.PermutationResult
         @test res_right.test_info.tail == :right
 
-        res_left = EegFun.permutation_test(prepared; threshold_method = :nonparametric_common, tail = :left, n_permutations = 20, cluster_type = :temporal)
+        res_left = EegFun.permutation_test(
+            prepared;
+            threshold_method = :nonparametric_common,
+            tail = :left,
+            n_permutations = 20,
+            cluster_type = :temporal,
+        )
         @test res_left isa EegFun.PermutationResult
         @test res_left.test_info.tail == :left
     end

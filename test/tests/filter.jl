@@ -131,7 +131,7 @@ using JLD2
         base1 = EegFun.create_test_continuous_data(; n = 1000, fs = 500)
         base2 = EegFun.create_test_continuous_data(; n = 1000, fs = 500)
         vec_dats = [base1, base2]
-        
+
         filtered_vec = EegFun.lowpass_filter(vec_dats, 30.0)
         @test length(filtered_vec) == 2
         @test filtered_vec[1].analysis_info.lp_filter == 30.0

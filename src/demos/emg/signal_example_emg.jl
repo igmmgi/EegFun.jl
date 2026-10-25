@@ -116,7 +116,7 @@ function signal_example_emg()
         btn_font   = Observable(12.5)
 
         on(fig.scene.viewport) do area
-            scale = area.widths[1] / 1440
+            scale        = area.widths[1] / 1440
             title_font[] = max(13, round(Int, 16 * scale))
             label_font[] = max(11, round(Int, 12.5 * scale))
             tick_font[]  = max(10, round(Int, 10.5 * scale))
@@ -129,12 +129,12 @@ function signal_example_emg()
     title_font, label_font, tick_font, btn_font = setup_adaptive_sizing(fig)
 
     # ── Observables ──────────────────────────────────────────────────────────
-    target_force        = Observable(45.0)  # Commanded % MVC (0–100%)
-    current_disp_force  = Observable(45.0)  # Currently rendered % MVC (for animation)
-    duration_ms         = Observable(700.0) # Contraction duration in ms
-    rms_window_ms       = Observable(75.0)  # Moving RMS window width in ms
-    noise_amp           = Observable(4.0)   # Baseline noise amplitude in µV
-    playback_time       = Observable(-1.0)  # < 0: static, >= 0: time cursor position [s]
+    target_force       = Observable(45.0)  # Commanded % MVC (0–100%)
+    current_disp_force = Observable(45.0)  # Currently rendered % MVC (for animation)
+    duration_ms        = Observable(700.0) # Contraction duration in ms
+    rms_window_ms      = Observable(75.0)  # Moving RMS window width in ms
+    noise_amp          = Observable(4.0)   # Baseline noise amplitude in µV
+    playback_time      = Observable(-1.0)  # < 0: static, >= 0: time cursor position [s]
 
     # ── Geometry & Anatomical Constants ──────────────────────────────────────
     color_mu_active   = "#1e293b" # dark slate / black
@@ -144,12 +144,7 @@ function signal_example_emg()
     theta_circ = range(0, 2π, length = n_pts)
 
     # ── Left Column [1, 1]: Anatomy, Motor Units & Circuit Schematic ─────────
-    ax_anatomy = Axis(
-        fig[1, 1],
-        title = "Motor Unit Pool, Muscle & Bipolar Recording Setup",
-        titlesize = title_font,
-        aspect = DataAspect(),
-    )
+    ax_anatomy = Axis(fig[1, 1], title = "Motor Unit Pool, Muscle & Bipolar Recording Setup", titlesize = title_font, aspect = DataAspect())
     hidedecorations!(ax_anatomy)
     hidespines!(ax_anatomy)
     xlims!(ax_anatomy, -5.90, 4.10)
@@ -167,7 +162,16 @@ function signal_example_emg()
         strokecolor = "#64748b",
         strokewidth = 1.5,
     )
-    text!(ax_anatomy, -2.85, y_center - 0.38, text = "Tendon (Origin)", align = (:center, :top), font = :bold, fontsize = 9.0, color = "#475569")
+    text!(
+        ax_anatomy,
+        -2.85,
+        y_center - 0.38,
+        text = "Tendon (Origin)",
+        align = (:center, :top),
+        font = :bold,
+        fontsize = 9.0,
+        color = "#475569",
+    )
 
     # Right Tendon (Insertion)
     poly!(
@@ -177,7 +181,16 @@ function signal_example_emg()
         strokecolor = "#64748b",
         strokewidth = 1.5,
     )
-    text!(ax_anatomy, 2.85, y_center - 0.38, text = "Tendon (Insertion)", align = (:center, :top), font = :bold, fontsize = 9.0, color = "#475569")
+    text!(
+        ax_anatomy,
+        2.85,
+        y_center - 0.38,
+        text = "Tendon (Insertion)",
+        align = (:center, :top),
+        font = :bold,
+        fontsize = 9.0,
+        color = "#475569",
+    )
 
     # ── Dynamic Muscle (Contour Bulges with Force) ───────────────────────────
     function make_muscle_poly(force)
@@ -203,30 +216,53 @@ function signal_example_emg()
         lines!(ax_anatomy, s_pts, color = RGBAf(0.3, 0.04, 0.04, 0.45), linewidth = 1.5, linestyle = :dot)
     end
 
-    text!(ax_anatomy, 0.5, y_center, text = "Muscle\n(1000s of fibers in\noverlapping MUs)", align = (:center, :center), font = :bold, fontsize = 8.0, color = "#fef2f2")
+    text!(
+        ax_anatomy,
+        0.5,
+        y_center,
+        text = "Muscle\n(1000s of fibers in\noverlapping MUs)",
+        align = (:center, :center),
+        font = :bold,
+        fontsize = 8.0,
+        color = "#fef2f2",
+    )
 
     # ── Spinal Motor Neuron Pool (Dense cluster conveying 100s of units) ────
-    poly!(
+    poly!(ax_anatomy, Rect2f(-5.70, -0.75, 1.25, 3.10), color = RGBAf(0.94, 0.96, 0.98, 0.85), strokecolor = "#cbd5e1", strokewidth = 1.5)
+    text!(
         ax_anatomy,
-        Rect2f(-5.70, -0.75, 1.25, 3.10),
-        color = RGBAf(0.94, 0.96, 0.98, 0.85),
-        strokecolor = "#cbd5e1",
-        strokewidth = 1.5,
+        -5.07,
+        2.40,
+        text = "Motor Neuron Pool\n(~100–1000+ MUs)",
+        align = (:center, :bottom),
+        font = :bold,
+        fontsize = 8.5,
+        color = "#0f172a",
     )
-    text!(ax_anatomy, -5.07, 2.40, text = "Motor Neuron Pool\n(~100–1000+ MUs)", align = (:center, :bottom), font = :bold, fontsize = 8.5, color = "#0f172a")
 
     # Clustered background somas representing the larger pool population
     bg_somas = [
-        Point2f(-5.48, 2.10), Point2f(-5.28, 1.85), Point2f(-5.48, 1.60),
-        Point2f(-5.30, 1.35), Point2f(-5.50, 1.05), Point2f(-5.30, 0.80),
-        Point2f(-5.50, 0.50), Point2f(-5.30, 0.20), Point2f(-5.48, -0.10),
-        Point2f(-5.30, -0.35), Point2f(-5.48, -0.58),
+        Point2f(-5.48, 2.10),
+        Point2f(-5.28, 1.85),
+        Point2f(-5.48, 1.60),
+        Point2f(-5.30, 1.35),
+        Point2f(-5.50, 1.05),
+        Point2f(-5.30, 0.80),
+        Point2f(-5.50, 0.50),
+        Point2f(-5.30, 0.20),
+        Point2f(-5.48, -0.10),
+        Point2f(-5.30, -0.35),
+        Point2f(-5.48, -0.58),
     ]
     bg_soma_r = 0.10
     for pos in bg_somas
-        poly!(ax_anatomy, [pos .+ Point2f(bg_soma_r * cos(t), bg_soma_r * sin(t)) for t in theta_circ],
-              color = lift(f -> f > 0.0 ? "#475569" : "#cbd5e1", current_disp_force),
-              strokecolor = "#334155", strokewidth = 1.0)
+        poly!(
+            ax_anatomy,
+            [pos .+ Point2f(bg_soma_r * cos(t), bg_soma_r * sin(t)) for t in theta_circ],
+            color = lift(f -> f > 0.0 ? "#475569" : "#cbd5e1", current_disp_force),
+            strokecolor = "#334155",
+            strokewidth = 1.0,
+        )
     end
 
     # Representative foreground somas with designated axon outputs
@@ -241,14 +277,22 @@ function signal_example_emg()
 
     # Active glow halos around representative somas scaling with force
     for pos in rep_somas
-        poly!(ax_anatomy, lift(f -> [pos .+ Point2f((r_soma + 0.12) * cos(t), (r_soma + 0.12) * sin(t)) for t in theta_circ], current_disp_force),
-              color = lift(f -> f > 0.0 ? RGBAf(0.12, 0.16, 0.23, 0.15 + 0.30 * (f / 100.0)) : RGBAf(0,0,0,0), current_disp_force))
+        poly!(
+            ax_anatomy,
+            lift(f -> [pos .+ Point2f((r_soma + 0.12) * cos(t), (r_soma + 0.12) * sin(t)) for t in theta_circ], current_disp_force),
+            color = lift(f -> f > 0.0 ? RGBAf(0.12, 0.16, 0.23, 0.15 + 0.30 * (f / 100.0)) : RGBAf(0, 0, 0, 0), current_disp_force),
+        )
     end
 
     # Representative soma bodies (black/grey)
     for pos in rep_somas
-        poly!(ax_anatomy, [pos .+ Point2f(r_soma * cos(t), r_soma * sin(t)) for t in theta_circ],
-              color = lift(f -> f > 0.0 ? color_mu_active : color_mu_inactive, current_disp_force), strokecolor = "#334155", strokewidth = 1.5)
+        poly!(
+            ax_anatomy,
+            [pos .+ Point2f(r_soma * cos(t), r_soma * sin(t)) for t in theta_circ],
+            color = lift(f -> f > 0.0 ? color_mu_active : color_mu_inactive, current_disp_force),
+            strokecolor = "#334155",
+            strokewidth = 1.5,
+        )
     end
 
     # Motor unit pool labels
@@ -269,7 +313,16 @@ function signal_example_emg()
         Point2f(-4.25, -0.45),
     ]
     poly!(ax_anatomy, nerve_poly, color = RGBAf(0.92, 0.95, 0.98, 0.65), strokecolor = "#94a3b8", strokewidth = 1.2, linestyle = :dash)
-    text!(ax_anatomy, -3.50, 1.72, text = "Motor Nerve\n(Axon Bundle)", align = (:center, :bottom), font = :bold, fontsize = 8.0, color = "#475569")
+    text!(
+        ax_anatomy,
+        -3.50,
+        1.72,
+        text = "Motor Nerve\n(Axon Bundle)",
+        align = (:center, :bottom),
+        font = :bold,
+        fontsize = 8.0,
+        color = "#475569",
+    )
 
     # Axons routing through the nerve bundle and arborizing into the muscle
     axon1 = [soma1_pos, Point2f(-3.7, 1.45), Point2f(-2.6, 1.10), Point2f(-1.3, 1.00)]
@@ -289,16 +342,19 @@ function signal_example_emg()
 
     # Neuromuscular Junctions (Motor Endplates)
     endplate_col = lift(f -> f > 0.0 ? color_mu_active : color_mu_inactive, current_disp_force)
-    endplate_pts = [
-        Point2f(-1.3, 1.00),
-        Point2f(-0.9, 0.78),
-        Point2f(-1.5, 0.58),
-        Point2f(-1.1, 0.38),
-        Point2f(-1.4, 0.18),
-        Point2f(-1.0, -0.05),
-    ]
+    endplate_pts =
+        [Point2f(-1.3, 1.00), Point2f(-0.9, 0.78), Point2f(-1.5, 0.58), Point2f(-1.1, 0.38), Point2f(-1.4, 0.18), Point2f(-1.0, -0.05)]
     scatter!(ax_anatomy, endplate_pts, marker = :utriangle, markersize = 11, color = endplate_col)
-    text!(ax_anatomy, -1.65, -0.28, text = "Neuromuscular Junctions\n(Innervation Zone)", align = (:right, :center), font = :bold, fontsize = 8.0, color = "#475569")
+    text!(
+        ax_anatomy,
+        -1.65,
+        -0.28,
+        text = "Neuromuscular Junctions\n(Innervation Zone)",
+        align = (:right, :center),
+        font = :bold,
+        fontsize = 8.0,
+        color = "#475569",
+    )
 
     # ── Bipolar Surface Electrodes & Difference Amplifier Circuit ────────────
     y_skin = 2.15
@@ -318,8 +374,26 @@ function signal_example_emg()
     poly!(ax_anatomy, amp_tri, color = "#f8fafc", strokewidth = 2.0, strokecolor = "#1e293b")
     text!(ax_anatomy, -0.48, y_amp + 0.22, text = "+", align = (:center, :center), font = :bold, fontsize = 17, color = "#dc2626")
     text!(ax_anatomy, -0.48, y_amp - 0.22, text = "–", align = (:center, :center), font = :bold, fontsize = 19, color = "#2563eb")
-    text!(ax_anatomy, 0.0, y_amp - 0.58, text = "Difference Amplifier", align = (:center, :top), font = :bold, fontsize = 11.0, color = "#1e293b")
-    text!(ax_anatomy, 0.0, y_amp - 0.78, text = "Vout = V(+) – V(-)", align = (:center, :top), font = :italic, fontsize = 8.5, color = "#64748b")
+    text!(
+        ax_anatomy,
+        0.0,
+        y_amp - 0.58,
+        text = "Difference Amplifier",
+        align = (:center, :top),
+        font = :bold,
+        fontsize = 11.0,
+        color = "#1e293b",
+    )
+    text!(
+        ax_anatomy,
+        0.0,
+        y_amp - 0.78,
+        text = "Vout = V(+) – V(-)",
+        align = (:center, :top),
+        font = :italic,
+        fontsize = 8.5,
+        color = "#64748b",
+    )
 
     # Lead wires routing cleanly around muscle with ample clearance
     wire_pos = [
@@ -332,17 +406,20 @@ function signal_example_emg()
     ]
     lines!(ax_anatomy, wire_pos, color = "#dc2626", linewidth = 2.0)
 
-    wire_neg = [
-        Point2f(-0.75, y_skin),
-        Point2f(-1.60, y_skin),
-        Point2f(-1.60, y_amp - 0.22),
-        Point2f(-0.70, y_amp - 0.22),
-    ]
+    wire_neg = [Point2f(-0.75, y_skin), Point2f(-1.60, y_skin), Point2f(-1.60, y_amp - 0.22), Point2f(-0.70, y_amp - 0.22)]
     lines!(ax_anatomy, wire_neg, color = "#2563eb", linewidth = 2.0)
 
     # Output lead
     lines!(ax_anatomy, [Point2f(0.70, y_amp), Point2f(1.50, y_amp)], color = "#1e293b", linewidth = 2.2)
-    scatter!(ax_anatomy, [Point2f(1.55, y_amp)], marker = :circle, markersize = 9, color = :white, strokecolor = "#1e293b", strokewidth = 2.0)
+    scatter!(
+        ax_anatomy,
+        [Point2f(1.55, y_amp)],
+        marker = :circle,
+        markersize = 9,
+        color = :white,
+        strokecolor = "#1e293b",
+        strokewidth = 2.0,
+    )
     text!(ax_anatomy, 1.70, y_amp, text = "Vout", align = (:left, :center), font = :bold, fontsize = 12, color = "#0f172a")
 
     # ── Left Column [2, 1]: 1x4 Slider Grid & Play Button ────────────────────
@@ -353,22 +430,31 @@ function signal_example_emg()
     # Row 1: Force Slider
     Label(slider_sub[1, 1], text = "Force:", font = :bold, fontsize = label_font, halign = :right)
     sl_force = Slider(slider_sub[1, 2], range = 0.0:1.0:100.0, startvalue = 45.0, width = 210)
-    lbl_force = Label(slider_sub[1, 3], text = lift(v -> "$(round(Int, v))% MVC", sl_force.value), width = 76, halign = :left, fontsize = label_font)
+    lbl_force = Label(
+        slider_sub[1, 3],
+        text = lift(v -> "$(round(Int, v))% MVC", sl_force.value),
+        width = 76,
+        halign = :left,
+        fontsize = label_font,
+    )
 
     # Row 2: Duration Slider
     Label(slider_sub[2, 1], text = "Duration:", font = :bold, fontsize = label_font, halign = :right)
     sl_dur = Slider(slider_sub[2, 2], range = 200.0:50.0:1400.0, startvalue = 700.0, width = 210)
-    lbl_dur = Label(slider_sub[2, 3], text = lift(v -> "$(round(Int, v)) ms", sl_dur.value), width = 76, halign = :left, fontsize = label_font)
+    lbl_dur =
+        Label(slider_sub[2, 3], text = lift(v -> "$(round(Int, v)) ms", sl_dur.value), width = 76, halign = :left, fontsize = label_font)
 
     # Row 3: RMS Window Slider
     Label(slider_sub[3, 1], text = "RMS Win:", font = :bold, fontsize = label_font, halign = :right)
     sl_rms = Slider(slider_sub[3, 2], range = 20.0:5.0:250.0, startvalue = 75.0, width = 210)
-    lbl_rms = Label(slider_sub[3, 3], text = lift(v -> "$(round(Int, v)) ms", sl_rms.value), width = 76, halign = :left, fontsize = label_font)
+    lbl_rms =
+        Label(slider_sub[3, 3], text = lift(v -> "$(round(Int, v)) ms", sl_rms.value), width = 76, halign = :left, fontsize = label_font)
 
     # Row 4: Noise Slider (0–100 µV)
     Label(slider_sub[4, 1], text = "Noise:", font = :bold, fontsize = label_font, halign = :right)
     sl_noise = Slider(slider_sub[4, 2], range = 0.0:1.0:100.0, startvalue = 4.0, width = 210)
-    lbl_noise = Label(slider_sub[4, 3], text = lift(v -> "$(round(Int, v)) µV", sl_noise.value), width = 76, halign = :left, fontsize = label_font)
+    lbl_noise =
+        Label(slider_sub[4, 3], text = lift(v -> "$(round(Int, v)) µV", sl_noise.value), width = 76, halign = :left, fontsize = label_font)
 
     colgap!(slider_sub, 10)
     rowgap!(slider_sub, 4)
@@ -386,27 +472,51 @@ function signal_example_emg()
     N_pts = length(t_vec)
 
     # Deterministic background physiological noise
-    base_noise = [0.65 * sin(2π * 23.4 * tt) * cos(2π * 61.2 * tt) +
-                  0.35 * sin(2π * 117.8 * tt) +
-                  0.25 * sin(2π * 243.1 * tt) for tt in t_vec]
+    base_noise =
+        [0.65 * sin(2π * 23.4 * tt) * cos(2π * 61.2 * tt) + 0.35 * sin(2π * 117.8 * tt) + 0.25 * sin(2π * 243.1 * tt) for tt in t_vec]
 
     # Pre-computed pseudo-random jitter phase sequences for 24 asynchronous motor units
-    coprimes = [31.0, 37.0, 41.0, 43.0, 47.0, 53.0, 59.0, 61.0, 67.0, 71.0, 73.0, 79.0,
-                83.0, 89.0, 97.0, 101.0, 103.0, 107.0, 109.0, 113.0, 127.0, 131.0, 137.0, 139.0]
+    coprimes = [
+        31.0,
+        37.0,
+        41.0,
+        43.0,
+        47.0,
+        53.0,
+        59.0,
+        61.0,
+        67.0,
+        71.0,
+        73.0,
+        79.0,
+        83.0,
+        89.0,
+        97.0,
+        101.0,
+        103.0,
+        107.0,
+        109.0,
+        113.0,
+        127.0,
+        131.0,
+        137.0,
+        139.0,
+    ]
     N_units = length(coprimes)
-    jitter_phases = [0.20 * sin.(2π .* (1:N_pts) ./ coprimes[idx] .+ (1.3 * idx)) for idx in 1:N_units]
+    jitter_phases = [0.20 * sin.(2π .* (1:N_pts) ./ coprimes[idx] .+ (1.3 * idx)) for idx = 1:N_units]
 
     # Motor unit pool: Henneman's size principle
     # Units have progressive recruitment thresholds (from 2% up to 80% MVC).
     # Small units recruited first fire at moderate rates; larger units recruited at higher force
     # fire at higher rates and generate larger action potentials.
     fiber_pools = [
-        (thresh = 2.0 + 78.0 * ((i - 1) / (N_units - 1))^1.2,
-         f_base = 8.0 + 4.0 * (i / N_units),
-         f_max  = 24.0 + 32.0 * (i / N_units),
-         amp    = 30.0 + 220.0 * ((i - 1) / (N_units - 1))^1.4,
-         sigma  = 0.0018 + 0.0018 * (i / N_units))
-        for i in 1:N_units
+        (
+            thresh = 2.0 + 78.0 * ((i - 1) / (N_units - 1))^1.2,
+            f_base = 8.0 + 4.0 * (i / N_units),
+            f_max  = 24.0 + 32.0 * (i / N_units),
+            amp    = 30.0 + 220.0 * ((i - 1) / (N_units - 1))^1.4,
+            sigma  = 0.0018 + 0.0018 * (i / N_units),
+        ) for i = 1:N_units
     ]
 
     function compute_emg_signals(force_val, dur_val, rms_win_val, noise_val)
@@ -414,22 +524,22 @@ function signal_example_emg()
         t_off = t_on + dur_val / 1000.0
 
         force_t = zeros(Float64, N_pts)
-        for i in 1:N_pts
+        for i = 1:N_pts
             tt = t_vec[i]
-            s_on  = 1.0 / (1.0 + exp(-(tt - t_on) / 0.025))
+            s_on = 1.0 / (1.0 + exp(-(tt - t_on) / 0.025))
             s_off = 1.0 / (1.0 + exp((tt - t_off) / 0.025))
             force_t[i] = force_val * s_on * s_off
         end
 
         raw_sig = zeros(Float64, N_pts)
 
-        for u_idx in 1:N_units
+        for u_idx = 1:N_units
             p = fiber_pools[u_idx]
             j_phase = jitter_phases[u_idx]
             phi = 0.0
             w_samples = round(Int, 5.0 * p.sigma * fs)
 
-            for i in 2:N_pts
+            for i = 2:N_pts
                 F = force_t[i]
                 if F >= p.thresh
                     drive = (F - p.thresh) / (100.0 - p.thresh)
@@ -438,7 +548,7 @@ function signal_example_emg()
                     phi_eff = phi + j_phase[i]
                     if floor(phi_eff) > floor(phi_eff - freq * dt)
                         amp_unit = p.amp * (0.60 + 0.40 * sqrt(drive))
-                        for k in -w_samples:w_samples
+                        for k = (-w_samples):w_samples
                             idx = i + k
                             if 1 <= idx <= N_pts
                                 tau = k * dt
@@ -461,10 +571,10 @@ function signal_example_emg()
         raw_sq = raw_sig .^ 2
         csum = [0.0; cumsum(raw_sq)]
         rms_sig = zeros(Float64, N_pts)
-        for i in 1:N_pts
+        for i = 1:N_pts
             i1 = max(1, i - half_w)
             i2 = min(N_pts, i + half_w)
-            diff_sq = max(0.0, csum[i2 + 1] - csum[i1])
+            diff_sq = max(0.0, csum[i2+1] - csum[i1])
             rms_sig[i] = sqrt(diff_sq / (i2 - i1 + 1))
         end
 
@@ -634,12 +744,12 @@ function signal_example_emg()
                 fps = 30.0
                 dt_frame = t_total / n_frames
 
-                for frame in 0:n_frames
+                for frame = 0:n_frames
                     t_curr = frame * dt_frame
                     playback_time[] = t_curr
 
                     # Instantaneous force profile at this moment
-                    s_on  = 1.0 / (1.0 + exp(-(t_curr - t_on) / 0.025))
+                    s_on = 1.0 / (1.0 + exp(-(t_curr - t_on) / 0.025))
                     s_off = 1.0 / (1.0 + exp((t_curr - t_off) / 0.025))
                     f_moment = target * s_on * s_off
                     current_disp_force[] = f_moment

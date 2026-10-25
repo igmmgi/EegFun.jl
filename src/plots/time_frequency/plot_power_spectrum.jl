@@ -87,14 +87,7 @@ fig, ax = plot_channel_spectrum(dat;
 ```
 """
 
-function _plot_power_spectrum!(
-    fig,
-    ax,
-    signals::AbstractVector{<:AbstractVector},
-    channels_to_plot::Vector{Symbol},
-    fs::Real;
-    kwargs...,
-)
+function _plot_power_spectrum!(fig, ax, signals::AbstractVector{<:AbstractVector}, channels_to_plot::Vector{Symbol}, fs::Real; kwargs...)
     isempty(signals) && return
 
     plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
@@ -127,7 +120,7 @@ function _plot_power_spectrum!(
     power_raw_data = Vector{typeof(first_power)}(undef, n_ch)
     power_raw_data[1] = first_power
 
-    for i in 2:n_ch
+    for i = 2:n_ch
         pgram = DSP.welch_pgram(sig_list[i], cfg)
         power_raw_data[i] = DSP.power(pgram)
     end

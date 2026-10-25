@@ -29,7 +29,7 @@ function _is_peak_to_peak(signal::AbstractVector{<:Real}, threshold::Real, windo
     last_marked = 0
     thresh_f = Float64(threshold)
 
-    @inbounds for b in 1:n_blocks
+    @inbounds for b = 1:n_blocks
         b_start = (b - 1) * w + 1
         b_end = min(b_start + w - 1, n)
         b_len = b_end - b_start + 1
@@ -38,8 +38,8 @@ function _is_peak_to_peak(signal::AbstractVector{<:Real}, threshold::Real, windo
         p_min = Float64(signal[b_start])
         pref_max[1] = p_max
         pref_min[1] = p_min
-        for k in 2:b_len
-            s_val = Float64(signal[b_start + k - 1])
+        for k = 2:b_len
+            s_val = Float64(signal[b_start+k-1])
             p_max = max(p_max, s_val)
             p_min = min(p_min, s_val)
             pref_max[k] = p_max
@@ -50,8 +50,8 @@ function _is_peak_to_peak(signal::AbstractVector{<:Real}, threshold::Real, windo
         s_min = Float64(signal[b_end])
         suff_max_curr[b_len] = s_max
         suff_min_curr[b_len] = s_min
-        for k in (b_len - 1):-1:1
-            s_val = Float64(signal[b_start + k - 1])
+        for k = (b_len-1):-1:1
+            s_val = Float64(signal[b_start+k-1])
             s_max = max(s_max, s_val)
             s_min = min(s_min, s_val)
             suff_max_curr[k] = s_max
@@ -68,14 +68,14 @@ function _is_peak_to_peak(signal::AbstractVector{<:Real}, threshold::Real, windo
                 end
             end
         else
-            for k in 2:w
+            for k = 2:w
                 j_global = (b - 1) * w + k - 1
                 if j_global > n
                     break
                 end
                 i_global = j_global - w + 1
-                w_max = max(suff_max_prev[k], pref_max[k - 1])
-                w_min = min(suff_min_prev[k], pref_min[k - 1])
+                w_max = max(suff_max_prev[k], pref_max[k-1])
+                w_min = min(suff_min_prev[k], pref_min[k-1])
                 if (w_max - w_min) > thresh_f
                     s_idx = max(last_marked + 1, i_global)
                     if s_idx <= j_global
@@ -284,4 +284,3 @@ function n_peak_to_peak(
         return DataFrame(channel = selected_channels, n_peak_to_peak = counts)
     end
 end
-

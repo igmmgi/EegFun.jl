@@ -1095,7 +1095,7 @@ function _create_sliders(fig, state::ContinuousDataBrowserState, dat)
     on(slider_range.value) do w
         updating_from_key[] && return
         start = slider_x.value[]
-        new_range = start:min(nrow(state.data.current[].data), start + w - 1)
+        new_range = start:min(nrow(state.data.current[].data), start+w-1)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
@@ -1104,7 +1104,7 @@ function _create_sliders(fig, state::ContinuousDataBrowserState, dat)
     on(slider_x.value) do start
         updating_from_key[] && return
         w = slider_range.value[]
-        new_range = start:min(nrow(state.data.current[].data), start + w - 1)
+        new_range = start:min(nrow(state.data.current[].data), start+w-1)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
@@ -1962,7 +1962,15 @@ _ica_original_series(data::ContinuousDataState, ep, col) = data.original.data[!,
 _ica_original_series(data::EpochedDataState, ep, col) = data.original.data[ep][!, col]
 
 """Accumulate `u * ((x[i] - m) / scale)` for `i in rng` into column `k` of `acts` (type-stable kernel)."""
-function _accumulate_activation!(acts::Matrix{Float64}, k::Int, x::AbstractVector{<:Real}, rng::UnitRange{Int}, u::Float64, m::Float64, scale::Float64)
+function _accumulate_activation!(
+    acts::Matrix{Float64},
+    k::Int,
+    x::AbstractVector{<:Real},
+    rng::UnitRange{Int},
+    u::Float64,
+    m::Float64,
+    scale::Float64,
+)
     @inbounds for (j, i) in enumerate(rng)
         acts[j, k] += u * ((x[i] - m) / scale)
     end
@@ -1997,7 +2005,7 @@ function _ica_activations!(state, ep, win::UnitRange{Int})
     if isnothing(entry) || first(win) < first(entry[1]) || last(win) > last(entry[1])
         n_total = length(_ica_original_series(state.data, ep, first(ica.original.layout.data.label)))
         w = length(win)
-        rng = max(1, first(win) - w):min(n_total, last(win) + w)
+        rng = max(1, first(win)-w):min(n_total, last(win)+w)
         entry = (rng, _compute_ica_activations(state, ep, rng))
         ica.activation_cache[ep] = entry
     end
@@ -2053,17 +2061,24 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
             ch_row = get(ch_idx_map, col, 0)
 
             # Channel data (compute once)
-            channel_data_obs = track(@lift(begin
-                cur = $(state.data.current)
-                ep = $(epoch_obs)
-                win = $(state.view.xrange)
-                raw = get_data(cur, ep, win, col)
-                if state.ica.is_active && ch_row > 0 && !($(state.plot_kwargs[:show_cleaned_ica])) && $(state.view.show_original_ica)
-                    _ica_restored_window(state, ep, win, raw, ch_row)
-                else
-                    collect(Float64, raw)
-                end
-            end))
+            channel_data_obs = track(
+                @lift(
+                    begin
+                        cur = $(state.data.current)
+                        ep = $(epoch_obs)
+                        win = $(state.view.xrange)
+                        raw = get_data(cur, ep, win, col)
+                        if state.ica.is_active &&
+                           ch_row > 0 &&
+                           !($(state.plot_kwargs[:show_cleaned_ica])) &&
+                           $(state.view.show_original_ica)
+                            _ica_restored_window(state, ep, win, raw, ch_row)
+                        else
+                            collect(Float64, raw)
+                        end
+                    end
+                )
+            )
 
             # One Point2 observable per line, updated in place (no per-step allocation of the point array)
             channel_points_obs = _points_observable(
@@ -2078,11 +2093,12 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                 win = state.view.xrange[]
                 ep = epoch_obs[]
                 cur = state.data.current[]
-                data_series = if state.ica.is_active && ch_row > 0 && !state.plot_kwargs[:show_cleaned_ica][] && state.view.show_original_ica[]
-                    _ica_restored_window(state, ep, win, get_data(cur, ep, win, col), ch_row)
-                else
-                    get_data(cur, ep, win, col)
-                end
+                data_series =
+                    if state.ica.is_active && ch_row > 0 && !state.plot_kwargs[:show_cleaned_ica][] && state.view.show_original_ica[]
+                        _ica_restored_window(state, ep, win, get_data(cur, ep, win, col), ch_row)
+                    else
+                        get_data(cur, ep, win, col)
+                    end
                 _window_points!(buf, get_time(cur, ep, win), data_series, state.view.amplitude_scale[], state.view.offset[idx])
                 return true
             end
@@ -2188,21 +2204,15 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                 cleaned_color = get(state.plot_kwargs, :cleaned_channel_color, :green)
                 line_colormap = track(
                     @lift(
-                        state.ica.is_active && $(state.plot_kwargs[:show_cleaned_ica]) ?
-                        [cleaned_color, cleaned_color, :red] :
+                        state.ica.is_active && $(state.plot_kwargs[:show_cleaned_ica]) ? [cleaned_color, cleaned_color, :red] :
                         [unsel_color, unsel_color, :red]
                     )
                 )
                 line_width = state.plot_kwargs[:channel_line_width]
             end
 
-            data_lines_visible = track(
-                @lift(
-                    !state.ica.is_active ||
-                    $(state.plot_kwargs[:show_cleaned_ica]) ||
-                    $(state.view.show_original_ica)
-                )
-            )
+            data_lines_visible =
+                track(@lift(!state.ica.is_active || $(state.plot_kwargs[:show_cleaned_ica]) || $(state.view.show_original_ica)))
 
             # Update or create line
             _create_line!(
@@ -2219,7 +2229,18 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
 
             # Handle labels
             if !state.view.butterfly[]
-                label_y_obs = track(@lift(get_label_y($(state.data.current), $(epoch_obs), $col, state.view.offset[idx], $(state.view.xrange)[1], $(state.view.amplitude_scale))))
+                label_y_obs = track(
+                    @lift(
+                        get_label_y(
+                            $(state.data.current),
+                            $(epoch_obs),
+                            $col,
+                            state.view.offset[idx],
+                            $(state.view.xrange)[1],
+                            $(state.view.amplitude_scale),
+                        )
+                    )
+                )
                 _create_label!(state.channels.data_labels, col, ax, time_start_obs, label_y_obs, is_selected)
             else
                 _hide_channel_label!(state.channels.data_labels, col)
@@ -2388,32 +2409,29 @@ function _draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
                 push!(legend_labels, String(channel))
             else # Regular channel - in-plot label is sufficient, skip legend
                 time_obs = @lift(get_time($(state.data.current), $(epoch_obs), :))
-                data_obs = @lift(get_data($(state.data.current), $(epoch_obs), :, $channel) .* $(state.view.amplitude_scale) .+ $channel_offset)
+                data_obs =
+                    @lift(get_data($(state.data.current), $(epoch_obs), :, $channel) .* $(state.view.amplitude_scale) .+ $channel_offset)
                 push!(state.extra_channel.draw_observers, time_obs)
                 push!(state.extra_channel.draw_observers, data_obs)
 
-                state.extra_channel.data_lines[channel] = lines!(
-                    ax,
-                    time_obs,
-                    data_obs,
-                    color = :black,
-                    linewidth = 2,
-                )
+                state.extra_channel.data_lines[channel] = lines!(ax, time_obs, data_obs, color = :black, linewidth = 2)
 
                 lbl_x_obs = @lift(get_time($(state.data.current), $(epoch_obs), $(state.view.xrange)[1:1])[1])
-                lbl_y_obs = @lift(get_label_y($(state.data.current), $(epoch_obs), $channel, $channel_offset, $(state.view.xrange)[1], $(state.view.amplitude_scale)))
+                lbl_y_obs = @lift(
+                    get_label_y(
+                        $(state.data.current),
+                        $(epoch_obs),
+                        $channel,
+                        $channel_offset,
+                        $(state.view.xrange)[1],
+                        $(state.view.amplitude_scale),
+                    )
+                )
                 push!(state.extra_channel.draw_observers, lbl_x_obs)
                 push!(state.extra_channel.draw_observers, lbl_y_obs)
 
-                state.extra_channel.data_labels[channel] = text!(
-                    ax,
-                    lbl_x_obs,
-                    lbl_y_obs,
-                    text = String(channel),
-                    align = (:left, :center),
-                    color = :black,
-                    fontsize = 18,
-                )
+                state.extra_channel.data_labels[channel] =
+                    text!(ax, lbl_x_obs, lbl_y_obs, text = String(channel), align = (:left, :center), color = :black, fontsize = 18)
             end
         end
 
@@ -2723,7 +2741,7 @@ function _percent_decode(s::AbstractString)
     while i <= n
         c = s[i]
         if c == '%' && i + 2 <= n && isxdigit(s[i+1]) && isxdigit(s[i+2])
-            b = parse(UInt8, s[i+1:i+2], base = 16)
+            b = parse(UInt8, s[(i+1):(i+2)], base = 16)
             push!(bytes, b)
             i += 3
         else

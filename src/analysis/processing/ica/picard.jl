@@ -88,7 +88,7 @@ function _picard_regularize_hessian!(h::Matrix{T}, lambda_min::T) where {T<:Abst
 end
 
 # Pre-allocated circular buffer for L-BFGS history (avoids push!/popfirst!/copy! allocations)
-mutable struct LBFGSBuffer{T<:AbstractFloat, MatT<:AbstractMatrix{T}}
+mutable struct LBFGSBuffer{T<:AbstractFloat,MatT<:AbstractMatrix{T}}
     s_buf::Vector{MatT}   # pre-allocated direction history
     y_buf::Vector{MatT}   # pre-allocated gradient diff history
     r_buf::Vector{T}      # pre-allocated curvature scalars
@@ -103,10 +103,10 @@ function LBFGSBuffer(T::Type{<:AbstractFloat}, N::Int, m::Int)
     y_buf = [zeros(T, N, N) for _ = 1:m]
     r_buf = zeros(T, m)
     a_buf = zeros(T, m)
-    return LBFGSBuffer{T, Matrix{T}}(s_buf, y_buf, r_buf, a_buf, m, 0, 1)
+    return LBFGSBuffer{T,Matrix{T}}(s_buf, y_buf, r_buf, a_buf, m, 0, 1)
 end
 
-function LBFGSBuffer(sample_mat::MatT, m::Int) where {T<:AbstractFloat, MatT<:AbstractMatrix{T}}
+function LBFGSBuffer(sample_mat::MatT, m::Int) where {T<:AbstractFloat,MatT<:AbstractMatrix{T}}
     N = size(sample_mat, 1)
     s_buf = [similar(sample_mat, N, N) for _ = 1:m]
     y_buf = [similar(sample_mat, N, N) for _ = 1:m]
@@ -116,7 +116,7 @@ function LBFGSBuffer(sample_mat::MatT, m::Int) where {T<:AbstractFloat, MatT<:Ab
     end
     r_buf = zeros(T, m)
     a_buf = zeros(T, m)
-    return LBFGSBuffer{T, MatT}(s_buf, y_buf, r_buf, a_buf, m, 0, 1)
+    return LBFGSBuffer{T,MatT}(s_buf, y_buf, r_buf, a_buf, m, 0, 1)
 end
 
 @inline function _lbfgs_reset!(buf::LBFGSBuffer)
@@ -124,7 +124,7 @@ end
     buf.head = 1
 end
 
-function _lbfgs_push!(buf::LBFGSBuffer{T, MatT}, direction::MatT, y_diff::MatT, r_val::T) where {T, MatT<:AbstractMatrix{T}}
+function _lbfgs_push!(buf::LBFGSBuffer{T,MatT}, direction::MatT, y_diff::MatT, r_val::T) where {T,MatT<:AbstractMatrix{T}}
     idx = buf.head
     copyto!(buf.s_buf[idx], direction)
     copyto!(buf.y_buf[idx], y_diff)
@@ -145,8 +145,8 @@ function _picard_l_bfgs_direction!(
     q::MatT,
     G::MatT,
     h::MatT,
-    buf::LBFGSBuffer{T, MatT},
-) where {T<:AbstractFloat, MatT<:AbstractMatrix{T}}
+    buf::LBFGSBuffer{T,MatT},
+) where {T<:AbstractFloat,MatT<:AbstractMatrix{T}}
     copyto!(q, G)
 
     m_len = buf.len
@@ -493,7 +493,7 @@ function _picard_y_loss_gpu(
     Y_gpu::AbstractMatrix{T},
     signs_gpu::AbstractVector{T},
     extended::Bool,
-    loss_tmp::Union{AbstractMatrix{T}, Nothing} = nothing,
+    loss_tmp::Union{AbstractMatrix{T},Nothing} = nothing,
 ) where {T<:AbstractFloat}
     N, T_len = size(Y_gpu)
     s = reshape(signs_gpu, N, 1)
@@ -725,9 +725,21 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
         _picard_l_bfgs_direction!(direction, q, G, h, lbfgs)
 
         converged, new_loss, alpha, logdetW = _picard_line_search_gpu!(
-            Y, W, Y_new, W_new, DY, DW, direction,
-            direction_cpu, transform_cpu, signs, loss_tmp,
-            current_loss, logdetW, ls_tries, extended,
+            Y,
+            W,
+            Y_new,
+            W_new,
+            DY,
+            DW,
+            direction,
+            direction_cpu,
+            transform_cpu,
+            signs,
+            loss_tmp,
+            current_loss,
+            logdetW,
+            ls_tries,
+            extended,
         )
 
         if !converged
@@ -737,9 +749,21 @@ function _picard_optimize_gpu!(W_cpu::Matrix{Float32}, dat_ica_cpu::Matrix{Float
             _lbfgs_reset!(lbfgs)
 
             converged, new_loss, alpha, logdetW = _picard_line_search_gpu!(
-                Y, W, Y_new, W_new, DY, DW, direction,
-                direction_cpu, transform_cpu, signs, loss_tmp,
-                current_loss, logdetW, ls_tries, extended,
+                Y,
+                W,
+                Y_new,
+                W_new,
+                DY,
+                DW,
+                direction,
+                direction_cpu,
+                transform_cpu,
+                signs,
+                loss_tmp,
+                current_loss,
+                logdetW,
+                ls_tries,
+                extended,
             )
 
             if !converged

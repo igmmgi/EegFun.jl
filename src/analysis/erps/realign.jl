@@ -277,7 +277,12 @@ function realign(
     global_interval::Union{Tuple{Float64,Float64},Nothing} = nothing,
     global_n_samples::Union{Int,Nothing} = nothing,
 )::Vector{EpochData}
-    return realign!([copy(d) for d in dat_vec], realignment_triggers; global_interval = global_interval, global_n_samples = global_n_samples)
+    return realign!(
+        [copy(d) for d in dat_vec],
+        realignment_triggers;
+        global_interval = global_interval,
+        global_n_samples = global_n_samples,
+    )
 end
 
 

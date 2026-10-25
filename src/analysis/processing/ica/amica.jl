@@ -547,9 +547,7 @@ function amica_ica(
     last_iter = 0
 
     if prep.gpu_active
-        A_final = _amica_optimize_gpu!(
-            dat_ica_t, A, LLdetS, scale, location, shape, proportions, m, prep.prms, lrate
-        )
+        A_final = _amica_optimize_gpu!(dat_ica_t, A, LLdetS, scale, location, shape, proportions, m, prep.prms, lrate)
         A .= A_final
     else
         for iter = 1:maxiter

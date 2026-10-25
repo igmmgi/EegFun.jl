@@ -86,5 +86,3 @@ end
 
 detect_eog_onsets(dat_vec::Vector{<:ContinuousData}, args...; kwargs...) = [detect_eog_onsets(d, args...; kwargs...) for d in dat_vec]
 detect_eog_onsets(dat_vec::Vector{<:EegData}, eog_cfg::Dict) = [detect_eog_onsets(d, eog_cfg) for d in dat_vec]
-
-

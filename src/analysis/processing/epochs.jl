@@ -715,12 +715,7 @@ end
 
 
 
-function _accumulate_epoch_average!(
-    avg_matrix::Matrix{Float64},
-    data::Vector{DataFrame},
-    ch_col_indices::Vector{Int},
-    n_timepoints::Int,
-)
+function _accumulate_epoch_average!(avg_matrix::Matrix{Float64}, data::Vector{DataFrame}, ch_col_indices::Vector{Int}, n_timepoints::Int)
     for epoch in data
         for (ch_idx, col_idx) in enumerate(ch_col_indices)
             col = epoch[!, col_idx]

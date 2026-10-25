@@ -93,7 +93,7 @@ function _compute_pooled_covariance(data_arrays::Vector{Array{Float64,3}}, time_
     col_offset = 0
     for cond_data in data_arrays
         n_tr = size(cond_data, 3)
-        @views all_data[:, (col_offset + 1):(col_offset + n_tr)] .= cond_data[:, time_idx, :]
+        @views all_data[:, (col_offset+1):(col_offset+n_tr)] .= cond_data[:, time_idx, :]
         col_offset += n_tr
     end
 
@@ -102,7 +102,7 @@ function _compute_pooled_covariance(data_arrays::Vector{Array{Float64,3}}, time_
 
     # Add small regularization for numerical stability directly to diagonal
     λ = 1e-6 * tr(pooled_cov) / n_features
-    @inbounds for i in 1:n_features
+    @inbounds for i = 1:n_features
         pooled_cov[i, i] += λ
     end
 

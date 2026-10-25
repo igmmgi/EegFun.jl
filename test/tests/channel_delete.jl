@@ -109,8 +109,10 @@ using EegFun
     end
 
     @testset "Vector of datasets" begin
-        dats = [EegFun.create_test_epoch_data(n = 100, n_epochs = 2, condition = 1),
-                EegFun.create_test_epoch_data(n = 100, n_epochs = 2, condition = 2)]
+        dats = [
+            EegFun.create_test_epoch_data(n = 100, n_epochs = 2, condition = 1),
+            EegFun.create_test_epoch_data(n = 100, n_epochs = 2, condition = 2),
+        ]
         del_copy = EegFun.channel_delete(dats, :Ch1)
         @test :Ch1 ∉ EegFun.channel_labels(del_copy[1])
         @test :Ch1 ∉ EegFun.channel_labels(del_copy[2])
@@ -122,4 +124,3 @@ using EegFun
     end
 
 end
-

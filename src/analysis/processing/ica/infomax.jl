@@ -12,11 +12,7 @@ Shared preprocessing helper for Infomax and Extended Infomax ICA:
 - Computes PCA reduction and analytic sphering via SVD
 - Configures CPU or GPU work buffers and block size
 """
-function _ica_preprocess(
-    dat_ica::Matrix{Float64},
-    n_components::Int,
-    params::IcaPrms,
-)
+function _ica_preprocess(dat_ica::Matrix{Float64}, n_components::Int, params::IcaPrms)
     n_channels, n_samples = size(dat_ica)
 
     # 1. Guards on n_components
@@ -638,7 +634,7 @@ function _infomax_optimize_gpu!(
 
     # Pre-construct data block views into preallocated dat_ica_gpu_shuffled
     block_starts = 1:block:n_samples
-    data_block_views = [view(dat_ica_gpu_shuffled, :, t:min(t + block - 1, n_samples)) for t in block_starts]
+    data_block_views = [view(dat_ica_gpu_shuffled, :, t:min(t+block-1, n_samples)) for t in block_starts]
     n_blocks = length(block_starts)
 
     @inbounds while step < params.max_iter
@@ -774,7 +770,7 @@ function _infomax_extended_optimize_gpu!(
     wtemp_gpu = gpu_array(zeros(Float32, n_components, n_components))
 
     # K signs vector: +1 for super-Gaussian, -1 for sub-Gaussian
-    signs_cpu = Float32[is_sub_gaussian[i] ? -1.0f0 : 1.0f0 for i in 1:n_channels]
+    signs_cpu = Float32[is_sub_gaussian[i] ? -1.0f0 : 1.0f0 for i = 1:n_channels]
     signs_gpu = gpu_array(reshape(signs_cpu, n_channels, 1))
 
     kurtsize = min(2000, n_samples)
@@ -801,7 +797,7 @@ function _infomax_extended_optimize_gpu!(
 
     # Pre-construct data block views into preallocated dat_ica_gpu_shuffled
     block_starts = 1:block:n_samples
-    data_block_views = [view(dat_ica_gpu_shuffled, :, t:min(t + block - 1, n_samples)) for t in block_starts]
+    data_block_views = [view(dat_ica_gpu_shuffled, :, t:min(t+block-1, n_samples)) for t in block_starts]
     n_blocks = length(block_starts)
 
     @inbounds while step < params.max_iter
@@ -908,7 +904,7 @@ function _infomax_extended_optimize_gpu!(
 
             # Push updated signs vector to GPU if any changed
             if signs_changed
-                signs_cpu .= Float32[is_sub_gaussian[i] ? -1.0f0 : 1.0f0 for i in 1:n_channels]
+                signs_cpu .= Float32[is_sub_gaussian[i] ? -1.0f0 : 1.0f0 for i = 1:n_channels]
                 copyto!(signs_gpu, reshape(signs_cpu, n_channels, 1))
             end
 

@@ -21,11 +21,11 @@ function find_bridged_channels(dat::SingleDataFrameEeg, correlation_threshold::R
         col = dat.data[!, ch]
         if col isa Vector{Float64}
             col_f = col::Vector{Float64}
-            @inbounds @simd for s in 1:n_samp
+            @inbounds @simd for s = 1:n_samp
                 X[s, c] = col_f[s]
             end
         else
-            @inbounds for s in 1:n_samp
+            @inbounds for s = 1:n_samp
                 X[s, c] = Float64(col[s])
             end
         end
@@ -37,9 +37,9 @@ function find_bridged_channels(dat::SingleDataFrameEeg, correlation_threshold::R
     pairs_2 = Symbol[]
     corrs = Float64[]
 
-    for i in 1:(n_ch - 1)
+    for i = 1:(n_ch-1)
         ch1 = selected_channels[i]
-        for j in (i + 1):n_ch
+        for j = (i+1):n_ch
             r = R[i, j]
             if r > correlation_threshold
                 push!(pairs_1, ch1)
@@ -71,12 +71,12 @@ function find_bridged_channels(dat::MultiDataFrameEeg, correlation_threshold::Re
             col = epoch_df[!, ch]
             if col isa Vector{Float64}
                 col_f = col::Vector{Float64}
-                @inbounds @simd for s in 1:n_ep
-                    X[row_offset + s, c] = col_f[s]
+                @inbounds @simd for s = 1:n_ep
+                    X[row_offset+s, c] = col_f[s]
                 end
             else
-                @inbounds for s in 1:n_ep
-                    X[row_offset + s, c] = Float64(col[s])
+                @inbounds for s = 1:n_ep
+                    X[row_offset+s, c] = Float64(col[s])
                 end
             end
         end
@@ -89,9 +89,9 @@ function find_bridged_channels(dat::MultiDataFrameEeg, correlation_threshold::Re
     pairs_2 = Symbol[]
     corrs = Float64[]
 
-    for i in 1:(n_ch - 1)
+    for i = 1:(n_ch-1)
         ch1 = selected_channels[i]
-        for j in (i + 1):n_ch
+        for j = (i+1):n_ch
             r = R[i, j]
             if r > correlation_threshold
                 push!(pairs_1, ch1)
@@ -103,4 +103,3 @@ function find_bridged_channels(dat::MultiDataFrameEeg, correlation_threshold::Re
 
     return DataFrame(channel_1 = pairs_1, channel_2 = pairs_2, correlation = corrs)
 end
-

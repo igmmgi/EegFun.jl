@@ -219,7 +219,9 @@ function _calculate_epoch_metrics(
     # Use a UnitRange when sample indices are contiguous 
     samples_idx = if selected_samples isa AbstractUnitRange
         selected_samples
-    elseif length(selected_samples) > 1 && issorted(selected_samples) && (selected_samples[end] - selected_samples[1] + 1 == length(selected_samples))
+    elseif length(selected_samples) > 1 &&
+           issorted(selected_samples) &&
+           (selected_samples[end] - selected_samples[1] + 1 == length(selected_samples))
         selected_samples[1]:selected_samples[end]
     else
         selected_samples
@@ -258,5 +260,3 @@ function _calculate_epoch_metrics(
 
     return metrics
 end
-
-

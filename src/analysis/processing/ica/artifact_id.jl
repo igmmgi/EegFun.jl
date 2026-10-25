@@ -102,7 +102,7 @@ function _max_lagged_corr(x_norm::AbstractVector{Float64}, y_norm::AbstractVecto
         a = max(1, 1 - lag)
         b = min(n, n - lag)
         a > b && continue
-        c = abs(dot(view(x_norm, a:b), view(y_norm, (a + lag):(b + lag))))
+        c = abs(dot(view(x_norm, a:b), view(y_norm, (a+lag):(b+lag))))
         if c > best
             best = c
         end
@@ -228,11 +228,7 @@ function _empty_line_noise_metrics()
 end
 
 function _empty_spatial_kurtosis_metrics()
-    return DataFrame(
-        :Component => Int[],
-        :spatial_kurtosis => Float64[],
-        :z_spatial_kurtosis => Float64[],
-    )
+    return DataFrame(:Component => Int[], :spatial_kurtosis => Float64[], :z_spatial_kurtosis => Float64[])
 end
 
 # === EOG Identification ===
@@ -378,8 +374,10 @@ function identify_eog_components(
             vEOG_spatial_corr_z = _zscore_for_remaining(vEOG_spatial_corr, remaining_vEOG)
             vEOG_temporal_corr_z = _zscore_for_remaining(vEOG_temporal_corr, remaining_vEOG)
 
-            sec_v_spat = _identify_secondary_components(remaining_vEOG, vEOG_spatial_corr, vEOG_spatial_corr_z, min_correlation, z_threshold)
-            sec_v_temp = _identify_secondary_components(remaining_vEOG, vEOG_temporal_corr, vEOG_temporal_corr_z, min_correlation, z_threshold)
+            sec_v_spat =
+                _identify_secondary_components(remaining_vEOG, vEOG_spatial_corr, vEOG_spatial_corr_z, min_correlation, z_threshold)
+            sec_v_temp =
+                _identify_secondary_components(remaining_vEOG, vEOG_temporal_corr, vEOG_temporal_corr_z, min_correlation, z_threshold)
             secondary_vEOG = union(sec_v_spat, sec_v_temp)
         end
 
@@ -390,8 +388,10 @@ function identify_eog_components(
             hEOG_spatial_corr_z = _zscore_for_remaining(hEOG_spatial_corr, remaining_hEOG)
             hEOG_temporal_corr_z = _zscore_for_remaining(hEOG_temporal_corr, remaining_hEOG)
 
-            sec_h_spat = _identify_secondary_components(remaining_hEOG, hEOG_spatial_corr, hEOG_spatial_corr_z, min_correlation, z_threshold)
-            sec_h_temp = _identify_secondary_components(remaining_hEOG, hEOG_temporal_corr, hEOG_temporal_corr_z, min_correlation, z_threshold)
+            sec_h_spat =
+                _identify_secondary_components(remaining_hEOG, hEOG_spatial_corr, hEOG_spatial_corr_z, min_correlation, z_threshold)
+            sec_h_temp =
+                _identify_secondary_components(remaining_hEOG, hEOG_temporal_corr, hEOG_temporal_corr_z, min_correlation, z_threshold)
             secondary_hEOG = union(sec_h_spat, sec_h_temp)
         end
     end
@@ -437,18 +437,18 @@ function _find_unidirectional_peaks(data::AbstractVector; min_prominence_std::Re
     m = mean(data)
     s = std(data)
     thresh = (s ≈ 0) ? m : m + min_prominence_std * s
-    @inbounds for i = (window_size + 1):(n - window_size)
+    @inbounds for i = (window_size+1):(n-window_size)
         val = data[i]
         if val > thresh
             is_p = true
-            for j = (i - window_size):(i - 1)
+            for j = (i-window_size):(i-1)
                 if val <= data[j]
                     is_p = false
                     break
                 end
             end
             if is_p
-                for j = (i + 1):(i + window_size)
+                for j = (i+1):(i+window_size)
                     if val <= data[j]
                         is_p = false
                         break
@@ -553,7 +553,7 @@ function identify_ecg_components(
 
     metrics = NamedTuple{
         (:Component, :num_peaks, :num_valid_ibis, :mean_ibi_s, :std_ibi_s, :peak_ratio, :heart_rate_bpm),
-        Tuple{Int, Int, Int, Float64, Float64, Float64, Float64},
+        Tuple{Int,Int,Int,Float64,Float64,Float64,Float64},
     }[]
     identified_ecg = Int[]
 
@@ -637,11 +637,7 @@ function identify_spatial_kurtosis_components(ica::InfoIca; z_threshold::Real = 
     high_kurtosis_comps = findall(z_spatial_kurtosis .> z_threshold)
     sort!(high_kurtosis_comps)
 
-    metrics_df = DataFrame(
-        :Component => 1:n_components,
-        :spatial_kurtosis => spatial_kurtosis,
-        :z_spatial_kurtosis => z_spatial_kurtosis,
-    )
+    metrics_df = DataFrame(:Component => 1:n_components, :spatial_kurtosis => spatial_kurtosis, :z_spatial_kurtosis => z_spatial_kurtosis)
 
     return high_kurtosis_comps, metrics_df
 end
@@ -724,10 +720,8 @@ function identify_line_noise_components(
     harmonic2_flank_band =
         findall((abs.(freqs .- harmonic2_freq) .> freq_bandwidth) .& (abs.(freqs .- harmonic2_freq) .<= freq_bandwidth + flank_bandwidth))
 
-    metrics = NamedTuple{
-        (:Component, :line_power, :flanking_power, :power_ratio, :harmonic_ratio),
-        Tuple{Int, Float64, Float64, Float64, Float64},
-    }[]
+    metrics =
+        NamedTuple{(:Component, :line_power, :flanking_power, :power_ratio, :harmonic_ratio),Tuple{Int,Float64,Float64,Float64,Float64}}[]
 
     for i = 1:n_components
         line_power = !isempty(line_band) ? mean(view(psd, line_band, i)) : 0.0
@@ -834,7 +828,7 @@ function Base.show(io::IO, ::MIME"text/plain", artifacts::ArtifactComponents)
     println(io, "  ECG: $(artifacts.ecg)")
     println(io, "  Line Noise: $(artifacts.line_noise)")
     println(io, "  Channel Noise: $(artifacts.channel_noise)")
-    print(io,   "  All: $all_comps")
+    print(io, "  All: $all_comps")
 end
 
 # === Unified Public API ===
@@ -962,10 +956,7 @@ function _identify_components_correlation(
     )
 
     # Identify channel noise components (spatial kurtosis)
-    channel_noise_comps, channel_noise_metrics_df = identify_spatial_kurtosis_components(
-        ica;
-        channel_noise_merged...,
-    )
+    channel_noise_comps, channel_noise_metrics_df = identify_spatial_kurtosis_components(ica; channel_noise_merged...)
 
     # Combine all components
     artifacts = combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)

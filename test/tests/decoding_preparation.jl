@@ -4,7 +4,14 @@ using EegFun
 @testset "Decoding Preparation" begin
     # Helper to generate mock participant epoch files
     function make_mock_epoch(sub::Int, cond::Int; fs = 256, n_samples = 100, n_channels = 3)
-        ep = EegFun.create_test_epoch_data(n = n_samples, fs = fs, n_epochs = 4, n_channels = n_channels, condition = cond, seed = sub * 10 + cond)
+        ep = EegFun.create_test_epoch_data(
+            n = n_samples,
+            fs = fs,
+            n_epochs = 4,
+            n_channels = n_channels,
+            condition = cond,
+            seed = sub * 10 + cond,
+        )
         return EegFun.EpochData(
             "cond_$(cond)_sub_$(sub).jld2",
             cond,
@@ -35,21 +42,13 @@ using EegFun
 
     # 2. Channel and interval selections
     ch1 = EegFun.channel_labels(p1_c1)[1]
-    prep_sub = EegFun.prepare_decoding(
-        all_epochs;
-        channel_selection = EegFun.channels(ch1),
-        interval_selection = EegFun.times(0.0, 0.2),
-    )
+    prep_sub = EegFun.prepare_decoding(all_epochs; channel_selection = EegFun.channels(ch1), interval_selection = EegFun.times(0.0, 0.2))
     @test length(EegFun.channel_labels(prep_sub[1][1])) == 1
     @test EegFun.channel_labels(prep_sub[1][1])[1] == ch1
 
     # 3. TimeFreqEpochData preparation
     function make_mock_tf_epoch(sub::Int, cond::Int)
-        return EegFun.create_test_tf_epoch_data(
-            participant = sub,
-            file = "tf_cond_$(cond)_sub_$(sub).jld2",
-            condition = cond,
-        )
+        return EegFun.create_test_tf_epoch_data(participant = sub, file = "tf_cond_$(cond)_sub_$(sub).jld2", condition = cond)
     end
 
     tf_p1_c1 = make_mock_tf_epoch(1, 1)

@@ -36,82 +36,50 @@ subtract_ica_components!(dat, ica_result, component_selection = components([1, 3
 cleaned_dat, ica_updated = subtract_ica_components(dat, ica_result, component_selection = components([1, 3]))
 ```
 """
-function subtract_ica_components!(
-    dat::DataFrame,
-    ica::InfoIca;
-    component_selection::Union{Function, Nothing} = nothing,
-)
+function subtract_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
     _subtract_ica_components!(dat, ica; component_selection = component_selection)
     return dat
 end
 
-function subtract_ica_components!(
-    dfs::Vector{DataFrame},
-    ica::InfoIca;
-    component_selection::Union{Function, Nothing} = nothing,
-)
+function subtract_ica_components!(dfs::Vector{DataFrame}, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
     _subtract_ica_components!(dfs, ica; component_selection = component_selection)
     return dfs
 end
 
-function subtract_ica_components!(
-    dat::ContinuousData,
-    ica::InfoIca;
-    component_selection::Union{Function, Nothing} = nothing,
-)
+function subtract_ica_components!(dat::ContinuousData, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
     actually_removed = _subtract_ica_components!(dat.data, ica; component_selection = component_selection)
     dat.analysis_info.n_ica_components_removed += length(actually_removed)
     return dat
 end
 
-function subtract_ica_components!(
-    dat::EpochData,
-    ica::InfoIca;
-    component_selection::Union{Function, Nothing} = nothing,
-)
+function subtract_ica_components!(dat::EpochData, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
     actually_removed = _subtract_ica_components!(dat.data, ica; component_selection = component_selection)
     dat.analysis_info.n_ica_components_removed += length(actually_removed)
     return dat
 end
 
-function subtract_ica_components(
-    dat::DataFrame,
-    ica::InfoIca;
-    component_selection::Union{Function, Nothing} = nothing,
-)
+function subtract_ica_components(dat::DataFrame, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
     dat_out = copy(dat)
     ica_out = copy(ica)
     subtract_ica_components!(dat_out, ica_out; component_selection = component_selection)
     return dat_out, ica_out
 end
 
-function subtract_ica_components(
-    dfs::Vector{DataFrame},
-    ica::InfoIca;
-    component_selection::Union{Function, Nothing} = nothing,
-)
+function subtract_ica_components(dfs::Vector{DataFrame}, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
     dfs_out = [copy(df) for df in dfs]
     ica_out = copy(ica)
     subtract_ica_components!(dfs_out, ica_out; component_selection = component_selection)
     return dfs_out, ica_out
 end
 
-function subtract_ica_components(
-    dat::ContinuousData,
-    ica::InfoIca;
-    component_selection::Union{Function, Nothing} = nothing,
-)
+function subtract_ica_components(dat::ContinuousData, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
     dat_out = copy(dat)
     ica_out = copy(ica)
     subtract_ica_components!(dat_out, ica_out; component_selection = component_selection)
     return dat_out, ica_out
 end
 
-function subtract_ica_components(
-    dat::EpochData,
-    ica::InfoIca;
-    component_selection::Union{Function, Nothing} = nothing,
-)
+function subtract_ica_components(dat::EpochData, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
     dat_out = copy(dat)
     ica_out = copy(ica)
     subtract_ica_components!(dat_out, ica_out; component_selection = component_selection)
@@ -151,82 +119,50 @@ add_ica_components!(dat, ica_result)
 add_ica_components!(dat, ica_result, component_selection = components([1]))
 ```
 """
-function add_ica_components!(
-    dat::DataFrame,
-    ica::InfoIca;
-    component_selection::Union{Function, Nothing} = nothing,
-)
+function add_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
     _add_ica_components!(dat, ica; component_selection = component_selection)
     return dat
 end
 
-function add_ica_components!(
-    dfs::Vector{DataFrame},
-    ica::InfoIca;
-    component_selection::Union{Function, Nothing} = nothing,
-)
+function add_ica_components!(dfs::Vector{DataFrame}, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
     _add_ica_components!(dfs, ica; component_selection = component_selection)
     return dfs
 end
 
-function add_ica_components!(
-    dat::ContinuousData,
-    ica::InfoIca;
-    component_selection::Union{Function, Nothing} = nothing,
-)
+function add_ica_components!(dat::ContinuousData, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
     actually_added = _add_ica_components!(dat.data, ica; component_selection = component_selection)
     dat.analysis_info.n_ica_components_removed -= length(actually_added)
     return dat
 end
 
-function add_ica_components!(
-    dat::EpochData,
-    ica::InfoIca;
-    component_selection::Union{Function, Nothing} = nothing,
-)
+function add_ica_components!(dat::EpochData, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
     actually_added = _add_ica_components!(dat.data, ica; component_selection = component_selection)
     dat.analysis_info.n_ica_components_removed -= length(actually_added)
     return dat
 end
 
-function add_ica_components(
-    dat::DataFrame,
-    ica::InfoIca;
-    component_selection::Union{Function, Nothing} = nothing,
-)
+function add_ica_components(dat::DataFrame, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
     dat_out = copy(dat)
     ica_out = copy(ica)
     add_ica_components!(dat_out, ica_out; component_selection = component_selection)
     return dat_out, ica_out
 end
 
-function add_ica_components(
-    dfs::Vector{DataFrame},
-    ica::InfoIca;
-    component_selection::Union{Function, Nothing} = nothing,
-)
+function add_ica_components(dfs::Vector{DataFrame}, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
     dfs_out = [copy(df) for df in dfs]
     ica_out = copy(ica)
     add_ica_components!(dfs_out, ica_out; component_selection = component_selection)
     return dfs_out, ica_out
 end
 
-function add_ica_components(
-    dat::ContinuousData,
-    ica::InfoIca;
-    component_selection::Union{Function, Nothing} = nothing,
-)
+function add_ica_components(dat::ContinuousData, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
     dat_out = copy(dat)
     ica_out = copy(ica)
     add_ica_components!(dat_out, ica_out; component_selection = component_selection)
     return dat_out, ica_out
 end
 
-function add_ica_components(
-    dat::EpochData,
-    ica::InfoIca;
-    component_selection::Union{Function, Nothing} = nothing,
-)
+function add_ica_components(dat::EpochData, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
     dat_out = copy(dat)
     ica_out = copy(ica)
     add_ica_components!(dat_out, ica_out; component_selection = component_selection)
@@ -278,10 +214,7 @@ function _add_core!(X::Matrix{Float64}, ica::InfoIca, comps::Vector{Int})
 end
 
 """Validate and filter components to be subtracted from an ICA model."""
-function _validate_and_filter_subtract_components(
-    ica::InfoIca,
-    component_selection::Union{Function, Nothing},
-)
+function _validate_and_filter_subtract_components(ica::InfoIca, component_selection::Union{Function,Nothing})
     if isnothing(component_selection)
         @minimal_error "subtract_ica_components! requires an explicit 'component_selection' (e.g., component_selection = components([1, 2]) or components(artifacts)). To subtract all components, pass component_selection = components()."
     end
@@ -303,10 +236,7 @@ function _validate_and_filter_subtract_components(
 end
 
 """Validate and filter components to be restored to an ICA model."""
-function _validate_and_filter_add_components(
-    ica::InfoIca,
-    component_selection::Union{Function, Nothing},
-)
+function _validate_and_filter_add_components(ica::InfoIca, component_selection::Union{Function,Nothing})
     n_components = size(ica.unmixing, 1)
     comps = if isnothing(component_selection)
         sort(collect(keys(ica.removed_activations)))
@@ -338,11 +268,7 @@ function _validate_and_filter_add_components(
 end
 
 """Internal DataFrame implementation of component subtraction."""
-function _subtract_ica_components!(
-    dat::DataFrame,
-    ica::InfoIca;
-    component_selection::Union{Function, Nothing} = nothing,
-)
+function _subtract_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
     comps = _validate_and_filter_subtract_components(ica, component_selection)
     isempty(comps) && return Int[]
 
@@ -362,11 +288,7 @@ function _subtract_ica_components!(
 end
 
 """Internal epoched Vector{DataFrame} implementation of component subtraction."""
-function _subtract_ica_components!(
-    dfs::Vector{DataFrame},
-    ica::InfoIca;
-    component_selection::Union{Function, Nothing} = nothing,
-)
+function _subtract_ica_components!(dfs::Vector{DataFrame}, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
     isempty(dfs) && return Int[]
     n_samples_per_epoch = nrow(dfs[1])
     if !all(nrow(df) == n_samples_per_epoch for df in dfs)
@@ -388,7 +310,7 @@ function _subtract_ica_components!(
             src = df[!, ch]
             offset = (ep_idx - 1) * n_samples_per_epoch
             for s = 1:n_samples_per_epoch
-                col_out[offset + s] = src[s]
+                col_out[offset+s] = src[s]
             end
         end
     end
@@ -405,7 +327,7 @@ function _subtract_ica_components!(
             dst = df[!, ch]
             offset = (ep_idx - 1) * n_samples_per_epoch
             for s = 1:n_samples_per_epoch
-                dst[s] = col_in[offset + s]
+                dst[s] = col_in[offset+s]
             end
         end
     end
@@ -414,11 +336,7 @@ function _subtract_ica_components!(
 end
 
 """Internal DataFrame implementation of component restoration."""
-function _add_ica_components!(
-    dat::DataFrame,
-    ica::InfoIca;
-    component_selection::Union{Function, Nothing} = nothing,
-)
+function _add_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
     comps = _validate_and_filter_add_components(ica, component_selection)
     isempty(comps) && return Int[]
 
@@ -438,11 +356,7 @@ function _add_ica_components!(
 end
 
 """Internal epoched Vector{DataFrame} implementation of component restoration."""
-function _add_ica_components!(
-    dfs::Vector{DataFrame},
-    ica::InfoIca;
-    component_selection::Union{Function, Nothing} = nothing,
-)
+function _add_ica_components!(dfs::Vector{DataFrame}, ica::InfoIca; component_selection::Union{Function,Nothing} = nothing)
     isempty(dfs) && return Int[]
     n_samples_per_epoch = nrow(dfs[1])
     if !all(nrow(df) == n_samples_per_epoch for df in dfs)
@@ -464,7 +378,7 @@ function _add_ica_components!(
             src = df[!, ch]
             offset = (ep_idx - 1) * n_samples_per_epoch
             for s = 1:n_samples_per_epoch
-                col_out[offset + s] = src[s]
+                col_out[offset+s] = src[s]
             end
         end
     end
@@ -477,7 +391,7 @@ function _add_ica_components!(
             dst = df[!, ch]
             offset = (ep_idx - 1) * n_samples_per_epoch
             for s = 1:n_samples_per_epoch
-                dst[s] = col_in[offset + s]
+                dst[s] = col_in[offset+s]
             end
         end
     end
@@ -491,12 +405,7 @@ end
 
 
 # Function barrier forces Julia to compile a fast inner loop for the concrete type of `src`
-function _copy_col_to_matrix!(
-    dst::Matrix{Float64},
-    col_idx::Int,
-    src::AbstractVector,
-    selected_samples::Vector{Int},
-)
+function _copy_col_to_matrix!(dst::Matrix{Float64}, col_idx::Int, src::AbstractVector, selected_samples::Vector{Int})
     isempty(selected_samples) && return dst
     min_idx, max_idx = extrema(selected_samples)
     if min_idx < 1 || max_idx > length(src)

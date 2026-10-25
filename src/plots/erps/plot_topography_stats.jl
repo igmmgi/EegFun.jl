@@ -110,7 +110,9 @@ function plot_topography_stats(
     time_mask = t_start .<= all_time_points .<= t_end
     time_indices = findall(time_mask)
     if isempty(time_indices)
-        @minimal_error("No time points found in range ($t_start, $t_end). Data range: $(first(all_time_points)) to $(last(all_time_points))")
+        @minimal_error(
+            "No time points found in range ($t_start, $t_end). Data range: $(first(all_time_points)) to $(last(all_time_points))"
+        )
     end
 
     # Divide time indices into n_topos equal bins

@@ -38,7 +38,9 @@ function permutation_test(
 
     # Validate threshold method
     if !(threshold_method in [:parametric, :nonparametric_common, :nonparametric_individual])
-        @minimal_error("threshold_method must be :parametric, :nonparametric_common, or :nonparametric_individual. " * "Got :$threshold_method")
+        @minimal_error(
+            "threshold_method must be :parametric, :nonparametric_common, or :nonparametric_individual. " * "Got :$threshold_method"
+        )
     end
 
     # GPU check

@@ -177,11 +177,12 @@ function _extract_tf_array(
 
     # Fast path: if all TFs follow standard regular grid (time outer, freq inner) matching requested axes
     first_df = tfs[1].data_power
-    is_standard_grid = (nrow(first_df) == n_freqs * n_time) &&
-                       (length(first_df.time) > 1 && first_df.time[1] == first_df.time[min(n_freqs, end)]) &&
-                       (round(first_df.time[1], digits = 6) == rounded_times[1]) &&
-                       (round(first_df.freq[1], digits = 6) == rounded_freqs[1]) &&
-                       all(nrow(tf.data_power) == n_freqs * n_time for tf in tfs)
+    is_standard_grid =
+        (nrow(first_df) == n_freqs * n_time) &&
+        (length(first_df.time) > 1 && first_df.time[1] == first_df.time[min(n_freqs, end)]) &&
+        (round(first_df.time[1], digits = 6) == rounded_times[1]) &&
+        (round(first_df.freq[1], digits = 6) == rounded_freqs[1]) &&
+        all(nrow(tf.data_power) == n_freqs * n_time for tf in tfs)
 
     if is_standard_grid
         for (p_idx, tf) in enumerate(tfs)

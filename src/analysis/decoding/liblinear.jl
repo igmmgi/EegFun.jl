@@ -45,12 +45,7 @@ function libsvm_classifier(
     n_test == 0 && return Int[]
 
     LIBSVM.LIBLINEAR.set_print(false)
-    model = LIBSVM.LIBLINEAR.linear_train(
-        y_train,
-        transpose(X_train);
-        solver_type = Int32(LIBSVM.Linearsolver.L2R_L2LOSS_SVC),
-        C = cost,
-    )
+    model = LIBSVM.LIBLINEAR.linear_train(y_train, transpose(X_train); solver_type = Int32(LIBSVM.Linearsolver.L2R_L2LOSS_SVC), C = cost)
     w = model.w
     labels = model.labels
     nr_c = Int(model.nr_class)
@@ -74,7 +69,7 @@ function libsvm_classifier(
             for c = 1:nr_c
                 val = 0.0
                 for f = 1:n_features
-                    val += w[(f - 1) * nr_c + c] * X_test[i, f]
+                    val += w[(f-1)*nr_c+c] * X_test[i, f]
                 end
                 if val > max_val
                     max_val = val
@@ -107,26 +102,32 @@ end
 
 function LiblinearWorkspace(max_features::Int, max_samples::Int, cost::Float64, max_classes::Int = 2)
     nodes = Matrix{LIBSVM.LIBLINEAR.FeatureNode}(undef, max_features + 1, max_samples)
-    for i in 1:max_samples
-        for j in 1:max_features
+    for i = 1:max_samples
+        for j = 1:max_features
             nodes[j, i] = LIBSVM.LIBLINEAR.FeatureNode(Cint(j), 0.0)
         end
-        nodes[max_features + 1, i] = LIBSVM.LIBLINEAR.FeatureNode(Cint(-1), NaN)
+        nodes[max_features+1, i] = LIBSVM.LIBLINEAR.FeatureNode(Cint(-1), NaN)
     end
-    nodeptrs = [pointer(nodes, (i - 1) * (max_features + 1) + 1) for i in 1:max_samples]
+    nodeptrs = [pointer(nodes, (i - 1) * (max_features + 1) + 1) for i = 1:max_samples]
     y_double = Vector{Float64}(undef, max_samples)
 
     solver_type = Int32(LIBSVM.Linearsolver.L2R_L2LOSS_SVC)
     eps = 0.01
-    param = [LIBSVM.LIBLINEAR.Parameter(
-        solver_type, eps, cost, Cint(0),
-        convert(Ptr{Cint}, C_NULL), convert(Ptr{Float64}, C_NULL), 0.1, 0.5,
-        convert(Ptr{Float64}, C_NULL), Cint(1)
-    )]
-    problem = [LIBSVM.LIBLINEAR.Problem(
-        Cint(max_samples), Cint(max_features),
-        pointer(y_double), pointer(nodeptrs), -1.0
-    )]
+    param = [
+        LIBSVM.LIBLINEAR.Parameter(
+            solver_type,
+            eps,
+            cost,
+            Cint(0),
+            convert(Ptr{Cint}, C_NULL),
+            convert(Ptr{Float64}, C_NULL),
+            0.1,
+            0.5,
+            convert(Ptr{Float64}, C_NULL),
+            Cint(1),
+        ),
+    ]
+    problem = [LIBSVM.LIBLINEAR.Problem(Cint(max_samples), Cint(max_features), pointer(y_double), pointer(nodeptrs), -1.0)]
     labels_buf = Vector{Cint}(undef, max_classes)
     w_dim = max_classes == 2 ? 1 : max_classes
     w_buf = Vector{Float64}(undef, max_features * w_dim)
@@ -142,22 +143,21 @@ function _train_prealloc_zero!(ws::LiblinearWorkspace, X_tr::AbstractMatrix{Floa
     n_feat = size(X_tr, 1)
     n_samp = size(X_tr, 2)
 
-    @inbounds for i in 1:n_samp
-        for j in 1:n_feat
+    @inbounds for i = 1:n_samp
+        for j = 1:n_feat
             ws.nodes[j, i] = LIBSVM.LIBLINEAR.FeatureNode(Cint(j), X_tr[j, i])
         end
         ws.y_double[i] = Float64(y_tr[i])
     end
 
-    ws.problem[1] = LIBSVM.LIBLINEAR.Problem(
-        Cint(n_samp), Cint(n_feat),
-        pointer(ws.y_double), pointer(ws.nodeptrs), -1.0
-    )
+    ws.problem[1] = LIBSVM.LIBLINEAR.Problem(Cint(n_samp), Cint(n_feat), pointer(ws.y_double), pointer(ws.nodeptrs), -1.0)
 
     ptr = ccall(
-        (:train, LIBSVM.LIBLINEAR.liblinear), Ptr{LIBSVM.LIBLINEAR.Model},
+        (:train, LIBSVM.LIBLINEAR.liblinear),
+        Ptr{LIBSVM.LIBLINEAR.Model},
         (Ptr{LIBSVM.LIBLINEAR.Problem}, Ptr{LIBSVM.LIBLINEAR.Parameter}),
-        ws.problem, ws.param
+        ws.problem,
+        ws.param,
     )
     m = unsafe_load(ptr)
 
@@ -168,14 +168,7 @@ function _train_prealloc_zero!(ws::LiblinearWorkspace, X_tr::AbstractMatrix{Floa
     unsafe_copyto!(pointer(ws.w_buf), m.w, total_w)
 
     ws.labels_buf .= -1
-    ccall(
-        (:get_labels, LIBSVM.LIBLINEAR.liblinear), Cvoid,
-        (Ptr{LIBSVM.LIBLINEAR.Model}, Ptr{Cint}),
-        ptr, pointer(ws.labels_buf)
-    )
-    ccall(
-        (:free_model_content, LIBSVM.LIBLINEAR.liblinear), Cvoid,
-        (Ptr{LIBSVM.LIBLINEAR.Model},), ptr
-    )
+    ccall((:get_labels, LIBSVM.LIBLINEAR.liblinear), Cvoid, (Ptr{LIBSVM.LIBLINEAR.Model}, Ptr{Cint}), ptr, pointer(ws.labels_buf))
+    ccall((:free_model_content, LIBSVM.LIBLINEAR.liblinear), Cvoid, (Ptr{LIBSVM.LIBLINEAR.Model},), ptr)
     return ws.w_buf, ws.labels_buf, nr_c
 end

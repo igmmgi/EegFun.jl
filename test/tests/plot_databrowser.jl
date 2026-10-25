@@ -23,7 +23,7 @@ using DataFrames
         @test res.fig isa Figure
 
         # Test in-place epoch stepping
-        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol, Any}())
+        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol,Any}())
         fig = Figure()
         ax = Axis(fig[1, 1])
         state = EegFun._create_browser_state(epoch_dat, epoch_dat.layout.data.label, ax, nothing, plot_kwargs)
@@ -44,7 +44,7 @@ using DataFrames
 
     @testset "line points update once per scroll step" begin
         cdat = EegFun.create_test_continuous_data(n = 3000, n_channels = 3, seed = 1)
-        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol, Any}())
+        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol,Any}())
         fig = Figure()
         ax = Axis(fig[1, 1])
         state = EegFun._create_browser_state(cdat, cdat.layout.data.label, ax, nothing, plot_kwargs)
@@ -57,7 +57,7 @@ using DataFrames
         on(line[1]) do _
             n_updates[] += 1
         end
-        for _ in 1:5
+        for _ = 1:5
             state.view.xrange[] = state.view.xrange[] .+ 50
             line[1][]
         end
@@ -81,7 +81,7 @@ using DataFrames
         state.view.xrange[] = state.view.xrange[] .+ 25
         @test line[1][] === buf
         # ... and reallocated when it changes
-        state.view.xrange[] = first(state.view.xrange[]):(last(state.view.xrange[]) - 100)
+        state.view.xrange[] = first(state.view.xrange[]):(last(state.view.xrange[])-100)
         @test length(line[1][]) == length(state.view.xrange[])
         @test line[1][] !== buf
     end
@@ -89,7 +89,7 @@ using DataFrames
     @testset "ICA ghost lines" begin
         cdat = EegFun.create_test_continuous_data(n = 3000, n_channels = 4, seed = 2)
         ica_res = EegFun.run_ica(cdat)
-        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol, Any}())
+        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol,Any}())
         fig = Figure()
         ax = Axis(fig[1, 1])
         state = EegFun._create_browser_state(cdat, cdat.layout.data.label, ax, ica_res, plot_kwargs)
@@ -159,7 +159,7 @@ using DataFrames
 
     @testset "redraws do not stack observers" begin
         cdat = EegFun.create_test_continuous_data(n = 3000, n_channels = 4, seed = 4)
-        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol, Any}())
+        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol,Any}())
         fig = Figure()
         ax = Axis(fig[1, 1])
         state = EegFun._create_browser_state(cdat, cdat.layout.data.label, ax, nothing, plot_kwargs)
@@ -167,7 +167,7 @@ using DataFrames
         n_xrange = length(state.view.xrange.listeners)
         n_current = length(state.data.current.listeners)
         n_amp = length(state.view.amplitude_scale.listeners)
-        for _ in 1:4   # even number: back in the same butterfly mode (labels only exist outside butterfly mode)
+        for _ = 1:4   # even number: back in the same butterfly mode (labels only exist outside butterfly mode)
             EegFun._butterfly_plot!(ax, state)
         end
         @test length(state.view.xrange.listeners) == n_xrange
@@ -186,7 +186,7 @@ using DataFrames
     @testset "selected channel is visually distinct with ICA" begin
         cdat = EegFun.create_test_continuous_data(n = 3000, n_channels = 4, seed = 5)
         ica_res = EegFun.run_ica(cdat)
-        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol, Any}())
+        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol,Any}())
         fig = Figure()
         ax = Axis(fig[1, 1])
         state = EegFun._create_browser_state(cdat, cdat.layout.data.label, ax, ica_res, plot_kwargs)
@@ -220,17 +220,17 @@ using DataFrames
 
     @testset "channel repair survives filter toggle" begin
         cdat = EegFun.create_test_continuous_data(n = 3000, n_channels = 5, seed = 42)
-        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol, Any}())
+        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol,Any}())
         fig = Figure()
         ax = Axis(fig[1, 1])
         state = EegFun._create_browser_state(cdat, cdat.layout.data.label, ax, nothing, plot_kwargs)
-        
+
         ch_bad = state.channels.labels[2]
-        
+
         EegFun._repair_selected_channels!(state, [ch_bad], :spherical_spline, ax)
         @test length(state.channel_repair_history) == 1
         repaired_data = copy(state.data.current[].data[!, ch_bad])
-        
+
         # Toggle HP filter on
         EegFun._apply_hp_filter!(state, true)
         @test state.data.filter_state.hp_active[] == true
@@ -253,8 +253,8 @@ using DataFrames
         cdat = EegFun.create_test_continuous_data(n = 3000, n_channels = 4, seed = 7)
         # Run ICA on a subset of 3 channels
         ica_res = EegFun.run_ica(cdat; channel_selection = EegFun.channels(1:3))
-        
-        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol, Any}())
+
+        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol,Any}())
         fig = Figure()
         ax = Axis(fig[1, 1])
         # Browser on full data with 4 channels, but ICA on 3 channels
@@ -262,7 +262,7 @@ using DataFrames
         state.view.show_original_ica[] = true
         state.view.show_subtracted_ica[] = true
         push!(state.ica.removed_components, 1)
-        
+
         # _draw must not throw KeyError for the 4th channel
         @test_nowarn EegFun._draw(ax, state)
     end
@@ -270,7 +270,7 @@ using DataFrames
     @testset "ICA component removal with active filter matches filter after removal" begin
         cdat = EegFun.create_test_continuous_data(n = 3000, n_channels = 4, seed = 123)
         ica_res = EegFun.run_ica(cdat)
-        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol, Any}())
+        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol,Any}())
         fig = Figure()
         ax = Axis(fig[1, 1])
         state = EegFun._create_browser_state(cdat, cdat.layout.data.label, ax, ica_res, plot_kwargs)
@@ -282,7 +282,13 @@ using DataFrames
         EegFun._apply_single_ica_removal!(cdat_expected, cdat, ica_res, 1)
         sym_method = Symbol(state.data.filter_state.hp_method[])
         sym_func = Symbol(state.data.filter_state.hp_func[])
-        EegFun.highpass_filter!(cdat_expected, state.data.filter_state.hp_freq[]; filter_method = sym_method, order = state.data.filter_state.hp_order[], filter_func = sym_func)
+        EegFun.highpass_filter!(
+            cdat_expected,
+            state.data.filter_state.hp_freq[];
+            filter_method = sym_method,
+            order = state.data.filter_state.hp_order[],
+            filter_func = sym_func,
+        )
 
         for col in state.channels.labels
             diff = maximum(abs.(state.data.current[].data[!, col] .- cdat_expected.data[!, col]))
@@ -292,7 +298,7 @@ using DataFrames
 
     @testset "analysis_settings copies mutable state" begin
         cdat = EegFun.create_test_continuous_data(n = 2000, n_channels = 3, seed = 8)
-        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol, Any}())
+        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol,Any}())
         fig = Figure()
         ax = Axis(fig[1, 1])
         state = EegFun._create_browser_state(cdat, cdat.layout.data.label, ax, nothing, plot_kwargs)
@@ -310,11 +316,11 @@ using DataFrames
 
     @testset "selection zero-width edge case" begin
         cdat = EegFun.create_test_continuous_data(n = 2000, n_channels = 3, seed = 9)
-        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol, Any}())
+        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol,Any}())
         fig = Figure()
         ax = Axis(fig[1, 1])
         state = EegFun._create_browser_state(cdat, cdat.layout.data.label, ax, nothing, plot_kwargs)
-        
+
         EegFun._start_selection!(ax, state, 0.5)
         @test state.selection.active[] == true
         EegFun._finish_selection!(ax, state, 0.5)
@@ -323,7 +329,7 @@ using DataFrames
     end
 
     @testset "vector of datasets returns results" begin
-        dats = [EegFun.create_test_continuous_data(n = 500, n_channels = 2, seed = i) for i in 1:2]
+        dats = [EegFun.create_test_continuous_data(n = 500, n_channels = 2, seed = i) for i = 1:2]
         res = EegFun.plot_databrowser(dats; display_plot = false)
         @test res isa Vector{<:NamedTuple}
         @test length(res) == 2
@@ -334,7 +340,7 @@ using DataFrames
     @testset "Data - ICA line color is green with ICA" begin
         cdat = EegFun.create_test_continuous_data(n = 1000, n_channels = 3, seed = 10)
         ica_res = EegFun.run_ica(cdat)
-        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol, Any}())
+        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol,Any}())
         fig = Figure()
         ax = Axis(fig[1, 1])
         state = EegFun._create_browser_state(cdat, cdat.layout.data.label, ax, ica_res, plot_kwargs)
@@ -351,13 +357,13 @@ using DataFrames
     @testset "plot_databrowser with ICA defaults to only data shown" begin
         cdat = EegFun.create_test_continuous_data(n = 1000, n_channels = 3, seed = 11)
         ica_res = EegFun.run_ica(cdat)
-        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol, Any}())
+        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol,Any}())
         fig = Figure()
         ax = Axis(fig[1, 1])
         state = EegFun._create_browser_state(cdat, cdat.layout.data.label, ax, ica_res, plot_kwargs)
         EegFun._setup_ui(fig, ax, state, cdat, ica_res, plot_kwargs)
         EegFun._draw(ax, state)
-        
+
         # Default state: only Data is shown, not Data - ICA, nor ICA activations
         @test state.view.show_original_ica[] == true
         @test state.plot_kwargs[:show_cleaned_ica][] == false

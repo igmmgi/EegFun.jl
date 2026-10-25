@@ -175,33 +175,35 @@ function plot_tf_stats(
             sig_mask = _extract_tf_significance_mask(result, ch_idx)
             has_mask = !isnothing(sig_mask) && any(sig_mask)
         end
-        
+
         cmap = _resolve_theme_colormap(ax, colormap)
-        
+
         if !has_mask || mask_style == :none
-            hm = heatmap!(ax, time_points, frequencies, data_mat', 
-                          colormap = cmap, colorrange = cr, nan_color = :transparent)
+            hm = heatmap!(ax, time_points, frequencies, data_mat', colormap = cmap, colorrange = cr, nan_color = :transparent)
             last_hm = hm
         elseif mask_style == :alpha
-            heatmap!(ax, time_points, frequencies, data_mat', 
-                     colormap = cmap, colorrange = cr, alpha = 0.15, nan_color = :transparent)
-            
+            heatmap!(ax, time_points, frequencies, data_mat', colormap = cmap, colorrange = cr, alpha = 0.15, nan_color = :transparent)
+
             highlight = copy(data_mat)
             highlight[.!sig_mask] .= NaN
-            hm = heatmap!(ax, time_points, frequencies, highlight', 
-                          colormap = cmap, colorrange = cr, nan_color = :transparent)
+            hm = heatmap!(ax, time_points, frequencies, highlight', colormap = cmap, colorrange = cr, nan_color = :transparent)
             last_hm = hm
         elseif mask_style == :hide
             highlight = copy(data_mat)
             highlight[.!sig_mask] .= NaN
-            hm = heatmap!(ax, time_points, frequencies, highlight', 
-                          colormap = cmap, colorrange = cr, nan_color = :transparent)
+            hm = heatmap!(ax, time_points, frequencies, highlight', colormap = cmap, colorrange = cr, nan_color = :transparent)
             last_hm = hm
         elseif mask_style == :contour
-            hm = heatmap!(ax, time_points, frequencies, data_mat', 
-                          colormap = cmap, colorrange = cr, nan_color = :transparent)
+            hm = heatmap!(ax, time_points, frequencies, data_mat', colormap = cmap, colorrange = cr, nan_color = :transparent)
             last_hm = hm
-            _render_significance_contour!(ax, time_points, frequencies, sig_mask; color = significance_color, linewidth = significance_linewidth)
+            _render_significance_contour!(
+                ax,
+                time_points,
+                frequencies,
+                sig_mask;
+                color = significance_color,
+                linewidth = significance_linewidth,
+            )
         end
     end
 

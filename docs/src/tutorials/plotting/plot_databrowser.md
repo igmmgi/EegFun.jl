@@ -18,7 +18,6 @@ The databrowser is an interactive visualization tool for navigating through EEG 
 - **Zoom in/out**: Adjust time scale for detailed inspection
 - **Channel selection**: Click channels to select for analysis
 - **Region selection**: Drag to select time regions
-- **Topography scrubber**: Right-click any selected region and choose **"Topoplot"** or **"Topoplot 3D"** to open an interactive 2D or 3D scalp topography with a live time scrubber slider and real-time playback
 - **Epoch browsing**: Navigate through individual trials
 
 **Visual Overlays**:
@@ -154,6 +153,9 @@ using JLD2
 
 const DEMO_OUTPUT = "./tutorials/output/"
 mkpath(DEMO_OUTPUT)
+
+# Quick demo with bundled raw dataset and full 72-channel layout:
+# EegFun.plot_databrowser()
 
 # read raw data
 dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"));

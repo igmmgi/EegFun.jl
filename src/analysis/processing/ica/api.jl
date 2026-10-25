@@ -84,8 +84,15 @@ function run_ica(
     input_filename = filename(dat)
 
     # Dispatch to the appropriate ICA algorithm
-    ica_result =
-        _run_ica_algorithm(dat_for_ica, ica_layout, input_filename; n_components = n_components, algorithm = algorithm, params = params, rng = rng)
+    ica_result = _run_ica_algorithm(
+        dat_for_ica,
+        ica_layout,
+        input_filename;
+        n_components = n_components,
+        algorithm = algorithm,
+        params = params,
+        rng = rng,
+    )
 
     return ica_result
 end
@@ -355,4 +362,3 @@ function _run_ica_algorithm(
         )
     end
 end
-

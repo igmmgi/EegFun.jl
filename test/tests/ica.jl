@@ -185,11 +185,7 @@ using LinearAlgebra
         @test maximum(abs.(Matrix{Float64}(dat_seq.data[!, dat_seq.layout.data.label]) - orig_seq)) < 1e-10
 
         # 5. Float32 DataFrame support
-        df32 = DataFrame(
-            :time => 1:100,
-            :ch1 => Float32.(sin.(1:100)),
-            :ch2 => Float32.(cos.(1:100)),
-        )
+        df32 = DataFrame(:time => 1:100, :ch1 => Float32.(sin.(1:100)), :ch2 => Float32.(cos.(1:100)))
         lay32 = EegFun.Layout(DataFrame(:label => [:ch1, :ch2], :x => [0.0, 1.0], :y => [0.0, 0.0]), nothing, nothing, nothing)
         ica32 = EegFun.InfoIca(
             "test32",
@@ -200,7 +196,7 @@ using LinearAlgebra
             1.0,
             [0.0, 0.0],
             [:comp1, :comp2],
-            Dict{Int, Matrix{Float64}}(),
+            Dict{Int,Matrix{Float64}}(),
             lay32,
             [false, false],
         )
@@ -211,10 +207,7 @@ using LinearAlgebra
         @test isapprox(df32.ch1, orig_ch1; atol = 1e-6)
 
         # 6. Epoched data (Vector{DataFrame} and EpochData)
-        ep_dfs = [
-            DataFrame(:ch1 => randn(50), :ch2 => randn(50)),
-            DataFrame(:ch1 => randn(50), :ch2 => randn(50)),
-        ]
+        ep_dfs = [DataFrame(:ch1 => randn(50), :ch2 => randn(50)), DataFrame(:ch1 => randn(50), :ch2 => randn(50))]
         ep_dat = EegFun.EpochData("test_ep", 1, "c1", ep_dfs, lay32, 100, EegFun.AnalysisInfo())
         orig_ep_mat = Matrix(ep_dat.data[1][!, [:ch1, :ch2]])
         EegFun.subtract_ica_components!(ep_dat, ica32; component_selection = EegFun.components([1]))
@@ -224,10 +217,7 @@ using LinearAlgebra
         @test isapprox(Matrix(ep_dat.data[1][!, [:ch1, :ch2]]), orig_ep_mat; atol = 1e-10)
 
         # Unequal epoch lengths throw EegFunError
-        bad_dfs = [
-            DataFrame(:ch1 => randn(50), :ch2 => randn(50)),
-            DataFrame(:ch1 => randn(40), :ch2 => randn(40)),
-        ]
+        bad_dfs = [DataFrame(:ch1 => randn(50), :ch2 => randn(50)), DataFrame(:ch1 => randn(40), :ch2 => randn(40))]
         @test_throws EegFun.EegFunError EegFun.subtract_ica_components!(bad_dfs, ica32; component_selection = EegFun.components([1]))
     end
 
@@ -323,24 +313,24 @@ using LinearAlgebra
         X_orig = copy(X)
         prms = EegFun.IcaPrms(l_rate = 0.002)
         prms_orig = deepcopy(prms)
-        layout = EegFun.Layout(DataFrame(label=[:C1, :C2, :C3, :C4], inc=zeros(4), azi=zeros(4)), nothing, nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:C1, :C2, :C3, :C4], inc = zeros(4), azi = zeros(4)), nothing, nothing, nothing)
 
-        res = EegFun.infomax_ica(X, layout, "test"; n_components=3, params=prms, rng=MersenneTwister(1))
+        res = EegFun.infomax_ica(X, layout, "test"; n_components = 3, params = prms, rng = MersenneTwister(1))
         @test X == X_orig
         @test prms.l_rate == prms_orig.l_rate
 
         # 2. Reproducibility test with rng
-        res1 = EegFun.infomax_ica(X, layout, "test"; n_components=3, rng=MersenneTwister(123))
-        res2 = EegFun.infomax_ica(X, layout, "test"; n_components=3, rng=MersenneTwister(123))
-        @test isapprox(res1.unmixing, res2.unmixing; atol=1e-12)
+        res1 = EegFun.infomax_ica(X, layout, "test"; n_components = 3, rng = MersenneTwister(123))
+        res2 = EegFun.infomax_ica(X, layout, "test"; n_components = 3, rng = MersenneTwister(123))
+        @test isapprox(res1.unmixing, res2.unmixing; atol = 1e-12)
 
         # 3. Rank deficiency test (average referenced data has rank n_channels - 1)
-        X_avg = X .- mean(X, dims=1)
-        @test_throws EegFun.EegFunError EegFun.infomax_ica(X_avg, layout, "test"; n_components=4)
+        X_avg = X .- mean(X, dims = 1)
+        @test_throws EegFun.EegFunError EegFun.infomax_ica(X_avg, layout, "test"; n_components = 4)
 
         # 4. Dimension guards
-        @test_throws EegFun.EegFunError EegFun.infomax_ica(X, layout, "test"; n_components=0)
-        @test_throws EegFun.EegFunError EegFun.infomax_ica(X, layout, "test"; n_components=5)
+        @test_throws EegFun.EegFunError EegFun.infomax_ica(X, layout, "test"; n_components = 0)
+        @test_throws EegFun.EegFunError EegFun.infomax_ica(X, layout, "test"; n_components = 5)
 
         # 5. Extended Infomax on sub-Gaussian sources (Lee et al. 1999 rule)
         N = 5000
@@ -349,8 +339,8 @@ using LinearAlgebra
         S = Matrix(transpose(hcat(s1, s2)))
         A = [0.8 0.6; 0.3 0.9]
         X_sub = A * S
-        layout2 = EegFun.Layout(DataFrame(label=[:C1, :C2], inc=zeros(2), azi=zeros(2)), nothing, nothing, nothing)
-        res_ext = EegFun.infomax_extended_ica(X_sub, layout2, "test"; n_components=2, rng=MersenneTwister(42))
+        layout2 = EegFun.Layout(DataFrame(label = [:C1, :C2], inc = zeros(2), azi = zeros(2)), nothing, nothing, nothing)
+        res_ext = EegFun.infomax_extended_ica(X_sub, layout2, "test"; n_components = 2, rng = MersenneTwister(42))
         S_rec = res_ext.unmixing * ((X_sub .- res_ext.mean) ./ res_ext.scale)
         c11 = abs(cor(S_rec[1, :], s1))
         c12 = abs(cor(S_rec[1, :], s2))
@@ -366,7 +356,7 @@ using LinearAlgebra
         s_uniform = rand(MersenneTwister(4), N) .- 0.5
         S_mix = Matrix(transpose(hcat(s_laplace, s_uniform)))
         X_mix = A * S_mix
-        res_mix = EegFun.infomax_extended_ica(X_mix, layout2, "test"; n_components=2, rng=MersenneTwister(99))
+        res_mix = EegFun.infomax_extended_ica(X_mix, layout2, "test"; n_components = 2, rng = MersenneTwister(99))
         S_rec_mix = res_mix.unmixing * ((X_mix .- res_mix.mean) ./ res_mix.scale)
         cm11 = abs(cor(S_rec_mix[1, :], s_laplace))
         cm12 = abs(cor(S_rec_mix[1, :], s_uniform))
@@ -384,19 +374,19 @@ using LinearAlgebra
         X_orig = copy(X)
         prms = EegFun.IcaPrms()
         prms_orig = deepcopy(prms)
-        layout = EegFun.Layout(DataFrame(label=[:C1, :C2, :C3, :C4], inc=zeros(4), azi=zeros(4)), nothing, nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:C1, :C2, :C3, :C4], inc = zeros(4), azi = zeros(4)), nothing, nothing, nothing)
 
-        res_pic = EegFun.picard_ica(X, layout, "test"; n_components=3, params=prms)
+        res_pic = EegFun.picard_ica(X, layout, "test"; n_components = 3, params = prms)
         @test X == X_orig
         @test prms.default_stop == prms_orig.default_stop
 
         # 2. Rank deficiency test (average referenced data has rank n_channels - 1)
-        X_avg = X .- mean(X, dims=1)
-        @test_throws EegFun.EegFunError EegFun.picard_ica(X_avg, layout, "test"; n_components=4)
+        X_avg = X .- mean(X, dims = 1)
+        @test_throws EegFun.EegFunError EegFun.picard_ica(X_avg, layout, "test"; n_components = 4)
 
         # 3. Dimension guards
-        @test_throws EegFun.EegFunError EegFun.picard_ica(X, layout, "test"; n_components=0)
-        @test_throws EegFun.EegFunError EegFun.picard_ica(X, layout, "test"; n_components=5)
+        @test_throws EegFun.EegFunError EegFun.picard_ica(X, layout, "test"; n_components = 0)
+        @test_throws EegFun.EegFunError EegFun.picard_ica(X, layout, "test"; n_components = 5)
 
         # 4. Extended Picard on mixed super-Gaussian (Laplace) and sub-Gaussian (Uniform) sources
         N = 5000
@@ -406,9 +396,9 @@ using LinearAlgebra
         S_mix = Matrix(transpose(hcat(s_laplace, s_uniform)))
         A = [0.8 0.6; 0.3 0.9]
         X_mix = A * S_mix
-        layout2 = EegFun.Layout(DataFrame(label=[:C1, :C2], inc=zeros(2), azi=zeros(2)), nothing, nothing, nothing)
+        layout2 = EegFun.Layout(DataFrame(label = [:C1, :C2], inc = zeros(2), azi = zeros(2)), nothing, nothing, nothing)
 
-        res_ext_pic = EegFun.picard_ica(X_mix, layout2, "test"; n_components=2, extended=true)
+        res_ext_pic = EegFun.picard_ica(X_mix, layout2, "test"; n_components = 2, extended = true)
         S_rec_mix = res_ext_pic.unmixing * ((X_mix .- res_ext_pic.mean) ./ res_ext_pic.scale)
         c11 = abs(cor(S_rec_mix[1, :], s_laplace))
         c12 = abs(cor(S_rec_mix[1, :], s_uniform))
@@ -420,7 +410,7 @@ using LinearAlgebra
         @test count(res_ext_pic.is_sub_gaussian) == 1
 
         # 5. Standard Picard (extended=false) marks all sources as super-Gaussian
-        res_std_pic = EegFun.picard_ica(X_mix, layout2, "test"; n_components=2, extended=false)
+        res_std_pic = EegFun.picard_ica(X_mix, layout2, "test"; n_components = 2, extended = false)
         @test all(.!res_std_pic.is_sub_gaussian)
     end
 
@@ -431,24 +421,24 @@ using LinearAlgebra
         X_orig = copy(X)
         prms = EegFun.IcaPrms(amica_lrate = 0.05)
         prms_orig = deepcopy(prms)
-        layout = EegFun.Layout(DataFrame(label=[:C1, :C2, :C3, :C4], inc=zeros(4), azi=zeros(4)), nothing, nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:C1, :C2, :C3, :C4], inc = zeros(4), azi = zeros(4)), nothing, nothing, nothing)
 
-        res_amica = EegFun.amica_ica(X, layout, "test"; n_components=3, params=prms, rng=MersenneTwister(1))
+        res_amica = EegFun.amica_ica(X, layout, "test"; n_components = 3, params = prms, rng = MersenneTwister(1))
         @test X == X_orig
         @test prms.amica_lrate == prms_orig.amica_lrate
 
         # 2. Reproducibility test with rng
-        res1 = EegFun.amica_ica(X, layout, "test"; n_components=3, rng=MersenneTwister(123))
-        res2 = EegFun.amica_ica(X, layout, "test"; n_components=3, rng=MersenneTwister(123))
-        @test isapprox(res1.unmixing, res2.unmixing; atol=1e-12)
+        res1 = EegFun.amica_ica(X, layout, "test"; n_components = 3, rng = MersenneTwister(123))
+        res2 = EegFun.amica_ica(X, layout, "test"; n_components = 3, rng = MersenneTwister(123))
+        @test isapprox(res1.unmixing, res2.unmixing; atol = 1e-12)
 
         # 3. Rank deficiency test (average referenced data has rank n_channels - 1)
-        X_avg = X .- mean(X, dims=1)
-        @test_throws EegFun.EegFunError EegFun.amica_ica(X_avg, layout, "test"; n_components=4)
+        X_avg = X .- mean(X, dims = 1)
+        @test_throws EegFun.EegFunError EegFun.amica_ica(X_avg, layout, "test"; n_components = 4)
 
         # 4. Dimension guards
-        @test_throws EegFun.EegFunError EegFun.amica_ica(X, layout, "test"; n_components=0)
-        @test_throws EegFun.EegFunError EegFun.amica_ica(X, layout, "test"; n_components=5)
+        @test_throws EegFun.EegFunError EegFun.amica_ica(X, layout, "test"; n_components = 0)
+        @test_throws EegFun.EegFunError EegFun.amica_ica(X, layout, "test"; n_components = 5)
 
         # 5. Separation of mixed super-Gaussian (Laplace) and sub-Gaussian (Uniform) sources
         N = 5000
@@ -458,9 +448,9 @@ using LinearAlgebra
         S_mix = Matrix(transpose(hcat(s_laplace, s_uniform)))
         A = [0.8 0.6; 0.3 0.9]
         X_mix = A * S_mix
-        layout2 = EegFun.Layout(DataFrame(label=[:C1, :C2], inc=zeros(2), azi=zeros(2)), nothing, nothing, nothing)
+        layout2 = EegFun.Layout(DataFrame(label = [:C1, :C2], inc = zeros(2), azi = zeros(2)), nothing, nothing, nothing)
 
-        res_mix = EegFun.amica_ica(X_mix, layout2, "test"; n_components=2, rng=MersenneTwister(42))
+        res_mix = EegFun.amica_ica(X_mix, layout2, "test"; n_components = 2, rng = MersenneTwister(42))
         S_rec_mix = res_mix.unmixing * ((X_mix .- res_mix.mean) ./ res_mix.scale)
         cm11 = abs(cor(S_rec_mix[1, :], s_laplace))
         cm12 = abs(cor(S_rec_mix[1, :], s_uniform))
@@ -473,7 +463,7 @@ using LinearAlgebra
 
         # 6. Rollback safeguard on extreme learning rate
         prms_wild = EegFun.IcaPrms(amica_lrate = 1e8, amica_max_iter = 5)
-        res_wild = EegFun.amica_ica(X_mix, layout2, "test"; n_components=2, params=prms_wild, rng=MersenneTwister(1))
+        res_wild = EegFun.amica_ica(X_mix, layout2, "test"; n_components = 2, params = prms_wild, rng = MersenneTwister(1))
         @test all(isfinite, res_wild.unmixing)
         @test all(isfinite, res_wild.mixing)
     end
@@ -494,7 +484,7 @@ using LinearAlgebra
 
         # 3. ECG polarity invariance: unidirectional peak finder detects peaks in both signs
         ts = zeros(2000)
-        for idx in 100:250:1900
+        for idx = 100:250:1900
             ts[idx] = 8.0
         end
         pk_pos = EegFun._find_unidirectional_peaks(ts; min_prominence_std = 3.0)
@@ -517,13 +507,23 @@ using LinearAlgebra
         t_128 = (0:2559) ./ 128.0
         noise_50hz = sin.(2π * 50.0 .* t_128)
         df_128 = DataFrame(:C1 => noise_50hz, :C2 => randn(MersenneTwister(1), 2560))
-        layout_128 = EegFun.Layout(DataFrame(label=[:C1, :C2], inc=zeros(2), azi=zeros(2)), nothing, nothing, nothing)
+        layout_128 = EegFun.Layout(DataFrame(label = [:C1, :C2], inc = zeros(2), azi = zeros(2)), nothing, nothing, nothing)
         cont_128 = EegFun.ContinuousData("test_128", df_128, layout_128, 128.0, EegFun.AnalysisInfo())
-        ica_128 = EegFun.InfoIca("test", [1.0 0.0; 0.0 1.0], [1.0 0.0; 0.0 1.0], [1.0 0.0; 0.0 1.0], [0.5, 0.5], 1.0, zeros(2), [:IC1, :IC2], Dict{Int,Matrix{Float64}}(), layout_128, falses(2))
+        ica_128 = EegFun.InfoIca(
+            "test",
+            [1.0 0.0; 0.0 1.0],
+            [1.0 0.0; 0.0 1.0],
+            [1.0 0.0; 0.0 1.0],
+            [0.5, 0.5],
+            1.0,
+            zeros(2),
+            [:IC1, :IC2],
+            Dict{Int,Matrix{Float64}}(),
+            layout_128,
+            falses(2),
+        )
         ln_comps, ln_df = EegFun.identify_line_noise_components(cont_128, ica_128; line_freq = 50.0, z_threshold = 0.5)
         @test 1 in ln_comps # Found even though 2nd harmonic (100 Hz) is above Nyquist (64 Hz)
     end
 
 end
-
-

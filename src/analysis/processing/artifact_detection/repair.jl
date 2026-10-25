@@ -220,6 +220,3 @@ function repair_artifacts_spherical_spline!(dat::EpochData, artifacts::EpochReje
 
     return dat
 end
-
-
-

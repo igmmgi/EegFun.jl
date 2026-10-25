@@ -310,4 +310,3 @@ function n_step_value(
         return DataFrame(channel = selected_channels, n_step = counts)
     end
 end
-

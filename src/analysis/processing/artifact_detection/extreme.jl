@@ -354,5 +354,3 @@ function _n_extreme_value(df::DataFrame, channels::AbstractVector{Symbol}, thres
     end
     return counts
 end
-
-

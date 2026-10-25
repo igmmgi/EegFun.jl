@@ -65,7 +65,7 @@ function _build_tf_independent_test_data(;
         push!(tfs, tf)
     end
     # Group 2: condition 2
-    for p = (n_group1 + 1):(n_group1 + n_group2)
+    for p = (n_group1+1):(n_group1+n_group2)
         tf = EegFun.create_test_tf_data(
             file = "participant$p",
             condition = 2,
@@ -798,12 +798,8 @@ end
         @test_throws EegFun.EegFunError EegFun.prepare_stats(tfs_too_few; design = :independent)
 
         # _compute_t_matrix_tf with independent design
-        t_mat, df, p_mat = EegFun._compute_t_matrix_tf(
-            prepared.analysis.data[1],
-            prepared.analysis.data[2],
-            :independent;
-            compute_p_values = true,
-        )
+        t_mat, df, p_mat =
+            EegFun._compute_t_matrix_tf(prepared.analysis.data[1], prepared.analysis.data[2], :independent; compute_p_values = true)
         expected_df = Float64(n_group1 + n_group2 - 2)
         @test df == expected_df
         @test size(t_mat) == (3, 4, 5)  # n_channels × n_freqs × n_times
@@ -832,17 +828,35 @@ end
         prepared = EegFun.prepare_stats(tfs; design = :paired)
 
         # Non-parametric common thresholding with :both tails
-        res_both = EegFun.permutation_test(prepared; threshold_method = :nonparametric_common, tail = :both, n_permutations = 15, cluster_type = :temporal)
+        res_both = EegFun.permutation_test(
+            prepared;
+            threshold_method = :nonparametric_common,
+            tail = :both,
+            n_permutations = 15,
+            cluster_type = :temporal,
+        )
         @test res_both isa EegFun.TFClusterPermutationResult
         @test res_both.test_info.tail == :both
 
         # Non-parametric common thresholding with :right tail
-        res_right = EegFun.permutation_test(prepared; threshold_method = :nonparametric_common, tail = :right, n_permutations = 15, cluster_type = :temporal)
+        res_right = EegFun.permutation_test(
+            prepared;
+            threshold_method = :nonparametric_common,
+            tail = :right,
+            n_permutations = 15,
+            cluster_type = :temporal,
+        )
         @test res_right isa EegFun.TFClusterPermutationResult
         @test res_right.test_info.tail == :right
 
         # Non-parametric common thresholding with :left tail
-        res_left = EegFun.permutation_test(prepared; threshold_method = :nonparametric_common, tail = :left, n_permutations = 15, cluster_type = :temporal)
+        res_left = EegFun.permutation_test(
+            prepared;
+            threshold_method = :nonparametric_common,
+            tail = :left,
+            n_permutations = 15,
+            cluster_type = :temporal,
+        )
         @test res_left isa EegFun.TFClusterPermutationResult
         @test res_left.test_info.tail == :left
     end

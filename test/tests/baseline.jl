@@ -322,4 +322,3 @@ using EegFun
     EegFun.baseline!(tf_vec, (0.0, 0.2); method = :relative)
     @test tf_vec[1].baseline.method == :relative
 end
-

@@ -66,9 +66,10 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}
     end
 
     # Check if the data follows the standard regular grid (time outer, freq inner)
-    is_regular_grid = (nrow(tf_data.data_power) == n_freqs * n_times) &&
-                      (n_freqs > 0 && n_times > 0) &&
-                      (tf_data.data_power.time[1] == tf_data.data_power.time[min(n_freqs, end)])
+    is_regular_grid =
+        (nrow(tf_data.data_power) == n_freqs * n_times) &&
+        (n_freqs > 0 && n_times > 0) &&
+        (tf_data.data_power.time[1] == tf_data.data_power.time[min(n_freqs, end)])
 
     if is_regular_grid
         base_range = baseline_start_idx:baseline_end_idx

@@ -455,8 +455,9 @@ function plot_topography_stats(
     end
     time_mask = t_start .<= all_time_points .<= t_end
     time_indices = findall(time_mask)
-    isempty(time_indices) &&
-        @minimal_error("No time points found in range ($t_start, $t_end). Data range: $(first(all_time_points)) to $(last(all_time_points))")
+    isempty(time_indices) && @minimal_error(
+        "No time points found in range ($t_start, $t_end). Data range: $(first(all_time_points)) to $(last(all_time_points))"
+    )
 
     # Divide time into bins
     n_topos = min(n_topos, length(time_indices))
@@ -491,12 +492,8 @@ function plot_topography_stats(
             bin_freqs = all_frequencies[freq_indices]
             bin_times = all_time_points[bin_indices]
             row_indices = _tf_filter_row_indices(result.data[1].data_power, bin_freqs, bin_times)
-            topo_values[i] = _tf_extract_channel_difference_means(
-                result.data[1].data_power,
-                result.data[2].data_power,
-                electrodes,
-                row_indices,
-            )
+            topo_values[i] =
+                _tf_extract_channel_difference_means(result.data[1].data_power, result.data[2].data_power, electrodes, row_indices)
         end
 
         # Significance: proportion of significant freq×time bins per channel in this window
@@ -521,7 +518,8 @@ function plot_topography_stats(
         n_rows, n_cols = _best_rect(n_topos)
     else
         n_rows, n_cols = dims
-        n_rows * n_cols < n_topos && @minimal_error("Grid dimensions ($n_rows × $n_cols) provide $(n_rows * n_cols) cells but need $n_topos")
+        n_rows * n_cols < n_topos &&
+            @minimal_error("Grid dimensions ($n_rows × $n_cols) provide $(n_rows * n_cols) cells but need $n_topos")
     end
 
     # Create figure

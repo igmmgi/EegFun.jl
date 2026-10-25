@@ -43,12 +43,22 @@ using EegFun
     end
 
     @testset "baseline_interval and legend_kwargs" begin
-        res_bl = EegFun.plot_epochs(dat; baseline_interval = (0.0, 0.2), legend_kwargs = (; framevisible = false), layout = :grid, display_plot = false)
+        res_bl = EegFun.plot_epochs(
+            dat;
+            baseline_interval = (0.0, 0.2),
+            legend_kwargs = (; framevisible = false),
+            layout = :grid,
+            display_plot = false,
+        )
         @test res_bl.fig isa Figure
     end
 
     @testset "empty data check" begin
-        @test_throws EegFun.EegFunError EegFun.plot_epochs(dat; condition_selection = EegFun.conditions("nonexistent"), display_plot = false)
+        @test_throws EegFun.EegFunError EegFun.plot_epochs(
+            dat;
+            condition_selection = EegFun.conditions("nonexistent"),
+            display_plot = false,
+        )
     end
 
     @testset "Float32 data support" begin

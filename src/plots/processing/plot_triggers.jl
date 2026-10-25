@@ -150,21 +150,15 @@ function _plot_trigger_vertical_lines!(ax::Axis, times::Vector{Float64}, y_posit
     ys = Vector{Float64}(undef, 3 * N)
     offset = PLOT_TRIGGERS_KWARGS[:line_offset][1]
     @inbounds for (i, (xpos, ypos)) in enumerate(zip(times, y_positions))
-        idx = 3 * i - 2
-        xs[idx] = xpos
-        xs[idx + 1] = xpos
-        xs[idx + 2] = NaN
-        ys[idx] = ypos - offset
-        ys[idx + 1] = ypos + offset
-        ys[idx + 2] = NaN
+        idx       = 3 * i - 2
+        xs[idx]   = xpos
+        xs[idx+1] = xpos
+        xs[idx+2] = NaN
+        ys[idx]   = ypos - offset
+        ys[idx+1] = ypos + offset
+        ys[idx+2] = NaN
     end
-    lines!(
-        ax,
-        xs,
-        ys,
-        color = :black,
-        linewidth = PLOT_TRIGGERS_KWARGS[:linewidth_trigger][1],
-    )
+    lines!(ax, xs, ys, color = :black, linewidth = PLOT_TRIGGERS_KWARGS[:linewidth_trigger][1])
 end
 
 """
@@ -537,21 +531,15 @@ function _plot_trigger_events!(
         xs = Vector{Float64}(undef, 3 * N)
         ys = Vector{Float64}(undef, 3 * N)
         @inbounds for (i, t) in enumerate(trigger_times)
-            idx = 3 * i - 2
-            xs[idx] = t
-            xs[idx + 1] = t
-            xs[idx + 2] = NaN
-            ys[idx] = 0.0
-            ys[idx + 1] = event_line_height
-            ys[idx + 2] = NaN
+            idx       = 3 * i - 2
+            xs[idx]   = t
+            xs[idx+1] = t
+            xs[idx+2] = NaN
+            ys[idx]   = 0.0
+            ys[idx+1] = event_line_height
+            ys[idx+2] = NaN
         end
-        lines!(
-            ax,
-            xs,
-            ys,
-            color = :black,
-            linewidth = PLOT_TRIGGERS_KWARGS[:event_line_width][1],
-        )
+        lines!(ax, xs, ys, color = :black, linewidth = PLOT_TRIGGERS_KWARGS[:event_line_width][1])
 
         # Vectorized trigger code text
         text!(

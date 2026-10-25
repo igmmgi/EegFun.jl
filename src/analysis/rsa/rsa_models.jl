@@ -115,11 +115,7 @@ Create an RDM from a feature matrix [conditions × features] or a similarity mat
 # Returns
 - `rdm::Matrix{Float64}`: RDM matrix [condition × condition]
 """
-function create_rdm(
-    data_matrix::AbstractMatrix{<:Real};
-    dissimilarity_measure::Symbol = :correlation,
-    is_similarity::Bool = false,
-)
+function create_rdm(data_matrix::AbstractMatrix{<:Real}; dissimilarity_measure::Symbol = :correlation, is_similarity::Bool = false)
     if is_similarity
         # Normalize to [0, 1] and invert (similarity -> dissimilarity)
         max_val = maximum(data_matrix)
@@ -129,7 +125,7 @@ function create_rdm(
         end
         normalized = (data_matrix .- min_val) ./ (max_val - min_val)
         rdm = 1.0 .- normalized
-        for i in 1:size(rdm, 1)
+        for i = 1:size(rdm, 1)
             rdm[i, i] = 0.0
         end
         return rdm

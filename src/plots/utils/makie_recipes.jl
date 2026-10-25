@@ -5,7 +5,7 @@ import Makie
 function Makie.convert_arguments(P::Makie.PointBased, dat::SingleDataFrameEeg, channel::Symbol)
     times_vec = dat.data.time
     y_vec = dat.data[!, channel]
-    
+
     # Delegate back to Makie's standard conversion for 1D arrays
     return Makie.convert_arguments(P, times_vec, y_vec)
 end
@@ -19,14 +19,14 @@ function Makie.convert_arguments(P::Type{<:Makie.Series}, dat::MultiDataFrameEeg
     if isnothing(c_idx)
         @minimal_error("Channel $channel not found in data.")
     end
-    
+
     times_vec = dat.data[1].time
-    
+
     # Array(dat) returns (epochs × samples × channels)
     # Extract the specific channel: (epochs × samples)
     # Makie's series expects (N_series × N_points)
     y_matrix = Array(dat)[:, :, c_idx]
-    
+
     return Makie.convert_arguments(P, times_vec, y_matrix)
 end
 

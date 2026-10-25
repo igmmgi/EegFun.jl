@@ -75,8 +75,9 @@ Base.getindex(dat::SingleDataFrameEeg, ci::CartesianIndex{2}) = dat[ci[1], ci[2]
 Base.getindex(dat::MultiDataFrameEeg, ci::CartesianIndex{3}) = dat[ci[1], ci[2], ci[3]]
 
 # Shorthand channel subsetting
-Base.getindex(dat::EegData, chan::Union{Symbol, AbstractString}) = subset(dat, channel_selection = channels(Symbol(chan)))
-Base.getindex(dat::EegData, chans::AbstractVector{<:Union{Symbol, AbstractString}}) = subset(dat, channel_selection = channels(Symbol.(chans)))
+Base.getindex(dat::EegData, chan::Union{Symbol,AbstractString}) = subset(dat, channel_selection = channels(Symbol(chan)))
+Base.getindex(dat::EegData, chans::AbstractVector{<:Union{Symbol,AbstractString}}) =
+    subset(dat, channel_selection = channels(Symbol.(chans)))
 # === Base Iteration Interface ===
 Base.iterate(dat::MultiDataFrameEeg, state = 1) = state > length(dat.data) ? nothing : (dat.data[state], state + 1)
 Base.length(dat::MultiDataFrameEeg) = length(dat.data)
@@ -198,8 +199,8 @@ Base.parent(dat::MultiDataFrameEeg) = dat.data
 
 
 # === Channel Membership & Keys ===
-Base.in(chan::Union{Symbol, AbstractString}, dat::EegData) = Symbol(chan) in channel_labels(dat)
-Base.haskey(dat::EegData, chan::Union{Symbol, AbstractString}) = Symbol(chan) in channel_labels(dat)
+Base.in(chan::Union{Symbol,AbstractString}, dat::EegData) = Symbol(chan) in channel_labels(dat)
+Base.haskey(dat::EegData, chan::Union{Symbol,AbstractString}) = Symbol(chan) in channel_labels(dat)
 Base.keys(dat::EegData) = channel_labels(dat)
 
 # === Equality and Approximations ===
@@ -241,8 +242,9 @@ end
 Base.isapprox(::EegData, ::EegData; kwargs...) = false
 
 # === Base.summary ===
-Base.summary(dat::SingleDataFrameEeg) = "$(n_samples(dat)) timepoints × $(n_channels(dat)) channels $(nameof(typeof(dat))) (\"$(dat.file)\")"
-Base.summary(dat::MultiDataFrameEeg) = "$(n_epochs(dat)) epochs × $(n_samples(dat)) timepoints × $(n_channels(dat)) channels $(nameof(typeof(dat))) (\"$(dat.file)\")"
-
-
-
+Base.summary(
+    dat::SingleDataFrameEeg,
+) = "$(n_samples(dat)) timepoints × $(n_channels(dat)) channels $(nameof(typeof(dat))) (\"$(dat.file)\")"
+Base.summary(
+    dat::MultiDataFrameEeg,
+) = "$(n_epochs(dat)) epochs × $(n_samples(dat)) timepoints × $(n_channels(dat)) channels $(nameof(typeof(dat))) (\"$(dat.file)\")"

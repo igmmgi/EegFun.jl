@@ -105,19 +105,10 @@ function plot_topography_3d(
     end
 
     if scrubber
-        dat_subset = subset(
-            dat,
-            channel_selection = channel_selection,
-            sample_selection = sample_selection,
-            interval_selection = interval_selection,
-        )
+        dat_subset =
+            subset(dat, channel_selection = channel_selection, sample_selection = sample_selection, interval_selection = interval_selection)
         if nrow(dat_subset.data) > 1
-            return _plot_topography_3d_scrubber(
-                dat_subset;
-                display_plot = display_plot,
-                interactive = interactive,
-                kwargs...,
-            )
+            return _plot_topography_3d_scrubber(dat_subset; display_plot = display_plot, interactive = interactive, kwargs...)
         end
     end
 
@@ -298,12 +289,7 @@ end
 Internal interactive 3D topography scrubber window with time slider, real-time playback,
 and amplitude scaling controls.
 """
-function _plot_topography_3d_scrubber(
-    dat::SingleDataFrameEeg;
-    display_plot = true,
-    interactive = true,
-    kwargs...,
-)
+function _plot_topography_3d_scrubber(dat::SingleDataFrameEeg; display_plot = true, interactive = true, kwargs...)
     layout = dat.layout
     if !hasproperty(layout.data, :inc) || !hasproperty(layout.data, :azi)
         @minimal_warning "Cannot create 3D topographic plot: layout missing spherical coordinates (:inc, :azi)."
@@ -553,4 +539,3 @@ function _plot_topography_3d_scrubber(
     _set_window_title("Makie")
     return (fig = fig, axes = [ax], screen = screen)
 end
-

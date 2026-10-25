@@ -229,11 +229,14 @@ function plot_epochs(
 
         # Compute colors - need to account for number of channels when in :single layout (only if not averaging channels)
         n_conditions = length(dat_subset)
-        n_channels_for_colors = (layout == :single && length(all_plot_channels) > 1 && !plot_kwargs[:average_channels]) ? length(all_plot_channels) : 1
-        color_cycle = haskey(Makie.current_default_theme(), :palette) ? Makie.current_default_theme()[:palette][:color][] : Makie.wong_colors()
+        n_channels_for_colors =
+            (layout == :single && length(all_plot_channels) > 1 && !plot_kwargs[:average_channels]) ? length(all_plot_channels) : 1
+        color_cycle =
+            haskey(Makie.current_default_theme(), :palette) ? Makie.current_default_theme()[:palette][:color][] : Makie.wong_colors()
         resolved_colormap =
             isnothing(plot_kwargs[:colormap]) ?
-            (haskey(Makie.current_default_theme(), :colormap) ? Makie.current_default_theme()[:colormap][] : nothing) : plot_kwargs[:colormap]
+            (haskey(Makie.current_default_theme(), :colormap) ? Makie.current_default_theme()[:colormap][] : nothing) :
+            plot_kwargs[:colormap]
         condition_colors_list = _compute_dataset_colors(
             plot_kwargs[:color],
             n_conditions,
@@ -263,133 +266,136 @@ function plot_epochs(
             line_refs = [Dict{Int,Dict{Symbol,Any}}() for _ = 1:n_axes]
         end
 
-    if plot_kwargs[:average_channels]
-        ax = Axis(fig[1, 1])
-        push!(axes, ax)
-        ax_line_refs = plot_kwargs[:interactive] ? line_refs[1] : nothing
-
-        _plot_epochs_conditions_on_axis!(
-            ax,
-            dat_subset,
-            :avg,
-            condition_colors_list,
-            plot_kwargs,
-            ax_line_refs;
-            dat_subset_avg = dat_subset_avg,
-            time_cat_list = time_cat_list,
-        )
-
-        # Add legend
-        _add_epochs_legend!(ax, [:avg], dat_subset, plot_kwargs)
-
-        # Set axis properties
-        if length(all_plot_channels) == 1
-            ax.title = string(all_plot_channels[1])
-        else
-            ax.title = "Avg: $(_print_vector(all_plot_channels, max_length = 8, n_ends = 3))"
-        end
-        _finalize_epochs_axis!(ax, plot_kwargs)
-
-    else # Multi-channel layout (single, grid, topo)
-
-        # Determine layout type
-        if layout == :single
+        if plot_kwargs[:average_channels]
             ax = Axis(fig[1, 1])
             push!(axes, ax)
             ax_line_refs = plot_kwargs[:interactive] ? line_refs[1] : nothing
 
-            # Plot all conditions for each channel
-            for (ch_idx, ch) in enumerate(all_plot_channels)
-                ch_colors = [condition_colors_list[length(all_plot_channels) > 1 ? ((ci - 1) * length(all_plot_channels) + ch_idx) : ci] for ci in 1:length(dat_subset)]
-                channel_suffix = length(all_plot_channels) > 1 ? " ($ch)" : ""
-                _plot_epochs_conditions_on_axis!(
-                    ax,
-                    dat_subset,
-                    ch,
-                    ch_colors,
-                    plot_kwargs,
-                    ax_line_refs;
-                    dat_subset_avg = dat_subset_avg,
-                    time_cat_list = time_cat_list,
-                    channel_suffix = channel_suffix,
-                )
-            end
+            _plot_epochs_conditions_on_axis!(
+                ax,
+                dat_subset,
+                :avg,
+                condition_colors_list,
+                plot_kwargs,
+                ax_line_refs;
+                dat_subset_avg = dat_subset_avg,
+                time_cat_list = time_cat_list,
+            )
 
             # Add legend
-            _add_epochs_legend!(ax, all_plot_channels, dat_subset, plot_kwargs)
+            _add_epochs_legend!(ax, [:avg], dat_subset, plot_kwargs)
 
             # Set axis properties
+            if length(all_plot_channels) == 1
+                ax.title = string(all_plot_channels[1])
+            else
+                ax.title = "Avg: $(_print_vector(all_plot_channels, max_length = 8, n_ends = 3))"
+            end
             _finalize_epochs_axis!(ax, plot_kwargs)
 
-        elseif layout == :grid
-            # Use layout_grid_dims if provided, otherwise calculate best rectangle
-            grid_dims = plot_layout.type == :grid ? Tuple(plot_layout.dims) : _best_rect(length(all_plot_channels))
-            _plot_epochs_grid_multi!(
+        else # Multi-channel layout (single, grid, topo)
+
+            # Determine layout type
+            if layout == :single
+                ax = Axis(fig[1, 1])
+                push!(axes, ax)
+                ax_line_refs = plot_kwargs[:interactive] ? line_refs[1] : nothing
+
+                # Plot all conditions for each channel
+                for (ch_idx, ch) in enumerate(all_plot_channels)
+                    ch_colors = [
+                        condition_colors_list[length(all_plot_channels) > 1 ? ((ci - 1) * length(all_plot_channels) + ch_idx) : ci] for
+                        ci = 1:length(dat_subset)
+                    ]
+                    channel_suffix = length(all_plot_channels) > 1 ? " ($ch)" : ""
+                    _plot_epochs_conditions_on_axis!(
+                        ax,
+                        dat_subset,
+                        ch,
+                        ch_colors,
+                        plot_kwargs,
+                        ax_line_refs;
+                        dat_subset_avg = dat_subset_avg,
+                        time_cat_list = time_cat_list,
+                        channel_suffix = channel_suffix,
+                    )
+                end
+
+                # Add legend
+                _add_epochs_legend!(ax, all_plot_channels, dat_subset, plot_kwargs)
+
+                # Set axis properties
+                _finalize_epochs_axis!(ax, plot_kwargs)
+
+            elseif layout == :grid
+                # Use layout_grid_dims if provided, otherwise calculate best rectangle
+                grid_dims = plot_layout.type == :grid ? Tuple(plot_layout.dims) : _best_rect(length(all_plot_channels))
+                _plot_epochs_grid_multi!(
+                    fig,
+                    axes,
+                    dat_subset,
+                    all_plot_channels,
+                    grid_dims,
+                    condition_colors_list,
+                    plot_kwargs,
+                    line_refs;
+                    dat_subset_avg = dat_subset_avg,
+                    time_cat_list = time_cat_list,
+                )
+
+            elseif layout == :topo
+                _plot_epochs_topo_multi!(
+                    fig,
+                    axes,
+                    dat_subset,
+                    all_plot_channels,
+                    condition_colors_list,
+                    plot_kwargs,
+                    line_refs;
+                    dat_subset_avg = dat_subset_avg,
+                    time_cat_list = time_cat_list,
+                    plot_layout = plot_layout,
+                )
+            end
+        end
+
+        # Setup interactivity if requested
+        if plot_kwargs[:interactive]
+            _setup_shared_interactivity!(fig, axes, :epochs; zoom_step = plot_kwargs[:zoom_step])
+
+            # Disable default interactions that conflict with our custom selection (all axes)
+            for ax in axes
+                deregister_interaction!(ax, :rectanglezoom)
+            end
+
+            # Set up selection system for all axes (will work with linked axes)
+            selection_state =
+                SharedSelectionState(axes; selection_color = plot_kwargs[:selection_color], selection_alpha = plot_kwargs[:selection_alpha])
+
+            # Set up control panel (press 'c' to open) - must be before selection to capture condition_checked
+            condition_checked_ref = Ref{Union{Vector{Observable{Bool}},Nothing}}(nothing)
+            _setup_epochs_control_panel!(
                 fig,
-                axes,
                 dat_subset,
-                all_plot_channels,
-                grid_dims,
-                condition_colors_list,
-                plot_kwargs,
-                line_refs;
-                dat_subset_avg = dat_subset_avg,
-                time_cat_list = time_cat_list,
+                dat_subset_avg,
+                axes,
+                get(plot_kwargs, :baseline_interval, nothing),
+                line_refs,
+                condition_checked_ref,
             )
 
-        elseif layout == :topo
-            _plot_epochs_topo_multi!(
-                fig,
-                axes,
-                dat_subset,
-                all_plot_channels,
-                condition_colors_list,
-                plot_kwargs,
-                line_refs;
-                dat_subset_avg = dat_subset_avg,
-                time_cat_list = time_cat_list,
-                plot_layout = plot_layout,
-            )
+            # Create right-click handler that has access to condition visibility
+            right_click_handler =
+                (selection_state, mouse_x, data) -> _handle_epochs_right_click!(selection_state, mouse_x, data, condition_checked_ref)
+
+            # Set up selection system that works for all layouts
+            _setup_unified_selection!(fig, axes, selection_state, dat_subset, right_click_handler)
+
+            # Set up channel selection events for topo and grid layouts
+            if plot_layout.type in (:topo, :grid)
+                _setup_channel_selection_events!(fig, selection_state, plot_layout, dat_subset, axes)
+            end
         end
-    end
-
-    # Setup interactivity if requested
-    if plot_kwargs[:interactive]
-        _setup_shared_interactivity!(fig, axes, :epochs; zoom_step = plot_kwargs[:zoom_step])
-
-        # Disable default interactions that conflict with our custom selection (all axes)
-        for ax in axes
-            deregister_interaction!(ax, :rectanglezoom)
-        end
-
-        # Set up selection system for all axes (will work with linked axes)
-        selection_state =
-            SharedSelectionState(axes; selection_color = plot_kwargs[:selection_color], selection_alpha = plot_kwargs[:selection_alpha])
-
-        # Set up control panel (press 'c' to open) - must be before selection to capture condition_checked
-        condition_checked_ref = Ref{Union{Vector{Observable{Bool}},Nothing}}(nothing)
-        _setup_epochs_control_panel!(
-            fig,
-            dat_subset,
-            dat_subset_avg,
-            axes,
-            get(plot_kwargs, :baseline_interval, nothing),
-            line_refs,
-            condition_checked_ref,
-        )
-
-        # Create right-click handler that has access to condition visibility
-        right_click_handler =
-            (selection_state, mouse_x, data) -> _handle_epochs_right_click!(selection_state, mouse_x, data, condition_checked_ref)
-
-        # Set up selection system that works for all layouts
-        _setup_unified_selection!(fig, axes, selection_state, dat_subset, right_click_handler)
-
-        # Set up channel selection events for topo and grid layouts
-        if plot_layout.type in (:topo, :grid)
-            _setup_channel_selection_events!(fig, selection_state, plot_layout, dat_subset, axes)
-        end
-    end
 
         if plot_kwargs[:display_plot]
             _display_figure(fig)
@@ -436,13 +442,7 @@ function _finalize_epochs_axis!(ax::Axis, kw::Dict)
         scale_x_value = kw[:scale_x_value],
         scale_y_value = kw[:scale_y_value],
     )
-    _set_axis_grid!(
-        ax;
-        xgrid = kw[:xgrid],
-        ygrid = kw[:ygrid],
-        xminorgrid = kw[:xminorgrid],
-        yminorgrid = kw[:yminorgrid],
-    )
+    _set_axis_grid!(ax; xgrid = kw[:xgrid], ygrid = kw[:ygrid], xminorgrid = kw[:xminorgrid], yminorgrid = kw[:yminorgrid])
     _set_origin_lines!(ax; add_xy_origin = kw[:add_xy_origin])
     _add_origin_scale_indicator!(
         ax;
@@ -471,15 +471,8 @@ function _plot_epochs_conditions_on_axis!(
         cond_plot_kwargs = merge(plot_kwargs, Dict(:color => colors[cond_idx]))
         tc = isnothing(time_cat_list) ? nothing : time_cat_list[cond_idx]
 
-        trial_line, trial_y_obs = _plot_epochs!(
-            ax,
-            dat,
-            [channel],
-            cond_plot_kwargs;
-            time_cat = tc,
-            label = label,
-            line_refs = ax_line_refs,
-        )
+        trial_line, trial_y_obs =
+            _plot_epochs!(ax, dat, [channel], cond_plot_kwargs; time_cat = tc, label = label, line_refs = ax_line_refs)
 
         if !isnothing(ax_line_refs)
             _store_line_ref!(ax_line_refs, cond_idx, channel, trial_line, trial_y_obs)
@@ -488,8 +481,7 @@ function _plot_epochs_conditions_on_axis!(
         if plot_kwargs[:plot_avg_trials]
             erp_dat = !isnothing(dat_subset_avg) ? dat_subset_avg[cond_idx] : average_epochs(dat)
             avg_label = label * " (avg)"
-            avg_line, y_obs =
-                _plot_erp_average!(ax, erp_dat, [channel], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
+            avg_line, y_obs = _plot_erp_average!(ax, erp_dat, [channel], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
             if !isnothing(ax_line_refs)
                 _store_avg_line_ref!(ax_line_refs, cond_idx, channel, avg_line, y_obs)
             end
@@ -727,19 +719,18 @@ function _plot_epochs_topo_multi!(
         hidespines!(ax)
     end
 
-    show_scale = get(plot_kwargs, :layout_topo_show_scale, !isnothing(plot_layout) ? get(plot_layout.metadata, :topo_show_scale, false) : false)
+    show_scale =
+        get(plot_kwargs, :layout_topo_show_scale, !isnothing(plot_layout) ? get(plot_layout.metadata, :topo_show_scale, false) : false)
     if show_scale
         @info "Showing scale axis"
-        scale_pos = get(plot_kwargs, :layout_topo_scale_pos, !isnothing(plot_layout) ? get(plot_layout.metadata, :topo_scale_pos, (0.8, -0.8)) : (0.8, -0.8))
+        scale_pos = get(
+            plot_kwargs,
+            :layout_topo_scale_pos,
+            !isnothing(plot_layout) ? get(plot_layout.metadata, :topo_scale_pos, (0.8, -0.8)) : (0.8, -0.8),
+        )
         scale_halign = 0.0 <= scale_pos[1] <= 1.0 ? scale_pos[1] : clamp((scale_pos[1] + 1) / 2, 0.0, 1.0)
         scale_valign = 0.0 <= scale_pos[2] <= 1.0 ? scale_pos[2] : clamp((scale_pos[2] + 1) / 2, 0.0, 1.0)
-        scale_ax = Axis(
-            fig[1, 1],
-            width = Relative(plot_w),
-            height = Relative(plot_h),
-            halign = scale_halign,
-            valign = scale_valign,
-        )
+        scale_ax = Axis(fig[1, 1], width = Relative(plot_w), height = Relative(plot_h), halign = scale_halign, valign = scale_valign)
         push!(axes, scale_ax)
         # No data in this axis; just show labels and limits
         tmin, tmax = (dat.data[1].time[1], dat.data[1].time[end])

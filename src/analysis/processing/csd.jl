@@ -31,7 +31,7 @@ function compute_csd!(data::EegData; m::Int = 4, lambda::Float64 = 1e-5, n_legen
     y3 = data.layout.data.y3
     z3 = data.layout.data.z3
 
-    for i in 1:n_channels
+    for i = 1:n_channels
         x = Float64(x3[i])
         y = Float64(y3[i])
         z = Float64(z3[i])

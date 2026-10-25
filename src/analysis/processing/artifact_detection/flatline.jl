@@ -35,9 +35,9 @@ function _is_flatline(signal::AbstractVector{<:Real}, threshold::Real, window_sa
 
     anchor_interval = 256
 
-    @inbounds for i = 2:(n - w + 1)
-        x_out = Float64(signal[i - 1])
-        x_in  = Float64(signal[i + w - 1])
+    @inbounds for i = 2:(n-w+1)
+        x_out = Float64(signal[i-1])
+        x_in  = Float64(signal[i+w-1])
 
         if (i % anchor_interval) == 0
             cur_view = view(signal, i:(i+w-1))
@@ -243,4 +243,3 @@ function n_flatline(
         return DataFrame(channel = selected_channels, n_flatline = counts)
     end
 end
-

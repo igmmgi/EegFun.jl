@@ -39,7 +39,7 @@ function _build_connectivity_matrix(electrodes::Vector{Symbol}, layout::Layout, 
         # Build adjacency matrix
         I = Int[]
         J = Int[]
-        elec_to_idx = Dict{Symbol, Int}(e => i for (i, e) in enumerate(electrodes))
+        elec_to_idx = Dict{Symbol,Int}(e => i for (i, e) in enumerate(electrodes))
 
         for (e_idx, electrode) in enumerate(electrodes)
             # Get neighbours from layout
@@ -67,7 +67,9 @@ function _build_connectivity_matrix(electrodes::Vector{Symbol}, layout::Layout, 
         return sparse(Int[], Int[], Bool[], n_electrodes, n_electrodes)
 
     else
-        @minimal_error("cluster_type must be :spatial, :temporal, :spectral, :spatiotemporal, :spectrotemporal, or :full, got :$cluster_type")
+        @minimal_error(
+            "cluster_type must be :spatial, :temporal, :spectral, :spatiotemporal, :spectrotemporal, or :full, got :$cluster_type"
+        )
     end
 end
 
@@ -95,7 +97,8 @@ function _prefilter_mask_by_neighbors!(mask::BitArray{2}, spatial_connectivity::
     n_electrodes, n_time = size(mask)
 
     # Ensure spatial connectivity is symmetric (zero allocation if already symmetric)
-    spatial_conn_sym = issymmetric(spatial_connectivity) ? spatial_connectivity : (spatial_connectivity .| copy(transpose(spatial_connectivity)))
+    spatial_conn_sym =
+        issymmetric(spatial_connectivity) ? spatial_connectivity : (spatial_connectivity .| copy(transpose(spatial_connectivity)))
     rv = rowvals(spatial_conn_sym)
 
     # removing a channel may cause its neighbors to now have too few neighbors
@@ -370,11 +373,7 @@ Consolidated version that can either return full Cluster objects or just statist
 - If `return_clusters=true`: `(updated_clusters::Vector{Cluster}, cluster_stats::Vector{Float64})`
 - If `return_clusters=false`: `cluster_stats::Vector{Float64}`
 """
-function _compute_cluster_statistics(
-    clusters::Vector{Cluster},
-    t_matrix::AbstractMatrix{<:AbstractFloat};
-    return_clusters::Bool = true,
-)
+function _compute_cluster_statistics(clusters::Vector{Cluster}, t_matrix::AbstractMatrix{<:AbstractFloat}; return_clusters::Bool = true)
     if isempty(clusters)
         return return_clusters ? (Cluster[], Float64[]) : Float64[]
     end
@@ -653,7 +652,8 @@ function _prefilter_mask_by_neighbors_tf!(mask::BitArray{3}, spatial_connectivit
     end
 
     n_electrodes, n_freqs, n_time = size(mask)
-    spatial_conn_sym = issymmetric(spatial_connectivity) ? spatial_connectivity : (spatial_connectivity .| copy(transpose(spatial_connectivity)))
+    spatial_conn_sym =
+        issymmetric(spatial_connectivity) ? spatial_connectivity : (spatial_connectivity .| copy(transpose(spatial_connectivity)))
     rv = rowvals(spatial_conn_sym)
 
     nremoved = 1
@@ -977,17 +977,17 @@ function _compute_tfce(
     time_points::Vector{Float64},
     spatial_connectivity::SparseMatrixCSC{Bool},
     cluster_type::Symbol;
-    E::Float64=0.5,
-    H::Float64=2.0,
-    dh::Float64=0.1
+    E::Float64 = 0.5,
+    H::Float64 = 2.0,
+    dh::Float64 = 0.1,
 )
     n_electrodes, n_time = size(t_map)
     tfce_map = zeros(Float64, n_electrodes, n_time)
-    
+
     # Process positive values
     max_val = maximum(t_map)
     if max_val > 0.0
-        for h in dh:dh:max_val
+        for h = dh:dh:max_val
             mask = t_map .>= h
             clusters = _find_clusters_connected_components(mask, electrodes, time_points, spatial_connectivity, cluster_type)
             for c in clusters
@@ -999,11 +999,11 @@ function _compute_tfce(
             end
         end
     end
-    
+
     # Process negative values
     min_val = minimum(t_map)
     if min_val < 0.0
-        for h in -dh:-dh:min_val
+        for h = (-dh):(-dh):min_val
             mask = t_map .<= h
             clusters = _find_clusters_connected_components(mask, electrodes, time_points, spatial_connectivity, cluster_type)
             for c in clusters
@@ -1015,6 +1015,6 @@ function _compute_tfce(
             end
         end
     end
-    
+
     return tfce_map
 end

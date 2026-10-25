@@ -442,7 +442,7 @@ function _decode_core(
                             for c = 1:nr_c
                                 val = 0.0
                                 for f = 1:n_features
-                                    val += w[(f - 1) * nr_c + c] * X_test_buf[f, i]
+                                    val += w[(f-1)*nr_c+c] * X_test_buf[f, i]
                                 end
                                 if val > max_val
                                     max_val = val
@@ -500,13 +500,7 @@ function _decode_core(
         end
     end
 
-    parameters = DecodingParameters(
-        1.0 / n_classes,
-        n_iterations,
-        n_folds,
-        n_classes == 2 ? :binary : :one_vs_all,
-        n_classes,
-    )
+    parameters = DecodingParameters(1.0 / n_classes, n_iterations, n_folds, n_classes == 2 ? :binary : :one_vs_all, n_classes)
 
     return DecodedData(
         file,
@@ -536,10 +530,9 @@ function _log_decoding_start(epochs::Vector{TimeFreqEpochData}, data_arrays, tim
     n_chans = n_channels(epochs[1])
     n_features = size(data_arrays[1], 1)
     n_freqs = n_features ÷ n_chans
-    @info "Starting TF decoding analysis" file = epochs[1].file n_conditions = length(epochs) n_channels = n_chans n_frequencies =
-        n_freqs n_features = n_features n_timepoints = length(time_points) time_range =
-        (first(time_points), last(time_points)) n_iterations = n_iterations n_folds = n_folds trials_per_condition =
-        n_trials_per_condition
+    @info "Starting TF decoding analysis" file = epochs[1].file n_conditions = length(epochs) n_channels = n_chans n_frequencies = n_freqs n_features =
+        n_features n_timepoints = length(time_points) time_range = (first(time_points), last(time_points)) n_iterations = n_iterations n_folds =
+        n_folds trials_per_condition = n_trials_per_condition
 end
 
 

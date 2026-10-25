@@ -650,8 +650,8 @@ using OrderedCollections
         @test Matrix{Float64}(cont) == Matrix(cont)
         @test Array{Float64}(cont) == Array(cont)
         @test Array{Float64}(ep) == Array(ep)
-        @test Array{Float64, 2}(cont) == Matrix(cont)
-        @test Array{Float64, 3}(ep) == Array(ep)
+        @test Array{Float64,2}(cont) == Matrix(cont)
+        @test Array{Float64,3}(ep) == Array(ep)
         @test length(vec(cont)) == 6
         @test length(vec(ep)) == 8
 
@@ -685,44 +685,35 @@ using OrderedCollections
     end
 
     @testset "Polymorphic Accessors (Layout, TF, Stats)" begin
-        layout_df = DataFrame(
-            label = [:Fz, :Cz, :Pz],
-            x = [0.0, 0.0, 0.0],
-            y = [1.0, 0.0, -1.0],
-            z = [0.0, 1.0, 0.0],
-        )
+        layout_df = DataFrame(label = [:Fz, :Cz, :Pz], x = [0.0, 0.0, 0.0], y = [1.0, 0.0, -1.0], z = [0.0, 1.0, 0.0])
         layout = EegFun.Layout(layout_df, nothing, nothing, nothing)
         @test EegFun.channel_labels(layout) == [:Fz, :Cz, :Pz]
         @test EegFun.n_channels(layout) == 3
 
         # TF Data frequency_vector
-        tf_df = DataFrame(
-            freq = [4.0, 4.0, 8.0, 8.0, 12.0, 12.0],
-            time = [0.0, 0.1, 0.0, 0.1, 0.0, 0.1],
-            Fz = fill(1.0, 6),
-            Cz = fill(2.0, 6),
-        )
-        tf_data = EegFun.TimeFreqData(
-            "test_tf", 1, "Cond1", tf_df, copy(tf_df), layout, 100, :wavelet, nothing, EegFun.AnalysisInfo()
-        )
+        tf_df =
+            DataFrame(freq = [4.0, 4.0, 8.0, 8.0, 12.0, 12.0], time = [0.0, 0.1, 0.0, 0.1, 0.0, 0.1], Fz = fill(1.0, 6), Cz = fill(2.0, 6))
+        tf_data = EegFun.TimeFreqData("test_tf", 1, "Cond1", tf_df, copy(tf_df), layout, 100, :wavelet, nothing, EegFun.AnalysisInfo())
         @test EegFun.frequency_vector(tf_data) == [4.0, 8.0, 12.0]
         @test EegFun.channel_labels(tf_data) == [:Fz, :Cz]
         @test EegFun.n_channels(tf_data) == 2
 
         tf_epoch = EegFun.TimeFreqEpochData(
-            "test_tf_ep", 1, "Cond1", [tf_df, copy(tf_df)], [copy(tf_df), copy(tf_df)],
-            layout, 100, :wavelet, nothing, EegFun.AnalysisInfo()
+            "test_tf_ep",
+            1,
+            "Cond1",
+            [tf_df, copy(tf_df)],
+            [copy(tf_df), copy(tf_df)],
+            layout,
+            100,
+            :wavelet,
+            nothing,
+            EegFun.AnalysisInfo(),
         )
         @test EegFun.frequency_vector(tf_epoch) == [4.0, 8.0, 12.0]
 
-        spec_df = DataFrame(
-            freq = [2.0, 4.0, 6.0],
-            Fz = [1.0, 2.0, 3.0],
-            Cz = [2.0, 3.0, 4.0],
-        )
-        spec_data = EegFun.SpectrumData(
-            "test_spec", 1, "Cond1", spec_df, layout, 100, :welch, EegFun.AnalysisInfo()
-        )
+        spec_df = DataFrame(freq = [2.0, 4.0, 6.0], Fz = [1.0, 2.0, 3.0], Cz = [2.0, 3.0, 4.0])
+        spec_data = EegFun.SpectrumData("test_spec", 1, "Cond1", spec_df, layout, 100, :welch, EegFun.AnalysisInfo())
         @test EegFun.frequency_vector(spec_data) == [2.0, 4.0, 6.0]
 
         # TFStatisticalData
@@ -735,4 +726,3 @@ using OrderedCollections
         @test EegFun.n_samples(tf_stat) == 2
     end
 end
-

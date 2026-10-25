@@ -420,11 +420,14 @@ end
 
 """Convenience wrapper: extract arrays from `StatisticalData` and call the raw-array `_compute_t_matrix`."""
 function _compute_t_matrix(prepared::StatisticalData; tail::Symbol = :both, compute_p_values::Bool = true, compute_se::Bool = true)
-    t_matrix, df, p_matrix, se_matrix =
-        _compute_t_matrix(
-            prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design;
-            tail = tail, compute_p_values = compute_p_values, compute_se = compute_se
-        )
+    t_matrix, df, p_matrix, se_matrix = _compute_t_matrix(
+        prepared.analysis.data[1],
+        prepared.analysis.data[2],
+        prepared.analysis.design;
+        tail = tail,
+        compute_p_values = compute_p_values,
+        compute_se = compute_se,
+    )
     return t_matrix, df, p_matrix, se_matrix
 end
 

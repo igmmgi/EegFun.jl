@@ -232,8 +232,7 @@ function plot_erp_image(
     epoch_range = 1:n_eps
     cb_pos = _get_colorbar_position(plot_kwargs[:colorbar_position], 1:1, 1:1)
 
-    single_col_indices = plot_layout.type == :single ?
-        [DataFrames.columnindex(first_df, ch) for ch in all_plot_channels] : Int[]
+    single_col_indices = plot_layout.type == :single ? [DataFrames.columnindex(first_df, ch) for ch in all_plot_channels] : Int[]
 
     # Plot ERP images for each channel
     heatmaps = Heatmap[]

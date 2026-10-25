@@ -29,7 +29,8 @@ nrow(dat::MultiDataFrameEeg) = isempty(dat.data) ? 0 : sum(nrow, dat.data)
 ncol(dat::MultiDataFrameEeg) = isempty(dat.data) ? 0 : ncol(first(dat.data))
 names(dat::MultiDataFrameEeg) = isempty(dat.data) ? String[] : names(first(dat.data))
 names(dat::MultiDataFrameEeg, cols) = isempty(dat.data) ? String[] : names(first(dat.data), cols)
-describe(dat::MultiDataFrameEeg; kwargs...) = isempty(dat.data) ? DataFrame() : describe(reduce(vcat, dat.data; source = nothing); kwargs...)
+describe(dat::MultiDataFrameEeg; kwargs...) =
+    isempty(dat.data) ? DataFrame() : describe(reduce(vcat, dat.data; source = nothing); kwargs...)
 first(dat::MultiDataFrameEeg, n::Integer) = first(dat.data, n)
 last(dat::MultiDataFrameEeg, n::Integer) = last(dat.data, n)
 

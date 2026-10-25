@@ -621,7 +621,12 @@ function _run_filter_batch(
     condition_selection::Function = conditions(),
     output_dir::Union{String,Nothing} = nothing,
 )
-    _with_batch_logging("$(filter_type == :lp ? "lowpass" : "highpass") filtering", "filter_$(filter_type).log", input_dir, output_dir) do ctx
+    _with_batch_logging(
+        "$(filter_type == :lp ? "lowpass" : "highpass") filtering",
+        "filter_$(filter_type).log",
+        input_dir,
+        output_dir,
+    ) do ctx
         @info "  cutoff: $cutoff_freq Hz"
 
         if cutoff_freq <= 0

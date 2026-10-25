@@ -289,19 +289,10 @@ function plot_topography(
     end
 
     if scrubber
-        dat_subset = subset(
-            dat,
-            channel_selection = channel_selection,
-            sample_selection = sample_selection,
-            interval_selection = interval_selection,
-        )
+        dat_subset =
+            subset(dat, channel_selection = channel_selection, sample_selection = sample_selection, interval_selection = interval_selection)
         if nrow(dat_subset.data) > 1
-            return _plot_topography_scrubber(
-                dat_subset;
-                display_plot = display_plot,
-                interactive = interactive,
-                kwargs...,
-            )
+            return _plot_topography_scrubber(dat_subset; display_plot = display_plot, interactive = interactive, kwargs...)
         end
     end
     # If n_topo is requested, split time range into bins and use the Vector method
@@ -567,10 +558,11 @@ function plot_topography(
     first_layout = subsets[1].layout
     method = plot_kwargs[:method]
     gridscale = plot_kwargs[:gridscale]
-    can_batch = n_datasets > 1 &&
-                has_valid_coordinates(first_layout) &&
-                all(s -> has_valid_coordinates(s.layout) && s.layout.data.label == first_layout.data.label, subsets) &&
-                _topo_method_supported(method)
+    can_batch =
+        n_datasets > 1 &&
+        has_valid_coordinates(first_layout) &&
+        all(s -> has_valid_coordinates(s.layout) && s.layout.data.label == first_layout.data.label, subsets) &&
+        _topo_method_supported(method)
 
     batched_interp = nothing
     xb_shared = nothing
@@ -580,7 +572,7 @@ function plot_topography(
         _ensure_coordinates_2d!(first_layout)
         labels = first_layout.data.label
         channel_mat = Matrix{Float64}(undef, length(labels), n_datasets)
-        for j in 1:n_datasets
+        for j = 1:n_datasets
             df = subsets[j].data
             for (i, lbl) in enumerate(labels)
                 channel_mat[i, j] = mean(df[!, lbl])
@@ -657,13 +649,7 @@ function plot_topography(
                 subplot_kwargs...,
             )
         else
-            _plot_topography!(
-                fig,
-                ax,
-                dataset.data,
-                dataset.layout;
-                subplot_kwargs...,
-            )
+            _plot_topography!(fig, ax, dataset.data, dataset.layout; subplot_kwargs...)
         end
     end
 
@@ -871,14 +857,13 @@ end
 # =============================================================================
 
 # ---- Legendre & G-function for Spherical Splines (Perrin et al., 1989) ----
-_g_factors(m::Int, nterms::Int) =
-    [(2n + 1) / (float(n)^m * float(n + 1)^m * 4π) for n in 1:nterms]
+_g_factors(m::Int, nterms::Int) = [(2n + 1) / (float(n)^m * float(n + 1)^m * 4π) for n = 1:nterms]
 
 @inline function _legendre_series(x::Float64, f::Vector{Float64})
     x = clamp(x, -1.0, 1.0)
     p_prev, p = 1.0, x
     acc = f[1] * x
-    @inbounds for n in 2:length(f)
+    @inbounds for n = 2:length(f)
         p_next = ((2n - 1) * x * p - (n - 1) * p_prev) / n
         acc += f[n] * p_next
         p_prev, p = p, p_next
@@ -928,7 +913,7 @@ function _spline_geometry(d, ch::Vector{Int})
         @warn "Layout has no :inc/:azi; assuming azimuthal-equidistant x2/y2 with ρ=1 at the equator." maxlog = 1
         k = π / 2
         θ = min.(k .* ρe, π)
-        sx = [ρe[i] > 0 ? sin(θ[i]) / ρe[i] : 0.0 for i in 1:length(ρe)]
+        sx = [ρe[i] > 0 ? sin(θ[i]) / ρe[i] : 0.0 for i = 1:length(ρe)]
         U = hcat(sx .* d.x2[ch], sx .* d.y2[ch], cos.(θ))
     end
     return U, k
@@ -943,7 +928,7 @@ function _build_spline_operator(layout::Layout, ch::Vector{Int}, gs::Int, m::Int
     # Solve once for all unit-impulse data vectors
     A = Matrix{Float64}(undef, n + 1, n + 1)
     A[1:n, 1:n] .= _g_from_cos!(U * U', f)
-    @inbounds for i in 1:n
+    @inbounds for i = 1:n
         A[i, i] += λ
         A[i, n+1] = 1.0
         A[n+1, i] = 1.0
@@ -956,7 +941,7 @@ function _build_spline_operator(layout::Layout, ch::Vector{Int}, gs::Int, m::Int
     xs = range(-R, R, length = gs)
     valid = Int[]
     sizehint!(valid, gs * gs)
-    for j in 1:gs, i in 1:gs
+    for j = 1:gs, i = 1:gs
         hypot(xs[i], xs[j]) <= R && push!(valid, i + (j - 1) * gs)
     end
     nv = length(valid)
@@ -974,7 +959,7 @@ function _build_spline_operator(layout::Layout, ch::Vector{Int}, gs::Int, m::Int
 
     Gg = _g_from_cos!(Ug * U', f)                          # nv × n
     W = Gg * view(X, 1:n, :)
-    W .+= view(X, n+1:n+1, :)
+    W .+= view(X, (n+1):(n+1), :)
     return SphericalSplineOperator(W, valid, gs, R)
 end
 
@@ -1014,8 +999,7 @@ function _data_interpolation_topo_spherical_spline(
     lambda::Float64 = 1e-5,
     n_legendre_terms::Int = 15,
 )
-    length(layout_idx) == size(dat, 1) ||
-        @minimal_error "Data has $(size(dat, 1)) channels but layout_idx has $(length(layout_idx))"
+    length(layout_idx) == size(dat, 1) || @minimal_error "Data has $(size(dat, 1)) channels but layout_idx has $(length(layout_idx))"
     _ensure_coordinates_2d!(layout)
 
     finite = dat isa AbstractVector ? isfinite.(dat) : vec(all(isfinite, dat; dims = 2))
@@ -1045,8 +1029,7 @@ function _data_interpolation_topo(
     method::Symbol = :thin_plate,
     layout_idx::AbstractVector{Int} = 1:size(dat, 1),
 )
-    length(layout_idx) == size(dat, 1) ||
-        @minimal_error "Data has $(size(dat, 1)) channels but layout_idx has $(length(layout_idx))"
+    length(layout_idx) == size(dat, 1) || @minimal_error "Data has $(size(dat, 1)) channels but layout_idx has $(length(layout_idx))"
     _ensure_coordinates_2d!(layout)
 
     points = permutedims(Matrix(layout.data[layout_idx, [:x2, :y2]]))
@@ -1057,7 +1040,7 @@ function _data_interpolation_topo(
 
     valid_cells = Int[]
     sizehint!(valid_cells, grid_scale * grid_scale)
-    for j in 1:grid_scale, i in 1:grid_scale
+    for j = 1:grid_scale, i = 1:grid_scale
         hypot(x_range[i], y_range[j]) <= plot_radius && push!(valid_cells, i + (j - 1) * grid_scale)
     end
 
@@ -1105,8 +1088,8 @@ function _data_interpolation_topo(
         return result, bounds, bounds
     else
         n_comps = size(dat, 2)
-        results = [fill(NaN, grid_scale, grid_scale) for _ in 1:n_comps]
-        for c in 1:n_comps
+        results = [fill(NaN, grid_scale, grid_scale) for _ = 1:n_comps]
+        for c = 1:n_comps
             res = results[c]
             @inbounds for (k, lin) in enumerate(valid_cells)
                 res[lin] = eval_res[k, c]
@@ -1725,12 +1708,7 @@ end
 
 Internal helper to render an interactive 2D scalp topography with a time scrubber slider.
 """
-function _plot_topography_scrubber(
-    dat::SingleDataFrameEeg;
-    display_plot = true,
-    interactive = true,
-    kwargs...,
-)
+function _plot_topography_scrubber(dat::SingleDataFrameEeg; display_plot = true, interactive = true, kwargs...)
     layout = dat.layout
     if !has_valid_coordinates(layout)
         @minimal_warning "Cannot create topographic plot: layout has no spatial coordinates."
@@ -1934,4 +1912,3 @@ function _plot_topography_scrubber(
     _set_window_title("Makie")
     return (fig = fig, axes = [ax], screen = screen)
 end
-

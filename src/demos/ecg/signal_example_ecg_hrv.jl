@@ -52,12 +52,7 @@ function signal_example_ecg_hrv()
 
     _set_window_title("Interactive HRV Simulator")
 
-    fig = Figure(
-        size = (1280, 860),
-        title = "Interactive HRV Simulator",
-        backgroundcolor = :white,
-        figure_padding = (24, 24, 24, 24),
-    )
+    fig = Figure(size = (1280, 860), title = "Interactive HRV Simulator", backgroundcolor = :white, figure_padding = (24, 24, 24, 24))
 
     # ── Adaptive Font Sizing ─────────────────────────────────────────────────
     function setup_adaptive_sizing(fig)
@@ -67,10 +62,10 @@ function signal_example_ecg_hrv()
         btn_font   = Observable(12.0)
 
         on(fig.scene.viewport) do area
-            scale = area.widths[1] / 1280
+            scale        = area.widths[1] / 1280
             title_font[] = max(12, round(Int, 15 * scale))
             label_font[] = max(10, round(Int, 12.5 * scale))
-            tick_font[]  = max(9,  round(Int, 10.5 * scale))
+            tick_font[]  = max(9, round(Int, 10.5 * scale))
             btn_font[]   = max(10, round(Int, 12.0 * scale))
         end
 
@@ -125,9 +120,9 @@ function signal_example_ecg_hrv()
         ecg_sig = zeros(Float64, n_ecg)
         r_peaks = Point2f[]
         bracket_lines = Point2f[]
-        ibi_labels = Tuple{Point2f, String}[]
+        ibi_labels = Tuple{Point2f,String}[]
 
-        for i in 1:length(t_beats)
+        for i = 1:length(t_beats)
             tb = t_beats[i]
             tR = tb + 0.25
             if 0.0 <= tR <= t_ecg_win
@@ -157,21 +152,21 @@ function signal_example_ecg_hrv()
             # ECG wave synthesis (P, Q, R, S, T)
             idx_start = max(1, round(Int, tb * fs_ecg) + 1)
             idx_end   = min(n_ecg, round(Int, (tb + 0.65) * fs_ecg))
-            for idx in idx_start:idx_end
+            for idx = idx_start:idx_end
                 dt = t_ecg[idx] - tb
                 if 0.0 <= dt <= 0.65
-                    gP = 0.18  * exp(-((dt - 0.12) / 0.022)^2)
+                    gP = 0.18 * exp(-((dt - 0.12) / 0.022)^2)
                     gQ = -0.16 * exp(-((dt - 0.22) / 0.010)^2)
-                    gR = 1.35  * exp(-((dt - 0.25) / 0.014)^2)
+                    gR = 1.35 * exp(-((dt - 0.25) / 0.014)^2)
                     gS = -0.32 * exp(-((dt - 0.28) / 0.012)^2)
-                    gT = 0.38  * exp(-((dt - 0.45) / 0.048)^2)
+                    gT = 0.38 * exp(-((dt - 0.45) / 0.048)^2)
                     ecg_sig[idx] += gP + gQ + gR + gS + gT
                 end
             end
         end
 
         # Subtle clean noise
-        for idx in 1:n_ecg
+        for idx = 1:n_ecg
             ecg_sig[idx] += 0.012 * sin(idx * 13.7)
         end
 
@@ -179,17 +174,28 @@ function signal_example_ecg_hrv()
         hr_pts   = Point2f.(t_hr, hr_curve)
         resp_pts = Point2f.(t_hr, resp_curve)
 
-        status_text = vagal_pct >= 50 ?
-            "Relaxed State: Heart rate flexibly speeds up & slows down with breathing (High HRV)" :
+        status_text =
+            vagal_pct >= 50 ? "Relaxed State: Heart rate flexibly speeds up & slows down with breathing (High HRV)" :
             "Stressed State: Heart rate is rigid and metronome-like with minimal variation (Low HRV)"
 
         status_color = vagal_pct >= 50 ? "#047857" : "#b91c1c"
 
         return (;
-            mean_hr, resp_bpm, vagal_pct, amp_bpm,
-            t_ecg_win, ecg_pts, r_peaks, bracket_lines, ibi_labels,
-            t_hr, hr_curve, hr_pts, resp_pts,
-            status_text, status_color
+            mean_hr,
+            resp_bpm,
+            vagal_pct,
+            amp_bpm,
+            t_ecg_win,
+            ecg_pts,
+            r_peaks,
+            bracket_lines,
+            ibi_labels,
+            t_hr,
+            hr_curve,
+            hr_pts,
+            resp_pts,
+            status_text,
+            status_color,
         )
     end
 
@@ -237,25 +243,13 @@ function signal_example_ecg_hrv()
     lines!(ax_ecg, lift(d -> d.ecg_pts, sim_data), color = "#e11d48", linewidth = 2.2)
 
     # R-peak markers
-    scatter!(
-        ax_ecg,
-        lift(d -> d.r_peaks, sim_data),
-        color = "#e11d48",
-        strokecolor = "#991b1b",
-        strokewidth = 1.2,
-        markersize = 10,
-    )
+    scatter!(ax_ecg, lift(d -> d.r_peaks, sim_data), color = "#e11d48", strokecolor = "#991b1b", strokewidth = 1.2, markersize = 10)
 
     # Interval brackets between peaks
-    linesegments!(
-        ax_ecg,
-        lift(d -> d.bracket_lines, sim_data),
-        color = "#0284c7",
-        linewidth = 1.5,
-    )
+    linesegments!(ax_ecg, lift(d -> d.bracket_lines, sim_data), color = "#0284c7", linewidth = 1.5)
 
     # Interval text labels (up to 12 intervals)
-    for k in 1:12
+    for k = 1:12
         txt_obs = lift(sim_data) do d
             k <= length(d.ibi_labels) ? d.ibi_labels[k][2] : ""
         end
@@ -296,21 +290,10 @@ function signal_example_ecg_hrv()
     xlims!(ax_hr, 0.0, 20.0)
 
     # Respiration curve (smooth dashed teal line)
-    line_resp = lines!(
-        ax_hr,
-        lift(d -> d.resp_pts, sim_data),
-        color = "#0891b2",
-        linewidth = 2.4,
-        linestyle = :dash,
-    )
+    line_resp = lines!(ax_hr, lift(d -> d.resp_pts, sim_data), color = "#0891b2", linewidth = 2.4, linestyle = :dash)
 
     # Instantaneous Heart Rate curve (bold blue line)
-    line_hr = lines!(
-        ax_hr,
-        lift(d -> d.hr_pts, sim_data),
-        color = "#2563eb",
-        linewidth = 3.0,
-    )
+    line_hr = lines!(ax_hr, lift(d -> d.hr_pts, sim_data), color = "#2563eb", linewidth = 3.0)
 
     # Dynamic limits for HR axis: generous headroom (+13 BPM) so curves never collide with legend
     on(sim_data) do d
@@ -344,7 +327,8 @@ function signal_example_ecg_hrv()
 
     Label(sl_grid[1, 5], text = "Breathing Speed:", font = :bold, fontsize = label_font)
     sl_resp = Slider(sl_grid[1, 6], range = 6.0:1.0:20.0, startvalue = 12.0, width = 120)
-    lbl_resp = Label(sl_grid[1, 7], text = lift(v -> "$(round(Int, v)) br/min", sl_resp.value), width = 85, fontsize = label_font, halign = :left)
+    lbl_resp =
+        Label(sl_grid[1, 7], text = lift(v -> "$(round(Int, v)) br/min", sl_resp.value), width = 85, fontsize = label_font, halign = :left)
 
     Label(sl_grid[1, 9], text = "Relaxation (HRV):", font = :bold, fontsize = label_font)
     sl_vag = Slider(sl_grid[1, 10], range = 0.0:1.0:100.0, startvalue = 75.0, width = 120)

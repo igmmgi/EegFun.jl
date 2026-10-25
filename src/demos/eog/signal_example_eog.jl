@@ -87,11 +87,7 @@ function signal_example_heog()
 
     _set_window_title("Interactive Bipolar hEOG Recording Simulator")
 
-    fig = Figure(
-        size = (1350, 850),
-        title = "Interactive Bipolar hEOG Recording Simulator",
-        backgroundcolor = :white,
-    )
+    fig = Figure(size = (1350, 850), title = "Interactive Bipolar hEOG Recording Simulator", backgroundcolor = :white)
 
     # ── Adaptive Font and UI Sizing ──────────────────────────────────────────
     function setup_adaptive_sizing(fig)
@@ -101,7 +97,7 @@ function signal_example_heog()
         btn_font = Observable(13)
 
         on(fig.scene.viewport) do area
-            scale = area.widths[1] / 1350
+            scale        = area.widths[1] / 1350
             title_font[] = max(14, round(Int, 18 * scale))
             label_font[] = max(11, round(Int, 14 * scale))
             tick_font[]  = max(10, round(Int, 12 * scale))
@@ -131,12 +127,7 @@ function signal_example_heog()
     theta_circ = range(0, 2π, length = n_pts)
 
     # ── Left Column [1, 1]: Anatomy & Circuit Schematic ─────────────────────
-    ax_eyes = Axis(
-        fig[1, 1],
-        title = "Corneo-Retinal Dipoles & Bipolar Amplifier Circuit",
-        titlesize = title_font,
-        aspect = DataAspect(),
-    )
+    ax_eyes = Axis(fig[1, 1], title = "Corneo-Retinal Dipoles & Bipolar Amplifier Circuit", titlesize = title_font, aspect = DataAspect())
     hidedecorations!(ax_eyes)
     hidespines!(ax_eyes)
     xlims!(ax_eyes, -5.2, 5.2)
@@ -155,9 +146,9 @@ function signal_example_heog()
         polys = Vector{Point2f}[]
         colors = RGBf[]
 
-        for i in 1:n_slices
+        for i = 1:n_slices
             s1 = s_vals[i]
-            s2 = s_vals[i + 1]
+            s2 = s_vals[i+1]
             w1 = sqrt(max(0.0f0, Float32(R^2 - s1^2)))
             w2 = sqrt(max(0.0f0, Float32(R^2 - s2^2)))
 
@@ -181,14 +172,26 @@ function signal_example_heog()
     end
 
     # Render dynamic gradient slices for both eyeballs (64 thin polygons for smooth color transition)
-    for i in 1:64
+    for i = 1:64
         poly!(ax_eyes, lift(s -> s[1][i], slices_L), color = lift(s -> s[2][i], slices_L), strokewidth = 0)
         poly!(ax_eyes, lift(s -> s[1][i], slices_R), color = lift(s -> s[2][i], slices_R), strokewidth = 0)
     end
 
     # Eyeball boundary circle rings
-    poly!(ax_eyes, [CL .+ Point2f(R * cos(t), R * sin(t)) for t in theta_circ], color = :transparent, strokewidth = 2.0, strokecolor = "#1e293b")
-    poly!(ax_eyes, [CR .+ Point2f(R * cos(t), R * sin(t)) for t in theta_circ], color = :transparent, strokewidth = 2.0, strokecolor = "#1e293b")
+    poly!(
+        ax_eyes,
+        [CL .+ Point2f(R * cos(t), R * sin(t)) for t in theta_circ],
+        color = :transparent,
+        strokewidth = 2.0,
+        strokecolor = "#1e293b",
+    )
+    poly!(
+        ax_eyes,
+        [CR .+ Point2f(R * cos(t), R * sin(t)) for t in theta_circ],
+        color = :transparent,
+        strokewidth = 2.0,
+        strokecolor = "#1e293b",
+    )
 
     # Feature generator function for each eye at rotation `deg`
     function get_eye_features(C, deg)
@@ -239,10 +242,46 @@ function signal_example_heog()
     linesegments!(ax_eyes, lift(f -> [f.dipole_start, f.dipole_end], feat_R), color = "#10b981", linewidth = 2.5)
 
     # Dipole charge signs: (+) at cornea, (–) at retina
-    text!(ax_eyes, lift(f -> f.plus_pos[1], feat_L), lift(f -> f.plus_pos[2], feat_L), text = "+", align = (:center, :center), font = :bold, fontsize = 20, color = "#e11d48")
-    text!(ax_eyes, lift(f -> f.plus_pos[1], feat_R), lift(f -> f.plus_pos[2], feat_R), text = "+", align = (:center, :center), font = :bold, fontsize = 20, color = "#e11d48")
-    text!(ax_eyes, lift(f -> f.minus_pos[1], feat_L), lift(f -> f.minus_pos[2], feat_L), text = "–", align = (:center, :center), font = :bold, fontsize = 22, color = "#2563eb")
-    text!(ax_eyes, lift(f -> f.minus_pos[1], feat_R), lift(f -> f.minus_pos[2], feat_R), text = "–", align = (:center, :center), font = :bold, fontsize = 22, color = "#2563eb")
+    text!(
+        ax_eyes,
+        lift(f -> f.plus_pos[1], feat_L),
+        lift(f -> f.plus_pos[2], feat_L),
+        text = "+",
+        align = (:center, :center),
+        font = :bold,
+        fontsize = 20,
+        color = "#e11d48",
+    )
+    text!(
+        ax_eyes,
+        lift(f -> f.plus_pos[1], feat_R),
+        lift(f -> f.plus_pos[2], feat_R),
+        text = "+",
+        align = (:center, :center),
+        font = :bold,
+        fontsize = 20,
+        color = "#e11d48",
+    )
+    text!(
+        ax_eyes,
+        lift(f -> f.minus_pos[1], feat_L),
+        lift(f -> f.minus_pos[2], feat_L),
+        text = "–",
+        align = (:center, :center),
+        font = :bold,
+        fontsize = 22,
+        color = "#2563eb",
+    )
+    text!(
+        ax_eyes,
+        lift(f -> f.minus_pos[1], feat_R),
+        lift(f -> f.minus_pos[2], feat_R),
+        text = "–",
+        align = (:center, :center),
+        font = :bold,
+        fontsize = 22,
+        color = "#2563eb",
+    )
 
     # Vertical reference lines (0° straight ahead)
     lines!(ax_eyes, [CL[1], CL[1]], [CL[2], CL[2] + 1.8 * R], color = :gray60, linestyle = :dash, linewidth = 1.2)
@@ -319,23 +358,11 @@ function signal_example_heog()
 
     # Lead wires routing cleanly into the centered amplifier:
     # Right wire to (+) input at (-0.7, -1.40), routing above the amplifier:
-    wire_R = [
-        Point2f(4.08, 0.5),
-        Point2f(3.5, 0.5),
-        Point2f(3.5, -0.85),
-        Point2f(-1.0, -0.85),
-        Point2f(-1.0, -1.40),
-        Point2f(-0.70, -1.40),
-    ]
+    wire_R = [Point2f(4.08, 0.5), Point2f(3.5, 0.5), Point2f(3.5, -0.85), Point2f(-1.0, -0.85), Point2f(-1.0, -1.40), Point2f(-0.70, -1.40)]
     lines!(ax_eyes, wire_R, color = "#dc2626", linewidth = 2.0)
 
     # Left wire to (–) input at (-0.7, -2.00):
-    wire_L = [
-        Point2f(-4.08, 0.5),
-        Point2f(-3.5, 0.5),
-        Point2f(-3.5, -2.00),
-        Point2f(-0.70, -2.00),
-    ]
+    wire_L = [Point2f(-4.08, 0.5), Point2f(-3.5, 0.5), Point2f(-3.5, -2.00), Point2f(-0.70, -2.00)]
     lines!(ax_eyes, wire_L, color = "#2563eb", linewidth = 2.0)
 
     # Live Voltage Calculations and Readout Box (centered below the amplifier)
@@ -414,32 +441,32 @@ function signal_example_heog()
 
     # Real-time waveform update
     waveform = lift(angle_deg, noise_amp, duration_ms) do deg, n_amp, dur_ms
-        amp = 5.0 * deg
-        t_on = 0.40
-        t_off = t_on + dur_ms / 1000.0
+        amp     = 5.0 * deg
+        t_on    = 0.40
+        t_off   = t_on + dur_ms / 1000.0
         sig_on  = @. 1.0 / (1.0 + exp(-(t_vec - t_on) / 0.015))
         sig_off = @. 1.0 / (1.0 + exp((t_vec - t_off) / 0.015))
-        pulse = sig_on .* sig_off
+        pulse   = sig_on .* sig_off
         return @. amp * pulse + n_amp * base_noise
     end
 
     waveform_R = lift(angle_deg, noise_amp, duration_ms) do deg, n_amp, dur_ms
-        amp = 5.0 * deg
-        t_on = 0.40
-        t_off = t_on + dur_ms / 1000.0
+        amp     = 5.0 * deg
+        t_on    = 0.40
+        t_off   = t_on + dur_ms / 1000.0
         sig_on  = @. 1.0 / (1.0 + exp(-(t_vec - t_on) / 0.015))
         sig_off = @. 1.0 / (1.0 + exp((t_vec - t_off) / 0.015))
-        pulse = sig_on .* sig_off
+        pulse   = sig_on .* sig_off
         return @. 0.5 * amp * pulse + 0.5 * n_amp * base_noise + common_eeg
     end
 
     waveform_L = lift(angle_deg, noise_amp, duration_ms) do deg, n_amp, dur_ms
-        amp = 5.0 * deg
-        t_on = 0.40
-        t_off = t_on + dur_ms / 1000.0
+        amp     = 5.0 * deg
+        t_on    = 0.40
+        t_off   = t_on + dur_ms / 1000.0
         sig_on  = @. 1.0 / (1.0 + exp(-(t_vec - t_on) / 0.015))
         sig_off = @. 1.0 / (1.0 + exp((t_vec - t_off) / 0.015))
-        pulse = sig_on .* sig_off
+        pulse   = sig_on .* sig_off
         return @. -0.5 * amp * pulse - 0.5 * n_amp * base_noise + common_eeg
     end
 
@@ -521,10 +548,10 @@ function signal_example_heog()
                 n_frames = 60
                 fps = 30.0
                 dt = t_total / n_frames
-                for frame in 0:n_frames
+                for frame = 0:n_frames
                     t_curr = frame * dt
                     playback_time[] = t_curr
-                    sig_on  = 1.0 / (1.0 + exp(-(t_curr - t_on) / 0.015))
+                    sig_on = 1.0 / (1.0 + exp(-(t_curr - t_on) / 0.015))
                     sig_off = 1.0 / (1.0 + exp((t_curr - t_off) / 0.015))
                     current_display_angle[] = target * sig_on * sig_off
                     sleep(1.0 / fps)

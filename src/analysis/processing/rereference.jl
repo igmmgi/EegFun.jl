@@ -44,7 +44,7 @@ function _apply_rereference!(dat::Vector{DataFrame}, channel_selection::Vector{S
     ch_indices = [columnindex(first_df, ch) for ch in channel_selection]
 
     n_threads = Threads.maxthreadid()
-    ref_buffers = [Vector{Float64}(undef, n) for _ in 1:n_threads]
+    ref_buffers = [Vector{Float64}(undef, n) for _ = 1:n_threads]
 
     Threads.@threads for df in dat
         tid = Threads.threadid()

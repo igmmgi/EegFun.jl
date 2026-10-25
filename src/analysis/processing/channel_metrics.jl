@@ -55,11 +55,11 @@ function _correlation_matrix(dat::DataFrame, selected_samples::Vector{Int}, sele
         col = dat[!, ch]
         if col isa Vector{Float64}
             col_f = col::Vector{Float64}
-            @inbounds @simd for s in 1:n_s
+            @inbounds @simd for s = 1:n_s
                 X[s, c] = col_f[selected_samples[s]]
             end
         else
-            @inbounds for s in 1:n_s
+            @inbounds for s = 1:n_s
                 X[s, c] = Float64(col[selected_samples[s]])
             end
         end
@@ -173,11 +173,11 @@ function _correlation_matrix_dual_selection(
         col = dat[!, ch]
         if col isa Vector{Float64}
             col_f = col::Vector{Float64}
-            @inbounds @simd for s in 1:n_s
+            @inbounds @simd for s = 1:n_s
                 matrix1[s, c] = col_f[selected_samples[s]]
             end
         else
-            @inbounds for s in 1:n_s
+            @inbounds for s = 1:n_s
                 matrix1[s, c] = Float64(col[selected_samples[s]])
             end
         end
@@ -188,11 +188,11 @@ function _correlation_matrix_dual_selection(
         col = dat[!, ch]
         if col isa Vector{Float64}
             col_f = col::Vector{Float64}
-            @inbounds @simd for s in 1:n_s
+            @inbounds @simd for s = 1:n_s
                 matrix2[s, c] = col_f[selected_samples[s]]
             end
         else
-            @inbounds for s in 1:n_s
+            @inbounds for s = 1:n_s
                 matrix2[s, c] = Float64(col[selected_samples[s]])
             end
         end

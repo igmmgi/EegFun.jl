@@ -307,12 +307,12 @@ function tf_multitaper(
         end
     else
         n_threads = min(Threads.nthreads(), n_chans)
-        channel_chunks = [Symbol[] for _ in 1:n_threads]
+        channel_chunks = [Symbol[] for _ = 1:n_threads]
         for (i, ch) in enumerate(selected_channels)
             push!(channel_chunks[mod1(i, n_threads)], ch)
         end
 
-        Threads.@threads for tid in 1:n_threads
+        Threads.@threads for tid = 1:n_threads
             buf = _allocate_multitaper_buffers(
                 n_samples_padded,
                 n_samples_per_epoch,
@@ -452,7 +452,7 @@ function _process_multitaper_channel!(
     phase_df,
     buf::Union{MultitaperBuffers,Nothing},
     gpu_buffers,
-) where {P1, P2}
+) where {P1,P2}
     gpu_active = !isnothing(gpu_buffers)
 
     if gpu_active

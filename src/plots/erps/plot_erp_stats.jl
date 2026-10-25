@@ -494,15 +494,15 @@ Supports multiple mask styles (:alpha, :hide, :contour, :none), smart high-densi
 and baseline window shading.
 """
 function _plot_stat_heatmap_core!(
-    fig::Union{Figure, Nothing},
+    fig::Union{Figure,Nothing},
     ax::Axis,
     time_points::AbstractVector{<:Real},
     electrodes::AbstractVector,
     t_values::AbstractMatrix{<:Real},
     mask::AbstractMatrix{Bool};
-    kwargs...
+    kwargs...,
 )
-    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs; validate=false)
+    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs; validate = false)
 
     time_unit = get(kwargs, :time_unit, :s)
     t_scale = time_unit == :ms ? 1000.0 : 1.0
@@ -549,29 +549,23 @@ function _plot_stat_heatmap_core!(
     local hm
     if mask_style == :alpha
         # Base transparent layer
-        heatmap!(ax, x_times, 1:n_chans, transpose(t_values),
-                 colormap = cmap, colorrange = clims, alpha = alpha_subdued)
+        heatmap!(ax, x_times, 1:n_chans, transpose(t_values), colormap = cmap, colorrange = clims, alpha = alpha_subdued)
 
         # Opaque layer over significant regions
         highlight = copy(t_values)
         highlight[.!mask] .= NaN
-        hm = heatmap!(ax, x_times, 1:n_chans, transpose(highlight),
-                      colormap = cmap, colorrange = clims, nan_color = :transparent)
+        hm = heatmap!(ax, x_times, 1:n_chans, transpose(highlight), colormap = cmap, colorrange = clims, nan_color = :transparent)
     elseif mask_style == :hide
         highlight = copy(t_values)
         highlight[.!mask] .= NaN
-        hm = heatmap!(ax, x_times, 1:n_chans, transpose(highlight),
-                      colormap = cmap, colorrange = clims, nan_color = :transparent)
+        hm = heatmap!(ax, x_times, 1:n_chans, transpose(highlight), colormap = cmap, colorrange = clims, nan_color = :transparent)
     elseif mask_style == :contour
-        hm = heatmap!(ax, x_times, 1:n_chans, transpose(t_values),
-                      colormap = cmap, colorrange = clims)
+        hm = heatmap!(ax, x_times, 1:n_chans, transpose(t_values), colormap = cmap, colorrange = clims)
         if any(mask)
-            contour!(ax, x_times, 1:n_chans, Float64.(transpose(mask)),
-                     levels = [0.5], color = :black, linewidth = 1.8)
+            contour!(ax, x_times, 1:n_chans, Float64.(transpose(mask)), levels = [0.5], color = :black, linewidth = 1.8)
         end
     else # :none
-        hm = heatmap!(ax, x_times, 1:n_chans, transpose(t_values),
-                      colormap = cmap, colorrange = clims)
+        hm = heatmap!(ax, x_times, 1:n_chans, transpose(t_values), colormap = cmap, colorrange = clims)
     end
 
     xlims!(ax, extrema(x_times))
@@ -594,7 +588,7 @@ end
 
 Mutating variant of `plot_stat_heatmap` to draw a 2D statistical heatmap into an existing Axis.
 """
-function plot_stat_heatmap!(fig::Union{Figure, Nothing}, ax::Axis, result::StatsResult; kwargs...)
+function plot_stat_heatmap!(fig::Union{Figure,Nothing}, ax::Axis, result::StatsResult; kwargs...)
     time_points = result.time_points
     electrodes = result.electrodes
     t_values = result.stat_matrix.t
@@ -610,7 +604,7 @@ end
 Plots a 2D heatmap of the t-statistics (Channels x Time) from a classical permutation test.
 """
 function plot_stat_heatmap(result::StatsResult; kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs; validate=false)
+    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs; validate = false)
     window_title = get(kwargs, :window_title, "T-Statistic Heatmap")
     xlabel_def = get(kwargs, :time_unit, :s) == :ms ? "Time (ms)" : "Time (s)"
     xlabel = get(kwargs, :xlabel, xlabel_def)
@@ -631,4 +625,3 @@ function plot_stat_heatmap(result::StatsResult; kwargs...)
 
     return (fig = fig, axes = [ax])
 end
-

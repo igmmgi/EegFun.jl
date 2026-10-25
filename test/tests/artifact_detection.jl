@@ -1171,4 +1171,3 @@ using EegFun
     end
 
 end
-
