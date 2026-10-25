@@ -233,15 +233,19 @@ EegFun.plot_erp(erps, layout = :grid)
 EegFun.plot_erp(erps[1], layout = :topo)
 
 
-with_theme(theme_ggplot2()) do
-
-with_theme(Theme(colormap=:coolwarm)) do
-EegFun.plot_erp(erps, layout = :grid, channel_selection = EegFun.channels([:Fp1, :M2]), 
-legend_channel = [:Fp1, :M2], yreversed = true, theme_fontsize=30)
+with_theme(Theme(colormap = :coolwarm)) do
+    EegFun.plot_erp(
+        erps,
+        layout = :grid,
+        channel_selection = EegFun.channels([:Fp1, :M2]),
+        legend_channel = [:Fp1, :M2],
+        yreversed = true,
+        theme_fontsize = 30,
+    )
 end
 
 with_theme(theme_dark()) do
-EegFun.plot_erp(erps, layout = :grid, legend_channel = [:Fp1, :M2], yreversed = true)
+    EegFun.plot_erp(erps, layout = :grid, legend_channel = [:Fp1, :M2], yreversed = true)
 end
 
 EegFun.plot_erp(
@@ -312,14 +316,15 @@ EegFun.plot_topography!(
     point_plot = false,
     label_plot = false,
     colorbar_plot = true,
-    colorbar_kwargs = (; width = Relative(0.03),
+    colorbar_kwargs = (;
+        width = Relative(0.03),
         height = Relative(0.2),
         tellheight = false,
         tellwidth = false,
         position = (1, 1),
         halign = 0.25,
         valign = 0,
-        flipaxis = true
+        flipaxis = true,
     ),
 )
 fig

@@ -130,8 +130,6 @@ EegFun.repair_channels!(dat, [channel_to_repair], method = :spherical_spline)
 
 # Cz is now repaired
 EegFun.plot_databrowser(dat)
-
-
 ```
 
 :::

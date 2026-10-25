@@ -78,9 +78,6 @@ epoch_data = EegFun.read_fieldtrip(EegFun.example_path("data/fieldtrip/custom_ep
 println("\nLoading ERP data...")
 erp_data = EegFun.read_fieldtrip(EegFun.example_path("data/fieldtrip/custom_erp.mat"), layout)
 EegFun.plot_erp(erp_data, layout = :grid)
-
-
-
 ```
 
 :::

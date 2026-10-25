@@ -54,7 +54,6 @@ gui = EegFun.plot_erp_filter_gui()
 if !isinteractive() && !isnothing(gui.screen)
     wait(gui.screen)
 end
-
 ```
 
 :::

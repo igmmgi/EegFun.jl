@@ -174,8 +174,6 @@ EegFun.plot_erp_stats(
     show_progress = true,
     use_gpu = true,
 )
-
-
 ```
 
 :::

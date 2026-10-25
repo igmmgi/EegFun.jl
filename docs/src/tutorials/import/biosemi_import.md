@@ -129,7 +129,6 @@ EegFun.rereference!(dat, :avg)    # Average reference
 
 # Open interactive databrowser
 EegFun.plot_databrowser(dat);
-
 ```
 
 :::

@@ -101,7 +101,7 @@ EegFun.plot_erp(grand_avgs, condition_selection = EegFun.conditions([1]), channe
 
 # Averages all JLD2 files whose name contains "erps_final" in the given directory.
 # Saves the result to tutorials/output/grand_average_erps_final.jld2
-EegFun.grand_average("erps_final", input_dir  = EegFun.example_path("data/julia/erps/"), output_dir = DEMO_OUTPUT)
+EegFun.grand_average("erps_final", input_dir = EegFun.example_path("data/julia/erps/"), output_dir = DEMO_OUTPUT)
 
 # With participant and condition filtering
 EegFun.grand_average(

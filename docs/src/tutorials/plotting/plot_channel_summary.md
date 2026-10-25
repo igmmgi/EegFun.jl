@@ -166,7 +166,6 @@ cs = EegFun.channel_summary(epochs)
 
 EegFun.plot_channel_summary(cs, :range, average_over = :epoch)
 EegFun.plot_channel_summary(cs, [:min, :max, :std, :range, :var, :zvar], average_over = :epoch)
-
 ```
 
 :::

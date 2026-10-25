@@ -128,9 +128,7 @@ EegFun.plot_ica_component_activation(dat, ica, component_selection = EegFun.comp
 #######################################################################
 
 # identify artifact components automatically
-component_artifacts, _ = EegFun.identify_components(
-    dat, ica, sample_selection = EegFun.samples_not(:is_extreme_value_200),
-)
+component_artifacts, _ = EegFun.identify_components(dat, ica, sample_selection = EegFun.samples_not(:is_extreme_value_200))
 
 # activation viewer with artifact category checkboxes
 # (components are labelled by type: EOG, ECG, line noise, channel noise)

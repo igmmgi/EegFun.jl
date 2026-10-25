@@ -150,11 +150,6 @@ EegFun.plot_filter_response(filter_info, title = "FIR Lowpass Filter", color = :
 # Test additional filter with separate plotting
 filter_info = EegFun.create_highpass_filter(0.5, 256.0; filter_method = "iir")
 EegFun.plot_filter_response(filter_info, title = "High-pass Filter with Plot")
-
-
-
-
-
 ```
 
 :::
