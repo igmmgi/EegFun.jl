@@ -14,6 +14,8 @@ public AnalysisSettings
 public AnalyticResult
 public ArtifactComponents
 public ArtifactInfo
+public AutoRejectConfig
+public AutoRejectResult
 public BaselineInfo
 public BatchResult
 public CleanLineConfig
@@ -227,6 +229,8 @@ public rsa
 public rsa_crossvalidated
 
 # === Artifact detection and repair ===
+public autoreject
+public autoreject!
 public compare_rejections
 public compute_csd
 public compute_csd!

@@ -107,6 +107,20 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "preprocess.channel_repair.method" =>
         simple_string_param("Method for bad channel interpolation (:spherical_spline or :neighbor_interpolation)", "spherical_spline"),
 
+    # Autoreject adaptive artifact rejection settings
+    "preprocess.autoreject.apply" => bool_param("Apply Autoreject adaptive artifact rejection and repair?", false),
+    "preprocess.autoreject.mode" => symbol_param("Autoreject mode (:local or :global).", :local, allowed = [:local, :global]),
+    "preprocess.autoreject.n_folds" => number_param("Number of cross-validation folds for Autoreject.", 10, 2, 50),
+    "preprocess.autoreject.n_candidates" => number_param("Number of candidate thresholds to evaluate per channel.", 30, 5, 100),
+    "preprocess.autoreject.consensus_perc" => number_param("Consensus rejection threshold (fraction of bad channels).", 0.2, 0.0, 1.0),
+    "preprocess.autoreject.max_repair_perc" => number_param("Maximum fraction of bad channels to repair in an epoch.", 0.1, 0.0, 1.0),
+    "preprocess.autoreject.repair_method" => symbol_param(
+        "Channel repair method (:spherical_spline or :neighbor_interpolation).",
+        :spherical_spline,
+        allowed = [:spherical_spline, :neighbor_interpolation],
+    ),
+    "preprocess.autoreject.seed" => number_param("Random seed for cross-validation splits.", 42),
+
     # ICA settings
     "preprocess.ica.apply" => bool_param("Independent Component Analysis (ICA) true/false.", true),
     "preprocess.ica.percentage_of_data" => number_param("Percentage of data to use for ICA (0-100).", 100.0, 0.0, 100.0),

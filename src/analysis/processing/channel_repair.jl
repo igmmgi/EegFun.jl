@@ -496,12 +496,20 @@ function _make_interpolation_matrix(
 
     for i = 1:n_from
         norm = sqrt(sum(pos_from_norm[i, :] .^ 2))
-        pos_from_norm[i, :] ./= norm
+        if norm > 1e-12
+            pos_from_norm[i, :] ./= norm
+        else
+            pos_from_norm[i, :] .= (0.0, 0.0, 1.0)
+        end
     end
 
     for i = 1:n_to
         norm = sqrt(sum(pos_to_norm[i, :] .^ 2))
-        pos_to_norm[i, :] ./= norm
+        if norm > 1e-12
+            pos_to_norm[i, :] ./= norm
+        else
+            pos_to_norm[i, :] .= (0.0, 0.0, 1.0)
+        end
     end
 
     # Calculate cosine angles (dot products) between positions

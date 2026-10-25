@@ -18,6 +18,7 @@ end
 
     include("tests/apply.jl")
     include("tests/artifact_detection.jl")
+    include("tests/autoreject.jl")
     include("tests/baseline.jl")
     include("tests/batch_utils.jl")
     include("tests/channel_average.jl")

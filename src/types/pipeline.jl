@@ -140,6 +140,32 @@ Configuration for data resampling.
 end
 
 """
+    AutoRejectConfig
+
+Configuration for adaptive artifact rejection and channel repair (Autoreject approach).
+
+# Fields
+- `apply::Bool`: Whether to apply Autoreject adaptive artifact rejection and repair (default: false)
+- `mode::Symbol`: Rejection mode (`:local` or `:global`, default: `:local`)
+- `n_folds::Int`: Number of cross-validation folds (default: 10)
+- `n_candidates::Int`: Number of candidate peak-to-peak thresholds to evaluate per channel (default: 30)
+- `consensus_perc::Float64`: Maximum fraction of bad channels in an epoch before the epoch is rejected (default: 0.2)
+- `max_repair_perc::Float64`: Maximum fraction of bad channels in an epoch that can be repaired (default: 0.1)
+- `repair_method::Symbol`: Repair method to use (`:spherical_spline` or `:neighbor_interpolation`, default: `:spherical_spline`)
+- `seed::Union{Int,Nothing}`: Random seed for cross-validation fold generation (default: 42)
+"""
+@kwdef struct AutoRejectConfig
+    apply::Bool = false
+    mode::Symbol = :local
+    n_folds::Int = 10
+    n_candidates::Int = 30
+    consensus_perc::Float64 = 0.2
+    max_repair_perc::Float64 = 0.1
+    repair_method::Symbol = :spherical_spline
+    seed::Union{Int,Nothing} = 42
+end
+
+"""
     PreprocessConfig
 
 Comprehensive configuration for EEG data preprocessing.
@@ -154,6 +180,7 @@ Comprehensive configuration for EEG data preprocessing.
 - `eog::EogConfig`: EOG configuration
 - `eeg::EegConfig`: EEG configuration
 - `ica::IcaConfig`: ICA configuration
+- `autoreject::AutoRejectConfig`: Autoreject adaptive artifact rejection configuration
 - `neighbour_criterion::Float64`: Criterion for layout neighbours
 - `channel_repair_method::Symbol`: Method for repairing bad channels
 - `interactive_continuous::Bool`: Show interactive continuous plot
@@ -170,6 +197,7 @@ Comprehensive configuration for EEG data preprocessing.
     eog::EogConfig = EogConfig()
     eeg::EegConfig = EegConfig()
     ica::IcaConfig = IcaConfig()
+    autoreject::AutoRejectConfig = AutoRejectConfig()
     neighbour_criterion::Float64 = 0.35
     channel_repair_method::Symbol = :spherical_spline
     interactive_continuous::Bool = false
@@ -329,6 +357,7 @@ EegConfig(cfg::Dict) = from_dict(EegConfig, cfg)
 IcaConfig(cfg::Dict) = from_dict(IcaConfig, cfg)
 CleanLineConfig(cfg::Dict) = from_dict(CleanLineConfig, cfg)
 ResampleConfig(cfg::Dict) = from_dict(ResampleConfig, cfg)
+AutoRejectConfig(cfg::Dict) = from_dict(AutoRejectConfig, cfg)
 PreprocessConfig(cfg::Dict) = from_dict(PreprocessConfig, cfg)
 InputFilesConfig(cfg::Dict) = from_dict(InputFilesConfig, cfg)
 OutputFilesConfig(cfg::Dict) = from_dict(OutputFilesConfig, cfg)

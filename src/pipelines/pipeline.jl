@@ -783,9 +783,7 @@ function _pipeline_epoch_and_reject!(
     @info section("Baseline whole epochs")
     baseline!(epochs)
 
-    #################### DETECT BAD EPOCHS ###################
-    @info section("Automatic epoch detection")
-
+    #################### DETECT AND REPAIR / REJECT BAD EPOCHS ###################
     # Determine interval selection for artifact rejection
     if !isnothing(preprocess_cfg.eeg.artifact_interval_start) && !isnothing(preprocess_cfg.eeg.artifact_interval_end)
         rej_interval = times(preprocess_cfg.eeg.artifact_interval_start, preprocess_cfg.eeg.artifact_interval_end)
@@ -794,47 +792,74 @@ function _pipeline_epoch_and_reject!(
         rej_interval = times()
     end
 
-    rejection_info_step1 = detect_bad_epochs_automatic(
-        epochs;
-        z_criterion = preprocess_cfg.eeg.artifact_value_z_criterion,
-        abs_criterion = preprocess_cfg.eeg.artifact_value_abs_criterion,
-        interval_selection = rej_interval,
-        name = "rejection_step1",
-    )
-    channel_repairable!(rejection_info_step1, epochs[1].layout)
-    @info "" # formatting
-    @info rejection_info_step1
+    local rejection_info_step1::Vector{EpochRejectionInfo}
+    local rejection_info_step2::Vector{EpochRejectionInfo}
 
-    #################### CHANNEL REPAIR PER EPOCH ###################
-    # Repair channels identified in rejection_step1 before rejecting epochs
-    # This may save epochs that would otherwise be rejected
-    @info section("Channel Repair per Epoch")
-    repair_artifacts!(epochs, rejection_info_step1; method = preprocess_cfg.channel_repair_method)
+    if preprocess_cfg.autoreject.apply
+        @info section("Adaptive Artifact Handling (Autoreject)")
+        autoreject_res = autoreject!(
+            epochs;
+            mode = preprocess_cfg.autoreject.mode,
+            interval_selection = rej_interval,
+            n_folds = preprocess_cfg.autoreject.n_folds,
+            n_candidates = preprocess_cfg.autoreject.n_candidates,
+            consensus_perc = preprocess_cfg.autoreject.consensus_perc,
+            max_repair_perc = preprocess_cfg.autoreject.max_repair_perc,
+            repair_method = preprocess_cfg.autoreject.repair_method,
+            seed = preprocess_cfg.autoreject.seed,
+            reject = false,
+        )
+
+        log_pretty_table(autoreject_res.summary_table; title = "Autoreject: Summary")
+        log_pretty_table(autoreject_res.channel_table; title = "Autoreject: Learned Channel Thresholds")
+
+        rejection_info_step1 = autoreject_res.rejection_info
+        rejection_info_step2 = autoreject_res.rejection_info
+    else
+        @info section("Automatic epoch detection")
+
+        rejection_info_step1 = detect_bad_epochs_automatic(
+            epochs;
+            z_criterion = preprocess_cfg.eeg.artifact_value_z_criterion,
+            abs_criterion = preprocess_cfg.eeg.artifact_value_abs_criterion,
+            interval_selection = rej_interval,
+            name = "rejection_step1",
+        )
+        channel_repairable!(rejection_info_step1, epochs[1].layout)
+        @info "" # formatting
+        @info rejection_info_step1
+
+        #################### CHANNEL REPAIR PER EPOCH ###################
+        # Repair channels identified in rejection_step1 before rejecting epochs
+        # This may save epochs that would otherwise be rejected
+        @info section("Channel Repair per Epoch")
+        repair_artifacts!(epochs, rejection_info_step1; method = preprocess_cfg.channel_repair_method)
+
+        #################### RE-DETECT ARTIFACTS AFTER REPAIR ###################
+        # Re-detect artifacts after repair to get updated rejection info
+        @info subsection("Re-detecting artifacts after repair")
+        rejection_info_step2 = detect_bad_epochs_automatic(
+            epochs;
+            z_criterion = preprocess_cfg.eeg.artifact_value_z_criterion,
+            abs_criterion = preprocess_cfg.eeg.artifact_value_abs_criterion,
+            interval_selection = rej_interval,
+            name = "rejection_step2",
+        )
+        channel_repairable!(rejection_info_step2, epochs[1].layout)
+        @info "" # formatting
+        @info rejection_info_step2
+
+        #################### COMPARE REJECTION STEPS ###################
+        @info subsection("Rejection Step Comparison (before vs after repair)")
+        rejection_comparison = compare_rejections(rejection_info_step1, rejection_info_step2)
+        log_pretty_table(rejection_comparison; title = "Rejection Step Comparison: Effectiveness of Channel Repair")
+    end
 
     #################### SAVE EPOCH DATA ###################
     if files_cfg.output.save_epoch_data_corrected
         @info "Saving epoch data (cleaned)"
         jldsave(_make_output_filename(output_directory, data_file, "_epochs_corrected"); data = epochs)
     end
-
-    #################### RE-DETECT ARTIFACTS AFTER REPAIR ###################
-    # Re-detect artifacts after repair to get updated rejection info
-    @info subsection("Re-detecting artifacts after repair")
-    rejection_info_step2 = detect_bad_epochs_automatic(
-        epochs;
-        z_criterion = preprocess_cfg.eeg.artifact_value_z_criterion,
-        abs_criterion = preprocess_cfg.eeg.artifact_value_abs_criterion,
-        interval_selection = rej_interval,
-        name = "rejection_step2",
-    )
-    channel_repairable!(rejection_info_step2, epochs[1].layout)
-    @info "" # formatting
-    @info rejection_info_step2
-
-    #################### COMPARE REJECTION STEPS ###################
-    @info subsection("Rejection Step Comparison (before vs after repair)")
-    rejection_comparison = compare_rejections(rejection_info_step1, rejection_info_step2)
-    log_pretty_table(rejection_comparison; title = "Rejection Step Comparison: Effectiveness of Channel Repair")
 
     if preprocess_cfg.interactive_epochs
         @info section("Interactive Epoch Rejection Review")
