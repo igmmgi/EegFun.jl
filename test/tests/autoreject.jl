@@ -55,6 +55,17 @@ using EegFun:
         prep_cfg = PreprocessConfig(Dict("autoreject" => dict))
         @test prep_cfg.autoreject.apply == true
         @test prep_cfg.autoreject.mode == :global
+
+        # Default PreprocessConfig has autoreject.apply == false
+        prep_cfg_default = PreprocessConfig()
+        @test prep_cfg_default.autoreject.apply == false
+        @test PreprocessConfig(Dict{String,Any}()).autoreject.apply == false
+
+        # Default config generation has preprocess.autoreject.apply == false
+        default_dict = EegFun._generate_default_config()
+        @test haskey(default_dict, "preprocess")
+        @test haskey(default_dict["preprocess"], "autoreject")
+        @test default_dict["preprocess"]["autoreject"]["apply"] == false
     end
 
     @testset "autoreject on clean synthetic epochs" begin
