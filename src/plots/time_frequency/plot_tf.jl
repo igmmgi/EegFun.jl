@@ -85,8 +85,8 @@ function plot_tf(filepath::String; kwargs...)
     return plot_tf(data; kwargs...)
 end
 function plot_tf(
-    tf_data::Vector{TimeFreqData};
-    channel_selection::Function = channels(),
+    tf_data::AbstractVector{<:TimeFreqData};
+    channel_selection = channels(),
     baseline_interval::Union{Nothing,Tuple{Real,Real}} = nothing,
     kwargs...,
 )
@@ -225,7 +225,7 @@ end
 
 function plot_tf(
     tf_data::TimeFreqData;
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
     baseline_interval::Union{Nothing,Tuple{Real,Real}} = nothing,
     kwargs...,

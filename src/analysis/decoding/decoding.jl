@@ -13,7 +13,7 @@ Returns arrays ready for classification.
 - `data_arrays::Vector{Array{Float64, 3}}`: One array per condition [channels × time × trials]
 - `n_trials_per_condition::Vector{Int}`: Number of trials per condition
 """
-function _prepare_decoding_data(epochs::Vector{EpochData})
+function _prepare_decoding_data(epochs::AbstractVector{<:EpochData})
 
     channels = channel_labels(epochs)
     n_channels = length(channels)
@@ -71,7 +71,7 @@ At each time point, channel × frequency pairs are used as features for classifi
 - `data_arrays::Vector{Array{Float64, 3}}`: One array per condition [(channels×frequencies) × time × trials]
 - `n_trials_per_condition::Vector{Int}`: Number of trials per condition
 """
-function _prepare_decoding_data(epochs::Vector{TimeFreqEpochData})
+function _prepare_decoding_data(epochs::AbstractVector{<:TimeFreqEpochData})
 
     channels = channel_labels(epochs)
     n_channels = length(channels)
@@ -315,7 +315,7 @@ function _decode_core(
     n_iterations::Int,
     n_folds::Int,
     equalize_trials::Bool,
-    cost::Float64,
+    cost::Real,
     save_raw_predictions::Bool = true,
     show_progress::Bool,
     progress_desc::String,
@@ -517,16 +517,23 @@ end
 
 # === TIME POINTS & LOGGING DISPATCH HELPERS ===
 
-_decoding_time_points(epochs::Vector{EpochData}) = time_vector(epochs)
-_decoding_time_points(epochs::Vector{TimeFreqEpochData}) = sort(unique(epochs[1].data_power[1].time))
+_decoding_time_points(epochs::AbstractVector{<:EpochData}) = time_vector(epochs)
+_decoding_time_points(epochs::AbstractVector{<:TimeFreqEpochData}) = sort(unique(epochs[1].data_power[1].time))
 
-function _log_decoding_start(epochs::Vector{EpochData}, data_arrays, time_points, n_iterations, n_folds, n_trials_per_condition)
+function _log_decoding_start(epochs::AbstractVector{<:EpochData}, data_arrays, time_points, n_iterations, n_folds, n_trials_per_condition)
     @info "Starting decoding analysis" file = epochs[1].file n_conditions = length(epochs) n_channels = n_channels(epochs[1]) n_timepoints =
         length(time_points) time_range = (first(time_points), last(time_points)) n_iterations = n_iterations n_folds = n_folds trials_per_condition =
         n_trials_per_condition
 end
 
-function _log_decoding_start(epochs::Vector{TimeFreqEpochData}, data_arrays, time_points, n_iterations, n_folds, n_trials_per_condition)
+function _log_decoding_start(
+    epochs::AbstractVector{<:TimeFreqEpochData},
+    data_arrays,
+    time_points,
+    n_iterations,
+    n_folds,
+    n_trials_per_condition,
+)
     n_chans = n_channels(epochs[1])
     n_features = size(data_arrays[1], 1)
     n_freqs = n_features ÷ n_chans
@@ -574,13 +581,13 @@ all_decoded = decode_libsvm(participant_epochs; n_iterations = 100)
 ```
 """
 function decode_libsvm(
-    epochs::Vector{T};
-    channel_selection::Function = channels(),
+    epochs::AbstractVector{T};
+    channel_selection = channels(),
     interval_selection::Interval = times(),
     n_iterations::Int = 100,
     n_folds::Int = 3,
     equalize_trials::Bool = true,
-    cost::Float64 = 1.0,
+    cost::Real = 1.0,
     save_raw_predictions::Bool = true,
     show_progress::Bool = true,
 ) where {T<:MultiDataFrameEeg}
@@ -625,7 +632,7 @@ function decode_libsvm(
     )
 end
 
-function decode_libsvm(participant_epochs::Vector{Vector{T}}; kwargs...) where {T<:MultiDataFrameEeg}
+function decode_libsvm(participant_epochs::AbstractVector{<:AbstractVector{<:MultiDataFrameEeg}}; kwargs...)
     return [decode_libsvm(epochs; kwargs...) for epochs in participant_epochs]
 end
 
@@ -633,7 +640,7 @@ end
 
 # === GRAND AVERAGE FOR DECODING RESULTS ===
 
-function grand_average(dat::Vector{DecodedData})
+function grand_average(dat::AbstractVector{<:DecodedData})
 
     isempty(dat) && @minimal_error("Cannot create grand average from empty decoded data list")
     length(dat) == 1 && return dat[1]

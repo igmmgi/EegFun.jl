@@ -25,7 +25,7 @@ Perform cluster-based permutation test on prepared ERP data.
 function permutation_test(
     prepared::StatisticalData;
     n_permutations::Int = 1000,
-    threshold::Float64 = 0.05,
+    threshold::Real = 0.05,
     threshold_method::Symbol = :parametric,
     cluster_type::Symbol = :spatiotemporal,
     min_num_neighbors::Int = 2,
@@ -344,7 +344,7 @@ end
 function permutation_test(
     prepared::TFStatisticalData;
     n_permutations::Int = 1000,
-    threshold::Float64 = 0.05,
+    threshold::Real = 0.05,
     threshold_method::Symbol = :parametric,
     cluster_type::Symbol = :full,
     min_num_neighbors::Int = 2,
@@ -602,7 +602,7 @@ function _compute_tf_cluster_pvalues(
     cluster_stats::Vector{Float64},
     permutation_max::Vector{Float64},
     n_permutations::Int,
-    alpha::Float64 = 0.05,
+    alpha::Real = 0.05,
 )
     if isempty(clusters)
         return TFCluster[]

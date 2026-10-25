@@ -73,8 +73,8 @@ plot_erp_stats(result_perm, channel_selection=channels(:PO7),
 function plot_erp_stats(
     result::StatsResult;
     layout::Union{Symbol,PlotLayout} = :single,
-    condition_selection::Function = conditions(),
-    channel_selection::Function = channels(),
+    condition_selection = conditions(),
+    channel_selection = channels(),
     channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
     plot_erp::Bool = true,
     plot_difference::Bool = false,
@@ -251,7 +251,7 @@ function _plot_erp_stats_channel!(
     result::StatsResult,
     channel_idx::Int,
     channel_sym::Symbol;
-    condition_selection::Function = conditions(),
+    condition_selection = conditions(),
     plot_erp::Bool = true,
     plot_difference::Bool = false,
     plot_tvalues::Bool = false,

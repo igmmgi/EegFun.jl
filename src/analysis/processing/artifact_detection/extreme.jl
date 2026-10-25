@@ -72,8 +72,8 @@ is_extreme_value!(epochs_unrejected, 100)  # batch over conditions
 function is_extreme_value!(
     dat::SingleDataFrameEeg,
     threshold::Real;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     mode::Symbol = :combined,
     channel_out::Union{Symbol,Nothing} = nothing,
@@ -107,10 +107,10 @@ end
 function is_extreme_value!(
     dat::MultiDataFrameEeg,
     threshold::Real;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
-    epoch_selection::Function = epochs(),
+    epoch_selection = epochs(),
     mode::Symbol = :combined,
     channel_out::Union{Symbol,Nothing} = nothing,
 )
@@ -162,7 +162,7 @@ function is_extreme_value!(
 end
 
 
-function is_extreme_value!(dat::Vector{EpochData}, threshold::Real; kwargs...)
+function is_extreme_value!(dat::AbstractVector{<:EpochData}, threshold::Real; kwargs...)
     for d in dat
         is_extreme_value!(d, threshold; kwargs...)
     end
@@ -171,12 +171,7 @@ end
 
 
 """Detect extreme values for selected channels and return a `Dict{Symbol, Vector{Bool}}`."""
-function _detect_extreme_values(
-    dat::SingleDataFrameEeg,
-    threshold::Real;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
-)
+function _detect_extreme_values(dat::SingleDataFrameEeg, threshold::Real; channel_selection = channels(), sample_selection = samples())
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
     isempty(selected_channels) && @minimal_error("No channels selected for extreme value detection")
 
@@ -214,8 +209,8 @@ results = is_extreme_value(dat, 100, mode = :separate)
 function is_extreme_value(
     dat::SingleDataFrameEeg,
     threshold::Real;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     mode::Symbol = :combined,
 )
@@ -250,8 +245,8 @@ end
 
 """
     n_extreme_value(dat::SingleDataFrameEeg, threshold::Real; 
-                   channel_selection::Function = channels(), 
-                   sample_selection::Function = samples(),
+                   channel_selection = channels(), 
+                   sample_selection = samples(),
     interval_selection::Interval = times(),
                    mode::Symbol = :combined)
 
@@ -260,8 +255,8 @@ Count the number of extreme values across selected channels.
 # Arguments
 - `dat::SingleDataFrameEeg`: The EEG data object
 - `threshold::Real`: Threshold for extreme value detection
-- `channel_selection::Function`: Channel predicate for selecting channels (default: all layout channels)
-- `sample_selection::Function`: Sample predicate for selecting samples (default: all samples)
+- `channel_selection`: Channel predicate for selecting channels (default: all layout channels)
+- `sample_selection`: Sample predicate for selecting samples (default: all samples)
 - `mode::Symbol`: Mode for extreme value detection (:separate or :combined, default: :combined)
 
 # Returns
@@ -285,8 +280,8 @@ count_df = n_extreme_value(dat, 100, mode = :separate)
 function n_extreme_value(
     dat::SingleDataFrameEeg,
     threshold::Real;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     mode::Symbol = :combined,
 )
@@ -330,7 +325,7 @@ function n_values(dat::MultiDataFrameEeg, column::Symbol)
     return sum(n_values(epoch, column) for epoch in dat)
 end
 
-n_values(dat::Vector{<:EegData}, column::Symbol) = sum(n_values(d, column) for d in dat)
+n_values(dat::AbstractVector{<:EegData}, column::Symbol) = sum(n_values(d, column) for d in dat)
 
 """
     _n_extreme_value(df::DataFrame, channels::Vector{Symbol}, threshold::Float64)

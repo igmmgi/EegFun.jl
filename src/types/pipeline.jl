@@ -74,9 +74,9 @@ Configuration for EEG-specific preprocessing settings.
 - `artifact_value_z_criterion::Float64`: Z-score threshold for artifact detection (optional)
 """
 @kwdef struct EegConfig
-    artifact_value_abs_criterion::Int = 100
+    artifact_value_abs_criterion::Float64 = 100.0
     artifact_value_z_criterion::Float64 = 0.0
-    extreme_value_abs_criterion::Int = 500
+    extreme_value_abs_criterion::Float64 = 500.0
     artifact_interval_start::Union{Nothing,Float64} = nothing
     artifact_interval_end::Union{Nothing,Float64} = nothing
 end
@@ -188,7 +188,7 @@ Comprehensive configuration for EEG data preprocessing.
 - `interactive_epochs::Bool`: Show interactive epochs plot
 """
 @kwdef struct PreprocessConfig
-    reference_channel::Symbol = :avg
+    reference_channel::Union{Symbol,Vector{Symbol}} = :avg
     epoch_start::Float64 = -1.0
     epoch_end::Float64 = 1.0
     filter::FilterConfig = FilterConfig()
@@ -314,6 +314,16 @@ function _coerce_value(::Type{T}, val) where {T}
         return Int(val)
     elseif T == Float64 && val isa Number
         return Float64(val)
+    elseif T == Union{Symbol,Vector{Symbol}}
+        if val isa Symbol || val isa Vector{Symbol}
+            return val
+        elseif val isa String
+            return Symbol(val)
+        elseif val isa Vector
+            return Symbol.(val)
+        else
+            return Symbol(val)
+        end
     elseif T == Union{Vector{String},String}
         if val isa String
             return val

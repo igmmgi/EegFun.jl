@@ -58,8 +58,8 @@ is_step_value!(all_epochs, 50.0)      # batch over conditions
 function is_step_value!(
     dat::SingleDataFrameEeg,
     threshold::Real;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     mode::Symbol = :combined,
     channel_out::Union{Symbol,Nothing} = nothing,
@@ -112,10 +112,10 @@ end
 function is_step_value!(
     dat::MultiDataFrameEeg,
     threshold::Real;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
-    epoch_selection::Function = epochs(),
+    epoch_selection = epochs(),
     mode::Symbol = :combined,
     channel_out::Union{Symbol,Nothing} = nothing,
 )
@@ -166,7 +166,7 @@ function is_step_value!(
 end
 
 
-function is_step_value!(dat::Vector{EpochData}, threshold::Real; kwargs...)
+function is_step_value!(dat::AbstractVector{<:EpochData}, threshold::Real; kwargs...)
     for d in dat
         is_step_value!(d, threshold; kwargs...)
     end
@@ -210,8 +210,8 @@ step_mask = is_step_value(dat, 50.0, channel_selection = channels([:Fp1, :Fp2]))
 function is_step_value(
     dat::SingleDataFrameEeg,
     threshold::Real;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     mode::Symbol = :combined,
 )
@@ -248,8 +248,8 @@ end
 
 """
     n_step_value(dat::SingleDataFrameEeg, threshold::Real; 
-                 channel_selection::Function = channels(), 
-                 sample_selection::Function = samples(),
+                 channel_selection = channels(), 
+                 sample_selection = samples(),
                  interval_selection::Interval = times(),
                  mode::Symbol = :combined)
 
@@ -258,8 +258,8 @@ Count the number of step values (sudden voltage jumps) across selected channels.
 # Arguments
 - `dat::SingleDataFrameEeg`: The EEG data object
 - `threshold::Real`: Threshold for step value detection
-- `channel_selection::Function`: Channel predicate for selecting channels (default: all layout channels)
-- `sample_selection::Function`: Sample predicate for selecting samples (default: all samples)
+- `channel_selection`: Channel predicate for selecting channels (default: all layout channels)
+- `sample_selection`: Sample predicate for selecting samples (default: all samples)
 - `mode::Symbol`: Mode for step value detection (`:separate` or `:combined`, default: `:combined`)
 
 # Returns
@@ -281,8 +281,8 @@ total_count = n_step_value(dat, 50, channel_selection = channels([:Fp1, :Fp2]))
 function n_step_value(
     dat::SingleDataFrameEeg,
     threshold::Real;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     mode::Symbol = :combined,
 )

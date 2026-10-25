@@ -413,6 +413,7 @@ Accepts:
 - `nothing` (fallback)
 """
 const Interval = Union{AbstractSelection,Tuple{Real,Real},Function,Nothing}
+
 """
     EpochCondition
 
@@ -424,11 +425,11 @@ It supports complex trigger patterns and timing relationships between events.
 
 # Fields
 - `name::String`: Descriptive condition name for identification
-- `trigger_sequences::Vector{Vector{Union{Int,Symbol,UnitRange{Int},Vector{Int}}}}`: Trigger sequences to match. Each element can be an `Int` (exact), `:any` (wildcard), `UnitRange{Int}` (range), or `Vector{Int}` (set — any of these values matches)
+- `trigger_sequences::Vector`: Trigger sequence(s) to match. Can be a single sequence (e.g. `[101, 102]`), a list of sequences (e.g. `[[101, 102], [103, 104]]`), a single trigger `101`, or a range `1:5`. Elements can be exact integers, `:any` (wildcard), ranges, or sets.
 - `reference_index::Int`: Which trigger position is t=0 (1-based, default: 1)
 - `timing_pairs::Union{Nothing,Vector{Tuple{Int,Int}}}`: Which trigger pairs to apply min/max intervals to (optional, default: nothing)
-- `min_interval::Union{Nothing,Float64}`: Minimum time between specified trigger pairs in seconds (optional, default: nothing)
-- `max_interval::Union{Nothing,Float64}`: Maximum time between specified trigger pairs in seconds (optional, default: nothing)
+- `min_interval::Union{Nothing,Real}`: Minimum time between specified trigger pairs in seconds (optional, default: nothing)
+- `max_interval::Union{Nothing,Real}`: Maximum time between specified trigger pairs in seconds (optional, default: nothing)
 - `mask_before_trigger::Union{Nothing,Int}`: Only search for sequences before this trigger value (optional, default: nothing)
 - `mask_after_trigger::Union{Nothing,Int}`: Only search for sequences after this trigger value (optional, default: nothing)
 - `mask_triggers::Union{Nothing,Vector{Int}}`: Specific trigger values to use as search boundaries (optional, default: nothing)
@@ -436,15 +437,50 @@ It supports complex trigger patterns and timing relationships between events.
 """
 @kwdef struct EpochCondition
     name::String
-    trigger_sequences::Vector{Vector{Union{Int,Symbol,UnitRange{Int},Vector{Int}}}}
+    trigger_sequences::Vector = []
     reference_index::Int = 1
     timing_pairs::Union{Nothing,Vector{Tuple{Int,Int}}} = nothing
-    min_interval::Union{Nothing,Float64} = nothing
-    max_interval::Union{Nothing,Float64} = nothing
+    min_interval::Union{Nothing,Real} = nothing
+    max_interval::Union{Nothing,Real} = nothing
     mask_before_trigger::Union{Nothing,Int} = nothing
     mask_after_trigger::Union{Nothing,Int} = nothing
     mask_triggers::Union{Nothing,Vector{Int}} = nothing
     mask_between_triggers::Union{Nothing,Vector{Tuple{Int,Int}}} = nothing
+
+    function EpochCondition(
+        name::String,
+        trigger_sequences,
+        reference_index::Int = 1,
+        timing_pairs = nothing,
+        min_interval = nothing,
+        max_interval = nothing,
+        mask_before_trigger = nothing,
+        mask_after_trigger = nothing,
+        mask_triggers = nothing,
+        mask_between_triggers = nothing,
+    )
+        norm_seqs = if trigger_sequences isa Number || trigger_sequences isa Symbol || trigger_sequences isa AbstractRange
+            Vector{Any}[Any[trigger_sequences]]
+        elseif isempty(trigger_sequences)
+            Vector{Any}[]
+        elseif all(x -> x isa AbstractVector && !(x isa AbstractRange), trigger_sequences)
+            Vector{Any}[collect(Any, s) for s in trigger_sequences]
+        else
+            Vector{Any}[collect(Any, trigger_sequences)]
+        end
+        new(
+            name,
+            norm_seqs,
+            reference_index,
+            timing_pairs,
+            min_interval,
+            max_interval,
+            mask_before_trigger,
+            mask_after_trigger,
+            mask_triggers,
+            mask_between_triggers,
+        )
+    end
 end
 
 

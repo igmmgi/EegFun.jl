@@ -34,7 +34,7 @@ function _apply_baseline!(dat::DataFrame, ch_indices::Vector{Int}, baseline_inte
     end
 end
 
-function _apply_baseline!(dat::DataFrame, channels::Vector{Symbol}, baseline_interval::Tuple{Int,Int})
+function _apply_baseline!(dat::DataFrame, channels::AbstractVector{Symbol}, baseline_interval::Tuple{Int,Int})
     ch_indices = [columnindex(dat, ch) for ch in channels]
     _apply_baseline!(dat, ch_indices, baseline_interval)
 end
@@ -44,7 +44,7 @@ end
 
 Internal function that applies baseline correction to each DataFrame in a vector using broadcasting.
 """
-function _apply_baseline!(dat::Vector{DataFrame}, channels::Vector{Symbol}, baseline_interval::Tuple{Int,Int})
+function _apply_baseline!(dat::AbstractVector{DataFrame}, channels::AbstractVector{Symbol}, baseline_interval::Tuple{Int,Int})
     isempty(dat) && return nothing
     ch_indices = [columnindex(dat[1], ch) for ch in channels]
     Threads.@threads for df in dat
@@ -80,7 +80,7 @@ baseline!(epochs, (-0.2, 0.0), channel_selection = channels([:Fz, :Cz, :Pz]))
 baseline!(erp)
 ```
 """
-function baseline!(dat::EegData, baseline_interval::Interval; channel_selection::Function = channels())
+function baseline!(dat::EegData, baseline_interval::Interval = times(); channel_selection = channels())
     # Validate baseline interval
     baseline_interval = _validate_baseline_interval(dat, baseline_interval)
 
@@ -99,24 +99,9 @@ function baseline!(dat::EegData, baseline_interval::Interval; channel_selection:
     return dat
 end
 
-
-function baseline!(dat::EegData; channel_selection::Function = channels())
-    # Use entire time range for baseline
-    baseline!(dat, times(); channel_selection = channel_selection)
-    return dat
-end
-
-function baseline!(dat::Vector{<:Union{EpochData,ErpData}}, baseline_interval::Interval; channel_selection::Function = channels())
+function baseline!(dat::AbstractVector{<:EegData}, baseline_interval::Interval = times(); channel_selection = channels())
     for d in dat
         baseline!(d, baseline_interval; channel_selection = channel_selection)
-    end
-    return dat
-end
-
-
-function baseline!(dat::Vector{<:Union{EpochData,ErpData}}; channel_selection::Function = channels())
-    for d in dat
-        baseline!(d; channel_selection = channel_selection)
     end
     return dat
 end
@@ -132,7 +117,7 @@ function baseline(dat::EegData, args...; kwargs...)
     return baseline!(copy(dat), args...; kwargs...)
 end
 
-function baseline(dat::Vector{T}, args...; kwargs...) where {T<:EegData}
+function baseline(dat::AbstractVector{<:EegData}, args...; kwargs...)
     return [baseline(d, args...; kwargs...) for d in dat]
 end
 
@@ -272,7 +257,7 @@ function _process_baseline_file(filepath::String, output_path::String, baseline_
     end
 
     # Validate that data is valid EEG data (Vector of ErpData or EpochData)
-    if !(data isa Vector{<:Union{ErpData,EpochData}})
+    if !(data isa AbstractVector{<:Union{ErpData,EpochData}})
         return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{EpochData}")
     end
 
@@ -328,8 +313,8 @@ function baseline(
     file_pattern::String,
     baseline_interval::Interval;
     input_dir::String = pwd(),
-    participant_selection::Function = participants(),
-    condition_selection::Function = conditions(),
+    participant_selection = participants(),
+    condition_selection = conditions(),
     output_dir::Union{String,Nothing} = nothing,
 )
 

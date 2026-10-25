@@ -35,7 +35,7 @@ Supports all `subset` kwargs (`epoch_selection`, `channel_selection`, `sample_se
 function subset(
     file_pattern::String;
     input_dir::String = pwd(),
-    participant_selection::Function = participants(),
+    participant_selection = participants(),
     output_dir::Union{String,Nothing} = nothing,
     kwargs...,
 )

@@ -70,7 +70,7 @@ Returns BatchResult with success/failure info.
 function _condition_difference_process_file(
     filepath::String,
     output_path::String,
-    condition_pairs::Union{Vector{Tuple{Int,Int}},Vector{Vector{Int}}},
+    condition_pairs::Union{AbstractVector{<:Tuple{Integer,Integer}},AbstractVector{<:AbstractVector{<:Integer}}},
 )
     filename = basename(filepath)
 
@@ -82,7 +82,7 @@ function _condition_difference_process_file(
     end
 
     # Dispatch to the appropriate in-memory condition_difference based on data type
-    if file_data isa Vector{<:ErpData} || file_data isa Vector{<:TimeFreqData}
+    if file_data isa AbstractVector{<:ErpData} || file_data isa AbstractVector{<:TimeFreqData}
         difference_waves = condition_difference(file_data, condition_pairs)
         jldsave(output_path; data = difference_waves)
         return BatchResult(true, filename, "Created $(length(difference_waves)) difference(s)")
@@ -114,13 +114,20 @@ diff_waves = condition_difference(erps, [(1, 2)])
 condition_difference("erps_unrejected", [(1, 2)])
 ```
 """
-function condition_difference(data::Vector{<:ErpData}, condition_pairs::Union{Vector{Tuple{Int,Int}},Vector{Vector{Int}}})::Vector{ErpData}
+function condition_difference(data::AbstractVector{<:ErpData}, condition_pairs)
+    pairs =
+        if condition_pairs isa Tuple ||
+           (condition_pairs isa AbstractVector && !isempty(condition_pairs) && first(condition_pairs) isa Integer)
+            [condition_pairs]
+        else
+            condition_pairs
+        end
 
     @info "Creating condition difference waves..."
 
     difference_waves = ErpData[]
 
-    for (pair_idx, pair) in enumerate(condition_pairs)
+    for (pair_idx, pair) in enumerate(pairs)
         cond1, cond2 = pair[1], pair[2]
 
         # Find ERP data for each condition
@@ -160,9 +167,9 @@ end
 
 function condition_difference(
     file_pattern::String,
-    condition_pairs::Union{Vector{Tuple{Int,Int}},Vector{Vector{Int}}};
+    condition_pairs::Union{AbstractVector{<:Tuple{Integer,Integer}},AbstractVector{<:AbstractVector{<:Integer}}};
     input_dir::String = pwd(),
-    participant_selection::Function = participants(),
+    participant_selection = participants(),
     output_dir::Union{String,Nothing} = nothing,
 )
 

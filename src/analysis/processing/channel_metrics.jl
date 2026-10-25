@@ -23,9 +23,9 @@ cm = correlation_matrix(dat, channel_selection = channels([:Fp1, :Fp2, :F3, :F4]
 """
 function correlation_matrix(
     dat::SingleDataFrameEeg;
-    sample_selection::Function = samples(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     include_extra::Bool = false,
 )::DataFrame
     selected_channels = EegFun.get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
@@ -122,10 +122,10 @@ cm = correlation_matrix_dual_selection(dat,
 """
 function correlation_matrix_dual_selection(
     dat::SingleDataFrameEeg;
-    sample_selection::Function = samples(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
-    channel_selection1::Function = channels(),
-    channel_selection2::Function = channels(),
+    channel_selection1 = channels(),
+    channel_selection2 = channels(),
     include_extra_selection1::Bool = false,
     include_extra_selection2::Bool = true,
 )::DataFrame
@@ -234,9 +234,9 @@ jp = channel_joint_probability(dat, threshold = 0.3)
 """
 function channel_joint_probability(
     dat::SingleDataFrameEeg;
-    sample_selection::Function = samples(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     include_extra::Bool = false,
     threshold::Real = 5.0,
     normalize::Int = 2,
@@ -276,10 +276,10 @@ function _channel_joint_probability(
     dat::DataFrame,
     selected_samples::Vector{Int},
     selected_channels::Vector{Symbol};
-    threshold::Float64 = 5.0,
+    threshold::Real = 5.0,
     normval::Int = 2,
     discret::Int = 1000,
-)::DataFrame
+)
     @info "channel_joint_probability: Computing probability for channels $(_print_vector(selected_channels))"
 
     # Select the specified channels and filter by samples
@@ -555,9 +555,9 @@ add_zscore_columns!(cm)
 function correlation_matrix_eog(
     dat::SingleDataFrameEeg,
     eog_cfg::EogConfig;
-    sample_selection::Function = samples(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     include_extra::Bool = false,
 )::DataFrame
     # Call the dual selection function

@@ -72,7 +72,7 @@ function detect_bad_epochs_automatic(
     dat::EpochData;
     z_criterion::Real = 3,
     abs_criterion::Real = 100,
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     interval_selection::Interval = times(),
     z_measures::AbstractVector{Symbol} = [:variance, :max, :min, :abs, :range, :kurtosis],
     name::String = "rejection_info",
@@ -175,7 +175,7 @@ function detect_bad_epochs_automatic(
     return rejection_info
 end
 
-detect_bad_epochs_automatic(dat::Vector{EpochData}; kwargs...) = detect_bad_epochs_automatic.(dat; kwargs...)
+detect_bad_epochs_automatic(dat::AbstractVector{<:EpochData}; kwargs...) = detect_bad_epochs_automatic.(dat; kwargs...)
 
 
 """
@@ -189,8 +189,8 @@ info = detect_bad_epochs_automatic(epochs)
 rejected = get_rejected(info)
 ```
 """
-get_rejected(info::EpochRejectionInfo)::Vector{Rejection} = info.rejected
-get_rejected(info::Vector{EpochRejectionInfo})::Vector{Vector{Rejection}} = get_rejected.(info)
+get_rejected(info::EpochRejectionInfo) = info.rejected
+get_rejected(info::AbstractVector{<:EpochRejectionInfo}) = get_rejected.(info)
 
 
 

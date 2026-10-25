@@ -215,10 +215,18 @@ function condition_parse_epoch(config::Dict)
     return conditions
 end
 
+# Helper to extract start and end from various interval representations
+_interval_endpoints(interval::Tuple{Real,Real}) = (Float64(interval[1]), Float64(interval[2]))
+_interval_endpoints(interval::AbstractVector{<:Real}) =
+    length(interval) == 2 ? (Float64(interval[1]), Float64(interval[2])) :
+    @minimal_error("Epoch interval must have exactly 2 elements, got $(length(interval))")
+_interval_endpoints(interval::TimeSelection) = (interval.start, interval.stop)
+_interval_endpoints(interval) = @minimal_error("Epoch interval must be a Tuple, Vector, or TimeSelection, got $(typeof(interval))")
+
 # Helper function to validate epoch interval parameters
-function _validate_epoch_interval_params(dat::ContinuousData, epoch_interval::Vector{<:Real})
-    length(epoch_interval) == 2 || @minimal_error "Epoch interval must have exactly 2 elements"
-    epoch_interval[1] <= epoch_interval[2] || @minimal_error "Epoch interval start must be less than or equal to end"
+function _validate_epoch_interval_params(dat::ContinuousData, epoch_interval)
+    t_start, t_end = _interval_endpoints(epoch_interval)
+    t_start <= t_end || @minimal_error "Epoch interval start ($t_start) must be less than or equal to end ($t_end)"
     hasproperty(dat.data, :trigger) || @minimal_error "Data must have a trigger column"
     hasproperty(dat.data, :time) || @minimal_error "Data must have a time column"
     !isempty(dat.data.time) || @minimal_error "Time column cannot be empty"
@@ -278,15 +286,14 @@ Internal helper function to mark time windows around specific reference indices.
 function _mark_windows_at_indices!(
     dat::ContinuousData,
     reference_indices::Vector{Int},
-    time_window::Vector{<:Real},
+    time_window::Union{Tuple{Real,Real},AbstractVector{<:Real},TimeSelection},
     channel_out::Symbol,
 )::Int
 
     times = dat.data.time
     col_out = dat.data[!, channel_out]
     n_samples = length(times)
-    w_start_offset = time_window[1]
-    w_end_offset = time_window[2]
+    w_start_offset, w_end_offset = _interval_endpoints(time_window)
 
     n_marked = 0
     for idx in reference_indices
@@ -338,8 +345,8 @@ mark_epoch_intervals!(dat, [condition1, condition2], [-1.0, 2.0])
 """
 function mark_epoch_intervals!(
     dat::ContinuousData,
-    triggers_of_interest::Vector{Int},
-    time_window::Vector{<:Real};
+    triggers_of_interest::AbstractVector{<:Integer},
+    time_window::Union{Tuple{Real,Real},AbstractVector{<:Real},TimeSelection};
     channel_out::Symbol = :epoch_interval,
 )
     # Input validation
@@ -372,7 +379,7 @@ end
 function mark_epoch_intervals!(
     dat::ContinuousData,
     channel_in::Symbol,
-    time_window::Vector{<:Real};
+    time_window::Union{Tuple{Real,Real},AbstractVector{<:Real},TimeSelection};
     channel_out::Symbol = Symbol(string(channel_in) * "_window"),
 )
     # Input validation
@@ -401,8 +408,8 @@ end
 
 function mark_epoch_intervals!(
     dat::ContinuousData,
-    channels_in::Vector{Symbol},
-    time_window::Vector{<:Real};
+    channels_in::AbstractVector{Symbol},
+    time_window::Union{Tuple{Real,Real},AbstractVector{<:Real},TimeSelection};
     channel_out::Symbol = :event_window,
 )
     # Input validation
@@ -536,8 +543,8 @@ end
 
 function mark_epoch_intervals!(
     dat::ContinuousData,
-    epoch_conditions::Vector{EpochCondition},
-    time_window::Vector{<:Real};
+    epoch_conditions::AbstractVector{<:EpochCondition},
+    time_window::Union{Tuple{Real,Real},AbstractVector{<:Real},TimeSelection};
     channel_out::Symbol = :epoch_interval,
 )
     # Input validation
@@ -593,6 +600,13 @@ function mark_epoch_intervals!(
     return dat
 end
 
+mark_epoch_intervals!(
+    dat::ContinuousData,
+    epoch_condition::EpochCondition,
+    time_window::Union{Tuple{Real,Real},AbstractVector{<:Real},TimeSelection};
+    channel_out::Symbol = :epoch_interval,
+) = mark_epoch_intervals!(dat, [epoch_condition], time_window; channel_out = channel_out)
+
 
 
 
@@ -644,9 +658,9 @@ condition = EpochCondition(
 epochs = extract_epochs(dat, 1, condition, (-0.2, 1.0))
 ```
 """
-function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::EpochCondition, epoch_interval::Tuple{Real,Real})
-    # Extract start and end times from tuple
-    start_time, end_time = epoch_interval
+function extract_epochs(dat::ContinuousData, condition::Integer, epoch_condition::EpochCondition, epoch_interval)
+    # Extract start and end times from interval
+    start_time, end_time = _interval_endpoints(epoch_interval)
 
     # Apply mask
     filtered_triggers, valid_indices = _apply_trigger_mask(dat.data.trigger, epoch_condition)
@@ -701,7 +715,7 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
     return EpochData(dat.file, condition, epoch_condition.name, epochs, copy(dat.layout), dat.sample_rate, copy(dat.analysis_info))
 end
 
-function extract_epochs(dat::ContinuousData, epoch_conditions::Vector{EpochCondition}, epoch_interval::Tuple{Real,Real})
+function extract_epochs(dat::ContinuousData, epoch_conditions::AbstractVector{<:EpochCondition}, epoch_interval)
     epochs = EpochData[]
     for (idx, epoch_condition) in enumerate(epoch_conditions)
         push!(epochs, extract_epochs(dat, idx, epoch_condition, epoch_interval))
@@ -709,7 +723,7 @@ function extract_epochs(dat::ContinuousData, epoch_conditions::Vector{EpochCondi
     return epochs
 end
 
-function extract_epochs(dat::ContinuousData, epoch_conditions::EpochCondition, epoch_interval::Tuple{Real,Real})
+function extract_epochs(dat::ContinuousData, epoch_conditions::EpochCondition, epoch_interval)
     return extract_epochs(dat, [epoch_conditions], epoch_interval)
 end
 
@@ -809,7 +823,7 @@ function average_epochs(dat::EpochData)
 end
 
 
-average_epochs(dat::Vector{EpochData}) = average_epochs.(dat)
+average_epochs(dat::AbstractVector{<:EpochData}) = average_epochs.(dat)
 
 
 
@@ -876,10 +890,10 @@ function reject_epochs(dat::EpochData, info::EpochRejectionInfo)::EpochData
     return dat_copy
 end
 
-reject_epochs(dat::Vector{EpochData}, info::Vector{EpochRejectionInfo})::Vector{EpochData} = reject_epochs.(dat, info)
+reject_epochs(dat::AbstractVector{<:EpochData}, info::AbstractVector{<:EpochRejectionInfo}) = reject_epochs.(dat, info)
 
 
-function reject_epochs(dat::EpochData, bad_columns::Vector{Symbol})
+function reject_epochs(dat::EpochData, bad_columns::AbstractVector{Symbol})
     # Input validation
     isempty(dat.data) && @minimal_error("Cannot remove bad epochs from empty EpochData")
     isempty(bad_columns) && return dat  # No columns to check
@@ -935,8 +949,8 @@ end
 
 reject_epochs(dat::EpochData, bad_column::Symbol) = reject_epochs(dat, [bad_column])
 
-reject_epochs(dat::Vector{EpochData}, bad_column::Symbol) = reject_epochs.(dat, bad_column)
-reject_epochs(dat::Vector{EpochData}, bad_columns::Vector{Symbol}) = reject_epochs.(dat, bad_columns)
+reject_epochs(dat::AbstractVector{<:EpochData}, bad_column::Symbol) = reject_epochs.(dat, bad_column)
+reject_epochs(dat::AbstractVector{<:EpochData}, bad_columns::AbstractVector{Symbol}) = [reject_epochs(d, bad_columns) for d in dat]
 
 
 # ============================================================================ #
@@ -996,7 +1010,7 @@ end
 
 Display a pretty table showing epoch information to console and return the DataFrame.
 """
-function epochs_table(epochs::Vector{EpochData}; print_table::Bool = true, kwargs...)
+function epochs_table(epochs::AbstractVector{<:EpochData}; print_table::Bool = true, kwargs...)
     isempty(epochs) && @minimal_error("epochs vector cannot be empty")
 
     df = _build_base_epochs_df(epochs)
@@ -1016,7 +1030,12 @@ Display a before/after comparison table of epoch counts — `epochs_raw` versus
 `epochs_corrected` — for each condition. Returns the DataFrame.
 Typically called after artifact rejection to log how many epochs were removed per condition.
 """
-function epochs_table(epochs_raw::Vector{EpochData}, epochs_corrected::Vector{EpochData}; print_table::Bool = true, kwargs...)
+function epochs_table(
+    epochs_raw::AbstractVector{<:EpochData},
+    epochs_corrected::AbstractVector{<:EpochData};
+    print_table::Bool = true,
+    kwargs...,
+)
     length(epochs_raw) != length(epochs_corrected) && @minimal_error("epochs_raw and epochs_corrected must have same length")
 
     df = _build_base_epochs_df(epochs_raw)
@@ -1032,7 +1051,7 @@ function epochs_table(epochs_raw::Vector{EpochData}, epochs_corrected::Vector{Ep
 end
 
 # Helper functions to reduce repetition
-function _build_base_epochs_df(epochs::Vector{EpochData})::DataFrame
+function _build_base_epochs_df(epochs::AbstractVector{<:EpochData})::DataFrame
     return DataFrame(
         file = [filename(epoch) for epoch in epochs],
         condition = [condition_number(epoch) for epoch in epochs],
@@ -1090,7 +1109,7 @@ function _process_average_file(filepath::String, output_path::String, condition_
     end
 
     # Validate that data is valid EEG data (Vector of EpochData)
-    if !(epochs_data isa Vector{<:EpochData})
+    if !(epochs_data isa AbstractVector{<:EpochData})
         return BatchResult(false, filename, "Invalid data type: expected Vector{EpochData}")
     end
 
@@ -1110,8 +1129,8 @@ end
 function average_epochs(
     file_pattern::String;
     input_dir::String = pwd(),
-    participant_selection::Function = participants(),
-    condition_selection::Function = conditions(),
+    participant_selection = participants(),
+    condition_selection = conditions(),
     output_dir::Union{String,Nothing} = nothing,
 )
 

@@ -60,7 +60,7 @@ function ride_decompose(
     comps::Vector{RideComponent};
     outer_iters::Int = 4,
     inner_iters::Int = 50,
-    inner_tol::Float64 = 1e-3,
+    inner_tol::Real = 1e-3,
     method::Symbol = :median,
 ) where {T<:Real}
 

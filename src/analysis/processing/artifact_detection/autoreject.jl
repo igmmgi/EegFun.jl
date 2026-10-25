@@ -213,7 +213,7 @@ function _repair_epochs_cached!(
     layout::Layout;
     repair_method::Symbol = :spherical_spline,
     m::Int = 4,
-    lambda::Float64 = 1e-5,
+    lambda::Real = 1e-5,
     sample_indices = Colon(),
 )
     repaired_channels = OrderedDict{Int,Vector{Symbol}}()
@@ -375,19 +375,19 @@ Jas, M., Engemann, D. A., Bekhti, Y., Raimondo, F., & Gramfort, A. (2017). Autor
 for MEG and EEG data. NeuroImage, 159, 417-429.
 """
 function autoreject!(
-    dat::Vector{EpochData};
+    dat::AbstractVector{<:EpochData};
     mode::Symbol = :local,
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     interval_selection::Interval = times(),
     n_folds::Int = 10,
     n_candidates::Int = 30,
-    candidate_quantiles::Tuple{Float64,Float64} = (0.40, 1.0),
-    consensus_perc::Float64 = 0.2,
-    max_repair_perc::Float64 = 0.1,
+    candidate_quantiles::Tuple{Real,Real} = (0.40, 1.0),
+    consensus_perc::Real = 0.2,
+    max_repair_perc::Real = 0.1,
     repair_method::Symbol = :spherical_spline,
     m::Int = 4,
-    lambda::Float64 = 1e-5,
-    seed::Union{Int,Nothing} = 42,
+    lambda::Real = 1e-5,
+    seed::Union{Integer,Nothing} = 42,
     reject::Bool = true,
     verbose::Bool = true,
 )
@@ -834,7 +834,7 @@ end
 Non-mutating version of `autoreject!`. Deep-copies `dat` and returns `(cleaned_data, result)`.
 Leaves input `dat` completely unmodified.
 """
-function autoreject(dat::Vector{EpochData}; kwargs...)
+function autoreject(dat::AbstractVector{<:EpochData}; kwargs...)
     dat_copy = [copy(d) for d in dat]
     res = autoreject!(dat_copy; kwargs...)
     return dat_copy, res

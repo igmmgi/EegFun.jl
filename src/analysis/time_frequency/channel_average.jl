@@ -83,7 +83,7 @@ function channel_average!(
     return dat
 end
 
-function channel_average!(dat::Vector{TimeFreqData}; kwargs...)
+function channel_average!(dat::AbstractVector{<:TimeFreqData}; kwargs...)
     for d in dat
         channel_average!(d; kwargs...)
     end
@@ -95,6 +95,6 @@ function channel_average(dat::TimeFreqData; kwargs...)
 end
 
 # Handle Vector{TimeFreqData}
-function channel_average(dat::Vector{TimeFreqData}; kwargs...)
+function channel_average(dat::AbstractVector{<:TimeFreqData}; kwargs...)
     return [channel_average(d; kwargs...) for d in dat]
 end

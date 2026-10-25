@@ -927,6 +927,10 @@ electrode labels and returns the matching channels.
 selected = get_selected_channels(layout, channels([:Fp1, :Fp2]))
 ```
 """
+get_selected_channels(layout::Layout, ::Colon) = get_selected_channels(layout, channels())
+
+get_selected_channels(layout::Layout, channel_selection) = get_selected_channels(layout, _to_channel_func(channel_selection))
+
 function get_selected_channels(layout::Layout, channel_selection::Function)
     # Get all channel labels from the layout and apply the channel selection predicate
     all_channels = layout.data.label

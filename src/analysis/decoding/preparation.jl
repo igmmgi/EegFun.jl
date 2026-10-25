@@ -35,9 +35,9 @@ participant_tf = prepare_decoding(
 ```
 """
 function prepare_decoding(
-    epochs::Vector{T};
-    condition_selection::Function = conditions(),
-    channel_selection::Function = channels(),
+    epochs::AbstractVector{T};
+    condition_selection = conditions(),
+    channel_selection = channels(),
     interval_selection::Interval = times(),
 ) where {T<:MultiDataFrameEeg}
 
@@ -51,8 +51,8 @@ function prepare_decoding(
     # Apply condition selection to sample datasets for each condition
     all_cond_nums = collect(keys(epochs_by_condition))  # Already sorted by group_by_condition
     sample_epochs = [epochs_by_condition[c][1] for c in all_cond_nums]
-    selected_mask = condition_selection(sample_epochs)
-    selected_cond_nums = all_cond_nums[selected_mask]
+    selected_indices = get_selected_conditions(sample_epochs, condition_selection)
+    selected_cond_nums = all_cond_nums[selected_indices]
 
     # Validate at least 2 conditions for classification
     if length(selected_cond_nums) < 2
@@ -147,9 +147,9 @@ end
 function prepare_decoding(
     file_pattern::String;
     input_dir::String = pwd(),
-    participant_selection::Function = participants(),
-    condition_selection::Function = conditions(),
-    channel_selection::Function = channels(),
+    participant_selection = participants(),
+    condition_selection = conditions(),
+    channel_selection = channels(),
     interval_selection::Interval = times(),
 )
 

@@ -35,8 +35,8 @@ function libsvm_classifier(
     X_train::AbstractMatrix{Float64},
     y_train::AbstractVector{Int},
     X_test::AbstractMatrix{Float64};
-    cost::Float64 = 1.0,
-)::Vector{Int}
+    cost::Real = 1.0,
+)
 
     n_train = size(X_train, 1)
     n_test = size(X_test, 1)
@@ -45,7 +45,12 @@ function libsvm_classifier(
     n_test == 0 && return Int[]
 
     LIBSVM.LIBLINEAR.set_print(false)
-    model = LIBSVM.LIBLINEAR.linear_train(y_train, transpose(X_train); solver_type = Int32(LIBSVM.Linearsolver.L2R_L2LOSS_SVC), C = cost)
+    model = LIBSVM.LIBLINEAR.linear_train(
+        y_train,
+        transpose(X_train);
+        solver_type = Int32(LIBSVM.Linearsolver.L2R_L2LOSS_SVC),
+        C = Float64(cost),
+    )
     w = model.w
     labels = model.labels
     nr_c = Int(model.nr_class)
@@ -100,7 +105,7 @@ struct LiblinearWorkspace
     w_buf::Vector{Float64}
 end
 
-function LiblinearWorkspace(max_features::Int, max_samples::Int, cost::Float64, max_classes::Int = 2)
+function LiblinearWorkspace(max_features::Int, max_samples::Int, cost::Real, max_classes::Int = 2)
     nodes = Matrix{LIBSVM.LIBLINEAR.FeatureNode}(undef, max_features + 1, max_samples)
     for i = 1:max_samples
         for j = 1:max_features
@@ -117,7 +122,7 @@ function LiblinearWorkspace(max_features::Int, max_samples::Int, cost::Float64, 
         LIBSVM.LIBLINEAR.Parameter(
             solver_type,
             eps,
-            cost,
+            Float64(cost),
             Cint(0),
             convert(Ptr{Cint}, C_NULL),
             convert(Ptr{Float64}, C_NULL),

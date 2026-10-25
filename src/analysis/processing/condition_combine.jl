@@ -118,9 +118,9 @@ end
 
 function condition_combine(
     file_pattern::String,
-    condition_groups::Vector{Vector{Int}};
+    condition_groups::AbstractVector{<:AbstractVector{<:Integer}};
     input_dir::String = pwd(),
-    participant_selection::Function = participants(),
+    participant_selection = participants(),
     output_dir::Union{String,Nothing} = nothing,
 )
 

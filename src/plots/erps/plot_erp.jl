@@ -132,12 +132,12 @@ plot_erp("erps_final", channel_selection = channels([:PO7, :PO8]), layout = :gri
 function plot_erp(
     filepath::String;
     input_dir::String = pwd(),
-    participant_selection::Function = participants(),
+    participant_selection = participants(),
     layout::Union{Symbol,PlotLayout} = :single,
-    condition_selection::Function = conditions(),
-    channel_selection::Function = channels(),
+    condition_selection = conditions(),
+    channel_selection = channels(),
     channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
-    sample_selection::Function = samples(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     baseline_interval::Interval = nothing,
     kwargs...,
@@ -202,9 +202,9 @@ end
 function plot_erp(
     dat::ErpData;
     layout::Union{Symbol,PlotLayout} = :single,
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
-    sample_selection::Function = samples(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     baseline_interval::Interval = nothing,
     kwargs...,
@@ -224,12 +224,12 @@ function plot_erp(
 end
 
 function plot_erp(
-    datasets::Vector{ErpData};
+    datasets::AbstractVector{<:ErpData};
     layout::Union{Symbol,PlotLayout} = :single,
-    condition_selection::Function = conditions(),
-    channel_selection::Function = channels(),
+    condition_selection = conditions(),
+    channel_selection = channels(),
     channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
-    sample_selection::Function = samples(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     baseline_interval::Interval = nothing,
     kwargs...,
@@ -292,12 +292,12 @@ Plot ERP errorbars for multiple datasets.
 function plot_erp_errorbar(
     filepath::String;
     input_dir::String = pwd(),
-    participant_selection::Function = participants(),
+    participant_selection = participants(),
     layout::Union{Symbol,PlotLayout} = :single,
-    condition_selection::Function = conditions(),
-    channel_selection::Function = channels(),
+    condition_selection = conditions(),
+    channel_selection = channels(),
     channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
-    sample_selection::Function = samples(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     baseline_interval::Interval = nothing,
     kwargs...,
@@ -353,9 +353,9 @@ Plot ERP errorbars for a single dataset.
 function plot_erp_errorbar(
     dat::ErpData;
     layout::Union{Symbol,PlotLayout} = :single,
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
-    sample_selection::Function = samples(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     baseline_interval::Interval = nothing,
     kwargs...,
@@ -374,17 +374,17 @@ function plot_erp_errorbar(
 end
 
 """
-    plot_erp_errorbar(datasets::Vector{ErpData}; kwargs...)
+    plot_erp_errorbar(datasets::AbstractVector{<:ErpData}; kwargs...)
 
 Plot ERP errorbars for multiple datasets.
 """
 function plot_erp_errorbar(
-    datasets::Vector{ErpData};
+    datasets::AbstractVector{<:ErpData};
     layout::Union{Symbol,PlotLayout} = :single,
-    condition_selection::Function = conditions(),
-    channel_selection::Function = channels(),
+    condition_selection = conditions(),
+    channel_selection = channels(),
     channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
-    sample_selection::Function = samples(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     baseline_interval::Interval = nothing,
     kwargs...,
@@ -860,7 +860,7 @@ Channel selection is applied later at plot time to keep all channels available f
 Returns (dat_subset_unfiltered_channels, all_channels, channel_selection_func, original_channels).
 """
 function _prepare_erp_data(
-    datasets::Vector{ErpData},
+    datasets::AbstractVector{<:ErpData},
     plot_kwargs;
     condition_selection = conditions(),
     channel_selection = channels(),

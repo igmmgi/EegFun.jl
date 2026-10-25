@@ -22,10 +22,10 @@ Validates the design and ensures data consistency across conditions.
 - `StatisticalData`: Prepared data structure ready for statistical testing
 """
 function prepare_stats(
-    erps::Vector{ErpData};
+    erps::AbstractVector{<:ErpData};
     design::Symbol = :paired,
-    condition_selection::Function = conditions(),
-    channel_selection::Function = channels(),
+    condition_selection = conditions(),
+    channel_selection = channels(),
     interval_selection::Interval = times(),
     baseline_interval::Interval = nothing,
     analysis_interval::Interval = times(),
@@ -35,7 +35,8 @@ function prepare_stats(
 
     # Apply condition selection to the sorted condition numbers
     all_cond_nums = collect(keys(erps_by_condition))  # Already sorted by group_by_condition
-    selected_mask = condition_selection(1:length(all_cond_nums))
+    cond_func = _to_condition_func(condition_selection)
+    selected_mask = cond_func(1:length(all_cond_nums))
     selected_cond_nums = all_cond_nums[selected_mask]
 
     # Validate exactly 2 conditions
@@ -146,13 +147,7 @@ function prepare_stats(
 end
 
 """Load ERP/TF files by pattern and call the typed `prepare_stats` method."""
-function prepare_stats(
-    file_pattern::String,
-    design::Symbol;
-    input_dir::String = pwd(),
-    participant_selection::Function = participants(),
-    kwargs...,
-)
+function prepare_stats(file_pattern::String, design::Symbol; input_dir::String = pwd(), participant_selection = participants(), kwargs...)
     # Load data and auto-detect type
     all_data = read_all_data(joinpath(input_dir, file_pattern), participant_selection)
     isempty(all_data) && @minimal_error "No valid data found matching pattern '$file_pattern' in $input_dir"
@@ -453,7 +448,7 @@ Compute critical t-values for parametric thresholding.
 critical_t = _compute_critical_t_values(df, size(t_matrix), 0.05, :both)
 ```
 """
-function _compute_critical_t_values(df::Float64, matrix_size::Tuple{Int,Int}, alpha::Float64 = 0.05, tail::Symbol = :both)
+function _compute_critical_t_values(df::Real, matrix_size::Tuple{Int,Int}, alpha::Real = 0.05, tail::Symbol = :both)
     critical_t_values = Array{Float64,2}(undef, matrix_size)
 
     if isnan(df) || isinf(df) || df <= 0

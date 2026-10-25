@@ -85,8 +85,8 @@ $(_generate_kwargs_doc(PLOT_TOPOGRAPHY_3D_KWARGS))
 """
 function plot_topography_3d(
     dat::SingleDataFrameEeg;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     baseline_interval::Interval = nothing,
     scrubber::Bool = false,
@@ -261,8 +261,8 @@ Create a 3D topographic plot for a specific epoch of `MultiDataFrameEeg` data.
 function plot_topography_3d(
     dat::MultiDataFrameEeg,
     epoch::Int;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     baseline_interval::Interval = nothing,
     scrubber::Bool = false,

@@ -44,7 +44,7 @@ lrp_results = lrp(erps, pairs)
 lrp("erps_unrejected", [(1, 2), (3, 4)], input_dir = "/data/study1")
 ```
 """
-function lrp(erp_left::ErpData, erp_right::ErpData; channel_selection::Function = channels())::ErpData
+function lrp(erp_left::ErpData, erp_right::ErpData; channel_selection = channels())::ErpData
 
     @info "Calculating lateralized readiness potential (LRP)"
 
@@ -92,19 +92,19 @@ Get channel pairs from a channel selection predicate.
 Takes a channel selection predicate, applies it to get left/odd channels,
 validates they are odd-numbered, and pairs them with their right/even counterparts.
 """
-function _get_channel_pairs_from_selection(erp_left::ErpData, erp_right::ErpData, channel_selection::Function)::Vector{Tuple{Symbol,Symbol}}
+function _get_channel_pairs_from_selection(erp_left::ErpData, erp_right::ErpData, channel_selection)::Vector{Tuple{Symbol,Symbol}}
 
     # Get all available channels
     left_labels = channel_labels(erp_left)
     right_labels = channel_labels(erp_right)
 
-    # If default channels() (all channels), auto-detect all lateral pairs
-    if channel_selection == channels()
+    # Apply the channel selection
+    selected_channels = get_selected_channels(erp_left, channel_selection, include_meta = false, include_extra = false)
+
+    # If all channels are selected, auto-detect all lateral pairs
+    if length(selected_channels) == length(left_labels) && selected_channels == left_labels
         return _detect_all_lateral_pairs(left_labels, right_labels)
     end
-
-    # Apply the channel selection predicate
-    selected_channels = get_selected_channels(erp_left, channel_selection, include_meta = false, include_extra = false)
 
     # Build pairs from selected channels
     pairs = Tuple{Symbol,Symbol}[]
@@ -148,7 +148,7 @@ end
 Detect all lateral channel pairs based on odd/even numbering (e.g., C3/C4, C1/C2).
 Used when channel_selection = channels() (default).
 """
-function _detect_all_lateral_pairs(left_labels::Vector{Symbol}, right_labels::Vector{Symbol})::Vector{Tuple{Symbol,Symbol}}
+function _detect_all_lateral_pairs(left_labels::AbstractVector{Symbol}, right_labels::AbstractVector{Symbol})::Vector{Tuple{Symbol,Symbol}}
 
     # Use intersection to ensure channels exist in both datasets
     common_labels = intersect(left_labels, right_labels)
@@ -200,7 +200,7 @@ end
 Process a single ERP file through LRP calculation pipeline.
 Returns BatchResult with success/failure info.
 """
-function _process_lrp_file(filepath::String, output_path::String, condition_pairs::Vector{Tuple{Int,Int}}, channel_selection::Function)
+function _process_lrp_file(filepath::String, output_path::String, condition_pairs::Vector{Tuple{Int,Int}}, channel_selection)
     filename = basename(filepath)
 
     # Read data (using read_data which finds by type)
@@ -235,8 +235,8 @@ function lrp(
     file_pattern::String,
     condition_pairs::Vector{Tuple{Int,Int}};
     input_dir::String = pwd(),
-    channel_selection::Function = channels(),
-    participant_selection::Function = participants(),
+    channel_selection = channels(),
+    participant_selection = participants(),
     output_dir::Union{String,Nothing} = nothing,
 )
 
@@ -260,10 +260,10 @@ end
 
 
 function lrp(
-    erps::Vector{ErpData},
-    condition_pairs::Vector{Tuple{Int,Int}};
-    condition_selection::Function = conditions(),
-    channel_selection::Function = channels(),
+    erps::AbstractVector{<:ErpData},
+    condition_pairs::AbstractVector{Tuple{Int,Int}};
+    condition_selection = conditions(),
+    channel_selection = channels(),
 )::Vector{ErpData}
 
     # Apply condition_selection first
@@ -385,7 +385,7 @@ end
 """
 Create a layout containing only the specified LRP channels.
 """
-function _create_lrp_layout(original_layout::Layout, lrp_channels::Vector{Symbol})::Layout
+function _create_lrp_layout(original_layout::Layout, lrp_channels::AbstractVector{Symbol})::Layout
     # Filter layout data to include only LRP channels
     layout_df = copy(original_layout.data)
     mask = [label ∈ lrp_channels for label in layout_df.label]

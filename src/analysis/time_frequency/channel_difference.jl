@@ -7,8 +7,8 @@ differencing to both `data_power` and `data_phase` DataFrames.
 
 function channel_difference!(
     dat::TimeFreqData;
-    channel_selection1::Function = channels(),
-    channel_selection2::Function = channels(),
+    channel_selection1 = channels(),
+    channel_selection2 = channels(),
     channel_out::Symbol = :diff,
 )
     # Resolve predicates
@@ -35,7 +35,7 @@ function channel_difference!(
     return dat
 end
 
-function channel_difference!(dat::Vector{TimeFreqData}; kwargs...)
+function channel_difference!(dat::AbstractVector{<:TimeFreqData}; kwargs...)
     for d in dat
         channel_difference!(d; kwargs...)
     end
@@ -47,6 +47,6 @@ function channel_difference(dat::TimeFreqData; kwargs...)
 end
 
 # Handle Vector{TimeFreqData}
-function channel_difference(dat::Vector{TimeFreqData}; kwargs...)
+function channel_difference(dat::AbstractVector{<:TimeFreqData}; kwargs...)
     return [channel_difference(d; kwargs...) for d in dat]
 end

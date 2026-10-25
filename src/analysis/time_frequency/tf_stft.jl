@@ -67,9 +67,9 @@ tf_data = tf_stft(epochs; frequencies=2:1:30, cycles=7, sample_selection=samples
 """
 function tf_stft(
     dat::EpochData;
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     interval_selection::Interval = times(),
-    frequencies::Union{AbstractRange,AbstractVector{<:Real}} = range(1, 40, length = 40),
+    frequencies::AbstractVector{<:Real} = range(1, 40, length = 40),
     time_steps::Real = 0.05,
     window_length::Union{Nothing,Real} = nothing,
     cycles::Union{Nothing,Real} = nothing,
@@ -686,7 +686,7 @@ function _process_stft_channel!(
 end
 
 # Vector version: process each EpochData element
-function tf_stft(data_vec::Vector{<:EpochData}; kwargs...)
+function tf_stft(data_vec::AbstractVector{<:EpochData}; kwargs...)
     return [tf_stft(dat; kwargs...) for dat in data_vec]
 end
 
@@ -696,8 +696,8 @@ function tf_stft(
     file_pattern::String;
     input_dir::String = pwd(),
     output_dir::Union{String,Nothing} = nothing,
-    participant_selection::Function = participants(),
-    condition_selection::Function = conditions(),
+    participant_selection = participants(),
+    condition_selection = conditions(),
     kwargs...,
 )
     _with_batch_logging("tf_stft", "tf_stft.log", input_dir, output_dir) do ctx

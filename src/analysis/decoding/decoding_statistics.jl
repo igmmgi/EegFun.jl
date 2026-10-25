@@ -285,7 +285,7 @@ stats = test_against_chance_cluster(decoded_list, alpha=0.05, n_permutations=100
 """
 function test_against_chance_cluster(
     decoded_list::Vector{DecodedData};
-    alpha::Float64 = 0.05,
+    alpha::Real = 0.05,
     n_permutations::Int = 1000,
     cluster_statistic::Symbol = :sum,
     show_progress::Bool = true,

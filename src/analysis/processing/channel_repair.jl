@@ -219,7 +219,7 @@ function _repair_channels_neighbor!(
     data::EpochData,
     channels_to_repair::AbstractVector{Symbol},
     neighbours_dict::Dict{Symbol,Neighbours};
-    epoch_selection::Function = epochs(),
+    epoch_selection = epochs(),
 )
     # Get selected epochs
     selected_epochs = get_selected_epochs(data, epoch_selection)
@@ -252,7 +252,7 @@ function _repair_channels_spherical!(
     channels::AbstractVector{Symbol},
     layout::DataFrame;
     m::Int = 4,
-    lambda::Float64 = 1e-5,
+    lambda::Real = 1e-5,
     n_legendre_terms::Int = 50,
     repair_info = nothing,
 )
@@ -332,7 +332,7 @@ function _repair_channels_spherical!(
     data::ContinuousData,
     channels_to_repair::AbstractVector{Symbol};
     m::Int = 4,
-    lambda::Float64 = 1e-5,
+    lambda::Real = 1e-5,
     repair_info = nothing,
 )
     # Ensure 3D coordinates are available
@@ -366,9 +366,9 @@ Tracking for EpochData is handled via EpochRejectionInfo, not through a separate
 function _repair_channels_spherical!(
     data::EpochData,
     channels_to_repair::AbstractVector{Symbol};
-    epoch_selection::Function = epochs(),
+    epoch_selection = epochs(),
     m::Int = 4,
-    lambda::Float64 = 1e-5,
+    lambda::Real = 1e-5,
 )
     # Ensure 3D coordinates are available
     _ensure_coordinates_3d!(data.layout)
@@ -465,7 +465,7 @@ end
 Construct spherical spline interpolation matrix (n_bad × n_good) from unit vectors on the sphere
 using LU factorization (Perrin et al., 1989).
 """
-function _spline_good_to_bad(U_good::Matrix{Float64}, U_bad::Matrix{Float64}, f::Vector{Float64}, λ::Float64)
+function _spline_good_to_bad(U_good::Matrix{Float64}, U_bad::Matrix{Float64}, f::Vector{Float64}, λ::Real)
     n = size(U_good, 1)
     A = zeros(Float64, n + 1, n + 1)
     A[1:n, 1:n] .= _g_from_cos!(U_good * U_good', f)
@@ -510,7 +510,7 @@ function _make_interpolation_matrix(
     pos_from::Matrix{Float64},
     pos_to::Matrix{Float64};
     m::Int = 4,
-    lambda::Float64 = 1e-5,
+    lambda::Real = 1e-5,
     n_legendre_terms::Int = 50,
 )
     n_from = size(pos_from, 1)

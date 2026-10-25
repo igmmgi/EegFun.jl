@@ -248,7 +248,7 @@ plot_topography("erps_final")
 plot_topography("erps_final", participant_selection = participants(1))
 ```
 """
-function plot_topography(filepath::String; input_dir::String = pwd(), participant_selection::Function = participants(), kwargs...)
+function plot_topography(filepath::String; input_dir::String = pwd(), participant_selection = participants(), kwargs...)
     if endswith(filepath, ".jld2")
         data = read_data(filepath)
         isnothing(data) && @minimal_error "No data found in file: $filepath"
@@ -273,8 +273,8 @@ end
 """Create a topographic plot for a single `SingleDataFrameEeg`; supports `n_topo` time bins."""
 function plot_topography(
     dat::SingleDataFrameEeg;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     baseline_interval::Interval = nothing,
     n_topo::Union{Int,Nothing} = nothing,
@@ -380,8 +380,8 @@ function plot_topography!(
     fig,
     ax,
     dat::SingleDataFrameEeg;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     data_interp = nothing,
     x_bounds = nothing,
@@ -408,9 +408,9 @@ end
 
 """Create a multi-panel topographic plot for a vector of datasets, one subplot per condition."""
 function plot_topography(
-    dat::Vector{<:SingleDataFrameEeg};
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    dat::AbstractVector{<:SingleDataFrameEeg};
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     baseline_interval::Interval = nothing,
     display_plot = true,
@@ -706,8 +706,8 @@ function plot_topography!(
     ax,
     dat::MultiDataFrameEeg,
     epoch::Int;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     kwargs...,
 )
@@ -726,8 +726,8 @@ end
 function plot_topography(
     dat::MultiDataFrameEeg,
     epoch::Int;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     scrubber::Bool = false,
     display_plot = true,

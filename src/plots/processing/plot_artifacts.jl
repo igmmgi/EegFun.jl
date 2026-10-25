@@ -212,7 +212,7 @@ fig = plot_artifact_detection(epochs, artifacts,
 fig = plot_artifact_detection(epochs, artifacts, xlim = (-0.2, 0.8), ylim = (-100, 100))
 ```
 """
-function plot_artifact_detection(epochs::EpochData, artifacts::EpochRejectionInfo; channel_selection::Function = channels(), kwargs...)
+function plot_artifact_detection(epochs::EpochData, artifacts::EpochRejectionInfo; channel_selection = channels(), kwargs...)
     # Generate window title from dataset
     title_str = _generate_window_title(epochs)
     _set_window_title(title_str)
@@ -324,9 +324,9 @@ function plot_artifact_detection(epochs::EpochData, artifacts::EpochRejectionInf
     return fig
 end
 function plot_artifact_detection(
-    epochs::Vector{EpochData},
-    artifacts::Vector{EpochRejectionInfo};
-    channel_selection::Function = channels(),
+    epochs::AbstractVector{<:EpochData},
+    artifacts::AbstractVector{<:EpochRejectionInfo};
+    channel_selection = channels(),
     kwargs...,
 )
     length(epochs) == length(artifacts) ||
@@ -368,7 +368,7 @@ function plot_artifact_repair(
     epochs_raw::EpochData,
     epochs_repaired::EpochData,
     artifacts::EpochRejectionInfo;
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     kwargs...,
 )
     # Generate window title from dataset
@@ -568,7 +568,7 @@ function plot_artifact_rejection(
     epochs_raw::EpochData,
     epochs_rejected::EpochData,
     artifacts::EpochRejectionInfo;
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     kwargs...,
 )
     # Generate window title from dataset

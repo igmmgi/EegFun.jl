@@ -49,15 +49,15 @@ This is a Julia port of the Chronux / EEGLAB CleanLine plugin, utilizing
 """
 function cleanline!(
     dat::ContinuousData;
-    line_frequencies::Vector{Float64} = [50.0, 100.0, 150.0, 200.0],
-    bandwidth::Float64 = 2.0,
-    sliding_win_length::Float64 = 4.0,
-    sliding_win_step::Float64 = 2.0,
-    time_bandwidth::Float64 = 3.0,
+    line_frequencies::AbstractVector{<:Real} = [50.0, 100.0, 150.0, 200.0],
+    bandwidth::Real = 2.0,
+    sliding_win_length::Real = 4.0,
+    sliding_win_step::Real = 2.0,
+    time_bandwidth::Real = 3.0,
     k_tapers::Int = 5,
-    p_value::Float64 = 0.05,
+    p_value::Real = 0.05,
     pad::Int = 2,
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
 )
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
     if isempty(selected_channels)
@@ -141,8 +141,19 @@ end
 
 Non-mutating version of `cleanline!`.
 """
+function cleanline!(dat::AbstractVector{<:ContinuousData}; kwargs...)
+    for d in dat
+        cleanline!(d; kwargs...)
+    end
+    return dat
+end
+
 function cleanline(dat::ContinuousData, args...; kwargs...)
     return cleanline!(copy(dat), args...; kwargs...)
+end
+
+function cleanline(dat::AbstractVector{<:ContinuousData}, args...; kwargs...)
+    return [cleanline(d, args...; kwargs...) for d in dat]
 end
 
 function _cleanline_channel!(

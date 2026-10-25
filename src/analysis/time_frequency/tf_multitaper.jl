@@ -70,9 +70,9 @@ tf_data = tf_multitaper(epochs; frequencies=1:2:30, cycles=5, frequency_smoothin
 """
 function tf_multitaper(
     dat::EpochData;
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     interval_selection::Interval = times(),
-    frequencies::Union{AbstractRange,AbstractVector{<:Real}} = range(1, 40, length = 40),
+    frequencies::AbstractVector{<:Real} = range(1, 40, length = 40),
     time_steps::Real = 0.05,
     cycles::Real,
     frequency_smoothing::Union{Nothing,Real} = nothing,
@@ -757,7 +757,7 @@ function _process_multitaper_channel!(
 end
 
 # Vector version: process each EpochData element
-function tf_multitaper(data_vec::Vector{<:EpochData}; kwargs...)
+function tf_multitaper(data_vec::AbstractVector{<:EpochData}; kwargs...)
     return [tf_multitaper(dat; kwargs...) for dat in data_vec]
 end
 
@@ -767,8 +767,8 @@ function tf_multitaper(
     file_pattern::String;
     input_dir::String = pwd(),
     output_dir::Union{String,Nothing} = nothing,
-    participant_selection::Function = participants(),
-    condition_selection::Function = conditions(),
+    participant_selection = participants(),
+    condition_selection = conditions(),
     kwargs...,
 )
     _with_batch_logging("tf_multitaper", "tf_multitaper.log", input_dir, output_dir) do ctx

@@ -26,21 +26,7 @@ Base.firstindex(::EegData) = 1
 Base.lastindex(dat::EegData, d::Int) = Base.size(dat, d)
 Base.lastindex(dat::EegData) = prod(size(dat))
 
-# getindex helpers
-_to_sample_func(::Colon) = samples()
-_to_sample_func(f::Function) = f
-_to_sample_func(idx::Integer) = x -> [i == idx for i = 1:nrow(x)]
-_to_sample_func(idx) = x -> [i in idx for i = 1:nrow(x)]
 
-_to_channel_func(::Colon) = channels()
-_to_channel_func(f::Function) = f
-_to_channel_func(idx::AbstractString) = channels(Symbol(idx))
-_to_channel_func(idx::AbstractVector{<:AbstractString}) = channels(Symbol.(idx))
-_to_channel_func(idx) = channels(idx)
-
-_to_epoch_func(::Colon) = epochs()
-_to_epoch_func(f::Function) = f
-_to_epoch_func(idx) = epochs(idx)
 
 # getindex implementation
 function Base.getindex(dat::SingleDataFrameEeg, time_idx, chan_idx)

@@ -60,17 +60,18 @@ const ERP_MEASUREMENTS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 # === ERP-MEASUREMENTS-SPECIFIC VALIDATION ===
 
 """Validate analysis type, returning error message or nothing."""
-function _validate_analysis_type(analysis_type::String)
-    if analysis_type ∉ VALID_MEASUREMENT_TYPES
-        return "Analysis type must be one of: $(join(VALID_MEASUREMENT_TYPES, ", ")). Got: $analysis_type"
+function _validate_analysis_type(analysis_type::Union{AbstractString,Symbol})
+    t_str = string(analysis_type)
+    if t_str ∉ VALID_MEASUREMENT_TYPES
+        return "Analysis type must be one of: $(join(VALID_MEASUREMENT_TYPES, ", ")). Got: $t_str"
     end
     return nothing
 end
 
 
 """Generate default output directory name for ERP measurements."""
-function _default_measurements_output_dir(input_dir::String, analysis_type::String)
-    joinpath(input_dir, "measurements_$(analysis_type)")
+function _default_measurements_output_dir(input_dir::String, analysis_type::Union{AbstractString,Symbol})
+    joinpath(input_dir, "measurements_$(string(analysis_type))")
 end
 
 """Normalize interval to tuple format (handles AbstractRange and Tuple)."""
@@ -374,7 +375,7 @@ Returns DataFrame row with metadata and channel measurements.
 """
 function _process_dataframe_measurements(
     df::DataFrame,
-    selected_channels::Vector{Symbol},
+    selected_channels::AbstractVector{Symbol},
     analysis_interval::Interval,
     baseline_interval::Interval,
     analysis_type::String,
@@ -499,11 +500,11 @@ Returns Vector of NamedTuples (one per condition/epoch).
 function _process_measurements_file(
     filepath::String,
     analysis_interval::Interval,
-    analysis_type::String,
+    analysis_type::Union{AbstractString,Symbol},
     baseline_interval::Interval,
     average_channels::Bool,
-    condition_selection::Function,
-    channel_selection::Function,
+    condition_selection,
+    channel_selection,
     measurement_kwargs::Dict{Symbol,Any},
 )
     filename = basename(filepath)
@@ -519,7 +520,7 @@ function _process_measurements_file(
     end
 
     # Validate that data is Vector of ErpData or EpochData
-    if !(data_var isa Vector{<:Union{ErpData,EpochData}})
+    if !(data_var isa AbstractVector{<:Union{ErpData,EpochData}})
         @minimal_warning "Invalid data type in $filename: expected Vector{ErpData} or Vector{EpochData}, got $(typeof(data_var))"
         return nothing
     end
@@ -549,7 +550,7 @@ end
 Helper function to apply baseline correction to data.
 Returns the DataFrames vector (modified in place if baseline applied).
 """
-function _apply_baseline_correction!(dfs::Vector{DataFrame}, baseline_interval::Interval, all_channels::Vector{Symbol})
+function _apply_baseline_correction!(dfs::AbstractVector{DataFrame}, baseline_interval::Interval, all_channels::AbstractVector{Symbol})
     # Skip if no baseline specified
     if isnothing(baseline_interval)
         return dfs
@@ -581,7 +582,7 @@ end
 Average channel measurement columns into a single `:mean_channels` column.
 Preserves all metadata columns and replaces individual channel columns with their mean.
 """
-function _average_channel_columns(row::NamedTuple, selected_channels::Vector{Symbol})
+function _average_channel_columns(row::NamedTuple, selected_channels::AbstractVector{Symbol})
     # Separate metadata from channel data
     channel_values = [Float64(row[ch]) for ch in selected_channels]
     avg_value = mean(channel_values)
@@ -631,22 +632,21 @@ erp_measurements("erps", "max_peak_amplitude",
 """
 function erp_measurements!(
     dat::ErpData,
-    analysis_type::String;
+    analysis_type::Union{AbstractString,Symbol};
     analysis_interval::Interval = times(),
     baseline_interval::Interval = nothing,
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     participant::Int = 0,
     average_channels::Bool = false,
     kwargs...,
 )
+    analysis_type_str = string(analysis_type)
     # Merge measurement kwargs with defaults
     measurement_kwargs = _merge_plot_kwargs(ERP_MEASUREMENTS_KWARGS, kwargs)
 
     # Get selected channels
-    metadata_cols = meta_labels(dat)
-    all_channels = setdiff(propertynames(dat.data), metadata_cols)
-    channel_mask = channel_selection(all_channels)
-    selected_channels = all_channels[channel_mask]
+    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
+    all_channels = channel_labels(dat)
 
     if isempty(selected_channels)
         @minimal_warning "No channels selected"
@@ -672,7 +672,7 @@ function erp_measurements!(
         selected_channels,
         analysis_interval,
         baseline_interval,
-        analysis_type,
+        analysis_type_str,
         dat.file,
         participant,
         measurement_kwargs,
@@ -689,23 +689,21 @@ end
 
 function erp_measurements!(
     dat::EpochData,
-    analysis_type::String;
+    analysis_type::Union{AbstractString,Symbol};
     analysis_interval::Interval = times(),
     baseline_interval::Interval = nothing,
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     participant::Int = 0,
     average_channels::Bool = false,
     kwargs...,
 )
+    analysis_type_str = string(analysis_type)
     # Merge measurement kwargs with defaults
     measurement_kwargs = _merge_plot_kwargs(ERP_MEASUREMENTS_KWARGS, kwargs)
 
     # Get selected channels
-    metadata_cols = meta_labels(dat)
-    first_df = dat.data[1]
-    all_channels = setdiff(propertynames(first_df), metadata_cols)
-    channel_mask = channel_selection(all_channels)
-    selected_channels = all_channels[channel_mask]
+    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
+    all_channels = channel_labels(dat)
 
     if isempty(selected_channels)
         @minimal_warning "No channels selected"
@@ -733,7 +731,7 @@ function erp_measurements!(
             selected_channels,
             analysis_interval,
             baseline_interval,
-            analysis_type,
+            analysis_type_str,
             dat.file,
             participant,
             measurement_kwargs,
@@ -751,7 +749,12 @@ function erp_measurements!(
 end
 
 
-function erp_measurements!(data::Vector{<:Union{ErpData,EpochData}}, analysis_type::String; average_channels::Bool = false, kwargs...)
+function erp_measurements!(
+    data::AbstractVector{<:Union{ErpData,EpochData}},
+    analysis_type::Union{AbstractString,Symbol};
+    average_channels::Bool = false,
+    kwargs...,
+)
     all_results = Vector{Any}()
 
     for dat in data
@@ -774,19 +777,19 @@ end
 
 
 """
-    erp_measurements(data::Vector{<:Union{ErpData,EpochData}}, analysis_type::String; kwargs...)
-    erp_measurements(data::Union{ErpData,EpochData}, analysis_type::String; kwargs...)
+    erp_measurements(data::Vector{<:Union{ErpData,EpochData}}, analysis_type; kwargs...)
+    erp_measurements(data::Union{ErpData,EpochData}, analysis_type; kwargs...)
 
 Non-mutating version of `erp_measurements!`.
 """
 function erp_measurements(
     file_pattern::String,
-    analysis_type::String;
+    analysis_type::Union{AbstractString,Symbol};
     analysis_interval::Interval = times(),
     baseline_interval::Interval = nothing,
-    participant_selection::Function = participants(),
-    condition_selection::Function = conditions(),
-    channel_selection::Function = channels(),
+    participant_selection = participants(),
+    condition_selection = conditions(),
+    channel_selection = channels(),
     average_channels::Bool = false,
     input_dir::String = pwd(),
     output_dir::Union{String,Nothing} = nothing,
@@ -912,6 +915,6 @@ function erp_measurements(
         @info "Analysis complete! Processed $processed_count files successfully, $error_count errors"
 
         # Return as ErpMeasurementsResult with metadata
-        return ErpMeasurementsResult(results_df, analysis_type, analysis_interval, baseline_interval)
+        return ErpMeasurementsResult(results_df, string(analysis_type), analysis_interval, baseline_interval)
     end
 end

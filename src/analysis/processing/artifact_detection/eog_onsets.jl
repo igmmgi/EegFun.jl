@@ -70,19 +70,20 @@ Non-mutating version of `detect_eog_onsets!`.
 detect_eog_onsets(dat::ContinuousData, args...; kwargs...) = detect_eog_onsets!(copy(dat), args...; kwargs...)
 detect_eog_onsets(dat::EegData, eog_cfg::Dict) = detect_eog_onsets!(copy(dat), eog_cfg)
 
-function detect_eog_onsets!(dat_vec::Vector{<:ContinuousData}, args...; kwargs...)
+function detect_eog_onsets!(dat_vec::AbstractVector{<:ContinuousData}, args...; kwargs...)
     for d in dat_vec
         detect_eog_onsets!(d, args...; kwargs...)
     end
     return dat_vec
 end
 
-function detect_eog_onsets!(dat_vec::Vector{<:EegData}, eog_cfg::Dict)
+function detect_eog_onsets!(dat_vec::AbstractVector{<:EegData}, eog_cfg::Dict)
     for d in dat_vec
         detect_eog_onsets!(d, eog_cfg)
     end
     return dat_vec
 end
 
-detect_eog_onsets(dat_vec::Vector{<:ContinuousData}, args...; kwargs...) = [detect_eog_onsets(d, args...; kwargs...) for d in dat_vec]
-detect_eog_onsets(dat_vec::Vector{<:EegData}, eog_cfg::Dict) = [detect_eog_onsets(d, eog_cfg) for d in dat_vec]
+detect_eog_onsets(dat_vec::AbstractVector{<:ContinuousData}, args...; kwargs...) =
+    [detect_eog_onsets(d, args...; kwargs...) for d in dat_vec]
+detect_eog_onsets(dat_vec::AbstractVector{<:EegData}, eog_cfg::Dict) = [detect_eog_onsets(d, eog_cfg) for d in dat_vec]

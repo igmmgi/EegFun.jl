@@ -46,7 +46,7 @@ function _build_gfp_result_df(dat::ErpData, result_pairs::Pair{Symbol,Vector{Flo
 end
 
 """Get channel matrix and selected channels, with validation."""
-function _get_channel_matrix(dat::ErpData, channel_selection::Function, operation::String)
+function _get_channel_matrix(dat::ErpData, channel_selection, operation::String)
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
 
     if isempty(selected_channels)
@@ -62,8 +62,8 @@ end
 """Apply a single-ErpData function across a vector of ErpData, with condition filtering."""
 function _apply_to_conditions(
     fn::Function,
-    dat::Vector{ErpData};
-    condition_selection::Function = conditions(),
+    dat::AbstractVector{<:ErpData};
+    condition_selection = conditions(),
     operation::String = "calculation",
     kwargs...,
 )::Vector{DataFrame}
@@ -78,7 +78,7 @@ end
 
 """
     gfp(dat::ErpData; 
-        channel_selection::Function = channels(),
+        channel_selection = channels(),
         normalize::Bool = false)::DataFrame
 
 Calculate Global Field Power (GFP) for ERP data.
@@ -88,7 +88,7 @@ time point, providing a reference-independent measure of global response strengt
 
 # Arguments
 - `dat::ErpData`: ERP data structure
-- `channel_selection::Function`: Channel predicate for selecting channels to include (default: all channels)
+- `channel_selection`: Channel predicate or symbols (default: all channels)
 - `normalize::Bool`: If true, normalize GFP to 0-100% range (default: false)
 
 # Returns
@@ -121,7 +121,7 @@ gfp_values = gfp_result.gfp
 - Low GFP values indicate weak or desynchronized activity
 - Normalization to 0-100% is useful for comparing across different datasets or conditions
 """
-function gfp(dat::ErpData; channel_selection::Function = channels(), normalize::Bool = false)::DataFrame
+function gfp(dat::ErpData; channel_selection = channels(), normalize::Bool = false)::DataFrame
 
     @info "Calculating Global Field Power (GFP)"
 
@@ -140,9 +140,9 @@ function gfp(dat::ErpData; channel_selection::Function = channels(), normalize::
 end
 
 function gfp(
-    dat::Vector{ErpData};
-    condition_selection::Function = conditions(),
-    channel_selection::Function = channels(),
+    dat::AbstractVector{<:ErpData};
+    condition_selection = conditions(),
+    channel_selection = channels(),
     normalize::Bool = false,
 )::Vector{DataFrame}
     return _apply_to_conditions(gfp, dat; condition_selection, operation = "Calculating GFP", channel_selection, normalize)
@@ -185,7 +185,7 @@ gd_result = global_dissimilarity(erp_data,
 - These peaks may indicate transitions between different brain states or ERP components
 - Normalization to 0-100% facilitates comparison across datasets
 """
-function global_dissimilarity(dat::ErpData; channel_selection::Function = channels(), normalize::Bool = false)::DataFrame
+function global_dissimilarity(dat::ErpData; channel_selection = channels(), normalize::Bool = false)::DataFrame
 
     @info "Calculating Global Dissimilarity (GD)"
 
@@ -221,9 +221,9 @@ function global_dissimilarity(dat::ErpData; channel_selection::Function = channe
 end
 
 function global_dissimilarity(
-    dat::Vector{ErpData};
-    condition_selection::Function = conditions(),
-    channel_selection::Function = channels(),
+    dat::AbstractVector{<:ErpData};
+    condition_selection = conditions(),
+    channel_selection = channels(),
     normalize::Bool = false,
 )::Vector{DataFrame}
     return _apply_to_conditions(
@@ -241,7 +241,7 @@ end
 
 """
     gfp_and_dissimilarity(dat::ErpData;
-                          channel_selection::Function = channels(),
+                          channel_selection = channels(),
                           normalize::Bool = false)::DataFrame
 
 Calculate both Global Field Power and Global Dissimilarity in one call.
@@ -250,7 +250,7 @@ This is a convenience function that computes both metrics efficiently.
 
 # Arguments
 - `dat::ErpData`: ERP data structure
-- `channel_selection::Function`: Channel predicate for selecting channels (default: all channels)
+- `channel_selection`: Channel predicate or symbols (default: all channels)
 - `normalize::Bool`: If true, normalize both metrics to 0-100% range (default: false)
 
 # Returns
@@ -270,7 +270,7 @@ dissimilarity_values = result.dissimilarity
 result = gfp_and_dissimilarity(erp_data, normalize = true)
 ```
 """
-function gfp_and_dissimilarity(dat::ErpData; channel_selection::Function = channels(), normalize::Bool = false)::DataFrame
+function gfp_and_dissimilarity(dat::ErpData; channel_selection = channels(), normalize::Bool = false)::DataFrame
 
     @info "Calculating Global Field Power and Global Dissimilarity"
 
@@ -304,9 +304,9 @@ function gfp_and_dissimilarity(dat::ErpData; channel_selection::Function = chann
 end
 
 function gfp_and_dissimilarity(
-    dat::Vector{ErpData};
-    condition_selection::Function = conditions(),
-    channel_selection::Function = channels(),
+    dat::AbstractVector{<:ErpData};
+    condition_selection = conditions(),
+    channel_selection = channels(),
     normalize::Bool = false,
 )::Vector{DataFrame}
     return _apply_to_conditions(

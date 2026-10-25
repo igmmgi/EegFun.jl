@@ -10,7 +10,7 @@ end
 """
 Create a grand average by averaging ERP data across participants for a specific condition.
 """
-function _create_grand_average(erps::Vector{ErpData}, cond_num::Int)
+function _create_grand_average(erps::AbstractVector{<:ErpData}, cond_num::Int)
     if isempty(erps)
         @minimal_error("Cannot create grand average from empty ERP list")
     end
@@ -84,7 +84,7 @@ end
 Create grand averages for all conditions in the grouped data.
 Returns Vector{ErpData}.
 """
-function _create_all_grand_averages(erps_by_condition::AbstractDict{Int,Vector{ErpData}})
+function _create_all_grand_averages(erps_by_condition::AbstractDict{<:Integer,<:AbstractVector{<:ErpData}})
     grand_averages = ErpData[]
 
     # Sort conditions to ensure consistent ordering
@@ -133,14 +133,15 @@ grand_avg_decoding = grand_average([decoded_p1, decoded_p2])
 grand_average("erps_unrejected")
 ```
 """
-function grand_average(erps::Vector{ErpData}; condition_selection::Function = conditions())
+function grand_average(erps::AbstractVector{<:ErpData}; condition_selection = conditions())
 
     # Group ERPs by condition
     erps_by_condition = group_by_condition(erps)
 
     # Apply condition selection
     all_cond_nums = collect(keys(erps_by_condition))
-    selected_mask = condition_selection(1:length(all_cond_nums))
+    cond_func = _to_condition_func(condition_selection)
+    selected_mask = cond_func(1:length(all_cond_nums))
     selected_cond_nums = all_cond_nums[selected_mask]
 
     filtered_groups = OrderedDict(num => erps_by_condition[num] for num in selected_cond_nums)
@@ -159,8 +160,8 @@ end
 function grand_average(
     file_pattern::String;
     input_dir::String = pwd(),
-    participant_selection::Function = participants(),
-    condition_selection::Function = conditions(),
+    participant_selection = participants(),
+    condition_selection = conditions(),
     output_dir::Union{String,Nothing} = nothing,
 )
 

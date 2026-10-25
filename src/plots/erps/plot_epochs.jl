@@ -106,11 +106,11 @@ plot_epochs("epochs_raw", participant_selection = participants(1))
 function plot_epochs(
     filename::String;
     input_dir::String = pwd(),
-    participant_selection::Function = participants(),
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    participant_selection = participants(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
-    epoch_selection::Function = epochs(),
+    epoch_selection = epochs(),
     include_extra::Bool = false,
     layout = :single,
     kwargs...,
@@ -162,12 +162,12 @@ function plot_epochs(
     end
 end
 function plot_epochs(
-    datasets::Vector{EpochData};
-    condition_selection::Function = conditions(),
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    datasets::AbstractVector{<:EpochData};
+    condition_selection = conditions(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
-    epoch_selection::Function = epochs(),
+    epoch_selection = epochs(),
     include_extra::Bool = false,
     layout = :single,
     kwargs...,
@@ -408,10 +408,10 @@ function plot_epochs(
 end
 function plot_epochs(
     dat::EpochData;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
-    epoch_selection::Function = epochs(),
+    epoch_selection = epochs(),
     include_extra::Bool = false,
     layout = :single,
     kwargs...,

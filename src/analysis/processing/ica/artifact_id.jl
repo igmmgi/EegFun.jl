@@ -278,7 +278,7 @@ function identify_eog_components(
     ica::InfoIca;
     vEOG_channel::Symbol = :vEOG,
     hEOG_channel::Symbol = :hEOG,
-    sample_selection::Function = samples(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     z_threshold::Real = 3.0,
     min_correlation::Real = 0.5,
@@ -514,7 +514,7 @@ function identify_ecg_components(
     min_peaks::Int = 100,
     max_ibi_std_s::Real = 0.2,
     min_peak_ratio::Real = 0.5,
-    sample_selection::Function = samples(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     _precomputed_components::Union{Nothing,Tuple{Matrix{Float64},Int}} = nothing,
     _precomputed_samples::Union{Nothing,Vector{Int}} = nothing,
@@ -659,7 +659,7 @@ and spectral peakiness ratios relative to flanking baseline frequencies.
 function identify_line_noise_components(
     dat::ContinuousData,
     ica::InfoIca;
-    sample_selection::Function = samples(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     line_freq::Real = 50.0,
     freq_bandwidth::Real = 1.0,
@@ -864,7 +864,7 @@ function identify_components(
     dat::ContinuousData,
     ica::InfoIca;
     method::Symbol = :correlation,
-    sample_selection::Function = samples(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     eog::NamedTuple = (;),
     ecg::NamedTuple = (;),
@@ -892,7 +892,7 @@ end
 function _identify_components_correlation(
     dat::ContinuousData,
     ica::InfoIca;
-    sample_selection::Function = samples(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     eog::NamedTuple = (;),
     ecg::NamedTuple = (;),

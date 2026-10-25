@@ -195,7 +195,7 @@ Modifies the data in place.
 - `filter`: Digital filter object to apply (can be DSP.jl filter or FilterInfo)
 - `filter_func::Symbol`: Filtering function to use (default: :filtfilt for two-pass filtering, or :filt for one-pass filtering)
 """
-function _apply_filter!(dat::DataFrame, channels::Vector{Symbol}, filter::FilterInfo; filter_func::Symbol = :filtfilt)::Nothing
+function _apply_filter!(dat::DataFrame, channels::AbstractVector{Symbol}, filter::FilterInfo; filter_func::Symbol = :filtfilt)::Nothing
     apply_fn = filter_func == :filtfilt ? filtfilt : filt
     Threads.@threads for channel in channels
         col = dat[!, channel]
@@ -208,7 +208,12 @@ function _apply_filter!(dat::DataFrame, channels::Vector{Symbol}, filter::Filter
     return nothing
 end
 
-function _apply_filter!(dat::Vector{DataFrame}, channels::Vector{Symbol}, filter::FilterInfo; filter_func::Symbol = :filtfilt)::Nothing
+function _apply_filter!(
+    dat::AbstractVector{DataFrame},
+    channels::AbstractVector{Symbol},
+    filter::FilterInfo;
+    filter_func::Symbol = :filtfilt,
+)::Nothing
     apply_fn = filter_func == :filtfilt ? filtfilt : filt
     Threads.@threads for epoch in dat
         for channel in channels
@@ -255,7 +260,7 @@ function lowpass_filter!(
     order::Int = 3,
     transition_width::Real = 0.1,
     filter_method::Symbol = :iir,
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     filter_func::Symbol = :filtfilt,
 )
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
@@ -303,7 +308,7 @@ function highpass_filter!(
     order::Int = 1,
     transition_width::Real = 0.25,
     filter_method::Symbol = :iir,
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     filter_func::Symbol = :filtfilt,
 )
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
@@ -348,25 +353,25 @@ function highpass_filter(dat::EegData, args...; kwargs...)
     return highpass_filter!(copy(dat), args...; kwargs...)
 end
 
-function lowpass_filter!(dat::Vector{<:EegData}, cutoff_freq::Real; kwargs...)
+function lowpass_filter!(dat::AbstractVector{<:EegData}, cutoff_freq::Real; kwargs...)
     for d in dat
         lowpass_filter!(d, cutoff_freq; kwargs...)
     end
     return dat
 end
 
-function highpass_filter!(dat::Vector{<:EegData}, cutoff_freq::Real; kwargs...)
+function highpass_filter!(dat::AbstractVector{<:EegData}, cutoff_freq::Real; kwargs...)
     for d in dat
         highpass_filter!(d, cutoff_freq; kwargs...)
     end
     return dat
 end
 
-function lowpass_filter(dat::Vector{<:EegData}, cutoff_freq::Real; kwargs...)
+function lowpass_filter(dat::AbstractVector{<:EegData}, cutoff_freq::Real; kwargs...)
     return [lowpass_filter(d, cutoff_freq; kwargs...) for d in dat]
 end
 
-function highpass_filter(dat::Vector{<:EegData}, cutoff_freq::Real; kwargs...)
+function highpass_filter(dat::AbstractVector{<:EegData}, cutoff_freq::Real; kwargs...)
     return [highpass_filter(d, cutoff_freq; kwargs...) for d in dat]
 end
 
@@ -379,6 +384,13 @@ function lowpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol
     return dat
 end
 
+function lowpass_filter!(dat::AbstractVector{<:EegData}, filter_cfg::FilterConfig; section::Symbol = :lowpass)
+    for d in dat
+        lowpass_filter!(d, filter_cfg; section = section)
+    end
+    return dat
+end
+
 """Apply highpass filter using settings from a `FilterConfig` section."""
 function highpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :highpass)
     sec = getfield(filter_cfg, section)
@@ -387,6 +399,22 @@ function highpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbo
     end
     return dat
 end
+
+function highpass_filter!(dat::AbstractVector{<:EegData}, filter_cfg::FilterConfig; section::Symbol = :highpass)
+    for d in dat
+        highpass_filter!(d, filter_cfg; section = section)
+    end
+    return dat
+end
+
+lowpass_filter(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :lowpass) =
+    lowpass_filter!(copy(dat), filter_cfg; section = section)
+highpass_filter(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :highpass) =
+    highpass_filter!(copy(dat), filter_cfg; section = section)
+lowpass_filter(dat::AbstractVector{<:EegData}, filter_cfg::FilterConfig; section::Symbol = :lowpass) =
+    [lowpass_filter(d, filter_cfg; section = section) for d in dat]
+highpass_filter(dat::AbstractVector{<:EegData}, filter_cfg::FilterConfig; section::Symbol = :highpass) =
+    [highpass_filter(d, filter_cfg; section = section) for d in dat]
 
 
 # === FILTER ANALYSIS AND CHARACTERIZATION ===
@@ -523,7 +551,7 @@ function _default_filter_output_dir(input_dir::String, pattern::String, filter_t
 end
 
 """Process a single file through filtering pipeline."""
-function _process_filter_file(filepath::String, output_path::String, filter_type::Symbol, cutoff_freq::Real, condition_selection::Function)
+function _process_filter_file(filepath::String, output_path::String, filter_type::Symbol, cutoff_freq::Real, condition_selection)
     filename = basename(filepath)
 
     # Read data
@@ -533,7 +561,7 @@ function _process_filter_file(filepath::String, output_path::String, filter_type
     end
 
     # Validate that data is valid EEG data (Vector of ErpData or EpochData)
-    if !(data isa Vector{<:Union{ErpData,EpochData}})
+    if !(data isa AbstractVector{<:Union{ErpData,EpochData}})
         return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{EpochData}")
     end
 
@@ -572,8 +600,8 @@ function lowpass_filter(
     file_pattern::String,
     cutoff_freq::Real;
     input_dir::String = pwd(),
-    participant_selection::Function = participants(),
-    condition_selection::Function = conditions(),
+    participant_selection = participants(),
+    condition_selection = conditions(),
     output_dir::Union{String,Nothing} = nothing,
 )
     return _run_filter_batch(
@@ -596,8 +624,8 @@ function highpass_filter(
     file_pattern::String,
     cutoff_freq::Real;
     input_dir::String = pwd(),
-    participant_selection::Function = participants(),
-    condition_selection::Function = conditions(),
+    participant_selection = participants(),
+    condition_selection = conditions(),
     output_dir::Union{String,Nothing} = nothing,
 )
     return _run_filter_batch(
@@ -617,8 +645,8 @@ function _run_filter_batch(
     cutoff_freq::Real,
     filter_type::Symbol;
     input_dir::String = pwd(),
-    participant_selection::Function = participants(),
-    condition_selection::Function = conditions(),
+    participant_selection = participants(),
+    condition_selection = conditions(),
     output_dir::Union{String,Nothing} = nothing,
 )
     _with_batch_logging(

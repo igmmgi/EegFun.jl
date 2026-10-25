@@ -427,7 +427,7 @@ Parse EEGLAB channel locations into EegFun Layout.
 Uses EEGLAB's native polar coordinates (theta, radius) which are what topoplot uses internally.
 Falls back to 3D spherical or Cartesian conversion if polar coordinates are missing.
 """
-function _parse_channel_locations(chanlocs, ch_names::Vector{Symbol})
+function _parse_channel_locations(chanlocs, ch_names::AbstractVector{Symbol})
 
     # EEGLAB set files have values for various coordinate systems
     # Let's try theta/radius first

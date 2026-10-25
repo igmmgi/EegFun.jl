@@ -81,9 +81,9 @@ rsa_cv = rsa_crossvalidated(epochs, cv_method=:splithalf, normalize_method=:zsco
 - Results are more reliable than single RDM computation
 """
 function rsa_crossvalidated(
-    epochs::Vector{EpochData};
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    epochs::AbstractVector{<:EpochData};
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     dissimilarity_measure::Symbol = :correlation,
     cv_method::Symbol = :splithalf,

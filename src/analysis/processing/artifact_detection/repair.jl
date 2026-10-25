@@ -72,11 +72,11 @@ function repair_artifacts(dat::EpochData, artifacts::EpochRejectionInfo; method:
     return repair_artifacts!(copy(dat), artifacts; method = method, kwargs...)
 end
 
-function repair_artifacts(dat::Vector{EpochData}, artifacts::Vector{EpochRejectionInfo}; kwargs...)
+function repair_artifacts(dat::AbstractVector{<:EpochData}, artifacts::AbstractVector{<:EpochRejectionInfo}; kwargs...)
     return repair_artifacts.(dat, artifacts; kwargs...)
 end
 
-function repair_artifacts!(dat::Vector{EpochData}, artifacts::Vector{EpochRejectionInfo}; kwargs...)
+function repair_artifacts!(dat::AbstractVector{<:EpochData}, artifacts::AbstractVector{<:EpochRejectionInfo}; kwargs...)
     for (d, a) in zip(dat, artifacts)
         repair_artifacts!(d, a; kwargs...)
     end

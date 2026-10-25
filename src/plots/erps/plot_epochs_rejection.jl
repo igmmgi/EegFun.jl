@@ -149,7 +149,7 @@ jldsave("participant_1_epochs_unrejected.jld2"; data = clean_data)
 """
 function detect_bad_epochs_interactive(
     dat::EpochData;
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     artifact_info::Union{Nothing,EpochRejectionInfo} = nothing,
     kwargs...,
 )::EpochRejectionState
@@ -227,9 +227,9 @@ function detect_bad_epochs_interactive(
     return state
 end
 function detect_bad_epochs_interactive(
-    epochs::Vector{EpochData};
-    channel_selection::Function = channels(),
-    artifact_info::Union{Nothing,Vector{EpochRejectionInfo}} = nothing,
+    epochs::AbstractVector{<:EpochData};
+    channel_selection = channels(),
+    artifact_info::Union{Nothing,AbstractVector{<:EpochRejectionInfo}} = nothing,
     kwargs...,
 )
     return [

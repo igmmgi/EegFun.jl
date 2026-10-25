@@ -145,7 +145,7 @@ Compute a single non-parametric threshold from pooled permutation distribution (
 thresh_pos, thresh_neg = compute_nonparametric_threshold_common(perm_t_matrices, 0.05, :both)
 ```
 """
-function _compute_nonparametric_threshold_common(permutation_t_matrices::Array{Float64,3}, alpha::Float64 = 0.05, tail::Symbol = :both)
+function _compute_nonparametric_threshold_common(permutation_t_matrices::Array{Float64,3}, alpha::Real = 0.05, tail::Symbol = :both)
     if tail == :both
         # Two-tailed: collect all absolute t-values
         all_t_values = _collect_valid_t_values(permutation_t_matrices, t -> true, abs)
@@ -211,7 +211,7 @@ Compute point-specific non-parametric thresholds from permutation distribution (
 thresh_pos, thresh_neg = compute_nonparametric_threshold_individual(perm_t_matrices, 0.05, :both)
 ```
 """
-function _compute_nonparametric_threshold_individual(permutation_t_matrices::Array{Float64,3}, alpha::Float64 = 0.05, tail::Symbol = :both)
+function _compute_nonparametric_threshold_individual(permutation_t_matrices::Array{Float64,3}, alpha::Real = 0.05, tail::Symbol = :both)
     n_electrodes, n_time, n_permutations = size(permutation_t_matrices)
 
     thresholds_positive = Array{Float64,2}(undef, n_electrodes, n_time)
@@ -517,7 +517,7 @@ end
 
 Compute common non-parametric thresholds from 4D TF permutation distribution.
 """
-function _compute_nonparametric_threshold_common_tf(permutation_t_matrices::Array{Float64,4}, alpha::Float64 = 0.05, tail::Symbol = :both)
+function _compute_nonparametric_threshold_common_tf(permutation_t_matrices::Array{Float64,4}, alpha::Real = 0.05, tail::Symbol = :both)
     if tail == :both
         all_t_values = _collect_valid_t_values_tf(permutation_t_matrices, t -> true, abs)
         isempty(all_t_values) && return NaN, NaN

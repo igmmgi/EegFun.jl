@@ -245,14 +245,14 @@ function tf_baseline(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real};
 end
 
 # Vector version
-function tf_baseline!(tf_data::Vector{TimeFreqData}, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
+function tf_baseline!(tf_data::AbstractVector{<:TimeFreqData}, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
     for tf in tf_data
         tf_baseline!(tf, baseline_interval; method = method)
     end
     return tf_data
 end
 
-function tf_baseline(tf_data::Vector{TimeFreqData}, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
+function tf_baseline(tf_data::AbstractVector{<:TimeFreqData}, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
     return [tf_baseline(tf, baseline_interval; method = method) for tf in tf_data]
 end
 
@@ -261,7 +261,7 @@ function baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}; m
     return tf_baseline!(tf_data, baseline_interval; method = method)
 end
 
-function baseline!(tf_data::Vector{TimeFreqData}, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
+function baseline!(tf_data::AbstractVector{<:TimeFreqData}, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
     return tf_baseline!(tf_data, baseline_interval; method = method)
 end
 
@@ -269,7 +269,7 @@ function baseline(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}; me
     return tf_baseline(tf_data, baseline_interval; method = method)
 end
 
-function baseline(tf_data::Vector{TimeFreqData}, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
+function baseline(tf_data::AbstractVector{<:TimeFreqData}, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
     return tf_baseline(tf_data, baseline_interval; method = method)
 end
 
@@ -291,8 +291,8 @@ function tf_baseline(
     method::Symbol = :db,
     input_dir::String = pwd(),
     output_dir::Union{String,Nothing} = nothing,
-    participant_selection::Function = participants(),
-    condition_selection::Function = conditions(),
+    participant_selection = participants(),
+    condition_selection = conditions(),
 )
     _with_batch_logging("TF baseline", "tf_baseline.log", input_dir, output_dir) do ctx
         @log_call "tf_baseline"

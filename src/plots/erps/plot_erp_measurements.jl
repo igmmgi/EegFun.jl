@@ -60,7 +60,7 @@ function plot_erp_measurements(
     filepath::String,
     analysis_type::String;
     input_dir::String = pwd(),
-    participant_selection::Function = participants(),
+    participant_selection = participants(),
     kwargs...,
 )
     if endswith(filepath, ".jld2")
@@ -85,13 +85,13 @@ function plot_erp_measurements(
 end
 
 function plot_erp_measurements(
-    erp_datasets::Vector{ErpData},
+    erp_datasets::AbstractVector{<:ErpData},
     analysis_type::String;
     analysis_interval::Union{Tuple{Real,Real},Nothing} = nothing,
     baseline_interval::Union{Tuple{Real,Real},Nothing} = nothing,
     layout::Union{Symbol,PlotLayout} = :single,
-    channel_selection::Function = channels(),
-    condition_selection::Function = conditions(),
+    channel_selection = channels(),
+    condition_selection = conditions(),
     average_channels::Bool = false,
     kwargs...,
 )

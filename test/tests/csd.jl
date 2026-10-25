@@ -53,6 +53,17 @@ using LinearAlgebra
     EegFun.compute_csd!(erp_mut)
     @test erp_mut.data == csd_erp.data
 
+    # Vector dispatch
+    erp_vec = [erp_dat, copy(erp_dat)]
+    csd_vec = EegFun.compute_csd(erp_vec)
+    @test length(csd_vec) == 2
+    @test csd_vec[1].data == csd_erp.data
+
+    erp_vec_mut = [copy(erp_dat), copy(erp_dat)]
+    EegFun.compute_csd!(erp_vec_mut)
+    @test erp_vec_mut[1].data == csd_erp.data
+    @test erp_vec_mut[2].data == csd_erp.data
+
     # 4. Legendre evaluation helper
     cosang = [1.0 0.5; 0.5 1.0]
     H = EegFun._calc_h(cosang, 4, 50)

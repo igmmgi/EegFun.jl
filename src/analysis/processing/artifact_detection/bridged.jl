@@ -7,7 +7,7 @@
 Find channels that are highly correlated with each other, indicative of an electrolyte gel bridge.
 Returns a `DataFrame` of the bridged pairs and their correlation coefficients.
 """
-function find_bridged_channels(dat::SingleDataFrameEeg, correlation_threshold::Real = 0.99; channel_selection::Function = channels())
+function find_bridged_channels(dat::SingleDataFrameEeg, correlation_threshold::Real = 0.99; channel_selection = channels())
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
     n_ch = length(selected_channels)
 
@@ -52,7 +52,7 @@ function find_bridged_channels(dat::SingleDataFrameEeg, correlation_threshold::R
     return DataFrame(channel_1 = pairs_1, channel_2 = pairs_2, correlation = corrs)
 end
 
-function find_bridged_channels(dat::MultiDataFrameEeg, correlation_threshold::Real = 0.99; channel_selection::Function = channels())
+function find_bridged_channels(dat::MultiDataFrameEeg, correlation_threshold::Real = 0.99; channel_selection = channels())
     # For epoched data, flatten across epochs and compute correlation via single matrix
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
     n_ch = length(selected_channels)

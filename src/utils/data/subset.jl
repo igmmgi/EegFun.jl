@@ -137,12 +137,13 @@ _interval_to_samples(f::Function) = f
 
 Combine an interval selection with a sample selection predicate.
 """
-function _combine_interval_sample(interval::Interval, sample_selection::Function)
+function _combine_interval_sample(interval::Interval, sample_selection)
+    sample_func = _to_sample_func(sample_selection)
     if interval isa Nothing || interval isa AllSelection
-        return sample_selection
+        return sample_func
     else
         interval_sel = _interval_to_samples(interval)
-        return x -> interval_sel(x) .& sample_selection(x)
+        return x -> interval_sel(x) .& sample_func(x)
     end
 end
 
@@ -198,8 +199,8 @@ sub = subset(erp, channel_selection = channels(:Fz, :Cz), interval_selection = t
 """
 function subset(
     dat::T;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     include_extra::Bool = false,
 )::T where {T<:SingleDataFrameEeg}
@@ -212,8 +213,8 @@ end
 
 function subset(
     dat::TimeFreqData;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     include_extra::Bool = false,
 )::TimeFreqData
@@ -232,9 +233,9 @@ end
 Create a subset of epoched EEG data (e.g., `EpochData`). 
 
 # Arguments
-- `epoch_selection::Function`: Epoch predicate. You can supply numerical indices using `epochs(1:5)` or a custom DataFrame predicate via `epochs(df -> nrow(df) > 100)` to efficiently filter trials by their contents (default: `epochs()` for all).
-- `channel_selection::Function`: Channel predicate (default: `channels()` for all)
-- `sample_selection::Function`: Sample predicate (default: `samples()` for all)
+- `epoch_selection`: Epoch predicate or indices (default: `epochs()` for all).
+- `channel_selection`: Channel predicate, Symbol, or indices (default: `channels()` for all)
+- `sample_selection`: Sample predicate (default: `samples()` for all)
 - `interval_selection::Interval`: Time interval (default: `times()` for all)
 - `include_extra::Bool`: Include extra columns (default: `false`)
 
@@ -246,10 +247,10 @@ cleaned_epochs = subset(epochs_data, epoch_selection = epochs(df -> 0.2 < df.int
 """
 function subset(
     dat::T;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
-    epoch_selection::Function = epochs(),
+    epoch_selection = epochs(),
     include_extra::Bool = false,
 )::T where {T<:MultiDataFrameEeg}
     # Combine interval and sample selection
@@ -267,10 +268,10 @@ Create a subset of time-frequency epoched data. Accepts the same arguments as ep
 """
 function subset(
     dat::TimeFreqEpochData;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
-    epoch_selection::Function = epochs(),
+    epoch_selection = epochs(),
     include_extra::Bool = false,
 )::TimeFreqEpochData
     # Combine interval and sample selection
@@ -284,10 +285,10 @@ function subset(
 end
 
 function subset(
-    datasets::Vector{ErpData};
-    condition_selection::Function = conditions(),
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    datasets::AbstractVector{<:ErpData};
+    condition_selection = conditions(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     include_extra::Bool = false,
 )::Vector{ErpData}
@@ -306,12 +307,12 @@ function subset(
 end
 
 function subset(
-    datasets::Vector{EpochData};
-    condition_selection::Function = conditions(),
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    datasets::AbstractVector{<:EpochData};
+    condition_selection = conditions(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
-    epoch_selection::Function = epochs(),
+    epoch_selection = epochs(),
     include_extra::Bool = false,
 )::Vector{EpochData}
     # First filter by condition_selection
@@ -330,10 +331,10 @@ function subset(
 end
 
 function subset(
-    datasets::Vector{TimeFreqData};
-    condition_selection::Function = conditions(),
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    datasets::AbstractVector{<:TimeFreqData};
+    condition_selection = conditions(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     include_extra::Bool = false,
 )::Vector{TimeFreqData}
@@ -352,12 +353,12 @@ function subset(
 end
 
 function subset(
-    datasets::Vector{TimeFreqEpochData};
-    condition_selection::Function = conditions(),
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    datasets::AbstractVector{<:TimeFreqEpochData};
+    condition_selection = conditions(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
-    epoch_selection::Function = epochs(),
+    epoch_selection = epochs(),
     include_extra::Bool = false,
 )::Vector{TimeFreqEpochData}
     # First filter by condition_selection
@@ -404,9 +405,12 @@ channels(x -> startswith.(string.(x), "F"))  # Custom predicate
 ```
 """
 channels() = x -> fill(true, length(x))  # Default: select all channels given
-channels(channel_names::Vector{Symbol}) = x -> x .∈ Ref(channel_names)
+channels(channel_names::AbstractVector{Symbol}) = x -> x .∈ Ref(channel_names)
+channels(channel_names::AbstractVector{<:AbstractString}) = channels(Symbol.(channel_names))
 channels(channel_name::Symbol) = channels([channel_name])
+channels(channel_name::AbstractString) = channels([Symbol(channel_name)])
 channels(channel_names::Symbol...) = channels(collect(channel_names))
+channels(channel_names::AbstractString...) = channels(Symbol.(channel_names)...)
 channels(channel_number::Int) = channels([channel_number])
 channels(channel_numbers::Union{Vector{Int},UnitRange}) = x -> [i in channel_numbers for i = 1:length(x)]
 channels(channel_ranges::Vector{UnitRange{Int}}) = x -> [i in union(channel_ranges...) for i = 1:length(x)]
@@ -426,9 +430,12 @@ channels_not(:Fp1, :Fp2)           # Exclude two frontal channels
 channels_not(1:4)                   # Exclude first 4 channels by index
 ```
 """
-channels_not(channel_names::Vector{Symbol}) = x -> .!(x .∈ Ref(channel_names))
+channels_not(channel_names::AbstractVector{Symbol}) = x -> .!(x .∈ Ref(channel_names))
+channels_not(channel_names::AbstractVector{<:AbstractString}) = channels_not(Symbol.(channel_names))
 channels_not(channel_name::Symbol) = channels_not([channel_name])
+channels_not(channel_name::AbstractString) = channels_not([Symbol(channel_name)])
 channels_not(channel_names::Symbol...) = channels_not(collect(channel_names))
+channels_not(channel_names::AbstractString...) = channels_not(Symbol.(channel_names)...)
 channels_not(channel_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in channel_numbers for i = 1:length(x)])
 
 """
@@ -681,6 +688,53 @@ conditions_not(condition_names::Vector{String}) = x -> .!([condition_name(dat) i
 conditions_not(cond_name::String) = x -> .!([condition_name(dat) == cond_name for dat in x])
 conditions_not(condition_names::String...) = conditions_not(collect(condition_names))
 
+# === SELECTOR CONVERSION HELPERS ===
+# Convert symbols, strings, numbers, vectors, ranges, or colons directly to predicates
+_to_sample_func(::Nothing) = samples()
+_to_sample_func(::Colon) = samples()
+_to_sample_func(f::Function) = f === Colon() ? samples() : f
+_to_sample_func(col::Symbol) = samples(col)
+_to_sample_func(idx::Integer) = x -> [i == idx for i = 1:nrow(x)]
+_to_sample_func(idx) = x -> [i in idx for i = 1:nrow(x)]
+
+_to_channel_func(::Nothing) = channels()
+_to_channel_func(::Colon) = channels()
+_to_channel_func(f::Function) = f === Colon() ? channels() : f
+_to_channel_func(ch::Symbol) = channels(ch)
+_to_channel_func(chans::AbstractVector{Symbol}) = channels(collect(chans))
+_to_channel_func(idx::AbstractString) = channels(Symbol(idx))
+_to_channel_func(idx::AbstractVector{<:AbstractString}) = channels(Symbol.(idx))
+_to_channel_func(idx::Integer) = channels(Int(idx))
+_to_channel_func(idx::AbstractVector{<:Integer}) = channels(collect(Int, idx))
+_to_channel_func(idx::AbstractRange) = channels(idx)
+_to_channel_func(idx) = channels(idx)
+
+_to_epoch_func(::Nothing) = epochs()
+_to_epoch_func(::Colon) = epochs()
+_to_epoch_func(f::Function) = f === Colon() ? epochs() : f
+_to_epoch_func(idx::Integer) = epochs(Int(idx))
+_to_epoch_func(idx::AbstractVector{<:Integer}) = epochs(collect(Int, idx))
+_to_epoch_func(idx::AbstractRange) = epochs(idx)
+_to_epoch_func(idx) = epochs(idx)
+
+_to_condition_func(::Nothing) = conditions()
+_to_condition_func(::Colon) = conditions()
+_to_condition_func(f::Function) = f === Colon() ? conditions() : f
+_to_condition_func(idx::Integer) = conditions(Int(idx))
+_to_condition_func(idx::AbstractVector{<:Integer}) = conditions(collect(Int, idx))
+_to_condition_func(idx::AbstractRange) = conditions(idx)
+_to_condition_func(name::AbstractString) = conditions(String(name))
+_to_condition_func(names::AbstractVector{<:AbstractString}) = conditions(collect(String, names))
+_to_condition_func(idx) = conditions(idx)
+
+_to_participant_func(::Nothing) = participants()
+_to_participant_func(::Colon) = participants()
+_to_participant_func(f::Function) = f === Colon() ? participants() : f
+_to_participant_func(idx::Integer) = participants(Int(idx))
+_to_participant_func(idx::AbstractVector{<:Integer}) = participants(collect(Int, idx))
+_to_participant_func(idx::AbstractRange) = participants(idx)
+_to_participant_func(idx) = participants(idx)
+
 """Preserve user-specified channel name ordering if all names are in the selection."""
 function _handle_channel_names_order(user_order::Vector{Symbol}, selectable_cols::Vector{Symbol}, selected::Vector{Symbol})
     # Validate: check for missing channels and duplicates
@@ -745,8 +799,14 @@ function _handle_channel_numbers_order(user_order_numbers, selectable_cols::Vect
     return nothing  # Use default order
 end
 
-"""Apply a channel predicate to data and return the matching column names (with optional metadata/extra)."""
+get_selected_channels(dat, ::Colon; include_meta::Bool = true, include_extra::Bool = true) =
+    get_selected_channels(dat, channels(); include_meta = include_meta, include_extra = include_extra)
+
+get_selected_channels(dat, channel_selection; include_meta::Bool = true, include_extra::Bool = true) =
+    get_selected_channels(dat, _to_channel_func(channel_selection); include_meta = include_meta, include_extra = include_extra)
+
 function get_selected_channels(dat, channel_selection::Function; include_meta::Bool = true, include_extra::Bool = true)
+    channel_selection === Colon() && (channel_selection = channels())
     # Columns/channels in dataframe to include
     metadata_cols = include_meta ? meta_labels(dat) : Symbol[]
     selectable_cols = include_extra ? vcat(channel_labels(dat), extra_labels(dat)) : channel_labels(dat)
@@ -773,31 +833,36 @@ end
 
 """Apply a component predicate and return matching indices."""
 function get_selected_components(ica_result::InfoIca, component_selection::Function)
+    component_selection === Colon() && return collect(1:length(ica_result.ica_label))
     all_components = 1:length(ica_result.ica_label)
     return all_components[component_selection(all_components)]
 end
+get_selected_components(ica_result::InfoIca, ::Union{Nothing,Colon}) = collect(1:length(ica_result.ica_label))
 
 """Apply a sample predicate and return matching row indices."""
 function get_selected_samples(dat::SingleDataFrameEeg, sample_selection::Function)
+    sample_selection === Colon() && return 1:nrow(dat.data)
     return findall(sample_selection(dat.data))
 end
-function get_selected_samples(dat::SingleDataFrameEeg, ::Union{Nothing,AllSelection})
+function get_selected_samples(dat::SingleDataFrameEeg, ::Union{Nothing,AllSelection,Colon})
     return 1:nrow(dat.data)
 end
 
 # Helper to select samples based on a predicate
 function get_selected_samples(dat::MultiDataFrameEeg, sample_selection::Function)
+    sample_selection === Colon() && return 1:nrow(dat.data[1])
     return findall(sample_selection(dat.data[1])) # assume all data have the same samples
 end
-function get_selected_samples(dat::MultiDataFrameEeg, ::Union{Nothing,AllSelection})
+function get_selected_samples(dat::MultiDataFrameEeg, ::Union{Nothing,AllSelection,Colon})
     return 1:nrow(dat.data[1])
 end
 
 # Helper to select samples from a DataFrame
 function get_selected_samples(dat::DataFrame, sample_selection::Function)
+    sample_selection === Colon() && return 1:nrow(dat)
     return findall(sample_selection(dat))
 end
-function get_selected_samples(dat::DataFrame, ::Union{Nothing,AllSelection})
+function get_selected_samples(dat::DataFrame, ::Union{Nothing,AllSelection,Colon})
     return 1:nrow(dat)
 end
 
@@ -807,14 +872,27 @@ function get_selected_samples(dat::Union{SingleDataFrameEeg,MultiDataFrameEeg,Da
     return get_selected_samples(dat, func)
 end
 
+get_selected_samples(dat::Union{SingleDataFrameEeg,MultiDataFrameEeg,DataFrame}, sample_selection) =
+    get_selected_samples(dat, _to_sample_func(sample_selection))
+
 """Apply an epoch predicate and return matching epoch indices."""
+get_selected_epochs(dat::MultiDataFrameEeg, ::Union{Nothing,Colon}) = collect(1:length(dat.data))
+get_selected_epochs(dat::MultiDataFrameEeg, epoch_selection) = get_selected_epochs(dat, _to_epoch_func(epoch_selection))
+
 function get_selected_epochs(dat::MultiDataFrameEeg, epoch_selection::Function)
+    epoch_selection === Colon() && return collect(1:length(dat.data))
     # The dat.data accessor maps to data_power for TimeFreqEpochData
-    return findall(epoch_selection(dat.data))
+    res = epoch_selection(dat.data)
+    return res isa AbstractVector{Bool} ? findall(res) : res
 end
 
 """Apply a condition predicate and return matching dataset indices."""
-function get_selected_conditions(datasets::Vector{<:EegFunData}, condition_selection::Function)
+get_selected_conditions(datasets::AbstractVector{<:EegFunData}, ::Union{Nothing,Colon}) = collect(1:length(datasets))
+get_selected_conditions(datasets::AbstractVector{<:EegFunData}, condition_selection) =
+    get_selected_conditions(datasets, _to_condition_func(condition_selection))
+
+function get_selected_conditions(datasets::AbstractVector{<:EegFunData}, condition_selection::Function)
+    condition_selection === Colon() && return collect(1:length(datasets))
     res = condition_selection(datasets)
     return res isa AbstractVector{Bool} ? findall(res) : res
 end
@@ -841,7 +919,7 @@ single_dat = epoch_to_continuous(dat, 3)
 summary = channel_summary(single_dat)
 ```
 """
-function epoch_to_continuous(dat::T, epoch_idx::Int)::ContinuousData where {T<:MultiDataFrameEeg}
+function epoch_to_continuous(dat::MultiDataFrameEeg, epoch_idx::Int)
     # Validate epoch index
     if epoch_idx < 1 || epoch_idx > length(dat.data)
         @minimal_error "Epoch index $epoch_idx out of range (1:$(length(dat.data)))"

@@ -25,7 +25,7 @@ function _compute_cluster_pvalues(
     cluster_stats::Vector{Float64},
     permutation_max::Vector{Float64},
     n_permutations::Int,
-    alpha::Float64 = 0.05,
+    alpha::Real = 0.05,
 )
     if isempty(clusters)
         return Cluster[]

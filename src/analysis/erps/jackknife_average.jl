@@ -9,7 +9,7 @@ This is commonly used with LRP data to reduce variance for statistical testing.
 # === JACKKNIFE-SPECIFIC VALIDATION ===
 
 """Validate jackknife parameters."""
-function _validate_jackknife_params(erps::Vector{ErpData})
+function _validate_jackknife_params(erps::AbstractVector{<:ErpData})
     length(erps) < 2 && return "Need at least 2 participants for jackknife averaging"
 
     # Validate that all ERPs have the same structure
@@ -32,7 +32,7 @@ Create jackknife averages: for each participant, average all other participants.
 
 Returns a vector where element i is the average of all participants except participant i.
 """
-function _create_jackknife_averages(erps::Vector{ErpData})::Vector{ErpData}
+function _create_jackknife_averages(erps::AbstractVector{<:ErpData})::Vector{ErpData}
     n_participants = length(erps)
 
     if n_participants < 2
@@ -116,7 +116,7 @@ end
 Load ERP/LRP data from multiple files and organize by condition.
 Returns Dict{Int, Vector{ErpData}} mapping condition number to ERPs from all participants.
 """
-function _load_and_group_for_jackknife(files::Vector{String}, input_dir::String, condition_selection::Function)
+function _load_and_group_for_jackknife(files::Vector{String}, input_dir::String, condition_selection)
     all_erps_by_condition = Dict{Int,Vector{ErpData}}()
     participant_ids = Int[]
 
@@ -189,7 +189,7 @@ for statistical testing.
 - The resulting data has the same format as the input (ErpData objects)
 - Common workflow: Calculate LRP → Jackknife average → Statistical testing
 """
-function jackknife_average(erps::Vector{ErpData}; condition_selection::Function = conditions())::Vector{ErpData}
+function jackknife_average(erps::AbstractVector{<:ErpData}; condition_selection = conditions())::Vector{ErpData}
     @info "Starting jackknife averaging"
 
     # Apply condition_selection first
@@ -211,8 +211,8 @@ end
 function jackknife_average(
     file_pattern::String;
     input_dir::String = pwd(),
-    participant_selection::Function = participants(),
-    condition_selection::Function = conditions(),
+    participant_selection = participants(),
+    condition_selection = conditions(),
     output_dir::Union{String,Nothing} = nothing,
 )
     _with_batch_logging("jackknife averaging", "jackknife.log", input_dir, output_dir) do ctx

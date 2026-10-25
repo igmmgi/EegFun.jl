@@ -44,7 +44,7 @@ spectrum = freq_spectrum(epochs; channel_selection=channels(:Cz), window_size=20
 """
 function freq_spectrum(
     dat::EegData;
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     window_size::Union{Int,Nothing} = nothing,
     overlap::Real = 0.5,
     window_function::Function = DSP.hanning,

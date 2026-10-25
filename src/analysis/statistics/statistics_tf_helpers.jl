@@ -33,10 +33,10 @@ result = permutation_test(prepared; n_permutations=1000)
 ```
 """
 function prepare_stats(
-    tfs::Vector{TimeFreqData};
+    tfs::AbstractVector{<:TimeFreqData};
     design::Symbol = :paired,
-    condition_selection::Function = conditions(),
-    channel_selection::Function = channels(),
+    condition_selection = conditions(),
+    channel_selection = channels(),
     frequency_selection::Interval = nothing,
     interval_selection::Interval = nothing,
     baseline_interval::Union{Nothing,Tuple{Real,Real}} = nothing,
@@ -47,7 +47,8 @@ function prepare_stats(
 
     # Apply condition selection to the sorted condition numbers
     all_cond_nums = collect(keys(tfs_by_condition))
-    selected_mask = condition_selection(1:length(all_cond_nums))
+    cond_func = _to_condition_func(condition_selection)
+    selected_mask = cond_func(1:length(all_cond_nums))
     selected_cond_nums = all_cond_nums[selected_mask]
 
     # Validate exactly 2 conditions
@@ -140,7 +141,7 @@ function prepare_stats(
     file_pattern::String,
     design::Symbol;
     input_dir::String = pwd(),
-    participant_selection::Function = participants(),
+    participant_selection = participants(),
     kwargs...,
 )
     all_tfs = read_all_data(TimeFreqData, joinpath(input_dir, file_pattern), participant_selection)
@@ -429,7 +430,7 @@ Compute critical t-values for parametric thresholding (3D version).
 # Returns
 - `critical_t_values::Array{Float64, 3}`: Uniform critical t-values [electrodes × freqs × time]
 """
-function _compute_critical_t_values_tf(df::Float64, matrix_size::Tuple{Int,Int,Int}, alpha::Float64 = 0.05, tail::Symbol = :both)
+function _compute_critical_t_values_tf(df::Real, matrix_size::Tuple{Int,Int,Int}, alpha::Real = 0.05, tail::Symbol = :both)
     critical_t_values = Array{Float64,3}(undef, matrix_size)
 
     if isnan(df) || isinf(df) || df <= 0

@@ -48,16 +48,20 @@ end
 
 # === IN-MEMORY API FUNCTION ===
 
-function condition_difference(
-    data::Vector{TimeFreqData},
-    condition_pairs::Union{Vector{Tuple{Int,Int}},Vector{Vector{Int}}},
-)::Vector{TimeFreqData}
+function condition_difference(data::AbstractVector{<:TimeFreqData}, condition_pairs)
+    pairs =
+        if condition_pairs isa Tuple ||
+           (condition_pairs isa AbstractVector && !isempty(condition_pairs) && first(condition_pairs) isa Integer)
+            [condition_pairs]
+        else
+            condition_pairs
+        end
 
     @info "Creating TF condition difference waves..."
 
     difference_waves = TimeFreqData[]
 
-    for (pair_idx, pair) in enumerate(condition_pairs)
+    for (pair_idx, pair) in enumerate(pairs)
         cond1, cond2 = pair[1], pair[2]
 
         # Find TF data for each condition

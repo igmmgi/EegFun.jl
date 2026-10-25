@@ -306,12 +306,12 @@ function search_sequence(array, sequences::Vector{<:Vector}; ignore_values::Vect
 
     # Optimize common case of single sequence
     if length(sequences) == 1
-        return search_sequence(array, sequences[1]; ignore_values = ignore_values, sort_indices = sort_indices)
+        return _search_single_sequence(array, sequences[1]; ignore_values = ignore_values, sort_indices = sort_indices)
     end
 
     all_matches = Vector{Int}[]
     for sequence in sequences
-        matches = search_sequence(array, sequence; ignore_values = ignore_values, sort_indices = false)
+        matches = _search_single_sequence(array, sequence; ignore_values = ignore_values, sort_indices = false)
         append!(all_matches, matches)
     end
 
@@ -320,13 +320,13 @@ function search_sequence(array, sequences::Vector{<:Vector}; ignore_values::Vect
     return sort_indices ? sort(all_matches, by = first) : all_matches
 end
 
-function search_sequence(array, sequence::Vector; ignore_values::Vector{Int} = [0], sort_indices::Bool = true)
+function _search_single_sequence(array, sequence::Vector; ignore_values::Vector{Int} = [0], sort_indices::Bool = true)
     isempty(array) && return Vector{Int}[]
     isempty(sequence) && return Vector{Int}[]
 
     # Handle case where sequence is all UnitRanges (treat as range search)
     if all(x -> x isa UnitRange, sequence)
-        indices = search_sequence(array, UnitRange{Int}[x for x in sequence]; sort_indices = sort_indices)
+        indices = search_sequence(array, UnitRange{Int}[x for x in sequence]; ignore_values = ignore_values, sort_indices = sort_indices)
         return [[idx] for idx in indices]
     end
 
@@ -355,6 +355,9 @@ function search_sequence(array, sequence::Vector; ignore_values::Vector{Int} = [
     return sort_indices ? sort(matches, by = first) : matches
 end
 
+search_sequence(array, sequence::Vector; ignore_values::Vector{Int} = [0], sort_indices::Bool = true) =
+    _search_single_sequence(array, sequence; ignore_values = ignore_values, sort_indices = sort_indices)
+
 function search_sequence(array, value::Integer; ignore_values::Vector{Int} = [0])
     indices = Int[]
     for (i, val) in enumerate(array)
@@ -365,15 +368,15 @@ function search_sequence(array, value::Integer; ignore_values::Vector{Int} = [0]
     return indices
 end
 
-function search_sequence(array, range::UnitRange; sort_indices::Bool = true)
-    return search_sequence(array, [range]; sort_indices = sort_indices)
+function search_sequence(array, range::UnitRange; ignore_values::Vector{Int} = [0], sort_indices::Bool = true)
+    return search_sequence(array, [range]; ignore_values = ignore_values, sort_indices = sort_indices)
 end
 
-function search_sequence(array, ranges::Vector{<:UnitRange}; sort_indices::Bool = true)
+function search_sequence(array, ranges::Vector{<:UnitRange}; ignore_values::Vector{Int} = [0], sort_indices::Bool = true)
     isempty(ranges) && return Int[]
     all_indices = Int[]
     for value in union(ranges...)
-        indices = search_sequence(array, value)
+        indices = search_sequence(array, value; ignore_values = ignore_values)
         append!(all_indices, indices)
     end
     return sort_indices ? sort(all_indices) : all_indices
@@ -468,7 +471,7 @@ Run `trigger_info` across all conditions in a `Vector{EpochData}`.
 Returns a `Dict{String, ...}` mapping each `condition_name` to its list of unique
 trigger sequences. See the `EpochData` method for details on the individual entries.
 """
-function trigger_info(dat_vec::Vector{EpochData})
+function trigger_info(dat_vec::AbstractVector{<:EpochData})
     info = Dict{String,Vector{NamedTuple{(:sequence, :t0),Tuple{Vector{Int},Int}}}}()
     for dat in dat_vec
         info[dat.condition_name] = trigger_info(dat)

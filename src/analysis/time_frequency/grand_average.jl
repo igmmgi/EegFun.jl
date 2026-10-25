@@ -2,7 +2,7 @@
 Grand averaging of time-frequency data across participants.
 """
 
-function grand_average(tfs::Vector{TimeFreqData}; condition_selection::Function = conditions())
+function grand_average(tfs::AbstractVector{<:TimeFreqData}; condition_selection = conditions())
     isempty(tfs) && @minimal_error("Cannot create grand average from empty TF list")
 
     # Group by condition
@@ -10,7 +10,7 @@ function grand_average(tfs::Vector{TimeFreqData}; condition_selection::Function 
 
     # Apply condition selection
     all_cond_nums = collect(keys(tfs_by_condition))
-    selected_mask = condition_selection(1:length(all_cond_nums))
+    selected_mask = _to_condition_func(condition_selection)(1:length(all_cond_nums))
     selected_cond_nums = all_cond_nums[selected_mask]
 
     if isempty(selected_cond_nums)

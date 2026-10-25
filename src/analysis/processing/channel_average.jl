@@ -44,12 +44,6 @@ function channel_average!(
     reduce::Bool = false,
 )
 
-    # Validate that all channel_selections are callable
-    for (i, sel) in enumerate(channel_selections)
-        if !(sel isa Function)
-            @minimal_error "Channel selection at index $i must be a Function, got $(typeof(sel))"
-        end
-    end
 
     # Resolve actual channel groups (exclude metadata; optionally include extra)
     # For the default case (channels()), we want to select only original channel columns, not derived averaged columns
@@ -95,13 +89,13 @@ function channel_average!(
     end
 
     """Add a column of channel means to a single DataFrame."""
-    function _add_avg!(df::DataFrame, cols::Vector{Symbol}, outlbl::Symbol)
+    function _add_avg!(df::DataFrame, cols::AbstractVector{Symbol}, outlbl::Symbol)
         df[!, outlbl] = _colmeans(df, cols)
         return nothing
     end
 
     """Broadcast `_add_avg!` across a vector of DataFrames."""
-    function _add_avg!(dfs::Vector{DataFrame}, cols::Vector{Symbol}, outlbl::Symbol)
+    function _add_avg!(dfs::AbstractVector{DataFrame}, cols::AbstractVector{Symbol}, outlbl::Symbol)
         _add_avg!.(dfs, Ref(cols), Ref(outlbl))
         return nothing
     end
@@ -130,7 +124,7 @@ function channel_average!(
     return dat
 end
 
-function channel_average!(dat::Vector{<:EegData}; kwargs...)
+function channel_average!(dat::AbstractVector{<:EegData}; kwargs...)
     for d in dat
         channel_average!(d; kwargs...)
     end
@@ -146,7 +140,7 @@ function channel_average(dat::EegData, args...; kwargs...)
     return channel_average!(copy(dat), args...; kwargs...)
 end
 
-function channel_average(dat::Vector{<:EegData}; kwargs...)
+function channel_average(dat::AbstractVector{<:EegData}; kwargs...)
     return [channel_average(d; kwargs...) for d in dat]
 end
 
@@ -164,9 +158,9 @@ Returns BatchResult with success/failure info.
 function _process_channel_average_file(
     filepath::String,
     output_path::String,
-    channel_selections::Vector{<:Function},
-    output_labels::Vector{Symbol},
-    condition_selection::Function,
+    channel_selections::AbstractVector,
+    output_labels::AbstractVector{Symbol},
+    condition_selection,
     reduce::Bool,
 )
     filename = basename(filepath)
@@ -178,7 +172,7 @@ function _process_channel_average_file(
     end
 
     # Validate that data is valid EEG data (Vector of ErpData or EpochData)
-    if !(data isa Vector{<:Union{ErpData,EpochData}})
+    if !(data isa AbstractVector{<:Union{ErpData,EpochData}})
         return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{EpochData}")
     end
 
@@ -245,11 +239,11 @@ channel_average("erps_unrejected",
 """
 function channel_average(
     file_pattern::String,
-    channel_selections::Vector{<:Function};
-    output_labels::Union{Vector{Symbol},Nothing} = nothing,
+    channel_selections::AbstractVector;
+    output_labels::Union{AbstractVector{Symbol},Nothing} = nothing,
     input_dir::String = pwd(),
-    participant_selection::Function = participants(),
-    condition_selection::Function = conditions(),
+    participant_selection = participants(),
+    condition_selection = conditions(),
     output_dir::Union{String,Nothing} = nothing,
     reduce::Bool = false,
 )

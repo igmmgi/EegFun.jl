@@ -1,8 +1,8 @@
 function tf_morlet(
     dat::EpochData;
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     interval_selection::Interval = times(),
-    frequencies::Union{AbstractRange,AbstractVector{<:Real}} = range(1, 40, length = 40),
+    frequencies::AbstractVector{<:Real} = range(1, 40, length = 40),
     cycles::Union{Real,Tuple{Real,Real}} = 7,
     pad::Union{Nothing,Symbol} = nothing,
     return_trials::Bool = false,
@@ -479,7 +479,7 @@ function _process_tf_channel!(
 end
 
 # Vector version: process each EpochData element
-function tf_morlet(data_vec::Vector{<:EpochData}; kwargs...)
+function tf_morlet(data_vec::AbstractVector{<:EpochData}; kwargs...)
     return [tf_morlet(dat; kwargs...) for dat in data_vec]
 end
 
@@ -525,8 +525,8 @@ function tf_morlet(
     file_pattern::String;
     input_dir::String = pwd(),
     output_dir::Union{String,Nothing} = nothing,
-    participant_selection::Function = participants(),
-    condition_selection::Function = conditions(),
+    participant_selection = participants(),
+    condition_selection = conditions(),
     kwargs...,
 )
     _with_batch_logging("tf_morlet", "tf_morlet.log", input_dir, output_dir) do ctx

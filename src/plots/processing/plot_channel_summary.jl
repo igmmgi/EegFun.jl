@@ -77,7 +77,7 @@ fig, ax = plot_channel_summary(summary_df, :kurtosis,
     error_linewidth = 3)
 ```
 """
-function plot_channel_summary!(fig::Figure, ax::Axis, dat::DataFrame, col::Symbol; channel_selection::Function = channels(), kwargs...)
+function plot_channel_summary!(fig::Figure, ax::Axis, dat::DataFrame, col::Symbol; channel_selection = channels(), kwargs...)
     # Merge user kwargs with defaults and validate
     plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
 
@@ -160,7 +160,7 @@ See `plot_channel_summary!` for full documentation of arguments and keyword argu
 # Returns
 - `(fig::Figure, ax::Axis)` - The created figure and axis objects
 """
-function plot_channel_summary(dat::DataFrame, col::Symbol; channel_selection::Function = channels(), kwargs...)
+function plot_channel_summary(dat::DataFrame, col::Symbol; channel_selection = channels(), kwargs...)
     # Merge user kwargs with defaults and validate
     plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
 
@@ -175,8 +175,8 @@ function plot_channel_summary(dat::DataFrame, col::Symbol; channel_selection::Fu
     return (fig = fig, axes = [ax])
 end
 
-plot_channel_summary(dat::Vector{DataFrame}, col::Symbol; kwargs...) = plot_channel_summary.(dat, col; kwargs...)
-function plot_channel_summary(dat::DataFrame, col::Vector{Symbol}; channel_selection::Function = channels(), kwargs...)
+plot_channel_summary(dat::AbstractVector{<:DataFrame}, col::Symbol; kwargs...) = plot_channel_summary.(dat, col; kwargs...)
+function plot_channel_summary(dat::DataFrame, col::AbstractVector{Symbol}; channel_selection = channels(), kwargs...)
     plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
     fig = Figure()
     _plot_multiple_columns!(fig, dat, col, plot_kwargs; channel_selection = channel_selection)
@@ -187,7 +187,8 @@ function plot_channel_summary(dat::DataFrame, col::Vector{Symbol}; channel_selec
     return fig
 end
 
-plot_channel_summary(dat::Vector{DataFrame}, col::Vector{Symbol}; kwargs...) = plot_channel_summary.(dat, Ref(col); kwargs...)
+plot_channel_summary(dat::AbstractVector{<:DataFrame}, col::AbstractVector{Symbol}; kwargs...) =
+    plot_channel_summary.(dat, Ref(col); kwargs...)
 
 
 """
@@ -213,9 +214,9 @@ a bar chart of that metric across all channels.
 function _plot_multiple_columns!(
     fig::Figure,
     dat::DataFrame,
-    col::Vector{Symbol},
+    col::AbstractVector{Symbol},
     plot_kwargs::Dict;
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
 )
     n_cols = length(col)
 

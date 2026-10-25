@@ -98,9 +98,9 @@ channel_summary("epochs", channel_selection = channels([:Fp1, :Fp2]))
 """
 function channel_summary(
     dat::SingleDataFrameEeg;
-    sample_selection::Function = samples(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     include_meta::Bool = false,
     include_extra::Bool = false,
 )::DataFrame
@@ -123,9 +123,9 @@ end
 
 function channel_summary(
     dat::MultiDataFrameEeg;
-    sample_selection::Function = samples(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     include_meta::Bool = false,
     include_extra::Bool = false,
 )::DataFrame
@@ -193,10 +193,10 @@ Returns tuple of (BatchResult, Vector{DataFrame}) with all condition results.
 """
 function _process_channel_summary_file(
     filepath::String,
-    condition_selection::Function,
-    sample_selection::Function,
+    condition_selection,
+    sample_selection,
     interval_selection::Interval,
-    channel_selection::Function,
+    channel_selection,
     include_extra::Bool,
 )
     filename = basename(filepath)
@@ -245,11 +245,11 @@ end
 function channel_summary(
     file_pattern::String;
     input_dir::String = pwd(),
-    participant_selection::Function = participants(),
-    condition_selection::Function = conditions(),
-    sample_selection::Function = samples(),
+    participant_selection = participants(),
+    condition_selection = conditions(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     include_extra::Bool = false,
     output_dir::Union{String,Nothing} = nothing,
     output_file::String = "channel_summary",

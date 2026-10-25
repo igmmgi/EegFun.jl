@@ -21,7 +21,7 @@ Returns arrays ready for RSA computation.
 - `times::Vector{Float64}`: Time points in seconds
 - `n_trials_per_condition::Vector{Int}`: Number of trials per condition
 """
-function _prepare_rsa_data(epochs::Vector{EpochData})
+function _prepare_rsa_data(epochs::AbstractVector{<:EpochData})
     channels = channel_labels(epochs)
     times = time_vector(epochs)
     n_channels = length(channels)
@@ -374,9 +374,9 @@ rsa_result = rsa(epochs)
 ```
 """
 function rsa(
-    epochs::Vector{EpochData};
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    epochs::AbstractVector{<:EpochData};
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     dissimilarity_measure::Symbol = :correlation,
     average_trials::Bool = true,
@@ -615,7 +615,7 @@ end
 
 # === GRAND AVERAGE ===
 
-function grand_average(rsa_data_list::Vector{RsaData}; compute_noise_ceiling::Bool = true)
+function grand_average(rsa_data_list::AbstractVector{<:RsaData}; compute_noise_ceiling::Bool = true)
     if isempty(rsa_data_list)
         @minimal_error("Cannot compute grand average with empty RSA data list")
     end

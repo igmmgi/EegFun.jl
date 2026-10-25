@@ -69,7 +69,7 @@ plot_tf_stats(result_analytic, mask_style=:alpha, colormap=:viridis)
 """
 function plot_tf_stats(
     result::TFStatsResult;
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
     content::Symbol = :tvalues,
     mask_style::Symbol = :alpha,

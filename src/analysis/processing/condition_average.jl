@@ -15,7 +15,7 @@ end
 """
 Create an average wave by averaging ERP data across conditions.
 """
-function _create_average_wave(erps::Vector{<:ErpData}, conditions::Vector{Int}, avg_cond::Int)
+function _create_average_wave(erps::AbstractVector{<:ErpData}, conditions::AbstractVector{<:Integer}, avg_cond::Int)
     # Validate that all ERPs have the same structure
     for i = 2:length(erps)
         _have_same_structure(erps[1], erps[i]) || @minimal_error("ERPs have inconsistent structure")
@@ -80,7 +80,7 @@ function _condition_average_process_file(filepath::String, output_path::String, 
     end
 
     # Dispatch to the appropriate in-memory condition_average based on data type
-    if file_data isa Vector{<:ErpData} || file_data isa Vector{<:TimeFreqData}
+    if file_data isa AbstractVector{<:ErpData} || file_data isa AbstractVector{<:TimeFreqData}
         average_waves = condition_average(file_data, condition_groups)
         jldsave(output_path; data = average_waves)
         return BatchResult(true, filename, "Created $(length(average_waves)) average(s)")
@@ -116,13 +116,20 @@ avg_waves = condition_average(erps, [[1, 2], [3, 4]])
 condition_average("erps_unrejected", [[1, 2], [3, 4]])
 ```
 """
-function condition_average(data::Vector{<:ErpData}, condition_groups::Vector{Vector{Int}})::Vector{ErpData}
+function condition_average(data::AbstractVector{<:ErpData}, condition_groups)
+    groups = if isempty(condition_groups)
+        condition_groups
+    elseif first(condition_groups) isa Integer
+        [condition_groups]
+    else
+        condition_groups
+    end
 
     @info "Creating condition average waves..."
 
     average_waves = ErpData[]
 
-    for (group_idx, conditions) in enumerate(condition_groups)
+    for (group_idx, conditions) in enumerate(groups)
         # Find ERP data for each condition in the group
         group_erps = ErpData[]
         all_found = true
@@ -165,9 +172,9 @@ end
 
 function condition_average(
     file_pattern::String,
-    condition_groups::Vector{Vector{Int}};
+    condition_groups::AbstractVector{<:AbstractVector{<:Integer}};
     input_dir::String = pwd(),
-    participant_selection::Function = participants(),
+    participant_selection = participants(),
     output_dir::Union{String,Nothing} = nothing,
 )
 

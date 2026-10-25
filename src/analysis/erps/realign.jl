@@ -32,8 +32,8 @@ calculate_trigger_interval!(epochs, [101, 103], [111, 112])
 """
 function calculate_trigger_interval!(
     dat::EpochData,
-    start_triggers::Vector{Int},
-    end_triggers::Vector{Int};
+    start_triggers::AbstractVector{<:Integer},
+    end_triggers::AbstractVector{<:Integer};
     column_name::Symbol = :interval,
 )
     @info "Calculating trigger intervals for EpochData (condition: $(dat.condition_name))"
@@ -66,9 +66,9 @@ end
 Apply `calculate_trigger_interval!` to every condition in a `Vector{EpochData}` in-place.
 """
 function calculate_trigger_interval!(
-    dat_vec::Vector{EpochData},
-    start_triggers::Vector{Int},
-    end_triggers::Vector{Int};
+    dat_vec::AbstractVector{<:EpochData},
+    start_triggers::AbstractVector{<:Integer},
+    end_triggers::AbstractVector{<:Integer};
     column_name::Symbol = :interval,
 )
     for dat in dat_vec
@@ -84,8 +84,8 @@ Non-mutating version of `calculate_trigger_interval!`.
 """
 function calculate_trigger_interval(
     dat::EpochData,
-    start_triggers::Vector{Int},
-    end_triggers::Vector{Int};
+    start_triggers::AbstractVector{<:Integer},
+    end_triggers::AbstractVector{<:Integer};
     column_name::Symbol = :interval,
 )::EpochData
     return calculate_trigger_interval!(copy(dat), start_triggers, end_triggers; column_name = column_name)
@@ -97,9 +97,9 @@ end
 Non-mutating `Vector{EpochData}` overload. Returns a new `Vector{EpochData}` with the interval column added.
 """
 function calculate_trigger_interval(
-    dat_vec::Vector{EpochData},
-    start_triggers::Vector{Int},
-    end_triggers::Vector{Int};
+    dat_vec::AbstractVector{<:EpochData},
+    start_triggers::AbstractVector{<:Integer},
+    end_triggers::AbstractVector{<:Integer};
     column_name::Symbol = :interval,
 )::Vector{EpochData}
     return [calculate_trigger_interval(dat, start_triggers, end_triggers; column_name = column_name) for dat in dat_vec]
@@ -148,7 +148,7 @@ realign!(epochs, [127, 191, 223, 239])
 # Notes
 - After realignment, epoch length may be shorter due to cropping to common interval.
 """
-function realign!(dat::EpochData, realignment_triggers::Vector{Int})
+function realign!(dat::EpochData, realignment_triggers::AbstractVector{<:Integer})
 
     @info "Realigning epoched data to triggers: $realignment_triggers"
 
@@ -189,7 +189,7 @@ end
 
 Non-mutating version of realign!. Returns a new EpochData object with realigned epochs.
 """
-function realign(dat::EpochData, realignment_triggers::Vector{Int})::EpochData
+function realign(dat::EpochData, realignment_triggers::AbstractVector{<:Integer})::EpochData
     return realign!(copy(dat), realignment_triggers)
 end
 
@@ -201,8 +201,8 @@ global time window** so that every condition ends up with an identical sample co
 strict requirement for LRP averaging across conditions.
 """
 function realign!(
-    dat_vec::Vector{EpochData},
-    realignment_triggers::Vector{Int};
+    dat_vec::AbstractVector{<:EpochData},
+    realignment_triggers::AbstractVector{<:Integer};
     global_interval::Union{Tuple{Float64,Float64},Nothing} = nothing,
     global_n_samples::Union{Int,Nothing} = nothing,
 )
@@ -272,8 +272,8 @@ end
 Non-mutating `Vector{EpochData}` overload of `realign!`. Returns a deep-copied, globally realigned vector.
 """
 function realign(
-    dat_vec::Vector{EpochData},
-    realignment_triggers::Vector{Int};
+    dat_vec::AbstractVector{<:EpochData},
+    realignment_triggers::AbstractVector{<:Integer};
     global_interval::Union{Tuple{Float64,Float64},Nothing} = nothing,
     global_n_samples::Union{Int,Nothing} = nothing,
 )::Vector{EpochData}
@@ -294,7 +294,7 @@ Realign each epoch by searching for the first occurrence of the realignment trig
 and shifting the time vector so that this event becomes time zero.
 Episodes missing the trigger are removed from `dat.data`.
 """
-function _realign_epochs!(dat::EpochData, realignment_triggers::Vector{Int})
+function _realign_epochs!(dat::EpochData, realignment_triggers::AbstractVector{<:Integer})
     # Filter out epochs missing the trigger and realign in a single pass
     valid_data = DataFrame[]
     for (i, epoch) in enumerate(dat.data)
@@ -459,7 +459,7 @@ function realign(
     file_pattern::String,
     realignment_triggers::Vector{Int};
     input_dir::String = pwd(),
-    participant_selection::Function = participants(),
+    participant_selection = participants(),
     output_dir::Union{String,Nothing} = nothing,
 )
 
@@ -560,8 +560,8 @@ Returns BatchResult with success/failure info.
 function _process_calculate_trigger_interval_file(
     filepath::String,
     output_path::String,
-    start_triggers::Vector{Int},
-    end_triggers::Vector{Int},
+    start_triggers::AbstractVector{<:Integer},
+    end_triggers::AbstractVector{<:Integer},
     column_name::Symbol,
 )
     filename = basename(filepath)
@@ -573,7 +573,7 @@ function _process_calculate_trigger_interval_file(
         return BatchResult(false, filename, "No data found in file")
     end
 
-    if !(epochs_data isa EpochData || epochs_data isa Vector{<:EpochData})
+    if !(epochs_data isa EpochData || epochs_data isa AbstractVector{<:EpochData})
         return BatchResult(false, filename, "Data is not EpochData type")
     end
 
@@ -603,7 +603,7 @@ function calculate_trigger_interval(
     start_triggers::Vector{Int},
     end_triggers::Vector{Int};
     input_dir::String = pwd(),
-    participant_selection::Function = participants(),
+    participant_selection = participants(),
     output_dir::Union{String,Nothing} = nothing,
     column_name::Symbol = :interval,
 )

@@ -321,4 +321,22 @@ using EegFun
 
     EegFun.baseline!(tf_vec, (0.0, 0.2); method = :relative)
     @test tf_vec[1].baseline.method == :relative
+
+    # Ergonomic channel selection and vector dispatch
+    erp1 = EegFun.create_test_erp_data(n_channels = 3)
+    orig_ch2 = copy(erp1.data.Ch2)
+    erp1_base = EegFun.baseline(erp1; channel_selection = :Ch1)
+    @test isapprox(mean(erp1_base.data.Ch1), 0.0; atol = 1e-9)
+    @test erp1_base.data.Ch2 == orig_ch2
+
+    erp_vec = [EegFun.create_test_erp_data(n_channels = 3, condition = 1), EegFun.create_test_erp_data(n_channels = 3, condition = 2)]
+    erp_vec_base = EegFun.baseline(erp_vec; channel_selection = [:Ch1, :Ch2])
+    @test length(erp_vec_base) == 2
+    @test isapprox(mean(erp_vec_base[1].data.Ch1), 0.0; atol = 1e-9)
+    @test isapprox(mean(erp_vec_base[1].data.Ch2), 0.0; atol = 1e-9)
+    @test erp_vec_base[1].data.Ch3 == erp_vec[1].data.Ch3
+
+    EegFun.baseline!(erp_vec; channel_selection = "Ch1")
+    @test isapprox(mean(erp_vec[1].data.Ch1), 0.0; atol = 1e-9)
+    @test isapprox(mean(erp_vec[2].data.Ch1), 0.0; atol = 1e-9)
 end

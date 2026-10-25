@@ -47,6 +47,27 @@ using Statistics
     dat = EegFun.create_test_epoch_data(n_epochs = 2, n_channels = 2, condition = 1)
     @test_throws Any EegFun.rereference!(copy(dat), [:Z]; channel_selection = EegFun.channels([:A]))
 
+    # 10) Ergonomic channel selection and reference inputs
+    dat_cont = EegFun.create_test_continuous_data(n_channels = 3)
+    res_sym = EegFun.rereference(dat_cont, :Ch1; channel_selection = :Ch2)
+    @test all(res_sym.data.Ch2 .== dat_cont.data.Ch2 .- dat_cont.data.Ch1)
+    @test res_sym.data.Ch3 == dat_cont.data.Ch3
+
+    res_str = EegFun.rereference(dat_cont, "Ch1"; channel_selection = ["Ch2", "Ch3"])
+    @test all(res_str.data.Ch2 .== dat_cont.data.Ch2 .- dat_cont.data.Ch1)
+    @test all(res_str.data.Ch3 .== dat_cont.data.Ch3 .- dat_cont.data.Ch1)
+
+    # 11) Vector dispatch for rereference and rereference!
+    erp1 = EegFun.create_test_erp_data(n_channels = 3, condition = 1)
+    erp2 = EegFun.create_test_erp_data(n_channels = 3, condition = 2)
+    vec_res = EegFun.rereference([erp1, erp2], :Ch1)
+    @test length(vec_res) == 2
+    @test all(vec_res[1].data.Ch1 .== 0.0)
+    @test all(vec_res[2].data.Ch1 .== 0.0)
+
+    EegFun.rereference!([erp1, erp2], :Ch1)
+    @test all(erp1.data.Ch1 .== 0.0)
+    @test all(erp2.data.Ch1 .== 0.0)
 end
 
 

@@ -282,4 +282,93 @@ using DataFrames
             @test sel.stop == 0.7
         end
     end
+
+    @testset "Ergonomic selectors" begin
+        erp = EegFun.create_test_erp_data(n_channels = 4)
+        epochs = EegFun.create_test_epoch_data(n_epochs = 4, n_channels = 4)
+        erp_vec = [
+            EegFun.create_test_erp_data(condition = 1),
+            EegFun.create_test_erp_data(condition = 2),
+            EegFun.create_test_erp_data(condition = 3),
+        ]
+
+        @testset "Single Symbol channel" begin
+            res = EegFun.subset(erp, channel_selection = :Ch1)
+            chs = names(res.data)[occursin.(r"^Ch[0-9]+$", names(res.data))]
+            @test chs == ["Ch1"]
+        end
+
+        @testset "Vector{Symbol} channels" begin
+            res = EegFun.subset(erp, channel_selection = [:Ch1, :Ch2])
+            chs = names(res.data)[occursin.(r"^Ch[0-9]+$", names(res.data))]
+            @test chs == ["Ch1", "Ch2"]
+        end
+
+        @testset "Vector{String} channels" begin
+            res = EegFun.subset(erp, channel_selection = ["Ch1", "Ch2"])
+            chs = names(res.data)[occursin.(r"^Ch[0-9]+$", names(res.data))]
+            @test chs == ["Ch1", "Ch2"]
+        end
+
+        @testset "Single String channel" begin
+            res = EegFun.subset(erp, channel_selection = "Ch2")
+            chs = names(res.data)[occursin.(r"^Ch[0-9]+$", names(res.data))]
+            @test chs == ["Ch2"]
+        end
+
+        @testset "Range and Colon channels" begin
+            res_range = EegFun.subset(erp, channel_selection = 1:2)
+            chs_range = names(res_range.data)[occursin.(r"^Ch[0-9]+$", names(res_range.data))]
+            @test chs_range == ["Ch1", "Ch2"]
+
+            res_colon = EegFun.subset(erp, channel_selection = :)
+            chs_colon = names(res_colon.data)[occursin.(r"^Ch[0-9]+$", names(res_colon.data))]
+            @test length(chs_colon) == 4
+        end
+
+        @testset "channels() with Strings" begin
+            @test EegFun.channels("Ch1") isa Function
+            @test EegFun.channels(["Ch1", "Ch2"]) isa Function
+            res = EegFun.subset(erp, channel_selection = EegFun.channels(["Ch1", "Ch3"]))
+            chs = names(res.data)[occursin.(r"^Ch[0-9]+$", names(res.data))]
+            @test chs == ["Ch1", "Ch3"]
+        end
+
+        @testset "channels_not with String and Vectors" begin
+            res = EegFun.subset(erp, channel_selection = EegFun.channels_not("Ch1"))
+            chs = names(res.data)[occursin.(r"^Ch[0-9]+$", names(res.data))]
+            @test "Ch1" ∉ chs
+            @test "Ch2" in chs
+
+            res2 = EegFun.subset(erp, channel_selection = EegFun.channels_not(["Ch1", "Ch2"]))
+            chs2 = names(res2.data)[occursin.(r"^Ch[0-9]+$", names(res2.data))]
+            @test "Ch1" ∉ chs2 && "Ch2" ∉ chs2
+            @test "Ch3" in chs2
+        end
+
+        @testset "Condition selection ergonomics" begin
+            res_single = EegFun.subset(erp_vec, condition_selection = 1)
+            @test length(res_single) == 1
+            @test res_single[1].condition == 1
+
+            res_vec = EegFun.subset(erp_vec, condition_selection = [1, 3])
+            @test length(res_vec) == 2
+            @test [r.condition for r in res_vec] == [1, 3]
+
+            res_range = EegFun.subset(erp_vec, condition_selection = 2:3)
+            @test length(res_range) == 2
+            @test [r.condition for r in res_range] == [2, 3]
+        end
+
+        @testset "Epoch selection ergonomics" begin
+            res_single = EegFun.subset(epochs, epoch_selection = 2)
+            @test length(res_single.data) == 1
+
+            res_vec = EegFun.subset(epochs, epoch_selection = [1, 3])
+            @test length(res_vec.data) == 2
+
+            res_range = EegFun.subset(epochs, epoch_selection = 2:4)
+            @test length(res_range.data) == 3
+        end
+    end
 end

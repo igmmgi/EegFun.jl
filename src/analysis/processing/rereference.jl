@@ -8,7 +8,7 @@ Internal function that applies rereferencing to specified channels in a DataFram
 - `channel_selection::Vector{Symbol}`: Names of channels to rereference
 - `reference_selection::Vector{Symbol}`: Names of channels to use for reference calculation
 """
-function _apply_rereference!(dat::DataFrame, channel_selection::Vector{Symbol}, reference_selection::Vector{Symbol})
+function _apply_rereference!(dat::DataFrame, channel_selection::AbstractVector{Symbol}, reference_selection::AbstractVector{Symbol})
     n = n_samples(dat)
     reference = Vector{Float64}(undef, n)
     ref_indices = [columnindex(dat, ch) for ch in reference_selection]
@@ -33,7 +33,11 @@ end
 
 Internal function that applies rereferencing to specified channels in a vector of DataFrames.
 """
-function _apply_rereference!(dat::Vector{DataFrame}, channel_selection::Vector{Symbol}, reference_selection::Vector{Symbol})
+function _apply_rereference!(
+    dat::AbstractVector{DataFrame},
+    channel_selection::AbstractVector{Symbol},
+    reference_selection::AbstractVector{Symbol},
+)
     if isempty(dat)
         return nothing
     end
@@ -132,7 +136,7 @@ function _get_reference_channels(dat::EegData, reference_channel::Symbol)
     return [reference_channel]
 end
 
-function _get_reference_channels(dat, reference_channel::Vector{Symbol})
+function _get_reference_channels(dat, reference_channel::AbstractVector{Symbol})
     isempty(reference_channel) && return Symbol[]
     if length(reference_channel) == 1
         return _get_reference_channels(dat, reference_channel[1])
@@ -140,13 +144,16 @@ function _get_reference_channels(dat, reference_channel::Vector{Symbol})
     return reference_channel
 end
 
+_get_reference_channels(dat, ref::AbstractString) = _get_reference_channels(dat, Symbol(ref))
+_get_reference_channels(dat, refs::AbstractVector{<:AbstractString}) = _get_reference_channels(dat, Symbol.(refs))
+
 # Single method for all EEG data types
 """
-    rereference!(dat::EegData, reference_selection::Union{Symbol,Vector{Symbol}}; channel_selection::Function = channels())
+    rereference!(dat::EegData, reference_selection; channel_selection = channels())
 
 Rereference EEG data to a specified channel or combination of channels.
 """
-function rereference!(dat::EegData, reference_selection::Union{Symbol,Vector{Symbol}}; channel_selection::Function = channels())
+function rereference!(dat::EegData, reference_selection; channel_selection = channels())
 
     reference_channels = _get_reference_channels(dat, reference_selection)
 
@@ -175,7 +182,7 @@ function rereference!(dat::EegData, reference_selection::Union{Symbol,Vector{Sym
 end
 
 
-function rereference!(dat::Vector{<:EegData}, reference_selection::Union{Symbol,Vector{Symbol}}; channel_selection::Function = channels())
+function rereference!(dat::AbstractVector{<:EegData}, reference_selection; channel_selection = channels())
     for d in dat
         rereference!(d, reference_selection; channel_selection = channel_selection)
     end
@@ -192,7 +199,7 @@ function rereference(dat::EegData, args...; kwargs...)
     return rereference!(copy(dat), args...; kwargs...)
 end
 
-function rereference(dat::Vector{T}, args...; kwargs...) where {T<:EegData}
+function rereference(dat::AbstractVector{<:EegData}, args...; kwargs...)
     return [rereference(d, args...; kwargs...) for d in dat]
 end
 
@@ -222,7 +229,7 @@ function _process_rereference_file(filepath::String, output_path::String, refere
     end
 
     # Validate that data is valid EEG data (Vector of ErpData or EpochData)
-    if !(data isa Vector{<:Union{ErpData,EpochData}})
+    if !(data isa AbstractVector{<:Union{ErpData,EpochData}})
         return BatchResult(false, fname, "Invalid data type: expected Vector{ErpData} or Vector{EpochData}")
     end
 
@@ -283,9 +290,9 @@ rereference("epochs", reference_selection=[:Cz], participants=[3, 4], conditions
 function rereference(
     file_pattern::String;
     input_dir::String = pwd(),
-    reference_selection::Union{Symbol,Vector{Symbol}} = :avg,
-    participant_selection::Function = participants(),
-    condition_selection::Function = conditions(),
+    reference_selection::Union{Symbol,AbstractVector{Symbol}} = :avg,
+    participant_selection = participants(),
+    condition_selection = conditions(),
     output_dir::Union{String,Nothing} = nothing,
 )
 

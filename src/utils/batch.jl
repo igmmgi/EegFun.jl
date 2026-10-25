@@ -43,8 +43,8 @@ Find and filter JLD2 files in a directory based on a pattern and participant IDs
 # Returns
 - `Vector{String}`: List of matching filenames.
 """
-# Method for function predicate
-function _find_batch_files(pattern::String, dir::String, participant_selection::Function = participants())
+function _find_batch_files(pattern::String, dir::String, participant_selection = participants())
+    part_func = _to_participant_func(participant_selection)
 
     # Filter by pattern and extension
     all_files = readdir(dir)
@@ -52,13 +52,13 @@ function _find_batch_files(pattern::String, dir::String, participant_selection::
         endswith(f, ".jld2") && contains(f, pattern)
     end
 
-    # extract ids from filenames  and apply predicate mask
+    # extract ids from filenames and apply predicate mask
     ids = [_extract_participant_id(f) for f in files]
-    mask = participant_selection(ids)
+    mask = part_func(ids)
     return files[mask]
 end
 
-# create predicate like input participants()
+# Convenience overloads
 _find_batch_files(pattern::String, dir::String, ids::Int) = _find_batch_files(pattern, dir, x -> x .== ids)
 _find_batch_files(pattern::String, dir::String, ids::Vector{Int}) = _find_batch_files(pattern, dir, x -> [id in ids for id in x])
 _find_batch_files(pattern::String, dir::String, ids::Nothing) = _find_batch_files(pattern, dir, x -> fill(true, length(x)))
@@ -391,7 +391,7 @@ function batch_process(
     file_pattern::String,
     input_dir::String,
     output_dir::String,
-    participant_selection::Function,
+    participant_selection,
     operation_name::String;
     filename_modifier::Function = identity,
     parallel::Bool = false,

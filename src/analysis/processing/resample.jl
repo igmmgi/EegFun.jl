@@ -149,15 +149,15 @@ end
 
 Non-mutating version of `resample!`.
 """
-function resample(dat::T, target_rate::Real)::T where {T<:EegData}
+function resample(dat::EegData, target_rate::Real)
     return resample!(copy(dat), target_rate)
 end
 
-function resample(data_vec::Vector{T}, target_rate::Real)::Vector{T} where {T<:EegData}
+function resample(data_vec::AbstractVector{<:EegData}, target_rate::Real)
     return [resample(dat, target_rate) for dat in data_vec]
 end
 
-function resample!(data_vec::Vector{T}, target_rate::Real)::Vector{T} where {T<:EegData}
+function resample!(data_vec::AbstractVector{<:EegData}, target_rate::Real)
     for dat in data_vec
         resample!(dat, target_rate)
     end
@@ -210,7 +210,7 @@ function resample(
     file_pattern::String,
     target_rate::Real;
     input_dir::String = pwd(),
-    participant_selection::Function = participants(),
+    participant_selection = participants(),
     output_dir::Union{String,Nothing} = nothing,
 )
 

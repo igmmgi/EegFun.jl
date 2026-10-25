@@ -10,17 +10,12 @@ Uses spherical spline interpolation according to Perrin et al. (1989).
 # Arguments
 - `data`: EEG data object (ContinuousData, EpochData, or ErpData)
 - `m::Int`: Stiffness parameter for the spherical splines (default: 4)
-- `lambda::Float64`: Regularization parameter (default: 1e-5)
+- `lambda::Real`: Regularization parameter (default: 1e-5)
 - `n_legendre_terms::Int`: Number of Legendre polynomial terms (default: 50)
 """
-function compute_csd!(data::EegData; m::Int = 4, lambda::Float64 = 1e-5, n_legendre_terms::Int = 50)
+function compute_csd!(data::EegData; m::Int = 4, lambda::Real = 1e-5, n_legendre_terms::Int = 50)
     # 1. Ensure 3D coordinates are available
     _ensure_coordinates_3d!(data.layout)
-
-    # Performance Note:
-    # The G and H matrices depend purely on the physical coordinates of the electrodes.
-    # Currently, they are re-calculated on every function call. For optimization, we could 
-    # cache `filter_matrix` directly inside the `Layout` object in the future.
 
     channels = Symbol.(data.layout.data.label)
     n_channels = length(channels)
@@ -79,7 +74,7 @@ function compute_csd!(data::EegData; m::Int = 4, lambda::Float64 = 1e-5, n_legen
     return data
 end
 
-function compute_csd!(dat::Vector{<:EegData}, args...; kwargs...)
+function compute_csd!(dat::AbstractVector{<:EegData}, args...; kwargs...)
     for d in dat
         compute_csd!(d, args...; kwargs...)
     end
@@ -89,19 +84,14 @@ end
 # Internal function for calculating H matrix (second spatial derivative of G)
 function _calc_h(cosang::AbstractArray, m::Int = 4, n_legendre_terms::Int = 50)
     # H(cos θ) = - (1 / 4π) * Σ[ (2n+1) / (n^(m-1) * (n+1)^(m-1)) * P_n(cos θ) ]
-    factors = zeros(n_legendre_terms + 1)
-    factors[1] = 0.0
-
-    for n = 1:n_legendre_terms
-        factors[n+1] = -(2 * n + 1) / (n^(m-1) * (n + 1)^(m-1) * 4 * π)
-    end
-
-    return _eval_legendre(cosang, factors)
+    factors = [-(2n + 1) / (float(n)^(m - 1) * float(n + 1)^(m - 1) * 4π) for n = 1:n_legendre_terms]
+    C = Matrix{Float64}(cosang)
+    return _g_from_cos!(C, factors)
 end
 
 # --- Type-specific application methods ---
 
-function _apply_csd!(data::SingleDataFrameEeg, filter_matrix::Matrix{Float64}, channels::Vector{Symbol})
+function _apply_csd!(data::SingleDataFrameEeg, filter_matrix::Matrix{Float64}, channels::AbstractVector{Symbol})
     n_samples = nrow(data.data)
     n_chans = length(channels)
     X = Matrix{Float64}(undef, n_samples, n_chans)
@@ -116,7 +106,7 @@ function _apply_csd!(data::SingleDataFrameEeg, filter_matrix::Matrix{Float64}, c
     end
 end
 
-function _apply_csd!(data::EpochData, filter_matrix::Matrix{Float64}, channels::Vector{Symbol})
+function _apply_csd!(data::EpochData, filter_matrix::Matrix{Float64}, channels::AbstractVector{Symbol})
     FT = collect(transpose(filter_matrix))
     n_chans = length(channels)
     Threads.@threads for epoch_df in data.data
@@ -142,6 +132,6 @@ function compute_csd(dat::EegData, args...; kwargs...)
     return compute_csd!(copy(dat), args...; kwargs...)
 end
 
-function compute_csd(dat::Vector{<:EegData}, args...; kwargs...)
+function compute_csd(dat::AbstractVector{<:EegData}, args...; kwargs...)
     return [compute_csd(d, args...; kwargs...) for d in dat]
 end

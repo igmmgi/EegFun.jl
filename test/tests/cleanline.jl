@@ -63,4 +63,39 @@ using Statistics
     no_ch_dat = copy(dat)
     @test EegFun.cleanline!(no_ch_dat, channel_selection = EegFun.channels(Symbol[])) === no_ch_dat
     @test no_ch_dat.data == dat.data
+
+    # 5. Ergonomic channel selection
+    ergo_dat = EegFun.cleanline(
+        dat;
+        line_frequencies = [50.0],
+        sliding_win_length = 2.0,
+        sliding_win_step = 1.0,
+        bandwidth = 2.0,
+        channel_selection = ch1,
+    )
+    @test isapprox(ergo_dat.data[!, ch1], cl_dat.data[!, ch1], atol = 1e-10)
+
+    # 6. Vector dispatch
+    vec_cl = EegFun.cleanline(
+        [dat, dat];
+        line_frequencies = [50.0],
+        sliding_win_length = 2.0,
+        sliding_win_step = 1.0,
+        bandwidth = 2.0,
+        channel_selection = [ch1],
+    )
+    @test length(vec_cl) == 2
+    @test isapprox(vec_cl[1].data[!, ch1], cl_dat.data[!, ch1], atol = 1e-10)
+
+    vec_mut = [copy(dat), copy(dat)]
+    EegFun.cleanline!(
+        vec_mut;
+        line_frequencies = [50.0],
+        sliding_win_length = 2.0,
+        sliding_win_step = 1.0,
+        bandwidth = 2.0,
+        channel_selection = [ch1],
+    )
+    @test isapprox(vec_mut[1].data[!, ch1], cl_dat.data[!, ch1], atol = 1e-10)
+    @test isapprox(vec_mut[2].data[!, ch1], cl_dat.data[!, ch1], atol = 1e-10)
 end

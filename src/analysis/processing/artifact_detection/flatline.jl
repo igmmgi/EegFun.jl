@@ -80,8 +80,8 @@ function is_flatline!(
     dat::SingleDataFrameEeg,
     threshold::Real,
     window_size::Real;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     mode::Symbol = :combined,
     channel_out::Union{Symbol,Nothing} = nothing,
@@ -126,10 +126,10 @@ function is_flatline!(
     dat::MultiDataFrameEeg,
     threshold::Real,
     window_size::Real;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
-    epoch_selection::Function = epochs(),
+    epoch_selection = epochs(),
     mode::Symbol = :combined,
     channel_out::Union{Symbol,Nothing} = nothing,
 )
@@ -172,7 +172,7 @@ function is_flatline!(
     return dat
 end
 
-function is_flatline!(dat::Vector{EpochData}, threshold::Real, window_size::Real; kwargs...)
+function is_flatline!(dat::AbstractVector{<:EpochData}, threshold::Real, window_size::Real; kwargs...)
     for d in dat
         is_flatline!(d, threshold, window_size; kwargs...)
     end
@@ -191,8 +191,8 @@ function is_flatline(
     dat::SingleDataFrameEeg,
     threshold::Real,
     window_size::Real;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     mode::Symbol = :combined,
 )
@@ -218,8 +218,8 @@ function n_flatline(
     dat::SingleDataFrameEeg,
     threshold::Real,
     window_size::Real;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     mode::Symbol = :combined,
 )

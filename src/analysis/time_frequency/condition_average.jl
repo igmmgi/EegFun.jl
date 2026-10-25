@@ -7,7 +7,7 @@ Condition averaging for time-frequency data.
 """
 Create an average TF result by averaging power and phase across conditions.
 """
-function _create_tf_average_wave(tfs::Vector{TimeFreqData}, conditions::Vector{Int}, avg_cond::Int)
+function _create_tf_average_wave(tfs::AbstractVector{<:TimeFreqData}, conditions::AbstractVector{<:Integer}, avg_cond::Int)
     # Validate that all TFs have the same structure
     for i = 2:length(tfs)
         _have_same_structure(tfs[1], tfs[i]) || @minimal_error("TF data have inconsistent structure")
@@ -61,13 +61,20 @@ end
 
 # === IN-MEMORY API FUNCTION ===
 
-function condition_average(data::Vector{TimeFreqData}, condition_groups::Vector{Vector{Int}})::Vector{TimeFreqData}
+function condition_average(data::AbstractVector{<:TimeFreqData}, condition_groups)
+    groups = if isempty(condition_groups)
+        condition_groups
+    elseif first(condition_groups) isa Integer
+        [condition_groups]
+    else
+        condition_groups
+    end
 
     @info "Creating TF condition average waves..."
 
     average_waves = TimeFreqData[]
 
-    for (group_idx, conditions) in enumerate(condition_groups)
+    for (group_idx, conditions) in enumerate(groups)
         # Find TF data for each condition in the group
         group_tfs = TimeFreqData[]
         all_found = true

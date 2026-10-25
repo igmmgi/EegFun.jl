@@ -159,8 +159,8 @@ Compute y-limits (min, max) for single-dataframe EEG data (ERP or Continuous) us
 """
 function _ylimits(
     dat::Union{ErpData,ContinuousData};
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     include_extra::Bool = false,
 )::Tuple{Float64,Float64}

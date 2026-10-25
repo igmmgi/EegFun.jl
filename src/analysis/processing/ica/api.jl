@@ -38,9 +38,9 @@ ica_result = run_ica(epochs_unrejected)
 function run_ica(
     dat::ContinuousData;
     n_components::Union{Nothing,Int} = nothing,
-    sample_selection::Function = samples(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     include_extra::Bool = false,
     percentage_of_data::Real = 100.0,
     algorithm::Symbol = :infomax,
@@ -100,11 +100,11 @@ end
 
 
 function run_ica(
-    epoched_data::Vector{EpochData};
+    epoched_data::AbstractVector{<:EpochData};
     n_components::Union{Nothing,Int} = nothing,
-    sample_selection::Function = samples(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     include_extra::Bool = false,
     remove_duplicates::Bool = true,
     percentage_of_data::Real = 100.0,

@@ -475,9 +475,9 @@ fig, ax = plot_channel_spectrum(dat, unit = :dB)
 
 function plot_channel_spectrum(
     dat::SingleDataFrameEeg;
-    sample_selection::Function = samples(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     kwargs...,
 )
     # Generate window title from dataset
@@ -580,9 +580,9 @@ Plot the power spectrum of specified ICA components.
 function plot_ica_component_spectrum(
     dat::ContinuousData,
     ica_result::InfoIca;
-    sample_selection::Function = samples(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
-    component_selection::Function = components(),
+    component_selection = components(),
     kwargs...,
 )
     # Merge user kwargs with defaults
@@ -654,7 +654,7 @@ end
 
 Plot a pre-computed power spectrum with interactive controls.
 """
-function plot_channel_spectrum(dat::SpectrumData; channel_selection::Function = channels(), kwargs...)
+function plot_channel_spectrum(dat::SpectrumData; channel_selection = channels(), kwargs...)
     title_str = _generate_window_title(dat)
     _set_window_title(title_str)
 

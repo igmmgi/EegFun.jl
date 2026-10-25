@@ -115,7 +115,7 @@ plot_erp_image(dat,
 )
 ```
 """
-function plot_erp_image(filepath::String; input_dir::String = pwd(), participant_selection::Function = participants(), kwargs...)
+function plot_erp_image(filepath::String; input_dir::String = pwd(), participant_selection = participants(), kwargs...)
     if endswith(filepath, ".jld2")
         data = read_data(filepath)
         isnothing(data) && @minimal_error "No data found in file: $filepath"
@@ -139,9 +139,9 @@ end
 function plot_erp_image(
     dat::EpochData;
     layout::Union{Symbol,PlotLayout} = :single,
-    channel_selection::Function = channels(),
+    channel_selection = channels(),
     channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
-    sample_selection::Function = samples(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     kwargs...,
 )

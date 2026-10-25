@@ -2801,7 +2801,7 @@ function plot_databrowser(
     filename::String,
     ica = nothing;
     input_dir::String = pwd(),
-    participant_selection::Function = participants(),
+    participant_selection = participants(),
     screen = nothing,
     kwargs...,
 )

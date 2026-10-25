@@ -97,7 +97,7 @@ plot_gfp("erps_final.jld2")
 plot_gfp("erps_final")
 ```
 """
-function plot_gfp(filepath::String; input_dir::String = pwd(), participant_selection::Function = participants(), kwargs...)
+function plot_gfp(filepath::String; input_dir::String = pwd(), participant_selection = participants(), kwargs...)
     if endswith(filepath, ".jld2")
         data = read_data(filepath)
         isnothing(data) && @minimal_error "No data found in file: $filepath"
@@ -119,14 +119,14 @@ function plot_gfp(filepath::String; input_dir::String = pwd(), participant_selec
     end
 end
 
-function plot_gfp(dat::ErpData; channel_selection::Function = channels(), normalize::Bool = true, kwargs...)
+function plot_gfp(dat::ErpData; channel_selection = channels(), normalize::Bool = true, kwargs...)
     return plot_gfp([dat]; channel_selection = channel_selection, normalize = normalize, kwargs...)
 end
 
 function plot_gfp(
-    datasets::Vector{ErpData};
-    condition_selection::Function = conditions(),
-    channel_selection::Function = channels(),
+    datasets::AbstractVector{<:ErpData};
+    condition_selection = conditions(),
+    channel_selection = channels(),
     normalize::Bool = true,
     kwargs...,
 )

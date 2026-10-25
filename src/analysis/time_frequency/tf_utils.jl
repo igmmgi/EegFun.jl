@@ -169,7 +169,7 @@ end
 
 Subset `dat` by channel and interval selection, erroring if no data remain.
 """
-function _subset_tf_data(dat::EpochData, channel_selection::Function, interval_selection::Interval)
+function _subset_tf_data(dat::EpochData, channel_selection, interval_selection::Interval)
     dat = subset(dat; channel_selection = channel_selection, interval_selection = interval_selection)
     isempty(dat.data) && @minimal_error("No data remaining after subsetting")
     return dat
