@@ -26,6 +26,28 @@ This demo shows how to use the interactive filter GUI to explore the effect of d
 3. Comparing filter effects across multiple conditions
 
 
+## Basic Usage
+
+- Launch the quick demo with default data and settings (bundled example ERPs, channel `:Cz`):
+  ```julia
+  EegFun.plot_erp_filter_gui()
+  ```
+
+## Custom Data & Settings
+
+- Launch the GUI for a specific channel or from custom ERP data:
+  ```julia
+  # Specific channel from bundled data:
+  EegFun.plot_erp_filter_gui(channel = :Pz)
+
+  # Custom data file:
+  EegFun.plot_erp_filter_gui("path/to/my_erps.jld2", channel = :Cz)
+
+  # Pre-loaded ERP data or multiple conditions:
+  dat = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps.jld2"))
+  EegFun.plot_erp_filter_gui(dat, channel = :Cz)
+  ```
+
 ## Code Examples
 
 ::: details Show Code
@@ -35,36 +57,16 @@ This demo shows how to use the interactive filter GUI to explore the effect of d
 # Shows how to launch the interactive filter exploration tool
 # to compare the effect of different filter settings on ERP waveforms.
 
-# Note: EegFun.example_path() resolves bundled example data paths.
-# When using your own data, simply pass the file path directly, e.g.:
-# dat = EegFun.read_raw_data("/path/to/your/data.bdf")
-
 using EegFun
 using GLMakie
 
-#######################################################################
-# LOAD DATA AND CREATE ERPS
-#######################################################################
+# Launch with default demo data (bundled example ERPs, channel :Cz):
+gui = EegFun.plot_erp_filter_gui()
 
-dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"))
-layout = EegFun.read_layout(EegFun.example_path("layouts/biosemi/biosemi72.csv"))
-EegFun.polar_to_cartesian_xy!(layout)
-dat = EegFun.create_eegfun_data(dat, layout)
-
-# Some minimal preprocessing (average reference and highpass filter)
-EegFun.rereference!(dat, :avg)
-EegFun.highpass_filter!(dat, 0.5)
-
-# EPOCHS
-epoch_cfg = EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])
-epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.5, 1.0))
-
-# Create ERP
-erp = EegFun.average_epochs(epochs)
-
-# interactive GUI with sliders for cutoff, order, method
-EegFun.plot_erp_filter_gui(erp)
-
+# Keep window open when run from terminal
+if !isinteractive() && !isnothing(gui.screen)
+    wait(gui.screen)
+end
 ```
 
 :::

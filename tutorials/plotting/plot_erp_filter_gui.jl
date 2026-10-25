@@ -9,26 +9,16 @@
 using EegFun
 using GLMakie
 
-#######################################################################
-# LOAD DATA AND CREATE ERPS
-#######################################################################
+# Launch with default demo data (bundled example ERPs, channel :Cz):
+gui = EegFun.plot_erp_filter_gui()
 
-dat = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"))
-layout = EegFun.read_layout(EegFun.example_path("layouts/biosemi/biosemi72.csv"))
-EegFun.polar_to_cartesian_xy!(layout)
-dat = EegFun.create_eegfun_data(dat, layout)
+# Alternatively, specify a channel or custom data / file:
+# gui = EegFun.plot_erp_filter_gui(channel = :Pz)
+# dat = EegFun.read_data(EegFun.example_path("data/julia/erps/example1_erps.jld2"))
+# gui = EegFun.plot_erp_filter_gui(dat, channel = :Cz)
 
-# Some minimal preprocessing (average reference and highpass filter)
-EegFun.rereference!(dat, :avg)
-EegFun.highpass_filter!(dat, 0.5)
-
-# EPOCHS
-epoch_cfg = EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])
-epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.5, 1.0))
-
-# Create ERP
-erp = EegFun.average_epochs(epochs)
-
-# interactive GUI with sliders for cutoff, order, method
-EegFun.plot_erp_filter_gui(erp)
+# Keep window open when run from terminal
+if !isinteractive() && !isnothing(gui.screen)
+    wait(gui.screen)
+end
 

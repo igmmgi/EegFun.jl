@@ -1,7 +1,8 @@
 """
+    plot_erp_filter_gui(; kwargs...)
     plot_erp_filter_gui(filepath::String; kwargs...)
-    plot_erp_filter_gui(erp::ErpData; kwargs...)
-    plot_erp_filter_gui(erps::Vector{ErpData}; kwargs...)
+    plot_erp_filter_gui(erp::Union{ErpData,ContinuousData}; kwargs...)
+    plot_erp_filter_gui(erps::Vector{<:Union{ErpData,ContinuousData}}; kwargs...)
 
 Launch interactive GUI for exploring filter effects on ERP waveforms.
 
@@ -12,10 +13,11 @@ Perfect for:
 
 # Arguments
 - `filepath::String`: Path to a `.jld2` file containing ERP data
-- `erp::ErpData` or `erps::Vector{ErpData}`: Single ERP or multiple conditions
+- `erp::Union{ErpData,ContinuousData}` or `erps::Vector{<:Union{ErpData,ContinuousData}}`: Single dataset or multiple conditions
 
 # Keyword Arguments
-- `channel::Union{Symbol,Nothing}`: Initial channel to display (default: first channel)
+- `channel::Union{Symbol,Nothing}`: Initial channel to display (default: `:Cz` for demo, first channel otherwise)
+- `display_plot::Bool`: Whether to display the interactive figure (default: `true`)
 
 # Interactive Controls
 - **Channel Menu**: Switch between channels
@@ -23,6 +25,19 @@ Perfect for:
 - **Filter Function Menu**: filtfilt (zero-phase), filt (one-pass)
 - **Lowpass Filter**: Toggle, cutoff, order sliders
 - **Highpass Filter**: Toggle, cutoff, order sliders
+- **Mirror**: Toggle mirror padding for edge artifacts
+
+# Examples
+```julia
+# Quick demo with default data:
+plot_erp_filter_gui()
+
+# Specific channel:
+plot_erp_filter_gui(channel = :Cz)
+
+# Load from file:
+plot_erp_filter_gui("participant_1_erps.jld2", channel = :Pz)
+```
 
 # Notes
 - Both filters disabled by default
@@ -30,13 +45,13 @@ Perfect for:
 """
 # No arguments - load example data
 """
-    plot_erp_filter_gui(; kwargs...)
+    plot_erp_filter_gui(; channel = :Cz, kwargs...)
 
-Launch a GUI for interactively filtering ERP data.
+Launch a GUI for interactively filtering ERP data using bundled example data.
 """
-function plot_erp_filter_gui(; kwargs...)
+function plot_erp_filter_gui(; channel::Union{Symbol,Nothing} = :Cz, kwargs...)
     data = read_data(example_path("data/julia/erps/example1_erps.jld2"))
-    return plot_erp_filter_gui(data[1]; kwargs...)
+    return plot_erp_filter_gui(data[1]; channel = channel, kwargs...)
 end
 
 # String filepath - load data and dispatch
@@ -55,12 +70,12 @@ end
 
 # Single ErpData/ContinuousData - dispatch to vector version
 """
-    plot_erp_filter_gui(erp::Union{ErpData,ContinuousData}; channel::Union{Symbol,Nothing} = nothing)
+    plot_erp_filter_gui(erp::Union{ErpData,ContinuousData}; channel::Union{Symbol,Nothing} = nothing, kwargs...)
 
 Launch a GUI for interactively filtering a single dataset.
 """
-function plot_erp_filter_gui(erp::Union{ErpData,ContinuousData}; channel::Union{Symbol,Nothing} = nothing)
-    return plot_erp_filter_gui([erp]; channel)
+function plot_erp_filter_gui(erp::Union{ErpData,ContinuousData}; channel::Union{Symbol,Nothing} = nothing, kwargs...)
+    return plot_erp_filter_gui([erp]; channel = channel, kwargs...)
 end
 
 # Vector of ErpData/ContinuousData - main implementation
@@ -385,9 +400,10 @@ function plot_erp_filter_gui(
         update_plot!()
     end
 
+    screen = nothing
     if display_plot
-        display(fig)
+        screen = _display_figure(fig)
     end
-    _set_window_title("Makie")
-    return (fig = fig)
+    _set_window_title("ERP Filter Tool")
+    return (fig = fig, screen = screen)
 end
