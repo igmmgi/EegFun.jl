@@ -35,4 +35,16 @@ using EegFun
         @test result.fig isa Figure
         @test first(result.axes) isa LScene
     end
+
+    @testset "plot_topography for AbstractVector{<:EpochData}" begin
+        ep1 = EegFun.create_test_epoch_data(n_channels = 6, n_epochs = 5)
+        ep2 = EegFun.create_test_epoch_data(n_channels = 6, n_epochs = 5, condition = 2)
+        ep1.layout.data.inc = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0]
+        ep1.layout.data.azi = [0.0, 60.0, 120.0, 180.0, 240.0, 300.0]
+        ep2.layout.data.inc = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0]
+        ep2.layout.data.azi = [0.0, 60.0, 120.0, 180.0, 240.0, 300.0]
+        vec_eps = [ep1, ep2]
+        res = EegFun.plot_topography(@view(vec_eps[1:2]); display_plot = false)
+        @test res.fig isa Figure
+    end
 end

@@ -2,6 +2,8 @@ using Test
 using JLD2
 using DataFrames
 using CSV
+using Makie
+using EegFun
 
 @testset "Batch ERP Measurements" begin
     # Create temporary test directory
@@ -1284,6 +1286,29 @@ using CSV
             @test result isa EegFun.ErpMeasurementsResult
             # After baseline correction, mean should be close to 0
             @test isapprox(result.data[1, :Ch1], 0.0, atol = 0.1)
+
+            # Test vector intervals and TimeSelection in erp_measurements
+            result_vec = EegFun.erp_measurements(
+                "baseline_test",
+                "mean_amplitude",
+                analysis_interval = [0.1, 0.2],
+                baseline_interval = [-0.2, 0.0],
+                input_dir = known_test_dir,
+                output_dir = joinpath(known_test_dir, "output_baseline_vec"),
+            )
+            @test result_vec isa EegFun.ErpMeasurementsResult
+            @test isapprox(result_vec.data[1, :Ch1], 0.0, atol = 0.1)
+
+            # Test plot_erp_measurements with vector intervals and symbol channel selection
+            plot_res = EegFun.plot_erp_measurements(
+                [erp],
+                "mean_amplitude";
+                analysis_interval = [0.1, 0.2],
+                baseline_interval = [-0.2, 0.0],
+                channel_selection = :Ch1,
+                display_plot = false,
+            )
+            @test plot_res isa Figure
         end
 
         # Cleanup

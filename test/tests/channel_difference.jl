@@ -393,4 +393,18 @@ end
         @test :diff_out ∉ propertynames(orig1.data)
         @test :diff_out ∈ propertynames(vec_res[1].data)
     end
+
+    @testset "String channel_out and ergonomic selectors" begin
+        dat = EegFun.create_test_continuous_data(n = 200)
+        # Using String channel_out and Symbol / String selectors
+        EegFun.channel_difference!(dat; channel_selection1 = :Ch1, channel_selection2 = "Ch2", channel_out = "Ch1_minus_Ch2_str")
+        @test :Ch1_minus_Ch2_str ∈ propertynames(dat.data)
+        @test all(dat.data.Ch1_minus_Ch2_str .== (dat.data.Ch1 .- dat.data.Ch2))
+
+        # TF channel difference with String channel_out
+        tf = EegFun.create_test_tf_data()
+        EegFun.channel_difference!(tf; channel_selection1 = :Ch1, channel_selection2 = [:Ch2], channel_out = "tf_diff_str")
+        @test hasproperty(tf.data_power, :tf_diff_str)
+        @test hasproperty(tf.data_phase, :tf_diff_str)
+    end
 end

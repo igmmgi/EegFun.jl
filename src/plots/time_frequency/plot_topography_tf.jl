@@ -41,9 +41,9 @@ plot_topography(tf, freq_range=(4.0, 7.0))
 """
 function plot_topography(
     tf::TimeFreqData;
-    freq_range::Tuple{Real,Real},
+    freq_range::Interval,
     interval_selection::Interval = times(),
-    baseline_interval::Union{Nothing,Tuple{Real,Real}} = nothing,
+    baseline_interval::Interval = nothing,
     baseline_method::Symbol = :db,
     kwargs...,
 )
@@ -69,7 +69,8 @@ function plot_topography(
     all_freqs = Float64.(sort(unique(tf_plot.data_power.freq)))
 
     # Apply frequency range filter
-    freq_mask = freq_range[1] .<= all_freqs .<= freq_range[2]
+    fr = _normalize_interval(freq_range)
+    freq_mask = fr[1] .<= all_freqs .<= fr[2]
     isempty(findall(freq_mask)) &&
         @minimal_error("No frequencies found in range $(freq_range). Data range: $(first(all_freqs)) to $(last(all_freqs)) Hz")
 
@@ -180,10 +181,10 @@ function plot_topography(
     return (fig = fig, ax = ax)
 end
 function plot_topography(
-    tfs::Vector{TimeFreqData};
-    freq_range::Tuple{Real,Real},
+    tfs::AbstractVector{<:TimeFreqData};
+    freq_range::Interval,
     interval_selection::Interval = times(),
-    baseline_interval::Union{Nothing,Tuple{Real,Real}} = nothing,
+    baseline_interval::Interval = nothing,
     baseline_method::Symbol = :db,
     kwargs...,
 )
@@ -235,7 +236,8 @@ function plot_topography(
     # Extract common TF data
     all_freqs = Float64.(sort(unique(tf_plots[1].data_power.freq)))
     all_times = Float64.(sort(unique(tf_plots[1].data_power.time)))
-    freq_mask = freq_range[1] .<= all_freqs .<= freq_range[2]
+    fr = _normalize_interval(freq_range)
+    freq_mask = fr[1] .<= all_freqs .<= fr[2]
 
     if isnothing(interval_selection) || interval_selection isa AllSelection
         time_mask = fill(true, length(all_times))
@@ -300,7 +302,7 @@ function plot_topography(
         batched_interp, xb_shared, yb_shared = _topo_interpolate(val_matrix, layout, gridscale; method = method)
     end
 
-    freq_str = "$(round(Int, freq_range[1]))-$(round(Int, freq_range[2])) Hz"
+    freq_str = "$(round(Int, fr[1]))-$(round(Int, fr[2])) Hz"
     fig = Figure(size = (250 * n_cols + 100, 250 * n_rows + 50))
 
     colorbar_kwargs = Dict{Symbol,Any}(pairs(pop!(plot_kwargs, :colorbar_kwargs, (;))))
@@ -401,7 +403,7 @@ plot_topography_stats(result, freq_range=(8.0, 12.0), interval_selection=times(0
 """
 function plot_topography_stats(
     result::TFStatsResult;
-    freq_range::Tuple{Real,Real},
+    freq_range::Interval,
     n_topos::Int = 10,
     interval_selection::Interval = times(),
     topo_data::Symbol = :tvalues,
@@ -441,7 +443,8 @@ function plot_topography_stats(
     all_frequencies = result.frequencies
 
     # Find frequency indices in the selected range
-    freq_mask = freq_range[1] .<= all_frequencies .<= freq_range[2]
+    fr = _normalize_interval(freq_range)
+    freq_mask = fr[1] .<= all_frequencies .<= fr[2]
     freq_indices = findall(freq_mask)
     isempty(freq_indices) &&
         @minimal_error("No frequencies found in range $(freq_range). Data range: $(first(all_frequencies)) to $(last(all_frequencies)) Hz")

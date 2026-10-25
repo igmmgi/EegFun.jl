@@ -77,7 +77,15 @@ fig, ax = plot_channel_summary(summary_df, :kurtosis,
     error_linewidth = 3)
 ```
 """
-function plot_channel_summary!(fig::Figure, ax::Axis, dat::DataFrame, col::Symbol; channel_selection = channels(), kwargs...)
+function plot_channel_summary!(
+    fig::Figure,
+    ax::Axis,
+    dat::DataFrame,
+    col::Union{Symbol,AbstractString};
+    channel_selection = channels(),
+    kwargs...,
+)
+    col = Symbol(col)
     # Merge user kwargs with defaults and validate
     plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
 
@@ -87,7 +95,8 @@ function plot_channel_summary!(fig::Figure, ax::Axis, dat::DataFrame, col::Symbo
     end
 
     # Apply channel selection
-    mask = channel_selection(Symbol.(dat.channel))
+    chan_func = _to_channel_func(channel_selection)
+    mask = chan_func(Symbol.(dat.channel))
     dat = dat[mask, :]
 
     # If averaging is requested, compute mean and std
@@ -160,7 +169,8 @@ See `plot_channel_summary!` for full documentation of arguments and keyword argu
 # Returns
 - `(fig::Figure, ax::Axis)` - The created figure and axis objects
 """
-function plot_channel_summary(dat::DataFrame, col::Symbol; channel_selection = channels(), kwargs...)
+function plot_channel_summary(dat::DataFrame, col::Union{Symbol,AbstractString}; channel_selection = channels(), kwargs...)
+    col = Symbol(col)
     # Merge user kwargs with defaults and validate
     plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
 
@@ -175,11 +185,18 @@ function plot_channel_summary(dat::DataFrame, col::Symbol; channel_selection = c
     return (fig = fig, axes = [ax])
 end
 
-plot_channel_summary(dat::AbstractVector{<:DataFrame}, col::Symbol; kwargs...) = plot_channel_summary.(dat, col; kwargs...)
-function plot_channel_summary(dat::DataFrame, col::AbstractVector{Symbol}; channel_selection = channels(), kwargs...)
+plot_channel_summary(dat::AbstractVector{<:DataFrame}, col::Union{Symbol,AbstractString}; kwargs...) =
+    plot_channel_summary.(dat, Symbol(col); kwargs...)
+function plot_channel_summary(
+    dat::DataFrame,
+    col::AbstractVector{<:Union{Symbol,AbstractString}};
+    channel_selection = channels(),
+    kwargs...,
+)
+    cols_sym = Symbol.(col)
     plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
     fig = Figure()
-    _plot_multiple_columns!(fig, dat, col, plot_kwargs; channel_selection = channel_selection)
+    _plot_multiple_columns!(fig, dat, cols_sym, plot_kwargs; channel_selection = channel_selection)
     if plot_kwargs[:display_plot]
         _set_window_title("Channel Summary")
         _display_figure(fig)
@@ -187,8 +204,8 @@ function plot_channel_summary(dat::DataFrame, col::AbstractVector{Symbol}; chann
     return fig
 end
 
-plot_channel_summary(dat::AbstractVector{<:DataFrame}, col::AbstractVector{Symbol}; kwargs...) =
-    plot_channel_summary.(dat, Ref(col); kwargs...)
+plot_channel_summary(dat::AbstractVector{<:DataFrame}, col::AbstractVector{<:Union{Symbol,AbstractString}}; kwargs...) =
+    plot_channel_summary.(dat, Ref(Symbol.(col)); kwargs...)
 
 
 """

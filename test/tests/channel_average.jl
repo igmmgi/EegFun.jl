@@ -928,4 +928,23 @@ end
         # Same columns added
         @test propertynames(tf.data_power) == propertynames(tf.data_phase)
     end
+
+    @testset "Ergonomic channel_selection and Vector channel_average!" begin
+        # Singular keyword channel_selection
+        dat = EegFun.create_test_continuous_data(n = 100)
+        EegFun.channel_average!(dat; channel_selection = [:Ch1, :Ch2], output_labels = "my_mean")
+        @test :my_mean ∈ propertynames(dat.data)
+        @test dat.data.my_mean ≈ (dat.data.Ch1 .+ dat.data.Ch2) ./ 2
+
+        # Un-nested single group in channel_selections
+        dat2 = EegFun.create_test_continuous_data(n = 100)
+        EegFun.channel_average!(dat2; channel_selections = ["Ch1", "Ch2"], output_labels = :my_mean2)
+        @test :my_mean2 ∈ propertynames(dat2.data)
+
+        # In-place Vector method
+        dats = [EegFun.create_test_continuous_data(n = 50), EegFun.create_test_continuous_data(n = 50)]
+        EegFun.channel_average!(dats; channel_selection = [:Ch1, :Ch2], output_labels = :vec_avg)
+        @test :vec_avg ∈ propertynames(dats[1].data)
+        @test :vec_avg ∈ propertynames(dats[2].data)
+    end
 end

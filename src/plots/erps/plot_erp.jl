@@ -136,7 +136,7 @@ function plot_erp(
     layout::Union{Symbol,PlotLayout} = :single,
     condition_selection = conditions(),
     channel_selection = channels(),
-    channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
+    channel_plot_order::Union{Nothing,AbstractVector} = nothing,
     sample_selection = samples(),
     interval_selection::Interval = times(),
     baseline_interval::Interval = nothing,
@@ -203,7 +203,7 @@ function plot_erp(
     dat::ErpData;
     layout::Union{Symbol,PlotLayout} = :single,
     channel_selection = channels(),
-    channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
+    channel_plot_order::Union{Nothing,AbstractVector} = nothing,
     sample_selection = samples(),
     interval_selection::Interval = times(),
     baseline_interval::Interval = nothing,
@@ -228,7 +228,7 @@ function plot_erp(
     layout::Union{Symbol,PlotLayout} = :single,
     condition_selection = conditions(),
     channel_selection = channels(),
-    channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
+    channel_plot_order::Union{Nothing,AbstractVector} = nothing,
     sample_selection = samples(),
     interval_selection::Interval = times(),
     baseline_interval::Interval = nothing,
@@ -296,7 +296,7 @@ function plot_erp_errorbar(
     layout::Union{Symbol,PlotLayout} = :single,
     condition_selection = conditions(),
     channel_selection = channels(),
-    channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
+    channel_plot_order::Union{Nothing,AbstractVector} = nothing,
     sample_selection = samples(),
     interval_selection::Interval = times(),
     baseline_interval::Interval = nothing,
@@ -354,7 +354,7 @@ function plot_erp_errorbar(
     dat::ErpData;
     layout::Union{Symbol,PlotLayout} = :single,
     channel_selection = channels(),
-    channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
+    channel_plot_order::Union{Nothing,AbstractVector} = nothing,
     sample_selection = samples(),
     interval_selection::Interval = times(),
     baseline_interval::Interval = nothing,
@@ -383,7 +383,7 @@ function plot_erp_errorbar(
     layout::Union{Symbol,PlotLayout} = :single,
     condition_selection = conditions(),
     channel_selection = channels(),
-    channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
+    channel_plot_order::Union{Nothing,AbstractVector} = nothing,
     sample_selection = samples(),
     interval_selection::Interval = times(),
     baseline_interval::Interval = nothing,
@@ -441,7 +441,7 @@ function _plot_erp_core(
 
     # Apply user-specified plotting order if provided
     if !isnothing(channel_plot_order)
-        ordered = Symbol[ch for ch in channel_plot_order if ch in all_plot_channels]
+        ordered = Symbol[Symbol(ch) for ch in channel_plot_order if Symbol(ch) in all_plot_channels]
         if !isempty(ordered)
             all_plot_channels = ordered
         end
@@ -628,7 +628,7 @@ function plot_erp!(fig::Figure, ax::Axis, datasets::AbstractVector{<:ErpData}; k
 
     # Apply user-specified plotting order if provided
     if !isnothing(channel_plot_order)
-        ordered = Symbol[ch for ch in channel_plot_order if ch in all_plot_channels]
+        ordered = Symbol[Symbol(ch) for ch in channel_plot_order if Symbol(ch) in all_plot_channels]
         if !isempty(ordered)
             all_plot_channels = ordered
         end
@@ -686,7 +686,7 @@ function plot_erp_errorbar!(fig::Figure, ax::Axis, datasets::AbstractVector{<:Er
 
     # Apply user-specified plotting order if provided
     if !isnothing(channel_plot_order)
-        ordered = Symbol[ch for ch in channel_plot_order if ch in all_plot_channels]
+        ordered = Symbol[Symbol(ch) for ch in channel_plot_order if Symbol(ch) in all_plot_channels]
         if !isempty(ordered)
             all_plot_channels = ordered
         end

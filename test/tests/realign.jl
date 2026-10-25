@@ -284,6 +284,40 @@ const RESP_TRIGGERS = [201]
             end
         end
     end
+
+    @testset "Scalar triggers and Vector global_interval" begin
+        # Scalar trigger for single EpochData
+        epochs = [_make_epoch_with_response(rt_seconds = 0.5, response_trigger = 201)]
+        ep_data = _make_epoch_data(epochs)
+        realigned = EegFun.realign(ep_data, 201)
+        @test isapprox(realigned.data[1].time[argmin(abs.(realigned.data[1].time))], 0.0, atol = 0.01)
+
+        # Scalar trigger and Vector global_interval for Vector{EpochData}
+        dat1 = _make_epoch_data([_make_epoch_with_response(rt_seconds = 0.5, response_trigger = 201)], condition = 1)
+        dat2 = _make_epoch_data([_make_epoch_with_response(rt_seconds = 0.6, response_trigger = 201)], condition = 2)
+        vec_data = [dat1, dat2]
+        EegFun.realign!(vec_data, 201; global_interval = [-0.2, 0.3])
+        @test isapprox(minimum(vec_data[1].data[1].time), -0.2, atol = 0.01)
+        @test isapprox(maximum(vec_data[1].data[1].time), 0.3, atol = 0.01)
+    end
+
+    @testset "calculate_trigger_interval (scalar, vector, String column)" begin
+        # Create epoch with start trigger (101) and response trigger (201)
+        epoch = _make_epoch_with_response(rt_seconds = 0.5, response_trigger = 201)
+        epoch.trigger[1] = 101  # time is -0.5
+        ep_data = _make_epoch_data([epoch])
+
+        # Test scalar triggers with String column name
+        EegFun.calculate_trigger_interval!(ep_data, 101, 201; column_name = "rt_interval")
+        @test :rt_interval ∈ propertynames(ep_data.data[1])
+        @test ep_data.data[1].rt_interval[1] ≈ 1.0  # from -0.5 to 0.5 is 1.0s
+
+        # Non-mutating version
+        ep_data2 = _make_epoch_data([copy(epoch)])
+        result = EegFun.calculate_trigger_interval(ep_data2, 101, 201; column_name = :rt_sym)
+        @test :rt_sym ∉ propertynames(ep_data2.data[1])
+        @test :rt_sym ∈ propertynames(result.data[1])
+    end
 end
 
 @testset "Batch realignment (file-based)" begin

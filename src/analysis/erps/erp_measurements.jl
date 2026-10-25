@@ -74,10 +74,21 @@ function _default_measurements_output_dir(input_dir::String, analysis_type::Unio
     joinpath(input_dir, "measurements_$(string(analysis_type))")
 end
 
-"""Normalize interval to tuple format (handles AbstractRange and Tuple)."""
+"""Normalize interval to tuple format (handles Tuple, AbstractVector, AbstractRange, TimeSelection)."""
 function _normalize_interval(interval::Interval)
     isnothing(interval) && return nothing
-    interval isa AbstractRange ? (first(interval), last(interval)) : interval
+    if interval isa AbstractRange
+        return (Float64(first(interval)), Float64(last(interval)))
+    elseif interval isa AbstractVector{<:Real}
+        length(interval) != 2 && @minimal_error "Interval vector must contain exactly 2 elements (start, stop), got $(length(interval))"
+        return (Float64(interval[1]), Float64(interval[2]))
+    elseif interval isa TimeSelection
+        return (Float64(interval.start), Float64(interval.stop))
+    elseif interval isa Tuple{Real,Real}
+        return (Float64(interval[1]), Float64(interval[2]))
+    else
+        return interval
+    end
 end
 
 # === ERP-MEASUREMENTS-SPECIFIC HELPERS ===

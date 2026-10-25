@@ -685,7 +685,7 @@ function plot_topography(
 end
 
 """Average epochs per condition, then delegate to the `Vector{ErpData}` topography method."""
-function plot_topography(dat::Vector{EpochData}; kwargs...)
+function plot_topography(dat::AbstractVector{<:EpochData}; kwargs...)
     # Average trials within each condition to create ERPs
     erps = average_epochs.(dat)
     # Delegate to the Vector{ErpData} method which creates subplots
@@ -693,7 +693,7 @@ function plot_topography(dat::Vector{EpochData}; kwargs...)
 end
 
 """Plot a single epoch from each `EpochData` in the vector."""
-function plot_topography(dat::Vector{EpochData}, epoch::Int; kwargs...)
+function plot_topography(dat::AbstractVector{<:EpochData}, epoch::Int; kwargs...)
     @info "Plotting epoch $(epoch) for each dataset in the vector"
     plot_topography.(dat, Ref(epoch))
 end

@@ -32,4 +32,9 @@ using EegFun
         result = EegFun.plot_erp_image(dat; boxcar_average = 3, display_plot = false)
         @test result.fig isa Figure
     end
+
+    @testset "channel_plot_order and symbol channel_selection" begin
+        result = EegFun.plot_erp_image(dat; channel_selection = :Ch1, channel_plot_order = ["Ch1"], display_plot = false)
+        @test result.fig isa Figure
+    end
 end

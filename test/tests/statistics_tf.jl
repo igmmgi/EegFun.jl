@@ -145,6 +145,31 @@ end
         @test size(prepared.analysis.data[1], 4) == 4  # 4 time points
     end
 
+    @testset "prepare_stats (TF) - channel selection and vector intervals" begin
+        Random.seed!(45)
+        tfs = _build_tf_test_data(
+            frequencies = [2.0, 4.0, 8.0, 12.0, 20.0, 30.0],
+            time_points = [-0.2, -0.1, 0.0, 0.1, 0.2, 0.3],
+            n_channels = 3,
+        )
+
+        # Test Symbol vector channel_selection and Vector frequency / baseline intervals
+        prepared = EegFun.prepare_stats(
+            tfs;
+            design = :paired,
+            channel_selection = [:Ch1, :Ch2],
+            frequency_selection = [4.0, 20.0],
+            baseline_interval = [-0.2, 0.0],
+        )
+        @test EegFun.channel_labels(prepared.data[1]) == [:Ch1, :Ch2]
+        @test size(prepared.analysis.data[1], 2) == 2  # 2 channels selected
+
+        # Test String channel selection
+        prepared_str = EegFun.prepare_stats(tfs; design = :paired, channel_selection = ["Ch2"])
+        @test EegFun.channel_labels(prepared_str.data[1]) == [:Ch2]
+        @test size(prepared_str.analysis.data[1], 2) == 1
+    end
+
     @testset "prepare_stats (TF) - requires 2 conditions" begin
         Random.seed!(45)
         # Build data with only 1 condition

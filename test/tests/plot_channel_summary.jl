@@ -2,6 +2,7 @@ using Test
 using DataFrames
 using Statistics
 using Makie
+using EegFun
 
 @testset "plot_channel_summary" begin
 
@@ -213,6 +214,18 @@ using Makie
         @test EegFun.PLOT_CHANNEL_SUMMARY_KWARGS[:display_plot][1] == true
         @test EegFun.PLOT_CHANNEL_SUMMARY_KWARGS[:bar_color][1] == :steelblue
         @test EegFun.PLOT_CHANNEL_SUMMARY_KWARGS[:xlabel][1] == "Electrode"
+    end
+
+    @testset "String columns and channel_selection ergonomics" begin
+        df = EegFun.create_test_summary_data()
+        # Test passing String for column name and String for channel_selection
+        res = EegFun.plot_channel_summary(df, "std", channel_selection = "Ch1", display_plot = false)
+        @test res.fig isa Figure
+        @test length(res.axes) == 1
+
+        # Test passing vector of String columns
+        res_multi = EegFun.plot_channel_summary(df, ["std", "var"], display_plot = false)
+        @test res_multi isa Figure
     end
 
 end # plot_channel_summary testset

@@ -34,8 +34,9 @@ function calculate_trigger_interval!(
     dat::EpochData,
     start_triggers::AbstractVector{<:Integer},
     end_triggers::AbstractVector{<:Integer};
-    column_name::Symbol = :interval,
+    column_name::Union{Symbol,AbstractString} = :interval,
 )
+    col_sym = Symbol(column_name)
     @info "Calculating trigger intervals for EpochData (condition: $(dat.condition_name))"
 
     n_missing = 0
@@ -45,11 +46,11 @@ function calculate_trigger_interval!(
         end_idx = findfirst(x -> x in end_triggers, epoch.trigger)
 
         if isnothing(start_idx) || isnothing(end_idx)
-            epoch[!, column_name] .= NaN
+            epoch[!, col_sym] .= NaN
             n_missing += 1
         else
             interval_seconds = epoch.time[end_idx] - epoch.time[start_idx]
-            epoch[!, column_name] .= interval_seconds
+            epoch[!, col_sym] .= interval_seconds
         end
     end
 
@@ -60,6 +61,13 @@ function calculate_trigger_interval!(
     return dat
 end
 
+calculate_trigger_interval!(dat::EpochData, start_trigger::Integer, end_trigger::Integer; kwargs...) =
+    calculate_trigger_interval!(dat, [start_trigger], [end_trigger]; kwargs...)
+calculate_trigger_interval!(dat::EpochData, start_triggers::AbstractVector{<:Integer}, end_trigger::Integer; kwargs...) =
+    calculate_trigger_interval!(dat, start_triggers, [end_trigger]; kwargs...)
+calculate_trigger_interval!(dat::EpochData, start_trigger::Integer, end_triggers::AbstractVector{<:Integer}; kwargs...) =
+    calculate_trigger_interval!(dat, [start_trigger], end_triggers; kwargs...)
+
 """
     calculate_trigger_interval!(dat_vec::Vector{EpochData}, start_triggers, end_triggers; column_name = :interval)
 
@@ -69,13 +77,28 @@ function calculate_trigger_interval!(
     dat_vec::AbstractVector{<:EpochData},
     start_triggers::AbstractVector{<:Integer},
     end_triggers::AbstractVector{<:Integer};
-    column_name::Symbol = :interval,
+    column_name::Union{Symbol,AbstractString} = :interval,
 )
     for dat in dat_vec
         calculate_trigger_interval!(dat, start_triggers, end_triggers; column_name = column_name)
     end
     return dat_vec
 end
+
+calculate_trigger_interval!(dat_vec::AbstractVector{<:EpochData}, start_trigger::Integer, end_trigger::Integer; kwargs...) =
+    calculate_trigger_interval!(dat_vec, [start_trigger], [end_trigger]; kwargs...)
+calculate_trigger_interval!(
+    dat_vec::AbstractVector{<:EpochData},
+    start_triggers::AbstractVector{<:Integer},
+    end_trigger::Integer;
+    kwargs...,
+) = calculate_trigger_interval!(dat_vec, start_triggers, [end_trigger]; kwargs...)
+calculate_trigger_interval!(
+    dat_vec::AbstractVector{<:EpochData},
+    start_trigger::Integer,
+    end_triggers::AbstractVector{<:Integer};
+    kwargs...,
+) = calculate_trigger_interval!(dat_vec, [start_trigger], end_triggers; kwargs...)
 
 """
     calculate_trigger_interval(dat, start_triggers, end_triggers; column_name = :interval)
@@ -86,10 +109,17 @@ function calculate_trigger_interval(
     dat::EpochData,
     start_triggers::AbstractVector{<:Integer},
     end_triggers::AbstractVector{<:Integer};
-    column_name::Symbol = :interval,
+    column_name::Union{Symbol,AbstractString} = :interval,
 )::EpochData
     return calculate_trigger_interval!(copy(dat), start_triggers, end_triggers; column_name = column_name)
 end
+
+calculate_trigger_interval(dat::EpochData, start_trigger::Integer, end_trigger::Integer; kwargs...) =
+    calculate_trigger_interval(dat, [start_trigger], [end_trigger]; kwargs...)
+calculate_trigger_interval(dat::EpochData, start_triggers::AbstractVector{<:Integer}, end_trigger::Integer; kwargs...) =
+    calculate_trigger_interval(dat, start_triggers, [end_trigger]; kwargs...)
+calculate_trigger_interval(dat::EpochData, start_trigger::Integer, end_triggers::AbstractVector{<:Integer}; kwargs...) =
+    calculate_trigger_interval(dat, [start_trigger], end_triggers; kwargs...)
 
 """
     calculate_trigger_interval(dat_vec::Vector{EpochData}, start_triggers, end_triggers; column_name = :interval)
@@ -100,10 +130,25 @@ function calculate_trigger_interval(
     dat_vec::AbstractVector{<:EpochData},
     start_triggers::AbstractVector{<:Integer},
     end_triggers::AbstractVector{<:Integer};
-    column_name::Symbol = :interval,
+    column_name::Union{Symbol,AbstractString} = :interval,
 )::Vector{EpochData}
     return [calculate_trigger_interval(dat, start_triggers, end_triggers; column_name = column_name) for dat in dat_vec]
 end
+
+calculate_trigger_interval(dat_vec::AbstractVector{<:EpochData}, start_trigger::Integer, end_trigger::Integer; kwargs...) =
+    calculate_trigger_interval(dat_vec, [start_trigger], [end_trigger]; kwargs...)
+calculate_trigger_interval(
+    dat_vec::AbstractVector{<:EpochData},
+    start_triggers::AbstractVector{<:Integer},
+    end_trigger::Integer;
+    kwargs...,
+) = calculate_trigger_interval(dat_vec, start_triggers, [end_trigger]; kwargs...)
+calculate_trigger_interval(
+    dat_vec::AbstractVector{<:EpochData},
+    start_trigger::Integer,
+    end_triggers::AbstractVector{<:Integer};
+    kwargs...,
+) = calculate_trigger_interval(dat_vec, [start_trigger], end_triggers; kwargs...)
 
 
 # === CORE REALIGNMENT FUNCTIONS ===
@@ -193,6 +238,9 @@ function realign(dat::EpochData, realignment_triggers::AbstractVector{<:Integer}
     return realign!(copy(dat), realignment_triggers)
 end
 
+realign!(dat::EpochData, realignment_trigger::Integer) = realign!(dat, [realignment_trigger])
+realign(dat::EpochData, realignment_trigger::Integer)::EpochData = realign(dat, [realignment_trigger])
+
 """
     realign!(dat_vec::Vector{EpochData}, realignment_triggers; global_interval = nothing, global_n_samples = nothing)
 
@@ -203,10 +251,15 @@ strict requirement for LRP averaging across conditions.
 function realign!(
     dat_vec::AbstractVector{<:EpochData},
     realignment_triggers::AbstractVector{<:Integer};
-    global_interval::Union{Tuple{Float64,Float64},Nothing} = nothing,
+    global_interval::Interval = nothing,
     global_n_samples::Union{Int,Nothing} = nothing,
 )
     @info "Realigning $(length(dat_vec)) conditions in Vector{EpochData}..."
+
+    # Normalize global_interval if provided
+    if !isnothing(global_interval)
+        global_interval = _normalize_interval(global_interval)
+    end
 
     # Step 1: Validate and realign all epochs individually
     for dat in dat_vec
@@ -266,6 +319,9 @@ function realign!(
     return dat_vec
 end
 
+realign!(dat_vec::AbstractVector{<:EpochData}, realignment_trigger::Integer; kwargs...) =
+    realign!(dat_vec, [realignment_trigger]; kwargs...)
+
 """
     realign(dat_vec::Vector{EpochData}, realignment_triggers; global_interval = nothing, global_n_samples = nothing)
 
@@ -274,7 +330,7 @@ Non-mutating `Vector{EpochData}` overload of `realign!`. Returns a deep-copied, 
 function realign(
     dat_vec::AbstractVector{<:EpochData},
     realignment_triggers::AbstractVector{<:Integer};
-    global_interval::Union{Tuple{Float64,Float64},Nothing} = nothing,
+    global_interval::Interval = nothing,
     global_n_samples::Union{Int,Nothing} = nothing,
 )::Vector{EpochData}
     return realign!(
@@ -284,6 +340,9 @@ function realign(
         global_n_samples = global_n_samples,
     )
 end
+
+realign(dat_vec::AbstractVector{<:EpochData}, realignment_trigger::Integer; kwargs...)::Vector{EpochData} =
+    realign(dat_vec, [realignment_trigger]; kwargs...)
 
 
 

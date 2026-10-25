@@ -161,4 +161,23 @@ using CairoMakie
         @test_throws Exception EegFun.plot_tf(EegFun.TimeFreqData[])
     end
 
+    @testset "plot_tf and topography ergonomics" begin
+        tf = tf_participant1[1]
+        # Direct channel symbol and string plot order
+        out = EegFun.plot_tf(tf; channel_selection = :Oz, channel_plot_order = ["Oz"], display_plot = false)
+        @test out.fig isa Figure
+
+        # String channel selection in multi TF
+        out_multi = EegFun.plot_tf(tf_participant1; channel_selection = "Oz", display_plot = false)
+        @test out_multi.fig isa Figure
+
+        # plot_topography with Vector freq_range and baseline_interval
+        out_topo = EegFun.plot_topography(tf; freq_range = [8.0, 12.0], baseline_interval = [-0.5, 0.0], display_plot = false)
+        @test out_topo.fig isa Figure
+
+        # plot_topography for AbstractVector{<:TimeFreqData}
+        out_topo_vec = EegFun.plot_topography(@view(tf_participant1[1:2]); freq_range = [8.0, 12.0], display_plot = false)
+        @test out_topo_vec.fig isa Figure
+    end
+
 end # @testset "TF Plots"

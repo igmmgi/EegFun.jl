@@ -140,7 +140,7 @@ function plot_erp_image(
     dat::EpochData;
     layout::Union{Symbol,PlotLayout} = :single,
     channel_selection = channels(),
-    channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
+    channel_plot_order::Union{Nothing,AbstractVector} = nothing,
     sample_selection = samples(),
     interval_selection::Interval = times(),
     kwargs...,
@@ -163,7 +163,7 @@ function plot_erp_image(
 
     # Apply user-specified plotting order if provided
     if !isnothing(channel_plot_order)
-        ordered = Symbol[ch for ch in channel_plot_order if ch in all_plot_channels]
+        ordered = Symbol[Symbol(ch) for ch in channel_plot_order if Symbol(ch) in all_plot_channels]
         if !isempty(ordered)
             all_plot_channels = ordered
         end

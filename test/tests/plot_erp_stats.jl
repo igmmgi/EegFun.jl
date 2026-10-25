@@ -22,5 +22,13 @@ using EegFun
     @testset "channel selection" begin
         result = EegFun.plot_erp_stats(res; channel_selection = EegFun.channels([1]), display_plot = false)
         @test result.fig isa Figure
+
+        # Symbol channel selection and String channel_plot_order
+        res_sym = EegFun.plot_erp_stats(res; channel_selection = :Ch1, channel_plot_order = ["Ch1"], display_plot = false)
+        @test res_sym.fig isa Figure
+
+        # String channel selection and String channel_plot_order
+        res_str = EegFun.plot_erp_stats(res; channel_selection = ["Ch1", "Ch2"], channel_plot_order = ["Ch2", "Ch1"], display_plot = false)
+        @test res_str.fig isa Figure
     end
 end

@@ -38,4 +38,15 @@ using EegFun
     @testset "empty data check" begin
         @test_throws EegFun.EegFunError EegFun.plot_erp(dat; condition_selection = EegFun.conditions("nonexistent"), display_plot = false)
     end
+
+    @testset "channel_plot_order and AbstractVector views" begin
+        # String channel_plot_order
+        res = EegFun.plot_erp(dat; channel_plot_order = ["Ch2", "Ch1"], display_plot = false)
+        @test res.fig isa Figure
+
+        # AbstractVector view
+        vec_dats = [dat, dat2]
+        res_view = EegFun.plot_erp(@view(vec_dats[1:2]); channel_plot_order = [:Ch1, :Ch2], display_plot = false)
+        @test res_view.fig isa Figure
+    end
 end

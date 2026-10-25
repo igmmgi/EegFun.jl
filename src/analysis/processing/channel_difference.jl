@@ -67,10 +67,11 @@ channel_difference!(dat)
 """
 function channel_difference!(
     dat::EegData;
-    channel_selection1::Function = channels(),
-    channel_selection2::Function = channels(),
-    channel_out::Symbol = :diff,
+    channel_selection1 = channels(),
+    channel_selection2 = channels(),
+    channel_out::Union{Symbol,AbstractString} = :diff,
 )
+    out_sym = Symbol(channel_out)
     # Resolve predicates to get actual channel names for logging
     channels_in1_selected = get_selected_channels(dat, channel_selection1, include_meta = false)
     channels_in2_selected = get_selected_channels(dat, channel_selection2, include_meta = false)
@@ -78,7 +79,7 @@ function channel_difference!(
     isempty(channels_in1_selected) && @minimal_error "No channels selected by channel_selection1"
     isempty(channels_in2_selected) && @minimal_error "No channels selected by channel_selection2"
 
-    @info "Channel sets: $(channels_in1_selected) vs. $(channels_in2_selected) -> $(channel_out)"
+    @info "Channel sets: $(channels_in1_selected) vs. $(channels_in2_selected) -> $(out_sym)"
 
     # Verify channels exist in data (use unique to avoid redundant checks)
     all_selected_channels = unique(vcat(channels_in1_selected, channels_in2_selected))
@@ -88,17 +89,17 @@ function channel_difference!(
     end
 
     # Check if difference channel already exists
-    if channel_out ∈ all_labels(dat)
-        @minimal_warning "Overwriting existing channel '$(channel_out)'"
+    if out_sym ∈ all_labels(dat)
+        @minimal_warning "Overwriting existing channel '$(out_sym)'"
     end
 
     # Check if output channel is in the input channel sets (would cause issues)
-    if channel_out ∈ channels_in1_selected || channel_out ∈ channels_in2_selected
-        @minimal_warning "Output channel '$(channel_out)' is also in the input channel sets. This may cause unexpected behavior."
+    if out_sym ∈ channels_in1_selected || out_sym ∈ channels_in2_selected
+        @minimal_warning "Output channel '$(out_sym)' is also in the input channel sets. This may cause unexpected behavior."
     end
 
     # Calculate channel difference (dispatch handles DataFrame vs Vector{DataFrame})
-    _calculate_channel_difference!(dat.data, channels_in1_selected, channels_in2_selected, channel_out)
+    _calculate_channel_difference!(dat.data, channels_in1_selected, channels_in2_selected, out_sym)
 
     return dat
 end

@@ -956,6 +956,8 @@ Returns (start, stop) tuple or (nothing, nothing) if interval is nothing.
 _extract_baseline_values(::Nothing) = (nothing, nothing)
 _extract_baseline_values(interval::AbstractRange) = (first(interval), last(interval))
 _extract_baseline_values(interval::Tuple) = (interval[1], interval[2])
+_extract_baseline_values(interval::AbstractVector{<:Real}) = (Float64(interval[1]), Float64(interval[2]))
+_extract_baseline_values(interval::TimeSelection) = (Float64(interval.start), Float64(interval.stop))
 
 """
     _parse_baseline_values(start_str::String, stop_str::String)

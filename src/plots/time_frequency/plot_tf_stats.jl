@@ -70,7 +70,7 @@ plot_tf_stats(result_analytic, mask_style=:alpha, colormap=:viridis)
 function plot_tf_stats(
     result::TFStatsResult;
     channel_selection = channels(),
-    channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
+    channel_plot_order::Union{Nothing,AbstractVector} = nothing,
     content::Symbol = :tvalues,
     mask_style::Symbol = :alpha,
     colormap = nothing,
@@ -90,13 +90,14 @@ function plot_tf_stats(
 
     # Select channels
     all_electrodes = result.electrodes
-    selected_mask = channel_selection(all_electrodes)
+    chan_func = _to_channel_func(channel_selection)
+    selected_mask = chan_func(all_electrodes)
     selected_channels = all_electrodes[selected_mask]
     isempty(selected_channels) && @minimal_error("No channels matched. Available: $(all_electrodes)")
 
     # Apply user-specified plotting order if provided
     if !isnothing(channel_plot_order)
-        ordered = Symbol[ch for ch in channel_plot_order if ch in selected_channels]
+        ordered = Symbol[Symbol(ch) for ch in channel_plot_order if Symbol(ch) in selected_channels]
         if !isempty(ordered)
             selected_channels = ordered
         end

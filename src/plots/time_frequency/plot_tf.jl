@@ -124,7 +124,8 @@ function plot_tf(tf_data::AbstractVector{<:TimeFreqData}; channel_selection = ch
 
     # Resolve channel (same for all conditions — use first condition's channels)
     all_channels = channel_labels(first(tf_plots))
-    selected_mask = channel_selection(all_channels)
+    chan_func = _to_channel_func(channel_selection)
+    selected_mask = chan_func(all_channels)
     selected_channels = all_channels[selected_mask]
     isempty(selected_channels) && @minimal_error("No channels matched. Available: $(all_channels)")
     channel = first(selected_channels)
@@ -221,7 +222,7 @@ end
 function plot_tf(
     tf_data::TimeFreqData;
     channel_selection = channels(),
-    channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
+    channel_plot_order::Union{Nothing,AbstractVector} = nothing,
     baseline_interval::Interval = nothing,
     kwargs...,
 )
@@ -262,13 +263,14 @@ function plot_tf(
 
     # Resolve channels via channel_selection predicate
     all_channels = channel_labels(tf_plot)
-    selected_mask = channel_selection(all_channels)
+    chan_func = _to_channel_func(channel_selection)
+    selected_mask = chan_func(all_channels)
     selected_channels = all_channels[selected_mask]
     isempty(selected_channels) && @minimal_error("No channels matched. Available: $(all_channels)")
 
     # Apply user-specified plotting order if provided
     if !isnothing(channel_plot_order)
-        ordered = Symbol[ch for ch in channel_plot_order if ch in selected_channels]
+        ordered = Symbol[Symbol(ch) for ch in channel_plot_order if Symbol(ch) in selected_channels]
         if !isempty(ordered)
             selected_channels = ordered
         end

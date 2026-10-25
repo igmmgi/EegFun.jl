@@ -9,12 +9,13 @@ function channel_difference!(
     dat::TimeFreqData;
     channel_selection1 = channels(),
     channel_selection2 = channels(),
-    channel_out::Symbol = :diff,
+    channel_out::Union{Symbol,AbstractString} = :diff,
 )
+    out_sym = Symbol(channel_out)
     # Resolve predicates
     channels_in1 = get_selected_channels(dat, channel_selection1, include_meta = false)
     channels_in2 = get_selected_channels(dat, channel_selection2, include_meta = false)
-    @info "channel_difference! (TF): $(channels_in1) vs. $(channels_in2) → :$(channel_out)"
+    @info "channel_difference! (TF): $(channels_in1) vs. $(channels_in2) → :$(out_sym)"
 
     # Verify channels exist in data
     all_selected = unique(vcat(channels_in1, channels_in2))
@@ -24,13 +25,13 @@ function channel_difference!(
     end
 
     # Check for overwrites
-    if hasproperty(dat.data_power, channel_out)
-        @minimal_warning "Overwriting existing channel '$(channel_out)'"
+    if hasproperty(dat.data_power, out_sym)
+        @minimal_warning "Overwriting existing channel '$(out_sym)'"
     end
 
     # Apply difference to BOTH power and phase DataFrames
-    _calculate_channel_difference!(dat.data_power, channels_in1, channels_in2, channel_out)
-    _calculate_channel_difference!(dat.data_phase, channels_in1, channels_in2, channel_out)
+    _calculate_channel_difference!(dat.data_power, channels_in1, channels_in2, out_sym)
+    _calculate_channel_difference!(dat.data_phase, channels_in1, channels_in2, out_sym)
 
     return dat
 end

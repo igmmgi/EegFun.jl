@@ -39,7 +39,7 @@ function prepare_stats(
     channel_selection = channels(),
     frequency_selection::Interval = nothing,
     interval_selection::Interval = nothing,
-    baseline_interval::Union{Nothing,Tuple{Real,Real}} = nothing,
+    baseline_interval::Interval = nothing,
     baseline_method::Symbol = :db,
 )
     # Group all TF data by condition
@@ -96,7 +96,8 @@ function prepare_stats(
     all_times = Float64.(sort(unique(ref_tf.data_power.time)))
 
     # Apply channel selection
-    selected_ch_mask = channel_selection(1:length(all_electrodes))
+    chan_func = _to_channel_func(channel_selection)
+    selected_ch_mask = chan_func(all_electrodes)
     electrodes = all_electrodes[selected_ch_mask]
     isempty(electrodes) && @minimal_error "No channels matched the channel selection."
 

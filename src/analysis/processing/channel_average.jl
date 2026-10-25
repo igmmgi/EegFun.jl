@@ -38,16 +38,39 @@ channel_average!(dat, channel_selections = [channels([:Fp1, :Fp2])]; reduce = tr
 """
 function channel_average!(
     dat::EegData;
-    channel_selections::AbstractVector = [channels()],
+    channel_selections = nothing,
+    channel_selection = nothing,
     output_labels = nothing,
     include_extra::Bool = false,
     reduce::Bool = false,
 )
+    # Handle singular `channel_selection` or plural `channel_selections`
+    selections = if !isnothing(channel_selection)
+        [channel_selection]
+    elseif !isnothing(channel_selections)
+        # Check if user passed a single group directly, e.g. [:Fz, :Cz], ["Fz", "Cz"], or channels(...)
+        if channel_selections isa AbstractVector{Symbol} || channel_selections isa AbstractVector{<:AbstractString}
+            [channel_selections]
+        elseif channel_selections isa Function
+            [channel_selections]
+        else
+            channel_selections
+        end
+    else
+        [channels()]
+    end
 
+    if !isnothing(output_labels)
+        if output_labels isa Union{Symbol,AbstractString}
+            output_labels = [Symbol(output_labels)]
+        else
+            output_labels = Symbol.(output_labels)
+        end
+    end
 
     # Resolve actual channel groups (exclude metadata; optionally include extra)
     # For the default case (channels()), we want to select only original channel columns, not derived averaged columns
-    selected_channel_groups::Vector{Vector{Symbol}} = if length(channel_selections) == 1 && channel_selections[1] == channels()
+    selected_channel_groups::Vector{Vector{Symbol}} = if length(selections) == 1 && selections[1] == channels()
         # Default case: select only original channel columns
         all_cols = all_labels(dat)
         meta_cols = meta_labels(dat)
@@ -55,7 +78,7 @@ function channel_average!(
         [original_channels]
     else
         # Custom selections: use the provided functions
-        [get_selected_channels(dat, sel; include_meta = false, include_extra = include_extra) for sel in channel_selections]
+        [get_selected_channels(dat, sel; include_meta = false, include_extra = include_extra) for sel in selections]
     end
 
     # Validate channel groups
@@ -138,6 +161,13 @@ Non-mutating version of `channel_average!`.
 """
 function channel_average(dat::EegData, args...; kwargs...)
     return channel_average!(copy(dat), args...; kwargs...)
+end
+
+function channel_average!(dat::AbstractVector{<:EegData}, args...; kwargs...)
+    for d in dat
+        channel_average!(d, args...; kwargs...)
+    end
+    return dat
 end
 
 function channel_average(dat::AbstractVector{<:EegData}; kwargs...)

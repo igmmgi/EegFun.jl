@@ -87,8 +87,8 @@ end
 function plot_erp_measurements(
     erp_datasets::AbstractVector{<:ErpData},
     analysis_type::String;
-    analysis_interval::Union{Tuple{Real,Real},Nothing} = nothing,
-    baseline_interval::Union{Tuple{Real,Real},Nothing} = nothing,
+    analysis_interval::Interval = nothing,
+    baseline_interval::Interval = nothing,
     layout::Union{Symbol,PlotLayout} = :single,
     channel_selection = channels(),
     condition_selection = conditions(),
@@ -106,6 +106,8 @@ function plot_erp_measurements(
     if isnothing(analysis_interval)
         time_data = time_vector(erp_datasets[1])
         analysis_interval = (first(time_data), last(time_data))
+    else
+        analysis_interval = _normalize_interval(analysis_interval)
     end
 
     kwargs_dict = Dict{Symbol,Any}(kwargs)
@@ -145,7 +147,8 @@ function plot_erp_measurements(
     first_data = erp_datasets[1]
     metadata_cols = meta_labels(first_data)
     all_channels = setdiff(propertynames(first_data.data), metadata_cols)
-    selected_channels = all_channels[channel_selection(all_channels)]
+    chan_func = _to_channel_func(channel_selection)
+    selected_channels = all_channels[chan_func(all_channels)]
     plot_channels = average_channels ? [:avg] : selected_channels
 
     # Build plot_line lookup from line_refs
