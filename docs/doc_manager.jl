@@ -108,7 +108,7 @@ end
 
 
 
-function check_doc_coverage(project_root::String; skip_build_check::Bool = false)
+function check_doc_coverage(project_root::String; skip_build_check::Bool = true)
     print_colored(YELLOW, "Checking documentation coverage...")
 
     try
@@ -130,7 +130,7 @@ function check_doc_coverage(project_root::String; skip_build_check::Bool = false
             return false
         end
 
-        # Check if documentation has been built (only if not skipping)
+        # Check if documentation has been built (only if explicitly requested)
         if !skip_build_check
             build_dir = joinpath(project_root, "docs", "build")
             if !isdir(build_dir)
@@ -237,6 +237,10 @@ function check_doc_coverage(project_root::String; skip_build_check::Bool = false
                     files_with_docs += 1
                     total_docstring_chars += file_doc_chars
                     println("  $(basename(file)): $file_documented/$file_functions functions documented")
+                    if file_documented < file_functions
+                        missing_docs = [k for (k, v) in file_func_names if !v.has_doc]
+                        println("    Missing docstrings: $(join(sort(missing_docs), ", "))")
+                    end
                 end
 
             catch e

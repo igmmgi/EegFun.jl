@@ -29,10 +29,14 @@ Run from root directory with: julia --project=. test/test_manager.jl
 
 using Printf
 using Pkg
-#
-# activate temp env and add packages needed for coverage
-Pkg.activate(; temp = true)
-Pkg.add(["Coverage", "CoverageTools"])
+const PROJECT_ROOT = dirname(@__DIR__)
+cd(PROJECT_ROOT)
+
+# Use a persistent shared environment so Coverage and CoverageTools are not re-downloaded on every run
+Pkg.activate("coverage"; shared = true)
+if Base.find_package("Coverage") === nothing || Base.find_package("CoverageTools") === nothing
+    Pkg.add(["Coverage", "CoverageTools"])
+end
 using Coverage
 using CoverageTools
 
@@ -53,7 +57,7 @@ function run_tests_with_coverage()
     clean_coverage_files() # ensure fresh coverage data
     print_colored(YELLOW, "Step 1: Running tests with coverage...")
     try # Run tests with coverage=true
-        run(`julia --project=. -e "using Pkg; Pkg.test(coverage=true)"`)
+        run(`julia --project=$(PROJECT_ROOT) -e "using Pkg; Pkg.test(coverage=true)"`)
         print_colored(GREEN, "✓ Tests completed successfully")
     catch e
         print_colored(RED, "✗ Error running tests: $e")
