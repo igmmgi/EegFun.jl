@@ -55,8 +55,10 @@ function channel_delete!(dat::EegData, channels_to_delete::AbstractVector{Symbol
     return dat
 end
 channel_delete!(dat::EegData, channel::Symbol) = channel_delete!(dat, [channel])
+channel_delete!(dat::EegData, channel::AbstractString) = channel_delete!(dat, [Symbol(channel)])
+channel_delete!(dat::EegData, channels::AbstractVector{<:AbstractString}) = channel_delete!(dat, Symbol.(channels))
 
-function channel_delete!(dat::AbstractVector{<:EegData}, channels_to_delete::Union{Symbol,AbstractVector{Symbol}})
+function channel_delete!(dat::AbstractVector{<:EegData}, channels_to_delete)
     for d in dat
         channel_delete!(d, channels_to_delete)
     end
@@ -113,7 +115,9 @@ new_dat = channel_delete(dat, [:Fp1, :Fp2, :Diode]) # Delete multiple channels
 """
 channel_delete(dat::EegData, channels_to_delete::AbstractVector{Symbol}) = channel_delete!(copy(dat), channels_to_delete)
 channel_delete(dat::EegData, channel::Symbol) = channel_delete(dat, [channel])
+channel_delete(dat::EegData, channel::AbstractString) = channel_delete(dat, [Symbol(channel)])
+channel_delete(dat::EegData, channels::AbstractVector{<:AbstractString}) = channel_delete(dat, Symbol.(channels))
 
-function channel_delete(dat::AbstractVector{<:EegData}, channels_to_delete::Union{Symbol,AbstractVector{Symbol}})
+function channel_delete(dat::AbstractVector{<:EegData}, channels_to_delete)
     return [channel_delete(d, channels_to_delete) for d in dat]
 end

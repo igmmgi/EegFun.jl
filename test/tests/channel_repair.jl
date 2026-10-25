@@ -247,4 +247,25 @@ using EegFun
         @test !isapprox(dat2.data.Ch2, orig2_Ch2, rtol = 1e-10)
     end
 
+    @testset "String channels and AbstractVector views" begin
+        dat1 = EegFun.create_test_continuous_data(n = 100, n_channels = 4)
+        dat1.layout.data.x3 = [0.0, 0.1, 0.0, -0.1]
+        dat1.layout.data.y3 = [0.1, 0.0, -0.1, 0.0]
+        dat1.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
+        EegFun.get_neighbours_xyz!(dat1.layout, 0.5)
+
+        orig_Ch2 = copy(dat1.data.Ch2)
+        # Test string channel "Ch2"
+        repaired = EegFun.repair_channels(dat1, "Ch2", method = :neighbor_interpolation)
+        @test !isapprox(repaired.data.Ch2, orig_Ch2, rtol = 1e-10)
+
+        # Test view dispatch
+        dats = [copy(dat1), copy(dat1), copy(dat1)]
+        v = @view dats[1:2]
+        EegFun.repair_channels!(v, ["Ch2"], method = :neighbor_interpolation)
+        @test !isapprox(dats[1].data.Ch2, orig_Ch2, rtol = 1e-10)
+        @test !isapprox(dats[2].data.Ch2, orig_Ch2, rtol = 1e-10)
+        @test isapprox(dats[3].data.Ch2, orig_Ch2, rtol = 1e-10)
+    end
+
 end

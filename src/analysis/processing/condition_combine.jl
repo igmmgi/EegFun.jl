@@ -147,6 +147,9 @@ function condition_combine(
     end
 end
 
+condition_combine(file_pattern::String, condition_group::AbstractVector{<:Integer}; kwargs...) =
+    condition_combine(file_pattern, [collect(Int, condition_group)]; kwargs...)
+
 """
 Batch combining of conditions for epoch data.
 """

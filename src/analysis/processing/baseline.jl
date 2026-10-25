@@ -146,6 +146,13 @@ function _to_interval(interval::TimeSelection)
     return (start, stop)
 end
 
+function _to_interval(interval::AbstractVector{<:Real})
+    length(interval) == 2 || @minimal_error("Baseline interval vector must have 2 elements [start, stop], got: $interval")
+    start, stop = Float64(interval[1]), Float64(interval[2])
+    start > stop && @minimal_error("Baseline start ($start) must be <= stop ($stop)")
+    return (start, stop)
+end
+
 
 """
     _validate_baseline_interval(baseline_interval::Interval) -> Tuple{Real,Real}

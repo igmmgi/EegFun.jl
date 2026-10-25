@@ -1064,7 +1064,14 @@ using EegFun
         res_empty = EegFun.find_bridged_channels(epochs, 0.99; channel_selection = EegFun.channels([:Ch1]))
         @test nrow(res_empty) == 0
         @test names(res_empty) == ["channel_1", "channel_2", "correlation"]
+
+        # Vector of datasets
+        res_vec = EegFun.find_bridged_channels([epochs, epochs], 0.99)
+        @test res_vec isa Vector{DataFrame}
+        @test length(res_vec) == 2
+        @test nrow(res_vec[1]) >= 1
     end
+
 
     @testset "all_data for EpochRejectionInfo" begin
         epochs = EegFun.create_test_epoch_data(n = 200, n_epochs = 5, n_channels = 2)

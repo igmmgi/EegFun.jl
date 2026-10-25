@@ -195,3 +195,6 @@ function condition_average(
         result = batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "Creating averages")
     end
 end
+
+condition_average(file_pattern::String, condition_group::AbstractVector{<:Integer}; kwargs...) =
+    condition_average(file_pattern, [collect(Int, condition_group)]; kwargs...)

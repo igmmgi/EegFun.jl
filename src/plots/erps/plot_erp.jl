@@ -600,7 +600,7 @@ Plot ERP data on an existing axis, mutating the figure and axis.
 - `ax::Axis`: The axis that was plotted on
 """
 plot_erp!(fig::Figure, ax::Axis, dat::ErpData; kwargs...) = plot_erp!(fig, ax, [dat]; kwargs...)
-function plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
+function plot_erp!(fig::Figure, ax::Axis, datasets::AbstractVector{<:ErpData}; kwargs...)
     # Extract special parameters before validation (like plot_erp does)
     baseline_interval = get(kwargs, :baseline_interval, nothing)
     channel_selection_func = get(kwargs, :channel_selection, channels())
@@ -656,7 +656,7 @@ plot_erp_errorbar!(fig::Figure, ax::Axis, dat::ErpData; kwargs...) = plot_erp_er
 
 Plot ERP errorbars for multiple datasets into an existing figure and axis.
 """
-function plot_erp_errorbar!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
+function plot_erp_errorbar!(fig::Figure, ax::Axis, datasets::AbstractVector{<:ErpData}; kwargs...)
     # Extract special parameters before validation (like plot_erp does)
     baseline_interval = get(kwargs, :baseline_interval, nothing)
     channel_selection_func = get(kwargs, :channel_selection, channels())
@@ -719,9 +719,9 @@ Note: datasets should already be subset based on channel_selection and sample_se
 """
 function _plot_erp!(
     ax::Axis,
-    datasets::Vector{ErpData},
-    channels::Vector{Symbol};
-    condition_mask::Vector{Bool} = Bool[],
+    datasets::AbstractVector{<:ErpData},
+    channels::AbstractVector{Symbol};
+    condition_mask::AbstractVector{Bool} = Bool[],
     line_refs = nothing,
     user_provided_color::Bool = false,
     variances_dict::Dict{Int,Tuple{DataFrames.DataFrame,Int}} = Dict{Int,Tuple{DataFrames.DataFrame,Int}}(),

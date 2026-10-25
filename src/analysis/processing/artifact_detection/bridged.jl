@@ -103,3 +103,7 @@ function find_bridged_channels(dat::MultiDataFrameEeg, correlation_threshold::Re
 
     return DataFrame(channel_1 = pairs_1, channel_2 = pairs_2, correlation = corrs)
 end
+
+function find_bridged_channels(dat::AbstractVector{<:EegData}, correlation_threshold::Real = 0.99; channel_selection = channels())
+    return [find_bridged_channels(d, correlation_threshold; channel_selection = channel_selection) for d in dat]
+end

@@ -339,4 +339,13 @@ using EegFun
     EegFun.baseline!(erp_vec; channel_selection = "Ch1")
     @test isapprox(mean(erp_vec[1].data.Ch1), 0.0; atol = 1e-9)
     @test isapprox(mean(erp_vec[2].data.Ch1), 0.0; atol = 1e-9)
+
+    # Test vector interval [start, stop] and TimeSelection
+    erp_vec_interval = [EegFun.create_test_erp_data(n_channels = 3, condition = 1)]
+    res_vec_interval = EegFun.baseline(erp_vec_interval, [-0.5, -0.49]; channel_selection = :Ch1)
+    @test res_vec_interval isa Vector{<:EegFun.ErpData}
+    @test isapprox(mean(res_vec_interval[1].data.Ch1[1:11]), 0.0; atol = 1e-9)
+
+    res_times_interval = EegFun.baseline(erp_vec_interval[1], EegFun.times(-0.5, -0.49); channel_selection = :Ch1)
+    @test isapprox(mean(res_times_interval.data.Ch1[1:11]), 0.0; atol = 1e-9)
 end

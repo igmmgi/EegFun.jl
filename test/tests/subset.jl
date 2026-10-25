@@ -370,5 +370,11 @@ using DataFrames
             res_range = EegFun.subset(epochs, epoch_selection = 2:4)
             @test length(res_range.data) == 3
         end
+
+        @testset "Interval vector ergonomics" begin
+            res_interval = EegFun.subset(erp, interval_selection = [-0.2, 0.2])
+            @test minimum(res_interval.data.time) >= -0.2
+            @test maximum(res_interval.data.time) <= 0.2
+        end
     end
 end

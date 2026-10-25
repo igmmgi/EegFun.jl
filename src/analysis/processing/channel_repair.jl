@@ -29,7 +29,14 @@ repair_channels!(dat, [:Fp1, :Fp2], method=:spherical_spline)
 repair_channels!(dat, [:Fp1], method=:spherical_spline, m=6, lambda=1e-6)
 ```
 """
+_to_repair_channels(ch::Symbol) = [ch]
+_to_repair_channels(ch::AbstractString) = [Symbol(ch)]
+_to_repair_channels(chans::AbstractVector{Symbol}) = collect(chans)
+_to_repair_channels(chans::AbstractVector{<:AbstractString}) = Symbol.(chans)
+_to_repair_channels(chans) = collect(chans)
+
 function repair_channels!(data, channels_to_repair; method::Symbol = :neighbor_interpolation, repair_info = nothing, kwargs...)
+    channels_to_repair = _to_repair_channels(channels_to_repair)
     # repair_info is only used for ContinuousData, not for EpochData (tracking is in EpochRejectionInfo)
     if method == :neighbor_interpolation
         _repair_channels_neighbor!(data, channels_to_repair; repair_info = repair_info, kwargs...)
@@ -64,14 +71,14 @@ function repair_channels(dat, args...; kwargs...)
     return repair_channels!(copy(dat), args...; kwargs...)
 end
 
-function repair_channels!(dat::Vector{<:EegData}, args...; kwargs...)
+function repair_channels!(dat::AbstractVector{<:EegData}, args...; kwargs...)
     for d in dat
         repair_channels!(d, args...; kwargs...)
     end
     return dat
 end
 
-function repair_channels(dat::Vector{<:EegData}, args...; kwargs...)
+function repair_channels(dat::AbstractVector{<:EegData}, args...; kwargs...)
     return [repair_channels(d, args...; kwargs...) for d in dat]
 end
 

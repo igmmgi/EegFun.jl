@@ -700,7 +700,7 @@ function _extract_erp_image_channel(epochs_data::Vector{DataFrame}, col_idx::Int
 end
 
 # Vector dispatch: plot each condition separately
-function plot_erp_image(data::Vector{EpochData}; kwargs...)
+function plot_erp_image(data::AbstractVector{<:EpochData}; kwargs...)
     results = plot_erp_image.(data; kwargs...)
     return length(results) == 1 ? only(results) : results
 end

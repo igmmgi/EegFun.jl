@@ -84,12 +84,7 @@ function plot_tf(filepath::String; kwargs...)
     end
     return plot_tf(data; kwargs...)
 end
-function plot_tf(
-    tf_data::AbstractVector{<:TimeFreqData};
-    channel_selection = channels(),
-    baseline_interval::Union{Nothing,Tuple{Real,Real}} = nothing,
-    kwargs...,
-)
+function plot_tf(tf_data::AbstractVector{<:TimeFreqData}; channel_selection = channels(), baseline_interval::Interval = nothing, kwargs...)
     isempty(tf_data) && @minimal_error("Empty TimeFreqData vector")
 
     plot_kwargs = _merge_plot_kwargs(PLOT_TF_KWARGS, kwargs)
@@ -227,7 +222,7 @@ function plot_tf(
     tf_data::TimeFreqData;
     channel_selection = channels(),
     channel_plot_order::Union{Nothing,Vector{Symbol}} = nothing,
-    baseline_interval::Union{Nothing,Tuple{Real,Real}} = nothing,
+    baseline_interval::Interval = nothing,
     kwargs...,
 )
 

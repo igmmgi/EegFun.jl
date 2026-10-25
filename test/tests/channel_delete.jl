@@ -123,4 +123,16 @@ using EegFun
         @test :Ch2 ∉ EegFun.channel_labels(dats[2])
     end
 
+    @testset "String channel deletion" begin
+        dat = EegFun.create_test_continuous_data(n = 200, n_channels = 3)
+        res = EegFun.channel_delete(dat, "Ch1")
+        @test :Ch1 ∉ EegFun.channel_labels(res)
+        @test :Ch1 ∈ EegFun.channel_labels(dat)
+
+        EegFun.channel_delete!(dat, ["Ch1", "Ch2"])
+        @test :Ch1 ∉ EegFun.channel_labels(dat)
+        @test :Ch2 ∉ EegFun.channel_labels(dat)
+        @test :Ch3 ∈ EegFun.channel_labels(dat)
+    end
+
 end

@@ -130,6 +130,12 @@ end
 _interval_to_samples(::AllSelection) = samples()
 _interval_to_samples(::Nothing) = samples()
 _interval_to_samples(t::Tuple{Real,Real}) = _interval_to_samples(TimeSelection(t[1], t[2]))
+function _interval_to_samples(v::AbstractVector{<:Real})
+    if length(v) != 2
+        @minimal_error("Time interval vector must have exactly 2 elements [start, stop], got $(length(v))")
+    end
+    return _interval_to_samples(TimeSelection(v[1], v[2]))
+end
 _interval_to_samples(f::Function) = f
 
 """

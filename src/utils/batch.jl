@@ -266,7 +266,7 @@ end
 Validate condition groups, returning error message or nothing.
 Modifies groups in-place to remove duplicates and warns about overlaps.
 """
-function _validate_condition_groups(groups::Vector{Vector{Int}})
+function _validate_condition_groups(groups::AbstractVector)
     isempty(groups) && return "Condition groups cannot be empty"
 
     all_conditions = Set{Int}()
@@ -283,7 +283,9 @@ function _validate_condition_groups(groups::Vector{Vector{Int}})
         if length(unique_group) != length(group)
             @info "  Group $group_idx: $(group) → $(unique_group) (removed duplicates)"
         end
-        groups[group_idx] = unique_group
+        if groups isa Vector{Vector{Int}} || groups isa Vector{<:Vector}
+            groups[group_idx] = unique_group
+        end
 
         # Check for overlaps between groups
         overlap = [c for c in unique_group if c in all_conditions]
@@ -298,12 +300,12 @@ function _validate_condition_groups(groups::Vector{Vector{Int}})
 end
 
 """
-    _validate_condition_pairs(pairs::Union{Vector{Tuple{Int,Int}},Vector{Vector{Int}}})
+    _validate_condition_pairs(pairs::AbstractVector)
 
 Validate condition pairs, returning error message or nothing.
 Warns about pairs with identical conditions.
 """
-function _validate_condition_pairs(pairs::Union{Vector{Tuple{Int,Int}},Vector{Vector{Int}}})
+function _validate_condition_pairs(pairs::AbstractVector)
     isempty(pairs) && return "Condition pairs cannot be empty"
 
     for (i, pair) in enumerate(pairs)

@@ -273,6 +273,41 @@ function baseline(tf_data::AbstractVector{<:TimeFreqData}, baseline_interval::Tu
     return tf_baseline(tf_data, baseline_interval; method = method)
 end
 
+# Interval normalization helpers for TimeFreqData baseline
+_to_tf_interval(interval::Tuple{Real,Real}) = (Float64(interval[1]), Float64(interval[2]))
+_to_tf_interval(interval::TimeSelection) = (interval.start, interval.stop)
+function _to_tf_interval(interval::AbstractVector{<:Real})
+    length(interval) == 2 || @minimal_error("Baseline interval vector must have 2 elements [start, stop], got: $interval")
+    return (Float64(interval[1]), Float64(interval[2]))
+end
+
+tf_baseline!(tf_data::TimeFreqData, baseline_interval::Union{AbstractVector{<:Real},TimeSelection}; method::Symbol = :db) =
+    tf_baseline!(tf_data, _to_tf_interval(baseline_interval); method = method)
+
+tf_baseline!(
+    tf_data::AbstractVector{<:TimeFreqData},
+    baseline_interval::Union{AbstractVector{<:Real},TimeSelection};
+    method::Symbol = :db,
+) = tf_baseline!(tf_data, _to_tf_interval(baseline_interval); method = method)
+
+tf_baseline(
+    tf_data::Union{TimeFreqData,AbstractVector{<:TimeFreqData}},
+    baseline_interval::Union{AbstractVector{<:Real},TimeSelection};
+    method::Symbol = :db,
+) = tf_baseline(tf_data, _to_tf_interval(baseline_interval); method = method)
+
+baseline!(
+    tf_data::Union{TimeFreqData,AbstractVector{<:TimeFreqData}},
+    baseline_interval::Union{AbstractVector{<:Real},TimeSelection};
+    method::Symbol = :db,
+) = tf_baseline!(tf_data, _to_tf_interval(baseline_interval); method = method)
+
+baseline(
+    tf_data::Union{TimeFreqData,AbstractVector{<:TimeFreqData}},
+    baseline_interval::Union{AbstractVector{<:Real},TimeSelection};
+    method::Symbol = :db,
+) = tf_baseline(tf_data, _to_tf_interval(baseline_interval); method = method)
+
 """
     tf_baseline(file_pattern::String, baseline_interval;
                 method=:db, input_dir=pwd(), output_dir=nothing,
