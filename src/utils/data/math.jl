@@ -208,3 +208,18 @@ function _ylimits(
     max_val = maximum(lim[2] for lim in limits)
     return (min_val, max_val)
 end
+
+"""
+    _ylimits(datasets::Vector{<:Union{ErpData, ContinuousData, EpochData}}; kwargs...)
+
+Compute global y-limits (min, max) across multiple EEG datasets.
+"""
+function _ylimits(
+    datasets::Vector{<:Union{ErpData, ContinuousData, EpochData}};
+    kwargs...,
+)::Tuple{Float64,Float64}
+    isempty(datasets) && return (0.0, 1.0)
+    all_limits = [_ylimits(d; kwargs...) for d in datasets]
+    return (minimum(lim[1] for lim in all_limits), maximum(lim[2] for lim in all_limits))
+end
+

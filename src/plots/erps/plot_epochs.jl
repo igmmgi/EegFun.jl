@@ -6,6 +6,7 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Data processing
     :average_channels => (false, "Whether to average across channels"),
     :plot_avg_trials => (true, "Whether to draw ERP average overlay"),
+    :baseline_interval => (nothing, "Baseline interval as (start, stop) tuple or range in seconds"),
 
     # Axis limits, labels, and direction
     :plot_title => (nothing, "Plot title. If nothing, automatically determined"),
@@ -187,111 +188,96 @@ function plot_epochs(
         include_extra = include_extra,
     )
 
+    # Check if subsetting resulted in empty data before generating window title
+    isempty(dat_subset) && @minimal_error "No data matched the selection criteria!"
+
+    # Apply initial baseline if requested
+    if !isnothing(plot_kwargs[:baseline_interval])
+        baseline!(dat_subset, plot_kwargs[:baseline_interval])
+    end
+
     # Generate window title from datasets
     title_str = _generate_window_title(dat_subset)
     _set_window_title(title_str)
 
-    # Check if subsetting resulted in empty data
-    isempty(dat_subset) && @minimal_error "No data matched the selection criteria!"
+    try
+        # Get ALL channels from first dataset (not filtered by channel_selection)
+        all_channels = channel_labels(dat_subset[1])
+        extra_channels = extra_labels(dat_subset[1])
+        all_channels = vcat(all_channels, extra_channels)
 
-    # Get ALL channels from first dataset (not filtered by channel_selection)
-    all_channels = channel_labels(dat_subset[1])
-    extra_channels = extra_labels(dat_subset[1])
-    all_channels = vcat(all_channels, extra_channels)
+        # Apply channel_selection to determine which channels to plot
+        selected_channels = get_selected_channels(first(dat_subset), channel_selection; include_meta = false, include_extra = include_extra)
+        # Preserve order from selected_channels (user's channel_selection order)
+        all_plot_channels = [ch for ch in selected_channels if ch in all_channels]
 
-    # Apply channel_selection to determine which channels to plot
-    selected_channels = get_selected_channels(first(dat_subset), channel_selection; include_meta = false, include_extra = include_extra)
-    # Preserve order from selected_channels (user's channel_selection order)
-    all_plot_channels = [ch for ch in selected_channels if ch in all_channels]
+        # Validate we have channels to plot
+        isempty(all_plot_channels) && @minimal_error "No channels selected for plotting"
 
-    # Validate we have channels to plot
-    isempty(all_plot_channels) && @minimal_error "No channels selected for plotting"
-
-    # If average_channels is requested, apply channel_average! directly to dat_subset (mutate in place)
-    if plot_kwargs[:average_channels]
-        for dat in dat_subset
-            channel_average!(dat; channel_selections = [channels(all_plot_channels)], output_labels = [:avg], reduce = false)
+        # If average_channels is requested, apply channel_average! directly to dat_subset (mutate in place)
+        if plot_kwargs[:average_channels]
+            for dat in dat_subset
+                channel_average!(dat; channel_selections = [channels(all_plot_channels)], output_labels = [:avg], reduce = false)
+            end
         end
-    end
 
-    # Create dat_subset_avg: average over trials (ERP data) for the average overlay
-    dat_subset_avg = [average_epochs(dat) for dat in dat_subset]
+        # Create dat_subset_avg: average over trials (ERP data) for the average overlay
+        dat_subset_avg = [average_epochs(dat) for dat in dat_subset]
 
-    # Precompute time_cat vectors once per condition for all channels
-    time_cat_list = [_build_time_cat(n_epochs(dat), dat.data[1][!, :time]) for dat in dat_subset]
+        # Precompute time_cat vectors once per condition for all channels
+        time_cat_list = [_build_time_cat(n_epochs(dat), dat.data[1][!, :time]) for dat in dat_subset]
 
-    # Compute colors - need to account for number of channels when in :single layout
-    n_conditions = length(dat_subset)
-    n_channels_for_colors = (layout == :single && length(all_plot_channels) > 1) ? length(all_plot_channels) : 1
-    color_cycle = haskey(Makie.current_default_theme(), :palette) ? Makie.current_default_theme()[:palette][:color][] : Makie.wong_colors()
-    resolved_colormap =
-        isnothing(plot_kwargs[:colormap]) ?
-        (haskey(Makie.current_default_theme(), :colormap) ? Makie.current_default_theme()[:colormap][] : nothing) : plot_kwargs[:colormap]
-    condition_colors_list = _compute_dataset_colors(
-        plot_kwargs[:color],
-        n_conditions,
-        n_channels_for_colors,
-        resolved_colormap,
-        user_provided_color,
-        color_cycle,
-    )
+        # Compute colors - need to account for number of channels when in :single layout (only if not averaging channels)
+        n_conditions = length(dat_subset)
+        n_channels_for_colors = (layout == :single && length(all_plot_channels) > 1 && !plot_kwargs[:average_channels]) ? length(all_plot_channels) : 1
+        color_cycle = haskey(Makie.current_default_theme(), :palette) ? Makie.current_default_theme()[:palette][:color][] : Makie.wong_colors()
+        resolved_colormap =
+            isnothing(plot_kwargs[:colormap]) ?
+            (haskey(Makie.current_default_theme(), :colormap) ? Makie.current_default_theme()[:colormap][] : nothing) : plot_kwargs[:colormap]
+        condition_colors_list = _compute_dataset_colors(
+            plot_kwargs[:color],
+            n_conditions,
+            n_channels_for_colors,
+            resolved_colormap,
+            user_provided_color,
+            color_cycle,
+        )
 
-    @info "plot_epochs: Plotting $(length(all_plot_channels)) channels across $(n_conditions) conditions"
+        @info "plot_epochs: Plotting $(length(all_plot_channels)) channels across $(n_conditions) conditions"
 
-    # Extract layout_* parameters, remove prefix, and pass to create_layout
-    layout_kwargs = pop!(plot_kwargs, :layout_kwargs, (;))
+        # Extract layout_* parameters, remove prefix, and pass to create_layout
+        layout_kwargs = pop!(plot_kwargs, :layout_kwargs, (;))
 
-    # Create plot_layout object for unified selection system
-    plot_layout = create_layout(layout, all_plot_channels, first(dat_subset).layout; layout_kwargs...)
+        # Create plot_layout object for unified selection system
+        plot_layout = create_layout(layout, all_plot_channels, first(dat_subset).layout; layout_kwargs...)
 
-    # Create figure with padding (guaranteed to be in plot_kwargs)
-    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
-    fig = Figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
-    axes = Axis[]
+        # Create figure with padding (guaranteed to be in plot_kwargs)
+        fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
+        fig = Figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+        axes = Axis[]
 
-    # Ensure layout size handles title properly
-    layout_kwargs = pop!(plot_kwargs, :layout_kwargs, (;))
-
-    # Initialize line references for control panel if interactive
-    line_refs = nothing
-    if plot_kwargs[:interactive]
-        n_axes = (layout == :grid || layout == :topo) ? length(all_plot_channels) : 1
-        line_refs = [Dict{Int,Dict{Symbol,Any}}() for _ = 1:n_axes]
-    end
+        # Initialize line references for control panel if interactive
+        line_refs = nothing
+        if plot_kwargs[:interactive]
+            n_axes = (layout == :grid || layout == :topo) ? length(all_plot_channels) : 1
+            line_refs = [Dict{Int,Dict{Symbol,Any}}() for _ = 1:n_axes]
+        end
 
     if plot_kwargs[:average_channels]
         ax = Axis(fig[1, 1])
         push!(axes, ax)
         ax_line_refs = plot_kwargs[:interactive] ? line_refs[1] : nothing
 
-        # For each condition, plot using dat_subset 
-        for (cond_idx, dat) in enumerate(dat_subset)
-            cond_plot_kwargs = merge(plot_kwargs, Dict(:color => condition_colors_list[cond_idx]))
-            label = _get_condition_label(dat, cond_idx, plot_kwargs[:legend_labels])
-
-            trial_line, trial_y_obs = _plot_epochs!(
-                ax,
-                dat,
-                [:avg],
-                cond_plot_kwargs;
-                time_cat = time_cat_list[cond_idx],
-                label = label,
-                line_refs = ax_line_refs,
-            )
-
-            if plot_kwargs[:interactive]
-                _store_line_ref!(ax_line_refs, cond_idx, :avg, trial_line, trial_y_obs)
-            end
-
-            if plot_kwargs[:plot_avg_trials]
-                erp_dat = dat_subset_avg[cond_idx]
-                avg_label = label * " (avg)"
-                avg_line, y_obs = _plot_erp_average!(ax, erp_dat, [:avg], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
-                if plot_kwargs[:interactive]
-                    _store_avg_line_ref!(ax_line_refs, cond_idx, :avg, avg_line, y_obs)
-                end
-            end
-        end
+        _plot_epochs_conditions_on_axis!(
+            ax,
+            dat_subset,
+            :avg,
+            condition_colors_list,
+            plot_kwargs,
+            ax_line_refs;
+            dat_subset_avg = dat_subset_avg,
+            time_cat_list = time_cat_list,
+        )
 
         # Add legend
         _add_epochs_legend!(ax, [:avg], dat_subset, plot_kwargs)
@@ -302,32 +288,7 @@ function plot_epochs(
         else
             ax.title = "Avg: $(_print_vector(all_plot_channels, max_length = 8, n_ends = 3))"
         end
-        _set_axis_properties!(
-            ax;
-            xlim = plot_kwargs[:xlim],
-            ylim = plot_kwargs[:ylim],
-            xlabel = plot_kwargs[:xlabel],
-            ylabel = plot_kwargs[:ylabel],
-            yreversed = plot_kwargs[:yreversed],
-            scale_x_value = plot_kwargs[:scale_x_value],
-            scale_y_value = plot_kwargs[:scale_y_value],
-        )
-        _set_axis_grid!(
-            ax;
-            xgrid = plot_kwargs[:xgrid],
-            ygrid = plot_kwargs[:ygrid],
-            xminorgrid = plot_kwargs[:xminorgrid],
-            yminorgrid = plot_kwargs[:yminorgrid],
-        )
-        _set_origin_lines!(ax; add_xy_origin = plot_kwargs[:add_xy_origin])
-        _add_origin_scale_indicator!(
-            ax;
-            axis_type = plot_kwargs[:axis_type],
-            scale_x_value = plot_kwargs[:scale_x_value],
-            scale_y_value = plot_kwargs[:scale_y_value],
-            xlabel = plot_kwargs[:xlabel],
-            ylabel = plot_kwargs[:ylabel],
-        )
+        _finalize_epochs_axis!(ax, plot_kwargs)
 
     else # Multi-channel layout (single, grid, topo)
 
@@ -339,69 +300,26 @@ function plot_epochs(
 
             # Plot all conditions for each channel
             for (ch_idx, ch) in enumerate(all_plot_channels)
-                for (cond_idx, dat) in enumerate(dat_subset)
-                    channel_suffix = length(all_plot_channels) > 1 ? " ($ch)" : ""
-                    label = _get_condition_label(dat, cond_idx, plot_kwargs[:legend_labels], channel_suffix)
-
-                    color_idx = length(all_plot_channels) > 1 ? ((cond_idx - 1) * length(all_plot_channels) + ch_idx) : cond_idx
-                    cond_plot_kwargs = merge(plot_kwargs, Dict(:color => condition_colors_list[color_idx]))
-
-                    trial_line, trial_y_obs = _plot_epochs!(
-                        ax,
-                        dat,
-                        [ch],
-                        cond_plot_kwargs;
-                        time_cat = time_cat_list[cond_idx],
-                        label = label,
-                        line_refs = ax_line_refs,
-                    )
-
-                    if plot_kwargs[:interactive]
-                        _store_line_ref!(ax_line_refs, cond_idx, ch, trial_line, trial_y_obs)
-                    end
-
-                    if plot_kwargs[:plot_avg_trials]
-                        erp_dat = dat_subset_avg[cond_idx]
-                        avg_label = label * " (avg)"
-                        avg_line, y_obs =
-                            _plot_erp_average!(ax, erp_dat, [ch], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
-                        if plot_kwargs[:interactive]
-                            _store_avg_line_ref!(ax_line_refs, cond_idx, ch, avg_line, y_obs)
-                        end
-                    end
-                end
+                ch_colors = [condition_colors_list[length(all_plot_channels) > 1 ? ((ci - 1) * length(all_plot_channels) + ch_idx) : ci] for ci in 1:length(dat_subset)]
+                channel_suffix = length(all_plot_channels) > 1 ? " ($ch)" : ""
+                _plot_epochs_conditions_on_axis!(
+                    ax,
+                    dat_subset,
+                    ch,
+                    ch_colors,
+                    plot_kwargs,
+                    ax_line_refs;
+                    dat_subset_avg = dat_subset_avg,
+                    time_cat_list = time_cat_list,
+                    channel_suffix = channel_suffix,
+                )
             end
 
             # Add legend
             _add_epochs_legend!(ax, all_plot_channels, dat_subset, plot_kwargs)
 
             # Set axis properties
-            _set_axis_properties!(
-                ax;
-                xlim = plot_kwargs[:xlim],
-                ylim = plot_kwargs[:ylim],
-                xlabel = plot_kwargs[:xlabel],
-                ylabel = plot_kwargs[:ylabel],
-                yreversed = plot_kwargs[:yreversed],
-                scale_x_value = plot_kwargs[:scale_x_value],
-                scale_y_value = plot_kwargs[:scale_y_value],
-            )
-            _set_axis_grid!(
-                ax;
-                xgrid = plot_kwargs[:xgrid],
-                ygrid = plot_kwargs[:ygrid],
-                xminorgrid = plot_kwargs[:xminorgrid],
-                yminorgrid = plot_kwargs[:yminorgrid],
-            )
-            _set_origin_lines!(ax; add_xy_origin = plot_kwargs[:add_xy_origin])
-            _add_origin_scale_indicator!(
-                ax;
-                axis_type = plot_kwargs[:axis_type],
-                scale_x_value = plot_kwargs[:scale_x_value],
-                scale_y_value = plot_kwargs[:scale_y_value],
-                xlabel = plot_kwargs[:xlabel],
-                ylabel = plot_kwargs[:ylabel],
-            )
+            _finalize_epochs_axis!(ax, plot_kwargs)
 
         elseif layout == :grid
             # Use layout_grid_dims if provided, otherwise calculate best rectangle
@@ -473,12 +391,14 @@ function plot_epochs(
         end
     end
 
-    if plot_kwargs[:display_plot]
-        _display_figure(fig)
-    end
+        if plot_kwargs[:display_plot]
+            _display_figure(fig)
+        end
 
-    _set_window_title("Makie")
-    return (fig = fig, axes = axes)
+        return (fig = fig, axes = axes)
+    finally
+        _set_window_title("Makie")
+    end
 end
 function plot_epochs(
     dat::EpochData;
@@ -504,19 +424,92 @@ function plot_epochs(
     return (fig = result.fig, axes = result.axes)
 end
 
+"""Finalize standard axis properties, grids, origin lines, and scale indicator."""
+function _finalize_epochs_axis!(ax::Axis, kw::Dict)
+    _set_axis_properties!(
+        ax;
+        xlim = kw[:xlim],
+        ylim = kw[:ylim],
+        xlabel = kw[:xlabel],
+        ylabel = kw[:ylabel],
+        yreversed = kw[:yreversed],
+        scale_x_value = kw[:scale_x_value],
+        scale_y_value = kw[:scale_y_value],
+    )
+    _set_axis_grid!(
+        ax;
+        xgrid = kw[:xgrid],
+        ygrid = kw[:ygrid],
+        xminorgrid = kw[:xminorgrid],
+        yminorgrid = kw[:yminorgrid],
+    )
+    _set_origin_lines!(ax; add_xy_origin = kw[:add_xy_origin])
+    _add_origin_scale_indicator!(
+        ax;
+        axis_type = kw[:axis_type],
+        scale_x_value = kw[:scale_x_value],
+        scale_y_value = kw[:scale_y_value],
+        xlabel = kw[:xlabel],
+        ylabel = kw[:ylabel],
+    )
+end
+
+"""Plot all conditions for a given channel on an axis, with optional average overlay and line tracking."""
+function _plot_epochs_conditions_on_axis!(
+    ax::Axis,
+    datasets::Vector{EpochData},
+    channel::Symbol,
+    colors::Vector,
+    plot_kwargs::Dict,
+    ax_line_refs;
+    dat_subset_avg::Union{Vector{ErpData},Nothing} = nothing,
+    time_cat_list::Union{Vector{<:AbstractVector},Nothing} = nothing,
+    channel_suffix::String = "",
+)
+    for (cond_idx, dat) in enumerate(datasets)
+        label = _get_condition_label(dat, cond_idx, plot_kwargs[:legend_labels], channel_suffix)
+        cond_plot_kwargs = merge(plot_kwargs, Dict(:color => colors[cond_idx]))
+        tc = isnothing(time_cat_list) ? nothing : time_cat_list[cond_idx]
+
+        trial_line, trial_y_obs = _plot_epochs!(
+            ax,
+            dat,
+            [channel],
+            cond_plot_kwargs;
+            time_cat = tc,
+            label = label,
+            line_refs = ax_line_refs,
+        )
+
+        if !isnothing(ax_line_refs)
+            _store_line_ref!(ax_line_refs, cond_idx, channel, trial_line, trial_y_obs)
+        end
+
+        if plot_kwargs[:plot_avg_trials]
+            erp_dat = !isnothing(dat_subset_avg) ? dat_subset_avg[cond_idx] : average_epochs(dat)
+            avg_label = label * " (avg)"
+            avg_line, y_obs =
+                _plot_erp_average!(ax, erp_dat, [channel], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
+            if !isnothing(ax_line_refs)
+                _store_avg_line_ref!(ax_line_refs, cond_idx, channel, avg_line, y_obs)
+            end
+        end
+    end
+end
+
 """Plot single-channel epoch traces (NaN-separated trials) onto an axis."""
 function _plot_epochs!(
     ax,
     dat,
     channels,
     plot_kwargs;
-    time_cat::Union{Vector{Float64},Nothing} = nothing,
+    time_cat::Union{AbstractVector,Nothing} = nothing,
     label::Union{String,Nothing} = nothing,
     line_refs = nothing,
 )::Tuple{Lines,Observable}
 
-    @info "plot_epochs: $(_print_vector(channels))"
-    @assert length(channels) == 1 "_plot_epochs! expects a single channel"
+    @debug "plot_epochs: $(_print_vector(channels))"
+    length(channels) == 1 || @minimal_error "_plot_epochs! expects a single channel"
 
     # Cache time vector and styles
     time_vec = dat.data[1][!, :time]
@@ -555,7 +548,7 @@ function _plot_erp_average!(
     label::Union{String,Nothing} = nothing,
     line_refs = nothing,
 )::Tuple{Lines,Observable}
-    @assert length(channels) == 1 "_plot_erp_average! expects a single channel"
+    length(channels) == 1 || @minimal_error "_plot_erp_average! expects a single channel"
     ch = channels[1]
 
     time_vec = erp_dat.data[!, :time]
@@ -590,11 +583,10 @@ function _plot_epochs_grid_multi!(
 )
     rows, cols = grid_dims
 
-    # Calculate y-range if not provided (use first dataset as reference)
+    # Calculate y-range if not provided across all datasets
     ylim = plot_kwargs[:ylim]
     if isnothing(ylim)
-        yr = _ylimits(datasets[1]; channel_selection = channels(all_plot_channels))
-        ylim = (yr[1], yr[2])
+        ylim = _ylimits(datasets; channel_selection = channels(all_plot_channels))
     end
 
     for (idx, channel) in enumerate(all_plot_channels)
@@ -607,34 +599,16 @@ function _plot_epochs_grid_multi!(
         ax_line_refs = !isnothing(line_refs) && idx <= length(line_refs) ? line_refs[idx] : nothing
 
         # Plot all conditions for this channel
-        for (cond_idx, dat) in enumerate(datasets)
-            label = _get_condition_label(dat, cond_idx, plot_kwargs[:legend_labels])
-            cond_plot_kwargs = merge(plot_kwargs, Dict(:color => condition_colors[cond_idx]))
-            tc = isnothing(time_cat_list) ? nothing : time_cat_list[cond_idx]
-            trial_line, trial_y_obs = _plot_epochs!(
-                ax,
-                dat,
-                [channel],
-                cond_plot_kwargs;
-                time_cat = tc,
-                label = label,
-                line_refs = ax_line_refs,
-            )
-
-            if !isnothing(ax_line_refs)
-                _store_line_ref!(ax_line_refs, cond_idx, channel, trial_line, trial_y_obs)
-            end
-
-            if plot_kwargs[:plot_avg_trials]
-                erp_dat = !isnothing(dat_subset_avg) ? dat_subset_avg[cond_idx] : average_epochs(dat)
-                avg_label = label * " (avg)"
-                avg_line, y_obs =
-                    _plot_erp_average!(ax, erp_dat, [channel], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
-                if !isnothing(ax_line_refs)
-                    _store_avg_line_ref!(ax_line_refs, cond_idx, channel, avg_line, y_obs)
-                end
-            end
-        end
+        _plot_epochs_conditions_on_axis!(
+            ax,
+            datasets,
+            channel,
+            condition_colors,
+            plot_kwargs,
+            ax_line_refs;
+            dat_subset_avg = dat_subset_avg,
+            time_cat_list = time_cat_list,
+        )
 
         # Add legend for this channel
         _add_epochs_legend!(ax, [channel], datasets, plot_kwargs)
@@ -653,32 +627,7 @@ function _plot_epochs_grid_multi!(
         end
 
         ax.title = string(channel)
-        _set_axis_properties!(
-            ax;
-            xlim = axis_kwargs[:xlim],
-            ylim = axis_kwargs[:ylim],
-            xlabel = axis_kwargs[:xlabel],
-            ylabel = axis_kwargs[:ylabel],
-            yreversed = axis_kwargs[:yreversed],
-            scale_x_value = axis_kwargs[:scale_x_value],
-            scale_y_value = axis_kwargs[:scale_y_value],
-        )
-        _set_axis_grid!(
-            ax;
-            xgrid = axis_kwargs[:xgrid],
-            ygrid = axis_kwargs[:ygrid],
-            xminorgrid = axis_kwargs[:xminorgrid],
-            yminorgrid = axis_kwargs[:yminorgrid],
-        )
-        _set_origin_lines!(ax; add_xy_origin = axis_kwargs[:add_xy_origin])
-        _add_origin_scale_indicator!(
-            ax;
-            axis_type = axis_kwargs[:axis_type],
-            scale_x_value = axis_kwargs[:scale_x_value],
-            scale_y_value = axis_kwargs[:scale_y_value],
-            xlabel = axis_kwargs[:xlabel],
-            ylabel = axis_kwargs[:ylabel],
-        )
+        _finalize_epochs_axis!(ax, axis_kwargs)
     end
 
     # Link axes for synchronized zooming
@@ -712,11 +661,10 @@ function _plot_epochs_topo_multi!(
         polar_to_cartesian_xy!(dat.layout)
     end
 
-    # Determine global y-lims for consistency across small axes
+    # Determine global y-lims across all datasets for consistency across small axes
     ylim = plot_kwargs[:ylim]
     if isnothing(ylim)
-        yr = _ylimits(dat; channel_selection = channels(all_plot_channels))
-        ylim = (yr[1], yr[2])
+        ylim = _ylimits(datasets; channel_selection = channels(all_plot_channels))
     end
 
     plot_w = get(plot_kwargs, :layout_topo_plot_width, !isnothing(plot_layout) ? get(plot_layout.metadata, :topo_plot_width, 0.1) : 0.1)
@@ -754,34 +702,16 @@ function _plot_epochs_topo_multi!(
         ax_line_refs = !isnothing(line_refs) && ch_idx <= length(line_refs) ? line_refs[ch_idx] : nothing
 
         # Plot all conditions for this channel
-        for (cond_idx, dat_cond) in enumerate(datasets)
-            label = _get_condition_label(dat_cond, cond_idx, plot_kwargs[:legend_labels])
-            cond_plot_kwargs = merge(plot_kwargs, Dict(:color => condition_colors[cond_idx]))
-            tc = isnothing(time_cat_list) ? nothing : time_cat_list[cond_idx]
-            trial_line, trial_y_obs = _plot_epochs!(
-                ax,
-                dat_cond,
-                [ch],
-                cond_plot_kwargs;
-                time_cat = tc,
-                label = label,
-                line_refs = ax_line_refs,
-            )
-
-            if !isnothing(ax_line_refs)
-                _store_line_ref!(ax_line_refs, cond_idx, ch, trial_line, trial_y_obs)
-            end
-
-            if plot_kwargs[:plot_avg_trials]
-                erp_dat = !isnothing(dat_subset_avg) ? dat_subset_avg[cond_idx] : average_epochs(dat_cond)
-                avg_label = label * " (avg)"
-                avg_line, y_obs =
-                    _plot_erp_average!(ax, erp_dat, [ch], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
-                if !isnothing(ax_line_refs)
-                    _store_avg_line_ref!(ax_line_refs, cond_idx, ch, avg_line, y_obs)
-                end
-            end
-        end
+        _plot_epochs_conditions_on_axis!(
+            ax,
+            datasets,
+            ch,
+            condition_colors,
+            plot_kwargs,
+            ax_line_refs;
+            dat_subset_avg = dat_subset_avg,
+            time_cat_list = time_cat_list,
+        )
 
         # Add legend for this channel
         _add_epochs_legend!(ax, [ch], datasets, plot_kwargs)
@@ -789,32 +719,7 @@ function _plot_epochs_topo_multi!(
         # Suppress axis labels on all but the final axis
         axis_kwargs = merge(plot_kwargs, Dict(:ylim => ylim, :xlabel => "", :ylabel => ""))
         ax.title = string(ch)
-        _set_axis_properties!(
-            ax;
-            xlim = axis_kwargs[:xlim],
-            ylim = axis_kwargs[:ylim],
-            xlabel = axis_kwargs[:xlabel],
-            ylabel = axis_kwargs[:ylabel],
-            yreversed = axis_kwargs[:yreversed],
-            scale_x_value = axis_kwargs[:scale_x_value],
-            scale_y_value = axis_kwargs[:scale_y_value],
-        )
-        _set_axis_grid!(
-            ax;
-            xgrid = axis_kwargs[:xgrid],
-            ygrid = axis_kwargs[:ygrid],
-            xminorgrid = axis_kwargs[:xminorgrid],
-            yminorgrid = axis_kwargs[:yminorgrid],
-        )
-        _set_origin_lines!(ax; add_xy_origin = axis_kwargs[:add_xy_origin])
-        _add_origin_scale_indicator!(
-            ax;
-            axis_type = axis_kwargs[:axis_type],
-            scale_x_value = axis_kwargs[:scale_x_value],
-            scale_y_value = axis_kwargs[:scale_y_value],
-            xlabel = axis_kwargs[:xlabel],
-            ylabel = axis_kwargs[:ylabel],
-        )
+        _finalize_epochs_axis!(ax, axis_kwargs)
         ax.xticklabelsvisible = false
         ax.yticklabelsvisible = false
         ax.xticksvisible = false
@@ -826,34 +731,21 @@ function _plot_epochs_topo_multi!(
     if show_scale
         @info "Showing scale axis"
         scale_pos = get(plot_kwargs, :layout_topo_scale_pos, !isnothing(plot_layout) ? get(plot_layout.metadata, :topo_scale_pos, (0.8, -0.8)) : (0.8, -0.8))
+        scale_halign = 0.0 <= scale_pos[1] <= 1.0 ? scale_pos[1] : clamp((scale_pos[1] + 1) / 2, 0.0, 1.0)
+        scale_valign = 0.0 <= scale_pos[2] <= 1.0 ? scale_pos[2] : clamp((scale_pos[2] + 1) / 2, 0.0, 1.0)
         scale_ax = Axis(
             fig[1, 1],
             width = Relative(plot_w),
             height = Relative(plot_h),
-            halign = scale_pos[1],
-            valign = scale_pos[2],
+            halign = scale_halign,
+            valign = scale_valign,
         )
         push!(axes, scale_ax)
         # No data in this axis; just show labels and limits
         tmin, tmax = (dat.data[1].time[1], dat.data[1].time[end])
         axis_kwargs = merge(plot_kwargs, Dict(:ylim => ylim, :xlim => (tmin, tmax)))
         scale_ax.title = ""
-        _set_axis_properties!(
-            scale_ax;
-            xlim = axis_kwargs[:xlim],
-            ylim = axis_kwargs[:ylim],
-            xlabel = axis_kwargs[:xlabel],
-            ylabel = axis_kwargs[:ylabel],
-            yreversed = axis_kwargs[:yreversed],
-        )
-        _set_axis_grid!(
-            scale_ax;
-            xgrid = axis_kwargs[:xgrid],
-            ygrid = axis_kwargs[:ygrid],
-            xminorgrid = axis_kwargs[:xminorgrid],
-            yminorgrid = axis_kwargs[:yminorgrid],
-        )
-        _set_origin_lines!(scale_ax; add_xy_origin = axis_kwargs[:add_xy_origin])
+        _finalize_epochs_axis!(scale_ax, axis_kwargs)
         # Scale axis should show labels and ticks (unlike channel axes which are hidden)
         scale_ax.xticklabelsvisible = true
         scale_ax.yticklabelsvisible = true
@@ -886,16 +778,14 @@ function _add_epochs_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vecto
     # Extract legend parameters
     legend_label = kwargs[:legend_label]
     legend_position = kwargs[:legend_position]
-    if isnothing(kwargs[:legend_nbanks])
-        kwargs[:legend_nbanks] = length(channels) > 10 ? cld(length(channels), 10) : 1
-    end
-    legend_kwargs = pop!(kwargs, :legend_kwargs, (;))
+    nbanks = something(get(kwargs, :legend_nbanks, nothing), length(channels) > 10 ? cld(length(channels), 10) : 1)
+    legend_kwargs = get(kwargs, :legend_kwargs, (;))
 
     # Add legend with position and optional label
-    if legend_label != ""
-        leg = axislegend(ax, legend_label; position = legend_position, legend_kwargs...)
+    if isempty(legend_label)
+        leg = axislegend(ax; position = legend_position, nbanks = nbanks, legend_kwargs...)
     else
-        leg = axislegend(ax; position = legend_position, legend_kwargs...)
+        leg = axislegend(ax, legend_label; position = legend_position, nbanks = nbanks, legend_kwargs...)
     end
 
     return leg
@@ -938,12 +828,11 @@ end
 function _build_time_cat(n_trials::Int, time_vec::AbstractVector)
     n = length(time_vec)
     total_len = n_trials * n + (n_trials - 1)
-    time_cat = Vector{Float64}(undef, total_len)
+    T = eltype(time_vec)
+    time_cat = Vector{T}(undef, total_len)
     pos = 1
     @inbounds for t = 1:n_trials
-        @simd for i = 1:n
-            time_cat[pos+i-1] = time_vec[i]
-        end
+        copyto!(time_cat, pos, time_vec, 1, n)
         pos += n
         if t != n_trials
             time_cat[pos] = NaN
@@ -958,14 +847,13 @@ function _concatenate_trials(trials, ch, time_vec)
     m = length(trials)
     n = length(time_vec)
     total_len = m * n + (m - 1)
-    y_cat = Vector{Float64}(undef, total_len)
     col_idx = ch isa Int ? ch : DataFrames.columnindex(trials[1], ch)
+    T = eltype(trials[1][!, col_idx])
+    y_cat = Vector{T}(undef, total_len)
     pos = 1
     @inbounds for t = 1:m
-        y = trials[t][!, col_idx]::Vector{Float64}
-        @simd for i = 1:n
-            y_cat[pos+i-1] = y[i]
-        end
+        y = trials[t][!, col_idx]
+        copyto!(y_cat, pos, y, 1, n)
         pos += n
         if t != m
             y_cat[pos] = NaN
@@ -1032,43 +920,30 @@ function _setup_linked_legend_interactions_epochs!(line_refs::Vector{<:Dict})
         end
     end
 
-    # Sync trial lines independently across plots
+    # Sync trial and average lines independently across plots
     for lines in values(condition_trial_lines)
-        length(lines) > 1 || continue  # Only need syncing if there are multiple lines
-
-        # Create a flag to prevent infinite loops
-        syncing = Ref(false)
-
-        for line in lines
-            other_lines = [l for l in lines if l !== line]
-            on(line.visible) do visible_val
-                syncing[] && return  # Skip if already syncing
-                syncing[] = true
-                for other_line in other_lines
-                    other_line.visible = visible_val
-                end
-                syncing[] = false
-            end
-        end
+        _sync_lines!(lines)
     end
-
-    # Sync average lines independently across plots
     for lines in values(condition_avg_lines)
-        length(lines) > 1 || continue  # Only need syncing if there are multiple lines
+        _sync_lines!(lines)
+    end
+end
 
-        # Create a flag to prevent infinite loops
-        syncing = Ref(false)
-
-        for line in lines
-            other_lines = [l for l in lines if l !== line]
-            on(line.visible) do visible_val
-                syncing[] && return  # Skip if already syncing
-                syncing[] = true
-                for other_line in other_lines
+"""Helper to sync visibility across lines in a group."""
+function _sync_lines!(lines::Vector)
+    length(lines) > 1 || return
+    syncing = Ref(false)
+    for line in lines
+        other_lines = [l for l in lines if l !== line]
+        on(line.visible) do visible_val
+            syncing[] && return
+            syncing[] = true
+            for other_line in other_lines
+                if other_line.visible[] != visible_val
                     other_line.visible = visible_val
                 end
-                syncing[] = false
             end
+            syncing[] = false
         end
     end
 end
@@ -1091,6 +966,7 @@ function _setup_epochs_control_panel!(
     condition_checked_ref::Ref{Union{Vector{Observable{Bool}},Nothing}} = Ref{Union{Vector{Observable{Bool}},Nothing}}(nothing),
 )
     control_fig = Ref{Union{Figure,Nothing}}(nothing)
+    control_screen = Ref{Any}(nothing)
 
     # Set up linked legend interactions
     _setup_linked_legend_interactions_epochs!(line_refs)
@@ -1115,7 +991,7 @@ function _setup_epochs_control_panel!(
         baseline_interval_new = (!isnothing(start_val) && !isnothing(stop_val)) ? (start_val, stop_val) : nothing
 
         # Check if baseline actually changed
-        baseline_changed = baseline_interval_new !== previous_baseline[]
+        baseline_changed = baseline_interval_new != previous_baseline[]
 
         # Apply baseline if it changed
         if baseline_changed && !isnothing(baseline_interval_new)
@@ -1145,7 +1021,9 @@ function _setup_epochs_control_panel!(
                     # Update trial line visibility and y-data
                     if haskey(line_data, :trials) && !isnothing(line_data[:trials])
                         trial_line, trial_y_obs = line_data[:trials]
-                        trial_line.visible = visible
+                        if trial_line.visible[] != visible
+                            trial_line.visible = visible
+                        end
                         if baseline_changed
                             time_vec = dat.data[1][!, :time]
                             trial_y_obs[] = _concatenate_trials(dat.data, ch, time_vec)
@@ -1155,7 +1033,9 @@ function _setup_epochs_control_panel!(
                     # Update average line visibility and y-data (if present)
                     if haskey(line_data, :average) && !isnothing(line_data[:average])
                         avg_line, y_obs = line_data[:average]
-                        avg_line.visible = visible
+                        if avg_line.visible[] != visible
+                            avg_line.visible = visible
+                        end
                         if baseline_changed && cond_idx <= length(dat_subset_avg)
                             y_obs[] = dat_subset_avg[cond_idx].data[!, ch]
                         end
@@ -1163,33 +1043,43 @@ function _setup_epochs_control_panel!(
                 end
             end
         end
+    end
 
+    # Auto-update on condition changes (registered once outside keyboard handler)
+    for checked in condition_checked
+        on(checked) do _
+            update_plot!()
+        end
     end
 
     # Keyboard handler for 'c' key
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press && event.key == Keyboard.c
+            # If control panel is already open, do not spawn another
+            if !isnothing(control_screen[]) && hasmethod(isopen, Tuple{typeof(control_screen[])}) && isopen(control_screen[])
+                return
+            end
 
             # Create new control panel
             control_fig[] = Figure(title = "Epochs Control Panel", size = (300, 400))
-            layout = GridLayout(control_fig[][1, 1], tellwidth = false, rowgap = 10)
+            panel_layout = GridLayout(control_fig[][1, 1], tellwidth = false, rowgap = 10)
 
             # Baseline section
-            Label(layout[1, 1], "Baseline Interval", fontsize = 14, font = :bold)
-            baseline_layout = GridLayout(layout[2, 1], tellwidth = false, colgap = 10)
+            Label(panel_layout[1, 1], "Baseline Interval", fontsize = 14, font = :bold)
+            baseline_layout = GridLayout(panel_layout[2, 1], tellwidth = false, colgap = 10)
 
-            _create_baseline_textbox(baseline_layout, 1, "Start (ms):", baseline_start_obs, " ", 100)
-            _create_baseline_textbox(baseline_layout, 2, "End (ms):", baseline_stop_obs, " ", 100)
+            _create_baseline_textbox(baseline_layout, 1, "Start (s):", baseline_start_obs, " ", 100)
+            _create_baseline_textbox(baseline_layout, 2, "End (s):", baseline_stop_obs, " ", 100)
 
             # Apply button
-            apply_btn = Button(layout[3, 1], label = "Apply Baseline", width = 200)
+            apply_btn = Button(panel_layout[3, 1], label = "Apply Baseline", width = 200)
             on(apply_btn.clicks) do _
                 update_plot!()
             end
 
             # Conditions section
-            Label(layout[4, 1], "Conditions", fontsize = 14, font = :bold)
-            conditions_layout = GridLayout(layout[5, 1], tellwidth = false, rowgap = 5)
+            Label(panel_layout[4, 1], "Conditions", fontsize = 14, font = :bold)
+            conditions_layout = GridLayout(panel_layout[5, 1], tellwidth = false, rowgap = 5)
 
             for (i, dat) in enumerate(dat_subset)
                 cb = Checkbox(conditions_layout[i, 1], checked = condition_checked[i][])
@@ -1197,15 +1087,7 @@ function _setup_epochs_control_panel!(
                 connect!(condition_checked[i], cb.checked)
             end
 
-            # Auto-update on condition changes
-            for checked in condition_checked
-                on(checked) do _
-                    update_plot!()
-                end
-            end
-
-            _display_in_screen(control_fig[])
-
+            control_screen[] = _display_in_screen(control_fig[])
         end
     end
 end

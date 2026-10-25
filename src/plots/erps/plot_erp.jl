@@ -469,117 +469,120 @@ function _plot_erp_core(
     end
     _set_window_title(title_str)
 
-    # Extract layout_* parameters, remove prefix, and pass to create_layout
-    layout_kwargs = pop!(plot_kwargs, :layout_kwargs, (;))
+    try
+        # Extract layout_* parameters, remove prefix, and pass to create_layout
+        layout_kwargs = get(plot_kwargs, :layout_kwargs, (;))
 
-    # Create figure and apply layout system
-    fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
-    fig = Figure(; title = title_str, figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+        # Create figure and apply layout system
+        fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
+        fig = Figure(; title = title_str, figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
 
+        plot_layout = create_layout(layout, all_plot_channels, first(dat_subset).layout; layout_kwargs...)
 
-
-    plot_layout = create_layout(layout, all_plot_channels, first(dat_subset).layout; layout_kwargs...)
-
-    # For :topo layout, set default legend_channel to last channel if not explicitly set
-    if plot_layout.type == :topo && isempty(plot_kwargs[:legend_channel]) && !isempty(all_plot_channels)
-        plot_kwargs[:legend_channel] = [all_plot_channels[end]]
-        plot_kwargs[:legend_position] = (5, -2) # and put it a bit outside the plot
-    end
-    axes, channels = _apply_layout!(fig, plot_layout; plot_kwargs...)
-
-    # Store line references for control panel (if interactive)
-    # Structure: line_refs[ax_idx][dataset_idx][channel_idx] = line
-    line_refs = plot_kwargs[:interactive] ? [Dict{Int,Dict{Symbol,Any}}() for _ in axes] : nothing
-
-    # Store legend references for linked interactions (if interactive)
-    legend_refs = plot_kwargs[:interactive] ? Vector{Union{Legend,Nothing}}(undef, length(axes)) : nothing
-
-    # Now do the actual plotting for each axis
-    for (ax_idx, (ax, channel)) in enumerate(zip(axes, channels))
-        channels_to_plot = plot_layout.type == :single ? all_plot_channels : [channel]
-        @info "plot_erp ($layout): $(_print_vector(channels_to_plot))"
-        ax_line_refs = plot_kwargs[:interactive] ? line_refs[ax_idx] : nothing
-        leg = _plot_erp!(
-            ax,
-            dat_subset,
-            channels_to_plot;
-            line_refs = ax_line_refs,
-            user_provided_color = user_provided_color,
-            variances_dict = variances_dict,
-            plot_kwargs...,
-        )
-        if plot_kwargs[:interactive] && !isnothing(legend_refs)
-            legend_refs[ax_idx] = leg
+        # For :topo layout, set default legend_channel to last channel if not explicitly set
+        if plot_layout.type == :topo && isempty(plot_kwargs[:legend_channel]) && !isempty(all_plot_channels)
+            plot_kwargs[:legend_channel] = [all_plot_channels[end]]
+            plot_kwargs[:legend_position] = (5, -2) # and put it a bit outside the plot
         end
-    end
+        axes, channels = _apply_layout!(fig, plot_layout; plot_kwargs...)
 
-    # Draw highlight regions on all axes (before axis properties so they render behind)
-    if !isnothing(plot_kwargs[:highlight_regions])
-        for ax in axes
-            _draw_highlight_regions!(ax, plot_kwargs[:highlight_regions])
-        end
-    end
+        # Store line references for control panel (if interactive)
+        # Structure: line_refs[ax_idx][dataset_idx][channel_idx] = line
+        line_refs = plot_kwargs[:interactive] ? [Dict{Int,Dict{Symbol,Any}}() for _ in axes] : nothing
 
-    # Apply our axis stuff
-    _apply_axis_properties!.(axes; plot_kwargs...)
-    _apply_layout_axis_properties!(axes, plot_layout; plot_kwargs...) # slightly different for grid and topo layouts
+        # Store legend references for linked interactions (if interactive)
+        legend_refs = plot_kwargs[:interactive] ? Vector{Union{Legend,Nothing}}(undef, length(axes)) : nothing
 
-    # Link axes for consistent navigation
-    length(axes) > 1 && linkaxes!(axes...)
+        @info "plot_erp ($layout): $(_print_vector(all_plot_channels))"
 
-    # Add keyboard interactivity if enabled
-    if plot_kwargs[:interactive]
-        _setup_shared_interactivity!(fig, axes, :erp; zoom_step = plot_kwargs[:zoom_step])
-
-        # Disable default interactions that conflict with our custom selection (all axes)
-        for ax in axes
-            deregister_interaction!(ax, :rectanglezoom)
-        end
-
-        # Set up selection system for all axes (will work with linked axes)
-        selection_state =
-            SharedSelectionState(axes; selection_color = plot_kwargs[:selection_color], selection_alpha = plot_kwargs[:selection_alpha])
-
-        # Set up control panel (press 'c' to open) - must be before selection to capture condition_checked
-        condition_checked_ref = Ref{Union{Vector{Observable{Bool}},Nothing}}(nothing)
-        _setup_erp_control_panel!(fig, dat_subset, axes, baseline_interval, line_refs, condition_checked_ref)
-
-        # Create right-click handler that has access to condition visibility
-        right_click_handler =
-            (selection_state, mouse_x, data) -> _handle_erp_right_click!(selection_state, mouse_x, data, condition_checked_ref)
-
-        # Set up selection system that works for all layouts
-        _setup_unified_selection!(fig, axes, selection_state, dat_subset, right_click_handler)
-
-        # Set up channel selection events for topo and grid layouts
-        if plot_layout.type in (:topo, :grid)
-            channel_rc_handler = (selected_chs, data) -> _show_channel_average_menu!(selected_chs, data, condition_checked_ref)
-            _setup_channel_selection_events!(
-                fig,
-                selection_state,
-                plot_layout,
+        # Now do the actual plotting for each axis
+        for (ax_idx, (ax, channel)) in enumerate(zip(axes, channels))
+            channels_to_plot = plot_layout.type == :single ? all_plot_channels : [channel]
+            @debug "plot_erp ($layout): $(_print_vector(channels_to_plot))"
+            ax_line_refs = plot_kwargs[:interactive] ? line_refs[ax_idx] : nothing
+            leg = _plot_erp!(
+                ax,
                 dat_subset,
-                axes;
-                channel_right_click_handler = channel_rc_handler,
+                channels_to_plot;
+                line_refs = ax_line_refs,
+                user_provided_color = user_provided_color,
+                variances_dict = variances_dict,
+                plot_kwargs...,
             )
+            if plot_kwargs[:interactive] && !isnothing(legend_refs)
+                legend_refs[ax_idx] = leg
+            end
         end
 
-    end
+        # Draw highlight regions on all axes (before axis properties so they render behind)
+        if !isnothing(plot_kwargs[:highlight_regions])
+            for ax in axes
+                _draw_highlight_regions!(ax, plot_kwargs[:highlight_regions])
+            end
+        end
 
-    # Draw supertitle if user explicitly provided a figure_title
-    if !isempty(plot_kwargs[:figure_title])
-        Label(fig[0, :], plot_kwargs[:figure_title], fontsize = plot_kwargs[:figure_title_fontsize], font = :bold, tellwidth = false)
-    end
+        # Apply our axis stuff
+        _apply_axis_properties!.(axes; plot_kwargs...)
+        _apply_layout_axis_properties!(axes, plot_layout; plot_kwargs...) # slightly different for grid and topo layouts
 
-    if plot_kwargs[:display_plot]
-        _display_figure(fig)
-    end
+        # Link axes for consistent navigation
+        length(axes) > 1 && linkaxes!(axes...)
 
-    # reset default title
-    _set_window_title("Makie")
-    # Return named tuple - line_refs available for advanced use (e.g., plot_erp_measurements)
-    # Most users can ignore it via: (; fig, axes) = plot_erp(...)
-    return (fig = fig, axes = axes, line_refs = line_refs)
+        # Add keyboard interactivity if enabled
+        if plot_kwargs[:interactive]
+            _setup_shared_interactivity!(fig, axes, :erp; zoom_step = plot_kwargs[:zoom_step])
+
+            # Disable default interactions that conflict with our custom selection (all axes)
+            for ax in axes
+                deregister_interaction!(ax, :rectanglezoom)
+            end
+
+            # Set up selection system for all axes (will work with linked axes)
+            selection_state =
+                SharedSelectionState(axes; selection_color = plot_kwargs[:selection_color], selection_alpha = plot_kwargs[:selection_alpha])
+
+            # Set up control panel (press 'c' to open) - must be before selection to capture condition_checked
+            condition_checked_ref = Ref{Union{Vector{Observable{Bool}},Nothing}}(nothing)
+            _setup_erp_control_panel!(fig, dat_subset, axes, baseline_interval, line_refs, condition_checked_ref)
+
+            # Create right-click handler that has access to condition visibility
+            right_click_handler =
+                (selection_state, mouse_x, data) -> _handle_erp_right_click!(selection_state, mouse_x, data, condition_checked_ref)
+
+            # Set up selection system that works for all layouts
+            _setup_unified_selection!(fig, axes, selection_state, dat_subset, right_click_handler)
+
+            # Set up channel selection events for topo and grid layouts
+            if plot_layout.type in (:topo, :grid)
+                channel_rc_handler = (selected_chs, data) -> _show_channel_average_menu!(selected_chs, data, condition_checked_ref)
+                _setup_channel_selection_events!(
+                    fig,
+                    selection_state,
+                    plot_layout,
+                    dat_subset,
+                    axes;
+                    channel_right_click_handler = channel_rc_handler,
+                )
+            end
+
+        end
+
+        # Draw supertitle if user explicitly provided a figure_title
+        if !isempty(plot_kwargs[:figure_title])
+            Label(fig[0, :], plot_kwargs[:figure_title], fontsize = plot_kwargs[:figure_title_fontsize], font = :bold, tellwidth = false)
+        end
+
+        if plot_kwargs[:display_plot]
+            _display_figure(fig)
+        end
+
+        # Return named tuple - line_refs available for advanced use (e.g., plot_erp_measurements)
+        # Most users can ignore it via: (; fig, axes) = plot_erp(...)
+        return (fig = fig, axes = axes, line_refs = line_refs)
+    finally
+        # reset default title
+        _set_window_title("Makie")
+    end
 end
 
 """
@@ -1333,16 +1336,15 @@ function _add_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vector{ErpDa
     # Extract legend parameters
     legend_label = kwargs[:legend_label]
     legend_position = kwargs[:legend_position]
-    if isnothing(kwargs[:legend_nbanks])
-        kwargs[:legend_nbanks] = length(channels) > 10 ? cld(length(channels), 10) : 1
-    end
-    legend_kwargs = pop!(kwargs, :legend_kwargs, (;))
+    nbanks = something(get(kwargs, :legend_nbanks, nothing), length(channels) > 10 ? cld(length(channels), 10) : 1)
+    legend_kwargs = get(kwargs, :legend_kwargs, (;))
+    framevisible = get(kwargs, :legend_framevisible, true)
 
     # Add legend with position and optional label
-    if legend_label != ""
-        leg = axislegend(ax, legend_label; position = legend_position, legend_kwargs...)
+    leg = if isempty(legend_label)
+        axislegend(ax; position = legend_position, nbanks = nbanks, framevisible = framevisible, legend_kwargs...)
     else
-        leg = axislegend(ax; position = legend_position, legend_kwargs...)
+        axislegend(ax, legend_label; position = legend_position, nbanks = nbanks, framevisible = framevisible, legend_kwargs...)
     end
 
     return leg
@@ -1379,7 +1381,9 @@ function _setup_linked_legend_interactions!(line_refs::Vector{<:Dict})
                 syncing[] && return  # Skip if already syncing
                 syncing[] = true
                 for other_line in other_lines
-                    other_line.visible = visible_val
+                    if other_line.visible[] != visible_val
+                        other_line.visible = visible_val
+                    end
                 end
                 syncing[] = false
             end
@@ -1431,7 +1435,7 @@ function _setup_erp_control_panel!(
         baseline_interval_new = (!isnothing(start_val) && !isnothing(stop_val)) ? (start_val, stop_val) : nothing
 
         # Check if baseline actually changed
-        baseline_changed = baseline_interval_new !== previous_baseline[]
+        baseline_changed = baseline_interval_new != previous_baseline[]
 
         # Apply baseline if it changed
         if baseline_changed && !isnothing(baseline_interval_new)
@@ -1458,26 +1462,43 @@ function _setup_erp_control_panel!(
                     end
 
                     # Update visibility based on condition_mask
-                    line.visible = dataset_idx <= length(condition_mask) ? condition_mask[dataset_idx] : true
+                    new_vis = dataset_idx <= length(condition_mask) ? condition_mask[dataset_idx] : true
+                    if line.visible[] != new_vis
+                        line.visible = new_vis
+                    end
                 end
             end
         end
     end
 
+    # Auto-update on condition changes (registered ONCE outside keyboard handler)
+    for checked in condition_checked
+        on(checked) do _
+            update_plot!()
+        end
+    end
+
+    control_open = Ref(false)
+
     # Keyboard handler for 'c' key
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press && event.key == Keyboard.c
+            if control_open[] && !isnothing(control_fig[])
+                _display_in_screen(control_fig[])
+                return
+            end
 
             # Create new control panel
-            control_fig[] = Figure(title = "ERP Control Panel", size = (300, 400))
+            control_fig[] = Figure(title = "ERP Control Panel", size = (320, 420))
+            control_open[] = true
             layout = GridLayout(control_fig[][1, 1], tellwidth = false, rowgap = 10)
 
             # Baseline section
             Label(layout[1, 1], "Baseline Interval", fontsize = 14, font = :bold)
             baseline_layout = GridLayout(layout[2, 1], tellwidth = false, colgap = 10)
 
-            _create_baseline_textbox(baseline_layout, 1, "Start (ms):", baseline_start_obs, " ", 100)
-            _create_baseline_textbox(baseline_layout, 2, "End (ms):", baseline_stop_obs, " ", 100)
+            _create_baseline_textbox(baseline_layout, 1, "Start (s):", baseline_start_obs, " ", 100)
+            _create_baseline_textbox(baseline_layout, 2, "End (s):", baseline_stop_obs, " ", 100)
 
             # Apply button
             apply_btn = Button(layout[3, 1], label = "Apply Baseline", width = 200)
@@ -1492,13 +1513,8 @@ function _setup_erp_control_panel!(
             for (idx, dat) in enumerate(dat_subset)
                 cb = Checkbox(conditions_layout[idx, 1], checked = condition_checked[idx][])
                 Label(conditions_layout[idx, 2], dat.condition_name)
-                connect!(condition_checked[idx], cb.checked)
-            end
-
-            # Auto-update on condition changes (re-plot)
-            for checked in condition_checked
-                on(checked) do _
-                    update_plot!()
+                on(cb.checked) do val
+                    condition_checked[idx][] = val
                 end
             end
 
