@@ -57,29 +57,13 @@ function _render_topo_surface!(
     kwargs...,
 )
 
-    supported_methods =
-        [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
-
     if isnothing(data_interp)
-        if method ∈ supported_methods
-            data_interp, x_bounds, y_bounds = _data_interpolation_topo(channel_data, layout, gridscale; method = method)
-        elseif method == :spherical_spline
-            data_interp = _data_interpolation_topo_spherical_spline(channel_data, layout, gridscale)
-            x_coords = layout.data.x2
-            y_coords = layout.data.y2
-            max_radius = maximum(sqrt.(x_coords .^ 2 .+ y_coords .^ 2))
-            margin = max_radius * 0.05
-            plot_radius = max_radius + margin
-            x_bounds = (-plot_radius, plot_radius)
-            y_bounds = (-plot_radius, plot_radius)
-        else
-            @minimal_error "Unknown interpolation method: $method. Supported: $supported_methods, :spherical_spline"
-        end
+        data_interp, x_bounds, y_bounds = _topo_interpolate(Float64.(channel_data), layout, gridscale; method = method)
     end
 
     # Compute symmetric ylim if not provided
     if isnothing(ylim)
-        valid_data = filter(!isnan, vec(data_interp))
+        valid_data = Iterators.filter(!isnan, data_interp)
         if !isempty(valid_data)
             data_min, data_max = extrema(valid_data)
             max_abs = max(abs(data_min), abs(data_max))
@@ -131,7 +115,6 @@ function _plot_topography!(
 
     # ensure coordinates 
     _ensure_coordinates_2d!(layout)
-    _ensure_coordinates_3d!(layout) # needed if spherical spline is used
 
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
@@ -157,8 +140,8 @@ function _plot_topography!(
         ax.titlesize = plot_kwargs[:plot_title_fontsize]
     end
 
-    # Compute channel data averaged over time window
-    channel_data = mean.(eachcol(dat[!, layout.data.label]))
+    # Compute channel data averaged over time window only if needed
+    channel_data = isnothing(data_interp) ? mean.(eachcol(dat[!, layout.data.label])) : Float64[]
 
     # Extract colorbar kwargs before calling render helper (removes colorbar_* keys)
     colorbar_kwargs = pop!(plot_kwargs, :colorbar_kwargs, (;))
@@ -584,13 +567,10 @@ function plot_topography(
     first_layout = subsets[1].layout
     method = plot_kwargs[:method]
     gridscale = plot_kwargs[:gridscale]
-    supported_methods =
-        [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
-
     can_batch = n_datasets > 1 &&
                 has_valid_coordinates(first_layout) &&
                 all(s -> has_valid_coordinates(s.layout) && s.layout.data.label == first_layout.data.label, subsets) &&
-                (method in supported_methods || method == :spherical_spline)
+                _topo_method_supported(method)
 
     batched_interp = nothing
     xb_shared = nothing
@@ -598,7 +578,6 @@ function plot_topography(
 
     if can_batch
         _ensure_coordinates_2d!(first_layout)
-        _ensure_coordinates_3d!(first_layout)
         labels = first_layout.data.label
         channel_mat = Matrix{Float64}(undef, length(labels), n_datasets)
         for j in 1:n_datasets
@@ -608,18 +587,7 @@ function plot_topography(
             end
         end
 
-        if method in supported_methods
-            batched_interp, xb_shared, yb_shared = _data_interpolation_topo(channel_mat, first_layout, gridscale; method = method)
-        else # :spherical_spline
-            batched_interp = _data_interpolation_topo_spherical_spline(channel_mat, first_layout, gridscale)
-            x_coords = first_layout.data.x2
-            y_coords = first_layout.data.y2
-            max_radius = maximum(sqrt.(x_coords .^ 2 .+ y_coords .^ 2))
-            margin = max_radius * 0.05
-            plot_radius = max_radius + margin
-            xb_shared = (-plot_radius, plot_radius)
-            yb_shared = (-plot_radius, plot_radius)
-        end
+        batched_interp, xb_shared, yb_shared = _topo_interpolate(channel_mat, first_layout, gridscale; method = method)
     end
 
     # Plot each dataset in its own subplot
@@ -898,62 +866,207 @@ end
 
 
 
-"""
-    _data_interpolation_topo(dat::Vector{<:AbstractFloat}, layout::Layout, grid_scale::Int; method::Symbol=:thin_plate)
+# =============================================================================
+# TOPOGRAPHY INTERPOLATION & OPERATOR CACHING
+# =============================================================================
 
-Interpolate EEG data using scattered interpolation with various radial basis functions.
+# ---- Legendre & G-function for Spherical Splines (Perrin et al., 1989) ----
+_g_factors(m::Int, nterms::Int) =
+    [(2n + 1) / (float(n)^m * float(n + 1)^m * 4π) for n in 1:nterms]
 
-For detailed information about these interpolation methods, see:
-https://eljungsk.github.io/ScatteredInterpolation.jl/dev/methods/
+@inline function _legendre_series(x::Float64, f::Vector{Float64})
+    x = clamp(x, -1.0, 1.0)
+    p_prev, p = 1.0, x
+    acc = f[1] * x
+    @inbounds for n in 2:length(f)
+        p_next = ((2n - 1) * x * p - (n - 1) * p_prev) / n
+        acc += f[n] * p_next
+        p_prev, p = p, p_next
+    end
+    return acc
+end
 
-# Arguments
-- `dat::Vector{<:AbstractFloat}`: EEG values at electrode positions
-- `layout::Layout`: Layout containing electrode 2D coordinates
-- `grid_scale::Int`: Size of the output grid
-- `method::Symbol`: Type of radial basis function or interpolation method. Options:
-  - `:multiquadratic` - Multiquadratic (default): φ(r) = √(1 + (εr)²)
-  - `:inverse_multiquadratic` - Inverse Multiquadratic: φ(r) = 1/√(1 + (εr)²)
-  - `:gaussian` - Gaussian: φ(r) = exp(-(εr)²)
-  - `:inverse_quadratic` - Inverse Quadratic: φ(r) = 1/(1 + (εr)²)
-  - `:thin_plate` - Thin Plate Spline: φ(r) = r²ln(r)
-  - `:polyharmonic` - Polyharmonic Spline (k=3): φ(r) = r³
-  - `:shepard` - Inverse Distance Weighting (Shepard interpolation): wᵢ(x) = 1/||x-xᵢ||ᵖ
-  - `:nearest` - Nearest Neighbor: returns value of nearest sample point
+function _g_from_cos!(C::Matrix{Float64}, f::Vector{Float64})
+    @inbounds for i in eachindex(C)
+        C[i] = _legendre_series(C[i], f)
+    end
+    return C
+end
 
-# Returns
-- `Matrix{Float64}`: Interpolated data on a regular grid
-"""
-function _data_interpolation_topo(dat::Union{Vector{<:AbstractFloat}, Matrix{<:AbstractFloat}}, layout::Layout, grid_scale::Int; method::Symbol = :thin_plate)
+# ---- Shared Topography Geometry ----
+function _topo_plot_radius(layout::Layout)
+    r = maximum(hypot.(layout.data.x2, layout.data.y2))
+    return r * 1.05
+end
 
-    if any(isnan, dat) || any(isinf, dat)
-        @minimal_error "Input data contains NaN or Inf values"
+# ---- Spherical Spline Precomputed Linear Operator ----
+struct SphericalSplineOperator
+    W::Matrix{Float64}        # n_valid_grid × n_channels
+    valid::Vector{Int}        # linear indices of grid cells inside the circle
+    grid_scale::Int
+    radius::Float64
+end
+
+const _SPLINE_CACHE = Dict{UInt,SphericalSplineOperator}()
+const _SPLINE_CACHE_LOCK = ReentrantLock()
+
+function _spline_geometry(d, ch::Vector{Int})
+    ρe = hypot.(d.x2[ch], d.y2[ch])
+    if hasproperty(d, :inc) && hasproperty(d, :azi)
+        rad_factor = pi / 180.0
+        inc = Float64.(d.inc[ch]) .* rad_factor
+        azi = Float64.(d.azi[ch]) .* rad_factor
+        U = hcat(sin.(inc) .* cos.(azi), sin.(inc) .* sin.(azi), cos.(inc))
+        θ = abs.(inc)
+        denom = dot(ρe, ρe)
+        k = denom > 0 ? dot(ρe, θ) / denom : (π / 2)
+        if maximum(abs, θ .- k .* ρe) > 1e-3
+            @warn "x2/y2 are not an azimuthal-equidistant image of inc/azi; spline map may be distorted."
+        end
+    else
+        # Fallback: only 2D coords available. Assume azimuthal-equidistant x2/y2 with ρ=1 at equator.
+        @warn "Layout has no :inc/:azi; assuming azimuthal-equidistant x2/y2 with ρ=1 at the equator." maxlog = 1
+        k = π / 2
+        θ = min.(k .* ρe, π)
+        sx = [ρe[i] > 0 ? sin(θ[i]) / ρe[i] : 0.0 for i in 1:length(ρe)]
+        U = hcat(sx .* d.x2[ch], sx .* d.y2[ch], cos.(θ))
+    end
+    return U, k
+end
+
+function _build_spline_operator(layout::Layout, ch::Vector{Int}, gs::Int, m::Int, λ::Float64, nterms::Int)
+    d = layout.data
+    U, k = _spline_geometry(d, ch)
+    n = length(ch)
+    f = _g_factors(m, nterms)
+
+    # Solve once for all unit-impulse data vectors
+    A = Matrix{Float64}(undef, n + 1, n + 1)
+    A[1:n, 1:n] .= _g_from_cos!(U * U', f)
+    @inbounds for i in 1:n
+        A[i, i] += λ
+        A[i, n+1] = 1.0
+        A[n+1, i] = 1.0
+    end
+    A[n+1, n+1] = 0.0
+    X = lu(A) \ [Matrix{Float64}(I, n, n); zeros(1, n)]   # (n+1) × n
+
+    # Grid in plot units (same bounds as RBF)
+    R = _topo_plot_radius(layout)
+    xs = range(-R, R, length = gs)
+    valid = Int[]
+    sizehint!(valid, gs * gs)
+    for j in 1:gs, i in 1:gs
+        hypot(xs[i], xs[j]) <= R && push!(valid, i + (j - 1) * gs)
+    end
+    nv = length(valid)
+    Ug = Matrix{Float64}(undef, nv, 3)
+    @inbounds for (r, lin) in enumerate(valid)
+        x = xs[mod1(lin, gs)]
+        y = xs[cld(lin, gs)]
+        ρ = hypot(x, y)
+        s, c = sincos(min(k * ρ, π))
+        sx = ρ > 0 ? s / ρ : 0.0
+        Ug[r, 1] = sx * x
+        Ug[r, 2] = sx * y
+        Ug[r, 3] = c
     end
 
-    points = permutedims(Matrix(layout.data[!, [:x2, :y2]]))
+    Gg = _g_from_cos!(Ug * U', f)                          # nv × n
+    W = Gg * view(X, 1:n, :)
+    W .+= view(X, n+1:n+1, :)
+    return SphericalSplineOperator(W, valid, gs, R)
+end
 
-    # Calculate circular bounds that enclose all electrodes
-    x_coords = @view points[1, :]
-    y_coords = @view points[2, :]
-    max_radius = maximum(sqrt.(x_coords .^ 2 .+ y_coords .^ 2))
+function _get_spline_operator(layout::Layout, ch::Vector{Int}, gs::Int, m::Int, λ::Float64, nterms::Int)
+    d = layout.data
+    inc_vals = hasproperty(d, :inc) ? d.inc[ch] : nothing
+    azi_vals = hasproperty(d, :azi) ? d.azi[ch] : nothing
+    key = hash((d.label[ch], d.x2[ch], d.y2[ch], inc_vals, azi_vals, gs, m, λ, nterms))
+    lock(_SPLINE_CACHE_LOCK) do
+        length(_SPLINE_CACHE) > 16 && empty!(_SPLINE_CACHE)
+        get!(() -> _build_spline_operator(layout, ch, gs, m, λ, nterms), _SPLINE_CACHE, key)
+    end
+end
 
-    margin = max_radius * 0.05
-    plot_radius = max_radius + margin
+function _scatter_to_grid(op::SphericalSplineOperator, v::AbstractVector)
+    out = fill(NaN, op.grid_scale, op.grid_scale)
+    @inbounds for (k, lin) in enumerate(op.valid)
+        out[lin] = v[k]
+    end
+    return out
+end
+
+"""
+    _data_interpolation_topo_spherical_spline(dat, layout, grid_scale; layout_idx, m=4, lambda=1e-5, n_legendre_terms=15)
+
+Spherical-spline interpolation (Perrin et al.; MNE-compatible G function).
+`dat` is a vector (one map) or channels × components matrix. `layout_idx` maps rows of `dat`
+to rows of `layout.data` (default: first `size(dat,1)` rows). Non-finite channels are dropped.
+Returns `(grid_or_grids, x_bounds, y_bounds)`, matching the RBF method.
+"""
+function _data_interpolation_topo_spherical_spline(
+    dat::AbstractVecOrMat{<:AbstractFloat},
+    layout::Layout,
+    grid_scale::Int;
+    layout_idx::AbstractVector{Int} = 1:size(dat, 1),
+    m::Int = 4,
+    lambda::Float64 = 1e-5,
+    n_legendre_terms::Int = 15,
+)
+    length(layout_idx) == size(dat, 1) ||
+        @minimal_error "Data has $(size(dat, 1)) channels but layout_idx has $(length(layout_idx))"
+    _ensure_coordinates_2d!(layout)
+
+    finite = dat isa AbstractVector ? isfinite.(dat) : vec(all(isfinite, dat; dims = 2))
+    count(finite) >= 3 || @minimal_error "Fewer than 3 finite channels for spherical spline"
+    ch = collect(layout_idx[finite])
+    op = _get_spline_operator(layout, ch, grid_scale, m, lambda, n_legendre_terms)
+
+    bounds = (-op.radius, op.radius)
+    if dat isa AbstractVector
+        return _scatter_to_grid(op, op.W * dat[finite]), bounds, bounds
+    else
+        V = op.W * dat[finite, :]
+        return [_scatter_to_grid(op, view(V, :, c)) for c in axes(V, 2)], bounds, bounds
+    end
+end
+
+"""
+    _data_interpolation_topo(dat, layout, grid_scale; method=:thin_plate, layout_idx=1:size(dat, 1))
+
+Interpolate EEG data using scattered interpolation with various radial basis functions.
+Returns `(grid_or_grids, x_bounds, y_bounds)`.
+"""
+function _data_interpolation_topo(
+    dat::AbstractVecOrMat{<:AbstractFloat},
+    layout::Layout,
+    grid_scale::Int;
+    method::Symbol = :thin_plate,
+    layout_idx::AbstractVector{Int} = 1:size(dat, 1),
+)
+    length(layout_idx) == size(dat, 1) ||
+        @minimal_error "Data has $(size(dat, 1)) channels but layout_idx has $(length(layout_idx))"
+    _ensure_coordinates_2d!(layout)
+
+    points = permutedims(Matrix(layout.data[layout_idx, [:x2, :y2]]))
+    plot_radius = _topo_plot_radius(layout)
 
     x_range = range(-plot_radius, plot_radius, length = grid_scale)
     y_range = range(-plot_radius, plot_radius, length = grid_scale)
 
-    grid_points = Matrix{Float64}(undef, 2, grid_scale^2)
-    idx = 1
-    @inbounds for y in y_range
-        for x in x_range
-            grid_points[1, idx] = x
-            grid_points[2, idx] = y
-            idx += 1
-        end
+    valid_cells = Int[]
+    sizehint!(valid_cells, grid_scale * grid_scale)
+    for j in 1:grid_scale, i in 1:grid_scale
+        hypot(x_range[i], y_range[j]) <= plot_radius && push!(valid_cells, i + (j - 1) * grid_scale)
     end
 
-    supported_methods =
-        [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
+    grid_points = Matrix{Float64}(undef, 2, length(valid_cells))
+    for (k, lin) in enumerate(valid_cells)
+        grid_points[1, k] = x_range[mod1(lin, grid_scale)]
+        grid_points[2, k] = y_range[cld(lin, grid_scale)]
+    end
+
     method_obj = if method == :multiquadratic
         ScatteredInterpolation.Multiquadratic()
     elseif method == :inverse_multiquadratic
@@ -971,282 +1084,73 @@ function _data_interpolation_topo(dat::Union{Vector{<:AbstractFloat}, Matrix{<:A
     elseif method == :nearest
         ScatteredInterpolation.NearestNeighbor()
     else
-        @minimal_error "Unknown method: $method. Supported: $supported_methods"
+        @minimal_error "Unknown method: $method. Supported: $(keys(_TOPO_RBF_METHODS))"
     end
 
-    pts = points
-    d = dat
-    if dat isa Vector
-        valid = isfinite.(dat)
-        if !all(valid)
-            if count(valid) < 3
-                @warn "Fewer than 3 valid channels for topography interpolation; returning zero grid."
-                result = zeros(Float64, grid_scale, grid_scale)
-                _circle_mask!(result, grid_scale)
-                return result, (-plot_radius, plot_radius), (-plot_radius, plot_radius)
-            end
-            pts = points[:, valid]
-            d = dat[valid]
-        end
-    end
+    finite = dat isa AbstractVector ? isfinite.(dat) : vec(all(isfinite, dat; dims = 2))
+    count(finite) >= 3 || @minimal_error "Fewer than 3 finite channels for topography interpolation"
+
+    pts = points[:, finite]
+    d = dat isa AbstractVector ? dat[finite] : dat[finite, :]
 
     itp = ScatteredInterpolation.interpolate(method_obj, pts, d)
     eval_res = ScatteredInterpolation.evaluate(itp, grid_points)
 
-    if dat isa Vector
-        result = reshape(eval_res, grid_scale, grid_scale)
-        _circle_mask!(result, grid_scale)
-        return result, (-plot_radius, plot_radius), (-plot_radius, plot_radius)
-    else
-        n_comps = size(dat, 2)
-        results = Vector{Matrix{Float64}}(undef, n_comps)
-        for c in 1:n_comps
-            res = reshape(eval_res[:, c], grid_scale, grid_scale)
-            _circle_mask!(res, grid_scale)
-            results[c] = res
-        end
-        return results, (-plot_radius, plot_radius), (-plot_radius, plot_radius)
-    end
-end
-
-"""
-    _data_interpolation_topo_spherical_spline(dat::Vector{Float64}, layout::DataFrame, grid_scale::Int; m::Int=4, lambda::Float64=1e-5)
-
-Interpolate EEG data using spherical spline interpolation for topographic plotting.
-Implementation follows MNE-Python exactly.
-
-# Arguments
-- `dat::Vector{<:AbstractFloat}`: EEG values at electrode positions
-- `layout::DataFrame`: Layout information with x3, y3, z3 coordinates
-- `grid_scale::Int`: Size of the output grid
-- `m::Int=4`: Order of Legendre polynomials (stiffness parameter)
-- `lambda::Float64=1e-5`: Regularization parameter
-
-# Returns
-- `Matrix{Float64}`: Interpolated data on a regular grid
-"""
-function _data_interpolation_topo_spherical_spline(dat::Union{Vector{<:AbstractFloat}, Matrix{<:AbstractFloat}}, layout::Layout, grid_scale::Int;)
-
-    # Ensure 3D coordinates exist
-    _ensure_coordinates_3d!(layout)
-
-    # Extract 3D coordinates efficiently from DataFrame
-    n_channels = size(dat, 1)
-    x3_col = layout.data.x3::Vector{Float64}
-    y3_col = layout.data.y3::Vector{Float64}
-    z3_col = layout.data.z3::Vector{Float64}
-
-    coords = Matrix{Float64}(undef, n_channels, 3)
-    @inbounds for i = 1:n_channels
-        coords[i, 1] = x3_col[i]
-        coords[i, 2] = y3_col[i]
-        coords[i, 3] = z3_col[i]
-    end
-
-    # Find the actual radius of the electrode positions
-    electrode_radius = 0.0
-    @inbounds for i = 1:n_channels
-        electrode_radius += sqrt(coords[i, 1]^2 + coords[i, 2]^2 + coords[i, 3]^2)
-    end
-    electrode_radius /= n_channels
-
-    # Pre-normalize electrode coordinates to unit sphere
-    coords_unit = Matrix{Float64}(undef, n_channels, 3)
-    @inbounds for i = 1:n_channels
-        norm_factor = sqrt(coords[i, 1]^2 + coords[i, 2]^2 + coords[i, 3]^2)
-        if norm_factor > 0
-            coords_unit[i, 1] = coords[i, 1] / norm_factor
-            coords_unit[i, 2] = coords[i, 2] / norm_factor
-            coords_unit[i, 3] = coords[i, 3] / norm_factor
-        else
-            coords_unit[i, 1], coords_unit[i, 2], coords_unit[i, 3] = coords[i, 1], coords[i, 2], coords[i, 3]
-        end
-    end
-
-    # Step 1: Solve for weights
-    cosang = coords_unit * transpose(coords_unit)
-    G = _calc_g_matrix(cosang)
-
-    G_extended = Matrix{Float64}(undef, n_channels + 1, n_channels + 1)
-    @inbounds for i = 1:n_channels
-        for j = 1:n_channels
-            G_extended[i, j] = G[i, j]
-        end
-        G_extended[i, i] += 1e-5 # λ regularization
-        G_extended[i, n_channels+1] = 1.0
-        G_extended[n_channels+1, i] = 1.0
-    end
-    G_extended[n_channels+1, n_channels+1] = 0.0
-
-    if dat isa Vector
-        data_vector = Vector{Float64}(undef, n_channels + 1)
-        @inbounds for i = 1:n_channels
-            data_vector[i] = dat[i]
-        end
-        data_vector[n_channels+1] = 0.0
-
-        weights = G_extended \ data_vector
-    else
-        n_comps = size(dat, 2)
-        data_matrix = Matrix{Float64}(undef, n_channels + 1, n_comps)
-        @inbounds for j = 1:n_comps, i = 1:n_channels
-            data_matrix[i, j] = dat[i, j]
-        end
-        @inbounds for j = 1:n_comps
-            data_matrix[n_channels+1, j] = 0.0
-        end
-
-        weights = G_extended \ data_matrix
-    end
-
-    # Step 2: Prepare grid points for interpolation
-    x_range = range(-1.0, 1.0, length = grid_scale)
-    y_range = range(-1.0, 1.0, length = grid_scale)
-
-    # Find valid indices first to minimize work
-    valid_indices = Tuple{Int,Int}[]
-    sizehint!(valid_indices, grid_scale^2)
-    for (iy, y) in enumerate(y_range), (ix, x) in enumerate(x_range)
-        if x^2 + y^2 <= 1.0
-            push!(valid_indices, (ix, iy))
-        end
-    end
-
-    n_valid = length(valid_indices)
-    grid_points_unit = Matrix{Float64}(undef, n_valid, 3)
-
-    @inbounds for i = 1:n_valid
-        ix, iy = valid_indices[i]
-        x, y = x_range[ix], y_range[iy]
-        r2 = x^2 + y^2
-        r = sqrt(r2)
-
-        # Stereographic projection
-        z3 = electrode_radius * (1.0 - r^2) / (1.0 + r^2)
-        px = x * (1.0 + z3 / electrode_radius)
-        py = y * (1.0 + z3 / electrode_radius)
-        pz = z3
-
-        # Normalize to unit sphere
-        p_norm = sqrt(px^2 + py^2 + pz^2)
-        if p_norm > 0
-            grid_points_unit[i, 1] = px / p_norm
-            grid_points_unit[i, 2] = py / p_norm
-            grid_points_unit[i, 3] = pz / p_norm
-        else
-            grid_points_unit[i, 1], grid_points_unit[i, 2], grid_points_unit[i, 3] = px, py, pz
-        end
-    end
-
-    # Step 3: Compute G matrix between valid grid points and channels using BLAS
-    cosang_grid = grid_points_unit * transpose(coords_unit)
-
-    # Step 4: Apply g-function in-place with pre-calculated factors
-    factors = _get_g_factors(15)
-    @inbounds for i in eachindex(cosang_grid)
-        cosang_grid[i] = _legendre_val(clamp(cosang_grid[i], -1.0, 1.0), factors)
-    end
-
-    # Step 5 & 6: Compute final interpolation values and map back to 2D grid
-    if dat isa Vector
-        w_channels = @view weights[1:n_channels]
-        interpolated_valid = cosang_grid * w_channels
-        interpolated_valid .+= weights[n_channels+1]
-
+    bounds = (-plot_radius, plot_radius)
+    if dat isa AbstractVector
         result = fill(NaN, grid_scale, grid_scale)
-        @inbounds for i = 1:n_valid
-            ix, iy = valid_indices[i]
-            result[ix, iy] = interpolated_valid[i]
+        @inbounds for (k, lin) in enumerate(valid_cells)
+            result[lin] = eval_res[k]
         end
-
-        _circle_mask!(result, grid_scale)
-        return result
+        return result, bounds, bounds
     else
         n_comps = size(dat, 2)
-        w_channels = @view weights[1:n_channels, :]
-        interpolated_valid = cosang_grid * w_channels
-        @inbounds for j = 1:n_comps
-            c_offset = weights[n_channels+1, j]
-            for i = 1:n_valid
-                interpolated_valid[i, j] += c_offset
+        results = [fill(NaN, grid_scale, grid_scale) for _ in 1:n_comps]
+        for c in 1:n_comps
+            res = results[c]
+            @inbounds for (k, lin) in enumerate(valid_cells)
+                res[lin] = eval_res[k, c]
             end
         end
-
-        results = Vector{Matrix{Float64}}(undef, n_comps)
-        for c = 1:n_comps
-            res = fill(NaN, grid_scale, grid_scale)
-            @inbounds for i = 1:n_valid
-                ix, iy = valid_indices[i]
-                res[ix, iy] = interpolated_valid[i, c]
-            end
-            _circle_mask!(res, grid_scale)
-            results[c] = res
-        end
-        return results
+        return results, bounds, bounds
     end
 end
 
+const _TOPO_RBF_METHODS = Dict{Symbol,Any}(
+    :multiquadratic         => ScatteredInterpolation.Multiquadratic,
+    :inverse_multiquadratic => ScatteredInterpolation.InverseMultiquadratic,
+    :gaussian               => ScatteredInterpolation.Gaussian,
+    :inverse_quadratic      => ScatteredInterpolation.InverseQuadratic,
+    :thin_plate             => ScatteredInterpolation.ThinPlate,
+    :polyharmonic           => () -> ScatteredInterpolation.Polyharmonic(3),
+    :shepard                => ScatteredInterpolation.Shepard,
+    :nearest                => ScatteredInterpolation.NearestNeighbor,
+)
 
-# Optimized Legendre polynomial series evaluation using recurrence
-# Pre-calculate recurrence coefficients to avoid divisions in the inner loop
-const _LEGENDRE_COEFF_A = Float64[(2n - 1) / n for n = 0:17]
-const _LEGENDRE_COEFF_B = Float64[(n - 1) / n for n = 0:17]
+_topo_method_supported(m::Symbol) = m === :spherical_spline || haskey(_TOPO_RBF_METHODS, m)
 
-@inline function _legendre_val(x::Float64, factors::Vector{Float64})
-    """Evaluate Legendre polynomial series efficiently using recurrence relation.
+"""
+    _topo_interpolate(dat, layout, gridscale; method=:thin_plate, layout_idx=1:size(dat,1), kwargs...)
 
-    factors[1] = 0.0 (for n=0, skipped)
-    factors[2] = factor for n=1
-    factors[3] = factor for n=2
-    etc.
-    """
-    max_order = length(factors) - 1
-    if max_order < 1
-        return 0.0
+Unified dispatcher for topography interpolation (supports `:spherical_spline` and all RBF methods).
+Returns `(grid_or_grids, x_bounds, y_bounds)`.
+"""
+function _topo_interpolate(
+    dat::AbstractVecOrMat{<:AbstractFloat},
+    layout::Layout,
+    gridscale::Int;
+    method::Symbol = :thin_plate,
+    layout_idx::AbstractVector{Int} = 1:size(dat, 1),
+    kwargs...,
+)
+    if method === :spherical_spline
+        return _data_interpolation_topo_spherical_spline(dat, layout, gridscale; layout_idx = layout_idx, kwargs...)
+    elseif haskey(_TOPO_RBF_METHODS, method)
+        return _data_interpolation_topo(dat, layout, gridscale; method = method, layout_idx = layout_idx, kwargs...)
+    else
+        supported = [keys(_TOPO_RBF_METHODS)..., :spherical_spline]
+        @minimal_error "Unknown interpolation method: $method. Supported: $supported"
     end
-
-    # Initialize recurrence: P_0 = 1, P_1 = x
-    p_prev = 1.0  # P_0
-    p_curr = x     # P_1
-
-    # Start with n=1 term: factors[2] * P_1(x) = factors[2] * x
-    @inbounds result = factors[2] * p_curr
-
-    # Compute remaining polynomials using recurrence (n=2 to max_order)
-    # Recurrence: P_n(x) = ((2n-1)/n * x * P_{n-1}(x) - (n-1)/n * P_{n-2}(x))
-    @inbounds for n = 2:max_order
-        p_next = _LEGENDRE_COEFF_A[n+1] * x * p_curr - _LEGENDRE_COEFF_B[n+1] * p_prev
-        result += factors[n+1] * p_next
-        p_prev = p_curr
-        p_curr = p_next
-    end
-
-    return result
-end
-
-# Pre-computed factors for m=4, cached to avoid recomputation
-const _G_FACTORS_CACHE = Dict{Int,Vector{Float64}}()
-
-"""Get pre-computed Legendre factors for g-function calculation (cached)."""
-function _get_g_factors(n_legendre_terms::Int = 15)
-    if !haskey(_G_FACTORS_CACHE, n_legendre_terms)
-        factors = [(2 * n + 1) / (n^4 * (n + 1)^4 * 4 * π) for n = 1:n_legendre_terms]
-        _G_FACTORS_CACHE[n_legendre_terms] = [0.0; factors]  # Prepend 0.0 for n=0
-    end
-    return _G_FACTORS_CACHE[n_legendre_terms]::Vector{Float64}
-end
-
-
-"""Calculate spherical spline G matrix between points on a sphere (m=4, MNE-Python-compatible)."""
-function _calc_g_matrix(cosang::Matrix{Float64}, n_legendre_terms::Int = 15)
-    factors = _get_g_factors(n_legendre_terms)
-
-    # Use Legendre polynomial evaluation for the entire matrix
-    G = similar(cosang)
-    @inbounds for i in eachindex(cosang)
-        G[i] = _legendre_val(cosang[i], factors)
-    end
-    return G
 end
 
 # === INTERACTIVITY FUNCTIONS ===
@@ -1834,7 +1738,6 @@ function _plot_topography_scrubber(
     end
 
     _ensure_coordinates_2d!(layout)
-    _ensure_coordinates_3d!(layout)
 
     df = dat.data
     available_channels = [ch for ch in Symbol.(layout.data.label) if ch in propertynames(df)]
@@ -1856,18 +1759,21 @@ function _plot_topography_scrubber(
     colorbar_plot = get(plot_kwargs, :colorbar_plot, true)
     colorbar_kwargs = pop!(plot_kwargs, :colorbar_kwargs, (;))
 
-    # Pre-calculate global symmetric amplitude scale across the whole selected segment
-    all_vals = Float64[]
-    for ch in available_channels
-        append!(all_vals, df[!, ch])
+    # Pre-extract data matrix once (channels × samples) for fast column views
+    X = Matrix{Float64}(undef, length(available_channels), n_samples)
+    for (i, ch) in enumerate(available_channels)
+        X[i, :] .= df[!, ch]
     end
-    q99 = Statistics.quantile(abs.(all_vals), 0.99)
+    layout_idx = [findfirst(==(ch), Symbol.(layout.data.label)) for ch in available_channels]
+
+    # Pre-calculate global symmetric amplitude scale across the whole selected segment
+    q99 = Statistics.quantile!(abs.(vec(copy(X))), 0.99)
     clim = max(round(q99, digits = 1), 1.0)
     ylim_obs = Observable{Tuple{Float64,Float64}}((-clim, clim))
     levels_obs = lift(lim -> range(lim[1], lim[2], length = num_levels), ylim_obs)
 
-    init_vals = Float64[df[1, ch] for ch in available_channels]
-    init_mat, x_bounds, y_bounds = _data_interpolation_topo(init_vals, layout, gridscale; method = method)
+    init_vals = @view X[:, 1]
+    init_mat, x_bounds, y_bounds = _topo_interpolate(init_vals, layout, gridscale; method = method, layout_idx = layout_idx)
     mat_obs = Observable(init_mat)
 
     fig = Figure(size = (650, 720); figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
@@ -1915,8 +1821,8 @@ function _plot_topography_scrubber(
         current_idx[] = c_idx
         t = time_vec[c_idx]
         title_obs[] = @sprintf("Topography | Latency: %.3f s (%d ms)", t, round(Int, t * 1000))
-        vals = Float64[df[c_idx, ch] for ch in available_channels]
-        new_mat, _, _ = _data_interpolation_topo(vals, layout, gridscale; method = method)
+        vals = @view X[:, c_idx]
+        new_mat, _, _ = _topo_interpolate(vals, layout, gridscale; method = method, layout_idx = layout_idx)
         mat_obs[] = new_mat
     end
 
@@ -1991,8 +1897,8 @@ function _plot_topography_scrubber(
 
     on(btn_mean.clicks) do _
         _stop_play()
-        mean_vals = Float64[Statistics.mean(df[!, ch]) for ch in available_channels]
-        mean_mat, _, _ = _data_interpolation_topo(mean_vals, layout, gridscale; method = method)
+        mean_vals = vec(mean(X, dims = 2))
+        mean_mat, _, _ = _topo_interpolate(mean_vals, layout, gridscale; method = method, layout_idx = layout_idx)
         mat_obs[] = mean_mat
         title_obs[] = @sprintf("Topography | Mean over %.3f – %.3f s", t_min, t_max)
     end

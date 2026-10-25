@@ -1363,29 +1363,11 @@ end
 
 """Interpolate ICA mixing weights onto a 2-D grid for topographic display."""
 function _prepare_ica_topo_data(ica::InfoIca, comp_idx::Int, method::Symbol, gridscale::Int)
-    supported_methods =
-        [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
-    if method ∈ supported_methods
-        data, x_bounds, y_bounds = _data_interpolation_topo(ica.mixing[:, comp_idx], ica.layout, gridscale, method = method)
-        return data, x_bounds, y_bounds
-    elseif method == :spherical_spline
-        data = _data_interpolation_topo_spherical_spline(ica.mixing[:, comp_idx], ica.layout, gridscale)
-        # Calculate circular bounds for spherical spline
-        x_coords = ica.layout.data.x2
-        y_coords = ica.layout.data.y2
-        max_radius = maximum(sqrt.(x_coords .^ 2 .+ y_coords .^ 2))
-        margin = max_radius * 0.05
-        plot_radius = max_radius + margin
-        return data, (-plot_radius, plot_radius), (-plot_radius, plot_radius)
-    else
-        @minimal_error "Unknown interpolation method: $method. Supported: $supported_methods"
-    end
+    return _topo_interpolate(ica.mixing[:, comp_idx], ica.layout, gridscale; method = method)
 end
 
 """Interpolate multiple ICA mixing weights onto 2-D grids in a single batched operation."""
 function _prepare_ica_topo_data(ica::InfoIca, comp_indices::AbstractVector{Int}, method::Symbol, gridscale::Int)
-    supported_methods =
-        [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
     if isempty(comp_indices)
         return Vector{Matrix{Float64}}(), (-1.0, 1.0), (-1.0, 1.0)
     end
@@ -1393,20 +1375,7 @@ function _prepare_ica_topo_data(ica::InfoIca, comp_indices::AbstractVector{Int},
         data, x_bounds, y_bounds = _prepare_ica_topo_data(ica, comp_indices[1], method, gridscale)
         return [data], x_bounds, y_bounds
     end
-    if method ∈ supported_methods
-        data_vec, x_bounds, y_bounds = _data_interpolation_topo(ica.mixing[:, comp_indices], ica.layout, gridscale, method = method)
-        return data_vec, x_bounds, y_bounds
-    elseif method == :spherical_spline
-        data_vec = _data_interpolation_topo_spherical_spline(ica.mixing[:, comp_indices], ica.layout, gridscale)
-        x_coords = ica.layout.data.x2
-        y_coords = ica.layout.data.y2
-        max_radius = maximum(sqrt.(x_coords .^ 2 .+ y_coords .^ 2))
-        margin = max_radius * 0.05
-        plot_radius = max_radius + margin
-        return data_vec, (-plot_radius, plot_radius), (-plot_radius, plot_radius)
-    else
-        @minimal_error "Unknown interpolation method: $method. Supported: $supported_methods"
-    end
+    return _topo_interpolate(ica.mixing[:, comp_indices], ica.layout, gridscale; method = method)
 end
 
 """Calculate contour levels — global across all components or local per component."""

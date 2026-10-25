@@ -285,12 +285,9 @@ function plot_topography(
 
     # Ensure coordinates
     _ensure_coordinates_2d!(layout)
-    _ensure_coordinates_3d!(layout)
 
     # Pre-interpolate all panels when possible
-    supported_methods =
-        [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
-    can_batch = n > 1 && (method in supported_methods || method == :spherical_spline)
+    can_batch = n > 1 && _topo_method_supported(method)
     batched_interp = nothing
     xb_shared = nothing
     yb_shared = nothing
@@ -300,18 +297,7 @@ function plot_topography(
         for j = 1:n
             val_matrix[:, j] = all_layout_values[j]
         end
-        if method in supported_methods
-            batched_interp, xb_shared, yb_shared = _data_interpolation_topo(val_matrix, layout, gridscale; method = method)
-        else # :spherical_spline
-            batched_interp = _data_interpolation_topo_spherical_spline(val_matrix, layout, gridscale)
-            x_coords = layout.data.x2
-            y_coords = layout.data.y2
-            max_radius = maximum(sqrt.(x_coords .^ 2 .+ y_coords .^ 2))
-            margin = max_radius * 0.05
-            plot_radius = max_radius + margin
-            xb_shared = (-plot_radius, plot_radius)
-            yb_shared = (-plot_radius, plot_radius)
-        end
+        batched_interp, xb_shared, yb_shared = _topo_interpolate(val_matrix, layout, gridscale; method = method)
     end
 
     freq_str = "$(round(Int, freq_range[1]))-$(round(Int, freq_range[2])) Hz"
@@ -558,9 +544,7 @@ function plot_topography_stats(
     axes = Axis[]
 
     # Pre-interpolate all panels when possible
-    supported_methods =
-        [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
-    can_batch = n_topos > 1 && (method in supported_methods || method == :spherical_spline)
+    can_batch = n_topos > 1 && _topo_method_supported(method)
     batched_interp = nothing
     xb_shared = nothing
     yb_shared = nothing
@@ -575,18 +559,7 @@ function plot_topography_stats(
                 all_layout_mat[k, i] = isfinite(v) ? v : 0.0
             end
         end
-        if method in supported_methods
-            batched_interp, xb_shared, yb_shared = _data_interpolation_topo(all_layout_mat, layout, gridscale; method = method)
-        else # :spherical_spline
-            batched_interp = _data_interpolation_topo_spherical_spline(all_layout_mat, layout, gridscale)
-            x_coords = layout.data.x2
-            y_coords = layout.data.y2
-            max_radius = maximum(sqrt.(x_coords .^ 2 .+ y_coords .^ 2))
-            margin = max_radius * 0.05
-            plot_radius = max_radius + margin
-            xb_shared = (-plot_radius, plot_radius)
-            yb_shared = (-plot_radius, plot_radius)
-        end
+        batched_interp, xb_shared, yb_shared = _topo_interpolate(all_layout_mat, layout, gridscale; method = method)
     end
 
     for i = 1:n_topos
