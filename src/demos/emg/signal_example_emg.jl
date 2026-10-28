@@ -102,7 +102,7 @@ function signal_example_emg()
 
     _set_window_title("Interactive Surface EMG Simulator — Raw → Rectify → Filter → Integrate")
 
-    fig = Figure(
+    fig = _eegfun_figure(
         size = (1440, 920),
         title = "Interactive Surface EMG Simulator — Raw → Rectify → Filter → Integrate",
         backgroundcolor = :white,

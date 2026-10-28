@@ -47,22 +47,21 @@ function _apply_rereference!(
     ref_indices = [columnindex(first_df, ch) for ch in reference_selection]
     ch_indices = [columnindex(first_df, ch) for ch in channel_selection]
 
-    n_threads = Threads.maxthreadid()
-    ref_buffers = [Vector{Float64}(undef, n) for _ = 1:n_threads]
-
-    Threads.@threads for df in dat
-        tid = Threads.threadid()
-        reference = ref_buffers[tid]
-        _calculate_reference!(reference, df, ref_indices)
-        for col_idx in ch_indices
-            col = df[!, col_idx]
-            if col isa Vector{Float64}
-                col_f64 = col::Vector{Float64}
-                @inbounds @simd for i = 1:n
-                    col_f64[i] -= reference[i]
+    _foreach_chunk(length(dat)) do df_range
+        reference = Vector{Float64}(undef, n)  # owned exclusively by this chunk/task
+        for df_idx in df_range
+            df = dat[df_idx]
+            _calculate_reference!(reference, df, ref_indices)
+            for col_idx in ch_indices
+                col = df[!, col_idx]
+                if col isa Vector{Float64}
+                    col_f64 = col::Vector{Float64}
+                    @inbounds @simd for i = 1:n
+                        col_f64[i] -= reference[i]
+                    end
+                else
+                    df[!, col_idx] .-= reference
                 end
-            else
-                df[!, col_idx] .-= reference
             end
         end
     end

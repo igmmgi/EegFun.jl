@@ -206,14 +206,14 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
     comps = get_selected_components(ica, component_selection)
     if isempty(comps)
         fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
-        return (fig = Figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...),)
+        return (fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...),)
     end
 
     # Get colorbar settings to adjust grid if needed
     colorbar_plot = pop!(plot_kwargs, :colorbar_plot)
 
     fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
-    fig = Figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+    fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
 
     # Deal with plot dimensions
     isnothing(dims) && (dims = _best_rect(length(comps)))
@@ -492,7 +492,7 @@ function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; artifa
 
     # Create figure and UI
     fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
-    fig = Figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+    fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
     _create_component_activation_plots!(fig, state)
     _add_navigation_controls!(fig, state)
     _add_navigation_sliders!(fig, state)
@@ -1021,7 +1021,7 @@ const _CHANNEL_OVERLAY_COLORS = [:grey, :dodgerblue, :darkorange, :mediumpurple,
 function _show_channel_popup(state)
     all_channels = Symbol.(names(state.dat.data))
 
-    menu_fig = Figure(size = (900, 700))
+    menu_fig = _eegfun_figure(size = (900, 700))
     Label(menu_fig[1, 1], "Select Additional Channels", fontsize = 18, halign = :center)
 
     scroll_area = menu_fig[2, 1] = GridLayout()

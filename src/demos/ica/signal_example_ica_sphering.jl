@@ -24,9 +24,9 @@ using EegFun
 """
 function signal_example_ica_sphering()
     N = 2500
-    Random.seed!(101) # Stable random numbers
+    rng = Random.Xoshiro(101) # Stable random numbers (local RNG; global RNG untouched)
 
-    fig = Figure(size = (1000, 700), figure_padding = (15, 15, 15, 15))
+    fig = _eegfun_figure(size = (1000, 700), figure_padding = (15, 15, 15, 15))
 
     lbl_sz   = Observable(14)
     tick_sz  = Observable(12)
@@ -38,9 +38,9 @@ function signal_example_ica_sphering()
     s1 = vcat([zeros(400); s1; zeros(400); s1]...)
     s1 = vcat(s1, zeros(max(0, N - length(s1))))[1:N]
 
-    s2 = randn(N) .* 0.3
+    s2 = randn(rng, N) .* 0.3
     for _ = 1:6
-        idx = rand(200:(N-200))
+        idx = rand(rng, 200:(N-200))
         s2[idx:(idx+99)] .+= [exp(-abs(i)/15.0) for i = -50:49]
     end
 

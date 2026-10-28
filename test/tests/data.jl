@@ -605,21 +605,26 @@ using OrderedCollections
         epoch2 = DataFrame(time = [0.1, 0.2], sample = [1, 2], Fz = [5.0, 6.0], Cz = [7.0, 8.0])
         ep = EegFun.EpochData("test", 1, "cond", [epoch1, epoch2], layout, 250, analysis_info)
 
-        # ndims, eltype, isempty
+        # ndims, isempty
         @test ndims(cont) == 2
         @test ndims(ep) == 3
-        @test eltype(cont) == Float64
-        @test eltype(ep) == Float64
         @test !isempty(cont)
         @test !isempty(ep)
 
-        # firstindex, lastindex, axes
-        @test firstindex(cont) == 1
+        # EegData is not an AbstractArray: indexing returns subsets, so no scalar eltype / linear indexing
+        @test !hasmethod(lastindex, Tuple{EegFun.ContinuousData})
+        @test !hasmethod(firstindex, Tuple{EegFun.ContinuousData})
+        @test eltype(ep) == DataFrame          # what iterating epoch data yields
+        @test length(ep) == 2
+        @test collect(ep) == [epoch1, epoch2]
+        @test all(x -> x isa DataFrame, ep)
+
+        # firstindex, lastindex (per dimension), axes
         @test firstindex(cont, 1) == 1
         @test firstindex(cont, 2) == 1
         @test lastindex(cont, 1) == 3
         @test lastindex(cont, 2) == 2
-        @test lastindex(cont) == 6
+        @test size(cont[2:end, :]) == (2, 2)
         @test axes(cont, 1) == Base.OneTo(3)
         @test axes(cont, 2) == Base.OneTo(2)
         @test axes(ep, 1) == Base.OneTo(2)
@@ -644,9 +649,10 @@ using OrderedCollections
         # Tensor conversions & vec
         @test size(Array(cont)) == (3, 2)
         @test size(Array(ep)) == (2, 2, 2)
-        @test convert(Matrix, cont) == Matrix(cont)
-        @test convert(Array, cont) == Array(cont)
-        @test convert(Array, ep) == Array(ep)
+        # No implicit conversions (would silently drop layout/metadata); explicit constructors only
+        @test_throws MethodError convert(Matrix, cont)
+        @test_throws MethodError convert(Array, ep)
+        @test_throws MethodError convert(DataFrame, cont)
         @test Matrix{Float64}(cont) == Matrix(cont)
         @test Array{Float64}(cont) == Array(cont)
         @test Array{Float64}(ep) == Array(ep)
@@ -678,6 +684,35 @@ using OrderedCollections
         @test cont != cont_diff
         @test isapprox(cont, cont_diff; atol = 1e-6)
         @test !isapprox(cont, ep)
+
+        # isapprox also requires matching sample rates
+        cont_sr = copy(cont)
+        cont_sr.sample_rate = 500
+        @test !isapprox(cont, cont_sr)
+
+        # hash is consistent with isequal (usable as Dict keys / in Sets)
+        @test hash(cont) == hash(copy(cont))
+        @test hash(ep) == hash(copy(ep))
+        @test hash(cont) != hash(cont_diff)
+        @test length(Set([cont, copy(cont), cont_diff])) == 2
+        @test Dict(cont => 1)[copy(cont)] == 1
+        @test hash(layout) == hash(copy(layout))
+        @test hash(analysis_info) == hash(copy(analysis_info))
+
+        # NaN: `==` follows IEEE (NaN != NaN), `isequal` treats NaNs as equal
+        cont_nan = copy(cont)
+        cont_nan.data[1, :Fz] = NaN
+        @test cont_nan != copy(cont_nan)
+        @test isequal(cont_nan, copy(cont_nan))
+        @test hash(cont_nan) == hash(copy(cont_nan))
+
+        # Neighbours compare by value (previously by identity)
+        nb1 = EegFun.Neighbours([:Cz], [1.0], [1.0])
+        nb2 = EegFun.Neighbours([:Cz], [1.0], [1.0])
+        @test nb1 == nb2
+        @test isequal(nb1, nb2)
+        @test hash(nb1) == hash(nb2)
+        @test nb1 != EegFun.Neighbours([:Pz], [1.0], [1.0])
 
         # summary
         @test summary(cont) == "3 timepoints × 2 channels ContinuousData (\"test\")"

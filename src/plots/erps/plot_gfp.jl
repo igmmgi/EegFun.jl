@@ -157,7 +157,7 @@ function plot_gfp(
     n_panels = 1 + (show_erp_traces ? 1 : 0) + (show_dissimilarity ? 1 : 0)
 
     # Create figure
-    fig = Figure(size = (800, 200 * n_panels))
+    fig = _eegfun_figure(size = (800, 200 * n_panels))
 
     panel_idx = 1
 
@@ -334,7 +334,7 @@ function plot_gfp(gfp_data::DataFrame; kwargs...)
     n_panels = 1 + (show_dissimilarity ? 1 : 0)
 
     # Create figure
-    fig = Figure(size = (800, 300 * n_panels))
+    fig = _eegfun_figure(size = (800, 300 * n_panels))
 
     panel_idx = 1
 
@@ -449,7 +449,7 @@ function plot_gfp(gfp_data::Vector{DataFrame}; kwargs...)
     n_panels = 1 + (show_dissimilarity ? 1 : 0)
 
     # Create figure
-    fig = Figure(size = (800, 300 * n_panels))
+    fig = _eegfun_figure(size = (800, 300 * n_panels))
 
     panel_idx = 1
 

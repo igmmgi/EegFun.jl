@@ -237,8 +237,8 @@ include("demos/ecg/signal_example_ecg_hrv.jl")
 include("precompile.jl")
 
 function __init__()
-    # Set the default visual aesthetic for EegFun
-    Makie.set_theme!(theme_eegfun())
+    # Note: the EegFun plot theme is applied per-figure (see `_eegfun_figure`), not globally,
+    # so loading EegFun never changes the user's Makie theme.
 
     register(
         DataDep(

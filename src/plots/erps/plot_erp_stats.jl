@@ -165,7 +165,7 @@ function plot_erp_stats(
     eeg_layout = result.data[1].layout
 
     # Create figure and apply layout system
-    fig = Figure(size = (800, 600), title = plot_kwargs[:window_title], figure_padding = plot_kwargs[:figure_padding])
+    fig = _eegfun_figure(size = (800, 600), title = plot_kwargs[:window_title], figure_padding = plot_kwargs[:figure_padding])
 
 
 
@@ -611,7 +611,7 @@ function plot_stat_heatmap(result::StatsResult; kwargs...)
     xlabel = get(kwargs, :xlabel, xlabel_def)
     ylabel = get(kwargs, :ylabel, "Channels")
 
-    fig = Figure(size = (850, 600), title = window_title, figure_padding = plot_kwargs[:figure_padding])
+    fig = _eegfun_figure(size = (850, 600), title = window_title, figure_padding = plot_kwargs[:figure_padding])
     ax = Axis(fig[1, 1], xlabel = xlabel, ylabel = ylabel)
 
     plot_stat_heatmap!(fig, ax, result; kwargs...)

@@ -150,7 +150,7 @@ function plot_joint_probability(dat::DataFrame; kwargs...)
     plot_kwargs = _merge_plot_kwargs(PLOT_JOINT_PROBABILITY_KWARGS, kwargs)
 
     # Create the figure and axis
-    fig = Figure()
+    fig = _eegfun_figure()
     ax = Axis(fig[1, 1])
 
     # Use the mutating version to plot

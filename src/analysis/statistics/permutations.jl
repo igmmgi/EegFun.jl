@@ -1,22 +1,52 @@
 # This file contains permutation logic for Monte Carlo statistical testing,
 # including label shuffling, t-matrix collection, and permutation loop execution.
+#
+# Randomness: all permutations are drawn up front on the calling task via
+# `_draw_permutation_plan(rng, ...)`. The (multi-threaded) permutation loops then only
+# *consume* columns of that plan, so results depend solely on `rng` and not on the number
+# of threads or on task scheduling.
+
 """
-    _generate_swap_mask(n_participants)
+    _draw_permutation_plan(rng, design, n_A, n_B, n_permutations)
 
-Generate a random swap mask for paired design.
-
-# Arguments
-- `n_participants::Int`: Number of participants
+Pre-draw all label permutations for a two-condition permutation test.
 
 # Returns
-- `BitVector`: Swap mask (true = swap, false = don't swap)
+- `:paired` → `Matrix{Bool}` of size `n_A × n_permutations`; `true` = swap the two conditions
+  for that participant in that permutation (`n_A == n_B` = number of participants).
+- `:independent` → `Matrix{Int}` of size `(n_A + n_B) × n_permutations`; each column is a
+  permutation of the pooled participants (first `n_A` entries form group A).
 """
-function _generate_swap_mask(n_participants::Int)
-    return BitVector([rand(Bool) for _ = 1:n_participants])
+function _draw_permutation_plan(rng::AbstractRNG, design::Symbol, n_A::Int, n_B::Int, n_permutations::Int)
+    if design == :paired
+        return rand(rng, Bool, n_A, n_permutations)
+    elseif design == :independent
+        n_total = n_A + n_B
+        plan = Matrix{Int}(undef, n_total, n_permutations)
+        buf = Vector{Int}(undef, n_total)
+        for p = 1:n_permutations
+            randperm!(rng, buf)
+            plan[:, p] .= buf
+        end
+        return plan
+    end
+    error("Unknown design: $design (expected :paired or :independent)")
 end
 
+_draw_permutation_plan(rng::AbstractRNG, prepared, n_permutations::Int) = _draw_permutation_plan(
+    rng,
+    prepared.analysis.design,
+    size(prepared.analysis.data[1], 1),
+    size(prepared.analysis.data[2], 1),
+    n_permutations,
+)
+
+# Draw a single permutation (one plan column) — used by the non-plan convenience methods.
+_draw_permutation(rng::AbstractRNG, design::Symbol, n_A::Int, n_B::Int) = vec(_draw_permutation_plan(rng, design, n_A, n_B, 1))
+
 """
-    _shuffle_labels!(shuffled_A, shuffled_B, data1, data2, design)
+    _shuffle_labels!(shuffled_A, shuffled_B, data1, data2, design, permutation)
+    _shuffle_labels!(shuffled_A, shuffled_B, data1, data2, design; rng = Random.default_rng())
 
 In-place version: Shuffle condition/group labels for permutation test.
 
@@ -26,71 +56,73 @@ In-place version: Shuffle condition/group labels for permutation test.
 - `data1::Array{Float64, 3}`: Original data for condition 1
 - `data2::Array{Float64, 3}`: Original data for condition 2
 - `design::Symbol`: Design type (`:paired` or `:independent`)
+- `permutation::AbstractVector`: One column of a plan from [`_draw_permutation_plan`](@ref).
+  If omitted, a fresh permutation is drawn from `rng`.
 
 # Returns
 - `(shuffled_A, shuffled_B)`: Shuffled data arrays
 
 # Notes
-For paired design: randomly swap A/B labels within each participant.
-For independent design: randomly shuffle participants between groups.
+For paired design: swap A/B labels within each participant where `permutation[p]` is `true`.
+For independent design: reassign pooled participants to groups according to `permutation`.
 """
 function _shuffle_labels!(
-    shuffled_A::Array{Float64,3},
-    shuffled_B::Array{Float64,3},
-    data1::Array{Float64,3},
-    data2::Array{Float64,3},
+    shuffled_A::Array{Float64,N},
+    shuffled_B::Array{Float64,N},
+    data1::Array{Float64,N},
+    data2::Array{Float64,N},
+    design::Symbol;
+    rng::AbstractRNG = Random.default_rng(),
+) where {N}
+    permutation = _draw_permutation(rng, design, size(data1, 1), size(data2, 1))
+    return _shuffle_labels!(shuffled_A, shuffled_B, data1, data2, design, permutation)
+end
+
+function _shuffle_labels!(
+    shuffled_A::Array{Float64,N},
+    shuffled_B::Array{Float64,N},
+    data1::Array{Float64,N},
+    data2::Array{Float64,N},
     design::Symbol,
-)
+    permutation::AbstractVector,
+) where {N}
+    n_features = prod(size(data1)[2:end])
+    n_A = size(data1, 1)
+    n_B = size(data2, 1)
+
     if design == :paired
-        # Paired: copy data first (copyto! is optimized), then swap slices in-place
         copyto!(shuffled_A, data1)
         copyto!(shuffled_B, data2)
 
-        n_participants, n_electrodes, n_time = size(data1)
-        swaps = rand(Bool, n_participants)
+        A_mat = reshape(shuffled_A, n_A, n_features)
+        B_mat = reshape(shuffled_B, n_B, n_features)
+        swaps = permutation
 
-        for t_idx = 1:n_time
-            for e_idx = 1:n_electrodes
-                @inbounds @simd for p_idx = 1:n_participants
-                    if swaps[p_idx]
-                        temp = shuffled_A[p_idx, e_idx, t_idx]
-                        shuffled_A[p_idx, e_idx, t_idx] = shuffled_B[p_idx, e_idx, t_idx]
-                        shuffled_B[p_idx, e_idx, t_idx] = temp
-                    end
+        for feat = 1:n_features
+            @inbounds @simd for p_idx = 1:n_A
+                if swaps[p_idx]
+                    temp = A_mat[p_idx, feat]
+                    A_mat[p_idx, feat] = B_mat[p_idx, feat]
+                    B_mat[p_idx, feat] = temp
                 end
             end
         end
 
     elseif design == :independent
-        n_A = size(data1, 1)
-        n_B = size(data2, 1)
-        n_total = n_A + n_B
-        n_electrodes = size(data1, 2)
-        n_time = size(data1, 3)
+        A_mat = reshape(shuffled_A, n_A, n_features)
+        B_mat = reshape(shuffled_B, n_B, n_features)
+        d1_mat = reshape(data1, n_A, n_features)
+        d2_mat = reshape(data2, n_B, n_features)
+        shuffled_indices = permutation
 
-        # Shuffle indices
-        shuffled_indices = collect(1:n_total)
-        shuffle!(shuffled_indices)
-
-        @inbounds for t_idx = 1:n_time
-            for e_idx = 1:n_electrodes
-                @simd for i = 1:n_A
-                    src_idx = shuffled_indices[i]
-                    if src_idx <= n_A
-                        shuffled_A[i, e_idx, t_idx] = data1[src_idx, e_idx, t_idx]
-                    else
-                        shuffled_A[i, e_idx, t_idx] = data2[src_idx-n_A, e_idx, t_idx]
-                    end
-                end
-
-                @simd for i = 1:n_B
-                    src_idx = shuffled_indices[n_A+i]
-                    if src_idx <= n_A
-                        shuffled_B[i, e_idx, t_idx] = data1[src_idx, e_idx, t_idx]
-                    else
-                        shuffled_B[i, e_idx, t_idx] = data2[src_idx-n_A, e_idx, t_idx]
-                    end
-                end
+        @inbounds for feat = 1:n_features
+            @simd for i = 1:n_A
+                src_idx = shuffled_indices[i]
+                A_mat[i, feat] = src_idx <= n_A ? d1_mat[src_idx, feat] : d2_mat[src_idx-n_A, feat]
+            end
+            @simd for i = 1:n_B
+                src_idx = shuffled_indices[n_A+i]
+                B_mat[i, feat] = src_idx <= n_A ? d1_mat[src_idx, feat] : d2_mat[src_idx-n_A, feat]
             end
         end
     end
@@ -98,101 +130,85 @@ function _shuffle_labels!(
 end
 
 """
-    _shuffle_labels(prepared)
+    _shuffle_labels(prepared; rng = Random.default_rng())
 
 Shuffle condition/group labels for permutation test.
 """
-function _shuffle_labels(prepared::StatisticalData)
+function _shuffle_labels(prepared::StatisticalData; rng::AbstractRNG = Random.default_rng())
     shuffled_A = similar(prepared.analysis.data[1])
     shuffled_B = similar(prepared.analysis.data[2])
-    return _shuffle_labels!(shuffled_A, shuffled_B, prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design)
+    return _shuffle_labels!(
+        shuffled_A,
+        shuffled_B,
+        prepared.analysis.data[1],
+        prepared.analysis.data[2],
+        prepared.analysis.design;
+        rng = rng,
+    )
 end
 
+# Start an (optional) progress bar fed by an atomic counter; returns the counter or `nothing`.
+function _start_permutation_progress(show_progress::Bool, n_permutations::Int, desc::String)
+    show_progress || return nothing
+    progress = Progress(n_permutations, desc = desc, showspeed = true)
+    completed = Threads.Atomic{Int}(0)
+    track_progress_async(progress, completed, n_permutations)
+    return completed
+end
+
+_tick!(::Nothing) = nothing
+_tick!(completed::Threads.Atomic{Int}) = (Threads.atomic_add!(completed, 1); nothing)
+
 """
-    _collect_permutation_t_matrices(prepared, n_permutations, show_progress)
+    _collect_permutation_t_matrices(prepared, plan, show_progress)
 
 Run permutations and collect t-matrices for non-parametric thresholding.
 
 # Arguments
 - `prepared::StatisticalData`: Prepared data
-- `n_permutations::Int`: Number of permutations
+- `plan::AbstractMatrix`: Pre-drawn permutations from [`_draw_permutation_plan`](@ref) (one column per permutation)
 - `show_progress::Bool`: Show progress bar (default: true)
 
 # Returns
 - `permutation_t_matrices::Array{Float64, 3}`: T-statistics from all permutations [electrodes × time × permutations]
-
-# Notes
-For reproducible results, call `Random.seed!(xxx)` in your Julia session before running this function.
-
-# Examples
-```julia
-perm_t_matrices = _collect_permutation_t_matrices(prepared, 1000, nothing, true)
-```
 """
-function _collect_permutation_t_matrices(prepared::StatisticalData, n_permutations::Int, show_progress::Bool = true)
-    # Get dimensions directly from data
-    n_electrodes = size(prepared.analysis.data[1], 2)
-    n_time = size(prepared.analysis.data[1], 3)
+function _collect_permutation_t_matrices(prepared::StatisticalData, plan::AbstractMatrix, show_progress::Bool = true)
+    n_permutations = size(plan, 2)
+    data1, data2 = prepared.analysis.data[1], prepared.analysis.data[2]
+    design = prepared.analysis.design
+    paired = design == :paired
+    n_electrodes = size(data1, 2)
+    n_time = size(data1, 3)
 
-    # Pre-allocate array for all t-matrices
     permutation_t_matrices = Array{Float64,3}(undef, n_electrodes, n_time, n_permutations)
+    completed = _start_permutation_progress(show_progress, n_permutations, "Collecting permutation t-matrices: ")
 
-    # Progress bar
-    local completed = nothing
-    if show_progress
-        progress = Progress(n_permutations, desc = "Collecting permutation t-matrices: ", showspeed = true)
-        completed = Base.Threads.Atomic{Int}(0)
-        EegFun.track_progress_async(progress, completed, n_permutations)
-    end
+    _foreach_chunk(n_permutations) do perm_range
+        # Scratch buffers owned exclusively by this chunk/task
+        shuffled_A = similar(data1)
+        shuffled_B = similar(data2)
+        t_matrix_buffer = Matrix{Float64}(undef, n_electrodes, n_time)
+        mean1_buffer = paired ? similar(t_matrix_buffer) : nothing
+        mean2_buffer = paired ? similar(t_matrix_buffer) : nothing
+        mean_diff_buffer = paired ? similar(t_matrix_buffer) : nothing
+        std_diff_buffer = paired ? similar(t_matrix_buffer) : nothing
 
-    # Pre-allocate buffers per thread to reuse memory safely across concurrent threads
-    n_threads = Threads.maxthreadid()
-    shuffled_A_buffers = [similar(prepared.analysis.data[1]) for _ = 1:n_threads]
-    shuffled_B_buffers = [similar(prepared.analysis.data[2]) for _ = 1:n_threads]
-
-    mean1_buffers = prepared.analysis.design == :paired ? [Array{Float64,2}(undef, n_electrodes, n_time) for _ = 1:n_threads] : nothing
-    mean2_buffers = prepared.analysis.design == :paired ? [Array{Float64,2}(undef, n_electrodes, n_time) for _ = 1:n_threads] : nothing
-    mean_diff_buffers = prepared.analysis.design == :paired ? [Array{Float64,2}(undef, n_electrodes, n_time) for _ = 1:n_threads] : nothing
-    std_diff_buffers = prepared.analysis.design == :paired ? [Array{Float64,2}(undef, n_electrodes, n_time) for _ = 1:n_threads] : nothing
-    t_matrix_buffers = [Array{Float64,2}(undef, n_electrodes, n_time) for _ = 1:n_threads]
-
-    Threads.@threads for perm_idx = 1:n_permutations
-        tid = Threads.threadid()
-        shuffled_A_buffer = shuffled_A_buffers[tid]
-        shuffled_B_buffer = shuffled_B_buffers[tid]
-        t_matrix_buffer = t_matrix_buffers[tid]
-
-        # Shuffle labels using pre-allocated thread-local buffers
-        _shuffle_labels!(
-            shuffled_A_buffer,
-            shuffled_B_buffer,
-            prepared.analysis.data[1],
-            prepared.analysis.data[2],
-            prepared.analysis.design,
-        )
-
-        mean1_buffer = prepared.analysis.design == :paired ? mean1_buffers[tid] : nothing
-        mean2_buffer = prepared.analysis.design == :paired ? mean2_buffers[tid] : nothing
-        mean_diff_buffer = prepared.analysis.design == :paired ? mean_diff_buffers[tid] : nothing
-        std_diff_buffer = prepared.analysis.design == :paired ? std_diff_buffers[tid] : nothing
-
-        # Compute t-matrix directly from arrays using thread-local memory
-        t_matrix_perm, _, _, _ = _compute_t_matrix(
-            shuffled_A_buffer,
-            shuffled_B_buffer,
-            prepared.analysis.design,
-            mean1_buffer = mean1_buffer,
-            mean2_buffer = mean2_buffer,
-            mean_diff_buffer = mean_diff_buffer,
-            std_diff_buffer = std_diff_buffer,
-            t_matrix_buffer = t_matrix_buffer,
-            compute_p_values = false,
-            compute_se = false,
-        )
-        permutation_t_matrices[:, :, perm_idx] = t_matrix_perm
-
-        if show_progress
-            Base.Threads.atomic_add!(completed::Base.Threads.Atomic{Int}, 1)
+        for perm_idx in perm_range
+            _shuffle_labels!(shuffled_A, shuffled_B, data1, data2, design, view(plan, :, perm_idx))
+            t_matrix_perm, _, _, _ = _compute_t_matrix(
+                shuffled_A,
+                shuffled_B,
+                design,
+                mean1_buffer = mean1_buffer,
+                mean2_buffer = mean2_buffer,
+                mean_diff_buffer = mean_diff_buffer,
+                std_diff_buffer = std_diff_buffer,
+                t_matrix_buffer = t_matrix_buffer,
+                compute_p_values = false,
+                compute_se = false,
+            )
+            permutation_t_matrices[:, :, perm_idx] = t_matrix_perm
+            _tick!(completed)
         end
     end
 
@@ -200,12 +216,14 @@ function _collect_permutation_t_matrices(prepared::StatisticalData, n_permutatio
 end
 
 """
-    _collect_permutation_t_matrices_gpu(prepared, n_permutations)
+    _collect_permutation_t_matrices_gpu(prepared, plan)
 
 GPU-accelerated collection of permutation t-matrices.
 Computes permutations using massive batched matrix multiplications instead of CPU loops.
+Uses the same pre-drawn `plan` as the CPU path, so CPU and GPU see identical permutations.
 """
-function _collect_permutation_t_matrices_gpu(prepared::StatisticalData, n_permutations::Int)
+function _collect_permutation_t_matrices_gpu(prepared::StatisticalData, plan::AbstractMatrix)
+    n_permutations = size(plan, 2)
     n_electrodes = size(prepared.analysis.data[1], 2)
     n_time = size(prepared.analysis.data[1], 3)
     n_features = n_electrodes * n_time
@@ -221,8 +239,8 @@ function _collect_permutation_t_matrices_gpu(prepared::StatisticalData, n_permut
         # Sum of squares is invariant
         sum_sq_D = sum(D_gpu .^ 2, dims = 1) # 1 x n_features
 
-        # Random sign matrix S (+1 or -1)
-        S_cpu = rand([-1.0f0, 1.0f0], n_permutations, n_participants)
+        # Sign matrix S (+1 or -1): swapping conditions for a participant flips the sign of D
+        S_cpu = Float32[plan[p_idx, perm_idx] ? -1.0f0 : 1.0f0 for perm_idx = 1:n_permutations, p_idx = 1:n_participants]
         S_gpu = gpu_array(S_cpu)
 
         # Matrix multiplication computes permutation sums simultaneously!
@@ -264,8 +282,7 @@ function _collect_permutation_t_matrices_gpu(prepared::StatisticalData, n_permut
         # Generate binary indicator matrix M on CPU
         M_cpu = zeros(Float32, n_permutations, n_total)
         for p = 1:n_permutations
-            idx = randperm(n_total)
-            M_cpu[p, idx[1:n_A]] .= 1.0f0
+            M_cpu[p, view(plan, 1:n_A, p)] .= 1.0f0
         end
         M_gpu = gpu_array(M_cpu)
 
@@ -299,14 +316,13 @@ end
 
 
 """
-    _run_permutations(prepared, n_permutations, critical_t_values, spatial_connectivity, cluster_type, tail, min_num_neighbors, show_progress; permutation_t_matrices)
+    _run_permutations(prepared, plan, critical_t_values, spatial_connectivity, cluster_type, tail, min_num_neighbors, show_progress; permutation_t_matrices)
 
 Run permutation loop to generate distribution of maximum cluster statistics (maxsum).
 
 # Arguments
 - `prepared::StatisticalData`: Prepared data
-- `n_permutations::Int`: Number of permutations
-- `threshold::Float64`: P-value threshold
+- `plan::AbstractMatrix`: Pre-drawn permutations from [`_draw_permutation_plan`](@ref) (one column per permutation)
 - `critical_t_values`: Critical t-values - can be:
   - `Array{Float64, 2}` for parametric (common critical t-values)
   - `Tuple{Float64, Float64}` for non-parametric common (positive, negative thresholds)
@@ -316,24 +332,16 @@ Run permutation loop to generate distribution of maximum cluster statistics (max
 - `tail::Symbol`: Test tail
 - `min_num_neighbors::Int`: Minimum number of neighbors for pre-filtering
 - `show_progress::Bool`: Show progress bar (default: true)
-- `permutation_t_matrices::Union{Nothing, Array{Float64, 3}}`: Pre-computed t-matrices from permutations (optional, for non-parametric)
+- `permutation_t_matrices::Union{Nothing, Array{Float64, 3}}`: Pre-computed t-matrices from permutations
+  (optional; must have been computed from the same `plan`)
 
 # Returns
 - `permutation_max_positive::Vector{Float64}`: Max cluster stats from permutations (positive)
 - `permutation_max_negative::Vector{Float64}`: Max cluster stats from permutations (negative)
-
-# Notes
-For reproducible results, call `Random.seed!(xxx)` in your Julia session before running this function.
-
-# Examples
-```julia
-perm_pos, perm_neg = _run_permutations(prepared, 1000, 0.05, critical_t, conn, 
-                                     :spatiotemporal, :both, 0, 0, true)
-```
 """
 function _run_permutations(
     prepared::StatisticalData,
-    n_permutations::Int,
+    plan::AbstractMatrix,
     critical_t_values,
     spatial_connectivity::SparseMatrixCSC{Bool},
     cluster_type::Symbol,
@@ -342,6 +350,8 @@ function _run_permutations(
     show_progress::Bool = true;
     permutation_t_matrices::Union{Nothing,Array{Float64,3}} = nothing,
 )
+    n_permutations = size(plan, 2)
+
     # Determine thresholding type from critical_t_values type
     is_parametric = isa(critical_t_values, Array{Float64,2})
     is_nonparametric_common = isa(critical_t_values, Tuple) && length(critical_t_values) == 2 && isa(critical_t_values[1], Float64)
@@ -351,126 +361,90 @@ function _run_permutations(
     permutation_max_positive = zeros(Float64, n_permutations)
     permutation_max_negative = zeros(Float64, n_permutations)
 
-    n_electrodes = size(prepared.analysis.data[1], 2)
-    n_time = size(prepared.analysis.data[1], 3)
-    n_threads = Threads.maxthreadid()
-
-    # Pre-allocate buffers per thread to reuse memory across concurrent permutations
-    shuffled_A_buffers = [similar(prepared.analysis.data[1]) for _ = 1:n_threads]
-    shuffled_B_buffers = [similar(prepared.analysis.data[2]) for _ = 1:n_threads]
-    mask_pos_buffers = [BitArray{2}(undef, n_electrodes, n_time) for _ = 1:n_threads]
-    mask_neg_buffers = [BitArray{2}(undef, n_electrodes, n_time) for _ = 1:n_threads]
-
-    if prepared.analysis.design == :paired
-        mean1_buffers = [Array{Float64,2}(undef, n_electrodes, n_time) for _ = 1:n_threads]
-        mean2_buffers = [Array{Float64,2}(undef, n_electrodes, n_time) for _ = 1:n_threads]
-        mean_diff_buffers = [Array{Float64,2}(undef, n_electrodes, n_time) for _ = 1:n_threads]
-        std_diff_buffers = [Array{Float64,2}(undef, n_electrodes, n_time) for _ = 1:n_threads]
-    else
-        mean1_buffers = mean2_buffers = mean_diff_buffers = std_diff_buffers = nothing
-    end
-    t_matrix_buffers = [Array{Float64,2}(undef, n_electrodes, n_time) for _ = 1:n_threads]
-    cluster_labels_buffers = [zeros(Int, n_electrodes, n_time) for _ = 1:n_threads]
-    cluster_queue_buffers = [Vector{Tuple{Int,Int}}(undef, n_electrodes * n_time) for _ = 1:n_threads]
-
-    # Extract commonly used fields from grand_average ErpData
-    electrodes = channel_labels(prepared.data[1])
-    time_points = prepared.analysis.time_points
+    data1, data2 = prepared.analysis.data[1], prepared.analysis.data[2]
+    design = prepared.analysis.design
+    paired = design == :paired
+    n_electrodes = size(data1, 2)
+    n_time = size(data1, 3)
 
     # Ensure spatial connectivity is symmetric once outside permutation loop
     spatial_conn_sym =
         issymmetric(spatial_connectivity) ? spatial_connectivity : (spatial_connectivity .| copy(transpose(spatial_connectivity)))
 
-    # Progress bar
-    local completed = nothing
-    if show_progress
-        progress = Progress(n_permutations, desc = "Permutations: ", showspeed = true)
-        completed = Base.Threads.Atomic{Int}(0)
-        EegFun.track_progress_async(progress, completed, n_permutations)
-    end
+    completed = _start_permutation_progress(show_progress, n_permutations, "Permutations: ")
 
-    Threads.@threads for perm_idx = 1:n_permutations
-        tid = Threads.threadid()
+    _foreach_chunk(n_permutations) do perm_range
+        # Scratch buffers owned exclusively by this chunk/task
+        shuffled_A = similar(data1)
+        shuffled_B = similar(data2)
+        mask_pos_buffer = BitArray{2}(undef, n_electrodes, n_time)
+        mask_neg_buffer = BitArray{2}(undef, n_electrodes, n_time)
+        t_matrix_buffer = Matrix{Float64}(undef, n_electrodes, n_time)
+        mean1_buffer = paired ? similar(t_matrix_buffer) : nothing
+        mean2_buffer = paired ? similar(t_matrix_buffer) : nothing
+        mean_diff_buffer = paired ? similar(t_matrix_buffer) : nothing
+        std_diff_buffer = paired ? similar(t_matrix_buffer) : nothing
+        cluster_labels = zeros(Int, n_electrodes, n_time)
+        cluster_queue = Vector{Tuple{Int,Int}}(undef, n_electrodes * n_time)
 
-        # Select thread-local buffers
-        shuffled_A_buffer = shuffled_A_buffers[tid]
-        shuffled_B_buffer = shuffled_B_buffers[tid]
-        mask_pos_buffer = mask_pos_buffers[tid]
-        mask_neg_buffer = mask_neg_buffers[tid]
-        mean1_buffer = prepared.analysis.design == :paired ? mean1_buffers[tid] : nothing
-        mean2_buffer = prepared.analysis.design == :paired ? mean2_buffers[tid] : nothing
-        mean_diff_buffer = prepared.analysis.design == :paired ? mean_diff_buffers[tid] : nothing
-        std_diff_buffer = prepared.analysis.design == :paired ? std_diff_buffers[tid] : nothing
-        t_matrix_buffer = t_matrix_buffers[tid]
+        for perm_idx in perm_range
+            # Get t-matrix: either from pre-computed or compute new
+            if !isnothing(permutation_t_matrices)
+                copyto!(t_matrix_buffer, view(permutation_t_matrices, :, :, perm_idx))
+                t_matrix_perm = t_matrix_buffer
+            else
+                _shuffle_labels!(shuffled_A, shuffled_B, data1, data2, design, view(plan, :, perm_idx))
+                t_matrix_perm, _, _, _ = _compute_t_matrix(
+                    shuffled_A,
+                    shuffled_B,
+                    design,
+                    mean1_buffer = mean1_buffer,
+                    mean2_buffer = mean2_buffer,
+                    mean_diff_buffer = mean_diff_buffer,
+                    std_diff_buffer = std_diff_buffer,
+                    t_matrix_buffer = t_matrix_buffer,
+                    compute_p_values = false,
+                    compute_se = false,
+                )
+            end
 
-        # Get t-matrix: either from pre-computed or compute new
-        if !isnothing(permutation_t_matrices)
-            t_matrix_perm = permutation_t_matrices[:, :, perm_idx]
-        else
-            # Shuffle and compute t-matrix
-            _shuffle_labels!(
-                shuffled_A_buffer,
-                shuffled_B_buffer,
-                prepared.analysis.data[1],
-                prepared.analysis.data[2],
-                prepared.analysis.design,
+            # Threshold (fill pre-allocated masks)
+            if is_parametric
+                _threshold_t_matrix_parametric!(mask_pos_buffer, mask_neg_buffer, t_matrix_perm, critical_t_values, tail)
+            elseif is_nonparametric_common
+                thresh_pos, thresh_neg = critical_t_values
+                _threshold_t_matrix_nonparametric!(mask_pos_buffer, mask_neg_buffer, t_matrix_perm, thresh_pos, thresh_neg, tail)
+            elseif is_nonparametric_individual
+                thresh_pos_mat, thresh_neg_mat = critical_t_values
+                _threshold_t_matrix_nonparametric!(mask_pos_buffer, mask_neg_buffer, t_matrix_perm, thresh_pos_mat, thresh_neg_mat, tail)
+            end
+
+            # Pre-filter masks (modify in place)
+            if min_num_neighbors > 0
+                _prefilter_mask_by_neighbors!(mask_pos_buffer, spatial_conn_sym, min_num_neighbors)
+                _prefilter_mask_by_neighbors!(mask_neg_buffer, spatial_conn_sym, min_num_neighbors)
+            end
+
+            # Find extreme cluster statistics directly (zero allocation)
+            permutation_max_positive[perm_idx] = _max_cluster_stat(
+                mask_pos_buffer,
+                t_matrix_perm,
+                spatial_conn_sym,
+                cluster_type,
+                cluster_labels,
+                cluster_queue;
+                is_negative = false,
             )
-            t_matrix_perm, _, _, _ = _compute_t_matrix(
-                shuffled_A_buffer,
-                shuffled_B_buffer,
-                prepared.analysis.design,
-                mean1_buffer = mean1_buffer,
-                mean2_buffer = mean2_buffer,
-                mean_diff_buffer = mean_diff_buffer,
-                std_diff_buffer = std_diff_buffer,
-                t_matrix_buffer = t_matrix_buffer,
-                compute_p_values = false,
-                compute_se = false,
+            permutation_max_negative[perm_idx] = _max_cluster_stat(
+                mask_neg_buffer,
+                t_matrix_perm,
+                spatial_conn_sym,
+                cluster_type,
+                cluster_labels,
+                cluster_queue;
+                is_negative = true,
             )
-        end
-
-        # Threshold (fill pre-allocated masks)
-        if is_parametric
-            _threshold_t_matrix_parametric!(mask_pos_buffer, mask_neg_buffer, t_matrix_perm, critical_t_values, tail)
-        elseif is_nonparametric_common
-            thresh_pos, thresh_neg = critical_t_values
-            _threshold_t_matrix_nonparametric!(mask_pos_buffer, mask_neg_buffer, t_matrix_perm, thresh_pos, thresh_neg, tail)
-        elseif is_nonparametric_individual
-            thresh_pos_mat, thresh_neg_mat = critical_t_values
-            _threshold_t_matrix_nonparametric!(mask_pos_buffer, mask_neg_buffer, t_matrix_perm, thresh_pos_mat, thresh_neg_mat, tail)
-        end
-
-        # Pre-filter masks (modify in place)
-        if min_num_neighbors > 0
-            _prefilter_mask_by_neighbors!(mask_pos_buffer, spatial_conn_sym, min_num_neighbors)
-            _prefilter_mask_by_neighbors!(mask_neg_buffer, spatial_conn_sym, min_num_neighbors)
-        end
-
-        # Find extreme cluster statistics directly (zero allocation)
-        max_pos = _max_cluster_stat(
-            mask_pos_buffer,
-            t_matrix_perm,
-            spatial_conn_sym,
-            cluster_type,
-            cluster_labels_buffers[tid],
-            cluster_queue_buffers[tid];
-            is_negative = false,
-        )
-        max_neg = _max_cluster_stat(
-            mask_neg_buffer,
-            t_matrix_perm,
-            spatial_conn_sym,
-            cluster_type,
-            cluster_labels_buffers[tid],
-            cluster_queue_buffers[tid];
-            is_negative = true,
-        )
-
-        permutation_max_positive[perm_idx] = max_pos
-        permutation_max_negative[perm_idx] = max_neg
-
-        if show_progress
-            Base.Threads.atomic_add!(completed::Base.Threads.Atomic{Int}, 1)
+            _tick!(completed)
         end
     end
 
@@ -478,90 +452,20 @@ function _run_permutations(
 end
 
 
-# === TF LABEL SHUFFLING (4D) ===
-
-"""
-    _shuffle_labels_tf!(shuffled_A, shuffled_B, data1, data2, design)
-
-In-place label shuffling for TF permutation tests.
-
-For paired design: randomly swap conditions for each participant.
-For independent design: randomly shuffle participants between groups.
-"""
-function _shuffle_labels_tf!(
-    shuffled_A::Array{Float64,4},
-    shuffled_B::Array{Float64,4},
-    data1::Array{Float64,4},
-    data2::Array{Float64,4},
-    design::Symbol,
-)
-    if design == :paired
-        copyto!(shuffled_A, data1)
-        copyto!(shuffled_B, data2)
-
-        n_participants, n_electrodes, n_freqs, n_time = size(data1)
-        swaps = rand(Bool, n_participants)
-
-        for t_idx = 1:n_time
-            for f_idx = 1:n_freqs
-                for e_idx = 1:n_electrodes
-                    @inbounds @simd for p_idx = 1:n_participants
-                        if swaps[p_idx]
-                            temp = shuffled_A[p_idx, e_idx, f_idx, t_idx]
-                            shuffled_A[p_idx, e_idx, f_idx, t_idx] = shuffled_B[p_idx, e_idx, f_idx, t_idx]
-                            shuffled_B[p_idx, e_idx, f_idx, t_idx] = temp
-                        end
-                    end
-                end
-            end
-        end
-
-    elseif design == :independent
-        n_A = size(data1, 1)
-        n_B = size(data2, 1)
-        n_total = n_A + n_B
-
-        shuffled_indices = randperm(n_total)
-
-        n_electrodes = size(data1, 2)
-        n_freqs = size(data1, 3)
-        n_time = size(data1, 4)
-
-        @inbounds for t_idx = 1:n_time
-            for f_idx = 1:n_freqs
-                for e_idx = 1:n_electrodes
-                    @simd for i = 1:n_A
-                        src_idx = shuffled_indices[i]
-                        if src_idx <= n_A
-                            shuffled_A[i, e_idx, f_idx, t_idx] = data1[src_idx, e_idx, f_idx, t_idx]
-                        else
-                            shuffled_A[i, e_idx, f_idx, t_idx] = data2[src_idx-n_A, e_idx, f_idx, t_idx]
-                        end
-                    end
-                    @simd for i = 1:n_B
-                        src_idx = shuffled_indices[n_A+i]
-                        if src_idx <= n_A
-                            shuffled_B[i, e_idx, f_idx, t_idx] = data1[src_idx, e_idx, f_idx, t_idx]
-                        else
-                            shuffled_B[i, e_idx, f_idx, t_idx] = data2[src_idx-n_A, e_idx, f_idx, t_idx]
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return shuffled_A, shuffled_B
-end
+# Forward TF label shuffling to unified N-D _shuffle_labels!
+const _shuffle_labels_tf! = _shuffle_labels!
 
 
 # === TF PERMUTATION LOOP ===
 
 """
-    _run_permutations_tf(prepared, n_permutations, critical_t_values, spatial_connectivity,
+    _run_permutations_tf(prepared, plan, critical_t_values, spatial_connectivity,
                           cluster_type, tail, min_num_neighbors, electrodes, frequencies,
                           time_points, show_progress)
 
 Run Monte Carlo permutations for TF cluster-based permutation test.
+
+`plan` holds the pre-drawn permutations from [`_draw_permutation_plan`](@ref) (one column per permutation).
 
 # Returns
 - `permutation_max_positive::Vector{Float64}`: Max positive cluster stats per permutation
@@ -569,7 +473,7 @@ Run Monte Carlo permutations for TF cluster-based permutation test.
 """
 function _run_permutations_tf(
     prepared::TFStatisticalData,
-    n_permutations::Int,
+    plan::AbstractMatrix,
     critical_t_values,  # Can be Array{Float64,3} or Tuple{Float64,Float64}
     spatial_connectivity::SparseMatrixCSC{Bool},
     cluster_type::Symbol,
@@ -580,6 +484,7 @@ function _run_permutations_tf(
     time_points::Vector{Float64},
     show_progress::Bool = true,
 )
+    n_permutations = size(plan, 2)
     is_parametric = isa(critical_t_values, Array{Float64,3})
     is_nonparametric_common = isa(critical_t_values, Tuple) && length(critical_t_values) == 2 && isa(critical_t_values[1], Float64)
 
@@ -590,88 +495,71 @@ function _run_permutations_tf(
     permutation_max_positive = zeros(Float64, n_permutations)
     permutation_max_negative = zeros(Float64, n_permutations)
 
-    n_threads = Threads.maxthreadid()
-
-    # Pre-allocate thread-local buffers
-    mask_pos_buffers = [BitArray{3}(undef, n_electrodes, n_freqs, n_time) for _ = 1:n_threads]
-    mask_neg_buffers = [BitArray{3}(undef, n_electrodes, n_freqs, n_time) for _ = 1:n_threads]
-    shuffled_A_buffers = [similar(prepared.analysis.data[1]) for _ = 1:n_threads]
-    shuffled_B_buffers = [similar(prepared.analysis.data[2]) for _ = 1:n_threads]
-    t_matrix_buffers = [Array{Float64,3}(undef, n_electrodes, n_freqs, n_time) for _ = 1:n_threads]
-    cluster_labels_buffers = [zeros(Int, n_electrodes, n_freqs, n_time) for _ = 1:n_threads]
-    cluster_queue_buffers = [Vector{Tuple{Int,Int,Int}}(undef, n_electrodes * n_freqs * n_time) for _ = 1:n_threads]
+    data1, data2 = prepared.analysis.data[1], prepared.analysis.data[2]
+    design = prepared.analysis.design
 
     # Ensure spatial connectivity is symmetric once outside permutation loop
     spatial_conn_sym =
         issymmetric(spatial_connectivity) ? spatial_connectivity : (spatial_connectivity .| copy(transpose(spatial_connectivity)))
 
-    local completed = nothing
-    if show_progress
-        progress = Progress(n_permutations, desc = "TF Permutations: ", showspeed = true)
-        completed = Base.Threads.Atomic{Int}(0)
-        EegFun.track_progress_async(progress, completed, n_permutations)
-    end
+    completed = _start_permutation_progress(show_progress, n_permutations, "TF Permutations: ")
 
-    Threads.@threads for perm_idx = 1:n_permutations
-        tid = Threads.threadid()
-        mask_pos_buffer = mask_pos_buffers[tid]
-        mask_neg_buffer = mask_neg_buffers[tid]
-        shuffled_A = shuffled_A_buffers[tid]
-        shuffled_B = shuffled_B_buffers[tid]
-        t_matrix_buffer = t_matrix_buffers[tid]
+    _foreach_chunk(n_permutations) do perm_range
+        # Scratch buffers owned exclusively by this chunk/task
+        mask_pos_buffer = BitArray{3}(undef, n_electrodes, n_freqs, n_time)
+        mask_neg_buffer = BitArray{3}(undef, n_electrodes, n_freqs, n_time)
+        shuffled_A = similar(data1)
+        shuffled_B = similar(data2)
+        t_matrix_buffer = Array{Float64,3}(undef, n_electrodes, n_freqs, n_time)
+        cluster_labels = zeros(Int, n_electrodes, n_freqs, n_time)
+        cluster_queue = Vector{Tuple{Int,Int,Int}}(undef, n_electrodes * n_freqs * n_time)
 
-        # Shuffle labels
-        _shuffle_labels_tf!(shuffled_A, shuffled_B, prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design)
+        for perm_idx in perm_range
+            _shuffle_labels_tf!(shuffled_A, shuffled_B, data1, data2, design, view(plan, :, perm_idx))
 
-        # Compute t-matrix for shuffled data
-        t_matrix_perm, _, _ = _compute_t_matrix_tf(
-            shuffled_A,
-            shuffled_B,
-            prepared.analysis.design,
-            tail = tail,
-            compute_p_values = false,
-            t_matrix_buffer = t_matrix_buffer,
-        )
+            t_matrix_perm, _, _ = _compute_t_matrix_tf(
+                shuffled_A,
+                shuffled_B,
+                design,
+                tail = tail,
+                compute_p_values = false,
+                t_matrix_buffer = t_matrix_buffer,
+            )
 
-        # Threshold
-        if is_parametric
-            _threshold_t_matrix_parametric_tf!(mask_pos_buffer, mask_neg_buffer, t_matrix_perm, critical_t_values, tail)
-        elseif is_nonparametric_common
-            thresh_pos, thresh_neg = critical_t_values
-            _threshold_t_matrix_nonparametric_tf!(mask_pos_buffer, mask_neg_buffer, t_matrix_perm, thresh_pos, thresh_neg, tail)
-        end
+            # Threshold
+            if is_parametric
+                _threshold_t_matrix_parametric_tf!(mask_pos_buffer, mask_neg_buffer, t_matrix_perm, critical_t_values, tail)
+            elseif is_nonparametric_common
+                thresh_pos, thresh_neg = critical_t_values
+                _threshold_t_matrix_nonparametric_tf!(mask_pos_buffer, mask_neg_buffer, t_matrix_perm, thresh_pos, thresh_neg, tail)
+            end
 
-        # Pre-filter
-        if min_num_neighbors > 0
-            _prefilter_mask_by_neighbors_tf!(mask_pos_buffer, spatial_conn_sym, min_num_neighbors)
-            _prefilter_mask_by_neighbors_tf!(mask_neg_buffer, spatial_conn_sym, min_num_neighbors)
-        end
+            # Pre-filter
+            if min_num_neighbors > 0
+                _prefilter_mask_by_neighbors_tf!(mask_pos_buffer, spatial_conn_sym, min_num_neighbors)
+                _prefilter_mask_by_neighbors_tf!(mask_neg_buffer, spatial_conn_sym, min_num_neighbors)
+            end
 
-        # Find extreme cluster statistics directly (zero allocation)
-        max_pos = _max_cluster_stat_tf(
-            mask_pos_buffer,
-            t_matrix_perm,
-            spatial_conn_sym,
-            cluster_type,
-            cluster_labels_buffers[tid],
-            cluster_queue_buffers[tid];
-            is_negative = false,
-        )
-        max_neg = _max_cluster_stat_tf(
-            mask_neg_buffer,
-            t_matrix_perm,
-            spatial_conn_sym,
-            cluster_type,
-            cluster_labels_buffers[tid],
-            cluster_queue_buffers[tid];
-            is_negative = true,
-        )
-
-        permutation_max_positive[perm_idx] = max_pos
-        permutation_max_negative[perm_idx] = max_neg
-
-        if show_progress
-            Base.Threads.atomic_add!(completed::Base.Threads.Atomic{Int}, 1)
+            # Find extreme cluster statistics directly (zero allocation)
+            permutation_max_positive[perm_idx] = _max_cluster_stat_tf(
+                mask_pos_buffer,
+                t_matrix_perm,
+                spatial_conn_sym,
+                cluster_type,
+                cluster_labels,
+                cluster_queue;
+                is_negative = false,
+            )
+            permutation_max_negative[perm_idx] = _max_cluster_stat_tf(
+                mask_neg_buffer,
+                t_matrix_perm,
+                spatial_conn_sym,
+                cluster_type,
+                cluster_labels,
+                cluster_queue;
+                is_negative = true,
+            )
+            _tick!(completed)
         end
     end
 

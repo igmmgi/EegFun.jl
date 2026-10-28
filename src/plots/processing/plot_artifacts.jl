@@ -224,7 +224,7 @@ function plot_artifact_detection(epochs::EpochData, artifacts::EpochRejectionInf
     selected_channels = get_selected_channels(epochs, channel_selection, include_meta = false, include_extra = false)
 
     # Create figure and axis
-    fig = Figure()
+    fig = _eegfun_figure()
     ax = Axis(fig[1, 1], xlabel = "Time (s)", ylabel = "Amplitude (μV)")
 
     # Setup axis styling
@@ -382,7 +382,7 @@ function plot_artifact_repair(
     selected_channels = get_selected_channels(epochs_raw, channel_selection, include_meta = false, include_extra = false)
 
     # Create figure and axes
-    fig = Figure()
+    fig = _eegfun_figure()
     ax1 = Axis(fig[1, 1], xlabel = "Time (s)", ylabel = "Amplitude (μV)")
     ax2 = Axis(fig[2, 1], xlabel = "Time (s)", ylabel = "Amplitude (μV)")
 
@@ -582,7 +582,7 @@ function plot_artifact_rejection(
     selected_channels = get_selected_channels(epochs_raw, channel_selection, include_meta = false, include_extra = false)
 
     # Create figure and axes
-    fig = Figure()
+    fig = _eegfun_figure()
     ax1 = Axis(fig[1, 1], xlabel = "Time (s)", ylabel = "Amplitude (μV)")
     ax2 = Axis(fig[2, 1], xlabel = "Time (s)", ylabel = "Amplitude (μV)")
 

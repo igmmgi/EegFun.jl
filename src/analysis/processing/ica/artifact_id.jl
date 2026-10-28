@@ -227,10 +227,6 @@ function _empty_line_noise_metrics()
     )
 end
 
-function _empty_spatial_kurtosis_metrics()
-    return DataFrame(:Component => Int[], :spatial_kurtosis => Float64[], :z_spatial_kurtosis => Float64[])
-end
-
 # === EOG Identification ===
 
 """

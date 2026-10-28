@@ -91,7 +91,7 @@ function signal_example_ica_geometry()
     FS = 512.0
     T  = 3.0
 
-    fig = Figure(size = (2100, 900), figure_padding = (8, 8, 8, 8))
+    fig = _eegfun_figure(size = (2100, 900), figure_padding = (8, 8, 8, 8))
 
     # ── Responsive font sizing ─────────────────────────────────────────────────
     lbl_sz   = Observable(13)

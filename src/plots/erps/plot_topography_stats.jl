@@ -201,7 +201,7 @@ function plot_topography_stats(
     data_label = topo_data == :tvalues ? "t-statistic" : "Difference (μV)"
     fig_title = isempty(figure_title) ? "$test_type Test — $data_label" : figure_title
 
-    fig = Figure(size = (max(220 * n_cols + 140, 600), 220 * n_rows + 70))
+    fig = _eegfun_figure(size = (max(220 * n_cols + 140, 600), 220 * n_rows + 70))
     gl_topos = fig[1, 1] = GridLayout()
     if !isempty(fig_title)
         Label(gl_topos[0, 1:n_cols], fig_title, fontsize = 16, font = :bold)

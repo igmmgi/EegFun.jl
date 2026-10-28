@@ -144,11 +144,15 @@ This ensures balanced classification by preventing bias toward conditions with m
 - `data_arrays::Vector{Array{Float64, 3}}`: Equalized data arrays
 - `n_trials_per_condition::Vector{Int}`: Updated trial counts (all equal to minimum)
 """
-function _equalize_trials(data_arrays::Vector{Array{Float64,3}}, n_trials_per_condition::Vector{Int})
+function _equalize_trials(
+    data_arrays::Vector{Array{Float64,3}},
+    n_trials_per_condition::Vector{Int},
+    rng::AbstractRNG = Random.default_rng(),
+)
     min_trials = minimum(n_trials_per_condition)
     for (cond_idx, data_array) in enumerate(data_arrays)
         if size(data_array, 3) > min_trials
-            selected_trials = sort(shuffle(1:size(data_array, 3))[1:min_trials])
+            selected_trials = sort(Random.randperm(rng, size(data_array, 3))[1:min_trials])
             data_arrays[cond_idx] = data_array[:, :, selected_trials]
         end
     end
@@ -158,21 +162,22 @@ end
 
 
 """
-    _shuffle_trials(data_arrays::Vector{Array{Float64, 3}})
+    _shuffle_trials(data_arrays::Vector{Array{Float64, 3}}, rng::AbstractRNG)
 
 Shuffle trials within each condition.
 
 # Arguments
 - `data_arrays::Vector{Array{Float64, 3}}`: Data arrays for each condition [channels × time × trials]
+- `rng::AbstractRNG`: Random number generator
 
 # Returns
 - `shuffled_indices::Vector{Vector{Int}}`: Shuffled trial indices per condition (avoids copying data)
 """
-function _shuffle_trials(data_arrays::Vector{Array{Float64,3}})
+function _shuffle_trials(data_arrays::Vector{Array{Float64,3}}, rng::AbstractRNG = Random.default_rng())
     shuffled_indices = Vector{Vector{Int}}(undef, length(data_arrays))
     for (cond_idx, data_array) in enumerate(data_arrays)
         n_trials = size(data_array, 3)
-        shuffled_indices[cond_idx] = shuffle(1:n_trials)
+        shuffled_indices[cond_idx] = Random.randperm(rng, n_trials)
     end
     return shuffled_indices
 end
@@ -319,6 +324,7 @@ function _decode_core(
     save_raw_predictions::Bool = true,
     show_progress::Bool,
     progress_desc::String,
+    rng::AbstractRNG = Random.default_rng(),
 )
     LIBSVM.LIBLINEAR.set_print(false)
     n_classes = length(data_arrays)
@@ -326,7 +332,7 @@ function _decode_core(
 
     # Equalize trials if requested
     if equalize_trials
-        data_arrays, n_trials_per_condition = _equalize_trials(data_arrays, n_trials_per_condition)
+        data_arrays, n_trials_per_condition = _equalize_trials(data_arrays, n_trials_per_condition, rng)
     end
 
     # Validate that we have enough trials for cross-validation
@@ -366,12 +372,18 @@ function _decode_core(
     # Initialize atomic flag to safely abort all threads on Ctrl-C
     should_stop = Threads.Atomic{Bool}(false)
 
+    # Pre-generate deterministic seeds on calling task
+    seeds = rand(rng, UInt64, n_iterations)
+
     try
         # Main decoding loop
         Threads.@threads for iter = 1:n_iterations
             if should_stop[]
                 continue
             end
+
+            # Thread-local RNG initialized deterministically per iteration
+            local_rng = Random.Xoshiro(seeds[iter])
 
             # Thread-local buffers (built as [features × trials] for cache-friendly extraction)
             X_all_t = Matrix{Float64}(undef, n_features, total_trials)
@@ -388,7 +400,7 @@ function _decode_core(
             ws = LiblinearWorkspace(n_features, local_max_train, cost, n_classes)
             tc = iter_confusions[iter]
 
-            shuffled_indices = _shuffle_trials(data_arrays)
+            shuffled_indices = _shuffle_trials(data_arrays, local_rng)
 
             for t = 1:n_timepoints
                 if should_stop[]
@@ -590,6 +602,7 @@ function decode_libsvm(
     cost::Real = 1.0,
     save_raw_predictions::Bool = true,
     show_progress::Bool = true,
+    rng::AbstractRNG = Random.default_rng(),
 ) where {T<:MultiDataFrameEeg}
     # Input validations
     isempty(epochs) && @minimal_error("Cannot decode with empty epochs vector")
@@ -629,6 +642,7 @@ function decode_libsvm(
         save_raw_predictions,
         show_progress,
         progress_desc = desc,
+        rng = rng,
     )
 end
 

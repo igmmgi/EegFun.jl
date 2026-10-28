@@ -53,7 +53,7 @@ settings that affect the interpretation of the data.
 - `reference::Symbol`: Reference type used (e.g., :avg, :mastoid, :none)
 - `hp_filter::Float64`: High-pass filter cutoff in Hz (0.0 if none)
 - `lp_filter::Float64`: Low-pass filter cutoff in Hz (0.0 if none)
-- `sample_rate::Int64`: Sample rate of the data in Hz
+- `sample_rate::Float64`: Sample rate of the data in Hz
 - `n_ica_components_removed::Int`: Number of ICA components removed
 - `n_channels_repaired::Int`: Number of channels repaired
 - `repaired_channels::Vector{Symbol}`: List of repaired channels
@@ -62,7 +62,7 @@ settings that affect the interpretation of the data.
     reference::Symbol = :none
     hp_filter::Float64 = 0.0
     lp_filter::Float64 = 0.0
-    sample_rate::Int64 = 0
+    sample_rate::Float64 = 0.0
     n_ica_components_removed::Int = 0
     n_channels_repaired::Int = 0
     repaired_channels::Vector{Symbol} = Symbol[]

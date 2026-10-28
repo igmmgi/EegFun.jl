@@ -64,6 +64,8 @@ _find_batch_files(pattern::String, dir::String, ids::Vector{Int}) = _find_batch_
 _find_batch_files(pattern::String, dir::String, ids::Nothing) = _find_batch_files(pattern, dir, x -> fill(true, length(x)))
 
 
+const EEGFUN_FORMAT_VERSION = 1
+
 """
     read_data(filepath::String)
 
@@ -79,6 +81,15 @@ function read_data(filepath::String)::Union{EegFunData,Vector{<:EegFunData},Noth
         return nothing
     end
     jldopen(filepath, "r") do file
+        if haskey(file, "format_version")
+            v = file["format_version"]
+            if v > EEGFUN_FORMAT_VERSION
+                @minimal_warning "File $filepath was written with EegFun format_version $v, but this version only supports up to $EEGFUN_FORMAT_VERSION."
+            end
+        end
+        if haskey(file, "data")
+            return _read_data(file["data"])
+        end
         keys_list = collect(keys(file))
         isempty(keys_list) && return nothing
 
@@ -114,10 +125,6 @@ end
 # NB. read_data is not a generic function for everything; we just use it for data that is saved from EegFun
 _read_data(data::Union{EegFunData,Vector{<:EegFunData}}) = data
 _read_data(::Any)::Nothing = nothing
-
-# helper to load and combine results
-_add_to_collection!(data::EegFunData, values, _) = push!(values, data)
-_add_to_collection!(data::Vector{<:EegFunData}, values, _) = append!(values, data)
 
 # return single element or vector
 _single_or_vector(v::Vector) = length(v) == 1 ? v[1] : v

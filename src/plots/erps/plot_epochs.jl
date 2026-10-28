@@ -256,7 +256,7 @@ function plot_epochs(
 
         # Create figure with padding (guaranteed to be in plot_kwargs)
         fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
-        fig = Figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+        fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
         axes = Axis[]
 
         # Initialize line references for control panel if interactive
@@ -1052,7 +1052,7 @@ function _setup_epochs_control_panel!(
             end
 
             # Create new control panel
-            control_fig[] = Figure(title = "Epochs Control Panel", size = (300, 400))
+            control_fig[] = _eegfun_figure(title = "Epochs Control Panel", size = (300, 400))
             panel_layout = GridLayout(control_fig[][1, 1], tellwidth = false, rowgap = 10)
 
             # Baseline section
@@ -1095,7 +1095,7 @@ end
 """Show a context menu with topoplot options for the current epoch selection."""
 function _show_epochs_context_menu!(selection_state, data, condition_checked_ref)
 
-    menu_fig = Figure()
+    menu_fig = _eegfun_figure()
 
     # Filter by visible conditions to determine if we have multiple visible conditions
     data_to_plot = _filter_visible_conditions_epochs(data, condition_checked_ref)

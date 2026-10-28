@@ -851,4 +851,71 @@ end
         @test res_left.test_info.tail == :left
     end
 
+    # ────────────────────────────────────────────────────────────
+    # Reproducibility & threading
+    # ────────────────────────────────────────────────────────────
+    @testset "permutation_test - reproducible via rng" begin
+        erps = _build_erp_test_data(n_participants = 6, n_channels = 3)
+        prepared = EegFun.prepare_stats(erps; design = :paired)
+        kw = (n_permutations = 50, show_progress = false)
+
+        r1 = EegFun.permutation_test(prepared; kw..., rng = Random.Xoshiro(7))
+        r2 = EegFun.permutation_test(prepared; kw..., rng = Random.Xoshiro(7))
+        @test r1.permutation_distribution.positive == r2.permutation_distribution.positive
+        @test r1.permutation_distribution.negative == r2.permutation_distribution.negative
+
+        # non-parametric thresholds reuse the same permutations and are reproducible too
+        n1 = EegFun.permutation_test(prepared; kw..., threshold_method = :nonparametric_individual, rng = Random.Xoshiro(7))
+        n2 = EegFun.permutation_test(prepared; kw..., threshold_method = :nonparametric_individual, rng = Random.Xoshiro(7))
+        @test n1.critical_t == n2.critical_t
+        @test n1.permutation_distribution.positive == n2.permutation_distribution.positive
+
+        # independent design
+        erps_ind = _build_erp_independent_test_data()
+        prep_ind = EegFun.prepare_stats(erps_ind; design = :independent)
+        i1 = EegFun.permutation_test(prep_ind; kw..., rng = Random.Xoshiro(3))
+        i2 = EegFun.permutation_test(prep_ind; kw..., rng = Random.Xoshiro(3))
+        @test i1.permutation_distribution.positive == i2.permutation_distribution.positive
+    end
+
+    @testset "permutation loops - independent of chunking" begin
+        erps = _build_erp_test_data(n_participants = 6, n_channels = 3)
+        prepared = EegFun.prepare_stats(erps; design = :paired)
+        plan = EegFun._draw_permutation_plan(Random.Xoshiro(11), prepared, 40)
+
+        # Serial reference computed one permutation at a time
+        A = similar(prepared.analysis.data[1])
+        B = similar(prepared.analysis.data[2])
+        ref = map(1:size(plan, 2)) do p
+            EegFun._shuffle_labels!(A, B, prepared.analysis.data[1], prepared.analysis.data[2], :paired, view(plan, :, p))
+            copy(first(EegFun._compute_t_matrix(A, B, :paired; compute_p_values = false, compute_se = false)))
+        end
+        threaded = EegFun._collect_permutation_t_matrices(prepared, plan, false)
+        @test all(p -> threaded[:, :, p] ≈ ref[p], 1:size(plan, 2))
+    end
+
+    @testset "_draw_permutation_plan" begin
+        paired = EegFun._draw_permutation_plan(Random.Xoshiro(1), :paired, 5, 5, 20)
+        @test size(paired) == (5, 20)
+        @test eltype(paired) == Bool
+        ind = EegFun._draw_permutation_plan(Random.Xoshiro(1), :independent, 3, 4, 20)
+        @test size(ind) == (7, 20)
+        @test all(p -> sort(ind[:, p]) == 1:7, 1:20)
+        @test ind == EegFun._draw_permutation_plan(Random.Xoshiro(1), :independent, 3, 4, 20)
+        @test_throws ErrorException EegFun._draw_permutation_plan(Random.Xoshiro(1), :bogus, 3, 4, 2)
+    end
+
+    @testset "_foreach_chunk" begin
+        for n in (0, 1, 7, 100), ntasks in (1, 3, 16)
+            hits = zeros(Int, n)
+            EegFun._foreach_chunk(n; ntasks = ntasks) do r
+                for i in r
+                    hits[i] += 1
+                end
+            end
+            @test all(==(1), hits)  # every index visited exactly once
+        end
+        @test_throws TaskFailedException EegFun._foreach_chunk(_ -> error("boom"), 10; ntasks = 2)
+    end
+
 end # @testset "ERP Statistics"

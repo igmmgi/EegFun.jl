@@ -475,7 +475,7 @@ function _plot_erp_core(
 
         # Create figure and apply layout system
         fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
-        fig = Figure(; title = title_str, figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+        fig = _eegfun_figure(; title = title_str, figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
 
         plot_layout = create_layout(layout, all_plot_channels, first(dat_subset).layout; layout_kwargs...)
 
@@ -1104,7 +1104,7 @@ end
 function _show_erp_context_menu!(selection_state, data, condition_checked_ref)
 
     _set_window_title("ERP Context Menu")
-    menu_fig = Figure(size = (300, 300))
+    menu_fig = _eegfun_figure(size = (300, 300))
 
     # Filter by visible conditions to determine if we have multiple visible conditions
     data_to_plot = _filter_visible_conditions(data, condition_checked_ref)
@@ -1224,7 +1224,7 @@ Offers "Plot Average of Selected" which opens a new ERP plot averaging the selec
 """
 function _show_channel_average_menu!(selected_channels, data, condition_checked_ref)
     _set_window_title("Channel Selection Menu")
-    menu_fig = Figure(size = (300, 150))
+    menu_fig = _eegfun_figure(size = (300, 150))
 
     data_to_plot = _filter_visible_conditions(data, condition_checked_ref)
 
@@ -1489,7 +1489,7 @@ function _setup_erp_control_panel!(
             end
 
             # Create new control panel
-            control_fig[] = Figure(title = "ERP Control Panel", size = (320, 420))
+            control_fig[] = _eegfun_figure(title = "ERP Control Panel", size = (320, 420))
             control_open[] = true
             layout = GridLayout(control_fig[][1, 1], tellwidth = false, rowgap = 10)
 

@@ -61,7 +61,7 @@ function create_lowpass_filter(
     sample_rate::Real;
     filter_method::Symbol = :iir,
     order::Integer = 2,
-    transition_width::Real = 0.1,
+    transition_width::Union{Nothing,Real} = nothing,
 )
     return _create_filter(:lp, cutoff_freq, sample_rate, filter_method = filter_method, order = order, transition_width = transition_width)
 end
@@ -101,7 +101,7 @@ function create_highpass_filter(
     sample_rate::Real;
     filter_method::Symbol = :iir,
     order::Integer = 2,
-    transition_width::Real = 0.1,
+    transition_width::Union{Nothing,Real} = nothing,
 )
     return _create_filter(:hp, cutoff_freq, sample_rate, filter_method = filter_method, order = order, transition_width = transition_width)
 end
@@ -114,7 +114,7 @@ function _create_filter(
     sample_rate::Real;
     filter_method::Symbol = :iir,
     order::Integer = 2,
-    transition_width::Real = 0.1,
+    transition_width::Union{Nothing,Real} = nothing,
 )
 
     # Input validation
@@ -142,7 +142,19 @@ function _create_filter(
 
     # Create filter prototype/object based on type
     filter_prototype = filter_type == :hp ? Highpass(cutoff_freq) : Lowpass(cutoff_freq)
-    transition_band = cutoff_freq * transition_width
+
+    # Determine transition band width in Hz (EEGLAB pop_eegfiltnew heuristic by default)
+    transition_band = if isnothing(transition_width)
+        if filter_type == :hp
+            min(max(0.25 * cutoff_freq, 2.0), Float64(cutoff_freq))
+        else
+            min(max(0.25 * cutoff_freq, 2.0), sample_rate / 2.0 - cutoff_freq)
+        end
+    elseif transition_width <= 1.0
+        cutoff_freq * transition_width
+    else
+        Float64(transition_width)
+    end
     n_taps = nothing
 
     # Create filter with chosen method
@@ -166,19 +178,30 @@ end
 # === FILTER APPLICATION ===
 
 """
-    _ensure_fir_transition_width(dat::EegData, transition_width::Real, cutoff_freq::Real) -> Float64
+    _ensure_fir_transition_width(dat::EegData, transition_width::Union{Nothing,Real}, cutoff_freq::Real, filter_type::Symbol = :hp) -> Real
 
 Ensures that the FIR filter transition width is wide enough to avoid crashing based on data length.
 Returns the required transition width.
 """
-function _ensure_fir_transition_width(dat::EegData, transition_width::Real, cutoff_freq::Real)
+function _ensure_fir_transition_width(dat::EegData, transition_width::Union{Nothing,Real}, cutoff_freq::Real, filter_type::Symbol = :hp)
     min_length = dat.data isa Vector ? minimum(nrow.(dat.data)) : n_samples(dat)
     min_required_transition_band = 12.0 * dat.sample_rate / min_length
-    min_required_transition_width = min_required_transition_band / cutoff_freq
 
-    if transition_width < min_required_transition_width
-        @minimal_warning "FIR transition width $(transition_width) too narrow for data length $(min_length). Widening to $(round(min_required_transition_width, digits=3)) to prevent crash."
-        return min_required_transition_width
+    actual_tb = if isnothing(transition_width)
+        if filter_type == :hp
+            min(max(0.25 * cutoff_freq, 2.0), Float64(cutoff_freq))
+        else
+            min(max(0.25 * cutoff_freq, 2.0), dat.sample_rate / 2.0 - cutoff_freq)
+        end
+    elseif transition_width <= 1.0
+        cutoff_freq * transition_width
+    else
+        Float64(transition_width)
+    end
+
+    if actual_tb < min_required_transition_band
+        @minimal_warning "FIR transition band $(round(actual_tb, digits=3)) Hz too narrow for data length $(min_length). Widening to $(round(min_required_transition_band, digits=3)) Hz to prevent crash."
+        return min_required_transition_band
     end
     return transition_width
 end
@@ -258,7 +281,7 @@ function lowpass_filter!(
     dat::EegData,
     cutoff_freq::Real;
     order::Int = 3,
-    transition_width::Real = 0.1,
+    transition_width::Union{Nothing,Real} = nothing,
     filter_method::Symbol = :iir,
     channel_selection = channels(),
     filter_func::Symbol = :filtfilt,
@@ -271,7 +294,7 @@ function lowpass_filter!(
     @debug "lowpass_filter! applying lp filter at $cutoff_freq Hz to $(length(selected_channels)) channels"
 
     if filter_method == :fir && filter_func == :filtfilt
-        transition_width = _ensure_fir_transition_width(dat, transition_width, cutoff_freq)
+        transition_width = _ensure_fir_transition_width(dat, transition_width, cutoff_freq, :lp)
     end
 
     filter_info = create_lowpass_filter(
@@ -306,7 +329,7 @@ function highpass_filter!(
     dat::EegData,
     cutoff_freq::Real;
     order::Int = 1,
-    transition_width::Real = 0.25,
+    transition_width::Union{Nothing,Real} = nothing,
     filter_method::Symbol = :iir,
     channel_selection = channels(),
     filter_func::Symbol = :filtfilt,
@@ -319,7 +342,7 @@ function highpass_filter!(
     @debug "highpass_filter! applying hp filter at $cutoff_freq Hz to $(length(selected_channels)) channels"
 
     if filter_method == :fir && filter_func == :filtfilt
-        transition_width = _ensure_fir_transition_width(dat, transition_width, cutoff_freq)
+        transition_width = _ensure_fir_transition_width(dat, transition_width, cutoff_freq, :hp)
     end
 
     filter_info = create_highpass_filter(

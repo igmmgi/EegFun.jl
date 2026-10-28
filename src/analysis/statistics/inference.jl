@@ -48,7 +48,7 @@ function _compute_cluster_pvalues(
         end
         p_value = count_exceed / (n_permutations + 1)
 
-        is_significant = p_value < alpha
+        is_significant = p_value <= alpha
 
         updated_cluster = Cluster(
             cluster.id,
@@ -67,20 +67,63 @@ function _compute_cluster_pvalues(
     return updated_clusters
 end
 
+function _compute_cluster_pvalues(
+    clusters::Vector{TFCluster},
+    cluster_stats::Vector{Float64},
+    permutation_max::Vector{Float64},
+    n_permutations::Int,
+    alpha::Real = 0.05,
+)
+    if isempty(clusters)
+        return TFCluster[]
+    end
+
+    updated_clusters = TFCluster[]
+
+    for (i, cluster) in enumerate(clusters)
+        cluster_stat = cluster_stats[i]
+
+        if cluster.polarity == :positive
+            count_exceed = sum(permutation_max .>= cluster_stat) + 1
+        else
+            count_exceed = sum(permutation_max .<= cluster_stat) + 1
+        end
+        p_value = count_exceed / (n_permutations + 1)
+        is_significant = p_value <= alpha
+
+        updated_cluster = TFCluster(
+            cluster.id,
+            cluster.electrodes,
+            cluster.freq_indices,
+            cluster.time_indices,
+            cluster.freq_range,
+            cluster.time_range,
+            cluster_stat,
+            p_value,
+            is_significant,
+            cluster.polarity,
+            cluster.pixels,
+        )
+        push!(updated_clusters, updated_cluster)
+    end
+
+    return updated_clusters
+end
+
 """
     _create_significance_mask(p_matrix, alpha, method)
 
 Create significance mask from p-values.
 
 # Arguments
-- `p_matrix::Array{Float64, 2}`: P-values [electrodes × time]
+- `p_matrix::AbstractArray{Float64, N}`: P-values
 - `alpha::Float64`: Significance threshold
 - `method::Symbol`: Correction method (`:no` or `:bonferroni`)
 
 # Returns
-- `mask::BitArray{2}`: Significance mask [electrodes × time]
+- `mask::BitArray{N}`: Significance mask
 """
-function _create_significance_mask(p_matrix::Array{Float64,2}, alpha::Float64, method::Symbol)
+function _create_significance_mask(p_matrix::AbstractArray{Float64,N}, alpha::Float64, method::Symbol) where {N}
     method == :bonferroni && (alpha = alpha / count(!isnan, p_matrix))
     return .!isnan.(p_matrix) .& (p_matrix .<= alpha)
 end

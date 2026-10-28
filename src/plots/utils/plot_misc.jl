@@ -40,7 +40,7 @@ function _find_continuous_regions(mask::BitVector, time_points::Vector{Float64})
 end
 
 function _open_save_settings_dialog(fig)
-    fig_settings = Figure(size = (550, 350), figure_padding = 20)
+    fig_settings = _eegfun_figure(size = (550, 350), figure_padding = 20)
     rowgap!(fig_settings.layout, 12)
     colgap!(fig_settings.layout, 15)
 
@@ -393,7 +393,7 @@ function _create_figure_with_axis(data; title_suffix::String = "", figure_kwargs
         title = title * title_suffix
     end
     _set_window_title(title)
-    fig = Figure(; figure_kwargs...)
+    fig = _eegfun_figure(; figure_kwargs...)
     ax = Axis(fig[1, 1])
     return (fig = fig, axes = [ax])
 end

@@ -30,10 +30,12 @@ erps = EegFun.average_epochs(epochs)
 # 2. Global vs. Local Themes
 # ==============================================================================
 
-# By default, when you run `using EegFun`, it automatically applies `EegFun.theme_eegfun()`!
+# Figures created by EegFun plotting functions use `EegFun.theme_eegfun()` by default.
+# This is applied per figure, so `using EegFun` does not change your global Makie theme.
 EegFun.plot_erp(erps, layout = :single, channel_selection = EegFun.channels([:Fp1]))
 
-# However, you can still use `with_theme` to apply a different theme only to a specific block:
+# Anything you customise yourself (via `with_theme`, `set_theme!` or `update_theme!`) takes
+# precedence over the EegFun defaults. For example, apply a different theme to a specific block:
 with_theme(theme_ggplot2()) do
     # This ERP plot will have the ggplot2 grey background and default colors
     EegFun.plot_erp(erps, layout = :single, channel_selection = EegFun.channels([:Fp1]))

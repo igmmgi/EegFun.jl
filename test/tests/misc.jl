@@ -1,5 +1,6 @@
 using Test
 using DataFrames
+using Random
 
 @testset "Miscellaneous Utilities" begin
     # Create test data for various functions
@@ -254,4 +255,22 @@ using DataFrames
 
     # Clean up
     rm(test_dir, recursive = true, force = true)
+
+    @testset "_with_seed restores the caller's RNG" begin
+        Random.seed!(1234)
+        expected = rand()
+        Random.seed!(1234)
+        a = EegFun._with_seed(() -> rand(), 1)
+        @test rand() == expected           # caller's stream unaffected by the seeded call
+        @test EegFun._with_seed(() -> rand(), 1) == a  # seeded call is reproducible
+        @test_throws ErrorException EegFun._with_seed(() -> error("x"), 1)
+        Random.seed!(99)
+        expected = rand()
+        Random.seed!(99)
+        try
+            EegFun._with_seed(() -> error("x"), 1)
+        catch
+        end
+        @test rand() == expected           # restored even when f throws
+    end
 end

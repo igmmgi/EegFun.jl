@@ -9,14 +9,11 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 
 ### Added
 
-- Closed-form Freedman–Lane permutation engine in `fit_mass_lmm`, parallelized via `Distributed`.
-- Convergence tracking and full parametric statistics (`z_values`, `p_parametric`, `fit_status`) in `LmmStatsResult`.
-- Support for factor contrasts (e.g., `EffectsCoding`) in `fit_mass_lmm`.
-- Permutation memory guard and sample-size validation in `fit_mass_lmm`.
 - Memory leak fixes and performance optimizations in `plot_databrowser` (cached ICA activations, coordinate buffers).
 - Complete `Base` array and `Tables.jl` interfaces for `EegData` types.
 - Canonical accessors (`time_vector`, `frequency_vector`, etc.) and `show` methods across stats types.
 - Expanded unit test suites for statistics, decoding, and signal processing.
+- Added `format_version = EEGFUN_FORMAT_VERSION` (version 1) to pipeline JLD2 output and added format compatibility checks on load in `read_data`.
 
 ### Fixed
 
@@ -26,30 +23,47 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
   - **Artifact Identification**: Implemented top-level keyword argument routing; robust MAD-scaled z-scoring and directional thresholding; ECG polarity invariance and continuous sample coordinate mapping for IBIs; Welch's periodogram for line noise estimation.
   - **Architecture & Performance**: Unified input preprocessing/postprocessing (`_ica_preprocess`, `_ica_postprocess`) with rank-deficiency detection, input copy protection, and activation power variance sorting; accelerated CPU/GPU execution via BLAS `mul!`, register accumulation, and tensor preallocations.
 - State consistency, observer lifecycle, and pipeline ordering in `plot_databrowser`.
-- Isolated flat channels, bad pixels, and non-converged fits as `NaN` in `fit_mass_lmm`, decoupled fit status from permutation inference eligibility, initialized shared outputs to `NaN`, and added valid-field tracking.
-- Eliminated Windows `mmap: Access is denied` failures by restricting `SharedArray` allocations strictly to multi-process distributed execution (`nprocs() > 1`), using standard Julia `Array`s and zero-copy inputs in single-process mode.
-- Ensured worker processes inherit package directory in `LOAD_PATH` with `--startup-file=no` during distributed mass-univariate LMM inference.
 - Channel line coloring under ICA overlay in `plot_databrowser`, defaulting to showing only original data in standard channel color, with dynamic switching to green upon enabling "Data - ICA", and fixing callback `MethodError` on toggle.
 - `BoundsError` and trial power averaging across time-frequency pipelines.
 - `MethodError` in out-of-place `channel_repairable`.
 - CI documentation build failure by pinning readabilities plugin.
 - Respected `display_plot = false` in `plot_tf`.
 - Guarded error logging across GUI plotting routines.
+- Thread safety of permutation loops (`permutation_test` ERP/TF, non-parametric threshold collection) and epoch rereferencing: per-thread scratch buffers were indexed with `Threads.threadid()`, which is unsafe under the default `:dynamic` scheduler (tasks can migrate between threads). Work is now split into chunks that own their buffers.
+- Permutation results no longer depend on the number of threads: all permutations are pre-drawn on the calling task. The TF non-parametric threshold and cluster inference now use the same permutations (as the ERP path already did), and the GPU path uses the same permutations as the CPU path.
+- Aligned two-tailed cluster permutation testing with FieldTrip (`correcttail`): two-tailed tests now test each tail at `alpha / 2.0` (`cluster_alpha`) to control family-wise error rate at α.
+- Fixed one-tailed non-parametric thresholding to evaluate the quantile across the full distribution of permutation t-values instead of only positive values.
+- Upgraded RSA model comparison permutation tests to Mantel-style condition-label permutations, with unbiased `(extreme_count + 1) / (n_permutations + 1)` p-value computation and an `rng` keyword.
+- Ensured thread-count-independent reproducibility in multi-threaded decoding analysis (`decode_libsvm`) by pre-drawing per-iteration RNG seeds on the main task from a user-specifiable `rng` keyword.
+- Standardized cluster significance testing to `p <= alpha`.
+- Prevented unwanted mutation of layout neighbour structures in Time-Frequency and ERP permutation testing by operating on layout copies.
+- Added warnings when spherical spline interpolation operators fail during channel repair in `autoreject!`.
+- Updated `AnalysisInfo.sample_rate` to `Float64` to prevent inexact errors and ensured synchronization during `resample!`.
+- `isequal`/`hash` contract for `EegData`, `Layout`, `AnalysisInfo` and `Neighbours`: equal objects now hash equally (safe as `Dict` keys / in `Set`s), `isequal` treats `NaN`s as equal, and `Neighbours` compare by value rather than identity.
+- `isapprox` on EEG data now also requires matching sample rates.
 
 ### Changed
 
 - Bumped minimum supported Julia version to 1.13 across `Project.toml`, GitHub Actions CI, documentation, and badges.
-- Replaced iterative LMM permutation refits with closed-form Woodbury GLS for instant permutation inference.
 - Modularized repository source structure (`ica/`, `utils/data/`, `artifact_detection/`).
 - Exported and documented missing functions in `public_api.jl`, standardizing on `@minimal_error`.
 - Updated to `AnovaFun` 0.5 with explicit Makie backend loading.
 - Optimized allocations across time-frequency, CSD, permutations, decoding, and GPU ICA.
 - Accelerated topography rendering with batched interpolation and observable binding.
+- `using EegFun` no longer overrides the global Makie theme. `theme_eegfun()` is applied per figure to figures created by EegFun; user customisations (`set_theme!`, `with_theme`, `update_theme!`) take precedence over the EegFun defaults.
+- Added `rng` keyword to `permutation_test` (ERP and TF) and `test_against_chance_cluster` for reproducible results (defaults to `Random.default_rng()`).
+- Seeded synthetic-data helpers and the ICA demos no longer reseed the user's global RNG.
+- Adopted EEGLAB `pop_eegfiltnew` default transition width heuristics for FIR filters (`min(max(0.25*fc, 2 Hz), fc)` for highpass, `min(max(0.25*fc, 2 Hz), fs/2 - fc)` for lowpass).
+- Unified selector helpers (`components`, `channels_not`, `components_not`, `epochs_not`, `participants_not`, `conditions_not`) to be consistently position-based with support for ranges and arbitrary predicate functions via `_negate_selector`.
+- Unified duplicated ERP and Time-Frequency statistical routines (parametric/non-parametric thresholding, p-matrix calculation, critical t-value calculation, significance masking, and label shuffling) into generic N-dimensional array methods.
+- Cleaned up `Project.toml` `[compat]` bounds: added standard library compats, bumped CUDA to 5 and 6, Tables to 1, and removed redundant test-only DataFrames entry.
 
 ### Removed
 
 - Deprecated mutating batch string aliases (`realign!`, `calculate_trigger_interval!`).
 - Legacy compatibility overloads (old `Layout` JLD2 conversion, obsolete decoding layouts).
+- Inconsistent `Base` methods on EEG data types: `IndexStyle`, scalar `eltype` (`Float64`), linear `firstindex(dat)`/`lastindex(dat)`, and implicit `convert(Matrix/Array/DataFrame, dat)`. Use `Matrix(dat)`, `Array(dat)` or `DataFrame(dat)` explicitly. `eltype` of epoch-type data is now `DataFrame` (matching iteration).
+- Removed dead internal functions (`_empty_spatial_kurtosis_metrics`, `_rereference!`, `_get_time_bounds`, `_notify_data_update`, `_reset_to_original!`, `_add_to_collection!`).
 
 ## [0.8.0] - 2026-08-13
 

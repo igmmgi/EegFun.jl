@@ -129,7 +129,7 @@ function plot_topography_3d(
     # Set up Figure and 3D Axis (LScene)
     _set_window_title(_generate_window_title(dat))
     fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
-    fig = Figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+    fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
     ax = LScene(fig[1, 1], show_axis = false)
 
     # Add title
@@ -350,7 +350,7 @@ function _plot_topography_3d_scrubber(dat::SingleDataFrameEeg; display_plot = tr
     init_colors = Float32.(ScatteredInterpolation.evaluate(itp_init, grid))
     vertex_colors_obs = Observable(init_colors)
 
-    fig = Figure(size = (700, 750); figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+    fig = _eegfun_figure(size = (700, 750); figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
     _set_window_title("Topography 3D Scrubber | $(_generate_window_title(dat))")
 
     current_idx = Observable{Int}(1)

@@ -275,7 +275,7 @@ function _repair_epochs_cached!(
                         op_mat = _spline_good_to_bad(U_good, U_bad, f_legendre, lambda)
                         spline_operator_cache[pattern] = (good_idx, bad_idx, op_mat)
                     catch e
-                        # Operator generation failed
+                        @minimal_warning "Spherical spline operator generation failed for bad channels $pattern: $e. Falling back to neighbour interpolation."
                     end
                 end
 

@@ -86,10 +86,10 @@ function plot_eog_component_features(identified_comps::Dict, metrics_df::DataFra
     # Check if data is empty
     if isempty(metrics_df) || isempty(metrics_df.vEOG_zscore) || isempty(metrics_df.hEOG_zscore)
         @minimal_warning "Could not plot eye component features, input DataFrame or z-scores are empty."
-        return Figure() # Return empty figure
+        return _eegfun_figure() # Return empty figure
     end
 
-    fig = Figure()
+    fig = _eegfun_figure()
 
     # Plot vEOG Correlation Z-Scores
     ax_v = Axis(fig[1, 1], xlabel = "Component Number", ylabel = "Z-Score", title = "vEOG Correlation Z-Scores")
@@ -131,7 +131,7 @@ function plot_spatial_kurtosis_components(kurtosis_comps::Vector{Int}, metrics_d
     display_plot = plot_kwargs[:display_plot]
 
     # Create figure
-    fig = Figure()
+    fig = _eegfun_figure()
 
     # Plot spatial kurtosis z-scores
     ax = Axis(fig[1, 1], xlabel = "Component", ylabel = "Spatial Kurtosis Z-Score", title = "Component Spatial Kurtosis Z-Scores")
@@ -173,7 +173,7 @@ function plot_line_noise_components(line_noise_comps::Vector{Int}, metrics_df::D
     display_plot = plot_kwargs[:display_plot]
 
     # Create figure with two subplots
-    fig = Figure(size = (1000, 400))
+    fig = _eegfun_figure(size = (1000, 400))
 
     # Plot 1: Power Ratio Z-Scores
     ax1 = Axis(fig[1, 1], xlabel = "Component", ylabel = "Power Ratio Z-Score", title = "Line Frequency Power Ratio Z-Scores")
@@ -297,7 +297,7 @@ function plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df
     # Extract commonly used values
     display_plot = plot_kwargs[:display_plot]
     # Create figure with two panels
-    fig = Figure(size = (1000, 600))
+    fig = _eegfun_figure(size = (1000, 600))
 
     # Calculate heart rates
     heart_rates = [isnan(ibi) || ibi <= 0 ? NaN : 60.0 / ibi for ibi in metrics_df.mean_ibi_s]
@@ -524,7 +524,7 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
     # If no components, return empty figure
     if isempty(component_types)
         @minimal_warning "No artifact components found to plot"
-        fig = Figure()
+        fig = _eegfun_figure()
         Label(fig[1, 1], "No artifact components found", fontsize = 16)
         return (fig = fig,)
     end
@@ -535,7 +535,7 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
     n_rows = ceil(Int, total_comps / n_cols)
 
     # Create figure
-    fig = Figure(size = (n_cols * 200, n_rows * 200))
+    fig = _eegfun_figure(size = (n_cols * 200, n_rows * 200))
 
     # Plot each component individually
     plot_idx = 1

@@ -107,7 +107,8 @@ function plot_tf(tf_data::AbstractVector{<:TimeFreqData}; channel_selection = ch
     n = length(tf_data)
     rows, cols = isnothing(grid_dims) ? _best_rect(n) : grid_dims
     fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
-    fig = Figure(; size = (max(600, cols * 400), max(400, rows * 350)), figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+    fig =
+        _eegfun_figure(; size = (max(600, cols * 400), max(400, rows * 350)), figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
     colormap = _resolve_theme_colormap(fig, plot_kwargs[:colormap])
     _set_window_title("$(basename(first(tf_data).file)) — Time-Frequency ($(n) conditions)")
 
@@ -305,7 +306,7 @@ function plot_tf(
 
     _set_window_title("$(basename(tf_data.file)) — $(tf_data.condition_name) — Time-Frequency")
     fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
-    fig = Figure(; size = fig_size, figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+    fig = _eegfun_figure(; size = fig_size, figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
     colormap = _resolve_theme_colormap(fig, plot_kwargs[:colormap])
 
     eeg_layout = hasproperty(tf_data, :layout) ? tf_data.layout : nothing

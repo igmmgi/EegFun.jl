@@ -1,5 +1,13 @@
-# === Base Array Interface ===
-Base.IndexStyle(::Type{<:EegData}) = IndexCartesian()
+# === Base Interface ===
+#
+# EegData types are *not* AbstractArrays. The interface below is intentionally partial:
+# - `size`/`axes`/`ndims` describe the data dimensions:
+#   (samples × channels) for single-DataFrame types, (epochs × samples × channels) for multi-DataFrame types.
+# - `dat[i, j]` / `dat[e, i, j]` return an *EegData subset* (not a scalar), so there is no scalar
+#   `eltype` and no linear indexing. Use `Matrix(dat)` / `Array(dat)` for a numeric array.
+# - Multi-DataFrame types iterate over their epochs: `length` = number of epochs and each element
+#   is a `DataFrame`.
+# - `dat[:Fz]`, `haskey(dat, :Fz)`, `:Fz in dat` and `keys(dat)` refer to *channels*.
 
 # size & axes & dims
 Base.axes(dat::SingleDataFrameEeg) = (Base.OneTo(n_samples(dat)), Base.OneTo(n_channels(dat)))
@@ -15,18 +23,12 @@ Base.ndims(::Type{<:SingleDataFrameEeg}) = 2
 Base.ndims(::Type{<:MultiDataFrameEeg}) = 3
 Base.ndims(dat::EegData) = ndims(typeof(dat))
 
-Base.eltype(::Type{<:EegData}) = Float64
-Base.eltype(dat::EegData) = Float64
-
 Base.isempty(dat::SingleDataFrameEeg) = isempty(dat.data)
 Base.isempty(dat::MultiDataFrameEeg) = isempty(dat.data)
 
+# Per-dimension bounds only (enables `end` inside `dat[1:end, :Fz]`); there is no linear indexing.
 Base.firstindex(::EegData, d::Int) = 1
-Base.firstindex(::EegData) = 1
 Base.lastindex(dat::EegData, d::Int) = Base.size(dat, d)
-Base.lastindex(dat::EegData) = prod(size(dat))
-
-
 
 # getindex implementation
 function Base.getindex(dat::SingleDataFrameEeg, time_idx, chan_idx)
@@ -64,9 +66,11 @@ Base.getindex(dat::MultiDataFrameEeg, ci::CartesianIndex{3}) = dat[ci[1], ci[2],
 Base.getindex(dat::EegData, chan::Union{Symbol,AbstractString}) = subset(dat, channel_selection = channels(Symbol(chan)))
 Base.getindex(dat::EegData, chans::AbstractVector{<:Union{Symbol,AbstractString}}) =
     subset(dat, channel_selection = channels(Symbol.(chans)))
-# === Base Iteration Interface ===
+# === Base Iteration Interface (multi-DataFrame types iterate over epochs) ===
 Base.iterate(dat::MultiDataFrameEeg, state = 1) = state > length(dat.data) ? nothing : (dat.data[state], state + 1)
 Base.length(dat::MultiDataFrameEeg) = length(dat.data)
+Base.eltype(::Type{<:MultiDataFrameEeg}) = DataFrame
+Base.IteratorSize(::Type{<:MultiDataFrameEeg}) = Base.HasLength()
 
 # === Base Concatenation Interface ===
 function Base.vcat(dats::EpochData...)
@@ -174,55 +178,58 @@ end
 StatsBase.mean(dat::EpochData) = average_epochs(dat)
 StatsBase.mean(dats::Vector{EpochData}) = average_epochs(dats)
 
-# === Base Type Conversion Interface ===
-Base.convert(::Type{Matrix}, dat::SingleDataFrameEeg) = Base.Matrix(dat)
-Base.convert(::Type{Matrix{Float64}}, dat::SingleDataFrameEeg) = Base.Matrix(dat)
-Base.convert(::Type{Array}, dat::EegData) = Base.Array(dat)
-Base.convert(::Type{DataFrame}, dat::EegData) = DataFrame(dat)
+# === Explicit Conversions ===
+# Note: no `Base.convert` methods on purpose. `convert` is called implicitly (e.g. when assigning to
+# typed fields/containers), which would silently drop layout/metadata. Use the explicit constructors
+# `Matrix(dat)`, `Array(dat)` and `DataFrame(dat)` instead.
 Base.vec(dat::EegData) = vec(Base.Array(dat))
 Base.parent(dat::SingleDataFrameEeg) = dat.data
 Base.parent(dat::MultiDataFrameEeg) = dat.data
 
 
-# === Channel Membership & Keys ===
+# === Channel Membership & Keys (channels, consistent with `dat[:Fz]`) ===
 Base.in(chan::Union{Symbol,AbstractString}, dat::EegData) = Symbol(chan) in channel_labels(dat)
 Base.haskey(dat::EegData, chan::Union{Symbol,AbstractString}) = Symbol(chan) in channel_labels(dat)
 Base.keys(dat::EegData) = channel_labels(dat)
 
-# === Equality and Approximations ===
-function Base.:(==)(a::Layout, b::Layout)
-    for f in fieldnames(Layout)
-        getfield(a, f) == getfield(b, f) || return false
+# === Equality, Hashing and Approximations ===
+# `==` and `isequal` compare all fields; `hash` is consistent with `isequal`
+# (required for use as Dict keys / in Sets).
+
+# `==` that treats `missing` comparisons as unequal instead of throwing in a boolean context
+_fields_equal(a, b) = all(f -> (getfield(a, f) == getfield(b, f)) === true, fieldnames(typeof(a)))
+_fields_isequal(a, b) = all(f -> isequal(getfield(a, f), getfield(b, f)), fieldnames(typeof(a)))
+function _fields_hash(x, h::UInt)
+    h = hash(typeof(x), h)
+    for f in fieldnames(typeof(x))
+        h = hash(getfield(x, f), h)
     end
-    return true
+    return h
 end
 
-function Base.:(==)(a::AnalysisInfo, b::AnalysisInfo)
-    for f in fieldnames(AnalysisInfo)
-        getfield(a, f) == getfield(b, f) || return false
-    end
-    return true
-end
+const _FieldwiseEq = Union{Layout,AnalysisInfo,Neighbours}
 
-function Base.:(==)(a::T, b::T) where {T<:EegData}
-    for f in fieldnames(T)
-        getfield(a, f) == getfield(b, f) || return false
-    end
-    return true
-end
+Base.:(==)(a::T, b::T) where {T<:_FieldwiseEq} = _fields_equal(a, b)
+Base.isequal(a::T, b::T) where {T<:_FieldwiseEq} = _fields_isequal(a, b)
+Base.hash(x::_FieldwiseEq, h::UInt) = _fields_hash(x, h)
+
+Base.:(==)(a::T, b::T) where {T<:EegData} = _fields_equal(a, b)
 Base.:(==)(::EegData, ::EegData) = false
-
-Base.isequal(a::T, b::T) where {T<:EegData} = a == b
+Base.isequal(a::T, b::T) where {T<:EegData} = _fields_isequal(a, b)
+Base.isequal(::EegData, ::EegData) = false
+Base.hash(x::EegData, h::UInt) = _fields_hash(x, h)
 
 function Base.isapprox(a::T, b::T; kwargs...) where {T<:SingleDataFrameEeg}
     channel_labels(a) == channel_labels(b) || return false
     size(a) == size(b) || return false
+    a.sample_rate == b.sample_rate || return false
     return isapprox(Matrix(a), Matrix(b); kwargs...)
 end
 
 function Base.isapprox(a::T, b::T; kwargs...) where {T<:MultiDataFrameEeg}
     channel_labels(a) == channel_labels(b) || return false
     size(a) == size(b) || return false
+    a.sample_rate == b.sample_rate || return false
     return isapprox(Array(a), Array(b); kwargs...)
 end
 Base.isapprox(::EegData, ::EegData; kwargs...) = false

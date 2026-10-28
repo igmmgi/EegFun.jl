@@ -345,7 +345,7 @@ function plot_topography(
 
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
     fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
-    fig = Figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+    fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
     ax = Axis(fig[1, 1], aspect = DataAspect())
 
     plot_topography!(
@@ -542,7 +542,7 @@ function plot_topography(
     _set_window_title(_generate_window_title(dat))
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
     fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
-    fig = Figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+    fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
     axes = Axis[]
 
     # Pre-subset datasets once
@@ -748,7 +748,7 @@ function plot_topography(
     _set_window_title(_generate_window_title(dat) * " - Epoch $epoch")
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
     fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
-    fig = Figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+    fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
     ax = Axis(fig[1, 1], aspect = DataAspect())
 
     plot_topography!(
@@ -1640,7 +1640,7 @@ function _show_topo_context_menu!(
         plot_configs = [(false, false, "single channel")]
     end
 
-    menu_fig = Figure(size = (400, 200))
+    menu_fig = _eegfun_figure(size = (400, 200))
     menu_buttons = [Button(menu_fig[idx, 1], label = plot_type) for (idx, plot_type) in enumerate(plot_types)]
 
     for (idx, btn) in enumerate(menu_buttons)
@@ -1708,7 +1708,7 @@ function _plot_topography_scrubber(dat::SingleDataFrameEeg; display_plot = true,
     init_mat, x_bounds, y_bounds = _topo_interpolate(init_vals, layout, gridscale; method = method, layout_idx = layout_idx)
     mat_obs = Observable(init_mat)
 
-    fig = Figure(size = (650, 720); figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+    fig = _eegfun_figure(size = (650, 720); figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
     _set_window_title("Topography Scrubber | $(_generate_window_title(dat))")
 
     current_idx = Observable{Int}(1)

@@ -396,63 +396,9 @@ function _compute_t_matrix_tf(prepared::TFStatisticalData; tail::Symbol = :both)
 end
 
 
-"""
-    _compute_p_matrix_tf!(p_matrix, t_matrix, df, tail)
+# In-place computation of p-values from 3D t-statistics matrix (forwards to N-D `_compute_p_matrix`)
+_compute_p_matrix_tf!(p_matrix::Array{Float64,3}, t_matrix::Array{Float64,3}, df::Float64, tail::Symbol) =
+    _compute_p_matrix(t_matrix, df, tail, p_matrix)
 
-In-place computation of p-values from 3D t-statistics matrix.
-"""
-function _compute_p_matrix_tf!(p_matrix::Array{Float64,3}, t_matrix::Array{Float64,3}, df::Float64, tail::Symbol)
-    dist = TDist(df)
-    if tail == :both
-        @inbounds @simd for i in eachindex(t_matrix)
-            t_val = t_matrix[i]
-            p_matrix[i] = (isnan(t_val) || isinf(t_val)) ? NaN : 2.0 * ccdf(dist, abs(t_val))
-        end
-    elseif tail == :left
-        @inbounds @simd for i in eachindex(t_matrix)
-            t_val = t_matrix[i]
-            p_matrix[i] = (isnan(t_val) || isinf(t_val)) ? NaN : cdf(dist, t_val)
-        end
-    else  # :right
-        @inbounds @simd for i in eachindex(t_matrix)
-            t_val = t_matrix[i]
-            p_matrix[i] = (isnan(t_val) || isinf(t_val)) ? NaN : ccdf(dist, t_val)
-        end
-    end
-    return p_matrix
-end
-
-
-"""
-    _compute_critical_t_values_tf(df, matrix_size, alpha, tail)
-
-Compute critical t-values for parametric thresholding (3D version).
-
-# Returns
-- `critical_t_values::Array{Float64, 3}`: Uniform critical t-values [electrodes × freqs × time]
-"""
-function _compute_critical_t_values_tf(df::Real, matrix_size::Tuple{Int,Int,Int}, alpha::Real = 0.05, tail::Symbol = :both)
-    critical_t_values = Array{Float64,3}(undef, matrix_size)
-
-    if isnan(df) || isinf(df) || df <= 0
-        fill!(critical_t_values, NaN)
-        return critical_t_values
-    end
-
-    dist = TDist(df)
-    if tail == :both
-        alpha_per_tail = alpha / 2.0
-        crit_t = quantile(dist, 1.0 - alpha_per_tail)
-        fill!(critical_t_values, crit_t)
-    elseif tail == :right
-        crit_t = quantile(dist, 1.0 - alpha)
-        fill!(critical_t_values, crit_t)
-    elseif tail == :left
-        crit_t = quantile(dist, alpha)
-        fill!(critical_t_values, crit_t)
-    else
-        @minimal_error("tail must be :both, :left, or :right, got :$tail")
-    end
-
-    return critical_t_values
-end
+# Compute critical t-values for parametric thresholding (forwards to N-D `_compute_critical_t_values`)
+const _compute_critical_t_values_tf = _compute_critical_t_values

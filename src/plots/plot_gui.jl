@@ -130,7 +130,7 @@ EegFun.plot_gui()
 function plot_gui()
     _set_window_title("PLOT GUI")
     # Dynamic sizing using Auto() rather than strict Fixed everywhere
-    gui_fig = Figure(size = (700, 600), title = "Plot GUI", backgroundcolor = :lightgrey, figure_padding = (20, 20, 20, 20))
+    gui_fig = _eegfun_figure(size = (700, 600), title = "Plot GUI", backgroundcolor = :lightgrey, figure_padding = (20, 20, 20, 20))
     main_layout = GridLayout(gui_fig[1, 1:3], rowgap = 2, colgap = 4)
 
 

@@ -79,7 +79,7 @@ function signal_example_decoding()
     t_arr  = collect(range(T_PRE, T_POST, step = 1.0 / FS))
     n_time = length(t_arr)
 
-    fig = Figure(size = (1400, 750), figure_padding = (8, 8, 8, 8), title = "MVPA Decoding Playground")
+    fig = _eegfun_figure(size = (1400, 750), figure_padding = (8, 8, 8, 8), title = "MVPA Decoding Playground")
 
     # ── Font sizing ──────────────────────────────────────────────────────────
     lbl_sz   = Observable(17)

@@ -114,7 +114,7 @@ function signal_example_tf()
     param_lbl_obs = Observable("Cycles: 7")
 
     # ── Figure & axes ─────────────────────────────────────────────────────────
-    fig = Figure(size = (1200, 850))
+    fig = _eegfun_figure(size = (1200, 850))
 
     ax_time = Axis(
         fig[1, 1],

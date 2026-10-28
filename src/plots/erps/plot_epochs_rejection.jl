@@ -185,7 +185,7 @@ function detect_bad_epochs_interactive(
 
     # Create figure sized to fit typical screens
     fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
-    fig = Figure(; figure_padding = 50, fontsize_kw...)
+    fig = _eegfun_figure(; figure_padding = 50, fontsize_kw...)
 
     # Performance optimizations
     selected_channels_set = Set(selected_channels)

@@ -83,8 +83,11 @@ function signal_example_ecg_einthoven()
 
     _set_window_title("Interactive ECG Simulator — Einthoven's Triangle & Vectorcardiogram")
 
-    fig =
-        Figure(size = (1400, 860), title = "Interactive ECG Simulator — Einthoven's Triangle & Vectorcardiogram", backgroundcolor = :white)
+    fig = _eegfun_figure(
+        size = (1400, 860),
+        title = "Interactive ECG Simulator — Einthoven's Triangle & Vectorcardiogram",
+        backgroundcolor = :white,
+    )
 
     # ── Adaptive Font and UI Sizing ──────────────────────────────────────────
     function setup_adaptive_sizing(fig)
