@@ -196,6 +196,27 @@ function _cv_candidate_errors(X::Matrix{Float64}, ptp_col::Vector{Float64}, cand
 end
 
 """
+    _best_candidate_index(errors::Vector{Float64}, tol::Float64 = 1e-7) -> Int
+
+Select the index of the minimum cross-validation error among candidate thresholds.
+If multiple candidates achieve the minimum within numerical tolerance `tol` (e.g. due to
+identical training partitions or floating-point noise from multi-threaded BLAS GEMM),
+consistently selects the first (lowest) candidate threshold for deterministic results across platforms.
+"""
+function _best_candidate_index(errors::Vector{Float64}, tol::Float64 = 1e-7)
+    all(isinf, errors) && return length(errors)
+    best_idx = 1
+    min_e = errors[1]
+    @inbounds for i = 2:length(errors)
+        if errors[i] < min_e - tol
+            min_e = errors[i]
+            best_idx = i
+        end
+    end
+    return best_idx
+end
+
+"""
     _repair_epochs_cached!(epochs_data::Vector{DataFrame}, epochs_to_repair::Vector{Int},
                            repair_matrix::BitMatrix, target_channels::Vector{Symbol}, layout::Layout;
                            repair_method::Symbol = :spherical_spline, m::Int = 4, lambda::Float64 = 1e-5,
@@ -553,7 +574,7 @@ function autoreject!(
             total_candidate_errors .+= err
         end
 
-        best_idx = all(isinf, total_candidate_errors) ? length(global_candidates) : argmin(total_candidate_errors)
+        best_idx = _best_candidate_index(total_candidate_errors)
         best_global_th = global_candidates[best_idx]
 
         for ch in selected_channels
@@ -576,7 +597,7 @@ function autoreject!(
             end
 
             err = _cv_candidate_errors(X, ptp_col, candidates, folds)
-            best_idx = all(isinf, err) ? length(candidates) : argmin(err)
+            best_idx = _best_candidate_index(err)
             threshold_results[ch_idx] = candidates[best_idx]
         end
 
