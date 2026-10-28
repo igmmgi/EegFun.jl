@@ -1,0 +1,27 @@
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
+    patch:
+      default:
+        target: auto
+        threshold: 1%
+
+comment:
+  layout: "reach,diff,flags,files,footer"
+  behavior: default
+  require_changes: false
+
+ignore:
+  - "src/demos"
+  - "src/demos/**"
+  - "src/precompile.jl"
+  - "src/plots/processing/plot_databrowser.jl"
+  - "src/plots/plot_gui.jl"
+  - "src/plots/plot_gui_helpers.jl"
+  - "src/plots/erps/plot_erp_filter_gui.jl"
+  - "src/plots/erps/plot_erp_measurement_gui.jl"
+  - "src/plots/utils/shared_interactivity.jl"
+  - "src/plots/utils/help_system.jl"
