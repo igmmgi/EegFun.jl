@@ -17,6 +17,7 @@ concurrency:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   format:
@@ -77,5 +78,5 @@ jobs:
       - uses: codecov/codecov-action@v7
         with:
           files: lcov.info
-          token: ${{ secrets.CODECOV_TOKEN }}
+          use_oidc: true
           fail_ci_if_error: false
