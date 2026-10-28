@@ -26,14 +26,14 @@ signal_example_ica_mixture()
 """
 function signal_example_ica_mixture()
     n = 1000
-    Random.seed!(42)
+    rng = Random.Xoshiro(42)  # local RNG: reproducible without touching the global RNG
 
     # ── Styling ───────────────────────────────────────────────────────────────
     col_brain = :blue
     col_blink = :red
     col_mix   = :black
 
-    fig = Figure(size = (1000, 800), figure_padding = (15, 15, 15, 15))
+    fig = _eegfun_figure(size = (1000, 800), figure_padding = (15, 15, 15, 15))
 
     lbl_sz   = Observable(14)
     tick_sz  = Observable(12)
@@ -60,7 +60,7 @@ function signal_example_ica_mixture()
     brain_base = sin.(10.0 .* t_arr)
     # Give the brain signal some spindle-like envelopes
     env = exp.(-((t_arr .- π) .^ 2) ./ 0.5) .+ exp.(-((t_arr .- 3π) .^ 2) ./ 0.5)
-    brain_raw = brain_base .* env .+ 0.1 .* randn(n)
+    brain_raw = brain_base .* env .+ 0.1 .* randn(rng, n)
 
     # Isolated blink shape
     blink_raw = 5.0 .* exp.(-((t_arr .- 2π) .^ 2) ./ 0.2)

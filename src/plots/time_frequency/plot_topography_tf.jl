@@ -140,7 +140,7 @@ function plot_topography(
     title = isempty(figure_title) ? default_title : figure_title
 
     # Create figure
-    fig = Figure(size = (400, 400))
+    fig = _eegfun_figure(size = (400, 400))
     ax = Axis(fig[1, 1], aspect = DataAspect(), title = title, titlesize = plot_kwargs[:plot_title_fontsize])
 
     # Ensure coordinates
@@ -303,7 +303,7 @@ function plot_topography(
     end
 
     freq_str = "$(round(Int, fr[1]))-$(round(Int, fr[2])) Hz"
-    fig = Figure(size = (250 * n_cols + 100, 250 * n_rows + 50))
+    fig = _eegfun_figure(size = (250 * n_cols + 100, 250 * n_rows + 50))
 
     colorbar_kwargs = Dict{Symbol,Any}(pairs(pop!(plot_kwargs, :colorbar_kwargs, (;))))
     pop!(colorbar_kwargs, :colorrange, nothing)
@@ -531,7 +531,7 @@ function plot_topography_stats(
     freq_str = "$(round(Int, freq_range[1]))–$(round(Int, freq_range[2])) Hz"
     fig_title = isempty(figure_title) ? "$test_type Test — $data_label ($freq_str)" : figure_title
 
-    fig = Figure(size = (200 * n_cols + 100, 200 * n_rows + 50))
+    fig = _eegfun_figure(size = (200 * n_cols + 100, 200 * n_rows + 50))
     Label(fig[0, 1:n_cols], fig_title, fontsize = 18, font = :bold)
 
     # Extract colorbar kwargs

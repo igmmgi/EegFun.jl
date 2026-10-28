@@ -219,7 +219,7 @@ function plot_layout_2d(
     display_plot::Bool = true,
     kwargs...,
 )
-    fig = Figure()
+    fig = _eegfun_figure()
     # Increase xautolimitmargin slightly more on the right (0.15) to account for text labels extending outwards
     ax = Axis(fig[1, 1], aspect = DataAspect(), xautolimitmargin = (0.1, 0.15), yautolimitmargin = (0.1, 0.1))
 
@@ -497,7 +497,7 @@ $(_generate_kwargs_doc(PLOT_LAYOUT_LABEL_KWARGS))
     plot_layout_3d(layout, neighbours=true)
 """
 function plot_layout_3d(layout::Layout; neighbours::Bool = false, display_plot::Bool = true, kwargs...)
-    fig = Figure()
+    fig = _eegfun_figure()
     # Increase autolimit margins to account for text labels extending outwards
     ax = Axis3(fig[1, 1], xautolimitmargin = (0.1, 0.15), yautolimitmargin = (0.1, 0.1), zautolimitmargin = (0.1, 0.1))
 

@@ -78,7 +78,7 @@ function plot_filter_response(
     end
 
     _set_window_title("Filter Response")
-    fig = Figure(size = (1200, 600))
+    fig = _eegfun_figure(size = (1200, 600))
 
     # Base axis properties
     base_props = (

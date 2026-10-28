@@ -40,9 +40,9 @@ using EegFun
 function signal_example_ica_optimization()
     # ── Constants ─────────────────────────────────────────────────────────────
     N = 4000
-    Random.seed!(42) # For stable shapes across resets
+    rng = Random.Xoshiro(42) # For stable shapes across resets (local RNG; global RNG untouched)
 
-    fig = Figure(size = (1200, 900), figure_padding = (15, 15, 15, 15))
+    fig = _eegfun_figure(size = (1200, 900), figure_padding = (15, 15, 15, 15))
 
     # Responsive sizing
     lbl_sz   = Observable(14)
@@ -78,8 +78,8 @@ function signal_example_ica_optimization()
     s2 = vcat(s2, zeros(N - length(s2)))[1:N]
 
     # Add minor noise
-    s1 .+= 0.05 .* randn(N)
-    s2 .+= 0.05 .* randn(N)
+    s1 .+= 0.05 .* randn(rng, N)
+    s2 .+= 0.05 .* randn(rng, N)
 
     # ── Mixture and Sphering ──────────────────────────────────────────────────
     S = vcat(s1', s2')

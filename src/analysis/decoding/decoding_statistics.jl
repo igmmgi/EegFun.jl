@@ -252,7 +252,8 @@ end
                                alpha::Float64 = 0.05,
                                n_permutations::Int = 1000,
                                cluster_statistic::Symbol = :sum,
-                               show_progress::Bool = true)
+                               show_progress::Bool = true,
+                               rng::AbstractRNG = Random.default_rng())
 
 Perform cluster-based permutation test against chance level for decoding results.
 
@@ -269,9 +270,10 @@ This is a one-tailed test (right tail) testing if accuracy > chance level.
 - `n_permutations::Int`: Number of permutations (default: 1000)
 - `cluster_statistic::Symbol`: Cluster statistic - `:sum` (default) or `:max`
 - `show_progress::Bool`: Show progress bar (default: true)
+- `rng::AbstractRNG`: Random number generator used for the sign-flip permutations (default: `Random.default_rng()`)
 
 # Notes
-For reproducible results, call `Random.seed!(xxx)` in your Julia session before running the test.
+For reproducible results pass a seeded RNG, e.g. `rng = Random.Xoshiro(42)`.
 
 # Returns
 - `DecodingStatisticsResult`: Results with t-statistics, p-values, significance masks, and clusters
@@ -289,6 +291,7 @@ function test_against_chance_cluster(
     n_permutations::Int = 1000,
     cluster_statistic::Symbol = :sum,
     show_progress::Bool = true,
+    rng::AbstractRNG = Random.default_rng(),
 )
     cluster_statistic ∈ (:sum, :max) || @minimal_error("cluster_statistic must be :sum or :max, got :$cluster_statistic")
 
@@ -354,7 +357,7 @@ function test_against_chance_cluster(
         # For one-sample t-test, we randomly flip signs of accuracies
         shuffled_accuracies = copy(accuracies)
         for p_idx = 1:n_participants
-            if rand(Bool)
+            if rand(rng, Bool)
                 # Flip sign: subtract from chance and negate
                 shuffled_accuracies[p_idx, :] = 2 * chance_level .- shuffled_accuracies[p_idx, :]
             end
@@ -399,7 +402,7 @@ function test_against_chance_cluster(
             # Count permutations with max >= observed
             count_exceed = sum(permutation_max .>= cluster_stat) + 1
             p_value = count_exceed / (n_permutations + 1)
-            is_significant = p_value < alpha
+            is_significant = p_value <= alpha
 
             updated_cluster = TemporalCluster(cluster.id, cluster.time_indices, cluster.time_range, cluster_stat, p_value, is_significant)
             push!(updated_clusters, updated_cluster)

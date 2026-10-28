@@ -421,11 +421,23 @@ channels(channel_number::Int) = channels([channel_number])
 channels(channel_numbers::Union{Vector{Int},UnitRange}) = x -> [i in channel_numbers for i = 1:length(x)]
 channels(channel_ranges::Vector{UnitRange{Int}}) = x -> [i in union(channel_ranges...) for i = 1:length(x)]
 channels(predicate::Function) = predicate  # Allow custom function predicates
+_negate_selector(f::Function) = x -> begin
+    res = f(x)
+    if res isa AbstractVector{Bool}
+        return .!res
+    elseif res isa AbstractVector{<:Integer}
+        mask = fill(true, length(x))
+        for idx in res
+            1 <= idx <= length(x) && (mask[idx] = false)
+        end
+        return mask
+    else
+        return .!(res)
+    end
+end
+
 """
-    channels_not(name::Symbol)
-    channels_not(names::Symbol...)
-    channels_not(names::Vector{Symbol})
-    channels_not(indices::Union{Vector{Int}, UnitRange})
+    channels_not(args...)
 
 Predicate generators that **exclude** the specified channels.
 Inverse of `channels(...)`.
@@ -436,13 +448,7 @@ channels_not(:Fp1, :Fp2)           # Exclude two frontal channels
 channels_not(1:4)                   # Exclude first 4 channels by index
 ```
 """
-channels_not(channel_names::AbstractVector{Symbol}) = x -> .!(x .∈ Ref(channel_names))
-channels_not(channel_names::AbstractVector{<:AbstractString}) = channels_not(Symbol.(channel_names))
-channels_not(channel_name::Symbol) = channels_not([channel_name])
-channels_not(channel_name::AbstractString) = channels_not([Symbol(channel_name)])
-channels_not(channel_names::Symbol...) = channels_not(collect(channel_names))
-channels_not(channel_names::AbstractString...) = channels_not(Symbol.(channel_names)...)
-channels_not(channel_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in channel_numbers for i = 1:length(x)])
+channels_not(args...) = _negate_selector(channels(args...))
 
 """
     components()
@@ -462,9 +468,11 @@ components(1:5)                     # Select first 5 components
 """
 components() = x -> fill(true, length(x))  # Default: select all components given
 components(component_numbers::Union{Vector{Int},UnitRange}) = x -> [i in component_numbers for i = 1:length(x)]
-components(component_number::Int) = x -> x .== component_number
+components(component_number::Int) = components([component_number])
+components(component_ranges::Vector{UnitRange{Int}}) = components(union(component_ranges...))
 components(component_numbers::Int...) = components(collect(component_numbers))
 components(predicate::Function) = predicate  # Allow custom function predicates
+
 """
     components_not(index::Int)
     components_not(indices::Int...)
@@ -478,9 +486,7 @@ components_not(1)                   # Exclude component 1
 components_not(1:3)                 # Exclude first 3 components
 ```
 """
-components_not(component_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in component_numbers for i = 1:length(x)])
-components_not(component_number::Int) = x -> .!(x .== component_number)
-components_not(component_numbers::Int...) = components_not(collect(component_numbers))
+components_not(args...) = _negate_selector(components(args...))
 
 """
     samples()
@@ -582,7 +588,8 @@ epochs(df -> df.interval[1] < 1.0)    # Keep epochs by metadata value
 """
 epochs() = x -> fill(true, length(x))  # Default: select all epochs given
 epochs(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> [i in epoch_numbers for i = 1:length(x)]
-epochs(epoch_number::Int) = x -> [i == epoch_number for i = 1:length(x)]
+epochs(epoch_number::Int) = epochs([epoch_number])
+epochs(epoch_ranges::Vector{UnitRange{Int}}) = epochs(union(epoch_ranges...))
 epochs(epoch_numbers::Int...) = epochs(collect(epoch_numbers))
 epochs(predicate::Function) = x -> map(predicate, x)  # Allow custom function predicates over dataframes
 
@@ -599,9 +606,7 @@ epochs_not(1)                         # Exclude epoch 1
 epochs_not(1:10)                      # Exclude first 10 epochs
 ```
 """
-epochs_not(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in epoch_numbers for i = 1:length(x)])
-epochs_not(epoch_number::Int) = x -> .!([i == epoch_number for i = 1:length(x)])
-epochs_not(epoch_numbers::Int...) = epochs_not(collect(epoch_numbers))
+epochs_not(args...) = _negate_selector(epochs(args...))
 
 """
     participants()
@@ -621,9 +626,11 @@ participants(1:10)                    # Select participants 1 through 10
 """
 participants() = x -> fill(true, length(x))  # Default: select all participants given
 participants(participant_ids::Union{Vector{Int},UnitRange}) = x -> [id in participant_ids for id in x]
-participants(participant_id::Int) = x -> x .== participant_id
+participants(participant_id::Int) = participants([participant_id])
+participants(participant_ranges::Vector{UnitRange{Int}}) = participants(union(participant_ranges...))
 participants(participant_ids::Int...) = participants(collect(participant_ids))
 participants(predicate::Function) = predicate  # Allow custom function predicates
+
 """
     participants_not(id::Int)
     participants_not(ids::Int...)
@@ -637,9 +644,7 @@ participants_not(5)                   # Exclude participant 5
 participants_not(1:3)                 # Exclude participants 1, 2, and 3
 ```
 """
-participants_not(participant_ids::Union{Vector{Int},UnitRange}) = x -> .!([id in participant_ids for id in x])
-participants_not(participant_id::Int) = x -> .!(x .== participant_id)
-participants_not(participant_ids::Int...) = participants_not(collect(participant_ids))
+participants_not(args...) = _negate_selector(participants(args...))
 
 """
     conditions()
@@ -664,12 +669,15 @@ conditions(["congruent", "neutral"])   # Select multiple conditions by name
 """
 conditions() = x -> fill(true, length(x))  # Default: select all conditions given
 conditions(condition_indices::Union{Vector{Int},UnitRange}) = x -> intersect(condition_indices, 1:length(x))
-conditions(condition_index::Int) = x -> intersect([condition_index], 1:length(x))
+conditions(condition_index::Int) = conditions([condition_index])
+conditions(condition_ranges::Vector{UnitRange{Int}}) = conditions(union(condition_ranges...))
 conditions(condition_indices::Int...) = conditions(collect(condition_indices))
 conditions(condition_names::Vector{String}) =
     x -> Vector{Int}(filter(!isnothing, [findfirst(dat -> condition_name(dat) == n, x) for n in condition_names]))
-conditions(cond_name::String) = x -> Vector{Int}(filter(!isnothing, [findfirst(dat -> condition_name(dat) == cond_name, x)]))
+conditions(cond_name::String) = conditions([cond_name])
+conditions(cond_names::String...) = conditions(collect(cond_names))
 conditions(predicate::Function) = predicate  # Allow custom function predicates
+
 """
     conditions_not(index::Int)
     conditions_not(indices::Int...)
@@ -686,13 +694,7 @@ conditions_not(1)                     # Exclude condition 1
 conditions_not("incongruent")         # Exclude condition by name
 ```
 """
-conditions_not() = x -> fill(true, length(x))
-conditions_not(condition_indices::Union{Vector{Int},UnitRange}) = x -> .!([i in condition_indices for i = 1:length(x)])
-conditions_not(condition_index::Int) = x -> .!([i == condition_index for i = 1:length(x)])
-conditions_not(condition_indices::Int...) = conditions_not(collect(condition_indices))
-conditions_not(condition_names::Vector{String}) = x -> .!([condition_name(dat) in condition_names for dat in x])
-conditions_not(cond_name::String) = x -> .!([condition_name(dat) == cond_name for dat in x])
-conditions_not(condition_names::String...) = conditions_not(collect(condition_names))
+conditions_not(args...) = _negate_selector(conditions(args...))
 
 # === SELECTOR CONVERSION HELPERS ===
 # Convert symbols, strings, numbers, vectors, ranges, or colons directly to predicates

@@ -118,7 +118,7 @@ function plot_tf_stats(
         figure_size = (n_cols * panel_w, n_rows * panel_h)
     end
 
-    fig = Figure(size = figure_size)
+    fig = _eegfun_figure(size = figure_size)
 
     # Build title
     test_type = isa(result, TFAnalyticResult) ? "Analytic" : "Permutation"

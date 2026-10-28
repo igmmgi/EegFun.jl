@@ -273,7 +273,7 @@ function plot_decoding(decoded::DecodedData; kwargs...)
     show_title = !isnothing(title_text)
 
     # Create figure
-    fig = Figure(size = (800, 600))
+    fig = _eegfun_figure(size = (800, 600))
     ax = Axis(
         fig[1, 1],
         xlabel = plot_kwargs[:xlabel],
@@ -323,7 +323,7 @@ function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
     rows, cols = _best_rect(n_subjects)
 
     # Create figure with appropriate size for subplots
-    fig = Figure(size = (400 * cols, 300 * rows))
+    fig = _eegfun_figure(size = (400 * cols, 300 * rows))
 
     # Determine common time range and y limits across all subjects
     all_times = [d.times for d in decoded_list]
@@ -530,7 +530,7 @@ function plot_confusion_matrix(decoded::DecodedData; time_point::Union{Float64,I
     end
 
     # Create figure
-    fig = Figure(size = (600, 600))
+    fig = _eegfun_figure(size = (600, 600))
     ax = Axis(fig[1, 1], title = title_text, xlabel = "Predicted", ylabel = "True")
 
     # Create heatmap

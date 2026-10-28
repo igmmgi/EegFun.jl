@@ -172,7 +172,7 @@ EegFun.simulate_erp()
 """
 function simulate_erp()
     # Create the figure with more space for component controls
-    fig = Figure(size = (1400, 1000))
+    fig = _eegfun_figure(size = (1400, 1000))
 
     # Create layout
     gl = fig[1:2, 1:3] = GridLayout()

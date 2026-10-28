@@ -192,7 +192,7 @@ function plot_erp_image(
     colorbar_kwargs = pop!(plot_kwargs, :colorbar_kwargs, (;))
 
     # Create figure and apply layout system
-    fig = Figure()
+    fig = _eegfun_figure()
 
     plot_layout = create_layout(layout, all_plot_channels, dat_subset.layout; layout_kwargs...)
 

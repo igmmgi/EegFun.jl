@@ -25,9 +25,9 @@ function signal_example_ica_clt()
     N_samples = 100_000
     Plot_samples = 150 # Drastically reduced to prevent visual spaghetti of white noise
     Max_Sources = 50
-    Random.seed!(42)
+    rng = Random.Xoshiro(42)  # local RNG: reproducible without touching the global RNG
 
-    fig = Figure(size = (1600, 800), figure_padding = (15, 15, 15, 15))
+    fig = _eegfun_figure(size = (1600, 800), figure_padding = (15, 15, 15, 15))
 
     lbl_sz   = Observable(16)
     title_sz = Observable(20)
@@ -38,7 +38,7 @@ function signal_example_ica_clt()
     # We use a sparse, "pointy" Laplace distribution (typical of brain artifacts)
     # because it takes many more sums to converge to a Gaussian than a flat box.
     # A single source is a massive sharp peak with long tails.
-    sources_obs = Observable([(-log.(rand(N_samples))) .* sign.(randn(N_samples)) for _ = 1:Max_Sources])
+    sources_obs = Observable([(-log.(rand(rng, N_samples))) .* sign.(randn(rng, N_samples)) for _ = 1:Max_Sources])
 
     function calc_kurtosis(x)
         v = var(x; corrected = false)
@@ -84,7 +84,7 @@ function signal_example_ica_clt()
         update!()
     end
     on(btn_regen.clicks) do _
-        sources_obs[] = [(-log.(rand(N_samples))) .* sign.(randn(N_samples)) for _ = 1:Max_Sources]
+        sources_obs[] = [(-log.(rand(rng, N_samples))) .* sign.(randn(rng, N_samples)) for _ = 1:Max_Sources]
         update!() # Redraw the UI
     end
 

@@ -87,7 +87,7 @@ function signal_example_heog()
 
     _set_window_title("Interactive Bipolar hEOG Recording Simulator")
 
-    fig = Figure(size = (1350, 850), title = "Interactive Bipolar hEOG Recording Simulator", backgroundcolor = :white)
+    fig = _eegfun_figure(size = (1350, 850), title = "Interactive Bipolar hEOG Recording Simulator", backgroundcolor = :white)
 
     # ── Adaptive Font and UI Sizing ──────────────────────────────────────────
     function setup_adaptive_sizing(fig)

@@ -602,3 +602,27 @@ function example_path(relative_path::String)
     isfile(path) || isdir(path) || @minimal_error("Example resource not found: $relative_path\nExpected at: $path")
     return path
 end
+
+"""
+    _foreach_chunk(f, n; ntasks = Threads.nthreads())
+
+Split `1:n` into at most `ntasks` contiguous chunks and call `f(chunk::UnitRange{Int})` for each
+chunk in its own task, waiting for all of them to finish (task errors are rethrown).
+
+Use this instead of indexing per-thread scratch buffers with `Threads.threadid()` inside
+`Threads.@threads`: with the default `:dynamic` scheduler a task can migrate between threads at
+any yield point, so `threadid()` is not a stable buffer index. Allocate scratch buffers inside `f`
+instead; each chunk then owns its buffers exclusively.
+"""
+function _foreach_chunk(f, n::Integer; ntasks::Integer = Threads.nthreads())
+    n <= 0 && return nothing
+    ntasks = clamp(ntasks, 1, n)
+    if ntasks == 1
+        f(1:n)
+        return nothing
+    end
+    chunk_size = cld(n, ntasks)
+    tasks = [Threads.@spawn f(chunk) for chunk in Iterators.partition(1:n, chunk_size)]
+    foreach(wait, tasks)
+    return nothing
+end

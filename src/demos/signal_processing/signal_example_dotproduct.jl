@@ -86,7 +86,7 @@ function signal_example_dotproduct()
     FS    = 1000.0  # sample rate (Hz) — high enough for smooth rendering up to 40 Hz
     EPOCH = 2.0     # epoch length (s)
 
-    fig = Figure(size = (1300, 850), figure_padding = (8, 8, 8, 8), title = "Dot Product Demo")
+    fig = _eegfun_figure(size = (1300, 850), figure_padding = (8, 8, 8, 8), title = "Dot Product Demo")
 
     # ── Font sizing ──────────────────────────────────────────────────────────
     lbl_sz   = Observable(17)

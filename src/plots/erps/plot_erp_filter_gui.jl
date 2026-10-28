@@ -129,7 +129,7 @@ function plot_erp_filter_gui(
 
     # Create Figure
     _set_window_title("ERP Filter Tool")
-    fig = Figure(size = (1200, 700))
+    fig = _eegfun_figure(size = (1200, 700))
 
     # Create main grid: controls on left (20%), plot area on right (80%)
     main_grid = fig[1, 1] = GridLayout()

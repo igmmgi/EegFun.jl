@@ -174,7 +174,7 @@ function plot_channel_summary(dat::DataFrame, col::Union{Symbol,AbstractString};
     # Merge user kwargs with defaults and validate
     plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
 
-    fig = Figure()
+    fig = _eegfun_figure()
     ax = Axis(fig[1, 1])
     plot_channel_summary!(fig, ax, dat, col; channel_selection = channel_selection, plot_kwargs...)
 
@@ -195,7 +195,7 @@ function plot_channel_summary(
 )
     cols_sym = Symbol.(col)
     plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
-    fig = Figure()
+    fig = _eegfun_figure()
     _plot_multiple_columns!(fig, dat, cols_sym, plot_kwargs; channel_selection = channel_selection)
     if plot_kwargs[:display_plot]
         _set_window_title("Channel Summary")

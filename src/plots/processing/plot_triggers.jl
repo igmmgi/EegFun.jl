@@ -330,12 +330,12 @@ function plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwa
 
     if isempty(trigger_count)
         @minimal_warning "No triggers found in the data"
-        fig = Figure()
+        fig = _eegfun_figure()
         ax = Axis(fig[1, 1])
         return (fig = fig, axes = [ax])
     end
 
-    fig = Figure()
+    fig = _eegfun_figure()
     ax = Axis(fig[1, 1], yticks = (1:length(keys(trigger_count)), string.(collect(keys(trigger_count)))))
 
     # Set grid using the shared function
@@ -384,7 +384,7 @@ function plot_trigger_overview(dat::ContinuousData; kwargs...)
 
         trigger_count, trigger_labels = _count_triggers(trigger_codes, trigger_info)
 
-        fig = Figure()
+        fig = _eegfun_figure()
         ax = Axis(fig[1, 1], yticks = (1:length(keys(trigger_count)), [trigger_labels[k] for k in keys(trigger_count)]))
 
         # Set grid using the shared function
@@ -597,7 +597,7 @@ function _create_interactive_trigger_plot(
     plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
     if isempty(trigger_times)
         @minimal_warning "No triggers found in the data"
-        fig = Figure()
+        fig = _eegfun_figure()
         ax = Axis(fig[1, 1])
         return (fig = fig, axes = [ax])
     end
@@ -606,7 +606,7 @@ function _create_interactive_trigger_plot(
     end_time = trigger_times[end] + 2.0
 
     # Create figure with grid layout to accommodate legend
-    fig = Figure()
+    fig = _eegfun_figure()
     ax = Axis(fig[1, 1])
 
     # Set grid using the shared function

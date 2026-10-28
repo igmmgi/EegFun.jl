@@ -78,9 +78,9 @@ import Tables
         @test length(eachcol(dat)) == ncol(dat.data)
         @test length(eachrow(dat)) == nrow(dat.data)
 
-        # Test convert and parent
-        @test convert(DataFrame, dat) isa DataFrame
-        @test nrow(convert(DataFrame, dat)) == nrow(dat.data)
+        # Test explicit DataFrame constructor and parent (no implicit `convert`)
+        @test DataFrame(dat) isa DataFrame
+        @test nrow(DataFrame(dat)) == nrow(dat.data)
         @test parent(dat) === dat.data
 
         # Test names with cols selector

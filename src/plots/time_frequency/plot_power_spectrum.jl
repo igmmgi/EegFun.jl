@@ -492,7 +492,7 @@ function plot_channel_spectrum(
         subset(dat, sample_selection = sample_selection, interval_selection = interval_selection, channel_selection = channel_selection)
 
     # Create figure and main axis
-    fig = Figure()
+    fig = _eegfun_figure()
     ax = Axis(fig[1, 1])
 
     _plot_power_spectrum!(fig, ax, dat_subset.data, dat_subset.layout.data.label, sample_rate(dat_subset); kwargs...)
@@ -593,7 +593,7 @@ function plot_ica_component_spectrum(
     # If empty, warn and return early
     if isempty(selected_components)
         @minimal_warning "No components selected for ICA spectrum plot"
-        return (fig = Figure(), axes = Axis[])
+        return (fig = _eegfun_figure(), axes = Axis[])
     end
 
     # Debug: verify selected components
@@ -619,7 +619,7 @@ function plot_ica_component_spectrum(
     component_signals = [components[comp_idx, :] for comp_idx in selected_components]
 
     # Create figure and axis
-    fig = Figure()
+    fig = _eegfun_figure()
     ax = Axis(fig[1, 1])
 
     _plot_power_spectrum!(fig, ax, component_signals, components_to_plot, sample_rate(dat); kwargs...)
@@ -675,7 +675,7 @@ function plot_channel_spectrum(dat::SpectrumData; channel_selection = channels()
 
     plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
 
-    fig = Figure()
+    fig = _eegfun_figure()
     ax = Axis(fig[1, 1])
 
     _plot_power_spectrum_data!(fig, ax, freq_data, power_raw_data, valid_channels; kwargs...)

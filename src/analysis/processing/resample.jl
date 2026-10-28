@@ -109,6 +109,7 @@ function resample!(dat::SingleDataFrameEeg, target_rate::Real)
     end
 
     dat.sample_rate = Float64(target_rate)
+    dat.analysis_info.sample_rate = dat.sample_rate
     @info "Resampling complete. New sample rate: $(dat.sample_rate) Hz, $(n_samples(dat)) samples"
 
     return dat
@@ -138,6 +139,7 @@ function resample!(dat::EpochData, target_rate::Real)
     end
 
     dat.sample_rate = Float64(target_rate)
+    dat.analysis_info.sample_rate = dat.sample_rate
     @info "Resampling complete. New sample rate: $(dat.sample_rate) Hz, $(nrow(dat.data[1])) samples per epoch"
 
     return dat

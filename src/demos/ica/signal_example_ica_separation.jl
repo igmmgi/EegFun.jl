@@ -72,7 +72,7 @@ function signal_example_ica_separation()
     t_arr = collect(range(0.0, T - 1.0 / FS, step = 1.0 / FS))
     n     = length(t_arr)
 
-    fig = Figure(size = (1800, 900), figure_padding = (10, 10, 10, 10))
+    fig = _eegfun_figure(size = (1800, 900), figure_padding = (10, 10, 10, 10))
 
     # ── 2. Observables (State & UI) ───────────────────────────────────────────
     lbl_sz_obs   = Observable(14)

@@ -226,17 +226,10 @@ function _validate_permutation_inputs(
         @minimal_error "cluster_type must be :spatial, :temporal, or :spatiotemporal, got :$cluster_type"
     tail ∉ (:both, :left, :right) && @minimal_error "tail must be :both, :left, or :right, got :$tail"
 
-    # Auto-compute neighbours if missing (only when needed for spatial clustering)
+    # Check neighbours if needed for spatial clustering
     if cluster_type ∈ (:spatial, :spatiotemporal)
         if isnothing(prepared.data[1].layout.neighbours)
             @minimal_warning "Layout.neighbours is not set. Computing with default distance criterion (0.35)."
-            # Need to update layout.neighbours for both conditions
-            get_neighbours_xy!(prepared.data[1].layout, 0.35)
-            if length(prepared.data) > 1
-                # Ensure they match if they have separate layouts
-                # They should share the layout anyway!
-                get_neighbours_xy!(prepared.data[2].layout, 0.35)
-            end
         end
     end
 
@@ -448,8 +441,8 @@ Compute critical t-values for parametric thresholding.
 critical_t = _compute_critical_t_values(df, size(t_matrix), 0.05, :both)
 ```
 """
-function _compute_critical_t_values(df::Real, matrix_size::Tuple{Int,Int}, alpha::Real = 0.05, tail::Symbol = :both)
-    critical_t_values = Array{Float64,2}(undef, matrix_size)
+function _compute_critical_t_values(df::Real, matrix_size::NTuple{N,Int}, alpha::Real = 0.05, tail::Symbol = :both) where {N}
+    critical_t_values = Array{Float64,N}(undef, matrix_size)
 
     if isnan(df) || isinf(df) || df <= 0
         fill!(critical_t_values, NaN)
@@ -482,15 +475,15 @@ Compute p-values from t-statistics.
 Internal helper function used by compute_t_matrix.
 """
 function _compute_p_matrix(
-    t_matrix::Array{Float64,2},
+    t_matrix::Array{Float64,N},
     df::Float64,
     tail::Symbol,
-    p_matrix_buffer::Union{Nothing,Array{Float64,2}} = nothing,
-)
+    p_matrix_buffer::Union{Nothing,Array{Float64,N}} = nothing,
+) where {N}
     if !isnothing(p_matrix_buffer)
         p_matrix = p_matrix_buffer
     else
-        p_matrix = Array{Float64,2}(undef, size(t_matrix))
+        p_matrix = Array{Float64,N}(undef, size(t_matrix))
     end
     dist = TDist(df)
     if tail == :both

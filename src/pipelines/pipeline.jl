@@ -291,7 +291,7 @@ function _pipeline_process_file!(
     # Save the original data in Julia format
     if files_cfg.output.save_continuous_data_raw
         @info "Saving continuous data (original)"
-        jldsave(_make_output_filename(output_directory, data_file, "_continuous_raw"); data = dat)
+        jldsave(_make_output_filename(output_directory, data_file, "_continuous_raw"); data = dat, format_version = EEGFUN_FORMAT_VERSION)
     end
 
     # Mark epoch intervals
@@ -327,12 +327,16 @@ function _pipeline_process_file!(
 
     if files_cfg.output.save_epoch_data_raw
         @info "Saving epoch data (original)"
-        jldsave(_make_output_filename(output_directory, data_file, "_epochs_raw"); data = epochs_raw)
+        jldsave(
+            _make_output_filename(output_directory, data_file, "_epochs_raw");
+            data = epochs_raw,
+            format_version = EEGFUN_FORMAT_VERSION,
+        )
     end
 
     if files_cfg.output.save_erp_data_raw
         @info "Saving ERP data (original)"
-        jldsave(_make_output_filename(output_directory, data_file, "_erps_raw"); data = erps_raw)
+        jldsave(_make_output_filename(output_directory, data_file, "_erps_raw"); data = erps_raw, format_version = EEGFUN_FORMAT_VERSION)
     end
 
     #################### Independent Component Analysis (ICA) ###################
@@ -412,8 +416,8 @@ function _pipeline_final_summary(
             alignment = [:l, :r],
         )
         @info "Mean percentage (averaged across all conditions and files): $(round(mean(merged_file_summary.percentage), digits = 1)) %"
-        jldsave(joinpath(output_directory, "epoch_summary.jld2"); data = merged_epoch_summary)
-        jldsave(joinpath(output_directory, "file_summary.jld2"); data = merged_file_summary)
+        jldsave(joinpath(output_directory, "epoch_summary.jld2"); data = merged_epoch_summary, format_version = EEGFUN_FORMAT_VERSION)
+        jldsave(joinpath(output_directory, "file_summary.jld2"); data = merged_file_summary, format_version = EEGFUN_FORMAT_VERSION)
     end
 
     return nothing
@@ -728,7 +732,7 @@ function _pipeline_ica!(
         # save ica results
         if files_cfg.output.save_ica_data
             @info "Saving ica data"
-            jldsave(_make_output_filename(output_directory, data_file, "_ica"); data = ica)
+            jldsave(_make_output_filename(output_directory, data_file, "_ica"); data = ica, format_version = EEGFUN_FORMAT_VERSION)
         end
 
     end
@@ -766,7 +770,11 @@ function _pipeline_epoch_and_reject!(
     # Save the cleaned continuous data in Julia format
     if files_cfg.output.save_continuous_data_corrected
         @info "Saving continuous data"
-        jldsave(_make_output_filename(output_directory, data_file, "_continuous_corrected"); data = dat)
+        jldsave(
+            _make_output_filename(output_directory, data_file, "_continuous_corrected");
+            data = dat,
+            format_version = EEGFUN_FORMAT_VERSION,
+        )
     end
 
     #################### EPOCH EXTRACTION ###################
@@ -858,7 +866,11 @@ function _pipeline_epoch_and_reject!(
     #################### SAVE EPOCH DATA ###################
     if files_cfg.output.save_epoch_data_corrected
         @info "Saving epoch data (cleaned)"
-        jldsave(_make_output_filename(output_directory, data_file, "_epochs_corrected"); data = epochs)
+        jldsave(
+            _make_output_filename(output_directory, data_file, "_epochs_corrected");
+            data = epochs,
+            format_version = EEGFUN_FORMAT_VERSION,
+        )
     end
 
     if preprocess_cfg.interactive_epochs
@@ -880,7 +892,7 @@ function _pipeline_epoch_and_reject!(
     if files_cfg.output.save_erp_data_corrected
         erps = average_epochs(epochs)
         @info "Saving ERP data (cleaned)"
-        jldsave(_make_output_filename(output_directory, data_file, "_erps_corrected"); data = erps)
+        jldsave(_make_output_filename(output_directory, data_file, "_erps_corrected"); data = erps, format_version = EEGFUN_FORMAT_VERSION)
     end
 
     #################### EPOCH REJECTION ###################
@@ -895,7 +907,11 @@ function _pipeline_epoch_and_reject!(
         vcat(rejection_info_step1, rejection_info_step2),
         component_artifacts,  # Save ICA components if ICA was applied, otherwise nothing
     )
-    jldsave(_make_output_filename(output_directory, data_file, "_artifact_info"); data = artifact_info)
+    jldsave(
+        _make_output_filename(output_directory, data_file, "_artifact_info");
+        data = artifact_info,
+        format_version = EEGFUN_FORMAT_VERSION,
+    )
     @info "Saved artifact info: $(artifact_info)"
 
     #################### LOG EPOCH COUNTS AND STORE FOR SUMMARY ###################
@@ -905,14 +921,14 @@ function _pipeline_epoch_and_reject!(
     #################### SAVE EPOCH DATA ###################
     if files_cfg.output.save_epoch_data
         @info "Saving epoch data (good)"
-        jldsave(_make_output_filename(output_directory, data_file, "_epochs"); data = epochs)
+        jldsave(_make_output_filename(output_directory, data_file, "_epochs"); data = epochs, format_version = EEGFUN_FORMAT_VERSION)
     end
 
     #################### SAVE ERP DATA ###################
     if files_cfg.output.save_erp_data
         erps = average_epochs(epochs)
         @info "Saving ERP data (good)"
-        jldsave(_make_output_filename(output_directory, data_file, "_erps"); data = erps)
+        jldsave(_make_output_filename(output_directory, data_file, "_erps"); data = erps, format_version = EEGFUN_FORMAT_VERSION)
     end
 
     @info section("End of Processing")

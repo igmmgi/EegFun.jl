@@ -97,7 +97,7 @@ function plot_rdm_heatmap(rsa_data::RsaData; time_point::Union{Float64,Int,Nothi
     end
 
     # Create figure
-    fig = Figure()
+    fig = _eegfun_figure()
 
     if show_title && !isempty(title_text)
         title_str = title_text
@@ -213,7 +213,7 @@ function plot_rdm_timecourse(rsa_data::RsaData; condition_pairs::Union{Vector{Tu
     end
 
     # Create figure
-    fig = Figure()
+    fig = _eegfun_figure()
 
     if show_title && !isempty(title_text)
         title_str = title_text
@@ -334,7 +334,7 @@ function plot_model_correlations(rsa_data::RsaData; kwargs...)
     end
 
     # Create figure
-    fig = Figure()
+    fig = _eegfun_figure()
 
     if show_title && !isempty(title_text)
         title_str = title_text

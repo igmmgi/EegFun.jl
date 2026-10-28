@@ -343,17 +343,9 @@ _data_state_type(::Type{ErpData}) = ContinuousDataState
 """Return the current DataFrame for the active data state."""
 _get_current_data(state::ContinuousDataState) = state.current[].data
 _get_current_data(state::EpochedDataState) = state.current[].data[state.current_epoch[]]
-"""Return `(t_start, t_end)` of the current data."""
-_get_time_bounds(dat::ContinuousDataState) = (dat.current[].data.time[1], dat.current[].data.time[end])
-_get_time_bounds(dat::EpochedDataState) =
-    (dat.current[].data[dat.current_epoch[]].time[1], dat.current[].data[dat.current_epoch[]].time[end])
 """Check whether a column exists in the current data."""
 _has_column(state::ContinuousDataState, col::Symbol) = col in propertynames(state.current[].data)
 _has_column(state::EpochedDataState, col::Symbol) = col in propertynames(state.current[].data[state.current_epoch[]])
-"""Trigger the current-data observable so listeners redraw."""
-_notify_data_update(state::AbstractDataState) = notify(state.current)
-"""Replace current data with a fresh copy of the original."""
-_reset_to_original!(state::AbstractDataState) = state.current[] = copy(state.original)
 
 ######
 # UI #
@@ -484,7 +476,7 @@ function _show_trigger_menu(state, ax, marker_symbol)
     end
     active_set = state.plot_kwargs[:active_triggers]
 
-    menu_fig = Figure(size = (600, 600))
+    menu_fig = _eegfun_figure(size = (600, 600))
     Label(menu_fig[1, 1], "Select Triggers to Display", fontsize = 18, halign = :center)
 
     scroll_area = menu_fig[2, 1] = GridLayout()
@@ -514,7 +506,7 @@ end
 
 """Popup: select filter cutoff frequency for a specific filter."""
 function _show_single_filter_menu(state, dat, filter_type::Symbol)
-    menu_fig = Figure(size = (450, 350))
+    menu_fig = _eegfun_figure(size = (450, 350))
 
     title_str = filter_type == :hp ? "Highpass Filter Settings" : "Lowpass Filter Settings"
     Label(menu_fig[1, 1], title_str, fontsize = 18, halign = :center, font = :bold)
@@ -613,7 +605,7 @@ end
 """Popup: select which channels are visible."""
 function _show_labels_menu(state, ax)
     all_channels = state.channels.labels
-    menu_fig = Figure(size = (900, 700))
+    menu_fig = _eegfun_figure(size = (900, 700))
     Label(menu_fig[1, 1], "Select Channels to Display", fontsize = 18, halign = :center)
     scroll_area = menu_fig[2, 1] = GridLayout()
     cbs = _build_checkbox_grid!(scroll_area, all_channels, 9, (ch, i) -> state.channels.visible[i])
@@ -650,7 +642,7 @@ _create_labels_menu(fig, ax, state) = _popup_button(fig, "Labels", () -> _show_l
 """Popup: select reference channels and apply re-referencing."""
 function _show_reference_menu(state, dat)
     all_channels = state.channels.labels
-    menu_fig = Figure(size = (900, 700))
+    menu_fig = _eegfun_figure(size = (900, 700))
     Label(menu_fig[1, 1], "Select Reference Channels", fontsize = 18, halign = :center)
 
     # Determine currently-checked channels from stored state
@@ -827,7 +819,7 @@ end
 """Popup: toggle ICA component removals and display options."""
 function _show_ica_menu(state, ax, ica)
     all_components = ica.ica_label
-    menu_fig = Figure(size = (800, 600))
+    menu_fig = _eegfun_figure(size = (800, 600))
     Label(menu_fig[1, 1], "Select ICA Components to Remove", fontsize = 18, halign = :center)
 
     scroll_area = menu_fig[2, 1] = GridLayout()
@@ -933,7 +925,7 @@ function _show_additional_menu(state, clicked_region_idx = nothing)
     end
     push!(plot_types, "Spectrum", "Get Selected Regions")
 
-    menu_fig = Figure(size = (300, max(150, 75 * length(plot_types))))
+    menu_fig = _eegfun_figure(size = (300, max(150, 75 * length(plot_types))))
     menu_buttons = [Button(menu_fig[idx, 1], label = plot_type) for (idx, plot_type) in enumerate(plot_types)]
 
     for btn in menu_buttons
@@ -966,7 +958,7 @@ end
 function _channel_repair_menu(state, selected_channels, ax)
     all_channels = state.channels.labels
 
-    menu_fig = Figure(size = (900, 700))
+    menu_fig = _eegfun_figure(size = (900, 700))
     Label(menu_fig[1, 1], "Channel Repair Interface", fontsize = 18, halign = :center)
 
     scroll_area = menu_fig[2, 1] = GridLayout()
@@ -1130,7 +1122,7 @@ function _show_extra_channel_menu(state, ax, dat)
     all_extras = extra_labels(dat)
     (isnothing(all_extras) || isempty(all_extras)) && return
 
-    menu_fig = Figure(size = (900, 700))
+    menu_fig = _eegfun_figure(size = (900, 700))
     Label(menu_fig[1, 1], "Select Extra Channels", fontsize = 18, halign = :center)
 
     scroll_area = menu_fig[2, 1] = GridLayout()
@@ -1716,15 +1708,6 @@ end
 function _apply_lp_filter!(state, active::Bool = !state.data.filter_state.lp_active[])
     state.data.filter_state.lp_active[] = active
     _apply_filters!(state)
-end
-
-########################
-# Reference
-########################
-"""Re-reference the current data to the given reference and rebuild."""
-function _rereference!(state::DataBrowserState, ref::Symbol)
-    state.reference_state = ref
-    _rebuild_current!(state)
 end
 
 ########################
@@ -2573,7 +2556,7 @@ function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs.
 
         # Common fig/ax/state/ui setup
         fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
-        fig = Figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+        fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
         ax = Axis(fig[1, 1], xlabel = plot_kwargs[:xlabel], ylabel = plot_kwargs[:ylabel], title = _get_title(dat))
 
         state = _create_browser_state(dat, dat.layout.data.label, ax, ica, plot_kwargs)
@@ -2647,7 +2630,7 @@ function _plot_databrowser_launcher(; screen = nothing, kwargs...)
     shared_layout = Ref{Union{Nothing,Layout}}(nothing)
     layout_status = Observable{String}("Layout: NA")
 
-    fig = Figure(size = (420, 260))
+    fig = _eegfun_figure(size = (420, 260))
     Label(fig[1, 1], "EegFun Data Browser", fontsize = 22, halign = :center)
     Label(fig[2, 1], "Drop EEG file(s) here", fontsize = 14, halign = :center, color = :gray50)
     status_label = Label(fig[3, 1], "", fontsize = 12, halign = :center, color = :gray40)

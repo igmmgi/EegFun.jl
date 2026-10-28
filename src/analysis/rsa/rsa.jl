@@ -587,6 +587,7 @@ function compare_models(
     model_names::Union{Vector{String},Nothing} = nothing,
     correlation_type::Symbol = :spearman,
     n_permutations::Int = 1000,
+    rng::AbstractRNG = Random.default_rng(),
 )
     n_models = length(model_rdms)
     n_conditions = length(rsa_data.condition_names)
@@ -603,7 +604,7 @@ function compare_models(
     end
 
     # Compute correlations at each time point
-    correlations, p_values = _compute_model_correlations(rsa_data, model_rdms, is_temporal, correlation_type, n_permutations)
+    correlations, p_values = _compute_model_correlations(rsa_data, model_rdms, is_temporal, correlation_type, n_permutations; rng = rng)
 
     # Update RsaData
     rsa_data.model_correlations = correlations
@@ -724,7 +725,8 @@ function _compute_model_correlations(
     model_rdms,
     is_temporal::Vector{Bool},
     correlation_type::Symbol,
-    n_permutations::Int,
+    n_permutations::Int;
+    rng::AbstractRNG = Random.default_rng(),
 )
     n_times = length(rsa_data.times)
     n_models = length(model_rdms)
@@ -762,9 +764,9 @@ function _compute_model_correlations(
             corr = _correlate_vectors(neural_vec, model_vec, correlation_type)
             correlations[t, model_idx] = corr
 
-            # Permutation test if requested
+            # Permutation test if requested (Mantel-style condition label permutation)
             if n_permutations > 0
-                p_values[t, model_idx] = _run_model_permutations(neural_vec, model_vec, corr, correlation_type, n_permutations)
+                p_values[t, model_idx] = _run_model_permutations(neural_vec, model_vec, corr, correlation_type, n_permutations; rng = rng)
             end
         end
     end
@@ -773,41 +775,73 @@ function _compute_model_correlations(
 end
 
 """
-    _run_model_permutations(neural_vec, model_vec, observed_corr, correlation_type, n_permutations)
+    _run_model_permutations(neural_vec, model_vec, observed_corr, correlation_type, n_permutations; rng)
 
-Perform permutation testing for model correlations.
+Perform Mantel-style permutation testing for model correlations by permuting condition labels.
 """
-function _run_model_permutations(neural_vec, model_vec, observed_corr, correlation_type, n_permutations)
+function _run_model_permutations(
+    neural_vec,
+    model_vec,
+    observed_corr,
+    correlation_type,
+    n_permutations;
+    rng::AbstractRNG = Random.default_rng(),
+)
     abs_observed = abs(observed_corr)
-    extreme_count = 0
+    L = length(neural_vec)
+    disc = 1 + 8 * L
+    r = isqrt(disc)
+    N = (r * r == disc && (1 + r) % 2 == 0) ? (1 + r) ÷ 2 : 0
 
-    if correlation_type == :spearman
-        neural_ranks = StatsBase.tiedrank(neural_vec)
-        model_ranks = StatsBase.tiedrank(model_vec)
-        shuffled_ranks = copy(model_ranks)
-
-        for _ = 1:n_permutations
-            shuffle!(shuffled_ranks)
-            perm_corr = cor(neural_ranks, shuffled_ranks)
-            if abs(perm_corr) >= abs_observed
-                extreme_count += 1
-            end
-        end
-    elseif correlation_type == :pearson
-        shuffled_model = copy(model_vec)
-        for _ = 1:n_permutations
-            shuffle!(shuffled_model)
-            perm_corr = cor(neural_vec, shuffled_model)
-            if abs(perm_corr) >= abs_observed
-                extreme_count += 1
-            end
-        end
-    else
-        @minimal_error("Unknown correlation type: $correlation_type. Use :spearman or :pearson")
+    if N < 3
+        # Too few conditions to meaningfully permute
+        return 1.0
     end
 
-    # Two-tailed p-value
-    return extreme_count / n_permutations
+    # Reconstruct symmetric model matrix from upper triangular vector
+    M = zeros(Float64, N, N)
+    idx = 1
+    for i = 1:N
+        for j = (i+1):N
+            val = model_vec[idx]
+            M[i, j] = val
+            M[j, i] = val
+            idx += 1
+        end
+    end
+
+    extreme_count = 0
+    shuffled_model = similar(model_vec)
+    neural_ranks = correlation_type == :spearman ? StatsBase.tiedrank(neural_vec) : nothing
+    perm = Vector{Int}(undef, N)
+
+    for _ = 1:n_permutations
+        Random.randperm!(rng, perm)
+        idx = 1
+        for i = 1:N
+            pi = perm[i]
+            for j = (i+1):N
+                pj = perm[j]
+                shuffled_model[idx] = M[pi, pj]
+                idx += 1
+            end
+        end
+
+        perm_corr = if correlation_type == :spearman
+            cor(neural_ranks, StatsBase.tiedrank(shuffled_model))
+        elseif correlation_type == :pearson
+            cor(neural_vec, shuffled_model)
+        else
+            @minimal_error("Unknown correlation type: $correlation_type. Use :spearman or :pearson")
+        end
+
+        if abs(perm_corr) >= abs_observed
+            extreme_count += 1
+        end
+    end
+
+    # Two-tailed p-value with standard +1 correction
+    return (extreme_count + 1) / (n_permutations + 1)
 end
 
 """

@@ -52,7 +52,8 @@ function signal_example_ecg_hrv()
 
     _set_window_title("Interactive HRV Simulator")
 
-    fig = Figure(size = (1280, 860), title = "Interactive HRV Simulator", backgroundcolor = :white, figure_padding = (24, 24, 24, 24))
+    fig =
+        _eegfun_figure(size = (1280, 860), title = "Interactive HRV Simulator", backgroundcolor = :white, figure_padding = (24, 24, 24, 24))
 
     # ── Adaptive Font Sizing ─────────────────────────────────────────────────
     function setup_adaptive_sizing(fig)

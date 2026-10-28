@@ -61,7 +61,7 @@ EegFun.signal_example_sampling()
 - `ax::Axis`: The axis object containing the plots
 """
 function signal_example_sampling()
-    fig = Figure(size = (1000, 800), title = "Signal Example 1")
+    fig = _eegfun_figure(size = (1000, 800), title = "Signal Example 1")
 
     # Set up adaptive font and UI sizing
     """Scale font sizes and UI element dimensions when the figure is resized."""

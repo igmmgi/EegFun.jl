@@ -10,6 +10,24 @@ Helper to generate a vector of symbols for channel labels.
 _generate_channel_labels(n_channels::Int) = [Symbol("Ch$i") for i = 1:n_channels]
 
 """
+    _with_seed(f, seed)
+
+Run `f()`; if `seed` is not `nothing`, run it with the global RNG seeded to `seed` and restore the
+caller's global RNG state afterwards, so seeded data generation is reproducible without
+permanently changing the user's random stream.
+"""
+function _with_seed(f, seed::Union{Integer,Nothing})
+    isnothing(seed) && return f()
+    saved = copy(Random.default_rng())
+    Random.seed!(seed)
+    try
+        return f()
+    finally
+        copy!(Random.default_rng(), saved)
+    end
+end
+
+"""
     _synthetic_signal(t; freq = 10.0, amp = 1.0, noise = 0.1)
 
 Internal helper for generating test signals.
@@ -25,17 +43,18 @@ end
 Create synthetic `ContinuousData` for testing.
 """
 function create_test_continuous_data(; n = 2000, fs = 1000, n_channels = 3, seed::Union{Int,Nothing} = nothing)
-    !isnothing(seed) && Random.seed!(seed)
-    t = collect(0:(n-1)) ./ fs
-    df = DataFrame(time = t, sample = 1:n, trigger = zeros(Int, n))
+    return _with_seed(seed) do
+        t = collect(0:(n-1)) ./ fs
+        df = DataFrame(time = t, sample = 1:n, trigger = zeros(Int, n))
 
-    channel_labels = _generate_channel_labels(n_channels)
-    for ch in channel_labels
-        df[!, ch] = 0.5 .+ _synthetic_signal(t, freq = 5 + rand() * 10, amp = 1.0, noise = 0.1)
+        channel_labels = _generate_channel_labels(n_channels)
+        for ch in channel_labels
+            df[!, ch] = 0.5 .+ _synthetic_signal(t, freq = 5 + rand() * 10, amp = 1.0, noise = 0.1)
+        end
+
+        layout = create_test_layout(n_channels = n_channels)
+        return EegFun.ContinuousData("test_data", copy(df, copycols = true), layout, fs, EegFun.AnalysisInfo(sample_rate = fs))
     end
-
-    layout = create_test_layout(n_channels = n_channels)
-    return EegFun.ContinuousData("test_data", copy(df, copycols = true), layout, fs, EegFun.AnalysisInfo(sample_rate = fs))
 end
 
 """
@@ -44,28 +63,29 @@ end
 Create synthetic `EpochData` for a single condition. Returns `EpochData`.
 """
 function create_test_epoch_data(; n = 2000, fs = 1000, condition = 1, n_epochs = 10, n_channels = 3, seed::Union{Int,Nothing} = nothing)
-    !isnothing(seed) && Random.seed!(seed)
-    t = collect(0:(n-1)) ./ fs
-    channel_labels = _generate_channel_labels(n_channels)
-    layout = create_test_layout(n_channels = n_channels)
+    return _with_seed(seed) do
+        t = collect(0:(n-1)) ./ fs
+        channel_labels = _generate_channel_labels(n_channels)
+        layout = create_test_layout(n_channels = n_channels)
 
-    dfs = DataFrame[]
-    for epoch = 1:n_epochs
-        df = DataFrame(
-            time = t,
-            sample = 1:n,
-            epoch = fill(epoch, n),
-            condition = fill(condition, n),
-            condition_name = fill("condition_$(condition)", n),
-        )
+        dfs = DataFrame[]
+        for epoch = 1:n_epochs
+            df = DataFrame(
+                time = t,
+                sample = 1:n,
+                epoch = fill(epoch, n),
+                condition = fill(condition, n),
+                condition_name = fill("condition_$(condition)", n),
+            )
 
-        for ch in channel_labels
-            df[!, ch] = _synthetic_signal(t, freq = 10.0, amp = condition * 0.5, noise = 0.1)
+            for ch in channel_labels
+                df[!, ch] = _synthetic_signal(t, freq = 10.0, amp = condition * 0.5, noise = 0.1)
+            end
+            push!(dfs, df)
         end
-        push!(dfs, df)
-    end
 
-    return EegFun.EpochData("test_data", condition, "condition_$(condition)", dfs, layout, fs, EegFun.AnalysisInfo(sample_rate = fs))
+        return EegFun.EpochData("test_data", condition, "condition_$(condition)", dfs, layout, fs, EegFun.AnalysisInfo(sample_rate = fs))
+    end
 end
 
 """
@@ -81,8 +101,9 @@ function create_test_epoch_data_vector(;
     n = 2000,
     seed::Union{Int,Nothing} = nothing,
 )
-    !isnothing(seed) && Random.seed!(seed)
-    return [create_test_epoch_data(condition = c, n_epochs = n_epochs, n_channels = n_channels, fs = fs, n = n) for c in conditions]
+    return _with_seed(seed) do
+        return [create_test_epoch_data(condition = c, n_epochs = n_epochs, n_channels = n_channels, fs = fs, n = n) for c in conditions]
+    end
 end
 
 """
@@ -91,23 +112,24 @@ end
 Create synthetic `ErpData` for testing.
 """
 function create_test_erp_data(; participant = 1, condition = 1, fs = 1000, n_channels = 3, seed::Union{Int,Nothing} = nothing)
-    !isnothing(seed) && Random.seed!(seed)
-    time = collect(-0.5:(1/fs):2.0)
-    df = DataFrame(
-        time = time,
-        sample = 1:length(time),
-        condition = fill(condition, length(time)),
-        condition_name = fill("condition_$condition", length(time)),
-        participant = fill(participant, length(time)),
-    )
+    return _with_seed(seed) do
+        time = collect(-0.5:(1/fs):2.0)
+        df = DataFrame(
+            time = time,
+            sample = 1:length(time),
+            condition = fill(condition, length(time)),
+            condition_name = fill("condition_$condition", length(time)),
+            participant = fill(participant, length(time)),
+        )
 
-    channel_labels = _generate_channel_labels(n_channels)
-    for ch in channel_labels
-        df[!, ch] = _synthetic_signal(time, freq = 0.1, amp = condition * 0.5, noise = 0.1)
+        channel_labels = _generate_channel_labels(n_channels)
+        for ch in channel_labels
+            df[!, ch] = _synthetic_signal(time, freq = 0.1, amp = condition * 0.5, noise = 0.1)
+        end
+
+        layout = create_test_layout(n_channels = n_channels)
+        return EegFun.ErpData("test_data", condition, "condition_$condition", df, layout, fs, EegFun.AnalysisInfo(sample_rate = fs), 10)
     end
-
-    layout = create_test_layout(n_channels = n_channels)
-    return EegFun.ErpData("test_data", condition, "condition_$condition", df, layout, fs, EegFun.AnalysisInfo(sample_rate = fs), 10)
 end
 
 """
@@ -116,8 +138,9 @@ end
 Create a vector of ErpData objects for testing batch operations.
 """
 function create_test_batch_erp_data(; n_conditions = 2, fs = 1000, n_channels = 3, seed::Union{Int,Nothing} = nothing)
-    !isnothing(seed) && Random.seed!(seed)
-    return [create_test_erp_data(condition = c, fs = fs, n_channels = n_channels) for c = 1:n_conditions]
+    return _with_seed(seed) do
+        return [create_test_erp_data(condition = c, fs = fs, n_channels = n_channels) for c = 1:n_conditions]
+    end
 end
 
 
@@ -138,30 +161,31 @@ function create_test_epoch_data_with_rt(;
     rt_range = (0.2, 0.6),
     seed::Union{Int,Nothing} = nothing,
 )
-    !isnothing(seed) && Random.seed!(seed)
-    time = collect(range(epoch_start, epoch_end, length = n_timepoints))
-    channel_labels = _generate_channel_labels(n_channels)
+    return _with_seed(seed) do
+        time = collect(range(epoch_start, epoch_end, length = n_timepoints))
+        channel_labels = _generate_channel_labels(n_channels)
 
-    dfs = DataFrame[]
-    for epoch = 1:n_epochs
-        df = DataFrame(
-            time = time,
-            sample = 1:n_timepoints,
-            condition = fill(condition, n_timepoints),
-            condition_name = fill("condition_$condition", n_timepoints),
-            participant = fill(participant, n_timepoints),
-            epoch = fill(epoch, n_timepoints),
-            rt = fill(rand() * (rt_range[2] - rt_range[1]) + rt_range[1], n_timepoints),
-        )
+        dfs = DataFrame[]
+        for epoch = 1:n_epochs
+            df = DataFrame(
+                time = time,
+                sample = 1:n_timepoints,
+                condition = fill(condition, n_timepoints),
+                condition_name = fill("condition_$condition", n_timepoints),
+                participant = fill(participant, n_timepoints),
+                epoch = fill(epoch, n_timepoints),
+                rt = fill(rand() * (rt_range[2] - rt_range[1]) + rt_range[1], n_timepoints),
+            )
 
-        for ch in channel_labels
-            df[!, ch] = _synthetic_signal(time, freq = 10.0, amp = condition * 0.5, noise = 0.1)
+            for ch in channel_labels
+                df[!, ch] = _synthetic_signal(time, freq = 10.0, amp = condition * 0.5, noise = 0.1)
+            end
+            push!(dfs, df)
         end
-        push!(dfs, df)
-    end
 
-    layout = create_test_layout(n_channels = n_channels)
-    return EegFun.EpochData("test_data", condition, "condition_$condition", dfs, layout, fs, EegFun.AnalysisInfo(sample_rate = fs))
+        layout = create_test_layout(n_channels = n_channels)
+        return EegFun.EpochData("test_data", condition, "condition_$condition", dfs, layout, fs, EegFun.AnalysisInfo(sample_rate = fs))
+    end
 end
 
 
@@ -171,21 +195,22 @@ end
 Create synthetic `ContinuousData` with trigger sequences.
 """
 function create_test_continuous_data_with_triggers(; n = 1000, fs = 1000, seed::Union{Int,Nothing} = nothing)
-    !isnothing(seed) && Random.seed!(seed)
-    t = collect(0:(n-1)) ./ fs
-    x = _synthetic_signal(t, freq = 10.0, amp = 1.0, noise = 0.1)
+    return _with_seed(seed) do
+        t = collect(0:(n-1)) ./ fs
+        x = _synthetic_signal(t, freq = 10.0, amp = 1.0, noise = 0.1)
 
-    trigger = zeros(Int, n)
-    trigger[300:302] .= [1, 7, 3]
-    trigger[400:402] .= [1, 2, 3]
-    trigger[750:752] .= [1, 2, 3]
-    trigger[850] = 8
-    trigger[900] = 9
-    trigger[950:952] .= [1, 2, 3]
+        trigger = zeros(Int, n)
+        trigger[300:302] .= [1, 7, 3]
+        trigger[400:402] .= [1, 2, 3]
+        trigger[750:752] .= [1, 2, 3]
+        trigger[850] = 8
+        trigger[900] = 9
+        trigger[950:952] .= [1, 2, 3]
 
-    df = DataFrame(time = t, trigger = trigger, A = x)
-    layout = EegFun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing, nothing)
-    return EegFun.ContinuousData("test_data", copy(df, copycols = true), layout, fs, EegFun.AnalysisInfo(sample_rate = fs))
+        df = DataFrame(time = t, trigger = trigger, A = x)
+        layout = EegFun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing, nothing)
+        return EegFun.ContinuousData("test_data", copy(df, copycols = true), layout, fs, EegFun.AnalysisInfo(sample_rate = fs))
+    end
 end
 
 
@@ -219,12 +244,13 @@ end
 Create `ContinuousData` with zero triggers.
 """
 function create_test_continuous_data_empty_triggers(; n_samples = 1000, fs = 1000, seed::Union{Int,Nothing} = nothing)
-    !isnothing(seed) && Random.seed!(seed)
-    t = collect(0:(n_samples-1)) ./ fs
-    df = DataFrame(time = t, trigger = zeros(Int16, n_samples), channel1 = _synthetic_signal(t), channel2 = _synthetic_signal(t))
+    return _with_seed(seed) do
+        t = collect(0:(n_samples-1)) ./ fs
+        df = DataFrame(time = t, trigger = zeros(Int16, n_samples), channel1 = _synthetic_signal(t), channel2 = _synthetic_signal(t))
 
-    layout = EegFun.Layout(DataFrame(label = [:channel1, :channel2], inc = [0.0, 90.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
-    return EegFun.ContinuousData("test_data", df, layout, fs, EegFun.AnalysisInfo(sample_rate = fs))
+        layout = EegFun.Layout(DataFrame(label = [:channel1, :channel2], inc = [0.0, 90.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
+        return EegFun.ContinuousData("test_data", df, layout, fs, EegFun.AnalysisInfo(sample_rate = fs))
+    end
 end
 
 """
@@ -240,39 +266,40 @@ function create_test_lrp_data(;
     fs = 250,
     seed::Union{Int,Nothing} = nothing,
 )
-    !isnothing(seed) && Random.seed!(seed)
-    time = collect(range(-0.2, 0.8, length = n_timepoints))
+    return _with_seed(seed) do
+        time = collect(range(-0.2, 0.8, length = n_timepoints))
 
-    df = DataFrame(
-        time = time,
-        sample = 1:n_timepoints,
-        condition = fill(condition, n_timepoints),
-        condition_name = fill("condition_$condition", n_timepoints),
-        participant = fill(participant, n_timepoints),
-        file = fill("test_file", n_timepoints),
-    )
+        df = DataFrame(
+            time = time,
+            sample = 1:n_timepoints,
+            condition = fill(condition, n_timepoints),
+            condition_name = fill("condition_$condition", n_timepoints),
+            participant = fill(participant, n_timepoints),
+            file = fill("test_file", n_timepoints),
+        )
 
-    # Left hemisphere
-    df.C3 = _synthetic_signal(time, freq = 0.1, amp = signal_scale, noise = 0.01)
-    df.C1 = _synthetic_signal(time, freq = 0.1, amp = signal_scale, noise = 0.01)
-    df.Fp1 = _synthetic_signal(time, freq = 0.2, amp = signal_scale, noise = 0.01)
+        # Left hemisphere
+        df.C3 = _synthetic_signal(time, freq = 0.1, amp = signal_scale, noise = 0.01)
+        df.C1 = _synthetic_signal(time, freq = 0.1, amp = signal_scale, noise = 0.01)
+        df.Fp1 = _synthetic_signal(time, freq = 0.2, amp = signal_scale, noise = 0.01)
 
-    # Right hemisphere (shifted)
-    df.C4 = _synthetic_signal(time, freq = 0.1, amp = signal_scale, noise = 0.01) .+ 0.1
-    df.C2 = _synthetic_signal(time, freq = 0.1, amp = signal_scale, noise = 0.01) .+ 0.1
-    df.Fp2 = _synthetic_signal(time, freq = 0.2, amp = signal_scale, noise = 0.01) .+ 0.1
+        # Right hemisphere (shifted)
+        df.C4 = _synthetic_signal(time, freq = 0.1, amp = signal_scale, noise = 0.01) .+ 0.1
+        df.C2 = _synthetic_signal(time, freq = 0.1, amp = signal_scale, noise = 0.01) .+ 0.1
+        df.Fp2 = _synthetic_signal(time, freq = 0.2, amp = signal_scale, noise = 0.01) .+ 0.1
 
-    df.Fz = _synthetic_signal(time, freq = 0.15, amp = signal_scale, noise = 0.01)
+        df.Fz = _synthetic_signal(time, freq = 0.15, amp = signal_scale, noise = 0.01)
 
-    channel_labels = [:C3, :C4, :C1, :C2, :Fp1, :Fp2, :Fz]
-    layout = EegFun.Layout(
-        DataFrame(label = channel_labels, inc = zeros(length(channel_labels)), azi = zeros(length(channel_labels))),
-        nothing,
-        nothing,
-        nothing,
-    )
+        channel_labels = [:C3, :C4, :C1, :C2, :Fp1, :Fp2, :Fz]
+        layout = EegFun.Layout(
+            DataFrame(label = channel_labels, inc = zeros(length(channel_labels)), azi = zeros(length(channel_labels))),
+            nothing,
+            nothing,
+            nothing,
+        )
 
-    return EegFun.ErpData("test_data", condition, "condition_$condition", df, layout, fs, EegFun.AnalysisInfo(sample_rate = fs), 10)
+        return EegFun.ErpData("test_data", condition, "condition_$condition", df, layout, fs, EegFun.AnalysisInfo(sample_rate = fs), 10)
+    end
 end
 
 
@@ -369,44 +396,46 @@ function create_test_epoch_data_with_artifacts(;
     n_bad_epochs = 1,
     seed::Union{Int,Nothing} = nothing,
 )
-    !isnothing(seed) && Random.seed!(seed)
-    dfs = DataFrame[]
-    bad_indices = collect(1:n_bad_epochs)
+    return _with_seed(seed) do
+        dfs = DataFrame[]
+        bad_indices = collect(1:n_bad_epochs)
 
-    time = collect(0:(n_timepoints-1)) ./ fs
+        time = collect(0:(n_timepoints-1)) ./ fs
 
-    for epoch = 1:n_epochs
-        df = DataFrame(
-            time = time,
-            sample = 1:n_timepoints,
-            epoch = fill(epoch, n_timepoints),
-            participant = fill(participant, n_timepoints),
-            condition = fill(condition, n_timepoints),
-            condition_name = fill("condition_$condition", n_timepoints),
-        )
+        for epoch = 1:n_epochs
+            df = DataFrame(
+                time = time,
+                sample = 1:n_timepoints,
+                epoch = fill(epoch, n_timepoints),
+                participant = fill(participant, n_timepoints),
+                condition = fill(condition, n_timepoints),
+                condition_name = fill("condition_$condition", n_timepoints),
+            )
 
-        is_bad = epoch <= n_bad_epochs
+            is_bad = epoch <= n_bad_epochs
 
-        for ch_idx = 1:n_channels
-            ch_name = Symbol("Ch$ch_idx")
-            signal = _synthetic_signal(time, freq = 10.0)
+            for ch_idx = 1:n_channels
+                ch_name = Symbol("Ch$ch_idx")
+                signal = _synthetic_signal(time, freq = 10.0)
 
-            if is_bad
-                signal .+= 50.0 .* randn(n_timepoints)
-                signal[1:min(20, n_timepoints)] .+= 200.0
-                if n_timepoints > 70
-                    signal[50:70] .+= 300.0
+                if is_bad
+                    signal .+= 50.0 .* randn(n_timepoints)
+                    signal[1:min(20, n_timepoints)] .+= 200.0
+                    if n_timepoints > 70
+                        signal[50:70] .+= 300.0
+                    end
                 end
+                df[!, ch_name] = signal
             end
-            df[!, ch_name] = signal
+            push!(dfs, df)
         end
-        push!(dfs, df)
+
+        layout = create_test_layout(n_channels = n_channels)
+        epoch_data =
+            EegFun.EpochData("test_data", condition, "condition_$condition", dfs, layout, fs, EegFun.AnalysisInfo(sample_rate = fs))
+
+        return epoch_data, bad_indices
     end
-
-    layout = create_test_layout(n_channels = n_channels)
-    epoch_data = EegFun.EpochData("test_data", condition, "condition_$condition", dfs, layout, fs, EegFun.AnalysisInfo(sample_rate = fs))
-
-    return epoch_data, bad_indices
 end
 
 """
@@ -704,20 +733,29 @@ function create_synthetic_epochs(
     noise_level = 0.3,
     seed::Union{Int,Nothing} = nothing,
 )
-    !isnothing(seed) && Random.seed!(seed)
-    time = range(-0.2, 0.8, length = n_timepoints)
-    layout = Layout(DataFrame(label = channels, inc = [90.0, 0.0, -90.0], azi = [0.0, 0.0, 0.0]), nothing, nothing, nothing)
+    return _with_seed(seed) do
+        time = range(-0.2, 0.8, length = n_timepoints)
+        layout = Layout(DataFrame(label = channels, inc = [90.0, 0.0, -90.0], azi = [0.0, 0.0, 0.0]), nothing, nothing, nothing)
 
-    epochs = DataFrame[]
-    for epoch = 1:n_epochs
-        df = DataFrame(time = collect(time), sample = 1:n_timepoints, epoch = fill(epoch, n_timepoints))
-        for ch in channels
-            # Condition-specific signal: positive for cond1, negative for cond2
-            signal = (condition_id == 1 ? signal_strength : -signal_strength) * exp.(-((time .- 0.2) .^ 2) / (2 * 0.05^2))
-            df[!, ch] = signal .+ noise_level * randn(n_timepoints)
+        epochs = DataFrame[]
+        for epoch = 1:n_epochs
+            df = DataFrame(time = collect(time), sample = 1:n_timepoints, epoch = fill(epoch, n_timepoints))
+            for ch in channels
+                # Condition-specific signal: positive for cond1, negative for cond2
+                signal = (condition_id == 1 ? signal_strength : -signal_strength) * exp.(-((time .- 0.2) .^ 2) / (2 * 0.05^2))
+                df[!, ch] = signal .+ noise_level * randn(n_timepoints)
+            end
+            push!(epochs, df)
         end
-        push!(epochs, df)
-    end
 
-    return EpochData("participant_$(participant_id)", condition_id, condition_name, epochs, layout, 200, AnalysisInfo(sample_rate = 200))
+        return EpochData(
+            "participant_$(participant_id)",
+            condition_id,
+            condition_name,
+            epochs,
+            layout,
+            200,
+            AnalysisInfo(sample_rate = 200),
+        )
+    end
 end

@@ -107,4 +107,27 @@ using EegFun
         @test occursin("…", result) || length(result) <= 80  # Either truncated or within limit
     end
 
+    @testset "EegFun theme is per-figure, not global" begin
+        Makie = EegFun.Makie
+        # Loading EegFun must not change the global Makie theme
+        @test Makie.Axis(Makie.Figure()[1, 1]).xgridvisible[] == true
+
+        # EegFun figures get the EegFun look
+        fig = EegFun._eegfun_figure()
+        ax = Makie.Axis(fig[1, 1])
+        @test ax.xgridvisible[] == false
+        @test ax.xticklabelsize[] == 16
+
+        # ... and the global theme is still untouched afterwards
+        @test Makie.Axis(Makie.Figure()[1, 1]).xgridvisible[] == true
+
+        # User customisations take precedence over the EegFun defaults
+        Makie.with_theme(Makie.Theme(fontsize = 10, Axis = (xgridvisible = true,))) do
+            ax2 = Makie.Axis(EegFun._eegfun_figure()[1, 1])
+            @test ax2.xticklabelsize[] == 10
+            @test ax2.xgridvisible[] == true
+            @test ax2.ygridvisible[] == false  # not customised -> EegFun default
+        end
+    end
+
 end

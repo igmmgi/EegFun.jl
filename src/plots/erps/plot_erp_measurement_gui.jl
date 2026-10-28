@@ -170,7 +170,7 @@ function plot_erp_measurement_gui(
 
     # Use plot_erp to create the ERP plot
     # We need to handle baseline reactively, so we'll recreate the plot when baseline changes
-    fig = Figure(size = (1280, 960))
+    fig = _eegfun_figure(size = (1280, 960))
     _set_window_title("ERP Measurement Tool")
 
     # Create main grid: controls on left (25%), plot area on right (75%)

@@ -41,7 +41,7 @@ EegFun.signal_example_composition()
 """
 function signal_example_composition()
 
-    fig = Figure(size = (1200, 1000), title = "Signal Example 2", backgroundcolor = :white)
+    fig = _eegfun_figure(size = (1200, 1000), title = "Signal Example 2", backgroundcolor = :white)
 
     # Set up adaptive font and UI sizing
     """Scale font sizes and UI element dimensions when the figure is resized."""

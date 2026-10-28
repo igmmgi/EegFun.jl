@@ -14,13 +14,16 @@ Perform cluster-based permutation test on prepared ERP data.
 - `min_num_neighbors::Int`: Minimum number of *neighbouring* significant channels required to keep a point (default: 2). 
 - `tail::Symbol`: Test tail - `:both` (default), `:left`, or `:right`
 - `show_progress::Bool`: Whether to show progress bar (default: true)
+- `use_gpu::Bool`: Compute permutation t-matrices on the GPU if a GPU backend is loaded (default: false)
+- `rng::AbstractRNG`: Random number generator used to draw the permutations (default: `Random.default_rng()`)
 
 # Returns
 - `PermutationResult`: Complete results structure
 
 # Notes
 - Cluster statistics are computed using the **maxsum** method (sum of t-values within cluster), which is the most sensitive and standard approach in EEG research.
-- For reproducible results, call `Random.seed!(xxx)` in your Julia session before running the test.
+- All permutations are drawn up front from `rng`, so results are reproducible for a given RNG state
+  regardless of the number of threads, e.g. `permutation_test(prepared; rng = Random.Xoshiro(42))`.
 """
 function permutation_test(
     prepared::StatisticalData;
@@ -32,6 +35,7 @@ function permutation_test(
     tail::Symbol = :both,
     show_progress::Bool = true,
     use_gpu::Bool = false,
+    rng::AbstractRNG = Random.default_rng(),
 )
     # Validate inputs
     _validate_permutation_inputs(prepared, n_permutations, threshold, cluster_type, tail)
@@ -54,9 +58,12 @@ function permutation_test(
         end
     end
 
+    # Draw all permutations once; reused for non-parametric thresholds and cluster inference
+    plan = _draw_permutation_plan(rng, prepared, n_permutations)
+
     # If GPU is active, precompute all permutations natively on the GPU
     if gpu_active
-        permutation_t_matrices = _collect_permutation_t_matrices_gpu(prepared, n_permutations)
+        permutation_t_matrices = _collect_permutation_t_matrices_gpu(prepared, plan)
     else
         permutation_t_matrices = nothing
     end
@@ -82,7 +89,7 @@ function permutation_test(
         # Non-parametric common: run all permutations first to get threshold
         if isnothing(permutation_t_matrices)
             @info "Collecting permutation t-matrices for non-parametric common thresholding..."
-            permutation_t_matrices = _collect_permutation_t_matrices(prepared, n_permutations, show_progress)
+            permutation_t_matrices = _collect_permutation_t_matrices(prepared, plan, show_progress)
         end
 
         # Compute common threshold from permutation distribution
@@ -101,7 +108,7 @@ function permutation_test(
         # Non-parametric individual: run all permutations first to get thresholds
         if isnothing(permutation_t_matrices)
             @info "Collecting permutation t-matrices for non-parametric individual thresholding..."
-            permutation_t_matrices = _collect_permutation_t_matrices(prepared, n_permutations, show_progress)
+            permutation_t_matrices = _collect_permutation_t_matrices(prepared, plan, show_progress)
         end
 
         # Compute individual thresholds from permutation distribution
@@ -121,6 +128,10 @@ function permutation_test(
     electrodes = channel_labels(prepared.data[1])
     time_points = prepared.analysis.time_points
     layout = prepared.data[1].layout
+    if cluster_type ∈ (:spatial, :spatiotemporal) && isnothing(layout.neighbours)
+        layout = copy(layout)
+        get_neighbours_xy!(layout, 0.35)
+    end
 
     # Build connectivity matrix
     @info "Building connectivity matrix..."
@@ -159,7 +170,7 @@ function permutation_test(
     end
     permutation_max_positive, permutation_max_negative = _run_permutations(
         prepared,
-        n_permutations,
+        plan,
         threshold_for_permutations,
         spatial_connectivity,
         cluster_type,
@@ -171,15 +182,16 @@ function permutation_test(
 
     # Compute p-values
     @info "Computing p-values..."
+    cluster_alpha = tail == :both ? threshold / 2.0 : threshold
     if !isempty(positive_clusters)
         positive_clusters =
-            _compute_cluster_pvalues(positive_clusters, cluster_stats_positive, permutation_max_positive, n_permutations, threshold)
+            _compute_cluster_pvalues(positive_clusters, cluster_stats_positive, permutation_max_positive, n_permutations, cluster_alpha)
         sort!(positive_clusters, by = c -> (!c.is_significant, -abs(c.cluster_stat)))
     end
 
     if !isempty(negative_clusters)
         negative_clusters =
-            _compute_cluster_pvalues(negative_clusters, cluster_stats_negative, permutation_max_negative, n_permutations, threshold)
+            _compute_cluster_pvalues(negative_clusters, cluster_stats_negative, permutation_max_negative, n_permutations, cluster_alpha)
         sort!(negative_clusters, by = c -> (!c.is_significant, -abs(c.cluster_stat)))
     end
 
@@ -350,6 +362,7 @@ function permutation_test(
     min_num_neighbors::Int = 2,
     tail::Symbol = :both,
     show_progress::Bool = true,
+    rng::AbstractRNG = Random.default_rng(),
 )
     # Validate inputs
     n_permutations < 1 && @minimal_error "n_permutations must be >= 1, got $n_permutations"
@@ -359,6 +372,9 @@ function permutation_test(
     tail ∉ (:both, :left, :right) && @minimal_error "tail must be :both, :left, or :right, got :$tail"
     threshold_method ∉ (:parametric, :nonparametric_common) &&
         @minimal_error "threshold_method must be :parametric or :nonparametric_common, got :$threshold_method"
+
+    # Draw all permutations once; reused for non-parametric thresholds and cluster inference
+    plan = _draw_permutation_plan(rng, prepared, n_permutations)
 
     # Compute observed t-matrix
     @info "Computing TF t-statistics..."
@@ -389,7 +405,14 @@ function permutation_test(
         progress = show_progress ? Progress(n_permutations, desc = "Collecting t-matrices: ", showspeed = true) : nothing
 
         for perm_idx = 1:n_permutations
-            _shuffle_labels_tf!(shuffled_A, shuffled_B, prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design)
+            _shuffle_labels_tf!(
+                shuffled_A,
+                shuffled_B,
+                prepared.analysis.data[1],
+                prepared.analysis.data[2],
+                prepared.analysis.design,
+                view(plan, :, perm_idx),
+            )
             t_perm, _, _ = _compute_t_matrix_tf(shuffled_A, shuffled_B, prepared.analysis.design, tail = tail)
             permutation_t_matrices[:, :, :, perm_idx] = t_perm
             !isnothing(progress) && next!(progress)
@@ -411,10 +434,8 @@ function permutation_test(
     layout = prepared.data[1].layout
     if cluster_type ∈ (:spatial, :spatiotemporal, :full) && isnothing(layout.neighbours)
         @minimal_warning "Layout.neighbours is not set. Computing with default distance criterion (0.35)."
+        layout = copy(layout)
         get_neighbours_xy!(layout, 0.35)
-        if length(prepared.data) > 1
-            get_neighbours_xy!(prepared.data[2].layout, 0.35)
-        end
     end
 
     # Build spatial connectivity
@@ -451,7 +472,7 @@ function permutation_test(
     @info "Running $n_permutations permutations for cluster-level inference..."
     permutation_max_positive, permutation_max_negative = _run_permutations_tf(
         prepared,
-        n_permutations,
+        plan,
         threshold_for_permutations,
         spatial_connectivity,
         cluster_type,
@@ -465,15 +486,16 @@ function permutation_test(
 
     # Compute p-values for observed clusters
     @info "Computing p-values..."
+    cluster_alpha = tail == :both ? threshold / 2.0 : threshold
     if !isempty(positive_clusters)
         positive_clusters =
-            _compute_tf_cluster_pvalues(positive_clusters, cluster_stats_positive, permutation_max_positive, n_permutations, threshold)
+            _compute_tf_cluster_pvalues(positive_clusters, cluster_stats_positive, permutation_max_positive, n_permutations, cluster_alpha)
         sort!(positive_clusters, by = c -> (!c.is_significant, -abs(c.cluster_stat)))
     end
 
     if !isempty(negative_clusters)
         negative_clusters =
-            _compute_tf_cluster_pvalues(negative_clusters, cluster_stats_negative, permutation_max_negative, n_permutations, threshold)
+            _compute_tf_cluster_pvalues(negative_clusters, cluster_stats_negative, permutation_max_negative, n_permutations, cluster_alpha)
         sort!(negative_clusters, by = c -> (!c.is_significant, -abs(c.cluster_stat)))
     end
 
@@ -590,63 +612,6 @@ function analytic_test(prepared::TFStatisticalData; alpha::Real = 0.05, tail::Sy
 end
 
 
-# === TF-SPECIFIC INFERENCE HELPERS ===
-
-"""
-    _compute_tf_cluster_pvalues(clusters, cluster_stats, permutation_max, n_permutations, alpha)
-
-Compute p-values for TF clusters by comparing to permutation distribution.
-"""
-function _compute_tf_cluster_pvalues(
-    clusters::Vector{TFCluster},
-    cluster_stats::Vector{Float64},
-    permutation_max::Vector{Float64},
-    n_permutations::Int,
-    alpha::Real = 0.05,
-)
-    if isempty(clusters)
-        return TFCluster[]
-    end
-
-    updated_clusters = TFCluster[]
-
-    for (i, cluster) in enumerate(clusters)
-        cluster_stat = cluster_stats[i]
-
-        if cluster.polarity == :positive
-            count_exceed = sum(permutation_max .>= cluster_stat) + 1
-        else
-            count_exceed = sum(permutation_max .<= cluster_stat) + 1
-        end
-        p_value = count_exceed / (n_permutations + 1)
-        is_significant = p_value < alpha
-
-        updated_cluster = TFCluster(
-            cluster.id,
-            cluster.electrodes,
-            cluster.freq_indices,
-            cluster.time_indices,
-            cluster.freq_range,
-            cluster.time_range,
-            cluster_stat,
-            p_value,
-            is_significant,
-            cluster.polarity,
-            cluster.pixels,
-        )
-        push!(updated_clusters, updated_cluster)
-    end
-
-    return updated_clusters
-end
-
-
-"""
-    _create_significance_mask_tf(p_matrix, alpha, method)
-
-Create significance mask from 3D p-values.
-"""
-function _create_significance_mask_tf(p_matrix::Array{Float64,3}, alpha::Float64, method::Symbol)
-    method == :bonferroni && (alpha = alpha / count(!isnan, p_matrix))
-    return .!isnan.(p_matrix) .& (p_matrix .<= alpha)
-end
+# Forward TF cluster p-values and significance masks to unified inference functions
+const _compute_tf_cluster_pvalues = _compute_cluster_pvalues
+const _create_significance_mask_tf = _create_significance_mask

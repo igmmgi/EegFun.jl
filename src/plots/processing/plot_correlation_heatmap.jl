@@ -176,7 +176,7 @@ function plot_correlation_heatmap(corr_df::DataFrame; kwargs...)
     plot_kwargs = _merge_plot_kwargs(PLOT_CORRELATION_HEATMAP_KWARGS, kwargs)
 
     # Create the figure and axis
-    fig = Figure()
+    fig = _eegfun_figure()
     ax = Axis(fig[1, 1])
 
     # Use the mutating version to plot

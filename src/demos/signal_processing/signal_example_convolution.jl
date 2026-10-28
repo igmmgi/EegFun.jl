@@ -65,7 +65,7 @@ function signal_example_convolution()
     FS    = 512.0   # fixed sample rate (Hz)
     EPOCH = 2.0     # epoch length (s)
 
-    fig = Figure(size = (1300, 650), figure_padding = (8, 8, 8, 8), title = "Convolution Demo")
+    fig = _eegfun_figure(size = (1300, 650), figure_padding = (8, 8, 8, 8), title = "Convolution Demo")
 
     # ── Font sizing ──────────────────────────────────────────────────────────
     lbl_sz   = Observable(17)
