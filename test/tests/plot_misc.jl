@@ -1,5 +1,6 @@
 using Test
 using EegFun
+import Logging
 
 @testset "Plot Misc Utilities" begin
 
@@ -127,6 +128,43 @@ using EegFun
             @test ax2.xticklabelsize[] == 10
             @test ax2.xgridvisible[] == true
             @test ax2.ygridvisible[] == false  # not customised -> EegFun default
+        end
+    end
+
+    @testset "Interactive Demo Backend Checks" begin
+        # Backend check returns false and warns when GLMakie is absent
+        @test EegFun._check_interactive_demo_backend("Test Demo") == false
+        @test EegFun._check_interactive_demo_backend() == false
+
+        # Display helper handles missing or headless figures without throwing
+        @test EegFun._display_demo_figure(nothing) === nothing
+        fig = EegFun._eegfun_figure()
+        @test EegFun._display_demo_figure(fig) === nothing
+
+        # Interactive demos safely return nothing without GLMakie
+        demo_functions = [
+            EegFun.signal_example_decoding,
+            EegFun.simulate_erp,
+            EegFun.signal_example_ica_sphering,
+            EegFun.signal_example_ica_separation,
+            EegFun.signal_example_ica_optimization,
+            EegFun.signal_example_ica_clt,
+            EegFun.signal_example_ica_geometry,
+            EegFun.signal_example_ica_mixture,
+            EegFun.signal_example_heog,
+            EegFun.signal_example_convolution,
+            EegFun.signal_example_ecg_hrv,
+            EegFun.signal_example_sampling,
+            EegFun.signal_example_dotproduct,
+            EegFun.signal_example_ecg_einthoven,
+            EegFun.signal_example_tf,
+            EegFun.signal_example_composition,
+            EegFun.signal_example_emg,
+        ]
+        Logging.with_logger(Logging.NullLogger()) do
+            for demo_fn in demo_functions
+                @test demo_fn() === nothing
+            end
         end
     end
 

@@ -376,5 +376,39 @@ using DataFrames
             @test minimum(res_interval.data.time) >= -0.2
             @test maximum(res_interval.data.time) <= 0.2
         end
+
+        @testset "Selector function helpers with ranges and variadic arguments" begin
+            # channels
+            fn_ch_range = EegFun.channels(1:2)
+            @test fn_ch_range([10, 20, 30]) == [true, true, false]
+            fn_ch_vec_range = EegFun.channels([1:1, 3:3])
+            @test fn_ch_vec_range([10, 20, 30]) == [true, false, true]
+
+            # participants
+            fn_p_all = EegFun.participants()
+            @test fn_p_all([1, 2, 3]) == [true, true, true]
+            fn_p_range = EegFun.participants(1:2)
+            @test fn_p_range([1, 2, 3]) == [true, true, false]
+            fn_p_vec_range = EegFun.participants([1:1, 3:3])
+            @test fn_p_vec_range([1, 2, 3]) == [true, false, true]
+            fn_p_var = EegFun.participants(1, 3)
+            @test fn_p_var([1, 2, 3]) == [true, false, true]
+
+            # conditions
+            fn_c_all = EegFun.conditions()
+            @test fn_c_all([10, 20, 30]) == [true, true, true]
+            fn_c_range = EegFun.conditions(1:2)
+            @test fn_c_range([10, 20, 30]) == [1, 2]
+            fn_c_vec_range = EegFun.conditions([1:1, 3:3])
+            @test fn_c_vec_range([10, 20, 30]) == [1, 3]
+            fn_c_var = EegFun.conditions(1, 3)
+            @test fn_c_var([10, 20, 30]) == [1, 3]
+
+            # _to_*_func with ranges
+            @test EegFun._to_channel_func(1:2)([10, 20, 30]) == [true, true, false]
+            @test EegFun._to_epoch_func(1:2)([10, 20, 30]) == [true, true, false]
+            @test EegFun._to_condition_func(1:2)([10, 20, 30]) == [1, 2]
+            @test EegFun._to_participant_func(1:2)([1, 2, 3]) == [true, true, false]
+        end
     end
 end
