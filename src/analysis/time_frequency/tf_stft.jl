@@ -80,22 +80,14 @@ function tf_stft(
     use_gpu::Bool = false,
 )
 
-    # Validate padding parameter
-    _validate_tf_pad(pad)
-
-    gpu_active = _tf_gpu_active(use_gpu)
-
-    # Subset data with channel and interval selection
-    dat = _subset_tf_data(dat, channel_selection, interval_selection)
+    # Validate arguments and subset data with channel and interval selection
+    sdat, gpu_active = _tf_prepare(dat, pad, use_gpu, channel_selection, interval_selection, frequencies)
 
     # Get selected channels (after subsetting)
-    selected_channels = channel_labels(dat)
+    selected_channels = channel_labels(sdat)
 
     # Use frequency input directly (ranges and vectors both work)
     num_frex = length(frequencies)
-
-    # Validate frequencies
-    _validate_tf_frequencies(frequencies)
 
     # Validate window_length and cycles - exactly one must be provided
     if isnothing(window_length) && isnothing(cycles)
@@ -112,31 +104,29 @@ function tf_stft(
     end
 
     # Get time points and determine output time grid
-    time_indices, times_out = _tf_time_grid(dat, time_steps)
+    time_indices, times_out = _tf_time_grid(sdat, time_steps)
 
     # Get number of trials/epochs
-    n_trials = n_epochs(dat)
-    n_samples_per_epoch = n_samples(dat)
+    n_trials = n_epochs(sdat)
+    n_samples_per_epoch = n_samples(sdat)
 
     # Use frequencies directly (convert to vector if needed for indexing)
     freqs = collect(frequencies)
 
     # Determine window mode: fixed or adaptive
-    if !isnothing(window_length)
+    # (single destructuring assignment so the channel closure below captures these without boxing)
+    is_fixed, n_window_samples_per_freq, window_lengths_samples_exact = if !isnothing(window_length)
         # Fixed window mode: same window length for all frequencies
-        n_window_samples = Int(round(window_length * dat.sample_rate))
-        _validate_tf_window_samples(n_window_samples)
-        n_window_samples_per_freq = fill(n_window_samples, num_frex)
-        is_fixed = true
-        window_lengths_samples_exact = fill(Float64(window_length * dat.sample_rate), num_frex)
+        n_window_samples_fixed = Int(round(window_length * sdat.sample_rate))
+        _validate_tf_window_samples(n_window_samples_fixed)
+        (true, fill(n_window_samples_fixed, num_frex), fill(Float64(window_length * sdat.sample_rate), num_frex))
     else
         # Adaptive window mode: window length = cycles / frequency 
         cycles_vec = fill(Float64(cycles), num_frex)
         window_lengths_sec = cycles_vec ./ freqs  # Window length in seconds 
-        n_window_samples_per_freq = [Int(round(wl * dat.sample_rate)) for wl in window_lengths_sec]
-        _validate_tf_window_samples(n_window_samples_per_freq)
-        is_fixed = false
-        window_lengths_samples_exact = [(cycles / freqs[fi]) * dat.sample_rate for fi = 1:num_frex]
+        n_window_samples_adaptive = [Int(round(wl * sdat.sample_rate)) for wl in window_lengths_sec]
+        _validate_tf_window_samples(n_window_samples_adaptive)
+        (false, n_window_samples_adaptive, [(cycles / freqs[fi]) * sdat.sample_rate for fi = 1:num_frex])
     end
 
     n_times = length(times_out)
@@ -157,13 +147,24 @@ function tf_stft(
 
     # Determine padding length: pad to at least the data length and largest window
     # (FFTW is efficient for many sizes, not just powers of 2)
-    n_pre_pad = (!isnothing(pad) && (pad == :both || pad == :pre)) ? n_samples_per_epoch - 1 : 0
-    n_post_pad = (!isnothing(pad) && (pad == :both || pad == :post)) ? n_samples_per_epoch - 1 : 0
-    n_padded_samples = n_pre_pad + n_samples_per_epoch + n_post_pad
+    n_pre_pad, _, n_padded_samples = _tf_padding(pad, n_samples_per_epoch)
     adjusted_time_indices = time_indices .+ n_pre_pad
 
     max_window_samples = maximum(n_window_samples_per_freq)
     n_samples_padded = max(n_padded_samples, max_window_samples)
+
+    g = TFGeometry(
+        n_trials,
+        n_samples_per_epoch,
+        n_pre_pad,
+        n_padded_samples,
+        n_samples_padded,
+        num_frex,
+        n_times,
+        return_trials,
+        return_phase,
+        filter_edges,
+    )
 
     # Pre-compute complex wavelets and their FFTs for each frequency using a pre-planned FFT
     wavelet_padded = zeros(ComplexF64, n_samples_padded)
@@ -176,192 +177,44 @@ function tf_stft(
         hanning_window = hanning_windows[fi]
 
         angle_in =
-            range(-(n_window_samples - 1) / 2, (n_window_samples - 1) / 2, length = n_window_samples) .* (2π * freq / dat.sample_rate)
+            range(-(n_window_samples - 1) / 2, (n_window_samples - 1) / 2, length = n_window_samples) .* (2π * freq / sdat.sample_rate)
         cos_wav = hanning_window .* cos.(angle_in)
         sin_wav = hanning_window .* sin.(angle_in)
         wavelet = cos_wav .+ im .* sin_wav
 
-        fill!(wavelet_padded, 0)
-        wavelet_padded[1:n_window_samples] = wavelet
-        w_fft = zeros(ComplexF64, n_samples_padded)
-        mul!(w_fft, p_fft_wavelet, wavelet_padded)
-        wavelet_ffts[fi] = w_fft
+        wavelet_ffts[fi] = _tf_padded_fft(wavelet, p_fft_wavelet, wavelet_padded)
     end
 
-    if gpu_active
-        template_padded_batch_gpu = gpu_array(zeros(ComplexF64, n_samples_padded, n_trials))
-        fft_plan_padded_batch = plan_fft!(template_padded_batch_gpu, 1)
-        ifft_plan_padded_batch = plan_ifft!(template_padded_batch_gpu, 1)
-
-        gpu_buffers = (
-            local_data_padded_gpu = gpu_array(zeros(Float64, n_samples_padded, n_trials)),
-            local_data_fft_gpu = gpu_array(zeros(ComplexF64, n_samples_padded, n_trials)),
-            local_conv_result_gpu = gpu_array(zeros(ComplexF64, n_samples_padded, n_trials)),
-            curr_wavelet_gpu = gpu_array(zeros(ComplexF64, n_samples_padded)),
-            eegpower_trials_gpu = return_trials ? gpu_array(zeros(Float64, n_trials, num_frex, n_times)) : nothing,
-            eegconv_trials_gpu = (return_trials && return_phase) ? gpu_array(zeros(ComplexF64, n_trials, num_frex, n_times)) : nothing,
-            eegpower_avg_gpu = !return_trials ? gpu_array(zeros(Float64, num_frex, n_times)) : nothing,
-            eegconv_avg_gpu = (!return_trials && return_phase) ? gpu_array(zeros(ComplexF64, num_frex, n_times)) : nothing,
-            adjusted_indices_gpu = gpu_array(zeros(Int, n_times)),
+    fft_plan, ifft_plan = _tf_batch_fft_plans(n_samples_padded, n_trials, gpu_active)
+    gpu_buffers =
+        gpu_active ?
+        _tf_gpu_buffers(
+            g;
             extracted_power_gpu = !return_trials ? gpu_array(zeros(Float64, n_times, n_trials)) : nothing,
             sum_power_gpu = !return_trials ? gpu_array(zeros(Float64, n_times, 1)) : nothing,
             sum_complex_gpu = (!return_trials && return_phase) ? gpu_array(zeros(ComplexF64, n_times, 1)) : nothing,
+        ) : nothing
+    out = TFOutput(times_out, freqs, g)
+
+    _tf_foreach_channel(selected_channels, gpu_active, host_outputs -> TFBuffers(g; host_outputs)) do channel, buf
+        _process_stft_channel!(
+            channel,
+            buf,
+            sdat,
+            g,
+            time_indices,
+            adjusted_time_indices,
+            n_window_samples_per_freq,
+            window_lengths_samples_exact,
+            fft_plan,
+            ifft_plan,
+            wavelet_ffts,
+            out,
+            gpu_buffers,
         )
-    else
-        # Plan for batch FFT of entire padded data (all trials at once)
-        template_padded_batch = zeros(ComplexF64, n_samples_padded, n_trials)
-        fft_plan_padded_batch = plan_fft!(template_padded_batch, 1, flags = FFTW.MEASURE)
-        ifft_plan_padded_batch = plan_ifft!(template_padded_batch, 1, flags = FFTW.MEASURE)
-        gpu_buffers = nothing
     end
 
-
-    # Initialize output structures - allocate appropriate type based on return_trials
-    # Pre-compute shared time and freq columns (same for power and phase)
-    time_col = repeat(times_out, inner = num_frex)
-    freq_col = repeat(freqs, outer = n_times)
-
-    if return_trials
-        power_df = [DataFrame(time = time_col, freq = freq_col, copycols = false) for _ = 1:n_trials]
-        phase_df = [DataFrame(time = time_col, freq = freq_col, copycols = false) for _ = 1:n_trials]
-    else
-        power_df = DataFrame(time = time_col, freq = freq_col, copycols = false)
-        phase_df = DataFrame(time = time_col, freq = freq_col, copycols = false)
-    end
-
-    # A lock to safely write into the DataFrames
-    df_lock = ReentrantLock()
-
-    n_chans = length(selected_channels)
-    if gpu_active
-        for channel in selected_channels
-            _process_stft_channel!(
-                channel,
-                dat,
-                n_trials,
-                n_samples_per_epoch,
-                n_padded_samples,
-                n_samples_padded,
-                num_frex,
-                return_trials,
-                return_phase,
-                filter_edges,
-                pad,
-                n_times,
-                time_indices,
-                adjusted_time_indices,
-                n_window_samples_per_freq,
-                window_lengths_samples_exact,
-                n_pre_pad,
-                fft_plan_padded_batch,
-                ifft_plan_padded_batch,
-                wavelet_ffts,
-                df_lock,
-                power_df,
-                phase_df,
-                nothing,
-                gpu_buffers,
-            )
-        end
-    else
-        n_threads = min(Threads.nthreads(), n_chans)
-        channel_chunks = [Symbol[] for _ = 1:n_threads]
-        for (i, ch) in enumerate(selected_channels)
-            push!(channel_chunks[mod1(i, n_threads)], ch)
-        end
-
-        Threads.@threads for tid = 1:n_threads
-            buf = _allocate_stft_buffers(n_samples_padded, n_samples_per_epoch, n_trials, num_frex, n_times, return_trials, return_phase)
-            for channel in channel_chunks[tid]
-                _process_stft_channel!(
-                    channel,
-                    dat,
-                    n_trials,
-                    n_samples_per_epoch,
-                    n_padded_samples,
-                    n_samples_padded,
-                    num_frex,
-                    return_trials,
-                    return_phase,
-                    filter_edges,
-                    pad,
-                    n_times,
-                    time_indices,
-                    adjusted_time_indices,
-                    n_window_samples_per_freq,
-                    window_lengths_samples_exact,
-                    n_pre_pad,
-                    fft_plan_padded_batch,
-                    ifft_plan_padded_batch,
-                    wavelet_ffts,
-                    df_lock,
-                    power_df,
-                    phase_df,
-                    buf,
-                    nothing,
-                )
-            end
-        end
-    end
-
-    # Restore original column order which might be shuffled by multithreading
-    expected_cols = vcat([:time, :freq], selected_channels)
-    if return_trials
-        for i = 1:n_trials
-            select!(power_df[i], expected_cols)
-            select!(phase_df[i], expected_cols)
-        end
-    else
-        select!(power_df, expected_cols)
-        select!(phase_df, expected_cols)
-    end
-
-    # Create and return appropriate data type
-    return_type = return_trials ? TimeFreqEpochData : TimeFreqData
-    return return_type(
-        dat.file,
-        dat.condition,
-        dat.condition_name,
-        power_df,
-        phase_df,
-        copy(dat.layout),
-        dat.sample_rate,
-        is_fixed ? :taper_fixed : :taper_adaptive,
-        nothing,  # baseline
-        copy(dat.analysis_info),
-    )
-end
-
-struct STFTBuffers
-    local_data_padded::Matrix{Float64}
-    local_data_fft::Matrix{ComplexF64}
-    local_conv_result::Matrix{ComplexF64}
-    local_trial_signals::Matrix{Float64}
-    eegpower_trials::Array{Float64,3}
-    eegconv_trials::Array{ComplexF64,3}
-    eegpower_avg::Matrix{Float64}
-    eegconv_avg::Matrix{ComplexF64}
-end
-
-function _allocate_stft_buffers(
-    n_samples_padded::Int,
-    n_samples_per_epoch::Int,
-    n_trials::Int,
-    num_frex::Int,
-    n_times::Int,
-    return_trials::Bool,
-    return_phase::Bool,
-)
-    return STFTBuffers(
-        Matrix{Float64}(undef, n_samples_padded, n_trials),
-        Matrix{ComplexF64}(undef, n_samples_padded, n_trials),
-        Matrix{ComplexF64}(undef, n_samples_padded, n_trials),
-        Matrix{Float64}(undef, n_samples_per_epoch, n_trials),
-        return_trials ? zeros(Float64, n_trials, num_frex, n_times) : Array{Float64,3}(undef, 0, 0, 0),
-        (return_trials && return_phase) ? zeros(ComplexF64, n_trials, num_frex, n_times) : Array{ComplexF64,3}(undef, 0, 0, 0),
-        return_trials ? Matrix{Float64}(undef, 0, 0) : zeros(Float64, num_frex, n_times),
-        (!return_trials && return_phase) ? zeros(ComplexF64, num_frex, n_times) : Matrix{ComplexF64}(undef, 0, 0),
-    )
+    return _tf_result(sdat, out, selected_channels, is_fixed ? :taper_fixed : :taper_adaptive, g)
 end
 
 function _stft_cpu_inner!(
@@ -433,139 +286,46 @@ end
 
 function _process_stft_channel!(
     channel::Symbol,
+    buf::TFBuffers,
     dat::EpochData,
-    n_trials::Int,
-    n_samples_per_epoch::Int,
-    n_padded_samples::Int,
-    n_samples_padded::Int,
-    num_frex::Int,
-    return_trials::Bool,
-    return_phase::Bool,
-    filter_edges::Bool,
-    pad::Union{Nothing,Symbol},
-    n_times::Int,
+    g::TFGeometry,
     time_indices::Vector{Int},
     adjusted_time_indices::Vector{Int},
     n_window_samples_per_freq::Vector{Int},
     window_lengths_samples_exact::Vector{Float64},
-    n_pre_pad::Int,
     fft_plan_padded_batch::P1,
     ifft_plan_padded_batch::P2,
     wavelet_ffts::Vector{Vector{ComplexF64}},
-    df_lock::ReentrantLock,
-    power_df,
-    phase_df,
-    buf::Union{STFTBuffers,Nothing},
+    out::TFOutput,
     gpu_buffers,
 ) where {P1,P2}
-    gpu_active = !isnothing(gpu_buffers)
+    n_trials, n_samples_padded, num_frex, n_times, n_pre_pad = g.n_trials, g.n_fft, g.num_frex, g.n_times, g.n_pre_pad
+    return_trials, return_phase = g.return_trials, g.return_phase
 
-    if gpu_active
-        local_data_padded_gpu = gpu_buffers.local_data_padded_gpu
+    _tf_reset_outputs!(isnothing(gpu_buffers) ? buf : gpu_buffers, g)
+
+    # Extract trials, mirror-pad and batch FFT (into buf.data_fft or the GPU buffer)
+    _tf_load_channel_fft!(buf, dat, channel, g, fft_plan_padded_batch, gpu_buffers)
+
+    if !isnothing(gpu_buffers)
         local_data_fft_gpu = gpu_buffers.local_data_fft_gpu
         local_conv_result_gpu = gpu_buffers.local_conv_result_gpu
         eegpower_trials_gpu = gpu_buffers.eegpower_trials_gpu
         eegconv_trials_gpu = gpu_buffers.eegconv_trials_gpu
         eegpower_avg_gpu = gpu_buffers.eegpower_avg_gpu
         eegconv_avg_gpu = gpu_buffers.eegconv_avg_gpu
-
         adjusted_indices_gpu = gpu_buffers.adjusted_indices_gpu
         extracted_power_gpu = gpu_buffers.extracted_power_gpu
         sum_power_gpu = gpu_buffers.sum_power_gpu
         sum_complex_gpu = gpu_buffers.sum_complex_gpu
         adjusted_indices_cpu = Vector{Int}(undef, n_times)
 
-        if return_trials
-            fill!(eegpower_trials_gpu, 0.0)
-            if return_phase
-                fill!(eegconv_trials_gpu, 0.0im)
-            end
-        else
-            fill!(eegpower_avg_gpu, 0.0)
-            if return_phase
-                fill!(eegconv_avg_gpu, 0.0im)
-            end
-        end
+        for fi = 1:num_frex
+            n_window_samples = n_window_samples_per_freq[fi]
+            norm_factor = sqrt(2.0 / n_window_samples)
+            half_window = n_window_samples ÷ 2
 
-        local_trial_signals = Matrix{Float64}(undef, n_samples_per_epoch, n_trials)
-        local_data_padded = Matrix{Float64}(undef, n_samples_padded, n_trials)
-        local_data_fft = Matrix{ComplexF64}(undef, n_samples_padded, n_trials)
-        local_conv_result = Matrix{ComplexF64}(undef, 0, 0)
-        eegpower_trials = Array{Float64,3}(undef, 0, 0, 0)
-        eegconv_trials = Array{ComplexF64,3}(undef, 0, 0, 0)
-        eegpower_avg = Matrix{Float64}(undef, 0, 0)
-        eegconv_avg = Matrix{ComplexF64}(undef, 0, 0)
-    else
-        b = buf::STFTBuffers
-        local_data_padded = b.local_data_padded
-        local_data_fft = b.local_data_fft
-        local_conv_result = b.local_conv_result
-        local_trial_signals = b.local_trial_signals
-        eegpower_trials = b.eegpower_trials
-        eegconv_trials = b.eegconv_trials
-        eegpower_avg = b.eegpower_avg
-        eegconv_avg = b.eegconv_avg
-
-        if return_trials
-            fill!(eegpower_trials, 0.0)
-            return_phase && fill!(eegconv_trials, 0.0im)
-        else
-            fill!(eegpower_avg, 0.0)
-            return_phase && fill!(eegconv_avg, 0.0im)
-        end
-    end
-
-    # Pre-extract all trial data for this channel
-    for trial_idx = 1:n_trials
-        col = dat.data[trial_idx][!, channel]
-        if col isa Vector{Float64}
-            col_f64 = col::Vector{Float64}
-            @inbounds @simd for i = 1:n_samples_per_epoch
-                local_trial_signals[i, trial_idx] = col_f64[i]
-            end
-        else
-            @inbounds @simd for i = 1:n_samples_per_epoch
-                local_trial_signals[i, trial_idx] = Float64(col[i])
-            end
-        end
-    end
-
-    fill!(local_data_padded, 0.0)
-
-    @inbounds for trial_idx = 1:n_trials
-        for j = 1:n_padded_samples
-            local src_j
-            if j <= n_pre_pad
-                src_j = n_samples_per_epoch - j + 1
-            elseif j > n_pre_pad + n_samples_per_epoch
-                idx_in_post = j - (n_pre_pad + n_samples_per_epoch)
-                src_j = n_samples_per_epoch - idx_in_post
-            else
-                src_j = j - n_pre_pad
-            end
-            local_data_padded[j, trial_idx] = local_trial_signals[src_j, trial_idx]
-        end
-    end
-
-    @inbounds @simd for i in eachindex(local_data_padded)
-        local_data_fft[i] = ComplexF64(local_data_padded[i])
-    end
-
-    if gpu_active
-        copyto!(local_data_fft_gpu, local_data_fft)
-        mul!(local_data_fft_gpu, fft_plan_padded_batch, local_data_fft_gpu)
-    else
-        mul!(local_data_fft, fft_plan_padded_batch, local_data_fft)
-    end
-
-    for fi = 1:num_frex
-        n_window_samples = n_window_samples_per_freq[fi]
-        curr_wavelet = wavelet_ffts[fi]
-        norm_factor = sqrt(2.0 / n_window_samples)
-        half_window = n_window_samples ÷ 2
-
-        if gpu_active
-            copyto!(gpu_buffers.curr_wavelet_gpu, curr_wavelet)
+            copyto!(gpu_buffers.curr_wavelet_gpu, wavelet_ffts[fi])
             local_conv_result_gpu .= local_data_fft_gpu .* gpu_buffers.curr_wavelet_gpu
             mul!(local_conv_result_gpu, ifft_plan_padded_batch, local_conv_result_gpu)
             local_conv_result_gpu .*= norm_factor
@@ -592,7 +352,19 @@ function _process_stft_channel!(
                     @views eegconv_avg_gpu[fi, :] .= vec(sum_complex_gpu)
                 end
             end
-        else
+        end
+
+        if !return_trials
+            eegpower_avg_gpu ./= n_trials
+            if return_phase
+                eegconv_avg_gpu ./= n_trials
+            end
+        end
+    else
+        for fi = 1:num_frex
+            n_window_samples = n_window_samples_per_freq[fi]
+            norm_factor = sqrt(2.0 / n_window_samples)
+            half_window = n_window_samples ÷ 2
             _stft_cpu_inner!(
                 fi,
                 n_trials,
@@ -604,85 +376,35 @@ function _process_stft_channel!(
                 time_indices,
                 return_trials,
                 return_phase,
-                local_data_fft,
-                curr_wavelet,
+                buf.data_fft,
+                wavelet_ffts[fi],
                 ifft_plan_padded_batch,
-                local_conv_result,
-                eegpower_trials,
-                eegconv_trials,
-                eegpower_avg,
-                eegconv_avg,
+                buf.conv_result,
+                buf.power_trials,
+                buf.conv_trials,
+                buf.power_avg,
+                buf.conv_avg,
             )
         end
     end
 
-    if gpu_active
-        if !return_trials
-            eegpower_avg_gpu ./= n_trials
-            if return_phase
-                eegconv_avg_gpu ./= n_trials
-            end
-        end
+    # Final [trial × freq × time] or [freq × time] arrays (downloaded from the GPU if needed)
+    power, conv = _tf_channel_results(buf, gpu_buffers, g)
 
-        if return_trials
-            eegpower_trials = Array(eegpower_trials_gpu)
-            if return_phase
-                eegconv_trials = Array(eegconv_trials_gpu)
-            end
-        else
-            eegpower_avg = Array(eegpower_avg_gpu)
-            if return_phase
-                eegconv_avg = Array(eegconv_avg_gpu)
-            end
+    if g.filter_edges
+        _filter_edges!(power, conv, num_frex, adjusted_time_indices, window_lengths_samples_exact, g.n_padded)
+    end
+
+    # CPU path averages over trials after edge filtering (GPU path averaged on the device above)
+    if isnothing(gpu_buffers) && !return_trials
+        power ./= n_trials
+        if return_phase
+            conv ./= n_trials
         end
     end
 
-    if filter_edges
-        _filter_edges!(
-            return_trials ? eegpower_trials : eegpower_avg,
-            return_trials ? (return_phase ? eegconv_trials : nothing) : (return_phase ? eegconv_avg : nothing),
-            num_frex,
-            adjusted_time_indices,
-            window_lengths_samples_exact,
-            n_padded_samples,
-        )
-    end
-
-    if !gpu_active
-        if !return_trials
-            eegpower_avg ./= n_trials
-            if return_phase
-                eegconv_avg ./= n_trials
-            end
-        end
-    end
-
-    lock(df_lock)
-    try
-        if return_trials
-            for trial_idx = 1:n_trials
-                power_df[trial_idx][!, channel] = copy(vec(@view eegpower_trials[trial_idx, :, :]))
-                if return_phase
-                    phase_df[trial_idx][!, channel] = copy(vec(angle.(@view eegconv_trials[trial_idx, :, :])))
-                else
-                    phase_df[trial_idx][!, channel] = fill(NaN, num_frex * n_times)
-                end
-            end
-        else
-            power_df[!, channel] = copy(vec(eegpower_avg))
-            if return_phase
-                phase_vec = Vector{Float64}(undef, num_frex * n_times)
-                @inbounds @simd for i in eachindex(eegconv_avg)
-                    phase_vec[i] = angle(eegconv_avg[i])
-                end
-                phase_df[!, channel] = phase_vec
-            else
-                phase_df[!, channel] = fill(NaN, num_frex * n_times)
-            end
-        end
-    finally
-        unlock(df_lock)
-    end
+    _tf_store_channel!(out, channel, power, conv, g)
+    return nothing
 end
 
 # Vector version: process each EpochData element
@@ -705,18 +427,7 @@ function tf_stft(
 
         output_dir = _prepare_output_dir!(ctx, joinpath(input_dir, "tf_stft_$(clean_pattern(file_pattern))"))
 
-        process_fn =
-            (input_path, output_path) -> begin
-                filename = basename(input_path)
-                data = read_data(input_path)
-                if isnothing(data) || !(data isa Vector{<:EpochData})
-                    return BatchResult(false, filename, "Invalid data type")
-                end
-                data = _condition_select(data, condition_selection)
-                tf_results = tf_stft(data; kwargs...)
-                jldsave(output_path; data = tf_results)
-                return BatchResult(true, filename, "TF STFT analysis complete ($(length(tf_results)) conditions)")
-            end
+        process_fn = _tf_batch_worker(tf_stft, "STFT", condition_selection, kwargs)
 
         batch_process(process_fn, file_pattern, input_dir, output_dir, participant_selection, "TF STFT")
     end

@@ -185,3 +185,25 @@ using DataFrames
     end
 
 end
+
+@testset "TF decompositions are thread-safe (all channels vs. one at a time)" begin
+    # Many channels so several threads process channels concurrently with their own buffers;
+    # each channel must match the result of decomposing that channel alone.
+    ep = EegFun.create_test_epoch_data(n = 500, fs = 250, n_epochs = 20, n_channels = 16, seed = 11)
+    freqs = 4:2:30
+    methods = (
+        (d; kw...) -> EegFun.tf_morlet(d; frequencies = freqs, cycles = 5, kw...),
+        (d; kw...) -> EegFun.tf_stft(d; frequencies = freqs, window_length = 0.4, time_steps = 0.02, kw...),
+        (d; kw...) -> EegFun.tf_multitaper(d; frequencies = freqs, cycles = 4, time_steps = 0.02, kw...),
+    )
+    for tf_fn in methods, return_trials in (false, true)
+        full = tf_fn(ep; return_trials = return_trials, return_phase = true)
+        for ch in EegFun.channel_labels(ep)
+            single = tf_fn(ep; channel_selection = EegFun.channels(ch), return_trials = return_trials, return_phase = true)
+            full_power = return_trials ? full.data_power[end][!, ch] : full.data_power[!, ch]
+            single_power = return_trials ? single.data_power[end][!, ch] : single.data_power[!, ch]
+            @test isequal(isnan.(full_power), isnan.(single_power))
+            @test filter(!isnan, full_power) ≈ filter(!isnan, single_power) rtol = 1e-9
+        end
+    end
+end
