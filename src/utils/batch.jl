@@ -229,7 +229,7 @@ Group items by their `.condition` field.
 # Returns
 - `OrderedDict{Int, Vector{T}}`: Items grouped by condition number (sorted)
 """
-function group_by_condition(items::Vector{T}) where {T}
+function group_by_condition(items::AbstractVector{T}) where {T}
     grouped = Dict{Int,Vector{T}}()
     for item in items
         cond_num = item.condition

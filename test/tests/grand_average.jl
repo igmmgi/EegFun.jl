@@ -420,5 +420,43 @@ end
 
     @testset "Empty input throws" begin
         @test_throws Exception EegFun.grand_average(EegFun.TimeFreqData[])
+        @test_throws Exception EegFun.grand_average(EegFun.ErpData[])
+    end
+
+    @testset "In-memory ERP grand average" begin
+        erps = [
+            EegFun.create_test_erp_data(participant = 1, condition = 1),
+            EegFun.create_test_erp_data(participant = 2, condition = 1),
+            EegFun.create_test_erp_data(participant = 1, condition = 2),
+            EegFun.create_test_erp_data(participant = 2, condition = 2),
+        ]
+        grand_avgs = EegFun.grand_average(erps)
+        @test length(grand_avgs) == 2
+        @test all(ga -> ga isa EegFun.ErpData, grand_avgs)
+        @test sort([ga.condition for ga in grand_avgs]) == [1, 2]
+    end
+
+    @testset "Batch TF grand average" begin
+        tf_test_dir = mktempdir()
+        for p = 1:3
+            tfs = [
+                EegFun.create_test_tf_data(participant = p, condition = 1),
+                EegFun.create_test_tf_data(participant = p, condition = 2),
+            ]
+            jldsave(joinpath(tf_test_dir, "$(p)_tf_data.jld2"); data = tfs)
+        end
+
+        tf_out = joinpath(tf_test_dir, "tf_grand_avg")
+        EegFun.grand_average("tf_data", input_dir = tf_test_dir, output_dir = tf_out)
+
+        out_file = joinpath(tf_out, "grand_average_tf_data.jld2")
+        @test isfile(out_file)
+        loaded = load(out_file, "data")
+        @test length(loaded) == 2
+        @test all(x -> x isa EegFun.TimeFreqData, loaded)
+        @test sort([x.condition for x in loaded]) == [1, 2]
+
+        rm(tf_test_dir, recursive = true)
     end
 end
+

@@ -1,4 +1,6 @@
-# Batch grand averaging of ERP data across participants.
+"""
+Grand averaging of ERP and time-frequency data across participants.
+"""
 
 # === GRANDAVERAGE-SPECIFIC HELPERS ===
 
@@ -73,34 +75,69 @@ function _create_grand_average(erps::AbstractVector{<:ErpData}, cond_num::Int)
     )
 end
 
+"""
+Create a grand average by averaging TimeFreqData across participants for a specific condition.
+"""
+function _create_grand_average(tfs::AbstractVector{<:TimeFreqData}, cond_num::Int)
+    if isempty(tfs)
+        @minimal_error("Cannot create grand average from empty TF list")
+    end
+
+    # Validate consistent structure
+    _have_same_structure(tfs) || @minimal_error("TF data for condition $cond_num have inconsistent structure")
+
+    # Get shared metadata
+    ref_tf = tfs[1]
+    electrodes = channel_labels(ref_tf)
+    frequencies = Float64.(sort(unique(ref_tf.data_power.freq)))
+    time_points = Float64.(sort(unique(ref_tf.data_power.time)))
+
+    # Extract 4D array and create grand average
+    data_4d = _extract_tf_array(tfs, electrodes, frequencies, time_points)
+    return _create_tf_grand_average(ref_tf, data_4d, electrodes, frequencies, time_points, cond_num)
+end
+
+_log_creating_grand_average(::Type{<:ErpData}, cond_num::Int, n::Int) =
+    @info "Creating grand average for condition $cond_num (n=$n participants)"
+
+_log_creating_grand_average(::Type{<:TimeFreqData}, cond_num::Int, n::Int) =
+    @info "Creating TF grand average for condition $cond_num (n=$n participants)"
+
+_log_created_grand_average(ga::ErpData) =
+    @info "  ✓ Created grand average with $(nrow(ga.data)) time points"
+
+function _log_created_grand_average(ga::TimeFreqData)
+    n_freqs = length(unique(ga.data_power.freq))
+    n_times = length(unique(ga.data_power.time))
+    @info "  ✓ Created TF grand average: $(n_freqs) freqs × $(n_times) times"
+end
 
 """
 Create grand averages for all conditions in the grouped data.
-Returns Vector{ErpData}.
+Returns Vector{T}.
 """
-function _create_all_grand_averages(erps_by_condition::AbstractDict{<:Integer,<:AbstractVector{<:ErpData}})
-    grand_averages = ErpData[]
+function _create_all_grand_averages(data_by_condition::AbstractDict{<:Integer,<:AbstractVector{T}}) where {T<:Union{ErpData,TimeFreqData}}
+    grand_averages = T[]
 
     # Sort conditions to ensure consistent ordering
-    for cond_num in sort(collect(keys(erps_by_condition)))
-        erps = erps_by_condition[cond_num]
-        @info "Creating grand average for condition $cond_num (n=$(length(erps)) participants)"
+    for cond_num in sort(collect(keys(data_by_condition)))
+        condition_data = data_by_condition[cond_num]
+        _log_creating_grand_average(T, cond_num, length(condition_data))
 
-        if length(erps) < 2
-            @minimal_warning "Only $(length(erps)) participant(s) for condition $cond_num. Skipping grand average."
+        if length(condition_data) < 2
+            @minimal_warning "Only $(length(condition_data)) participant(s) for condition $cond_num. Skipping."
             continue
         end
 
         # Create grand average
-        grand_avg = _create_grand_average(erps, cond_num)
+        grand_avg = _create_grand_average(condition_data, cond_num)
         push!(grand_averages, grand_avg)
 
-        @info "  ✓ Created grand average with $(nrow(grand_avg.data)) time points"
+        _log_created_grand_average(grand_avg)
     end
 
     return grand_averages
 end
-
 
 """
     grand_average(erps::Vector{ErpData}; condition_selection = conditions()) -> Vector{ErpData}
@@ -108,48 +145,53 @@ end
     grand_average(rsa_data_list::Vector{RsaData}; compute_noise_ceiling::Bool = true) -> RsaData
     grand_average(decoded_list::Vector{DecodedData}) -> DecodedData
     grand_average(file_pattern::String; input_dir::String = pwd(),
-    participant_selection::Function = participants(), condition_selection::Function = conditions(),
-    output_dir = nothing)
+        participant_selection::Function = participants(), condition_selection::Function = conditions(),
+        output_dir = nothing)
 
 Create grand averages by averaging across participants.
 
 For `ErpData` / `TimeFreqData`: groups by condition and averages across participants.
 For `RsaData`: averages RDMs at each time point with optional noise ceiling.
 For `DecodedData`: averages classification accuracy across participants.
-The `file_pattern` method batch-processes JLD2 ERP files.
+The `file_pattern` method batch-processes JLD2 data files.
 
 # Examples
 ```julia
 grand_avgs = grand_average([erp1, erp2, erp3])
 grand_avgs = grand_average(erps, condition_selection = conditions([1, 3]))
+grand_avgs = grand_average(tfs, condition_selection = conditions([1, 3]))
 grand_avg_rsa = grand_average([rsa_p1, rsa_p2, rsa_p3])
 grand_avg_decoding = grand_average([decoded_p1, decoded_p2])
 grand_average("erps_unrejected")
 ```
 """
-function grand_average(erps::AbstractVector{<:ErpData}; condition_selection = conditions())
+function grand_average(
+    data::AbstractVector{T};
+    condition_selection = conditions(),
+) where {T<:Union{ErpData,TimeFreqData}}
+    isempty(data) && @minimal_error("Cannot create grand average from empty $(T <: ErpData ? "ERP" : "TF") list")
 
-    # Group ERPs by condition
-    erps_by_condition = group_by_condition(erps)
+    # Group by condition
+    data_by_condition = group_by_condition(data)
 
     # Apply condition selection
-    all_cond_nums = collect(keys(erps_by_condition))
+    all_cond_nums = collect(keys(data_by_condition))
     cond_func = _to_condition_func(condition_selection)
     selected_mask = cond_func(1:length(all_cond_nums))
     selected_cond_nums = all_cond_nums[selected_mask]
 
-    filtered_groups = OrderedDict(num => erps_by_condition[num] for num in selected_cond_nums)
+    filtered_groups = OrderedDict(num => data_by_condition[num] for num in selected_cond_nums)
 
     if isempty(filtered_groups)
         @minimal_warning "No conditions selected or found for grand averaging"
-        return ErpData[]
+        return T[]
     end
 
     # Create grand averages
     return _create_all_grand_averages(filtered_groups)
 end
 
-# === MAIN API FUNCTION ===
+# === MAIN BATCH API FUNCTION ===
 
 function grand_average(
     file_pattern::String;
@@ -158,7 +200,6 @@ function grand_average(
     condition_selection = conditions(),
     output_dir::Union{String,Nothing} = nothing,
 )
-
     _with_batch_logging("grand averaging", "grand_average.log", input_dir, output_dir) do ctx
         @log_call "grand_average"
 

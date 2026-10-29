@@ -409,7 +409,7 @@ function _have_same_structure(dat1::EegData, dat2::EegData)::Bool
     return true
 end
 
-function _have_same_structure(dats::Vector{<:EegData})::Bool
+function _have_same_structure(dats::AbstractVector{<:EegData})::Bool
     isempty(dats) && return true
     length(dats) == 1 && return true
 
