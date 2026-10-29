@@ -110,7 +110,7 @@ end
             @test erp isa EegFun.ErpData
             @test nrow(erp.data) == 2501  # n_timepoints (-0.5 to 2.0s at 1000Hz)
             @test "time" in names(erp.data)
-            @test "condition" in names(erp.data)
+            @test hasproperty(erp, :condition)
             @test "Ch1" in names(erp.data)
             @test "Ch2" in names(erp.data)
             @test "Ch3" in names(erp.data)
