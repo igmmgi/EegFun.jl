@@ -103,8 +103,7 @@ _log_creating_grand_average(::Type{<:ErpData}, cond_num::Int, n::Int) =
 _log_creating_grand_average(::Type{<:TimeFreqData}, cond_num::Int, n::Int) =
     @info "Creating TF grand average for condition $cond_num (n=$n participants)"
 
-_log_created_grand_average(ga::ErpData) =
-    @info "  ✓ Created grand average with $(nrow(ga.data)) time points"
+_log_created_grand_average(ga::ErpData) = @info "  ✓ Created grand average with $(nrow(ga.data)) time points"
 
 function _log_created_grand_average(ga::TimeFreqData)
     n_freqs = length(unique(ga.data_power.freq))
@@ -165,10 +164,7 @@ grand_avg_decoding = grand_average([decoded_p1, decoded_p2])
 grand_average("erps_unrejected")
 ```
 """
-function grand_average(
-    data::AbstractVector{T};
-    condition_selection = conditions(),
-) where {T<:Union{ErpData,TimeFreqData}}
+function grand_average(data::AbstractVector{T}; condition_selection = conditions()) where {T<:Union{ErpData,TimeFreqData}}
     isempty(data) && @minimal_error("Cannot create grand average from empty $(T <: ErpData ? "ERP" : "TF") list")
 
     # Group by condition

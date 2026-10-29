@@ -439,10 +439,7 @@ end
     @testset "Batch TF grand average" begin
         tf_test_dir = mktempdir()
         for p = 1:3
-            tfs = [
-                EegFun.create_test_tf_data(participant = p, condition = 1),
-                EegFun.create_test_tf_data(participant = p, condition = 2),
-            ]
+            tfs = [EegFun.create_test_tf_data(participant = p, condition = 1), EegFun.create_test_tf_data(participant = p, condition = 2)]
             jldsave(joinpath(tf_test_dir, "$(p)_tf_data.jld2"); data = tfs)
         end
 
@@ -459,4 +456,3 @@ end
         rm(tf_test_dir, recursive = true)
     end
 end
-
