@@ -32,23 +32,7 @@ signal_example_ecg_hrv()
 - `ax_hr::Axis`: Heart rate and breathing synchrony plot.
 """
 function signal_example_ecg_hrv()
-    # Explicitly activate GLMakie before constructing the Figure
-    if isdefined(Main, :GLMakie)
-        try
-            Main.GLMakie.activate!(inline = false)
-        catch
-        end
-    end
-
-    if string(Makie.current_backend()) == "CairoMakie" || (!_is_glmakie_available() && !isdefined(Main, :GLMakie))
-        @minimal_warning """
-        Interactive demo requires GLMakie for live sliders and buttons.
-        Currently active backend: $(Makie.current_backend())
-        Please activate GLMakie in your session:
-            using GLMakie
-            GLMakie.activate!(inline = false)
-        """
-    end
+    _check_interactive_demo_backend("Interactive ECG HRV demo") || return nothing
 
     _set_window_title("Interactive HRV Simulator")
 
@@ -385,7 +369,7 @@ function signal_example_ecg_hrv()
     rowgap!(fig.layout, 12)
     rowgap!(fig.layout, 3, Fixed(26))        # Generous separation between HR axis and controls
 
-    display(fig)
+    _display_demo_figure(fig)
 
     return fig, ax_ecg, ax_hr
 end

@@ -61,6 +61,8 @@ EegFun.signal_example_sampling()
 - `ax::Axis`: The axis object containing the plots
 """
 function signal_example_sampling()
+    _check_interactive_demo_backend("Signal Sampling demo") || return nothing
+
     fig = _eegfun_figure(size = (1000, 800), title = "Signal Example 1")
 
     # Set up adaptive font and UI sizing
@@ -277,7 +279,7 @@ function signal_example_sampling()
     rowsize!(fig.layout, 2, Relative(0.1))
 
     # Display the figure
-    display(fig)
+    _display_demo_figure(fig)
 
     return fig, ax
 

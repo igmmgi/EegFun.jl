@@ -23,6 +23,8 @@ using EegFun
 ```
 """
 function signal_example_ica_sphering()
+    _check_interactive_demo_backend("ICA Sphering demo") || return nothing
+
     N = 2500
     rng = Random.Xoshiro(101) # Stable random numbers (local RNG; global RNG untouched)
 
@@ -189,6 +191,6 @@ function signal_example_ica_sphering()
     rowsize!(fig.layout, 3, Relative(0.15))
 
     update_morph(0.0)
-    display(fig)
+    _display_demo_figure(fig)
     return fig
 end

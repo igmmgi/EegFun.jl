@@ -72,6 +72,7 @@ EegFun.signal_example_decoding()
 - `axes::Tuple`: `(ax_erp, ax_acc)` — the two axis objects
 """
 function signal_example_decoding()
+    _check_interactive_demo_backend("MVPA Decoding demo") || return nothing
 
     FS     = 250.0    # sample rate (Hz) — typical EEG
     T_PRE  = -0.2     # pre-stimulus (s)
@@ -409,6 +410,6 @@ function signal_example_decoding()
     rowsize!(fig.layout, 2, Relative(0.45))
     rowsize!(fig.layout, 3, Relative(0.20))
 
-    display(fig)
+    _display_demo_figure(fig)
     return fig, (ax_erp, ax_acc)
 end

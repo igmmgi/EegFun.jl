@@ -352,6 +352,53 @@ end
 
 _is_glmakie_available() = MAKIE_EXT_STATE.glmakie_active
 
+"""
+    _check_interactive_demo_backend(demo_name::String = "Interactive demo") -> Bool
+
+Check if an interactive backend (GLMakie) is active or available. If GLMakie is loaded
+in `Main`, it is activated. If no suitable interactive backend is available, warns the user
+with activation instructions and returns `false`.
+"""
+function _check_interactive_demo_backend(demo_name::String = "Interactive demo")
+    if isdefined(Main, :GLMakie)
+        try
+            Main.GLMakie.activate!(inline = false)
+        catch
+        end
+    end
+
+    backend = Makie.current_backend()
+    if backend === missing || string(backend) == "CairoMakie" || (!_is_glmakie_available() && !isdefined(Main, :GLMakie))
+        @minimal_warning """
+        $demo_name requires GLMakie for live sliders, buttons, and animations.
+        Currently active backend: $(backend)
+        Please activate GLMakie in your session:
+            using GLMakie
+            GLMakie.activate!(inline = false)
+        """
+        return false
+    end
+    return true
+end
+
+"""
+    _display_demo_figure(fig)
+
+Safely display an interactive demo figure. Avoids hard crashes if no display screen or backend is available.
+"""
+function _display_demo_figure(fig)
+    backend = Makie.current_backend()
+    if backend === missing || isnothing(backend)
+        return nothing
+    end
+    try
+        display(fig)
+    catch e
+        @debug "Could not display demo figure" exception = e
+        return nothing
+    end
+end
+
 function _display_figure(fig)
     # Register keyboard shortcut for saving the figure
     on(events(fig).keyboardbutton) do event

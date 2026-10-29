@@ -66,6 +66,8 @@ using EegFun
 - `fig::Figure`: The Makie figure object
 """
 function signal_example_ica_separation()
+    _check_interactive_demo_backend("ICA Separation demo") || return nothing
+
     # ── 1. Setup & Constants ──────────────────────────────────────────────────
     FS    = 256.0
     T     = 4.0
@@ -404,6 +406,6 @@ function signal_example_ica_separation()
         update()
     end
     update()
-    display(fig)
+    _display_demo_figure(fig)
     return fig
 end

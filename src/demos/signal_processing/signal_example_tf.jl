@@ -70,6 +70,7 @@ EegFun.signal_example_tf()
 - `axes::NamedTuple`: Named tuple with `:time` and `:tf` axes
 """
 function signal_example_tf()
+    _check_interactive_demo_backend("Signal Time-Frequency demo") || return nothing
 
     # ── Fixed simulation parameters ──────────────────────────────────────────
     const_samp_rate = 250
@@ -437,6 +438,6 @@ function signal_example_tf()
     # ── Initial render ─────────────────────────────────────────────────────────
     run_simulation()
 
-    display(fig)
+    _display_demo_figure(fig)
     return fig, (time = ax_time, tf = ax_tf)
 end

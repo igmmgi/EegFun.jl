@@ -87,6 +87,7 @@ using EegFun
 - `fig::Figure`: The Makie figure object
 """
 function signal_example_ica_geometry()
+    _check_interactive_demo_backend("ICA Geometry demo") || return nothing
 
     FS = 512.0
     T  = 3.0
@@ -516,6 +517,6 @@ function signal_example_ica_geometry()
     colsize!(fig.layout, 4, Relative(0.177))
 
     update()
-    display(fig)
+    _display_demo_figure(fig)
     return fig
 end

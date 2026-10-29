@@ -418,8 +418,9 @@ channels(channel_name::AbstractString) = channels([Symbol(channel_name)])
 channels(channel_names::Symbol...) = channels(collect(channel_names))
 channels(channel_names::AbstractString...) = channels(Symbol.(channel_names)...)
 channels(channel_number::Int) = channels([channel_number])
-channels(channel_numbers::Union{Vector{Int},UnitRange}) = x -> [i in channel_numbers for i = 1:length(x)]
-channels(channel_ranges::Vector{UnitRange{Int}}) = x -> [i in union(channel_ranges...) for i = 1:length(x)]
+channels(channel_numbers::AbstractVector{Int}) = x -> [i in channel_numbers for i = 1:length(x)]
+channels(channel_numbers::UnitRange{Int}) = channels(collect(Int, channel_numbers))
+channels(channel_ranges::Vector{UnitRange{Int}}) = channels(collect(Int, union(channel_ranges...)))
 channels(predicate::Function) = predicate  # Allow custom function predicates
 _negate_selector(f::Function) = x -> begin
     res = f(x)
@@ -625,10 +626,11 @@ participants(1:10)                    # Select participants 1 through 10
 ```
 """
 participants() = x -> fill(true, length(x))  # Default: select all participants given
-participants(participant_ids::Union{Vector{Int},UnitRange}) = x -> [id in participant_ids for id in x]
+participants(participant_ids::AbstractVector{Int}) = x -> [id in participant_ids for id in x]
+participants(participant_ids::UnitRange{Int}) = participants(collect(Int, participant_ids))
 participants(participant_id::Int) = participants([participant_id])
-participants(participant_ranges::Vector{UnitRange{Int}}) = participants(union(participant_ranges...))
-participants(participant_ids::Int...) = participants(collect(participant_ids))
+participants(participant_ranges::Vector{UnitRange{Int}}) = participants(collect(Int, union(participant_ranges...)))
+participants(participant_ids::Int...) = participants(collect(Int, participant_ids))
 participants(predicate::Function) = predicate  # Allow custom function predicates
 
 """
@@ -668,10 +670,11 @@ conditions(["congruent", "neutral"])   # Select multiple conditions by name
 ```
 """
 conditions() = x -> fill(true, length(x))  # Default: select all conditions given
-conditions(condition_indices::Union{Vector{Int},UnitRange}) = x -> intersect(condition_indices, 1:length(x))
+conditions(condition_indices::AbstractVector{Int}) = x -> intersect(condition_indices, 1:length(x))
+conditions(condition_indices::UnitRange{Int}) = conditions(collect(Int, condition_indices))
 conditions(condition_index::Int) = conditions([condition_index])
-conditions(condition_ranges::Vector{UnitRange{Int}}) = conditions(union(condition_ranges...))
-conditions(condition_indices::Int...) = conditions(collect(condition_indices))
+conditions(condition_ranges::Vector{UnitRange{Int}}) = conditions(collect(Int, union(condition_ranges...)))
+conditions(condition_indices::Int...) = conditions(collect(Int, condition_indices))
 conditions(condition_names::Vector{String}) =
     x -> Vector{Int}(filter(!isnothing, [findfirst(dat -> condition_name(dat) == n, x) for n in condition_names]))
 conditions(cond_name::String) = conditions([cond_name])
@@ -714,7 +717,7 @@ _to_channel_func(idx::AbstractString) = channels(Symbol(idx))
 _to_channel_func(idx::AbstractVector{<:AbstractString}) = channels(Symbol.(idx))
 _to_channel_func(idx::Integer) = channels(Int(idx))
 _to_channel_func(idx::AbstractVector{<:Integer}) = channels(collect(Int, idx))
-_to_channel_func(idx::AbstractRange) = channels(idx)
+_to_channel_func(idx::AbstractRange) = channels(collect(Int, idx))
 _to_channel_func(idx) = channels(idx)
 
 _to_epoch_func(::Nothing) = epochs()
@@ -722,7 +725,7 @@ _to_epoch_func(::Colon) = epochs()
 _to_epoch_func(f::Function) = f === Colon() ? epochs() : f
 _to_epoch_func(idx::Integer) = epochs(Int(idx))
 _to_epoch_func(idx::AbstractVector{<:Integer}) = epochs(collect(Int, idx))
-_to_epoch_func(idx::AbstractRange) = epochs(idx)
+_to_epoch_func(idx::AbstractRange) = epochs(collect(Int, idx))
 _to_epoch_func(idx) = epochs(idx)
 
 _to_condition_func(::Nothing) = conditions()
@@ -730,7 +733,7 @@ _to_condition_func(::Colon) = conditions()
 _to_condition_func(f::Function) = f === Colon() ? conditions() : f
 _to_condition_func(idx::Integer) = conditions(Int(idx))
 _to_condition_func(idx::AbstractVector{<:Integer}) = conditions(collect(Int, idx))
-_to_condition_func(idx::AbstractRange) = conditions(idx)
+_to_condition_func(idx::AbstractRange) = conditions(collect(Int, idx))
 _to_condition_func(name::AbstractString) = conditions(String(name))
 _to_condition_func(names::AbstractVector{<:AbstractString}) = conditions(collect(String, names))
 _to_condition_func(idx) = conditions(idx)
@@ -740,7 +743,7 @@ _to_participant_func(::Colon) = participants()
 _to_participant_func(f::Function) = f === Colon() ? participants() : f
 _to_participant_func(idx::Integer) = participants(Int(idx))
 _to_participant_func(idx::AbstractVector{<:Integer}) = participants(collect(Int, idx))
-_to_participant_func(idx::AbstractRange) = participants(idx)
+_to_participant_func(idx::AbstractRange) = participants(collect(Int, idx))
 _to_participant_func(idx) = participants(idx)
 
 """Preserve user-specified channel name ordering if all names are in the selection."""

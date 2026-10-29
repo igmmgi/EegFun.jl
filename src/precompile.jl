@@ -159,6 +159,47 @@ PrecompileTools.@compile_workload begin
             EegFun.global_dissimilarity(erp[1])
             EegFun.lrp(erp[1], erp_fake2; channel_selection = EegFun.channels([:C3, :C4]))
             EegFun.jackknife_average([erp[1], erp_fake2])
+
+            # 11. Grand average (ERP & TF)
+            erp_p1 = copy(erp[1])
+            erp_p1.file = "p1"
+            erp_p2 = copy(erp[1])
+            erp_p2.file = "p2"
+            EegFun.grand_average([erp_p1, erp_p2])
+
+            # 12. Time-frequency decomposition & operations
+            tf_ep_sub = EegFun.subset(epochs[1]; channel_selection = EegFun.channels([:Fz, :Cz]))
+            tf1 = EegFun.tf_morlet(tf_ep_sub; frequencies = 8:4:16, cycles = 3)
+            EegFun.tf_stft(tf_ep_sub; frequencies = 8:4:16, time_steps = 0.05, window_length = 0.2)
+            EegFun.tf_multitaper(tf_ep_sub; frequencies = 8:4:16, time_steps = 0.05, cycles = 3)
+            EegFun.tf_baseline!(tf1, (-0.2, 0.0); method = :db)
+            EegFun.freq_spectrum(tf_ep_sub; max_freq = 50.0)
+            tf2 = copy(tf1)
+            tf2.file = "p2"
+            EegFun.grand_average([tf1, tf2])
+
+            # 13. Statistics (Analytic & Permutation)
+            erp1_c1 = copy(erp_p1)
+            erp1_c1.condition = 1
+            erp1_c2 = copy(erp_p1)
+            erp1_c2.condition = 2
+            erp2_c1 = copy(erp_p2)
+            erp2_c1.condition = 1
+            erp2_c2 = copy(erp_p2)
+            erp2_c2.condition = 2
+            prep_stats = EegFun.prepare_stats(
+                [erp1_c1, erp1_c2, erp2_c1, erp2_c2];
+                design = :paired,
+                channel_selection = EegFun.channels([:Fz, :Cz]),
+            )
+            EegFun.analytic_test(prep_stats)
+            EegFun.permutation_test(prep_stats; n_permutations = 2, cluster_type = :temporal)
+
+            # 14. Decoding & RSA
+            ep_c1 = EegFun.create_test_epoch_data(condition = 1, n_epochs = 4, n_channels = 3, n = 20, fs = 1000)
+            ep_c2 = EegFun.create_test_epoch_data(condition = 2, n_epochs = 4, n_channels = 3, n = 20, fs = 1000)
+            EegFun.decode_libsvm([ep_c1, ep_c2]; n_iterations = 2, n_folds = 2, show_progress = false)
+            EegFun.rsa([ep_c1, ep_c2])
         else
             @debug "Skipping precompilation workload (example data files not found)" data_file layout_file_path
         end

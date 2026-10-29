@@ -25,6 +25,8 @@ signal_example_ica_mixture()
 ```
 """
 function signal_example_ica_mixture()
+    _check_interactive_demo_backend("ICA Mixture demo") || return nothing
+
     n = 1000
     rng = Random.Xoshiro(42)  # local RNG: reproducible without touching the global RNG
 
@@ -104,6 +106,6 @@ function signal_example_ica_mixture()
 
     update!(sl_mix.value[])
 
-    display(fig)
+    _display_demo_figure(fig)
     return fig
 end

@@ -61,6 +61,7 @@ EegFun.signal_example_convolution()
 - `axes::Tuple`: `(ax_sig, ax_out)` — the two axis objects
 """
 function signal_example_convolution()
+    _check_interactive_demo_backend("Signal Convolution demo") || return nothing
 
     FS    = 512.0   # fixed sample rate (Hz)
     EPOCH = 2.0     # epoch length (s)
@@ -421,6 +422,6 @@ function signal_example_convolution()
     rowsize!(fig.layout, 3, Relative(0.18))   # controls
     rowsize!(fig.layout, 4, Relative(0.06))   # presets
 
-    display(fig)
+    _display_demo_figure(fig)
     return fig, (ax_sig, ax_out)
 end

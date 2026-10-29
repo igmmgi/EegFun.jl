@@ -43,7 +43,7 @@ Find and filter JLD2 files in a directory based on a pattern and participant IDs
 # Returns
 - `Vector{String}`: List of matching filenames.
 """
-function _find_batch_files(pattern::String, dir::String, participant_selection = participants())
+function _find_batch_files(pattern::String, dir::String, @nospecialize(participant_selection = participants()))
     part_func = _to_participant_func(participant_selection)
 
     # Filter by pattern and extension
@@ -192,7 +192,7 @@ read_all_data("./derivatives/erps/erps_final")             # all matching files
   whose `basename` is matched (via `contains`) against `.jld2` filenames.
 - `participant_selection`: Predicate function (default: `participants()` — all).
 """
-function read_all_data(path_pattern::String, participant_selection::Function = participants())
+function read_all_data(path_pattern::String, @nospecialize(participant_selection = participants()))
     input_dir = let d = dirname(path_pattern)
         isempty(d) ? pwd() : d
     end
@@ -208,7 +208,7 @@ function read_all_data(path_pattern::String, participant_selection::Function = p
     return data
 end
 
-function read_all_data(::Type{T}, path_pattern::String, participant_selection::Function = participants()) where {T}
+function read_all_data(::Type{T}, path_pattern::String, @nospecialize(participant_selection = participants())) where {T}
     input_dir = let d = dirname(path_pattern)
         isempty(d) ? pwd() : d
     end
@@ -400,7 +400,7 @@ function batch_process(
     file_pattern::String,
     input_dir::String,
     output_dir::String,
-    participant_selection,
+    @nospecialize(participant_selection),
     operation_name::String;
     filename_modifier::Function = identity,
     parallel::Bool = false,

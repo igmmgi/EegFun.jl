@@ -82,6 +82,7 @@ EegFun.signal_example_dotproduct()
 - `axes::Tuple`: `(ax_sig, ax_prod_sin, ax_prod_cos)` — the three axis objects
 """
 function signal_example_dotproduct()
+    _check_interactive_demo_backend("Signal Dot Product demo") || return nothing
 
     FS    = 1000.0  # sample rate (Hz) — high enough for smooth rendering up to 40 Hz
     EPOCH = 2.0     # epoch length (s)
@@ -403,6 +404,6 @@ function signal_example_dotproduct()
     # Hide cosine row initially
     ax_prod_cos.blockscene.visible[] = false
 
-    display(fig)
+    _display_demo_figure(fig)
     return fig, (ax_sig, ax_prod_sin, ax_prod_cos)
 end

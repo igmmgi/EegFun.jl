@@ -40,6 +40,7 @@ EegFun.signal_example_composition()
 - `axes::Vector{Axis}`: The six axis objects (rows 1–6)
 """
 function signal_example_composition()
+    _check_interactive_demo_backend("Signal Composition demo") || return nothing
 
     fig = _eegfun_figure(size = (1200, 1000), title = "Signal Example 2", backgroundcolor = :white)
 
@@ -478,6 +479,6 @@ function signal_example_composition()
         set_close_to!(phase_sliders[3], rand() * 2π - π)
     end
 
-    display(fig)
+    _display_demo_figure(fig)
     return fig, axes
 end

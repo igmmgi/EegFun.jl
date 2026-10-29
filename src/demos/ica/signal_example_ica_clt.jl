@@ -22,6 +22,8 @@ EegFun.signal_example_ica_clt()
 ```
 """
 function signal_example_ica_clt()
+    _check_interactive_demo_backend("ICA Central Limit Theorem demo") || return nothing
+
     N_samples = 100_000
     Plot_samples = 150 # Drastically reduced to prevent visual spaghetti of white noise
     Max_Sources = 50
@@ -148,6 +150,6 @@ function signal_example_ica_clt()
     rowsize!(fig.layout, 3, Relative(0.65))
 
     update!() # bootstrap
-    display(fig)
+    _display_demo_figure(fig)
     return fig
 end

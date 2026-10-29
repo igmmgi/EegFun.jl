@@ -171,6 +171,8 @@ EegFun.simulate_erp()
 - `ax::Axis`: The main plot axis
 """
 function simulate_erp()
+    _check_interactive_demo_backend("ERP Simulator demo") || return nothing
+
     # Create the figure with more space for component controls
     fig = _eegfun_figure(size = (1400, 1000))
 
@@ -431,7 +433,7 @@ function simulate_erp()
     # Initialize with empty plot
     update_plot(zeros(0, n_samples), zeros(n_samples))
 
-    display(fig)
+    _display_demo_figure(fig)
     return fig, ax
 
 end

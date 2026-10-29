@@ -82,23 +82,7 @@ signal_example_emg()
 - `ax_integ::Axis`: The cumulative integrated EMG (iEMG) axis.
 """
 function signal_example_emg()
-    # Explicitly activate GLMakie before constructing the Figure, in case another backend (e.g. CairoMakie) is active
-    if isdefined(Main, :GLMakie)
-        try
-            Main.GLMakie.activate!(inline = false)
-        catch
-        end
-    end
-
-    if string(Makie.current_backend()) == "CairoMakie" || (!_is_glmakie_available() && !isdefined(Main, :GLMakie))
-        @minimal_warning """
-        Interactive demo requires GLMakie for live sliders, buttons, and animations.
-        Currently active backend: $(Makie.current_backend())
-        Please activate GLMakie in your session:
-            using GLMakie
-            GLMakie.activate!(inline = false)
-        """
-    end
+    _check_interactive_demo_backend("Interactive Surface EMG demo") || return nothing
 
     _set_window_title("Interactive Surface EMG Simulator — Raw → Rectify → Filter → Integrate")
 
@@ -776,7 +760,7 @@ function signal_example_emg()
     rowsize!(pipe_layout, 3, Relative(0.25))
     rowsize!(pipe_layout, 4, Relative(0.25))
 
-    display(fig)
+    _display_demo_figure(fig)
 
     return fig, ax_anatomy, ax_raw, ax_rect, ax_filt, ax_integ
 end

@@ -38,6 +38,8 @@ using EegFun
 - `fig::Figure`: The Makie figure object
 """
 function signal_example_ica_optimization()
+    _check_interactive_demo_backend("ICA Optimization demo") || return nothing
+
     # ── Constants ─────────────────────────────────────────────────────────────
     N = 4000
     rng = Random.Xoshiro(42) # For stable shapes across resets (local RNG; global RNG untouched)
@@ -285,6 +287,6 @@ function signal_example_ica_optimization()
     rowsize!(fig.layout, 4, Relative(0.10))
 
     update_state()
-    display(fig)
+    _display_demo_figure(fig)
     return fig
 end

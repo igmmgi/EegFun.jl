@@ -63,23 +63,7 @@ signal_example_ecg_einthoven()
 - `ax_ecg::Axis`: High-resolution calibrated ECG strip axis.
 """
 function signal_example_ecg_einthoven()
-    # Explicitly activate GLMakie before constructing the Figure, in case another backend (e.g. CairoMakie) is active
-    if isdefined(Main, :GLMakie)
-        try
-            Main.GLMakie.activate!(inline = false)
-        catch
-        end
-    end
-
-    if string(Makie.current_backend()) == "CairoMakie" || (!_is_glmakie_available() && !isdefined(Main, :GLMakie))
-        @minimal_warning """
-        Interactive demo requires GLMakie for live sliders, buttons, and animations.
-        Currently active backend: $(Makie.current_backend())
-        Please activate GLMakie in your session:
-            using GLMakie
-            GLMakie.activate!(inline = false)
-        """
-    end
+    _check_interactive_demo_backend("Interactive ECG Einthoven demo") || return nothing
 
     _set_window_title("Interactive ECG Simulator — Einthoven's Triangle & Vectorcardiogram")
 
@@ -792,7 +776,7 @@ function signal_example_ecg_einthoven()
     colsize!(fig.layout, 1, Relative(0.53))
     colsize!(fig.layout, 2, Relative(0.47))
 
-    display(fig)
+    _display_demo_figure(fig)
 
     return fig, ax_torso, ax_ecg
 end
