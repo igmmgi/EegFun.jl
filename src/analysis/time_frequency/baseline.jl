@@ -73,83 +73,10 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}
 
     if is_regular_grid
         base_range = baseline_start_idx:baseline_end_idx
-        n_base = length(base_range)
-        inv_n_base = 1.0 / n_base
-
         Threads.@threads for ch in ch_labels
             col = tf_data.data_power[!, ch]
             if col isa Vector{Float64}
-                mat = reshape(col::Vector{Float64}, n_freqs, n_times)
-                for fi = 1:n_freqs
-                    base_vals = @view mat[fi, base_range]
-                    bm = if any(isnan, base_vals)
-                        valid = filter(!isnan, base_vals)
-                        isempty(valid) ? NaN : mean(valid)
-                    else
-                        s = 0.0
-                        @inbounds @simd for ti in base_range
-                            s += mat[fi, ti]
-                        end
-                        s * inv_n_base
-                    end
-
-                    if isnan(bm)
-                        @inbounds for ti = 1:n_times
-                            mat[fi, ti] = NaN
-                        end
-                        continue
-                    end
-
-                    safe_bm = max(bm, 1e-30)
-
-                    if method == :absolute
-                        @inbounds @simd for ti = 1:n_times
-                            mat[fi, ti] -= bm
-                        end
-                    elseif method == :relative
-                        inv_bm = 1.0 / safe_bm
-                        @inbounds @simd for ti = 1:n_times
-                            mat[fi, ti] *= inv_bm
-                        end
-                    elseif method == :relchange
-                        inv_bm = 1.0 / safe_bm
-                        @inbounds @simd for ti = 1:n_times
-                            mat[fi, ti] = (mat[fi, ti] - bm) * inv_bm
-                        end
-                    elseif method == :normchange || method == :vssum
-                        @inbounds for ti = 1:n_times
-                            p = mat[fi, ti]
-                            mat[fi, ti] = (p - bm) / (p + bm)
-                        end
-                    elseif method == :db
-                        inv_bm = 1.0 / safe_bm
-                        @inbounds for ti = 1:n_times
-                            mat[fi, ti] = 10.0 * log10(max(mat[fi, ti], 1e-30) * inv_bm)
-                        end
-                    elseif method == :zscore
-                        bstd = if any(isnan, base_vals)
-                            valid = filter(!isnan, base_vals)
-                            (isempty(valid) || length(valid) < 2) ? NaN : std(valid, corrected = false)
-                        else
-                            std(base_vals, corrected = false)
-                        end
-                        if isnan(bstd)
-                            @inbounds for ti = 1:n_times
-                                mat[fi, ti] = NaN
-                            end
-                        else
-                            inv_std = 1.0 / max(bstd, 1e-30)
-                            @inbounds @simd for ti = 1:n_times
-                                mat[fi, ti] = (mat[fi, ti] - bm) * inv_std
-                            end
-                        end
-                    elseif method == :percent
-                        inv_bm = 100.0 / safe_bm
-                        @inbounds @simd for ti = 1:n_times
-                            mat[fi, ti] = (mat[fi, ti] - bm) * inv_bm
-                        end
-                    end
-                end
+                _tf_baseline_grid!(reshape(col, n_freqs, n_times), base_range, method)
             end
         end
     else
@@ -237,6 +164,88 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}
     tf_data.baseline = BaselineInfo(method = method, window = (Float64(baseline_interval[1]), Float64(baseline_interval[2])))
 
     return tf_data
+end
+
+"""
+    _tf_baseline_grid!(mat::AbstractMatrix{Float64}, base_range, method::Symbol)
+
+Baseline-correct one channel stored as a regular `[freq × time]` grid, in place.
+Kept as a separate function so that each thread gets its own local variables.
+"""
+function _tf_baseline_grid!(mat::AbstractMatrix{Float64}, base_range::UnitRange{Int}, method::Symbol)
+    n_freqs, n_times = size(mat)
+    inv_n_base = 1.0 / length(base_range)
+    for fi = 1:n_freqs
+        base_vals = @view mat[fi, base_range]
+        bm = if any(isnan, base_vals)
+            valid = filter(!isnan, base_vals)
+            isempty(valid) ? NaN : mean(valid)
+        else
+            s = 0.0
+            @inbounds @simd for ti in base_range
+                s += mat[fi, ti]
+            end
+            s * inv_n_base
+        end
+
+        if isnan(bm)
+            @inbounds for ti = 1:n_times
+                mat[fi, ti] = NaN
+            end
+            continue
+        end
+
+        safe_bm = max(bm, 1e-30)
+
+        if method == :absolute
+            @inbounds @simd for ti = 1:n_times
+                mat[fi, ti] -= bm
+            end
+        elseif method == :relative
+            inv_bm = 1.0 / safe_bm
+            @inbounds @simd for ti = 1:n_times
+                mat[fi, ti] *= inv_bm
+            end
+        elseif method == :relchange
+            inv_bm = 1.0 / safe_bm
+            @inbounds @simd for ti = 1:n_times
+                mat[fi, ti] = (mat[fi, ti] - bm) * inv_bm
+            end
+        elseif method == :normchange || method == :vssum
+            @inbounds for ti = 1:n_times
+                p = mat[fi, ti]
+                mat[fi, ti] = (p - bm) / (p + bm)
+            end
+        elseif method == :db
+            inv_bm = 1.0 / safe_bm
+            @inbounds for ti = 1:n_times
+                mat[fi, ti] = 10.0 * log10(max(mat[fi, ti], 1e-30) * inv_bm)
+            end
+        elseif method == :zscore
+            bstd = if any(isnan, base_vals)
+                valid = filter(!isnan, base_vals)
+                (isempty(valid) || length(valid) < 2) ? NaN : std(valid, corrected = false)
+            else
+                std(base_vals, corrected = false)
+            end
+            if isnan(bstd)
+                @inbounds for ti = 1:n_times
+                    mat[fi, ti] = NaN
+                end
+            else
+                inv_std = 1.0 / max(bstd, 1e-30)
+                @inbounds @simd for ti = 1:n_times
+                    mat[fi, ti] = (mat[fi, ti] - bm) * inv_std
+                end
+            end
+        elseif method == :percent
+            inv_bm = 100.0 / safe_bm
+            @inbounds @simd for ti = 1:n_times
+                mat[fi, ti] = (mat[fi, ti] - bm) * inv_bm
+            end
+        end
+    end
+    return mat
 end
 
 # Non-mutating version

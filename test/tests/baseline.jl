@@ -349,3 +349,33 @@ using EegFun
     res_times_interval = EegFun.baseline(erp_vec_interval[1], EegFun.times(-0.5, -0.49); channel_selection = :Ch1)
     @test isapprox(mean(res_times_interval.data.Ch1[1:11]), 0.0; atol = 1e-9)
 end
+
+@testset "tf_baseline matches reference (thread safety)" begin
+    # Many channels so that multiple threads process channels concurrently
+    tf = EegFun.create_test_tf_data(n_channels = 32, power_offset = 3.0, noise = 0.5)
+    freqs = unique(tf.data_power.freq)
+    base_t = (0.0, 0.1)
+    in_base = base_t[1] .<= tf.data_power.time .<= base_t[2]
+    for method in (:absolute, :relchange, :db, :zscore)
+        res = EegFun.tf_baseline(tf, base_t; method = method)
+        for ch in EegFun.channel_labels(tf)
+            col = tf.data_power[!, ch]
+            expected = similar(col)
+            for f in freqs
+                rows = tf.data_power.freq .== f
+                bvals = col[rows .& in_base]
+                bm = mean(bvals)
+                expected[rows] .= if method == :absolute
+                    col[rows] .- bm
+                elseif method == :relchange
+                    (col[rows] .- bm) ./ bm
+                elseif method == :db
+                    10 .* log10.(col[rows] ./ bm)
+                else
+                    (col[rows] .- bm) ./ std(bvals, corrected = false)
+                end
+            end
+            @test res.data_power[!, ch] ≈ expected
+        end
+    end
+end
