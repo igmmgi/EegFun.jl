@@ -41,7 +41,8 @@ end
 Calculate and add channel difference to EEG data in-place using predicates.
 
 # Arguments
-- `dat::EegData`: EEG data object to modify (ContinuousData, ErpData, or EpochData)
+- `dat::EegData`: EEG data object to modify (ContinuousData, ErpData, EpochData, or time-frequency data,
+  where both power and phase are differenced)
 - `channel_selection1::Function`: Channel selection predicate for first set (default: channels() - all channels)
 - `channel_selection2::Function`: Channel selection predicate for second set (default: channels() - all channels)
 - `channel_out::Symbol`: Column name for the difference (default: :diff)
@@ -98,8 +99,11 @@ function channel_difference!(
         @minimal_warning "Output channel '$(out_sym)' is also in the input channel sets. This may cause unexpected behavior."
     end
 
-    # Calculate channel difference (dispatch handles DataFrame vs Vector{DataFrame})
-    _calculate_channel_difference!(dat.data, channels_in1_selected, channels_in2_selected, out_sym)
+    # Calculate channel difference in every container (e.g. TF power and phase);
+    # dispatch handles DataFrame vs Vector{DataFrame}
+    for container in _data_frames(dat)
+        _calculate_channel_difference!(container, channels_in1_selected, channels_in2_selected, out_sym)
+    end
 
     return dat
 end

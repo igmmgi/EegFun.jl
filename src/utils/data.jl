@@ -7,6 +7,7 @@
 # Organization (implementation lives in utils/data/):
 # - columns.jl:        Column identification (metadata, channel, extra columns)
 # - access.jl:         Data access, convenience functions, data viewing
+# - frames.jl:         Uniform access to channel-data containers (EEG `data` / TF power+phase)
 # - math.jl:           Mathematical utilities (_datarange, _colmeans, data_limits, y-ranges)
 # - subset.jl:         Subsetting EEG data objects, selection helpers, epoch_to_continuous
 # - subset_files.jl:   File-based (batch) subsetting
@@ -16,6 +17,7 @@
 
 include("data/columns.jl")
 include("data/access.jl")
+include("data/frames.jl")
 include("data/math.jl")
 include("data/subset.jl")
 include("data/subset_files.jl")

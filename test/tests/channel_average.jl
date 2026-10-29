@@ -929,6 +929,29 @@ end
         @test propertynames(tf.data_power) == propertynames(tf.data_phase)
     end
 
+    @testset "TimeFreqEpochData: power and phase both averaged" begin
+        tfe = EegFun.create_test_tf_epoch_data(n_channels = 3, n_epochs = 2, power_offset = 2.0, noise = 0.0)
+
+        EegFun.channel_average!(tfe, channel_selections = [EegFun.channels([:Ch1, :Ch2])], output_labels = [:grp])
+
+        for i = 1:2
+            @test hasproperty(tfe.data_power[i], :grp)
+            @test hasproperty(tfe.data_phase[i], :grp)
+            @test all(tfe.data_power[i][!, :grp] .≈ 2.0)
+        end
+    end
+
+    @testset "TimeFreqEpochData: reduce mode" begin
+        tfe = EegFun.create_test_tf_epoch_data(n_channels = 3, n_epochs = 2)
+
+        EegFun.channel_average!(tfe, channel_selections = [EegFun.channels([:Ch1, :Ch2])], output_labels = [:grp], reduce = true)
+
+        for dfs in (tfe.data_power, tfe.data_phase), df in dfs
+            @test propertynames(df) == [:time, :freq, :grp]
+        end
+        @test EegFun.channel_labels(tfe) == [:grp]
+    end
+
     @testset "Ergonomic channel_selection and Vector channel_average!" begin
         # Singular keyword channel_selection
         dat = EegFun.create_test_continuous_data(n = 100)

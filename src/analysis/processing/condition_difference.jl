@@ -1,5 +1,5 @@
 """
-Batch computation of condition difference waves for ERP data.
+Condition difference waves for ERP and time-frequency data (in-memory and batch).
 """
 
 # === DIFFERENCE-SPECIFIC HELPERS ===
@@ -17,50 +17,28 @@ end
 # === DIFFERENCE-SPECIFIC PROCESSING ===
 
 """
-Create a difference wave by subtracting ERP2 from ERP1.
+Create a difference wave by subtracting `dat2` from `dat1` (ERP data, or TF power and phase).
 """
-function _create_difference_wave(erp1::ErpData, erp2::ErpData, cond1::Int, cond2::Int, diff_cond::Int)
-    # Validate that both ERPs have the same structure
-    _have_same_structure(erp1, erp2) || @minimal_error("ERPs have inconsistent structure")
+function _create_difference_wave(dat1::T, dat2::T, cond1::Int, cond2::Int, diff_cond::Int) where {T<:ConditionAverageData}
+    # Validate that both datasets have the same structure
+    _have_same_structure(dat1, dat2) || @minimal_error("Data have inconsistent structure")
 
-    # Get EEG channels (exclude metadata columns)
-    metadata_cols = meta_labels(erp1)
-    eeg_channels = setdiff(propertynames(erp1.data), metadata_cols)
-
-    # Create a copy of erp1's data for the difference
-    diff_data = copy(erp1.data)
-
-    # Remove condition/condition_name/n_epochs columns if they exist (they're in struct now)
-    cols_to_remove = [:condition, :condition_name, :n_epochs]
-    for col in cols_to_remove
-        if hasproperty(diff_data, col)
-            select!(diff_data, Not(col))
-        end
-    end
-
-    # Subtract EEG channels
-    for ch in eeg_channels
-        if hasproperty(erp2.data, ch)
-            diff_data[!, ch] .-= erp2.data[!, ch]
+    # Copy dat1's channel data (all containers, e.g. TF power and phase) and subtract dat2 in place
+    diff_frames = map(copy, _data_frames(dat1))
+    frames2 = _data_frames(dat2)
+    for ch in _condition_channels(dat1)
+        if hasproperty(dat2.data, ch)
+            for (df, df2) in zip(diff_frames, frames2)
+                df[!, ch] .-= df2[!, ch]
+            end
         else
             @minimal_warning "Channel $ch not found in condition $cond2, keeping original values"
         end
     end
 
-    # Update n_epochs to reflect the minimum (conservative estimate)
-    min_epochs = min(erp1.n_epochs, erp2.n_epochs)
-    diff_condition_name = "difference_$(cond1)_$(cond2)"
-
-    return ErpData(
-        erp1.file,
-        diff_cond,
-        diff_condition_name,
-        diff_data,
-        copy(erp1.layout),
-        erp1.sample_rate,
-        copy(erp1.analysis_info),
-        min_epochs,
-    )
+    # ERP: n_epochs reflects the minimum (conservative estimate)
+    n_epochs = dat1 isa ErpData ? min(dat1.n_epochs, dat2.n_epochs) : 0
+    return _derive_condition(dat1, diff_cond, "difference_$(cond1)_$(cond2)", diff_frames; n_epochs = n_epochs)
 end
 
 """
@@ -114,7 +92,7 @@ diff_waves = condition_difference(erps, [(1, 2)])
 condition_difference("erps_unrejected", [(1, 2)])
 ```
 """
-function condition_difference(data::AbstractVector{<:ErpData}, condition_pairs)
+function condition_difference(data::AbstractVector{T}, condition_pairs) where {T<:ConditionAverageData}
     pairs =
         if condition_pairs isa Tuple ||
            (condition_pairs isa AbstractVector && !isempty(condition_pairs) && first(condition_pairs) isa Integer)
@@ -123,35 +101,36 @@ function condition_difference(data::AbstractVector{<:ErpData}, condition_pairs)
             condition_pairs
         end
 
-    @info "Creating condition difference waves..."
+    tag = _kind_tag(T)
+    @info "Creating $(tag)condition difference waves..."
 
-    difference_waves = ErpData[]
+    difference_waves = T[]
 
     for (pair_idx, pair) in enumerate(pairs)
         cond1, cond2 = pair[1], pair[2]
 
-        # Find ERP data for each condition
-        erp1 = nothing
-        erp2 = nothing
-        for erp in data
-            cond_num = erp.condition
+        # Find data for each condition (last match wins)
+        dat1 = nothing
+        dat2 = nothing
+        for d in data
+            cond_num = d.condition
             if cond_num == cond1
-                erp1 = erp
+                dat1 = d
             elseif cond_num == cond2
-                erp2 = erp
+                dat2 = d
             end
         end
 
-        if isnothing(erp1)
+        if isnothing(dat1)
             @minimal_warning "Condition $cond1 not found. Skipping pair ($cond1, $cond2)."
             continue
         end
-        if isnothing(erp2)
+        if isnothing(dat2)
             @minimal_warning "Condition $cond2 not found. Skipping pair ($cond1, $cond2)."
             continue
         end
 
-        diff_wave = _create_difference_wave(erp1, erp2, cond1, cond2, pair_idx)
+        diff_wave = _create_difference_wave(dat1, dat2, cond1, cond2, pair_idx)
         push!(difference_waves, diff_wave)
     end
 
@@ -159,7 +138,7 @@ function condition_difference(data::AbstractVector{<:ErpData}, condition_pairs)
         @minimal_error("No valid condition pairs found")
     end
 
-    @info "Created $(length(difference_waves)) difference wave(s)"
+    @info "Created $(length(difference_waves)) $(tag)difference wave(s)"
     return difference_waves
 end
 

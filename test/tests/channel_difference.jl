@@ -407,4 +407,22 @@ end
         @test hasproperty(tf.data_power, :tf_diff_str)
         @test hasproperty(tf.data_phase, :tf_diff_str)
     end
+
+    @testset "TF: TimeFreqEpochData differences power and phase" begin
+        tfe = EegFun.create_test_tf_epoch_data(n_channels = 3, n_epochs = 2)
+        EegFun.channel_difference!(tfe; channel_selection1 = :Ch1, channel_selection2 = :Ch2, channel_out = :d)
+        for i = 1:2
+            @test tfe.data_power[i].d ≈ tfe.data_power[i].Ch1 .- tfe.data_power[i].Ch2
+            @test hasproperty(tfe.data_phase[i], :d)
+        end
+    end
+
+    @testset "TF: empty channel selection errors" begin
+        tf = EegFun.create_test_tf_data()
+        @test_throws Exception EegFun.channel_difference!(
+            tf;
+            channel_selection1 = EegFun.channels([:Nope]),
+            channel_selection2 = EegFun.channels([:Ch1]),
+        )
+    end
 end

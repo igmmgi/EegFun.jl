@@ -6,6 +6,8 @@
 
 Create averaged channels for each provided channel-selection predicate and add them to `dat`.
 
+Works for all EEG data types, including time-frequency data (where both power and phase are averaged).
+
 - `channel_selections` is a vector of channel predicates (see `channels(...)`) that defaults to `[channels()]` (all channels).
 - For every predicate, the selected channels are averaged to produce a new column.
 - Output labels default to the underscore-joined contributing channel labels (e.g., :Fp1_Fp2).
@@ -111,31 +113,23 @@ function channel_average!(
         labels = Symbol.(output_labels)
     end
 
-    """Add a column of channel means to a single DataFrame."""
-    function _add_avg!(df::DataFrame, cols::AbstractVector{Symbol}, outlbl::Symbol)
-        df[!, outlbl] = _colmeans(df, cols)
-        return nothing
-    end
-
-    """Broadcast `_add_avg!` across a vector of DataFrames."""
-    function _add_avg!(dfs::AbstractVector{DataFrame}, cols::AbstractVector{Symbol}, outlbl::Symbol)
-        _add_avg!.(dfs, Ref(cols), Ref(outlbl))
-        return nothing
-    end
-
-    # Apply for each channel selection (append columns)
+    # Apply for each channel selection (append columns to every container, e.g. TF power and phase)
+    frames = _data_frames(dat)
     for (grp, lbl) in zip(selected_channel_groups, labels)
         if lbl ∈ all_labels(dat)
             @minimal_warning "Overwriting existing channel '$(lbl)'"
         end
         @info "channel_average!: $(_print_vector(grp)) → :$(lbl)"
-        _add_avg!(dat.data, grp, lbl)
+        for container in frames
+            _foreach_df(df -> df[!, lbl] = _colmeans(df, grp), container)
+        end
     end
 
     # Handle data and layout based on reduce parameter
     if reduce
         # Replace data with metadata + averaged columns only
-        dat.data = _build_reduced_df(dat, selected_channel_groups, labels)
+        meta_cols = meta_labels(dat)
+        _set_data_frames!(dat, map(container -> _map_df(df -> _reduced_df(df, meta_cols, labels), container), frames))
         # Create new layout with only averaged channels
         dat.layout = _layout_from_groups(dat.layout, selected_channel_groups, labels)
     else
@@ -305,28 +299,13 @@ function channel_average(
 end
 
 
-"""Create a reduced DataFrame containing only metadata and averaged channel columns."""
-function _build_reduced_df(dat::SingleDataFrameEeg, channel_groups::Vector{Vector{Symbol}}, labels::Vector{Symbol})
-    meta_cols = meta_labels(dat)
-    new_df = isempty(meta_cols) ? DataFrame() : dat.data[!, meta_cols]
-    for (grp, lbl) in zip(channel_groups, labels)
-        new_df[!, lbl] = _colmeans(dat.data, grp)
+"""Create a reduced DataFrame containing only metadata and the (already computed) averaged columns."""
+function _reduced_df(df::DataFrame, meta_cols::AbstractVector{Symbol}, labels::AbstractVector{Symbol})
+    new_df = isempty(meta_cols) ? DataFrame() : df[!, meta_cols]
+    for lbl in labels
+        new_df[!, lbl] = df[!, lbl]
     end
     return new_df
-end
-
-"""Create reduced DataFrames (one per epoch) containing only metadata and averaged channel columns."""
-function _build_reduced_df(dat::MultiDataFrameEeg, channel_groups::Vector{Vector{Symbol}}, labels::Vector{Symbol})
-    meta_cols = meta_labels(dat)
-    new_epochs = Vector{DataFrame}(undef, n_epochs(dat))
-    for (i, df) in pairs(dat.data)
-        new_df = isempty(meta_cols) ? DataFrame() : df[!, meta_cols]
-        for (grp, lbl) in zip(channel_groups, labels)
-            new_df[!, lbl] = _colmeans(df, grp)
-        end
-        new_epochs[i] = new_df
-    end
-    return new_epochs
 end
 
 

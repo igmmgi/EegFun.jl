@@ -1,5 +1,5 @@
 """
-Batch computation of condition averages for ERP data.
+Condition averages for ERP and time-frequency data (in-memory and batch).
 """
 
 # === AVERAGE-SPECIFIC VALIDATION ===
@@ -13,56 +13,35 @@ end
 # === AVERAGE-SPECIFIC PROCESSING ===
 
 """
-Create an average wave by averaging ERP data across conditions.
+Create an average wave by averaging data across conditions (ERP data, or TF power and phase).
 """
-function _create_average_wave(erps::AbstractVector{<:ErpData}, conditions::AbstractVector{<:Integer}, avg_cond::Int)
-    # Validate that all ERPs have the same structure
-    for i = 2:length(erps)
-        _have_same_structure(erps[1], erps[i]) || @minimal_error("ERPs have inconsistent structure")
+function _create_average_wave(dats::AbstractVector{T}, conditions::AbstractVector{<:Integer}, avg_cond::Int) where {T<:ConditionAverageData}
+    # Validate that all datasets have the same structure
+    for i = 2:length(dats)
+        _have_same_structure(dats[1], dats[i]) || @minimal_error("Data have inconsistent structure")
     end
 
-    # Get EEG channels (exclude metadata columns)
-    metadata_cols = meta_labels(erps[1])
-    eeg_channels = setdiff(propertynames(erps[1].data), metadata_cols)
-
-    # Create a copy of first ERP's data for the average
-    avg_data = copy(erps[1].data)
-
-    # Remove condition/condition_name/n_epochs columns if they exist (they're in struct now)
-    cols_to_remove = filter(col -> hasproperty(avg_data, col), [:condition, :condition_name, :n_epochs])
-    if !isempty(cols_to_remove)
-        select!(avg_data, Not(cols_to_remove))
-    end
-
-    # Average EEG channels across conditions
-    n = length(erps)
-    for ch in eeg_channels
-        all_have_ch = all(hasproperty(erp.data, ch) for erp in erps)
-        if all_have_ch
-            col = avg_data[!, ch]
-            for i = 2:n
-                col .+= erps[i].data[!, ch]
+    # Copy the first dataset's channel data (all containers) and accumulate the others in place
+    avg_frames = map(copy, _data_frames(dats[1]))
+    n = length(dats)
+    inv_n = 1.0 / n
+    for ch in _condition_channels(dats[1])
+        if all(d -> hasproperty(d.data, ch), dats)
+            for (k, avg_df) in enumerate(avg_frames)
+                col = avg_df[!, ch]
+                for i = 2:n
+                    col .+= _data_frames(dats[i])[k][!, ch]
+                end
+                col .*= inv_n
             end
-            col ./= n
         else
             @minimal_warning "Channel $ch not found in all conditions, keeping values from first condition"
         end
     end
 
-    # Sum n_epochs across all conditions (total epochs contributing to the average)
-    total_epochs = sum(erp.n_epochs for erp in erps)
-    avg_condition_name = "average_$(join(conditions, "_"))"
-
-    return ErpData(
-        erps[1].file,
-        avg_cond,
-        avg_condition_name,
-        avg_data,
-        copy(erps[1].layout),
-        erps[1].sample_rate,
-        copy(erps[1].analysis_info),
-        total_epochs,
-    )
+    # ERP: total number of epochs contributing to the average
+    n_epochs = dats[1] isa ErpData ? sum(d.n_epochs for d in dats) : 0
+    return _derive_condition(dats[1], avg_cond, "average_$(join(conditions, "_"))", avg_frames; n_epochs = n_epochs)
 end
 
 """
@@ -116,7 +95,7 @@ avg_waves = condition_average(erps, [[1, 2], [3, 4]])
 condition_average("erps_unrejected", [[1, 2], [3, 4]])
 ```
 """
-function condition_average(data::AbstractVector{<:ErpData}, condition_groups)
+function condition_average(data::AbstractVector{T}, condition_groups) where {T<:ConditionAverageData}
     groups = if isempty(condition_groups)
         condition_groups
     elseif first(condition_groups) isa Integer
@@ -125,37 +104,29 @@ function condition_average(data::AbstractVector{<:ErpData}, condition_groups)
         condition_groups
     end
 
-    @info "Creating condition average waves..."
+    tag = _kind_tag(T)
+    @info "Creating $(tag)condition average waves..."
 
-    average_waves = ErpData[]
+    average_waves = T[]
 
     for (group_idx, conditions) in enumerate(groups)
-        # Find ERP data for each condition in the group
-        group_erps = ErpData[]
+        # Find data for each condition in the group (first match wins)
+        group_data = T[]
         all_found = true
 
         for cond in conditions
-            erp_found = nothing
-            for erp in data
-                if erp.condition == cond
-                    erp_found = erp
-                    break
-                end
-            end
-
-            if isnothing(erp_found)
+            found_idx = findfirst(d -> d.condition == cond, data)
+            if isnothing(found_idx)
                 @minimal_warning "Condition $cond not found. Skipping group $conditions."
                 all_found = false
                 break
             end
-            push!(group_erps, erp_found)
+            push!(group_data, data[found_idx])
         end
 
-        if !all_found
-            continue
-        end
+        all_found || continue
 
-        avg_wave = _create_average_wave(group_erps, conditions, group_idx)
+        avg_wave = _create_average_wave(group_data, conditions, group_idx)
         push!(average_waves, avg_wave)
     end
 
@@ -163,7 +134,7 @@ function condition_average(data::AbstractVector{<:ErpData}, condition_groups)
         @minimal_error("No valid condition groups found")
     end
 
-    @info "Created $(length(average_waves)) average wave(s)"
+    @info "Created $(length(average_waves)) $(tag)average wave(s)"
     return average_waves
 end
 
