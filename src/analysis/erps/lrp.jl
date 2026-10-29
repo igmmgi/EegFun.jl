@@ -354,14 +354,6 @@ function _calculate_lrp(erp_left::ErpData, erp_right::ErpData, pairs::Vector{Tup
         lrp_df[!, label] = lrp_matrix[:, idx]
     end
 
-    # Remove condition/condition_name columns if they exist (they're in struct now)
-    cols_to_remove = [:condition, :condition_name, :n_epochs]
-    for col in cols_to_remove
-        if hasproperty(lrp_df, col)
-            select!(lrp_df, Not(col))
-        end
-    end
-
     # Create layout with only the LRP channels
     lrp_layout = _create_lrp_layout(erp_left.layout, lrp_labels)
 

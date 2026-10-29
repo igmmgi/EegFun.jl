@@ -70,13 +70,7 @@ function create_test_epoch_data(; n = 2000, fs = 1000, condition = 1, n_epochs =
 
         dfs = DataFrame[]
         for epoch = 1:n_epochs
-            df = DataFrame(
-                time = t,
-                sample = 1:n,
-                epoch = fill(epoch, n),
-                condition = fill(condition, n),
-                condition_name = fill("condition_$(condition)", n),
-            )
+            df = DataFrame(time = t, sample = 1:n, epoch = fill(epoch, n))
 
             for ch in channel_labels
                 df[!, ch] = _synthetic_signal(t, freq = 10.0, amp = condition * 0.5, noise = 0.1)
@@ -114,13 +108,7 @@ Create synthetic `ErpData` for testing.
 function create_test_erp_data(; participant = 1, condition = 1, fs = 1000, n_channels = 3, seed::Union{Int,Nothing} = nothing)
     return _with_seed(seed) do
         time = collect(-0.5:(1/fs):2.0)
-        df = DataFrame(
-            time = time,
-            sample = 1:length(time),
-            condition = fill(condition, length(time)),
-            condition_name = fill("condition_$condition", length(time)),
-            participant = fill(participant, length(time)),
-        )
+        df = DataFrame(time = time, sample = 1:length(time), participant = fill(participant, length(time)))
 
         channel_labels = _generate_channel_labels(n_channels)
         for ch in channel_labels
@@ -170,8 +158,6 @@ function create_test_epoch_data_with_rt(;
             df = DataFrame(
                 time = time,
                 sample = 1:n_timepoints,
-                condition = fill(condition, n_timepoints),
-                condition_name = fill("condition_$condition", n_timepoints),
                 participant = fill(participant, n_timepoints),
                 epoch = fill(epoch, n_timepoints),
                 rt = fill(rand() * (rt_range[2] - rt_range[1]) + rt_range[1], n_timepoints),
@@ -272,8 +258,6 @@ function create_test_lrp_data(;
         df = DataFrame(
             time = time,
             sample = 1:n_timepoints,
-            condition = fill(condition, n_timepoints),
-            condition_name = fill("condition_$condition", n_timepoints),
             participant = fill(participant, n_timepoints),
             file = fill("test_file", n_timepoints),
         )
@@ -408,8 +392,6 @@ function create_test_epoch_data_with_artifacts(;
                 sample = 1:n_timepoints,
                 epoch = fill(epoch, n_timepoints),
                 participant = fill(participant, n_timepoints),
-                condition = fill(condition, n_timepoints),
-                condition_name = fill("condition_$condition", n_timepoints),
             )
 
             is_bad = epoch <= n_bad_epochs

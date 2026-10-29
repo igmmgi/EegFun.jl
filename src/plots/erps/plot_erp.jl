@@ -1007,12 +1007,6 @@ function _compute_dynamic_grand_averages(datasets::Vector{ErpData}, error_bars::
         eeg_channels = collect(intersect(all_channel_sets...))
 
         grand_avg_data = copy(first_erp.data)
-        cols_to_remove = [:condition, :condition_name, :n_epochs]
-        for col in cols_to_remove
-            if hasproperty(grand_avg_data, col)
-                select!(grand_avg_data, Not(col))
-            end
-        end
 
         var_df = DataFrames.DataFrame()
         for col in metadata_cols

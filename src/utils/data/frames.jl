@@ -57,11 +57,7 @@ Build a new condition object of the same type as `template` holding the given ch
 analysis info are taken from `template`. `n_epochs` is only used by `ErpData`.
 """
 function _derive_condition(t::ErpData, condition::Int, condition_name::String, frames::Tuple{DataFrame}; n_epochs::Int)
-    data = frames[1]
-    # condition/condition_name/n_epochs live in the struct, not as columns
-    legacy_cols = filter(col -> hasproperty(data, col), [:condition, :condition_name, :n_epochs])
-    isempty(legacy_cols) || select!(data, Not(legacy_cols))
-    return ErpData(t.file, condition, condition_name, data, copy(t.layout), t.sample_rate, copy(t.analysis_info), n_epochs)
+    return ErpData(t.file, condition, condition_name, frames[1], copy(t.layout), t.sample_rate, copy(t.analysis_info), n_epochs)
 end
 
 function _derive_condition(t::TimeFreqData, condition::Int, condition_name::String, frames::Tuple{DataFrame,DataFrame}; n_epochs::Int = 0)

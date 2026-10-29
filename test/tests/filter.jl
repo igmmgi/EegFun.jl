@@ -245,7 +245,7 @@ end
             # Load and verify only one condition
             filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "data")
             @test length(filtered_data) == 1
-            @test filtered_data[1].data[1, :condition] == 1
+            @test filtered_data[1].condition == 1
         end
 
         @testset "High-pass filter" begin
@@ -332,8 +332,8 @@ end
             # Load and verify both conditions are present
             filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "data")
             @test length(filtered_data) == 2
-            @test filtered_data[1].data[1, :condition] == 1
-            @test filtered_data[2].data[1, :condition] == 2
+            @test filtered_data[1].condition == 1
+            @test filtered_data[2].condition == 2
         end
 
         @testset "EpochData support" begin
@@ -480,7 +480,7 @@ end
             # Load and verify
             filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "data")
             @test length(filtered_data) == 1  # Only one condition
-            @test filtered_data[1].data[1, :condition] == 1
+            @test filtered_data[1].condition == 1
             @test !isfile(joinpath(output_dir, "2_erps.jld2"))  # Participant 2 not processed
         end
 

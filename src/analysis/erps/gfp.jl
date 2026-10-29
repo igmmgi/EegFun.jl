@@ -37,6 +37,14 @@ function _build_gfp_result_df(dat::ErpData, result_pairs::Pair{Symbol,Vector{Flo
         result_df[!, col] = copy(dat.data[!, col])
     end
 
+    n = nrow(dat.data)
+    if !hasproperty(result_df, :condition)
+        result_df[!, :condition] = fill(dat.condition, n)
+    end
+    if !hasproperty(result_df, :condition_name)
+        result_df[!, :condition_name] = fill(dat.condition_name, n)
+    end
+
     # Add result columns
     for (name, values) in result_pairs
         result_df[!, name] = values

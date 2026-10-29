@@ -71,14 +71,6 @@ function _create_jackknife_averages(erps::AbstractVector{<:ErpData})::Vector{Erp
         # Create a copy of the first ERP's data as the base (just to get the structure and time vector)
         jackknife_data = copy(first_erp.data)
 
-        # Remove condition/condition_name/n_epochs columns if they exist (they're in struct now)
-        cols_to_remove = [:condition, :condition_name, :n_epochs]
-        for col in cols_to_remove
-            if hasproperty(jackknife_data, col)
-                select!(jackknife_data, Not(col))
-            end
-        end
-
         # Calculate jackknife average: (Total - Excluded) / (N - 1)
         for ch in eeg_channels
             avg_col = (total_sums[ch] .- excluded_erp.data[!, ch]) ./ (n_participants - 1)
