@@ -468,6 +468,20 @@ using DataFrames
         @test !any(state.channels.selected)
         @test EegFun._get_browser_target_channels(state) == state.channels.labels[state.channels.visible]
 
+        # Test toggling multiple channels
+        EegFun._toggle_channel_selection!(ax, state, 1)
+        EegFun._toggle_channel_selection!(ax, state, 2)
+        @test state.channels.selected[1] == true
+        @test state.channels.selected[2] == true
+        @test count(state.channels.selected) == 2
+        @test EegFun._get_browser_target_channels(state) == state.channels.labels[1:2]
+        # Toggle channel 1 off
+        EegFun._toggle_channel_selection!(ax, state, 1)
+        @test state.channels.selected[1] == false
+        @test state.channels.selected[2] == true
+        @test count(state.channels.selected) == 1
+        EegFun._clear_channel_selection!(ax, state)
+
         # 7. Select region containing multiple triggers (around 1500 and 1800)
         t_trig2 = cdat.data.time[1500]
         t_trig3 = cdat.data.time[1800]

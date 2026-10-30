@@ -14,7 +14,7 @@ const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Line styling
     :channel_line_width => (1, "Line width for channel lines"),
     :channel_line_alpha => (1, "Transparency for channel lines"),
-    :selected_channel_color => (:red, "Color for selected channels"),
+    :selected_channel_color => (:black, "Color for selected channels"),
     :unselected_channel_color => (:darkgrey, "Color for unselected channels"),
     :cleaned_channel_color => (:green, "Color for cleaned/corrected channels (Data - ICA)"),
     :show_cleaned_ica => (false, "Whether to show cleaned/corrected channels (Data - ICA) by default"),
@@ -1620,9 +1620,11 @@ end
 
 """Apply visual styling to all channels based on current selection and repair state."""
 function _apply_channel_visual_state!(ax, state)
-    any_sel = any(state.channels.selected)
-    sel_color = get(state.plot_kwargs, :selected_channel_color, :red)
-    base_selected_lw = state.plot_kwargs[:channel_line_width] * 3.0
+    sel_color = get(state.plot_kwargs, :selected_channel_color, :black)
+    selected_lw = state.plot_kwargs[:channel_line_width] * 2
+    normal_lw = state.plot_kwargs[:channel_line_width]
+    base_unselected_color = state.plot_kwargs[:unselected_channel_color]
+
     for (idx, col) in enumerate(state.channels.labels)
         !state.channels.visible[idx] && continue
         is_selected = state.channels.selected[idx]
@@ -1632,15 +1634,15 @@ function _apply_channel_visual_state!(ax, state)
             label_handle = state.channels.data_labels[col]
             if is_repaired || is_selected
                 line_handle.colormap[] = [sel_color, sel_color, sel_color]
-                line_handle.linewidth[] = base_selected_lw
-                label_handle.color[] = sel_color
+                line_handle.linewidth[] = selected_lw
+                label_handle.color[] = :red
             else
                 is_cleaned = state.ica.is_active && haskey(state.plot_kwargs, :show_cleaned_ica) && state.plot_kwargs[:show_cleaned_ica][]
                 base_color =
-                    is_cleaned ? get(state.plot_kwargs, :cleaned_channel_color, :green) : state.plot_kwargs[:unselected_channel_color]
-                line_handle.colormap[] = any_sel ? [:gray75, :gray75, :red] : [base_color, base_color, :red]
-                line_handle.linewidth[] = state.plot_kwargs[:channel_line_width]
-                label_handle.color[] = any_sel ? :gray60 : :black
+                    is_cleaned ? get(state.plot_kwargs, :cleaned_channel_color, :green) : base_unselected_color
+                line_handle.colormap[] = [base_color, base_color, :red]
+                line_handle.linewidth[] = normal_lw
+                label_handle.color[] = :black
             end
         end
     end
@@ -1662,21 +1664,13 @@ function _clear_channel_selection!(ax, state)
     _apply_channel_visual_state!(ax, state)
 end
 
-"""Handle click on channel label or trace to select or deselect a channel."""
-function _handle_channel_click!(ax, state, channel_idx)
-    col = state.channels.labels[channel_idx]
-    if state.channels.selected[channel_idx] && count(state.channels.selected) == 1
-        _clear_channel_selection!(ax, state)
-    else
-        _select_single_channel!(ax, state, col)
-    end
-end
-
 """Toggle the selected/highlighted state of one channel instantly."""
 function _toggle_channel_selection!(ax, state, channel_idx)
-    _handle_channel_click!(ax, state, channel_idx)
+    state.channels.selected[channel_idx] = !state.channels.selected[channel_idx]
+    _apply_channel_visual_state!(ax, state)
 end
 const _toggle_channel_visibility! = _toggle_channel_selection!
+_handle_channel_click!(ax, state, channel_idx) = _toggle_channel_selection!(ax, state, channel_idx)
 
 """Register keyboard shortcuts (arrows, i=help, r=repair, c=clear)."""
 function _handle_keyboard_events!(fig, ax, state)
