@@ -1,6 +1,7 @@
 const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Figure and layout
+    :figure_size => ((1300, 800), "Figure size as (width, height)"),
     :figure_padding => ((50, 30, 50, 50), "Figure padding as (left, right, bottom, top)"),
 
     # Axis styling
@@ -13,7 +14,7 @@ const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Line styling
     :channel_line_width => (1, "Line width for channel lines"),
     :channel_line_alpha => (1, "Transparency for channel lines"),
-    :selected_channel_color => (:black, "Color for selected channels"),
+    :selected_channel_color => (:red, "Color for selected channels"),
     :unselected_channel_color => (:darkgrey, "Color for unselected channels"),
     :cleaned_channel_color => (:green, "Color for cleaned/corrected channels (Data - ICA)"),
     :show_cleaned_ica => (false, "Whether to show cleaned/corrected channels (Data - ICA) by default"),
@@ -444,7 +445,7 @@ function _create_toggles(fig, ax, state, dat)
             end
             push!(toggles_grid, [tog, btn])
         else
-            lbl = Label(fig, config.label, fontsize = 22, halign = :left)
+            lbl = Label(fig, config.label, fontsize = 14, halign = :left)
             push!(toggles_grid, [tog, lbl])
         end
     end
@@ -640,7 +641,7 @@ end
 """Create channel selector dropdown menu for the control panel."""
 function _create_channel_selector(fig, ax, state)
     channel_options = ["All Channels", string.(state.channels.labels)...]
-    menu = Menu(fig, options = channel_options, default = "All Channels")
+    menu = Menu(fig, options = channel_options, default = "All Channels", tellwidth = false, fontsize = 14)
     state.plot_kwargs[:channel_selector_menu] = menu
 
     updating_from_click = get!(state.plot_kwargs, :updating_channel_menu_from_click, Ref(false))
@@ -654,7 +655,8 @@ function _create_channel_selector(fig, ax, state)
         end
     end
 
-    return hcat(Label(fig, "Electrode:", halign = :left, fontsize = 14, font = :bold), menu)
+    lbl = Label(fig, "Electrode:", halign = :left, fontsize = 14, font = :bold)
+    return (lbl, menu)
 end
 
 """Create the channel-label selection button for the control panel."""
@@ -1163,18 +1165,19 @@ function _undo_last_repair!(state, ax)
     @info "Remaining repairs in history: $remaining_repairs"
 end
 
-"""Create extreme-value slider. Returns a list of `hcat` rows for stacking."""
+"""Create extreme-value slider and label widgets."""
 function _create_extreme_slider(fig, state)
-    slider_extreme = Slider(fig, range = 0:5:100, startvalue = 0, width = 100)
+    slider_extreme = Slider(fig, range = 0:5:100, startvalue = 0, tellwidth = false)
     on(slider_extreme.value) do x
         state.view.crit_val[] = x
     end
-    return [hcat(slider_extreme, Label(fig, @lift(string("Extreme: ", $(slider_extreme.value), " μV")), fontsize = 22))]
+    lbl = Label(fig, @lift(string("Extreme: ", $(slider_extreme.value), " μV")), halign = :left, fontsize = 14)
+    return (lbl, slider_extreme)
 end
 
 """Create sliders for continuous data — includes x-range and position."""
 function _create_sliders(fig, state::ContinuousDataBrowserState, dat)
-    sliders = state.ica.is_active ? [] : _create_extreme_slider(fig, state)
+    extreme_widgets = state.ica.is_active ? nothing : _create_extreme_slider(fig, state)
 
     # Add navigation sliders specific to continuous data
     slider_range = Slider(fig[3, 1], range = 100:50:30000, startvalue = length(state.view.xrange[]), snap = true)
@@ -1207,12 +1210,12 @@ function _create_sliders(fig, state::ContinuousDataBrowserState, dat)
         updating_from_key[] = false
     end
 
-    return sliders
+    return extreme_widgets
 end
 
 """Create sliders for epoched data (extreme slider only)."""
 function _create_sliders(fig, state::EpochedDataBrowserState, dat)
-    return state.ica.is_active ? [] : _create_extreme_slider(fig, state)
+    return state.ica.is_active ? nothing : _create_extreme_slider(fig, state)
 end
 
 """Popup: select which extra channels to overlay."""
@@ -1242,10 +1245,6 @@ end
 """Create the extra-channels button for the control panel."""
 _create_extra_channel_menu(fig, ax, state, dat) = _popup_button(fig, "Extra Channels", () -> _show_extra_channel_menu(state, ax, dat))
 
-"""Wrap a widget so it can be stacked with `vcat` in `grid!`."""
-_as_grid_row(fig, w::Button) = hcat(w, Label(fig, "", tellwidth = false))
-_as_grid_row(_, w) = w  # already a matrix (toggles, sliders, hcat menus)
-
 function _build_grid_components!(
     fig,
     dat,
@@ -1258,24 +1257,57 @@ function _build_grid_components!(
     extra_menu = nothing,
     epoch_menu = nothing,
 )
-    grid_components = Matrix{Any}[]
-    push!(grid_components, toggles[:, 1:2])
+    control_panel = GridLayout(fig[1, 2], tellwidth = true, tellheight = false)
+    colsize!(control_panel, 1, Fixed(42))
+    rowgap!(control_panel, 8)
 
-    append!(grid_components, _create_sliders(fig, state, dat))
-    push!(grid_components, _as_grid_row(fig, channel_selector))
-    push!(grid_components, _as_grid_row(fig, labels_menu))
-    push!(grid_components, _as_grid_row(fig, reference_menu))
+    cur_row = 1
+    # 1. Toggles section
+    for i = 1:size(toggles, 1)
+        control_panel[cur_row, 1] = toggles[i, 1]
+        control_panel[cur_row, 2] = toggles[i, 2]
+        cur_row += 1
+    end
 
-    !isnothing(ica_menu) && push!(grid_components, _as_grid_row(fig, ica_menu))
-    !isnothing(extra_menu) && push!(grid_components, _as_grid_row(fig, extra_menu))
-    !isnothing(epoch_menu) && push!(grid_components, _as_grid_row(fig, epoch_menu))
+    # 2. Extreme slider section
+    extreme_widgets = _create_sliders(fig, state, dat)
+    if !isnothing(extreme_widgets)
+        lbl_ext, slider_ext = extreme_widgets
+        control_panel[cur_row, 1:2] = lbl_ext
+        cur_row += 1
+        control_panel[cur_row, 1:2] = slider_ext
+        cur_row += 1
+    end
 
-    control_panel = grid!(vcat(grid_components...), tellheight = false)
-    fig[1, 2] = control_panel
+    # 3. Electrode selector section
+    lbl_elec, menu_elec = channel_selector
+    control_panel[cur_row, 1:2] = lbl_elec
+    cur_row += 1
+    control_panel[cur_row, 1:2] = menu_elec
+    cur_row += 1
 
-    colsize!(fig.layout, 2, Relative(0.25))
+    # 4. Action buttons
+    control_panel[cur_row, 1:2] = labels_menu
+    cur_row += 1
+    control_panel[cur_row, 1:2] = reference_menu
+    cur_row += 1
+
+    if !isnothing(ica_menu)
+        control_panel[cur_row, 1:2] = ica_menu
+        cur_row += 1
+    end
+    if !isnothing(extra_menu)
+        control_panel[cur_row, 1:2] = extra_menu
+        cur_row += 1
+    end
+    if !isnothing(epoch_menu)
+        control_panel[cur_row, 1:2] = epoch_menu
+        cur_row += 1
+    end
+
+    colsize!(fig.layout, 2, Fixed(220))
+    colgap!(fig.layout, 15)
     rowsize!(fig.layout, 1, Relative(1.0))
-
 end
 
 """Return an epoch menu for epoched data, `nothing` for continuous."""
@@ -1448,26 +1480,29 @@ function _handle_mouse_events!(ax, state)
 
         if event.button == Mouse.left
             if event.action == Mouse.press
-                # Check if click is on a channel label at the left
-                label_channel = _find_clicked_channel_label(state, mouse_x, mouseposition(ax)[2])
-                if !isnothing(label_channel)
-                    _handle_channel_click!(ax, state, label_channel)
+                # Check if click is on an existing region to deselect it
+                clicked_region_idx = _find_clicked_region(state, mouse_x)
+                if !isnothing(clicked_region_idx)
+                    _remove_region_from_selection!(ax, state, clicked_region_idx)
                     return
                 end
 
-                if ctrl_pressed[]
-                    mouse_y = mouseposition(ax)[2]
-                    clicked_channel = _find_closest_browser_channel(ax, state, mouse_x, mouse_y)
-                    if !isnothing(clicked_channel)
-                        _handle_channel_click!(ax, state, clicked_channel)
-                        return
-                    end
-                elseif shift_pressed[]
-                    _handle_left_click!(ax, state, event, mouse_x)
+                # If shift is pressed, start time-region selection drag
+                if shift_pressed[]
+                    _start_selection!(ax, state, mouse_x)
+                    return
+                end
+
+                # If shift is NOT pressed, any left-click (or Ctrl+click) on or near a channel selects that channel!
+                mouse_y = mouseposition(ax)[2]
+                clicked_channel = _find_closest_browser_channel(ax, state, mouse_x, mouse_y)
+                if !isnothing(clicked_channel)
+                    _handle_channel_click!(ax, state, clicked_channel)
+                    return
                 end
             elseif event.action == Mouse.release
-                if state.selection.active[] || shift_pressed[]
-                    _handle_left_click!(ax, state, event, mouse_x)
+                if state.selection.active[]
+                    _finish_selection!(ax, state, mouse_x)
                 end
             end
         elseif event.button == Mouse.right && event.action == Mouse.press
@@ -1607,9 +1642,9 @@ function _find_closest_browser_channel(ax, state, mouse_x, mouse_y)
     tol = if length(visible_indices) >= 2
         offsets = state.view.offset[visible_indices]
         step = abs(offsets[end] - offsets[1]) / (length(visible_indices) - 1)
-        max(step * 0.45, 20.0)
+        max(step * 0.9, 50.0)
     else
-        50.0
+        100.0
     end
 
     return min_distance <= tol ? closest_channel : nothing
@@ -1618,6 +1653,8 @@ end
 """Apply visual styling to all channels based on current selection and repair state."""
 function _apply_channel_visual_state!(ax, state)
     any_sel = any(state.channels.selected)
+    sel_color = get(state.plot_kwargs, :selected_channel_color, :red)
+    base_selected_lw = state.plot_kwargs[:channel_line_width] * 3.0
     for (idx, col) in enumerate(state.channels.labels)
         !state.channels.visible[idx] && continue
         is_selected = state.channels.selected[idx]
@@ -1626,18 +1663,32 @@ function _apply_channel_visual_state!(ax, state)
             line_handle = state.channels.data_lines[col]
             label_handle = state.channels.data_labels[col]
             if is_repaired || is_selected
-                sel_color = state.plot_kwargs[:selected_channel_color]
                 line_handle.colormap[] = [sel_color, sel_color, sel_color]
-                line_handle.linewidth[] = state.plot_kwargs[:channel_line_width] * 2.0
-                label_handle.color[] = :red
+                line_handle.linewidth[] = base_selected_lw
+                label_handle.color[] = sel_color
             else
                 is_cleaned = state.ica.is_active && haskey(state.plot_kwargs, :show_cleaned_ica) && state.plot_kwargs[:show_cleaned_ica][]
                 base_color =
                     is_cleaned ? get(state.plot_kwargs, :cleaned_channel_color, :green) : state.plot_kwargs[:unselected_channel_color]
-                line_handle.colormap[] = [base_color, base_color, :red]
+                line_handle.colormap[] = any_sel ? [:gray75, :gray75, :red] : [base_color, base_color, :red]
                 line_handle.linewidth[] = state.plot_kwargs[:channel_line_width]
-                label_handle.color[] = any_sel ? :gray50 : :black
+                label_handle.color[] = any_sel ? :gray60 : :black
             end
+        end
+    end
+end
+
+"""Synchronize the control panel channel dropdown menu with the active channel selection."""
+function _sync_channel_selector_menu!(state, target_str::String)
+    menu = get(state.plot_kwargs, :channel_selector_menu, nothing)
+    updating = get(state.plot_kwargs, :updating_channel_menu_from_click, nothing)
+    if !isnothing(menu) && !isnothing(updating)
+        opts = menu.options[]
+        idx = findfirst(==(target_str), opts)
+        if !isnothing(idx) && menu.i_selected[] != idx
+            updating[] = true
+            menu.i_selected[] = idx
+            updating[] = false
         end
     end
 end
@@ -1650,22 +1701,14 @@ function _select_single_channel!(ax, state, target_col::Symbol)
         state.channels.selected[idx] = true
     end
     _apply_channel_visual_state!(ax, state)
-    if haskey(state.plot_kwargs, :channel_selector_menu) && haskey(state.plot_kwargs, :updating_channel_menu_from_click)
-        state.plot_kwargs[:updating_channel_menu_from_click][] = true
-        state.plot_kwargs[:channel_selector_menu].selection[] = string(target_col)
-        state.plot_kwargs[:updating_channel_menu_from_click][] = false
-    end
+    _sync_channel_selector_menu!(state, string(target_col))
 end
 
 """Clear channel selection and restore normal styling for all channels."""
 function _clear_channel_selection!(ax, state)
     state.channels.selected .= false
     _apply_channel_visual_state!(ax, state)
-    if haskey(state.plot_kwargs, :channel_selector_menu) && haskey(state.plot_kwargs, :updating_channel_menu_from_click)
-        state.plot_kwargs[:updating_channel_menu_from_click][] = true
-        state.plot_kwargs[:channel_selector_menu].selection[] = "All Channels"
-        state.plot_kwargs[:updating_channel_menu_from_click][] = false
-    end
+    _sync_channel_selector_menu!(state, "All Channels")
 end
 
 """Handle click on channel label or trace to select or deselect a channel."""
@@ -2755,7 +2798,7 @@ function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs.
 
         # Common fig/ax/state/ui setup
         fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
-        fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
+        fig = _eegfun_figure(; size = plot_kwargs[:figure_size], figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
         ax = Axis(fig[1, 1], xlabel = plot_kwargs[:xlabel], ylabel = plot_kwargs[:ylabel], title = _get_title(dat))
 
         state = _create_browser_state(dat, dat.layout.data.label, ax, ica, plot_kwargs)
