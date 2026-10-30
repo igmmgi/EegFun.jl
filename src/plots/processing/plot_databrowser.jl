@@ -913,45 +913,135 @@ function _create_epoch_menu(fig, ax, state)
     return hcat(slider_epoch, label)
 end
 
-"""Open a popup menu with Topoplot / Spectrum / Region actions."""
+"""Find trigger onset events within the selected region for continuous data."""
+function _find_region_triggers(state::ContinuousDataBrowserState, clicked_region_idx = nothing)
+    bounds = _get_selected_region_bounds(state, clicked_region_idx)
+    isnothing(bounds) && return NamedTuple{(:sample, :code, :time),Tuple{Int,Int,Float64}}[]
+    x_min, x_max = bounds
+
+    df = state.data.current[].data
+    !hasproperty(df, :trigger) && return NamedTuple{(:sample, :code, :time),Tuple{Int,Int,Float64}}[]
+
+    return [
+        (sample = i, code = Int(df.trigger[i]), time = Float64(df.time[i])) for
+        i = 1:nrow(df) if df.time[i] >= x_min && df.time[i] <= x_max && df.trigger[i] != 0 && (i == 1 || df.trigger[i] != df.trigger[i-1])
+    ]
+end
+
+_find_region_triggers(state, clicked_region_idx = nothing) = NamedTuple{(:sample, :code, :time),Tuple{Int,Int,Float64}}[]
+
+"""Extract and plot a single epoch around a trigger event within the selected region bounds."""
+function _plot_single_trigger_epoch(state::ContinuousDataBrowserState, ev, x_min::Real, x_max::Real; kwargs...)
+    curr_dat = state.data.current[]
+    idx_min = searchsortedfirst(curr_dat.data.time, x_min)
+    idx_max = searchsortedlast(curr_dat.data.time, x_max)
+    t_trig = ev.time
+
+    cols_to_keep = setdiff(propertynames(curr_dat.data), [:condition, :condition_name, :file])
+    epoch_df = copy(curr_dat.data[idx_min:idx_max, cols_to_keep])
+    epoch_df.time .-= t_trig
+    if !hasproperty(epoch_df, :epoch)
+        insertcols!(epoch_df, 1, :epoch => 1)
+    end
+
+    single_epoch = EpochData(
+        curr_dat.file,
+        1,
+        "Trigger_$(ev.code)",
+        [epoch_df],
+        copy(curr_dat.layout),
+        curr_dat.sample_rate,
+        copy(curr_dat.analysis_info),
+    )
+
+    selected_channels = state.channels.labels[state.channels.visible]
+    return plot_epochs(single_epoch; channel_selection = channels(selected_channels), kwargs...)
+end
+
+"""Extract and plot all epochs matching a trigger code using the selected region offset interval."""
+function _plot_all_trigger_epochs(state::ContinuousDataBrowserState, code::Integer, x_min::Real, x_max::Real, t_trig::Real; kwargs...)
+    curr_dat = state.data.current[]
+    interval = (x_min - t_trig, x_max - t_trig)
+    epoch_cond = EpochCondition(name = "Trigger_$code", trigger_sequences = [[code]])
+    try
+        all_epochs = extract_epochs(curr_dat, 1, epoch_cond, interval)
+        selected_channels = state.channels.labels[state.channels.visible]
+        return plot_epochs(all_epochs; channel_selection = channels(selected_channels), kwargs...)
+    catch e
+        @minimal_warning "Could not extract all epochs for trigger $code: $e"
+        return nothing
+    end
+end
+
+"""Open a popup menu with Topoplot / Spectrum / Epoch / Region actions."""
 function _show_additional_menu(state, clicked_region_idx = nothing)
 
     # Check if layout has valid coordinates for topographic plots
     has_coords = has_valid_coordinates(state.data.original.layout)
 
-    plot_types = String[]
+    menu_items = Tuple{String,Function}[]
+
     if has_coords
-        push!(plot_types, "Topoplot", "Topoplot 3D")
+        push!(menu_items, ("Topoplot", () -> begin
+            selected_data = _subset_selected_data(state, clicked_region_idx)
+            !isnothing(selected_data) && plot_topography(selected_data; scrubber = true)
+        end))
+        push!(menu_items, ("Topoplot 3D", () -> begin
+            selected_data = _subset_selected_data(state, clicked_region_idx)
+            !isnothing(selected_data) && plot_topography_3d(selected_data; scrubber = true)
+        end))
     end
-    push!(plot_types, "Spectrum", "Get Selected Regions")
+    push!(menu_items, ("Spectrum", () -> begin
+        selected_data = _subset_selected_data(state, clicked_region_idx)
+        !isnothing(selected_data) && plot_channel_spectrum(selected_data)
+    end))
 
-    menu_fig = _eegfun_figure(size = (300, max(150, 75 * length(plot_types))))
-    menu_buttons = [Button(menu_fig[idx, 1], label = plot_type) for (idx, plot_type) in enumerate(plot_types)]
+    # Check for trigger codes in the selected region for continuous data
+    if state.data isa ContinuousDataState
+        trigger_events = _find_region_triggers(state, clicked_region_idx)
+        bounds = _get_selected_region_bounds(state, clicked_region_idx)
+        if !isempty(trigger_events) && !isnothing(bounds)
+            x_min, x_max = bounds
+            unique_codes = unique([ev.code for ev in trigger_events])
 
-    for btn in menu_buttons
-        on(btn.clicks) do _
-            if btn.label[] == "Get Selected Regions"
-                # Get the boolean vector of selected regions
-                selected_regions_bool = _get_selected_regions_bool(state)
-                @info "Selected regions boolean vector:"
-                @info "Length: $(length(selected_regions_bool))"
-                @info "Number of selected samples: $(sum(selected_regions_bool))"
-                @info "Selected regions: $(state.selection.selected_regions[])"
+            # Specific epoch action(s)
+            if length(trigger_events) == 1
+                ev = trigger_events[1]
+                push!(menu_items, ("Plot Epoch (Trigger $(ev.code))", () -> _plot_single_trigger_epoch(state, ev, x_min, x_max)))
             else
-                selected_data = _subset_selected_data(state, clicked_region_idx)
-                isnothing(selected_data) && return # No data available, just return
-                if btn.label[] == "Topoplot"
-                    plot_topography(selected_data; scrubber = true)
-                elseif btn.label[] == "Topoplot 3D"
-                    plot_topography_3d(selected_data; scrubber = true)
-                elseif btn.label[] == "Spectrum"
-                    plot_channel_spectrum(selected_data)
+                for (i, ev) in enumerate(trigger_events)
+                    lbl =
+                        length(unique_codes) == 1 ? "Plot Epoch $i (Trigger $(ev.code))" :
+                        "Plot Epoch (Trigger $(ev.code) at $(round(ev.time, digits = 2))s)"
+                    push!(menu_items, (lbl, () -> _plot_single_trigger_epoch(state, ev, x_min, x_max)))
                 end
+            end
+
+            # All matching epochs action(s)
+            for code in unique_codes
+                ev = trigger_events[findfirst(e -> e.code == code, trigger_events)]
+                push!(menu_items, ("Plot All Epochs (Trigger $code)", () -> _plot_all_trigger_epochs(state, code, x_min, x_max, ev.time)))
             end
         end
     end
 
-    _display_in_screen(menu_fig; size = (300, max(150, 75 * length(plot_types))))
+    push!(menu_items, ("Get Selected Regions", () -> begin
+        selected_regions_bool = _get_selected_regions_bool(state)
+        @info "Selected regions boolean vector:"
+        @info "Length: $(length(selected_regions_bool))"
+        @info "Number of selected samples: $(sum(selected_regions_bool))"
+        @info "Selected regions: $(state.selection.selected_regions[])"
+    end))
+
+    menu_fig = _eegfun_figure(size = (340, max(160, 50 * length(menu_items))))
+    for (idx, (label_str, action_fn)) in enumerate(menu_items)
+        btn = Button(menu_fig[idx, 1], label = label_str, tellwidth = false)
+        on(btn.clicks) do _
+            action_fn()
+        end
+    end
+
+    _display_in_screen(menu_fig; size = (340, max(160, 50 * length(menu_items))))
 end
 
 """Open the interactive channel repair window with checkboxes and method selection."""
@@ -1628,19 +1718,27 @@ function _get_selected_regions_info(state::DataBrowserState)
     return (bool_vector = bool_vector, regions = regions, n_samples = sum(bool_vector), n_regions = length(regions))
 end
 
+"""Return (x_min, x_max) tuple for the clicked or most recent selected region."""
+function _get_selected_region_bounds(state, clicked_region_idx = nothing)
+    if !isnothing(clicked_region_idx) && 1 <= clicked_region_idx <= length(state.selection.selected_regions[])
+        r = state.selection.selected_regions[][clicked_region_idx]
+        return (min(r[1], r[2]), max(r[1], r[2]))
+    elseif !isempty(state.selection.selected_regions[])
+        r = state.selection.selected_regions[][end]
+        return (min(r[1], r[2]), max(r[1], r[2]))
+    else
+        return nothing
+    end
+end
+
 """Return a subset of the current continuous data within the selected region."""
 function _subset_selected_data(state::ContinuousDataBrowserState, clicked_region_idx = nothing)
-    # Use the clicked region if specified, otherwise use the most recent region
-    if !isnothing(clicked_region_idx) && 1 <= clicked_region_idx <= length(state.selection.selected_regions[])
-        # Use the specific clicked region
-        x_min, x_max = state.selection.selected_regions[][clicked_region_idx]
-    elseif !isempty(state.selection.selected_regions[])
-        # Use the last (most recent) selected region
-        x_min, x_max = state.selection.selected_regions[][end]
-    else
+    bounds = _get_selected_region_bounds(state, clicked_region_idx)
+    if isnothing(bounds)
         @minimal_warning "No region selected"
         return nothing
     end
+    x_min, x_max = bounds
 
     selected_channels = state.channels.labels[state.channels.visible]
     return subset(
@@ -1652,15 +1750,12 @@ end
 
 """Return a subset of the current epoch data within the selected region."""
 function _subset_selected_data(state::EpochedDataBrowserState, clicked_region_idx = nothing)
-    # Get the selected region
-    if !isnothing(clicked_region_idx) && 1 <= clicked_region_idx <= length(state.selection.selected_regions[])
-        x_min, x_max = state.selection.selected_regions[][clicked_region_idx]
-    elseif !isempty(state.selection.selected_regions[])
-        x_min, x_max = state.selection.selected_regions[][end]
-    else
+    bounds = _get_selected_region_bounds(state, clicked_region_idx)
+    if isnothing(bounds)
         @minimal_warning "No region selected"
         return nothing
     end
+    x_min, x_max = bounds
 
     selected_channels = state.channels.labels[state.channels.visible]
     current_epoch = state.data.current_epoch[]

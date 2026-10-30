@@ -405,4 +405,57 @@ using DataFrames
         @test res_3d_static.fig isa Figure
         @test length(res_3d_static.axes) == 1
     end
+
+    @testset "region trigger detection and epoch plotting" begin
+        cdat = EegFun.create_test_continuous_data(n = 2000, n_channels = 3, seed = 55)
+        # Add triggers: code 10 at sample 500 and 1500, code 20 at sample 1800
+        cdat.data.trigger[500] = 10
+        cdat.data.trigger[1500] = 10
+        cdat.data.trigger[1800] = 20
+
+        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol,Any}())
+        fig = Figure()
+        ax = Axis(fig[1, 1])
+        state = EegFun._create_browser_state(cdat, cdat.layout.data.label, ax, nothing, plot_kwargs)
+
+        # 1. No region selected -> empty trigger events
+        @test isempty(EegFun._find_region_triggers(state))
+
+        # 2. Select region containing no triggers (samples 1 to 200)
+        t_start = cdat.data.time[1]
+        t_end = cdat.data.time[200]
+        push!(state.selection.selected_regions[], (t_start, t_end))
+        @test isempty(EegFun._find_region_triggers(state))
+
+        # 3. Select region containing trigger 10 (around sample 500)
+        t_trig = cdat.data.time[500]
+        x_min = t_trig - 0.2
+        x_max = t_trig + 0.4
+        push!(state.selection.selected_regions[], (x_min, x_max))
+
+        trig_events = EegFun._find_region_triggers(state)
+        @test length(trig_events) == 1
+        @test trig_events[1].sample == 500
+        @test trig_events[1].code == 10
+        @test abs(trig_events[1].time - t_trig) < 1e-12
+
+        # 4. Extract single epoch
+        single_res = EegFun._plot_single_trigger_epoch(state, trig_events[1], x_min, x_max; display_plot = false)
+        @test haskey(single_res, :fig)
+        @test single_res.fig isa Figure
+
+        # 5. Extract all epochs for trigger 10
+        all_res = EegFun._plot_all_trigger_epochs(state, 10, x_min, x_max, t_trig; display_plot = false)
+        @test haskey(all_res, :fig)
+        @test all_res.fig isa Figure
+
+        # 6. Select region containing multiple triggers (around 1500 and 1800)
+        t_trig2 = cdat.data.time[1500]
+        t_trig3 = cdat.data.time[1800]
+        push!(state.selection.selected_regions[], (t_trig2 - 0.1, t_trig3 + 0.1))
+        multi_events = EegFun._find_region_triggers(state)
+        @test length(multi_events) == 2
+        @test multi_events[1].code == 10
+        @test multi_events[2].code == 20
+    end
 end
