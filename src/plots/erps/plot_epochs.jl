@@ -865,61 +865,55 @@ end
 """
     _setup_linked_legend_interactions_epochs!(line_refs::Vector{<:Dict})
 
-Set up linked legend interactions so clicking a legend entry in one plot
-toggles visibility of the corresponding condition in all plots.
+Set up linked legend interactions across multiple subplots so clicking a legend entry
+in one subplot toggles visibility of the corresponding condition in all subplots.
+Lines within the same subplot/axis are never linked, preserving independent channel selection.
 Structure: line_refs[ax_idx][condition_idx][ch][:trials] and [:average]
 
 Note: Both trial and average lines appear in the legend (trial with condition name, 
 average with condition name + " (avg)"). We sync both types across plots.
 """
 function _setup_linked_legend_interactions_epochs!(line_refs::Vector{<:Dict})
-    # Create separate mappings: condition_idx -> trial lines and condition_idx -> average lines
-    condition_trial_lines = Dict{Int,Vector{Any}}()
-    condition_avg_lines = Dict{Int,Vector{Any}}()
+    # Linked legend interactions are only relevant across multiple subplots (axes)
+    length(line_refs) > 1 || return
 
-    # Collect all lines for each condition, separating trials and averages
-    # Structure: line_refs[ax_idx][condition_idx][ch][:trials] and [:average]
+    # Create separate mappings: group_key -> trial lines and group_key -> average lines
+    condition_trial_lines = Dict{Any,Vector{Any}}()
+    condition_avg_lines = Dict{Any,Vector{Any}}()
+
+    # Collect lines across distinct axes
     for ax_line_refs in line_refs
         for (cond_idx, cond_line_data) in ax_line_refs
-            # Iterate over channels
             for (ch, ch_line_data) in cond_line_data
-                if !isa(ch_line_data, Dict)
-                    continue
-                end
+                !isa(ch_line_data, Dict) && continue
+
+                # If an axis has only 1 channel, group by cond_idx; if multiple channels, group by (cond_idx, ch)
+                group_key = length(cond_line_data) == 1 ? cond_idx : (cond_idx, ch)
+
                 # Collect trial lines
                 if haskey(ch_line_data, :trials) && !isnothing(ch_line_data[:trials])
                     trial_data = ch_line_data[:trials]
-                    trial_line = nothing
-                    if trial_data isa Tuple && length(trial_data) == 2
-                        trial_line = trial_data[1]  # Get the line, not the tuple
-                    elseif trial_data isa Lines
-                        trial_line = trial_data
-                    end
+                    trial_line = trial_data isa Tuple ? trial_data[1] : (trial_data isa Lines ? trial_data : nothing)
                     if !isnothing(trial_line)
-                        trial_lines = get!(condition_trial_lines, cond_idx, Any[])
-                        push!(trial_lines, trial_line)
+                        lines = get!(condition_trial_lines, group_key, Any[])
+                        push!(lines, trial_line)
                     end
                 end
 
                 # Collect average lines
                 if haskey(ch_line_data, :average) && !isnothing(ch_line_data[:average])
                     avg_data = ch_line_data[:average]
-                    avg_line = nothing
-                    if avg_data isa Tuple && length(avg_data) == 2
-                        avg_line = avg_data[1]  # Get the line, not the tuple
-                    elseif avg_data isa Lines
-                        avg_line = avg_data
-                    end
+                    avg_line = avg_data isa Tuple ? avg_data[1] : (avg_data isa Lines ? avg_data : nothing)
                     if !isnothing(avg_line)
-                        avg_lines = get!(condition_avg_lines, cond_idx, Any[])
-                        push!(avg_lines, avg_line)
+                        lines = get!(condition_avg_lines, group_key, Any[])
+                        push!(lines, avg_line)
                     end
                 end
             end
         end
     end
 
-    # Sync trial and average lines independently across plots
+    # Sync trial and average lines independently across subplots
     for lines in values(condition_trial_lines)
         _sync_lines!(lines)
     end

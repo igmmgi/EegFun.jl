@@ -1352,32 +1352,43 @@ end
 """
     _setup_linked_legend_interactions!(line_refs::Vector{<:Dict})
 
-Set up linked legend interactions so clicking a legend entry in one plot
-toggles visibility of the corresponding condition in all plots.
+Set up linked legend interactions across multiple subplots so clicking a legend entry
+in one subplot toggles visibility of the corresponding condition in all subplots.
+Lines within the same subplot/axis are never linked, preserving independent channel selection.
 """
 function _setup_linked_legend_interactions!(line_refs::Vector{<:Dict})
-    # Create a mapping: dataset_idx -> all lines across all axes for that dataset
-    dataset_lines = Dict{Int,Vector{Any}}()
+    # Linked legend interactions are only relevant across multiple subplots (axes)
+    length(line_refs) > 1 || return
 
-    # Collect all lines for each dataset
+    # Map each dataset/condition to lines across distinct subplots
+    dataset_lines = Dict{Any,Vector{Any}}()
+
+    # Collect lines across distinct axes
     for ax_line_refs in line_refs
         for (dataset_idx, channel_lines) in ax_line_refs
-            lines = get!(dataset_lines, dataset_idx, Any[])
-            append!(lines, [line_data[1] for line_data in values(channel_lines)])
+            if length(channel_lines) == 1
+                # Standard case for multi-axis plots (e.g. topo or grid layout where each axis is one channel)
+                lines = get!(dataset_lines, dataset_idx, Any[])
+                push!(lines, first(values(channel_lines))[1])
+            elseif length(channel_lines) > 1
+                # If an axis has multiple channels, only link the matching channel across different axes
+                for (ch, line_data) in channel_lines
+                    lines = get!(dataset_lines, (dataset_idx, ch), Any[])
+                    push!(lines, line_data[1])
+                end
+            end
         end
     end
 
-    # When any line's visibility changes, update all other lines for that dataset
+    # When any line's visibility changes, update all other lines in that linked group across subplots
     for lines in values(dataset_lines)
-        length(lines) > 1 || continue  # Only need syncing if there are multiple lines
+        length(lines) > 1 || continue
 
-        # Create a flag to prevent infinite loops
         syncing = Ref(false)
-
         for line in lines
             other_lines = [l for l in lines if l !== line]
             on(line.visible) do visible_val
-                syncing[] && return  # Skip if already syncing
+                syncing[] && return
                 syncing[] = true
                 for other_line in other_lines
                     if other_line.visible[] != visible_val
@@ -1388,7 +1399,6 @@ function _setup_linked_legend_interactions!(line_refs::Vector{<:Dict})
             end
         end
     end
-
 end
 
 """
