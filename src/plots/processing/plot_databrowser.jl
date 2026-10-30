@@ -364,7 +364,6 @@ function _setup_ui_base(fig, ax, state, dat, ica = nothing)
     # Create toggles/markers/menus
     state.markers = _init_markers(ax, state)
     toggles = _create_toggles(fig, ax, state, dat)
-    channel_selector = _create_channel_selector(fig, ax, state)
     labels_menu = _create_labels_menu(fig, ax, state)
     reference_menu = _create_reference_menu(fig, state, dat)
 
@@ -380,20 +379,20 @@ function _setup_ui_base(fig, ax, state, dat, ica = nothing)
         extra_menu = _create_extra_channel_menu(fig, ax, state, dat)
     end
 
-    return (toggles, channel_selector, labels_menu, reference_menu, ica_menu, extra_menu)
+    return (toggles, labels_menu, reference_menu, ica_menu, extra_menu)
 end
 
 # Unified setup_ui method using multiple dispatch for the epoch menu
 """Assemble all UI controls into the figure grid."""
 function _setup_ui(fig, ax, state::DataBrowserState{<:AbstractDataState}, dat, ica = nothing, plot_kwargs = nothing)
     # Get common UI elements
-    toggles, channel_selector, labels_menu, reference_menu, ica_menu, extra_menu = _setup_ui_base(fig, ax, state, dat, ica)
+    toggles, labels_menu, reference_menu, ica_menu, extra_menu = _setup_ui_base(fig, ax, state, dat, ica)
 
     # Get type-specific epoch menu (or nothing)
     epoch_menu = _get_epoch_menu(fig, ax, state)
 
     # Build the grid components
-    _build_grid_components!(fig, dat, state, toggles, channel_selector, labels_menu, reference_menu, ica_menu, extra_menu, epoch_menu)
+    _build_grid_components!(fig, dat, state, toggles, labels_menu, reference_menu, ica_menu, extra_menu, epoch_menu)
 
     # Apply theme
     hideydecorations!(ax, label = true)
@@ -636,27 +635,6 @@ function _show_labels_menu(state, ax)
     end
 
     _display_in_screen(menu_fig)
-end
-
-"""Create channel selector dropdown menu for the control panel."""
-function _create_channel_selector(fig, ax, state)
-    channel_options = ["All Channels", string.(state.channels.labels)...]
-    menu = Menu(fig, options = channel_options, default = "All Channels", tellwidth = false, fontsize = 14)
-    state.plot_kwargs[:channel_selector_menu] = menu
-
-    updating_from_click = get!(state.plot_kwargs, :updating_channel_menu_from_click, Ref(false))
-
-    on(menu.selection) do selected_val
-        updating_from_click[] && return
-        if selected_val == "All Channels" || isnothing(selected_val)
-            _clear_channel_selection!(ax, state)
-        else
-            _select_single_channel!(ax, state, Symbol(selected_val))
-        end
-    end
-
-    lbl = Label(fig, "Electrode:", halign = :left, fontsize = 14, font = :bold)
-    return (lbl, menu)
 end
 
 """Create the channel-label selection button for the control panel."""
@@ -1250,7 +1228,6 @@ function _build_grid_components!(
     dat,
     state,
     toggles,
-    channel_selector,
     labels_menu,
     reference_menu,
     ica_menu = nothing,
@@ -1279,14 +1256,7 @@ function _build_grid_components!(
         cur_row += 1
     end
 
-    # 3. Electrode selector section
-    lbl_elec, menu_elec = channel_selector
-    control_panel[cur_row, 1:2] = lbl_elec
-    cur_row += 1
-    control_panel[cur_row, 1:2] = menu_elec
-    cur_row += 1
-
-    # 4. Action buttons
+    # 3. Action buttons
     control_panel[cur_row, 1:2] = labels_menu
     cur_row += 1
     control_panel[cur_row, 1:2] = reference_menu
@@ -1463,10 +1433,10 @@ function _handle_mouse_events!(ax, state)
     ctrl_pressed = Ref(false)
 
     on(events(ax).keyboardbutton) do key_event
-        if key_event.key == Keyboard.left_shift
-            shift_pressed[] = key_event.action == Keyboard.press
-        elseif key_event.key == Keyboard.left_control
-            ctrl_pressed[] = key_event.action == Keyboard.press
+        if key_event.key in (Keyboard.left_shift, Keyboard.right_shift)
+            shift_pressed[] = (key_event.action != Keyboard.release)
+        elseif key_event.key in (Keyboard.left_control, Keyboard.right_control)
+            ctrl_pressed[] = (key_event.action != Keyboard.release)
         end
     end
 
@@ -1480,29 +1450,27 @@ function _handle_mouse_events!(ax, state)
 
         if event.button == Mouse.left
             if event.action == Mouse.press
-                # Check if click is on an existing region to deselect it
-                clicked_region_idx = _find_clicked_region(state, mouse_x)
-                if !isnothing(clicked_region_idx)
-                    _remove_region_from_selection!(ax, state, clicked_region_idx)
-                    return
-                end
-
-                # If shift is pressed, start time-region selection drag
-                if shift_pressed[]
-                    _start_selection!(ax, state, mouse_x)
-                    return
-                end
-
-                # If shift is NOT pressed, any left-click (or Ctrl+click) on or near a channel selects that channel!
-                mouse_y = mouseposition(ax)[2]
-                clicked_channel = _find_closest_browser_channel(ax, state, mouse_x, mouse_y)
-                if !isnothing(clicked_channel)
-                    _handle_channel_click!(ax, state, clicked_channel)
-                    return
+                # Ctrl + Left click selects/toggles a channel
+                if ctrl_pressed[]
+                    mouse_y = mouseposition(ax)[2]
+                    clicked_channel = _find_closest_browser_channel(ax, state, mouse_x, mouse_y)
+                    if !isnothing(clicked_channel)
+                        _toggle_channel_selection!(ax, state, clicked_channel)
+                        return
+                    end
+                elseif shift_pressed[]
+                    _handle_left_click!(ax, state, event, mouse_x)
+                else
+                    # Left click on an existing region to deselect it
+                    clicked_region_idx = _find_clicked_region(state, mouse_x)
+                    if !isnothing(clicked_region_idx)
+                        _remove_region_from_selection!(ax, state, clicked_region_idx)
+                        return
+                    end
                 end
             elseif event.action == Mouse.release
-                if state.selection.active[]
-                    _finish_selection!(ax, state, mouse_x)
+                if state.selection.active[] || shift_pressed[]
+                    _handle_left_click!(ax, state, event, mouse_x)
                 end
             end
         elseif event.button == Mouse.right && event.action == Mouse.press
@@ -1678,22 +1646,7 @@ function _apply_channel_visual_state!(ax, state)
     end
 end
 
-"""Synchronize the control panel channel dropdown menu with the active channel selection."""
-function _sync_channel_selector_menu!(state, target_str::String)
-    menu = get(state.plot_kwargs, :channel_selector_menu, nothing)
-    updating = get(state.plot_kwargs, :updating_channel_menu_from_click, nothing)
-    if !isnothing(menu) && !isnothing(updating)
-        opts = menu.options[]
-        idx = findfirst(==(target_str), opts)
-        if !isnothing(idx) && menu.i_selected[] != idx
-            updating[] = true
-            menu.i_selected[] = idx
-            updating[] = false
-        end
-    end
-end
-
-"""Select a single channel, update styling, and sync with control panel menu."""
+"""Select a single channel and update visual styling."""
 function _select_single_channel!(ax, state, target_col::Symbol)
     state.channels.selected .= false
     idx = findfirst(==(target_col), state.channels.labels)
@@ -1701,14 +1654,12 @@ function _select_single_channel!(ax, state, target_col::Symbol)
         state.channels.selected[idx] = true
     end
     _apply_channel_visual_state!(ax, state)
-    _sync_channel_selector_menu!(state, string(target_col))
 end
 
 """Clear channel selection and restore normal styling for all channels."""
 function _clear_channel_selection!(ax, state)
     state.channels.selected .= false
     _apply_channel_visual_state!(ax, state)
-    _sync_channel_selector_menu!(state, "All Channels")
 end
 
 """Handle click on channel label or trace to select or deselect a channel."""

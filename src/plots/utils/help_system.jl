@@ -56,7 +56,6 @@ function _get_plot_help_info(plot_type::Symbol)::PlotHelpInfo
                 ("Shift + Left Click", "Clear current selection"),
                 ("C", "Clear all selected regions and channel selection"),
                 ("Right Click within highlighted region", "Context menu (Plot Epochs, Plot ERP, Topoplot, Spectrum)"),
-                ("Left Click on channel label / Electrode menu", "Select/toggle single channel"),
                 ("Ctrl + Left click", "Select/toggle closest channel"),
                 ("R", "Open channel repair menu (continuous data only)"),
             ],
