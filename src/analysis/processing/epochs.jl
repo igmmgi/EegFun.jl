@@ -235,37 +235,6 @@ function _validate_epoch_interval_params(dat::ContinuousData, epoch_interval)
     return nothing
 end
 
-"""
-    get_selected_epochs(dat::EpochData, epoch_selection::Function) -> Vector{Int}
-
-Get the indices of epochs that match the epoch selection predicate.
-
-The predicate receives `dat.data` (a `Vector{DataFrame}`) and must return a boolean vector
-of the same length. This enables both index-based and content-based filtering.
-
-# Arguments
-- `dat::EpochData`: The EpochData object containing the epochs
-- `epoch_selection::Function`: Function that returns boolean vector for epoch filtering
-
-# Returns
-- `Vector{Int}`: Indices of selected epochs
-
-# Examples
-```julia
-# Get all epochs
-selected = get_selected_epochs(dat, epochs())
-
-# Get specific epochs by index
-selected = get_selected_epochs(dat, epochs(1:10))
-
-# Content-based: keep only epochs where interval < 1 second
-selected = get_selected_epochs(dat, epochs(df -> df.interval[1] < 1.0))
-```
-"""
-function get_selected_epochs(dat::EpochData, epoch_selection::Function)
-    return findall(epoch_selection(dat.data))
-end
-
 
 
 

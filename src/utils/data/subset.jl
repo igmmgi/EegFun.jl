@@ -886,7 +886,26 @@ end
 get_selected_samples(dat::Union{SingleDataFrameEeg,MultiDataFrameEeg,DataFrame}, sample_selection) =
     get_selected_samples(dat, _to_sample_func(sample_selection))
 
-"""Apply an epoch predicate and return matching epoch indices."""
+"""
+    get_selected_epochs(dat::MultiDataFrameEeg, epoch_selection) -> Vector{Int}
+
+Get the indices of epochs that match the epoch selection predicate.
+
+The predicate receives `dat.data` (a `Vector{DataFrame}`) and can return a boolean vector
+or indices. This enables both index-based and content-based filtering.
+
+# Examples
+```julia
+# Get all epochs
+selected = get_selected_epochs(dat, epochs())
+
+# Get specific epochs by index
+selected = get_selected_epochs(dat, epochs(1:10))
+
+# Content-based: keep only epochs where interval < 1 second
+selected = get_selected_epochs(dat, epochs(df -> df.interval[1] < 1.0))
+```
+"""
 get_selected_epochs(dat::MultiDataFrameEeg, ::Union{Nothing,Colon}) = collect(1:length(dat.data))
 get_selected_epochs(dat::MultiDataFrameEeg, epoch_selection) = get_selected_epochs(dat, _to_epoch_func(epoch_selection))
 

@@ -53,7 +53,7 @@ eog_cfg = Dict(
 detect_eog_onsets!(dat, eog_cfg)
 ```
 """
-function detect_eog_onsets!(dat::EegData, eog_cfg::Dict)
+function detect_eog_onsets!(dat::ContinuousData, eog_cfg::Dict)
     vEOG_cfg = eog_cfg["vEOG_channels"]
     detect_eog_onsets!(dat, eog_cfg["vEOG_criterion"], Symbol(vEOG_cfg[3][1]), Symbol("is_" * vEOG_cfg[3][1]))
     hEOG_cfg = eog_cfg["hEOG_channels"]
@@ -68,7 +68,7 @@ end
 Non-mutating version of `detect_eog_onsets!`.
 """
 detect_eog_onsets(dat::ContinuousData, args...; kwargs...) = detect_eog_onsets!(copy(dat), args...; kwargs...)
-detect_eog_onsets(dat::EegData, eog_cfg::Dict) = detect_eog_onsets!(copy(dat), eog_cfg)
+detect_eog_onsets(dat::ContinuousData, eog_cfg::Dict) = detect_eog_onsets!(copy(dat), eog_cfg)
 
 function detect_eog_onsets!(dat_vec::AbstractVector{<:ContinuousData}, args...; kwargs...)
     for d in dat_vec
@@ -77,7 +77,7 @@ function detect_eog_onsets!(dat_vec::AbstractVector{<:ContinuousData}, args...; 
     return dat_vec
 end
 
-function detect_eog_onsets!(dat_vec::AbstractVector{<:EegData}, eog_cfg::Dict)
+function detect_eog_onsets!(dat_vec::AbstractVector{<:ContinuousData}, eog_cfg::Dict)
     for d in dat_vec
         detect_eog_onsets!(d, eog_cfg)
     end
@@ -86,4 +86,4 @@ end
 
 detect_eog_onsets(dat_vec::AbstractVector{<:ContinuousData}, args...; kwargs...) =
     [detect_eog_onsets(d, args...; kwargs...) for d in dat_vec]
-detect_eog_onsets(dat_vec::AbstractVector{<:EegData}, eog_cfg::Dict) = [detect_eog_onsets(d, eog_cfg) for d in dat_vec]
+detect_eog_onsets(dat_vec::AbstractVector{<:ContinuousData}, eog_cfg::Dict) = [detect_eog_onsets(d, eog_cfg) for d in dat_vec]
