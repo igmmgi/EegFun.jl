@@ -457,5 +457,17 @@ using DataFrames
         @test length(multi_events) == 2
         @test multi_events[1].code == 10
         @test multi_events[2].code == 20
+
+        # 7. Check that active_triggers filter in plot_kwargs is respected
+        state.plot_kwargs[:active_triggers] = Set([20])
+        filtered_events = EegFun._find_region_triggers(state)
+        @test length(filtered_events) == 1
+        @test filtered_events[1].code == 20
+        delete!(state.plot_kwargs, :active_triggers)
+
+        # 8. Check trigger visibility flag
+        @test get(state.marker_visibility, :trigger, false) == false
+        state.marker_visibility[:trigger] = true
+        @test get(state.marker_visibility, :trigger, false) == true
     end
 end

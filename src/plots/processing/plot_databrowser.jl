@@ -922,9 +922,13 @@ function _find_region_triggers(state::ContinuousDataBrowserState, clicked_region
     df = state.data.current[].data
     !hasproperty(df, :trigger) && return NamedTuple{(:sample, :code, :time),Tuple{Int,Int,Float64}}[]
 
+    active_triggers = get(state.plot_kwargs, :active_triggers, nothing)
     return [
-        (sample = i, code = Int(df.trigger[i]), time = Float64(df.time[i])) for
-        i = 1:nrow(df) if df.time[i] >= x_min && df.time[i] <= x_max && df.trigger[i] != 0 && (i == 1 || df.trigger[i] != df.trigger[i-1])
+        (sample = i, code = Int(df.trigger[i]), time = Float64(df.time[i])) for i = 1:nrow(df) if df.time[i] >= x_min &&
+            df.time[i] <= x_max &&
+            df.trigger[i] != 0 &&
+            (isnothing(active_triggers) || df.trigger[i] in active_triggers) &&
+            (i == 1 || df.trigger[i] != df.trigger[i-1])
     ]
 end
 
@@ -997,7 +1001,9 @@ function _show_additional_menu(state, clicked_region_idx = nothing)
     end))
 
     # Check for trigger codes in the selected region for continuous data
-    if state.data isa ContinuousDataState
+    # Only offer epoch plotting if the trigger toggle is active and the region contains an actual trigger
+    trigger_active = get(state.marker_visibility, :trigger, false)
+    if state.data isa ContinuousDataState && trigger_active
         trigger_events = _find_region_triggers(state, clicked_region_idx)
         bounds = _get_selected_region_bounds(state, clicked_region_idx)
         if !isempty(trigger_events) && !isnothing(bounds)
