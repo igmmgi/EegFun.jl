@@ -258,6 +258,7 @@ function plot_epochs(
         fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
         fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
         axes = Axis[]
+        legend_refs = Union{Legend,Nothing}[]
 
         # Initialize line references for control panel if interactive
         line_refs = nothing
@@ -283,7 +284,8 @@ function plot_epochs(
             )
 
             # Add legend
-            _add_epochs_legend!(ax, [:avg], dat_subset, plot_kwargs)
+            leg = _add_epochs_legend!(ax, [:avg], dat_subset, plot_kwargs)
+            !isnothing(leg) && push!(legend_refs, leg)
 
             # Set axis properties
             if length(all_plot_channels) == 1
@@ -322,7 +324,8 @@ function plot_epochs(
                 end
 
                 # Add legend
-                _add_epochs_legend!(ax, all_plot_channels, dat_subset, plot_kwargs)
+                leg = _add_epochs_legend!(ax, all_plot_channels, dat_subset, plot_kwargs)
+                !isnothing(leg) && push!(legend_refs, leg)
 
                 # Set axis properties
                 _finalize_epochs_axis!(ax, plot_kwargs)
@@ -382,6 +385,7 @@ function plot_epochs(
                 get(plot_kwargs, :baseline_interval, nothing),
                 line_refs,
                 condition_checked_ref,
+                legend_refs,
             )
 
             # Create right-click handler that has access to condition visibility
@@ -758,8 +762,7 @@ Similar to _add_legend! for ERPs but adapted for EpochData.
 """
 function _add_epochs_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vector{EpochData}, kwargs::Dict)
     # Check if legend should be shown
-    # Do not show if requested false, or single channel + single dataset
-    if !kwargs[:legend] || (length(channels) == 1 && length(datasets) == 1)
+    if !kwargs[:legend]
         return nothing
     end
     if !isempty(kwargs[:legend_channel]) && isempty(intersect(kwargs[:legend_channel], channels))
@@ -773,10 +776,15 @@ function _add_epochs_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vecto
     legend_kwargs = get(kwargs, :legend_kwargs, (;))
 
     # Add legend with position and optional label
-    if isempty(legend_label)
-        leg = axislegend(ax; position = legend_position, nbanks = nbanks, legend_kwargs...)
+    leg = if isempty(legend_label)
+        axislegend(ax; position = legend_position, nbanks = nbanks, legend_kwargs...)
     else
-        leg = axislegend(ax, legend_label; position = legend_position, nbanks = nbanks, legend_kwargs...)
+        axislegend(ax, legend_label; position = legend_position, nbanks = nbanks, legend_kwargs...)
+    end
+
+    # For single channel + single dataset, hide by default, but keep object for 'l' toggle
+    if length(channels) == 1 && length(datasets) == 1
+        leg.blockscene.visible[] = false
     end
 
     return leg
@@ -955,6 +963,7 @@ function _setup_epochs_control_panel!(
     baseline_interval::Interval,
     line_refs::Vector{<:Dict},
     condition_checked_ref::Ref{Union{Vector{Observable{Bool}},Nothing}} = Ref{Union{Vector{Observable{Bool}},Nothing}}(nothing),
+    legend_refs::Vector = Union{Legend,Nothing}[],
 )
     control_fig = Ref{Union{Figure,Nothing}}(nothing)
     control_screen = Ref{Any}(nothing)
@@ -1078,7 +1087,23 @@ function _setup_epochs_control_panel!(
                 connect!(condition_checked[i], cb.checked)
             end
 
+            # Legend toggle button
+            leg_btn = Button(panel_layout[6, 1], label = "Toggle Legend (L)", width = 200)
+            on(leg_btn.clicks) do _
+                for leg in legend_refs
+                    if !isnothing(leg) && isdefined(leg, :blockscene)
+                        leg.blockscene.visible[] = !leg.blockscene.visible[]
+                    end
+                end
+            end
+
             control_screen[] = _display_in_screen(control_fig[])
+        elseif event.action == Keyboard.press && event.key == Keyboard.l
+            for leg in legend_refs
+                if !isnothing(leg) && isdefined(leg, :blockscene)
+                    leg.blockscene.visible[] = !leg.blockscene.visible[]
+                end
+            end
         end
     end
 end

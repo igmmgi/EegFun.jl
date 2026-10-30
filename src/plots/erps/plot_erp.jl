@@ -543,7 +543,7 @@ function _plot_erp_core(
 
             # Set up control panel (press 'c' to open) - must be before selection to capture condition_checked
             condition_checked_ref = Ref{Union{Vector{Observable{Bool}},Nothing}}(nothing)
-            _setup_erp_control_panel!(fig, dat_subset, axes, baseline_interval, line_refs, condition_checked_ref)
+            _setup_erp_control_panel!(fig, dat_subset, axes, baseline_interval, line_refs, condition_checked_ref, legend_refs)
 
             # Create right-click handler that has access to condition visibility
             right_click_handler =
@@ -1320,7 +1320,7 @@ Handles legend_channel filtering, position, and other legend attributes.
 function _add_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vector{ErpData}, kwargs::Dict)
 
     # Check if legend should be shown
-    if !kwargs[:legend] || (length(channels) == 1 && length(datasets) == 1)
+    if !kwargs[:legend]
         return nothing
     end
     if !isempty(kwargs[:legend_channel]) && isempty(intersect(kwargs[:legend_channel], channels))
@@ -1339,6 +1339,11 @@ function _add_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vector{ErpDa
         axislegend(ax; position = legend_position, nbanks = nbanks, framevisible = framevisible, legend_kwargs...)
     else
         axislegend(ax, legend_label; position = legend_position, nbanks = nbanks, framevisible = framevisible, legend_kwargs...)
+    end
+
+    # For single channel + single dataset, hide by default, but keep object for 'l' toggle
+    if length(channels) == 1 && length(datasets) == 1
+        leg.blockscene.visible[] = false
     end
 
     return leg
@@ -1401,6 +1406,7 @@ function _setup_erp_control_panel!(
     baseline_interval::Interval,
     line_refs::Union{Vector{<:Dict},Nothing} = nothing,
     condition_checked_ref::Ref{Union{Vector{Observable{Bool}},Nothing}} = Ref{Union{Vector{Observable{Bool}},Nothing}}(nothing),
+    legend_refs = nothing,
 )
 
     control_fig = Ref{Union{Figure,Nothing}}(nothing)
@@ -1512,8 +1518,28 @@ function _setup_erp_control_panel!(
                 end
             end
 
+            # Legend toggle button
+            leg_btn = Button(layout[6, 1], label = "Toggle Legend (L)", width = 200)
+            on(leg_btn.clicks) do _
+                if !isnothing(legend_refs)
+                    for leg in legend_refs
+                        if !isnothing(leg) && isdefined(leg, :blockscene)
+                            leg.blockscene.visible[] = !leg.blockscene.visible[]
+                        end
+                    end
+                end
+            end
+
             _display_in_screen(control_fig[])
 
+        elseif event.action == Keyboard.press && event.key == Keyboard.l
+            if !isnothing(legend_refs)
+                for leg in legend_refs
+                    if !isnothing(leg) && isdefined(leg, :blockscene)
+                        leg.blockscene.visible[] = !leg.blockscene.visible[]
+                    end
+                end
+            end
         end
     end
 end

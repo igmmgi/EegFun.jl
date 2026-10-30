@@ -363,6 +363,7 @@ function _setup_ui_base(fig, ax, state, dat, ica = nothing)
     # Create toggles/markers/menus
     state.markers = _init_markers(ax, state)
     toggles = _create_toggles(fig, ax, state, dat)
+    channel_selector = _create_channel_selector(fig, ax, state)
     labels_menu = _create_labels_menu(fig, ax, state)
     reference_menu = _create_reference_menu(fig, state, dat)
 
@@ -378,20 +379,20 @@ function _setup_ui_base(fig, ax, state, dat, ica = nothing)
         extra_menu = _create_extra_channel_menu(fig, ax, state, dat)
     end
 
-    return (toggles, labels_menu, reference_menu, ica_menu, extra_menu)
+    return (toggles, channel_selector, labels_menu, reference_menu, ica_menu, extra_menu)
 end
 
 # Unified setup_ui method using multiple dispatch for the epoch menu
 """Assemble all UI controls into the figure grid."""
 function _setup_ui(fig, ax, state::DataBrowserState{<:AbstractDataState}, dat, ica = nothing, plot_kwargs = nothing)
     # Get common UI elements
-    toggles, labels_menu, reference_menu, ica_menu, extra_menu = _setup_ui_base(fig, ax, state, dat, ica)
+    toggles, channel_selector, labels_menu, reference_menu, ica_menu, extra_menu = _setup_ui_base(fig, ax, state, dat, ica)
 
     # Get type-specific epoch menu (or nothing)
     epoch_menu = _get_epoch_menu(fig, ax, state)
 
     # Build the grid components
-    _build_grid_components!(fig, dat, state, toggles, labels_menu, reference_menu, ica_menu, extra_menu, epoch_menu)
+    _build_grid_components!(fig, dat, state, toggles, channel_selector, labels_menu, reference_menu, ica_menu, extra_menu, epoch_menu)
 
     # Apply theme
     hideydecorations!(ax, label = true)
@@ -634,6 +635,26 @@ function _show_labels_menu(state, ax)
     end
 
     _display_in_screen(menu_fig)
+end
+
+"""Create channel selector dropdown menu for the control panel."""
+function _create_channel_selector(fig, ax, state)
+    channel_options = ["All Channels", string.(state.channels.labels)...]
+    menu = Menu(fig, options = channel_options, default = "All Channels")
+    state.plot_kwargs[:channel_selector_menu] = menu
+
+    updating_from_click = get!(state.plot_kwargs, :updating_channel_menu_from_click, Ref(false))
+
+    on(menu.selection) do selected_val
+        updating_from_click[] && return
+        if selected_val == "All Channels" || isnothing(selected_val)
+            _clear_channel_selection!(ax, state)
+        else
+            _select_single_channel!(ax, state, Symbol(selected_val))
+        end
+    end
+
+    return hcat(Label(fig, "Electrode:", halign = :left, fontsize = 14, font = :bold), menu)
 end
 
 """Create the channel-label selection button for the control panel."""
@@ -934,34 +955,6 @@ end
 
 _find_region_triggers(state, clicked_region_idx = nothing) = NamedTuple{(:sample, :code, :time),Tuple{Int,Int,Float64}}[]
 
-"""Extract and plot a single epoch around a trigger event within the selected region bounds."""
-function _plot_single_trigger_epoch(state::ContinuousDataBrowserState, ev, x_min::Real, x_max::Real; kwargs...)
-    curr_dat = state.data.current[]
-    idx_min = searchsortedfirst(curr_dat.data.time, x_min)
-    idx_max = searchsortedlast(curr_dat.data.time, x_max)
-    t_trig = ev.time
-
-    cols_to_keep = setdiff(propertynames(curr_dat.data), [:condition, :condition_name, :file])
-    epoch_df = copy(curr_dat.data[idx_min:idx_max, cols_to_keep])
-    epoch_df.time .-= t_trig
-    if !hasproperty(epoch_df, :epoch)
-        insertcols!(epoch_df, 1, :epoch => 1)
-    end
-
-    single_epoch = EpochData(
-        curr_dat.file,
-        1,
-        "Trigger_$(ev.code)",
-        [epoch_df],
-        copy(curr_dat.layout),
-        curr_dat.sample_rate,
-        copy(curr_dat.analysis_info),
-    )
-
-    selected_channels = state.channels.labels[state.channels.visible]
-    return plot_epochs(single_epoch; channel_selection = channels(selected_channels), kwargs...)
-end
-
 """Extract and plot all epochs matching a trigger code using the selected region offset interval."""
 function _plot_all_trigger_epochs(state::ContinuousDataBrowserState, code::Integer, x_min::Real, x_max::Real, t_trig::Real; kwargs...)
     curr_dat = state.data.current[]
@@ -969,10 +962,26 @@ function _plot_all_trigger_epochs(state::ContinuousDataBrowserState, code::Integ
     epoch_cond = EpochCondition(name = "Trigger_$code", trigger_sequences = [[code]])
     try
         all_epochs = extract_epochs(curr_dat, 1, epoch_cond, interval)
-        selected_channels = state.channels.labels[state.channels.visible]
-        return plot_epochs(all_epochs; channel_selection = channels(selected_channels), kwargs...)
+        target_channels = _get_browser_target_channels(state)
+        return plot_epochs(all_epochs; channel_selection = channels(target_channels), kwargs...)
     catch e
         @minimal_warning "Could not extract all epochs for trigger $code: $e"
+        return nothing
+    end
+end
+
+"""Extract and plot averaged ERP matching a trigger code using the selected region offset interval."""
+function _plot_trigger_erp(state::ContinuousDataBrowserState, code::Integer, x_min::Real, x_max::Real, t_trig::Real; kwargs...)
+    curr_dat = state.data.current[]
+    interval = (x_min - t_trig, x_max - t_trig)
+    epoch_cond = EpochCondition(name = "Trigger_$code", trigger_sequences = [[code]])
+    try
+        all_epochs = extract_epochs(curr_dat, 1, epoch_cond, interval)
+        erp = average_epochs(all_epochs)
+        target_channels = _get_browser_target_channels(state)
+        return plot_erp(erp; channel_selection = channels(target_channels), kwargs...)
+    catch e
+        @minimal_warning "Could not compute ERP for trigger $code: $e"
         return nothing
     end
 end
@@ -986,14 +995,20 @@ function _show_additional_menu(state, clicked_region_idx = nothing)
     menu_items = Tuple{String,Function}[]
 
     if has_coords
-        push!(menu_items, ("Topoplot", () -> begin
-            selected_data = _subset_selected_data(state, clicked_region_idx)
-            !isnothing(selected_data) && plot_topography(selected_data; scrubber = true)
-        end))
-        push!(menu_items, ("Topoplot 3D", () -> begin
-            selected_data = _subset_selected_data(state, clicked_region_idx)
-            !isnothing(selected_data) && plot_topography_3d(selected_data; scrubber = true)
-        end))
+        push!(
+            menu_items,
+            ("Topoplot", () -> begin
+                selected_data = _subset_selected_data(state, clicked_region_idx; all_visible_channels = true)
+                !isnothing(selected_data) && plot_topography(selected_data; scrubber = true)
+            end),
+        )
+        push!(
+            menu_items,
+            ("Topoplot 3D", () -> begin
+                selected_data = _subset_selected_data(state, clicked_region_idx; all_visible_channels = true)
+                !isnothing(selected_data) && plot_topography_3d(selected_data; scrubber = true)
+            end),
+        )
     end
     push!(menu_items, ("Spectrum", () -> begin
         selected_data = _subset_selected_data(state, clicked_region_idx)
@@ -1001,7 +1016,7 @@ function _show_additional_menu(state, clicked_region_idx = nothing)
     end))
 
     # Check for trigger codes in the selected region for continuous data
-    # Only offer epoch plotting if the trigger toggle is active and the region contains an actual trigger
+    # Only offer epoch and ERP plotting if the trigger toggle is active and the region contains an actual trigger
     trigger_active = get(state.marker_visibility, :trigger, false)
     if state.data isa ContinuousDataState && trigger_active
         trigger_events = _find_region_triggers(state, clicked_region_idx)
@@ -1010,23 +1025,10 @@ function _show_additional_menu(state, clicked_region_idx = nothing)
             x_min, x_max = bounds
             unique_codes = unique([ev.code for ev in trigger_events])
 
-            # Specific epoch action(s)
-            if length(trigger_events) == 1
-                ev = trigger_events[1]
-                push!(menu_items, ("Plot Epoch (Trigger $(ev.code))", () -> _plot_single_trigger_epoch(state, ev, x_min, x_max)))
-            else
-                for (i, ev) in enumerate(trigger_events)
-                    lbl =
-                        length(unique_codes) == 1 ? "Plot Epoch $i (Trigger $(ev.code))" :
-                        "Plot Epoch (Trigger $(ev.code) at $(round(ev.time, digits = 2))s)"
-                    push!(menu_items, (lbl, () -> _plot_single_trigger_epoch(state, ev, x_min, x_max)))
-                end
-            end
-
-            # All matching epochs action(s)
             for code in unique_codes
                 ev = trigger_events[findfirst(e -> e.code == code, trigger_events)]
-                push!(menu_items, ("Plot All Epochs (Trigger $code)", () -> _plot_all_trigger_epochs(state, code, x_min, x_max, ev.time)))
+                push!(menu_items, ("Plot Epochs (Trigger $code)", () -> _plot_all_trigger_epochs(state, code, x_min, x_max, ev.time)))
+                push!(menu_items, ("Plot ERP (Trigger $code)", () -> _plot_trigger_erp(state, code, x_min, x_max, ev.time)))
             end
         end
     end
@@ -1249,6 +1251,7 @@ function _build_grid_components!(
     dat,
     state,
     toggles,
+    channel_selector,
     labels_menu,
     reference_menu,
     ica_menu = nothing,
@@ -1259,6 +1262,7 @@ function _build_grid_components!(
     push!(grid_components, toggles[:, 1:2])
 
     append!(grid_components, _create_sliders(fig, state, dat))
+    push!(grid_components, _as_grid_row(fig, channel_selector))
     push!(grid_components, _as_grid_row(fig, labels_menu))
     push!(grid_components, _as_grid_row(fig, reference_menu))
 
@@ -1444,11 +1448,18 @@ function _handle_mouse_events!(ax, state)
 
         if event.button == Mouse.left
             if event.action == Mouse.press
+                # Check if click is on a channel label at the left
+                label_channel = _find_clicked_channel_label(state, mouse_x, mouseposition(ax)[2])
+                if !isnothing(label_channel)
+                    _handle_channel_click!(ax, state, label_channel)
+                    return
+                end
+
                 if ctrl_pressed[]
                     mouse_y = mouseposition(ax)[2]
                     clicked_channel = _find_closest_browser_channel(ax, state, mouse_x, mouse_y)
                     if !isnothing(clicked_channel)
-                        _toggle_channel_visibility!(ax, state, clicked_channel)
+                        _handle_channel_click!(ax, state, clicked_channel)
                         return
                     end
                 elseif shift_pressed[]
@@ -1519,10 +1530,55 @@ function _get_selected_channels(state)
     return state.channels.labels[selected_indices]
 end
 
+"""Return selected channels if any channel is selected, otherwise all visible channels."""
+function _get_browser_target_channels(state)
+    if any(state.channels.selected)
+        return state.channels.labels[state.channels.selected]
+    else
+        return state.channels.labels[state.channels.visible]
+    end
+end
+
+"""Find the channel label clicked near the left edge of the browser axis."""
+function _find_clicked_channel_label(state, mouse_x, mouse_y)
+    current_data = _get_current_data(state.data)
+    time_vec = current_data.time
+    t_start = time_vec[first(state.view.xrange[])]
+    t_end = time_vec[last(state.view.xrange[])]
+    t_span = t_end - t_start
+
+    # Check if click is near the left edge of the visible window
+    if mouse_x < t_start - 0.05 * t_span || mouse_x > t_start + 0.08 * t_span
+        return nothing
+    end
+
+    visible_indices = findall(state.channels.visible)
+    isempty(visible_indices) && return nothing
+
+    min_dist = Inf
+    closest_idx = nothing
+    for idx in visible_indices
+        dist = abs(mouse_y - state.view.offset[idx])
+        if dist < min_dist
+            min_dist = dist
+            closest_idx = idx
+        end
+    end
+
+    tol = if length(visible_indices) >= 2
+        offsets = state.view.offset[visible_indices]
+        step = abs(offsets[end] - offsets[1]) / (length(visible_indices) - 1)
+        max(step * 0.5, 20.0)
+    else
+        50.0
+    end
+
+    return min_dist <= tol ? closest_idx : nothing
+end
+
 """Find the channel line closest to the given mouse coordinates."""
 function _find_closest_browser_channel(ax, state, mouse_x, mouse_y)
     current_data = _get_current_data(state.data)
-    tolerance = 10  # data units tolerance for snap detection
 
     min_distance = Inf
     closest_channel = nothing
@@ -1538,14 +1594,8 @@ function _find_closest_browser_channel(ax, state, mouse_x, mouse_y)
     for (idx, visible) in enumerate(state.channels.visible)
         if visible
             col = state.channels.labels[idx]
-
-            # Calculate the y position of this channel at the clicked x position
             channel_y = current_data[x_idx, col] * state.view.amplitude_scale[] + state.view.offset[idx]
-
-            # Calculate distance to the clicked point
             distance = abs(mouse_y - channel_y)
-
-            # Track closest channel overall
             if distance < min_distance
                 min_distance = distance
                 closest_channel = idx
@@ -1553,37 +1603,84 @@ function _find_closest_browser_channel(ax, state, mouse_x, mouse_y)
         end
     end
 
-    # Only return if within tolerance
-    return min_distance <= tolerance ? closest_channel : nothing
+    visible_indices = findall(state.channels.visible)
+    tol = if length(visible_indices) >= 2
+        offsets = state.view.offset[visible_indices]
+        step = abs(offsets[end] - offsets[1]) / (length(visible_indices) - 1)
+        max(step * 0.45, 20.0)
+    else
+        50.0
+    end
+
+    return min_distance <= tol ? closest_channel : nothing
+end
+
+"""Apply visual styling to all channels based on current selection and repair state."""
+function _apply_channel_visual_state!(ax, state)
+    any_sel = any(state.channels.selected)
+    for (idx, col) in enumerate(state.channels.labels)
+        !state.channels.visible[idx] && continue
+        is_selected = state.channels.selected[idx]
+        is_repaired = _is_channel_repaired(state, col)
+        if haskey(state.channels.data_lines, col) && haskey(state.channels.data_labels, col)
+            line_handle = state.channels.data_lines[col]
+            label_handle = state.channels.data_labels[col]
+            if is_repaired || is_selected
+                sel_color = state.plot_kwargs[:selected_channel_color]
+                line_handle.colormap[] = [sel_color, sel_color, sel_color]
+                line_handle.linewidth[] = state.plot_kwargs[:channel_line_width] * 2.0
+                label_handle.color[] = :red
+            else
+                is_cleaned = state.ica.is_active && haskey(state.plot_kwargs, :show_cleaned_ica) && state.plot_kwargs[:show_cleaned_ica][]
+                base_color =
+                    is_cleaned ? get(state.plot_kwargs, :cleaned_channel_color, :green) : state.plot_kwargs[:unselected_channel_color]
+                line_handle.colormap[] = [base_color, base_color, :red]
+                line_handle.linewidth[] = state.plot_kwargs[:channel_line_width]
+                label_handle.color[] = any_sel ? :gray50 : :black
+            end
+        end
+    end
+end
+
+"""Select a single channel, update styling, and sync with control panel menu."""
+function _select_single_channel!(ax, state, target_col::Symbol)
+    state.channels.selected .= false
+    idx = findfirst(==(target_col), state.channels.labels)
+    if !isnothing(idx)
+        state.channels.selected[idx] = true
+    end
+    _apply_channel_visual_state!(ax, state)
+    if haskey(state.plot_kwargs, :channel_selector_menu) && haskey(state.plot_kwargs, :updating_channel_menu_from_click)
+        state.plot_kwargs[:updating_channel_menu_from_click][] = true
+        state.plot_kwargs[:channel_selector_menu].selection[] = string(target_col)
+        state.plot_kwargs[:updating_channel_menu_from_click][] = false
+    end
+end
+
+"""Clear channel selection and restore normal styling for all channels."""
+function _clear_channel_selection!(ax, state)
+    state.channels.selected .= false
+    _apply_channel_visual_state!(ax, state)
+    if haskey(state.plot_kwargs, :channel_selector_menu) && haskey(state.plot_kwargs, :updating_channel_menu_from_click)
+        state.plot_kwargs[:updating_channel_menu_from_click][] = true
+        state.plot_kwargs[:channel_selector_menu].selection[] = "All Channels"
+        state.plot_kwargs[:updating_channel_menu_from_click][] = false
+    end
+end
+
+"""Handle click on channel label or trace to select or deselect a channel."""
+function _handle_channel_click!(ax, state, channel_idx)
+    col = state.channels.labels[channel_idx]
+    if state.channels.selected[channel_idx] && count(state.channels.selected) == 1
+        _clear_channel_selection!(ax, state)
+    else
+        _select_single_channel!(ax, state, col)
+    end
 end
 
 """Toggle the selected/highlighted state of one channel instantly."""
 function _toggle_channel_selection!(ax, state, channel_idx)
-    col = state.channels.labels[channel_idx]
-    is_selected = state.channels.selected[channel_idx] = !state.channels.selected[channel_idx]
-    is_repaired = _is_channel_repaired(state, col)
-
-    if haskey(state.channels.data_lines, col) && haskey(state.channels.data_labels, col)
-        line_handle = state.channels.data_lines[col]
-        label_handle = state.channels.data_labels[col]
-
-        if is_repaired || is_selected
-            sel_color = state.plot_kwargs[:selected_channel_color]
-            line_handle.colormap[] = [sel_color, sel_color, sel_color]
-            line_handle.linewidth[] = state.plot_kwargs[:channel_line_width] * 2
-            label_handle.color[] = :red
-        else
-            is_cleaned = state.ica.is_active && haskey(state.plot_kwargs, :show_cleaned_ica) && state.plot_kwargs[:show_cleaned_ica][]
-            base_color = is_cleaned ? get(state.plot_kwargs, :cleaned_channel_color, :green) : state.plot_kwargs[:unselected_channel_color]
-            line_handle.colormap[] = [base_color, base_color, :red]
-            line_handle.linewidth[] = state.plot_kwargs[:channel_line_width]
-            label_handle.color[] = :black
-        end
-    else
-        # Fallback if handles do not exist yet
-        _clear_and_save_limits!(ax, state)
-        _draw(ax, state)
-    end
+    _handle_channel_click!(ax, state, channel_idx)
 end
 const _toggle_channel_visibility! = _toggle_channel_selection!
 
@@ -1597,8 +1694,9 @@ function _handle_keyboard_events!(fig, ax, state)
             # Open channel repair menu
             _show_channel_repair_menu(state, ax)
         elseif event.action == Keyboard.press && event.key == Keyboard.c
-            # Clear all selected regions
+            # Clear all selected regions and channel selection
             _clear_all_selected_regions!(ax, state)
+            _clear_channel_selection!(ax, state)
         elseif event.action in (Keyboard.press, Keyboard.repeat) && haskey(KEYBOARD_ACTIONS, event.key)
             action = KEYBOARD_ACTIONS[event.key]
             _handle_navigation!(ax, state, action)
@@ -1738,7 +1836,7 @@ function _get_selected_region_bounds(state, clicked_region_idx = nothing)
 end
 
 """Return a subset of the current continuous data within the selected region."""
-function _subset_selected_data(state::ContinuousDataBrowserState, clicked_region_idx = nothing)
+function _subset_selected_data(state::ContinuousDataBrowserState, clicked_region_idx = nothing; all_visible_channels::Bool = false)
     bounds = _get_selected_region_bounds(state, clicked_region_idx)
     if isnothing(bounds)
         @minimal_warning "No region selected"
@@ -1746,7 +1844,7 @@ function _subset_selected_data(state::ContinuousDataBrowserState, clicked_region
     end
     x_min, x_max = bounds
 
-    selected_channels = state.channels.labels[state.channels.visible]
+    selected_channels = all_visible_channels ? state.channels.labels[state.channels.visible] : _get_browser_target_channels(state)
     return subset(
         state.data.current[],
         sample_selection = x -> (x.time .>= x_min) .& (x.time .<= x_max),
@@ -1755,7 +1853,7 @@ function _subset_selected_data(state::ContinuousDataBrowserState, clicked_region
 end
 
 """Return a subset of the current epoch data within the selected region."""
-function _subset_selected_data(state::EpochedDataBrowserState, clicked_region_idx = nothing)
+function _subset_selected_data(state::EpochedDataBrowserState, clicked_region_idx = nothing; all_visible_channels::Bool = false)
     bounds = _get_selected_region_bounds(state, clicked_region_idx)
     if isnothing(bounds)
         @minimal_warning "No region selected"
@@ -1763,7 +1861,7 @@ function _subset_selected_data(state::EpochedDataBrowserState, clicked_region_id
     end
     x_min, x_max = bounds
 
-    selected_channels = state.channels.labels[state.channels.visible]
+    selected_channels = all_visible_channels ? state.channels.labels[state.channels.visible] : _get_browser_target_channels(state)
     current_epoch = state.data.current_epoch[]
 
     # Create a sample_selection function that works with epoch DataFrame
@@ -2325,7 +2423,7 @@ function _draw(ax, state::DataBrowserState{<:AbstractDataState})
                         )
                     )
                 )
-                _create_label!(state.channels.data_labels, col, ax, time_start_obs, label_y_obs, is_selected)
+                _create_label!(state.channels.data_labels, col, ax, time_start_obs, label_y_obs, is_selected, any(state.channels.selected))
             else
                 _hide_channel_label!(state.channels.data_labels, col)
             end
@@ -2403,9 +2501,9 @@ function _create_line!(data_lines, col, ax, points_obs, color, colormap, linewid
 end
 
 """Add a channel-name text label on the axis."""
-function _create_label!(data_labels, col, ax, x_obs, y_obs, is_selected)
-    data_labels[col] =
-        text!(ax, x_obs, y_obs, text = String(col), align = (:left, :center), fontsize = 18, color = is_selected ? :red : :black)
+function _create_label!(data_labels, col, ax, x_obs, y_obs, is_selected, any_selected = false)
+    label_color = is_selected ? :red : (any_selected ? :gray50 : :black)
+    data_labels[col] = text!(ax, x_obs, y_obs, text = String(col), align = (:left, :center), fontsize = 18, color = label_color)
 end
 
 """Hide a single channel label."""

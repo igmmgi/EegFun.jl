@@ -54,10 +54,27 @@ function _get_plot_help_info(plot_type::Symbol)::PlotHelpInfo
                 ("Shift + Left Click + Drag", "Select x-region (multiple selections allowed)"),
                 ("Left Click on region", "Deselect that region"),
                 ("Shift + Left Click", "Clear current selection"),
-                ("C", "Clear all selected regions"),
-                ("Right Click within highlighted region", "Context menu (includes 'Get Selected Regions')"),
-                ("Strg/Crtl + Left click", "Select closest channel"),
+                ("C", "Clear all selected regions and channel selection"),
+                ("Right Click within highlighted region", "Context menu (Plot Epochs, Plot ERP, Topoplot, Spectrum)"),
+                ("Left Click on channel label / Electrode menu", "Select/toggle single channel"),
+                ("Ctrl + Left click", "Select/toggle closest channel"),
                 ("R", "Open channel repair menu (continuous data only)"),
+            ],
+        ),
+        :erp => PlotHelpInfo(
+            "ERP Plot",
+            [
+                ("C", "Open control panel (baseline and condition toggles)"),
+                ("L", "Toggle legend on/off"),
+                ("Left Click + Drag", "Pan the view"),
+            ],
+        ),
+        :epochs => PlotHelpInfo(
+            "Epochs Plot",
+            [
+                ("C", "Open control panel (baseline and condition toggles)"),
+                ("L", "Toggle legend on/off"),
+                ("Left Click + Drag", "Pan the view"),
             ],
         ),
         :erp_image => PlotHelpInfo(

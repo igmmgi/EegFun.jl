@@ -439,17 +439,36 @@ using DataFrames
         @test trig_events[1].code == 10
         @test abs(trig_events[1].time - t_trig) < 1e-12
 
-        # 4. Extract single epoch
-        single_res = EegFun._plot_single_trigger_epoch(state, trig_events[1], x_min, x_max; display_plot = false)
-        @test haskey(single_res, :fig)
-        @test single_res.fig isa Figure
-
-        # 5. Extract all epochs for trigger 10
+        # 4. Extract and plot all epochs for trigger 10
         all_res = EegFun._plot_all_trigger_epochs(state, 10, x_min, x_max, t_trig; display_plot = false)
         @test haskey(all_res, :fig)
         @test all_res.fig isa Figure
 
-        # 6. Select region containing multiple triggers (around 1500 and 1800)
+        # 5. Extract and plot ERP for trigger 10
+        erp_res = EegFun._plot_trigger_erp(state, 10, x_min, x_max, t_trig; display_plot = false)
+        @test haskey(erp_res, :fig)
+        @test erp_res.fig isa Figure
+
+        # 6. Test channel selection helpers and target channel routing
+        @test EegFun._get_browser_target_channels(state) == state.channels.labels[state.channels.visible]
+        target_ch = state.channels.labels[1]
+        EegFun._select_single_channel!(ax, state, target_ch)
+        @test state.channels.selected[1] == true
+        @test count(state.channels.selected) == 1
+        @test EegFun._get_browser_target_channels(state) == [target_ch]
+
+        # Verify single channel is routed into plot_epochs and plot_erp
+        single_all_res = EegFun._plot_all_trigger_epochs(state, 10, x_min, x_max, t_trig; display_plot = false)
+        @test single_all_res.fig isa Figure
+        single_erp_res = EegFun._plot_trigger_erp(state, 10, x_min, x_max, t_trig; display_plot = false)
+        @test single_erp_res.fig isa Figure
+
+        # Clear channel selection
+        EegFun._clear_channel_selection!(ax, state)
+        @test !any(state.channels.selected)
+        @test EegFun._get_browser_target_channels(state) == state.channels.labels[state.channels.visible]
+
+        # 7. Select region containing multiple triggers (around 1500 and 1800)
         t_trig2 = cdat.data.time[1500]
         t_trig3 = cdat.data.time[1800]
         push!(state.selection.selected_regions[], (t_trig2 - 0.1, t_trig3 + 0.1))
@@ -458,14 +477,14 @@ using DataFrames
         @test multi_events[1].code == 10
         @test multi_events[2].code == 20
 
-        # 7. Check that active_triggers filter in plot_kwargs is respected
+        # 8. Check that active_triggers filter in plot_kwargs is respected
         state.plot_kwargs[:active_triggers] = Set([20])
         filtered_events = EegFun._find_region_triggers(state)
         @test length(filtered_events) == 1
         @test filtered_events[1].code == 20
         delete!(state.plot_kwargs, :active_triggers)
 
-        # 8. Check trigger visibility flag
+        # 9. Check trigger visibility flag
         @test get(state.marker_visibility, :trigger, false) == false
         state.marker_visibility[:trigger] = true
         @test get(state.marker_visibility, :trigger, false) == true
