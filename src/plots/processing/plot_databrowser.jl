@@ -1638,8 +1638,7 @@ function _apply_channel_visual_state!(ax, state)
                 label_handle.color[] = :red
             else
                 is_cleaned = state.ica.is_active && haskey(state.plot_kwargs, :show_cleaned_ica) && state.plot_kwargs[:show_cleaned_ica][]
-                base_color =
-                    is_cleaned ? get(state.plot_kwargs, :cleaned_channel_color, :green) : base_unselected_color
+                base_color = is_cleaned ? get(state.plot_kwargs, :cleaned_channel_color, :green) : base_unselected_color
                 line_handle.colormap[] = [base_color, base_color, :red]
                 line_handle.linewidth[] = normal_lw
                 label_handle.color[] = :black
