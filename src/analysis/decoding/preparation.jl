@@ -1,38 +1,14 @@
 """
-    prepare_decoding(epochs::Vector{T}; condition_selection, channel_selection, interval_selection) where {T<:MultiDataFrameEeg}
+    prepare_decoding(epochs::AbstractVector{T}; condition_selection = conditions(),
+                     channel_selection = channels(), interval_selection = times()) where {T<:MultiDataFrameEeg}
+    prepare_decoding(file_pattern::String; input_dir = pwd(), participant_selection = participants(),
+                     condition_selection = conditions(), channel_selection = channels(),
+                     interval_selection = times())
 
-Prepare epoch data for multivariate pattern analysis (MVPA/decoding).
+Organize multi-participant epoch data (`EpochData` or `TimeFreqEpochData`) into per-participant
+condition vectors `Vector{Vector{T}}` ready for [`decode_libsvm`](@ref).
 
-Organizes epoch data into a structure suitable for decoding analysis by grouping
-epochs by participant and selecting specified conditions for classification.
-Works with both EpochData and TimeFreqEpochData.
-
-# Arguments
-- `epochs::Vector{T}`: Epoch data containing multiple conditions/participants (EpochData or TimeFreqEpochData)
-- `condition_selection::Function`: Predicate to select conditions for classification (default: `conditions()` - all conditions)
-- `channel_selection::Function`: Predicate to filter channels (default: `channels()` - all channels)
-- `interval_selection::Interval`: Time window as tuple (e.g., (0.0, 1.0)) or interval object (default: `times()` - all samples)
-
-# Returns
-- `Vector{Vector{T}}`: Vector of participant data, where each element is a vector of data for that participant's conditions
-
-# Examples
-```julia
-# ERP decoding
-# all_epochs = read_all_data(EpochData, joinpath(input_dir, "epochs_final"))
-participant_epochs = prepare_decoding(
-    all_epochs,
-    condition_selection = conditions([1, 2]),
-    channel_selection = channels(),
-    interval_selection = (0.0, 1.0))
-
-# TF decoding
-# all_tf_epochs = read_all_data(TimeFreqEpochData, joinpath(input_dir, "tf_epochs"))
-participant_tf = prepare_decoding(
-    all_tf_epochs,
-    condition_selection = conditions([1, 2]),
-    interval_selection = times(0.0, 1.0))
-```
+Validates consistent participants, channels, sample rates, and time vectors across selected conditions.
 """
 function prepare_decoding(
     epochs::AbstractVector{T};
@@ -40,105 +16,62 @@ function prepare_decoding(
     channel_selection = channels(),
     interval_selection::Interval = times(),
 ) where {T<:MultiDataFrameEeg}
+    isempty(epochs) && @minimal_error("Cannot prepare decoding with empty epochs vector")
 
-    if isempty(epochs)
-        @minimal_error("Cannot prepare decoding with empty epochs vector")
-    end
-
-    # Group all epochs by condition first
     epochs_by_condition = group_by_condition(epochs)
-
-    # Apply condition selection to sample datasets for each condition
-    all_cond_nums = collect(keys(epochs_by_condition))  # Already sorted by group_by_condition
+    all_cond_nums = collect(keys(epochs_by_condition))
     sample_epochs = [epochs_by_condition[c][1] for c in all_cond_nums]
-    selected_indices = get_selected_conditions(sample_epochs, condition_selection)
-    selected_cond_nums = all_cond_nums[selected_indices]
+    selected_cond_nums = all_cond_nums[get_selected_conditions(sample_epochs, condition_selection)]
 
-    # Validate at least 2 conditions for classification
     if length(selected_cond_nums) < 2
         @minimal_error(
             "Decoding requires 2+ conditions, got $(length(selected_cond_nums)): $selected_cond_nums. Use condition_selection to select 2+ conditions."
         )
     end
 
-    # Get selected conditions
-    selected_conditions = [epochs_by_condition[cond_num] for cond_num in selected_cond_nums]
+    selected_conditions = [epochs_by_condition[c] for c in selected_cond_nums]
+    pids_per_cond = [Int[_extract_participant_id(basename(ep.file)) for ep in cond_eps] for cond_eps in selected_conditions]
 
-    # Extract participant IDs from filenames for all conditions
-    participant_ids_per_condition =
-        [[_extract_participant_id(basename(epoch.file)) for epoch in condition_epochs] for condition_epochs in selected_conditions]
-
-    # Validate all conditions have the same participants
-    first_participants = participant_ids_per_condition[1]
-    for (cond_idx, participants) in enumerate(participant_ids_per_condition[2:end])
-        sort(participants) != sort(first_participants) && @minimal_error(
-            "Condition $(selected_cond_nums[cond_idx+1]) has different participants than condition $(selected_cond_nums[1]). " *
+    sorted_first_pids = sort(pids_per_cond[1])
+    for c = 2:length(selected_conditions)
+        sort(pids_per_cond[c]) != sorted_first_pids && @minimal_error(
+            "Condition $(selected_cond_nums[c]) has different participants than condition $(selected_cond_nums[1]). " *
             "Decoding requires the same participants across all conditions."
         )
     end
 
-    # Get unique participant list (sorted)
-    unique_participants = sort(unique(first_participants))
-
-    # Validate all epochs have same structure within each condition
-    for (cond_idx, condition_epochs) in enumerate(selected_conditions)
-        if !_have_same_structure(condition_epochs)
-            @minimal_error("Condition $(selected_cond_nums[cond_idx]): Epochs have inconsistent structure")
-        end
+    for (c, cond_eps) in enumerate(selected_conditions)
+        _have_same_structure(cond_eps) || @minimal_error("Condition $(selected_cond_nums[c]): Epochs have inconsistent structure")
+    end
+    for c = 2:length(selected_conditions)
+        _have_same_structure(selected_conditions[1][1], selected_conditions[c][1]) || @minimal_error(
+            "Condition $(selected_cond_nums[1]) vs $(selected_cond_nums[c]): " *
+            "Epochs have inconsistent structure (different channels, sample rates, or time vectors)"
+        )
     end
 
-    # Validate structure is consistent across conditions
-    for cond_idx = (firstindex(selected_conditions)+1):lastindex(selected_conditions)
-        if !_have_same_structure(selected_conditions[1][1], selected_conditions[cond_idx][1])
-            @minimal_error(
-                "Condition $(selected_cond_nums[1]) vs $(selected_cond_nums[cond_idx]): " *
-                "Epochs have inconsistent structure (different channels, sample rates, or time vectors)"
-            )
-        end
-    end
-
-    # Apply channel and interval selection to all epochs
     selected_conditions = [
-        subset(condition_epochs; channel_selection = channel_selection, interval_selection = interval_selection) for
-        condition_epochs in selected_conditions
+        subset(cond_eps; channel_selection = channel_selection, interval_selection = interval_selection) for cond_eps in selected_conditions
     ]
 
-    # Validate selection produced data
-    for (cond_idx, condition_epochs) in enumerate(selected_conditions)
-        if isempty(condition_epochs)
-            @minimal_error("Condition $(selected_cond_nums[cond_idx]): No data matched the selection criteria!")
-        end
-        if isempty(channel_labels(condition_epochs[1]))
-            @minimal_error("Channel selection produced no channels")
-        end
-        if isempty(time_vector(condition_epochs[1]))
-            @minimal_error("Interval selection produced no time points")
-        end
+    for (c, cond_eps) in enumerate(selected_conditions)
+        isempty(cond_eps) && @minimal_error("Condition $(selected_cond_nums[c]): No data matched the selection criteria!")
+        isempty(channel_labels(cond_eps[1])) && @minimal_error("Channel selection produced no channels")
+        isempty(time_vector(cond_eps[1])) && @minimal_error("Interval selection produced no time points")
     end
 
-    # Organize by participant: for each participant, collect their data for all selected conditions
-    participant_epochs = Vector{Vector{T}}()
-    sizehint!(participant_epochs, length(unique_participants))
-
-    for participant_id in unique_participants
-        participant_data = Vector{T}()
-        sizehint!(participant_data, length(selected_conditions))
-
-        for condition_epochs in selected_conditions
-            # Find this participant's epoch for this condition
-            participant_epoch = findfirst(epoch -> _extract_participant_id(basename(epoch.file)) == participant_id, condition_epochs)
-
-            if !isnothing(participant_epoch)
-                push!(participant_data, condition_epochs[participant_epoch])
-            else
-                @minimal_error(
-                    "Participant $participant_id is missing data for condition. " *
-                    "All participants must have data for all selected conditions."
-                )
-            end
+    unique_pids = unique(sorted_first_pids)
+    participant_epochs = Vector{Vector{T}}(undef, length(unique_pids))
+    for (p_idx, pid) in enumerate(unique_pids)
+        p_data = Vector{T}(undef, length(selected_conditions))
+        for (c, cond_eps) in enumerate(selected_conditions)
+            ep_idx = findfirst(==(pid), pids_per_cond[c])
+            isnothing(ep_idx) && @minimal_error(
+                "Participant $pid is missing data for condition. All participants must have data for all selected conditions."
+            )
+            p_data[c] = cond_eps[ep_idx]
         end
-
-        push!(participant_epochs, participant_data)
+        participant_epochs[p_idx] = p_data
     end
 
     return participant_epochs
@@ -152,18 +85,11 @@ function prepare_decoding(
     channel_selection = channels(),
     interval_selection::Interval = times(),
 )
-
-    # Load all data (auto-detects type from files)
     all_data = read_all_data(joinpath(input_dir, file_pattern), participant_selection)
-    if isempty(all_data)
-        @minimal_error("No valid data found matching pattern '$file_pattern' in $input_dir")
-    end
+    isempty(all_data) && @minimal_error("No valid data found matching pattern '$file_pattern' in $input_dir")
 
-    # Filter to epoch-based types suitable for decoding
     epochs = filter(d -> d isa MultiDataFrameEeg, all_data)
-    if isempty(epochs)
-        @minimal_error("No epoch data (EpochData or TimeFreqEpochData) found matching pattern '$file_pattern' in $input_dir")
-    end
+    isempty(epochs) && @minimal_error("No epoch data (EpochData or TimeFreqEpochData) found matching pattern '$file_pattern' in $input_dir")
 
     return prepare_decoding(
         epochs;
