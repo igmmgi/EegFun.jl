@@ -1,31 +1,24 @@
-# === PEAK TO PEAK ARTIFACT DETECTION ===
-
-"""
-    _is_peak_to_peak(signal::AbstractVector{<:Real}, threshold::Real, window_samples::Int)
-
-Detect moving-window peak-to-peak artifacts (max - min > threshold).
-Returns a boolean mask where all samples within any offending window are true.
-"""
-function _is_peak_to_peak(signal::AbstractVector{<:Real}, threshold::Real, window_samples::Int)
+function _is_peak_to_peak!(
+    mask::AbstractVector{Bool},
+    signal::AbstractVector{<:Real},
+    threshold::Real,
+    window_samples::Int,
+    ws::Union{Nothing,NTuple{6,Vector{Float64}}} = nothing,
+)
     n = length(signal)
-    n == 0 && return falses(0)
-    mask = falses(n)
+    fill!(mask, false)
+    n == 0 && return mask
     w = max(1, window_samples)
     if w >= n
-        return (maximum(signal) - minimum(signal) > threshold ? trues(n) : falses(n))
+        (maximum(signal) - minimum(signal) > threshold) && fill!(mask, true)
+        return mask
     end
-    if w == 1
-        return falses(n)
-    end
+    w == 1 && return mask
+
+    pref_max, pref_min, suff_max_prev, suff_min_prev, suff_max_curr, suff_min_curr =
+        isnothing(ws) ? ntuple(_ -> Vector{Float64}(undef, w), 6) : ws
 
     n_blocks = cld(n, w)
-    pref_max = Vector{Float64}(undef, w)
-    pref_min = Vector{Float64}(undef, w)
-    suff_max_prev = Vector{Float64}(undef, w)
-    suff_min_prev = Vector{Float64}(undef, w)
-    suff_max_curr = Vector{Float64}(undef, w)
-    suff_min_curr = Vector{Float64}(undef, w)
-
     last_marked = 0
     thresh_f = Float64(threshold)
 
@@ -34,8 +27,7 @@ function _is_peak_to_peak(signal::AbstractVector{<:Real}, threshold::Real, windo
         b_end = min(b_start + w - 1, n)
         b_len = b_end - b_start + 1
 
-        p_max = Float64(signal[b_start])
-        p_min = Float64(signal[b_start])
+        p_max = p_min = Float64(signal[b_start])
         pref_max[1] = p_max
         pref_min[1] = p_min
         for k = 2:b_len
@@ -46,8 +38,7 @@ function _is_peak_to_peak(signal::AbstractVector{<:Real}, threshold::Real, windo
             pref_min[k] = p_min
         end
 
-        s_max = Float64(signal[b_end])
-        s_min = Float64(signal[b_end])
+        s_max = s_min = Float64(signal[b_end])
         suff_max_curr[b_len] = s_max
         suff_min_curr[b_len] = s_min
         for k = (b_len-1):-1:1
@@ -59,24 +50,16 @@ function _is_peak_to_peak(signal::AbstractVector{<:Real}, threshold::Real, windo
         end
 
         if b == 1
-            if b_len == w
-                w_max = pref_max[w]
-                w_min = pref_min[w]
-                if (w_max - w_min) > thresh_f
-                    mask[1:w] .= true
-                    last_marked = w
-                end
+            if b_len == w && (pref_max[w] - pref_min[w]) > thresh_f
+                mask[1:w] .= true
+                last_marked = w
             end
         else
             for k = 2:w
                 j_global = (b - 1) * w + k - 1
-                if j_global > n
-                    break
-                end
+                j_global > n && break
                 i_global = j_global - w + 1
-                w_max = max(suff_max_prev[k], pref_max[k-1])
-                w_min = min(suff_min_prev[k], pref_min[k-1])
-                if (w_max - w_min) > thresh_f
+                if (max(suff_max_prev[k], pref_max[k-1]) - min(suff_min_prev[k], pref_min[k-1])) > thresh_f
                     s_idx = max(last_marked + 1, i_global)
                     if s_idx <= j_global
                         mask[s_idx:j_global] .= true
@@ -84,17 +67,11 @@ function _is_peak_to_peak(signal::AbstractVector{<:Real}, threshold::Real, windo
                     end
                 end
             end
-            if b_len == w
-                i_global = b_start
-                j_global = b_end
-                w_max = pref_max[w]
-                w_min = pref_min[w]
-                if (w_max - w_min) > thresh_f
-                    s_idx = max(last_marked + 1, i_global)
-                    if s_idx <= j_global
-                        mask[s_idx:j_global] .= true
-                        last_marked = j_global
-                    end
+            if b_len == w && (pref_max[w] - pref_min[w]) > thresh_f
+                s_idx = max(last_marked + 1, b_start)
+                if s_idx <= b_end
+                    mask[s_idx:b_end] .= true
+                    last_marked = b_end
                 end
             end
         end
@@ -106,16 +83,18 @@ function _is_peak_to_peak(signal::AbstractVector{<:Real}, threshold::Real, windo
     return mask
 end
 
+_is_peak_to_peak(signal::AbstractVector{<:Real}, threshold::Real, window_samples::Int) =
+    _is_peak_to_peak!(falses(length(signal)), signal, threshold, window_samples)
+
 """
     is_peak_to_peak!(dat::SingleDataFrameEeg, threshold::Real, window_size::Real;
-                     channel_selection::Function = channels(),
-                     sample_selection::Function = samples(),
-                     interval_selection::Interval = times(),
-                     mode::Symbol = :combined, channel_out = nothing)
-    is_peak_to_peak!(dat::MultiDataFrameEeg, ...)
-    is_peak_to_peak!(dat::Vector{EpochData}, ...)
+                     channel_selection = channels(), sample_selection = samples(),
+                     interval_selection = times(), mode::Symbol = :combined, channel_out = nothing)
+    is_peak_to_peak!(dat::MultiDataFrameEeg, threshold::Real, window_size::Real; kwargs...)
+    is_peak_to_peak!(dat::AbstractVector{<:EpochData}, threshold::Real, window_size::Real; kwargs...)
 
-Detect moving window peak-to-peak artifacts (where max-min > `threshold` inside `window_size` in seconds).
+Detect moving-window peak-to-peak artifacts (`max - min > threshold` within `window_size` seconds),
+storing boolean flag columns in-place (`:is_peak_to_peak` or `:is_peak_to_peak_<ch>` by default).
 """
 function is_peak_to_peak!(
     dat::SingleDataFrameEeg,
@@ -127,40 +106,21 @@ function is_peak_to_peak!(
     mode::Symbol = :combined,
     channel_out::Union{Symbol,Nothing} = nothing,
 )
-    mode ∉ [:separate, :combined] && @minimal_error("mode must be :separate or :combined")
-    threshold <= 0 && @minimal_error("threshold must be greater than 0")
-    window_size <= 0 && @minimal_error("window_size must be greater than 0")
-
-    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
-    isempty(selected_channels) && @minimal_error("No channels selected")
-
-    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
-    selected_samples = get_selected_samples(dat.data, combined_sel)
-
+    _validate_detector_args(mode, threshold, window_size)
     window_samples = round(Int, window_size * dat.sample_rate)
-    channel_out = something(channel_out, :is_peak_to_peak)
-
-    if mode == :combined
-        dat.data[!, channel_out] = falses(n_samples(dat))
-        sample_mask = falses(n_samples(dat))
-        sample_mask[selected_samples] .= true
-
-        for ch in selected_channels
-            p2p_mask = _is_peak_to_peak(dat.data[!, ch], threshold, window_samples) .& sample_mask
-            dat.data[!, channel_out] .|= p2p_mask
-        end
-    elseif mode == :separate
-        sample_mask = falses(n_samples(dat))
-        sample_mask[selected_samples] .= true
-
-        for ch in selected_channels
-            p2p_mask = _is_peak_to_peak(dat.data[!, ch], threshold, window_samples) .& sample_mask
-            column_name = Symbol("$(channel_out)_$(ch)")
-            dat.data[!, column_name] = p2p_mask
-        end
-    end
-
-    return dat
+    combined_col = something(channel_out, :is_peak_to_peak)
+    sep_fn = ch -> Symbol("$(combined_col)_$(ch)")
+    ws = ntuple(_ -> Vector{Float64}(undef, max(1, window_samples)), 6)
+    return _flag_artifacts!(
+        (buf, sig) -> _is_peak_to_peak!(buf, sig, threshold, window_samples, ws),
+        dat,
+        combined_col,
+        sep_fn;
+        channel_selection,
+        sample_selection,
+        interval_selection,
+        mode,
+    )
 end
 
 function is_peak_to_peak!(
@@ -174,64 +134,21 @@ function is_peak_to_peak!(
     mode::Symbol = :combined,
     channel_out::Union{Symbol,Nothing} = nothing,
 )
-    mode ∉ [:separate, :combined] && @minimal_error("mode must be :separate or :combined")
-    threshold <= 0 && @minimal_error("threshold must be greater than 0")
-    window_size <= 0 && @minimal_error("window_size must be greater than 0")
-
-    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
-    isempty(selected_channels) && @minimal_error("No channels selected")
-    selected_epochs = get_selected_epochs(dat, epoch_selection)
-    isempty(selected_epochs) && @minimal_error("No epochs selected")
-
+    _validate_detector_args(mode, threshold, window_size)
     window_samples = round(Int, window_size * dat.sample_rate)
-    channel_out = something(channel_out, :is_peak_to_peak)
-
-    # Ensure unselected epochs also have uniform false-initialized flag columns
-    selected_set = Set(selected_epochs)
-    if mode == :combined
-        for (idx, epoch_df) in enumerate(dat.data)
-            if idx ∉ selected_set && !hasproperty(epoch_df, channel_out)
-                epoch_df[!, channel_out] = falses(nrow(epoch_df))
-            end
-        end
-    else
-        sep_cols = [Symbol("$(channel_out)_$(ch)") for ch in selected_channels]
-        for (idx, epoch_df) in enumerate(dat.data)
-            if idx ∉ selected_set
-                for col in sep_cols
-                    if !hasproperty(epoch_df, col)
-                        epoch_df[!, col] = falses(nrow(epoch_df))
-                    end
-                end
-            end
-        end
-    end
-
-    # Combine interval and sample selection once (constant across all epochs)
-    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
-
-    Threads.@threads for epoch_idx in selected_epochs
-        epoch_df = dat.data[epoch_idx]
-        selected_samples = get_selected_samples(epoch_df, combined_sel)
-
-        sample_mask = falses(nrow(epoch_df))
-        sample_mask[selected_samples] .= true
-
-        if mode == :combined
-            epoch_df[!, channel_out] = falses(nrow(epoch_df))
-            for ch in selected_channels
-                p2p_mask = _is_peak_to_peak(epoch_df[!, ch], threshold, window_samples) .& sample_mask
-                epoch_df[!, channel_out] .|= p2p_mask
-            end
-        else
-            for ch in selected_channels
-                p2p_mask = _is_peak_to_peak(epoch_df[!, ch], threshold, window_samples) .& sample_mask
-                column_name = Symbol("$(channel_out)_$(ch)")
-                epoch_df[!, column_name] = p2p_mask
-            end
-        end
-    end
-    return dat
+    combined_col = something(channel_out, :is_peak_to_peak)
+    sep_fn = ch -> Symbol("$(combined_col)_$(ch)")
+    return _flag_artifacts!(
+        (buf, sig) -> _is_peak_to_peak!(buf, sig, threshold, window_samples),
+        dat,
+        combined_col,
+        sep_fn;
+        channel_selection,
+        sample_selection,
+        interval_selection,
+        epoch_selection,
+        mode,
+    )
 end
 
 function is_peak_to_peak!(dat::AbstractVector{<:EpochData}, threshold::Real, window_size::Real; kwargs...)
@@ -242,12 +159,11 @@ function is_peak_to_peak!(dat::AbstractVector{<:EpochData}, threshold::Real, win
 end
 
 """
-    is_peak_to_peak(dat::SingleDataFrameEeg, threshold::Real, window_size::Real;
-                    channel_selection = channels(), sample_selection = samples(),
-                    interval_selection = times(), mode::Symbol = :combined)
+    is_peak_to_peak(dat, threshold::Real, window_size::Real; channel_selection = channels(),
+                    sample_selection = samples(), interval_selection = times(), mode::Symbol = :combined)
 
-Detect moving window peak-to-peak artifacts without modifying data.
-Returns `Vector{Bool}` (`:combined` mode) or a `DataFrame` (`:separate` mode).
+Detect moving-window peak-to-peak artifacts without modifying `dat`. Returns a `Vector{Bool}`
+(or per-epoch vector) in `:combined` mode, or a `DataFrame` (or per-epoch vector) in `:separate` mode.
 """
 function is_peak_to_peak(
     dat::SingleDataFrameEeg,
@@ -258,17 +174,18 @@ function is_peak_to_peak(
     interval_selection::Interval = times(),
     mode::Symbol = :combined,
 )
-    mode ∉ [:separate, :combined] && @minimal_error("mode must be :separate or :combined")
-    temp_dat = copy(dat)
-    is_peak_to_peak!(temp_dat, threshold, window_size; channel_selection, sample_selection, interval_selection, mode)
-
-    if mode == :combined
-        return temp_dat.data[!, :is_peak_to_peak]
-    elseif mode == :separate
-        selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
-        cols = [Symbol("is_peak_to_peak_$(ch)") for ch in selected_channels]
-        return temp_dat.data[!, cols]
-    end
+    _validate_detector_args(mode, threshold, window_size)
+    window_samples = round(Int, window_size * dat.sample_rate)
+    ws = ntuple(_ -> Vector{Float64}(undef, max(1, window_samples)), 6)
+    return _detect_artifacts(
+        (buf, sig) -> _is_peak_to_peak!(buf, sig, threshold, window_samples, ws),
+        dat,
+        ch -> Symbol("is_peak_to_peak_$(ch)");
+        channel_selection,
+        sample_selection,
+        interval_selection,
+        mode,
+    )
 end
 
 function is_peak_to_peak(
@@ -281,27 +198,29 @@ function is_peak_to_peak(
     epoch_selection = epochs(),
     mode::Symbol = :combined,
 )
-    mode ∉ [:separate, :combined] && @minimal_error("mode must be :separate or :combined")
-    temp_dat = copy(dat)
-    is_peak_to_peak!(temp_dat, threshold, window_size; channel_selection, sample_selection, interval_selection, epoch_selection, mode)
-
-    if mode == :combined
-        return [Vector{Bool}(ep_df[!, :is_peak_to_peak]) for ep_df in temp_dat.data]
-    else
-        selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
-        cols = [Symbol("is_peak_to_peak_$(ch)") for ch in selected_channels]
-        return [ep_df[!, cols] for ep_df in temp_dat.data]
-    end
+    _validate_detector_args(mode, threshold, window_size)
+    window_samples = round(Int, window_size * dat.sample_rate)
+    return _detect_artifacts(
+        (buf, sig) -> _is_peak_to_peak!(buf, sig, threshold, window_samples),
+        dat,
+        ch -> Symbol("is_peak_to_peak_$(ch)");
+        channel_selection,
+        sample_selection,
+        interval_selection,
+        epoch_selection,
+        mode,
+    )
 end
 
 is_peak_to_peak(dat::AbstractVector{<:EpochData}, threshold::Real, window_size::Real; kwargs...) =
     [is_peak_to_peak(d, threshold, window_size; kwargs...) for d in dat]
 
 """
-    n_peak_to_peak(dat::SingleDataFrameEeg, threshold::Real, window_size::Real; ...)
-    n_peak_to_peak(dat::MultiDataFrameEeg, threshold::Real, window_size::Real; ...)
+    n_peak_to_peak(dat, threshold::Real, window_size::Real; channel_selection = channels(),
+                   sample_selection = samples(), interval_selection = times(), mode::Symbol = :combined)
 
-Count the number of peak-to-peak artifact values across selected channels.
+Count peak-to-peak artifact samples across selected channels, returning a total `Int` (`:combined`)
+or a per-channel `DataFrame` (`:separate`).
 """
 function n_peak_to_peak(
     dat::SingleDataFrameEeg,
@@ -312,28 +231,18 @@ function n_peak_to_peak(
     interval_selection::Interval = times(),
     mode::Symbol = :combined,
 )
-    mode ∉ [:separate, :combined] && @minimal_error("mode must be :separate or :combined")
-    threshold <= 0 && @minimal_error("threshold must be greater than 0")
-    window_size <= 0 && @minimal_error("window_size must be greater than 0")
-    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
-    isempty(selected_channels) && @minimal_error("No channels selected")
-    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
-    selected_samples = get_selected_samples(dat.data, combined_sel)
-    sample_mask = falses(n_samples(dat))
-    sample_mask[selected_samples] .= true
+    _validate_detector_args(mode, threshold, window_size)
     window_samples = round(Int, window_size * dat.sample_rate)
-
-    if mode == :combined
-        combined_mask = falses(n_samples(dat))
-        for ch in selected_channels
-            p2p_mask = _is_peak_to_peak(dat.data[!, ch], threshold, window_samples) .& sample_mask
-            combined_mask .|= p2p_mask
-        end
-        return sum(combined_mask)
-    elseif mode == :separate
-        counts = [sum(_is_peak_to_peak(dat.data[!, ch], threshold, window_samples) .& sample_mask) for ch in selected_channels]
-        return DataFrame(channel = selected_channels, n_peak_to_peak = counts)
-    end
+    ws = ntuple(_ -> Vector{Float64}(undef, max(1, window_samples)), 6)
+    return _count_artifacts(
+        (buf, sig) -> _is_peak_to_peak!(buf, sig, threshold, window_samples, ws),
+        dat,
+        :n_peak_to_peak;
+        channel_selection,
+        sample_selection,
+        interval_selection,
+        mode,
+    )
 end
 
 function n_peak_to_peak(
@@ -346,44 +255,19 @@ function n_peak_to_peak(
     epoch_selection = epochs(),
     mode::Symbol = :combined,
 )
-    mode ∉ [:separate, :combined] && @minimal_error("mode must be :separate or :combined")
-    threshold <= 0 && @minimal_error("threshold must be greater than 0")
-    window_size <= 0 && @minimal_error("window_size must be greater than 0")
-    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
-    isempty(selected_channels) && @minimal_error("No channels selected")
-    selected_epochs = get_selected_epochs(dat, epoch_selection)
-    isempty(selected_epochs) && @minimal_error("No epochs selected")
-
-    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+    _validate_detector_args(mode, threshold, window_size)
     window_samples = round(Int, window_size * dat.sample_rate)
-
-    if mode == :combined
-        total = 0
-        for epoch_idx in selected_epochs
-            epoch_df = dat.data[epoch_idx]
-            selected_samples = get_selected_samples(epoch_df, combined_sel)
-            sample_mask = falses(nrow(epoch_df))
-            sample_mask[selected_samples] .= true
-            combined_mask = falses(nrow(epoch_df))
-            for ch in selected_channels
-                combined_mask .|= (_is_peak_to_peak(epoch_df[!, ch], threshold, window_samples) .& sample_mask)
-            end
-            total += sum(combined_mask)
-        end
-        return total
-    else
-        counts = zeros(Int, length(selected_channels))
-        for epoch_idx in selected_epochs
-            epoch_df = dat.data[epoch_idx]
-            selected_samples = get_selected_samples(epoch_df, combined_sel)
-            sample_mask = falses(nrow(epoch_df))
-            sample_mask[selected_samples] .= true
-            for (ci, ch) in enumerate(selected_channels)
-                counts[ci] += sum(_is_peak_to_peak(epoch_df[!, ch], threshold, window_samples) .& sample_mask)
-            end
-        end
-        return DataFrame(channel = selected_channels, n_peak_to_peak = counts)
-    end
+    ws = ntuple(_ -> Vector{Float64}(undef, max(1, window_samples)), 6)
+    return _count_artifacts(
+        (buf, sig) -> _is_peak_to_peak!(buf, sig, threshold, window_samples, ws),
+        dat,
+        :n_peak_to_peak;
+        channel_selection,
+        sample_selection,
+        interval_selection,
+        epoch_selection,
+        mode,
+    )
 end
 
 n_peak_to_peak(dat::AbstractVector{<:EpochData}, threshold::Real, window_size::Real; kwargs...) =
