@@ -1,28 +1,14 @@
 """
-    RIDE Decomposition Orchestrator
-
-High-level interface to run the Residue Iteration DEcomposition (RIDE) on EEG data.
-"""
-
-using Random
-using Statistics
-
-"""
     RideComponent
 
-Defines a single RIDE component to be extracted.
+Specification for a single RIDE component (`:S`, `:C`, `:R`, etc.).
 
 # Fields
-- `name::Symbol`: Component name (e.g., `:S`, `:R`, `:C`).
-- `latencies::Union{Vector{Int}, Nothing}`: Pre-defined sample latencies (relative to epoch zero
-  or trial onset) for each trial. For Stimulus-locked (`:S`), this is usually a vector of zeros.
-  For Response-locked (`:R`), this is a vector of reaction times (in samples), which `ride_decompose`
-  centers around `round(Int, median(rt))` (recording the median offset in `RideResult.latency_offsets`).
-  If `nothing`, latencies are initialized and refined via the Woody filter.
-- `window_radius::Int`: Search window radius (in samples) for the Woody filter if latencies are estimated.
-- `time_window::Union{Nothing,Tuple{Float64,Float64}}`: Optional component time window `(t_start, t_end)`
-  in seconds (when `times` or `sample_rate` is provided) or sample indices (for raw tensors without
-  time metadata). Used for initial `:C` Woody latency estimation and template tapering.
+- `name::Symbol`: Component name (e.g. `:S`, `:C`, `:R`).
+- `latencies::Union{Vector{Int}, Nothing}`: Known trial sample latencies (centered around their median by
+  [`ride_decompose`](@ref)), or `nothing` when latencies are estimated via [`woody_filter`](@ref).
+- `window_radius::Int`: Woody-filter search radius in samples when `latencies === nothing`.
+- `time_window::Union{Nothing, Tuple{Float64, Float64}}`: Optional active component window `(t_start, t_end)`.
 """
 struct RideComponent
     name::Symbol
@@ -47,7 +33,6 @@ end
 _normalize_ride_time_window(::Nothing) = nothing
 _normalize_ride_time_window(tw::Tuple{<:Real,<:Real}) = (Float64(tw[1]), Float64(tw[2]))
 
-# Constructor for 3 positional args + optional time_window keyword
 RideComponent(
     name::Symbol,
     latencies::Union{AbstractVector{<:Integer},Nothing},
@@ -55,15 +40,12 @@ RideComponent(
     time_window::Union{Nothing,Tuple{<:Real,<:Real}} = nothing,
 ) = RideComponent(name, isnothing(latencies) ? nothing : collect(Int, latencies), window_radius, _normalize_ride_time_window(time_window))
 
-# Default constructor for pre-defined components (e.g., :S or :R)
 RideComponent(name::Symbol, latencies::AbstractVector{<:Integer}; time_window::Union{Nothing,Tuple{<:Real,<:Real}} = nothing) =
     RideComponent(name, collect(Int, latencies), 0, _normalize_ride_time_window(time_window))
 
-# Default constructor for estimated components (e.g., :C)
 RideComponent(name::Symbol, window_radius::Int; time_window::Union{Nothing,Tuple{<:Real,<:Real}} = nothing) =
     RideComponent(name, nothing, window_radius, _normalize_ride_time_window(time_window))
 
-# Keyword constructor
 RideComponent(;
     name::Symbol,
     latencies::Union{AbstractVector{<:Integer},Nothing} = nothing,
@@ -71,18 +53,18 @@ RideComponent(;
     time_window::Union{Nothing,Tuple{<:Real,<:Real}} = nothing,
 ) = RideComponent(name, isnothing(latencies) ? nothing : collect(Int, latencies), window_radius, _normalize_ride_time_window(time_window))
 
-
 """
     RideResult{T<:Real}
 
-Contains the decomposed templates, centered single-trial latencies, median latency offsets, and residues.
+Decomposed RIDE templates (`samples × channels × components`), centered single-trial `latencies`,
+`latency_offsets`, residual tensor `residue`, convergence flag, and outer iteration count.
 """
 struct RideResult{T<:Real}
     components::Vector{Symbol}
-    templates::Array{T,3}        # (samples, channels, components)
-    latencies::Matrix{Int}       # (trials, components) — centered relative sample shifts
-    latency_offsets::Vector{Int} # median sample offset per component (e.g., round(Int, median(rt)) for :R)
-    residue::Array{T,3}          # (samples, channels, trials)
+    templates::Array{T,3}
+    latencies::Matrix{Int}
+    latency_offsets::Vector{Int}
+    residue::Array{T,3}
     converged::Bool
     iterations::Int
 end
@@ -94,11 +76,8 @@ RideResult(
     residue::Array{T,3},
     converged::Bool,
     iterations::Int,
-) where {T<:Real} = RideResult(components, templates, latencies, zeros(Int, length(components)), converged, iterations)
+) where {T<:Real} = RideResult(components, templates, latencies, zeros(Int, length(components)), residue, converged, iterations)
 
-"""
-Map a component's `time_window` tuple to a valid `UnitRange{Int}` within `1:n_samples`.
-"""
 function _resolve_ride_time_window(
     time_window::Union{Nothing,Tuple{Float64,Float64}},
     n_samples::Int,
@@ -115,40 +94,48 @@ function _resolve_ride_time_window(
         isnothing(s_start) && (s_start = argmin(abs.(times .- t_start)))
         isnothing(s_end) && (s_end = argmin(abs.(times .- t_end)))
         s_start = clamp(s_start, 1, n_samples)
-        s_end = clamp(s_end, s_start, n_samples)
-        return s_start:s_end
+        return s_start:clamp(s_end, s_start, n_samples)
     elseif !isnothing(sample_rate) && sample_rate > 0
         s_start = clamp(round(Int, t_start * Float64(sample_rate)) + 1, 1, n_samples)
-        s_end = clamp(round(Int, t_end * Float64(sample_rate)) + 1, s_start, n_samples)
-        return s_start:s_end
+        return s_start:clamp(round(Int, t_end*Float64(sample_rate))+1, s_start, n_samples)
     elseif 0.0 <= t_start < t_end <= 1.0 && n_samples > 1
         s_start = clamp(round(Int, t_start * (n_samples - 1)) + 1, 1, n_samples)
-        s_end = clamp(round(Int, t_end * (n_samples - 1)) + 1, s_start, n_samples)
-        return s_start:s_end
+        return s_start:clamp(round(Int, t_end*(n_samples-1))+1, s_start, n_samples)
     else
         s_start = clamp(round(Int, t_start), 1, n_samples)
-        s_end = clamp(round(Int, t_end), s_start, n_samples)
-        return s_start:s_end
+        return s_start:clamp(round(Int, t_end), s_start, n_samples)
     end
 end
 
+function _compute_ride_residue!(
+    dest::Array{T,3},
+    data::AbstractArray{T,3},
+    templates::Array{T,3},
+    latencies::Matrix{Int};
+    skip_comp::Int = 0,
+) where {T<:Real}
+    _, n_channels, n_trials = size(data)
+    n_components = size(templates, 3)
+
+    _foreach_chunk(n_trials) do trial_range
+        @inbounds for t in trial_range, c = 1:n_channels
+            dest_col = view(dest, :, c, t)
+            copyto!(dest_col, view(data, :, c, t))
+            for j = 1:n_components
+                j == skip_comp && continue
+                _subtract_shifted!(dest_col, view(templates, :, c, j), latencies[t, j])
+            end
+        end
+    end
+    return dest
+end
 
 """
-    ride_decompose(
-        data::AbstractArray{T, 3}, 
-        comps::Vector{RideComponent};
-        outer_iters::Int = 4,
-        inner_iters::Int = 50,
-        inner_tol::Real = 1e-3,
-        method::Symbol = :median,
-        taper_alpha::Real = 0.2,
-        times::Union{Nothing,AbstractVector{<:Real}} = nothing,
-        sample_rate::Union{Nothing,Real} = nothing,
-        baseline_range::Union{Nothing,UnitRange{Int}} = nothing,
-        rng::AbstractRNG = Random.default_rng(),
-    ) where {T<:Real}
+    ride_decompose(data, comps; outer_iters=4, inner_iters=50, inner_tol=1e-3,
+                   method=:median, taper_alpha=0.2, times=nothing, sample_rate=nothing,
+                   baseline_range=nothing, rng=Random.default_rng()) -> RideResult
 
-Execute the full RIDE decomposition pipeline on a 3D data tensor `(samples, channels, trials)`.
+Run Residue Iteration DEcomposition (RIDE) on a 3D tensor `(samples, channels, trials)`.
 """
 function ride_decompose(
     data::AbstractArray{T,3},
@@ -163,136 +150,52 @@ function ride_decompose(
     baseline_range::Union{Nothing,UnitRange{Int}} = nothing,
     rng::AbstractRNG = Random.default_rng(),
 ) where {T<:Real}
-
     n_samples, n_channels, n_trials = size(data)
     n_components = length(comps)
 
-    # Initialize centered latencies matrix (trials, components) and median offsets
     latencies = zeros(Int, n_trials, n_components)
     latency_offsets = zeros(Int, n_components)
     comp_windows = Vector{UnitRange{Int}}(undef, n_components)
-
-    # Track which components need estimation
     needs_estimation = falses(n_components)
 
     for k = 1:n_components
         comp_windows[k] = _resolve_ride_time_window(comps[k].time_window, n_samples, times, sample_rate)
-
-        if !isnothing(comps[k].latencies)
-            if length(comps[k].latencies) != n_trials
-                @minimal_error(
-                    "Component $(comps[k].name) latencies length ($(length(comps[k].latencies))) does not match number of trials ($n_trials)",
-                )
-            end
-            # Center pre-defined latencies (e.g., reaction times for :R) around their median
-            med_offset = n_trials > 0 ? round(Int, median(comps[k].latencies)) : 0
+        comp_lats = comps[k].latencies
+        if !isnothing(comp_lats)
+            length(comp_lats) == n_trials || @minimal_error(
+                "Component $(comps[k].name) latencies length ($(length(comp_lats))) does not match number of trials ($n_trials)",
+            )
+            med_offset = n_trials > 0 ? round(Int, median(comp_lats)) : 0
             latency_offsets[k] = med_offset
-            latencies[:, k] .= comps[k].latencies .- med_offset
+            latencies[:, k] .= comp_lats .- med_offset
         else
             needs_estimation[k] = true
         end
     end
 
-    # Initialize unknown component latencies (e.g. :C) BEFORE the first ride_iteration!
-    # using leave-one-out Woody filter within each component's time_window so :C never collapses to 0.0
-    if any(needs_estimation) && n_trials > 1 && n_samples > 2
+    has_estimated = any(needs_estimation)
+    if has_estimated && n_trials > 1 && n_samples > 2
         for k = 1:n_components
             if needs_estimation[k]
-                win_k = comp_windows[k]
-                init_slice = view(data, win_k, :, :)
-                latencies[:, k] .= woody_filter(init_slice, comps[k].window_radius; template = nothing, rng = rng)
+                latencies[:, k] .= woody_filter(view(data, comp_windows[k], :, :), comps[k].window_radius; template = nothing, rng = rng)
             end
         end
     end
 
-    # Initialize templates
     templates = zeros(T, n_samples, n_channels, n_components)
+    residue = Array{T,3}(undef, n_samples, n_channels, n_trials)
+    ws =
+        (n_samples > 0 && n_channels > 0 && n_trials > 0 && n_components > 0) ?
+        _RideIterWorkspace(T, n_samples, n_channels, n_trials, n_components, method) : nothing
 
     converged_outer = false
     actual_outer_iters = 0
-
     prev_latencies = copy(latencies)
+    max_allowed_changes = ceil(Int, 0.01 * n_trials * count(needs_estimation))
 
-    # Outer loop: Alternate between EM template extraction and Woody latency estimation
     for outer = 1:outer_iters
         actual_outer_iters = outer
 
-        # 1. EM Template Iteration (modifies `templates` in-place, with Tukey boundary tapering)
-        _, inner_converged = ride_iteration!(
-            templates,
-            data,
-            latencies;
-            max_iter = inner_iters,
-            tol = inner_tol,
-            method = method,
-            taper_alpha = taper_alpha,
-            component_windows = comp_windows,
-            baseline_range = baseline_range,
-        )
-
-        # 2. Re-estimate Latencies for unknown components
-        if any(needs_estimation)
-            for k = 1:n_components
-                if needs_estimation[k]
-                    # Compute data for Woody filter: Raw data minus all OTHER components
-                    # (This prevents stimulus or response components from confusing the C-component estimator)
-                    woody_data = copy(data)
-                    shifted_comp = zeros(T, n_samples)
-
-                    for j = 1:n_components
-                        if j == k
-                            continue
-                        end
-
-                        comp_j = view(templates, :, :, j)
-                        @inbounds for t = 1:n_trials
-                            shift_val = latencies[t, j]
-                            for c = 1:n_channels
-                                shift_signal!(shifted_comp, view(comp_j, :, c), shift_val)
-                                for s = 1:n_samples
-                                    woody_data[s, c, t] -= shifted_comp[s]
-                                end
-                            end
-                        end
-                    end
-
-                    # Run Woody filter within component time_window using current template & latency guesses
-                    win_k = comp_windows[k]
-                    current_template = view(templates, win_k, :, k)
-                    initial_lats = latencies[:, k]
-
-                    new_lats = woody_filter(
-                        view(woody_data, win_k, :, :),
-                        comps[k].window_radius;
-                        template = current_template,
-                        initial_latencies = initial_lats,
-                        rng = rng,
-                    )
-
-                    latencies[:, k] .= new_lats
-                end
-            end
-
-            # Check latency convergence
-            # If 99% of trials haven't changed latency, we converge
-            changed_trials = sum(latencies .!= prev_latencies)
-            max_allowed_changes = ceil(Int, 0.01 * n_trials * sum(needs_estimation))
-
-            if changed_trials <= max_allowed_changes
-                converged_outer = true
-                break
-            end
-
-            copyto!(prev_latencies, latencies)
-        else
-            # If no components need estimation, we only need 1 outer iteration
-            converged_outer = true
-            break
-        end
-    end
-
-    # Final pass of template extraction with converged latencies if latencies changed on the final outer step
-    if any(needs_estimation) && !converged_outer && actual_outer_iters > 0
         ride_iteration!(
             templates,
             data,
@@ -303,25 +206,50 @@ function ride_decompose(
             taper_alpha = taper_alpha,
             component_windows = comp_windows,
             baseline_range = baseline_range,
+            _workspace = ws,
         )
-    end
 
-    # 3. Calculate final residue
-    residue = copy(data)
-    shifted_comp = zeros(T, n_samples)
-
-    for k = 1:n_components
-        comp_k = view(templates, :, :, k)
-        @inbounds for t = 1:n_trials
-            shift_val = latencies[t, k]
-            for c = 1:n_channels
-                shift_signal!(shifted_comp, view(comp_k, :, c), shift_val)
-                for s = 1:n_samples
-                    residue[s, c, t] -= shifted_comp[s]
-                end
+        if has_estimated
+            for k = 1:n_components
+                needs_estimation[k] || continue
+                _compute_ride_residue!(residue, data, templates, latencies; skip_comp = k)
+                win_k = comp_windows[k]
+                latencies[:, k] .= woody_filter(
+                    view(residue, win_k, :, :),
+                    comps[k].window_radius;
+                    template = view(templates, win_k, :, k),
+                    initial_latencies = @view(latencies[:, k]),
+                    rng = rng,
+                )
             end
+
+            changed_trials = count(i -> @inbounds(latencies[i] != prev_latencies[i]), eachindex(latencies, prev_latencies))
+            if changed_trials <= max_allowed_changes
+                converged_outer = true
+                break
+            end
+            copyto!(prev_latencies, latencies)
+        else
+            converged_outer = true
+            break
         end
     end
 
+    if has_estimated && !converged_outer && actual_outer_iters > 0
+        ride_iteration!(
+            templates,
+            data,
+            latencies;
+            max_iter = inner_iters,
+            tol = inner_tol,
+            method = method,
+            taper_alpha = taper_alpha,
+            component_windows = comp_windows,
+            baseline_range = baseline_range,
+            _workspace = ws,
+        )
+    end
+
+    _compute_ride_residue!(residue, data, templates, latencies; skip_comp = 0)
     return RideResult([c.name for c in comps], templates, latencies, latency_offsets, residue, converged_outer, actual_outer_iters)
 end

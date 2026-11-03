@@ -1,45 +1,52 @@
-"""
-    extract_ride(epochs::EpochData, comps::Vector{RideComponent}; kwargs...)
+@inline function _copy_col_to_tensor!(tensor::Array{Float64,3}, c_idx::Int, t_idx::Int, col::AbstractVector)
+    @inbounds for s in axes(tensor, 1)
+        tensor[s, c_idx, t_idx] = Float64(col[s])
+    end
+    return nothing
+end
 
-Extract RIDE components from `EpochData`. 
-Returns a Dictionary mapping component names to `ErpData` objects containing the decomposed components
-(each with independent copies of `layout` and `analysis_info`).
+"""
+    extract_ride(epochs::EpochData, comps::Vector{RideComponent}; kwargs...) -> Dict{Symbol, ErpData}
+
+Extract RIDE components from `EpochData`, returning a `Dict{Symbol, ErpData}` mapping each
+component name to its decomposed template (with independent copies of `layout` and `analysis_info`).
 """
 function extract_ride(epochs::EpochData, comps::Vector{RideComponent}; kwargs...)
     isempty(epochs.data) && @minimal_error("EpochData contains no trials.")
 
     n_trials = n_epochs(epochs)
     n_samples = nrow(epochs.data[1])
-    channels = epochs.layout.data.label
-    n_channels = length(channels)
-    time_vec = epochs.data[1].time
+    ch_syms = Symbol.(epochs.layout.data.label)
+    n_channels = length(ch_syms)
+    time_vec = Float64.(epochs.data[1].time)
 
-    # 1. Convert to 3D Tensor
-    data_tensor = zeros(Float64, n_samples, n_channels, n_trials)
-
+    data_tensor = Array{Float64,3}(undef, n_samples, n_channels, n_trials)
     for t = 1:n_trials
         df = epochs.data[t]
-        for (c_idx, ch) in enumerate(channels)
-            data_tensor[:, c_idx, t] .= df[!, Symbol(ch)]
+        for (c_idx, ch) in enumerate(ch_syms)
+            _copy_col_to_tensor!(data_tensor, c_idx, t, df[!, ch])
         end
     end
 
-    # 2. Run the RIDE engine (passing epoch timeline & sample_rate unless overridden in kwargs)
     ride_res = ride_decompose(data_tensor, comps; times = time_vec, sample_rate = epochs.sample_rate, kwargs...)
 
-    # 3. Package back into ErpData objects with independent layout & analysis_info copies
+    col_names = Vector{Symbol}(undef, n_channels + 1)
+    col_names[1] = :time
+    copyto!(col_names, 2, ch_syms, 1, n_channels)
+
     results = Dict{Symbol,ErpData}()
     for (i, comp_name) in enumerate(ride_res.components)
-        df = DataFrame(time = copy(time_vec))
-        for (c_idx, ch) in enumerate(channels)
-            df[!, Symbol(ch)] = ride_res.templates[:, c_idx, i]
+        cols = Vector{Any}(undef, n_channels + 1)
+        cols[1] = copy(time_vec)
+        for c_idx = 1:n_channels
+            cols[c_idx+1] = ride_res.templates[:, c_idx, i]
         end
 
         results[comp_name] = ErpData(
             epochs.file,
             epochs.condition,
             epochs.condition_name * "_RIDE_$(comp_name)",
-            df,
+            DataFrame(cols, col_names; copycols = false),
             copy(epochs.layout),
             epochs.sample_rate,
             copy(epochs.analysis_info),

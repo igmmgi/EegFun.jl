@@ -1,15 +1,19 @@
-"""
-    RIDE Iteration Core
+struct _RideIterWorkspace{T<:Real}
+    trial_residues::Vector{Vector{T}}
+    sort_buffers::Vector{Vector{T}}
+    aligned_buffers::Vector{Matrix{T}}
+    prev_templates::Array{T,3}
+end
 
-Native Julia implementation of the L1-norm / L2-norm Expectation-Maximization
-loop for Residue Iteration DEcomposition (RIDE).
-"""
+function _RideIterWorkspace(::Type{T}, n_samples::Int, n_channels::Int, n_trials::Int, n_components::Int, method::Symbol) where {T<:Real}
+    n_workers = max(1, min(Threads.nthreads(), n_channels))
+    trial_residues = [Vector{T}(undef, n_samples) for _ = 1:n_workers]
+    sort_buffers = method === :median ? [Vector{T}(undef, n_trials) for _ = 1:n_workers] : Vector{T}[]
+    aligned_buffers = method === :median ? [Matrix{T}(undef, n_samples, n_trials) for _ = 1:n_workers] : Matrix{T}[]
+    prev_templates = Array{T,3}(undef, n_samples, n_channels, n_components)
+    return _RideIterWorkspace{T}(trial_residues, sort_buffers, aligned_buffers, prev_templates)
+end
 
-using Statistics
-
-"""
-Construct a 1D Tukey cosine-tapered window of length `L` with taper fraction `alpha` in `[0, 1]`.
-"""
 function _ride_tukey_window(::Type{T}, L::Int, alpha::Real) where {T<:Real}
     L <= 0 && return T[]
     w = ones(T, L)
@@ -25,10 +29,6 @@ function _ride_tukey_window(::Type{T}, L::Int, alpha::Real) where {T<:Real}
     return w
 end
 
-"""
-Apply baseline/edge-drift removal and Tukey boundary tapering to `vec[win_range]`,
-zeroing samples outside `win_range`.
-"""
 function _apply_ride_boundary_taper!(
     vec::AbstractVector{T},
     win_range::UnitRange{Int},
@@ -41,14 +41,12 @@ function _apply_ride_boundary_taper!(
     w_end = last(win_range)
     L = length(win_range)
 
-    # Zero outside component active window
     @inbounds for s = 1:(w_start-1)
         vec[s] = zero(T)
     end
     @inbounds for s = (w_end+1):n
         vec[s] = zero(T)
     end
-
     L == 0 && return vec
 
     if !isnothing(baseline_range) && !isempty(baseline_range)
@@ -59,59 +57,50 @@ function _apply_ride_boundary_taper!(
             vec[s] -= base_val
         end
     elseif detrend_edges && L >= 4
-        # Remove linear drift anchored to left/right boundary means (prevents DC/drift leakage across RIDE components)
         n_edge = max(1, min(div(L, 4), round(Int, 0.05 * L)))
         left_mean = mean(view(vec, w_start:(w_start+n_edge-1)))
         right_mean = mean(view(vec, (w_end-n_edge+1):w_end))
-        denom = T(max(1, L - 1))
-        slope = (right_mean - left_mean) / denom
+        slope = (right_mean - left_mean) / T(max(1, L - 1))
         @inbounds @simd for idx = 1:L
             s = w_start + idx - 1
-            vec[s] -= (left_mean + slope * T(idx - 1))
+            vec[s] -= left_mean + slope * T(idx - 1)
         end
     end
 
-    # Multiply by Tukey boundary taper so shifted templates smoothly vanish at boundaries
     if length(taper_weights) == L
         @inbounds @simd for idx = 1:L
-            s = w_start + idx - 1
-            vec[s] *= taper_weights[idx]
+            vec[w_start+idx-1] *= taper_weights[idx]
         end
     end
-
     return vec
 end
 
+@inline function _add_shifted!(dest::AbstractVector{T}, src::AbstractVector{T}, shift::Int) where {T}
+    n = length(dest)
+    abs(shift) >= n && return dest
+    if shift > 0
+        @inbounds @simd for s = 1:(n-shift)
+            dest[s+shift] += src[s]
+        end
+    elseif shift < 0
+        s_val = -shift
+        @inbounds @simd for s = 1:(n-s_val)
+            dest[s] += src[s+s_val]
+        end
+    else
+        @inbounds @simd for s = 1:n
+            dest[s] += src[s]
+        end
+    end
+    return dest
+end
+
 """
-    ride_iteration!(
-        templates::AbstractArray{T, 3},
-        data::AbstractArray{T, 3},
-        latencies::AbstractMatrix{Int};
-        max_iter::Int = 50,
-        tol::Float64 = 1e-3,
-        method::Symbol = :median,
-        taper_alpha::Real = 0.2,
-        component_windows::Union{Nothing,Vector{UnitRange{Int}}} = nothing,
-        baseline_range::Union{Nothing,UnitRange{Int}} = nothing,
-    ) where {T<:Real}
+    ride_iteration!(templates, data, latencies; max_iter=50, tol=1e-3, method=:median,
+                    taper_alpha=0.2, component_windows=nothing, baseline_range=nothing)
 
-Perform the RIDE iteration loop to extract component templates, applying baseline/linear-drift
-stabilization and Tukey boundary tapering on each component update.
-
-# Arguments
-- `templates`: 3D array of `(samples, channels, components)`. Will be updated in-place.
-- `data`: 3D array of `(samples, channels, trials)`.
-- `latencies`: 2D matrix of `(trials, components)` containing the sample shifts.
-- `max_iter`: Maximum number of iterations.
-- `tol`: Convergence tolerance based on L1-norm of template changes.
-- `method`: `:median` (L1-norm, standard RIDE) or `:mean` (L2-norm).
-- `taper_alpha`: Tukey cosine taper fraction (`0.0` disables boundary tapering; default `0.2`).
-- `component_windows`: Optional active sample range per component (defaults to `1:n_samples` for all).
-- `baseline_range`: Optional sample range for explicit baseline subtraction per iteration.
-
-# Returns
-- `iter`: Number of iterations performed.
-- `converged`: Boolean indicating if convergence was reached.
+Run the inner L1 (`:median`) or L2 (`:mean`) RIDE template estimation loop in-place with
+boundary drift stabilization and Tukey tapering, returning `(iterations, converged)`.
 """
 function ride_iteration!(
     templates::AbstractArray{T,3},
@@ -123,8 +112,8 @@ function ride_iteration!(
     taper_alpha::Real = 0.2,
     component_windows::Union{Nothing,Vector{UnitRange{Int}}} = nothing,
     baseline_range::Union{Nothing,UnitRange{Int}} = nothing,
+    _workspace::Union{Nothing,_RideIterWorkspace{T}} = nothing,
 ) where {T<:Real}
-
     method in (:median, :mean) || @minimal_error("Unknown method: $method. Use :median or :mean")
 
     n_samples, n_channels, n_trials = size(data)
@@ -141,142 +130,111 @@ function ride_iteration!(
     comp_tapers = [_ride_tukey_window(T, length(w), taper_alpha) for w in comp_wins]
     detrend_multi = n_components > 1 && isnothing(baseline_range)
 
-    # Pre-allocate channel-specific buffers outside the loop (channels run in parallel without contention)
-    trial_residues = [zeros(T, n_samples) for _ = 1:n_channels]
-    sort_buffers = [zeros(T, n_trials) for _ = 1:n_channels]
-    aligned_buffers = [zeros(T, n_samples, n_trials) for _ = 1:n_channels]
+    ws = isnothing(_workspace) ? _RideIterWorkspace(T, n_samples, n_channels, n_trials, n_components, method) : _workspace
+    prev_templates = ws.prev_templates
+    copyto!(prev_templates, templates)
 
-    # Track convergence
-    prev_templates = copy(templates)
+    n_workers = length(ws.trial_residues)
+    ch_chunks = collect(Iterators.partition(1:n_channels, cld(n_channels, n_workers)))
+    n_chunks = length(ch_chunks)
+    inv_trials = one(T) / T(n_trials)
     converged = false
     iter = 0
 
     for i = 1:max_iter
         iter = i
-        max_diff = zero(T)
 
         for k = 1:n_components
             win_k = comp_wins[k]
+            w_start, w_end = first(win_k), last(win_k)
             taper_k = comp_tapers[k]
 
-            # Channels are entirely independent, perfectly parallelizable
-            Threads.@threads for c = 1:n_channels
+            _foreach_chunk(n_chunks; ntasks = n_chunks) do chunk_ids
+                for chunk_id in chunk_ids
+                    ch_range = ch_chunks[chunk_id]
+                    trial_residue = ws.trial_residues[chunk_id]
 
-                # Use channel-specific buffers
-                trial_residue = trial_residues[c]
-                sort_buffer = sort_buffers[c]
-                aligned_buffer = aligned_buffers[c]
-
-                # 1. Compute residues and align them for this channel
-                @inbounds for t = 1:n_trials
-
-                    # Start with the raw data for this channel and trial
-                    copyto!(trial_residue, view(data, :, c, t))
-
-                    # Subtract all OTHER components
-                    for j = 1:n_components
-                        if j == k
-                            continue
-                        end
-
-                        comp_j = view(templates, :, c, j)
-                        shift_val = latencies[t, j]
-
-                        # Apply shift directly via SIMD without an intermediate buffer
-                        if shift_val >= n_samples || shift_val <= -n_samples
-                            continue
-                        elseif shift_val > 0
-                            @simd for s = 1:(n_samples-shift_val)
-                                trial_residue[s+shift_val] -= comp_j[s]
+                    if method === :median
+                        sort_buffer = ws.sort_buffers[chunk_id]
+                        aligned_buffer = ws.aligned_buffers[chunk_id]
+                        for c in ch_range
+                            @inbounds for t = 1:n_trials
+                                copyto!(trial_residue, view(data, :, c, t))
+                                for j = 1:n_components
+                                    j == k && continue
+                                    _subtract_shifted!(trial_residue, view(templates, :, c, j), latencies[t, j])
+                                end
+                                shift_signal!(view(aligned_buffer, :, t), trial_residue, -latencies[t, k])
                             end
-                        elseif shift_val < 0
-                            s_val = abs(shift_val)
-                            @simd for s = 1:(n_samples-s_val)
-                                trial_residue[s] -= comp_j[s+s_val]
-                            end
-                        else
-                            @simd for s = 1:n_samples
-                                trial_residue[s] -= comp_j[s]
-                            end
-                        end
-                    end
 
-                    # Now we have the residue. Align it by shifting backwards by latencies[t, k]
-                    align_val = -latencies[t, k]
+                            @inbounds for s = 1:(w_start-1)
+                                templates[s, c, k] = zero(T)
+                            end
+                            @inbounds for s = w_start:w_end
+                                @simd for t = 1:n_trials
+                                    sort_buffer[t] = aligned_buffer[s, t]
+                                end
+                                templates[s, c, k] = median!(sort_buffer)
+                            end
+                            @inbounds for s = (w_end+1):n_samples
+                                templates[s, c, k] = zero(T)
+                            end
 
-                    # Apply alignment directly to aligned_buffer
-                    if align_val >= n_samples || align_val <= -n_samples
-                        for s = 1:n_samples
-                            aligned_buffer[s, t] = zero(T)
-                        end
-                    elseif align_val > 0
-                        for s = 1:align_val
-                            aligned_buffer[s, t] = zero(T)
-                        end
-                        @simd for s = 1:(n_samples-align_val)
-                            aligned_buffer[s+align_val, t] = trial_residue[s]
-                        end
-                    elseif align_val < 0
-                        s_val = abs(align_val)
-                        @simd for s = 1:(n_samples-s_val)
-                            aligned_buffer[s, t] = trial_residue[s+s_val]
-                        end
-                        for s = (n_samples-s_val+1):n_samples
-                            aligned_buffer[s, t] = zero(T)
+                            _apply_ride_boundary_taper!(
+                                view(templates, :, c, k),
+                                win_k,
+                                taper_k;
+                                baseline_range = baseline_range,
+                                detrend_edges = detrend_multi,
+                            )
                         end
                     else
-                        for s = 1:n_samples
-                            aligned_buffer[s, t] = trial_residue[s]
+                        for c in ch_range
+                            tmpl_ck = view(templates, :, c, k)
+                            fill!(tmpl_ck, zero(T))
+                            @inbounds for t = 1:n_trials
+                                copyto!(trial_residue, view(data, :, c, t))
+                                for j = 1:n_components
+                                    j == k && continue
+                                    _subtract_shifted!(trial_residue, view(templates, :, c, j), latencies[t, j])
+                                end
+                                _add_shifted!(tmpl_ck, trial_residue, -latencies[t, k])
+                            end
+                            @inbounds @simd for s = w_start:w_end
+                                tmpl_ck[s] *= inv_trials
+                            end
+                            _apply_ride_boundary_taper!(
+                                tmpl_ck,
+                                win_k,
+                                taper_k;
+                                baseline_range = baseline_range,
+                                detrend_edges = detrend_multi,
+                            )
                         end
                     end
                 end
-
-                # 2. Update the template for component k, channel c
-                if method == :median
-                    @inbounds for s = 1:n_samples
-                        @simd for t = 1:n_trials
-                            sort_buffer[t] = aligned_buffer[s, t]
-                        end
-                        templates[s, c, k] = median!(sort_buffer)
-                    end
-                else
-                    @inbounds for s = 1:n_samples
-                        val = zero(T)
-                        @simd for t = 1:n_trials
-                            val += aligned_buffer[s, t]
-                        end
-                        templates[s, c, k] = val / n_trials
-                    end
-                end
-
-                # Apply baseline/linear-drift stabilization and Tukey boundary tapering
-                _apply_ride_boundary_taper!(
-                    view(templates, :, c, k),
-                    win_k,
-                    taper_k;
-                    baseline_range = baseline_range,
-                    detrend_edges = detrend_multi,
-                )
             end
         end
 
-        # 3. Check convergence
-        for k = 1:n_components
-            diff = sum(abs, view(templates, :, :, k) .- view(prev_templates, :, :, k))
-            max_diff = max(max_diff, diff)
+        max_diff = zero(T)
+        total_abs = zero(T)
+        @inbounds for k = 1:n_components
+            diff_k = zero(T)
+            for c = 1:n_channels
+                @simd for s = 1:n_samples
+                    prev_v = prev_templates[s, c, k]
+                    diff_k += abs(templates[s, c, k] - prev_v)
+                    total_abs += abs(prev_v)
+                end
+            end
+            diff_k > max_diff && (max_diff = diff_k)
         end
 
-        # Normalize diff by total absolute sum to make tolerance scale-invariant
-        total_abs = sum(abs, prev_templates)
-        if total_abs > 0
-            max_diff = max_diff / total_abs
-        end
-
+        total_abs > 0 && (max_diff /= total_abs)
         if max_diff < tol
             converged = true
             break
         end
-
         copyto!(prev_templates, templates)
     end
 

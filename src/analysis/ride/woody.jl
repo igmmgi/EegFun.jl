@@ -1,19 +1,7 @@
 """
-    RIDE Woody Filter Implementation
-
-Native Julia implementation of the Woody filter for single-trial latency estimation.
-Uses multi-threaded cross-correlation for massive performance improvements.
-"""
-
-using Statistics
-using DSP
-using Random
-
-"""
     find_nearest_peak(signal::AbstractVector, center::Int)
 
-Find the local maximum in `signal` that is closest to index `center`.
-Returns `(peak_index, found_peak_boolean)`.
+Find the strict local maximum in `signal` closest to index `center`, returning `(peak_index, found_peak)`.
 """
 function find_nearest_peak(signal::AbstractVector, center::Int)
     n = length(signal)
@@ -35,29 +23,53 @@ function find_nearest_peak(signal::AbstractVector, center::Int)
     return best_idx, found_peak
 end
 
+@inline function _center_vector!(dest::Vector{Float64}, src::AbstractVector)
+    n = length(src)
+    s = 0.0
+    @inbounds @simd for i = 1:n
+        v = Float64(src[i])
+        dest[i] = v
+        s += v
+    end
+    m = s / n
+    @inbounds @simd for i = 1:n
+        dest[i] -= m
+    end
+    return dest
+end
+
+@inline function _accumulate_xcov_window!(
+    win_xcov::Vector{Float64},
+    x::Vector{Float64},
+    y::AbstractVector{Float64},
+    lag_min::Int,
+    lag_max::Int,
+)
+    n = length(x)
+    @inbounds for idx = 1:(lag_max-lag_min+1)
+        τ = lag_min + idx - 1
+        s = 0.0
+        if τ >= 0
+            @simd for k = 1:(n-τ)
+                s += x[k+τ] * y[k]
+            end
+        else
+            a = -τ
+            @simd for k = 1:(n-a)
+                s += x[k] * y[k+a]
+            end
+        end
+        win_xcov[idx] += s
+    end
+    return nothing
+end
+
 """
-    woody_filter(
-        data::AbstractArray{T, 3}, 
-        window_radius::Int;
-        template::Union{Nothing, AbstractMatrix{T}} = nothing,
-        initial_latencies::Union{Nothing, AbstractVector{Int}} = nothing,
-        max_lag::Union{Nothing, Int} = nothing,
-        rng::AbstractRNG = Random.default_rng(),
-    ) where {T<:Real}
+    woody_filter(data, window_radius; template=nothing, initial_latencies=nothing,
+                 max_lag=nothing, rng=Random.default_rng()) -> Vector{Int}
 
-Estimate single-trial latencies using cross-covariance against a template.
-If `template` is nothing, a leave-one-out average is used.
-
-# Arguments
-- `data`: 3D array of `(samples, channels, trials)`
-- `window_radius`: How many samples from the center to search for a peak (equivalent to MATLAB `dur`)
-- `template`: Optional fixed template `(samples, channels)`
-- `initial_latencies`: Optional initial guesses for each trial (defaults to 0 shift)
-- `max_lag`: Maximum lag for cross-correlation. Defaults to `size(data,1) ÷ 2` (expanded up to `size(data,1) - 1` if needed for `initial_latencies` + `window_radius`).
-- `rng`: Random number generator for fallback jitter when a trial has no interior cross-covariance peak.
-
-# Returns
-- `latencies::Vector{Int}`: The estimated sample shifts for each trial relative to the median.
+Estimate single-trial sample shifts via multi-channel cross-covariance against `template`
+(or leave-one-out trial averages when `template === nothing`), centered around the median shift.
 """
 function woody_filter(
     data::AbstractArray{T,3},
@@ -67,7 +79,6 @@ function woody_filter(
     max_lag::Union{Nothing,Int} = nothing,
     rng::AbstractRNG = Random.default_rng(),
 ) where {T<:Real}
-
     n_samples, n_channels, n_trials = size(data)
     n_trials == 0 && return Int[]
     if n_samples <= 2 || n_channels == 0 || (n_trials == 1 && isnothing(template))
@@ -75,127 +86,113 @@ function woody_filter(
     end
 
     init_lats = isnothing(initial_latencies) ? zeros(Int, n_trials) : collect(Int, initial_latencies)
-    length(init_lats) != n_trials && @minimal_error("initial_latencies length ($(length(init_lats))) does not match n_trials ($n_trials)")
+    length(init_lats) == n_trials || @minimal_error("initial_latencies length ($(length(init_lats))) does not match n_trials ($n_trials)")
 
     max_init_shift = isempty(init_lats) ? 0 : maximum(abs, init_lats)
     default_lag = min(n_samples - 1, max(div(n_samples, 2), max_init_shift + max(0, window_radius)))
     maxlag = isnothing(max_lag) ? default_lag : clamp(max_lag, 0, n_samples - 1)
     eff_radius = clamp(window_radius, 0, maxlag)
 
-    lags = (-maxlag):maxlag
-    n_lags = length(lags)
+    n_lags = 2 * maxlag + 1
     center_idx = maxlag + 1
-
     latencies = copy(init_lats)
-    found_peaks = falses(n_trials)
+    found_peaks = Vector{Bool}(undef, n_trials)
 
-    # Calculate the grand average if no template is provided
-    # We will subtract each trial from this sum to get the leave-one-out average
-    grand_sum = zeros(T, n_samples, n_channels)
-    if isnothing(template)
-        @inbounds for t = 1:n_trials
+    # Precompute column-centered template (or centered grand sum for leave-one-out)
+    tmpl_cent = Matrix{Float64}(undef, n_samples, n_channels)
+    has_fixed_template = !isnothing(template)
+    if has_fixed_template
+        @inbounds for c = 1:n_channels
+            s_col = 0.0
+            @simd for s = 1:n_samples
+                v = Float64(template[s, c])
+                tmpl_cent[s, c] = v
+                s_col += v
+            end
+            m_col = s_col / n_samples
+            @simd for s = 1:n_samples
+                tmpl_cent[s, c] -= m_col
+            end
+        end
+    else
+        fill!(tmpl_cent, 0.0)
+        @inbounds for t = 1:n_trials, c = 1:n_channels
+            @simd for s = 1:n_samples
+                tmpl_cent[s, c] += Float64(data[s, c, t])
+            end
+        end
+        @inbounds for c = 1:n_channels
+            s_col = 0.0
+            @simd for s = 1:n_samples
+                s_col += tmpl_cent[s, c]
+            end
+            m_col = s_col / n_samples
+            @simd for s = 1:n_samples
+                tmpl_cent[s, c] -= m_col
+            end
+        end
+    end
+
+    inv_loo = (!has_fixed_template && n_trials > 1) ? 1.0 / (n_trials - 1) : 1.0
+    n_win = 2 * eff_radius + 1
+
+    _foreach_chunk(n_trials) do trial_range
+        x_cent = Vector{Float64}(undef, n_samples)
+        y_cent = has_fixed_template ? Float64[] : Vector{Float64}(undef, n_samples)
+        win_xcov = Vector{Float64}(undef, n_win)
+
+        for t in trial_range
+            search_center = clamp(center_idx + init_lats[t], 1 + eff_radius, n_lags - eff_radius)
+            search_start = search_center - eff_radius
+            search_end = search_center + eff_radius
+            lag_min = search_start - center_idx
+            lag_max = search_end - center_idx
+
+            fill!(win_xcov, 0.0)
             for c = 1:n_channels
-                for s = 1:n_samples
-                    grand_sum[s, c] += data[s, c, t]
+                _center_vector!(x_cent, @view(data[:, c, t]))
+                if has_fixed_template
+                    _accumulate_xcov_window!(win_xcov, x_cent, @view(tmpl_cent[:, c]), lag_min, lag_max)
+                else
+                    if n_trials > 1
+                        @inbounds @simd for s = 1:n_samples
+                            y_cent[s] = (tmpl_cent[s, c] - x_cent[s]) * inv_loo
+                        end
+                        _accumulate_xcov_window!(win_xcov, x_cent, y_cent, lag_min, lag_max)
+                    else
+                        _accumulate_xcov_window!(win_xcov, x_cent, @view(tmpl_cent[:, c]), lag_min, lag_max)
+                    end
                 end
             end
+
+            peak_idx, found = find_nearest_peak(win_xcov, eff_radius + 1)
+            found_peaks[t] = found
+            latencies[t] = found ? (search_start + peak_idx - 1 - center_idx) : init_lats[t]
         end
     end
 
-    # Pre-allocate per-trial cross-covariance in parallel across trials
-    Threads.@threads for t = 1:n_trials
-
-        # 1. Get the template for this trial
-        trial_template = zeros(T, n_samples, n_channels)
-        if !isnothing(template)
-            copyto!(trial_template, template)
-        elseif n_trials > 1
-            # Leave-one-out average
-            @inbounds for c = 1:n_channels
-                for s = 1:n_samples
-                    trial_template[s, c] = (grand_sum[s, c] - data[s, c, t]) / (n_trials - 1)
-                end
-            end
-        else
-            copyto!(trial_template, grand_sum)
-        end
-
-        # 2. Compute cross-covariance across channels and average them
-        mean_xcov = zeros(T, n_lags)
-
-        for c = 1:n_channels
-            # Extract trial data and template for this channel
-            x = view(data, :, c, t)
-            y = view(trial_template, :, c)
-
-            # Mean center
-            mx = mean(x)
-            my = mean(y)
-            x_centered = x .- mx
-            y_centered = y .- my
-
-            # Fast cross-correlation using DSP.xcorr
-            # Note: DSP.xcorr returns 2N-1 points. We want the center 2*maxlag+1 points
-            full_xcov = DSP.xcorr(x_centered, y_centered)
-
-            # The center of full_xcov is at index n_samples
-            # We extract from n_samples - maxlag to n_samples + maxlag
-            start_idx = n_samples - maxlag
-
-            @inbounds for l = 1:n_lags
-                mean_xcov[l] += full_xcov[start_idx+l-1] / n_channels
-            end
-        end
-
-        # 3. Extract the search window centered around initial latency guess
-        search_center = center_idx + init_lats[t]
-        search_center = clamp(search_center, 1 + eff_radius, n_lags - eff_radius)
-
-        search_start = search_center - eff_radius
-        search_end = search_center + eff_radius
-
-        search_window = view(mean_xcov, search_start:search_end)
-
-        # Find nearest peak relative to the center of the search window
-        local_center = eff_radius + 1
-        peak_idx, found = find_nearest_peak(search_window, local_center)
-
-        found_peaks[t] = found
-
-        # Convert local window peak index back to full lag index, then to latency
-        if found
-            full_peak_idx = search_start + peak_idx - 1
-            latencies[t] = full_peak_idx - center_idx
-        else
-            latencies[t] = init_lats[t]
-        end
-    end
-
-    # Deal with trials where no peak was found
-    # Randomly assign them based on the distribution of found peaks (guarding <= 1 valid peak)
-    valid_latencies = latencies[found_peaks]
-    if length(valid_latencies) < n_trials
-        if length(valid_latencies) > 1
+    n_valid = count(found_peaks)
+    if n_valid < n_trials
+        if n_valid > 1
+            valid_latencies = [latencies[t] for t = 1:n_trials if found_peaks[t]]
             std_lat = std(valid_latencies)
             if isfinite(std_lat) && std_lat > 0
-                missing_indices = findall(.!found_peaks)
-                for idx in missing_indices
-                    random_jitter = round(Int, randn(rng) * std_lat)
-                    latencies[idx] = clamp(latencies[idx] + random_jitter, -maxlag, maxlag)
+                for t = 1:n_trials
+                    if !found_peaks[t]
+                        jitter = round(Int, randn(rng) * std_lat)
+                        latencies[t] = clamp(latencies[t] + jitter, -maxlag, maxlag)
+                    end
                 end
             end
-        elseif length(valid_latencies) == 1
-            # Only 1 peak found: std would be NaN; assign missing trials to the found latency without NaN jitter
-            missing_indices = findall(.!found_peaks)
-            for idx in missing_indices
-                latencies[idx] = valid_latencies[1]
+        elseif n_valid == 1
+            only_lat = latencies[findfirst(found_peaks)::Int]
+            for t = 1:n_trials
+                !found_peaks[t] && (latencies[t] = only_lat)
             end
         end
     end
 
-    # RIDE converts latencies to relative values by subtracting the median
     lat_median = round(Int, median(latencies))
     latencies .-= lat_median
-
     return latencies
 end
