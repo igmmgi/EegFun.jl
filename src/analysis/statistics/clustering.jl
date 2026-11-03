@@ -6,7 +6,7 @@ Build connectivity matrix for clustering.
 
 # Arguments
 - `electrodes::Vector{Symbol}`: Electrode labels
-- `layout::Layout`: Layout with neighbours information
+- `layout::Layout`: Layout with neighbors information
 - `cluster_type::Symbol`: `:spatial`, `:temporal`, or `:spatiotemporal`
 
 # Returns
@@ -31,9 +31,10 @@ function _build_connectivity_matrix(electrodes::Vector{Symbol}, layout::Layout, 
     no_spatial = cluster_type in (:temporal, :spectral, :spectrotemporal)
 
     if uses_spatial
-        if isnothing(layout.neighbours)
-            @minimal_warning "Layout.neighbours is not set. Computing with default distance criterion (0.25)."
-            get_neighbours_xy!(layout, 0.25)
+        if isnothing(layout.neighbors)
+            @minimal_warning "Layout.neighbors is not set. Computing with default distance criterion (0.35)."
+            layout = copy(layout)
+            get_neighbors_xy!(layout, 0.35)
         end
 
         # Build adjacency matrix
@@ -42,12 +43,12 @@ function _build_connectivity_matrix(electrodes::Vector{Symbol}, layout::Layout, 
         elec_to_idx = Dict{Symbol,Int}(e => i for (i, e) in enumerate(electrodes))
 
         for (e_idx, electrode) in enumerate(electrodes)
-            # Get neighbours from layout
-            if haskey(layout.neighbours, electrode)
-                neighbours = layout.neighbours[electrode]
-                for neighbour in neighbours.channels
-                    # Find index of neighbour in electrodes list
-                    n_idx = get(elec_to_idx, neighbour, 0)
+            # Get neighbors from layout
+            if haskey(layout.neighbors, electrode)
+                neighbors = layout.neighbors[electrode]
+                for neighbor in neighbors.channels
+                    # Find index of neighbor in electrodes list
+                    n_idx = get(elec_to_idx, neighbor, 0)
                     if n_idx > 0
                         push!(I, e_idx)
                         push!(J, n_idx)
@@ -80,9 +81,9 @@ end
 
 In-place version: Pre-filter mask to remove isolated points 
 
-For each significant point, count how many *neighbouring* significant channels it has
+For each significant point, count how many *neighboring* significant channels it has
 (not counting itself). If a point has fewer than `min_num_neighbors` significant
-neighbours, remove it. This is a single-pass filter
+neighbors, remove it. This is a single-pass filter
 
 # Arguments
 - `mask::BitArray{2}`: Significant points mask [electrodes × time]
@@ -111,7 +112,7 @@ function _prefilter_mask_by_neighbors!(mask::BitArray{2}, spatial_connectivity::
                     continue
                 end
 
-                # Count significant spatial neighbours (NOT counting self)
+                # Count significant spatial neighbors (NOT counting self)
                 neighbor_count = 0
                 for ptr in nzrange(spatial_conn_sym, e_idx)
                     n_e_idx = rv[ptr]
@@ -665,7 +666,7 @@ function _prefilter_mask_by_neighbors_tf!(mask::BitArray{3}, spatial_connectivit
                     if !mask[e_idx, f_idx, t_idx]
                         continue
                     end
-                    # Count significant spatial neighbours (NOT counting self)
+                    # Count significant spatial neighbors (NOT counting self)
                     neighbor_count = 0
                     for ptr in nzrange(spatial_conn_sym, e_idx)
                         n_e_idx = rv[ptr]
@@ -695,9 +696,9 @@ Connectivity is determined by `cluster_type`:
 - `:temporal`: adjacent time points only
 - `:spatial`: spatially adjacent electrodes only (same freq and time)
 - `:spectral`: adjacent frequency bins only (same electrode and time)
-- `:spatiotemporal`: spatial + temporal neighbours
-- `:spectrotemporal`: spectral + temporal neighbours
-- `:full`: spatial + spectral + temporal neighbours (all 3 dimensions)
+- `:spatiotemporal`: spatial + temporal neighbors
+- `:spectrotemporal`: spectral + temporal neighbors
+- `:full`: spatial + spectral + temporal neighbors (all 3 dimensions)
 """
 function _find_clusters_connected_components_tf(
     mask::BitArray{3},
@@ -984,11 +985,23 @@ function _compute_tfce(
     n_electrodes, n_time = size(t_map)
     tfce_map = zeros(Float64, n_electrodes, n_time)
 
+    # Guard against NaN/Inf entries
+    has_finite = false
+    max_val = -Inf
+    min_val = Inf
+    @inbounds for x in t_map
+        if isfinite(x)
+            has_finite = true
+            x > max_val && (max_val = Float64(x))
+            x < min_val && (min_val = Float64(x))
+        end
+    end
+    has_finite || return tfce_map
+
     # Process positive values
-    max_val = maximum(t_map)
     if max_val > 0.0
         for h = dh:dh:max_val
-            mask = t_map .>= h
+            mask = isfinite.(t_map) .& (t_map .>= h)
             clusters = _find_clusters_connected_components(mask, electrodes, time_points, spatial_connectivity, cluster_type)
             for c in clusters
                 extent = length(c.members)
@@ -1001,10 +1014,9 @@ function _compute_tfce(
     end
 
     # Process negative values
-    min_val = minimum(t_map)
     if min_val < 0.0
         for h = (-dh):(-dh):min_val
-            mask = t_map .<= h
+            mask = isfinite.(t_map) .& (t_map .<= h)
             clusters = _find_clusters_connected_components(mask, electrodes, time_points, spatial_connectivity, cluster_type)
             for c in clusters
                 extent = length(c.members)

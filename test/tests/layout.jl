@@ -75,39 +75,39 @@ using OrderedCollections
         @test isapprox(EegFun._distance_xyz(1, 1, 1, 1, 1, 1), 0.0)
     end
 
-    @testset "Electrode Neighbours" begin
-        # Test 2D neighbours
+    @testset "Electrode Neighbors" begin
+        # Test 2D neighbors
         layout_xy = copy(test_layout)
         EegFun.polar_to_cartesian_xy!(layout_xy)
-        EegFun.get_neighbours_xy!(layout_xy, 50.0)
+        EegFun.get_neighbors_xy!(layout_xy, 50.0)
 
-        @test !isnothing(layout_xy.neighbours)
-        @test haskey(layout_xy.neighbours, :Fp1)
-        @test haskey(layout_xy.neighbours, :Cz)
+        @test !isnothing(layout_xy.neighbors)
+        @test haskey(layout_xy.neighbors, :Fp1)
+        @test haskey(layout_xy.neighbors, :Cz)
 
-        # Test that Fp1 has expected neighbours
-        @test :AF7 in layout_xy.neighbours[:Fp1].channels
-        @test :AF3 in layout_xy.neighbours[:Fp1].channels
+        # Test that Fp1 has expected neighbors
+        @test :AF7 in layout_xy.neighbors[:Fp1].channels
+        @test :AF3 in layout_xy.neighbors[:Fp1].channels
 
         # Test weight calculations for 2D
-        @test length(layout_xy.neighbours[:Fp1].weights) == length(layout_xy.neighbours[:Fp1].channels)
-        @test isapprox(sum(layout_xy.neighbours[:Fp1].weights), 1.0, atol = 1e-10)
+        @test length(layout_xy.neighbors[:Fp1].weights) == length(layout_xy.neighbors[:Fp1].channels)
+        @test isapprox(sum(layout_xy.neighbors[:Fp1].weights), 1.0, atol = 1e-10)
 
-        # Test 3D neighbours
+        # Test 3D neighbors
         layout_xyz = copy(test_layout)
         EegFun.polar_to_cartesian_xyz!(layout_xyz)
-        EegFun.get_neighbours_xyz!(layout_xyz, 50.0)
+        EegFun.get_neighbors_xyz!(layout_xyz, 50.0)
 
-        @test !isnothing(layout_xyz.neighbours)
-        @test haskey(layout_xyz.neighbours, :Fp1)
-        @test haskey(layout_xyz.neighbours, :Cz)
+        @test !isnothing(layout_xyz.neighbors)
+        @test haskey(layout_xyz.neighbors, :Fp1)
+        @test haskey(layout_xyz.neighbors, :Cz)
 
         # Test weight calculations for 3D
-        @test length(layout_xyz.neighbours[:Fp1].weights) == length(layout_xyz.neighbours[:Fp1].channels)
-        @test isapprox(sum(layout_xyz.neighbours[:Fp1].weights), 1.0, atol = 1e-10)
+        @test length(layout_xyz.neighbors[:Fp1].weights) == length(layout_xyz.neighbors[:Fp1].channels)
+        @test isapprox(sum(layout_xyz.neighbors[:Fp1].weights), 1.0, atol = 1e-10)
 
         # Test error handling
-        @test_throws Exception EegFun.get_neighbours_xy!(test_layout, -1.0) # Negative distance
+        @test_throws Exception EegFun.get_neighbors_xy!(test_layout, -1.0) # Negative distance
     end
 
     @testset "Error Handling" begin
@@ -197,8 +197,8 @@ using OrderedCollections
             @test EegFun._squared_distance_xyz(0, 0, 0, 0, 0, 0) ≈ 0.0
         end
 
-        # Test electrode neighbours
-        @testset "electrode_neighbours" begin
+        # Test electrode neighbors
+        @testset "electrode_neighbors" begin
             # Create test layout
             layout = EegFun.Layout(
                 DataFrame(label = [:Fp1, :Fp2, :F3, :F4], inc = [90.0, 90.0, 45.0, 45.0], azi = [0.0, 180.0, 45.0, 135.0]),
@@ -208,22 +208,22 @@ using OrderedCollections
             )
             EegFun.polar_to_cartesian_xy!(layout)
 
-            # Test xy neighbours
-            EegFun.get_neighbours_xy!(layout, 100.0)
-            @test !isnothing(layout.neighbours)
-            @test length(layout.neighbours) == size(layout.data, 1)
+            # Test xy neighbors
+            EegFun.get_neighbors_xy!(layout, 100.0)
+            @test !isnothing(layout.neighbors)
+            @test length(layout.neighbors) == size(layout.data, 1)
 
             # Test error handling for invalid distance criterion
-            @test_throws Exception EegFun.get_neighbours_xy!(layout, -1.0)
+            @test_throws Exception EegFun.get_neighbors_xy!(layout, -1.0)
 
-            # Test xyz neighbours
+            # Test xyz neighbors
             EegFun.polar_to_cartesian_xyz!(layout)
-            EegFun.get_neighbours_xyz!(layout, 100.0)
-            @test !isnothing(layout.neighbours)
-            @test length(layout.neighbours) == size(layout.data, 1)
+            EegFun.get_neighbors_xyz!(layout, 100.0)
+            @test !isnothing(layout.neighbors)
+            @test length(layout.neighbors) == size(layout.data, 1)
 
             # Test error handling for invalid distance criterion
-            @test_throws Exception EegFun.get_neighbours_xyz!(layout, -1.0)
+            @test_throws Exception EegFun.get_neighbors_xyz!(layout, -1.0)
         end
     end
 
@@ -327,22 +327,22 @@ using OrderedCollections
             @test length(new_layout.data.label) == length(original_layout.data.label)
         end
 
-        @testset "rename_channel! - Neighbour cache clearing" begin
+        @testset "rename_channel! - Neighbor cache clearing" begin
             layout = copy(test_layout)
 
-            # Add some neighbours first
+            # Add some neighbors first
             EegFun.polar_to_cartesian_xy!(layout)
-            EegFun.get_neighbours_xy!(layout, 100.0)
+            EegFun.get_neighbors_xy!(layout, 100.0)
 
-            # Verify neighbours exist
-            @test !isnothing(layout.neighbours)
-            @test haskey(layout.neighbours, :Fp1)
+            # Verify neighbors exist
+            @test !isnothing(layout.neighbors)
+            @test haskey(layout.neighbors, :Fp1)
 
             # Rename a channel
             EegFun.rename_channel!(layout, Dict(:Fp1 => :Fpz))
 
-            # Neighbours should be cleared
-            @test isnothing(layout.neighbours)
+            # Neighbors should be cleared
+            @test isnothing(layout.neighbors)
         end
 
         @testset "rename_channel! - Coordinate preservation" begin
@@ -422,5 +422,25 @@ using OrderedCollections
             # Should be back to original
             @test layout.data.label == original_labels
         end
+    end
+
+    @testset "Zero-neighbor formatting and concrete Float64 coordinates" begin
+        layout_iso = EegFun.Layout(DataFrame(label = [:Fp1, :Oz], inc = [90.0, 90.0], azi = [0.0, 180.0]), nothing, nothing, nothing)
+        EegFun.polar_to_cartesian_xy!(layout_iso)
+        EegFun.polar_to_cartesian_xyz!(layout_iso)
+        @test eltype(layout_iso.data.x2) == Float64
+        @test eltype(layout_iso.data.y2) == Float64
+        @test eltype(layout_iso.data.x3) == Float64
+        @test eltype(layout_iso.data.y3) == Float64
+        @test eltype(layout_iso.data.z3) == Float64
+
+        # Small distance criterion so electrodes have 0 neighbors
+        EegFun.get_neighbors_xy!(layout_iso, 0.01)
+        @test isempty(layout_iso.neighbors[:Fp1].channels)
+        buf = IOBuffer()
+        EegFun._format_electrode(buf, :Fp1, layout_iso.neighbors[:Fp1])
+        formatted = String(take!(buf))
+        @test !occursin("NaN", formatted)
+        @test occursin("0 neighbors", formatted)
     end
 end

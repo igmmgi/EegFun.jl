@@ -233,6 +233,16 @@ end
         # No valid groups → should throw
         @test_throws Exception EegFun.condition_average(erps, [[5, 6]])
     end
+
+    @testset "Non-contiguous .condition numbers matched by .condition field" begin
+        e2 = EegFun.create_test_erp_data(condition = 2)
+        e5 = EegFun.create_test_erp_data(condition = 5)
+        e2.data.Ch1 .= 10.0
+        e5.data.Ch1 .= 30.0
+        avg = EegFun.condition_average([e2, e5], [[2, 5]])
+        @test length(avg) == 1
+        @test avg[1].data.Ch1[1] ≈ 20.0
+    end
 end
 
 @testset "TF Condition Average" begin
@@ -293,16 +303,26 @@ end
         end
     end
 
-    @testset "Phase data integrity" begin
+    @testset "Phase data integrity (circular mean)" begin
         tfs = [EegFun.create_test_tf_data(condition = 1), EegFun.create_test_tf_data(condition = 2)]
 
         avg = EegFun.condition_average(tfs, [[1, 2]])
 
-        # Phase should be averaged too
+        # Phase must be averaged circularly via atan(mean(sin), mean(cos))
         for ch in [:Ch1, :Ch2, :Ch3]
-            expected_phase = (tfs[1].data_phase[!, ch] .+ tfs[2].data_phase[!, ch]) ./ 2
-            @test all(abs.(avg[1].data_phase[!, ch] .- expected_phase) .< 1e-10)
+            p1 = tfs[1].data_phase[!, ch]
+            p2 = tfs[2].data_phase[!, ch]
+            expected_phase = atan.((sin.(p1) .+ sin.(p2)) ./ 2, (cos.(p1) .+ cos.(p2)) ./ 2)
+            @test avg[1].data_phase[!, ch] ≈ expected_phase atol = 1e-10
         end
+
+        # Wrap-around test: averaging +0.9π and -0.9π yields ±π (NOT 0.0!)
+        tf_pos = EegFun.create_test_tf_data(condition = 1)
+        tf_neg = EegFun.create_test_tf_data(condition = 2)
+        tf_pos.data_phase.Ch1 .= 0.9 * π
+        tf_neg.data_phase.Ch1 .= -0.9 * π
+        avg_wrap = EegFun.condition_average([tf_pos, tf_neg], [[1, 2]])
+        @test all(x -> isapprox(abs(x), π; atol = 1e-10), avg_wrap[1].data_phase.Ch1)
     end
 
     @testset "Metadata preservation" begin

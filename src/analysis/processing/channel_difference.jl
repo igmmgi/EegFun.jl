@@ -196,6 +196,11 @@ function calculate_eog_channels!(dat::AbstractVector{<:EegData}, eog_cfg)
     return dat
 end
 
+"""
+    calculate_eog_channels(dat, eog_cfg)
+
+Non-mutating version of [`calculate_eog_channels!`](@ref) that returns a copy of `dat` with computed EOG channels.
+"""
 function calculate_eog_channels(dat::EegData, args...; kwargs...)
     return calculate_eog_channels!(copy(dat), args...; kwargs...)
 end
@@ -215,13 +220,13 @@ Detect EOG onsets for both vertical and horizontal EOG channels based on configu
 
 # Example
 ```julia
-eog_cfg = EogConfig(
+eog_cfg = EegFun.EogConfig(
     vEOG_criterion = 50.0,
     hEOG_criterion = 50.0,
     vEOG_channels = [["Fp1"], ["Fp2"], ["vEOG"]],
-    hEOG_channels = [["F9"], ["F10"], ["hEOG"]]
+    hEOG_channels = [["F9"], ["F10"], ["hEOG"]],
 )
-detect_eog_onsets!(dat, eog_cfg)
+EegFun.detect_eog_onsets!(dat, eog_cfg)
 ```
 """
 function detect_eog_onsets!(dat::EegData, eog_cfg::EogConfig)

@@ -159,6 +159,8 @@ _create_subset(dat::ErpData, ds, ls) =
     ErpData(dat.file, dat.condition, dat.condition_name, ds, ls, dat.sample_rate, copy(dat.analysis_info), dat.n_epochs)
 _create_subset(dat::EpochData, ds, ls) =
     EpochData(dat.file, dat.condition, dat.condition_name, ds, ls, dat.sample_rate, copy(dat.analysis_info))
+_create_subset(dat::SpectrumData, ds, ls) =
+    SpectrumData(dat.file, dat.condition, dat.condition_name, ds, ls, dat.sample_rate, dat.method, copy(dat.analysis_info))
 _create_subset(dat::TimeFreqData, ds_power::DataFrame, ds_phase::DataFrame, ls) = TimeFreqData(
     dat.file,
     dat.condition,
@@ -378,6 +380,26 @@ function subset(
         sample_selection = sample_selection,
         interval_selection = interval_selection,
         epoch_selection = epoch_selection,
+        include_extra = include_extra,
+    )
+end
+
+function subset(
+    datasets::AbstractVector{<:SpectrumData};
+    condition_selection = conditions(),
+    channel_selection = channels(),
+    sample_selection = samples(),
+    interval_selection::Interval = times(),
+    include_extra::Bool = false,
+)::Vector{SpectrumData}
+    selected_conditions = get_selected_conditions(datasets, condition_selection)
+    datasets_filtered = datasets[selected_conditions]
+
+    return subset.(
+        datasets_filtered;
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        interval_selection = interval_selection,
         include_extra = include_extra,
     )
 end
@@ -852,29 +874,31 @@ get_selected_components(ica_result::InfoIca, ::Union{Nothing,Colon}) = collect(1
 
 """Apply a sample predicate and return matching row indices."""
 function get_selected_samples(dat::SingleDataFrameEeg, sample_selection::Function)
-    sample_selection === Colon() && return 1:nrow(dat.data)
+    sample_selection === Colon() && return collect(1:nrow(dat.data))
     return findall(sample_selection(dat.data))
 end
 function get_selected_samples(dat::SingleDataFrameEeg, ::Union{Nothing,AllSelection,Colon})
-    return 1:nrow(dat.data)
+    return collect(1:nrow(dat.data))
 end
 
 # Helper to select samples based on a predicate
 function get_selected_samples(dat::MultiDataFrameEeg, sample_selection::Function)
-    sample_selection === Colon() && return 1:nrow(dat.data[1])
+    isempty(dat.data) && return Int[]
+    sample_selection === Colon() && return collect(1:nrow(dat.data[1]))
     return findall(sample_selection(dat.data[1])) # assume all data have the same samples
 end
 function get_selected_samples(dat::MultiDataFrameEeg, ::Union{Nothing,AllSelection,Colon})
-    return 1:nrow(dat.data[1])
+    isempty(dat.data) && return Int[]
+    return collect(1:nrow(dat.data[1]))
 end
 
 # Helper to select samples from a DataFrame
 function get_selected_samples(dat::DataFrame, sample_selection::Function)
-    sample_selection === Colon() && return 1:nrow(dat)
+    sample_selection === Colon() && return collect(1:nrow(dat))
     return findall(sample_selection(dat))
 end
 function get_selected_samples(dat::DataFrame, ::Union{Nothing,AllSelection,Colon})
-    return 1:nrow(dat)
+    return collect(1:nrow(dat))
 end
 
 # Helper to convert TimeSelection and Tuple into sample functions
@@ -954,5 +978,5 @@ function epoch_to_continuous(dat::MultiDataFrameEeg, epoch_idx::Int)
     if epoch_idx < 1 || epoch_idx > length(dat.data)
         @minimal_error "Epoch index $epoch_idx out of range (1:$(length(dat.data)))"
     end
-    return ContinuousData(dat.file, dat.data[epoch_idx], dat.layout, dat.sample_rate, dat.analysis_info)
+    return ContinuousData(dat.file, copy(dat.data[epoch_idx], copycols = true), copy(dat.layout), dat.sample_rate, copy(dat.analysis_info))
 end

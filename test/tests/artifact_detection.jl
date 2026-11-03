@@ -1,5 +1,6 @@
 using Test
 using DataFrames
+using JLD2
 using OrderedCollections
 using EegFun
 
@@ -500,14 +501,14 @@ using EegFun
         layout_df = DataFrame(label = [:Ch1, :Ch2, :Ch3, :Ch4], inc = [0.0, 0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0, 0.0])
 
         # Create neighbors dict
-        neighbours_dict = OrderedDict(
-            :Ch1 => EegFun.Neighbours([:Ch2, :Ch3], [1.0, 1.0], [0.5, 0.5]),
-            :Ch2 => EegFun.Neighbours([:Ch1, :Ch3, :Ch4], [1.0, 1.0, 1.0], [0.33, 0.33, 0.34]),
-            :Ch3 => EegFun.Neighbours([:Ch1, :Ch2], [1.0, 1.0], [0.5, 0.5]),
-            :Ch4 => EegFun.Neighbours([:Ch2], [1.0], [1.0]),
+        neighbors_dict = OrderedDict(
+            :Ch1 => EegFun.Neighbors([:Ch2, :Ch3], [1.0, 1.0], [0.5, 0.5]),
+            :Ch2 => EegFun.Neighbors([:Ch1, :Ch3, :Ch4], [1.0, 1.0, 1.0], [0.33, 0.33, 0.34]),
+            :Ch3 => EegFun.Neighbors([:Ch1, :Ch2], [1.0, 1.0], [0.5, 0.5]),
+            :Ch4 => EegFun.Neighbors([:Ch2], [1.0], [1.0]),
         )
 
-        layout = EegFun.Layout(layout_df, neighbours_dict, nothing, nothing)
+        layout = EegFun.Layout(layout_df, neighbors_dict, nothing, nothing)
 
         # Create epochs with layout
         epochs = EegFun.create_test_epoch_data(n_epochs = 5, n_channels = 4)
@@ -543,13 +544,13 @@ using EegFun
         # Create layout with neighbors for repair
         layout_df = DataFrame(label = [:Ch1, :Ch2, :Ch3], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0])
 
-        neighbours_dict = OrderedDict(
-            :Ch1 => EegFun.Neighbours([:Ch2, :Ch3], [1.0, 1.0], [0.5, 0.5]),
-            :Ch2 => EegFun.Neighbours([:Ch1, :Ch3], [1.0, 1.0], [0.5, 0.5]),
-            :Ch3 => EegFun.Neighbours([:Ch1, :Ch2], [1.0, 1.0], [0.5, 0.5]),
+        neighbors_dict = OrderedDict(
+            :Ch1 => EegFun.Neighbors([:Ch2, :Ch3], [1.0, 1.0], [0.5, 0.5]),
+            :Ch2 => EegFun.Neighbors([:Ch1, :Ch3], [1.0, 1.0], [0.5, 0.5]),
+            :Ch3 => EegFun.Neighbors([:Ch1, :Ch2], [1.0, 1.0], [0.5, 0.5]),
         )
 
-        layout = EegFun.Layout(layout_df, neighbours_dict, nothing, nothing)
+        layout = EegFun.Layout(layout_df, neighbors_dict, nothing, nothing)
 
         # Create epochs with artifacts
         epochs = EegFun.create_test_epoch_data(n_epochs = 5, n_channels = 3)
@@ -740,10 +741,10 @@ using EegFun
         layout_df = DataFrame(label = [:Ch1, :Ch2], inc = [0.0, 0.0], azi = [0.0, 0.0])
 
         # Ch1 has no neighbors (can't be repaired)
-        neighbours_dict =
-            OrderedDict(:Ch1 => EegFun.Neighbours(Symbol[], Float64[], Float64[]), :Ch2 => EegFun.Neighbours([:Ch1], [1.0], [1.0]))
+        neighbors_dict =
+            OrderedDict(:Ch1 => EegFun.Neighbors(Symbol[], Float64[], Float64[]), :Ch2 => EegFun.Neighbors([:Ch1], [1.0], [1.0]))
 
-        layout = EegFun.Layout(layout_df, neighbours_dict, nothing, nothing)
+        layout = EegFun.Layout(layout_df, neighbors_dict, nothing, nothing)
 
         epochs = EegFun.create_test_epoch_data(n_epochs = 3, n_channels = 2)
         epochs.layout = layout
@@ -1163,18 +1164,118 @@ using EegFun
 
         # repair_artifacts_neighbor! returns dat
         layout_df = DataFrame(label = [:Ch1, :Ch2, :Ch3], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0])
-        neighbours_dict = EegFun.OrderedDict(
-            :Ch1 => EegFun.Neighbours([:Ch2, :Ch3], [1.0, 1.0], [0.5, 0.5]),
-            :Ch2 => EegFun.Neighbours([:Ch1, :Ch3], [1.0, 1.0], [0.5, 0.5]),
-            :Ch3 => EegFun.Neighbours([:Ch1, :Ch2], [1.0, 1.0], [0.5, 0.5]),
+        neighbors_dict = EegFun.OrderedDict(
+            :Ch1 => EegFun.Neighbors([:Ch2, :Ch3], [1.0, 1.0], [0.5, 0.5]),
+            :Ch2 => EegFun.Neighbors([:Ch1, :Ch3], [1.0, 1.0], [0.5, 0.5]),
+            :Ch3 => EegFun.Neighbors([:Ch1, :Ch2], [1.0, 1.0], [0.5, 0.5]),
         )
-        layout = EegFun.Layout(layout_df, neighbours_dict, nothing, nothing)
+        layout = EegFun.Layout(layout_df, neighbors_dict, nothing, nothing)
         epochs = EegFun.create_test_epoch_data(n_epochs = 3, n_channels = 3)
         epochs.layout = layout
         epochs.data[2][!, :Ch1] .= 200.0
         info = EegFun.detect_bad_epochs_automatic(epochs, abs_criterion = 150.0, z_criterion = 0)
         EegFun.channel_repairable!(info, layout)
         @test EegFun.repair_artifacts_neighbor!(epochs, info) === epochs
+    end
+
+    @testset "Phase 2 regressions: spherical_spline metadata, copy(artifacts), subset_bad_data, MultiDataFrameEeg overloads" begin
+        # 1. repair_artifacts! (:spherical_spline) populates repaired & skipped, guards all-bad epochs,
+        #    and non-mutating repair_artifacts does NOT mutate caller's EpochRejectionInfo
+        dat_sp = EegFun.create_test_epoch_data(n = 80, n_epochs = 3, n_channels = 4)
+        dat_sp.layout.data.x3 = [0.0, 0.1, 0.0, -0.1]
+        dat_sp.layout.data.y3 = [0.1, 0.0, -0.1, 0.0]
+        dat_sp.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
+        # Epoch 2: single bad channel Ch2 (repairable)
+        dat_sp.data[2][!, :Ch2] .= 300.0
+        # Epoch 3: ALL channels bad (must be skipped cleanly!)
+        for ch in [:Ch1, :Ch2, :Ch3, :Ch4]
+            dat_sp.data[3][!, ch] .= 300.0
+        end
+        rej_sp = EegFun.detect_bad_epochs_automatic(dat_sp; abs_criterion = 150.0, z_criterion = 0)
+        @test isnothing(rej_sp.repaired) && isnothing(rej_sp.skipped)
+
+        # Non-mutating repair_artifacts leaves rej_sp untouched
+        dat_nonmut = EegFun.repair_artifacts(dat_sp, rej_sp; method = :spherical_spline)
+        @test isnothing(rej_sp.repaired) && isnothing(rej_sp.skipped)
+        @test all(dat_nonmut.data[2].Ch2 .!= 300.0)
+
+        # Mutating repair_artifacts! populates rej_sp.repaired (epoch 2) and rej_sp.skipped (epoch 3)
+        @test_logs (:warn,) match_mode = :any EegFun.repair_artifacts!(dat_sp, rej_sp; method = :spherical_spline)
+        @test haskey(rej_sp.repaired, 2) && rej_sp.repaired[2] == [:Ch2]
+        @test haskey(rej_sp.skipped, 3) && length(rej_sp.skipped[3]) == 4
+        @test !haskey(rej_sp.repaired, 3)
+
+        # 2. subset_bad_data exact participant boundary matching (1 must NOT match 10 or 21!)
+        mktempdir() do tmpdir
+            ep_a = EegFun.create_test_epoch_data_vector(conditions = 1:1, n_epochs = 2)
+            JLD2.jldsave(joinpath(tmpdir, "1_epochs.jld2"); data = ep_a)
+            JLD2.jldsave(joinpath(tmpdir, "sub-1_epochs.jld2"); data = ep_a)
+            JLD2.jldsave(joinpath(tmpdir, "10_epochs.jld2"); data = ep_a)
+            JLD2.jldsave(joinpath(tmpdir, "21_epochs.jld2"); data = ep_a)
+
+            ep_sum_df = DataFrame(file = ["1", "10", "21"], condition = [1, 1, 1], percentage = [50.0, 95.0, 95.0])
+            file_sum_df = DataFrame(file = ["1", "10", "21"])
+            JLD2.jldsave(joinpath(tmpdir, "epoch_summary.jld2"); data = ep_sum_df)
+            JLD2.jldsave(joinpath(tmpdir, "file_summary.jld2"); data = file_sum_df)
+
+            EegFun.subset_bad_data(tmpdir, 75.0; subset_directory = "bad_out")
+            out_sub = joinpath(tmpdir, "bad_out")
+            @test isfile(joinpath(out_sub, "1_epochs.jld2"))
+            @test isfile(joinpath(out_sub, "sub-1_epochs.jld2"))
+            @test !isfile(joinpath(out_sub, "10_epochs.jld2"))
+            @test !isfile(joinpath(out_sub, "21_epochs.jld2"))
+            @test isfile(joinpath(tmpdir, "10_epochs.jld2"))
+            @test isfile(joinpath(tmpdir, "21_epochs.jld2"))
+        end
+
+        # 3. Partial epoch_selection in is_*! initializes false on unselected epochs so all_data(dat) succeeds,
+        #    and non-mutating MultiDataFrameEeg / Vector{EpochData} overloads work for is_* and n_*
+        ep_det = EegFun.create_test_epoch_data(n = 100, n_epochs = 4, n_channels = 2)
+        ep_det.data[1][10, :Ch1] = 500.0
+        ep_det.data[1][11, :Ch1] = -500.0
+        ep_det.data[2][!, :Ch2] .= 0.0
+
+        # Non-mutating MultiDataFrameEeg overloads
+        ext_masks = EegFun.is_extreme_value(ep_det, 200.0)
+        @test ext_masks isa Vector{Vector{Bool}} && length(ext_masks) == 4
+        @test any(ext_masks[1]) && !any(ext_masks[3])
+        @test EegFun.n_extreme_value(ep_det, 200.0) >= 2
+        @test EegFun.n_extreme_value(ep_det, 200.0; mode = :separate) isa DataFrame
+
+        step_masks = EegFun.is_step_value(ep_det, 200.0)
+        @test step_masks isa Vector{Vector{Bool}} && any(step_masks[1])
+        @test EegFun.n_step_value(ep_det, 200.0) >= 1
+
+        ptp_masks = EegFun.is_peak_to_peak(ep_det, 800.0, 0.05)
+        @test ptp_masks isa Vector{Vector{Bool}} && any(ptp_masks[1])
+        @test EegFun.n_peak_to_peak(ep_det, 800.0, 0.05) >= 1
+
+        flat_masks = EegFun.is_flatline(ep_det, 0.01, 0.05)
+        @test flat_masks isa Vector{Vector{Bool}} && all(flat_masks[2])
+        @test EegFun.n_flatline(ep_det, 0.01, 0.05) == 100
+
+        # Vector{EpochData} overloads
+        @test length(EegFun.is_extreme_value([ep_det, ep_det], 200.0)) == 2
+        @test length(EegFun.n_extreme_value([ep_det, ep_det], 200.0)) == 2
+
+        # Partial epoch_selection schema uniformity -> all_data(ep_schema) must NOT fail!
+        ep_schema = copy(ep_det)
+        EegFun.is_extreme_value!(ep_schema, 200.0; epoch_selection = EegFun.epochs([1]))
+        EegFun.is_step_value!(ep_schema, 200.0; epoch_selection = EegFun.epochs([1]))
+        EegFun.is_peak_to_peak!(ep_schema, 800.0, 0.05; epoch_selection = EegFun.epochs([1]))
+        EegFun.is_flatline!(ep_schema, 0.01, 0.05; epoch_selection = EegFun.epochs([2]))
+
+        for ep_idx = 1:4
+            df_e = ep_schema.data[ep_idx]
+            @test hasproperty(df_e, Symbol("is_extreme_value_200.0"))
+            @test hasproperty(df_e, Symbol("is_step_value_200.0"))
+            @test hasproperty(df_e, :is_peak_to_peak)
+            @test hasproperty(df_e, :is_flatline)
+        end
+        @test !any(ep_schema.data[3][!, Symbol("is_extreme_value_200.0")])
+        @test !any(ep_schema.data[1].is_flatline)
+        stacked = EegFun.all_data(ep_schema)
+        @test nrow(stacked) == 400
     end
 
 end

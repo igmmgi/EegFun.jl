@@ -63,28 +63,28 @@ EegFun.signal_example_sampling()
 function signal_example_sampling()
     _check_interactive_demo_backend("Signal Sampling demo") || return nothing
 
-    fig = _eegfun_figure(size = (1000, 800), title = "Signal Example 1")
+    fig = _eegfun_figure(size = (1350, 800), title = "Signal Example 1")
 
     # Set up adaptive font and UI sizing
     """Scale font sizes and UI element dimensions when the figure is resized."""
     function setup_adaptive_sizing(fig)
         # Create observables for different font sizes and UI elements
-        title_font = Observable(24)
-        label_font = Observable(22)
-        tick_font = Observable(18)
-        slider_font = Observable(30)
-        slider_width = Observable(300)
-        slider_height = Observable(25)
+        title_font = Observable(20)
+        label_font = Observable(16)
+        tick_font = Observable(13)
+        slider_font = Observable(16)
+        slider_width = Observable(250)
+        slider_height = Observable(22)
 
         # Update fonts and UI elements when figure is resized
         on(fig.scene.viewport) do area
-            scale_factor = area.widths[1] / 4000
-            title_font[] = max(16, round(Int, 24 * scale_factor))
-            label_font[] = max(14, round(Int, 22 * scale_factor))
-            tick_font[] = max(12, round(Int, 18 * scale_factor))
-            slider_font[] = max(20, round(Int, 30 * scale_factor))
-            slider_width[] = max(200, round(Int, 300 * scale_factor))
-            slider_height[] = max(15, round(Int, 25 * scale_factor))
+            scale_factor = area.widths[1] / 1350
+            title_font[] = max(14, round(Int, 20 * scale_factor))
+            label_font[] = max(12, round(Int, 16 * scale_factor))
+            tick_font[] = max(10, round(Int, 13 * scale_factor))
+            slider_font[] = max(12, round(Int, 16 * scale_factor))
+            slider_width[] = max(180, round(Int, 250 * scale_factor))
+            slider_height[] = max(15, round(Int, 22 * scale_factor))
         end
 
         return title_font, label_font, tick_font, slider_font, slider_width, slider_height

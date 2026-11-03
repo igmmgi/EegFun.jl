@@ -26,13 +26,22 @@ function _create_average_wave(dats::AbstractVector{T}, conditions::AbstractVecto
     n = length(dats)
     inv_n = 1.0 / n
     for ch in _condition_channels(dats[1])
-        if all(d -> hasproperty(d.data, ch), dats)
-            for (k, avg_df) in enumerate(avg_frames)
-                col = avg_df[!, ch]
+        if all(d -> all(df -> hasproperty(df, ch), _data_frames(d)), dats)
+            if dats[1] isa TimeFreqData
+                col_pow = avg_frames[1][!, ch]
                 for i = 2:n
-                    col .+= _data_frames(dats[i])[k][!, ch]
+                    col_pow .+= dats[i].data_power[!, ch]
                 end
-                col .*= inv_n
+                col_pow .*= inv_n
+                avg_frames[2][!, ch] = _circular_phase_mean([d.data_phase[!, ch] for d in dats])
+            else
+                for (k, avg_df) in enumerate(avg_frames)
+                    col = avg_df[!, ch]
+                    for i = 2:n
+                        col .+= _data_frames(dats[i])[k][!, ch]
+                    end
+                    col .*= inv_n
+                end
             end
         else
             @minimal_warning "Channel $ch not found in all conditions, keeping values from first condition"
@@ -61,7 +70,7 @@ function _condition_average_process_file(filepath::String, output_path::String, 
     # Dispatch to the appropriate in-memory condition_average based on data type
     if file_data isa AbstractVector{<:ErpData} || file_data isa AbstractVector{<:TimeFreqData}
         average_waves = condition_average(file_data, condition_groups)
-        jldsave(output_path; data = average_waves)
+        jldsave(output_path; data = average_waves, format_version = EEGFUN_FORMAT_VERSION)
         return BatchResult(true, filename, "Created $(length(average_waves)) average(s)")
     else
         return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{TimeFreqData}, got $(typeof(file_data))")
@@ -88,11 +97,11 @@ conditions. The `file_pattern` method loads JLD2 files and saves results to a ne
 
 # Example
 ```julia
-erps = average_epochs(epochs)
-avg_waves = condition_average(erps, [[1, 2], [3, 4]])
+erps = EegFun.average_epochs(epochs)
+avg_waves = EegFun.condition_average(erps, [[1, 2], [3, 4]])
 
 # Batch
-condition_average("erps_unrejected", [[1, 2], [3, 4]])
+EegFun.condition_average("erps_unrejected", [[1, 2], [3, 4]])
 ```
 """
 function condition_average(data::AbstractVector{T}, condition_groups) where {T<:ConditionAverageData}
@@ -107,15 +116,21 @@ function condition_average(data::AbstractVector{T}, condition_groups) where {T<:
     tag = _kind_tag(T)
     @info "Creating $(tag)condition average waves..."
 
+    cond_nums = Int[d.condition for d in data]
+    use_cond_field = allunique(cond_nums) && all(>(0), cond_nums)
     average_waves = T[]
 
     for (group_idx, conditions) in enumerate(groups)
-        # Find data for each condition in the group (first match wins)
+        # Find data for each condition in the group (.condition match with positional fallback)
         group_data = T[]
         all_found = true
 
         for cond in conditions
-            found_idx = findfirst(d -> d.condition == cond, data)
+            found_idx = if use_cond_field
+                findfirst(d -> d.condition == cond, data)
+            else
+                (1 <= cond <= length(data)) ? cond : nothing
+            end
             if isnothing(found_idx)
                 @minimal_warning "Condition $cond not found. Skipping group $conditions."
                 all_found = false

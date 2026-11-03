@@ -30,7 +30,7 @@ The databrowser is an interactive visualization tool for navigating through EEG 
 **ICA Integration**:
 
 ```julia
-plot_databrowser(dat, ica_result)
+EegFun.plot_databrowser(dat, ica_result)
 ```
 
 ## Analysis Settings
@@ -38,8 +38,8 @@ plot_databrowser(dat, ica_result)
 The databrowser can also be used to return analysis settings for further processing:
 
 ```julia
-fig, ax, analysis_settings = plot_databrowser(dat)
-dat_new = apply_analysis_settings(dat, analysis_settings)
+res = EegFun.plot_databrowser(dat)
+dat_new = EegFun.apply_analysis_settings(dat, res.analysis_settings)
 ```
 
 Extract user-selected:
@@ -62,7 +62,7 @@ Extract user-selected:
 Customize visual appearance:
 
 ```julia
-plot_databrowser(dat,
+EegFun.plot_databrowser(dat,
     channel_line_width = 2,
     selection_color = (:red, 0.5)
 )
@@ -73,8 +73,8 @@ plot_databrowser(dat,
 Load data directly from saved files:
 
 ```julia
-plot_databrowser("dat.jld2")                   # saved continuous data
-plot_databrowser("epochs.jld2", "ica.jld2")    # saved epochs and ica result
+EegFun.plot_databrowser("dat.jld2")                   # saved continuous data
+EegFun.plot_databrowser("epochs.jld2", "ica.jld2")    # saved epochs and ica result
 ```
 
 ## Common Workflows

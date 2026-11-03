@@ -62,6 +62,11 @@ function shift_matrix!(dest::AbstractMatrix{T}, src::AbstractMatrix{T}, shift::I
     return dest
 end
 
+"""
+    shift_matrix(src::AbstractMatrix{T}, shift::Int) where {T}
+
+Return a new matrix with each column (samples × channels) shifted by `shift` samples. See [`shift_matrix!`](@ref).
+"""
 function shift_matrix(src::AbstractMatrix{T}, shift::Int) where {T}
     dest = similar(src)
     shift_matrix!(dest, src, shift)

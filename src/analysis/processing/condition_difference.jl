@@ -62,7 +62,7 @@ function _condition_difference_process_file(
     # Dispatch to the appropriate in-memory condition_difference based on data type
     if file_data isa AbstractVector{<:ErpData} || file_data isa AbstractVector{<:TimeFreqData}
         difference_waves = condition_difference(file_data, condition_pairs)
-        jldsave(output_path; data = difference_waves)
+        jldsave(output_path; data = difference_waves, format_version = EEGFUN_FORMAT_VERSION)
         return BatchResult(true, filename, "Created $(length(difference_waves)) difference(s)")
     else
         return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{TimeFreqData}, got $(typeof(file_data))")
@@ -104,33 +104,35 @@ function condition_difference(data::AbstractVector{T}, condition_pairs) where {T
     tag = _kind_tag(T)
     @info "Creating $(tag)condition difference waves..."
 
+    cond_nums = Int[d.condition for d in data]
+    use_cond_field = allunique(cond_nums) && all(>(0), cond_nums)
     difference_waves = T[]
 
     for (pair_idx, pair) in enumerate(pairs)
         cond1, cond2 = pair[1], pair[2]
 
-        # Find data for each condition (last match wins)
-        dat1 = nothing
-        dat2 = nothing
-        for d in data
-            cond_num = d.condition
-            if cond_num == cond1
-                dat1 = d
-            elseif cond_num == cond2
-                dat2 = d
-            end
+        # Find data for each condition (.condition match with positional fallback)
+        idx1 = if use_cond_field
+            findfirst(d -> d.condition == cond1, data)
+        else
+            (1 <= cond1 <= length(data)) ? cond1 : nothing
+        end
+        idx2 = if use_cond_field
+            findfirst(d -> d.condition == cond2, data)
+        else
+            (1 <= cond2 <= length(data)) ? cond2 : nothing
         end
 
-        if isnothing(dat1)
+        if isnothing(idx1)
             @minimal_warning "Condition $cond1 not found. Skipping pair ($cond1, $cond2)."
             continue
         end
-        if isnothing(dat2)
+        if isnothing(idx2)
             @minimal_warning "Condition $cond2 not found. Skipping pair ($cond1, $cond2)."
             continue
         end
 
-        diff_wave = _create_difference_wave(dat1, dat2, cond1, cond2, pair_idx)
+        diff_wave = _create_difference_wave(data[idx1], data[idx2], cond1, cond2, pair_idx)
         push!(difference_waves, diff_wave)
     end
 

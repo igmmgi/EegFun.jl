@@ -160,39 +160,90 @@ using DataFrames
     end
 
 
-    @testset "Derivatives renaming" begin
+    @testset "Derivatives renaming and stem isolation" begin
         mktempdir() do tmpdir
-            # Create mock derivatives directory with JLD2 files
+            # Create mock derivatives directory with all 9 pipeline outputs + ICA + artifact_info
             deriv_dir = joinpath(tmpdir, "preprocessed")
             mkpath(deriv_dir)
 
-            # Create dummy JLD2 files (just empty files for naming tests)
-            for suffix in ["_epochs_raw", "_erps", "_ica", "_artifact_info"]
-                touch(joinpath(deriv_dir, "example1$(suffix).jld2"))
+            all_suffixes = [
+                "_continuous_raw",
+                "_continuous_corrected",
+                "_continuous",
+                "_epochs_raw",
+                "_epochs_corrected",
+                "_epochs",
+                "_erps_raw",
+                "_erps_corrected",
+                "_erps",
+                "_ica",
+                "_artifact_info",
+            ]
+            for suffix in all_suffixes
+                touch(joinpath(deriv_dir, "sub1$(suffix).jld2"))
             end
+            # Also create sub10 files to verify `sub1` never matches `sub10`
+            touch(joinpath(deriv_dir, "sub10_epochs.jld2"))
+            touch(joinpath(deriv_dir, "sub10_erps.jld2"))
 
             output_dir = joinpath(tmpdir, "bids_out")
             mkpath(output_dir)
 
-            raw_files = ["example1.bdf"]
-            pmap = Dict("example1" => "sub-01")
+            raw_files = ["sub1.bdf", "sub10.bdf"]
+            pmap = Dict("sub1" => "sub-01", "sub10" => "sub-10")
 
             EegFun._bids_copy_derivatives(output_dir, deriv_dir, raw_files, pmap, "posner", false)
 
-            sub_dir = joinpath(output_dir, "derivatives", "EegFun", "sub-01", "eeg")
-            @test isdir(sub_dir)
+            sub1_dir = joinpath(output_dir, "derivatives", "EegFun", "sub-01", "eeg")
+            sub10_dir = joinpath(output_dir, "derivatives", "EegFun", "sub-10", "eeg")
+            @test isdir(sub1_dir)
+            @test isdir(sub10_dir)
 
-            # Check renamed files
-            files = readdir(sub_dir)
-            @test "sub-01_task-posner_desc-raw_eeg.jld2" in files
-            @test "sub-01_task-posner_eeg.jld2" in files
-            @test "sub-01_task-posner_desc-ica_eeg.jld2" in files
-            @test "sub-01_task-posner_desc-artifactInfo_eeg.jld2" in files
+            # All 11 sub1 files must map to distinct camelCase desc- filenames (zero overwrites)
+            files1 = readdir(sub1_dir)
+            @test length(files1) == 11
+            for expected_desc in [
+                "continuousRaw",
+                "continuousCorrected",
+                "continuous",
+                "epochsRaw",
+                "epochsCorrected",
+                "epochs",
+                "erpsRaw",
+                "erpsCorrected",
+                "erps",
+                "ica",
+                "artifactInfo",
+            ]
+                @test "sub-01_task-posner_desc-$(expected_desc)_eeg.jld2" in files1
+            end
+
+            # sub10 must only have its 2 files (never matched by sub1)
+            files10 = readdir(sub10_dir)
+            @test length(files10) == 2
+            @test "sub-10_task-posner_desc-epochs_eeg.jld2" in files10
+            @test "sub-10_task-posner_desc-erps_eeg.jld2" in files10
 
             # Check derivatives dataset_description.json
             deriv_desc = joinpath(output_dir, "derivatives", "EegFun", "dataset_description.json")
             @test isfile(deriv_desc)
             @test contains(read(deriv_desc, String), "derivative")
+        end
+    end
+
+    @testset "Events TSV populates trial_type from trigger_info" begin
+        mktempdir() do tmpdir
+            dat = _make_test_continuous_data("test_file")
+            info_col = fill("", nrow(dat.data))
+            info_col[10] = "cue_left"
+            info_col[30] = "target_right"
+            dat.data[!, :trigger_info] = info_col
+            prefix = "sub-01_task-test"
+            EegFun._bids_write_events_tsv(tmpdir, prefix, dat)
+            lines = readlines(joinpath(tmpdir, "$(prefix)_events.tsv"))
+            @test split(lines[2], '\t')[3] == "cue_left"
+            @test split(lines[3], '\t')[3] == "target_right"
+            @test split(lines[4], '\t')[3] == "n/a"
         end
     end
 

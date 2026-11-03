@@ -1,5 +1,31 @@
+# Check whether `filename` belongs to `participant_id` using exact token boundaries.
+function _matches_participant_file(filename::AbstractString, participant_id)
+    # Never move summary, config, or global pipeline log files
+    if filename in (
+        "epoch_summary.jld2",
+        "epoch_summary_subset.jld2",
+        "file_summary.jld2",
+        "file_summary_subset.jld2",
+        "config.toml",
+        "neighbors.toml",
+    ) || startswith(filename, "preprocess_log_")
+        return false
+    end
+
+    pid_raw = strip(string(participant_id))
+    isempty(pid_raw) && return false
+    pid_stem = replace(pid_raw, r"\.(bdf|edf|vhdr|eeg|fif|xdf|set|mat|jld2|csv|txt)$"i => "")
+    isempty(pid_stem) && return false
+
+    escaped = replace(pid_stem, r"([.^$*+?()\[\]{}|\\])" => s"\\\1")
+    left_boundary = isdigit(first(pid_stem)) ? "(?:^|[^0-9])" : "(?:^|[^A-Za-z0-9])"
+    right_boundary = "(?:[^A-Za-z0-9]|\$)"
+    pat = Regex(left_boundary * escaped * right_boundary)
+    return occursin(pat, filename)
+end
+
 """
-    subset_bad_data(data_path::String, threshold::Float64; 
+    subset_bad_data(data_path::String, threshold::Real;
                     subset_directory::String = "excluded")
 
 Identify and move files from participants with low data retention to a separate directory.
@@ -12,7 +38,7 @@ The function searches for "epoch_summary.jld2" in the specified directory.
 
 # Arguments
 - `data_path::String`: Path to the directory containing epoch_summary.jld2 and preprocessed files
-- `threshold::Float64`: Minimum percentage threshold (e.g., 75.0 means 75% retention required)
+- `threshold::Real`: Minimum percentage threshold (e.g., 75.0 means 75% retention required)
 
 # Keyword Arguments
 - `subset_directory::String`: Name of subdirectory for excluded participants (default: "excluded")
@@ -29,7 +55,7 @@ subset_bad_data("/path/to/preprocessed", 80.0, subset_directory="excluded")
 function subset_bad_data(data_path::String, threshold::Real; subset_directory::String = "excluded")
 
     # Validate inputs/outputs
-    (threshold < 0.0 || threshold > 100.0) && @minimal_error("threshold must be 0 < threshold < 100, got $threshold")
+    (threshold < 0.0 || threshold > 100.0) && @minimal_error("threshold must be between 0 and 100, got $threshold")
     !isdir(data_path) && @minimal_error("data_path must be a directory: $data_path")
 
     epoch_summary_path = joinpath(data_path, "epoch_summary.jld2")
@@ -45,9 +71,8 @@ function subset_bad_data(data_path::String, threshold::Real; subset_directory::S
 
     # Find participants with any condition below threshold
     bad_participants = unique(epoch_summary.file[epoch_summary.percentage .< threshold])
-    println("Subsetting data: $(length(bad_participants))")
-    println("   N remaining: $(length(unique(epoch_summary.file)) - length(bad_participants))")
-    println("   N removed: $(length(bad_participants))")
+    n_remaining = length(unique(epoch_summary.file)) - length(bad_participants)
+    @info "Subsetting data: $(length(bad_participants)) removed, $n_remaining remaining"
 
     # Create subset summary files with only non-excluded participants
     # Filter epoch_summary to exclude bad participants
@@ -64,15 +89,15 @@ function subset_bad_data(data_path::String, threshold::Real; subset_directory::S
     epoch_summary_subset_path = joinpath(output_directory, "epoch_summary_subset.jld2")
     file_summary_subset_path = joinpath(output_directory, "file_summary_subset.jld2")
 
-    jldsave(epoch_summary_subset_path; data = epoch_summary_subset)
-    jldsave(file_summary_subset_path; data = file_summary_subset)
+    jldsave(epoch_summary_subset_path; data = epoch_summary_subset, format_version = EEGFUN_FORMAT_VERSION)
+    jldsave(file_summary_subset_path; data = file_summary_subset, format_version = EEGFUN_FORMAT_VERSION)
 
     # Find and move all files for bad participants
     all_files = readdir(output_directory)
     for participant_id in bad_participants
-        # Find all files that contain participant_id
+        # Find all files matching exact participant_id boundary
         matching_files = filter(all_files) do filename
-            occursin(participant_id, filename)
+            _matches_participant_file(filename, participant_id)
         end
         # Move each matching file
         for filename in matching_files

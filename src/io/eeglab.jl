@@ -71,7 +71,8 @@ function read_eeglab(filepath::String; preserve_radial_distance::Bool = true)
         layout = _parse_channel_locations(eeg["chanlocs"], ch_names)
         if isnothing(layout)
             @minimal_warning "No valid coordinate system found for ICA. Layout will contain only channel names."
-            layout = Layout(DataFrame(label = ch_names), nothing, nothing, nothing)
+            layout =
+                Layout(DataFrame(label = ch_names, inc = zeros(length(ch_names)), azi = zeros(length(ch_names))), nothing, nothing, nothing)
         else
             polar_to_cartesian_xy!(layout, preserve_radial_distance = preserve_radial_distance)
         end
@@ -87,10 +88,10 @@ end
 Helper to extract common components used by all EEGLAB converters.
 Returns: (n_channels, n_timepoints, sample_rate, ch_names, data, times, layout)
 """
-function _load_common_eeglab_components(eeg::Dict, filepath::String, preserve_radial_distance::Bool)
+function _load_common_eeglab_components(eeg::AbstractDict, filepath::String, preserve_radial_distance::Bool)
     n_channels = Int(eeg["nbchan"])
     n_timepoints = Int(eeg["pnts"])
-    sample_rate = Int(eeg["srate"])
+    sample_rate = Int(round(eeg["srate"]))
 
     @info "Data: $n_channels channels × $n_timepoints timepoints" *
           (haskey(eeg, "trials") && eeg["trials"] > 1 ? " × $(Int(eeg["trials"])) trials" : "")
@@ -110,7 +111,8 @@ function _load_common_eeglab_components(eeg::Dict, filepath::String, preserve_ra
     layout = _parse_channel_locations(eeg["chanlocs"], ch_names)
     if isnothing(layout)
         @minimal_warning "No complete coordinate system found. Layout will contain only channel names."
-        layout = Layout(DataFrame(label = ch_names), nothing, nothing, nothing)
+        layout =
+            Layout(DataFrame(label = ch_names, inc = zeros(length(ch_names)), azi = zeros(length(ch_names))), nothing, nothing, nothing)
     else
         polar_to_cartesian_xy!(layout, preserve_radial_distance = preserve_radial_distance)
     end
@@ -120,23 +122,27 @@ end
 
 
 """
-    _eeglab_to_epochdata(eeg::Dict, filepath::String, preserve_radial_distance::Bool) → EpochData
+    _eeglab_to_epochdata(eeg::AbstractDict, filepath::String, preserve_radial_distance::Bool) → EpochData
 
 Convert EEGLAB structure to EegFun EpochData.
 
 Internal function called by `load_eeglab`.
 """
-function _eeglab_to_epochdata(eeg::Dict, filepath::String, preserve_radial_distance::Bool)
+function _eeglab_to_epochdata(eeg::AbstractDict, filepath::String, preserve_radial_distance::Bool)
     # Load common components
     n_timepoints, sample_rate, ch_names, data_array, times, layout = _load_common_eeglab_components(eeg, filepath, preserve_radial_distance)
 
     n_trials = Int(eeg["trials"])
 
     # Extract triggers from epochs (returns both integer codes and string info)
-    trigger_codes, trigger_info = _extract_triggers(eeg["epoch"], n_trials)
+    trigger_codes, trigger_info =
+        haskey(eeg, "epoch") && !isempty(eeg["epoch"]) ? _extract_triggers(eeg["epoch"], n_trials) :
+        (zeros(Int, n_trials), fill("", n_trials))
 
     # Convert 3D array to Vector{DataFrame}
     epoch_dataframes = Vector{DataFrame}(undef, n_trials)
+    zero_idx = find_closest_time_index(times, 0.0)
+    sample_col = collect(1:n_timepoints)
 
     for trial_idx = 1:n_trials
         # Extract trial data [channels × timepoints]
@@ -145,13 +151,6 @@ function _eeglab_to_epochdata(eeg::Dict, filepath::String, preserve_radial_dista
         # Create DataFrame with channel data
         df = DataFrame(trial_data, ch_names)
 
-        # Insert time column at the beginning
-        insertcols!(df, 1, :time => times)
-
-        # Add trigger columns (mark trigger only at time=0)
-        # Find index closest to time=0
-        zero_idx = find_closest_time_index(times, 0.0)
-
         # Create trigger vectors (0 everywhere except at t=0)
         trigger_vec = zeros(Int, n_timepoints)
         trigger_vec[zero_idx] = trigger_codes[trial_idx]
@@ -159,8 +158,15 @@ function _eeglab_to_epochdata(eeg::Dict, filepath::String, preserve_radial_dista
         trigger_info_vec = fill("", n_timepoints)
         trigger_info_vec[zero_idx] = trigger_info[trial_idx]
 
-        insertcols!(df, 2, :trigger => trigger_vec)
-        insertcols!(df, 3, :trigger_info => trigger_info_vec)
+        insertcols!(
+            df,
+            1,
+            :time => times,
+            :sample => copy(sample_col),
+            :epoch => fill(trial_idx, n_timepoints),
+            :trigger => trigger_vec,
+            :trigger_info => trigger_info_vec,
+        )
 
         epoch_dataframes[trial_idx] = df
     end
@@ -169,7 +175,7 @@ function _eeglab_to_epochdata(eeg::Dict, filepath::String, preserve_radial_dista
     condition_name = get(eeg, "setname", basename(filepath))
 
     # Create AnalysisInfo (EEGLAB doesn't have reliable filter/reference metadata)
-    analysis_info = AnalysisInfo(sample_rate = Int(round(sample_rate)))
+    analysis_info = AnalysisInfo(sample_rate = Float64(sample_rate))
 
     # Create EpochData
     epoch_data = EpochData(
@@ -177,7 +183,7 @@ function _eeglab_to_epochdata(eeg::Dict, filepath::String, preserve_radial_dista
         1,                 # condition
         condition_name,    # condition_name
         epoch_dataframes,  # data
-        layout,            # layout
+        copy(layout),      # layout
         sample_rate,       # sample_rate
         analysis_info,     # analysis_info
     )
@@ -188,7 +194,83 @@ function _eeglab_to_epochdata(eeg::Dict, filepath::String, preserve_radial_dista
 end
 
 
-function _eeglab_to_continuousdata(eeg::Dict, filepath::String, preserve_radial_distance::Bool)
+function _eeglab_event_code(typ, pos)::Int
+    if typ isa Integer && !(typ isa Bool)
+        return Int(typ)
+    elseif typ isa Real && !(typ isa Bool) && !isnan(typ)
+        return round(Int, typ)
+    elseif !(typ isa AbstractArray && isempty(typ))
+        parsed = _parse_marker_code(string(typ))
+        parsed != 0 && return parsed
+    end
+    if pos isa Integer && !(pos isa Bool)
+        return Int(pos)
+    elseif pos isa Real && !(pos isa Bool) && !isnan(pos)
+        return round(Int, pos)
+    end
+    return 0
+end
+
+function _eeglab_extract_continuous_events!(trigger_vec::Vector{Int}, trigger_info_vec::Vector{String}, events, n_timepoints::Int)
+    if events isa AbstractArray
+        # Array-of-dicts representation
+        for ev in events
+            ev isa AbstractDict || continue
+            haskey(ev, "latency") || continue
+            lat_raw = ev["latency"]
+            lat_val = lat_raw isa AbstractArray ? (isempty(lat_raw) ? nothing : first(lat_raw)) : lat_raw
+            (lat_val isa Number && !isnan(lat_val)) || continue
+            latency = Int(round(lat_val))
+            (1 <= latency <= n_timepoints) || continue
+
+            typ = get(ev, "type", "")
+            typ_val = typ isa AbstractArray ? (isempty(typ) ? "" : first(typ)) : typ
+            pos = get(ev, "position", nothing)
+            pos_val = pos isa AbstractArray ? (isempty(pos) ? nothing : first(pos)) : pos
+
+            code = _eeglab_event_code(typ_val, pos_val)
+            if code != 0 || trigger_vec[latency] == 0
+                trigger_vec[latency] = code
+            end
+            info_str = string(typ_val)
+            if code != 0 || isempty(trigger_info_vec[latency])
+                trigger_info_vec[latency] = info_str
+            end
+        end
+    else
+        # Struct-of-arrays representation (MAT.MatlabStructArray or Dict of arrays)
+        has_lat = haskey(events, "latency")
+        has_type = haskey(events, "type")
+        if has_lat && (has_type || haskey(events, "position"))
+            latencies = vec(events["latency"])
+            types = has_type ? vec(events["type"]) : nothing
+            positions = haskey(events, "position") ? vec(events["position"]) : nothing
+
+            @info "Extracted $(length(latencies)) events"
+
+            for i in eachindex(latencies)
+                lat_val = latencies[i]
+                (lat_val isa Number && !isnan(lat_val)) || continue
+                latency = Int(round(lat_val))
+                (1 <= latency <= n_timepoints) || continue
+
+                typ_val = (!isnothing(types) && i <= length(types)) ? types[i] : ""
+                pos_val = (!isnothing(positions) && i <= length(positions)) ? positions[i] : nothing
+
+                code = _eeglab_event_code(typ_val, pos_val)
+                if code != 0 || trigger_vec[latency] == 0
+                    trigger_vec[latency] = code
+                end
+                info_str = typ_val isa AbstractArray && isempty(typ_val) ? "" : string(typ_val)
+                if code != 0 || isempty(trigger_info_vec[latency])
+                    trigger_info_vec[latency] = info_str
+                end
+            end
+        end
+    end
+end
+
+function _eeglab_to_continuousdata(eeg::AbstractDict, filepath::String, preserve_radial_distance::Bool)
     # Load common components
     n_timepoints, sample_rate, ch_names, data_array, times, layout = _load_common_eeglab_components(eeg, filepath, preserve_radial_distance)
 
@@ -200,81 +282,45 @@ function _eeglab_to_continuousdata(eeg::Dict, filepath::String, preserve_radial_
     trigger_info_vec = fill("", n_timepoints)
 
     if haskey(eeg, "event") && !isempty(eeg["event"])
-        events = eeg["event"]
-
-        # EEGLAB stores events as struct-of-arrays: .names and .values
-        type_idx = findfirst(==("type"), events.names)
-        lat_idx = findfirst(==("latency"), events.names)
-        pos_idx = findfirst(==("position"), events.names)
-
-        if !isnothing(lat_idx) && !isnothing(type_idx)
-            latencies = events.values[lat_idx]
-            types = events.values[type_idx]
-            positions = !isnothing(pos_idx) ? events.values[pos_idx] : nothing
-
-            if isnothing(positions)
-                @minimal_warning "No 'position' field found in EEGLAB events. Integer trigger codes will be 0; trigger type strings are preserved in :trigger_info."
-            end
-
-            @info "Extracted $(length(latencies)) events"
-
-            for i in eachindex(latencies)
-                latency = Int(round(latencies[i]))
-                (latency < 1 || latency > n_timepoints) && continue
-
-                # Extract trigger code from position field (use 0 for events without position)
-                trigger_code = if !isnothing(positions) && i <= length(positions)
-                    val = positions[i]
-                    # Position is either a number or an empty array
-                    (val isa Number) ? Int(val) : 0
-                else
-                    0
-                end
-
-                trigger_vec[latency] = trigger_code
-                trigger_info_vec[latency] = string(types[i])
-            end
-        end
+        _eeglab_extract_continuous_events!(trigger_vec, trigger_info_vec, eeg["event"], n_timepoints)
     end
 
     # Create DataFrame
     df = DataFrame(data_matrix, ch_names)
-    insertcols!(df, 1, :time => times)
-    insertcols!(df, 2, :trigger => trigger_vec)
-    insertcols!(df, 3, :trigger_info => trigger_info_vec)
+    insertcols!(df, 1, :time => times, :sample => collect(1:n_timepoints), :trigger => trigger_vec, :trigger_info => trigger_info_vec)
 
     # Create AnalysisInfo
-    analysis_info = AnalysisInfo(sample_rate = Int(round(sample_rate)))
+    analysis_info = AnalysisInfo(sample_rate = Float64(sample_rate))
 
     # Create ContinuousData
-    continuous_data = ContinuousData(filepath, df, layout, sample_rate, analysis_info)
+    continuous_data = ContinuousData(filepath, df, copy(layout), sample_rate, analysis_info)
 
     @info "Successfully converted to ContinuousData"
     return continuous_data
 end
 
 
-function _eeglab_to_erpdata(eeg::Dict, filepath::String, preserve_radial_distance::Bool)
+function _eeglab_to_erpdata(eeg::AbstractDict, filepath::String, preserve_radial_distance::Bool)
 
-    _, sample_rate, ch_names, data_array, times, layout = _load_common_eeglab_components(eeg, filepath, preserve_radial_distance)
+    n_timepoints, sample_rate, ch_names, data_array, times, layout = _load_common_eeglab_components(eeg, filepath, preserve_radial_distance)
 
     # Transpose to [timepoints × channels]
     data_matrix = data_array'
 
     # Create DataFrame
     df = DataFrame(data_matrix, ch_names)
-    insertcols!(df, 1, :time => times)
+    insertcols!(df, 1, :time => times, :sample => collect(1:n_timepoints))
 
     # Create AnalysisInfo (we don't really know much about the data)
-    analysis_info = AnalysisInfo(sample_rate = Int(round(sample_rate)))
+    analysis_info = AnalysisInfo(sample_rate = Float64(sample_rate))
 
-    # Get condition name (is this correct?)
+    # Get condition name
     condition_name = get(eeg, "setname", basename(filepath))
 
     # Create ErpData
     # Note: EEGLAB averaged ERPs don't natively store epoch counts in a standard way,
     # so we default to n_epochs=1 and condition=1.
-    erp_data = ErpData(filepath, 1, condition_name, df, layout, sample_rate, analysis_info, 1)
+    erp_data = ErpData(filepath, 1, condition_name, df, copy(layout), sample_rate, analysis_info, 1)
 
     @info "Successfully converted to ErpData"
     return erp_data
@@ -367,53 +413,79 @@ function _extract_channel_names(chanlocs)
 end
 
 
+function _select_epoch_event_type(event_types, event_latencies)::String
+    (event_types === nothing || (event_types isa AbstractArray && isempty(event_types))) && return ""
+    if event_types isa AbstractArray
+        types_vec = vec(event_types)
+        if length(types_vec) > 1 && event_latencies isa AbstractArray && length(event_latencies) == length(types_vec)
+            lats_vec = vec(event_latencies)
+            best_idx = 1
+            best_abs = Inf
+            for (k, lat) in enumerate(lats_vec)
+                lat_num = lat isa Number ? Float64(lat) : tryparse(Float64, string(lat))
+                if !isnothing(lat_num) && !isnan(lat_num) && abs(lat_num) < best_abs
+                    best_abs = abs(lat_num)
+                    best_idx = k
+                end
+            end
+            return string(types_vec[best_idx])
+        end
+        return string(first(types_vec))
+    else
+        return string(event_types)
+    end
+end
+
 """
     _extract_triggers(epochs, n_trials::Int) → Tuple{Vector{Int}, Vector{String}}
 
-Extract trigger codes from EEGLAB epoch structure.
-
-Maps unique trigger strings to sequential integers (1, 2, 3, ...) and returns both
-the integer codes and original strings for storage in :trigger and :trigger_info columns.
+Extract trigger codes from EEGLAB epoch structure, selecting the event closest to `eventlatency == 0`
+when an epoch contains multiple events. Handles both struct-of-arrays and array-of-dicts representations.
 """
 function _extract_triggers(epochs, n_trials::Int)
-    # First pass: collect all unique trigger strings
     trigger_strings = Vector{String}(undef, n_trials)
-    unique_values = Set{String}()
 
-    for i = 1:n_trials
-        epoch = epochs[i]
-
-        # Try to extract event type
-        if haskey(epoch, "eventtype") && !isempty(epoch["eventtype"])
-            event_types = epoch["eventtype"]
-
-            # Take first event type if multiple, convert to String
-            if event_types isa AbstractArray
-                trigger_str = string(first(event_types))
-            else
-                trigger_str = string(event_types)
-            end
-
-            trigger_strings[i] = trigger_str
-            push!(unique_values, trigger_str)
-        else
-            # No event type - use empty string
-            trigger_strings[i] = ""
-            push!(unique_values, "")
+    if epochs isa AbstractDict
+        # Dict struct-of-arrays representation
+        has_et = haskey(epochs, "eventtype")
+        has_lat = haskey(epochs, "eventlatency")
+        ets = has_et ? vec(epochs["eventtype"]) : nothing
+        lats = has_lat ? vec(epochs["eventlatency"]) : nothing
+        for i = 1:n_trials
+            et_i = (!isnothing(ets) && i <= length(ets)) ? ets[i] : nothing
+            lat_i = (!isnothing(lats) && i <= length(lats)) ? lats[i] : nothing
+            trigger_strings[i] = _select_epoch_event_type(et_i, lat_i)
+        end
+    else
+        # MAT.MatlabStructArray or Vector{Dict} representation
+        for i = 1:n_trials
+            epoch = epochs[i]
+            et_i = haskey(epoch, "eventtype") ? epoch["eventtype"] : nothing
+            lat_i = haskey(epoch, "eventlatency") ? epoch["eventlatency"] : nothing
+            trigger_strings[i] = _select_epoch_event_type(et_i, lat_i)
         end
     end
 
-    # Create mapping from strings to sequential integers
-    string_to_int = Dict{String,Int}()
-    for (idx, value) in enumerate(sort(collect(unique_values)))
-        string_to_int[value] = idx
+    # Parse numeric codes directly when present; assign deterministic sequential codes to purely non-numeric labels
+    parsed_codes = [_parse_marker_code(s) for s in trigger_strings]
+    max_num = isempty(parsed_codes) ? 0 : max(0, maximum(parsed_codes))
+    non_numeric = sort(unique([s for (s, c) in zip(trigger_strings, parsed_codes) if !isempty(strip(s)) && c == 0]))
+    label_to_int = Dict{String,Int}(lbl => (max_num + idx) for (idx, lbl) in enumerate(non_numeric))
+
+    trigger_codes = Vector{Int}(undef, n_trials)
+    for i = 1:n_trials
+        s = trigger_strings[i]
+        if isempty(strip(s))
+            trigger_codes[i] = 0
+        elseif parsed_codes[i] != 0
+            trigger_codes[i] = parsed_codes[i]
+        else
+            trigger_codes[i] = label_to_int[s]
+        end
     end
 
-    # Second pass: create integer trigger codes
-    trigger_codes = [string_to_int[s] for s in trigger_strings]
-
-    n_unique = length(unique_values)
-    @info "Extracted $n_unique unique trigger types: $(sort(collect(unique_values)))"
+    unique_vals = sort(unique(trigger_strings))
+    @info "Extracted $(length(unique_vals)) unique trigger types: $(unique_vals)"
 
     return trigger_codes, trigger_strings
 end
@@ -485,16 +557,37 @@ Extract ICA information from EEGLAB structure.
 
 Converts EEGLAB ICA matrices to EegFun InfoIca format.
 """
-function _extract_ica_info(eeg::Dict, filepath::String, layout::Layout)
-    # Extract ICA matrices
-    unmixing = Matrix{Float64}(eeg["icaweights"])  # Unmixing matrix
-    sphere = Matrix{Float64}(eeg["icasphere"])     # Sphering matrix
-    mixing = Matrix{Float64}(eeg["icawinv"])       # Mixing matrix (inverse)
+function _extract_ica_info(eeg::AbstractDict, filepath::String, layout::Layout)
+    # Extract ICA matrices: in EEGLAB, full unmixing = icaweights * icasphere
+    W = Matrix{Float64}(eeg["icaweights"])
+    has_sphere = haskey(eeg, "icasphere") && !isempty(eeg["icasphere"])
+    sphere = has_sphere ? Matrix{Float64}(eeg["icasphere"]) : [i == j ? 1.0 : 0.0 for i = 1:size(W, 2), j = 1:size(W, 2)]
+    unmixing = (has_sphere && size(W, 2) == size(sphere, 1)) ? (W * sphere) : W
+    mixing =
+        (haskey(eeg, "icawinv") && !isempty(eeg["icawinv"])) ? Matrix{Float64}(eeg["icawinv"]) :
+        Matrix{Float64}(LinearAlgebra.pinv(unmixing))
 
-    # Get number of components
+    # Get number of components and ICA channels
     n_components = size(unmixing, 1)
+    n_ica_channels = size(unmixing, 2)
 
-    @info "Extracting $n_components ICA components"
+    @info "Extracting $n_components ICA components across $n_ica_channels channels"
+
+    # Subset copied layout to icachansind if present
+    ica_layout = copy(layout)
+    if haskey(eeg, "icachansind") && !isempty(eeg["icachansind"])
+        raw_inds = vec(eeg["icachansind"])
+        if all(x -> x isa Number && !isnan(x), raw_inds)
+            ch_inds = Int.(round.(raw_inds))
+            all_lbls = ica_layout.data.label
+            if all(idx -> 1 <= idx <= length(all_lbls), ch_inds) && length(ch_inds) <= length(all_lbls)
+                sel_labels = all_lbls[ch_inds]
+                if sel_labels != all_lbls
+                    ica_layout = subset_layout(ica_layout; channel_selection = channels(sel_labels))
+                end
+            end
+        end
+    end
 
     # Generate component labels
     ica_label = [Symbol("IC$i") for i = 1:n_components]
@@ -502,21 +595,18 @@ function _extract_ica_info(eeg::Dict, filepath::String, layout::Layout)
     # Create variance vector (placeholder - would need activations to compute properly)
     variance = ones(Float64, n_components)
 
-    # Note: EEGLAB .set files do not store the full component variance or mean activations
-    # natively in the weights matrix, so we use placeholders (ones/zeros).
-
     # Create InfoIca object
     return InfoIca(
         filepath,                           # filename
-        unmixing,                           # unmixing
+        unmixing,                           # unmixing (W * sphere)
         mixing,                             # mixing
         sphere,                             # sphere
         variance,                           # variance (placeholder)
         1.0,                                # scale
-        zeros(Float64, n_components),       # mean
+        zeros(Float64, n_ica_channels),     # mean (length = size(unmixing, 2))
         ica_label,                          # ica_label
-        OrderedDict{Int,Matrix{Float64}}(), # removed_activations (empty)
-        layout,                             # layout
+        Dict{Int,Matrix{Float64}}(),        # removed_activations (empty)
+        ica_layout,                         # layout (copied & subsetted to icachansind)
         fill(false, n_components),          # is_sub_gaussian (all super-Gaussian by default)
     )
 end

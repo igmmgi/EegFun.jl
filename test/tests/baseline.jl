@@ -372,10 +372,48 @@ end
                 elseif method == :db
                     10 .* log10.(col[rows] ./ bm)
                 else
-                    (col[rows] .- bm) ./ std(bvals, corrected = false)
+                    (col[rows] .- bm) ./ std(bvals, corrected = true)
                 end
             end
             @test res.data_power[!, ch] ≈ expected
         end
     end
+end
+
+@testset "TimeFreqEpochData baseline & TF baseline edge guards" begin
+    tf_ep = EegFun.create_test_tf_epoch_data(n_channels = 2, n_epochs = 3, power_offset = 4.0, noise = 0.2)
+    orig_ep1_ch1 = copy(tf_ep.data_power[1].Ch1)
+
+    tf_ep_base = EegFun.baseline(tf_ep, (0.0, 0.2); method = :db)
+    @test tf_ep_base isa EegFun.TimeFreqEpochData
+    @test tf_ep.data_power[1].Ch1 == orig_ep1_ch1  # non-mutating
+    @test tf_ep_base.baseline.method == :db
+
+    EegFun.tf_baseline!(tf_ep, (0.0, 0.2); method = :zscore)
+    @test tf_ep.baseline.method == :zscore
+
+    # Vector{TimeFreqEpochData}
+    tf_ep_vec = [
+        EegFun.create_test_tf_epoch_data(condition = 1, n_epochs = 2, power_offset = 3.0),
+        EegFun.create_test_tf_epoch_data(condition = 2, n_epochs = 2, power_offset = 5.0),
+    ]
+    tf_ep_vec_b = EegFun.baseline(tf_ep_vec, (0.0, 0.2); method = :relchange)
+    @test length(tf_ep_vec_b) == 2
+    @test tf_ep_vec_b[1].baseline.method == :relchange
+
+    # Invalid / out-of-range intervals throw EegFunError
+    tf_single = EegFun.create_test_tf_data(n_channels = 2, power_offset = 3.0, noise = 0.1)
+    @test_throws EegFun.EegFunError EegFun.tf_baseline(tf_single, (0.2, 0.0))
+    @test_throws EegFun.EegFunError EegFun.tf_baseline(tf_single, (-10.0, -9.0))
+
+    # Zero-SD / zero-mean / non-positive guards produce NaN (never 1e30 or ±Inf)
+    tf_const = EegFun.create_test_tf_data(n_channels = 1, power_offset = 2.0, noise = 0.0)
+    tf_const.data_power.Ch1 .= 2.0
+    res_z0 = EegFun.tf_baseline(tf_const, (0.0, 0.2); method = :zscore)
+    @test all(isnan, res_z0.data_power.Ch1)
+
+    tf_zero = EegFun.create_test_tf_data(n_channels = 1, power_offset = 0.0, noise = 0.0)
+    tf_zero.data_power.Ch1 .= 0.0
+    @test all(isnan, EegFun.tf_baseline(tf_zero, (0.0, 0.2); method = :db).data_power.Ch1)
+    @test all(isnan, EegFun.tf_baseline(tf_zero, (0.0, 0.2); method = :relchange).data_power.Ch1)
 end

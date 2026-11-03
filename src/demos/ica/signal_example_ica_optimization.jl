@@ -248,14 +248,27 @@ function signal_example_ica_optimization()
     btn_run  = Button(ctrl[1, 4]; label = "Run to Convergence", fontsize = ctrl_sz)
 
     # ── Wiring ────────────────────────────────────────────────────────────────
+    is_syncing_angle = Ref(false)
     on(sl_angle.value) do v
-        angle_obs[] = v
-        update_state()
+        is_syncing_angle[] && return
+        is_syncing_angle[] = true
+        try
+            angle_obs[] = v
+            update_state()
+        finally
+            is_syncing_angle[] = false
+        end
     end
 
     # Sync manual slider if angle_obs changed programmatically (via Step)
     on(angle_obs) do v
-        set_close_to!(sl_angle, v)
+        is_syncing_angle[] && return
+        is_syncing_angle[] = true
+        try
+            set_close_to!(sl_angle, v)
+        finally
+            is_syncing_angle[] = false
+        end
     end
 
     on(btn_step.clicks) do _
@@ -269,7 +282,7 @@ function signal_example_ica_optimization()
         @async begin
             try
                 for _ = 1:20
-                    !is_running[] && break
+                    (!is_running[] || !events(fig).window_open[]) && break
                     execute_ica_step()
                     sleep(0.05)
                 end

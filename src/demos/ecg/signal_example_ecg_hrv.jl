@@ -23,7 +23,7 @@ dynamically modulates heart rate.
 using GLMakie
 using EegFun
 
-signal_example_ecg_hrv()
+EegFun.signal_example_ecg_hrv()
 ```
 
 # Returns

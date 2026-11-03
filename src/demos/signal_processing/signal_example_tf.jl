@@ -115,23 +115,48 @@ function signal_example_tf()
     param_lbl_obs = Observable("Cycles: 7")
 
     # ── Figure & axes ─────────────────────────────────────────────────────────
-    fig = _eegfun_figure(size = (1200, 850))
+    fig = _eegfun_figure(size = (1350, 850))
+
+    title_sz = Observable(18)
+    lbl_sz   = Observable(15)
+    tick_sz  = Observable(12)
+    ctrl_sz  = Observable(15)
+    hdr_sz   = Observable(13)
+
+    on(fig.scene.viewport) do area
+        sf         = area.widths[1] / 1350
+        title_sz[] = max(13, round(Int, 18 * sf))
+        lbl_sz[]   = max(11, round(Int, 15 * sf))
+        tick_sz[]  = max(10, round(Int, 12 * sf))
+        ctrl_sz[]  = max(11, round(Int, 15 * sf))
+        hdr_sz[]   = max(10, round(Int, 13 * sf))
+    end
 
     ax_time = Axis(
         fig[1, 1],
-        title        = "Time-Domain Signal (trial average)",
-        xlabel       = "Time (s)",
-        ylabel       = "Amplitude",
-        xgridvisible = true,
-        ygridvisible = true,
+        title          = "Time-Domain Signal (trial average)",
+        xlabel         = "Time (s)",
+        ylabel         = "Amplitude",
+        titlesize      = title_sz,
+        xlabelsize     = lbl_sz,
+        ylabelsize     = lbl_sz,
+        xticklabelsize = tick_sz,
+        yticklabelsize = tick_sz,
+        xgridvisible   = true,
+        ygridvisible   = true,
     )
     ax_tf = Axis(
         fig[2, 1],
-        title        = "Time-Frequency Map",
-        xlabel       = "Time (s)",
-        ylabel       = "Frequency (Hz)",
-        xgridvisible = false,
-        ygridvisible = false,
+        title          = "Time-Frequency Map",
+        xlabel         = "Time (s)",
+        ylabel         = "Frequency (Hz)",
+        titlesize      = title_sz,
+        xlabelsize     = lbl_sz,
+        ylabelsize     = lbl_sz,
+        xticklabelsize = tick_sz,
+        yticklabelsize = tick_sz,
+        xgridvisible   = false,
+        ygridvisible   = false,
     )
 
     # Stimulus onset markers
@@ -145,13 +170,23 @@ function signal_example_tf()
     # ── Plot data ─────────────────────────────────────────────────────────────
     time_signal  = Observable(zeros(const_n_samples))
     hm_times     = Observable(const_t_sub)
+    hm_freqs     = Observable(const_freqs_out)
     tf_power_mat = Observable(zeros(length(hm_times[]), const_n_freqs))
 
     lines!(ax_time, collect(const_times_vec), time_signal, color = :blue, linewidth = 2)
 
-    hm = heatmap!(ax_tf, hm_times, const_freqs_out, tf_power_mat, colormap = :jet, interpolate = true)
+    hm = heatmap!(ax_tf, hm_times, hm_freqs, tf_power_mat, colormap = :jet, interpolate = true)
     colorbar_label = Observable("Power (a.u.)")
-    Colorbar(fig[2, 2], hm, label = colorbar_label)
+    Colorbar(fig[2, 2], hm, label = colorbar_label, labelsize = lbl_sz, ticklabelsize = tick_sz)
+
+    function _update_tf_heatmap!(t_vec_new::AbstractVector, f_vec_new::AbstractVector, pwr_mat_new::AbstractMatrix)
+        hm_times.val     = collect(Float64, t_vec_new)
+        hm_freqs.val     = collect(Float64, f_vec_new)
+        tf_power_mat.val = Matrix{Float64}(pwr_mat_new)
+        notify(hm_times)
+        notify(hm_freqs)
+        notify(tf_power_mat)
+    end
 
     # ── Helper: label string for the colorbar based on baseline method ────────
     """Return a descriptive colorbar label string for the given baseline method."""
@@ -215,9 +250,8 @@ function signal_example_tf()
         end
 
         if isempty(freqs_list)
-            time_signal[]  = zeros(const_n_samples)
-            hm_times[]     = const_t_sub
-            tf_power_mat[] = zeros(length(const_t_sub), const_n_freqs)
+            time_signal[] = zeros(const_n_samples)
+            _update_tf_heatmap!(const_t_sub, const_freqs_out, zeros(length(const_t_sub), const_n_freqs))
             return
         end
 
@@ -236,23 +270,20 @@ function signal_example_tf()
             pwr_vec = tf_dat.data[!, :Ch1]
             pwr_full = reshape(pwr_vec, const_n_freqs, const_n_samples)  # (n_f × n_t_full)
             pwr_sub = pwr_full[:, 1:const_sub_step:end]
-            hm_times[] = const_t_sub
-            tf_power_mat[] = Matrix(pwr_sub')
+            _update_tf_heatmap!(const_t_sub, const_freqs_out, Matrix(pwr_sub'))
 
         elseif m == :stft
             win_s = p / const_stft_ref_hz
             tf_dat = tf_stft(epoch_dat; frequencies = const_freqs_out, window_length = win_s, time_steps = const_step_out)
             tf_dat = _maybe_baseline(tf_dat)
             t_out, pwr_mat = _extract_power(tf_dat, const_n_freqs)
-            hm_times[] = t_out
-            tf_power_mat[] = pwr_mat
+            _update_tf_heatmap!(t_out, const_freqs_out, pwr_mat)
 
         elseif m == :multitaper
             tf_dat = tf_multitaper(epoch_dat; frequencies = const_freqs_out, cycles = p, time_steps = const_step_out)
             tf_dat = _maybe_baseline(tf_dat)
             t_out, pwr_mat = _extract_power(tf_dat, const_n_freqs)
-            hm_times[] = t_out
-            tf_power_mat[] = pwr_mat
+            _update_tf_heatmap!(t_out, const_freqs_out, pwr_mat)
         end
 
         colorbar_label[] = _colorbar_label(baseline_method_val[])
@@ -263,6 +294,7 @@ function signal_example_tf()
     end
 
     # ── Connect observables → simulation ──────────────────────────────────────
+    is_batch_updating = Ref(false)
     for obs in [
         method_val,
         param_val,
@@ -283,13 +315,13 @@ function signal_example_tf()
         interval3_val,
     ]
         on(obs) do _
-            run_simulation()
+            is_batch_updating[] || run_simulation()
         end
     end
 
     # ── Control panel ──────────────────────────────────────────────────────────
     ctrl  = fig[3, 1:2] = GridLayout(tellheight = false)
-    fsize = 16
+    fsize = ctrl_sz
 
     # Rows 1 & 2: global and baseline controls (combined for alignment)
     top_ctrl = ctrl[1, 1] = GridLayout()
@@ -382,11 +414,11 @@ function signal_example_tf()
     comp_grid = ctrl[2, 1] = GridLayout()
 
     # ── Column headers (row 1 of comp_grid) ────────────────────────────────
-    Label(comp_grid[1, 1], ""; fontsize = fsize - 2, font = :bold, halign = :center)
-    Label(comp_grid[1, 2], "Active"; fontsize = fsize - 2, font = :bold, halign = :center)
-    Label(comp_grid[1, 3:4], "Freq (Hz)"; fontsize = fsize - 2, font = :bold, halign = :center)
-    Label(comp_grid[1, 5:6], "Amp"; fontsize = fsize - 2, font = :bold, halign = :center)
-    Label(comp_grid[1, 7:8], "Interval (s)"; fontsize = fsize - 2, font = :bold, halign = :center)
+    Label(comp_grid[1, 1], ""; fontsize = hdr_sz, font = :bold, halign = :center)
+    Label(comp_grid[1, 2], "Active"; fontsize = hdr_sz, font = :bold, halign = :center)
+    Label(comp_grid[1, 3:4], "Freq (Hz)"; fontsize = hdr_sz, font = :bold, halign = :center)
+    Label(comp_grid[1, 5:6], "Amp"; fontsize = hdr_sz, font = :bold, halign = :center)
+    Label(comp_grid[1, 7:8], "Interval (s)"; fontsize = hdr_sz, font = :bold, halign = :center)
 
     # ── Helper: one component row inside comp_grid ──────────────────────────
     function make_comp_row(grid_row, label, active_obs, freq_obs, amp_obs, interval_obs, init_active, init_freq, init_amp, init_interval)
@@ -418,9 +450,14 @@ function signal_example_tf()
         end
     end
 
-    make_comp_row(2, "Comp 1", comp1_active, freq1_val, amp1_val, interval1_val, true, 10.0, 3.0, (0.0, 0.8))
-    make_comp_row(3, "Comp 2", comp2_active, freq2_val, amp2_val, interval2_val, false, 25.0, 3.0, (0.5, 1.5))
-    make_comp_row(4, "Comp 3", comp3_active, freq3_val, amp3_val, interval3_val, false, 40.0, 3.0, (1.0, 2.0))
+    is_batch_updating[] = true
+    try
+        make_comp_row(2, "Comp 1", comp1_active, freq1_val, amp1_val, interval1_val, true, 10.0, 3.0, (0.0, 0.8))
+        make_comp_row(3, "Comp 2", comp2_active, freq2_val, amp2_val, interval2_val, false, 25.0, 3.0, (0.5, 1.5))
+        make_comp_row(4, "Comp 3", comp3_active, freq3_val, amp3_val, interval3_val, false, 40.0, 3.0, (1.0, 2.0))
+    finally
+        is_batch_updating[] = false
+    end
 
     # Size columns now that content exists
     colsize!(comp_grid, 1, Fixed(70))      # component name

@@ -1,6 +1,7 @@
 using Test
 using Random
 using Statistics
+using EegFun
 
 @testset "Decoding Statistics" begin
 
@@ -167,6 +168,21 @@ using Statistics
         # Empty clusters
         empty_stats = EegFun._compute_cluster_statistics(EegFun.TemporalCluster[], t_statistics)
         @test isempty(empty_stats)
+
+        # Reproducible cluster permutation via rng & zero-variance handling
+        decoded_list = _create_test_decoded_list(n_participants = 5)
+        r1 = EegFun.test_against_chance_cluster(decoded_list; n_permutations = 25, show_progress = false, rng = Random.Xoshiro(77))
+        r2 = EegFun.test_against_chance_cluster(decoded_list; n_permutations = 25, show_progress = false, rng = Random.Xoshiro(77))
+        @test [c.p_value for c in r1.clusters] == [c.p_value for c in r2.clusters]
+
+        # Zero-variance identical chance scores -> t = NaN, p = NaN, never significant under Bonferroni
+        flat_list = [copy(d) for d in decoded_list]
+        for d in flat_list
+            fill!(d.average_score, d.parameters.chance_level)
+        end
+        flat_stats = EegFun.test_against_chance(flat_list; correction_method = :bonferroni)
+        @test all(isnan, flat_stats.t_statistics)
+        @test !any(flat_stats.significant_mask)
     end
 
 end # @testset "Decoding Statistics"

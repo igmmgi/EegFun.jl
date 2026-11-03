@@ -26,12 +26,15 @@ function _get_cols_by_group(dat::EegData, group::Symbol)
     layout_channels = dat.layout.data.label
 
     if group == :channels
+        if dat isa MultiDataFrameEeg && isempty(dat.data)
+            return copy(layout_channels)
+        end
         return intersect(layout_channels, labels)
     end
 
-    isempty(layout_channels) && return Symbol[]
+    isempty(layout_channels) && return (group == :metadata ? labels : Symbol[])
     channel_indices = [i for (i, l) in enumerate(labels) if l in layout_channels]
-    isempty(channel_indices) && return Symbol[]
+    isempty(channel_indices) && return (group == :metadata ? labels : Symbol[])
 
     first_channel_idx = minimum(channel_indices)
     last_channel_idx = maximum(channel_indices)

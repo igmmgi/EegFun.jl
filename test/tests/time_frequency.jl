@@ -1,6 +1,8 @@
 using Test
 using JLD2
 using DataFrames
+using Statistics
+using EegFun
 
 @testset "Time-Frequency Batch Processing" begin
 
@@ -206,4 +208,55 @@ end
             @test filter(!isnan, full_power) ≈ filter(!isnan, single_power) rtol = 1e-9
         end
     end
+end
+
+@testset "MNE discrete L2 normalization, linear FFT padding, and multitaper phase" begin
+    # 1. Sample-rate Parseval consistency across fs=250 and fs=500 for pure 12 Hz tone
+    function make_tone_epoch(fs::Int)
+        n = 2 * fs
+        ep = EegFun.create_test_epoch_data(n = n, fs = fs, n_epochs = 2, n_channels = 1, seed = 1)
+        t = ep.data[1].time
+        for df in ep.data
+            df.Ch1 .= 4.0 .* cos.(2π * 12.0 .* t)
+        end
+        return ep
+    end
+    ep250 = make_tone_epoch(250)
+    ep500 = make_tone_epoch(500)
+
+    m250 = EegFun.tf_morlet(ep250; frequencies = [12.0], cycles = 6, filter_edges = false)
+    m500 = EegFun.tf_morlet(ep500; frequencies = [12.0], cycles = 6, filter_edges = false)
+    # Center samples away from edges: under ||W||_2 = sqrt(2), power scales consistently with dt (1/fs) or discrete energy:
+    # Specifically discrete sum |conv|^2 is Parseval-consistent; check finite positive center peak on both
+    mid250 = m250.data_power.Ch1[div(nrow(m250.data_power), 2)]
+    mid500 = m500.data_power.Ch1[div(nrow(m500.data_power), 2)]
+    @test isfinite(mid250) && mid250 > 0
+    @test isfinite(mid500) && mid500 > 0
+    @test isapprox(mid500 / mid250, 2.0; rtol = 0.05)
+
+    # 2. Linear FFT padding in STFT & multitaper prevents circular wrap-around from end impulse
+    ep_imp = EegFun.create_test_epoch_data(n = 256, fs = 256, n_epochs = 1, n_channels = 1, seed = 2)
+    ep_imp.data[1].Ch1 .= 0.0
+    ep_imp.data[1].Ch1[end] = 1000.0
+
+    stft_imp = EegFun.tf_stft(ep_imp; frequencies = [10.0], window_length = 0.25, filter_edges = false)
+    mt_imp = EegFun.tf_multitaper(ep_imp; frequencies = [10.0], cycles = 4, filter_edges = false)
+    @test stft_imp.data_power.Ch1[1] < 1e-20
+    @test mt_imp.data_power.Ch1[1] < 1e-20
+
+    # 3. Multitaper primary-taper phase does not cancel across odd/even Slepian tapers
+    mt_phase = EegFun.tf_multitaper(
+        ep250;
+        frequencies = [12.0],
+        cycles = 6,
+        frequency_smoothing = 0.4,
+        time_steps = 1 / 250,
+        return_phase = true,
+        filter_edges = false,
+    )
+    n_mt = nrow(mt_phase.data_phase)
+    center_phases = mt_phase.data_phase.Ch1[div(n_mt, 4):div(3*n_mt, 4)]
+    @test all(isfinite, center_phases)
+    # Phase should sweep smoothly across cycles rather than collapsing to constant/noise
+    @test maximum(center_phases) - minimum(center_phases) > 3.0
 end

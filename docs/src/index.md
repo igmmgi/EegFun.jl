@@ -18,7 +18,7 @@ features:
   - icon: 
       src: /eeg-cap.svg
     title: Raw data readers
-    details: Biosemi, BrainVision Analyser, ...
+    details: BioSemi, BrainVision, EDF+, FIF, XDF, EEGLAB, FieldTrip, BIDS
   - icon: 
       src: /epochs.svg
     title: Data Processing
@@ -49,6 +49,7 @@ Read and preprocess EEG data:
 
 ```julia
 using EegFun
+using GLMakie # or CairoMakie for static plots
 
 # Load EEG data and layout
 dat = EegFun.read_raw_data("your_data.bdf")

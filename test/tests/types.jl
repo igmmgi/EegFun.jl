@@ -29,15 +29,15 @@ using OrderedCollections
         @test info.reference == :mastoid
     end
 
-    @testset "Neighbours" begin
+    @testset "Neighbors" begin
         # Test constructor
-        neighbours = EegFun.Neighbours([:Fz, :Cz], [10.0, 15.0], [0.5, 0.5])
-        @test neighbours.channels == [:Fz, :Cz]
-        @test neighbours.distances == [10.0, 15.0]
-        @test neighbours.weights == [0.5, 0.5]
+        neighbors = EegFun.Neighbors([:Fz, :Cz], [10.0, 15.0], [0.5, 0.5])
+        @test neighbors.channels == [:Fz, :Cz]
+        @test neighbors.distances == [10.0, 15.0]
+        @test neighbors.weights == [0.5, 0.5]
 
         # Test immutability - trying to set a non-existent field throws FieldError
-        @test_throws FieldError neighbours.electrodes = [:Pz]
+        @test_throws FieldError neighbors.electrodes = [:Pz]
     end
 
     @testset "Layout" begin
@@ -47,37 +47,47 @@ using OrderedCollections
         # Test constructor
         layout = EegFun.Layout(df, nothing, nothing, nothing)
         @test layout.data == df
-        @test isnothing(layout.neighbours)
+        @test isnothing(layout.neighbors)
         @test isnothing(layout.criterion)
 
         # Test mutability
         layout.criterion = 50.0
         @test layout.criterion == 50.0
 
-        # Test with neighbours
-        neighbours_dict = OrderedDict{Symbol,EegFun.Neighbours}()
-        neighbours_dict[:Fz] = EegFun.Neighbours([:Cz], [10.0], [1.0])
-        layout_with_neighbours = EegFun.Layout(df, neighbours_dict, 50.0, nothing)
-        @test layout_with_neighbours.neighbours == neighbours_dict
-        @test layout_with_neighbours.criterion == 50.0
+        # Test empty Layout() constructor
+        empty_layout = EegFun.Layout()
+        @test EegFun.channel_labels(empty_layout) == Symbol[]
+        @test_nowarn show(IOBuffer(), empty_layout)
+        @test_nowarn show(IOBuffer(), MIME"text/plain"(), empty_layout)
+
+        # Test with neighbors
+        neighbors_dict = Dict{Symbol,EegFun.Neighbors}()
+        neighbors_dict[:Fz] = EegFun.Neighbors([:Cz], [10.0], [1.0])
+        layout_with_neighbors = EegFun.Layout(df, neighbors_dict, 50.0, nothing)
+        @test layout_with_neighbors.neighbors == neighbors_dict
+        @test layout_with_neighbors.criterion == 50.0
     end
 
     @testset "Layout copy function" begin
         # Create test layout
         df = DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0])
-        neighbours_dict = OrderedDict{Symbol,EegFun.Neighbours}()
-        neighbours_dict[:Fz] = EegFun.Neighbours([:Cz], [10.0], [1.0])
-        layout = EegFun.Layout(df, neighbours_dict, 50.0, nothing)
+        neighbors_dict = Dict{Symbol,EegFun.Neighbors}()
+        neighbors_dict[:Fz] = EegFun.Neighbors([:Cz], [10.0], [1.0])
+        layout = EegFun.Layout(df, neighbors_dict, 50.0, nothing)
 
         # Test copy
         copied = copy(layout)
         @test copied.data == layout.data
-        @test copied.neighbours == layout.neighbours
+        @test copied.neighbors == layout.neighbors
         @test copied.criterion == layout.criterion
 
-        # Test independence
+        # Test independence of DataFrame AND deep-copied neighbors
         layout.data[1, :label] = :Pz
         @test copied.data[1, :label] == :Fz  # Copy should be unchanged
+        push!(layout.neighbors[:Fz].channels, :Pz)
+        layout.neighbors[:Cz] = EegFun.Neighbors([:Fz], [10.0], [1.0])
+        @test copied.neighbors[:Fz].channels == [:Cz]
+        @test !haskey(copied.neighbors, :Cz)
     end
 
     @testset "ContinuousData" begin
@@ -177,6 +187,14 @@ using OrderedCollections
         @test condition.max_interval == 1.0
         @test condition.mask_after_trigger == 10
         @test condition.mask_before_trigger == 20
+
+        # Concrete Float64 conversion on integer intervals & empty trigger_sequences show guard
+        cond_int = EegFun.EpochCondition(name = "empty_seq", min_interval = 0, max_interval = 2)
+        @test cond_int.min_interval === 0.0
+        @test cond_int.max_interval === 2.0
+        @test cond_int.trigger_sequences isa Vector{Vector{Any}}
+        @test isempty(cond_int.trigger_sequences)
+        @test_nowarn show(IOBuffer(), cond_int)
     end
 
     @testset "Index tuples" begin
@@ -308,11 +326,19 @@ using OrderedCollections
         @test_nowarn show(stdout, ica_info)
         @test_nowarn show(stdout, MIME"text/plain"(), ica_info)
 
-        # Test Neighbours OrderedDict display
-        neighbours_dict = OrderedDict{Symbol,EegFun.Neighbours}()
-        neighbours_dict[:Fz] = EegFun.Neighbours([:Cz], [10.0], [1.0])
-        @test_nowarn show(stdout, neighbours_dict)
-        @test_nowarn show(stdout, MIME"text/plain"(), neighbours_dict)
+        # Test Neighbors Dict display
+        neighbors_dict = Dict{Symbol,EegFun.Neighbors}()
+        neighbors_dict[:Fz] = EegFun.Neighbors([:Cz], [10.0], [1.0])
+        @test_nowarn show(IOBuffer(), neighbors_dict)
+        @test_nowarn show(IOBuffer(), MIME"text/plain"(), neighbors_dict)
+
+        # Test 0-epoch EpochData display & TF propertynames
+        empty_ep = EegFun.EpochData("empty", 1, "cond_1", DataFrame[], layout, 250, info)
+        @test_nowarn show(IOBuffer(), empty_ep)
+        tf = EegFun.create_test_tf_data()
+        tf_ep = EegFun.create_test_tf_epoch_data(n_epochs = 2)
+        @test :data in propertynames(tf)
+        @test :data in propertynames(tf_ep)
     end
 
     @testset "Copy functions" begin
@@ -322,7 +348,7 @@ using OrderedCollections
         sphere = [1.0 0.0; 0.0 1.0]
         variance = [0.5, 0.3]
         ica_label = [:IC1, :IC2]
-        removed_activations = OrderedDict{Int,Matrix{Float64}}()
+        removed_activations = Dict{Int,Matrix{Float64}}()
         removed_activations[1] = [1.0 2.0; 3.0 4.0]
         layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
         ica_info = EegFun.InfoIca(
@@ -350,9 +376,15 @@ using OrderedCollections
         @test copied.removed_activations == ica_info.removed_activations
         @test copied.layout == ica_info.layout
 
-        # Test independence
+        # Test independence (including deep-copied removed_activations matrices and layout)
         ica_info.unmixing[1, 1] = 2.0
         @test copied.unmixing[1, 1] == 1.0  # Copy should be unchanged
+        ica_info.removed_activations[1][1, 1] = 999.0
+        ica_info.removed_activations[2] = zeros(2, 2)
+        ica_info.layout.data[1, :label] = :Pz
+        @test copied.removed_activations[1][1, 1] == 1.0
+        @test !haskey(copied.removed_activations, 2)
+        @test copied.layout.data[1, :label] == :Fz
     end
 
     @testset "Filename functions" begin

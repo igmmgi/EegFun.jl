@@ -81,6 +81,20 @@ using Test
         files = EegFun.get_files(test_dir, missing_files)
         @test length(files) == 2  # Still returns paths, even if files don't exist
         @test all(contains.(files, "nonexistent"))
+
+        # Test recursive=true with Vector{String}
+        nested_files = EegFun.get_files(test_dir, ["biosemi64.csv", "biosemi32.csv"]; recursive = true)
+        @test length(nested_files) == 2
+        @test all(isfile.(nested_files))
+        @test joinpath(subdir1, "biosemi64.csv") in nested_files
+        @test joinpath(subdir2, "biosemi32.csv") in nested_files
+    end
+
+    @testset "get_file_extension" begin
+        @test EegFun.get_file_extension("data/recording.bdf") == ".bdf"
+        @test EegFun.get_file_extension("data/recording.xdf") == ".xdf"
+        @test EegFun.get_file_extension("data/recording.xdf.gz") == ".xdf.gz"
+        @test EegFun.get_file_extension("data/RECORDING.XDF.GZ") == ".xdf.gz"
     end
 
     @testset "find_file" begin

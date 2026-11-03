@@ -20,7 +20,7 @@ This saves time when starting a new preprocessing project by providing a well-or
 - **EOG**: EOG channel names and correlation thresholds
 - **EEG**: Artifact and extreme value detection thresholds
 - **ICA**: Whether to apply ICA and data percentage settings
-- **Layout**: Neighbour distance criterion
+- **Layout**: Neighbor distance criterion
 - **Epoch**: Timing parameters (start/end times)
 
 ### Using Templates with Pipelines

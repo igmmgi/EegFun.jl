@@ -749,7 +749,7 @@ function signal_example_ecg_einthoven()
                 curr_t = playback_time[] < 0.0 ? 0.0 : playback_time[]
 
                 try
-                    while is_playing[]
+                    while is_playing[] && events(fig).window_open[]
                         curr_t += dt
                         if curr_t > t_window
                             curr_t = 0.0
@@ -758,7 +758,9 @@ function signal_example_ecg_einthoven()
                         sleep(dt)
                     end
                 finally
-                    if !is_playing[]
+                    if !events(fig).window_open[]
+                        is_playing[] = false
+                    elseif !is_playing[]
                         btn_play.label[] = "Play Heartbeat"
                         btn_play.buttoncolor[] = "#dcfce7"
                     end

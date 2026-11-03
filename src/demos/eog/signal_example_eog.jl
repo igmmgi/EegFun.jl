@@ -66,7 +66,7 @@ signal_example_heog()
 - `ax_eyes::Axis`: The anatomical dipole & circuit schematic axis.
 - `ax_eog::Axis`: The potential vs. time signal recording axis.
 """
-function signal_example_heog()
+function signal_example_heog(; kwargs...)
     _check_interactive_demo_backend("Interactive hEOG demo") || return nothing
 
     _set_window_title("Interactive Bipolar hEOG Recording Simulator")
@@ -533,6 +533,7 @@ function signal_example_heog()
                 fps = 30.0
                 dt = t_total / n_frames
                 for frame = 0:n_frames
+                    (!is_animating[] || !events(fig).window_open[]) && break
                     t_curr = frame * dt
                     playback_time[] = t_curr
                     sig_on = 1.0 / (1.0 + exp(-(t_curr - t_on) / 0.015))
@@ -540,8 +541,10 @@ function signal_example_heog()
                     current_display_angle[] = target * sig_on * sig_off
                     sleep(1.0 / fps)
                 end
-                playback_time[] = -1.0
-                current_display_angle[] = target
+                if events(fig).window_open[]
+                    playback_time[] = -1.0
+                    current_display_angle[] = target
+                end
             finally
                 is_animating[] = false
             end
@@ -557,3 +560,10 @@ function signal_example_heog()
 
     return fig, ax_eyes, ax_eog
 end
+
+"""
+    signal_example_eog(; kwargs...)
+
+Alias for [`signal_example_heog`](@ref): launches the interactive Electrooculography (EOG) corneo-retinal dipole and bipolar derivation simulator.
+"""
+signal_example_eog(; kwargs...) = signal_example_heog(; kwargs...)

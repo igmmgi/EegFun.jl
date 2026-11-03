@@ -1,6 +1,7 @@
 using Test
 using Random
 using Statistics
+using EegFun
 
 @testset "TF Decoding" begin
 
@@ -105,8 +106,8 @@ using Statistics
         @test result.parameters.n_iterations == 2
         @test result.parameters.n_folds == 2
 
-        # With clear separation, accuracy should be above chance (0.5) at most time points
-        @test mean(result.average_score) > 0.4
+        # With clear separation, accuracy should be well above chance (0.5)
+        @test mean(result.average_score) > 0.75
     end
 
     @testset "decode_libsvm (TF) - vector of participants" begin

@@ -7,16 +7,20 @@
 # =============================================================================
 
 """
-    _find_continuous_regions(mask::BitVector, time_points::Vector{Float64})
+    _find_continuous_regions(mask::AbstractVector{Bool}, time_points::AbstractVector{<:Real})
 
-Find continuous regions where mask is true, returning start and end times.
+Find continuous regions where mask is true, returning `(start_time, end_time)` tuples
+expanded by `±dt/2` so single-sample significant clusters have width `dt` instead of `0.0`.
 """
-function _find_continuous_regions(mask::BitVector, time_points::Vector{Float64})
+function _find_continuous_regions(mask::AbstractVector{Bool}, time_points::AbstractVector{<:Real})
 
     regions = Vector{Tuple{Float64,Float64}}()
     if isempty(mask) || !any(mask)
         return regions
     end
+
+    dt = length(time_points) > 1 ? Float64(median(diff(time_points))) : 0.001
+    half_dt = dt / 2.0
 
     in_region = false
     start_idx = 0
@@ -27,13 +31,13 @@ function _find_continuous_regions(mask::BitVector, time_points::Vector{Float64})
             start_idx = i
         elseif !is_sig && in_region # End of a region
             in_region = false
-            push!(regions, (time_points[start_idx], time_points[i-1]))
+            push!(regions, (Float64(time_points[start_idx]) - half_dt, Float64(time_points[i-1]) + half_dt))
         end
     end
 
     # Handle case where region extends to end
     if in_region
-        push!(regions, (time_points[start_idx], time_points[end]))
+        push!(regions, (Float64(time_points[start_idx]) - half_dt, Float64(time_points[end]) + half_dt))
     end
 
     return regions
@@ -387,23 +391,37 @@ end
 Safely display an interactive demo figure. Avoids hard crashes if no display screen or backend is available.
 """
 function _display_demo_figure(fig)
+    isnothing(fig) && return nothing
     backend = Makie.current_backend()
-    if backend === missing || isnothing(backend)
+    if backend === missing || isnothing(backend) || string(backend) == "CairoMakie"
         return nothing
     end
     try
         display(fig)
     catch e
         @debug "Could not display demo figure" exception = e
-        return nothing
     end
+    return nothing
+end
+
+function _has_focused_textbox(fig::Figure)::Bool
+    for block in fig.content
+        if block isa Textbox && block.focused[]
+            return true
+        end
+    end
+    return false
 end
 
 function _display_figure(fig)
-    # Register keyboard shortcut for saving the figure
+    # Register Ctrl+S keyboard shortcut for saving the figure (ignoring focused Textboxes)
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press && event.key == Keyboard.s
-            _open_save_settings_dialog(fig)
+            kb_state = events(fig).keyboardstate
+            ctrl_held = (Keyboard.left_control in kb_state) || (Keyboard.right_control in kb_state)
+            if ctrl_held && !_has_focused_textbox(fig)
+                _open_save_settings_dialog(fig)
+            end
         end
     end
 
@@ -455,6 +473,93 @@ _resolve_theme_colormap(obj, user_cmap, default_cmap = DEFAULT_COLORMAP) =
 _resolve_theme_linewidth(obj, user_lw, default_lw = 2) = _resolve_from_scene(obj.scene, :linewidth, user_lw, default_lw)
 _resolve_theme_textcolor(obj, user_color, default_color = :black) = _resolve_from_scene(obj.scene, :textcolor, user_color, default_color)
 _resolve_theme_linecolor(obj, user_color, default_color = :black) = _resolve_from_scene(obj.scene, :linecolor, user_color, default_color)
+
+const _DIVERGING_COLORMAPS = Set{Symbol}([
+    :coolwarm,
+    :RdBu,
+    :RdYlBu,
+    :RdYlGn,
+    :RdGy,
+    :PuOr,
+    :PRGn,
+    :PiYG,
+    :BrBG,
+    :Spectral,
+    :bwr,
+    :seismic,
+    :balance,
+    :curl,
+    :delta,
+    :vik,
+    :roma,
+    :broc,
+    :cork,
+    :bam,
+    :berlin,
+    :tofino,
+    :lisbon,
+    :managua,
+])
+
+function _is_diverging_colormap(cmap)::Bool
+    cmap isa Symbol && return cmap in _DIVERGING_COLORMAPS
+    cmap isa AbstractString && return Symbol(cmap) in _DIVERGING_COLORMAPS
+    cmap isa Makie.Reverse && return _is_diverging_colormap(cmap.data)
+    return false
+end
+
+function _symmetric_colorrange(min_val::Real, max_val::Real; fallback::Float64 = 1.0)::Tuple{Float64,Float64}
+    max_abs = Float64(max(abs(min_val), abs(max_val)))
+    (!isfinite(max_abs) || max_abs == 0.0) && return (-fallback, fallback)
+    return (-max_abs, max_abs)
+end
+
+const _STANDARD_KWARG_ALIASES = Dict{Symbol,Symbol}(
+    :title => :plot_title,
+    :add_plot_title => :show_title,
+    :colorbar => :colorbar_plot,
+    :show_colorbar => :colorbar_plot,
+    :show_legend => :legend,
+    :colormap_name => :colormap,
+    :x_scale => :xscale,
+    :y_scale => :yscale,
+    :ylogscale => :yscale,
+    :sig_bar_position => :significance_position,
+    :n_topos => :n_topo,
+)
+
+"""
+    _normalize_plot_kwargs(kwargs, extra_aliases = nothing) -> Dict{Symbol,Any}
+
+Map legacy/outlier keyword argument names onto standardized `EegFun` plot keyword names
+before validating with `_merge_plot_kwargs`. Explicit canonical keys take precedence.
+"""
+function _normalize_plot_kwargs(kwargs, extra_aliases::Union{Nothing,AbstractDict{Symbol,Symbol}} = nothing)::Dict{Symbol,Any}
+    raw = Dict{Symbol,Any}(Symbol(k) => v for (k, v) in pairs(kwargs))
+    out = Dict{Symbol,Any}()
+    for (k, v) in raw
+        target = if !isnothing(extra_aliases) && haskey(extra_aliases, k)
+            extra_aliases[k]
+        elseif haskey(_STANDARD_KWARG_ALIASES, k)
+            _STANDARD_KWARG_ALIASES[k]
+        else
+            k
+        end
+
+        if target != k
+            # Canonical key explicitly passed by user takes precedence over alias
+            haskey(raw, target) && continue
+            if k == :ylogscale && target == :yscale && v isa Bool
+                out[target] = v ? :log10 : :linear
+            else
+                out[target] = v
+            end
+        else
+            out[k] = v
+        end
+    end
+    return out
+end
 
 
 

@@ -351,14 +351,14 @@ end
         # Two electrodes spatially connected, spanning freq and time
         mask = falses(2, 2, 2)
         mask[1, 1, 1] = true
-        mask[2, 1, 1] = true  # spatial neighbour
-        mask[1, 2, 1] = true  # spectral neighbour
-        mask[1, 1, 2] = true  # temporal neighbour
+        mask[2, 1, 1] = true  # spatial neighbor
+        mask[1, 2, 1] = true  # spectral neighbor
+        mask[1, 1, 2] = true  # temporal neighbor
 
         electrodes = [:Ch1, :Ch2]
         frequencies = [4.0, 8.0]
         time_points = [0.0, 0.1]
-        # Ch1 and Ch2 are spatial neighbours
+        # Ch1 and Ch2 are spatial neighbors
         spatial_conn = sparse([1, 2], [2, 1], true, 2, 2)
 
         clusters = EegFun._find_clusters_connected_components_tf(mask, electrodes, frequencies, time_points, spatial_conn, :full)
@@ -423,9 +423,9 @@ end
 
         EegFun._prefilter_mask_by_neighbors_tf!(mask, spatial_conn, 1)
 
-        # Ch3 has no spatial neighbours → removed
+        # Ch3 has no spatial neighbors → removed
         @test all(mask[3, :, :] .== false)
-        # Ch1 and Ch2 each have 1 neighbour → survive (>= 1)
+        # Ch1 and Ch2 each have 1 neighbor → survive (>= 1)
         @test all(mask[1, :, :] .== true)
         @test all(mask[2, :, :] .== true)
     end
@@ -456,7 +456,7 @@ end
         @test result.test_info.type == :paired
         @test result.test_info.alpha == 0.05
         @test result.test_info.tail == :both
-        @test result.test_info.correction_method == :no
+        @test result.test_info.correction_method == :none
 
         # Dimensions
         @test size(result.stat_matrix.t) == (3, 4, 5)  # n_channels × n_freqs × n_time
@@ -761,7 +761,7 @@ end
         result = EegFun.analytic_test(prepared)
 
         @test_throws Exception EegFun.plot_tf_stats(result; content = :invalid, display_plot = false)
-        @test_throws Exception EegFun.plot_tf_stats(result; significance = :invalid, display_plot = false)
+        @test_throws Exception EegFun.plot_tf_stats(result; mask_style = :invalid, display_plot = false)
     end
 
     @testset "plot_tf_stats - internal helpers" begin
@@ -884,6 +884,24 @@ end
         )
         @test res_left isa EegFun.TFClusterPermutationResult
         @test res_left.test_info.tail == :left
+
+        # Non-parametric individual thresholding (streaming/reused) + analysis_interval + NaN phase
+        prep_iv = EegFun.prepare_stats(tfs; design = :paired, analysis_interval = (0.1, 0.3))
+        @test prep_iv.analysis.time_points == [0.1, 0.2, 0.3]
+        @test all(isnan, prep_iv.data[1].data_phase.Ch1)
+
+        res_ind = EegFun.permutation_test(
+            prep_iv;
+            alpha = 0.02,
+            cluster_alpha = 0.05,
+            threshold_method = :nonparametric_individual,
+            n_permutations = 15,
+            cluster_type = :temporal,
+            rng = Random.Xoshiro(123),
+        )
+        @test res_ind isa EegFun.TFClusterPermutationResult
+        @test res_ind.test_info.alpha == 0.02
+        @test res_ind.test_info.cluster_info.cluster_alpha == 0.05
     end
 
 

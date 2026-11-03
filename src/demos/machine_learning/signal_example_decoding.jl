@@ -83,17 +83,17 @@ function signal_example_decoding()
     fig = _eegfun_figure(size = (1400, 750), figure_padding = (8, 8, 8, 8), title = "MVPA Decoding Playground")
 
     # ── Font sizing ──────────────────────────────────────────────────────────
-    lbl_sz   = Observable(17)
-    tick_sz  = Observable(14)
-    title_sz = Observable(19)
-    ctrl_sz  = Observable(17)
+    lbl_sz   = Observable(15)
+    tick_sz  = Observable(12)
+    title_sz = Observable(18)
+    ctrl_sz  = Observable(15)
 
     on(fig.scene.viewport) do area
-        sf         = area.widths[1] / 3000
-        lbl_sz[]   = max(12, round(Int, 17 * sf))
-        tick_sz[]  = max(10, round(Int, 14 * sf))
-        title_sz[] = max(14, round(Int, 19 * sf))
-        ctrl_sz[]  = max(12, round(Int, 17 * sf))
+        sf         = area.widths[1] / 1400
+        lbl_sz[]   = max(11, round(Int, 15 * sf))
+        tick_sz[]  = max(10, round(Int, 12 * sf))
+        title_sz[] = max(13, round(Int, 18 * sf))
+        ctrl_sz[]  = max(11, round(Int, 15 * sf))
     end
 
     # ── Axes ─────────────────────────────────────────────────────────────────
@@ -389,11 +389,16 @@ function signal_example_decoding()
         status_text[] = "Decoding... (this takes a few seconds)"
         @async begin
             try
+                events(fig).window_open[] || return
                 data_a, data_b = current_data[]
                 run_decoding(data_a, data_b)
-                status_text[] = "Done! Adjust parameters and decode again."
+                if events(fig).window_open[]
+                    status_text[] = "Done! Adjust parameters and decode again."
+                end
             catch e
-                status_text[] = "Error: $(sprint(showerror, e))"
+                if events(fig).window_open[]
+                    status_text[] = "Error: $(sprint(showerror, e))"
+                end
             finally
                 is_decoding[] = false
             end

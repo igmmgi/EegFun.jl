@@ -5,7 +5,7 @@ const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :figure_padding => ((50, 30, 50, 50), "Figure padding as (left, right, bottom, top)"),
 
     # Axis styling
-    :xlabel => ("Time (S)", "X-axis label"),
+    :xlabel => ("Time (s)", "X-axis label"),
     :ylabel => ("Amplitude (μV)", "Y-axis label"),
 
     # UI styling
@@ -227,6 +227,7 @@ mutable struct DataBrowserState{T<:AbstractDataState}
     ica::IcaVisualState
     extra_channel::ExtraChannelInfo
     reference_state::Symbol
+    custom_reference_channels::Vector{Symbol}
     channel_repair_history::Vector{Tuple{Vector{Symbol},Symbol,Any}}  # (channels, method, original_data) - stack for multiple undos
     analysis_settings::Observable{AnalysisSettings}  # Observable analysis settings
     plot_kwargs::Dict{Symbol,Any}
@@ -241,6 +242,8 @@ mutable struct DataBrowserState{T<:AbstractDataState}
         extra_channel::ExtraChannelInfo = ExtraChannelInfo(),
         plot_kwargs::Dict{Symbol,Any} = Dict{Symbol,Any}(),
     ) where {T<:AbstractDataState}
+        init_ref = data.original.analysis_info.reference
+        init_custom = (init_ref ∉ (:none, :avg, :mastoid) && init_ref in channels.labels) ? Symbol[init_ref] : Symbol[]
         return new{T}(
             view,
             channels,
@@ -250,7 +253,8 @@ mutable struct DataBrowserState{T<:AbstractDataState}
             Dict{Symbol,Bool}(),
             IcaVisualState(ica_original),
             extra_channel,
-            data.original.analysis_info.reference,
+            init_ref,
+            init_custom,
             [],  # empty repair history
             Observable(AnalysisSettings()),  # Initialize with empty settings
             plot_kwargs,
@@ -646,15 +650,19 @@ function _show_reference_menu(state, dat)
     menu_fig = _eegfun_figure(size = (900, 700))
     Label(menu_fig[1, 1], "Select Reference Channels", fontsize = 18, halign = :center)
 
-    # Determine currently-checked channels from stored state
+    # Determine currently-checked channels from stored state (without splitting channel names on "_")
     current_syms = if state.reference_state == :avg
         all_channels  # all checked when avg
     elseif state.reference_state == :mastoid
         [:M1, :M2]
     elseif state.reference_state == :none
         Symbol[]
+    elseif !isempty(state.custom_reference_channels)
+        state.custom_reference_channels
+    elseif state.reference_state in all_channels
+        Symbol[state.reference_state]
     else
-        Symbol.(split(string(state.reference_state), "_"))
+        Symbol[]
     end
 
     scroll_area = menu_fig[2, 1] = GridLayout()
@@ -674,16 +682,22 @@ function _show_reference_menu(state, dat)
     btn_apply = Button(action_area[1, 1], label = "Apply", width = 200)
     on(btn_apply.clicks) do _
         selected = [all_channels[i] for (i, cb) in enumerate(cbs) if cb.checked[]]
-        opt = if isempty(selected)
-            :none
+        if isempty(selected)
+            state.reference_state = :none
+            empty!(state.custom_reference_channels)
         elseif length(selected) == length(all_channels)
-            :avg
+            state.reference_state = :avg
+            empty!(state.custom_reference_channels)
         elseif length(selected) == 2 && :M1 in selected && :M2 in selected
-            :mastoid
+            state.reference_state = :mastoid
+            empty!(state.custom_reference_channels)
+        elseif length(selected) == 1
+            state.reference_state = selected[1]
+            state.custom_reference_channels = copy(selected)
         else
-            selected
+            state.reference_state = :custom
+            state.custom_reference_channels = copy(selected)
         end
-        state.reference_state = Symbol(opt isa Symbol ? string(opt) : join(opt, "_"))
         _rebuild_current!(state)
     end
 
@@ -693,16 +707,17 @@ end
 """Create the re-reference button for the control panel."""
 _create_reference_menu(fig, state, dat) = _popup_button(fig, "Reference", () -> _show_reference_menu(state, dat))
 
-"""Apply re-referencing to `cur` according to `ref_state`."""
-function _apply_reference!(cur::EegData, ref_state::Symbol)
+"""Apply re-referencing to `cur` according to `ref_state` and optional `custom_channels`."""
+function _apply_reference!(cur::EegData, ref_state::Symbol, custom_channels::Vector{Symbol} = Symbol[])
     ref_state == :none && return cur
     ref = if ref_state == :avg
         :avg
     elseif ref_state == :mastoid
         :mastoid
+    elseif !isempty(custom_channels)
+        length(custom_channels) == 1 ? custom_channels[1] : custom_channels
     else
-        syms = Symbol.(split(string(ref_state), "_"))
-        length(syms) == 1 ? syms[1] : syms
+        ref_state
     end
     rereference!(cur, ref)
     return cur
@@ -791,7 +806,7 @@ function _rebuild_current!(state)
     for (chs, method, _) in state.channel_repair_history
         repair_channels!(cur, chs; method = method)
     end
-    _apply_reference!(cur, state.reference_state)
+    _apply_reference!(cur, state.reference_state, state.custom_reference_channels)
     _apply_all_ica_removals!(cur, state)
     _apply_active_filters!(cur, state)
     state.data.current[] = cur
@@ -2768,7 +2783,7 @@ function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs.
             end
         end
 
-        return (fig = fig, ax = ax, analysis_settings = state.analysis_settings, screen = screen_obj)
+        return (fig = fig, axes = [ax], ax = ax, analysis_settings = state.analysis_settings, screen = screen_obj)
     finally
         _set_window_title("Makie")
     end
@@ -2899,7 +2914,7 @@ function _plot_databrowser_launcher(; screen = nothing, kwargs...)
 
     screen_obj = _display_in_screen(fig)
     _set_window_title("EegFun Data Browser")
-    return (fig = fig, screen = screen_obj)
+    return (fig = fig, axes = Axis[], screen = screen_obj)
 end
 
 """Decode percent-encoded bytes into a UTF-8 string."""

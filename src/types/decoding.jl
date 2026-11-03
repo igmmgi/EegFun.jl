@@ -71,18 +71,37 @@ mutable struct DecodedData <: EegFunData
     end
 end
 
+function Base.copy(decoded::DecodedData)::DecodedData
+    return DecodedData(
+        decoded.file,
+        copy(decoded.condition_names),
+        copy(decoded.times),
+        copy(decoded.average_score),
+        copy(decoded.channels),
+        decoded.parameters;
+        stderror = isnothing(decoded.stderror) ? nothing : copy(decoded.stderror),
+        confusion_matrix = isnothing(decoded.confusion_matrix) ? nothing : copy(decoded.confusion_matrix),
+        raw_predictions = isnothing(decoded.raw_predictions) ? nothing : copy(decoded.raw_predictions),
+    )
+end
+
 function Base.show(io::IO, decoded::DecodedData)
+    time_str = isempty(decoded.times) ? "N/A" : "$(first(decoded.times)) to $(last(decoded.times)) s"
     println(io, "DecodedData:")
     println(io, "  File: $(decoded.file)")
     println(io, "  Conditions: $(join(decoded.condition_names, ", "))")
     println(io, "  Classes: $(decoded.parameters.n_classes)")
-    println(io, "  Time range: $(decoded.times[1]) to $(decoded.times[end]) s")
+    println(io, "  Time range: $time_str")
     println(io, "  Iterations: $(decoded.parameters.n_iterations)")
     println(io, "  Cross-validation folds: $(decoded.parameters.n_folds)")
     println(io, "  Channels: $(length(decoded.channels))")
-    if !isnothing(decoded.stderror)
+    if !isnothing(decoded.stderror) && !isempty(decoded.average_score) && !isempty(decoded.times)
         max_acc = maximum(decoded.average_score)
         max_idx = argmax(decoded.average_score)
-        println(io, "  Max accuracy: $(round(max_acc, digits=3)) at $(round(decoded.times[max_idx], digits=3)) s")
+        if max_idx <= length(decoded.times)
+            println(io, "  Max accuracy: $(round(max_acc, digits=3)) at $(round(decoded.times[max_idx], digits=3)) s")
+        else
+            println(io, "  Max accuracy: $(round(max_acc, digits=3))")
+        end
     end
 end

@@ -2,18 +2,24 @@
 mutable struct LoggingState
     log_handle::Union{Nothing,IO}
     log_start_time::Union{Nothing,DateTime}
+    log_include_kwargs::Bool
     global_log_handle::Union{Nothing,IO}
     global_log_start_time::Union{Nothing,DateTime}
+    global_log_include_kwargs::Bool
     saved_logger::Any
     log_level::Logging.LogLevel
 end
+
+const LOG_LOCK = ReentrantLock()
 
 # Initialize global logging state
 const LOG_STATE = LoggingState(
     nothing,               # log_handle
     nothing,               # log_start_time
+    true,                  # log_include_kwargs
     nothing,               # global_log_handle
     nothing,               # global_log_start_time
+    false,                 # global_log_include_kwargs
     nothing,               # saved_logger (captured at runtime)
     Logging.Info,          # log_level
 )
@@ -98,12 +104,15 @@ Create a FormatLogger that writes to the given IO handle.
 """
 function _create_file_logger(io::IO, level::Logging.LogLevel; include_kwargs::Bool = false)
     return FormatLogger(io) do io_inner, log
-        if isopen(io_inner) && log.level >= level
-            println(io_inner, log.message)
-            if include_kwargs && !isempty(log.kwargs)
-                for (key, val) in log.kwargs
-                    println(io_inner, "$key = $val")
+        lock(LOG_LOCK) do
+            if isopen(io_inner) && log.level >= level
+                println(io_inner, log.message)
+                if include_kwargs && !isempty(log.kwargs)
+                    for (key, val) in log.kwargs
+                        println(io_inner, "$key = $val")
+                    end
                 end
+                flush(io_inner)
             end
         end
     end
@@ -135,35 +144,54 @@ Set up logging to both stdout and a file.
 - The file handle (for direct writing if desired).
 """
 function setup_logging(log_file::String; log_level::Symbol = :info, is_global::Bool = false, include_kwargs::Bool = !is_global)
-    level = _to_loglevel(log_level)
-    LOG_STATE.log_level = level
+    return lock(LOG_LOCK) do
+        level = _to_loglevel(log_level)
+        LOG_STATE.log_level = level
 
-    h_field = is_global ? :global_log_handle : :log_handle
-    t_field = is_global ? :global_log_start_time : :log_start_time
+        h_field = is_global ? :global_log_handle : :log_handle
+        t_field = is_global ? :global_log_start_time : :log_start_time
+        k_field = is_global ? :global_log_include_kwargs : :log_include_kwargs
 
-    # Capture original logger if we haven't yet (before replacing with our first file logger)
-    if isnothing(LOG_STATE.saved_logger) && !(global_logger() isa TeeLogger)
-        LOG_STATE.saved_logger = global_logger()
+        # Capture original logger if we haven't yet (before replacing with our first file logger)
+        if isnothing(LOG_STATE.saved_logger) && !(global_logger() isa TeeLogger)
+            LOG_STATE.saved_logger = global_logger()
+        end
+
+        # Open log file (closes existing if necessary)
+        handle, start_time = _open_log_file(getproperty(LOG_STATE, h_field), log_file)
+
+        # Update state
+        setproperty!(LOG_STATE, h_field, handle)
+        setproperty!(LOG_STATE, t_field, start_time)
+        setproperty!(LOG_STATE, k_field, include_kwargs)
+
+        # Re-apply logger.
+        # If local is active, it always takes precedence. Otherwise global.
+        use_local = !isnothing(LOG_STATE.log_handle)
+        active_handle = use_local ? LOG_STATE.log_handle : LOG_STATE.global_log_handle
+        active_include = use_local ? LOG_STATE.log_include_kwargs : LOG_STATE.global_log_include_kwargs
+
+        global_logger(_create_tee_logger(level, active_handle, level; include_kwargs = active_include))
+
+        return handle
     end
-
-    # Open log file (closes existing if necessary)
-    handle, start_time = _open_log_file(getproperty(LOG_STATE, h_field), log_file)
-
-    # Update state
-    setproperty!(LOG_STATE, h_field, handle)
-    setproperty!(LOG_STATE, t_field, start_time)
-
-    # Re-apply logger.
-    # If local is active, it always takes precedence. Otherwise global.
-    active_handle = !isnothing(LOG_STATE.log_handle) ? LOG_STATE.log_handle : LOG_STATE.global_log_handle
-    active_include = !isnothing(LOG_STATE.log_handle) ? true : false
-
-    global_logger(_create_tee_logger(level, active_handle, level; include_kwargs = active_include))
-
-    return handle
 end
 
-# Convenience aliases
+function setup_logging(f::Function, log_file::String; is_global::Bool = false, kwargs...)
+    handle = setup_logging(log_file; is_global = is_global, kwargs...)
+    try
+        return applicable(f, handle) ? f(handle) : f()
+    finally
+        close_logging(; is_global = is_global)
+    end
+end
+
+"""
+    setup_global_logging(log_file::String; kwargs...)
+    setup_global_logging(f::Function, log_file::String; kwargs...)
+
+Configure global session file logging (convenience wrapper around [`setup_logging`](@ref) with `is_global = true`).
+"""
 setup_global_logging(args...; kwargs...) = setup_logging(args...; is_global = true, kwargs...)
 
 """
@@ -172,32 +200,41 @@ setup_global_logging(args...; kwargs...) = setup_logging(args...; is_global = tr
 Close the currently active log file and restore previous logger.
 """
 function close_logging(; is_global::Bool = false)
-    h_field = is_global ? :global_log_handle : :log_handle
-    t_field = is_global ? :global_log_start_time : :log_start_time
-    label = is_global ? "Global session duration" : "File processing duration"
+    lock(LOG_LOCK) do
+        h_field = is_global ? :global_log_handle : :log_handle
+        t_field = is_global ? :global_log_start_time : :log_start_time
+        label = is_global ? "Global session duration" : "File processing duration"
 
-    _close_log_file(getproperty(LOG_STATE, h_field), getproperty(LOG_STATE, t_field), label)
+        _close_log_file(getproperty(LOG_STATE, h_field), getproperty(LOG_STATE, t_field), label)
 
-    setproperty!(LOG_STATE, h_field, nothing)
-    setproperty!(LOG_STATE, t_field, nothing)
+        setproperty!(LOG_STATE, h_field, nothing)
+        setproperty!(LOG_STATE, t_field, nothing)
 
-    # If both file loggers are now closed, restore the original saved logger
-    if isnothing(LOG_STATE.log_handle) && isnothing(LOG_STATE.global_log_handle)
-        if !isnothing(LOG_STATE.saved_logger)
-            global_logger(LOG_STATE.saved_logger)
-            LOG_STATE.saved_logger = nothing
+        # If both file loggers are now closed, restore the original saved logger
+        if isnothing(LOG_STATE.log_handle) && isnothing(LOG_STATE.global_log_handle)
+            if !isnothing(LOG_STATE.saved_logger)
+                global_logger(LOG_STATE.saved_logger)
+                LOG_STATE.saved_logger = nothing
+            else
+                global_logger(ConsoleLogger(stdout, LOG_STATE.log_level))
+            end
         else
-            global_logger(ConsoleLogger(stdout, LOG_STATE.log_level))
+            # Still have one file logger active (must be the global one if were closing local, 
+            # or we just closed global while local was active)
+            use_local = !isnothing(LOG_STATE.log_handle)
+            active_handle = use_local ? LOG_STATE.log_handle : LOG_STATE.global_log_handle
+            active_include = use_local ? LOG_STATE.log_include_kwargs : LOG_STATE.global_log_include_kwargs
+            global_logger(_create_tee_logger(LOG_STATE.log_level, active_handle, LOG_STATE.log_level; include_kwargs = active_include))
         end
-    else
-        # Still have one file logger active (must be the global one if were closing local, 
-        # or we just closed global while local was active)
-        active_handle = !isnothing(LOG_STATE.log_handle) ? LOG_STATE.log_handle : LOG_STATE.global_log_handle
-        active_include = !isnothing(LOG_STATE.log_handle) ? true : false
-        global_logger(_create_tee_logger(LOG_STATE.log_level, active_handle, LOG_STATE.log_level; include_kwargs = active_include))
     end
+    return nothing
 end
 
+"""
+    close_global_logging()
+
+Close the active global session log file and restore the previous logger (wrapper around [`close_logging`](@ref) with `is_global = true`).
+"""
 close_global_logging() = close_logging(is_global = true)
 
 
@@ -256,19 +293,45 @@ end
 
 # === ASYNC PROGRESS TRACKING ===
 
+_progress_stopped(::Nothing) = false
+_progress_stopped(flag::Base.Threads.Atomic{Bool}) = flag[]
+_progress_stopped(flag::Base.RefValue{Bool}) = flag[]
+
 """
-    track_progress_async(prog::ProgressMeter.Progress, counter::Base.Threads.Atomic{Int}, total::Int)
+    track_progress_async(prog::ProgressMeter.Progress, counter::Base.Threads.Atomic{Int}, total::Int; stop_flag = nothing)
 
 Tracks progress of a multithreaded loop without lock contention.
 Worker threads should increment `counter` via `Threads.atomic_add!(counter, 1)`.
-This function spins up a lightweight async task to securely update `prog` twice a second.
+This function spins up a lightweight async task to securely update `prog` twice a second,
+stopping early if `stop_flag[]` becomes `true`.
 """
-function track_progress_async(prog, counter::Base.Threads.Atomic{Int}, total::Int)
+function track_progress_async(
+    prog,
+    counter::Base.Threads.Atomic{Int},
+    total::Int;
+    stop_flag::Union{Nothing,Base.Threads.Atomic{Bool},Base.RefValue{Bool}} = nothing,
+)
     @async begin
-        while counter[] < total
+        while counter[] < total && !_progress_stopped(stop_flag)
             ProgressMeter.update!(prog, counter[])
             sleep(0.5)
         end
-        ProgressMeter.update!(prog, total)
+        if !_progress_stopped(stop_flag)
+            ProgressMeter.update!(prog, total)
+        end
+    end
+end
+
+function track_progress_async(f::Function, prog, counter::Base.Threads.Atomic{Int}, total::Int)
+    stop_flag = Base.Threads.Atomic{Bool}(false)
+    task = track_progress_async(prog, counter, total; stop_flag = stop_flag)
+    try
+        return f()
+    finally
+        stop_flag[] = true
+        try
+            wait(task)
+        catch
+        end
     end
 end

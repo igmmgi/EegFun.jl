@@ -327,8 +327,8 @@ julia> map(x -> x^2, [1, 2, 3])
 By convention, functions that modify their input end with `!`:
 
 ```julia
-lowpass_filter!(data, 30.0)   # modifies data in-place
-lowpass_filter(data, 30.0)    # returns a new copy, data is unchanged
+EegFun.lowpass_filter!(data, 30.0)   # modifies data in-place
+EegFun.lowpass_filter(data, 30.0)    # returns a new copy, data is unchanged
 ```
 
 This is a naming convention, not enforced by the language, but Julia packages

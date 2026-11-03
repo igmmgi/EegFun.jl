@@ -121,7 +121,8 @@ function plot_topography_3d(
         @minimal_error "Cannot create 3D topographic plot: layout missing spherical coordinates (:inc, :azi)."
     end
 
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_3D_KWARGS, kwargs)
+    kwargs_norm = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_3D_KWARGS, kwargs_norm)
 
     # Compute channel data averaged over time window
     channel_data = mean.(eachcol(dat_subset.data[!, dat_subset.layout.data.label]))
@@ -133,7 +134,8 @@ function plot_topography_3d(
     ax = LScene(fig[1, 1], show_axis = false)
 
     # Add title
-    if !isnothing(plot_kwargs[:plot_title]) && !isempty(plot_kwargs[:plot_title])
+    show_title = pop!(plot_kwargs, :show_title, true)
+    if show_title && !isnothing(plot_kwargs[:plot_title]) && !isempty(plot_kwargs[:plot_title])
         if plot_kwargs[:plot_title] != ""
             title_str = plot_kwargs[:plot_title]
         else
@@ -153,15 +155,16 @@ function plot_topography_3d(
 
     # Extract rendering parameters
     colormap = pop!(plot_kwargs, :colormap)
-    ylim = pop!(plot_kwargs, :ylim)
+    colorrange = pop!(plot_kwargs, :colorrange)
 
-    if isnothing(ylim)
+    if isnothing(colorrange)
         valid_data = filter(!isnan, channel_data)
         if !isempty(valid_data)
             max_abs = maximum(abs.(valid_data))
-            ylim = (-max_abs, max_abs)
+            max_abs = max_abs ≈ 0.0 ? 1.0 : max_abs
+            colorrange = (-max_abs, max_abs)
         else
-            ylim = (-1.0, 1.0)
+            colorrange = (-1.0, 1.0)
         end
     end
 
@@ -173,7 +176,7 @@ function plot_topography_3d(
 
     actual_colormap = _resolve_theme_colormap(ax, colormap)
     # Render continuous mesh
-    m = mesh!(ax, head_mesh, color = vertex_colors, colormap = actual_colormap, colorrange = ylim, shading = true)
+    m = mesh!(ax, head_mesh, color = vertex_colors, colormap = actual_colormap, colorrange = colorrange, shading = true)
 
     # Extract point and label kwargs
     point_plot = get(plot_kwargs, :point_plot, true)
@@ -250,7 +253,7 @@ function plot_topography_3d(
     end
 
     _set_window_title("Makie")
-    return (fig = fig, axes = [ax])
+    return (fig = fig, axes = [ax], ax = ax)
 end
 
 """
@@ -317,7 +320,7 @@ function _plot_topography_3d_scrubber(dat::SingleDataFrameEeg; display_plot = tr
     n_samples = length(time_vec)
     t_min, t_max = extrema(time_vec)
 
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_3D_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_3D_KWARGS, _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES))
     fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
     colormap = get(plot_kwargs, :colormap, nothing)
     colorbar_plot = get(plot_kwargs, :colorbar_plot, true)
@@ -332,9 +335,9 @@ function _plot_topography_3d_scrubber(dat::SingleDataFrameEeg; display_plot = tr
     grid = hcat([[v[1], v[2], v[3]] for v in head_verts]...)
 
     # Global symmetric amplitude scale across the selected segment
-    user_ylim = get(plot_kwargs, :ylim, nothing)
-    if !isnothing(user_ylim)
-        ylim_obs = Observable{Tuple{Float64,Float64}}((Float64(user_ylim[1]), Float64(user_ylim[2])))
+    user_colorrange = get(plot_kwargs, :colorrange, nothing)
+    if !isnothing(user_colorrange)
+        ylim_obs = Observable{Tuple{Float64,Float64}}((Float64(user_colorrange[1]), Float64(user_colorrange[2])))
     else
         all_vals = Float64[]
         for ch in available_channels
@@ -537,5 +540,5 @@ function _plot_topography_3d_scrubber(dat::SingleDataFrameEeg; display_plot = tr
         screen = _display_figure(fig)
     end
     _set_window_title("Makie")
-    return (fig = fig, axes = [ax], screen = screen)
+    return (fig = fig, axes = [ax], ax = ax, screen = screen)
 end

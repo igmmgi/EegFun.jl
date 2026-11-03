@@ -32,7 +32,7 @@ Browse interactive code examples demonstrating EegFun.jl's capabilities.
 - [Channel Repair](preprocessing/channel_repair.md) - Interpolating bad channels
 - [Channel Summary](preprocessing/channel_summary.md) - Summarizing channel data
 - [ICA](preprocessing/ica.md) - Independent Component Analysis
-- [Layouts & Neighbours](preprocessing/layouts.md) - Electrode layouts and spatial neighbours
+- [Layouts & Neighbors](preprocessing/layouts.md) - Electrode layouts and spatial neighbors
 - [Analysis Settings](preprocessing/analysis_settings.md) - Saving and replaying preprocessing recipes
 
 ## Artifact Detection & Correction

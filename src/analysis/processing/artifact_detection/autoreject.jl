@@ -263,11 +263,11 @@ function _repair_epochs_cached!(
                 f_legendre = _g_factors(m, 50)
                 has_spline_coords = true
             catch e
-                @minimal_warning "Failed to construct spherical geometry from layout: $(sprint(showerror, e)). Falling back to neighbour interpolation if available."
+                @minimal_warning "Failed to construct spherical geometry from layout: $(sprint(showerror, e)). Falling back to neighbor interpolation if available."
                 has_spline_coords = false
             end
         else
-            @minimal_warning "Layout is missing electrode coordinates for one or more target channels. Falling back to neighbour interpolation if available."
+            @minimal_warning "Layout is missing electrode coordinates for one or more target channels. Falling back to neighbor interpolation if available."
             has_spline_coords = false
         end
     end
@@ -296,25 +296,25 @@ function _repair_epochs_cached!(
                         op_mat = _spline_good_to_bad(U_good, U_bad, f_legendre, lambda)
                         spline_operator_cache[pattern] = (good_idx, bad_idx, op_mat)
                     catch e
-                        @minimal_warning "Spherical spline operator generation failed for bad channels $pattern: $e. Falling back to neighbour interpolation."
+                        @minimal_warning "Spherical spline operator generation failed for bad channels $pattern: $e. Falling back to neighbor interpolation."
                     end
                 end
 
                 if haskey(spline_operator_cache, pattern)
                     g_idx, b_idx, op_mat = spline_operator_cache[pattern]
 
-                    # Extract only good channels
+                    # Extract only good channels across the full epoch
                     good_data = Matrix{Float64}(undef, length(g_idx), n_timepoints)
                     for (row_i, g_i) in enumerate(g_idx)
-                        good_data[row_i, :] = epoch_df[sample_indices, target_channels[g_i]]
+                        good_data[row_i, :] = epoch_df[!, target_channels[g_i]]
                     end
 
                     # Compute interpolated potentials for bad channels
                     repaired_data = op_mat * good_data
 
-                    # Write only to bad channel columns in epoch DataFrame
+                    # Write only to bad channel columns across the full epoch DataFrame
                     for (row_i, b_i) in enumerate(b_idx)
-                        epoch_df[sample_indices, target_channels[b_i]] = repaired_data[row_i, :]
+                        epoch_df[!, target_channels[b_i]] = repaired_data[row_i, :]
                     end
 
                     repaired_channels[ep_idx] = pattern
@@ -323,13 +323,13 @@ function _repair_epochs_cached!(
             end
         end
 
-        # Fallback to neighbour interpolation if spline coordinates not available or failed
-        if !isnothing(layout.neighbours)
-            epoch_mat = Matrix(epoch_df[:, target_channels])'
+        # Fallback to neighbor interpolation if spline coordinates not available or failed
+        if !isnothing(layout.neighbors)
+            epoch_mat = Matrix{Float64}(Matrix(epoch_df[:, target_channels])')
             actually_repaired = Symbol[]
             for bad_ch in pattern
-                if haskey(layout.neighbours, bad_ch)
-                    good_neighs = [n for n in layout.neighbours[bad_ch].channels if n ∉ pattern && n in target_channels]
+                if haskey(layout.neighbors, bad_ch)
+                    good_neighs = [n for n in layout.neighbors[bad_ch].channels if n ∉ pattern && n in target_channels]
                     if !isempty(good_neighs)
                         push!(actually_repaired, bad_ch)
                     end
@@ -337,12 +337,15 @@ function _repair_epochs_cached!(
             end
 
             if !isempty(actually_repaired)
-                _repair_channels_neighbor!(epoch_mat, target_channels, actually_repaired, layout.neighbours)
-                for bad_ch in actually_repaired
-                    ch_idx = findfirst(==(bad_ch), target_channels)
-                    epoch_df[sample_indices, bad_ch] = epoch_mat[ch_idx, :]
+                actually_repaired =
+                    _repair_channels_neighbor!(epoch_mat, target_channels, actually_repaired, layout.neighbors; bad_channels = pattern)
+                if !isempty(actually_repaired)
+                    for bad_ch in actually_repaired
+                        ch_idx = findfirst(==(bad_ch), target_channels)
+                        epoch_df[!, bad_ch] = epoch_mat[ch_idx, :]
+                    end
+                    repaired_channels[ep_idx] = actually_repaired
                 end
-                repaired_channels[ep_idx] = actually_repaired
             end
         end
     end

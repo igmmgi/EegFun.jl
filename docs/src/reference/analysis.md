@@ -4,12 +4,19 @@ CollapsedDocStrings = true
 
 # Analysis Functions
 
-All public analysis and processing functions in EegFun.jl.
+All public data access, I/O, preprocessing, ERP, RIDE, time-frequency, statistical, decoding, RSA, and pipeline functions in `EegFun.jl`.
+
+## Index
+
+```@index
+Pages = ["analysis.md"]
+```
 
 ## Functions
 
 ```@autodocs
 Modules = [EegFun]
+Private = false
 Order = [:function, :macro]
-Filter = t -> let s = string(t); !startswith(s, "_") && !startswith(s, "plot_") && !startswith(s, "Base.") && !endswith(s, ".show") && !endswith(s, ".copy") && !endswith(s, ".convert") && !endswith(s, ".getproperty") end
+Filter = t -> let s = applicable(nameof, t) ? string(nameof(t)) : string(t); !startswith(s, "plot_") && !startswith(s, "signal_example_") && s != "simulate_erp" && s != "theme_eegfun" && s != "add_topo_rois!" end
 ```

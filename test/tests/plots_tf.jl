@@ -1,5 +1,6 @@
 using Test
 using CairoMakie
+using EegFun
 
 @testset "TF Plots" begin
 
@@ -178,6 +179,68 @@ using CairoMakie
         # plot_topography for AbstractVector{<:TimeFreqData}
         out_topo_vec = EegFun.plot_topography(@view(tf_participant1[1:2]); freq_range = [8.0, 12.0], display_plot = false)
         @test out_topo_vec.fig isa Figure
+
+        # Return shape includes .axes and .ax alias on single TF topography, plus normalized reversed freq_range
+        out_rev = EegFun.plot_topography(
+            tf;
+            freq_range = (13.0, 8.0),
+            baseline_interval = (-0.5, 0.0),
+            baseline_method = :db,
+            colormap = :coolwarm,
+            display_plot = false,
+        )
+        @test out_rev.axes == [out_rev.ax]
+        @test occursin("8-13 Hz", out_rev.ax.title[])
+        @test !occursin("13-8", out_rev.ax.title[])
+        cf = only(filter(p -> p isa Makie.Contourf, out_rev.ax.scene.plots))
+        @test cf.colorrange[][1] ≈ -cf.colorrange[][2]
+    end
+
+    @testset "plot_tf_stats shared symmetric colorrange across channels" begin
+        for mode in (:tvalues, :difference)
+            out_stats = EegFun.plot_tf_stats(
+                tf_analytic_result;
+                content = mode,
+                channel_selection = EegFun.channels(:Oz, :Pz, :Cz),
+                layout = :grid,
+                colormap = :coolwarm,
+                display_plot = false,
+            )
+            @test out_stats.fig isa Figure
+            @test length(out_stats.axes) == 3
+            crs = [first(filter(p->p isa Makie.Heatmap, ax.scene.plots)).colorrange[] for ax in out_stats.axes]
+            @test crs[1][1] ≈ -crs[1][2]
+            @test all(cr -> cr == crs[1], crs)
+        end
+    end
+
+    @testset "plot_topography_stats (TF) subsets unanalyzed layout channels" begin
+        tf_res_sub = deepcopy(tf_analytic_result)
+        n_orig_layout = size(tf_res_sub.data[1].layout.data, 1)
+        # Drop the last 2 electrodes from the stats result while keeping them in tf_res_sub.data[1].layout
+        n_keep = length(tf_res_sub.electrodes) - 2
+        tf_res_sub = EegFun.TFAnalyticResult(
+            tf_res_sub.test_info,
+            tf_res_sub.data,
+            EegFun.TFStatMatrix(
+                tf_res_sub.stat_matrix.t[1:n_keep, :, :],
+                isnothing(tf_res_sub.stat_matrix.p) ? nothing : tf_res_sub.stat_matrix.p[1:n_keep, :, :],
+            ),
+            EegFun.TFMasks(tf_res_sub.masks.positive[1:n_keep, :, :], tf_res_sub.masks.negative[1:n_keep, :, :]),
+            tf_res_sub.electrodes[1:n_keep],
+            tf_res_sub.frequencies,
+            tf_res_sub.time_points,
+            tf_res_sub.critical_t,
+        )
+        out_sub = EegFun.plot_topography_stats(tf_res_sub; freq_range = (13.0, 8.0), n_topo = 2, point_plot = true, display_plot = false)
+        @test out_sub.fig isa Figure
+        @test length(out_sub.axes) == 2
+        lbls = filter(b -> b isa Label, out_sub.fig.content)
+        @test any(l -> occursin("8–13 Hz", l.text[]), lbls)
+        # Point scatter on each topo axis should only have n_keep points, NOT n_orig_layout
+        scatters = filter(p -> p isa Makie.Scatter, out_sub.axes[1].scene.plots)
+        @test any(sc -> length(sc[1][]) == n_keep, scatters)
+        @test !any(sc -> length(sc[1][]) == n_orig_layout, scatters)
     end
 
 end # @testset "TF Plots"

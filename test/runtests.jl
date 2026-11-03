@@ -1,4 +1,5 @@
 using Test
+using CairoMakie
 using EegFun
 
 println("Running EegFun.jl Test Suite")
@@ -92,6 +93,11 @@ end
     include("tests/freq_spectrum.jl")
     include("tests/ride.jl")
     include("tests/decoding_preparation.jl")
+    include("tests/dimensional_data_ext.jl")
+    include("tests/makie_recipes.jl")
+    include("tests/plot_epochs_rejection.jl")
+    include("tests/plot_topography.jl")
+    include("tests/plot_topography_stats.jl")
 
 
 end

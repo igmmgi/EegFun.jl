@@ -16,7 +16,7 @@ The multitaper method improves spectral estimates by averaging across multiple o
 Similar to Morlet wavelets, controls the time window length:
 
 ```julia
-tf_multitaper(epochs, cycles = 5)
+EegFun.tf_multitaper(epochs, cycles = 5)
 ```
 
 
@@ -31,12 +31,12 @@ tf_multitaper(epochs, cycles = 5)
 
 - Proportional steps (constant ratios)
 - Better for wide ranges (2-80 Hz)
-- Use with `ylogscale = true` for visualization
+- Use with `yscale = :log10` for visualization
 
 ### Baseline Correction
 
 ```julia
-plot_tf(
+EegFun.plot_tf(
     tf_data,
     baseline_interval = (-0.5, -0.2),
     baseline_method = :db

@@ -127,7 +127,7 @@ EegFun.plot_gui()
 # Click "Plot" to generate visualization
 ```
 """
-function plot_gui()
+function plot_gui(; display_plot::Bool = true)
     _set_window_title("PLOT GUI")
     # Dynamic sizing using Auto() rather than strict Fixed everywhere
     gui_fig = _eegfun_figure(size = (700, 600), title = "Plot GUI", backgroundcolor = :lightgrey, figure_padding = (20, 20, 20, 20))
@@ -148,10 +148,10 @@ function plot_gui()
     colsize!(main_layout, 2, Auto())
     colsize!(main_layout, 3, Auto())
 
-    _display_in_screen(gui_fig)
+    screen = display_plot ? _display_in_screen(gui_fig) : nothing
     _set_window_title("Makie")
 
-    return nothing
+    return (fig = gui_fig, axes = Axis[], screen = screen)
 end
 
 function _build_file_column!(main_layout, gui_state)
@@ -348,7 +348,10 @@ function _build_filter_column!(main_layout, gui_state)
         end
     end
 
+    resetting_channel_menu = Ref(false)
     on(gui_state.channel_menu.selection) do selection
+        resetting_channel_menu[] && return
+        isnothing(selection) && return
         if selection == "Select"
             gui_state.electrodes[] = String[]
         elseif selection in gui_state.electrodes[]
@@ -361,8 +364,12 @@ function _build_filter_column!(main_layout, gui_state)
         else
             selected_channels_text[] = "Selected: " * join(gui_state.electrodes[], ", ")
         end
-        gui_state.channel_menu.i_selected.val = 0
-        gui_state.channel_menu.selection.val = nothing
+        resetting_channel_menu[] = true
+        try
+            gui_state.channel_menu.i_selected[] = 0
+        finally
+            resetting_channel_menu[] = false
+        end
     end
 end
 
@@ -564,8 +571,8 @@ function _plot_epochs(gui_state)
                 condition_selection   = cond_sel,
                 channel_selection     = selected_channels,
                 layout                = layout_sym,
-                xlim                  = gui_state.xlim[],
-                ylim                  = gui_state.ylim[],
+                xlim                  = _gui_lim(gui_state.xlim[]),
+                ylim                  = _gui_lim(gui_state.ylim[]),
                 yreversed             = gui_state.invert_y[],
             )
         end
@@ -593,8 +600,8 @@ function _plot_epochs(gui_state)
             epoch_selection = epoch_sel,
             layout = layout_sym,
             average_channels = gui_state.average_channels[],
-            xlim = gui_state.xlim[],
-            ylim = gui_state.ylim[],
+            xlim = _gui_lim(gui_state.xlim[]),
+            ylim = _gui_lim(gui_state.ylim[]),
             yreversed = gui_state.invert_y[],
         )
     end
@@ -624,10 +631,7 @@ function _plot_erp(gui_state)
 
         _guarded_async("ERP") do
             layout_sym = Symbol(gui_state.layout_type[])
-            baseline = nothing
-            if !isnothing(gui_state.baseline_start[]) && !isnothing(gui_state.baseline_end[])
-                baseline = (gui_state.baseline_start[], gui_state.baseline_end[])
-            end
+            baseline = _gui_lim((gui_state.baseline_start[], gui_state.baseline_end[]))
             plot_erp(
                 fname;
                 input_dir = input_dir,
@@ -637,8 +641,8 @@ function _plot_erp(gui_state)
                 condition_selection = cond_sel,
                 baseline_interval = baseline,
                 average_channels = gui_state.average_channels[],
-                xlim = gui_state.xlim[],
-                ylim = gui_state.ylim[],
+                xlim = _gui_lim(gui_state.xlim[]),
+                ylim = _gui_lim(gui_state.ylim[]),
                 yreversed = gui_state.invert_y[],
             )
         end
@@ -655,10 +659,7 @@ function _plot_erp(gui_state)
 
     selected_channels = isempty(gui_state.electrodes[]) ? channels() : channels(Symbol.(gui_state.electrodes[]))
 
-    baseline = nothing
-    if !isnothing(gui_state.baseline_start[]) && !isnothing(gui_state.baseline_end[])
-        baseline = (gui_state.baseline_start[], gui_state.baseline_end[])
-    end
+    baseline = _gui_lim((gui_state.baseline_start[], gui_state.baseline_end[]))
 
     _guarded_async("ERP") do
         layout_sym = Symbol(gui_state.layout_type[])
@@ -669,8 +670,8 @@ function _plot_erp(gui_state)
             channel_selection = selected_channels,
             baseline_interval = baseline,
             average_channels = gui_state.average_channels[],
-            xlim = gui_state.xlim[],
-            ylim = gui_state.ylim[],
+            xlim = _gui_lim(gui_state.xlim[]),
+            ylim = _gui_lim(gui_state.ylim[]),
             yreversed = gui_state.invert_y[],
         )
     end
@@ -692,17 +693,17 @@ function _plot_topography(gui_state)
         isnothing(data) && return
 
         # Build baseline interval from GUI
-        b_lo, b_hi = gui_state.baseline_start[], gui_state.baseline_end[]
-        baseline_interval = (!isnothing(b_lo) && !isnothing(b_hi)) ? (b_lo, b_hi) : nothing
+        baseline_interval = _gui_lim((gui_state.baseline_start[], gui_state.baseline_end[]))
 
         !isnothing(baseline_interval) && baseline!(data, baseline_interval)
 
-        # xlim → interval_selection (time window to average over); ylim → color scale
-        x_lo, x_hi   = gui_state.xlim[]
-        interval_sel = (!isnothing(x_lo) && !isnothing(x_hi)) ? times(x_lo, x_hi) : times()
-        y_lo, y_hi   = gui_state.ylim[]
-        color_range  = (!isnothing(y_lo) && !isnothing(y_hi)) ? (y_lo, y_hi) : nothing
-        extra_kwargs = isnothing(color_range) ? (;) : (ylim = color_range,)
+        # xlim → interval_selection (time window to average over); zlim/ylim → colorrange
+        x_lim        = _gui_lim(gui_state.xlim[])
+        interval_sel = !isnothing(x_lim) ? times(x_lim[1], x_lim[2]) : times()
+        z_lim        = _gui_lim(gui_state.zlim[])
+        y_lim        = _gui_lim(gui_state.ylim[])
+        color_range  = !isnothing(z_lim) ? z_lim : y_lim
+        extra_kwargs = isnothing(color_range) ? (;) : (colorrange = color_range,)
 
         if data isa Vector{<:ErpData} || data isa ErpData
             plot_topography(data; channel_selection = selected_channels, interval_selection = interval_sel, extra_kwargs...)

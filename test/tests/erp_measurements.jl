@@ -1308,7 +1308,111 @@ using EegFun
                 channel_selection = :Ch1,
                 display_plot = false,
             )
-            @test plot_res isa Figure
+            @test (plot_res isa Figure) || (plot_res isa NamedTuple && hasproperty(plot_res, :fig) && plot_res.fig isa Figure)
+        end
+
+        @testset "Phase 2 regressions: in-memory non-mutating erp_measurements, trapezoidal area_boundary, peak_polarity, '_' channels" begin
+            # Create bipolar / underscore layout channel + signed biphasic waveform:
+            # t in [-0.2, 1.0], baseline = +2.0 on [-0.2, 0.0], then after baseline subtraction:
+            # +4.0 on [0.0, 0.5] and -2.0 on (0.5, 1.0] -> exact step/linear test
+            t_pts = collect(range(-0.2, 1.0, step = 0.01)) # 121 samples, fs = 100 Hz
+            # Linear wave from -4.0 at t=0.0 to +4.0 at t=1.0 (plus +3.0 DC offset in baseline [-0.2, 0.0))
+            raw_sig = [t < 0.0 ? 3.0 : 3.0 + (-4.0 + 8.0 * t) for t in t_pts]
+            df_inmem = DataFrame(time = t_pts, sample = 1:length(t_pts), Ch1_bip = copy(raw_sig), vEOG = fill(999.0, length(t_pts)))
+            lay_inmem = EegFun.Layout(DataFrame(label = [:Ch1_bip], inc = [0.0], azi = [0.0]), nothing, nothing, nothing)
+            erp_inmem = EegFun.ErpData("sub1", 1, "condA", df_inmem, lay_inmem, 100, EegFun.AnalysisInfo(), 10)
+            orig_col = copy(erp_inmem.data.Ch1_bip)
+
+            # 1. In-memory non-mutating erp_measurements on ErpData, Vector{ErpData}, and EpochData
+            res_rect =
+                EegFun.erp_measurements(erp_inmem, "rectified_area"; analysis_interval = (0.0, 1.0), baseline_interval = (-0.2, -0.01))
+            @test res_rect isa EegFun.ErpMeasurementsResult
+            @test erp_inmem.data.Ch1_bip == orig_col # caller's ErpData was NOT mutated by baseline_interval!
+            @test :Ch1_bip in propertynames(res_rect.data) # EEG channel with "_" is kept!
+            @test :vEOG ∉ propertynames(res_rect.data)     # extra channel excluded by default!
+            # After subtracting exact 3.0 baseline: y(t) = -4 + 8t on [0, 1].
+            # Rectified area = integral_0^0.5 (4 - 8t) dt + integral_0.5^1 (8t - 4) dt = 1.0 + 1.0 = 2.0
+            @test isapprox(res_rect.data[1, :Ch1_bip], 2.0; atol = 0.05)
+
+            # 2. positive_area (= 1.0), negative_area (= 1.0), signed integral (= 0.0)
+            res_pos_area =
+                EegFun.erp_measurements(erp_inmem, "positive_area"; analysis_interval = (0.0, 1.0), baseline_interval = (-0.2, -0.01))
+            res_neg_area =
+                EegFun.erp_measurements(erp_inmem, "negative_area"; analysis_interval = (0.0, 1.0), baseline_interval = (-0.2, -0.01))
+            res_signed = EegFun.erp_measurements(erp_inmem, "integral"; analysis_interval = (0.0, 1.0), baseline_interval = (-0.2, -0.01))
+            @test isapprox(res_pos_area.data[1, :Ch1_bip], 1.0; atol = 0.05)
+            @test isapprox(res_neg_area.data[1, :Ch1_bip], 1.0; atol = 0.05)
+            @test isapprox(res_signed.data[1, :Ch1_bip], 0.0; atol = 0.05)
+
+            # 3. Trapezoidal _fractional_area_latency starting at 0.0 at time_col[1] with area_boundary
+            # On [0, 1], y(t) = -4 + 8t: positive part is on [0.5, 1.0] where y = 8(t - 0.5),
+            # cumulative positive area = 4*(t - 0.5)^2, total = 1.0 -> 50% positive area at t = 0.5 + 0.5/sqrt(2) ≈ 0.85355
+            res_fal_pos = EegFun.erp_measurements(
+                erp_inmem,
+                "fractional_area_latency";
+                analysis_interval = (0.0, 1.0),
+                baseline_interval = (-0.2, -0.01),
+                area_boundary = :positive,
+                fractional_area_fraction = 0.5,
+            )
+            res_fal_rect = EegFun.erp_measurements(
+                erp_inmem,
+                "fractional_area_latency";
+                analysis_interval = (0.0, 1.0),
+                baseline_interval = (-0.2, -0.01),
+                area_boundary = :rectified,
+                fractional_area_fraction = 0.5,
+            )
+            @test isapprox(res_fal_pos.data[1, :Ch1_bip], 0.5 + 0.5 / sqrt(2); atol = 0.015)
+            @test isapprox(res_fal_rect.data[1, :Ch1_bip], 0.5; atol = 0.015)
+
+            # 4. peak_polarity (:positive, :negative, :abs) on asymmetric waveform (-10 at t=0.2, +5 at t=0.8)
+            asym_sig = [-10.0 * exp(-((t - 0.2) / 0.05)^2) + 5.0 * exp(-((t - 0.8) / 0.05)^2) for t in t_pts]
+            erp_asym = EegFun.ErpData(
+                "asym",
+                1,
+                "c1",
+                DataFrame(time = t_pts, sample = 1:length(t_pts), Ch1_bip = asym_sig),
+                lay_inmem,
+                100,
+                EegFun.AnalysisInfo(),
+                10,
+            )
+            lat_abs = EegFun.erp_measurements(
+                erp_asym,
+                "fractional_peak_latency";
+                analysis_interval = (0.0, 1.0),
+                fractional_peak_fraction = 0.5,
+                peak_polarity = :abs,
+            )
+            lat_pos = EegFun.erp_measurements(
+                erp_asym,
+                "fractional_peak_latency";
+                analysis_interval = (0.0, 1.0),
+                fractional_peak_fraction = 0.5,
+                peak_polarity = :positive,
+            )
+            lat_neg = EegFun.erp_measurements(
+                erp_asym,
+                "fractional_peak_latency";
+                analysis_interval = (0.0, 1.0),
+                fractional_peak_fraction = 0.5,
+                peak_polarity = :negative,
+            )
+            @test isapprox(lat_abs.data[1, :Ch1_bip], lat_neg.data[1, :Ch1_bip]; atol = 1e-12)
+            @test lat_abs.data[1, :Ch1_bip] < 0.2
+            @test lat_pos.data[1, :Ch1_bip] > 0.7 && lat_pos.data[1, :Ch1_bip] < 0.8
+
+            # 5. In-memory EpochData & Vector{ErpData}
+            ep_df1 = copy(erp_asym.data)
+            ep_df1.epoch = fill(1, nrow(ep_df1))
+            ep_df2 = copy(erp_asym.data)
+            ep_df2.epoch = fill(2, nrow(ep_df2))
+            ep_inmem = EegFun.EpochData("ep_sub", 1, "c1", [ep_df1, ep_df2], lay_inmem, 100, EegFun.AnalysisInfo())
+            res_ep = EegFun.erp_measurements(ep_inmem, "mean_amplitude"; analysis_interval = (0.15, 0.25))
+            @test nrow(res_ep.data) == 2 && :epoch in propertynames(res_ep.data)
+            res_vec_erps = EegFun.erp_measurements([erp_inmem, erp_asym], "mean_amplitude"; analysis_interval = (0.1, 0.3))
+            @test nrow(res_vec_erps.data) == 2
         end
 
         # Cleanup

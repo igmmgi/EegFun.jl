@@ -51,15 +51,13 @@ function read_fieldtrip_csv(
     end
 
     channel_labels = [Symbol(col) for col in actual_cols[3:end]]
-    n_trials = length(unique(all_data.trial))
+    grouped = groupby(all_data, :trial)
+    n_trials = length(grouped)
 
     # Estimate sample rate from time column if not provided
     if isnothing(fsample)
-        # Get time differences for first trial
-        trial1_data = filter(row -> row.trial == 1, all_data)
-        if length(trial1_data.time) > 1
-            time_diffs = diff(sort(trial1_data.time))
-            # Most common time difference should be 1/fsample
+        if n_trials > 0 && length(grouped[1].time) > 1
+            time_diffs = diff(sort(collect(grouped[1].time)))
             median_dt = median(time_diffs)
             fsample = Int(round(1.0 / median_dt))
             @info "Estimated sample rate from time column: $fsample Hz"
@@ -73,20 +71,17 @@ function read_fieldtrip_csv(
     layout = EegFun.Layout(layout_df, nothing, nothing, nothing)
 
     # Create AnalysisInfo
-    analysis_info = EegFun.AnalysisInfo(sample_rate = Int(round(fsample)))
+    analysis_info = EegFun.AnalysisInfo(sample_rate = Float64(fsample))
 
-    # Split data into trials
+    # Split data into trials in O(N) via groupby
     trial_dfs = Vector{DataFrame}(undef, n_trials)
-    for trial_idx = 1:n_trials
-        # Filter data for this trial
-        trial_data = filter(row -> row.trial == trial_idx, all_data)
-
-        # Create DataFrame with time and channel columns
-        trial_df = DataFrame(:time => trial_data.time, :epoch => fill(trial_idx, nrow(trial_data)))
+    for (trial_idx, trial_data) in enumerate(grouped)
+        n_rows = nrow(trial_data)
+        trial_df = DataFrame(:time => collect(Float64, trial_data.time), :sample => collect(1:n_rows), :epoch => fill(trial_idx, n_rows))
 
         # Add channel columns
         for ch in channel_labels
-            trial_df[!, ch] = trial_data[!, ch]
+            trial_df[!, ch] = collect(Float64, trial_data[!, ch])
         end
 
         trial_dfs[trial_idx] = trial_df

@@ -27,12 +27,12 @@ using OrderedCollections
         # Test error handling - @minimal_error now throws EegFunError
         @test_throws Exception EegFun._get_cols_by_group(continuous_data, :invalid)
 
-        # Test empty layout case - need a layout with a label column
-        empty_layout = EegFun.Layout(DataFrame(label = Symbol[]), nothing, nothing, nothing)
+        # Test empty layout case - metadata columns are preserved when no layout channels exist
+        empty_layout = EegFun.Layout()
         empty_df = DataFrame(time = [0.1], sample = [1])
         empty_data = EegFun.ContinuousData("test_data", empty_df, empty_layout, 250, analysis_info)
         @test EegFun._get_cols_by_group(empty_data, :channels) == Symbol[]
-        @test EegFun._get_cols_by_group(empty_data, :metadata) == Symbol[]
+        @test EegFun._get_cols_by_group(empty_data, :metadata) == [:time, :sample]
         @test EegFun._get_cols_by_group(empty_data, :extra) == Symbol[]
     end
 
@@ -207,7 +207,7 @@ using OrderedCollections
 
         # Test with empty DataFrame
         empty_df = DataFrame()
-        empty_layout = EegFun.Layout(DataFrame(), nothing, nothing, nothing)
+        empty_layout = EegFun.Layout()
         empty_data = EegFun.ContinuousData("test_data", empty_df, empty_layout, 250, analysis_info)
         @test isempty(EegFun.head(empty_data))
         @test isempty(EegFun.tail(empty_data))
@@ -706,13 +706,13 @@ using OrderedCollections
         @test isequal(cont_nan, copy(cont_nan))
         @test hash(cont_nan) == hash(copy(cont_nan))
 
-        # Neighbours compare by value (previously by identity)
-        nb1 = EegFun.Neighbours([:Cz], [1.0], [1.0])
-        nb2 = EegFun.Neighbours([:Cz], [1.0], [1.0])
+        # Neighbors compare by value (previously by identity)
+        nb1 = EegFun.Neighbors([:Cz], [1.0], [1.0])
+        nb2 = EegFun.Neighbors([:Cz], [1.0], [1.0])
         @test nb1 == nb2
         @test isequal(nb1, nb2)
         @test hash(nb1) == hash(nb2)
-        @test nb1 != EegFun.Neighbours([:Pz], [1.0], [1.0])
+        @test nb1 != EegFun.Neighbors([:Pz], [1.0], [1.0])
 
         # summary
         @test summary(cont) == "3 timepoints × 2 channels ContinuousData (\"test\")"
@@ -759,5 +759,111 @@ using OrderedCollections
         @test EegFun.channel_labels(tf_stat) == [:Fz, :Cz]
         @test EegFun.n_channels(tf_stat) == 2
         @test EegFun.n_samples(tf_stat) == 2
+    end
+
+    @testset "Zero-epoch guards, vcat validation, TF rename, circular phase, and NaN-safe ylimits" begin
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
+        info = EegFun.AnalysisInfo()
+        empty_ep = EegFun.EpochData("empty", 1, "cond_1", DataFrame[], layout, 250, info)
+
+        # 0-epoch and empty collection guards
+        @test EegFun.all_labels(empty_ep) == Symbol[]
+        @test EegFun.time_vector(empty_ep) == Float64[]
+        @test EegFun.n_samples(empty_ep) == 0
+        @test EegFun.duration(empty_ep) == 0.0
+        @test EegFun.channel_data(empty_ep, :Fz) == Float64[]
+        @test isempty(EegFun.meta_data(empty_ep))
+        @test size(Array(empty_ep)) == (0, 0, 2)
+        @test lastindex(empty_ep) == 0
+        @test EegFun.channel_labels(EegFun.EegData[]) == Symbol[]
+        @test EegFun.extra_labels(EegFun.EegData[]) == Symbol[]
+
+        # lastindex & vcat validation on EpochData
+        ep1 = EegFun.EpochData(
+            "f1",
+            1,
+            "c1",
+            [DataFrame(time = [0.0, 0.1], sample = [1, 2], epoch = [1, 1], Fz = [1.0, 2.0], Cz = [3.0, 4.0])],
+            layout,
+            250,
+            info,
+        )
+        @test lastindex(ep1) == 1
+        ep_diff_ch = EegFun.EpochData(
+            "f2",
+            1,
+            "c1",
+            [DataFrame(time = [0.0, 0.1], sample = [1, 2], epoch = [1, 1], Fz = [1.0, 2.0])],
+            EegFun.Layout(DataFrame(label = [:Fz], inc = [0.0], azi = [0.0]), nothing, nothing, nothing),
+            250,
+            info,
+        )
+        ep_diff_samp = EegFun.EpochData(
+            "f3",
+            1,
+            "c1",
+            [DataFrame(time = [0.0, 0.1, 0.2], sample = [1, 2, 3], epoch = [1, 1, 1], Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0])],
+            layout,
+            250,
+            info,
+        )
+        @test_throws EegFun.EegFunError vcat(ep1, ep_diff_ch)
+        @test_throws EegFun.EegFunError vcat(ep1, ep_diff_samp)
+
+        # _have_same_structure on ContinuousData (no .condition field) and isapprox time vector
+        c1 = EegFun.ContinuousData("c1", DataFrame(time = [0.0, 0.1], Fz = [1.0, 2.0], Cz = [3.0, 4.0]), copy(layout), 10, info)
+        c2 = EegFun.ContinuousData("c2", DataFrame(time = [0.0, 0.1 + 1e-12], Fz = [5.0, 6.0], Cz = [7.0, 8.0]), copy(layout), 10, info)
+        @test EegFun._have_same_structure(c1, c2)
+
+        # rename_channel! on TimeFreqData and TimeFreqEpochData renames data_phase as well as data_power
+        tf = EegFun.create_test_tf_data(n_channels = 2)
+        EegFun.rename_channel!(tf, Dict(:Ch1 => :Frontal))
+        @test :Frontal in propertynames(tf.data_power)
+        @test :Frontal in propertynames(tf.data_phase)
+        @test :Ch1 ∉ propertynames(tf.data_phase)
+
+        tf_ep = EegFun.create_test_tf_epoch_data(n_channels = 2, n_epochs = 2)
+        EegFun.rename_channel!(tf_ep, Dict(:Ch1 => :Frontal))
+        @test all(df -> :Frontal in propertynames(df) && :Ch1 ∉ propertynames(df), tf_ep.data_power)
+        @test all(df -> :Frontal in propertynames(df) && :Ch1 ∉ propertynames(df), tf_ep.data_phase)
+
+        # _condition_channels excludes boolean :extra columns; circular phase difference & mean
+        c_flag = copy(c1)
+        c_flag.data[!, :is_extreme] = [true, false]
+        @test EegFun._condition_channels(c_flag) == [:Fz, :Cz]
+
+        tf1 = EegFun.create_test_tf_data(condition = 1, n_channels = 1)
+        tf2 = EegFun.create_test_tf_data(condition = 2, n_channels = 1)
+        tf1.data_phase[!, :Ch1] .= π - 0.1
+        tf2.data_phase[!, :Ch1] .= -π + 0.1
+        diff_frames = EegFun._difference_frames(tf1, tf2)
+        @test all(isapprox.(diff_frames[2][!, :Ch1], -0.2, atol = 1e-10))
+        derived_diff = EegFun._derive_condition(
+            tf1,
+            1,
+            "difference_1_2",
+            (
+                tf1.data_power .- tf2.data_power,
+                DataFrame(time = tf1.data_phase.time, freq = tf1.data_phase.freq, Ch1 = tf1.data_phase.Ch1 .- tf2.data_phase.Ch1),
+            ),
+        )
+        @test all(isapprox.(derived_diff.data_phase[!, :Ch1], -0.2, atol = 1e-10))
+        avg_frames = EegFun._average_frames([tf1, tf2])
+        @test all(x -> isapprox(abs(x), π, atol = 1e-10), avg_frames[2][!, :Ch1])
+
+        # find_closest_time_index empty guard & NaN-safe ylimits + include_extra
+        @test_throws EegFun.EegFunError EegFun.find_closest_time_index(Float64[], 0.0)
+        df_nan = DataFrame(
+            time = [0.0, 0.1, 0.2],
+            Fz = [NaN, -2.0, 4.0],
+            Cz = [NaN, NaN, NaN],
+            vEOG = [-50.0, 0.0, 50.0],
+            flag = [true, false, true],
+        )
+        cont_nan = EegFun.ContinuousData("nan", df_nan, copy(layout), 10, info)
+        @test EegFun._data_limits_y(df_nan, [:Fz, :Cz]) == [-2.0, 4.0]
+        ylims_no_extra = EegFun._ylimits(cont_nan; include_extra = false)
+        ylims_extra = EegFun._ylimits(cont_nan; include_extra = true)
+        @test ylims_extra[2] > ylims_no_extra[2]
     end
 end

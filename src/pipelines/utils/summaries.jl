@@ -270,12 +270,12 @@ function summarize_ica_components(ica_components::Vector{ArtifactComponents})
     # Per-file summary
     per_file_data = []
     for component_artifacts in ica_components
-        vEOG_count = length(get(component_artifacts.eog, :vEOG, []))
-        hEOG_count = length(get(component_artifacts.eog, :hEOG, []))
+        vEOG_count = length(get(component_artifacts.eog, :vEOG, Int[]))
+        hEOG_count = length(get(component_artifacts.eog, :hEOG, Int[]))
         ecg_count = length(component_artifacts.ecg)
         line_noise_count = length(component_artifacts.line_noise)
         channel_noise_count = length(component_artifacts.channel_noise)
-        total_count = vEOG_count + hEOG_count + ecg_count + line_noise_count + channel_noise_count
+        total_count = length(unique(get_all_ica_components(component_artifacts)))
 
         push!(
             per_file_data,

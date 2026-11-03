@@ -2,9 +2,9 @@
 CollapsedDocStrings = true
 ```
 
-# Plotting Functions
+# Plotting & Interactive Demos
 
-All public plotting functions in EegFun.jl.
+All public visualization functions, themes, topography helpers, and interactive teaching demos in `EegFun.jl`.
 
 ## Index
 
@@ -12,10 +12,29 @@ All public plotting functions in EegFun.jl.
 Pages = ["plotting.md"]
 ```
 
-## Functions
+## Plotting Functions
 
 ```@autodocs
 Modules = [EegFun]
-Order = [:function, :macro]
-Filter = t -> !startswith(string(t), "_") && startswith(string(t), "plot_")
+Private = false
+Order = [:function]
+Filter = t -> let s = applicable(nameof, t) ? string(nameof(t)) : string(t); startswith(s, "plot_") end
+```
+
+## Themes & Topography Overlays
+
+```@autodocs
+Modules = [EegFun]
+Private = false
+Order = [:function]
+Filter = t -> let s = applicable(nameof, t) ? string(nameof(t)) : string(t); s in ("theme_eegfun", "add_topo_rois!") end
+```
+
+## Interactive Teaching Demos
+
+```@autodocs
+Modules = [EegFun]
+Private = false
+Order = [:function]
+Filter = t -> let s = applicable(nameof, t) ? string(nameof(t)) : string(t); startswith(s, "signal_example_") || s == "simulate_erp" end
 ```

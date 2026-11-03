@@ -450,6 +450,36 @@ using Logging
         end
     end
 
+    @testset "Legacy JLD2 backward compatibility & synthetic data helpers" begin
+        # Legacy JLD2 file saved with UK :neighbours / Neighbours
+        legacy_erp_path = EegFun.example_path("data/julia/erps/example1_erps.jld2")
+        @test isfile(legacy_erp_path)
+        legacy_erps = @test_logs min_level = Logging.Warn EegFun.read_data(legacy_erp_path)
+        @test legacy_erps isa Vector{EegFun.ErpData}
+        @test !isempty(legacy_erps)
+        @test legacy_erps[1].layout isa EegFun.Layout
+        @test legacy_erps[1].layout.neighbors isa Dict{Symbol,EegFun.Neighbors}
+        @test length(legacy_erps[1].layout.neighbors) == 72
+
+        legacy_tf_path = EegFun.example_path("data/julia/tf/tf_data_1.jld2")
+        @test isfile(legacy_tf_path)
+        legacy_tf = @test_logs min_level = Logging.Warn EegFun.read_data(legacy_tf_path)
+        @test legacy_tf isa Vector{EegFun.TimeFreqData}
+        @test legacy_tf[1].layout isa EegFun.Layout
+
+        # signal_to_data sample_rate propagation & EegFunError on length mismatch
+        sig = EegFun.signal_to_data(0.0:0.002:0.1, ones(51), :Cz, 500)
+        @test sig.sample_rate == 500
+        @test sig.analysis_info.sample_rate == 500.0
+        @test_throws EegFun.EegFunError EegFun.signal_to_data([0.0, 0.1], [1.0], :Cz, 10)
+
+        # create_synthetic_epochs dynamic channel count & sample rate
+        syn = EegFun.create_synthetic_epochs(1, 1, "Cond1", 3; channels = [:Fp1, :Fz, :Cz, :Pz, :Oz], sample_rate = 500)
+        @test EegFun.n_channels(syn) == 5
+        @test syn.sample_rate == 500
+        @test syn.analysis_info.sample_rate == 500.0
+    end
+
     # Cleanup
     rm(test_dir, recursive = true)
 end

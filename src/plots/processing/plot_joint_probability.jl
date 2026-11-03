@@ -12,6 +12,7 @@ const PLOT_JOINT_PROBABILITY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :xlabel => ("Electrode", "Label for x-axis"),
     :ylabel => ("Joint Probability", "Label for y-axis"),
     :plot_title => (nothing, "Plot title"),
+    :show_title => (true, "Whether to show the plot title"),
     :plot_title_position => (
         nothing,
         "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis.",
@@ -69,7 +70,7 @@ $(_generate_kwargs_doc(PLOT_JOINT_PROBABILITY_KWARGS))
 """
 function plot_joint_probability!(fig::Figure, ax::Axis, dat::DataFrame; kwargs...)
     # Merge user kwargs with defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_JOINT_PROBABILITY_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_JOINT_PROBABILITY_KWARGS, _normalize_plot_kwargs(kwargs))
 
     # Basic validation
     if :channel ∉ propertynames(dat) || :jp ∉ propertynames(dat)
@@ -88,7 +89,9 @@ function plot_joint_probability!(fig::Figure, ax::Axis, dat::DataFrame; kwargs..
     ax.xticklabelrotation = plot_kwargs[:xtick_rotation]
     ax.xlabel = plot_kwargs[:xlabel]
     ax.ylabel = plot_kwargs[:ylabel]
-    ax.title = plot_kwargs[:plot_title]
+    if plot_kwargs[:show_title] && !isnothing(plot_kwargs[:plot_title])
+        ax.title = plot_kwargs[:plot_title]
+    end
     ax.titlesize = plot_kwargs[:plot_title_fontsize]
     ax.xlabelsize = plot_kwargs[:label_fontsize]
     ax.ylabelsize = plot_kwargs[:label_fontsize]
@@ -147,14 +150,15 @@ $(_generate_kwargs_doc(PLOT_JOINT_PROBABILITY_KWARGS))
 """
 function plot_joint_probability(dat::DataFrame; kwargs...)
     # Merge user kwargs with defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_JOINT_PROBABILITY_KWARGS, kwargs)
+    norm_kw = _normalize_plot_kwargs(kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_JOINT_PROBABILITY_KWARGS, norm_kw)
 
     # Create the figure and axis
     fig = _eegfun_figure()
     ax = Axis(fig[1, 1])
 
     # Use the mutating version to plot
-    plot_joint_probability!(fig, ax, dat; kwargs...)
+    plot_joint_probability!(fig, ax, dat; norm_kw...)
 
     _set_window_title("Joint Probability")
     if plot_kwargs[:display_plot]

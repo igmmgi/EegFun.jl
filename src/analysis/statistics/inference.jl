@@ -26,6 +26,7 @@ function _compute_cluster_pvalues(
     permutation_max::Vector{Float64},
     n_permutations::Int,
     alpha::Real = 0.05,
+    tail::Symbol = :both,
 )
     if isempty(clusters)
         return Cluster[]
@@ -46,7 +47,8 @@ function _compute_cluster_pvalues(
             # permutation_max contains minimum (most negative) values from each permutation
             count_exceed = sum(permutation_max .<= cluster_stat) + 1
         end
-        p_value = count_exceed / (n_permutations + 1)
+        p_one_sided = count_exceed / (n_permutations + 1)
+        p_value = tail == :both ? min(1.0, 2.0 * p_one_sided) : p_one_sided
 
         is_significant = p_value <= alpha
 
@@ -73,6 +75,7 @@ function _compute_cluster_pvalues(
     permutation_max::Vector{Float64},
     n_permutations::Int,
     alpha::Real = 0.05,
+    tail::Symbol = :both,
 )
     if isempty(clusters)
         return TFCluster[]
@@ -88,7 +91,8 @@ function _compute_cluster_pvalues(
         else
             count_exceed = sum(permutation_max .<= cluster_stat) + 1
         end
-        p_value = count_exceed / (n_permutations + 1)
+        p_one_sided = count_exceed / (n_permutations + 1)
+        p_value = tail == :both ? min(1.0, 2.0 * p_one_sided) : p_one_sided
         is_significant = p_value <= alpha
 
         updated_cluster = TFCluster(
@@ -118,13 +122,16 @@ Create significance mask from p-values.
 # Arguments
 - `p_matrix::AbstractArray{Float64, N}`: P-values
 - `alpha::Float64`: Significance threshold
-- `method::Symbol`: Correction method (`:no` or `:bonferroni`)
+- `method::Symbol`: Correction method (`:none`, `:no`, or `:bonferroni`)
 
 # Returns
 - `mask::BitArray{N}`: Significance mask
 """
 function _create_significance_mask(p_matrix::AbstractArray{Float64,N}, alpha::Float64, method::Symbol) where {N}
-    method == :bonferroni && (alpha = alpha / count(!isnan, p_matrix))
+    if method == :bonferroni
+        n_comp = count(!isnan, p_matrix)
+        alpha = n_comp > 0 ? alpha / n_comp : 0.0
+    end
     return .!isnan.(p_matrix) .& (p_matrix .<= alpha)
 end
 
@@ -134,8 +141,6 @@ end
 Apply Bonferroni correction to p-values and return significance mask.
 
 Shared utility function used by both general statistics and decoding statistics modules.
-Handles NaN p-values that can occur with zero variance by treating them as significant
-when the corresponding t-statistic is positive.
 
 # Arguments
 - `p_values::Vector{Float64}`: Uncorrected p-values
@@ -150,9 +155,8 @@ when the corresponding t-statistic is positive.
 significant_mask = _apply_bonferroni_correction(p_values, 0.05, t_statistics)
 ```
 """
-function _apply_bonferroni_correction(p_values::Vector{Float64}, alpha::Float64, t_statistics::Vector{Float64})
+function _apply_bonferroni_correction(p_values::Vector{Float64}, alpha::Float64, t_statistics::Vector{Float64} = Float64[])
     n_comparisons = count(!isnan, p_values)
     corrected_alpha = n_comparisons > 0 ? alpha / n_comparisons : 0.0
-    # Handle NaN p-values: if p is NaN but t > 0, treat as significant
-    return (p_values .<= corrected_alpha) .| (isnan.(p_values) .& (t_statistics .> 0))
+    return .!isnan.(p_values) .& (p_values .<= corrected_alpha)
 end

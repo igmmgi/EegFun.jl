@@ -77,7 +77,7 @@ Get all column names from the complete DataFrame.
 - `Vector{Symbol}`: All column names
 """
 all_labels(dat::SingleDataFrameEeg)::Vector{Symbol} = propertynames(dat.data)
-all_labels(dat::MultiDataFrameEeg)::Vector{Symbol} = propertynames(dat.data[1])
+all_labels(dat::MultiDataFrameEeg)::Vector{Symbol} = isempty(dat.data) ? Symbol[] : propertynames(dat.data[1])
 all_labels(dat::MultiDataFrameEeg, epoch::Int)::Vector{Symbol} = propertynames(dat.data[epoch])
 all_labels(dat::DataFrame)::Vector{Symbol} = propertynames(dat)
 
@@ -100,7 +100,8 @@ Get the time column from the EEG data or DataFrame as a vector.
 - All epochs are assumed to have identical time vectors
 """
 time_vector(dat::SingleDataFrameEeg)::Vector{Float64} = hasproperty(dat.data, :time) ? dat.data[!, :time] : Float64[]
-time_vector(dat::MultiDataFrameEeg)::Vector{Float64} = hasproperty(dat.data[1], :time) ? dat.data[1][!, :time] : Float64[]
+time_vector(dat::MultiDataFrameEeg)::Vector{Float64} =
+    !isempty(dat.data) && hasproperty(dat.data[1], :time) ? dat.data[1][!, :time] : Float64[]
 time_vector(dat::MultiDataFrameEeg, epoch::Int)::Vector{Float64} =
     hasproperty(dat.data[epoch], :time) ? dat.data[epoch][!, :time] : Float64[]
 time_vector(dat::Vector{T}) where {T<:EegData} = isempty(dat) ? Float64[] : time_vector(dat[1])
@@ -149,6 +150,7 @@ function _get_cols_data(dat::MultiDataFrameEeg, group::Symbol, epoch::Int)
 end
 
 function _get_cols_data(dat::MultiDataFrameEeg, group::Symbol)
+    isempty(dat.data) && return DataFrame()
     cols = _get_cols_by_group(dat, group)
     return isempty(cols) ? DataFrame() : reduce(vcat, [df[!, cols] for df in dat.data])
 end
@@ -175,9 +177,9 @@ channel_labels(dat::EegData, channel_numbers::Int)::Vector{Symbol} = channel_lab
 
 # Handle collections of EEG data
 # NOTE: Assumes all EegData objects in the collection have identical channel labels.
-channel_labels(dat::Vector{<:EegData})::Vector{Symbol} = channel_labels(first(dat))
-channel_labels(dat::StatisticalData)::Vector{Symbol} = channel_labels(first(dat.data))
-channel_labels(dat::TFStatisticalData)::Vector{Symbol} = channel_labels(first(dat.data))
+channel_labels(dat::Vector{<:EegData})::Vector{Symbol} = isempty(dat) ? Symbol[] : channel_labels(first(dat))
+channel_labels(dat::StatisticalData)::Vector{Symbol} = isempty(dat.data) ? Symbol[] : channel_labels(first(dat.data))
+channel_labels(dat::TFStatisticalData)::Vector{Symbol} = isempty(dat.data) ? Symbol[] : channel_labels(first(dat.data))
 channel_labels(res::StatsResult)::Vector{Symbol} = res.electrodes
 
 
@@ -191,7 +193,8 @@ channel_data(dat::MultiDataFrameEeg, epoch::Int)::DataFrame = _get_cols_data(dat
 channel_data(dat::MultiDataFrameEeg)::DataFrame = _get_cols_data(dat, :channels)
 
 # Extract channel signals as vectors (returns vector of signals for processing)
-channel_data(dat::MultiDataFrameEeg, channel::Symbol) = reduce(vcat, (trial[!, channel] for trial in dat.data))
+channel_data(dat::MultiDataFrameEeg, channel::Symbol) =
+    isempty(dat.data) ? Float64[] : reduce(vcat, (trial[!, channel] for trial in dat.data))
 channel_data(dat::SingleDataFrameEeg, channel::Symbol)::Vector{Float64} = dat.data[!, channel]
 
 """
@@ -200,7 +203,7 @@ channel_data(dat::SingleDataFrameEeg, channel::Symbol)::Vector{Float64} = dat.da
 Get extra/derived column names (EOG, flags, etc.) from the EEG data.
 """
 extra_labels(dat::EegData) = _get_cols_by_group(dat, :extra)
-extra_labels(dat::Vector{<:EegData})::Vector{Symbol} = extra_labels(first(dat))
+extra_labels(dat::Vector{<:EegData})::Vector{Symbol} = isempty(dat) ? Symbol[] : extra_labels(first(dat))
 
 """
     extra_data(eeg_data::EegData) -> DataFrame
@@ -227,7 +230,7 @@ Get the sample rate of the EEG data.
 - `Int`: Sample rate in Hz
 """
 sample_rate(dat::EegData)::Int = dat.sample_rate
-sample_rate(dat::DataFrame)::Int = Int(1 / mean(diff(dat.time)))
+sample_rate(dat::DataFrame)::Int = round(Int, 1 / mean(diff(dat.time)))
 
 """
     reference(dat::EegData) -> Symbol
@@ -269,7 +272,7 @@ Get the number of samples in the EEG data.
 - `Int`: Number of samples
 """
 n_samples(dat::SingleDataFrameEeg)::Int = nrow(dat.data)
-n_samples(dat::MultiDataFrameEeg)::Int = nrow(dat.data[1])
+n_samples(dat::MultiDataFrameEeg)::Int = isempty(dat.data) ? 0 : nrow(dat.data[1])
 n_samples(dat::MultiDataFrameEeg, epoch::Int)::Int = nrow(dat.data[epoch])
 n_samples(dat::DataFrame)::Int = nrow(dat)
 n_samples(dat::StatisticalData)::Int = length(dat.analysis.time_points)
@@ -290,8 +293,8 @@ Get the number of channels in the EEG data.
 """
 n_channels(dat::EegData)::Int = length(channel_labels(dat))
 n_channels(layout::Layout)::Int = nrow(layout.data)
-n_channels(dat::StatisticalData)::Int = n_channels(first(dat.data))
-n_channels(dat::TFStatisticalData)::Int = n_channels(first(dat.data))
+n_channels(dat::StatisticalData)::Int = isempty(dat.data) ? 0 : n_channels(first(dat.data))
+n_channels(dat::TFStatisticalData)::Int = isempty(dat.data) ? 0 : n_channels(first(dat.data))
 n_channels(res::StatsResult)::Int = length(channel_labels(res))
 
 """
@@ -358,11 +361,14 @@ Get the duration of the EEG data in seconds.
 duration(dat::SingleDataFrameEeg)::Float64 =
     hasproperty(dat.data, :time) && !isempty(dat.data.time) ? last(dat.data.time) - first(dat.data.time) : 0.0
 duration(dat::MultiDataFrameEeg)::Float64 =
-    hasproperty(dat.data[1], :time) && !isempty(dat.data[1].time) ? last(dat.data[1].time) - first(dat.data[1].time) : 0.0
+    !isempty(dat.data) && hasproperty(dat.data[1], :time) && !isempty(dat.data[1].time) ? last(dat.data[1].time) - first(dat.data[1].time) :
+    0.0
 duration(dat::MultiDataFrameEeg, epoch::Int)::Float64 =
     hasproperty(dat.data[epoch], :time) && !isempty(dat.data[epoch].time) ? last(dat.data[epoch].time) - first(dat.data[epoch].time) : 0.0
 duration(dat::Vector{T}) where {T<:EegData} = isempty(dat) ? 0.0 : duration(dat[1])
 
+
+_structure_label(dat::EegData) = hasfield(typeof(dat), :condition) ? "$(dat.file)/$(dat.condition)" : dat.file
 
 """
     _have_same_structure(dat1::EegData, dat2::EegData) -> Bool
@@ -387,23 +393,25 @@ _have_same_structure(erps)
 ```
 """
 function _have_same_structure(dat1::EegData, dat2::EegData)::Bool
+    desc1 = _structure_label(dat1)
+    desc2 = _structure_label(dat2)
     if sample_rate(dat1) != sample_rate(dat2)
-        @minimal_error("Sample rates do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
+        @minimal_error("Sample rates do not match: $desc1 vs. $desc2")
         return false
     end
     if n_samples(dat1) != n_samples(dat2)
-        @minimal_error("Number of samples do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
+        @minimal_error("Number of samples do not match: $desc1 vs. $desc2")
         return false
     end
     if channel_labels(dat1) != channel_labels(dat2)
-        @minimal_error("Channel labels do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
+        @minimal_error("Channel labels do not match: $desc1 vs. $desc2")
         return false
     end
     # Check time vectors match (if they exist)
     time1 = time_vector(dat1)
     time2 = time_vector(dat2)
-    if !isempty(time1) && !isempty(time2) && !isapprox(time1, time2)
-        @minimal_error("Time vectors do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
+    if (isempty(time1) != isempty(time2)) || (!isempty(time1) && (length(time1) != length(time2) || !isapprox(time1, time2)))
+        @minimal_error("Time vectors do not match: $desc1 vs. $desc2")
         return false
     end
     return true

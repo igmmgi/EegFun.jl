@@ -76,16 +76,21 @@ function plot_topography_stats(
     topo_data in (:tvalues, :difference) || @minimal_error("topo_data must be :tvalues or :difference, got :$topo_data")
 
     # Merge user kwargs with shared topography defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+    kwargs_norm = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
+    if haskey(kwargs_norm, :n_topo)
+        n_topos = Int(pop!(kwargs_norm, :n_topo))
+    end
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs_norm)
 
     # Extract topography-specific parameters
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
     colormap = pop!(plot_kwargs, :colormap)
-    ylim = pop!(plot_kwargs, :ylim)
+    colorrange = pop!(plot_kwargs, :colorrange)
     display_plot = pop!(plot_kwargs, :display_plot)
     figure_title = pop!(plot_kwargs, :figure_title)
     num_levels = pop!(plot_kwargs, :num_levels)
+    show_title = pop!(plot_kwargs, :show_title, true)
 
     # Pop ICA-specific keys not used here
     pop!(plot_kwargs, :interactive, nothing)
@@ -94,8 +99,8 @@ function plot_topography_stats(
 
     # Override defaults: labels and points off by default for grid layout
     # (respects explicit user override via kwargs)
-    plot_kwargs[:label_plot] = get(kwargs, :label_plot, false)
-    plot_kwargs[:point_plot] = get(kwargs, :point_plot, false)
+    plot_kwargs[:label_plot] = get(kwargs_norm, :label_plot, false)
+    plot_kwargs[:point_plot] = get(kwargs_norm, :point_plot, false)
 
     # Get time points and determine range
     all_time_points = result.time_points
@@ -119,9 +124,14 @@ function plot_topography_stats(
     n_topos = min(n_topos, length(time_indices))
     bins = _partition_indices(time_indices, n_topos)
 
-    # Get layout and electrodes
-    layout = result.data[1].layout
+    # Subset layout to analyzed electrodes (never fill unanalyzed layout electrodes with 0.0!)
+    orig_layout = result.data[1].layout
     electrodes = result.electrodes
+    common_channels = intersect(orig_layout.data.label, electrodes)
+    if isempty(common_channels)
+        @minimal_error("None of the analyzed electrodes $(electrodes) were found in the layout.")
+    end
+    layout = subset_layout(orig_layout; channel_selection = channels(common_channels))
 
     # Validate layout
     if !has_valid_coordinates(layout)
@@ -132,8 +142,9 @@ function plot_topography_stats(
     _ensure_coordinates_2d!(layout)
     _ensure_coordinates_3d!(layout)
 
-    # Cache layout labels and valid channel set (avoids per-bin propertynames lookups)
+    # Cache layout labels and electrode index mapping
     layout_labels = layout.data.label
+    layout_to_elec_idx = Int[findfirst(==(lbl), electrodes)::Int for lbl in layout_labels]
     if topo_data == :difference
         cond_A = result.data[1]
         cond_B = result.data[2]
@@ -161,7 +172,7 @@ function plot_topography_stats(
                     b_vals = cond_B.data[bin_indices, ch_sym]
                     diff_per_electrode[j] = mean(a_vals .- b_vals)
                 else
-                    diff_per_electrode[j] = 0.0
+                    diff_per_electrode[j] = NaN
                 end
             end
             topo_values[i] = diff_per_electrode
@@ -175,14 +186,14 @@ function plot_topography_stats(
     end
 
     # Compute symmetric color limits across all panels for consistent scaling
-    all_vals = vcat(topo_values...)
-    max_abs = maximum(abs, all_vals)
+    all_vals = filter(isfinite, vcat(topo_values...))
+    max_abs = isempty(all_vals) ? 1.0 : maximum(abs, all_vals)
     if max_abs ≈ 0.0
         max_abs = 1.0
     end
-    # Use user-provided ylim or compute symmetric limits
-    if isnothing(ylim)
-        ylim = (-max_abs, max_abs)
+    # Use user-provided colorrange or compute symmetric limits
+    if isnothing(colorrange)
+        colorrange = (-max_abs, max_abs)
     end
 
     # Grid layout (dims comes from PLOT_TOPOGRAPHY_KWARGS)
@@ -203,7 +214,7 @@ function plot_topography_stats(
 
     fig = _eegfun_figure(size = (max(220 * n_cols + 140, 600), 220 * n_rows + 70))
     gl_topos = fig[1, 1] = GridLayout()
-    if !isempty(fig_title)
+    if show_title && !isempty(fig_title)
         Label(gl_topos[0, 1:n_cols], fig_title, fontsize = 16, font = :bold)
     end
     for c = 1:n_cols
@@ -214,14 +225,14 @@ function plot_topography_stats(
     colorbar_kwargs = Dict{Symbol,Any}(pairs(pop!(plot_kwargs, :colorbar_kwargs, (;))))
     pop!(colorbar_kwargs, :colorrange, nothing)
     pop!(colorbar_kwargs, :label, nothing)
-    pop!(plot_kwargs, :colorbar_plot, nothing)
+    colorbar_plot = pop!(plot_kwargs, :colorbar_plot, true)
     pop!(plot_kwargs, :colorbar_position, nothing)
     pop!(plot_kwargs, :colorbar_plot_numbers, nothing)
 
     axes = Axis[]
 
     # Pre-interpolate all panels when possible
-    can_batch = n_topos > 1 && _topo_method_supported(method)
+    can_batch = n_topos > 1 && _topo_method_supported(method) && length(layout_labels) >= 3
     batched_interp = nothing
     xb_shared = nothing
     yb_shared = nothing
@@ -230,10 +241,8 @@ function plot_topography_stats(
         all_layout_mat = Matrix{Float64}(undef, length(layout_labels), n_topos)
         for i = 1:n_topos
             channel_data = topo_values[i]
-            for (k, lbl) in enumerate(layout_labels)
-                ch_idx = findfirst(==(lbl), electrodes)
-                v = !isnothing(ch_idx) ? channel_data[ch_idx] : 0.0
-                all_layout_mat[k, i] = isfinite(v) ? v : 0.0
+            for (k, ch_idx) in enumerate(layout_to_elec_idx)
+                all_layout_mat[k, i] = channel_data[ch_idx]
             end
         end
         batched_interp, xb_shared, yb_shared = _topo_interpolate(all_layout_mat, layout, gridscale; method = method)
@@ -243,16 +252,13 @@ function plot_topography_stats(
         row = div(i - 1, n_cols) + 1
         col = mod1(i, n_cols)
 
-        ax = Axis(gl_topos[row, col], aspect = DataAspect(), title = bin_time_labels[i], titlesize = plot_kwargs[:plot_title_fontsize])
+        panel_title = show_title ? bin_time_labels[i] : ""
+        ax = Axis(gl_topos[row, col], aspect = DataAspect(), title = panel_title, titlesize = plot_kwargs[:plot_title_fontsize])
         push!(axes, ax)
 
-        # Map electrode values to layout order
+        # Map electrode values to subsetted layout order
         channel_data = topo_values[i]
-        layout_values = Float64[
-            let ch_idx = findfirst(==(lbl), electrodes)
-                !isnothing(ch_idx) ? channel_data[ch_idx] : 0.0
-            end for lbl in layout_labels
-        ]
+        layout_values = Float64[channel_data[ch_idx] for ch_idx in layout_to_elec_idx]
 
         # Render using shared helper (uses num_levels, not gridscale, for contour levels)
         _render_topo_surface!(
@@ -266,7 +272,7 @@ function plot_topography_stats(
             method = method,
             gridscale = gridscale,
             colormap = colormap,
-            ylim = ylim,
+            colorrange = colorrange,
             num_levels = num_levels,
             plot_kwargs...,
         )
@@ -301,10 +307,13 @@ function plot_topography_stats(
         hidedecorations!(ax)
     end
 
-    # Add shared colorbar and include in return value
-    cb_label = topo_data == :tvalues ? "t-statistic" : "Difference (μV)"
-    actual_colormap = _resolve_theme_colormap(fig, colormap)
-    cb = Colorbar(fig[1, 2]; colorbar_kwargs..., colormap = actual_colormap, colorrange = ylim, label = cb_label)
+    # Add shared colorbar if enabled and include in return value
+    cb = nothing
+    if colorbar_plot
+        cb_label = topo_data == :tvalues ? "t-statistic" : "Difference (μV)"
+        actual_colormap = _resolve_theme_colormap(fig, colormap)
+        cb = Colorbar(fig[1, 2]; colorbar_kwargs..., colormap = actual_colormap, colorrange = colorrange, label = cb_label)
+    end
 
     if display_plot
         _display_figure(fig)

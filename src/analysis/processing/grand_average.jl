@@ -139,6 +139,39 @@ function _create_all_grand_averages(data_by_condition::AbstractDict{<:Integer,<:
 end
 
 """
+Resolve `condition_selection` against `items`, matching integer `conditions(...)` / `conditions_not(...)`
+selectors against each item's `.condition` field when unique positive condition numbers are present,
+with positional fallback otherwise.
+"""
+function _select_conditions_by_field(items::AbstractVector, condition_selection)
+    isempty(items) && return Int[]
+    (isnothing(condition_selection) || condition_selection === Colon()) && return collect(1:length(items))
+
+    cond_func = _to_condition_func(condition_selection)
+    cond_func === Colon() && return collect(1:length(items))
+
+    has_cond_field = all(x -> hasfield(typeof(x), :condition), items)
+    if has_cond_field
+        cond_nums = Int[x.condition for x in items]
+        if allunique(cond_nums) && all(>(0), cond_nums)
+            if hasfield(typeof(cond_func), :condition_indices)
+                req_ids = getfield(cond_func, :condition_indices)
+                return Int[i for (i, c) in enumerate(cond_nums) if c in req_ids]
+            elseif hasfield(typeof(cond_func), :f) && hasfield(typeof(getfield(cond_func, :f)), :condition_indices)
+                req_ids = getfield(getfield(cond_func, :f), :condition_indices)
+                return Int[i for (i, c) in enumerate(cond_nums) if !(c in req_ids)]
+            end
+        end
+    end
+
+    if items isa AbstractVector{<:EegFunData}
+        return get_selected_conditions(items, cond_func)
+    end
+    res = cond_func(1:length(items))
+    return res isa AbstractVector{Bool} ? findall(res) : collect(Int, res)
+end
+
+"""
     grand_average(erps::Vector{ErpData}; condition_selection = conditions()) -> Vector{ErpData}
     grand_average(tfs::Vector{TimeFreqData}; condition_selection = conditions()) -> Vector{TimeFreqData}
     grand_average(rsa_data_list::Vector{RsaData}; compute_noise_ceiling::Bool = true) -> RsaData
@@ -170,11 +203,11 @@ function grand_average(data::AbstractVector{T}; condition_selection = conditions
     # Group by condition
     data_by_condition = group_by_condition(data)
 
-    # Apply condition selection
+    # Apply condition selection against representative condition objects (matching .condition numbers and names)
     all_cond_nums = collect(keys(data_by_condition))
-    cond_func = _to_condition_func(condition_selection)
-    selected_mask = cond_func(1:length(all_cond_nums))
-    selected_cond_nums = all_cond_nums[selected_mask]
+    rep_items = T[first(data_by_condition[num]) for num in all_cond_nums]
+    selected_indices = _select_conditions_by_field(rep_items, condition_selection)
+    selected_cond_nums = all_cond_nums[selected_indices]
 
     filtered_groups = OrderedDict(num => data_by_condition[num] for num in selected_cond_nums)
 
@@ -235,7 +268,7 @@ function grand_average(
         # Save
         output_file = "grand_average_$(clean_pattern(file_pattern)).jld2"
         output_path = joinpath(output_dir, output_file)
-        jldsave(output_path; data = grand_averages)
+        jldsave(output_path; data = grand_averages, format_version = EEGFUN_FORMAT_VERSION)
 
         @info "Grand averaging complete! Created $(length(grand_averages)) grand averages"
         @info "Output saved to: $output_path"

@@ -29,6 +29,7 @@ Base.isempty(dat::MultiDataFrameEeg) = isempty(dat.data)
 # Per-dimension bounds only (enables `end` inside `dat[1:end, :Fz]`); there is no linear indexing.
 Base.firstindex(::EegData, d::Int) = 1
 Base.lastindex(dat::EegData, d::Int) = Base.size(dat, d)
+Base.lastindex(dat::MultiDataFrameEeg) = length(dat.data)
 
 # getindex implementation
 function Base.getindex(dat::SingleDataFrameEeg, time_idx, chan_idx)
@@ -75,16 +76,23 @@ Base.IteratorSize(::Type{<:MultiDataFrameEeg}) = Base.HasLength()
 # === Base Concatenation Interface ===
 function Base.vcat(dats::EpochData...)
     if isempty(dats)
-        throw(ArgumentError("Cannot concatenate empty list of datasets"))
+        @minimal_error("Cannot concatenate empty list of datasets")
     end
 
     first_dat = dats[1]
+    first_chs = channel_labels(first_dat)
     new_data = DataFrame[]
     epoch_counter = 1
 
     for dat in dats
         if dat.condition != first_dat.condition || dat.sample_rate != first_dat.sample_rate
-            throw(ArgumentError("Cannot vcat EpochData with different conditions or sample rates"))
+            @minimal_error("Cannot vcat EpochData with different conditions or sample rates")
+        end
+        if channel_labels(dat) != first_chs
+            @minimal_error("Cannot vcat EpochData with different channel labels")
+        end
+        if !isempty(dat.data) && !isempty(first_dat.data) && n_samples(dat) != n_samples(first_dat)
+            @minimal_error("Cannot vcat EpochData with different numbers of samples ($(n_samples(dat)) vs $(n_samples(first_dat)))")
         end
 
         for df in dat.data
@@ -156,9 +164,10 @@ end
 
 function Base.Array(dat::MultiDataFrameEeg)
     cols = channel_labels(dat)
+    n_chan = length(cols)
+    isempty(dat.data) && return Array{Float64,3}(undef, 0, 0, n_chan)
     n_ep = n_epochs(dat)
     n_samp = n_samples(dat)
-    n_chan = length(cols)
 
     # Preallocate 3D array: (epochs x samples x channels)
     # matching the size(dat) output of (epochs, samples, channels)
@@ -207,7 +216,7 @@ function _fields_hash(x, h::UInt)
     return h
 end
 
-const _FieldwiseEq = Union{Layout,AnalysisInfo,Neighbours}
+const _FieldwiseEq = Union{Layout,AnalysisInfo,Neighbors}
 
 Base.:(==)(a::T, b::T) where {T<:_FieldwiseEq} = _fields_equal(a, b)
 Base.isequal(a::T, b::T) where {T<:_FieldwiseEq} = _fields_isequal(a, b)

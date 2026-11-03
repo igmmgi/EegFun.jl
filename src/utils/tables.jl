@@ -81,6 +81,14 @@ end
 
 # 5. Implement column access for MultiDataFrameEeg (EpochData, etc.)
 function Tables.columns(dat::MultiDataFrameEeg)
+    if isempty(dat.data)
+        res = DataFrame()
+        for ch in dat.layout.data.label
+            res[!, ch] = Float64[]
+        end
+        _inject_metadata!(res, dat, 0)
+        return Tables.columns(res)
+    end
     # Concatenate all DataFrames in the vector (epoch column is already present internally)
     df = reduce(vcat, dat.data; source = nothing)
 
@@ -101,6 +109,7 @@ Tables.rows(dats::AbstractVector{<:EegData}) = Tables.rows(Tables.columns(dats))
 Tables.schema(dats::AbstractVector{<:EegData}) = Tables.schema(Tables.columns(dats))
 
 function Tables.columns(dats::AbstractVector{<:EegData})
+    isempty(dats) && return Tables.columns(DataFrame())
     # Convert each object to a DataFrame (which goes through our Tables interface above)
     # and then efficiently concatenate them all together.
     dfs = [DataFrame(d) for d in dats]

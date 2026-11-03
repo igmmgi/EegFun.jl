@@ -2,6 +2,8 @@
 Time-frequency plotting functions for visualizing TimeFreqData.
 """
 
+const _SIGNED_TF_BASELINE_METHODS = (:db, :percent, :relchange, :normchange, :vssum, :zscore, :absolute)
+
 # === DEFAULT KEYWORD ARGUMENTS ===
 const PLOT_TF_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display
@@ -27,10 +29,12 @@ const PLOT_TF_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :colorbar_label => (nothing, "Custom colorbar label. If nothing, automatically determined"),
 
     # Axis
-    :ylogscale => (false, "Whether to use logarithmic scale for the frequency (y) axis"),
+    :xscale => (:linear, "X-axis scale (:linear or :log10)"),
+    :yscale => (:linear, "Frequency (y) axis scale (:linear or :log10; legacy alias `ylogscale` also accepted)"),
     :xlim => (nothing, "X-axis time limits as (min, max) tuple in seconds. If nothing, shows all time points"),
     :interpolate => (false, "Whether to interpolate the heatmap for a smoother appearance"),
     :plot_title => (nothing, "Plot title. If nothing, automatically determined from condition name and channel"),
+    :show_title => (true, "Whether to show the plot title"),
     :plot_title_fontsize => (16, "Font size for plot titles"),
     :plot_title_position => (
         nothing,
@@ -87,7 +91,7 @@ end
 function plot_tf(tf_data::AbstractVector{<:TimeFreqData}; channel_selection = channels(), baseline_interval::Interval = nothing, kwargs...)
     isempty(tf_data) && @minimal_error("Empty TimeFreqData vector")
 
-    plot_kwargs = _merge_plot_kwargs(PLOT_TF_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TF_KWARGS, _normalize_plot_kwargs(kwargs))
 
     # Extract colorbar/layout kwargs
     colorbar_kwargs = pop!(plot_kwargs, :colorbar_kwargs, (;))
@@ -95,7 +99,9 @@ function plot_tf(tf_data::AbstractVector{<:TimeFreqData}; channel_selection = ch
 
     colorrange = plot_kwargs[:colorrange]
     colorbar = pop!(plot_kwargs, :colorbar_plot, true)
-    ylogscale = plot_kwargs[:ylogscale]
+    xlogscale = plot_kwargs[:xscale] in (:log10, :log, log10)
+    ylogscale = plot_kwargs[:yscale] in (:log10, :log, log10)
+    show_title = plot_kwargs[:show_title]
     xlim = plot_kwargs[:xlim]
     xticks = plot_kwargs[:xticks]
     yticks = plot_kwargs[:yticks]
@@ -153,18 +159,30 @@ function plot_tf(tf_data::AbstractVector{<:TimeFreqData}; channel_selection = ch
         push!(power_mats, pmat)
     end
 
+    has_signed_baseline =
+        any(tf -> (!isnothing(tf.baseline) && tf.baseline.method in _SIGNED_TF_BASELINE_METHODS), tf_plots) ||
+        (!isnothing(baseline_interval) && baseline_method in _SIGNED_TF_BASELINE_METHODS)
+
     if isnothing(colorrange)
         global_min = Inf
         global_max = -Inf
         for pmat in power_mats
             for v in pmat
-                if !isnan(v)
+                if isfinite(v)
                     global_min = min(global_min, v)
                     global_max = max(global_max, v)
                 end
             end
         end
-        shared_colorrange = isinf(global_min) ? (-1.0, 1.0) : (global_min, global_max)
+        if isinf(global_min)
+            shared_colorrange = (-1.0, 1.0)
+        elseif _is_diverging_colormap(colormap) && (global_min < 0 || has_signed_baseline)
+            shared_colorrange = _symmetric_colorrange(global_min, global_max)
+        elseif global_min ≈ global_max
+            shared_colorrange = (global_min - 1.0, global_max + 1.0)
+        else
+            shared_colorrange = (global_min, global_max)
+        end
     else
         shared_colorrange = colorrange
     end
@@ -187,6 +205,7 @@ function plot_tf(tf_data::AbstractVector{<:TimeFreqData}; channel_selection = ch
             power_mat = power_mats[idx],
             colormap = colormap,
             colorrange = shared_colorrange,
+            xlogscale = xlogscale,
             ylogscale = ylogscale,
             xlim = xlim,
             interpolate = interpolate,
@@ -195,7 +214,7 @@ function plot_tf(tf_data::AbstractVector{<:TimeFreqData}; channel_selection = ch
             time_unit = time_unit,
         )
         last_hm = hm
-        ax.title = "$(tf.condition_name) — $channel"
+        ax.title = show_title ? (isnothing(plot_kwargs[:plot_title]) ? "$(tf.condition_name) — $channel" : plot_kwargs[:plot_title]) : ""
 
         # Only show y-labels on leftmost, x-labels on bottom
         col != 1 && (ax.ylabel = ""; ax.yticklabelsvisible = false)
@@ -228,7 +247,7 @@ function plot_tf(
     kwargs...,
 )
 
-    plot_kwargs = _merge_plot_kwargs(PLOT_TF_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TF_KWARGS, _normalize_plot_kwargs(kwargs))
 
     # Extract colorbar/layout kwargs
     colorbar_kwargs = pop!(plot_kwargs, :colorbar_kwargs, (;))
@@ -237,8 +256,10 @@ function plot_tf(
     layout                  = plot_kwargs[:layout]
     colorrange              = plot_kwargs[:colorrange]
     title                   = plot_kwargs[:plot_title]
+    show_title              = plot_kwargs[:show_title]
     colorbar                = pop!(plot_kwargs, :colorbar_plot, true)
-    ylogscale               = plot_kwargs[:ylogscale]
+    xlogscale               = plot_kwargs[:xscale] in (:log10, :log, log10)
+    ylogscale               = plot_kwargs[:yscale] in (:log10, :log, log10)
     xlim                    = plot_kwargs[:xlim]
     xticks                  = plot_kwargs[:xticks]
     yticks                  = plot_kwargs[:yticks]
@@ -261,6 +282,10 @@ function plot_tf(
     else
         tf_plot = tf_data
     end
+
+    eff_baseline_method =
+        !isnothing(tf_plot.baseline) ? tf_plot.baseline.method : (!isnothing(baseline_interval) ? baseline_method : nothing)
+    has_signed_baseline = eff_baseline_method in _SIGNED_TF_BASELINE_METHODS
 
     # Resolve channels via channel_selection predicate
     all_channels = channel_labels(tf_plot)
@@ -338,13 +363,21 @@ function plot_tf(
         for ch in plot_channels
             pmat = cached_mats[ch]
             for v in pmat
-                if !isnan(v)
+                if isfinite(v)
                     global_min = min(global_min, v)
                     global_max = max(global_max, v)
                 end
             end
         end
-        shared_colorrange = isinf(global_min) ? (-1.0, 1.0) : (global_min, global_max)
+        if isinf(global_min)
+            shared_colorrange = (-1.0, 1.0)
+        elseif _is_diverging_colormap(colormap) && (global_min < 0 || has_signed_baseline)
+            shared_colorrange = _symmetric_colorrange(global_min, global_max)
+        elseif global_min ≈ global_max
+            shared_colorrange = (global_min - 1.0, global_max + 1.0)
+        else
+            shared_colorrange = (global_min, global_max)
+        end
     else
         shared_colorrange = colorrange
     end
@@ -372,6 +405,7 @@ function plot_tf(
             power_mat = pmat,
             colormap = colormap,
             colorrange = shared_colorrange,
+            xlogscale = xlogscale,
             ylogscale = ylogscale,
             xlim = xlim,
             interpolate = interpolate,
@@ -382,10 +416,12 @@ function plot_tf(
         last_hm = hm
 
         # Set title per axis
-        if layout === :single
+        if !show_title
+            ax.title = ""
+        elseif layout === :single
             ax.title = isnothing(title) ? "$(tf_data.condition_name) - $channel" : title
         else
-            ax.title = string(channel)
+            ax.title = isnothing(title) ? string(channel) : title
         end
     end
 
@@ -461,6 +497,7 @@ function _plot_tf_heatmap!(
     row_index::Union{Nothing,Dict{Tuple{Float64,Float64},Int}} = nothing,
     colormap = nothing,
     colorrange::Tuple{Real,Real} = (-1.0, 1.0),
+    xlogscale::Bool = false,
     ylogscale::Bool = false,
     xlim::Union{Nothing,Tuple{Real,Real}} = nothing,
     interpolate::Bool = false,
@@ -486,6 +523,14 @@ function _plot_tf_heatmap!(
         ax.xlabel = "Time (s)"
     end
     ax.ylabel = "Frequency (Hz)"
+
+    if xlogscale
+        pos_times = filter(>(0), times)
+        if !isempty(pos_times)
+            xlims!(ax, (minimum(pos_times), maximum(pos_times)))
+            ax.xscale = log10
+        end
+    end
 
     if ylogscale
         ylims!(ax, (minimum(freqs_vec), maximum(freqs_vec)))

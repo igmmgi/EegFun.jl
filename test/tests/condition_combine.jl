@@ -611,4 +611,19 @@ end
 
         @test_throws Exception EegFun.condition_combine(epochs, [[0, 1]])
     end
+
+    @testset "Phase 2 regressions: .condition field matching & independent DataFrame copies" begin
+        # Non-contiguous .condition numbers (e.g., [2, 5] at vector positions 1 and 2)
+        ep_c2 = EegFun.create_test_epoch_data(condition = 2, n_epochs = 2, n = 20)
+        ep_c5 = EegFun.create_test_epoch_data(condition = 5, n_epochs = 3, n = 20)
+        orig_val = ep_c2.data[1].Ch1[1]
+
+        combined = EegFun.condition_combine([ep_c2, ep_c5], [[2, 5]])
+        @test length(combined) == 1
+        @test length(combined[1].data) == 5
+
+        # Mutating combined DataFrame must NOT mutate original ep_c2 DataFrame!
+        combined[1].data[1].Ch1[1] = orig_val + 999.0
+        @test ep_c2.data[1].Ch1[1] == orig_val
+    end
 end

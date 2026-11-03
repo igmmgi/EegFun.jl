@@ -15,7 +15,7 @@ using EegFun
         dat.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
 
         # Calculate neighbors
-        EegFun.get_neighbours_xyz!(dat.layout, 0.5)
+        EegFun.get_neighbors_xyz!(dat.layout, 0.5)
 
         # Store original data
         original_data = copy(dat.data)
@@ -66,7 +66,7 @@ using EegFun
         dat.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
 
         # Calculate neighbors
-        EegFun.get_neighbours_xyz!(dat.layout, 0.5)
+        EegFun.get_neighbors_xyz!(dat.layout, 0.5)
 
         # Store original data
         original_data = copy(dat.data)
@@ -96,7 +96,7 @@ using EegFun
         dat.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
 
         # Calculate neighbors
-        EegFun.get_neighbours_xyz!(dat.layout, 0.5)
+        EegFun.get_neighbors_xyz!(dat.layout, 0.5)
 
         # Store original data
         original_data = [copy(epoch) for epoch in dat.data]
@@ -155,7 +155,7 @@ using EegFun
         dat.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
 
         # Calculate neighbors
-        EegFun.get_neighbours_xyz!(dat.layout, 0.5)
+        EegFun.get_neighbors_xyz!(dat.layout, 0.5)
 
         # Store original data
         original_data = copy(dat.data)
@@ -209,7 +209,7 @@ using EegFun
         dat.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
 
         # Calculate neighbors
-        EegFun.get_neighbours_xyz!(dat.layout, 0.5)
+        EegFun.get_neighbors_xyz!(dat.layout, 0.5)
 
         # Store original data
         original_data = [copy(epoch) for epoch in dat.data]
@@ -230,7 +230,7 @@ using EegFun
             d.layout.data.x3 = [0.0, 0.1, 0.0, -0.1]
             d.layout.data.y3 = [0.1, 0.0, -0.1, 0.0]
             d.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
-            EegFun.get_neighbours_xyz!(d.layout, 0.5)
+            EegFun.get_neighbors_xyz!(d.layout, 0.5)
         end
         orig1_Ch2 = copy(dat1.data.Ch2)
         orig2_Ch2 = copy(dat2.data.Ch2)
@@ -252,7 +252,7 @@ using EegFun
         dat1.layout.data.x3 = [0.0, 0.1, 0.0, -0.1]
         dat1.layout.data.y3 = [0.1, 0.0, -0.1, 0.0]
         dat1.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
-        EegFun.get_neighbours_xyz!(dat1.layout, 0.5)
+        EegFun.get_neighbors_xyz!(dat1.layout, 0.5)
 
         orig_Ch2 = copy(dat1.data.Ch2)
         # Test string channel "Ch2"
@@ -266,6 +266,66 @@ using EegFun
         @test !isapprox(dats[1].data.Ch2, orig_Ch2, rtol = 1e-10)
         @test !isapprox(dats[2].data.Ch2, orig_Ch2, rtol = 1e-10)
         @test isapprox(dats[3].data.Ch2, orig_Ch2, rtol = 1e-10)
+    end
+
+    @testset "Phase 2 regressions: order-independent neighbor repair, bad-neighbor exclusion, ErpData, analysis_info" begin
+        # 1. Exclude co-bad channels from neighbor weights & guarantee 100% order independence
+        df_rep = DataFrame(
+            time = [0.0, 0.01, 0.02],
+            sample = [1, 2, 3],
+            Ch1 = [1000.0, 1000.0, 1000.0], # corrupted bad channel
+            Ch2 = [-500.0, -500.0, -500.0], # corrupted bad channel (neighbor of Ch1!)
+            Ch3 = [10.0, 20.0, 30.0],       # clean neighbor
+            Ch4 = [30.0, 40.0, 50.0],       # clean neighbor
+        )
+        nb_dict = EegFun.OrderedDict(
+            :Ch1 => EegFun.Neighbors([:Ch2, :Ch3, :Ch4], [1.0, 1.0, 1.0], [0.5, 0.25, 0.25]),
+            :Ch2 => EegFun.Neighbors([:Ch1, :Ch3, :Ch4], [1.0, 1.0, 1.0], [0.5, 0.25, 0.25]),
+            :Ch3 => EegFun.Neighbors([:Ch1, :Ch2, :Ch4], [1.0, 1.0, 1.0], [1 / 3, 1 / 3, 1 / 3]),
+            :Ch4 => EegFun.Neighbors([:Ch1, :Ch2, :Ch3], [1.0, 1.0, 1.0], [1 / 3, 1 / 3, 1 / 3]),
+        )
+        lay_rep = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2, :Ch3, :Ch4], inc = zeros(4), azi = zeros(4)), nb_dict, 0.5, :xyz)
+        cont_ab = EegFun.ContinuousData("rep_ab", copy(df_rep), lay_rep, 100, EegFun.AnalysisInfo())
+        cont_ba = EegFun.ContinuousData("rep_ba", copy(df_rep), lay_rep, 100, EegFun.AnalysisInfo())
+
+        EegFun.repair_channels!(cont_ab, [:Ch1, :Ch2]; method = :neighbor_interpolation)
+        EegFun.repair_channels!(cont_ba, [:Ch2, :Ch1]; method = :neighbor_interpolation)
+
+        # Equal re-normalized clean weights (0.25/(0.25+0.25) = 0.5 each on Ch3 and Ch4) -> exact mean [20, 30, 40]
+        @test cont_ab.data.Ch1 ≈ [20.0, 30.0, 40.0]
+        @test cont_ab.data.Ch2 ≈ [20.0, 30.0, 40.0]
+        # Order-independent!
+        @test cont_ab.data.Ch1 ≈ cont_ba.data.Ch1
+        @test cont_ab.data.Ch2 ≈ cont_ba.data.Ch2
+        @test sort(cont_ab.analysis_info.repaired_channels) == [:Ch1, :Ch2]
+
+        # 2. All neighbors bad -> warns, skips channel cleanly without corrupting with NaN, and omits from analysis_info
+        cont_allbad = EegFun.ContinuousData("rep_skip", copy(df_rep), lay_rep, 100, EegFun.AnalysisInfo())
+        @test_logs (:warn,) match_mode = :any EegFun.repair_channels!(
+            cont_allbad,
+            [:Ch1, :Ch2, :Ch3, :Ch4];
+            method = :neighbor_interpolation,
+        )
+        @test cont_allbad.data.Ch1 == df_rep.Ch1
+        @test isempty(cont_allbad.analysis_info.repaired_channels)
+
+        # 3. ErpData support for both :neighbor_interpolation and :spherical_spline
+        erp_dat = EegFun.create_test_erp_data(n_channels = 4, seed = 10)
+        erp_dat.layout.data.x3 = [0.0, 0.1, 0.0, -0.1]
+        erp_dat.layout.data.y3 = [0.1, 0.0, -0.1, 0.0]
+        erp_dat.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
+        EegFun.get_neighbors_xyz!(erp_dat.layout, 0.5)
+        erp_dat.data[!, :Ch2] .= 999.0
+
+        erp_nb = EegFun.repair_channels(erp_dat, [:Ch2]; method = :neighbor_interpolation)
+        @test erp_nb isa EegFun.ErpData
+        @test all(abs.(erp_nb.data.Ch2) .< 100.0)
+        @test erp_nb.analysis_info.repaired_channels == [:Ch2]
+
+        erp_sp = EegFun.repair_channels(erp_dat, [:Ch2]; method = :spherical_spline)
+        @test erp_sp isa EegFun.ErpData
+        @test all(abs.(erp_sp.data.Ch2) .< 100.0)
+        @test erp_sp.analysis_info.repaired_channels == [:Ch2]
     end
 
 end

@@ -22,9 +22,14 @@ function eeglab_benchmark(data_dir, n_files_to_process, run_ica_flag)
     fprintf('Benchmarking EEGLAB pipeline...\n');
     t_start = tic;
 
-    % Add EEGLAB to path if not already present
+    % Add EEGLAB to path if not already present (check EEGLAB_PATH environment variable)
     if ~exist('eeglab', 'file')
-        addpath('/home/ian/Documents/MATLAB/eeglab');
+        eeglab_env = getenv('EEGLAB_PATH');
+        if ~isempty(eeglab_env) && exist(eeglab_env, 'dir')
+            addpath(eeglab_env);
+        else
+            error('EEGLAB not found on MATLAB path. Add EEGLAB to your path or set the EEGLAB_PATH environment variable.');
+        end
     end
 
     % Start EEGLAB

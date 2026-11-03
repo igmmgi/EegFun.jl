@@ -39,7 +39,11 @@ Extract the base filename without extension from a file path.
 filename = basename_without_ext("data/file.bdf")
 ```
 """
-basename_without_ext(path::String) = splitext(basename(path))[1]
+function basename_without_ext(path::String)
+    base = basename(path)
+    endswith(lowercase(base), ".xdf.gz") && return base[1:(end-7)]
+    return splitext(base)[1]
+end
 
 
 
@@ -332,7 +336,7 @@ function _parse_string_to_ints(text::String)
     isempty(text) && return Int[]
 
     # Check for decimal points and error (EEG channel/component indices are always integers)
-    occursin('.', text) && throw(ArgumentError("Decimal points not allowed in integer selection: '$text'"))
+    occursin('.', text) && @minimal_error("Decimal points not allowed in integer selection: '$text'")
 
     components = Int[]
 
@@ -488,7 +492,7 @@ function _generate_kwargs_doc(kwargs_dict::Dict{Symbol,Tuple{Any,String}})::Stri
     function _format_default(val)
         str = repr(val)
         if length(str) > 80
-            return str[1:77] * "..."
+            return first(str, 77) * "..."
         end
         return str
     end

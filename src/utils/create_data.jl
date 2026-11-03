@@ -519,25 +519,26 @@ function signal_to_data(
 
     # Convert times to vector if needed
     times_vec = collect(Float64, times)
-    @assert length(times_vec) == n_samples "Time vector length ($(length(times_vec))) must match signal samples ($n_samples)"
+    length(times_vec) == n_samples || @minimal_error("Time vector length ($(length(times_vec))) must match signal samples ($n_samples)")
 
     # Create minimal layout for the channel
-    layout_df = DataFrame(:label => [channel_name])
+    layout_df = DataFrame(:label => [channel_name], :inc => [0.0], :azi => [0.0])
     layout = Layout(layout_df, nothing, nothing, nothing)
 
     # Create AnalysisInfo
-    analysis_info = AnalysisInfo(sample_rate = 250)
+    fs_int = round(Int, sample_rate)
+    analysis_info = AnalysisInfo(sample_rate = Float64(sample_rate))
 
     # If only one epoch, return ErpData
     if n_trials == 1
         erp_df = DataFrame(:time => times_vec, channel_name => signal[:, 1])
-        return ErpData(file, condition, condition_name, erp_df, layout, Int(sample_rate), analysis_info, 1)
+        return ErpData(file, condition, condition_name, erp_df, layout, fs_int, analysis_info, 1)
     else
         trial_dfs = Vector{DataFrame}(undef, n_trials)
         for trial_idx = 1:n_trials
             trial_dfs[trial_idx] = DataFrame(:time => times_vec, channel_name => signal[:, trial_idx], :epoch => trial_idx)
         end
-        return EpochData(file, condition, condition_name, trial_dfs, layout, Int(sample_rate), analysis_info)
+        return EpochData(file, condition, condition_name, trial_dfs, layout, fs_int, analysis_info)
     end
 end
 
@@ -713,11 +714,17 @@ function create_synthetic_epochs(
     channels = [:Fz, :Cz, :Pz],
     signal_strength = 1.0,
     noise_level = 0.3,
+    sample_rate::Union{Int,Nothing} = nothing,
     seed::Union{Int,Nothing} = nothing,
 )
     return _with_seed(seed) do
-        time = range(-0.2, 0.8, length = n_timepoints)
-        layout = Layout(DataFrame(label = channels, inc = [90.0, 0.0, -90.0], azi = [0.0, 0.0, 0.0]), nothing, nothing, nothing)
+        time =
+            isnothing(sample_rate) ? range(-0.2, 0.8, length = n_timepoints) : range(-0.2, step = 1.0 / sample_rate, length = n_timepoints)
+        fs = isnothing(sample_rate) ? (n_timepoints > 1 ? round(Int, 1 / step(time)) : 500) : sample_rate
+        n_ch = length(channels)
+        inc_vals = n_ch == 0 ? Float64[] : (n_ch == 1 ? [0.0] : collect(range(90.0, -90.0, length = n_ch)))
+        azi_vals = zeros(Float64, n_ch)
+        layout = Layout(DataFrame(label = collect(Symbol, channels), inc = inc_vals, azi = azi_vals), nothing, nothing, nothing)
 
         epochs = DataFrame[]
         for epoch = 1:n_epochs
@@ -736,8 +743,8 @@ function create_synthetic_epochs(
             condition_name,
             epochs,
             layout,
-            200,
-            AnalysisInfo(sample_rate = 200),
+            fs,
+            AnalysisInfo(sample_rate = Float64(fs)),
         )
     end
 end

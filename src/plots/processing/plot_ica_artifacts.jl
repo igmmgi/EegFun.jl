@@ -77,33 +77,52 @@ Uses the results from `identify_eye_components`.
 """
 function plot_eog_component_features(identified_comps::Dict, metrics_df::DataFrame; kwargs...)
     # Merge user kwargs with defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_QUALITY_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_QUALITY_KWARGS, _normalize_plot_kwargs(kwargs))
 
     # Extract commonly used values
     z_threshold = plot_kwargs[:z_threshold]
     display_plot = plot_kwargs[:display_plot]
+    show_title = plot_kwargs[:show_title]
+    thresh_color = plot_kwargs[:zscore_threshold_color]
+    thresh_style = plot_kwargs[:zscore_threshold_style]
 
     # Check if data is empty
     if isempty(metrics_df) || isempty(metrics_df.vEOG_zscore) || isempty(metrics_df.hEOG_zscore)
         @minimal_warning "Could not plot eye component features, input DataFrame or z-scores are empty."
-        return _eegfun_figure() # Return empty figure
+        return (fig = _eegfun_figure(), axes = Axis[])
     end
 
     fig = _eegfun_figure()
 
     # Plot vEOG Correlation Z-Scores
-    ax_v = Axis(fig[1, 1], xlabel = "Component Number", ylabel = "Z-Score", title = "vEOG Correlation Z-Scores")
-    _plot_component_metric!(ax_v, metrics_df, :vEOG_zscore, identified_comps[:vEOG]; threshold = [z_threshold, -z_threshold])
+    ax_v = Axis(fig[1, 1], xlabel = "Component Number", ylabel = "Z-Score", title = show_title ? "vEOG Correlation Z-Scores" : "")
+    _plot_component_metric!(
+        ax_v,
+        metrics_df,
+        :vEOG_zscore,
+        identified_comps[:vEOG];
+        threshold = [z_threshold, -z_threshold],
+        threshold_color = thresh_color,
+        threshold_style = thresh_style,
+    )
 
     # Plot hEOG Correlation Z-Scores
-    ax_h = Axis(fig[1, 2], xlabel = "Component Number", ylabel = "Z-Score", title = "hEOG Correlation Z-Scores")
-    _plot_component_metric!(ax_h, metrics_df, :hEOG_zscore, identified_comps[:hEOG]; threshold = [z_threshold, -z_threshold])
+    ax_h = Axis(fig[1, 2], xlabel = "Component Number", ylabel = "Z-Score", title = show_title ? "hEOG Correlation Z-Scores" : "")
+    _plot_component_metric!(
+        ax_h,
+        metrics_df,
+        :hEOG_zscore,
+        identified_comps[:hEOG];
+        threshold = [z_threshold, -z_threshold],
+        threshold_color = thresh_color,
+        threshold_style = thresh_style,
+    )
 
     if display_plot
         _display_figure(fig)
     end
 
-    return (fig = fig, axes = (ax_v, ax_h))
+    return (fig = fig, axes = [ax_v, ax_h])
 end
 
 """
@@ -120,30 +139,41 @@ Plot spatial kurtosis z-scores for all ICA components and highlight those exceed
 - `display_plot::Bool`: Whether to display the plot (default: true).
 
 # Returns
-- Named tuple `(fig, axis)`.
+- Named tuple `(fig = fig, axes = [ax])`.
 """
 function plot_spatial_kurtosis_components(kurtosis_comps::Vector{Int}, metrics_df::DataFrame; kwargs...)
     # Merge user kwargs with defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_QUALITY_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_QUALITY_KWARGS, _normalize_plot_kwargs(kwargs))
 
     # Extract commonly used values
     z_threshold = plot_kwargs[:z_threshold]
     display_plot = plot_kwargs[:display_plot]
+    show_title = plot_kwargs[:show_title]
+    default_title = "Component Spatial Kurtosis Z-Scores"
+    title_str = !show_title ? "" : something(plot_kwargs[:plot_title], default_title)
 
     # Create figure
     fig = _eegfun_figure()
 
     # Plot spatial kurtosis z-scores
-    ax = Axis(fig[1, 1], xlabel = "Component", ylabel = "Spatial Kurtosis Z-Score", title = "Component Spatial Kurtosis Z-Scores")
+    ax = Axis(fig[1, 1], xlabel = "Component", ylabel = "Spatial Kurtosis Z-Score", title = title_str)
 
-    _plot_component_metric!(ax, metrics_df, :z_spatial_kurtosis, kurtosis_comps; threshold = [z_threshold], threshold_color = :red)
+    _plot_component_metric!(
+        ax,
+        metrics_df,
+        :z_spatial_kurtosis,
+        kurtosis_comps;
+        threshold = [z_threshold],
+        threshold_color = plot_kwargs[:zscore_threshold_color],
+        threshold_style = plot_kwargs[:zscore_threshold_style],
+    )
     hlines!(ax, [0.0], color = :gray, linestyle = :dot)
 
     if display_plot
         _display_figure(fig)
     end
 
-    return (fig = fig, axis = ax)
+    return (fig = fig, axes = [ax])
 end
 
 """
@@ -161,44 +191,54 @@ Plot spectral metrics used for line noise component identification.
 - `display_plot::Bool`: Whether to display the plot (default: true).
 
 # Returns
-- Named tuple `(fig, axes)` where `axes = (ax1, ax2)`.
+- Named tuple `(fig = fig, axes = [ax1, ax2])`.
 """
 function plot_line_noise_components(line_noise_comps::Vector{Int}, metrics_df::DataFrame; kwargs...)
     # Merge user kwargs with defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_QUALITY_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_QUALITY_KWARGS, _normalize_plot_kwargs(kwargs))
 
     # Extract commonly used values
     z_threshold = plot_kwargs[:z_threshold]
     min_harmonic_power = plot_kwargs[:min_harmonic_power]
     display_plot = plot_kwargs[:display_plot]
+    show_title = plot_kwargs[:show_title]
+    show_legend = plot_kwargs[:legend]
 
     # Create figure with two subplots
     fig = _eegfun_figure(size = (1000, 400))
 
     # Plot 1: Power Ratio Z-Scores
-    ax1 = Axis(fig[1, 1], xlabel = "Component", ylabel = "Power Ratio Z-Score", title = "Line Frequency Power Ratio Z-Scores")
+    ax1 = Axis(
+        fig[1, 1],
+        xlabel = "Component",
+        ylabel = "Power Ratio Z-Score",
+        title = show_title ? "Line Frequency Power Ratio Z-Scores" : "",
+    )
     _plot_component_metric!(
         ax1,
         metrics_df,
         :power_ratio_zscore,
         line_noise_comps;
         threshold = [z_threshold],
-        threshold_color = :red,
+        threshold_color = plot_kwargs[:zscore_threshold_color],
+        threshold_style = plot_kwargs[:zscore_threshold_style],
         threshold_label = "Threshold",
-        add_legend = true,
+        add_legend = show_legend,
         label_highlight = "Line Noise Components",
     )
 
     # Plot 2: Harmonic Ratios
-    ax2 = Axis(fig[1, 2], xlabel = "Component", ylabel = "Power Ratio", title = "Harmonic Power Ratios")
+    ax2 = Axis(fig[1, 2], xlabel = "Component", ylabel = "Power Ratio", title = show_title ? "Harmonic Power Ratios" : "")
     _plot_component_metric!(
         ax2,
         metrics_df,
         :harmonic_ratio,
         line_noise_comps;
         threshold = [min_harmonic_power],
+        threshold_color = plot_kwargs[:threshold_color],
+        threshold_style = plot_kwargs[:threshold_style],
         threshold_label = "Min Harmonic Power",
-        add_legend = true,
+        add_legend = show_legend,
         label_highlight = "Line Noise Components",
     )
 
@@ -206,7 +246,7 @@ function plot_line_noise_components(line_noise_comps::Vector{Int}, metrics_df::D
         _display_figure(fig)
     end
 
-    return (fig = fig, axes = (ax1, ax2))
+    return (fig = fig, axes = [ax1, ax2])
 end
 
 # ECG Component Identification 
@@ -290,28 +330,35 @@ Create a simplified visualization of ECG component detection metrics.
 # Returns
 - `fig::Figure`: The Makie Figure containing the plot
 """
-function plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df::DataFrame; kwargs...)
+function plot_ecg_component_features(identified_comps::AbstractVector{<:Integer}, metrics_df::DataFrame; kwargs...)
     # Merge user kwargs with defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_QUALITY_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_QUALITY_KWARGS, _normalize_plot_kwargs(kwargs))
 
     # Extract commonly used values
     display_plot = plot_kwargs[:display_plot]
+    show_title = plot_kwargs[:show_title]
+    show_legend = plot_kwargs[:legend]
+    thresh_color = plot_kwargs[:zscore_threshold_color]
+    thresh_style = plot_kwargs[:zscore_threshold_style]
+
     # Create figure with two panels
     fig = _eegfun_figure(size = (1000, 600))
 
-    # Calculate heart rates
-    heart_rates = [isnan(ibi) || ibi <= 0 ? NaN : 60.0 / ibi for ibi in metrics_df.mean_ibi_s]
-    metrics_df[!, :heart_rate_bpm] = heart_rates
+    # Copy DataFrame so we never mutate caller's input
+    df = copy(metrics_df)
+    heart_rates = [isnan(ibi) || ibi <= 0 ? NaN : 60.0 / ibi for ibi in df.mean_ibi_s]
+    df[!, :heart_rate_bpm] = heart_rates
 
     # Left panel: Heart Rate vs Peak Ratio
-    ax1 = Axis(fig[1, 1], xlabel = "Heart Rate (BPM)", ylabel = "Peak Ratio (valid/total)", title = "ECG Detection Metrics")
+    ax1 =
+        Axis(fig[1, 1], xlabel = "Heart Rate (BPM)", ylabel = "Peak Ratio (valid/total)", title = show_title ? "ECG Detection Metrics" : "")
 
     # Right panel: Heart Rate vs IBI Regularity (std)
-    ax2 = Axis(fig[1, 2], xlabel = "BPM", ylabel = "IBI Std Dev (seconds)", title = "Heart Rate Regularity")
+    ax2 = Axis(fig[1, 2], xlabel = "BPM", ylabel = "IBI Std Dev (seconds)", title = show_title ? "Heart Rate Regularity" : "")
 
     # Plot non-ECG components
-    non_ecg_idx = setdiff(1:nrow(metrics_df), identified_comps)
-    non_ecg_df = metrics_df[non_ecg_idx, :]
+    non_ecg_idx = setdiff(1:nrow(df), identified_comps)
+    non_ecg_df = df[non_ecg_idx, :]
 
     # Filter out NaNs for plotting
     valid_non_ecg = findall(.!isnan.(non_ecg_df.heart_rate_bpm) .& .!isnan.(non_ecg_df.peak_ratio))
@@ -340,12 +387,12 @@ function plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df
     end
 
     # Plot ECG components
-    ecg_df = metrics_df[in.(metrics_df.Component, Ref(identified_comps)), :]
+    ecg_df = df[in.(df.Component, Ref(identified_comps)), :]
 
     # Filter out NaNs
     valid_ecg = findall(.!isnan.(ecg_df.heart_rate_bpm) .& .!isnan.(ecg_df.peak_ratio))
     if !isempty(valid_ecg)
-        ecg_scatter1 = scatter!(
+        scatter!(
             ax1,
             ecg_df.heart_rate_bpm[valid_ecg],
             ecg_df.peak_ratio[valid_ecg],
@@ -396,29 +443,32 @@ function plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df
         end
     end
 
-    # Add reference ranges using pre-defined values 
+    # Add reference ranges using pre-defined values
     # Normal heart rate range (typical values)
-    vlines!(ax1, [60, 100], color = (:green, 0.5), linestyle = :dash, label = "Normal HR Range")
-    vlines!(ax2, [60, 100], color = (:green, 0.5), linestyle = :dash)
+    vlines!(ax1, [60, 100], color = (:green, 0.5), linestyle = thresh_style, label = "Normal HR Range")
+    vlines!(ax2, [60, 100], color = (:green, 0.5), linestyle = thresh_style)
 
     # Get threshold values from actual data when possible
-    min_peak_ratio = 0.7  # Default if no components found
-    max_std = 0.12        # Default if no components found
+    min_peak_ratio = plot_kwargs[:min_peak_ratio]
+    max_std = 0.12
 
     if !isempty(identified_comps)
-        # Get actual values from identified components
         ecg_identified = ecg_df[in.(ecg_df.Component, Ref(identified_comps)), :]
-        min_peak_ratio = minimum(ecg_identified.peak_ratio)
-        max_std = maximum(ecg_identified.std_ibi_s)
+        if !isempty(ecg_identified)
+            min_peak_ratio = minimum(ecg_identified.peak_ratio)
+            max_std = maximum(ecg_identified.std_ibi_s)
+        end
     end
 
     # Add threshold lines
-    hlines!(ax1, [min_peak_ratio], color = (:red, 0.5), linestyle = :dash, label = "Min Peak Ratio")
-    hlines!(ax2, [max_std], color = (:red, 0.5), linestyle = :dash, label = "Max StdDev")
+    hlines!(ax1, [min_peak_ratio], color = (thresh_color, 0.5), linestyle = thresh_style, label = "Min Peak Ratio")
+    hlines!(ax2, [max_std], color = (thresh_color, 0.5), linestyle = thresh_style, label = "Max StdDev")
 
     # Add legends
-    axislegend(ax1, position = :rt)
-    axislegend(ax2, position = :rt)
+    if show_legend
+        axislegend(ax1, position = :rt)
+        axislegend(ax2, position = :rt)
+    end
 
     # Calculate BPM range from actual data
     min_hr = 40   # Default minimum heart rate
@@ -445,7 +495,7 @@ function plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df
         _display_figure(fig)
     end
 
-    return (fig = fig,)
+    return (fig = fig, axes = [ax1, ax2])
 end
 
 """
@@ -487,17 +537,24 @@ fig = plot_artifact_components(ica, artifacts)
 """
 function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; kwargs...)
     # ICA weights are dimensionless — override the default "μV" label
-    merged_kwargs = Dict{Symbol,Any}(:colorbar_label => "a.u.", pairs(kwargs)...)
+    norm_kw = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
+    merged_kwargs = Dict{Symbol,Any}(:colorbar_label => "a.u.", pairs(norm_kw)...)
 
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, merged_kwargs)
+
+    # Ensure coordinates are 2d and 3d
+    _ensure_coordinates_2d!(ica.layout)
+    _ensure_coordinates_3d!(ica.layout)
 
     # Extract commonly used kwargs
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
     colormap = pop!(plot_kwargs, :colormap)
+    colorrange = pop!(plot_kwargs, :colorrange)
     display_plot = pop!(plot_kwargs, :display_plot)
     num_levels = pop!(plot_kwargs, :num_levels)
+    show_title = pop!(plot_kwargs, :show_title)
 
     # Extract head shape parameters
     head_color = pop!(plot_kwargs, :head_color)
@@ -526,7 +583,7 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
         @minimal_warning "No artifact components found to plot"
         fig = _eegfun_figure()
         Label(fig[1, 1], "No artifact components found", fontsize = 16)
-        return (fig = fig,)
+        return (fig = fig, axes = Axis[])
     end
 
     # Calculate total number of components to plot
@@ -538,6 +595,7 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
     fig = _eegfun_figure(size = (n_cols * 200, n_rows * 200))
 
     # Plot each component individually
+    axes = Axis[]
     plot_idx = 1
     for (comp_type, comps) in zip(component_types, component_lists)
         for comp_idx in comps
@@ -545,12 +603,24 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
             col = ((plot_idx - 1) % n_cols) + 1
 
             # Create subplot for this component
-            ax = Axis(fig[row, col])
-            ax.title = "$comp_type $comp_idx"
+            ax = Axis(fig[row, col], aspect = DataAspect())
+            ax.title = show_title ? "$comp_type $comp_idx" : ""
             ax.titlesize = 12
+            push!(axes, ax)
 
             # Create topoplot data
-            topo_data = _prepare_ica_topo_data(ica, comp_idx, method, gridscale)
+            topo_data, x_bounds, y_bounds = _prepare_ica_topo_data(ica, comp_idx, method, gridscale)
+            levels = if !isnothing(colorrange)
+                _calculate_topo_levels(
+                    topo_data;
+                    use_global_scale = true,
+                    global_min = colorrange[1],
+                    global_max = colorrange[2],
+                    num_levels = num_levels,
+                )
+            else
+                _calculate_topo_levels(topo_data; num_levels = num_levels)
+            end
 
             # Use the generic topo plotting function
             _plot_topo_on_axis!(
@@ -558,7 +628,9 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
                 fig,
                 topo_data,
                 ica.layout,
-                num_levels;
+                levels;
+                x_bounds = x_bounds,
+                y_bounds = y_bounds,
                 gridscale = gridscale,
                 colormap = colormap,
                 head_color = head_color,
@@ -574,13 +646,15 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
     end
 
     # Add overall title
-    total_comps = sum(length(comps) for comps in component_lists)
-    Label(fig[0, :], "ICA Artifact Components", fontsize = 18, font = :bold)
+    if show_title
+        header_title = something(plot_kwargs[:plot_title], "ICA Artifact Components")
+        Label(fig[0, :], header_title, fontsize = 18, font = :bold)
+    end
 
     # Display plot if requested
     if display_plot
         _display_figure(fig)
     end
 
-    return (fig = fig,)
+    return (fig = fig, axes = axes)
 end

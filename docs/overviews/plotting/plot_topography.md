@@ -69,7 +69,7 @@ Topographic maps (topoplots) show the spatial distribution of electrical activit
 **Appearance**:
 
 - Colormap selection
-- Color limits (ylim)
+- Color limits (`colorrange`)
 - Head outline radius
 
 **Labels and markers**:

@@ -61,12 +61,21 @@ function _derive_condition(t::ErpData, condition::Int, condition_name::String, f
 end
 
 function _derive_condition(t::TimeFreqData, condition::Int, condition_name::String, frames::Tuple{DataFrame,DataFrame}; n_epochs::Int = 0)
+    phase_df = frames[2]
+    if startswith(condition_name, "difference_")
+        phase_df = copy(phase_df)
+        for ch in channel_labels(t)
+            if hasproperty(phase_df, ch)
+                phase_df[!, ch] = rem2pi.(phase_df[!, ch], RoundNearest)
+            end
+        end
+    end
     return TimeFreqData(
         t.file,
         condition,
         condition_name,
         frames[1],
-        frames[2],
+        phase_df,
         copy(t.layout),
         t.sample_rate,
         t.method,
@@ -75,5 +84,79 @@ function _derive_condition(t::TimeFreqData, condition::Int, condition_name::Stri
     )
 end
 
-"""Channels (non-metadata columns) of `dat` that condition arithmetic operates on."""
-_condition_channels(dat::EegData) = setdiff(propertynames(dat.data), meta_labels(dat))
+"""Channels (electrode columns only, excluding metadata and extra columns) that condition arithmetic operates on."""
+_condition_channels(dat::EegData) = channel_labels(dat)
+
+"""Wrap phase differences in radians onto `[-π, π]` using circular arithmetic."""
+_circular_phase_diff(p1::Real, p2::Real) = rem2pi(Float64(p1) - Float64(p2), RoundNearest)
+_circular_phase_diff(p1::AbstractVector{<:Real}, p2::AbstractVector{<:Real}) = rem2pi.(Float64.(p1) .- Float64.(p2), RoundNearest)
+
+"""Compute circular mean of phase angles in radians via `atan(mean(sin), mean(cos))`."""
+function _circular_phase_mean(phases::AbstractVector{<:AbstractVector{<:Real}})::Vector{Float64}
+    isempty(phases) && return Float64[]
+    n_rows = length(phases[1])
+    n_conds = length(phases)
+    sin_sum = zeros(Float64, n_rows)
+    cos_sum = zeros(Float64, n_rows)
+    for p in phases
+        @inbounds @simd for i = 1:n_rows
+            val = Float64(p[i])
+            sin_sum[i] += sin(val)
+            cos_sum[i] += cos(val)
+        end
+    end
+    inv_n = 1.0 / n_conds
+    return [atan(sin_sum[i] * inv_n, cos_sum[i] * inv_n) for i = 1:n_rows]
+end
+
+"""Compute condition-difference channel-data frames, using circular difference for `TimeFreqData` phase."""
+function _difference_frames(dat1::ErpData, dat2::ErpData)
+    diff_df = copy(dat1.data)
+    for ch in _condition_channels(dat1)
+        hasproperty(dat2.data, ch) && (diff_df[!, ch] .-= dat2.data[!, ch])
+    end
+    return (diff_df,)
+end
+
+function _difference_frames(dat1::TimeFreqData, dat2::TimeFreqData)
+    diff_power = copy(dat1.data_power)
+    diff_phase = copy(dat1.data_phase)
+    for ch in _condition_channels(dat1)
+        if hasproperty(dat2.data_power, ch)
+            diff_power[!, ch] .-= dat2.data_power[!, ch]
+        end
+        if hasproperty(dat2.data_phase, ch)
+            diff_phase[!, ch] = _circular_phase_diff(dat1.data_phase[!, ch], dat2.data_phase[!, ch])
+        end
+    end
+    return (diff_power, diff_phase)
+end
+
+"""Compute condition-average channel-data frames, using circular mean for `TimeFreqData` phase."""
+function _average_frames(dats::AbstractVector{<:ErpData})
+    avg_df = copy(dats[1].data)
+    n = length(dats)
+    for ch in _condition_channels(dats[1])
+        avg_df[!, ch] .= 0.0
+        for d in dats
+            avg_df[!, ch] .+= d.data[!, ch]
+        end
+        avg_df[!, ch] ./= n
+    end
+    return (avg_df,)
+end
+
+function _average_frames(dats::AbstractVector{<:TimeFreqData})
+    avg_power = copy(dats[1].data_power)
+    avg_phase = copy(dats[1].data_phase)
+    n = length(dats)
+    for ch in _condition_channels(dats[1])
+        avg_power[!, ch] .= 0.0
+        for d in dats
+            avg_power[!, ch] .+= d.data_power[!, ch]
+        end
+        avg_power[!, ch] ./= n
+        avg_phase[!, ch] = _circular_phase_mean([d.data_phase[!, ch] for d in dats])
+    end
+    return (avg_power, avg_phase)
+end

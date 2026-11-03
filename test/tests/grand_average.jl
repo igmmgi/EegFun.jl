@@ -455,4 +455,24 @@ end
 
         rm(tf_test_dir, recursive = true)
     end
+
+    @testset "Batch ERP grand_average matches .condition field on non-contiguous conditions" begin
+        nc_dir = mktempdir()
+        nc_out = joinpath(nc_dir, "out")
+        for p = 1:2
+            e2 = EegFun.create_test_erp_data(participant = p, condition = 2)
+            e5 = EegFun.create_test_erp_data(participant = p, condition = 5)
+            e2.data.Ch1 .= 10.0 * p
+            e5.data.Ch1 .= 100.0 * p
+            jldsave(joinpath(nc_dir, "$(p)_erps_nc.jld2"); data = [e2, e5])
+        end
+        EegFun.grand_average("erps_nc"; input_dir = nc_dir, output_dir = nc_out)
+        gas = load(joinpath(nc_out, "grand_average_erps_nc.jld2"), "data")
+        @test sort([g.condition for g in gas]) == [2, 5]
+        ga2 = only(filter(g -> g.condition == 2, gas))
+        ga5 = only(filter(g -> g.condition == 5, gas))
+        @test ga2.data.Ch1[1] ≈ 15.0
+        @test ga5.data.Ch1[1] ≈ 150.0
+        rm(nc_dir, recursive = true, force = true)
+    end
 end

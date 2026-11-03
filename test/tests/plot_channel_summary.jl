@@ -225,7 +225,9 @@ using EegFun
 
         # Test passing vector of String columns
         res_multi = EegFun.plot_channel_summary(df, ["std", "var"], display_plot = false)
-        @test res_multi isa Figure
+        @test res_multi.fig isa Figure
+        @test res_multi.axes isa Vector{Axis}
+        @test length(res_multi.axes) == 2
     end
 
 end # plot_channel_summary testset

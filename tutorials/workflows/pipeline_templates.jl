@@ -39,7 +39,7 @@ EegFun.generate_config_template(filename = "my_config.toml")
 # - eog (EOG channel configuration and thresholds)
 # - eeg (artifact and extreme value thresholds)
 # - ica (whether to apply, percentage of data)
-# - layout (neighbour criterion)
+# - layout (neighbor criterion)
 # - epoch timing (start/end times)
 
 # You can read and inspect a config file

@@ -187,5 +187,5 @@ Some plot types (Data Browser with a raw `.bdf` file, Layout View) require an el
 ## Next Steps
 
 - **Preprocessing your data** — [Manual Preprocessing](manual-preprocessing.md) or [Batch Processing](batch-processing.md) to produce clean epochs and ERPs to explore in the GUI
-- **Layouts** — [Layouts and Neighbours](layouts-neighbors.md) for loading the layout file required by topographic and data browser plots
+- **Layouts** — [Layouts and Neighbors](layouts-neighbors.md) for loading the layout file required by topographic and data browser plots
 - **Artifact review** — [Artifact Handling](artifact-handling.md) for the `detect_bad_epochs_interactive` GUI workflow

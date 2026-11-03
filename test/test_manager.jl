@@ -303,13 +303,13 @@ function show_interactive_menu()
         elseif choice == "3"
             show_detailed_analysis()
         elseif choice == "4"
-            print("Enter filename to analyze (e.g., eyelink_edf/ascii_exporter.jl): ")
+            print("Enter filename to analyze (e.g., analysis/processing/epochs.jl): ")
             filename = readline()
             if !isempty(filename)
                 analyze_specific_file(filename)
             end
         elseif choice == "5"
-            print("Enter filename to show missed branches (e.g., eyelink_edf/ascii_exporter.jl): ")
+            print("Enter filename to show missed branches (e.g., analysis/processing/epochs.jl): ")
             filename = readline()
             if !isempty(filename)
                 show_missed_branches(filename)
@@ -340,14 +340,14 @@ function main()
     elseif command == "file"
         if isempty(filename)
             print_colored(RED, "Error: Please specify a filename")
-            println("Usage: julia --project=. test/test_manager.jl file eyelink_edf/ascii_exporter.jl")
+            println("Usage: julia --project=. test/test_manager.jl file analysis/processing/epochs.jl")
         else
             analyze_specific_file(filename)
         end
     elseif command == "missed"
         if isempty(filename)
             print_colored(RED, "Error: Please specify a filename")
-            println("Usage: julia --project=. test/test_manager.jl missed eyelink_edf/ascii_exporter.jl")
+            println("Usage: julia --project=. test/test_manager.jl missed analysis/processing/epochs.jl")
         else
             show_missed_branches(filename)
         end

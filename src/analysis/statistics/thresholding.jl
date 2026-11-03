@@ -213,85 +213,71 @@ Compute point-specific non-parametric thresholds from permutation distribution (
 thresh_pos, thresh_neg = compute_nonparametric_threshold_individual(perm_t_matrices, 0.05, :both)
 ```
 """
-function _compute_nonparametric_threshold_individual(permutation_t_matrices::Array{Float64,3}, alpha::Real = 0.05, tail::Symbol = :both)
-    n_electrodes, n_time, n_permutations = size(permutation_t_matrices)
+function _compute_nonparametric_threshold_individual(
+    permutation_t_matrices::Array{Float64,N},
+    alpha::Real = 0.05,
+    tail::Symbol = :both,
+) where {N}
+    tail ∉ (:both, :left, :right) && @minimal_error("tail must be :both, :left, or :right, got :$tail")
 
-    thresholds_positive = Array{Float64,2}(undef, n_electrodes, n_time)
-    thresholds_negative = Array{Float64,2}(undef, n_electrodes, n_time)
+    grid_dims = ntuple(d -> size(permutation_t_matrices, d), Val(N - 1))
+    n_voxels = prod(grid_dims)
+    n_permutations = size(permutation_t_matrices, N)
 
-    t_values_grid = [Float64[] for _ = 1:n_electrodes, _ = 1:n_time]
-    for j = 1:n_time, i = 1:n_electrodes
-        sizehint!(t_values_grid[i, j], n_permutations)
-    end
+    thresholds_positive = Array{Float64,N-1}(undef, grid_dims)
+    thresholds_negative = Array{Float64,N-1}(undef, grid_dims)
 
+    perm_flat = reshape(permutation_t_matrices, n_voxels, n_permutations)
+    scratch = Vector{Float64}(undef, n_permutations)
     percentile_level = 1.0 - alpha
 
     if tail == :both
-        @inbounds for perm_idx = 1:n_permutations
-            for j = 1:n_time
-                for i = 1:n_electrodes
-                    t_val = permutation_t_matrices[i, j, perm_idx]
-                    if !isnan(t_val) && !isinf(t_val)
-                        push!(t_values_grid[i, j], abs(t_val))
-                    end
+        @inbounds for v = 1:n_voxels
+            cnt = 0
+            for perm_idx = 1:n_permutations
+                t_val = perm_flat[v, perm_idx]
+                if isfinite(t_val)
+                    cnt += 1
+                    scratch[cnt] = abs(t_val)
                 end
             end
-        end
-
-        for j = 1:n_time, i = 1:n_electrodes
-            if isempty(t_values_grid[i, j])
-                thresholds_positive[i, j] = NaN
-                thresholds_negative[i, j] = NaN
+            if cnt == 0
+                thresholds_positive[v] = NaN
+                thresholds_negative[v] = NaN
             else
-                threshold = quantile(t_values_grid[i, j], percentile_level)
-                thresholds_positive[i, j] = threshold
-                thresholds_negative[i, j] = threshold
+                threshold = quantile!(view(scratch, 1:cnt), percentile_level)
+                thresholds_positive[v] = threshold
+                thresholds_negative[v] = threshold
             end
         end
 
     elseif tail == :right
-        @inbounds for perm_idx = 1:n_permutations
-            for j = 1:n_time
-                for i = 1:n_electrodes
-                    t_val = permutation_t_matrices[i, j, perm_idx]
-                    if !isnan(t_val) && !isinf(t_val)
-                        push!(t_values_grid[i, j], t_val)
-                    end
+        fill!(thresholds_negative, NaN)
+        @inbounds for v = 1:n_voxels
+            cnt = 0
+            for perm_idx = 1:n_permutations
+                t_val = perm_flat[v, perm_idx]
+                if isfinite(t_val)
+                    cnt += 1
+                    scratch[cnt] = t_val
                 end
             end
+            thresholds_positive[v] = cnt == 0 ? NaN : quantile!(view(scratch, 1:cnt), percentile_level)
         end
 
-        for j = 1:n_time, i = 1:n_electrodes
-            if isempty(t_values_grid[i, j])
-                thresholds_positive[i, j] = NaN
-            else
-                thresholds_positive[i, j] = quantile(t_values_grid[i, j], percentile_level)
-            end
-            thresholds_negative[i, j] = NaN
-        end
-
-    elseif tail == :left
-        @inbounds for perm_idx = 1:n_permutations
-            for j = 1:n_time
-                for i = 1:n_electrodes
-                    t_val = permutation_t_matrices[i, j, perm_idx]
-                    if !isnan(t_val) && !isinf(t_val)
-                        push!(t_values_grid[i, j], t_val)
-                    end
+    else # tail == :left
+        fill!(thresholds_positive, NaN)
+        @inbounds for v = 1:n_voxels
+            cnt = 0
+            for perm_idx = 1:n_permutations
+                t_val = perm_flat[v, perm_idx]
+                if isfinite(t_val)
+                    cnt += 1
+                    scratch[cnt] = t_val
                 end
             end
+            thresholds_negative[v] = cnt == 0 ? NaN : -quantile!(view(scratch, 1:cnt), alpha)
         end
-
-        for j = 1:n_time, i = 1:n_electrodes
-            thresholds_positive[i, j] = NaN
-            if isempty(t_values_grid[i, j])
-                thresholds_negative[i, j] = NaN
-            else
-                thresholds_negative[i, j] = -quantile(t_values_grid[i, j], alpha)
-            end
-        end
-    else
-        @minimal_error("tail must be :both, :left, or :right, got :$tail")
     end
 
     return thresholds_positive, thresholds_negative
@@ -426,4 +412,5 @@ const _threshold_t_matrix_parametric_tf! = _threshold_t_matrix_parametric!
 const _threshold_t_matrix_parametric_tf = _threshold_t_matrix_parametric
 const _collect_valid_t_values_tf = _collect_valid_t_values
 const _compute_nonparametric_threshold_common_tf = _compute_nonparametric_threshold_common
+const _compute_nonparametric_threshold_individual_tf = _compute_nonparametric_threshold_individual
 const _threshold_t_matrix_nonparametric_tf! = _threshold_t_matrix_nonparametric!

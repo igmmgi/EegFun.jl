@@ -55,9 +55,27 @@ PrecompileTools.@compile_workload begin
             # 3. Artifact detection
             EegFun.is_extreme_value!(dat, 100)
 
-            # 4. Epoch extraction & ERP workflow
+            # 4. Epoch extraction, baseline, ICA, artifact detection & channel repair
             epoch_cfg = [EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
             epochs = EegFun.extract_epochs(dat, epoch_cfg, (-0.5, 1.0))
+            EegFun.baseline!(epochs, (-0.2, 0.0))
+            EegFun.detect_bad_epochs_automatic(epochs; abs_criterion = 100.0)
+            EegFun.run_ica(
+                dat;
+                channel_selection = EegFun.channels(1:4),
+                percentage_of_data = 25.0,
+                params = EegFun.IcaPrms(max_iter = 3),
+                rng = Random.Xoshiro(42),
+            )
+            if !EegFun.has_neighbors(dat.layout)
+                EegFun.polar_to_cartesian_xy!(dat.layout)
+                EegFun.get_neighbors_xy!(dat.layout, 0.35)
+            end
+            rep_info = EegFun.create_continuous_repair_info(:neighbor_interpolation)
+            EegFun.channel_repairable!(rep_info, [dat.layout.data.label[1]], dat.layout)
+            if !isempty(rep_info.repaired)
+                EegFun.repair_channels!(copy(dat), rep_info; method = :neighbor_interpolation)
+            end
             erp = EegFun.average_epochs(epochs)
 
             # 5. Key plot types (headless — display_plot = false prevents window creation)
@@ -193,12 +211,12 @@ PrecompileTools.@compile_workload begin
                 channel_selection = EegFun.channels([:Fz, :Cz]),
             )
             EegFun.analytic_test(prep_stats)
-            EegFun.permutation_test(prep_stats; n_permutations = 2, cluster_type = :temporal)
+            EegFun.permutation_test(prep_stats; n_permutations = 2, cluster_type = :temporal, rng = Random.Xoshiro(42))
 
             # 14. Decoding & RSA
-            ep_c1 = EegFun.create_test_epoch_data(condition = 1, n_epochs = 4, n_channels = 3, n = 20, fs = 1000)
-            ep_c2 = EegFun.create_test_epoch_data(condition = 2, n_epochs = 4, n_channels = 3, n = 20, fs = 1000)
-            EegFun.decode_libsvm([ep_c1, ep_c2]; n_iterations = 2, n_folds = 2, show_progress = false)
+            ep_c1 = EegFun.create_test_epoch_data(condition = 1, n_epochs = 4, n_channels = 3, n = 20, fs = 1000, seed = 42)
+            ep_c2 = EegFun.create_test_epoch_data(condition = 2, n_epochs = 4, n_channels = 3, n = 20, fs = 1000, seed = 43)
+            EegFun.decode_libsvm([ep_c1, ep_c2]; n_iterations = 2, n_folds = 2, show_progress = false, rng = Random.Xoshiro(42))
             EegFun.rsa([ep_c1, ep_c2])
         else
             @debug "Skipping precompilation workload (example data files not found)" data_file layout_file_path

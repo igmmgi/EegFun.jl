@@ -1,3 +1,5 @@
+const _CsdData = Union{ContinuousData,ErpData,EpochData}
+
 """
     compute_csd!(data; m=4, lambda=1e-5, n_legendre_terms=50)
 
@@ -5,45 +7,30 @@ Compute the Current Source Density (CSD) / Surface Laplacian of the data in-plac
 This acts as a spatial high-pass filter that removes volume conduction and 
 sharpens the topography.
 
-Uses spherical spline interpolation according to Perrin et al. (1989).
+Uses spherical spline interpolation according to Perrin et al. (1989; 1990 Corrigenda).
 
 # Arguments
-- `data`: EEG data object (ContinuousData, EpochData, or ErpData)
+- `data`: EEG data object (`ContinuousData`, `EpochData`, or `ErpData`)
 - `m::Int`: Stiffness parameter for the spherical splines (default: 4)
 - `lambda::Real`: Regularization parameter (default: 1e-5)
 - `n_legendre_terms::Int`: Number of Legendre polynomial terms (default: 50)
 """
-function compute_csd!(data::EegData; m::Int = 4, lambda::Real = 1e-5, n_legendre_terms::Int = 50)
-    # 1. Ensure 3D coordinates are available
-    _ensure_coordinates_3d!(data.layout)
-
-    channels = Symbol.(data.layout.data.label)
+function compute_csd!(data::_CsdData; m::Int = 4, lambda::Real = 1e-5, n_legendre_terms::Int = 50)
+    # 1. Ensure 3D coordinates are available and extract unit-sphere coordinates
+    channels = channel_labels(data)
+    isempty(channels) && @minimal_error("No EEG channels found in data for CSD computation")
     n_channels = length(channels)
 
-    # 2. Extract coordinates and normalize to unit sphere
-    coords = zeros(Float64, n_channels, 3)
-    x3 = data.layout.data.x3
-    y3 = data.layout.data.y3
-    z3 = data.layout.data.z3
+    coords = _spherical_coords(data.layout, channels)
 
-    for i = 1:n_channels
-        x = Float64(x3[i])
-        y = Float64(y3[i])
-        z = Float64(z3[i])
-        inv_norm = 1.0 / sqrt(x^2 + y^2 + z^2)
-        coords[i, 1] = x * inv_norm
-        coords[i, 2] = y * inv_norm
-        coords[i, 3] = z * inv_norm
-    end
-
-    # 3. Calculate cosine angles between all electrodes
+    # 2. Calculate cosine angles between all electrodes
     cosang = coords * coords'
 
-    # 4. Calculate G and H matrices
+    # 3. Calculate G and H matrices
     G = _calc_g(cosang, m, n_legendre_terms)
     H = _calc_h(cosang, m, n_legendre_terms)
 
-    # 5. Add regularization to diagonal of G (MNE/FieldTrip standard scaling)
+    # 4. Add regularization to diagonal of G (MNE/FieldTrip standard scaling)
     if lambda > 0
         trace_G = sum(G[i, i] for i = 1:n_channels)
         lambda_scaled = lambda * trace_G / n_channels
@@ -52,7 +39,7 @@ function compute_csd!(data::EegData; m::Int = 4, lambda::Real = 1e-5, n_legendre
         end
     end
 
-    # 6. Construct system matrix C
+    # 5. Construct system matrix C
     # C = [G     ones(n)]
     #     [ones' 0      ]
     C = zeros(n_channels + 1, n_channels + 1)
@@ -64,27 +51,62 @@ function compute_csd!(data::EegData; m::Int = 4, lambda::Real = 1e-5, n_legendre
     # Compute inverse
     C_inv = pinv(C)
 
-    # 7. Compute the spatial filter matrix
+    # 6. Compute the spatial filter matrix
     # filter_matrix = H * C_inv[1:n_channels, 1:n_channels]
     filter_matrix = H * C_inv[1:n_channels, 1:n_channels]
 
-    # 8. Apply filter to data
+    # 7. Apply filter to data and record reference
     _apply_csd!(data, filter_matrix, channels)
+    data.analysis_info.reference = :csd
 
     return data
 end
 
-function compute_csd!(dat::AbstractVector{<:EegData}, args...; kwargs...)
+function compute_csd!(dat::AbstractVector{<:_CsdData}, args...; kwargs...)
     for d in dat
         compute_csd!(d, args...; kwargs...)
     end
     return dat
 end
 
-# Internal function for calculating H matrix (second spatial derivative of G)
+# Extract unit-sphere 3D coordinates for channels, guarding zero-norm vectors
+function _spherical_coords(layout::Layout, channels::AbstractVector{Symbol} = Symbol.(layout.data.label))
+    _ensure_coordinates_3d!(layout)
+    df = layout.data
+    label_to_idx = Dict(Symbol(df.label[i]) => i for i = 1:nrow(df))
+    n_channels = length(channels)
+    coords = zeros(Float64, n_channels, 3)
+
+    for (i, ch) in enumerate(channels)
+        row_idx = get(label_to_idx, ch, nothing)
+        if isnothing(row_idx)
+            @minimal_warning "Channel $ch not found in layout; defaulting unit-sphere coordinate to (0, 0, 1)"
+            coords[i, 3] = 1.0
+            continue
+        end
+        x = Float64(df.x3[row_idx])
+        y = Float64(df.y3[row_idx])
+        z = Float64(df.z3[row_idx])
+        norm_v = sqrt(x^2 + y^2 + z^2)
+        if norm_v > 1e-12
+            inv_norm = 1.0 / norm_v
+            coords[i, 1] = x * inv_norm
+            coords[i, 2] = y * inv_norm
+            coords[i, 3] = z * inv_norm
+        else
+            @minimal_warning "Channel $ch has zero-norm 3D coordinates (0, 0, 0); defaulting to (0, 0, 1)"
+            coords[i, 1] = 0.0
+            coords[i, 2] = 0.0
+            coords[i, 3] = 1.0
+        end
+    end
+    return coords
+end
+
+# Internal function for calculating H matrix (negative surface Laplacian of G; Perrin et al., 1990 Corrigenda)
 function _calc_h(cosang::AbstractArray, m::Int = 4, n_legendre_terms::Int = 50)
-    # H(cos θ) = - (1 / 4π) * Σ[ (2n+1) / (n^(m-1) * (n+1)^(m-1)) * P_n(cos θ) ]
-    factors = [-(2n + 1) / (float(n)^(m - 1) * float(n + 1)^(m - 1) * 4π) for n = 1:n_legendre_terms]
+    # H(cos θ) = (1 / 4π) * Σ[ (2n+1) / (n^(m-1) * (n+1)^(m-1)) * P_n(cos θ) ]
+    factors = [(2n + 1) / (float(n)^(m - 1) * float(n + 1)^(m - 1) * 4π) for n = 1:n_legendre_terms]
     C = Matrix{Float64}(cosang)
     return _g_from_cos!(C, factors)
 end
@@ -128,10 +150,10 @@ end
 
 Non-mutating version of `compute_csd!`.
 """
-function compute_csd(dat::EegData, args...; kwargs...)
+function compute_csd(dat::_CsdData, args...; kwargs...)
     return compute_csd!(copy(dat), args...; kwargs...)
 end
 
-function compute_csd(dat::AbstractVector{<:EegData}, args...; kwargs...)
+function compute_csd(dat::AbstractVector{<:_CsdData}, args...; kwargs...)
     return [compute_csd(d, args...; kwargs...) for d in dat]
 end

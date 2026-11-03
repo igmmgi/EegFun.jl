@@ -151,7 +151,7 @@ function tf_stft(
     adjusted_time_indices = time_indices .+ n_pre_pad
 
     max_window_samples = maximum(n_window_samples_per_freq)
-    n_samples_padded = max(n_padded_samples, max_window_samples)
+    n_samples_padded = nextpow(2, n_padded_samples + max_window_samples - 1)
 
     g = TFGeometry(
         n_trials,
@@ -180,7 +180,7 @@ function tf_stft(
             range(-(n_window_samples - 1) / 2, (n_window_samples - 1) / 2, length = n_window_samples) .* (2π * freq / sdat.sample_rate)
         cos_wav = hanning_window .* cos.(angle_in)
         sin_wav = hanning_window .* sin.(angle_in)
-        wavelet = cos_wav .+ im .* sin_wav
+        wavelet = (cos_wav .+ im .* sin_wav) .* sqrt(2.0)
 
         wavelet_ffts[fi] = _tf_padded_fft(wavelet, p_fft_wavelet, wavelet_padded)
     end
@@ -223,7 +223,6 @@ function _stft_cpu_inner!(
     n_samples_padded::Int,
     n_pre_pad::Int,
     half_window::Int,
-    norm_factor::Float64,
     n_times::Int,
     time_indices::Vector{Int},
     return_trials::Bool,
@@ -245,18 +244,9 @@ function _stft_cpu_inner!(
 
     mul!(local_conv_result, ifft_plan_padded_batch, local_conv_result)
 
-    @inbounds @simd for i in eachindex(local_conv_result)
-        local_conv_result[i] *= norm_factor
-    end
-
     @inbounds for ti_idx = 1:n_times
         sample_idx = time_indices[ti_idx]
         adjusted_idx = sample_idx + n_pre_pad + half_window
-        if adjusted_idx < 1
-            adjusted_idx = 1
-        elseif adjusted_idx > n_samples_padded
-            adjusted_idx = n_samples_padded
-        end
 
         if return_trials
             @inbounds @simd for trial_idx = 1:n_trials
@@ -322,16 +312,14 @@ function _process_stft_channel!(
 
         for fi = 1:num_frex
             n_window_samples = n_window_samples_per_freq[fi]
-            norm_factor = sqrt(2.0 / n_window_samples)
             half_window = n_window_samples ÷ 2
 
             copyto!(gpu_buffers.curr_wavelet_gpu, wavelet_ffts[fi])
             local_conv_result_gpu .= local_data_fft_gpu .* gpu_buffers.curr_wavelet_gpu
             mul!(local_conv_result_gpu, ifft_plan_padded_batch, local_conv_result_gpu)
-            local_conv_result_gpu .*= norm_factor
 
             for ti_idx = 1:n_times
-                adjusted_indices_cpu[ti_idx] = min(max(time_indices[ti_idx] + n_pre_pad + half_window, 1), n_samples_padded)
+                adjusted_indices_cpu[ti_idx] = time_indices[ti_idx] + n_pre_pad + half_window
             end
             copyto!(adjusted_indices_gpu, adjusted_indices_cpu)
 
@@ -363,7 +351,6 @@ function _process_stft_channel!(
     else
         for fi = 1:num_frex
             n_window_samples = n_window_samples_per_freq[fi]
-            norm_factor = sqrt(2.0 / n_window_samples)
             half_window = n_window_samples ÷ 2
             _stft_cpu_inner!(
                 fi,
@@ -371,7 +358,6 @@ function _process_stft_channel!(
                 n_samples_padded,
                 n_pre_pad,
                 half_window,
-                norm_factor,
                 n_times,
                 time_indices,
                 return_trials,

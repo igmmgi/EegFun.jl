@@ -14,8 +14,8 @@ EegFun uses predicate-generator functions that create selection criteria:
 Selection helpers return functions (predicates) that are passed to `subset()`, and other functions via keyword arguments:
 
 ```julia
-# channels(:Cz, :Pz) returns a function that selects those channels
-subset(erp, channel_selection = channels(:Cz, :Pz))
+# EegFun.channels(:Cz, :Pz) returns a function that selects those channels
+EegFun.subset(erp, channel_selection = EegFun.channels(:Cz, :Pz))
 ```
 
 ### Composing Selections
@@ -23,10 +23,10 @@ subset(erp, channel_selection = channels(:Cz, :Pz))
 Multiple selections can be combined in a single call:
 
 ```julia
-subset(epochs[1],
-    channel_selection = channels(:Cz),
-    epoch_selection = epochs(1:3),
-    interval_selection = times(0.0, 0.5),
+EegFun.subset(epochs[1],
+    channel_selection = EegFun.channels(:Cz),
+    epoch_selection = EegFun.epochs(1:3),
+    interval_selection = EegFun.times(0.0, 0.5),
 )
 ```
 

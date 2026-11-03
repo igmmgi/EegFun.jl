@@ -313,6 +313,16 @@ end
         # No valid pairs → should throw
         @test_throws Exception EegFun.condition_difference(erps, [(5, 6)])
     end
+
+    @testset "Non-contiguous .condition numbers matched by .condition field" begin
+        e2 = EegFun.create_test_erp_data(condition = 2)
+        e5 = EegFun.create_test_erp_data(condition = 5)
+        e2.data.Ch1 .= 30.0
+        e5.data.Ch1 .= 10.0
+        diff = EegFun.condition_difference([e2, e5], [(2, 5)])
+        @test length(diff) == 1
+        @test diff[1].data.Ch1[1] ≈ 20.0
+    end
 end
 
 @testset "TF Condition Difference" begin

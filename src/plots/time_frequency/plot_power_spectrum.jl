@@ -9,13 +9,14 @@ const PLOT_POWER_SPECTRUM_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Display parameters
     :display_plot => (true, "Whether to display the plot"),
-    :show_legend => (true, "Whether to show the legend"),
+    :legend => (true, "Whether to show the legend"),
     :show_freq_bands => (true, "Whether to show frequency band indicators"),
 
     # Axis styling
     :xlabel => ("Frequency (Hz)", "X-axis label"),
     :ylabel => ("Power Spectral Density (μV²/Hz)", "Y-axis label"),
     :plot_title => ("Power Spectrum", "Plot title"),
+    :show_title => (true, "Whether to show the plot title"),
     :plot_title_position => (
         nothing,
         "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis.",
@@ -23,8 +24,8 @@ const PLOT_POWER_SPECTRUM_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
 
     # Scale parameters
-    :x_scale => (:linear, "X-axis scale: :linear or :log10"),
-    :y_scale => (:log10, "Y-axis scale: :linear or :log10"),
+    :xscale => (:linear, "X-axis scale: :linear or :log10"),
+    :yscale => (:log10, "Y-axis scale: :linear or :log10"),
     :unit => (:linear, "Power unit: :linear (μV²/Hz) or :dB (decibels)"),
 
     # Font sizes
@@ -87,10 +88,19 @@ fig, ax = plot_channel_spectrum(dat;
 ```
 """
 
-function _plot_power_spectrum!(fig, ax, signals::AbstractVector{<:AbstractVector}, channels_to_plot::Vector{Symbol}, fs::Real; kwargs...)
+function _plot_power_spectrum!(
+    fig,
+    ax,
+    signals::AbstractVector{<:AbstractVector},
+    channels_to_plot::Vector{Symbol},
+    fs::Real;
+    line_labels::Union{Nothing,AbstractVector{<:AbstractString}} = nothing,
+    kwargs...,
+)
     isempty(signals) && return
 
-    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
+    kwargs_norm = _normalize_plot_kwargs(kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs_norm)
     window_size = plot_kwargs[:window_size]
     overlap = plot_kwargs[:overlap]
     window_function = plot_kwargs[:window_function]
@@ -125,7 +135,7 @@ function _plot_power_spectrum!(fig, ax, signals::AbstractVector{<:AbstractVector
         power_raw_data[i] = DSP.power(pgram)
     end
 
-    _plot_power_spectrum_data!(fig, ax, freq_data, power_raw_data, channels_to_plot; kwargs...)
+    _plot_power_spectrum_data!(fig, ax, freq_data, power_raw_data, channels_to_plot; line_labels = line_labels, kwargs_norm...)
 end
 
 function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{Symbol}, fs::Real; kwargs...)
@@ -159,17 +169,18 @@ function _plot_power_spectrum_data!(
     freq_data::Vector{<:AbstractVector},
     power_raw_data::Vector{<:AbstractVector},
     channels_to_plot::Vector{Symbol};
+    line_labels::Union{Nothing,AbstractVector{<:AbstractString}} = nothing,
     kwargs...,
 )
     # Merge user kwargs with defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, _normalize_plot_kwargs(kwargs))
 
     # Extract commonly used values
     window_size = plot_kwargs[:window_size]
     overlap = plot_kwargs[:overlap]
     max_freq = plot_kwargs[:max_freq]
-    x_scale = plot_kwargs[:x_scale]
-    y_scale = plot_kwargs[:y_scale]
+    x_scale = plot_kwargs[:xscale]
+    y_scale = plot_kwargs[:yscale]
     unit = plot_kwargs[:unit]
     window_function = plot_kwargs[:window_function]
     show_freq_bands = plot_kwargs[:show_freq_bands]
@@ -177,11 +188,11 @@ function _plot_power_spectrum_data!(
     # Validate scale parameters
     valid_scales = [:linear, :log10]
     if !(x_scale in valid_scales)
-        @minimal_warning "Invalid x_scale '$x_scale'. Using :linear instead."
+        @minimal_warning "Invalid xscale '$x_scale'. Using :linear instead."
         x_scale = :linear
     end
     if !(y_scale in valid_scales)
-        @minimal_warning "Invalid y_scale '$y_scale'. Using :linear instead."
+        @minimal_warning "Invalid yscale '$y_scale'. Using :linear instead."
         y_scale = :linear
     end
 
@@ -192,8 +203,8 @@ function _plot_power_spectrum_data!(
         unit = :linear
     end
 
-    # Define EEG frequency bands
-    freq_bands = Dict(
+    # Define EEG frequency bands in deterministic order
+    freq_bands = OrderedDict(
         "δ" => (0.5, 4.0),    # Delta
         "θ" => (4.0, 8.0),    # Theta
         "α" => (8.0, 13.0),   # Alpha
@@ -206,7 +217,7 @@ function _plot_power_spectrum_data!(
     # Update y-axis label based on unit
     ylabel_text = unit == :dB ? "Power Spectral Density (dB)" : plot_kwargs[:ylabel]
     ax.ylabel = ylabel_text
-    ax.title = plot_kwargs[:plot_title]
+    ax.title = plot_kwargs[:show_title] && !isnothing(plot_kwargs[:plot_title]) ? plot_kwargs[:plot_title] : ""
     ax.titlesize = plot_kwargs[:plot_title_fontsize]
     ax.xlabelsize = plot_kwargs[:label_fontsize]
     ax.ylabelsize = plot_kwargs[:label_fontsize]
@@ -284,7 +295,8 @@ function _plot_power_spectrum_data!(
         end
 
         psd_obs = Observable(psd)
-        line_plot = lines!(ax, freqs, psd_obs, label = string(ch), linewidth = plot_kwargs[:linewidth], alpha = plot_kwargs[:line_alpha])
+        lbl = !isnothing(line_labels) && i <= length(line_labels) ? String(line_labels[i]) : string(ch)
+        line_plot = lines!(ax, freqs, psd_obs, label = lbl, linewidth = plot_kwargs[:linewidth], alpha = plot_kwargs[:line_alpha])
         push!(line_plots, (line_plot, psd_obs))
     end
 
@@ -485,7 +497,8 @@ function plot_channel_spectrum(
     _set_window_title(title_str)
 
     # Merge user kwargs with defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
+    kwargs_norm = _normalize_plot_kwargs(kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs_norm)
 
     # data selection
     dat_subset =
@@ -495,10 +508,10 @@ function plot_channel_spectrum(
     fig = _eegfun_figure()
     ax = Axis(fig[1, 1])
 
-    _plot_power_spectrum!(fig, ax, dat_subset.data, dat_subset.layout.data.label, sample_rate(dat_subset); kwargs...)
+    _plot_power_spectrum!(fig, ax, dat_subset.data, dat_subset.layout.data.label, sample_rate(dat_subset); kwargs_norm...)
 
     # Add legend if requested
-    if plot_kwargs[:show_legend]
+    if plot_kwargs[:legend]
         n_channels = length(dat_subset.layout.data.label)
         n_cols = n_channels > 10 ? cld(n_channels, 20) : 1
         axislegend(ax, nbanks = n_cols)
@@ -586,7 +599,8 @@ function plot_ica_component_spectrum(
     kwargs...,
 )
     # Merge user kwargs with defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
+    kwargs_norm = _normalize_plot_kwargs(kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs_norm)
     # Get selected components using the predicate
     selected_components = get_selected_components(ica_result, component_selection)
 
@@ -604,36 +618,29 @@ function plot_ica_component_spectrum(
     # Apply combined selection
     selected_samples = get_selected_samples(dat, combined_sel)
 
-    # Prepare data matrix for selected samples only
+    # Prepare data matrix for selected samples only (centered using ica_result.mean)
     relevant_cols = vcat(ica_result.layout.data.label)
     dat_matrix = permutedims(Matrix(dat.data[selected_samples, relevant_cols]))
-    dat_matrix .-= mean(dat_matrix, dims = 2)
+    dat_matrix .-= ica_result.mean
     dat_matrix ./= ica_result.scale
 
     # Calculate component activations for selected samples
     components = ica_result.unmixing * dat_matrix
     fs = dat.sample_rate
 
-    # Prepare component signals and symbols directly without allocating temporary DataFrame
+    # Prepare component signals, symbols, and variance labels
     components_to_plot = [Symbol("IC_$(comp_idx)") for comp_idx in selected_components]
     component_signals = [components[comp_idx, :] for comp_idx in selected_components]
+    component_labels = String[@sprintf("IC %d (%.1f%%)", comp_idx, ica_result.variance[comp_idx] * 100) for comp_idx in selected_components]
 
     # Create figure and axis
     fig = _eegfun_figure()
     ax = Axis(fig[1, 1])
 
-    _plot_power_spectrum!(fig, ax, component_signals, components_to_plot, sample_rate(dat); kwargs...)
+    _plot_power_spectrum!(fig, ax, component_signals, components_to_plot, sample_rate(dat); line_labels = component_labels, kwargs_norm...)
 
     # Add custom legend with component variance percentages if requested
-    if plot_kwargs[:show_legend]
-        # Create component labels with variance percentages
-        component_labels = []
-        for comp_idx in selected_components
-            variance_pct = ica_result.variance[comp_idx] * 100
-            push!(component_labels, @sprintf("IC %d (%.1f%%)", comp_idx, variance_pct))
-        end
-
-        # Use axislegend for consistency with plot_channel_spectrum
+    if plot_kwargs[:legend]
         # Calculate number of columns based on number of components
         ncols = length(selected_components) > 10 ? ceil(Int, length(selected_components) / 10) : 1
 
@@ -673,14 +680,15 @@ function plot_channel_spectrum(dat::SpectrumData; channel_selection = channels()
     freq_data = Vector{Vector{Float64}}([Float64.(dat.data.freq) for _ in valid_channels])
     power_raw_data = Vector{Vector{Float64}}([Float64.(dat.data[!, ch]) for ch in valid_channels])
 
-    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
+    kwargs_norm = _normalize_plot_kwargs(kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs_norm)
 
     fig = _eegfun_figure()
     ax = Axis(fig[1, 1])
 
-    _plot_power_spectrum_data!(fig, ax, freq_data, power_raw_data, valid_channels; kwargs...)
+    _plot_power_spectrum_data!(fig, ax, freq_data, power_raw_data, valid_channels; kwargs_norm...)
 
-    if plot_kwargs[:show_legend]
+    if plot_kwargs[:legend]
         n_channels = length(valid_channels)
         n_cols = n_channels > 10 ? cld(n_channels, 20) : 1
         axislegend(ax, nbanks = n_cols)

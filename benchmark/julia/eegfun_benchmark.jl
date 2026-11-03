@@ -5,7 +5,7 @@ using DelimitedFiles
 using Statistics
 CairoMakie.activate!()
 
-function process_eeg_to_grandaverage(raw_files::Vector{String}, data_dir::String, run_ica::Bool)
+function process_eeg_to_grandaverage(raw_files::Vector{String}, data_dir::String, results_dir::String, run_ica::Bool)
 
     all_subject_erps = EegFun.ErpData[]
 
@@ -126,10 +126,10 @@ mkpath(results_dir)
 
 # println("Compiling Julia pipeline (first run)...")
 warmup_files = min(length(test_files), 2)
-Base.invokelatest(process_eeg_to_grandaverage, test_files[1:warmup_files], data_dir, run_ica_flag) # Warm-up to trigger JIT compilation
+Base.invokelatest(process_eeg_to_grandaverage, test_files[1:warmup_files], data_dir, results_dir, run_ica_flag) # Warm-up to trigger JIT compilation
 
 println("Benchmarking...")
-val, t_elapsed = @timed Base.invokelatest(process_eeg_to_grandaverage, test_files, data_dir, run_ica_flag)
+val, t_elapsed = @timed Base.invokelatest(process_eeg_to_grandaverage, test_files, data_dir, results_dir, run_ica_flag)
 grand_avg, individual_times = val
 
 # Save execution time

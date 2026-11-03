@@ -42,26 +42,26 @@ EegFun.signal_example_composition()
 function signal_example_composition()
     _check_interactive_demo_backend("Signal Composition demo") || return nothing
 
-    fig = _eegfun_figure(size = (1200, 1000), title = "Signal Example 2", backgroundcolor = :white)
+    fig = _eegfun_figure(size = (1350, 950), title = "Signal Example 2", backgroundcolor = :white)
 
     # Set up adaptive font and UI sizing
     """Scale font sizes and UI element dimensions when the figure is resized."""
     function setup_adaptive_sizing(fig)
         # Create observables for different font sizes and UI elements
-        title_font = Observable(24)
-        label_font = Observable(20)
-        tick_font = Observable(18)
-        slider_font = Observable(20)
+        title_font = Observable(18)
+        label_font = Observable(15)
+        tick_font = Observable(12)
+        slider_font = Observable(14)
         slider_width = Observable(150)
         slider_height = Observable(20)
 
         # Update fonts and UI elements when figure is resized
         on(fig.scene.viewport) do area
-            scale_factor = area.widths[1] / 4000  # Base on 1200px width
-            title_font[] = max(16, round(Int, 24 * scale_factor))
-            label_font[] = max(14, round(Int, 20 * scale_factor))
-            tick_font[] = max(12, round(Int, 18 * scale_factor))
-            slider_font[] = max(12, round(Int, 20 * scale_factor))
+            scale_factor = area.widths[1] / 1350
+            title_font[] = max(13, round(Int, 18 * scale_factor))
+            label_font[] = max(11, round(Int, 15 * scale_factor))
+            tick_font[] = max(10, round(Int, 12 * scale_factor))
+            slider_font[] = max(11, round(Int, 14 * scale_factor))
             slider_width[] = max(100, round(Int, 150 * scale_factor))
             slider_height[] = max(15, round(Int, 20 * scale_factor))
         end
@@ -262,6 +262,7 @@ function signal_example_composition()
     end
 
     # Connect observables to update function
+    is_applying_preset = Ref(false)
     for obs in [
         sig_dur,
         samp_rate,
@@ -281,7 +282,7 @@ function signal_example_composition()
         high_pass_filter,
     ]
         on(obs) do _
-            update_signals()
+            is_applying_preset[] || update_signals()
         end
     end
 
@@ -437,46 +438,64 @@ function signal_example_composition()
     # Pedagogical Button Wiring
     on(btn_square.clicks) do _
         # Square Wave: sum(sin(n*x)/n) for odd n
-        set_close_to!(freq_sliders[1], 5.0)
-        set_close_to!(amp_sliders[1], 5.0)
-        set_close_to!(phase_sliders[1], 0.0)
+        is_applying_preset[] = true
+        try
+            set_close_to!(freq_sliders[1], 5.0)
+            set_close_to!(amp_sliders[1], 5.0)
+            set_close_to!(phase_sliders[1], 0.0)
 
-        set_close_to!(freq_sliders[2], 15.0)
-        set_close_to!(amp_sliders[2], 5.0 / 3.0)
-        set_close_to!(phase_sliders[2], 0.0)
+            set_close_to!(freq_sliders[2], 15.0)
+            set_close_to!(amp_sliders[2], 5.0 / 3.0)
+            set_close_to!(phase_sliders[2], 0.0)
 
-        set_close_to!(freq_sliders[3], 25.0)
-        set_close_to!(amp_sliders[3], 5.0 / 5.0)
-        set_close_to!(phase_sliders[3], 0.0)
+            set_close_to!(freq_sliders[3], 25.0)
+            set_close_to!(amp_sliders[3], 5.0 / 5.0)
+            set_close_to!(phase_sliders[3], 0.0)
 
-        set_close_to!(noise_slider, 0.0)
-        filter_checkbox.checked[] = false
+            set_close_to!(noise_slider, 0.0)
+            filter_checkbox.checked[] = false
+        finally
+            is_applying_preset[] = false
+        end
+        update_signals()
     end
 
     on(btn_saw.clicks) do _
         # Sawtooth: sum((-1)^(n-1) * sin(n*x)/n) for all n
-        set_close_to!(freq_sliders[1], 5.0)
-        set_close_to!(amp_sliders[1], 5.0)
-        set_close_to!(phase_sliders[1], 0.0)
+        is_applying_preset[] = true
+        try
+            set_close_to!(freq_sliders[1], 5.0)
+            set_close_to!(amp_sliders[1], 5.0)
+            set_close_to!(phase_sliders[1], 0.0)
 
-        set_close_to!(freq_sliders[2], 10.0)
-        set_close_to!(amp_sliders[2], 5.0 / 2.0)
-        set_close_to!(phase_sliders[2], π) # (-1) shift
+            set_close_to!(freq_sliders[2], 10.0)
+            set_close_to!(amp_sliders[2], 5.0 / 2.0)
+            set_close_to!(phase_sliders[2], π) # (-1) shift
 
-        set_close_to!(freq_sliders[3], 15.0)
-        set_close_to!(amp_sliders[3], 5.0 / 3.0)
-        set_close_to!(phase_sliders[3], 0.0)
+            set_close_to!(freq_sliders[3], 15.0)
+            set_close_to!(amp_sliders[3], 5.0 / 3.0)
+            set_close_to!(phase_sliders[3], 0.0)
 
-        set_close_to!(noise_slider, 0.0)
-        filter_checkbox.checked[] = false
+            set_close_to!(noise_slider, 0.0)
+            filter_checkbox.checked[] = false
+        finally
+            is_applying_preset[] = false
+        end
+        update_signals()
     end
 
     on(btn_scramble.clicks) do _
         # Demonstrates that Phase completely changes the time domain 
         # but leaves the frequency (Power Spectrum) completely untouched!
-        set_close_to!(phase_sliders[1], rand() * 2π - π)
-        set_close_to!(phase_sliders[2], rand() * 2π - π)
-        set_close_to!(phase_sliders[3], rand() * 2π - π)
+        is_applying_preset[] = true
+        try
+            set_close_to!(phase_sliders[1], rand() * 2π - π)
+            set_close_to!(phase_sliders[2], rand() * 2π - π)
+            set_close_to!(phase_sliders[3], rand() * 2π - π)
+        finally
+            is_applying_preset[] = false
+        end
+        update_signals()
     end
 
     _display_demo_figure(fig)

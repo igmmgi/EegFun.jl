@@ -4,6 +4,7 @@ DocumenterTools = "35a29f4d-8980-5a13-9543-d66fff28ecb8"
 DocumenterTypst = "d7fd56dd-41bc-4b2d-b658-79a5840b2e09"
 DocumenterVitepress = "4710194d-e776-4893-9690-8d956a29c365"
 EegFun = "aa15e9e4-a77e-4972-a32b-58bceaaa184b"
+FFTA = "b86e33f2-c0db-4aa1-a6e0-ab43e668529e"
 JuliaFormatter = "98e50ef6-434e-11e9-1051-2b60c6c9e899"
 LiveServer = "16fef848-5104-11e9-1b77-fb7a48bbb589"
 
@@ -12,3 +13,4 @@ EegFun = {path = ".."}
 
 [compat]
 Documenter = "~1.17"
+FFTA = "0.3.0 - 0.3.1, 0.3.3 - 0.3"

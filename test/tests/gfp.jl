@@ -209,13 +209,15 @@ end
 end
 
 @testset "Plot GFP" begin
+    _is_fig_or_nt(res) = (res isa Figure) || (res isa NamedTuple && hasproperty(res, :fig) && res.fig isa Figure)
+
     @testset "Basic plot creation" begin
         erp_data = EegFun.create_test_erp_data(participant = 1, condition = 1, fs = 100, n_channels = 5)
 
         # Create plot (without displaying)
         fig = EegFun.plot_gfp(erp_data, display_plot = false)
 
-        @test fig isa Figure
+        @test _is_fig_or_nt(fig)
     end
 
     @testset "Plot with ERP traces" begin
@@ -223,7 +225,7 @@ end
 
         fig = EegFun.plot_gfp(erp_data, display_plot = false, show_erp_traces = true)
 
-        @test fig isa Figure
+        @test _is_fig_or_nt(fig)
     end
 
     @testset "Plot with dissimilarity" begin
@@ -231,7 +233,7 @@ end
 
         fig = EegFun.plot_gfp(erp_data, display_plot = false, show_dissimilarity = true)
 
-        @test fig isa Figure
+        @test _is_fig_or_nt(fig)
     end
 
     @testset "Plot all panels" begin
@@ -239,7 +241,7 @@ end
 
         fig = EegFun.plot_gfp(erp_data, display_plot = false, show_erp_traces = true, show_dissimilarity = true)
 
-        @test fig isa Figure
+        @test _is_fig_or_nt(fig)
     end
 
     @testset "Plot multiple datasets" begin
@@ -247,7 +249,7 @@ end
 
         fig = EegFun.plot_gfp(erps, display_plot = false)
 
-        @test fig isa Figure
+        @test _is_fig_or_nt(fig)
     end
 
     @testset "Plot from pre-computed GFP" begin
@@ -256,7 +258,7 @@ end
 
         fig = EegFun.plot_gfp(gfp_result, display_plot = false)
 
-        @test fig isa Figure
+        @test _is_fig_or_nt(fig)
     end
 
     @testset "Plot from pre-computed GFP with dissimilarity" begin
@@ -265,7 +267,7 @@ end
 
         fig = EegFun.plot_gfp(result, display_plot = false, show_dissimilarity = true)
 
-        @test fig isa Figure
+        @test _is_fig_or_nt(fig)
     end
 
     @testset "Plot multiple pre-computed GFP" begin
@@ -274,7 +276,7 @@ end
 
         fig = EegFun.plot_gfp(gfp_results, display_plot = false)
 
-        @test fig isa Figure
+        @test _is_fig_or_nt(fig)
     end
 
     @testset "Plot with custom styling" begin
@@ -282,7 +284,7 @@ end
 
         fig = EegFun.plot_gfp(erp_data, display_plot = false, color = :blue, linewidth = 3, xlim = (-0.1, 0.5), plot_title = "Test GFP")
 
-        @test fig isa Figure
+        @test _is_fig_or_nt(fig)
     end
 
     @testset "Plot error handling" begin
@@ -334,5 +336,41 @@ end
 
         # GFP should be high (large variance)
         @test all(gfp_result.gfp .> 5.0)
+    end
+
+    @testset "Phase 2 regressions: Lehmann & Skrandies (1980) spatial mean subtraction, zero-GFP & n_timepoints == 1 guards" begin
+        lay3 = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2, :Ch3], inc = zeros(3), azi = zeros(3)), nothing, nothing, nothing)
+        # Same topography at t=0.0 and t=0.1 up to a huge reference/DC shift (+100 μV across all channels at t=0.1)
+        df_dc1 = DataFrame(time = [0.0, 0.1], Ch1 = [1.0, 1.0], Ch2 = [0.0, 0.0], Ch3 = [-1.0, -1.0])
+        df_dc2 = DataFrame(time = [0.0, 0.1], Ch1 = [1.0, 101.0], Ch2 = [0.0, 100.0], Ch3 = [-1.0, 99.0])
+        erp_dc1 = EegFun.ErpData("dc1", 1, "c1", df_dc1, lay3, 100, EegFun.AnalysisInfo(), 10)
+        erp_dc2 = EegFun.ErpData("dc2", 1, "c1", df_dc2, lay3, 100, EegFun.AnalysisInfo(), 10)
+
+        # With spatial mean subtraction before dividing by GFP, dissimilarity is reference-independent and equals 0!
+        gd1 = EegFun.global_dissimilarity(erp_dc1)
+        gd2 = EegFun.global_dissimilarity(erp_dc2)
+        comb2 = EegFun.gfp_and_dissimilarity(erp_dc2)
+        @test gd1.dissimilarity ≈ [0.0, 0.0] atol = 1e-12
+        @test gd2.dissimilarity ≈ [0.0, 0.0] atol = 1e-12
+        @test comb2.dissimilarity ≈ [0.0, 0.0] atol = 1e-12
+
+        # Opposite polarity topographies yield maximum dissimilarity = 2.0
+        df_opp = DataFrame(time = [0.0, 0.1], Ch1 = [1.0, -1.0], Ch2 = [0.0, 0.0], Ch3 = [-1.0, 1.0])
+        erp_opp = EegFun.ErpData("opp", 1, "c1", df_opp, lay3, 100, EegFun.AnalysisInfo(), 10)
+        @test EegFun.global_dissimilarity(erp_opp).dissimilarity[2] ≈ 2.0 atol = 1e-12
+
+        # Zero GFP guard (all channels equal at t=0.0 -> gfp <= eps(Float64) -> finite 0.0, no NaN/Inf)
+        df_zero_gfp = DataFrame(time = [0.0, 0.1], Ch1 = [5.0, 1.0], Ch2 = [5.0, -1.0], Ch3 = [5.0, 0.0])
+        erp_zero_gfp = EegFun.ErpData("zg", 1, "c1", df_zero_gfp, lay3, 100, EegFun.AnalysisInfo(), 10)
+        gd_zg = EegFun.global_dissimilarity(erp_zero_gfp)
+        @test all(isfinite, gd_zg.dissimilarity)
+
+        # Single timepoint guard (n_timepoints == 1)
+        df_1tp = DataFrame(time = [0.0], Ch1 = [1.0], Ch2 = [0.0], Ch3 = [-1.0])
+        erp_1tp = EegFun.ErpData("1tp", 1, "c1", df_1tp, lay3, 100, EegFun.AnalysisInfo(), 10)
+        gd_1tp = EegFun.global_dissimilarity(erp_1tp)
+        comb_1tp = EegFun.gfp_and_dissimilarity(erp_1tp)
+        @test nrow(gd_1tp) == 1 && gd_1tp.dissimilarity == [0.0]
+        @test nrow(comb_1tp) == 1 && comb_1tp.dissimilarity == [0.0]
     end
 end

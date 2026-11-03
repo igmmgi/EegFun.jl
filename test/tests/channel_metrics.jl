@@ -484,17 +484,17 @@ using OrderedCollections
         channel_labels = [:Ch1, :Ch2, :Ch3, :Ch4, :Ch5]
         layout_df = DataFrame(label = channel_labels, inc = zeros(5), azi = zeros(5))
 
-        # Create neighbors dictionary (Neighbours requires channels, distances, weights)
-        # Layout expects OrderedDict for neighbours
-        neighbours = OrderedDict(
-            :Ch1 => EegFun.Neighbours([:Ch2, :Ch3], [1.0, 1.0], [0.5, 0.5]),
-            :Ch2 => EegFun.Neighbours([:Ch1, :Ch3, :Ch4], [1.0, 1.0, 1.0], [1 / 3, 1 / 3, 1 / 3]),
-            :Ch3 => EegFun.Neighbours([:Ch1, :Ch2], [1.0, 1.0], [0.5, 0.5]),
-            :Ch4 => EegFun.Neighbours([:Ch2, :Ch5], [1.0, 1.0], [0.5, 0.5]),
-            :Ch5 => EegFun.Neighbours([:Ch4], [1.0], [1.0]),  # Only 1 neighbor (not enough)
+        # Create neighbors dictionary (Neighbors requires channels, distances, weights)
+        # Layout expects OrderedDict for neighbors
+        neighbors = OrderedDict(
+            :Ch1 => EegFun.Neighbors([:Ch2, :Ch3], [1.0, 1.0], [0.5, 0.5]),
+            :Ch2 => EegFun.Neighbors([:Ch1, :Ch3, :Ch4], [1.0, 1.0, 1.0], [1 / 3, 1 / 3, 1 / 3]),
+            :Ch3 => EegFun.Neighbors([:Ch1, :Ch2], [1.0, 1.0], [0.5, 0.5]),
+            :Ch4 => EegFun.Neighbors([:Ch2, :Ch5], [1.0, 1.0], [0.5, 0.5]),
+            :Ch5 => EegFun.Neighbors([:Ch4], [1.0], [1.0]),  # Only 1 neighbor (not enough)
         )
 
-        layout = EegFun.Layout(layout_df, neighbours, nothing, nothing)  # data, neighbours, criterion
+        layout = EegFun.Layout(layout_df, neighbors, nothing, nothing)  # data, neighbors, criterion
 
         # Test with bad channels that have all good neighbors
         # Ch1 and Ch3 are neighbors of each other, so we can't test them together
@@ -530,11 +530,38 @@ using OrderedCollections
         @test isempty(repairable)
 
         # Test with channel not in neighbors dict
-        neighbours_partial = OrderedDict(:Ch2 => EegFun.Neighbours([:Ch1], [1.0], [1.0]))
-        layout_partial = EegFun.Layout(layout_df, neighbours_partial, nothing, nothing)
+        neighbors_partial = OrderedDict(:Ch2 => EegFun.Neighbors([:Ch1], [1.0], [1.0]))
+        layout_partial = EegFun.Layout(layout_df, neighbors_partial, nothing, nothing)
         bad_channels = [:Ch3]
         repairable = EegFun.check_channel_neighbors(bad_channels, layout_partial)
-        @test isempty(repairable)  # Ch3 not in neighbours dict
+        @test isempty(repairable)  # Ch3 not in neighbors dict
+    end
+
+    @testset "Phase 2 regressions: discret forwarding, Real threshold, and std == 0 guard" begin
+        dat = EegFun.create_test_continuous_data(n = 500, n_channels = 4, seed = 123)
+        # 1. discret forwarding in channel_joint_probability: histogram (discret = 20) vs Gaussian (discret = 0)
+        jp_hist = EegFun.channel_joint_probability(dat; discret = 20, normalize = 0)
+        jp_gauss = EegFun.channel_joint_probability(dat; discret = 0, normalize = 0)
+        @test jp_hist.jp != jp_gauss.jp
+
+        # 2. threshold::Real (accepts Int threshold such as 3) and AbstractMatrix{Float32}
+        jp_int_thresh = EegFun.channel_joint_probability(dat; threshold = 3)
+        @test jp_int_thresh isa DataFrame
+        sig32 = randn(Float32, 3, 100)
+        jp32, rej32 = EegFun._joint_probability(sig32, 3, 1, 100)
+        @test all(isfinite, jp32) && length(rej32) == 3
+
+        # 3. std == 0 constant channel guard (no NaN / Inf division by zero)
+        dat_const = copy(dat)
+        dat_const.data[!, :Ch1] .= 7.0 # single constant channel among varying channels
+        jp_one_const = EegFun.channel_joint_probability(dat_const; threshold = 3, normalize = 2, discret = 0)
+        @test all(isfinite, jp_one_const.jp)
+
+        # All channels identical -> across-channel std of jp is 0 -> returns 0 z-scores & no false rejections
+        sig_identical = ones(Float64, 4, 100)
+        jp_id, rej_id = EegFun._joint_probability(sig_identical, 3, 2, 100)
+        @test all(jp_id .== 0.0)
+        @test !any(rej_id)
     end
 
 end

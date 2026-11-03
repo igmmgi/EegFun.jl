@@ -407,4 +407,73 @@ end
         end
     end
 
+    @testset "Phase 2 regressions: 1-based trigger mapping, pad alignment, extra/Bool cols, Vector batch" begin
+        # 1. Exact 1-based trigger & metadata index mapping + non-integer ratio (500 -> 200 Hz, rate = 2//5)
+        fs_orig = 500
+        n_orig = 1000
+        t_orig = collect(0:(n_orig-1)) ./ fs_orig
+        trig_orig = zeros(Int, n_orig)
+        trig_orig[1] = 11     # 1-based index 1 -> must map to index 1
+        trig_orig[251] = 22   # t = 0.5s (orig idx 251) -> (251-1)*0.4 + 1 = 101 (t = 0.5s at 200 Hz!)
+        flag_col = falses(n_orig)
+        flag_col[252] = true  # off-grid Bool flag inside bin around 101 -> OR-reduced so true is preserved!
+        extra_float = sin.(2π .* 5.0 .* t_orig) .+ 0.5 .* sin.(2π .* 150.0 .* t_orig) # 150 Hz above new Nyquist (100 Hz)
+        const_meta = fill(42.0, n_orig)
+
+        df = DataFrame(
+            time = t_orig,
+            sample = 1:n_orig,
+            trigger = trig_orig,
+            C3 = cos.(2π .* 10.0 .* t_orig),
+            vEOG = extra_float,
+            const_val = const_meta,
+            artifact_flag = Vector{Bool}(flag_col),
+        )
+        lay = EegFun.Layout(DataFrame(label = [:C3], inc = [0.0], azi = [0.0]), nothing, nothing, nothing)
+        cont = EegFun.ContinuousData("resamp_reg", df, lay, fs_orig, EegFun.AnalysisInfo())
+
+        res = EegFun.resample(cont, 200)
+        @test res.sample_rate == 200
+        @test nrow(res.data) == 400
+        @test res.data.trigger[1] == 11
+        @test res.data.trigger[101] == 22
+        @test any(res.data.artifact_flag)
+        @test res.data.artifact_flag[101] == true
+        # Constant float extra column stays exact without ringing
+        @test all(res.data.const_val .== 42.0)
+        # Continuous float extra channel (:vEOG) was anti-aliased (150 Hz attenuated, only 5 Hz remains -> amplitude ~1)
+        t_new = res.data.time
+        @test cor(res.data.vEOG[20:380], sin.(2π .* 5.0 .* t_new[20:380])) > 0.98
+
+        # Fractional target_rate throws EegFunError cleanly (no InexactError)
+        @test_throws EegFun.EegFunError EegFun.resample(cont, 125.5)
+
+        # SingleDataFrameEeg restriction: unsupported SingleDataFrameEeg subtype cannot hit Continuous/Erp method
+        tf_dat = EegFun.create_test_tf_data()
+        @test_throws MethodError EegFun.resample!(tf_dat, 100)
+
+        # Batch resample on Vector{EpochData} and Vector{ErpData} saved in JLD2
+        mktempdir() do tmpdir
+            ep_vec = EegFun.create_test_epoch_data_vector(conditions = 1:2, n_epochs = 2, fs = 256, n = 256)
+            jldsave(joinpath(tmpdir, "1_epochs_vec.jld2"); data = ep_vec)
+            erp_vec = EegFun.create_test_batch_erp_data(n_conditions = 2, fs = 256)
+            jldsave(joinpath(tmpdir, "1_erps_vec.jld2"); data = erp_vec)
+
+            out_ep = joinpath(tmpdir, "out_ep")
+            out_erp = joinpath(tmpdir, "out_erp")
+            r1 = EegFun.resample("epochs_vec", 128; input_dir = tmpdir, output_dir = out_ep)
+            r2 = EegFun.resample("erps_vec", 128; input_dir = tmpdir, output_dir = out_erp)
+            @test r1.success == 1 && r1.errors == 0
+            @test r2.success == 1 && r2.errors == 0
+
+            loaded_ep = load(joinpath(out_ep, "1_epochs_vec.jld2"), "data")
+            @test loaded_ep isa Vector{EegFun.EpochData}
+            @test all(ep.sample_rate == 128 for ep in loaded_ep)
+
+            loaded_erp = load(joinpath(out_erp, "1_erps_vec.jld2"), "data")
+            @test loaded_erp isa Vector{EegFun.ErpData}
+            @test all(e.sample_rate == 128 for e in loaded_erp)
+        end
+    end
+
 end

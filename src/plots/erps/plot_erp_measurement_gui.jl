@@ -100,7 +100,7 @@ function plot_erp_measurement_gui(filepath::String; kwargs...)
 end
 # Single ErpData - dispatch to vector version
 """
-    plot_erp_measurement_gui(erp::Union{ErpData,EpochData}; kwargs...)
+    plot_erp_measurement_gui(erp::ErpData; kwargs...)
 
 Launch a GUI for interacting with ERP measurements for a single dataset.
 """
@@ -117,7 +117,7 @@ end
 
 # Vector of ErpData - main implementation
 """
-    plot_erp_measurement_gui(erps::Vector{<:Union{ErpData,EpochData}}; kwargs...)
+    plot_erp_measurement_gui(erps::Vector{ErpData}; kwargs...)
 
 Launch a GUI for interacting with ERP measurements for multiple datasets.
 """
@@ -196,11 +196,13 @@ function plot_erp_measurement_gui(
 
     # Measurement type selection
     Label(controls_grid[4, 1], "Measurement Type:", halign = :left)
+    type_idx = findfirst(p -> p.second == analysis_type, MEASUREMENT_TYPE_LABELS)
+    default_type_label = isnothing(type_idx) ? "Mean Amplitude" : MEASUREMENT_TYPE_LABELS[type_idx].first
     # Create menu with display names (labels) that map to full pairs (values)
     type_menu = Menu(
         controls_grid[5, 1],
         options = zip([p.first for p in MEASUREMENT_TYPE_LABELS], MEASUREMENT_TYPE_LABELS),
-        default = "Mean Amplitude",
+        default = default_type_label,
     )
 
     # Measurement interval sliders
@@ -241,7 +243,7 @@ function plot_erp_measurement_gui(
         fraction_slider.blockscene.visible[] = is_frac
         frac_lbl2.blockscene.visible[] = is_frac
     end
-    update_param_sliders_visibility!("mean_amplitude")
+    update_param_sliders_visibility!(analysis_type)
 
     Label(controls_grid[18, 1], "Show Result Markers:", halign = :left)
     show_markers_toggle = Toggle(controls_grid[19, 1], active = false)
@@ -396,7 +398,7 @@ function plot_erp_measurement_gui(
         plot_area_grid[1, 1],
         xlabel = "Time (s)",
         ylabel = "μV",
-        title = "ERP: $(_print_vector(initial_channels))",
+        title = "$(_print_vector(initial_channels)): $(analysis_type)",
         xgridvisible = false,
         ygridvisible = false,
         xminorgridvisible = false,
@@ -612,6 +614,78 @@ function plot_erp_measurement_gui(
         return :none
     end
 
+    # Re-entrancy guard and synchronous measurement calculation + UI update
+    is_recalculating = Ref(false)
+    latest_results = Ref{Vector{NamedTuple}}(NamedTuple[])
+
+    function recalculate_and_update!()
+        is_recalculating[] && return
+        is_recalculating[] = true
+        try
+            chs = selected_channels[]
+            type_str = selected_type[]
+            mw = analysis_interval_obs[]
+            bw = baseline_interval_obs[]
+            li = local_interval_slider.value[]
+            frac = fraction_slider.value[]
+
+            results = NamedTuple[]
+            measurement_kwargs = Dict{Symbol,Any}(k => v[1] for (k, v) in ERP_MEASUREMENTS_KWARGS)
+            measurement_kwargs[:local_interval] = li
+            measurement_kwargs[:fractional_area_fraction] = frac
+            measurement_kwargs[:fractional_peak_fraction] = frac
+
+            for erp in erp_vec
+                try
+                    result = _compute_gui_measurement(erp, chs, type_str, mw, bw, measurement_kwargs)
+                    push!(results, (condition = erp.condition_name, result...))
+                catch e
+                    push!(results, (condition = erp.condition_name, value = NaN, error = string(e)))
+                end
+            end
+            latest_results[] = results
+
+            if isempty(results)
+                result_label.text = "—"
+            else
+                function format_value(val)
+                    if isnothing(val) || isnan(val)
+                        return "   N/A  "
+                    elseif _is_latency_measurement(type_str)
+                        return @sprintf("% .3f s", val)
+                    elseif type_str in ["rectified_area", "integral", "positive_area", "negative_area"]
+                        return @sprintf("% .3f μV·s", val)
+                    else  # Amplitudes
+                        return @sprintf("% .3f μV", val)
+                    end
+                end
+
+                if length(results) == 1
+                    result = results[1]
+                    if haskey(result, :error)
+                        result_label.text = "Error: $(result.error)"
+                    else
+                        result_label.text = format_value(result.value)
+                    end
+                else
+                    lines_txt = String[]
+                    for result in results
+                        if haskey(result, :error)
+                            push!(lines_txt, "$(result.condition): $(result.error)")
+                        else
+                            push!(lines_txt, "$(result.condition): $(format_value(result.value))")
+                        end
+                    end
+                    result_label.text = join(lines_txt, "\n")
+                end
+            end
+
+            update_result_markers!(results, show_markers_obs[])
+        finally
+            is_recalculating[] = false
+        end
+    end
+
     # Mouse press: start dragging if on an edge or inside a band
     on(events(ax).mousebutton, priority = 100) do event
         if event.button == Mouse.left && event.action == Mouse.press
@@ -639,7 +713,12 @@ function plot_erp_measurement_gui(
             end
         elseif event.button == Mouse.left && event.action == Mouse.release
             if drag_target[] != :none
+                released_target = drag_target[]
                 drag_target[] = :none
+                if released_target in (:baseline_left, :baseline_right, :baseline_middle)
+                    update_erp_plot!()
+                end
+                recalculate_and_update!()
                 return Consume(true)
             end
         end
@@ -664,12 +743,14 @@ function plot_erp_measurement_gui(
             analysis_interval_obs[] = (new_left, ai[2])
             set_close_to!(meas_window_slider, new_left, ai[2])
             meas_window_label.text = @sprintf("%.3f s - %.3f s", new_left, ai[2])
+            recalculate_and_update!()
         elseif target == :analysis_right
             ai = analysis_interval_obs[]
             new_right = max(world_x, ai[1] + 0.005)
             analysis_interval_obs[] = (ai[1], new_right)
             set_close_to!(meas_window_slider, ai[1], new_right)
             meas_window_label.text = @sprintf("%.3f s - %.3f s", ai[1], new_right)
+            recalculate_and_update!()
         elseif target == :analysis_middle
             ai = analysis_interval_obs[]
             width = ai[2] - ai[1]
@@ -679,6 +760,7 @@ function plot_erp_measurement_gui(
             analysis_interval_obs[] = (new_left, new_right)
             set_close_to!(meas_window_slider, new_left, new_right)
             meas_window_label.text = @sprintf("%.3f s - %.3f s", new_left, new_right)
+            recalculate_and_update!()
         elseif target == :baseline_left
             bi = baseline_interval_obs[]
             new_left = min(world_x, bi[2] - 0.005)
@@ -686,6 +768,7 @@ function plot_erp_measurement_gui(
             set_close_to!(baseline_interval_slider, new_left, bi[2])
             baseline_interval_label.text = @sprintf("%.3f s - %.3f s", new_left, bi[2])
             update_erp_plot!()
+            recalculate_and_update!()
         elseif target == :baseline_right
             bi = baseline_interval_obs[]
             new_right = max(world_x, bi[1] + 0.005)
@@ -693,6 +776,7 @@ function plot_erp_measurement_gui(
             set_close_to!(baseline_interval_slider, bi[1], new_right)
             baseline_interval_label.text = @sprintf("%.3f s - %.3f s", bi[1], new_right)
             update_erp_plot!()
+            recalculate_and_update!()
         elseif target == :baseline_middle
             bi = baseline_interval_obs[]
             width = bi[2] - bi[1]
@@ -703,6 +787,7 @@ function plot_erp_measurement_gui(
             set_close_to!(baseline_interval_slider, new_left, new_right)
             baseline_interval_label.text = @sprintf("%.3f s - %.3f s", new_left, new_right)
             update_erp_plot!()
+            recalculate_and_update!()
         end
 
         drag_suppress_slider[] = false
@@ -722,9 +807,7 @@ function plot_erp_measurement_gui(
     on(selected_channels) do chs
         update_erp_plot!()
         ax.title = "$(_print_vector(chs)): $(selected_type[])"
-        # Redraw markers after plot update
-        yield()
-        update_result_markers!(measurement_results[], show_markers_obs[])
+        recalculate_and_update!()
     end
 
     on(type_menu.selection) do type_pair
@@ -733,12 +816,14 @@ function plot_erp_measurement_gui(
         selected_type[] = type_str
         ax.title = "$(_print_vector(selected_channels[])): $(type_str)"
         update_param_sliders_visibility!(type_str)
+        recalculate_and_update!()
     end
 
     on(meas_window_slider.interval) do interval
         drag_suppress_slider[] && return  # skip if drag is driving this
         analysis_interval_obs[] = (interval[1], interval[2])
         meas_window_label.text = @sprintf("%.3f s - %.3f s", interval[1], interval[2])
+        recalculate_and_update!()
     end
 
     on(baseline_interval_slider.interval) do interval
@@ -746,9 +831,15 @@ function plot_erp_measurement_gui(
         baseline_interval_obs[] = (interval[1], interval[2])
         baseline_interval_label.text = @sprintf("%.3f s - %.3f s", interval[1], interval[2])
         update_erp_plot!()  # Baseline always enabled, so always update
-        # Manually redraw markers after plot clears them
-        yield()  # Small delay to let measurement_results update
-        update_result_markers!(measurement_results[], show_markers_obs[])
+        recalculate_and_update!()
+    end
+
+    on(local_interval_slider.value) do _
+        recalculate_and_update!()
+    end
+
+    on(fraction_slider.value) do _
+        recalculate_and_update!()
     end
 
     # Connect observables to band visuals
@@ -760,91 +851,20 @@ function plot_erp_measurement_gui(
         update_baseline_band!(bw)
     end
 
-    # Computed observable for measurement values (one per condition)
-    measurement_results = lift(
-        selected_channels,
-        selected_type,
-        analysis_interval_obs,
-        baseline_interval_obs,
-        local_interval_slider.value,
-        fraction_slider.value,
-    ) do chs, type_str, mw, bw, li, frac
-        # Compute for all conditions (baseline always enabled)
-        results = NamedTuple[]
-
-        measurement_kwargs = Dict{Symbol,Any}(k => v[1] for (k, v) in ERP_MEASUREMENTS_KWARGS)
-        measurement_kwargs[:local_interval] = li
-        measurement_kwargs[:fractional_area_fraction] = frac
-        measurement_kwargs[:fractional_peak_fraction] = frac
-
-        for erp in erp_vec
-            try
-                result = _compute_gui_measurement(erp, chs, type_str, mw, bw, measurement_kwargs)
-                push!(results, (condition = erp.condition_name, result...))
-            catch e
-                push!(results, (condition = erp.condition_name, value = NaN, error = string(e)))
-            end
-        end
-        return results
-    end
-
-    # Update result label to show all condition values
-    on(measurement_results) do results
-        if isempty(results)
-            result_label.text = "—"
-            return
-        end
-
-        # Format based on measurement type
-        function format_value(val)
-            if isnothing(val) || isnan(val)
-                return "   N/A  "
-            elseif _is_latency_measurement(selected_type[])
-                return @sprintf("% .3f s", val)
-            elseif selected_type[] in ["rectified_area", "integral", "positive_area", "negative_area"]
-                return @sprintf("% .3f μV·s", val)
-            else  # Amplitudes
-                return @sprintf("% .3f μV", val)
-            end
-        end
-
-        if length(results) == 1
-            result = results[1]
-            if haskey(result, :error)
-                result_label.text = "Error: $(result.error)"
-            else
-                result_label.text = format_value(result.value)
-            end
-        else
-            lines = String[]
-            for result in results
-                if haskey(result, :error)
-                    push!(lines, "$(result.condition): $(result.error)")
-                else
-                    push!(lines, "$(result.condition): $(format_value(result.value))")
-                end
-            end
-            result_label.text = join(lines, "\n")
-        end
-
-        # Update result markers
-        update_result_markers!(results, show_markers_obs[])
-    end
-
     # Connect toggle to observable
     on(show_markers_toggle.active) do enabled
         show_markers_obs[] = enabled
-        update_result_markers!(measurement_results[], enabled)
+        update_result_markers!(latest_results[], enabled)
     end
 
-    # Trigger initial result display 
-    notify(measurement_results)
+    # Trigger initial result display
+    recalculate_and_update!()
 
     screen = nothing
     if display_plot
         screen = _display_figure(fig)
     end
-    return (fig = fig, screen = screen)
+    return (fig = fig, axes = [ax], screen = screen)
 
 end
 
@@ -863,7 +883,7 @@ function _compute_gui_measurement(
     measurement_kwargs,
 )
     # Apply baseline correction using existing infrastructure
-    erp_data = baseline(erp, baseline_interval)
+    erp_data = isnothing(baseline_interval) ? erp : baseline(erp, baseline_interval)
     time_data = time_vector(erp_data)
 
     channels_df = erp_data.data[!, channels]

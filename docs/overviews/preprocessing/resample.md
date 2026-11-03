@@ -1,121 +1,46 @@
-This demo shows how to change the sampling rate of EEG data through resampling.
+This demo shows how to change the sampling rate of EEG data through polyphase resampling.
 
 ### What is Resampling?
 
-Resampling changes the number of samples per second in your data. EegFun's `resample` function supports **downsampling** — reducing the sampling rate by an integer factor (e.g., 2048 Hz → 512 Hz with factor 2).
-
-> **Note**: Upsampling (increasing the sampling rate) is not currently supported.
+Resampling changes the number of samples per second (Hz) in your recording. `EegFun.resample` and `EegFun.resample!` resample continuous, epoched, or ERP data to a positive integer target sampling rate (e.g., 2048 Hz → 512 Hz or 256 Hz) using `DSP.resample` polyphase anti-aliasing filtering with mirror padding.
 
 ### Why Resample?
 
 **Downsampling benefits**:
 
-- **Reduce file size**: Fewer samples = less disk space
-- **Speed up processing**: Faster filtering, epoching, time-frequency analysis
-- **Match dataset requirements**: Some analyses expect specific rates
-- **Remove unnecessary detail**: Most ERP information is below 50 Hz
+- **Reduce memory & disk footprint**: Fewer samples per channel
+- **Speed up downstream steps**: Faster ICA, filtering, time-frequency decomposition, and MVPA decoding
+- **Harmonize multi-site cohorts**: Bring recordings with different acquisition rates onto a common sampling grid
 
 ### The Nyquist Theorem
 
-The sampling rate must be **at least 2× the highest frequency** in your signal:
+The target sampling rate must be **strictly greater than 2× the highest frequency** of interest:
 
-- **250 Hz sampling** → Can represent frequencies up to 125 Hz
-- **500 Hz sampling** → Can represent frequencies up to 250 Hz
-- **1000 Hz sampling** → Can represent frequencies up to 500 Hz
+- **256 Hz sampling** → Nyquist = 128 Hz (well-suited for standard ERP analyses < 40 Hz)
+- **512 Hz sampling** → Nyquist = 256 Hz (well-suited for time-frequency and gamma oscillations up to ~100 Hz)
+- **1000 Hz sampling** → Nyquist = 500 Hz
 
-**For ERP research**:
+### Anti-Aliasing & Mirror Padding
 
-- Most ERP components are below 30-50 Hz
-- **250-500 Hz** sampling is typically adequate
-- Higher rates needed for high-frequency oscillations (gamma: 30-100 Hz)
-
-### Anti-Aliasing
-
-When downsampling, **always lowpass filter first** to prevent aliasing:
-
-**Bad practice** (aliasing risk):
-```julia
-dat_new = resample(dat, 4)  # Downsample by 4× WITHOUT filtering
-```
-
-**Good practice** (safe downsampling):
-```julia
-# If original rate is 2048 Hz and downsampling to 512 Hz:
-# Filter at ~200 Hz (below new Nyquist of 256 Hz)
-lowpass_filter!(dat, 200)
-dat_new = resample(dat, 4)  # Now safe to downsample
-```
-
-EegFun's `resample` function uses simple decimation (keeping every `factor`-th sample) — it does **not** apply anti-aliasing automatically. Always lowpass filter before downsampling to prevent aliasing artifacts.
-
-### Downsampling Factors
-
-The demo shows downsampling by factors of 2 and 4:
+`EegFun.resample` automatically constructs a polyphase anti-aliasing filter (`DSP.resample_filter`) and applies mirror padding at segment boundaries to suppress edge transients:
 
 ```julia
-dat_new = resample(dat, 2)  # Divide rate by 2 (e.g., 2048 → 1024 Hz)
-dat_new = resample(dat, 4)  # Divide rate by 4 (e.g., 2048 → 512 Hz)
+dat_512 = EegFun.resample(dat, 512) # Resample to 512 Hz
+dat_256 = EegFun.resample(dat, 256) # Resample to 256 Hz
 ```
 
-**Common downsampling targets**:
+### Trigger & Metadata Preservation
 
-| Original Rate | Factor | Target Rate |
-|---------------|--------|-------------|
-| 2048 Hz | 4 | 512 Hz |
-| 2048 Hz | 8 | 256 Hz |
-| 1024 Hz | 4 | 256 Hz |
-| 1024 Hz | 2 | 512 Hz |
-| 512 Hz | 2 | 256 Hz |
-
-### Trigger Preservation
-
-The demo verifies that triggers are preserved during resampling:
+Event triggers and extra channels (such as EOG or boolean artifact flags) are mapped to the new sample grid automatically:
 
 ```julia
-trigger_count(dat)      # Original trigger count
-trigger_count(dat_new)  # Should match after resampling
+EegFun.trigger_count(dat)      # Original trigger counts
+EegFun.trigger_count(dat_256)  # Preserved after resampling
 ```
-
-Trigger timing is automatically adjusted to match the new sampling rate.
-
-### When to Resample
-
-**Resample early** in your pipeline:
-
-1. Load raw data
-2. **Resample** (if needed)
-3. Filter
-4. Epoch
-5. Analyze
-
-This minimizes processing time for subsequent steps.
-
-**Don't resample after epoching** unless necessary - it's more efficient to resample continuous data first.
 
 ### Workflow Summary
 
-This demo demonstrates:
-
-1. **Load continuous data** at original sampling rate
-2. **Check current rate** with `sample_rate()`
-3. **Downsample by factor** (2× and 4×)
-4. **Verify new rate** matches expected value
-5. **Verify triggers preserved** with `trigger_count()`
-
-### Best Practices
-
-**Choose appropriate target rate**:
-
-- **250 Hz**: Minimum for standard ERP work
-- **500 Hz**: Good balance for most EEG applications
-- **1000+ Hz**: Needed for high-frequency analyses
-
-**Filter before downsampling**:
-
-- Prevents aliasing artifacts
-- Use lowpass filter at ~80% of new Nyquist frequency
-
-**Document the change**:
-
-- Always note original and resampled rates in your analysis notes
-- Important for interpretation and reproducibility
+1. **Load continuous data** at the acquisition sampling rate
+2. **Inspect current rate** with `EegFun.sample_rate(dat)`
+3. **Resample to target Hz** (`EegFun.resample(dat, 512)` or `EegFun.resample!(dat, 256)`)
+4. **Verify triggers preserved** with `EegFun.trigger_count(dat_256)`

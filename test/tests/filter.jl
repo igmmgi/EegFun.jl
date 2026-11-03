@@ -158,13 +158,50 @@ using JLD2
     @testset "plot_filter_response (no display)" begin
         fs = 1000.0
         fi = EegFun.create_highpass_filter(1.0, fs)
-        fig, axes = EegFun.plot_filter_response(fi; xscale = :linear, display_plot = false)
+        res1 = EegFun.plot_filter_response(fi; xscale = :linear, display_plot = false)
+        fig = res1 isa NamedTuple ? res1.fig : res1[1]
+        axes = res1 isa NamedTuple ? res1.axes : res1[2]
         @test fig isa Figure
         @test length(axes) == 2
         # log scale path
-        fig2, axes2 = EegFun.plot_filter_response(fi; xscale = :log, display_plot = false)
+        res2 = EegFun.plot_filter_response(fi; xscale = :log, display_plot = false)
+        fig2 = res2 isa NamedTuple ? res2.fig : res2[1]
+        axes2 = res2 isa NamedTuple ? res2.axes : res2[2]
         @test fig2 isa Figure
         @test length(axes2) == 2
+    end
+
+    @testset "Phase 2 regressions: FIR Hz transition width, no nextpow(2) overflow, zero-phase filtfilt dB" begin
+        # 1. FIR highpass at 0.5 Hz (fs = 250 Hz): default transition width is 0.5 Hz (<= 1.0 Hz!)
+        # Must NOT be misinterpreted as 0.5 * Nyquist, and must NOT nextpow(2)-double taps beyond min_length / 3
+        fs = 250
+        fi_hp = EegFun.create_highpass_filter(0.5, fs; filter_method = :fir)
+        @test fi_hp.transition_band == 0.5
+        @test fi_hp.n_taps == 2001 # exact odd tap count (ceil(4*250/0.5)+1 = 2001) without nextpow(2)=4097 inflation!
+
+        # 6100 samples: (6100 - 1) ÷ 3 = 2033 >= 2001 fits without widening, whereas nextpow(2)=4097 would overflow!
+        dat_fir_fit = EegFun.create_test_continuous_data(; n = 6100, fs = fs)
+        filtered_fir = EegFun.highpass_filter(dat_fir_fit, 0.5; filter_method = :fir)
+        @test filtered_fir.analysis_info.hp_filter == 0.5
+
+        # Short data (2200 samples -> max_odd_taps = 733) widens transition_band cleanly in Hz without crashing filtfilt
+        dat_fir_short = EegFun.create_test_continuous_data(; n = 2200, fs = fs)
+        filtered_short = @test_logs (:warn, r"Widening") match_mode = :any EegFun.highpass_filter(dat_fir_short, 0.5; filter_method = :fir)
+        @test filtered_short.analysis_info.hp_filter == 0.5
+
+        # 2. Zero-phase filtfilt doubles dB attenuation relative to single-pass filt in get_filter_characteristics
+        fi_lp = EegFun.create_lowpass_filter(30.0, 1000.0; order = 2)
+        ch_ff = EegFun.get_filter_characteristics(fi_lp; npoints = 512, filter_func = :filtfilt)
+        ch_f = EegFun.get_filter_characteristics(fi_lp; npoints = 512, filter_func = :filt)
+        # At the single-pass -3 dB frequency, zero-phase filtfilt has -6 dB (exact 2x dB scaling)
+        @test isapprox(ch_ff.cutoff_freq_6db, ch_f.cutoff_freq_3db; rtol = 1e-6)
+        # Stopband attenuation in dB is nearly doubled (much deeper than single-pass)
+        @test ch_ff.stopband_atten < 1.8 * ch_f.stopband_atten
+
+        # 3. Empty stopband_mask guard (cutoff very close to Nyquist so cutoff + transition >= Nyquist)
+        fi_near_nyq = EegFun.create_lowpass_filter(480.0, 1000.0; order = 2, transition_width = 0.2)
+        ch_near_nyq = EegFun.get_filter_characteristics(fi_near_nyq; npoints = 128)
+        @test isnan(ch_near_nyq.stopband_atten)
     end
 
 end

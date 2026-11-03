@@ -37,7 +37,7 @@ The `cycles` parameter controls the time-frequency resolution trade-off:
 
 - Proportional frequency steps
 - Better for wide ranges (e.g., 2-80 Hz)
-- Use with `ylogscale = true` in plots
+- Use with `yscale = :log10` in plots
 
 ### Baseline Correction
 
@@ -59,8 +59,8 @@ baseline_method = :db           # Decibel conversion (10*log10(activity/baseline
 The `filter_edges` and `pad` parameters control edge artifacts:
 
 ```julia
-tf_morlet(epochs, pad = :both)         # Mirror padding
-tf_morlet(epochs, filter_edges = true) # Remove edge samples
+EegFun.tf_morlet(epochs, pad = :both)         # Mirror padding
+EegFun.tf_morlet(epochs, filter_edges = true) # Remove edge samples
 ```
 
 ### Workflow Summary

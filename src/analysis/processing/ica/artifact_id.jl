@@ -422,11 +422,25 @@ end
 # === ECG Identification ===
 
 """
-    _find_unidirectional_peaks(data::AbstractVector; min_prominence_std::Real = 3.0, window_size::Int = 1)
+    _find_unidirectional_peaks(
+        data::AbstractVector;
+        min_prominence_std::Real = 3.0,
+        window_size::Int = 1,
+        min_distance::Int = 1,
+        sample_coords::Union{Nothing,AbstractVector{<:Integer}} = nothing,
+    )
 
 Find local peaks in a single direction exceeding `mean + min_prominence_std * std`.
+When `min_distance > 1`, enforces a minimum refractory distance (in samples, or in `sample_coords`
+if provided) by greedily keeping higher-amplitude peaks and suppressing weaker neighboring peaks.
 """
-function _find_unidirectional_peaks(data::AbstractVector; min_prominence_std::Real = 3.0, window_size::Int = 1)
+function _find_unidirectional_peaks(
+    data::AbstractVector;
+    min_prominence_std::Real = 3.0,
+    window_size::Int = 1,
+    min_distance::Int = 1,
+    sample_coords::Union{Nothing,AbstractVector{<:Integer}} = nothing,
+)
     n = length(data)
     n < 2 * window_size + 1 && return Int[]
     peaks = Int[]
@@ -454,6 +468,24 @@ function _find_unidirectional_peaks(data::AbstractVector; min_prominence_std::Re
             is_p && push!(peaks, i)
         end
     end
+
+    if min_distance > 1 && length(peaks) > 1
+        coords = isnothing(sample_coords) ? peaks : [Int(sample_coords[p]) for p in peaks]
+        order = sortperm(peaks; by = p -> data[p], rev = true)
+        suppressed = falses(length(peaks))
+        for k in order
+            suppressed[k] && continue
+            c_k = coords[k]
+            lo = searchsortedfirst(coords, c_k - min_distance + 1)
+            hi = searchsortedlast(coords, c_k + min_distance - 1)
+            for j = lo:hi
+                j == k && continue
+                suppressed[j] = true
+            end
+        end
+        peaks = [peaks[j] for j in eachindex(peaks) if !suppressed[j]]
+    end
+
     return peaks
 end
 
@@ -555,6 +587,7 @@ function identify_ecg_components(
 
     n_samples = size(components_subset, 2)
     ts_zscored = Vector{Float64}(undef, n_samples)
+    refractory_samples = max(1, round(Int, 0.2 * dat.sample_rate))
 
     for comp_idx = 1:n_components
         component_ts = @view components_subset[comp_idx, :]
@@ -563,9 +596,19 @@ function identify_ecg_components(
         s = std(component_ts)
         ts_zscored .= (component_ts .- m) ./ (s > eps(Float64) ? s : 1.0)
 
-        # Detect peaks in both polarities to handle arbitrary ICA signs
-        pk_pos = _find_unidirectional_peaks(ts_zscored; min_prominence_std = min_prominence_std)
-        pk_neg = _find_unidirectional_peaks(-ts_zscored; min_prominence_std = min_prominence_std)
+        # Detect peaks in both polarities to handle arbitrary ICA signs, enforcing QRS refractory distance (~200 ms)
+        pk_pos = _find_unidirectional_peaks(
+            ts_zscored;
+            min_prominence_std = min_prominence_std,
+            min_distance = refractory_samples,
+            sample_coords = selected_samples,
+        )
+        pk_neg = _find_unidirectional_peaks(
+            -ts_zscored;
+            min_prominence_std = min_prominence_std,
+            min_distance = refractory_samples,
+            sample_coords = selected_samples,
+        )
 
         # Map back to original sample coordinates to prevent sewing across non-contiguous gaps
         pos_orig = selected_samples[pk_pos]
@@ -688,6 +731,9 @@ function identify_line_noise_components(
     end
 
     n_samples = size(components, 2)
+    if n_components == 0 || n_samples == 0
+        return Int[], _empty_line_noise_metrics()
+    end
     components_t = Matrix{Float64}(components')
 
     # Welch periodogram with Hann window and 50% overlap using all samples
@@ -767,16 +813,21 @@ A structure holding all identified artifact components from ICA analysis.
 
 # Fields
 - `eog::Dict{Symbol, Vector{Int}}`: Dictionary with :vEOG and :hEOG keys containing identified eye movement components
-- `ecg::Vector{Int}`: Vector of identified ECG/heartbeat components  
+- `ecg::Vector{Int}`: Vector of identified ECG/heartbeat components
 - `line_noise::Vector{Int}`: Vector of identified line noise components
 - `channel_noise::Vector{Int}`: Vector of identified high spatial kurtosis (channel noise) components
+- `manual::Vector{Int}`: Vector of manually flagged components (default: `Int[]`)
 """
 struct ArtifactComponents
     eog::Dict{Symbol,Vector{Int}}
     ecg::Vector{Int}
     line_noise::Vector{Int}
     channel_noise::Vector{Int}
+    manual::Vector{Int}
 end
+
+ArtifactComponents(eog::Dict{Symbol,Vector{Int}}, ecg::Vector{Int}, line_noise::Vector{Int}, channel_noise::Vector{Int}) =
+    ArtifactComponents(eog, ecg, line_noise, channel_noise, Int[])
 
 """
     combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
@@ -794,7 +845,6 @@ end
 
 """
     get_all_ica_components(artifacts::ArtifactComponents)
-    get_all_components(artifacts::ArtifactComponents)
 
 Get all unique artifact component indices as a single sorted vector.
 """
@@ -806,10 +856,16 @@ function get_all_ica_components(artifacts::ArtifactComponents)
     union!(all_comps, artifacts.ecg)
     union!(all_comps, artifacts.line_noise)
     union!(all_comps, artifacts.channel_noise)
+    union!(all_comps, artifacts.manual)
     return sort(collect(all_comps))
 end
 
-const get_all_components = get_all_ica_components
+"""
+    get_all_components(artifacts::ArtifactComponents)
+
+Alias for [`get_all_ica_components`](@ref): return all unique artifact component indices as a sorted vector.
+"""
+get_all_components(artifacts::ArtifactComponents) = get_all_ica_components(artifacts)
 
 function Base.show(io::IO, artifacts::ArtifactComponents)
     all_comps = get_all_ica_components(artifacts)
@@ -824,6 +880,7 @@ function Base.show(io::IO, ::MIME"text/plain", artifacts::ArtifactComponents)
     println(io, "  ECG: $(artifacts.ecg)")
     println(io, "  Line Noise: $(artifacts.line_noise)")
     println(io, "  Channel Noise: $(artifacts.channel_noise)")
+    !isempty(artifacts.manual) && println(io, "  Manual: $(artifacts.manual)")
     print(io, "  All: $all_comps")
 end
 

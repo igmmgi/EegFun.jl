@@ -29,17 +29,17 @@ Track when discriminative information emerges, peaks, and decays across the tria
 **1. Prepare data**:
 
 ```julia
-participant_epochs = prepare_decoding(
+participant_epochs = EegFun.prepare_decoding(
     "epochs_final",
-    condition_selection = conditions([1, 2]),
-    sample_selection = samples((-0.2, 1.5))
+    condition_selection = EegFun.conditions([1, 2]),
+    sample_selection = EegFun.samples((-0.2, 1.5))
 )
 ```
 
 **2. Run decoding**:
 
 ```julia
-all_decoded = decode_libsvm(
+all_decoded = EegFun.decode_libsvm(
     participant_epochs,
     n_iterations = 5,
     n_folds = 3
@@ -59,14 +59,14 @@ Average decoding accuracy across participants.
 **4. Statistical testing**:
 
 ```julia
-stats = test_against_chance(all_decoded, alpha = 0.05)
-stats_cluster = test_against_chance_cluster(all_decoded, alpha = 0.05)
+stats = EegFun.test_against_chance(all_decoded, alpha = 0.05)
+stats_cluster = EegFun.test_against_chance_cluster(all_decoded, alpha = 0.05)
 ```
 
 **5. Visualization**:
 
 ```julia
-plot_decoding(grand_avg, stats)
+EegFun.plot_decoding(grand_avg, stats)
 ```
 
 ### Cross-Validation

@@ -215,11 +215,75 @@ function _collect_permutation_t_matrices(prepared::StatisticalData, plan::Abstra
     return permutation_t_matrices
 end
 
+@kernel function _paired_perm_ttest_kernel!(t_out, @Const(D), @Const(plan), n_participants::Int)
+    feat_idx, perm_idx = @index(Global, NTuple)
+
+    sum_d = 0.0f0
+    @inbounds for p = 1:n_participants
+        val = D[p, feat_idx]
+        d = plan[p, perm_idx] ? -val : val
+        sum_d += d
+    end
+    mean_d = sum_d / Float32(n_participants)
+
+    ss_d = 0.0f0
+    @inbounds for p = 1:n_participants
+        val = D[p, feat_idx]
+        d = plan[p, perm_idx] ? -val : val
+        delta = d - mean_d
+        ss_d += delta * delta
+    end
+
+    var_d = max(ss_d / Float32(n_participants - 1), 0.0f0)
+    se_d = sqrt(var_d / Float32(n_participants))
+
+    @inbounds t_out[feat_idx, perm_idx] = se_d == 0.0f0 ? (mean_d == 0.0f0 ? NaN32 : copysign(Inf32, mean_d)) : (mean_d / se_d)
+end
+
+@kernel function _indep_perm_ttest_kernel!(t_out, @Const(X), @Const(plan), n_A::Int, n_B::Int)
+    feat_idx, perm_idx = @index(Global, NTuple)
+
+    sum1 = 0.0f0
+    @inbounds for i = 1:n_A
+        src = plan[i, perm_idx]
+        sum1 += X[src, feat_idx]
+    end
+
+    sum2 = 0.0f0
+    @inbounds for i = 1:n_B
+        src = plan[n_A+i, perm_idx]
+        sum2 += X[src, feat_idx]
+    end
+
+    mean1 = sum1 / Float32(n_A)
+    mean2 = sum2 / Float32(n_B)
+
+    ss1 = 0.0f0
+    @inbounds for i = 1:n_A
+        src = plan[i, perm_idx]
+        d1 = X[src, feat_idx] - mean1
+        ss1 += d1 * d1
+    end
+
+    ss2 = 0.0f0
+    @inbounds for i = 1:n_B
+        src = plan[n_A+i, perm_idx]
+        d2 = X[src, feat_idx] - mean2
+        ss2 += d2 * d2
+    end
+
+    df = Float32(n_A + n_B - 2)
+    pooled_var = max((ss1 + ss2) / df, 0.0f0)
+    se = sqrt(pooled_var * (1.0f0 / Float32(n_A) + 1.0f0 / Float32(n_B)))
+    diff_mean = mean1 - mean2
+
+    @inbounds t_out[feat_idx, perm_idx] = se == 0.0f0 ? (diff_mean == 0.0f0 ? NaN32 : copysign(Inf32, diff_mean)) : (diff_mean / se)
+end
+
 """
     _collect_permutation_t_matrices_gpu(prepared, plan)
 
-GPU-accelerated collection of permutation t-matrices.
-Computes permutations using massive batched matrix multiplications instead of CPU loops.
+GPU-accelerated collection of permutation t-matrices using numerically stable two-pass Float32 kernels.
 Uses the same pre-drawn `plan` as the CPU path, so CPU and GPU see identical permutations.
 """
 function _collect_permutation_t_matrices_gpu(prepared::StatisticalData, plan::AbstractMatrix)
@@ -227,42 +291,22 @@ function _collect_permutation_t_matrices_gpu(prepared::StatisticalData, plan::Ab
     n_electrodes = size(prepared.analysis.data[1], 2)
     n_time = size(prepared.analysis.data[1], 3)
     n_features = n_electrodes * n_time
+    backend = gpu_backend()
 
     if prepared.analysis.design == :paired
         n_participants = size(prepared.analysis.data[1], 1)
 
-        # Calculate D = data1 - data2
         D_cpu = reshape(prepared.analysis.data[1] .- prepared.analysis.data[2], n_participants, n_features)
+        D_gpu = gpu_array(Float32.(D_cpu))
+        plan_gpu = gpu_array(Matrix{Bool}(plan))
+        t_perm_gpu = KernelAbstractions.allocate(backend, Float32, n_features, n_permutations)
 
-        D_gpu = gpu_array(Float32.(D_cpu)) # n_participants x n_features
+        kernel! = _paired_perm_ttest_kernel!(backend)
+        kernel!(t_perm_gpu, D_gpu, plan_gpu, n_participants; ndrange = (n_features, n_permutations))
+        KernelAbstractions.synchronize(backend)
 
-        # Sum of squares is invariant
-        sum_sq_D = sum(D_gpu .^ 2, dims = 1) # 1 x n_features
-
-        # Sign matrix S (+1 or -1): swapping conditions for a participant flips the sign of D
-        S_cpu = Float32[plan[p_idx, perm_idx] ? -1.0f0 : 1.0f0 for perm_idx = 1:n_permutations, p_idx = 1:n_participants]
-        S_gpu = gpu_array(S_cpu)
-
-        # Matrix multiplication computes permutation sums simultaneously!
-        sum_D_perm = S_gpu * D_gpu # n_permutations x n_features
-
-        mean_D_perm = sum_D_perm ./ Float32(n_participants)
-
-        # var = (sum(x^2)/n - mean^2) * n/(n-1)
-        var_D_perm = @. (sum_sq_D / Float32(n_participants) - mean_D_perm^2) * (Float32(n_participants) / Float32(n_participants - 1))
-
-        # Avoid negative variance due to floating point precision
-        var_D_perm = max.(var_D_perm, 0.0f0)
-
-        std_D_perm = sqrt.(var_D_perm)
-        se_D_perm = std_D_perm ./ sqrt(Float32(n_participants))
-
-        # Avoid division by zero
-        t_perm_gpu = @. ifelse(se_D_perm == 0.0f0, ifelse(mean_D_perm == 0.0f0, 0.0f0, Inf32), mean_D_perm / se_D_perm)
-
-        # Download and reshape back to [n_electrodes, n_time, n_permutations]
-        t_perm_cpu = Float64.(Array(t_perm_gpu)) # n_permutations x n_features
-        return copy(reshape(t_perm_cpu', n_electrodes, n_time, n_permutations))
+        t_perm_cpu = Float64.(Array(t_perm_gpu))
+        return reshape(t_perm_cpu, n_electrodes, n_time, n_permutations)
 
     elseif prepared.analysis.design == :independent
         n_A = size(prepared.analysis.data[1], 1)
@@ -272,45 +316,19 @@ function _collect_permutation_t_matrices_gpu(prepared::StatisticalData, plan::Ab
         data1_flat = reshape(prepared.analysis.data[1], n_A, n_features)
         data2_flat = reshape(prepared.analysis.data[2], n_B, n_features)
         X_cpu = vcat(data1_flat, data2_flat)
+        # Center each feature in Float64 before casting to Float32 so large DC offsets never lose precision
+        X_centered = X_cpu .- mean(X_cpu, dims = 1)
 
-        X_gpu = gpu_array(Float32.(X_cpu)) # n_total x n_features
-        X2_gpu = X_gpu .^ 2
+        X_gpu = gpu_array(Float32.(X_centered))
+        plan_gpu = gpu_array(Matrix{Int32}(plan))
+        t_perm_gpu = KernelAbstractions.allocate(backend, Float32, n_features, n_permutations)
 
-        sum_tot = sum(X_gpu, dims = 1) # 1 x n_features
-        sum_sq_tot = sum(X2_gpu, dims = 1) # 1 x n_features
-
-        # Generate binary indicator matrix M on CPU
-        M_cpu = zeros(Float32, n_permutations, n_total)
-        for p = 1:n_permutations
-            M_cpu[p, view(plan, 1:n_A, p)] .= 1.0f0
-        end
-        M_gpu = gpu_array(M_cpu)
-
-        # Matrix multiplications to compute partitioned sums
-        sum_A = M_gpu * X_gpu # n_permutations x n_features
-        sum_sq_A = M_gpu * X2_gpu # n_permutations x n_features
-
-        sum_B = sum_tot .- sum_A
-        sum_sq_B = sum_sq_tot .- sum_sq_A
-
-        mean_A = sum_A ./ Float32(n_A)
-        mean_B = sum_B ./ Float32(n_B)
-
-        var_A = @. (sum_sq_A / Float32(n_A) - mean_A^2) * (Float32(n_A) / Float32(n_A - 1))
-        var_B = @. (sum_sq_B / Float32(n_B) - mean_B^2) * (Float32(n_B) / Float32(n_B - 1))
-
-        var_A = max.(var_A, 0.0f0)
-        var_B = max.(var_B, 0.0f0)
-
-        df = Float32(n_total - 2)
-        pooled_var = @. ((Float32(n_A - 1) * var_A) + (Float32(n_B - 1) * var_B)) / df
-        se = sqrt.(pooled_var .* (1.0f0 / Float32(n_A) + 1.0f0 / Float32(n_B)))
-
-        diff_mean = mean_A .- mean_B
-        t_perm_gpu = @. ifelse(se == 0.0f0, ifelse(diff_mean == 0.0f0, 0.0f0, Inf32), diff_mean / se)
+        kernel! = _indep_perm_ttest_kernel!(backend)
+        kernel!(t_perm_gpu, X_gpu, plan_gpu, n_A, n_B; ndrange = (n_features, n_permutations))
+        KernelAbstractions.synchronize(backend)
 
         t_perm_cpu = Float64.(Array(t_perm_gpu))
-        return copy(reshape(t_perm_cpu', n_electrodes, n_time, n_permutations))
+        return reshape(t_perm_cpu, n_electrodes, n_time, n_permutations)
     end
 end
 
@@ -458,10 +476,126 @@ const _shuffle_labels_tf! = _shuffle_labels!
 
 # === TF PERMUTATION LOOP ===
 
+const _TF_PERM_CACHE_MAX_FLOATS = 16_000_000 # 128 MB cap for 4D TF permutation t-matrix cache
+
+"""
+    _collect_permutation_t_matrices_tf(data1, data2, design, plan, show_progress)
+
+Threaded collection of 3D TF permutation t-matrices into `[n_electrodes × n_freqs × n_time × n_permutations]`.
+"""
+function _collect_permutation_t_matrices_tf(
+    data1::Array{Float64,4},
+    data2::Array{Float64,4},
+    design::Symbol,
+    plan::AbstractMatrix,
+    show_progress::Bool = true,
+)
+    n_permutations = size(plan, 2)
+    _, n_electrodes, n_freqs, n_time = size(data1)
+
+    permutation_t_matrices = Array{Float64,4}(undef, n_electrodes, n_freqs, n_time, n_permutations)
+    completed = _start_permutation_progress(show_progress, n_permutations, "Collecting TF t-matrices: ")
+
+    _foreach_chunk(n_permutations) do perm_range
+        shuffled_A = similar(data1)
+        shuffled_B = similar(data2)
+        t_matrix_buffer = Array{Float64,3}(undef, n_electrodes, n_freqs, n_time)
+
+        for perm_idx in perm_range
+            _shuffle_labels_tf!(shuffled_A, shuffled_B, data1, data2, design, view(plan, :, perm_idx))
+            _compute_t_matrix_tf(shuffled_A, shuffled_B, design; compute_p_values = false, t_matrix_buffer = t_matrix_buffer)
+            copyto!(view(permutation_t_matrices, :, :, :, perm_idx), t_matrix_buffer)
+            _tick!(completed)
+        end
+    end
+
+    return permutation_t_matrices
+end
+
+"""
+    _stream_nonparametric_threshold_common_tf(prepared, plan, alpha, tail, show_progress)
+
+Memory-bounded parallel computation of common non-parametric threshold for large TF grids
+without allocating a multi-GB 4D `Array{Float64,4}`.
+"""
+function _stream_nonparametric_threshold_common_tf(
+    prepared::TFStatisticalData,
+    plan::AbstractMatrix,
+    alpha::Float64,
+    tail::Symbol,
+    show_progress::Bool = true,
+)
+    n_permutations = size(plan, 2)
+    data1, data2 = prepared.analysis.data[1], prepared.analysis.data[2]
+    design = prepared.analysis.design
+    _, n_electrodes, n_freqs, n_time = size(data1)
+    n_voxels = n_electrodes * n_freqs * n_time
+
+    # Deterministic stride per permutation so total pooled sample stays <= _TF_PERM_CACHE_MAX_FLOATS
+    stride = max(1, cld(n_voxels * n_permutations, _TF_PERM_CACHE_MAX_FLOATS))
+    samples_per_perm = cld(n_voxels, stride)
+    pooled = Matrix{Float64}(undef, samples_per_perm, n_permutations)
+    fill!(pooled, NaN)
+
+    completed = _start_permutation_progress(show_progress, n_permutations, "Streaming TF thresholds: ")
+
+    _foreach_chunk(n_permutations) do perm_range
+        shuffled_A = similar(data1)
+        shuffled_B = similar(data2)
+        t_matrix_buffer = Array{Float64,3}(undef, n_electrodes, n_freqs, n_time)
+
+        for perm_idx in perm_range
+            _shuffle_labels_tf!(shuffled_A, shuffled_B, data1, data2, design, view(plan, :, perm_idx))
+            _compute_t_matrix_tf(shuffled_A, shuffled_B, design; compute_p_values = false, t_matrix_buffer = t_matrix_buffer)
+            offset = mod(perm_idx - 1, stride) + 1
+            out_idx = 0
+            @inbounds for v = offset:stride:n_voxels
+                out_idx += 1
+                pooled[out_idx, perm_idx] = t_matrix_buffer[v]
+            end
+            _tick!(completed)
+        end
+    end
+
+    return _compute_nonparametric_threshold_common_tf(pooled, alpha, tail)
+end
+
+"""
+    _stream_nonparametric_threshold_individual_tf(prepared, plan, alpha, tail, show_progress)
+
+Electrode-sliced exact computation of individual non-parametric thresholds for large TF grids
+without allocating the full 4D `Array{Float64,4}`.
+"""
+function _stream_nonparametric_threshold_individual_tf(
+    prepared::TFStatisticalData,
+    plan::AbstractMatrix,
+    alpha::Float64,
+    tail::Symbol,
+    show_progress::Bool = true,
+)
+    data1, data2 = prepared.analysis.data[1], prepared.analysis.data[2]
+    design = prepared.analysis.design
+    _, n_electrodes, n_freqs, n_time = size(data1)
+
+    thresholds_pos = Array{Float64,3}(undef, n_electrodes, n_freqs, n_time)
+    thresholds_neg = Array{Float64,3}(undef, n_electrodes, n_freqs, n_time)
+
+    for e = 1:n_electrodes
+        d1_e = data1[:, e:e, :, :]
+        d2_e = data2[:, e:e, :, :]
+        perm_e = _collect_permutation_t_matrices_tf(d1_e, d2_e, design, plan, show_progress && e == 1)
+        tp_e, tn_e = _compute_nonparametric_threshold_individual_tf(perm_e, alpha, tail)
+        thresholds_pos[e:e, :, :] .= tp_e
+        thresholds_neg[e:e, :, :] .= tn_e
+    end
+
+    return thresholds_pos, thresholds_neg
+end
+
 """
     _run_permutations_tf(prepared, plan, critical_t_values, spatial_connectivity,
                           cluster_type, tail, min_num_neighbors, electrodes, frequencies,
-                          time_points, show_progress)
+                          time_points, show_progress; permutation_t_matrices)
 
 Run Monte Carlo permutations for TF cluster-based permutation test.
 
@@ -474,7 +608,7 @@ Run Monte Carlo permutations for TF cluster-based permutation test.
 function _run_permutations_tf(
     prepared::TFStatisticalData,
     plan::AbstractMatrix,
-    critical_t_values,  # Can be Array{Float64,3} or Tuple{Float64,Float64}
+    critical_t_values,
     spatial_connectivity::SparseMatrixCSC{Bool},
     cluster_type::Symbol,
     tail::Symbol,
@@ -482,11 +616,14 @@ function _run_permutations_tf(
     electrodes::Vector{Symbol},
     frequencies::Vector{Float64},
     time_points::Vector{Float64},
-    show_progress::Bool = true,
+    show_progress::Bool = true;
+    permutation_t_matrices::Union{Nothing,Array{Float64,4}} = nothing,
 )
     n_permutations = size(plan, 2)
     is_parametric = isa(critical_t_values, Array{Float64,3})
     is_nonparametric_common = isa(critical_t_values, Tuple) && length(critical_t_values) == 2 && isa(critical_t_values[1], Float64)
+    is_nonparametric_individual =
+        isa(critical_t_values, Tuple) && length(critical_t_values) == 2 && isa(critical_t_values[1], Array{Float64,3})
 
     n_electrodes = length(electrodes)
     n_freqs = length(frequencies)
@@ -508,23 +645,28 @@ function _run_permutations_tf(
         # Scratch buffers owned exclusively by this chunk/task
         mask_pos_buffer = BitArray{3}(undef, n_electrodes, n_freqs, n_time)
         mask_neg_buffer = BitArray{3}(undef, n_electrodes, n_freqs, n_time)
-        shuffled_A = similar(data1)
-        shuffled_B = similar(data2)
+        shuffled_A = isnothing(permutation_t_matrices) ? similar(data1) : Array{Float64,4}(undef, 0, 0, 0, 0)
+        shuffled_B = isnothing(permutation_t_matrices) ? similar(data2) : Array{Float64,4}(undef, 0, 0, 0, 0)
         t_matrix_buffer = Array{Float64,3}(undef, n_electrodes, n_freqs, n_time)
         cluster_labels = zeros(Int, n_electrodes, n_freqs, n_time)
         cluster_queue = Vector{Tuple{Int,Int,Int}}(undef, n_electrodes * n_freqs * n_time)
 
         for perm_idx in perm_range
-            _shuffle_labels_tf!(shuffled_A, shuffled_B, data1, data2, design, view(plan, :, perm_idx))
+            if !isnothing(permutation_t_matrices)
+                copyto!(t_matrix_buffer, view(permutation_t_matrices, :, :, :, perm_idx))
+                t_matrix_perm = t_matrix_buffer
+            else
+                _shuffle_labels_tf!(shuffled_A, shuffled_B, data1, data2, design, view(plan, :, perm_idx))
 
-            t_matrix_perm, _, _ = _compute_t_matrix_tf(
-                shuffled_A,
-                shuffled_B,
-                design,
-                tail = tail,
-                compute_p_values = false,
-                t_matrix_buffer = t_matrix_buffer,
-            )
+                t_matrix_perm, _, _ = _compute_t_matrix_tf(
+                    shuffled_A,
+                    shuffled_B,
+                    design,
+                    tail = tail,
+                    compute_p_values = false,
+                    t_matrix_buffer = t_matrix_buffer,
+                )
+            end
 
             # Threshold
             if is_parametric
@@ -532,6 +674,9 @@ function _run_permutations_tf(
             elseif is_nonparametric_common
                 thresh_pos, thresh_neg = critical_t_values
                 _threshold_t_matrix_nonparametric_tf!(mask_pos_buffer, mask_neg_buffer, t_matrix_perm, thresh_pos, thresh_neg, tail)
+            elseif is_nonparametric_individual
+                thresh_pos_mat, thresh_neg_mat = critical_t_values
+                _threshold_t_matrix_nonparametric_tf!(mask_pos_buffer, mask_neg_buffer, t_matrix_perm, thresh_pos_mat, thresh_neg_mat, tail)
             end
 
             # Pre-filter
@@ -566,29 +711,7 @@ function _run_permutations_tf(
     return permutation_max_positive, permutation_max_negative
 end
 
-"""
-    generate_permutation_matrix(df, block_col; sync_col=nothing, n_perms=1000, type=:within, rng=Random.GLOBAL_RNG)
-
-Generate a mathematically valid `N × n_perms` permutation matrix of integer row indices for Monte Carlo / permutation tests.
-
-# Arguments
-- `df`: A `DataFrame` containing the experimental design / trial metadata.
-- `block_col`: Column identifier (Symbol or String) for the grouping block (e.g. `:Subject` or `:Item`).
-
-# Keyword Arguments
-- `sync_col=nothing`: Column identifier to synchronize across for crossed designs (e.g. `sync_col=:Subject, block_col=:Item`).
-- `n_perms=1000`: Number of permutations to generate.
-- `type=:within`: Permutation scheme:
-  - `:within`: Independent shuffling within blocks (e.g. within Subjects). Standard for uncrossed repeated measures.
-  - `:synchronized`: Shuffles `block_col` (e.g. Items) and perfectly synchronizes that shuffle across `sync_col` (e.g. Subjects).
-    Requires a balanced crossed design where every subject sees the items.
-  - `:global`: Unrestricted random permutation across all rows.
-- `rng=Random.GLOBAL_RNG`: Random number generator for reproducibility.
-
-# Returns
-- `Matrix{Int}`: An `N × n_perms` matrix where each column is a valid permutation of `1:N`.
-"""
-function _permute_within!(perm_matrix::Matrix{Int}, block_idxs::Vector{Vector{Int}}, n_perms::Int, rng)
+function _permute_within!(perm_matrix::Matrix{Int}, block_idxs::Vector{Vector{Int}}, n_perms::Int, rng::AbstractRNG)
     scratch_bufs = [copy(b) for b in block_idxs]
     for p = 1:n_perms
         for (k, b_idx) in enumerate(block_idxs)
@@ -605,7 +728,7 @@ function _permute_within!(perm_matrix::Matrix{Int}, block_idxs::Vector{Vector{In
     end
 end
 
-function _permute_synchronized!(perm_matrix::Matrix{Int}, grid::Matrix{Vector{Int}}, cell_len::Int, n_perms::Int, rng)
+function _permute_synchronized!(perm_matrix::Matrix{Int}, grid::Matrix{Vector{Int}}, cell_len::Int, n_perms::Int, rng::AbstractRNG)
     n_syncs, n_blocks = size(grid)
     shuffled_idx = collect(1:n_blocks)
     for p = 1:n_perms
@@ -626,7 +749,7 @@ function _permute_synchronized!(perm_matrix::Matrix{Int}, grid::Matrix{Vector{In
     end
 end
 
-function _permute_global!(perm_matrix::Matrix{Int}, n_perms::Int, rng)
+function _permute_global!(perm_matrix::Matrix{Int}, n_perms::Int, rng::AbstractRNG)
     N = size(perm_matrix, 1)
     for p = 1:n_perms
         col = @view perm_matrix[:, p]
@@ -640,7 +763,36 @@ function _permute_global!(perm_matrix::Matrix{Int}, n_perms::Int, rng)
     end
 end
 
-function generate_permutation_matrix(df, block_col; sync_col = nothing, n_perms = 1000, type = :within, rng = Random.GLOBAL_RNG)
+"""
+    generate_permutation_matrix(df, block_col; sync_col=nothing, n_perms=1000, type=:within, rng=Random.default_rng())
+
+Generate a mathematically valid `N × n_perms` permutation matrix of integer row indices for Monte Carlo / permutation tests.
+
+# Arguments
+- `df`: A `DataFrame` containing the experimental design / trial metadata.
+- `block_col`: Column identifier (Symbol or String) for the grouping block (e.g. `:Subject` or `:Item`).
+
+# Keyword Arguments
+- `sync_col=nothing`: Column identifier to synchronize across for crossed designs (e.g. `sync_col=:Subject, block_col=:Item`).
+- `n_perms=1000`: Number of permutations to generate.
+- `type=:within`: Permutation scheme:
+  - `:within`: Independent shuffling within blocks (e.g. within Subjects). Standard for uncrossed repeated measures.
+  - `:synchronized`: Shuffles `block_col` (e.g. Items) and perfectly synchronizes that shuffle across `sync_col` (e.g. Subjects).
+    Requires a balanced crossed design where every subject sees the items.
+  - `:global`: Unrestricted random permutation across all rows.
+- `rng=Random.default_rng()`: Random number generator for reproducibility.
+
+# Returns
+- `Matrix{Int}`: An `N × n_perms` matrix where each column is a valid permutation of `1:N`.
+"""
+function generate_permutation_matrix(
+    df,
+    block_col;
+    sync_col = nothing,
+    n_perms = 1000,
+    type = :within,
+    rng::AbstractRNG = Random.default_rng(),
+)
     N = nrow(df)
     n_perms <= 0 && return zeros(Int, N, 0)
 

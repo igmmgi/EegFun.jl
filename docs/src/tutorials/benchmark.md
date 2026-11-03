@@ -13,8 +13,8 @@ The benchmark uses the same raw Visual Attention (Posner Cueing) dataset feature
 You do not need to download the dataset manually. You can seamlessly load any tutorial dataset directly within Julia:
 ```julia
 using EegFun
-data_dir = download_eegfun_datasets() # Returns the local path to the downloaded directory
-file_path = joinpath(data_dir, "participant1.bdf") # Or whichever specific file the benchmark requires
+data_dir = EegFun.download_eegfun_datasets() # Returns the local path to the downloaded directory
+file_path = joinpath(data_dir, "example1.bdf")
 dat = EegFun.read_raw_data(file_path)
 ```
 

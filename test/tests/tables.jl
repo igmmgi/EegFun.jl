@@ -86,4 +86,10 @@ import Tables
         # Test names with cols selector
         @test names(dat, r"^time") == ["time"]
     end
+
+    @testset "Empty EpochData and empty collection guards" begin
+        empty_ep = EegFun.EpochData("empty", 1, "cond_1", DataFrame[], copy(dat.layout), dat.sample_rate, EegFun.AnalysisInfo())
+        @test isempty(DataFrame(empty_ep))
+        @test isempty(DataFrame(EegFun.EpochData[]))
+    end
 end

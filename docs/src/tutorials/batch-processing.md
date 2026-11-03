@@ -50,7 +50,7 @@ reference_channel = "avg"
 | `[preprocess.filter.ica_highpass]` | Separate high-pass for the ICA copy (typically 1 Hz) |
 | `[preprocess.filter.ica_lowpass]` | Optional low-pass for the ICA copy |
 | `[preprocess.ica]` | Whether to apply ICA, percentage of data to use |
-| `[preprocess.layout]` | Neighbour distance criterion for channel repair |
+| `[preprocess.layout]` | Neighbor distance criterion for channel repair |
 
 > [!TIP]
 > See `src/config/default.toml` for all available options and their defaults. Copy it as a starting point and modify only the values you need to change.
@@ -87,7 +87,7 @@ max_interval = 1.5
 ### Phase 1 — Setup
 
 - Loads and validates the TOML configuration
-- Reads the electrode layout and computes spatial neighbours
+- Reads the electrode layout and computes spatial neighbors
 - Discovers raw data files matching the file pattern
 - Parses epoch condition definitions
 
@@ -97,7 +97,7 @@ max_interval = 1.5
 - **Filtering** — high-pass to remove drift, optional low-pass
 - **Artifact detection** — marks extreme values and identifies bad channels via channel joint probability and z-score variance
 - **ICA** — optionally runs ICA on a separately filtered copy of the data, identifies artifact components (eye blinks, muscle, line noise), and removes them from the original
-- **Channel repair** — interpolates bad scalp channels using neighbour weights
+- **Channel repair** — interpolates bad scalp channels using neighbor weights
 
 ### Phase 3 — Epoching and Cleanup
 

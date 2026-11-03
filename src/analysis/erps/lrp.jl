@@ -223,7 +223,7 @@ function _process_lrp_file(filepath::String, output_path::String, condition_pair
     lrp_results = lrp(erps_data, condition_pairs; channel_selection = channel_selection)
 
     # Save results
-    jldsave(output_path; data = lrp_results)
+    jldsave(output_path; data = lrp_results, format_version = EEGFUN_FORMAT_VERSION)
 
     return BatchResult(true, filename, "Calculated LRP for $(length(lrp_results)) pair(s)")
 end
@@ -261,31 +261,50 @@ end
 
 function lrp(
     erps::AbstractVector{<:ErpData},
-    condition_pairs::AbstractVector{Tuple{Int,Int}};
+    condition_pairs::AbstractVector{<:Tuple{Integer,Integer}};
     condition_selection = conditions(),
     channel_selection = channels(),
 )::Vector{ErpData}
+    isempty(condition_pairs) && @minimal_error("Condition pairs cannot be empty")
 
-    # Apply condition_selection first
-    erps_filtered = erps[get_selected_conditions(erps, condition_selection)]
+    # Apply condition_selection first (matching .condition numbers when unique/positive)
+    erps_filtered = erps[_select_conditions_by_field(erps, condition_selection)]
+    isempty(erps_filtered) && @minimal_error("No ERP conditions available after applying condition_selection")
 
     @info "Calculating LRP for $(length(condition_pairs)) condition pair(s) from $(length(erps_filtered)) condition(s)"
 
+    cond_nums = Int[d.condition for d in erps_filtered]
+    use_cond_field = allunique(cond_nums) && all(>(0), cond_nums)
     lrp_results = ErpData[]
 
-    for (idx, (left_cond, right_cond)) in enumerate(condition_pairs)
-        # Validate condition indices (now referring to filtered array)
-        if left_cond < 1 || left_cond > length(erps_filtered)
-            @minimal_error("Left condition index $left_cond out of range (1-$(length(erps_filtered)))")
+    for (idx, (left_raw, right_raw)) in enumerate(condition_pairs)
+        left_cond = Int(left_raw)
+        right_cond = Int(right_raw)
+        left_cond < 1 && @minimal_error("Left condition index must be >= 1, got $left_cond")
+        right_cond < 1 && @minimal_error("Right condition index must be >= 1, got $right_cond")
+
+        left_idx = if use_cond_field
+            findfirst(d -> d.condition == left_cond, erps_filtered)
+        else
+            (1 <= left_cond <= length(erps_filtered)) ? left_cond : nothing
         end
-        if right_cond < 1 || right_cond > length(erps_filtered)
-            @minimal_error("Right condition index $right_cond out of range (1-$(length(erps_filtered)))")
+        isnothing(left_idx) && @minimal_error(
+            "Left condition $left_cond not found (available conditions: $(use_cond_field ? cond_nums : collect(1:length(erps_filtered))))"
+        )
+
+        right_idx = if use_cond_field
+            findfirst(d -> d.condition == right_cond, erps_filtered)
+        else
+            (1 <= right_cond <= length(erps_filtered)) ? right_cond : nothing
         end
+        isnothing(right_idx) && @minimal_error(
+            "Right condition $right_cond not found (available conditions: $(use_cond_field ? cond_nums : collect(1:length(erps_filtered))))"
+        )
 
         @info "  Processing pair $idx: condition $left_cond (left) vs $right_cond (right)"
 
         # Calculate LRP for this pair
-        lrp_data = lrp(erps_filtered[left_cond], erps_filtered[right_cond]; channel_selection = channel_selection)
+        lrp_data = lrp(erps_filtered[left_idx], erps_filtered[right_idx]; channel_selection = channel_selection)
 
         # Update condition information to reflect the pair number (set struct fields)
         lrp_data.condition = idx
@@ -379,16 +398,17 @@ Create a layout containing only the specified LRP channels.
 """
 function _create_lrp_layout(original_layout::Layout, lrp_channels::AbstractVector{Symbol})::Layout
     # Filter layout data to include only LRP channels
+    keep_set = Set(lrp_channels)
     layout_df = copy(original_layout.data)
-    mask = [label ∈ lrp_channels for label in layout_df.label]
+    mask = [label ∈ keep_set for label in layout_df.label]
     filtered_layout_df = layout_df[mask, :]
 
-    # Filter neighbours if they exist
-    filtered_neighbours = if !isnothing(original_layout.neighbours)
-        filtered_dict = OrderedDict{Symbol,Neighbours}()
+    # Filter neighbors if they exist, removing deleted midline/unpaired channels and re-normalizing weights
+    filtered_neighbors = if !isnothing(original_layout.neighbors)
+        filtered_dict = Dict{Symbol,Neighbors}()
         for channel in lrp_channels
-            if haskey(original_layout.neighbours, channel)
-                filtered_dict[channel] = original_layout.neighbours[channel]
+            if haskey(original_layout.neighbors, channel)
+                filtered_dict[channel] = _subset_neighbors(original_layout.neighbors[channel], keep_set)
             end
         end
         isempty(filtered_dict) ? nothing : filtered_dict
@@ -396,5 +416,5 @@ function _create_lrp_layout(original_layout::Layout, lrp_channels::AbstractVecto
         nothing
     end
 
-    return Layout(filtered_layout_df, filtered_neighbours, original_layout.criterion, original_layout.criterion_type)
+    return Layout(filtered_layout_df, filtered_neighbors, original_layout.criterion, original_layout.criterion_type)
 end

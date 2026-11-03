@@ -45,7 +45,7 @@ Pkg.add("EegFun")
 *   `add GLMakie` (Recommended for interactive GUIs and the Data Browser)
 *   `add CairoMakie` (Recommended for static, publication-quality plots or headless servers)
 
-### Development Version (vía GitHub)
+### Development Version (via GitHub)
 
 To install the latest development version directly from GitHub:
 
@@ -210,3 +210,4 @@ EegFun.plot_ica_component_activation(dat, ica_result)
 </details>
 
 </details>
+

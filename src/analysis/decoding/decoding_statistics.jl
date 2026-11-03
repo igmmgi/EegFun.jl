@@ -46,8 +46,42 @@ struct DecodingStatisticsResult
     clusters::Union{Vector{TemporalCluster},Nothing}
 end
 
+# Centered two-pass one-sample right-tailed t-test against `chance_level`
+function _onesample_ttest_right!(
+    t_statistics::Vector{Float64},
+    p_values::Vector{Float64},
+    accuracies::Matrix{Float64},
+    chance_level::Float64,
+)
+    n_participants, n_timepoints = size(accuracies)
+    df = Float64(n_participants - 1)
+    dist = TDist(df)
+
+    @inbounds for t_idx = 1:n_timepoints
+        sum_d = 0.0
+        @simd for p_idx = 1:n_participants
+            sum_d += accuracies[p_idx, t_idx] - chance_level
+        end
+        mean_d = sum_d / n_participants
+
+        ss_d = 0.0
+        @simd for p_idx = 1:n_participants
+            delta = (accuracies[p_idx, t_idx] - chance_level) - mean_d
+            ss_d += delta * delta
+        end
+        variance = max(ss_d / df, 0.0)
+        se = sqrt(variance / n_participants)
+
+        t_val = se == 0.0 ? (mean_d == 0.0 ? NaN : copysign(Inf, mean_d)) : (mean_d / se)
+        t_statistics[t_idx] = t_val
+        p_values[t_idx] = isnan(t_val) ? NaN : ccdf(dist, t_val)
+    end
+
+    return df
+end
+
 """
-    test_against_chance(decoded_list::Vector{DecodedData}; alpha::Float64 = 0.05, correction_method::Symbol = :none)
+    test_against_chance(decoded_list::Vector{DecodedData}; alpha::Real = 0.05, correction_method::Symbol = :none)
 
 Perform one-sample t-test against chance level across multiple participants.
 
@@ -59,7 +93,7 @@ if accuracy > chance level.
 - `decoded_list::Vector{DecodedData}`: Vector of DecodedData objects, one per participant
 
 # Keyword Arguments
-- `alpha::Float64`: Significance threshold (default: 0.05)
+- `alpha::Real`: Significance threshold (default: 0.05)
 - `correction_method::Symbol`: Multiple comparison correction - `:none` (default) or `:bonferroni`
 
 # Returns
@@ -69,7 +103,7 @@ if accuracy > chance level.
 ```julia
 # Test across participants
 decoded_list = [decoded_p1, decoded_p2, decoded_p3]
-stats = test_against_chance(decoded_list, alpha=0.05, correction_method=:bonferroni)
+stats = EegFun.test_against_chance(decoded_list; alpha = 0.05, correction_method = :bonferroni)
 ```
 """
 function test_against_chance(decoded_list::Vector{DecodedData}; alpha::Real = 0.05, correction_method::Symbol = :none)
@@ -78,6 +112,10 @@ function test_against_chance(decoded_list::Vector{DecodedData}; alpha::Real = 0.
     if isempty(decoded_list)
         @minimal_error("Cannot test empty decoded data list")
     end
+    length(decoded_list) < 2 && @minimal_error("test_against_chance requires at least 2 participants, got $(length(decoded_list))")
+    alpha_f = Float64(alpha)
+    (alpha_f <= 0.0 || alpha_f >= 1.0) && @minimal_error("alpha must be between 0 and 1, got $alpha_f")
+    correction_method == :no && (correction_method = :none)
     if correction_method ∉ (:none, :bonferroni)
         @minimal_error("correction_method must be :none or :bonferroni, got :$correction_method")
     end
@@ -104,26 +142,12 @@ function test_against_chance(decoded_list::Vector{DecodedData}; alpha::Real = 0.
         accuracies[p_idx, :] = decoded.average_score
     end
 
-    # Compute t-statistics using AnovaFun's paired_ttest
-    # For one-sample t-test against chance, we compare accuracies against a constant vector
-    # of chance level values. This tests if mean(accuracies - chance) is significantly different from 0.
     t_statistics = Vector{Float64}(undef, n_timepoints)
     p_values = Vector{Float64}(undef, n_timepoints)
-    chance_vector = fill(chance_level, n_participants)
-    df = Float64(n_participants - 1)  # df for one-sample t-test
-    for t_idx = 1:n_timepoints
-        # Extract accuracies for this timepoint across all participants
-        accuracies_at_t = accuracies[:, t_idx]
-        # Use paired_ttest to compare accuracies against chance level
-        # This is equivalent to a one-sample t-test: H0: mean(accuracies) = chance_level
-        # One-tailed test (right tail): tests if accuracy > chance
-        result = paired_ttest(accuracies_at_t, chance_vector, tail = :right)
-        t_statistics[t_idx] = result.t
-        p_values[t_idx] = result.p
-    end
+    df = _onesample_ttest_right!(t_statistics, p_values, accuracies, chance_level)
 
     # Apply multiple comparison correction
-    significant_mask = _apply_correction(p_values, alpha, correction_method, t_statistics)
+    significant_mask = _apply_correction(p_values, alpha_f, correction_method, t_statistics)
 
     return DecodingStatisticsResult(
         first_times,
@@ -131,7 +155,7 @@ function test_against_chance(decoded_list::Vector{DecodedData}; alpha::Real = 0.
         p_values,
         significant_mask,
         df,
-        alpha,
+        alpha_f,
         correction_method,
         nothing,  # No clusters for simple t-test
     )
@@ -142,10 +166,6 @@ end
 
 Apply multiple comparison correction to p-values.
 
-Handles NaN p-values that can occur when there is zero variance (e.g., when all participants
-have identical accuracies). NaN p-values with positive t-statistics indicate a perfect effect
-with zero variance and are treated as significant.
-
 # Arguments
 - `p_values::Vector{Float64}`: Uncorrected p-values
 - `alpha::Float64`: Significance threshold
@@ -155,12 +175,9 @@ with zero variance and are treated as significant.
 # Returns
 - `BitVector`: Boolean mask indicating significant time points after correction
 """
-function _apply_correction(p_values::Vector{Float64}, alpha::Float64, method::Symbol, t_statistics::Vector{Float64})
+function _apply_correction(p_values::Vector{Float64}, alpha::Float64, method::Symbol, t_statistics::Vector{Float64} = Float64[])
     if method == :none
-        # Handle NaN p-values: if p is NaN but t > 0, treat as significant
-        # (occurs when SE = 0, meaning perfect effect with no variance)
-        # This is probably just an extreme edge case from the simulated data
-        return (p_values .<= alpha) .| (isnan.(p_values) .& (t_statistics .> 0))
+        return .!isnan.(p_values) .& (p_values .<= alpha)
     elseif method == :bonferroni
         return _apply_bonferroni_correction(p_values, alpha, t_statistics)
     else
@@ -294,8 +311,11 @@ function test_against_chance_cluster(
     rng::AbstractRNG = Random.default_rng(),
 )
     cluster_statistic ∈ (:sum, :max) || @minimal_error("cluster_statistic must be :sum or :max, got :$cluster_statistic")
-
     isempty(decoded_list) && @minimal_error("Cannot test empty decoded data list")
+    length(decoded_list) < 2 && @minimal_error("test_against_chance_cluster requires at least 2 participants, got $(length(decoded_list))")
+    n_permutations < 1 && @minimal_error("n_permutations must be >= 1, got $n_permutations")
+    alpha_f = Float64(alpha)
+    (alpha_f <= 0.0 || alpha_f >= 1.0) && @minimal_error("alpha must be between 0 and 1, got $alpha_f")
 
     # Validate all have same structure
     first_decoded = decoded_list[1]
@@ -308,35 +328,31 @@ function test_against_chance_cluster(
         decoded.parameters.chance_level != chance_level && @minimal_warning "DecodedData objects have different chance_level"
     end
 
-    # Extract accuracies: [participants × timepoints]
+    # Extract accuracies and centered differences: [participants × timepoints]
     n_participants = length(decoded_list)
     n_timepoints = length(first_times)
     accuracies = Matrix{Float64}(undef, n_participants, n_timepoints)
+    diffs = Matrix{Float64}(undef, n_participants, n_timepoints)
 
     for (p_idx, decoded) in enumerate(decoded_list)
-        accuracies[p_idx, :] = decoded.average_score
+        @inbounds for t_idx = 1:n_timepoints
+            acc = decoded.average_score[t_idx]
+            accuracies[p_idx, t_idx] = acc
+            diffs[p_idx, t_idx] = acc - chance_level
+        end
     end
 
-    # Compute observed t-statistics
+    # Compute observed t-statistics and p-values (right-tailed one-sample test)
     t_statistics = Vector{Float64}(undef, n_timepoints)
     p_values = Vector{Float64}(undef, n_timepoints)
-    chance_vector = fill(chance_level, n_participants)
-    df = Float64(n_participants - 1)
-
-    for t_idx = 1:n_timepoints
-        accuracies_at_t = accuracies[:, t_idx]
-        # One-tailed test (right tail): tests if accuracy > chance
-        result = paired_ttest(accuracies_at_t, chance_vector, tail = :right)
-        t_statistics[t_idx] = result.t
-        p_values[t_idx] = result.p
-    end
+    df = _onesample_ttest_right!(t_statistics, p_values, accuracies, chance_level)
 
     # Compute critical t-value for thresholding (one-tailed right)
     dist = TDist(df)
-    critical_t = quantile(dist, 1.0 - alpha)
+    critical_t = quantile(dist, 1.0 - alpha_f)
 
     # Threshold observed data (right tail: accuracy > chance)
-    mask_observed = t_statistics .> critical_t
+    mask_observed = .!isnan.(t_statistics) .& (t_statistics .> critical_t)
 
     # Find observed clusters
     observed_clusters = _find_temporal_clusters(mask_observed, first_times)
@@ -344,53 +360,58 @@ function test_against_chance_cluster(
     # Compute observed cluster statistics
     cluster_stats_observed = _compute_cluster_statistics(observed_clusters, t_statistics, cluster_statistic)
 
-    # Run permutations
-    permutation_max = Float64[]
-    sizehint!(permutation_max, n_permutations)
+    # Pre-draw all sign-flip permutations up front for thread-count-independent reproducibility
+    flips = rand(rng, Bool, n_participants, n_permutations)
+    permutation_max = zeros(Float64, n_permutations)
+    use_sum_stat = cluster_statistic == :sum
+    completed = _start_permutation_progress(show_progress, n_permutations, "Permutations: ")
 
-    if show_progress
-        progress = Progress(n_permutations, desc = "Permutations: ", showspeed = true)
-    end
+    # Fast zero-allocation threaded 1D contiguous cluster scan
+    _foreach_chunk(n_permutations) do perm_range
+        @inbounds for perm_idx in perm_range
+            best_stat = 0.0
+            in_cluster = false
+            cur_stat = 0.0
 
-    for _ = 1:n_permutations
-        # Shuffle participant labels (sign-flip for one-sample test)
-        # For one-sample t-test, we randomly flip signs of accuracies
-        shuffled_accuracies = copy(accuracies)
-        for p_idx = 1:n_participants
-            if rand(rng, Bool)
-                # Flip sign: subtract from chance and negate
-                shuffled_accuracies[p_idx, :] = 2 * chance_level .- shuffled_accuracies[p_idx, :]
+            for t_idx = 1:n_timepoints
+                sum_d = 0.0
+                @simd for p_idx = 1:n_participants
+                    d = diffs[p_idx, t_idx]
+                    sum_d += flips[p_idx, perm_idx] ? -d : d
+                end
+                mean_d = sum_d / n_participants
+
+                ss_d = 0.0
+                @simd for p_idx = 1:n_participants
+                    d = diffs[p_idx, t_idx]
+                    val = flips[p_idx, perm_idx] ? -d : d
+                    delta = val - mean_d
+                    ss_d += delta * delta
+                end
+                variance = max(ss_d / df, 0.0)
+                se = sqrt(variance / n_participants)
+                t_val = se == 0.0 ? (mean_d == 0.0 ? NaN : copysign(Inf, mean_d)) : (mean_d / se)
+
+                if !isnan(t_val) && t_val > critical_t
+                    in_cluster = true
+                    if use_sum_stat
+                        cur_stat += t_val
+                    else
+                        abs_t = abs(t_val)
+                        abs_t > cur_stat && (cur_stat = abs_t)
+                    end
+                elseif in_cluster
+                    cur_stat > best_stat && (best_stat = cur_stat)
+                    in_cluster = false
+                    cur_stat = 0.0
+                end
             end
-        end
 
-        # Compute t-statistics for permuted data
-        t_statistics_perm = Vector{Float64}(undef, n_timepoints)
-        for t_idx = 1:n_timepoints
-            accuracies_at_t = shuffled_accuracies[:, t_idx]
-            # One-tailed test (right tail): tests if accuracy > chance
-            result = paired_ttest(accuracies_at_t, chance_vector, tail = :right)
-            t_statistics_perm[t_idx] = result.t
-        end
-
-        # Threshold permuted data (right tail: accuracy > chance)
-        mask_perm = t_statistics_perm .> critical_t
-
-        # Find clusters in permuted data
-        clusters_perm = _find_temporal_clusters(mask_perm, first_times)
-
-        # Compute max cluster statistic
-        # For one-tailed test (right tail), only consider positive cluster stats
-        if !isempty(clusters_perm)
-            cluster_stats_perm = _compute_cluster_statistics(clusters_perm, t_statistics_perm, cluster_statistic)
-            max_stat = maximum(cluster_stats_perm)  # Don't use abs() for one-tailed test
-        else
-            max_stat = 0.0
-        end
-
-        push!(permutation_max, max_stat)
-
-        if show_progress
-            next!(progress)
+            if in_cluster && cur_stat > best_stat
+                best_stat = cur_stat
+            end
+            permutation_max[perm_idx] = best_stat
+            _tick!(completed)
         end
     end
 
@@ -402,7 +423,7 @@ function test_against_chance_cluster(
             # Count permutations with max >= observed
             count_exceed = sum(permutation_max .>= cluster_stat) + 1
             p_value = count_exceed / (n_permutations + 1)
-            is_significant = p_value <= alpha
+            is_significant = p_value <= alpha_f
 
             updated_cluster = TemporalCluster(cluster.id, cluster.time_indices, cluster.time_range, cluster_stat, p_value, is_significant)
             push!(updated_clusters, updated_cluster)
@@ -427,7 +448,7 @@ function test_against_chance_cluster(
         p_values,
         significant_mask,
         df,
-        alpha,
+        alpha_f,
         :cluster_permutation,
         observed_clusters,
     )

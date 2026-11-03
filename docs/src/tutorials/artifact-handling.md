@@ -107,18 +107,18 @@ non_eog_bad, eog_bad = EegFun.partition_channels_by_eog_correlation(
 
 Channels that are genuinely broken (not EOG-related) can be repaired by interpolation. Two methods are available:
 
-**Neighbour interpolation** — weighted average of nearby channels. Requires pre-computed neighbour information:
+**Neighbor interpolation** — weighted average of nearby channels. Requires pre-computed neighbor information:
 
 ```julia
-# Compute neighbours first (only needed once)
-EegFun.get_neighbours_xyz!(dat.layout, 0.5)
+# Compute neighbors first (only needed once)
+EegFun.get_neighbors_xyz!(dat.layout, 0.5)
 
 repair_info = EegFun.create_continuous_repair_info(:neighbor_interpolation)
 EegFun.channel_repairable!(repair_info, non_eog_bad, dat.layout)
 EegFun.repair_channels!(dat, repair_info; method = :neighbor_interpolation)
 ```
 
-**Spherical spline interpolation** — uses all remaining good channels weighted by their spatial relationship on the scalp (Perrin et al., 1989). Does not require neighbours, but does require 3D coordinates in the layout:
+**Spherical spline interpolation** — uses all remaining good channels weighted by their spatial relationship on the scalp (Perrin et al., 1989). Does not require neighbors, but does require 3D coordinates in the layout:
 
 ```julia
 EegFun.repair_channels!(dat, non_eog_bad; method = :spherical_spline)
@@ -182,7 +182,7 @@ If only one or two channels are noisy in an otherwise clean trial, you can repai
 
 ### Analyse Repairability
 
-Before repairing with neighbour interpolation, use `channel_repairable!` to check if bad channels have enough clean neighbours:
+Before repairing with neighbor interpolation, use `channel_repairable!` to check if bad channels have enough clean neighbors:
 
 ```julia
 EegFun.channel_repairable!(artifacts, epochs.layout)
@@ -191,7 +191,7 @@ EegFun.channel_repairable!(artifacts, epochs.layout)
 ### Apply Repair
 
 ```julia
-# Method 1: Weighted neighbour interpolation (fast, requires neighbours)
+# Method 1: Weighted neighbor interpolation (fast, requires neighbors)
 EegFun.repair_artifacts!(epochs, artifacts, method = :neighbor_interpolation)
 
 # Method 2: Spherical spline interpolation (higher quality, requires 3D coordinates)

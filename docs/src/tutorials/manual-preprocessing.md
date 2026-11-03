@@ -25,7 +25,7 @@ The goal is to make data **cleaner** without making it **artificial**.
 dat = EegFun.create_eegfun_data(raw_data, layout)
 EegFun.polar_to_cartesian_xy!(layout)   
 EegFun.polar_to_cartesian_xyz!(layout)  
-EegFun.get_neighbours_xy!(layout, 0.4)  
+EegFun.get_neighbors_xy!(layout, 0.4)  
 ```
 
 #### Why?
@@ -36,7 +36,7 @@ EegFun.get_neighbours_xy!(layout, 0.4)
 
 #### When to Customize?
 
-- Adjust neighbour distance based on electrode density — the distance is in normalized units where 1.0 = the scalp equator. Think of it as a fraction of the head radius: 0.4 means "neighbours within 40% of the head radius"
+- Adjust neighbor distance based on electrode density — the distance is in normalized units where 1.0 = the scalp equator. Think of it as a fraction of the head radius: 0.4 means "neighbors within 40% of the head radius"
 - Higher density arrays (e.g., 128 channels) may need smaller radius (~0.3)
 
 ---

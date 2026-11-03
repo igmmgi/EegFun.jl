@@ -132,9 +132,9 @@ function tf_multitaper(
     # Pre-calculate padding amounts for virtual padding (no new dataframe allocations)
     n_pre_pad, _, n_padded_samples = _tf_padding(pad, n_samples_per_epoch)
 
-    # Maximum window dictates if we need additional padding for FFT beyond our explicit pad
+    # Maximum window dictates linear convolution FFT padding so circular wrap-around never occurs
     max_window_samples = maximum(n_window_samples_per_freq)
-    n_samples_padded = nextpow(2, max(n_padded_samples, max_window_samples))
+    n_samples_padded = nextpow(2, n_padded_samples + max_window_samples - 1)
 
     adjusted_time_indices = time_indices .+ n_pre_pad
     window_lengths_samples_exact = [(cycles / freqs[fi]) * sdat.sample_rate for fi = 1:num_frex]
@@ -214,11 +214,12 @@ function tf_multitaper(
         cos_wav = cos.(angle_in)
         sin_wav = sin.(angle_in)
 
-        # For each taper, create tapered wavelet and compute FFT using pre-planned FFT
+        # For each taper, create tapered wavelet with MNE-style discrete L2 norm sqrt(2) and compute FFT
         for taper_idx = 1:K
             taper_col = @view tapers_per_freq[fi][:, taper_idx]
-            # Tapered wavelet: taper * (cos + i*sin)
+            # Tapered wavelet: taper * (cos + i*sin), DPSS column already has L2 norm = 1
             tapered_wavelet = taper_col .* (cos_wav .+ im .* sin_wav)
+            tapered_wavelet .*= sqrt(2.0) / norm(tapered_wavelet, 2)
             tapered_wavelet_ffts[fi][taper_idx] = _tf_padded_fft(tapered_wavelet, p_fft_wavelet, wavelet_padded)
         end
     end
@@ -330,11 +331,10 @@ function _process_multitaper_channel!(
             n_window_samples = n_window_samples_per_freq[fi]
             n_tapers = n_tapers_per_freq[fi]
             inv_n_tapers = inv_n_tapers_per_freq[fi]
-            norm_factor = sqrt(2.0 / n_window_samples)
             half_window = n_window_samples ÷ 2
 
             for ti_idx = 1:n_times
-                adjusted_indices_cpu[ti_idx] = min(max(time_indices[ti_idx] + n_pre_pad + half_window, 1), n_samples_padded)
+                adjusted_indices_cpu[ti_idx] = time_indices[ti_idx] + n_pre_pad + half_window
             end
             copyto!(adjusted_indices_gpu, adjusted_indices_cpu)
 
@@ -350,13 +350,12 @@ function _process_multitaper_channel!(
                 copyto!(gpu_buffers.curr_wavelet_gpu, tapered_wavelet_ffts[fi][taper_idx])
                 local_conv_result_gpu .= local_data_fft_gpu .* gpu_buffers.curr_wavelet_gpu
                 mul!(local_conv_result_gpu, ifft_plan_padded_batch, local_conv_result_gpu)
-                local_conv_result_gpu .*= norm_factor
 
                 extracted_gpu = @view local_conv_result_gpu[adjusted_indices_gpu, :]
 
                 if return_trials
                     power_accum_trials_gpu .+= transpose(abs2.(extracted_gpu))
-                    if return_phase
+                    if return_phase && taper_idx == 1
                         complex_accum_trials_gpu .+= transpose(extracted_gpu)
                     end
                 else
@@ -364,7 +363,7 @@ function _process_multitaper_channel!(
                     sum!(sum_power_gpu, extracted_power_gpu)
                     power_accum_avg_gpu .+= vec(sum_power_gpu)
 
-                    if return_phase
+                    if return_phase && taper_idx == 1
                         sum!(sum_complex_gpu, extracted_gpu)
                         complex_accum_avg_gpu .+= vec(sum_complex_gpu)
                     end
@@ -374,12 +373,12 @@ function _process_multitaper_channel!(
             if return_trials
                 @views eegpower_trials_gpu[:, fi, :] .= power_accum_trials_gpu .* inv_n_tapers
                 if return_phase
-                    @views eegconv_trials_gpu[:, fi, :] .= complex_accum_trials_gpu .* inv_n_tapers
+                    @views eegconv_trials_gpu[:, fi, :] .= complex_accum_trials_gpu
                 end
             else
                 @views eegpower_avg_gpu[fi, :] .= power_accum_avg_gpu .* (inv_n_tapers * inv_n_trials)
                 if return_phase
-                    @views eegconv_avg_gpu[fi, :] .= complex_accum_avg_gpu .* (inv_n_tapers * inv_n_trials)
+                    @views eegconv_avg_gpu[fi, :] .= complex_accum_avg_gpu .* inv_n_trials
                 end
             end
         end
@@ -399,7 +398,6 @@ function _process_multitaper_channel!(
             n_window_samples = n_window_samples_per_freq[fi]
             n_tapers = n_tapers_per_freq[fi]
             inv_n_tapers = inv_n_tapers_per_freq[fi]
-            norm_factor = sqrt(2.0 / n_window_samples)
             half_window = n_window_samples ÷ 2
 
             if return_trials
@@ -412,6 +410,7 @@ function _process_multitaper_channel!(
 
             for taper_idx = 1:n_tapers
                 tapered_wavelet_fft = tapered_wavelet_ffts[fi][taper_idx]
+                accum_phase = return_phase && taper_idx == 1
 
                 @inbounds for trial_idx = 1:n_trials
                     @simd for i = 1:n_samples_padded
@@ -420,24 +419,15 @@ function _process_multitaper_channel!(
                 end
                 mul!(local_conv_result, ifft_plan_padded_batch, local_conv_result)
 
-                @inbounds @simd for i in eachindex(local_conv_result)
-                    local_conv_result[i] *= norm_factor
-                end
-
                 @inbounds for ti_idx = 1:n_times
                     sample_idx = time_indices[ti_idx]
                     adjusted_idx = sample_idx + n_pre_pad + half_window
-                    if adjusted_idx < 1
-                        adjusted_idx = 1
-                    elseif adjusted_idx > n_samples_padded
-                        adjusted_idx = n_samples_padded
-                    end
 
                     if return_trials
                         @inbounds @simd for trial_idx = 1:n_trials
                             val = local_conv_result[adjusted_idx, trial_idx]
                             power_accum_trials[trial_idx, ti_idx] += abs2(val)
-                            if return_phase
+                            if accum_phase
                                 complex_accum_trials[trial_idx, ti_idx] += val
                             end
                         end
@@ -447,12 +437,12 @@ function _process_multitaper_channel!(
                         @inbounds @simd for trial_idx = 1:n_trials
                             val = local_conv_result[adjusted_idx, trial_idx]
                             power_sum += abs2(val)
-                            if return_phase
+                            if accum_phase
                                 conv_sum += val
                             end
                         end
                         power_accum_avg[ti_idx] += power_sum
-                        if return_phase
+                        if accum_phase
                             complex_accum_avg[ti_idx] += conv_sum
                         end
                     end
@@ -466,7 +456,7 @@ function _process_multitaper_channel!(
                     end
                     if return_phase
                         @simd for trial_idx = 1:n_trials
-                            eegconv_trials[trial_idx, fi, ti_idx] = complex_accum_trials[trial_idx, ti_idx] * inv_n_tapers
+                            eegconv_trials[trial_idx, fi, ti_idx] = complex_accum_trials[trial_idx, ti_idx]
                         end
                     end
                 end
@@ -475,7 +465,7 @@ function _process_multitaper_channel!(
                 @inbounds for ti_idx = 1:n_times
                     eegpower_avg[fi, ti_idx] = power_accum_avg[ti_idx] * factor
                     if return_phase
-                        eegconv_avg[fi, ti_idx] = complex_accum_avg[ti_idx] * factor
+                        eegconv_avg[fi, ti_idx] = complex_accum_avg[ti_idx] * inv_n_trials
                     end
                 end
             end

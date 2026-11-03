@@ -80,7 +80,7 @@ function read_data(filepath::String)::Union{EegFunData,Vector{<:EegFunData},Noth
         @minimal_warning "File does not exist: $filepath"
         return nothing
     end
-    jldopen(filepath, "r") do file
+    jldopen(filepath, "r"; typemap = _LEGACY_JLD2_TYPEMAP) do file
         if haskey(file, "format_version")
             v = file["format_version"]
             if v > EEGFUN_FORMAT_VERSION

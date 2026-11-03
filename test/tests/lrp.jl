@@ -378,4 +378,38 @@ using DataFrames
             @test :C2 ∉ channels
         end
     end
+
+    @testset "Phase 2 regressions: _create_lrp_layout cleans deleted midline channels from neighbors & matches .condition" begin
+        # 1. Midline channel Cz removed from layout.neighbors (and weights re-normalized)
+        df_lr = DataFrame(
+            time = [0.0, 0.01],
+            sample = [1, 2],
+            C3 = [1.0, 2.0],
+            Cz = [3.0, 3.0],
+            C4 = [5.0, 6.0],
+            F3 = [2.0, 2.0],
+            F4 = [4.0, 4.0],
+        )
+        nb_lr = EegFun.OrderedDict(
+            :C3 => EegFun.Neighbors([:Cz, :F3], [1.0, 1.0], [0.5, 0.5]),
+            :Cz => EegFun.Neighbors([:C3, :C4], [1.0, 1.0], [0.5, 0.5]),
+            :C4 => EegFun.Neighbors([:Cz, :F4], [1.0, 1.0], [0.5, 0.5]),
+            :F3 => EegFun.Neighbors([:C3], [1.0], [1.0]),
+            :F4 => EegFun.Neighbors([:C4], [1.0], [1.0]),
+        )
+        lay_lr = EegFun.Layout(DataFrame(label = [:C3, :Cz, :C4, :F3, :F4], inc = zeros(5), azi = zeros(5)), nb_lr, 0.5, :xy)
+        e_l = EegFun.ErpData("lr", 10, "left10", df_lr, lay_lr, 100, EegFun.AnalysisInfo(), 5)
+        e_r = EegFun.ErpData("lr", 20, "right20", copy(df_lr), lay_lr, 100, EegFun.AnalysisInfo(), 5)
+
+        lrp_out = EegFun.lrp(e_l, e_r)
+        @test !haskey(lrp_out.layout.neighbors, :Cz)
+        @test :Cz ∉ lrp_out.layout.neighbors[:C3].channels
+        @test lrp_out.layout.neighbors[:C3].channels == [:F3]
+        @test lrp_out.layout.neighbors[:C3].weights ≈ [1.0]
+
+        # 2. Batch lrp(erps, condition_pairs) matches .condition field on non-contiguous condition numbers [10, 20]
+        lrp_nc = EegFun.lrp([e_l, e_r], [(10, 20)])
+        @test length(lrp_nc) == 1
+        @test lrp_nc[1].condition_name == "lrp_10_20"
+    end
 end

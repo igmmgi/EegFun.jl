@@ -237,7 +237,7 @@ function _process_rereference_file(filepath::String, output_path::String, refere
 
     # Handle empty data (valid case - just save empty vector)
     if isempty(data)
-        jldsave(output_path; data = data)
+        jldsave(output_path; data = data, format_version = EEGFUN_FORMAT_VERSION)
         ref_str = reference_selection isa Symbol ? string(reference_selection) : join(reference_selection, ", ")
         return BatchResult(true, fname, "Rereferenced to $ref_str (empty data)")
     end
@@ -246,7 +246,7 @@ function _process_rereference_file(filepath::String, output_path::String, refere
     rereference!.(data, Ref(reference_selection))
 
     # Save (always use "data" as variable name since read_data finds by type)
-    jldsave(output_path; data = data)
+    jldsave(output_path; data = data, format_version = EEGFUN_FORMAT_VERSION)
 
     ref_str = reference_selection isa Symbol ? string(reference_selection) : join(reference_selection, ", ")
     return BatchResult(true, fname, "Rereferenced to $ref_str")

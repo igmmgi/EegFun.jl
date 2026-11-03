@@ -26,6 +26,7 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Title
     :plot_title => (nothing, "Plot title"),
+    :show_title => (true, "Show plot title (true/false)"),
     :plot_title_fontsize => (16, "Font size for plot titles"),
     :plot_title_position => (
         nothing,
@@ -847,8 +848,9 @@ Prepare plot kwargs by merging with defaults and tracking whether user provided 
 Returns (plot_kwargs, user_provided_color).
 """
 function _prepare_plot_kwargs(kwargs)
-    user_provided_color = haskey(kwargs, :color)
-    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs)
+    kwargs_norm = _normalize_plot_kwargs(kwargs)
+    user_provided_color = haskey(kwargs_norm, :color)
+    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs_norm)
     return plot_kwargs, user_provided_color
 end
 

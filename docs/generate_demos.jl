@@ -31,7 +31,7 @@ demos = [
     ("preprocessing", "channel_repair", "Channel Repair"),
     ("preprocessing", "channel_summary", "Channel Summary"),
     ("preprocessing", "ica", "ICA"),
-    ("preprocessing", "layouts", "Layouts & Neighbours"),
+    ("preprocessing", "layouts", "Layouts & Neighbors"),
     ("preprocessing", "analysis_settings", "Analysis Settings"),
 
     # Artifacts
@@ -72,7 +72,6 @@ demos = [
     ("plotting", "plot_erp_measurements", "Plot ERP Measurements"),
     ("plotting", "plot_erp_measurement_gui", "Plot ERP Measurement GUI"),
     ("plotting", "plot_filter", "Plot Filter"),
-    ("plotting", "plot_channel_spectrum", "Plot Channel Spectrum"),
     ("plotting", "plot_gfp", "Plot GFP"),
     ("plotting", "plot_ica", "Plot ICA"),
     ("plotting", "plot_joint_probability", "Plot Joint Probability"),

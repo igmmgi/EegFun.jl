@@ -438,9 +438,10 @@ using EegFun
         expected = mean([r.rdm for r in rsa_list])
         @test ga.rdm ≈ expected
 
-        # Single participant returns itself
+        # Single participant returns an isolated copy
         single_ga = EegFun.grand_average([rsa_list[1]])
-        @test single_ga === rsa_list[1]
+        @test single_ga !== rsa_list[1]
+        @test single_ga.rdm == rsa_list[1].rdm
     end
 
     # ────────────────────────────────────────────────────────────
@@ -536,6 +537,110 @@ using EegFun
 
         @test contains(output, "NoiseCeiling")
         @test contains(output, "4")
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # 15. Crossnobis unbiasedness, Ledoit-Wolf, Nili noise ceiling, and copy/mutation safety
+    # ────────────────────────────────────────────────────────────
+    @testset "Unbiased Crossnobis & CV-Euclidean, Nili noise ceiling, and non-mutating API" begin
+        rng = Random.Xoshiro(2026)
+
+        # 1. Under H0 (identical pure-noise distributions), Crossnobis and CV-Euclidean have ~0 expectation
+        null_epochs =
+            [EegFun.create_test_epoch_data(condition = c, n_epochs = 20, n_channels = 4, n = 25, fs = 500, seed = 700 + c) for c = 1:3]
+        # Replace deterministic test signal with pure zero-mean Gaussian noise so H0 holds strictly
+        for ep in null_epochs, df in ep.data, ch in EegFun.channel_labels(ep)
+            df[!, ch] .= randn(rng, length(df[!, ch]))
+        end
+
+        cv_eucl = EegFun.rsa_crossvalidated(
+            null_epochs;
+            dissimilarity_measure = :euclidean,
+            cv_method = :kfold,
+            n_folds = 5,
+            rng = Random.Xoshiro(11),
+        )
+        cv_cn = EegFun.rsa_crossvalidated(
+            null_epochs;
+            dissimilarity_measure = :crossnobis,
+            cv_method = :splithalf,
+            n_iterations = 20,
+            rng = Random.Xoshiro(12),
+        )
+        off_eucl = [cv_eucl.rdm[t, i, j] for t = 1:25, i = 1:3, j = 1:3 if i < j]
+        off_cn = [cv_cn.rdm[t, i, j] for t = 1:25, i = 1:3, j = 1:3 if i < j]
+        @test abs(mean(off_eucl)) < 0.25
+        @test abs(mean(off_cn)) < 0.5
+        @test any(<(0.0), off_cn)  # unbiased Crossnobis permits negative noise fluctuations
+
+        # Unequal trial counts in leave-one-out
+        uneq_epochs = [
+            EegFun.create_test_epoch_data(condition = 1, n_epochs = 12, n_channels = 3, n = 10, fs = 500, seed = 801),
+            EegFun.create_test_epoch_data(condition = 2, n_epochs = 9, n_channels = 3, n = 10, fs = 500, seed = 802),
+        ]
+        cv_loo_uneq = EegFun.rsa_crossvalidated(uneq_epochs; dissimilarity_measure = :crossnobis, cv_method = :leaveoneout)
+        @test size(cv_loo_uneq.rdm) == (10, 2, 2)
+        @test all(isfinite, cv_loo_uneq.rdm)
+
+        # 2. Within-condition demeaned Ledoit-Wolf covariance is invariant to between-condition mean shifts
+        arr1 = ones(Float64, 3, 1, 10) .+ 0.1 .* randn(rng, 3, 1, 10)
+        arr2_near = ones(Float64, 3, 1, 10) .+ 0.1 .* randn(rng, 3, 1, 10)
+        arr2_far = arr2_near .+ 1000.0
+        cov_near = EegFun._compute_pooled_covariance([arr1, arr2_near], 1)
+        cov_far = EegFun._compute_pooled_covariance([arr1, arr2_far], 1)
+        @test cov_near ≈ cov_far rtol = 1e-10
+
+        # 3. create_rdm preserves negative off-diagonals in pre-computed Crossnobis RDMs
+        cn_rdm = [0.0 -0.15 0.8; -0.15 0.0 0.4; 0.8 0.4 0.0]
+        @test EegFun.create_rdm(cn_rdm) == cn_rdm
+
+        # 4. normalize_rdm(:rank) uses tied average ranks
+        tied_rdm = [0.0 2.0 2.0; 2.0 0.0 5.0; 2.0 5.0 0.0]
+        ranked_rdm = EegFun.normalize_rdm(tied_rdm; method = :rank)
+        @test EegFun._extract_upper_triangular(ranked_rdm) == [1.5, 1.5, 3.0]
+
+        # 5. Nili et al. (2014) noise ceiling strictly satisfies lower_bound <= upper_bound
+        sub_rsas = [
+            EegFun.rsa([
+                EegFun.create_test_epoch_data(condition = c, n_epochs = 8, n_channels = 4, n = 12, fs = 500, seed = 900 + 10 * s + c)
+                for c = 1:4
+            ]) for s = 1:3
+        ]
+        for cm in (:spearman, :pearson)
+            nc = EegFun.compute_noise_ceiling(sub_rsas; correlation_method = cm)
+            @test all(nc.lower_bound .<= nc.upper_bound .+ 1e-12)
+        end
+
+        ga = EegFun.grand_average(sub_rsas; compute_noise_ceiling = false)
+        @test isnothing(ga.noise_ceiling)
+        ga_with_nc = EegFun.add_noise_ceiling(ga, sub_rsas)
+        @test isnothing(ga.noise_ceiling)  # non-mutating
+        @test !isnothing(ga_with_nc.noise_ceiling)
+
+        # 6. compare_models vs compare_models! non-mutation & exact N! enumeration for N <= 4
+        asym_model = [0.0 1.0 2.0 3.0; 1.2 0.0 2.0 3.0; 2.0 2.0 0.0 1.0; 3.0 3.0 1.0 0.0]
+        asym_orig = copy(asym_model)
+        models_vec = [asym_model]
+        res_cmp = EegFun.compare_models(ga, models_vec; model_names = ["M1"], n_permutations = 50, tail = :right)
+        @test isnothing(ga.model_correlations)  # non-mutating on rsa_data
+        @test models_vec[1] == asym_orig        # non-mutating on caller's model_rdms
+        @test all(p -> 1 / 24 - 1e-12 <= p <= 1.0, res_cmp.p_values)  # exact 4! = 24 denominator
+
+        EegFun.compare_models!(ga, models_vec; model_names = ["M1"], n_permutations = 10, tail = :both)
+        @test !isnothing(ga.model_correlations)
+
+        # 7. Base.copy(::RsaData) and empty show guards
+        ga_cp = copy(ga)
+        ga_cp.rdm[1, 1, 2] = 999.0
+        @test ga.rdm[1, 1, 2] != 999.0
+
+        empty_nc = EegFun.NoiseCeiling(Float64[], Float64[], 2)
+        empty_rsa =
+            EegFun.RsaData("empty", String[], Float64[], zeros(0, 0, 0), :correlation, Symbol[], ga.layout, 500; noise_ceiling = empty_nc)
+        io = IOBuffer()
+        show(io, empty_nc)
+        show(io, empty_rsa)
+        @test contains(String(take!(io)), "N/A")
     end
 
 end # @testset "RSA"

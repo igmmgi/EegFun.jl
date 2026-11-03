@@ -15,7 +15,7 @@ for epoched data, since ICA benefits from many data points).
 Tip: **Pre-filter to ≥1 Hz** before running ICA to ensure a good decomposition.
 
 # Key Arguments
-- `n_components`: Number of components (default: n_channels − 1)
+- `n_components`: Number of components (default: effective numerical rank of the data via SVD)
 - `sample_selection`: Exclude bad samples (e.g., `samples_not(:is_extreme_value_100)`)
 - `percentage_of_data`: Use a random subset of data for faster ICA (e.g., `25.0` = 25%)
 - `algorithm`: `:infomax` (default) or `:infomax_extended` (handles sub- and super-Gaussian sources)
@@ -48,7 +48,8 @@ function run_ica(
     params::IcaPrms = IcaPrms(),
     rng::AbstractRNG = Random.default_rng(),
 )
-    params.use_gpu = use_gpu || params.use_gpu
+    prms = deepcopy(params)
+    prms.use_gpu = use_gpu || prms.use_gpu
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
     isempty(selected_channels) && @minimal_error("No channels available after applying channel filter")
 
@@ -58,16 +59,6 @@ function run_ica(
     # Get samples to use using predicate
     sample_indices = get_selected_samples(dat, combined_sel)
     isempty(sample_indices) && @minimal_error("No samples available after applying sample filter")
-
-    # Set n_components if not specified
-    if isnothing(n_components)
-        n_components = length(selected_channels) - 1
-    elseif n_components > length(selected_channels)
-        @minimal_warning "Requested $n_components components but only $(length(selected_channels)) channels available. Using $(length(selected_channels) - 1) components instead."
-        n_components = length(selected_channels) - 1
-    end
-
-    @info "Running ICA (use_gpu=$(params.use_gpu)): $(length(selected_channels)) channels x $(length(sample_indices)) samples -> $(n_components) components"
 
     # Create subsetted layout that matches the selected channels
     ica_layout = subset_layout(dat.layout, channel_selection = channels(selected_channels))
@@ -80,6 +71,11 @@ function run_ica(
         dat_for_ica = _select_subsample!(dat_for_ica, percentage_of_data; rng = rng)
     end
 
+    # Resolve n_components against effective numerical rank (handles :avg ref, linked mastoids, interpolated channels)
+    n_components = _resolve_ica_n_components(dat_for_ica, n_components)
+
+    @info "Running ICA (use_gpu=$(prms.use_gpu)): $(length(selected_channels)) channels x $(size(dat_for_ica, 2)) samples -> $(n_components) components"
+
     # Get filename from the data
     input_filename = filename(dat)
 
@@ -90,7 +86,7 @@ function run_ica(
         input_filename;
         n_components = n_components,
         algorithm = algorithm,
-        params = params,
+        params = prms,
         rng = rng,
     )
 
@@ -113,7 +109,8 @@ function run_ica(
     params::IcaPrms = IcaPrms(),
     rng::AbstractRNG = Random.default_rng(),
 )
-    params.use_gpu = use_gpu || params.use_gpu
+    prms = deepcopy(params)
+    prms.use_gpu = use_gpu || prms.use_gpu
     isempty(epoched_data) && @minimal_error("Empty epoched_data vector provided")
 
     # Use the first EpochData object as reference for some meta-like data
@@ -146,13 +143,8 @@ function run_ica(
         concatenated_matrix = _select_subsample!(concatenated_matrix, percentage_of_data; rng = rng)
     end
 
-    # Set n_components if not specified
-    if isnothing(n_components)
-        n_components = length(selected_channels) - 1
-    elseif n_components > length(selected_channels)
-        @minimal_warning "Requested $n_components components but only $(length(selected_channels)) channels available. Using $(length(selected_channels) - 1) components instead."
-        n_components = length(selected_channels) - 1
-    end
+    # Resolve n_components against effective numerical rank
+    n_components = _resolve_ica_n_components(concatenated_matrix, n_components)
 
     final_samples = size(concatenated_matrix, 2)
     total_epochs = sum(n_epochs(epoch_data) for epoch_data in epoched_data)
@@ -172,7 +164,7 @@ function run_ica(
         input_filename;
         n_components = n_components,
         algorithm = algorithm,
-        params = params,
+        params = prms,
         rng = rng,
     )
 
@@ -232,6 +224,49 @@ function _check_epoched_data_uniqueness!(concatenated_df::DataFrame; remove_dupl
 end
 
 run_ica(epoched_data::EpochData; kwargs...) = run_ica([epoched_data]; kwargs...)
+
+"""Estimate effective numerical rank of an ICA data matrix `(channels × samples)` using SVD tolerances."""
+function _estimate_ica_rank(dat_ica::Matrix{Float64})
+    n_channels, n_samples = size(dat_ica)
+    (n_channels == 0 || n_samples <= 1) && return 0
+    dat = copy(dat_ica)
+    dat .-= mean(dat, dims = 2)
+    scale = sqrt(norm((dat * transpose(dat)) / n_samples))
+    scale <= 0 && return 0
+    dat ./= scale
+    S = svdvals!(dat)
+    isempty(S) && return 0
+    s_max = S[1]
+    s_max <= 0 && return 0
+    tol = max(1e-7 * s_max, max(n_channels, n_samples) * eps(Float64) * s_max, 1e-10)
+    return count(>=(tol), S)
+end
+
+"""Resolve `n_components` by defaulting or clamping to the effective numerical rank of `dat_ica`."""
+function _resolve_ica_n_components(dat_ica::Matrix{Float64}, n_components::Union{Nothing,Int})
+    n_channels = size(dat_ica, 1)
+    eff_rank = _estimate_ica_rank(dat_ica)
+    eff_rank == 0 && @minimal_error("Data has effective numerical rank 0 (flat or constant channels); cannot run ICA.")
+
+    if isnothing(n_components)
+        if eff_rank < n_channels
+            @info "Detected numerical rank $eff_rank (< $n_channels channels); defaulting n_components = $eff_rank."
+        end
+        return eff_rank
+    end
+
+    n_components <= 0 && @minimal_error("n_components must be positive, got $n_components")
+
+    if n_components > n_channels
+        @minimal_warning "Requested $n_components components, which exceeds $n_channels selected channels (effective rank $eff_rank). Using $eff_rank components instead."
+        return eff_rank
+    elseif n_components > eff_rank
+        @minimal_warning "Requested $n_components components, which exceeds effective numerical rank $eff_rank (out of $n_channels channels). Clamping n_components to $eff_rank."
+        return eff_rank
+    end
+
+    return n_components
+end
 
 
 

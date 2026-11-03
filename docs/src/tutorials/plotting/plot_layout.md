@@ -174,18 +174,18 @@ EegFun.add_topo_rois!(
     roi_fillalpha = [0.5],
 )
 
-# Plots with neighbours (hover mouse over channel to show neighbour connections)
-EegFun.get_neighbours_xy!(layout, 0.5);
-EegFun.plot_layout_2d(layout, neighbours = true)
+# Plots with neighbors (hover mouse over channel to show neighbor connections)
+EegFun.get_neighbors_xy!(layout, 0.5);
+EegFun.plot_layout_2d(layout, neighbors = true)
 
-# Print neighbours while 2D neighbours are still computed
-# (the 3D coordinate conversion below clears cached neighbours)
-EegFun.print_layout_neighbours(layout, joinpath(DEMO_OUTPUT, "electrode_neighbours_1.toml"))
-EegFun.print_layout_neighbours(layout.neighbours, joinpath(DEMO_OUTPUT, "electrode_neighbours_2.toml"))
+# Print neighbors while 2D neighbors are still computed
+# (the 3D coordinate conversion below clears cached neighbors)
+EegFun.print_layout_neighbors(layout, joinpath(DEMO_OUTPUT, "electrode_neighbors_1.toml"))
+EegFun.print_layout_neighbors(layout.neighbors, joinpath(DEMO_OUTPUT, "electrode_neighbors_2.toml"))
 
-# 3D layout with neighbours
-EegFun.get_neighbours_xyz!(layout, 0.5);
-EegFun.plot_layout_3d(layout, neighbours = true)
+# 3D layout with neighbors
+EegFun.get_neighbors_xyz!(layout, 0.5);
+EegFun.plot_layout_3d(layout, neighbors = true)
 
 # save a basic figure
 # NB. for vector graphics, use CairoMakie

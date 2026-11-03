@@ -60,7 +60,7 @@ end
 # Layout plotting functions
 ########################################################
 """
-    plot_layout_2d!(fig::Figure, ax::Axis, layout::Layout; neighbours::Bool=false, correlation_matrix::Union{DataFrame, Nothing}=nothing, kwargs...)
+    plot_layout_2d!(fig::Figure, ax::Axis, layout::Layout; neighbors::Bool=false, correlation_matrix::Union{DataFrame, Nothing}=nothing, kwargs...)
 
 Plot a 2D EEG electrode layout with customizable head shape, electrode points, and labels.
 
@@ -68,8 +68,8 @@ Plot a 2D EEG electrode layout with customizable head shape, electrode points, a
 - `fig`: The figure to plot on
 - `ax`: The axis to plot on
 - `layout`: Layout containing electrode positions with columns x2, y2, and label
-- `neighbours`: Boolean to show interactive neighbour connections (default: false). Ignored if `correlation_matrix` is provided.
-- `correlation_matrix`: Optional DataFrame from `correlation_matrix()` to show correlation values on hover (default: nothing). When provided, `neighbours` is ignored.
+- `neighbors`: Boolean to show interactive neighbor connections (default: false). Ignored if `correlation_matrix` is provided.
+- `correlation_matrix`: Optional DataFrame from `correlation_matrix()` to show correlation values on hover (default: nothing). When provided, `neighbors` is ignored.
 
 $(_generate_kwargs_doc(PLOT_LAYOUT_HEAD_KWARGS))
 $(_generate_kwargs_doc(PLOT_LAYOUT_POINT_KWARGS))
@@ -93,7 +93,7 @@ function plot_layout_2d!(
     fig::Figure,
     ax::Axis,
     layout::Layout;
-    neighbours::Bool = false,
+    neighbors::Bool = false,
     correlation_matrix::Union{DataFrame,Nothing} = nothing,
     kwargs...,
 )
@@ -166,11 +166,11 @@ function plot_layout_2d!(
             end
         end
 
-        if neighbours
-            if isnothing(layout.neighbours)
-                @minimal_warning "Layout has no neighbours data. Set neighbours=false or calculate neighbours first."
+        if neighbors
+            if isnothing(layout.neighbors)
+                @minimal_warning "Layout has no neighbors data. Set neighbors=false or calculate neighbors first."
             else
-                _add_interactive_points!(fig, ax, layout.data, layout.neighbours, positions)
+                _add_interactive_points!(fig, ax, layout.data, layout.neighbors, positions)
             end
         end
     end
@@ -185,14 +185,14 @@ plot_layout_2d!(fig, ax, dat::EegFunData; kwargs...) = plot_layout_2d!(fig, ax, 
 
 
 """
-    plot_layout_2d(layout::Layout; neighbours::Bool=false, correlation_matrix::Union{DataFrame, Nothing}=nothing, display_plot::Bool=true, kwargs...)
+    plot_layout_2d(layout::Layout; neighbors::Bool=false, correlation_matrix::Union{DataFrame, Nothing}=nothing, display_plot::Bool=true, kwargs...)
 
 Create a new figure and plot a 2D EEG electrode layout.
 
 # Arguments
 - `layout`: Layout containing electrode positions
-- `neighbours`: Boolean to show interactive neighbour connections (default: false). Ignored if `correlation_matrix` is provided.
-- `correlation_matrix`: Optional DataFrame from `correlation_matrix()` to show correlation values on hover (default: nothing). When provided, `neighbours` is ignored.
+- `neighbors`: Boolean to show interactive neighbor connections (default: false). Ignored if `correlation_matrix` is provided.
+- `correlation_matrix`: Optional DataFrame from `correlation_matrix()` to show correlation values on hover (default: nothing). When provided, `neighbors` is ignored.
 - `display_plot`: Boolean to display the plot (default: true)
 
 $(_generate_kwargs_doc(PLOT_LAYOUT_HEAD_KWARGS))
@@ -206,15 +206,15 @@ $(_generate_kwargs_doc(PLOT_LAYOUT_LABEL_KWARGS))
     layout = read_layout("./layouts/biosemi64.csv")
     polar_to_cartesian_xy!(layout)
     plot_layout_2d(layout)
-    # With neighbour interactivity
-    plot_layout_2d(layout, neighbours=true)
+    # With neighbor interactivity
+    plot_layout_2d(layout, neighbors=true)
     # With correlation matrix
     cm = correlation_matrix(dat)
     plot_layout_2d(layout, correlation_matrix=cm)
 """
 function plot_layout_2d(
     layout::Layout;
-    neighbours::Bool = false,
+    neighbors::Bool = false,
     correlation_matrix::Union{DataFrame,Nothing} = nothing,
     display_plot::Bool = true,
     kwargs...,
@@ -223,7 +223,7 @@ function plot_layout_2d(
     # Increase xautolimitmargin slightly more on the right (0.15) to account for text labels extending outwards
     ax = Axis(fig[1, 1], aspect = DataAspect(), xautolimitmargin = (0.1, 0.15), yautolimitmargin = (0.1, 0.1))
 
-    plot_layout_2d!(fig, ax, layout; neighbours = neighbours, correlation_matrix = correlation_matrix, kwargs...)
+    plot_layout_2d!(fig, ax, layout; neighbors = neighbors, correlation_matrix = correlation_matrix, kwargs...)
 
     _set_window_title("Layout 2D")
     if display_plot
@@ -362,17 +362,18 @@ function add_topo_rois!(ax::Axis, layout::Layout, rois::Vector{<:Vector{Symbol}}
         ys = [p[2] for p in hull_points]
 
         # Draw the ROI
+        linecolor_i = _resolve_theme_linecolor(ax, merged_kwargs[:roi_linecolor][i])
         if merged_kwargs[:roi_fill][i]
             poly!(
                 ax,
                 xs,
                 ys;
                 color = (merged_kwargs[:roi_fillcolor][i], merged_kwargs[:roi_fillalpha][i]),
-                strokecolor = merged_kwargs[:roi_linecolor][i],
+                strokecolor = linecolor_i,
                 strokewidth = merged_kwargs[:roi_linewidth][i],
             )
         else
-            lines!(ax, xs, ys; color = merged_kwargs[:roi_linecolor][i], linewidth = merged_kwargs[:roi_linewidth][i])
+            lines!(ax, xs, ys; color = linecolor_i, linewidth = merged_kwargs[:roi_linewidth][i])
         end
     end
 end
@@ -380,7 +381,7 @@ end
 
 
 """
-    plot_layout_3d!(fig::Figure, ax::Axis3, layout::Layout; neighbours::Bool=false, kwargs...)
+    plot_layout_3d!(fig::Figure, ax::Axis3, layout::Layout; neighbors::Bool=false, kwargs...)
 
 Plot a 3D EEG electrode layout with customizable head shape, electrode points, and labels.
 
@@ -388,7 +389,7 @@ Plot a 3D EEG electrode layout with customizable head shape, electrode points, a
 - `fig`: The figure to plot on
 - `ax`: The axis to plot on
 - `layout`: Layout containing electrode positions with columns x3, y3, z3, and label
-- `neighbours`: Boolean to show interactive neighbour connections (default: false)
+- `neighbors`: Boolean to show interactive neighbor connections (default: false)
 
 $(_generate_kwargs_doc(PLOT_LAYOUT_HEAD_KWARGS))
 $(_generate_kwargs_doc(PLOT_LAYOUT_POINT_KWARGS))
@@ -404,7 +405,7 @@ $(_generate_kwargs_doc(PLOT_LAYOUT_LABEL_KWARGS))
     ax = Axis3(fig[1, 1])
     plot_layout_3d!(fig, ax, layout)
 """
-function plot_layout_3d!(fig::Figure, ax::Axis3, layout::Layout; neighbours::Bool = false, kwargs...)
+function plot_layout_3d!(fig::Figure, ax::Axis3, layout::Layout; neighbors::Bool = false, kwargs...)
 
     _ensure_coordinates_3d!(layout)
 
@@ -454,12 +455,12 @@ function plot_layout_3d!(fig::Figure, ax::Axis3, layout::Layout; neighbours::Boo
         end
     end
 
-    if neighbours
-        if isnothing(layout.neighbours)
-            @minimal_warning "Layout has no neighbours data. Set neighbours=false or calculate neighbours first."
+    if neighbors
+        if isnothing(layout.neighbors)
+            @minimal_warning "Layout has no neighbors data. Set neighbors=false or calculate neighbors first."
         else
             positions = Point3f.(layout.data.x3, layout.data.y3, layout.data.z3)
-            _add_interactive_points!(fig, ax, layout.data, layout.neighbours, positions, true)
+            _add_interactive_points!(fig, ax, layout.data, layout.neighbors, positions, true)
         end
     end
 
@@ -473,13 +474,13 @@ plot_layout_3d!(fig, ax, dat::EegFunData; kwargs...) = plot_layout_3d!(fig, ax, 
 
 
 """
-    plot_layout_3d(layout::Layout; neighbours::Bool=false, display_plot::Bool=true, kwargs...)
+    plot_layout_3d(layout::Layout; neighbors::Bool=false, display_plot::Bool=true, kwargs...)
 
 Create a new figure and plot a 3D EEG electrode layout.
 
 # Arguments
 - `layout`: Layout containing electrode positions
-- `neighbours`: Boolean to show interactive neighbour connections (default: false)
+- `neighbors`: Boolean to show interactive neighbor connections (default: false)
 - `display_plot`: Boolean to display the plot (default: true)
 
 $(_generate_kwargs_doc(PLOT_LAYOUT_HEAD_KWARGS))
@@ -493,22 +494,22 @@ $(_generate_kwargs_doc(PLOT_LAYOUT_LABEL_KWARGS))
     layout = read_layout("./layouts/biosemi64.csv")
     polar_to_cartesian_xyz!(layout)
     plot_layout_3d(layout)
-    # With neighbour interactivity
-    plot_layout_3d(layout, neighbours=true)
+    # With neighbor interactivity
+    plot_layout_3d(layout, neighbors=true)
 """
-function plot_layout_3d(layout::Layout; neighbours::Bool = false, display_plot::Bool = true, kwargs...)
+function plot_layout_3d(layout::Layout; neighbors::Bool = false, display_plot::Bool = true, kwargs...)
     fig = _eegfun_figure()
     # Increase autolimit margins to account for text labels extending outwards
     ax = Axis3(fig[1, 1], xautolimitmargin = (0.1, 0.15), yautolimitmargin = (0.1, 0.1), zautolimitmargin = (0.1, 0.1))
 
-    plot_layout_3d!(fig, ax, layout; neighbours = neighbours, kwargs...)
+    plot_layout_3d!(fig, ax, layout; neighbors = neighbors, kwargs...)
 
     _set_window_title("Layout 3D")
     if display_plot
         _display_figure(fig)
     end
 
-    return (fig = fig, axes = [ax])
+    return (fig = fig, axes = [ax], ax = ax)
 end
 
 plot_layout_3d(dat::EegFunData; kwargs...) = plot_layout_3d(dat.layout; kwargs...)
@@ -520,7 +521,7 @@ plot_layout_3d(dat::EegFunData; kwargs...) = plot_layout_3d(dat.layout; kwargs..
 
 """
     _add_interactive_points!(fig::Figure, ax::Union{Axis, Axis3}, layout::DataFrame,
-                          neighbours::OrderedDict, positions::Union{Vector{Point2f}, Vector{Point3f}}, is_3d::Bool=false)
+                          neighbors::OrderedDict, positions::Union{Vector{Point2f}, Vector{Point3f}}, is_3d::Bool=false)
 
 Add interactive electrode points that highlight and show connections to neighboring electrodes on hover.
 
@@ -528,7 +529,7 @@ Add interactive electrode points that highlight and show connections to neighbor
 - `fig`: The figure to add interactivity to
 - `ax`: The axis to add interactivity to (can be 2D or 3D)
 - `layout`: DataFrame containing electrode information
-- `neighbours`: OrderedDict mapping electrode symbols to their neighboring electrodes
+- `neighbors`: OrderedDict mapping electrode symbols to their neighboring electrodes
 - `positions`: Vector containing point positions (Point2f or Point3f) - no longer Observable
 - `is_3d`: Boolean indicating if the plot is 3D (default: false)
 
@@ -539,10 +540,11 @@ function _add_interactive_points!(
     fig::Figure,
     ax::Union{Axis,Axis3},
     layout::DataFrame,
-    neighbours::OrderedDict,
-    positions::Union{Vector{Point2f},Vector{Point3f}},  # Keep as regular vector
+    neighbors::Union{Nothing,AbstractDict} = nothing,
+    positions::Union{Vector{Point2f},Vector{Point3f}} = Point2f[],
     is_3d::Bool = false,
 )
+    isnothing(neighbors) && return nothing
     base_size = 15
     hover_size = 25
     sizes = Observable(fill(base_size, length(layout.label)))  # Observable for reactivity
@@ -551,8 +553,8 @@ function _add_interactive_points!(
     neighbor_indices = Vector{Vector{Int}}(undef, length(layout.label))
     for (i, label) in enumerate(layout.label)
         neighbor_indices[i] = Int[]
-        if haskey(neighbours, Symbol(label))
-            for neighbor in neighbours[Symbol(label)].channels
+        if haskey(neighbors, Symbol(label))
+            for neighbor in neighbors[Symbol(label)].channels
                 neighbor_idx = findfirst(==(neighbor), layout.label)
                 if !isnothing(neighbor_idx)
                     push!(neighbor_indices[i], neighbor_idx)
@@ -636,43 +638,51 @@ function _add_interactive_correlation_points!(
     yoffset,
     plot_labels,
 )
+    n_channels = length(layout.label)
+    n_channels == 0 && return nothing
 
     base_size = point_kwargs[:point_markersize]
     hover_size = base_size * 1.5
 
     # Observable for point sizes and correlation values
-    sizes = Observable(fill(base_size, length(layout.label)))
-    base_corr_values = fill(0.0, length(layout.label))  # Start with 0 (middle of colormap)
-    corr_values = Observable(base_corr_values)
+    sizes = Observable(fill(Float64(base_size), n_channels))
+    corr_values = Observable(fill(0.0, n_channels))
+    corr_texts = Observable(fill("", n_channels))
 
-    # Store text label objects to manage visibility
-    current_text_labels = Ref{Vector{Any}}([])  # Correlation value labels
-    channel_labels = Ref{Vector{Any}}([])  # Regular channel name labels
+    actual_label_color = _resolve_theme_textcolor(ax, label_kwargs[:label_color])
+    actual_point_color = _resolve_theme_textcolor(ax, point_kwargs[:point_color])
 
-    # Plot regular labels if requested and store references
-    if plot_labels
-        x_coords = layout[!, :x2] .+ xoffset
-        y_coords = layout[!, :y2] .+ yoffset
-        labels = String.(layout[!, :label])
-        for i in eachindex(labels)
-            label_obj = text!(
-                ax,
-                position = (x_coords[i], y_coords[i]),
-                labels[i];
-                fontsize = label_kwargs[:label_fontsize],
-                color = label_kwargs[:label_color],
-                align = label_kwargs[:label_align],
-            )
-            push!(channel_labels[], label_obj)
-        end
+    # Pre-create a single vectorized text plot for regular channel labels
+    channel_label_plot = if plot_labels
+        label_positions = Point2f.(layout[!, :x2] .+ xoffset, layout[!, :y2] .+ yoffset)
+        text!(
+            ax,
+            label_positions;
+            text = String.(layout[!, :label]),
+            fontsize = label_kwargs[:label_fontsize],
+            color = actual_label_color,
+            align = label_kwargs[:label_align],
+        )
+    else
+        nothing
     end
 
-    # Add interactive scatter points with observable correlation values for coloring
-    default_color = point_kwargs[:point_color]
+    # Pre-create a single Observable-backed text plot for hover correlation values (no per-hover text! allocations)
+    corr_text_plot = text!(
+        ax,
+        positions;
+        text = corr_texts,
+        fontsize = 16,
+        color = _resolve_theme_textcolor(ax, nothing),
+        align = label_kwargs[:label_align],
+        visible = false,
+    )
+
+    # Add interactive scatter points
     p = scatter!(
         ax,
         positions;
-        color = default_color,
+        color = actual_point_color,
         markersize = sizes,
         marker = point_kwargs[:point_marker],
         inspectable = true,
@@ -693,66 +703,52 @@ function _add_interactive_correlation_points!(
         visible = false,
     )
 
-    # Add hover interaction
-    new_sizes = fill(base_size, length(layout.label))
-    new_corr_values = fill(0.0, length(layout.label))
-    on(events(fig).mouseposition) do mp
+    # Add hover interaction updating pre-created Observables
+    new_sizes = fill(Float64(base_size), n_channels)
+    new_corr_values = fill(0.0, n_channels)
+    new_corr_strings = fill("", n_channels)
+    last_hovered = Ref{Int}(0)
+
+    on(events(fig).mouseposition) do _
         plt, i = pick(fig)
-        if (plt == p || plt == corr_scatter) && !isnothing(i)
+        if (plt == p || plt == corr_scatter) && !isnothing(i) && 1 <= i <= n_channels
+            i == last_hovered[] && return nothing
+            last_hovered[] = i
 
-            # Reset all sizes 
-            fill!(new_sizes, base_size)
-            new_sizes[i] = hover_size
-            sizes[] = new_sizes
+            fill!(new_sizes, Float64(base_size))
+            new_sizes[i] = Float64(hover_size)
+            sizes[] = copy(new_sizes)
 
-            # Hide regular channel labels and old correlation text labels
-            for label_obj in channel_labels[]
-                label_obj.visible = false
-            end
-            for text_obj in current_text_labels[]
-                text_obj.visible = false
-            end
-            empty!(current_text_labels[])
-
-            # Color all points based on correlation with selected channel
             row_idx = findfirst(==(layout.label[i]), correlation_matrix[!, :row])
-            for (j, label) in enumerate(layout.label)
-                corr_val = correlation_matrix[row_idx, label]
-                new_corr_values[j] = corr_val
-
-                # Add text label with correlation value at electrode position
-                pos = positions[j]
-                text_obj = text!(
-                    ax,
-                    position = (pos[1], pos[2]),
-                    string(round(corr_val, digits = 2));
-                    fontsize = 16,
-                    color = _resolve_theme_textcolor(ax, nothing),
-                    align = label_kwargs[:label_align],
-                )
-                push!(current_text_labels[], text_obj)
+            if !isnothing(row_idx)
+                for (j, label) in enumerate(layout.label)
+                    corr_val = hasproperty(correlation_matrix, label) ? Float64(correlation_matrix[row_idx, label]) : 0.0
+                    new_corr_values[j] = corr_val
+                    new_corr_strings[j] = string(round(corr_val, digits = 2))
+                end
+            else
+                fill!(new_corr_values, 0.0)
+                fill!(new_corr_strings, "")
             end
 
-            # Update correlation scatter colors and show it, hide default scatter
-            corr_values[] = new_corr_values
+            corr_values[] = copy(new_corr_values)
+            corr_texts[] = copy(new_corr_strings)
+
+            !isnothing(channel_label_plot) && (channel_label_plot.visible = false)
+            corr_text_plot.visible = true
             p.visible = false
             corr_scatter.visible = true
-        else
-            # Mouse not over any point, reset to defaults by showing channels labels and hiding correlation values
-            fill!(new_sizes, base_size)
-            sizes[] = new_sizes
+        elseif last_hovered[] != 0
+            last_hovered[] = 0
+            fill!(new_sizes, Float64(base_size))
+            sizes[] = copy(new_sizes)
 
-            for label_obj in channel_labels[]
-                label_obj.visible = true
-            end
-            for text_obj in current_text_labels[]
-                text_obj.visible = false
-            end
-            empty!(current_text_labels[])
-
+            !isnothing(channel_label_plot) && (channel_label_plot.visible = true)
+            corr_text_plot.visible = false
             p.visible = true
             corr_scatter.visible = false
         end
+        return nothing
     end
 
     return nothing

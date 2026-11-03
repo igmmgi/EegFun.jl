@@ -111,7 +111,7 @@ using DataFrames
         c_dat.layout.data.x3 = [0.0, 0.1, 0.0, -0.1]
         c_dat.layout.data.y3 = [0.1, 0.0, -0.1, 0.0]
         c_dat.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
-        EegFun.get_neighbours_xyz!(c_dat.layout, 0.5)
+        EegFun.get_neighbors_xyz!(c_dat.layout, 0.5)
 
         # In-place channel_repairable!
         rep_info = EegFun.create_continuous_repair_info(:neighbor_interpolation)
@@ -206,27 +206,27 @@ using DataFrames
         data_dir = joinpath(dirname(dirname(@__DIR__)), "resources", "data")
         test_file = joinpath(data_dir, "bdf", "example1.bdf")
 
-        if isfile(test_file)
-            # Create a temporary directory for the pipeline config and output
-            mktempdir() do temp_dir
-                # Create epoch condition file
-                epoch_file = joinpath(temp_dir, "epochs.toml")
-                write(
-                    epoch_file,
-                    """
+        @test isfile(test_file)
+        # Create a temporary directory for the pipeline config and output
+        mktempdir() do temp_dir
+            # Create epoch condition file
+            epoch_file = joinpath(temp_dir, "epochs.toml")
+            write(
+                epoch_file,
+                """
   [epochs]
   [[epochs.conditions]]
   name = "Test Condition"
   trigger_sequences = [1]
   """,
-                )
+            )
 
-                # Create pipeline config file
-                pipeline_file = joinpath(temp_dir, "pipeline.toml")
-                bdf_dir = replace(joinpath(data_dir, "bdf"), '\\' => '/')
-                write(
-                    pipeline_file,
-                    """
+            # Create pipeline config file
+            pipeline_file = joinpath(temp_dir, "pipeline.toml")
+            bdf_dir = replace(joinpath(data_dir, "bdf"), '\\' => '/')
+            write(
+                pipeline_file,
+                """
 [files.input]
 directory = "$bdf_dir"
 raw_data_files = "example1\\\\.bdf"
@@ -242,23 +242,20 @@ save_continuous_data_corrected = false
 epoch_start = -0.1
 epoch_end = 0.5
 """,
-                )
+            )
 
-                # Run the pipeline (this shouldn't throw any errors)
-                # Redirect stdout/stderr to avoid spamming the test output
-                redirect_stdio(stdout = devnull, stderr = devnull) do
-                    EegFun.preprocess(pipeline_file; base_dir = temp_dir)
-                end
-
-                # Check that the output directory was created and contains the expected files
-                out_dir = joinpath(temp_dir, "output")
-                @test isdir(out_dir)
-                @test isfile(joinpath(out_dir, "example1_epochs.jld2"))
-                @test isfile(joinpath(out_dir, "example1_erps.jld2"))
-                @test isfile(joinpath(out_dir, "example1_artifact_info.jld2"))
+            # Run the pipeline (this shouldn't throw any errors)
+            # Redirect stdout/stderr to avoid spamming the test output
+            redirect_stdio(stdout = devnull, stderr = devnull) do
+                EegFun.preprocess(pipeline_file; base_dir = temp_dir)
             end
-        else
-            EegFun.@minimal_warning "Test file not found: $test_file (skipping end-to-end pipeline test)"
+
+            # Check that the output directory was created and contains the expected files
+            out_dir = joinpath(temp_dir, "output")
+            @test isdir(out_dir)
+            @test isfile(joinpath(out_dir, "example1_epochs.jld2"))
+            @test isfile(joinpath(out_dir, "example1_erps.jld2"))
+            @test isfile(joinpath(out_dir, "example1_artifact_info.jld2"))
         end
     end
 
@@ -269,24 +266,24 @@ epoch_end = 0.5
         data_dir = joinpath(dirname(dirname(@__DIR__)), "resources", "data")
         test_file = joinpath(data_dir, "bdf", "example1.bdf")
 
-        if isfile(test_file)
-            mktempdir() do temp_dir
-                epoch_file = joinpath(temp_dir, "epochs.toml")
-                write(
-                    epoch_file,
-                    """
+        @test isfile(test_file)
+        mktempdir() do temp_dir
+            epoch_file = joinpath(temp_dir, "epochs.toml")
+            write(
+                epoch_file,
+                """
   [epochs]
   [[epochs.conditions]]
   name = "Test Condition"
   trigger_sequences = [1]
   """,
-                )
+            )
 
-                pipeline_file = joinpath(temp_dir, "pipeline.toml")
-                bdf_dir = replace(joinpath(data_dir, "bdf"), '\\' => '/')
-                write(
-                    pipeline_file,
-                    """
+            pipeline_file = joinpath(temp_dir, "pipeline.toml")
+            bdf_dir = replace(joinpath(data_dir, "bdf"), '\\' => '/')
+            write(
+                pipeline_file,
+                """
 [files.input]
 directory = "$bdf_dir"
 raw_data_files = "example1\\\\.bdf"
@@ -300,19 +297,16 @@ directory = "output"
 epoch_start = -0.1
 epoch_end = 0.5
 """,
-                )
+            )
 
-                # dry_run should return nothing and NOT create output files
-                result = redirect_stdio(stdout = devnull, stderr = devnull) do
-                    EegFun.preprocess(pipeline_file; base_dir = temp_dir, dry_run = true)
-                end
-
-                @test isnothing(result)
-                # dry_run must not touch the disk: no output directory, config copy or data files
-                @test !isdir(joinpath(temp_dir, "output"))
+            # dry_run should return nothing and NOT create output files
+            result = redirect_stdio(stdout = devnull, stderr = devnull) do
+                EegFun.preprocess(pipeline_file; base_dir = temp_dir, dry_run = true)
             end
-        else
-            EegFun.@minimal_warning "Test file not found: $test_file (skipping dry_run test)"
+
+            @test isnothing(result)
+            # dry_run must not touch the disk: no output directory, config copy or data files
+            @test !isdir(joinpath(temp_dir, "output"))
         end
     end
 
@@ -323,24 +317,24 @@ epoch_end = 0.5
         data_dir = joinpath(dirname(dirname(@__DIR__)), "resources", "data")
         test_file = joinpath(data_dir, "bdf", "example1.bdf")
 
-        if isfile(test_file)
-            mktempdir() do temp_dir
-                epoch_file = joinpath(temp_dir, "epochs.toml")
-                write(
-                    epoch_file,
-                    """
+        @test isfile(test_file)
+        mktempdir() do temp_dir
+            epoch_file = joinpath(temp_dir, "epochs.toml")
+            write(
+                epoch_file,
+                """
   [epochs]
   [[epochs.conditions]]
   name = "Test Condition"
   trigger_sequences = [1]
   """,
-                )
+            )
 
-                pipeline_file = joinpath(temp_dir, "pipeline.toml")
-                bdf_dir = replace(joinpath(data_dir, "bdf"), '\\' => '/')
-                write(
-                    pipeline_file,
-                    """
+            pipeline_file = joinpath(temp_dir, "pipeline.toml")
+            bdf_dir = replace(joinpath(data_dir, "bdf"), '\\' => '/')
+            write(
+                pipeline_file,
+                """
 [files.input]
 directory = "$bdf_dir"
 raw_data_files = "example1\\\\.bdf"
@@ -356,34 +350,104 @@ save_continuous_data_corrected = false
 epoch_start = -0.1
 epoch_end = 0.5
 """,
-                )
+            )
 
-                # First run: process normally
-                redirect_stdio(stdout = devnull, stderr = devnull) do
-                    EegFun.preprocess(pipeline_file; base_dir = temp_dir)
-                end
-
-                out_dir = joinpath(temp_dir, "output")
-                final_file = joinpath(out_dir, "example1_epochs.jld2")
-                @test isfile(final_file)
-
-                # Record modification time of the final file
-                mtime_before = mtime(final_file)
-
-                # Small sleep to ensure mtime would differ if file were rewritten
-                sleep(1.1)
-
-                # Second run with skip_existing: should NOT reprocess
-                redirect_stdio(stdout = devnull, stderr = devnull) do
-                    EegFun.preprocess(pipeline_file; base_dir = temp_dir, skip_existing = true)
-                end
-
-                # The final file should NOT have been overwritten
-                @test mtime(final_file) == mtime_before
+            # First run: process normally
+            redirect_stdio(stdout = devnull, stderr = devnull) do
+                EegFun.preprocess(pipeline_file; base_dir = temp_dir)
             end
-        else
-            EegFun.@minimal_warning "Test file not found: $test_file (skipping skip_existing test)"
+
+            out_dir = joinpath(temp_dir, "output")
+            final_file = joinpath(out_dir, "example1_epochs.jld2")
+            @test isfile(final_file)
+
+            # Record modification time of the final file
+            mtime_before = mtime(final_file)
+
+            # Small sleep to ensure mtime would differ if file were rewritten
+            sleep(1.1)
+
+            # Second run with skip_existing: should NOT reprocess
+            redirect_stdio(stdout = devnull, stderr = devnull) do
+                EegFun.preprocess(pipeline_file; base_dir = temp_dir, skip_existing = true)
+            end
+
+            # The final file should NOT have been overwritten
+            @test mtime(final_file) == mtime_before
         end
+    end
+
+    # ────────────────────────────────────────────────────────────
+    # 11. Phase 2 regressions: summarize_ica_components unique total, zero-export template, interactive helpers
+    # ────────────────────────────────────────────────────────────
+    @testset "Phase 2 pipeline regressions" begin
+        # 1. summarize_ica_components counts unique ICA components across categories + manual
+        art_overlap = EegFun.ArtifactComponents(
+            Dict(:vEOG => [1, 2], :hEOG => [2, 3]),
+            [2, 4],     # ecg overlaps component 2
+            [3],        # line_noise overlaps component 3
+            [1],        # channel_noise overlaps component 1
+            [4, 5],     # manual overlaps 4 and adds 5
+        )
+        per_file_df, avg_df = EegFun.summarize_ica_components([art_overlap])
+        @test nrow(per_file_df) == 1
+        @test per_file_df.total_components[1] == 5 # unique([1, 2, 3, 4, 5]) == 5 (NOT 1+2+2+2+1+1+2 = 10!)
+        @test avg_df[avg_df.component_type .== "total", :avg_per_participant][1] == 5.0
+
+        # 2. generate_pipeline_template compiles & executes dry_run inside a fresh zero-export Module
+        mktempdir() do temp_dir
+            tpl_file = joinpath(temp_dir, "generated_pipe.jl")
+            EegFun.generate_pipeline_template(tpl_file, "custom_zero_export_pipe")
+            tpl_src = read(tpl_file, String)
+            @test !contains(tpl_src, "default.toml")
+            @test contains(tpl_src, "EegFun.read_config")
+
+            # Load into an isolated anonymous module (verifies zero reliance on unexported EegFun names!)
+            isolated_mod = Module(:IsolatedZeroExportPipeline)
+            Base.include(isolated_mod, tpl_file)
+            @test Base.invokelatest(isdefined, isolated_mod, :custom_zero_export_pipe)
+
+            data_dir = joinpath(dirname(dirname(@__DIR__)), "resources", "data")
+            bdf_dir = replace(joinpath(data_dir, "bdf"), '\\' => '/')
+            epoch_file = joinpath(temp_dir, "epochs.toml")
+            write(epoch_file, "[epochs]\n[[epochs.conditions]]\nname = \"Cond1\"\ntrigger_sequences = [1]\n")
+            cfg_file = joinpath(temp_dir, "cfg.toml")
+            write(
+                cfg_file,
+                """
+[files.input]
+directory = "$bdf_dir"
+raw_data_files = "example1\\\\.bdf"
+layout_file = "biosemi72.csv"
+epoch_condition_file = "epochs.toml"
+
+[files.output]
+directory = "out_tpl"
+""",
+            )
+            cd(temp_dir) do
+                redirect_stdio(stdout = devnull, stderr = devnull) do
+                    Base.invokelatest() do
+                        pipe_fn = getfield(isolated_mod, :custom_zero_export_pipe)
+                        pipe_fn(cfg_file; base_dir = temp_dir)
+                    end
+                end
+            end
+            @test isfile(joinpath(temp_dir, "out_tpl", "config.toml"))
+            @test isfile(joinpath(temp_dir, "out_tpl", "neighbors.toml"))
+        end
+
+        # 3. _wait_interactive_figure does not throw MethodError on Makie.Figure / Makie.Scene when headless
+        fig_headless = EegFun.Makie.Figure()
+        @test isnothing(EegFun._wait_interactive_figure(fig_headless, nothing))
+
+        # 4. _to_rejection_info converts EpochRejectionState vector cleanly to EpochRejectionInfo vector
+        ep_sample = EegFun.create_test_epoch_data(n = 30, n_epochs = 3, n_channels = 2)
+        state = EegFun.detect_bad_epochs_interactive(ep_sample; display_plot = false)
+        state.rejected[2] = true
+        infos = EegFun._to_rejection_info([state])
+        @test length(infos) == 1 && infos[1] isa EegFun.EpochRejectionInfo
+        @test unique([r.epoch for r in infos[1].rejected]) == [2]
     end
 
     # ────────────────────────────────────────────────────────────

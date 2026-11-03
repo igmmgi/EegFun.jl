@@ -1,8 +1,8 @@
 using Documenter
 using DocumenterVitepress
 
-# Add the parent directory to the load path so we can load the local package
-pushfirst!(LOAD_PATH, dirname(@__DIR__))
+# Add the parent directory to LOAD_PATH only if EegFun is not already in the active project
+isnothing(Base.find_package("EegFun")) && pushfirst!(LOAD_PATH, dirname(@__DIR__))
 using EegFun
 
 
@@ -53,7 +53,7 @@ pages = [
             "Channel Repair" => "tutorials/preprocessing/channel_repair.md",
             "Channel Summary" => "tutorials/preprocessing/channel_summary.md",
             "ICA" => "tutorials/preprocessing/ica.md",
-            "Layouts & Neighbours" => "tutorials/preprocessing/layouts.md",
+            "Layouts & Neighbors" => "tutorials/preprocessing/layouts.md",
             "Analysis Settings" => "tutorials/preprocessing/analysis_settings.md",
         ],
         "Artifacts" => [
@@ -92,7 +92,6 @@ pages = [
             "Plot ERP Image" => "tutorials/plotting/plot_erp_image.md",
             "Plot ERP Measurements" => "tutorials/plotting/plot_erp_measurements.md",
             "Plot Filter" => "tutorials/plotting/plot_filter.md",
-            "Plot Channel Spectrum" => "tutorials/plotting/plot_channel_spectrum.md",
             "Plot GFP" => "tutorials/plotting/plot_gfp.md",
             "Plot ICA" => "tutorials/plotting/plot_ica.md",
             "Plot Joint Probability" => "tutorials/plotting/plot_joint_probability.md",
@@ -153,6 +152,12 @@ pages = [
         ],
         "Machine Learning" => ["Decoding" => "tutorials/teaching/machine_learning/signal_example_decoding.md"],
         "ERP" => ["Simulate ERP" => "tutorials/teaching/erp/simulate_erp.md"],
+        "Psychophysiology (EOG / EMG / ECG)" => [
+            "EOG Dipole & Derivation" => "tutorials/teaching/eog/signal_example_eog.md",
+            "Surface EMG Cascade" => "tutorials/teaching/emg/signal_example_emg.md",
+            "ECG Einthoven's Triangle" => "tutorials/teaching/ecg/signal_example_ecg_einthoven.md",
+            "ECG Heart Rate Variability" => "tutorials/teaching/ecg/signal_example_ecg_hrv.md",
+        ],
     ],
     "Cheatsheet" => "cheatsheet.md",
     "Reference" => [
@@ -214,11 +219,12 @@ end
 try
     makedocs(;
         modules = [EegFun],
-        authors = "igmmgi",
+        authors = "Ian G. MacKenzie, Carolin Dudschig",
         sitename = "EegFun",
         repo = "https://github.com/igmmgi/EegFun.jl",
         format = build_format,
-        warnonly = [:linkcheck, :cross_references, :missing_docs],
+        checkdocs = :public,
+        warnonly = [:linkcheck],
         draft = false,
         source = src_dir,
         build = build_dir,

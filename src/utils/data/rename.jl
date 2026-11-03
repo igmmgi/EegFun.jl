@@ -26,7 +26,7 @@ rename_channel!(dat, Dict(:Cz => :Cz_new))
 - Only channels that exist in the data will be renamed
 - If multiple channels would be renamed to the same name, an error is thrown to prevent duplicates
 - Updates both the data columns and the layout labels
-- Clears any cached neighbour information in the layout since channel names have changed
+- Clears any cached neighbor information in the layout since channel names have changed
 - Properly handles swaps (e.g., Dict(:A => :B, :B => :A) correctly exchanges the channels)
 """
 function rename_channel!(dat::EegData, rename_dict::Dict{Symbol,Symbol})
@@ -118,9 +118,19 @@ function _rename_data_columns!(dat::SingleDataFrameEeg, rename_dict::Dict{Symbol
     _rename_data_columns!(dat.data, rename_dict, existing_channels)
 end
 
+function _rename_data_columns!(dat::TimeFreqData, rename_dict::Dict{Symbol,Symbol}, existing_channels::Set{Symbol})
+    _rename_data_columns!(dat.data_power, rename_dict, existing_channels)
+    _rename_data_columns!(dat.data_phase, rename_dict, existing_channels)
+end
+
 function _rename_data_columns!(dat::MultiDataFrameEeg, rename_dict::Dict{Symbol,Symbol}, existing_channels::Set{Symbol})
     # Use broadcasting to apply the DataFrame method to all DataFrames
     _rename_data_columns!.(dat.data, Ref(rename_dict), Ref(existing_channels))
+end
+
+function _rename_data_columns!(dat::TimeFreqEpochData, rename_dict::Dict{Symbol,Symbol}, existing_channels::Set{Symbol})
+    _rename_data_columns!.(dat.data_power, Ref(rename_dict), Ref(existing_channels))
+    _rename_data_columns!.(dat.data_phase, Ref(rename_dict), Ref(existing_channels))
 end
 
 

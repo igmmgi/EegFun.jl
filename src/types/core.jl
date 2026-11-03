@@ -96,7 +96,7 @@ end
 
 # === LAYOUT TYPES ===
 """
-    Neighbours
+    Neighbors
 
 Stores spatial neighbor information for an electrode in layout-based operations.
 
@@ -110,7 +110,7 @@ positions in 2D or 3D space.
 - `distances::Vector{Float64}`: Distances to each neighbor in normalized coordinate units
 - `weights::Vector{Float64}`: Interpolation weights for each neighbor
 """
-struct Neighbours
+struct Neighbors
     channels::Vector{Symbol}
     distances::Vector{Float64}
     weights::Vector{Float64}
@@ -127,28 +127,69 @@ electrode positions in various coordinate systems (polar, 2D Cartesian,
 
 # Fields
 - `data::DataFrame`: DataFrame containing layout information with metadata groups
-- `neighbours::Union{Nothing, Dict{Symbol, Neighbours}}`: Dictionary of neighbours for each electrode
-- `criterion::Union{Nothing, Float64}`: Distance criterion for neighbour calculation in normalized coordinate units
-- `criterion_type::Union{Nothing, Symbol}`: Type of neighbour calculation (`:xy` or `:xyz`)
+- `neighbors::Union{Nothing, Dict{Symbol, Neighbors}}`: Dictionary of neighbors for each electrode
+- `criterion::Union{Nothing, Float64}`: Distance criterion for neighbor calculation in normalized coordinate units
+- `criterion_type::Union{Nothing, Symbol}`: Type of neighbor calculation (`:xy` or `:xyz`)
 """
 mutable struct Layout
     data::DataFrame
-    neighbours::Union{Nothing,Dict{Symbol,Neighbours}}
+    neighbors::Union{Nothing,Dict{Symbol,Neighbors}}
     criterion::Union{Nothing,Float64}
     criterion_type::Union{Nothing,Symbol}
 end
 
 # Empty constructor for quick visualization without layout information
-Layout() = Layout(DataFrame(), nothing, nothing, nothing)
+Layout() = Layout(DataFrame(label = Symbol[], inc = Float64[], azi = Float64[]), nothing, nothing, nothing)
 
 function Base.copy(layout::Layout)::Layout
+    neighbors_copy = if isnothing(layout.neighbors)
+        nothing
+    else
+        Dict{Symbol,Neighbors}(k => Neighbors(copy(v.channels), copy(v.distances), copy(v.weights)) for (k, v) in layout.neighbors)
+    end
     return Layout(
         copy(layout.data, copycols = true),
-        layout.neighbours,  # Share since Dict and Neighbours are immutable
+        neighbors_copy,
         layout.criterion,    # Share since Float64 is immutable
         layout.criterion_type,
     )
 end
+
+# Backward-compatible JLD2 deserialization for legacy files saved with UK spelling (:neighbours / Neighbours)
+_convert_legacy_jld2_neighbors(::Nothing) = nothing
+
+function _convert_legacy_jld2_neighbors(d::JLD2.SerializedDict)
+    out = Dict{Symbol,Neighbors}()
+    for p in d.kvvec
+        out[Symbol(p.first)] = p.second isa Neighbors ? p.second : convert(Neighbors, p.second)
+    end
+    return out
+end
+
+function _convert_legacy_jld2_neighbors(d)
+    out = Dict{Symbol,Neighbors}()
+    for (k, v) in d
+        out[Symbol(k)] = v isa Neighbors ? v : convert(Neighbors, v)
+    end
+    return out
+end
+
+Base.convert(::Type{Neighbors}, x::Union{JLD2.ReconstructedStatic,JLD2.ReconstructedMutable}) =
+    Neighbors(Symbol.(x.channels), Float64.(x.distances), Float64.(x.weights))
+
+function Base.convert(::Type{Layout}, x::JLD2.ReconstructedMutable)
+    nb_raw = hasproperty(x, :neighbors) ? x.neighbors : (hasproperty(x, :neighbours) ? x.neighbours : nothing)
+    return Layout(x.data, _convert_legacy_jld2_neighbors(nb_raw), x.criterion, x.criterion_type)
+end
+
+JLD2.rconvert(::Type{Neighbors}, nt::NamedTuple) = Neighbors(Symbol.(nt.channels), Float64.(nt.distances), Float64.(nt.weights))
+
+function JLD2.rconvert(::Type{Layout}, nt::NamedTuple)
+    nb_raw = haskey(nt, :neighbors) ? nt.neighbors : (haskey(nt, :neighbours) ? nt.neighbours : nothing)
+    return Layout(nt.data, _convert_legacy_jld2_neighbors(nb_raw), nt.criterion, nt.criterion_type)
+end
+
+const _LEGACY_JLD2_TYPEMAP = Dict{String,Any}("EegFun.Neighbours" => Neighbors, "EegFun.Layout" => JLD2.Upgrade(Layout))
 
 # === EEG DATA TYPES ===
 """
@@ -279,6 +320,8 @@ function Base.getproperty(tf_data::TimeFreqData, name::Symbol)
     end
 end
 
+Base.propertynames(tf::TimeFreqData, private::Bool = false) = (fieldnames(typeof(tf))..., :data)
+
 function Base.copy(tf_data::TimeFreqData)::TimeFreqData
     return TimeFreqData(
         tf_data.file,
@@ -335,6 +378,8 @@ function Base.getproperty(tf_data::TimeFreqEpochData, name::Symbol)
         return getfield(tf_data, name)
     end
 end
+
+Base.propertynames(tf::TimeFreqEpochData, private::Bool = false) = (fieldnames(typeof(tf))..., :data)
 
 function Base.copy(tf_data::TimeFreqEpochData)::TimeFreqEpochData
     return TimeFreqEpochData(
@@ -437,11 +482,11 @@ It supports complex trigger patterns and timing relationships between events.
 """
 @kwdef struct EpochCondition
     name::String
-    trigger_sequences::Vector = []
+    trigger_sequences::Vector{Vector{Any}} = Vector{Any}[]
     reference_index::Int = 1
     timing_pairs::Union{Nothing,Vector{Tuple{Int,Int}}} = nothing
-    min_interval::Union{Nothing,Real} = nothing
-    max_interval::Union{Nothing,Real} = nothing
+    min_interval::Union{Nothing,Float64} = nothing
+    max_interval::Union{Nothing,Float64} = nothing
     mask_before_trigger::Union{Nothing,Int} = nothing
     mask_after_trigger::Union{Nothing,Int} = nothing
     mask_triggers::Union{Nothing,Vector{Int}} = nothing
@@ -468,13 +513,15 @@ It supports complex trigger patterns and timing relationships between events.
         else
             Vector{Any}[collect(Any, trigger_sequences)]
         end
+        min_iv = isnothing(min_interval) ? nothing : Float64(min_interval)
+        max_iv = isnothing(max_interval) ? nothing : Float64(max_interval)
         new(
             name,
             norm_seqs,
             reference_index,
             timing_pairs,
-            min_interval,
-            max_interval,
+            min_iv,
+            max_iv,
             mask_before_trigger,
             mask_after_trigger,
             mask_triggers,
@@ -620,7 +667,7 @@ function Base.show(io::IO, cond::EpochCondition)
     end
 
     # Show reference index only if any sequence has more than one trigger
-    max_seq_length = maximum(length(seq) for seq in cond.trigger_sequences)
+    max_seq_length = isempty(cond.trigger_sequences) ? 0 : maximum(length(seq) for seq in cond.trigger_sequences)
     if max_seq_length > 1
         println(io, "├─ Reference index: $(cond.reference_index) (t=0)")
     end
@@ -679,14 +726,14 @@ function Base.show(io::IO, layout::Layout)
     n_electrodes = size(layout.data, 1)
     has_2d = has_2d_coords(layout)
     has_3d = has_3d_coords(layout)
-    has_neigh = has_neighbours(layout)
+    has_neigh = has_neighbors(layout)
 
     println(io, "Layout ($n_electrodes channels)")
-    println(io, "2D coords: $(has_2d ? "✓" : "✗"), 3D coords: $(has_3d ? "✓" : "✗"), Neighbours: $(has_neigh ? "✓" : "✗")")
+    println(io, "2D coords: $(has_2d ? "✓" : "✗"), 3D coords: $(has_3d ? "✓" : "✗"), Neighbors: $(has_neigh ? "✓" : "✗")")
 
     if has_neigh
-        avg_neighbours = average_number_of_neighbours(layout.neighbours)
-        println(io, "Criterion: $(layout.criterion) ($(layout.criterion_type)), Avg neighbours: $(round(avg_neighbours, digits=1))")
+        avg_neighbors = average_number_of_neighbors(layout.neighbors)
+        println(io, "Criterion: $(layout.criterion) ($(layout.criterion_type)), Avg neighbors: $(round(avg_neighbors, digits=1))")
     end
     println(io)
 
@@ -720,17 +767,17 @@ function Base.show(io::IO, ::MIME"text/plain", layout::Layout)
     show(io, layout)
 end
 
-# Custom show method for neighbours Dict
-function Base.show(io::IO, neighbours_dict::Dict{Symbol,Neighbours})
-    if isempty(neighbours_dict)
-        print(io, "Neighbours Dictionary (empty)")
+# Custom show method for neighbors Dict
+function Base.show(io::IO, neighbors_dict::Dict{Symbol,Neighbors})
+    if isempty(neighbors_dict)
+        print(io, "Neighbors Dictionary (empty)")
         return
     end
 
-    n_electrodes = length(neighbours_dict)
-    avg_neighbours = average_number_of_neighbours(neighbours_dict)
+    n_electrodes = length(neighbors_dict)
+    avg_neighbors = average_number_of_neighbors(neighbors_dict)
 
-    print(io, "Neighbours Dictionary ($n_electrodes electrodes, avg neighbours: $(round(avg_neighbours, digits=1)))")
+    print(io, "Neighbors Dictionary ($n_electrodes electrodes, avg neighbors: $(round(avg_neighbors, digits=1)))")
 end
 
 filename(dat::BiosemiDataFormat.BiosemiData)::String = basename_without_ext(dat.filename)
@@ -748,25 +795,25 @@ filename(dat::SpectrumData)::String = dat.file
 
 
 """
-    Base.show(io::IO, ::MIME"text/plain", neighbours_dict::Dict{Symbol,Neighbours})
+    Base.show(io::IO, ::MIME"text/plain", neighbors_dict::Dict{Symbol,Neighbors})
 
-Prints a detailed multi-line representation of the `Neighbours` dictionary, showing the
-neighbours for each electrode. Displays a summary of the dictionary configuration.
+Prints a detailed multi-line representation of the `Neighbors` dictionary, showing the
+neighbors for each electrode. Displays a summary of the dictionary configuration.
 """
-function Base.show(io::IO, ::MIME"text/plain", neighbours_dict::Dict{Symbol,Neighbours})
-    n_electrodes = length(neighbours_dict)
-    avg_neighbours = average_number_of_neighbours(neighbours_dict)
+function Base.show(io::IO, ::MIME"text/plain", neighbors_dict::Dict{Symbol,Neighbors})
+    n_electrodes = length(neighbors_dict)
+    avg_neighbors = average_number_of_neighbors(neighbors_dict)
 
-    println(io, "Neighbours Dictionary ($n_electrodes electrodes): Average neighbours per electrode: $(round(avg_neighbours, digits=1))")
+    println(io, "Neighbors Dictionary ($n_electrodes electrodes): Average neighbors per electrode: $(round(avg_neighbors, digits=1))")
     println(io)
 
     # Don't print too much noise!
     if n_electrodes <= 6
-        for (electrode, neighbours) in neighbours_dict
-            _format_electrode(io, electrode, neighbours)
+        for (electrode, neighbors) in neighbors_dict
+            _format_electrode(io, electrode, neighbors)
         end
     else
-        entries = collect(neighbours_dict)
+        entries = collect(neighbors_dict)
         # Show first 3, ellipsis, last 3
         for entry in entries[1:3]
             _format_electrode(io, entry[1], entry[2])
@@ -781,10 +828,11 @@ end
 
 
 function Base.show(io::IO, dat::MultiDataFrameEeg)
+    n_rows = isempty(dat.data) ? 0 : nrow(dat.data[1])
     println(io, "File: $(filename(dat))")
     println(io, "Type: $(typeof(dat))")
     println(io, "Condition $(condition_number(dat)): $(condition_name(dat))")
-    println(io, "Size: $(n_epochs(dat)) (epoch) x $(nrow(meta_data(dat))) (rows) x $(n_channels(dat)) (columns)")
+    println(io, "Size: $(n_epochs(dat)) (epoch) x $(n_rows) (rows) x $(n_channels(dat)) (columns)")
     println(io, "Labels: ", _print_vector(channel_labels(dat)))
     println(io, "Duration: ", duration(dat), " S")
     println(io, "Sample Rate: ", sample_rate(dat))
@@ -862,8 +910,8 @@ function Base.copy(ica::InfoIca)::InfoIca
         ica.scale,
         copy(ica.mean),
         copy(ica.ica_label),
-        copy(ica.removed_activations),
-        ica.layout,
+        Dict{Int,Matrix{Float64}}(k => copy(v) for (k, v) in ica.removed_activations),
+        copy(ica.layout),
         copy(ica.is_sub_gaussian),
     )
 end

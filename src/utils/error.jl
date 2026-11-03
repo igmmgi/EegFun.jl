@@ -6,12 +6,12 @@ error message without Julia's overly verbose stacktrace spew.
 
 # Error handling policy
 - Problems a user can fix (bad input, configuration, files, selections, parameter values)
-  are raised with [`@minimal_error`](@ref), which throws an `EegFunError`.
+  are raised with `@minimal_error`, which throws an `EegFunError`.
 - Internal invariant violations (bugs, "this should never happen") use plain `error()`.
 
 # Example
 ```julia
-throw(EegFunError("No data found matching pattern 'xyz'"))
+throw(EegFun.EegFunError("No data found matching pattern 'xyz'"))
 ```
 """
 struct EegFunError <: Exception

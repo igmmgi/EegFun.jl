@@ -1,7 +1,7 @@
 # === TF DATA PREPARATION (4D: participants × electrodes × frequencies × time) ===
 
 """
-    prepare_stats(tfs::Vector{TimeFreqData}; design, condition_selection, channel_selection, frequency_selection, interval_selection, baseline_interval, baseline_method)
+    prepare_stats(tfs::Vector{TimeFreqData}; design, condition_selection, channel_selection, frequency_selection, interval_selection, baseline_interval, baseline_method, analysis_interval)
 
 Prepare TimeFreqData for comparing two conditions in statistical tests.
 
@@ -17,6 +17,7 @@ for statistical analysis. Validates the design and ensures data consistency acro
 - `interval_selection::Interval`: Time interval as tuple (e.g., `(0.0, 1.0)`) or `nothing` for all time points
 - `baseline_interval::Union{Nothing,Tuple{Real,Real}}`: Baseline window in seconds (e.g., `(-0.5, -0.1)`). Default: `nothing` (no baseline)
 - `baseline_method::Symbol`: Baseline method (default: `:db`). Options: `:db`, `:absolute`, `:relative`, `:relchange`, `:percent`, `:zscore`
+- `analysis_interval::Interval`: Analysis time interval as tuple (e.g., `(0.2, 0.5)`) or interval object for statistical testing (default: `nothing` - use `interval_selection`)
 
 # Returns
 - `TFStatisticalData`: Prepared data structure ready for statistical testing
@@ -41,6 +42,7 @@ function prepare_stats(
     interval_selection::Interval = nothing,
     baseline_interval::Interval = nothing,
     baseline_method::Symbol = :db,
+    analysis_interval::Interval = nothing,
 )
     # Group all TF data by condition
     tfs_by_condition = group_by_condition(tfs)
@@ -112,28 +114,39 @@ function prepare_stats(
     end
     isempty(frequencies) && @minimal_error "No frequencies matched the frequency selection."
 
-    # Apply time (interval) selection
+    # Apply time (interval) selection for display / grand average
     if !isnothing(interval_selection) && !(interval_selection isa AllSelection)
         t_start = interval_selection isa TimeSelection ? interval_selection.start : interval_selection[1]
         t_stop = interval_selection isa TimeSelection ? interval_selection.stop : interval_selection[2]
         time_mask = (all_times .>= t_start) .& (all_times .<= t_stop)
-        time_points = all_times[time_mask]
+        display_times = all_times[time_mask]
     else
-        time_points = all_times
+        display_times = all_times
     end
-    isempty(time_points) && @minimal_error "No time points matched the interval selection."
+    isempty(display_times) && @minimal_error "No time points matched the interval selection."
 
-    n_electrodes = length(electrodes)
-    n_freqs = length(frequencies)
-    n_time = length(time_points)
+    # Apply optional analysis_interval to narrow statistical test window (matching ERP prepare_stats)
+    if !isnothing(analysis_interval) && !(analysis_interval isa AllSelection)
+        a_start = analysis_interval isa TimeSelection ? analysis_interval.start : analysis_interval[1]
+        a_stop = analysis_interval isa TimeSelection ? analysis_interval.stop : analysis_interval[2]
+        analysis_mask = (display_times .>= a_start) .& (display_times .<= a_stop)
+        time_points = display_times[analysis_mask]
+        isempty(time_points) && @minimal_error "No time points matched the analysis interval criteria!"
+    else
+        analysis_mask = nothing
+        time_points = display_times
+    end
 
-    # Extract 4D arrays: [participants × electrodes × frequencies × time]
-    data1 = _extract_tf_array(condition1, electrodes, frequencies, time_points)
-    data2 = _extract_tf_array(condition2, electrodes, frequencies, time_points)
+    # Extract 4D display arrays: [participants × electrodes × frequencies × display_times]
+    display_data1 = _extract_tf_array(condition1, electrodes, frequencies, display_times)
+    display_data2 = _extract_tf_array(condition2, electrodes, frequencies, display_times)
 
-    # Create grand averages from pre-extracted arrays (avoids re-extracting)
-    condition1_avg = _create_tf_grand_average(condition1[1], data1, electrodes, frequencies, time_points, selected_cond_nums[1])
-    condition2_avg = _create_tf_grand_average(condition2[1], data2, electrodes, frequencies, time_points, selected_cond_nums[2])
+    # Create grand averages from display arrays (avoids re-extracting)
+    condition1_avg = _create_tf_grand_average(condition1[1], display_data1, electrodes, frequencies, display_times, selected_cond_nums[1])
+    condition2_avg = _create_tf_grand_average(condition2[1], display_data2, electrodes, frequencies, display_times, selected_cond_nums[2])
+
+    data1 = isnothing(analysis_mask) ? display_data1 : display_data1[:, :, :, analysis_mask]
+    data2 = isnothing(analysis_mask) ? display_data2 : display_data2[:, :, :, analysis_mask]
 
     return TFStatisticalData([condition1_avg, condition2_avg], TFAnalysisData(design, [data1, data2], frequencies, time_points))
 end
@@ -259,10 +272,10 @@ function _create_tf_grand_average(
         _tf_matrix_to_df!(power_df, elec, avg_power[e_idx, :, :], frequencies, time_points, row_index)
     end
 
-    # Create a matching phase DataFrame (all zeros for grand average since phase averages to zero)
+    # Create a matching phase DataFrame (NaN placeholder since grand-average phase is not computed)
     phase_df = copy(power_df)
     for elec in electrodes
-        phase_df[!, elec] .= 0.0
+        phase_df[!, elec] .= NaN
     end
 
     return TimeFreqData(
@@ -275,7 +288,7 @@ function _create_tf_grand_average(
         ref_tf.sample_rate,
         ref_tf.method,
         ref_tf.baseline,
-        ref_tf.analysis_info,
+        copy(ref_tf.analysis_info),
     )
 end
 
@@ -321,20 +334,23 @@ function _compute_t_matrix_tf(
             for f_idx = 1:n_freqs
                 for e_idx = 1:n_electrodes
                     sum_diff = 0.0
-                    sum_diff_sq = 0.0
-                    for p_idx = 1:n_participants
-                        diff_val = data1[p_idx, e_idx, f_idx, t_idx] - data2[p_idx, e_idx, f_idx, t_idx]
-                        sum_diff += diff_val
-                        sum_diff_sq += diff_val * diff_val
+                    @simd for p_idx = 1:n_participants
+                        sum_diff += data1[p_idx, e_idx, f_idx, t_idx] - data2[p_idx, e_idx, f_idx, t_idx]
                     end
                     mean_diff_val = sum_diff / n_participants
-                    variance = (sum_diff_sq / n_participants) - (mean_diff_val * mean_diff_val)
-                    std_diff = sqrt(variance * n_participants / (n_participants - 1))
 
-                    if std_diff == 0.0
-                        t_matrix[e_idx, f_idx, t_idx] = mean_diff_val == 0.0 ? NaN : Inf
+                    ss_diff = 0.0
+                    @simd for p_idx = 1:n_participants
+                        d = (data1[p_idx, e_idx, f_idx, t_idx] - data2[p_idx, e_idx, f_idx, t_idx]) - mean_diff_val
+                        ss_diff += d * d
+                    end
+                    variance = max(ss_diff / (n_participants - 1), 0.0)
+                    se = sqrt(variance / n_participants)
+
+                    if se == 0.0
+                        t_matrix[e_idx, f_idx, t_idx] = mean_diff_val == 0.0 ? NaN : copysign(Inf, mean_diff_val)
                     else
-                        t_matrix[e_idx, f_idx, t_idx] = mean_diff_val / (std_diff / sqrt(n_participants))
+                        t_matrix[e_idx, f_idx, t_idx] = mean_diff_val / se
                     end
                 end
             end
@@ -346,7 +362,7 @@ function _compute_t_matrix_tf(
         end
 
     else
-        # Independent design
+        # Independent design (centered two-pass sum of squares)
         n_A = size(data1, 1)
         n_B = size(data2, 1)
         df = Float64(n_A + n_B - 2)
@@ -355,30 +371,39 @@ function _compute_t_matrix_tf(
                 for e_idx = 1:n_electrodes
                     sum1 = 0.0
                     sum2 = 0.0
-                    sum1_sq = 0.0
-                    sum2_sq = 0.0
 
                     @simd for p_idx = 1:n_A
-                        val = data1[p_idx, e_idx, f_idx, t_idx]
-                        sum1 += val
-                        sum1_sq += val * val
+                        sum1 += data1[p_idx, e_idx, f_idx, t_idx]
                     end
 
                     @simd for p_idx = 1:n_B
-                        val = data2[p_idx, e_idx, f_idx, t_idx]
-                        sum2 += val
-                        sum2_sq += val * val
+                        sum2 += data2[p_idx, e_idx, f_idx, t_idx]
                     end
 
                     mean1 = sum1 / n_A
                     mean2 = sum2 / n_B
-                    var1 = (sum1_sq / n_A - mean1 * mean1) * n_A / (n_A - 1)
-                    var2 = (sum2_sq / n_B - mean2 * mean2) * n_B / (n_B - 1)
 
-                    pooled_var = ((n_A - 1) * var1 + (n_B - 1) * var2) / df
+                    ss1 = 0.0
+                    @simd for p_idx = 1:n_A
+                        d1 = data1[p_idx, e_idx, f_idx, t_idx] - mean1
+                        ss1 += d1 * d1
+                    end
+
+                    ss2 = 0.0
+                    @simd for p_idx = 1:n_B
+                        d2 = data2[p_idx, e_idx, f_idx, t_idx] - mean2
+                        ss2 += d2 * d2
+                    end
+
+                    pooled_var = max((ss1 + ss2) / df, 0.0)
                     se = sqrt(pooled_var * (1.0 / n_A + 1.0 / n_B))
+                    diff_mean = mean1 - mean2
 
-                    t_matrix[e_idx, f_idx, t_idx] = (mean1 - mean2) / se
+                    if se == 0.0
+                        t_matrix[e_idx, f_idx, t_idx] = diff_mean == 0.0 ? NaN : copysign(Inf, diff_mean)
+                    else
+                        t_matrix[e_idx, f_idx, t_idx] = diff_mean / se
+                    end
                 end
             end
         end
@@ -391,8 +416,14 @@ function _compute_t_matrix_tf(
     return t_matrix, df, p_matrix
 end
 
-function _compute_t_matrix_tf(prepared::TFStatisticalData; tail::Symbol = :both)
-    return _compute_t_matrix_tf(prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design, tail = tail)
+function _compute_t_matrix_tf(prepared::TFStatisticalData; tail::Symbol = :both, compute_p_values::Bool = true)
+    return _compute_t_matrix_tf(
+        prepared.analysis.data[1],
+        prepared.analysis.data[2],
+        prepared.analysis.design;
+        tail = tail,
+        compute_p_values = compute_p_values,
+    )
 end
 
 

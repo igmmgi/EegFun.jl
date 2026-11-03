@@ -15,12 +15,16 @@ const PLOT_GFP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Title
     :plot_title => (nothing, "Plot title"),
+    :show_title => (true, "Whether to show the plot title"),
     :plot_title_fontsize => (16, "Font size for plot titles"),
     :plot_title_position => (
         nothing,
         "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis.",
     ),
     :plot_title_align => ((:center, :top), "Alignment of the inner plot title"),
+
+    # Legend
+    :legend => (true, "Whether to show the legend when plotting multiple conditions"),
 
     # Line styling
     :linewidth => (2, "Line width for GFP/dissimilarity traces"),
@@ -119,6 +123,21 @@ function plot_gfp(filepath::String; input_dir::String = pwd(), participant_selec
     end
 end
 
+function _is_gfp_df_normalized(df::DataFrame, normalize::Union{Nothing,Bool})
+    !isnothing(normalize) && return normalize
+    if hasproperty(df, :normalized) && !isempty(df.normalized)
+        return Bool(first(df.normalized))
+    end
+    meta = DataFrames.metadata(df)
+    for key in ("normalized", :normalized)
+        if haskey(meta, string(key))
+            val = meta[string(key)]
+            return val isa Bool ? val : lowercase(string(val)) == "true"
+        end
+    end
+    return false
+end
+
 function plot_gfp(dat::ErpData; channel_selection = channels(), normalize::Bool = true, kwargs...)
     return plot_gfp([dat]; channel_selection = channel_selection, normalize = normalize, kwargs...)
 end
@@ -139,7 +158,7 @@ function plot_gfp(
     _set_window_title(title_str)
 
     # Merge user kwargs and default kwargs
-    plot_kwargs = _merge_plot_kwargs(PLOT_GFP_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_GFP_KWARGS, _normalize_plot_kwargs(kwargs))
 
     # Calculate GFP (and optionally dissimilarity) for all datasets
     show_dissimilarity = plot_kwargs[:show_dissimilarity]
@@ -158,12 +177,14 @@ function plot_gfp(
 
     # Create figure
     fig = _eegfun_figure(size = (800, 200 * n_panels))
+    axes = Axis[]
 
     panel_idx = 1
 
     # Panel 1: ERP traces (if requested)
     if show_erp_traces
         ax_erp = Axis(fig[panel_idx, 1])
+        push!(axes, ax_erp)
 
         # Vectorized background ERP traces: single NaN-separated lines! call per dataset
         for dat in datasets_filtered
@@ -198,7 +219,9 @@ function plot_gfp(
 
         ax_erp.xlabel = ""
         ax_erp.ylabel = "Amplitude (μV)"
-        ax_erp.title = isnothing(plot_kwargs[:plot_title]) ? "EEG Channels" : plot_kwargs[:plot_title]
+        if plot_kwargs[:show_title]
+            ax_erp.title = isnothing(plot_kwargs[:plot_title]) ? "EEG Channels" : plot_kwargs[:plot_title]
+        end
 
         if plot_kwargs[:add_x_origin]
             vlines!(ax_erp, [0.0], color = :black, linewidth = 1, linestyle = :dash)
@@ -209,6 +232,7 @@ function plot_gfp(
 
     # Panel 2 (or 1): GFP
     ax_gfp = Axis(fig[panel_idx, 1])
+    push!(axes, ax_gfp)
 
     # Determine y-label
     ylabel_gfp = if !isnothing(plot_kwargs[:ylabel])
@@ -217,8 +241,11 @@ function plot_gfp(
         normalize ? "GFP (%)" : "GFP (μV)"
     end
 
+    resolved_color = _resolve_theme_linecolor(ax_gfp, plot_kwargs[:color])
+    resolved_linestyle = isnothing(plot_kwargs[:linestyle]) ? :solid : plot_kwargs[:linestyle]
+
     # Plot GFP for each dataset
-    colors = length(datasets_filtered) == 1 ? [plot_kwargs[:color]] : Makie.wong_colors()
+    colors = length(datasets_filtered) == 1 ? [resolved_color] : (!isnothing(plot_kwargs[:color]) ? [resolved_color] : Makie.wong_colors())
     for (i, result) in enumerate(results)
         color = colors[mod1(i, length(colors))]
         lines!(
@@ -227,22 +254,28 @@ function plot_gfp(
             result.gfp,
             color = color,
             linewidth = plot_kwargs[:linewidth],
-            linestyle = plot_kwargs[:linestyle],
+            linestyle = resolved_linestyle,
             label = length(datasets_filtered) > 1 ? "Condition $i" : nothing,
         )
     end
 
-    # Apply styling
-    ax_gfp.xlabel = show_dissimilarity ? "" : plot_kwargs[:xlabel]
-    ax_gfp.ylabel = ylabel_gfp
-    if !show_erp_traces
-        ax_gfp.title = isnothing(plot_kwargs[:plot_title]) ? "Global Field Power" : plot_kwargs[:plot_title]
-    else
-        ax_gfp.title = "Global Field Power"
+    # Apply styling and limits
+    if plot_kwargs[:show_title]
+        if !show_erp_traces
+            ax_gfp.title = isnothing(plot_kwargs[:plot_title]) ? "Global Field Power" : plot_kwargs[:plot_title]
+        else
+            ax_gfp.title = "Global Field Power"
+        end
     end
 
-    # Set axis limits using the shared function
-    _set_axis_properties!(ax_gfp; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
+    # Set axis limits and labels using the shared function
+    _set_axis_properties!(
+        ax_gfp;
+        xlim = plot_kwargs[:xlim],
+        ylim = plot_kwargs[:ylim],
+        xlabel = show_dissimilarity ? "" : plot_kwargs[:xlabel],
+        ylabel = ylabel_gfp,
+    )
 
     # Set grid using the shared function
     _set_axis_grid!(
@@ -258,7 +291,7 @@ function plot_gfp(
     end
 
     # Add legend if multiple datasets
-    if length(datasets_filtered) > 1
+    if length(datasets_filtered) > 1 && plot_kwargs[:legend]
         axislegend(ax_gfp, position = :rt)
     end
 
@@ -267,6 +300,7 @@ function plot_gfp(
     # Panel 3: Global Dissimilarity (if requested)
     if show_dissimilarity
         ax_diss = Axis(fig[panel_idx, 1])
+        push!(axes, ax_diss)
 
         # Determine y-label
         ylabel_diss = normalize ? "Dissimilarity (%)" : "Dissimilarity"
@@ -280,16 +314,22 @@ function plot_gfp(
                 result.dissimilarity,
                 color = color,
                 linewidth = plot_kwargs[:linewidth],
-                linestyle = plot_kwargs[:linestyle],
+                linestyle = resolved_linestyle,
             )
         end
 
-        ax_diss.xlabel = plot_kwargs[:xlabel]
-        ax_diss.ylabel = ylabel_diss
-        ax_diss.title = "Global Dissimilarity"
+        if plot_kwargs[:show_title]
+            ax_diss.title = "Global Dissimilarity"
+        end
 
-        # Set axis limits using the shared function
-        _set_axis_properties!(ax_diss; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
+        # Set axis limits and labels using the shared function
+        _set_axis_properties!(
+            ax_diss;
+            xlim = plot_kwargs[:xlim],
+            ylim = plot_kwargs[:ylim],
+            xlabel = plot_kwargs[:xlabel],
+            ylabel = ylabel_diss,
+        )
 
         # Set grid using the shared function
         _set_axis_grid!(
@@ -307,17 +347,17 @@ function plot_gfp(
 
     # Display the plot if requested
     if plot_kwargs[:display_plot]
-        display(fig)
+        _display_figure(fig)
     end
 
     _set_window_title("Makie")
-    return fig
+    return (fig = fig, axes = axes)
 end
 
-function plot_gfp(gfp_data::DataFrame; kwargs...)
+function plot_gfp(gfp_data::DataFrame; normalize::Union{Nothing,Bool} = nothing, kwargs...)
 
     # Merge user kwargs and default kwargs
-    plot_kwargs = _merge_plot_kwargs(PLOT_GFP_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_GFP_KWARGS, _normalize_plot_kwargs(kwargs))
 
     # Check required columns
     if !hasproperty(gfp_data, :time)
@@ -335,35 +375,38 @@ function plot_gfp(gfp_data::DataFrame; kwargs...)
 
     # Create figure
     fig = _eegfun_figure(size = (800, 300 * n_panels))
+    axes = Axis[]
 
     panel_idx = 1
 
     # GFP panel
     ax_gfp = Axis(fig[panel_idx, 1])
+    push!(axes, ax_gfp)
 
-    # Determine if data is normalized (simple heuristic: check if values are 0-100)
-    is_normalized = all(0 .<= gfp_data.gfp .<= 100)
+    is_normalized = _is_gfp_df_normalized(gfp_data, normalize)
     ylabel_gfp = if !isnothing(plot_kwargs[:ylabel])
         plot_kwargs[:ylabel]
     else
         is_normalized ? "GFP (%)" : "GFP (μV)"
     end
 
-    lines!(
-        ax_gfp,
-        gfp_data.time,
-        gfp_data.gfp,
-        color = plot_kwargs[:color],
-        linewidth = plot_kwargs[:linewidth],
-        linestyle = plot_kwargs[:linestyle],
+    resolved_color = _resolve_theme_linecolor(ax_gfp, plot_kwargs[:color])
+    resolved_linestyle = isnothing(plot_kwargs[:linestyle]) ? :solid : plot_kwargs[:linestyle]
+
+    lines!(ax_gfp, gfp_data.time, gfp_data.gfp, color = resolved_color, linewidth = plot_kwargs[:linewidth], linestyle = resolved_linestyle)
+
+    if plot_kwargs[:show_title]
+        ax_gfp.title = isnothing(plot_kwargs[:plot_title]) ? "Global Field Power" : plot_kwargs[:plot_title]
+    end
+
+    # Set axis limits and labels using the shared function
+    _set_axis_properties!(
+        ax_gfp;
+        xlim = plot_kwargs[:xlim],
+        ylim = plot_kwargs[:ylim],
+        xlabel = show_dissimilarity ? "" : plot_kwargs[:xlabel],
+        ylabel = ylabel_gfp,
     )
-
-    ax_gfp.xlabel = show_dissimilarity ? "" : plot_kwargs[:xlabel]
-    ax_gfp.ylabel = ylabel_gfp
-    ax_gfp.title = isnothing(plot_kwargs[:plot_title]) ? "Global Field Power" : plot_kwargs[:plot_title]
-
-    # Set axis limits using the shared function
-    _set_axis_properties!(ax_gfp; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
 
     # Set grid using the shared function
     _set_axis_grid!(
@@ -383,26 +426,31 @@ function plot_gfp(gfp_data::DataFrame; kwargs...)
     # Dissimilarity panel (if requested and available)
     if show_dissimilarity
         ax_diss = Axis(fig[panel_idx, 1])
+        push!(axes, ax_diss)
 
-        # Determine if dissimilarity is normalized
-        is_diss_normalized = all(0 .<= gfp_data.dissimilarity .<= 100)
-        ylabel_diss = is_diss_normalized ? "Dissimilarity (%)" : "Dissimilarity"
+        ylabel_diss = is_normalized ? "Dissimilarity (%)" : "Dissimilarity"
 
         lines!(
             ax_diss,
             gfp_data.time,
             gfp_data.dissimilarity,
-            color = plot_kwargs[:color],
+            color = resolved_color,
             linewidth = plot_kwargs[:linewidth],
-            linestyle = plot_kwargs[:linestyle],
+            linestyle = resolved_linestyle,
         )
 
-        ax_diss.xlabel = plot_kwargs[:xlabel]
-        ax_diss.ylabel = ylabel_diss
-        ax_diss.title = "Global Dissimilarity"
+        if plot_kwargs[:show_title]
+            ax_diss.title = "Global Dissimilarity"
+        end
 
-        # Set axis limits using the shared function
-        _set_axis_properties!(ax_diss; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
+        # Set axis limits and labels using the shared function
+        _set_axis_properties!(
+            ax_diss;
+            xlim = plot_kwargs[:xlim],
+            ylim = plot_kwargs[:ylim],
+            xlabel = plot_kwargs[:xlabel],
+            ylabel = ylabel_diss,
+        )
 
         # Set grid using the shared function
         _set_axis_grid!(
@@ -420,17 +468,17 @@ function plot_gfp(gfp_data::DataFrame; kwargs...)
 
     _set_window_title("GFP")
     if plot_kwargs[:display_plot]
-        display(fig)
+        _display_figure(fig)
     end
     _set_window_title("Makie")
 
-    return fig
+    return (fig = fig, axes = axes)
 end
 
-function plot_gfp(gfp_data::Vector{DataFrame}; kwargs...)
+function plot_gfp(gfp_data::AbstractVector{<:DataFrame}; normalize::Union{Nothing,Bool} = nothing, kwargs...)
 
     # Merge user kwargs and default kwargs
-    plot_kwargs = _merge_plot_kwargs(PLOT_GFP_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_GFP_KWARGS, _normalize_plot_kwargs(kwargs))
 
     # Check required columns in all DataFrames
     for (i, df) in enumerate(gfp_data)
@@ -450,22 +498,26 @@ function plot_gfp(gfp_data::Vector{DataFrame}; kwargs...)
 
     # Create figure
     fig = _eegfun_figure(size = (800, 300 * n_panels))
+    axes = Axis[]
 
     panel_idx = 1
 
     # GFP panel
     ax_gfp = Axis(fig[panel_idx, 1])
+    push!(axes, ax_gfp)
 
-    # Determine if data is normalized (check first dataset)
-    is_normalized = all(0 .<= gfp_data[1].gfp .<= 100)
+    is_normalized = isempty(gfp_data) ? false : _is_gfp_df_normalized(gfp_data[1], normalize)
     ylabel_gfp = if !isnothing(plot_kwargs[:ylabel])
         plot_kwargs[:ylabel]
     else
         is_normalized ? "GFP (%)" : "GFP (μV)"
     end
 
+    resolved_color = _resolve_theme_linecolor(ax_gfp, plot_kwargs[:color])
+    resolved_linestyle = isnothing(plot_kwargs[:linestyle]) ? :solid : plot_kwargs[:linestyle]
+
     # Plot GFP for each dataset
-    colors = length(gfp_data) == 1 ? [plot_kwargs[:color]] : Makie.wong_colors()
+    colors = length(gfp_data) == 1 ? [resolved_color] : (!isnothing(plot_kwargs[:color]) ? [resolved_color] : Makie.wong_colors())
     for (i, df) in enumerate(gfp_data)
         color = colors[mod1(i, length(colors))]
         lines!(
@@ -474,17 +526,23 @@ function plot_gfp(gfp_data::Vector{DataFrame}; kwargs...)
             df.gfp,
             color = color,
             linewidth = plot_kwargs[:linewidth],
-            linestyle = plot_kwargs[:linestyle],
+            linestyle = resolved_linestyle,
             label = "Condition $i",
         )
     end
 
-    ax_gfp.xlabel = show_dissimilarity ? "" : plot_kwargs[:xlabel]
-    ax_gfp.ylabel = ylabel_gfp
-    ax_gfp.title = isnothing(plot_kwargs[:plot_title]) ? "Global Field Power" : plot_kwargs[:plot_title]
+    if plot_kwargs[:show_title]
+        ax_gfp.title = isnothing(plot_kwargs[:plot_title]) ? "Global Field Power" : plot_kwargs[:plot_title]
+    end
 
-    # Set axis limits using the shared function
-    _set_axis_properties!(ax_gfp; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
+    # Set axis limits and labels using the shared function
+    _set_axis_properties!(
+        ax_gfp;
+        xlim = plot_kwargs[:xlim],
+        ylim = plot_kwargs[:ylim],
+        xlabel = show_dissimilarity ? "" : plot_kwargs[:xlabel],
+        ylabel = ylabel_gfp,
+    )
 
     # Set grid using the shared function
     _set_axis_grid!(
@@ -500,7 +558,7 @@ function plot_gfp(gfp_data::Vector{DataFrame}; kwargs...)
     end
 
     # Add legend
-    if length(gfp_data) > 1
+    if length(gfp_data) > 1 && plot_kwargs[:legend]
         axislegend(ax_gfp, position = :rt)
     end
 
@@ -509,28 +567,27 @@ function plot_gfp(gfp_data::Vector{DataFrame}; kwargs...)
     # Dissimilarity panel (if requested and available)
     if show_dissimilarity
         ax_diss = Axis(fig[panel_idx, 1])
+        push!(axes, ax_diss)
 
-        is_diss_normalized = all(0 .<= gfp_data[1].dissimilarity .<= 100)
-        ylabel_diss = is_diss_normalized ? "Dissimilarity (%)" : "Dissimilarity"
+        ylabel_diss = is_normalized ? "Dissimilarity (%)" : "Dissimilarity"
 
         for (i, df) in enumerate(gfp_data)
             color = colors[mod1(i, length(colors))]
-            lines!(
-                ax_diss,
-                df.time,
-                df.dissimilarity,
-                color = color,
-                linewidth = plot_kwargs[:linewidth],
-                linestyle = plot_kwargs[:linestyle],
-            )
+            lines!(ax_diss, df.time, df.dissimilarity, color = color, linewidth = plot_kwargs[:linewidth], linestyle = resolved_linestyle)
         end
 
-        ax_diss.xlabel = plot_kwargs[:xlabel]
-        ax_diss.ylabel = ylabel_diss
-        ax_diss.title = "Global Dissimilarity"
+        if plot_kwargs[:show_title]
+            ax_diss.title = "Global Dissimilarity"
+        end
 
-        # Set axis limits using the shared function
-        _set_axis_properties!(ax_diss; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
+        # Set axis limits and labels using the shared function
+        _set_axis_properties!(
+            ax_diss;
+            xlim = plot_kwargs[:xlim],
+            ylim = plot_kwargs[:ylim],
+            xlabel = plot_kwargs[:xlabel],
+            ylabel = ylabel_diss,
+        )
 
         # Set grid using the shared function
         _set_axis_grid!(
@@ -548,9 +605,9 @@ function plot_gfp(gfp_data::Vector{DataFrame}; kwargs...)
 
     _set_window_title("GFP")
     if plot_kwargs[:display_plot]
-        display(fig)
+        _display_figure(fig)
     end
     _set_window_title("Makie")
 
-    return fig
+    return (fig = fig, axes = axes)
 end

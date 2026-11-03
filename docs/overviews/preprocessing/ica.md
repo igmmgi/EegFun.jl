@@ -53,8 +53,8 @@ Each component represents one independent source (e.g., one component might be p
 
 **5. Remove Artifacts**:
 
-- `remove_ica_components()` - subtract artifact components
-- `restore_ica_components()` - add back if needed (for validation)
+- `EegFun.subtract_ica_components!` - subtract artifact components
+- `EegFun.add_ica_components!` - add back if needed (for validation)
 
 ### Component Identification
 

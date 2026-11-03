@@ -1,16 +1,35 @@
+function _circular_colmeans(df::DataFrame, cols::AbstractVector{Symbol})::Vector{Float64}
+    n = nrow(df)
+    sin_sum = zeros(Float64, n)
+    cos_sum = zeros(Float64, n)
+    for col in cols
+        vals = df[!, col]
+        @inbounds @simd for i = 1:n
+            s, c = sincos(Float64(vals[i]))
+            sin_sum[i] += s
+            cos_sum[i] += c
+        end
+    end
+    out = Vector{Float64}(undef, n)
+    @inbounds @simd for i = 1:n
+        out[i] = atan(sin_sum[i], cos_sum[i])
+    end
+    return out
+end
+
 """
-    channel_average!(dat::EegData; channel_selections::AbstractVector{<:Function} = [channels()],
+    channel_average!(dat::EegData; channel_selections = [channels()],
                      output_labels = nothing,
                      include_extra::Bool = false,
                      reduce::Bool = false) -> EegData
 
 Create averaged channels for each provided channel-selection predicate and add them to `dat`.
 
-Works for all EEG data types, including time-frequency data (where both power and phase are averaged).
+Works for all EEG data types, including time-frequency data (where power is averaged linearly and phase circularly).
 
-- `channel_selections` is a vector of channel predicates (see `channels(...)`) that defaults to `[channels()]` (all channels).
+- `channel_selections` is a vector of channel predicates (see `EegFun.channels(...)`) that defaults to `[EegFun.channels()]` (all channels).
 - For every predicate, the selected channels are averaged to produce a new column.
-- Output labels default to the underscore-joined contributing channel labels (e.g., :Fp1_Fp2).
+- Output labels default to the underscore-joined contributing channel labels (e.g., `:Fp1_Fp2`).
 - Can be used for single or multiple channel selections by passing a vector with one or more functions.
 
 Layout handling
@@ -20,22 +39,22 @@ Layout handling
 Examples
 ```julia
 # Average all channels (default)
-channel_average!(dat)
+EegFun.channel_average!(dat)
 
 # Single channel selection
-channel_average!(dat, channel_selections = [channels([:Fp1, :Fp2])])
+EegFun.channel_average!(dat; channel_selections = [EegFun.channels([:Fp1, :Fp2])])
 
 # Multiple channel selections (append columns and layout)
-channel_average!(dat, channel_selections = [channels([:Fp1, :Fp2]), channels([:O1, :O2])])
+EegFun.channel_average!(dat; channel_selections = [EegFun.channels([:Fp1, :Fp2]), EegFun.channels([:O1, :O2])])
 
 # Average by patterns with custom labels
-channel_average!(dat,
-    channel_selections = [x -> startswith.(string.(x), "F"), x -> startswith.(string.(x), "P")];
+EegFun.channel_average!(dat;
+    channel_selections = [x -> startswith.(string.(x), "F"), x -> startswith.(string.(x), "P")],
     output_labels = [:F_avg, :P_avg],
 )
 
 # Produce a reduced dataset (meta + averages only) with new layout
-channel_average!(dat, channel_selections = [channels([:Fp1, :Fp2])]; reduce = true)
+EegFun.channel_average!(dat; channel_selections = [EegFun.channels([:Fp1, :Fp2])], reduce = true)
 ```
 """
 function channel_average!(
@@ -70,18 +89,9 @@ function channel_average!(
         end
     end
 
-    # Resolve actual channel groups (exclude metadata; optionally include extra)
-    # For the default case (channels()), we want to select only original channel columns, not derived averaged columns
-    selected_channel_groups::Vector{Vector{Symbol}} = if length(selections) == 1 && selections[1] == channels()
-        # Default case: select only original channel columns
-        all_cols = all_labels(dat)
-        meta_cols = meta_labels(dat)
-        original_channels = [col for col in all_cols if col ∉ meta_cols && !contains(string(col), "_")]
-        [original_channels]
-    else
-        # Custom selections: use the provided functions
+    # Resolve actual channel groups via layout-backed channel_labels (include_extra = false by default)
+    selected_channel_groups::Vector{Vector{Symbol}} =
         [get_selected_channels(dat, sel; include_meta = false, include_extra = include_extra) for sel in selections]
-    end
 
     # Validate channel groups
     if any(isempty, selected_channel_groups)
@@ -91,18 +101,12 @@ function channel_average!(
 
     # Determine labels (explicit if/else for clarity)
     if isnothing(output_labels)
-        # Get original channel columns (excluding any previously added averaged columns)
-        # We need to identify which columns are the original channels vs derived averaged columns
-        all_cols = all_labels(dat)
-        meta_cols = meta_labels(dat)
-
-        # Original channels are those that are not metadata and don't contain underscores (averaged columns)
-        original_channels = [col for col in all_cols if col ∉ meta_cols && !contains(string(col), "_")]
+        original_channels = channel_labels(dat)
 
         labels = Vector{Symbol}(undef, length(selected_channel_groups))
         for (i, grp) in enumerate(selected_channel_groups)
-            # Check if this group covers all original channel columns (excluding metadata)
-            is_all = length(grp) == length(original_channels) && all(in(original_channels), grp)
+            # Check if this group covers all layout channel columns
+            is_all = !isempty(original_channels) && length(grp) == length(original_channels) && all(in(original_channels), grp)
             labels[i] = is_all ? :avg : Symbol(join(string.(grp), "_"))
         end
     else
@@ -113,15 +117,21 @@ function channel_average!(
         labels = Symbol.(output_labels)
     end
 
-    # Apply for each channel selection (append columns to every container, e.g. TF power and phase)
+    # Apply for each channel selection (for TF data: arithmetic mean on power, circular mean on phase)
     frames = _data_frames(dat)
+    is_tf = dat isa Union{TimeFreqData,TimeFreqEpochData}
     for (grp, lbl) in zip(selected_channel_groups, labels)
         if lbl ∈ all_labels(dat)
             @minimal_warning "Overwriting existing channel '$(lbl)'"
         end
         @info "channel_average!: $(_print_vector(grp)) → :$(lbl)"
-        for container in frames
-            _foreach_df(df -> df[!, lbl] = _colmeans(df, grp), container)
+        if is_tf
+            _foreach_df(df -> df[!, lbl] = _colmeans(df, grp), frames[1])
+            _foreach_df(df -> df[!, lbl] = _circular_colmeans(df, grp), frames[2])
+        else
+            for container in frames
+                _foreach_df(df -> df[!, lbl] = _colmeans(df, grp), container)
+            end
         end
     end
 
@@ -155,13 +165,6 @@ Non-mutating version of `channel_average!`.
 """
 function channel_average(dat::EegData, args...; kwargs...)
     return channel_average!(copy(dat), args...; kwargs...)
-end
-
-function channel_average!(dat::AbstractVector{<:EegData}, args...; kwargs...)
-    for d in dat
-        channel_average!(d, args...; kwargs...)
-    end
-    return dat
 end
 
 function channel_average(dat::AbstractVector{<:EegData}; kwargs...)
@@ -209,7 +212,7 @@ function _process_channel_average_file(
     end
 
     # Save (always use "data" as variable name since read_data finds by type)
-    jldsave(output_path; data = data)
+    jldsave(output_path; data = data, format_version = EEGFUN_FORMAT_VERSION)
 
     n_groups = length(channel_selections)
     return BatchResult(true, filename, "Averaged $n_groups channel group(s)")

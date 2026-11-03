@@ -1,6 +1,6 @@
-# Layouts and Neighbours
+# Layouts and Neighbors
 
-Spatial analysis, topographic plotting, and artifact repair in `EegFun.jl` all depend on knowing where electrodes are physically located. A **layout** stores electrode positions; **neighbours** are the set of nearby electrodes computed from those positions.
+Spatial analysis, topographic plotting, and artifact repair in `EegFun.jl` all depend on knowing where electrodes are physically located. A **layout** stores electrode positions; **neighbors** are the set of nearby electrodes computed from those positions.
 
 ## Reading a Layout
 
@@ -49,7 +49,7 @@ EegFun.positions_3D(layout)
 ```
 
 > [!NOTE]
-> Both coordinate conversions modify the layout in-place and clear any previously calculated neighbour information, since the distance metric changes.
+> Both coordinate conversions modify the layout in-place and clear any previously calculated neighbor information, since the distance metric changes.
 
 ## Visualising the Layout
 
@@ -63,60 +63,60 @@ EegFun.plot_layout_2d(layout)
 EegFun.plot_layout_3d(layout)
 ```
 
-## Computing Neighbours
+## Computing Neighbors
 
-Many algorithms — neighbour interpolation for channel repair, spatial clustering, correlation-based diagnostics — require knowing which electrodes are near each other. EegFun finds neighbours based on Euclidean distance within a specified criterion.
+Many algorithms — neighbor interpolation for channel repair, spatial clustering, correlation-based diagnostics — require knowing which electrodes are near each other. EegFun finds neighbors based on Euclidean distance within a specified criterion.
 
-### 2D Neighbours
+### 2D Neighbors
 
 Computed from the 2D projected coordinates. Suitable for topographic analysis:
 
 ```julia
-EegFun.get_neighbours_xy!(layout, 0.5)
+EegFun.get_neighbors_xy!(layout, 0.5)
 ```
 
-### 3D Neighbours
+### 3D Neighbors
 
 Computed from the 3D spherical coordinates. Preferred for channel repair since distances on the sphere are more accurate than projected distances:
 
 ```julia
-EegFun.get_neighbours_xyz!(layout, 0.5)
+EegFun.get_neighbors_xyz!(layout, 0.5)
 ```
 
 > [!IMPORTANT]
-> The **distance criterion** is in normalised coordinate units where 1.0 = the scalp equator (ear level). Think of it as a fraction of the head radius: 0.5 means "neighbours within 50% of the head radius." After computing neighbours, check the average count to ensure the value makes sense for your cap density:
+> The **distance criterion** is in normalised coordinate units where 1.0 = the scalp equator (ear level). Think of it as a fraction of the head radius: 0.5 means "neighbors within 50% of the head radius." After computing neighbors, check the average count to ensure the value makes sense for your cap density:
 >
 > ```julia
-> avg = EegFun.average_number_of_neighbours(layout.neighbours)
+> avg = EegFun.average_number_of_neighbors(layout.neighbors)
 > ```
 >
-> A good target is typically 4–6 neighbours per electrode, although this can vary depending on the cap density. If the average is much lower, increase the criterion; if much higher, decrease it. But visual inspection is always recommended.
+> A good target is typically 4–6 neighbors per electrode, although this can vary depending on the cap density. If the average is much lower, increase the criterion; if much higher, decrease it. But visual inspection is always recommended.
 
-### Inspecting Neighbours
+### Inspecting Neighbors
 
-For transparency and reproducibility, you can export the full neighbour structure — including distances and interpolation weights — to a TOML file:
+For transparency and reproducibility, you can export the full neighbor structure — including distances and interpolation weights — to a TOML file:
 
 ```julia
-EegFun.print_layout_neighbours(layout, "neighbours.toml")
+EegFun.print_layout_neighbors(layout, "neighbors.toml")
 ```
 
-### Visualising Neighbours
+### Visualising Neighbors
 
-Pass `neighbours = true` to the layout plot to interactively inspect connections. Hovering over an electrode highlights its neighbours:
+Pass `neighbors = true` to the layout plot to interactively inspect connections. Hovering over an electrode highlights its neighbors:
 
 ```julia
-EegFun.plot_layout_2d(layout, neighbours = true)
-EegFun.plot_layout_3d(layout, neighbours = true)
+EegFun.plot_layout_2d(layout, neighbors = true)
+EegFun.plot_layout_3d(layout, neighbors = true)
 ```
 
 ## Checking and Querying
 
 ```julia
-# Does the layout have computed neighbours?
-EegFun.has_neighbours(layout)
+# Does the layout have computed neighbors?
+EegFun.has_neighbors(layout)
 
 # What distance criterion was used?
-EegFun.neighbour_criterion(layout)
+EegFun.neighbor_criterion(layout)
 
 # Does the layout have valid (non-zero) coordinates?
 EegFun.has_valid_coordinates(layout)
@@ -137,15 +137,15 @@ layout = EegFun.read_layout("resources/layouts/biosemi/biosemi64.csv")
 EegFun.polar_to_cartesian_xy!(layout)   # for topoplots
 EegFun.polar_to_cartesian_xyz!(layout)  # for spherical spline repair
 
-# Compute neighbours
-EegFun.get_neighbours_xyz!(layout, 0.5)
+# Compute neighbors
+EegFun.get_neighbors_xyz!(layout, 0.5)
 
 # Verify visually
-EegFun.plot_layout_2d(layout, neighbours = true)
+EegFun.plot_layout_2d(layout, neighbors = true)
 ```
 
 ## Next Steps
 
-- **Channel repair** — [Artifact Handling](artifact-handling.md) uses the neighbour structure computed here for `repair_channels!` and `repair_artifacts!`
+- **Channel repair** — [Artifact Handling](artifact-handling.md) uses the neighbor structure computed here for `repair_channels!` and `repair_artifacts!`
 - **Manual preprocessing** — [Manual Preprocessing](manual-preprocessing.md) shows how layout setup fits into the full preprocessing workflow
-- **Batch pipelines** — [Batch Processing](batch-processing.md) configures the layout and neighbour criterion via TOML
+- **Batch pipelines** — [Batch Processing](batch-processing.md) configures the layout and neighbor criterion via TOML

@@ -10,15 +10,15 @@ This demo shows how to visualise ERP statistical test results, including conditi
 
 | Function | Purpose |
 | --- | --- |
-| `plot_erp_stats(result, channel_selection=channels(:Cz))` | Plot analytic test results |
-| `plot_erp_stats(perm_result, channel_selection=channels(:Cz))` | Plot permutation test results |
+| `EegFun.plot_erp_stats(result, channel_selection=EegFun.channels(:Cz))` | Plot analytic test results |
+| `EegFun.plot_erp_stats(perm_result, channel_selection=EegFun.channels(:Cz))` | Plot permutation test results |
 
 ### Key Parameters
 
 | Parameter | Default | Description |
 | --- | --- | --- |
 | `layout` | `:single` | Layout: `:single`, `:grid`, or `:topo` |
-| `channel_selection` | `channels()` | Channel predicate (e.g., `channels(:Cz)`) |
+| `channel_selection` | `EegFun.channels()` | Channel predicate (e.g., `EegFun.channels(:Cz)`) |
 | `plot_erp` | `true` | Show condition ERP waveforms |
 | `plot_difference` | `false` | Show difference wave (A − B) |
 | `plot_tvalues` | `false` | Overlay t-statistic curve |

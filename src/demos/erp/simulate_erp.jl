@@ -88,6 +88,7 @@ function _run_erp_simulation(
 
 
     n_components = size(comps, 1)
+    ms_to_samples = samp_freq / 1000.0
     for comp = 1:n_components
         my_signal .+= _peak_vec(
             trials,
@@ -95,9 +96,9 @@ function _run_erp_simulation(
             samp_freq,
             comps[comp, 1],  # peakFreq
             comps[comp, 2],  # peakAmp
-            comps[comp, 3] + (base_length * samp_freq),  # peakLatency
+            comps[comp, 3] * ms_to_samples + (base_length * samp_freq),  # peakLatency (ms -> samples)
             comps[comp, 4],  # jitterAmp
-            comps[comp, 5],  # jitterLatency
+            comps[comp, 5] * ms_to_samples,  # jitterLatency (ms -> samples)
         )
     end
 
@@ -106,11 +107,11 @@ end
 
 # Component parameters structure
 """
-    Component
+    _SimulatedErpComponent
 
 Mutable struct representing an ERP component for simulation.
 """
-mutable struct Component
+mutable struct _SimulatedErpComponent
     active::Observable{Bool}
     freq::Observable{Float64}
     amp::Observable{Float64}
@@ -196,7 +197,7 @@ function simulate_erp()
     base_length = 0.2
     n_samples = Int(samp_freq * (sig_length + base_length))
 
-    time = collect(1:n_samples) .- (samp_freq * base_length)
+    time = (collect(1:n_samples) .- (samp_freq * base_length)) .* (1000.0 / samp_freq)
 
     # Precompute noise base for up to 500 trials to avoid millions of sin/cos calls on every slider drag
     MAX_TRIALS = 500
@@ -232,9 +233,9 @@ function simulate_erp()
     colsize!(ctrl_layout, 5, Weight(1))
 
     # List to store components
-    components = Component[]
+    components = _SimulatedErpComponent[]
 
-    """Create sliders and toggle for one ERP component and return a `Component` struct."""
+    """Create sliders and toggle for one ERP component and return a `_SimulatedErpComponent` struct."""
     function create_component(parent, row)
         # Initialize all observables - start INACTIVE
         active = Observable(false)
@@ -273,7 +274,7 @@ function simulate_erp()
         lbl_jitter_lat = Label(parent[row, 11], lift(x -> string(round(x, digits = 1)), jitter_lat), halign = :left)
         connect!(jitter_lat, sl_jitter_lat.value)
 
-        Component(active, freq, amp, latency, jitter_amp, jitter_lat)
+        _SimulatedErpComponent(active, freq, amp, latency, jitter_amp, jitter_lat)
     end
 
     # Component parameter labels

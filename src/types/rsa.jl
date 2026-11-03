@@ -32,12 +32,20 @@ struct NoiseCeiling <: EegFunData
     n_participants::Int
 end
 
+function Base.copy(nc::NoiseCeiling)::NoiseCeiling
+    return NoiseCeiling(copy(nc.lower_bound), copy(nc.upper_bound), nc.n_participants)
+end
+
 function Base.show(io::IO, nc::NoiseCeiling)
+    lower_str =
+        isempty(nc.lower_bound) ? "N/A" : "$(round(minimum(nc.lower_bound), digits=3)) to $(round(maximum(nc.lower_bound), digits=3))"
+    upper_str =
+        isempty(nc.upper_bound) ? "N/A" : "$(round(minimum(nc.upper_bound), digits=3)) to $(round(maximum(nc.upper_bound), digits=3))"
     println(io, "NoiseCeiling:")
     println(io, "  Participants: $(nc.n_participants)")
     println(io, "  Time points: $(length(nc.lower_bound))")
-    println(io, "  Lower bound: $(round(minimum(nc.lower_bound), digits=3)) to $(round(maximum(nc.lower_bound), digits=3))")
-    println(io, "  Upper bound: $(round(minimum(nc.upper_bound), digits=3)) to $(round(maximum(nc.upper_bound), digits=3))")
+    println(io, "  Lower bound: $lower_str")
+    println(io, "  Upper bound: $upper_str")
 end
 
 """
@@ -103,48 +111,81 @@ function RsaData(
         rdm,
         dissimilarity_measure,
         channels,
-        layout,
+        copy(layout),
         sample_rate,
         model_correlations,
         model_names,
         p_values,
         noise_ceiling,
-        analysis_info,
+        copy(analysis_info),
+    )
+end
+
+function Base.copy(rsa::RsaData)::RsaData
+    return RsaData(
+        rsa.file,
+        copy(rsa.condition_names),
+        copy(rsa.times),
+        copy(rsa.rdm),
+        rsa.dissimilarity_measure,
+        copy(rsa.channels),
+        copy(rsa.layout),
+        rsa.sample_rate,
+        isnothing(rsa.model_correlations) ? nothing : copy(rsa.model_correlations),
+        isnothing(rsa.model_names) ? nothing : copy(rsa.model_names),
+        isnothing(rsa.p_values) ? nothing : copy(rsa.p_values),
+        isnothing(rsa.noise_ceiling) ? nothing : copy(rsa.noise_ceiling),
+        copy(rsa.analysis_info),
     )
 end
 
 function Base.show(io::IO, rsa::RsaData)
     n_conditions = length(rsa.condition_names)
     n_times = length(rsa.times)
+    time_str = isempty(rsa.times) ? "N/A" : "$(first(rsa.times)) to $(last(rsa.times)) s"
 
     println(io, "RsaData:")
     println(io, "  File: $(rsa.file)")
     println(io, "  Conditions: $(join(rsa.condition_names, ", ")) (n=$(n_conditions))")
     println(io, "  Dissimilarity measure: $(rsa.dissimilarity_measure)")
-    println(io, "  Time points: $(n_times) ($(rsa.times[1]) to $(rsa.times[end]) s)")
+    println(io, "  Time points: $(n_times) ($time_str)")
     println(io, "  Channels: $(length(rsa.channels))")
 
-    if !isnothing(rsa.model_correlations) && !isnothing(rsa.model_names)
+    if !isnothing(rsa.model_correlations) && !isnothing(rsa.model_names) && size(rsa.model_correlations, 1) > 0
         println(io, "  Model comparisons: $(length(rsa.model_names))")
         for (idx, model_name) in enumerate(rsa.model_names)
-            max_corr = maximum(rsa.model_correlations[:, idx])
-            max_idx = argmax(rsa.model_correlations[:, idx])
-            println(io, "    - $model_name: max r=$(round(max_corr, digits=3)) at $(round(rsa.times[max_idx], digits=3)) s")
+            idx > size(rsa.model_correlations, 2) && break
+            col = @view rsa.model_correlations[:, idx]
+            max_corr = maximum(col)
+            max_idx = argmax(col)
+            if max_idx <= length(rsa.times)
+                println(io, "    - $model_name: max r=$(round(max_corr, digits=3)) at $(round(rsa.times[max_idx], digits=3)) s")
+            else
+                println(io, "    - $model_name: max r=$(round(max_corr, digits=3))")
+            end
         end
     end
 
     if !isnothing(rsa.noise_ceiling)
         nc = rsa.noise_ceiling
-        avg_lower = mean(nc.lower_bound)
-        avg_upper = mean(nc.upper_bound)
         println(io, "  Noise ceiling ($(nc.n_participants) participants):")
-        println(
-            io,
-            "    - Lower: $(round(avg_lower, digits=3)) (range: $(round(minimum(nc.lower_bound), digits=3))-$(round(maximum(nc.lower_bound), digits=3)))",
-        )
-        println(
-            io,
-            "    - Upper: $(round(avg_upper, digits=3)) (range: $(round(minimum(nc.upper_bound), digits=3))-$(round(maximum(nc.upper_bound), digits=3)))",
-        )
+        if !isempty(nc.lower_bound)
+            avg_lower = mean(nc.lower_bound)
+            println(
+                io,
+                "    - Lower: $(round(avg_lower, digits=3)) (range: $(round(minimum(nc.lower_bound), digits=3))-$(round(maximum(nc.lower_bound), digits=3)))",
+            )
+        else
+            println(io, "    - Lower: N/A")
+        end
+        if !isempty(nc.upper_bound)
+            avg_upper = mean(nc.upper_bound)
+            println(
+                io,
+                "    - Upper: $(round(avg_upper, digits=3)) (range: $(round(minimum(nc.upper_bound), digits=3))-$(round(maximum(nc.upper_bound), digits=3)))",
+            )
+        else
+            println(io, "    - Upper: N/A")
+        end
     end
 end

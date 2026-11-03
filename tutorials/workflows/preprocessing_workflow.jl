@@ -35,10 +35,10 @@ raw_data = EegFun.read_raw_data(EegFun.example_path("data/bdf/example1.bdf"))
 layout = EegFun.read_layout(EegFun.example_path("layouts/biosemi/biosemi72.csv"))
 EegFun.polar_to_cartesian_xy!(layout)   # For 2D topography plots
 EegFun.polar_to_cartesian_xyz!(layout)  # For 3D interpolation (spherical spline)
-EegFun.get_neighbours_xy!(layout, 0.35) # Calculate neighbors (normalized units for this layout)
+EegFun.get_neighbors_xy!(layout, 0.35) # Calculate neighbors (normalized units for this layout)
 
 # Optional: Visualize layout and neighbors
-# EegFun.plot_layout_2d(layout, neighbours = true)
+# EegFun.plot_layout_2d(layout, neighbors = true)
 
 # Create EegFun data structure
 dat = EegFun.create_eegfun_data(raw_data, layout)

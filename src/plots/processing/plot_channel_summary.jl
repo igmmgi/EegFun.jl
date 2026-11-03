@@ -12,6 +12,7 @@ const PLOT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :xlabel => ("Electrode", "x-axis label."),
     :ylabel => ("", "y-axis label"),
     :plot_title => (nothing, "Plot title."),
+    :show_title => (true, "Whether to show the plot title."),
     :plot_title_position => (
         nothing,
         "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis.",
@@ -87,7 +88,7 @@ function plot_channel_summary!(
 )
     col = Symbol(col)
     # Merge user kwargs with defaults and validate
-    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, _normalize_plot_kwargs(kwargs))
 
     # Check if required columns exist
     if :channel ∉ propertynames(dat) || col ∉ propertynames(dat)
@@ -172,7 +173,7 @@ See `plot_channel_summary!` for full documentation of arguments and keyword argu
 function plot_channel_summary(dat::DataFrame, col::Union{Symbol,AbstractString}; channel_selection = channels(), kwargs...)
     col = Symbol(col)
     # Merge user kwargs with defaults and validate
-    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, _normalize_plot_kwargs(kwargs))
 
     fig = _eegfun_figure()
     ax = Axis(fig[1, 1])
@@ -194,14 +195,14 @@ function plot_channel_summary(
     kwargs...,
 )
     cols_sym = Symbol.(col)
-    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, _normalize_plot_kwargs(kwargs))
     fig = _eegfun_figure()
-    _plot_multiple_columns!(fig, dat, cols_sym, plot_kwargs; channel_selection = channel_selection)
+    axes = _plot_multiple_columns!(fig, dat, cols_sym, plot_kwargs; channel_selection = channel_selection)
     if plot_kwargs[:display_plot]
         _set_window_title("Channel Summary")
         _display_figure(fig)
     end
-    return fig
+    return (fig = fig, axes = axes)
 end
 
 plot_channel_summary(dat::AbstractVector{<:DataFrame}, col::AbstractVector{<:Union{Symbol,AbstractString}}; kwargs...) =
@@ -236,6 +237,8 @@ function _plot_multiple_columns!(
     channel_selection = channels(),
 )
     n_cols = length(col)
+    axes = Axis[]
+    n_cols == 0 && return axes
 
     if isnothing(plot_kwargs[:dims])
         rs, cs = _best_rect(n_cols)
@@ -252,12 +255,14 @@ function _plot_multiple_columns!(
         for c = 1:cs
             ax = Axis(fig[r, c])
             plot_channel_summary!(fig, ax, dat, col[count]; channel_selection = channel_selection, plot_kwargs...)
+            push!(axes, ax)
             count += 1
             if count > n_cols
-                break
+                return axes
             end
         end
     end
+    return axes
 end
 
 
@@ -295,7 +300,7 @@ function _configure_axis!(ax::Axis, channel_names::Vector{String}, col::Symbol, 
     ax.xticks = (1:length(channel_names), channel_names)
     ax.xticklabelrotation = plot_kwargs[:xtick_rotation]
     ax.xlabel = plot_kwargs[:xlabel]
-    if !isnothing(plot_kwargs[:plot_title])
+    if plot_kwargs[:show_title] && !isnothing(plot_kwargs[:plot_title])
         ax.title = plot_kwargs[:plot_title]
         ax.titlesize = plot_kwargs[:plot_title_fontsize]
     end

@@ -1,3 +1,41 @@
+"""
+    tf_morlet(dat::EpochData;
+              channel_selection=channels(),
+              interval_selection::Interval=times(),
+              frequencies::AbstractVector{<:Real}=range(1, 40, length=40),
+              cycles::Union{Real,Tuple{Real,Real}}=7,
+              pad::Union{Nothing,Symbol}=nothing,
+              return_trials::Bool=false,
+              return_phase::Bool=false,
+              filter_edges::Bool=true,
+              use_gpu::Bool=false)
+
+Morlet wavelet time-frequency decomposition using MNE-style discrete ``L^2`` wavelet
+normalization (``\\|W\\|_2 = \\sqrt{2}``).
+
+# Arguments
+- `dat::EpochData`: Epoched EEG data
+
+# Keyword Arguments
+- `channel_selection=channels()`: Channel selection predicate (see `channels()`)
+- `interval_selection::Interval=times()`: Time interval selection (see `times()`)
+- `frequencies::AbstractVector{<:Real}=range(1, 40, length=40)`: Target frequencies in Hz
+- `cycles::Union{Real,Tuple{Real,Real}}=7`: Number of wavelet cycles (constant scalar or `(min_cycles, max_cycles)` log-spaced across frequencies)
+- `pad::Union{Nothing,Symbol}=nothing`: Mirror padding mode (`nothing`, `:pre`, `:post`, or `:both`)
+- `return_trials::Bool=false`: If `true`, return `TimeFreqEpochData` preserving single trials; otherwise return trial-averaged `TimeFreqData`
+- `return_phase::Bool=false`: If `true`, populate `data_phase` with instantaneous phase angles (radians); otherwise fill with `NaN`
+- `filter_edges::Bool=true`: If `true`, mask edge samples where the wavelet window extends past data/padding boundaries with `NaN`
+- `use_gpu::Bool=false`: If `true`, execute FFT convolutions on the active GPU backend when available
+
+# Returns
+- `TimeFreqData` (when `return_trials=false`) or `TimeFreqEpochData` (when `return_trials=true`)
+
+# Examples
+```julia
+tf_data = tf_morlet(epochs; frequencies=range(2, 40, length=30), cycles=7)
+tf_trials = tf_morlet(epochs; frequencies=logrange(2, 40, length=20), cycles=(3, 10), return_trials=true, return_phase=true)
+```
+"""
 function tf_morlet(
     dat::EpochData;
     channel_selection = channels(),
@@ -55,7 +93,6 @@ function tf_morlet(
     # Pre-compute some constants 
     inv_sr = 1.0 / sdat.sample_rate
     two_pi = 2 * pi
-    sqrt_pi = sqrt(pi)
 
     # Pre-compute wavelets and their FFTs once (same for all channels and trials)
     wavelet_ffts = Vector{Vector{ComplexF64}}(undef, num_frex)
@@ -71,16 +108,17 @@ function tf_morlet(
         valid_start = hw + 1
         valid_starts_per_freq[fi] = valid_start
 
-        # Create wavelet directly in padded buffer
+        # Create wavelet directly in padded buffer with MNE-style discrete L2 normalization (||W||_2 = sqrt(2))
         fill!(wavelet_padded, 0)
-        A = sqrt(1 / (sigma * sqrt_pi))
         two_pi_freq = two_pi * freq_val
         inv_2sigma2 = 1.0 / (2 * sigma^2)
         @inbounds @simd for i = 1:wl
             t = (i - 1 - hw) * inv_sr
             t2 = t * t
-            wavelet_padded[i] = A * exp(im * two_pi_freq * t) * exp(-t2 * inv_2sigma2)
+            wavelet_padded[i] = exp(im * two_pi_freq * t) * exp(-t2 * inv_2sigma2)
         end
+        w_view = @view wavelet_padded[1:wl]
+        w_view .*= sqrt(2.0) / norm(w_view, 2)
 
         # FFT of wavelet - compute once, reuse for all channels and trials
         wavelet_fft_freq = zeros(ComplexF64, n_conv_pow2)
@@ -138,7 +176,6 @@ function _process_morlet_channel!(
     _tf_load_channel_fft!(buf, dat, channel, g, fft_plan_padded_batch, gpu_buffers)
 
     # Process each frequency
-    sqrt2 = sqrt(2)
     if !isnothing(gpu_buffers)
         local_data_fft_gpu = gpu_buffers.local_data_fft_gpu
         local_conv_result_gpu = gpu_buffers.local_conv_result_gpu
@@ -155,7 +192,6 @@ function _process_morlet_channel!(
             copyto!(curr_wavelet_gpu, wavelet_ffts[fi])
             local_conv_result_gpu .= local_data_fft_gpu .* curr_wavelet_gpu
             mul!(local_conv_result_gpu, ifft_plan_padded_batch, local_conv_result_gpu)
-            local_conv_result_gpu .*= sqrt2
 
             # Extract requested time points (precompute valid indices)
             valid_start = valid_starts_per_freq[fi]
@@ -202,13 +238,8 @@ function _process_morlet_channel!(
                 end
             end
 
-            # IFFT to get time-domain result (in-place along dim 2)
+            # IFFT to get time-domain result (in-place along dim 1)
             mul!(local_conv_result, ifft_plan_padded_batch, local_conv_result)
-
-            # Scale to approximate MNE's normalization
-            @inbounds @simd for i in eachindex(local_conv_result)
-                local_conv_result[i] *= sqrt2
-            end
 
             # Extract requested time points (time_indices are sample indices in processed data)
             valid_start = valid_starts_per_freq[fi]

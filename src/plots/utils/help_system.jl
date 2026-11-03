@@ -25,9 +25,12 @@ function _get_plot_help_info(plot_type::Symbol)::PlotHelpInfo
                 ("Down", "Zoom out on Y-axis (expand Y limits)"),
                 ("Left", "Zoom in on X-axis (compress time range)"),
                 ("Right", "Zoom out on X-axis (expand time range)"),
+                ("Left Click + Drag", "Pan the view"),
                 ("Shift + Left Click + Drag", "Select a time region (blue rectangle)"),
                 ("Right Click on Selection", "Context menu"),
                 ("Ctrl + Left Click + Drag", "Select channels for analysis"),
+                ("C", "Open control panel (baseline and condition toggles)"),
+                ("L", "Toggle legend on/off"),
             ],
         ),
         :epochs => PlotHelpInfo(
@@ -37,9 +40,12 @@ function _get_plot_help_info(plot_type::Symbol)::PlotHelpInfo
                 ("Down", "Zoom out on Y-axis (expand Y limits)"),
                 ("Left", "Zoom in on X-axis (compress time range)"),
                 ("Right", "Zoom out on X-axis (expand time range)"),
+                ("Left Click + Drag", "Pan the view"),
                 ("Shift + Left Click + Drag", "Select a time region (blue rectangle)"),
                 ("Right Click on Selection", "Open context menu with plot options"),
                 ("Ctrl + Left Click + Drag", "Select channels for analysis"),
+                ("C", "Open control panel (baseline and condition toggles)"),
+                ("L", "Toggle legend on/off"),
             ],
         ),
         :databrowser => PlotHelpInfo(
@@ -58,22 +64,6 @@ function _get_plot_help_info(plot_type::Symbol)::PlotHelpInfo
                 ("Right Click within highlighted region", "Context menu (Plot Epochs, Plot ERP, Topoplot, Spectrum)"),
                 ("Ctrl + Left click", "Select/toggle closest channel"),
                 ("R", "Open channel repair menu (continuous data only)"),
-            ],
-        ),
-        :erp => PlotHelpInfo(
-            "ERP Plot",
-            [
-                ("C", "Open control panel (baseline and condition toggles)"),
-                ("L", "Toggle legend on/off"),
-                ("Left Click + Drag", "Pan the view"),
-            ],
-        ),
-        :epochs => PlotHelpInfo(
-            "Epochs Plot",
-            [
-                ("C", "Open control panel (baseline and condition toggles)"),
-                ("L", "Toggle legend on/off"),
-                ("Left Click + Drag", "Pan the view"),
             ],
         ),
         :erp_image => PlotHelpInfo(

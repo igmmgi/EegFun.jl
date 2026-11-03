@@ -296,8 +296,9 @@ function _plot_erp_image(gui_state)
 
     _guarded_async("ERP Image") do
         layout_sym = Symbol(gui_state.layout_type[])
-        z = gui_state.zlim[]
-        extra_kwargs = (!isnothing(z[1]) && !isnothing(z[2])) ? (colorrange = z,) : NamedTuple()
+        z_lim = _gui_lim(gui_state.zlim[])
+        x_lim = _gui_lim(gui_state.xlim[])
+        extra_kwargs = !isnothing(z_lim) ? (colorrange = z_lim,) : NamedTuple()
 
         if is_pattern
             # Pattern mode — delegate directly; batch discovery handled by string dispatch
@@ -306,7 +307,7 @@ function _plot_erp_image(gui_state)
                 input_dir = _gui_dir(gui_state),
                 layout = layout_sym,
                 channel_selection = selected_channels,
-                xlim = gui_state.xlim[],
+                xlim = x_lim,
                 yreversed = gui_state.invert_y[],
                 extra_kwargs...,
             )
@@ -320,7 +321,7 @@ function _plot_erp_image(gui_state)
                 dat;
                 layout = layout_sym,
                 channel_selection = selected_channels,
-                xlim = gui_state.xlim[],
+                xlim = x_lim,
                 yreversed = gui_state.invert_y[],
                 extra_kwargs...,
             )
@@ -340,6 +341,7 @@ function _plot_time_frequency(gui_state)
     # Shared plot kwargs
     selected_channels = _gui_selected_channels(gui_state)
     xlim_val = _gui_lim(gui_state.xlim[])
+    ylim_val = _gui_lim(gui_state.ylim[])
     zlim_val = _gui_lim(gui_state.zlim[])
     baseline_val = _gui_lim((gui_state.baseline_start[], gui_state.baseline_end[]))
     valid_tf_methods = ("db", "absolute", "relative", "relchange", "percent", "zscore", "normchange", "vssum")
@@ -382,6 +384,7 @@ function _plot_time_frequency(gui_state)
                     layout_kw...,
                     channel_selection = selected_channels,
                     xlim              = xlim_val,
+                    ylim              = ylim_val,
                     colorrange        = zlim_val,
                     baseline_interval = baseline_val,
                     baseline_method   = baseline_method_sym,
@@ -407,6 +410,7 @@ function _plot_time_frequency(gui_state)
             layout_kw...,
             channel_selection = selected_channels,
             xlim              = xlim_val,
+            ylim              = ylim_val,
             colorrange        = zlim_val,
             baseline_interval = baseline_val,
             baseline_method   = baseline_method_sym,

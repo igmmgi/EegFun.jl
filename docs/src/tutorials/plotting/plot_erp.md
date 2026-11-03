@@ -26,7 +26,7 @@ The demo shows three layout modes:
 **Average across channels**:
 
 ```julia
-plot_erp(erps, average_channels = true)
+EegFun.plot_erp(erps, average_channels = true)
 ```
 
 Shows grand average waveform across all selected channels.
@@ -34,7 +34,7 @@ Shows grand average waveform across all selected channels.
 **Individual channels**:
 
 ```julia
-plot_erp(erps, average_channels = false, colormap = :viridis)
+EegFun.plot_erp(erps, average_channels = false, colormap = :viridis)
 ```
 
 Overlays all channels with color-coding.
@@ -42,8 +42,8 @@ Overlays all channels with color-coding.
 **Selected channels**:
 
 ```julia
-plot_erp(erps, 
-    channel_selection = channels([:Cz, :PO7, :PO8]),
+EegFun.plot_erp(erps, 
+    channel_selection = EegFun.channels([:Cz, :PO7, :PO8]),
     average_channels = false
 )
 ```
@@ -55,14 +55,14 @@ Shows only specified channels.
 Displays multiple channels as subplots:
 
 ```julia
-plot_erp(erps, layout = :grid)
+EegFun.plot_erp(erps, layout = :grid)
 ```
 
 **Custom grid dimensions**:
 
 ```julia
-plot_erp(erps,
-    channel_selection = channels([:F3, :Cz, :PO7, :PO8, :Fp1, :Fp2]),
+EegFun.plot_erp(erps,
+    channel_selection = EegFun.channels([:F3, :Cz, :PO7, :PO8, :Fp1, :Fp2]),
     layout = :grid,
     layout_kwargs = (; grid_dims = (3, 2))  # 3 rows × 2 columns
 )
@@ -71,7 +71,7 @@ plot_erp(erps,
 **Skip positions**:
 
 ```julia
-plot_erp(erps,
+EegFun.plot_erp(erps,
     layout_kwargs = (; grid_dims = (3, 4), grid_skip_positions = [(2, 1), (2, 3)])  # Leave empty
 )
 ```
@@ -81,7 +81,7 @@ Creates custom layouts with empty spaces.
 **Adjust spacing**:
 
 ```julia
-plot_erp(erps,
+EegFun.plot_erp(erps,
     layout = :grid,
     layout_kwargs = (; grid_rowgap = 0, grid_colgap = 0)
 )
@@ -92,7 +92,7 @@ plot_erp(erps,
 Arranges channels by scalp position:
 
 ```julia
-plot_erp(erps, layout = :topo)
+EegFun.plot_erp(erps, layout = :topo)
 ```
 
 Each channel plotted at its actual spatial location for intuitive interpretation.
@@ -102,13 +102,13 @@ Each channel plotted at its actual spatial location for intuitive interpretation
 **Y-axis orientation**:
 
 ```julia
-plot_erp(erps, yreversed = true)  # Negative up (common convention)
+EegFun.plot_erp(erps, yreversed = true)  # Negative up (common convention)
 ```
 
 **Legend placement**:
 
 ```julia
-plot_erp(erps,
+EegFun.plot_erp(erps,
     legend_channel = [:Fp1, :M2],  # Channels for legend
     legend_nbanks = 3              # Number of legend columns
 )
@@ -117,7 +117,7 @@ plot_erp(erps,
 **Figure padding**:
 
 ```julia
-plot_erp(erps,
+EegFun.plot_erp(erps,
     figure_padding = (150, 150, 150, 150)  # left, right, bottom, top
 )
 ```
@@ -132,8 +132,8 @@ fig = Figure(size = (800, 800))
 ax1 = Axis(fig[1, 1])
 ax2 = Axis(fig[1, 1], width = Relative(0.2), height = Relative(0.2))
 
-plot_erp!(fig, ax1, erps, average_channels = true)
-plot_topography!(fig, ax2, erps[1],
+EegFun.plot_erp!(fig, ax1, erps, average_channels = true)
+EegFun.plot_topography!(fig, ax2, erps[1],
     point_plot = false,
     label_plot = false,
     colorbar_plot = true

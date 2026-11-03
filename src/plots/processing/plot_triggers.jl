@@ -8,6 +8,9 @@ const PLOT_TRIGGERS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :max_window_size => (100.0, "Maximum size of the time interval in seconds."),
     :label_fontsize => (20, "Font size for labels."),
     :display_plot => (true, "Whether to display the plot."),
+    :plot_title => (nothing, "Custom plot title override."),
+    :show_title => (true, "Whether to show the plot title."),
+    :legend => (true, "Whether to show the trigger count legend."),
     :ignore_triggers => (Int[], "Vector of trigger codes to ignore."),
     :marker_size => (15, "Size of markers in the trigger overview plot."),
     :linewidth_trigger => (1, "Line width for trigger vertical lines."),
@@ -143,12 +146,17 @@ end
 
 Helper function to plot vertical lines for trigger events.
 """
-function _plot_trigger_vertical_lines!(ax::Axis, times::Vector{Float64}, y_positions::Vector{Int})
+function _plot_trigger_vertical_lines!(
+    ax::Axis,
+    times::Vector{Float64},
+    y_positions::Vector{Int};
+    offset::Real = PLOT_TRIGGERS_KWARGS[:line_offset][1],
+    linewidth::Real = PLOT_TRIGGERS_KWARGS[:linewidth_trigger][1],
+)
     isempty(times) && return
     N = length(times)
     xs = Vector{Float64}(undef, 3 * N)
     ys = Vector{Float64}(undef, 3 * N)
-    offset = PLOT_TRIGGERS_KWARGS[:line_offset][1]
     @inbounds for (i, (xpos, ypos)) in enumerate(zip(times, y_positions))
         idx       = 3 * i - 2
         xs[idx]   = xpos
@@ -158,7 +166,7 @@ function _plot_trigger_vertical_lines!(ax::Axis, times::Vector{Float64}, y_posit
         ys[idx+1] = ypos + offset
         ys[idx+2] = NaN
     end
-    lines!(ax, xs, ys, color = :black, linewidth = PLOT_TRIGGERS_KWARGS[:linewidth_trigger][1])
+    lines!(ax, xs, ys, color = _resolve_theme_linecolor(ax, nothing), linewidth = linewidth)
 end
 
 """
@@ -326,7 +334,7 @@ $(_generate_kwargs_doc(PLOT_TRIGGERS_KWARGS))
 - `ax`: The Axis object containing the plot
 """
 function plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, _normalize_plot_kwargs(kwargs))
 
     if isempty(trigger_count)
         @minimal_warning "No triggers found in the data"
@@ -353,15 +361,22 @@ function plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwa
         trigger_data[key] = trigger_times[trigger_values .== key]
     end
 
-    for (unique, (key, value)) in enumerate(trigger_count)
+    for (unique_idx, (key, value)) in enumerate(trigger_count)
         times = trigger_data[key]
-        y_pos = fill(unique, length(times))
-        scatter!(ax, times, y_pos, label = "$key: $(string(value))", markersize = PLOT_TRIGGERS_KWARGS[:marker_size][1])
-        _plot_trigger_vertical_lines!(ax, times, y_pos)
+        y_pos = fill(unique_idx, length(times))
+        scatter!(ax, times, y_pos, label = "$key: $(string(value))", markersize = plot_kwargs[:marker_size])
+        _plot_trigger_vertical_lines!(ax, times, y_pos; offset = plot_kwargs[:line_offset], linewidth = plot_kwargs[:linewidth_trigger])
     end
-    fig[1, 2] = Legend(fig, ax)
+    if plot_kwargs[:legend]
+        fig[1, 2] = Legend(fig, ax)
+    end
     ax.ylabel = "Trigger Value"
     ax.xlabel = "Time (s)"
+    ax.xlabelsize = plot_kwargs[:label_fontsize]
+    ax.ylabelsize = plot_kwargs[:label_fontsize]
+    if plot_kwargs[:show_title] && !isnothing(plot_kwargs[:plot_title])
+        ax.title = plot_kwargs[:plot_title]
+    end
 
     plot_kwargs[:display_plot] && _display_figure(fig)
     return (fig = fig, axes = [ax])
@@ -376,7 +391,8 @@ function plot_trigger_overview(dat::ContinuousData; kwargs...)
     title_str = _generate_window_title(dat)
     _set_window_title(title_str)
 
-    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
+    norm_kw = _normalize_plot_kwargs(kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, norm_kw)
     trigger_codes, trigger_times, trigger_info = _extract_trigger_data(dat, plot_kwargs[:ignore_triggers])
     has_info = any(!isempty, trigger_info)
 
@@ -402,22 +418,23 @@ function plot_trigger_overview(dat::ContinuousData; kwargs...)
             trigger_data[key] = trigger_times[Int.(trigger_codes) .== key]
         end
 
-        for (unique, (key, value)) in enumerate(trigger_count)
+        for (unique_idx, (key, value)) in enumerate(trigger_count)
             times = trigger_data[key]
-            y_pos = fill(unique, length(times))
-            scatter!(
-                ax,
-                times,
-                y_pos,
-                label = "$(trigger_labels[key]): $(string(value))",
-                markersize = PLOT_TRIGGERS_KWARGS[:marker_size][1],
-            )
-            _plot_trigger_vertical_lines!(ax, times, y_pos)
+            y_pos = fill(unique_idx, length(times))
+            scatter!(ax, times, y_pos, label = "$(trigger_labels[key]): $(string(value))", markersize = plot_kwargs[:marker_size])
+            _plot_trigger_vertical_lines!(ax, times, y_pos; offset = plot_kwargs[:line_offset], linewidth = plot_kwargs[:linewidth_trigger])
         end
 
-        fig[1, 2] = Legend(fig, ax)
+        if plot_kwargs[:legend]
+            fig[1, 2] = Legend(fig, ax)
+        end
         ax.ylabel = "Trigger Value"
-        ax.xlabel = "Time (S)"
+        ax.xlabel = "Time (s)"
+        ax.xlabelsize = plot_kwargs[:label_fontsize]
+        ax.ylabelsize = plot_kwargs[:label_fontsize]
+        if plot_kwargs[:show_title] && !isnothing(plot_kwargs[:plot_title])
+            ax.title = plot_kwargs[:plot_title]
+        end
 
         plot_kwargs[:display_plot] && _display_figure(fig)
 
@@ -426,7 +443,7 @@ function plot_trigger_overview(dat::ContinuousData; kwargs...)
 
     else # Fall back to original behavior
         trigger_count = _count_triggers(trigger_codes)
-        result = plot_trigger_overview(trigger_times, Int.(trigger_codes), trigger_count; kwargs...)
+        result = plot_trigger_overview(trigger_times, Int.(trigger_codes), trigger_count; norm_kw...)
         _set_window_title("Makie")
         return result
     end
@@ -437,18 +454,19 @@ end
 ########################################################
 
 """
-    _setup_axis_properties!(ax::Axis)
+    _setup_axis_properties!(ax::Axis, plot_kwargs::Dict)
 
 Set up common axis properties for trigger timing plots.
 """
-function _setup_axis_properties!(ax::Axis)
+function _setup_axis_properties!(ax::Axis, plot_kwargs::Dict = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, (;)))
     ax.xlabel = "Time (s)"
     ax.ylabel = ""
-    ax.title = "Event Timing and Intervals"
-    ax.xlabelsize = 20
+    default_title = "Event Timing and Intervals"
+    ax.title = !plot_kwargs[:show_title] ? "" : something(plot_kwargs[:plot_title], default_title)
+    ax.xlabelsize = plot_kwargs[:label_fontsize]
     ax.titlesize = 22
     hideydecorations!(ax, ticks = true, label = false)
-    ylims!(ax, PLOT_TRIGGERS_KWARGS[:y_min_limit][1], PLOT_TRIGGERS_KWARGS[:y_max_limit][1])
+    ylims!(ax, plot_kwargs[:y_min_limit], plot_kwargs[:y_max_limit])
 end
 
 """
@@ -492,6 +510,12 @@ function _plot_trigger_events!(
     trigger_info::Vector{String};
     timeline_start::Float64 = trigger_times[1],
     timeline_end::Float64 = trigger_times[end],
+    font_size::Real = PLOT_TRIGGERS_KWARGS[:font_size][1],
+    event_line_height::Real = PLOT_TRIGGERS_KWARGS[:event_line_height][1],
+    event_line_width::Real = PLOT_TRIGGERS_KWARGS[:event_line_width][1],
+    time_label_offset::Real = PLOT_TRIGGERS_KWARGS[:time_label_offset][1],
+    timeline_width::Real = PLOT_TRIGGERS_KWARGS[:timeline_width][1],
+    draw_timeline::Bool = true,
 )
     # Early return if no triggers to plot
     if isempty(trigger_times)
@@ -499,11 +523,8 @@ function _plot_trigger_events!(
         return
     end
 
-    # frequently accessed values
-    font_size = PLOT_TRIGGERS_KWARGS[:font_size][1]
-    event_line_height = PLOT_TRIGGERS_KWARGS[:event_line_height][1]
-    time_label_offset = PLOT_TRIGGERS_KWARGS[:time_label_offset][1]
-    timeline_width = PLOT_TRIGGERS_KWARGS[:timeline_width][1]
+    line_col = _resolve_theme_linecolor(ax, nothing)
+    text_col = _resolve_theme_textcolor(ax, nothing)
 
     # Pre-compute string conversions with optional trigger info
     code_strings = String[]
@@ -523,7 +544,9 @@ function _plot_trigger_events!(
     interval_positions = [(trigger_times[i] + trigger_times[i+1]) / 2 for i = 1:length(intervals)]
 
     # Plot horizontal timeline — span the full visible window
-    lines!(ax, [timeline_start, timeline_end], [0, 0], color = :black, linewidth = timeline_width)
+    if draw_timeline
+        lines!(ax, [timeline_start, timeline_end], [0, 0], color = line_col, linewidth = timeline_width)
+    end
 
     # Vectorized vertical lines and labels for all events
     N = length(trigger_times)
@@ -539,7 +562,7 @@ function _plot_trigger_events!(
             ys[idx+1] = event_line_height
             ys[idx+2] = NaN
         end
-        lines!(ax, xs, ys, color = :black, linewidth = PLOT_TRIGGERS_KWARGS[:event_line_width][1])
+        lines!(ax, xs, ys, color = line_col, linewidth = event_line_width)
 
         # Vectorized trigger code text
         text!(
@@ -548,7 +571,7 @@ function _plot_trigger_events!(
             fill(event_line_height, N);
             text = code_strings,
             align = (:center, :bottom),
-            color = :black,
+            color = text_col,
             fontsize = font_size,
         )
 
@@ -559,7 +582,7 @@ function _plot_trigger_events!(
             fill(time_label_offset, N);
             text = time_strings,
             align = (:center, :top),
-            color = :black,
+            color = text_col,
             fontsize = font_size,
         )
     end
@@ -572,7 +595,7 @@ function _plot_trigger_events!(
             fill(0.0, length(interval_positions));
             text = interval_strings,
             align = (:center, :top),
-            color = :black,
+            color = text_col,
             fontsize = font_size,
         )
     end
@@ -594,7 +617,7 @@ function _create_interactive_trigger_plot(
     trigger_info::Vector{String};
     kwargs...,
 )
-    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, _normalize_plot_kwargs(kwargs))
     if isempty(trigger_times)
         @minimal_warning "No triggers found in the data"
         fig = _eegfun_figure()
@@ -627,26 +650,18 @@ function _create_interactive_trigger_plot(
         trigger_count = _count_triggers(trigger_codes)
         _add_trigger_legend_entries!(ax, trigger_count)
     end
-    fig[1, 2] = Legend(fig, ax)
-
-    # Create Observables for reactive plotting
-    window_size = Observable(plot_kwargs[:window_size])
-    slider_position, slider_size, initial_position = _create_interactive_sliders(fig, end_time, plot_kwargs)
-    window_position = Observable(plot_kwargs[:initial_position])
-
-    # Update Observables when sliders change
-    onany(slider_position.value, slider_size.value) do pos, size
-        window_position[] = pos
-        window_size[] = size
+    if plot_kwargs[:legend]
+        fig[1, 2] = Legend(fig, ax)
     end
 
-    # Reactive plotting function
+    slider_position, slider_size, _ = _create_interactive_sliders(fig, end_time, plot_kwargs)
+
+    # Reactive plotting function (fires once per slider change)
     function update_plot!()
         empty!(ax)
 
-        # Get current window bounds
-        current_start = window_position[]
-        current_end = min(current_start + window_size[], end_time)
+        current_start = Float64(slider_position.value[])
+        current_end = min(current_start + Float64(slider_size.value[]), end_time)
 
         # Filter triggers within the current window
         window_mask = (trigger_times .>= current_start) .& (trigger_times .<= current_end)
@@ -655,32 +670,40 @@ function _create_interactive_trigger_plot(
         window_info = trigger_info[window_mask]
 
         # Always draw the horizontal timeline across the visible window
-        lines!(ax, [current_start, current_end], [0, 0], color = :black, linewidth = PLOT_TRIGGERS_KWARGS[:timeline_width][1])
+        lines!(
+            ax,
+            [current_start, current_end],
+            [0, 0],
+            color = _resolve_theme_linecolor(ax, nothing),
+            linewidth = plot_kwargs[:timeline_width],
+        )
 
         if !isempty(window_times)
+            event_kw = (
+                timeline_start = current_start,
+                timeline_end = current_end,
+                font_size = plot_kwargs[:font_size],
+                event_line_height = plot_kwargs[:event_line_height],
+                event_line_width = plot_kwargs[:event_line_width],
+                time_label_offset = plot_kwargs[:time_label_offset],
+                timeline_width = plot_kwargs[:timeline_width],
+                draw_timeline = false,
+            )
             if has_info
-                _plot_trigger_events!(
-                    ax,
-                    window_times,
-                    window_codes,
-                    window_info,
-                    timeline_start = current_start,
-                    timeline_end = current_end,
-                )
+                _plot_trigger_events!(ax, window_times, window_codes, window_info; event_kw...)
             else
-                _plot_trigger_events!(ax, window_times, window_codes, timeline_start = current_start, timeline_end = current_end)
+                _plot_trigger_events!(ax, window_times, window_codes; event_kw...)
             end
         end
 
         xlims!(ax, current_start, current_end)
     end
 
-    # Set up reactive updates
-    onany(window_position, window_size) do _, _
+    onany(slider_position.value, slider_size.value) do _, _
         update_plot!()
     end
 
-    _setup_axis_properties!(ax)
+    _setup_axis_properties!(ax, plot_kwargs)
     update_plot!()
 
     plot_kwargs[:display_plot] && _display_figure(fig)
@@ -702,8 +725,7 @@ Plot trigger timing with interactive x-axis sliders for scrolling and window siz
 $(_generate_kwargs_doc(PLOT_TRIGGERS_KWARGS))
 
 # Returns
-- `fig::Figure`: The Makie figure object
-- `ax::Axis`: The Makie axis object
+- `(fig = fig, axes = [ax])`
 
 # Example
 ```julia
@@ -719,7 +741,7 @@ function plot_trigger_timing(dat::ContinuousData; kwargs...)
     title_str = _generate_window_title(dat)
     _set_window_title(title_str)
 
-    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, _normalize_plot_kwargs(kwargs))
     trigger_codes, trigger_times, trigger_info = _extract_trigger_data(dat, plot_kwargs[:ignore_triggers])
     result = _create_interactive_trigger_plot(trigger_codes, trigger_times, trigger_info; plot_kwargs...)
     _set_window_title("Makie")

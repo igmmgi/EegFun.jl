@@ -411,4 +411,42 @@ using DataFrames
             @test EegFun._to_participant_func(1:2)([1, 2, 3]) == [true, true, false]
         end
     end
+
+    @testset "SpectrumData subsetting, epoch_to_continuous copy isolation, and 0-epoch guards" begin
+        layout = EegFun.create_test_layout(n_channels = 3)
+        spec_df =
+            DataFrame(freq = [2.0, 4.0, 8.0, 12.0], Ch1 = [1.0, 2.0, 3.0, 4.0], Ch2 = [5.0, 6.0, 7.0, 8.0], Ch3 = [9.0, 10.0, 11.0, 12.0])
+        spec1 = EegFun.SpectrumData("p1", 1, "cond_1", spec_df, copy(layout), 250, :welch, EegFun.AnalysisInfo())
+        spec2 = EegFun.SpectrumData("p1", 2, "cond_2", copy(spec_df), copy(layout), 250, :welch, EegFun.AnalysisInfo())
+
+        sub_spec = EegFun.subset(spec1; channel_selection = [:Ch1, :Ch3])
+        @test sub_spec isa EegFun.SpectrumData
+        @test EegFun.channel_labels(sub_spec) == [:Ch1, :Ch3]
+        @test sub_spec.data.freq == [2.0, 4.0, 8.0, 12.0]
+
+        sub_specs = EegFun.subset([spec1, spec2]; condition_selection = 2, channel_selection = :Ch2)
+        @test length(sub_specs) == 1
+        @test sub_specs[1].condition == 2
+        @test EegFun.channel_labels(sub_specs[1]) == [:Ch2]
+
+        # Copy isolation in epoch_to_continuous
+        epochs = EegFun.create_test_epoch_data(n_epochs = 2, n_channels = 2)
+        orig_val = epochs.data[1][1, :Ch1]
+        orig_ref = epochs.analysis_info.reference
+        cont = EegFun.epoch_to_continuous(epochs, 1)
+        cont.data[1, :Ch1] = orig_val + 1000.0
+        cont.layout.data[1, :label] = :Mutated
+        cont.analysis_info.reference = :mastoid
+        @test epochs.data[1][1, :Ch1] == orig_val
+        @test epochs.layout.data[1, :label] == :Ch1
+        @test epochs.analysis_info.reference == orig_ref
+
+        # 0-epoch EpochData subsetting and get_selected_samples
+        empty_ep = EegFun.EpochData("empty", 1, "cond_1", DataFrame[], copy(layout), 250, EegFun.AnalysisInfo())
+        @test EegFun.get_selected_samples(empty_ep, EegFun.samples()) == Int[]
+        sub_empty = EegFun.subset(empty_ep; channel_selection = [:Ch1])
+        @test sub_empty isa EegFun.EpochData
+        @test isempty(sub_empty.data)
+        @test EegFun.channel_labels(sub_empty) == [:Ch1]
+    end
 end

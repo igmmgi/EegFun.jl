@@ -32,19 +32,19 @@ The `channel_summary()` function computes:
 
 **Single Metric**:
 ```julia
-plot_channel_summary(cs, :range)
+EegFun.plot_channel_summary(cs, :range)
 ```
 Shows one statistic across all channels as a bar plot
 
 **Multiple Metrics**:
 ```julia
-plot_channel_summary(cs, [:min, :max, :std, :range])
+EegFun.plot_channel_summary(cs, [:min, :max, :std, :range])
 ```
 Creates multiple subplots for comparison
 
 **Epoched Data**:
 ```julia
-plot_channel_summary(cs, :range, average_over = :epoch)
+EegFun.plot_channel_summary(cs, :range, average_over = :epoch)
 ```
 Averages statistics across epochs before plotting
 

@@ -26,17 +26,17 @@ EegFun.rereference!(dat, :avg)
 EegFun.highpass_filter!(dat, 1)
 
 # visually selected blink like artifact via interval selection times
-EegFun.plot_topography_3d(dat, interval_selection = EegFun.times(5.973, 6.02), ylim = (-200, 200))
-EegFun.plot_topography_3d(dat, interval_selection = EegFun.times(6), ylim = (-200, 200))
+EegFun.plot_topography_3d(dat, interval_selection = EegFun.times(5.973, 6.02), colorrange = (-200, 200))
+EegFun.plot_topography_3d(dat, interval_selection = EegFun.times(6), colorrange = (-200, 200))
 
 # blink like artifact via sample selection predicate
-EegFun.plot_topography_3d(dat, sample_selection = x -> x.time .>= 5.973 .&& x.time .<= 6.02, ylim = (-200, 200))
+EegFun.plot_topography_3d(dat, sample_selection = x -> x.time .>= 5.973 .&& x.time .<= 6.02, colorrange = (-200, 200))
 
 # Various stylistic combinations (sharing aesthetics with plot_topography)
 EegFun.plot_topography_3d(dat, colorbar_plot = false)
 EegFun.plot_topography_3d(dat, colormap = :inferno)
 EegFun.plot_topography_3d(dat, colormap = :redblue)
-EegFun.plot_topography_3d(dat, title = "3D Custom Title", title_fontsize = 30)
+EegFun.plot_topography_3d(dat, plot_title = "3D Custom Title", plot_title_fontsize = 30)
 EegFun.plot_topography_3d(dat, label_plot = false, point_plot = false)
 
 # You can also change the default starting camera angle (in degrees). 
@@ -74,13 +74,13 @@ EegFun.plot_topography_3d(epochs[2], 1, interval_selection = (0.4, 0.6)) # Condi
 #################################
 erps = EegFun.average_epochs(epochs)
 
-EegFun.plot_topography_3d(erps[1], sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6, ylim = (-2, 2))
-EegFun.plot_topography_3d(erps[1], interval_selection = (0.4, 0.6), ylim = (-2, 2))
+EegFun.plot_topography_3d(erps[1], sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6, colorrange = (-2, 2))
+EegFun.plot_topography_3d(erps[1], interval_selection = (0.4, 0.6), colorrange = (-2, 2))
 
 EegFun.plot_topography_3d(
     erps[2],
     interval_selection = (0.4, 0.6),
-    ylim = (-2, 2),
+    colorrange = (-2, 2),
     colorbar_plot = true,
     colorbar_kwargs = (; position = (1, 2)), # Note: GLMakie LScene placement
 )

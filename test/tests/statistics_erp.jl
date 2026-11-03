@@ -346,12 +346,12 @@ end
         # 2 electrodes × 3 time points
         mask = falses(2, 3)
         mask[1, 1] = true
-        mask[2, 1] = true   # spatial neighbour at same time
-        mask[1, 2] = true   # temporal neighbour
+        mask[2, 1] = true   # spatial neighbor at same time
+        mask[1, 2] = true   # temporal neighbor
 
         electrodes = [:Ch1, :Ch2]
         time_points = [0.0, 0.1, 0.2]
-        # Ch1 and Ch2 are spatial neighbours
+        # Ch1 and Ch2 are spatial neighbors
         spatial_conn = sparse([1, 2], [2, 1], true, 2, 2)
 
         clusters = EegFun._find_clusters_connected_components(mask, electrodes, time_points, spatial_conn, :spatiotemporal)
@@ -421,9 +421,9 @@ end
 
         filtered = EegFun._prefilter_mask_by_neighbors(mask, spatial_conn, 1)
 
-        # Ch3 has no spatial neighbours → removed
+        # Ch3 has no spatial neighbors → removed
         @test all(filtered[3, :] .== false)
-        # Ch1 and Ch2 each have 1 neighbour → survive (>= 1)
+        # Ch1 and Ch2 each have 1 neighbor → survive (>= 1)
         @test all(filtered[1, :] .== true)
         @test all(filtered[2, :] .== true)
     end
@@ -549,7 +549,7 @@ end
         @test result.test_info.type == :paired
         @test result.test_info.alpha == 0.05
         @test result.test_info.tail == :both
-        @test result.test_info.correction_method == :no
+        @test result.test_info.correction_method == :none
 
         # Dimensions
         @test size(result.stat_matrix.t, 1) == 3   # n_channels
@@ -916,6 +916,50 @@ end
             @test all(==(1), hits)  # every index visited exactly once
         end
         @test_throws TaskFailedException EegFun._foreach_chunk(_ -> error("boom"), 10; ntasks = 2)
+    end
+
+    @testset "Split alpha & cluster_alpha, two-sided cluster p-values, and centered variance" begin
+        # 1. Centered two-pass variance resists catastrophic cancellation at large DC offsets
+        diffs = [1.0, 2.0, 3.0, 4.0, 5.0]
+        big = 1e9
+        d1 = reshape(big .+ diffs, 5, 1, 1)
+        d2 = fill(big, 5, 1, 1)
+        t_mat, _, _, se_mat = EegFun._compute_t_matrix(d1, d2, :paired)
+        @test se_mat[1, 1] ≈ std(diffs) / sqrt(5) rtol = 1e-8
+        @test t_mat[1, 1] ≈ mean(diffs) / (std(diffs) / sqrt(5)) rtol = 1e-8
+
+        # Indep design large offset
+        g1 = reshape(big .+ [1.0, 2.0, 3.0, 4.0], 4, 1, 1)
+        g2 = reshape(big .+ [0.0, 1.0, 2.0, 3.0], 4, 1, 1)
+        t_ind, _, _, _ = EegFun._compute_t_matrix(g1, g2, :independent)
+        @test t_ind[1, 1] ≈ 1.0 / sqrt(2 * var([1.0, 2.0, 3.0, 4.0]) / 4) rtol = 1e-8
+
+        # 2. Split alpha and cluster_alpha + two-sided cluster p-values
+        erps = _build_erp_test_data(n_participants = 6, offset_cond1 = 2.5, offset_cond2 = 0.0, noise = 0.05)
+        prepared = EegFun.prepare_stats(erps; design = :paired)
+        res = EegFun.permutation_test(
+            prepared;
+            alpha = 0.01,
+            cluster_alpha = 0.05,
+            n_permutations = 40,
+            cluster_type = :temporal,
+            rng = Random.Xoshiro(99),
+        )
+        @test res.test_info.alpha == 0.01
+        @test res.test_info.cluster_info.cluster_alpha == 0.05
+        for c in vcat(res.clusters.positive, res.clusters.negative)
+            @test c.is_significant == (c.p_value <= res.test_info.alpha)
+        end
+
+        # ClusterInfo 3-arg and 4-arg constructors
+        ci3 = EegFun.ClusterInfo(:parametric, :temporal, 100)
+        @test ci3.cluster_alpha == 0.05
+        ci4 = EegFun.ClusterInfo(:parametric, :temporal, 100, 0.01)
+        @test ci4.cluster_alpha == 0.01
+
+        # Bonferroni NaN p-values are never marked significant even when t > 0
+        mask_nan = EegFun._apply_bonferroni_correction([NaN, 0.001], 0.05, [5.0, 5.0])
+        @test mask_nan == [false, true]
     end
 
 end # @testset "ERP Statistics"

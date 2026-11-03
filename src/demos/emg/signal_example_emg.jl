@@ -729,6 +729,7 @@ function signal_example_emg()
                 dt_frame = t_total / n_frames
 
                 for frame = 0:n_frames
+                    (!is_animating[] || !events(fig).window_open[]) && break
                     t_curr = frame * dt_frame
                     playback_time[] = t_curr
 
@@ -741,8 +742,10 @@ function signal_example_emg()
                     sleep(1.0 / fps)
                 end
 
-                playback_time[] = -1.0
-                current_disp_force[] = target
+                if events(fig).window_open[]
+                    playback_time[] = -1.0
+                    current_disp_force[] = target
+                end
             finally
                 is_animating[] = false
             end

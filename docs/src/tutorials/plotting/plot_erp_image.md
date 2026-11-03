@@ -51,7 +51,7 @@ The demo shows three layout modes:
 
 Smooth the image by averaging across neighboring trials:
 ```julia
-plot_erp_image(epochs, boxcar_average = 20)
+EegFun.plot_erp_image(epochs, boxcar_average = 20)
 ```
 
 Reduces noise while preserving overall patterns.
@@ -59,14 +59,14 @@ Reduces noise while preserving overall patterns.
 **Colorbar control**:
 
 ```julia
-plot_erp_image(epochs, colorbar_plot = false)  # Hide colorbar
-plot_erp_image(epochs, colorrange = (-50, 50))  # Custom range
+EegFun.plot_erp_image(epochs, colorbar_plot = false)  # Hide colorbar
+EegFun.plot_erp_image(epochs, colorrange = (-50, 50))  # Custom range
 ```
 
 **Optional ERP overlay**:
 
 ```julia
-plot_erp_image(epochs, plot_erp = false)  # Hide the averaged ERP
+EegFun.plot_erp_image(epochs, plot_erp = false)  # Hide the averaged ERP
 ```
 
 By default, the averaged ERP is plotted above the image for reference.

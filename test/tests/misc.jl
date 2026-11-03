@@ -12,6 +12,7 @@ using Random
         @test EegFun.basename_without_ext("path/to/another_file.csv") == "another_file"
         @test EegFun.basename_without_ext("no_extension") == "no_extension"
         @test EegFun.basename_without_ext("multiple.dots.in.name.txt") == "multiple.dots.in.name"
+        @test EegFun.basename_without_ext("path/to/recording.xdf.gz") == "recording"
 
         # Test _make_output_filename
         @test EegFun._make_output_filename("/output", "data/file.bdf", "_ica") == joinpath("/output", "file_ica.jld2")
@@ -100,7 +101,7 @@ using Random
         @test EegFun._parse_string_to_ints("1,2,3", 2) == [1, 2]
 
         # Test error handling
-        @test_throws ArgumentError EegFun._parse_string_to_ints("1.5,2.3")  # Decimal points not allowed
+        @test_throws EegFun.EegFunError EegFun._parse_string_to_ints("1.5,2.3")  # Decimal points not allowed
 
         # Test with non-numeric parts (should warn but continue)
         result = EegFun._parse_string_to_ints("1,abc,3")
@@ -251,6 +252,12 @@ using Random
         @test contains(doc, "First parameter")
         @test contains(doc, "param2::Float64 = 2.0")
         @test contains(doc, "Second parameter")
+
+        # UTF-8 multi-byte safety in _format_default when truncating >80 character strings
+        utf8_default = repeat("μ", 100)  # 2-byte codepoints: byte 77 is mid-character!
+        utf8_kwargs = Dict{Symbol,Tuple{Any,String}}(:label => (utf8_default, "UTF-8 label"))
+        utf8_doc = @test_nowarn EegFun._generate_kwargs_doc(utf8_kwargs)
+        @test contains(utf8_doc, "...")
     end
 
     # Clean up

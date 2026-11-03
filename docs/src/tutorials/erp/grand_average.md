@@ -11,7 +11,7 @@ using EegFun
 
 # Create grand averages for all conditions found in the list
 # results = [erp_p1, erp_p2, erp_p3]
-grand_avgs = grand_average(results)
+grand_avgs = EegFun.grand_average(results)
 ```
 
 ## Batch Averaging (from Disk)
@@ -20,7 +20,7 @@ For large studies, it is often more efficient to process files directly from the
 
 ```julia
 # Averages all JLD2 files in the folder that match the "erps_unrejected" pattern
-grand_average("erps_unrejected", input_dir = "derivatives/erp_analysis/")
+EegFun.grand_average("erps_unrejected", input_dir = "derivatives/erp_analysis/")
 ```
 
 ## How it Works
@@ -37,7 +37,7 @@ Once calculated, grand averages can be visualized using the same tools as indivi
 
 ```julia
 # Plot with standard error shading (if n > 1)
-plot_erp(ga_results, labels = ["Standard", "Target"])
+EegFun.plot_erp(ga_results, legend_labels = ["Standard", "Target"])
 ```
 
 

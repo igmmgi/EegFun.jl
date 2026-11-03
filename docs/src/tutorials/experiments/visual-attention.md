@@ -61,7 +61,7 @@ layout = EegFun.read_layout("biosemi72.csv")
 dat = EegFun.create_eegfun_data(dat, layout)
 ```
 
-### 1.2 Channel Layout and Neighbours
+### 1.2 Channel Layout and Neighbors
 
 Plot the channel layout to check that electrode positions look correct:
 
@@ -72,16 +72,16 @@ EegFun.plot_layout_2d(dat)
 ![Biosemi 72-channel layout](../../public/demos/experiments/visual-attention/biosemi72.png)
 
 
-Define channel neighbours (used later potential electrode repair via nearest neighbours, or for cluster based statistics):
+Define channel neighbors (used later potential electrode repair via nearest neighbors, or for cluster based statistics):
 
 ```julia
-EegFun.get_neighbours_xy!(dat, 0.35)
+EegFun.get_neighbors_xy!(dat, 0.35)
 ```
 
-Plot again with neighbour connections (interactive with mouse hover):
+Plot again with neighbor connections (interactive with mouse hover):
 
 ```julia
-EegFun.plot_layout_2d(dat, neighbours = true)
+EegFun.plot_layout_2d(dat, neighbors = true)
 ```
 
 ### 1.3 Inspect Triggers
@@ -250,7 +250,7 @@ jp = EegFun.channel_joint_probability(dat,
 bad_channels = EegFun.identify_bad_channels(cs, jp)
 ```
 
-If any channels are flagged, you can repair them interactively in the databrowser. Press **R** to open the channel repair menu, which lets you select the repair method (neighbour interpolation or spherical spline) and apply it immediately:
+If any channels are flagged, you can repair them interactively in the databrowser. Press **R** to open the channel repair menu, which lets you select the repair method (neighbor interpolation or spherical spline) and apply it immediately:
 
 ```julia
 EegFun.plot_databrowser(dat)
@@ -325,7 +325,7 @@ Remove the identified components and verify the cleaned data in the databrowser:
 ```julia
 # Remove artifact components from the original (0.1 Hz filtered) data
 all_removed = EegFun.get_all_ica_components(component_artifacts)
-EegFun.remove_ica_components!(dat, ica_result,
+EegFun.subtract_ica_components!(dat, ica_result,
     component_selection = EegFun.components(all_removed)
 )
 ```
@@ -463,7 +463,7 @@ For each participant, the pipeline runs through the following stages:
 | 5 | **Initial Epochs** | Extract preliminary epochs and ERPs (before cleaning) |
 | 6 | **Artifact Scan** | Channel summary, extreme-value detection, joint probability, bad-channel identification |
 | 7 | **ICA** | Apply stricter high-pass filter (on copy of data), decompose, auto-identify artifact components (e.g., EOG, ECG), remove them |
-| 8 | **Channel Repair** | Interpolate bad channels (previously removed) from their neighbours (or spline interpolation) |
+| 8 | **Channel Repair** | Interpolate bad channels (previously removed) from their neighbors (or spline interpolation) |
 | 9 | **Recalculate EOG** | Recompute vEOG / hEOG after ICA and channel repair |
 | 10 | **Artifact Values** | Re-detect extreme values on cleaned continuous data (used for epoch exclusion) |
 | 11 | **Epoch + Baseline** | Cut cleaned continuous data into trial segments and baseline-correct |
@@ -489,7 +489,7 @@ The most commonly adjusted parameters are shown below. The full configuration (w
 | | `eeg.artifact_value_abs_criterion` | 100 μV | Artifact threshold (epoch rejection) |
 | **EOG** | `eog.vEOG_channels` | Fp1/Fp2 − IO1/IO2 | Vertical EOG electrode pairs |
 | | `eog.hEOG_channels` | F9 − F10 | Horizontal EOG electrode pairs |
-| **Layout** | `layout.neighbour_criterion` | 0.35 | Distance for neighbour definition |
+| **Layout** | `layout.neighbor_criterion` | 0.35 | Distance for neighbor definition |
 
 ::: details Full default configuration (click to expand)
 
@@ -575,7 +575,7 @@ percentage_of_data = 100.0
 # ──── Layout ────
 
 [preprocess.layout]
-neighbour_criterion = 0.25
+neighbor_criterion = 0.35
 ```
 
 :::
@@ -639,7 +639,7 @@ EegFun.grand_average("erps_final")
 EegFun.plot_erp("grand_average_erps_final.jld2", channel_selection = EegFun.channels([:PO7, :PO8]), baseline_interval = (-0.2, 0), average_channels = true) 
 
 # topography plot for P1 
-EegFun.plot_topography("grand_average_erps_final.jld2", baseline_interval = (-0.2, 0), interval_selection = (0.1, 0.1), dims = (1,2), ylim = (-3, 3), 
+EegFun.plot_topography("grand_average_erps_final.jld2", baseline_interval = (-0.2, 0), interval_selection = (0.1, 0.1), dims = (1,2), colorrange = (-3, 3), 
 label_plot = false) 
 ```
 
@@ -679,7 +679,7 @@ fig = EegFun.plot_erp("grand_average_erps_final.jld2",
     xlim = (-0.25, 0.65),
     xticks = -0.2:0.1:0.6,
     time_unit = :ms, 
-    title = "Validity Effect (Avg: PO7/PO8)",
+    plot_title = "Validity Effect (Avg: PO7/PO8)",
 )
 
 # and save the figure
@@ -770,8 +770,8 @@ stat_data = EegFun.prepare_stats(
     :paired;
     condition_selection = EegFun.conditions([1, 2]),   # Valid left vs. Invalid left
     channel_selection = EegFun.channels(1:72),
-    baseline_interval = EegFun.times((-0.2, 0.0)),
-    analysis_interval = EegFun.times((0.0, 0.3)),
+    baseline_interval = EegFun.times(-0.2, 0.0),
+    analysis_interval = EegFun.times(0.0, 0.3),
 )
 
 # Run cluster-based permutation test
@@ -836,10 +836,10 @@ dat = EegFun.read_raw_data("example1.bdf")
 layout = EegFun.read_layout("biosemi72.csv")
 dat = EegFun.create_eegfun_data(dat, layout)
 
-# ── 1.2 Channel Layout and Neighbours ──
+# ── 1.2 Channel Layout and Neighbors ──
 EegFun.plot_layout_2d(dat)
-EegFun.get_neighbours_xy!(dat, 0.35)
-EegFun.plot_layout_2d(dat, neighbours = true)
+EegFun.get_neighbors_xy!(dat, 0.35)
+EegFun.plot_layout_2d(dat, neighbors = true)
 
 # ── 1.3 Inspect Triggers ──
 EegFun.trigger_count(dat)
@@ -906,7 +906,7 @@ component_artifacts, component_metrics = EegFun.identify_components(dat, ica_res
 )
 EegFun.plot_ica_component_activation(dat, ica_result, artifacts = component_artifacts)
 all_removed = EegFun.get_all_ica_components(component_artifacts)
-EegFun.remove_ica_components!(dat, ica_result,
+EegFun.subtract_ica_components!(dat, ica_result,
     component_selection = EegFun.components(all_removed)
 )
 
@@ -932,7 +932,7 @@ EegFun.plot_artifact_detection(epochs[2], rejection_info[2])
 EegFun.channel_repairable!(rejection_info, epochs[1].layout)
 EegFun.repair_artifacts!(epochs, rejection_info)
 rejection_info2 = EegFun.detect_bad_epochs_automatic(epochs, abs_criterion = 100.0)
-EegFun.detect_bad_epochs_interactive(epochs[1], artifact_info = rejection_info2[1], dims = (3, 3)))
+EegFun.detect_bad_epochs_interactive(epochs[1], artifact_info = rejection_info2[1], dims = (3, 3))
 epochs_final = EegFun.reject_epochs(epochs, rejection_info2)
 
 # ── 1.13 Average and Plot Single-Participant ERPs ──
@@ -1023,8 +1023,8 @@ stat_data = EegFun.prepare_stats(
     :paired;
     condition_selection = EegFun.conditions([1, 2]),
     channel_selection = EegFun.channels(1:72),
-    baseline_interval = EegFun.times((-0.2, 0.0)),
-    analysis_interval = EegFun.times((0.0, 0.3)),
+    baseline_interval = EegFun.times(-0.2, 0.0),
+    analysis_interval = EegFun.times(0.0, 0.3),
 )
 
 result_perm = EegFun.permutation_test(

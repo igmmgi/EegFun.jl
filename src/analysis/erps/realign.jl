@@ -43,7 +43,12 @@ function calculate_trigger_interval!(
 
     for epoch in dat
         start_idx = findfirst(x -> x in start_triggers, epoch.trigger)
-        end_idx = findfirst(x -> x in end_triggers, epoch.trigger)
+        end_idx = if isnothing(start_idx)
+            nothing
+        else
+            rel_idx = findfirst(x -> x in end_triggers, @view epoch.trigger[start_idx:end])
+            isnothing(rel_idx) ? nothing : start_idx + rel_idx - 1
+        end
 
         if isnothing(start_idx) || isnothing(end_idx)
             epoch[!, col_sym] .= NaN
@@ -286,8 +291,10 @@ function realign!(
         end
 
         global_interval = (maximum(common_starts), minimum(common_ends))
+    end
 
-        # Pre-calculate global strict n_samples
+    # Pre-calculate global strict n_samples if not explicitly provided
+    if isnothing(global_n_samples)
         all_n_samples = Int[]
         for dat in dat_vec
             for epoch in dat
@@ -295,6 +302,10 @@ function realign!(
                 e_idx = find_closest_time_index(epoch.time, global_interval[2])
                 push!(all_n_samples, e_idx - s_idx + 1)
             end
+        end
+        if isempty(all_n_samples)
+            @info "No data to realign."
+            return dat_vec
         end
         global_n_samples = minimum(all_n_samples)
     end
@@ -443,12 +454,14 @@ function _crop_epochs_to_window!(dat::EpochData, window::Tuple{Float64,Float64},
         dat.data[i] = epoch[start_idx:end_idx, :]
     end
 
-    # Third pass: Regenerate uniform time vector for all epochs
-    # This ensures all epochs have identical time vectors
-    uniform_time = range(start_time, stop = end_time, length = n_samples)
+    # Third pass: Regenerate uniform time vector for all epochs preserving exact dt = 1 / sample_rate around t = 0
+    isempty(dat.data) && return
+    fs = Float64(dat.sample_rate)
+    k_start = round(Int, dat.data[1].time[1] * fs)
+    uniform_time = Float64[(k_start + j - 1) / fs for j = 1:n_samples]
 
     for epoch in dat
-        epoch[!, :time] = collect(uniform_time)
+        epoch[!, :time] = copy(uniform_time)
     end
 end
 
@@ -502,7 +515,7 @@ function _process_realign_file(
     end
 
     # Save results
-    jldsave(output_path; data = realigned_epochs)
+    jldsave(output_path; data = realigned_epochs, format_version = EEGFUN_FORMAT_VERSION)
 
     if realigned_epochs isa Vector
         n_eps = sum(n_epochs(cond) for cond in realigned_epochs)
@@ -640,7 +653,7 @@ function _process_calculate_trigger_interval_file(
     epochs_with_interval = calculate_trigger_interval(epochs_data, start_triggers, end_triggers; column_name = column_name)
 
     # Save results
-    jldsave(output_path; data = epochs_with_interval)
+    jldsave(output_path; data = epochs_with_interval, format_version = EEGFUN_FORMAT_VERSION)
 
     if epochs_with_interval isa Vector
         n_eps = sum(n_epochs(cond) for cond in epochs_with_interval)

@@ -47,14 +47,14 @@ using EegFun
         # Create a layout with neighbors for repair
         layout_df = DataFrame(label = [:Ch1, :Ch2, :Ch3, :Ch4, :Ch5], inc = zeros(5), azi = zeros(5))
         # Create neighbors dict manually for testing
-        neighbours_dict = OrderedCollections.OrderedDict(
-            :Ch1 => EegFun.Neighbours([:Ch2, :Ch3], [1.0, 1.0], [1.0, 1.0]),
-            :Ch2 => EegFun.Neighbours([:Ch1, :Ch3, :Ch4], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]),
-            :Ch3 => EegFun.Neighbours([:Ch1, :Ch2, :Ch4], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]),
-            :Ch4 => EegFun.Neighbours([:Ch2, :Ch3, :Ch5], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]),
-            :Ch5 => EegFun.Neighbours([:Ch3, :Ch4], [1.0, 1.0], [1.0, 1.0]),
+        neighbors_dict = OrderedCollections.OrderedDict(
+            :Ch1 => EegFun.Neighbors([:Ch2, :Ch3], [1.0, 1.0], [1.0, 1.0]),
+            :Ch2 => EegFun.Neighbors([:Ch1, :Ch3, :Ch4], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]),
+            :Ch3 => EegFun.Neighbors([:Ch1, :Ch2, :Ch4], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]),
+            :Ch4 => EegFun.Neighbors([:Ch2, :Ch3, :Ch5], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]),
+            :Ch5 => EegFun.Neighbors([:Ch3, :Ch4], [1.0, 1.0], [1.0, 1.0]),
         )
-        layout = EegFun.Layout(layout_df, neighbours_dict, nothing, nothing)
+        layout = EegFun.Layout(layout_df, neighbors_dict, nothing, nothing)
         dat.layout = layout
 
         # Set a channel to NaN to test repair

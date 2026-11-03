@@ -71,7 +71,7 @@ Topographic maps (topoplots) show the spatial distribution of electrical activit
 **Appearance**:
 
 - Colormap selection
-- Color limits (ylim)
+- Color limits (`colorrange`)
 - Head outline radius
 
 **Labels and markers**:
@@ -154,21 +154,21 @@ EegFun.highpass_filter!(dat, 1)
 
 # visually selected blink like artifact via interval selection times
 with_theme(Theme(colormap = :coolwarm)) do
-    EegFun.plot_topography(dat, interval_selection = EegFun.times(5.973, 6.02), ylim = (-200, 200))
+    EegFun.plot_topography(dat, interval_selection = EegFun.times(5.973, 6.02), colorrange = (-200, 200))
 end
 
-EegFun.plot_topography(dat, interval_selection = EegFun.times(6), ylim = (-200, 200))
+EegFun.plot_topography(dat, interval_selection = EegFun.times(6), colorrange = (-200, 200))
 
 # blink like artifact via sample selection predicate
-EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 5.973 .&& x.time .<= 6.02, ylim = (-200, 200))
+EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 5.973 .&& x.time .<= 6.02, colorrange = (-200, 200))
 
 # blink like artifact across multiple time points
-EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 5.5 .&& x.time .<= 6.5, ylim = (-75, 75), n_topo = 5, dims = (1, 5))
+EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 5.5 .&& x.time .<= 6.5, colorrange = (-75, 75), n_topos = 5, dims = (1, 5))
 EegFun.plot_topography(
     dat,
     sample_selection = x -> x.time .>= 5.5 .&& x.time .<= 6.5,
-    ylim = (-75, 75),
-    n_topo = 5,
+    colorrange = (-75, 75),
+    n_topos = 5,
     dims = (1, 5),
     colorbar_plot_numbers = 5,
 )
@@ -197,7 +197,7 @@ epochs = EegFun.extract_epochs(dat, epoch_cfg, (-2, 4))
 # Separate plots
 EegFun.plot_topography(epochs[1], 1) # Condition 1, Epoch 1
 EegFun.plot_topography(epochs[2], 1) # Condition 2, Epoch 1
-EegFun.plot_topography(epochs, ylim = (-0.1, 0.1)) # NOTE: Consider adding aspect ratio and global scale controls in the future
+EegFun.plot_topography(epochs, colorrange = (-0.1, 0.1)) # NOTE: Consider adding aspect ratio and global scale controls in the future
 EegFun.plot_topography(epochs, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6)
 
 
@@ -207,21 +207,21 @@ EegFun.plot_topography(epochs, sample_selection = x -> x.time .>= 0.4 .&& x.time
 #################################
 erps = EegFun.average_epochs(epochs)
 
-EegFun.plot_topography(erps, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6, ylim = (-2, 2), time_unit = :ms)
-EegFun.plot_topography(erps, interval_selection = (0.4, 0.6), ylim = (-2, 2))
+EegFun.plot_topography(erps, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6, colorrange = (-2, 2), time_unit = :ms)
+EegFun.plot_topography(erps, interval_selection = (0.4, 0.6), colorrange = (-2, 2))
 
-EegFun.plot_topography(erps, interval_selection = (0.4, 0.6), ylim = (-2, 2), colorbar_plot_numbers = [1, 2])
+EegFun.plot_topography(erps, interval_selection = (0.4, 0.6), colorrange = (-2, 2), colorbar_plot_numbers = [1, 2])
 
 EegFun.plot_topography(
     erps,
     interval_selection = (0.4, 0.6),
-    ylim = (-2, 2),
+    colorrange = (-2, 2),
     colorbar_plot = true,
     colorbar_kwargs = (; position = (2, 1), vertical = false),
 )
 
 EegFun.plot_topography(erps)
-EegFun.plot_topography(erps, ylim = (-2, 2))
+EegFun.plot_topography(erps, colorrange = (-2, 2))
 EegFun.plot_topography(erps[2])
 EegFun.plot_topography(erps[1], gridscale = 50)
 EegFun.plot_topography(erps[2], gridscale = 1000)

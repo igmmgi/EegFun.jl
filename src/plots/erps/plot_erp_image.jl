@@ -19,6 +19,7 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Title
     :plot_title => (nothing, "Plot title"),
+    :show_title => (true, "Show plot title (true/false)"),
     :plot_title_fontsize => (16, "Font size for plot titles"),
     :plot_title_position => (
         nothing,
@@ -146,7 +147,7 @@ function plot_erp_image(
     kwargs...,
 )
     # Merge default kwargs with provided kwargs
-    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_IMAGE_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_IMAGE_KWARGS, _normalize_plot_kwargs(kwargs))
 
     # Use subset to get the data we want to plot (same pattern as other functions)
     dat_subset =
@@ -251,9 +252,16 @@ function plot_erp_image(
             data = _apply_boxcar_average(data, plot_kwargs[:boxcar_average])
         end
 
-        # Set color range if not provided
-        if isnothing(plot_kwargs[:colorrange])
-            plot_kwargs[:colorrange] = extrema(data)
+        # Set color range if not provided (use local cr so multi-channel plots don't reuse ch 1's extrema,
+        # and auto-compute symmetric limits on diverging colormaps)
+        resolved_cmap = _resolve_theme_colormap(ax, plot_kwargs[:colormap])
+        cr = if !isnothing(plot_kwargs[:colorrange])
+            plot_kwargs[:colorrange]
+        elseif _is_diverging_colormap(resolved_cmap)
+            _symmetric_colorrange(extrema(data)...)
+        else
+            dmin, dmax = extrema(data)
+            dmin == dmax ? (dmin - 1.0, dmax + 1.0) : (dmin, dmax)
         end
 
         # Create heatmap
@@ -262,8 +270,8 @@ function plot_erp_image(
             time_vec,
             epoch_range,
             transpose(data),
-            colormap = _resolve_theme_colormap(ax, plot_kwargs[:colormap]),
-            colorrange = plot_kwargs[:colorrange],
+            colormap = resolved_cmap,
+            colorrange = cr,
             interpolate = plot_kwargs[:interpolate],
         )
         push!(heatmaps, hm)
@@ -277,7 +285,7 @@ function plot_erp_image(
             if plot_kwargs[:plot_erp]
                 ax.xticklabelsvisible = false
             end
-        elseif plot_layout.type == :topo
+        elseif plot_layout.type == :topo && plot_kwargs[:show_title]
             # Set channel name as title for topo layout
             ax.title = string(channel)
         end
@@ -317,11 +325,18 @@ function plot_erp_image(
         end
     end
 
-    # Apply axis properties to all axes (sets labels on all axes first)
-    _apply_axis_properties!.(axes; plot_kwargs...)
+    # Apply axis properties to heatmap axes WITHOUT waveform ylim (ylim is for ax_erp, not epoch indices!)
+    heatmap_axis_kwargs = copy(plot_kwargs)
+    heatmap_axis_kwargs[:ylim] = nothing
+    _apply_axis_properties!.(axes; heatmap_axis_kwargs...)
 
     # Then apply layout-specific properties (clears labels on inner axes for grid layouts)
-    _apply_layout_axis_properties!(axes, plot_layout; plot_kwargs...)
+    _apply_layout_axis_properties!(axes, plot_layout; heatmap_axis_kwargs...)
+
+    # Ensure epoch index y-limits remain (1, n_eps) on all heatmap axes
+    for ax in axes
+        ylims!(ax, (1, n_eps))
+    end
 
     # For plot_erp_image, we want to show tick marks (but not labels) on all axes (including topo layouts)
     # Override the decoration hiding that _apply_layout_axis_properties! does for topo layouts

@@ -20,7 +20,7 @@ channel_delete!(dat, [:Fp1, :Fp2, :Diode]) # Delete multiple channels
 # Notes
 - Only channels that exist in the data will be deleted
 - Updates both the data columns and the layout rows
-- Clears any cached neighbour information in the layout since channels have changed
+- Clears any cached neighbor information in the layout since channels have changed
 """
 function channel_delete!(dat::EegData, channels_to_delete::AbstractVector{Symbol})
 
@@ -41,10 +41,10 @@ function channel_delete!(dat::EegData, channels_to_delete::AbstractVector{Symbol
     if !isempty(channels_in_layout)
         filter!(:label => ∉(channels_in_layout), dat.layout.data)
 
-        # Clear neighbours if they exist (since channels have changed)
-        if has_neighbours(dat.layout)
-            @info "channel_delete!: Clearing neighbours since channels have changed"
-            clear_neighbours!(dat.layout)
+        # Clear neighbors if they exist (since channels have changed)
+        if has_neighbors(dat.layout)
+            @info "channel_delete!: Clearing neighbors since channels have changed"
+            clear_neighbors!(dat.layout)
         end
     end
 
@@ -110,7 +110,7 @@ new_dat = channel_delete(dat, [:Fp1, :Fp2, :Diode]) # Delete multiple channels
 # Notes
 - Only channels that exist in the data will be deleted
 - Updates both the data columns and the layout rows
-- Clears any cached neighbour information in the layout since channels have changed
+- Clears any cached neighbor information in the layout since channels have changed
 - The original data is not modified
 """
 channel_delete(dat::EegData, channels_to_delete::AbstractVector{Symbol}) = channel_delete!(copy(dat), channels_to_delete)

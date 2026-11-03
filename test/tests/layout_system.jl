@@ -181,6 +181,12 @@ using DataFrames
         # Should respect user title, not override with channel names
         @test axes[1].title[] == "User Title"
         @test axes[2].title[] == "User Title"
+
+        # Should hide titles when show_title = false
+        axes_hidden, _ = EegFun._apply_layout!(fig, layout; xgrid = true, ygrid = true, xminorgrid = false, yminorgrid = false)
+        EegFun._apply_layout_axis_properties!(axes_hidden, layout; plot_title = "Ignored", show_title = false)
+        @test axes_hidden[1].title[] == ""
+        @test axes_hidden[2].title[] == ""
     end
 
     @testset "Topographic Layout Properties" begin

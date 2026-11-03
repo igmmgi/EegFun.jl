@@ -142,8 +142,8 @@ function channel_summary(
             continue
         end
 
-        # Epoch number is now derived from vector index
-        original_epoch_number = epoch_idx
+        # Preserve actual :epoch ID when present (e.g., after epoch rejection), falling back to vector index
+        original_epoch_number = hasproperty(epoch_df, :epoch) && !isempty(epoch_df.epoch) ? Int(epoch_df.epoch[1]) : epoch_idx
 
         # Create ContinuousData from this epoch DataFrame  
         single_dat = ContinuousData(dat.file, epoch_df, dat.layout, dat.sample_rate, dat.analysis_info)
@@ -207,17 +207,23 @@ function _process_channel_summary_file(
         return (BatchResult(false, filename, "No recognized data variable"), DataFrame[])
     end
 
-    # Select conditions
-    data_var = _condition_select(data_var, condition_selection)
+    if !(data_var isa EegData || data_var isa AbstractVector{<:EegData})
+        return (
+            BatchResult(false, filename, "Invalid data type: expected EegData or Vector{<:EegData}, got $(typeof(data_var))"),
+            DataFrame[],
+        )
+    end
 
-    # Determine actual condition numbers for tracking
-    # After _condition_select, data_var is filtered but we need original condition numbers
-    condition_numbers = 1:length(data_var)
+    items = data_var isa AbstractVector ? data_var : [data_var]
 
-    # Process each condition and collect results
+    # Select conditions (matching .condition numbers when available, with positional fallback)
+    selected_indices = _select_conditions_by_field(items, condition_selection)
+    selected_items = items[selected_indices]
+
+    # Process each selected condition and collect results
     summary_dfs = DataFrame[]
-    for (cond_idx, data) in enumerate(data_var)
-        condition = condition_numbers[cond_idx]
+    for (cond_idx, data) in enumerate(selected_items)
+        condition = hasfield(typeof(data), :condition) ? data.condition : selected_indices[cond_idx]
 
         # Compute channel summary
         summary_df = channel_summary(

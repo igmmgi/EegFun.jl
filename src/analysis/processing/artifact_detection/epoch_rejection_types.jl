@@ -79,6 +79,16 @@ struct ZScoreRejectionInfo
     z_kurtosis::Vector{Rejection}
 end
 
+Base.copy(z::ZScoreRejectionInfo) = ZScoreRejectionInfo(
+    copy(z.z_measures),
+    copy(z.z_variance),
+    copy(z.z_max),
+    copy(z.z_min),
+    copy(z.z_abs),
+    copy(z.z_range),
+    copy(z.z_kurtosis),
+)
+
 """
     EpochRejectionInfo
 
@@ -107,6 +117,21 @@ mutable struct EpochRejectionInfo
     rejected::Vector{Rejection}
     repaired::Union{OrderedDict{Int,Vector{Symbol}},Nothing}
     skipped::Union{OrderedDict{Int,Vector{Symbol}},Nothing}
+end
+
+function Base.copy(info::EpochRejectionInfo)
+    return EpochRejectionInfo(
+        info.name,
+        info.info,
+        info.n_artifacts,
+        info.abs_criterion,
+        isnothing(info.abs_rejections) ? nothing : copy(info.abs_rejections),
+        info.z_criterion,
+        isnothing(info.z_rejections) ? nothing : copy(info.z_rejections),
+        copy(info.rejected),
+        isnothing(info.repaired) ? nothing : OrderedDict{Int,Vector{Symbol}}(k => copy(v) for (k, v) in info.repaired),
+        isnothing(info.skipped) ? nothing : OrderedDict{Int,Vector{Symbol}}(k => copy(v) for (k, v) in info.skipped),
+    )
 end
 
 """Return unique rejections from an `EpochRejectionInfo`."""

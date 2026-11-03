@@ -66,20 +66,20 @@ function signal_example_convolution()
     FS    = 512.0   # fixed sample rate (Hz)
     EPOCH = 2.0     # epoch length (s)
 
-    fig = _eegfun_figure(size = (1300, 650), figure_padding = (8, 8, 8, 8), title = "Convolution Demo")
+    fig = _eegfun_figure(size = (1350, 650), figure_padding = (8, 8, 8, 8), title = "Convolution Demo")
 
     # ── Font sizing ──────────────────────────────────────────────────────────
-    lbl_sz   = Observable(17)
-    tick_sz  = Observable(14)
-    title_sz = Observable(19)
-    ctrl_sz  = Observable(17)
+    lbl_sz   = Observable(15)
+    tick_sz  = Observable(12)
+    title_sz = Observable(18)
+    ctrl_sz  = Observable(15)
 
     on(fig.scene.viewport) do area
-        sf         = area.widths[1] / 3000
-        lbl_sz[]   = max(12, round(Int, 17 * sf))
-        tick_sz[]  = max(10, round(Int, 14 * sf))
-        title_sz[] = max(14, round(Int, 19 * sf))
-        ctrl_sz[]  = max(12, round(Int, 17 * sf))
+        sf         = area.widths[1] / 1350
+        lbl_sz[]   = max(11, round(Int, 15 * sf))
+        tick_sz[]  = max(10, round(Int, 12 * sf))
+        title_sz[] = max(13, round(Int, 18 * sf))
+        ctrl_sz[]  = max(11, round(Int, 15 * sf))
     end
 
     # ── Axes ─────────────────────────────────────────────────────────────────
@@ -253,9 +253,10 @@ function signal_example_convolution()
         end
     end
 
+    is_applying_preset = Ref(false)
     for obs in (kernel_pos, kernel_width, kernel_type, wavelet_freq, wavelet_cycles, sig_freq, noise_lvl)
         on(obs) do _
-            update()
+            is_applying_preset[] || update()
         end
     end
     update()
@@ -382,7 +383,7 @@ function signal_example_convolution()
         @async begin
             try
                 for p = 0.0:0.01:1.0
-                    !is_playing[] && break
+                    (!is_playing[] || !events(fig).window_open[]) && break
                     set_close_to!(sl_pos, p)
                     sleep(0.05)   # 5 seconds total
                 end
@@ -394,26 +395,38 @@ function signal_example_convolution()
 
     on(btn_denoise.clicks) do _
         is_playing[] = false
-        idx = findfirst(x -> x == "Gaussian", kernel_options)
-        if !isnothing(idx)
-            menu_kt.i_selected[] = idx
+        is_applying_preset[] = true
+        try
+            idx = findfirst(x -> x == "Gaussian", kernel_options)
+            if !isnothing(idx)
+                menu_kt.i_selected[] = idx
+            end
+            set_close_to!(sl_kw, 0.15)
+            set_close_to!(sl_sf, 4.0)
+            set_close_to!(sl_nl, 0.5)
+            set_close_to!(sl_pos, 0.0)
+        finally
+            is_applying_preset[] = false
         end
-        set_close_to!(sl_kw, 0.15)
-        set_close_to!(sl_sf, 4.0)
-        set_close_to!(sl_nl, 0.5)
-        set_close_to!(sl_pos, 0.0)
+        update()
     end
 
     on(btn_wavelet.clicks) do _
         is_playing[] = false
-        idx = findfirst(x -> x == "Wavelet (Morlet)", kernel_options)
-        if !isnothing(idx)
-            menu_kt.i_selected[] = idx
+        is_applying_preset[] = true
+        try
+            idx = findfirst(x -> x == "Wavelet (Morlet)", kernel_options)
+            if !isnothing(idx)
+                menu_kt.i_selected[] = idx
+            end
+            set_close_to!(sl_wf, 8.0)
+            set_close_to!(sl_sf, 8.0)
+            set_close_to!(sl_nl, 0.0)
+            set_close_to!(sl_pos, 0.0)
+        finally
+            is_applying_preset[] = false
         end
-        set_close_to!(sl_wf, 8.0)
-        set_close_to!(sl_sf, 8.0)
-        set_close_to!(sl_nl, 0.0)
-        set_close_to!(sl_pos, 0.0)
+        update()
     end
 
     # ── Row sizing ────────────────────────────────────────────────────────────

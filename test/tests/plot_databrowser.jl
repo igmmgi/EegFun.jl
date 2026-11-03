@@ -7,8 +7,27 @@ using DataFrames
     dat = EegFun.create_test_continuous_data(n_channels = 3)
 
     @testset "basic functionality" begin
-        fig = EegFun.plot_databrowser(dat; display_plot = false)
-        @test fig.fig isa Figure
+        res = EegFun.plot_databrowser(dat; display_plot = false)
+        @test res.fig isa Figure
+        @test res.axes isa Vector{Axis}
+        @test res.axes == [res.ax]
+    end
+
+    @testset "custom reference with underscored channel names" begin
+        cdat_u = EegFun.create_test_continuous_data(n = 500, n_channels = 3)
+        DataFrames.rename!(cdat_u.data, Dict(:Ch1 => :EOG_L, :Ch2 => :EOG_R, :Ch3 => :Fz))
+        cdat_u.layout.data.label = [:EOG_L, :EOG_R, :Fz]
+        plot_kwargs = EegFun._merge_plot_kwargs(EegFun.PLOT_DATABROWSER_KWARGS, Dict{Symbol,Any}())
+        fig = Figure()
+        ax = Axis(fig[1, 1])
+        state = EegFun._create_browser_state(cdat_u, cdat_u.layout.data.label, ax, nothing, plot_kwargs)
+        state.reference_state = :custom
+        state.custom_reference_channels = [:EOG_L, :EOG_R]
+        EegFun._rebuild_current!(state)
+        @test state.analysis_settings[].reference == :custom
+        @test state.custom_reference_channels == [:EOG_L, :EOG_R]
+        expected_fz = cdat_u.data[!, :Fz] .- 0.5 .* (cdat_u.data[!, :EOG_L] .+ cdat_u.data[!, :EOG_R])
+        @test state.data.current[].data[!, :Fz] ≈ expected_fz
     end
 
     @testset "with ICA" begin

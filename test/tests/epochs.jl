@@ -1420,4 +1420,73 @@ using Random
         @test res4[1] == [[101, 103], 200]
     end
 
+    @testset "Phase 2 regressions: signed offsets, non-zero start time, meta col order, reject_epochs!" begin
+        # 1. Windows not crossing 0.0: post-only (0.2, 0.8) and pre-only (-0.8, -0.2), plus time[1] != 0.0
+        fs = 100
+        n_samp = 500
+        # Start recording at t = 10.0s instead of 0.0s
+        t_vec = 10.0 .+ collect(0:(n_samp-1)) ./ fs
+        trig = zeros(Int, n_samp)
+        trig[201] = 1 # trigger at t = 12.0s (200 samples after start)
+        df_offset = DataFrame(
+            time = t_vec,
+            sample = 1:n_samp,
+            trigger = trig,
+            block_id = fill(7, n_samp),
+            Ch1 = collect(1.0:n_samp),
+            Ch2 = collect(1.0:n_samp) .* 2.0,
+        )
+        lay_offset = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
+        # Note: block_id is an extra non-EEG column; test standard 3 meta cols vs fewer/more meta cols
+        cont_offset = EegFun.ContinuousData("offset_test", df_offset, lay_offset, fs, EegFun.AnalysisInfo())
+        ec_single = EegFun.EpochCondition(name = "stim", trigger_sequences = [[1]], reference_index = 1)
+
+        ep_post = EegFun.extract_epochs(cont_offset, 1, ec_single, (0.2, 0.8))
+        @test EegFun.n_epochs(ep_post) == 1
+        @test ep_post.data[1].time[1] ≈ 0.2 atol = 1e-9
+        @test ep_post.data[1].time[end] ≈ 0.8 atol = 1e-9
+        @test nrow(ep_post.data[1]) == 61
+        @test ep_post.data[1].Ch1[1] == 221.0 # index 201 + 20
+
+        ep_pre = EegFun.extract_epochs(cont_offset, 1, ec_single, (-0.8, -0.2))
+        @test EegFun.n_epochs(ep_pre) == 1
+        @test ep_pre.data[1].time[1] ≈ -0.8 atol = 1e-9
+        @test ep_pre.data[1].time[end] ≈ -0.2 atol = 1e-9
+        @test nrow(ep_pre.data[1]) == 61
+        @test ep_pre.data[1].Ch1[1] == 121.0 # index 201 - 80
+
+        # 2. :epoch placement after length(meta_labels(dat)) (not hardcoded col 4 when e.g. only :time and :trigger exist)
+        df_2meta = DataFrame(time = t_vec, trigger = trig, Ch1 = collect(1.0:n_samp), Ch2 = collect(1.0:n_samp))
+        cont_2meta = EegFun.ContinuousData("meta2", df_2meta, lay_offset, fs, EegFun.AnalysisInfo())
+        ep_2meta = EegFun.extract_epochs(cont_2meta, 1, ec_single, (-0.1, 0.1))
+        @test propertynames(ep_2meta.data[1])[1:3] == [:time, :trigger, :epoch]
+
+        # 3. reject_epochs! with Symbol / Vector{Symbol} flag columns and Vector{EpochData}
+        ep_flag = EegFun.create_test_epoch_data(n = 50, n_epochs = 4, n_channels = 2)
+        for (idx, df) in enumerate(ep_flag.data)
+            df[!, :bad_a] = fill(idx == 2, nrow(df))
+            df[!, :bad_b] = fill(idx == 4, nrow(df))
+        end
+        ep_flag_single = copy(ep_flag)
+        EegFun.reject_epochs!(ep_flag_single, :bad_a)
+        @test EegFun.n_epochs(ep_flag_single) == 3
+
+        ep_flag_multi = copy(ep_flag)
+        EegFun.reject_epochs!(ep_flag_multi, [:bad_a, :bad_b])
+        @test EegFun.n_epochs(ep_flag_multi) == 2
+
+        # Vector{EpochData} with Vector{EpochRejectionInfo} and with Symbol flag
+        ep_v1, _ = EegFun.create_test_epoch_data_with_artifacts(condition = 1, n_epochs = 5, n_bad_epochs = 1)
+        ep_v2, _ = EegFun.create_test_epoch_data_with_artifacts(condition = 2, n_epochs = 5, n_bad_epochs = 1)
+        vec_ep = [ep_v1, ep_v2]
+        rejs = EegFun.detect_bad_epochs_automatic(vec_ep, z_criterion = 2.0)
+        expected_v = EegFun.reject_epochs(vec_ep, rejs)
+        EegFun.reject_epochs!(vec_ep, rejs)
+        @test length.(getfield.(vec_ep, :data)) == length.(getfield.(expected_v, :data))
+
+        vec_flag = [copy(ep_flag), copy(ep_flag)]
+        EegFun.reject_epochs!(vec_flag, :bad_a)
+        @test all(EegFun.n_epochs(d) == 3 for d in vec_flag)
+    end
+
 end

@@ -17,6 +17,7 @@ mutable struct AmicaLearningRate{T<:Real}
     newt_ramp::Int
     minrho::T
     maxrho::T
+    step_halved::Bool
 end
 
 function AmicaLearningRate(
@@ -48,6 +49,7 @@ function AmicaLearningRate(
         newt_ramp,
         T(minrho),
         T(maxrho),
+        false,
     )
 end
 
@@ -409,17 +411,32 @@ function update_amica_mixing!(
         end
 
         if posdef
-            lrate.lrate = min(lrate.newtrate, lrate.lrate + min(T(1.0) / lrate.newt_ramp, lrate.lrate))
+            if lrate.step_halved
+                lrate.lrate = min(lrate.newtrate, lrate.lrate)
+                lrate.step_halved = false
+            else
+                lrate.lrate = min(lrate.newtrate, lrate.lrate + min(T(1.0) / lrate.newt_ramp, lrate.lrate))
+            end
             A .-= lrate.lrate .* A * B
             return no_newton
         else
             no_newton = true
-            lrate.lrate = min(lrate.lrate0, lrate.lrate + min(T(1.0) / lrate.newt_ramp, lrate.lrate))
+            if lrate.step_halved
+                lrate.lrate = min(lrate.lrate0, lrate.lrate)
+                lrate.step_halved = false
+            else
+                lrate.lrate = min(lrate.lrate0, lrate.lrate + min(T(1.0) / lrate.newt_ramp, lrate.lrate))
+            end
             A .-= lrate.lrate .* A * dA
             return no_newton
         end
     else
-        lrate.lrate = min(lrate.lrate0, lrate.lrate + min(T(1.0) / lrate.newt_ramp, lrate.lrate))
+        if lrate.step_halved
+            lrate.lrate = min(lrate.lrate0, lrate.lrate)
+            lrate.step_halved = false
+        else
+            lrate.lrate = min(lrate.lrate0, lrate.lrate + min(T(1.0) / lrate.newt_ramp, lrate.lrate))
+        end
         A .-= lrate.lrate .* A * dA
         return no_newton
     end
@@ -446,6 +463,7 @@ function calculate_amica_lrate!(
         else
             lrate.lrate *= lrate.lratefact
             lrate.shapelrate *= lrate.shapelratefact
+            lrate.step_halved = true
             lrate.numdecs += 1
             if lrate.numdecs >= lrate.maxdecs
                 lrate.lrate0 *= lrate.lratefact
@@ -542,6 +560,7 @@ function amica_ica(
     best_ll = -Inf
     best_snap = snap()
     converged = false
+    aborted_nonfinite = false
     consecutive_conv = 0
     tol = prep.prms.default_stop > 0 ? prep.prms.default_stop : 1e-7
     last_iter = 0
@@ -574,6 +593,7 @@ function amica_ica(
 
             if !isfinite(LL_iter) || isnan(LL_iter)
                 @minimal_warning "AMICA encountered non-finite log-likelihood ($LL_iter) at iteration $iter. Rolling back to best model."
+                aborted_nonfinite = true
                 restore!(best_snap)
                 break
             end
@@ -623,6 +643,10 @@ function amica_ica(
             if iter == 1 || iter % 10 == 0
                 @info Printf.@sprintf("AMICA iter %d, LL = %.7f", iter, LL[iter])
             end
+        end
+
+        if !converged && !aborted_nonfinite
+            @minimal_warning "AMICA did not converge within $maxiter iterations (best LL = $(round(best_ll, digits=7))). Returning best model encountered."
         end
 
         # Ensure parameters correspond to the best model if not converged or last step degraded
@@ -733,6 +757,7 @@ function _amica_optimize_gpu!(
     best_ll = -Inf
     best_snap = snap_gpu()
     converged = false
+    aborted_nonfinite = false
     consecutive_conv = 0
     tol = params.default_stop > 0 ? params.default_stop : 1e-7
     last_iter = 0
@@ -807,6 +832,7 @@ function _amica_optimize_gpu!(
 
         if !isfinite(LL_iter) || isnan(LL_iter)
             @minimal_warning "AMICA GPU encountered non-finite log-likelihood ($LL_iter) at iteration $iter. Rolling back to best model."
+            aborted_nonfinite = true
             restore_gpu!(best_snap)
             break
         end
@@ -910,6 +936,10 @@ function _amica_optimize_gpu!(
         if iter == 1 || iter % 10 == 0
             @info Printf.@sprintf("AMICA iter %d, LL = %.7f", iter, LL[iter])
         end
+    end
+
+    if !converged && !aborted_nonfinite
+        @minimal_warning "AMICA GPU did not converge within $maxiter iterations (best LL = $(round(best_ll, digits=7))). Returning best model encountered."
     end
 
     if best_ll > -Inf && (!converged || (last_iter > 0 && LL[last_iter] < best_ll))

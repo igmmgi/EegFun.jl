@@ -60,5 +60,24 @@ using DataFrames
     @test_throws EegFun.EegFunError EegFun.freq_spectrum(c_dat; overlap = -0.1)
     @test_throws EegFun.EegFunError EegFun.freq_spectrum(c_dat; overlap = 1.0)
     @test_throws EegFun.EegFunError EegFun.freq_spectrum(c_dat; overlap = 1.5)
+    @test_throws EegFun.EegFunError EegFun.freq_spectrum(c_dat; window_size = 0)
+    @test_throws EegFun.EegFunError EegFun.freq_spectrum(c_dat; window_size = n_samples + 10)
     @test_throws EegFun.EegFunError EegFun.freq_spectrum(c_dat; channel_selection = EegFun.channels(Symbol[]))
+
+    # 6. Per-epoch Welch PSD avoids inter-epoch step-discontinuity broadband leakage
+    ep_step = EegFun.create_test_epoch_data(n = 256, fs = fs, n_epochs = 6, n_channels = 1, seed = 99)
+    ep_const = copy(ep_step)
+    for (idx, df) in enumerate(ep_step.data)
+        df.Ch1 .= isodd(idx) ? 500.0 : -500.0  # pure DC within every epoch, huge jump between epochs
+    end
+    for df in ep_const.data
+        df.Ch1 .= 500.0
+    end
+    spec_step = EegFun.freq_spectrum(ep_step; window_size = 128)
+    spec_const = EegFun.freq_spectrum(ep_const; window_size = 128)
+    @test spec_step.data.Ch1 ≈ spec_const.data.Ch1
+
+    spec_rect = EegFun.freq_spectrum(ep_step; window_size = 128, window_function = ones)
+    high_freq_bins = spec_rect.data.freq .>= 10.0
+    @test maximum(spec_rect.data.Ch1[high_freq_bins]) < 1e-20
 end

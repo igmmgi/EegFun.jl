@@ -9,61 +9,48 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 
 ### Added
 
-- Memory leak fixes and performance optimizations in `plot_databrowser` (cached ICA activations, coordinate buffers).
-- Complete `Base` array and `Tables.jl` interfaces for `EegData` types.
-- Canonical accessors (`time_vector`, `frequency_vector`, etc.) and `show` methods across stats types.
-- Expanded unit test suites for statistics, decoding, and signal processing.
-- Added `format_version = EEGFUN_FORMAT_VERSION` (version 1) to pipeline JLD2 output and added format compatibility checks on load in `read_data`.
-
-### Fixed
-
-- LLM-guided refactor and fixes across the ICA pipeline (`infomax.jl`, `picard.jl`, `amica.jl`, `artifact_id.jl`, `components.jl`):
-  - **Algorithm Corrections**: Aligned Extended Infomax natural gradient with Lee et al. (1999) / EEGLAB `runica.m` for correct sub-Gaussian separation; fixed Extended Picard line-search loss evaluation and stabilized the block Hessian solve; added parameter snapshot rollback, non-divergent scale updates, and kurtosis-based sub-Gaussian detection to AMICA.
-  - **Component Subtraction & Restoration**: Fixed rank-deficient component restoration in `add_ica_components!` ($X + s A_c^T M_c^T$) preserving variance orthogonal to the ICA subspace; guarded against duplicate indices and re-subtraction overwrite; added `EpochData` and `Vector{DataFrame}` support with arbitrary numeric column types (`Float32`, `Float64`); optimized memory layout in `samples × channels`, eliminating `permutedims` copies and ~75% peak memory.
-  - **Artifact Identification**: Implemented top-level keyword argument routing; robust MAD-scaled z-scoring and directional thresholding; ECG polarity invariance and continuous sample coordinate mapping for IBIs; Welch's periodogram for line noise estimation.
-  - **Architecture & Performance**: Unified input preprocessing/postprocessing (`_ica_preprocess`, `_ica_postprocess`) with rank-deficiency detection, input copy protection, and activation power variance sorting; accelerated CPU/GPU execution via BLAS `mul!`, register accumulation, and tensor preallocations.
-- State consistency, observer lifecycle, and pipeline ordering in `plot_databrowser`.
-- Channel line coloring under ICA overlay in `plot_databrowser`, defaulting to showing only original data in standard channel color, with dynamic switching to green upon enabling "Data - ICA", and fixing callback `MethodError` on toggle.
-- `BoundsError` and trial power averaging across time-frequency pipelines.
-- `MethodError` in out-of-place `channel_repairable`.
-- CI documentation build failure by pinning readabilities plugin.
-- Respected `display_plot = false` in `plot_tf`.
-- Guarded error logging across GUI plotting routines.
-- Thread safety of permutation loops (`permutation_test` ERP/TF, non-parametric threshold collection) and epoch rereferencing: per-thread scratch buffers were indexed with `Threads.threadid()`, which is unsafe under the default `:dynamic` scheduler (tasks can migrate between threads). Work is now split into chunks that own their buffers.
-- Permutation results no longer depend on the number of threads: all permutations are pre-drawn on the calling task. The TF non-parametric threshold and cluster inference now use the same permutations (as the ERP path already did), and the GPU path uses the same permutations as the CPU path.
-- Aligned two-tailed cluster permutation testing with FieldTrip (`correcttail`): two-tailed tests now test each tail at `alpha / 2.0` (`cluster_alpha`) to control family-wise error rate at α.
-- Fixed one-tailed non-parametric thresholding to evaluate the quantile across the full distribution of permutation t-values instead of only positive values.
-- Upgraded RSA model comparison permutation tests to Mantel-style condition-label permutations, with unbiased `(extreme_count + 1) / (n_permutations + 1)` p-value computation and an `rng` keyword.
-- Ensured thread-count-independent reproducibility in multi-threaded decoding analysis (`decode_libsvm`) by pre-drawing per-iteration RNG seeds on the main task from a user-specifiable `rng` keyword.
-- Standardized cluster significance testing to `p <= alpha`.
-- Prevented unwanted mutation of layout neighbour structures in Time-Frequency and ERP permutation testing by operating on layout copies.
-- Added warnings when spherical spline interpolation operators fail during channel repair in `autoreject!`.
-- Updated `AnalysisInfo.sample_rate` to `Float64` to prevent inexact errors and ensured synchronization during `resample!`.
-- `isequal`/`hash` contract for `EegData`, `Layout`, `AnalysisInfo` and `Neighbours`: equal objects now hash equally (safe as `Dict` keys / in `Set`s), `isequal` treats `NaN`s as equal, and `Neighbours` compare by value rather than identity.
-- `isapprox` on EEG data now also requires matching sample rates.
+- Deep `Base.copy` methods across all core, rejection, statistical, decoding, and RSA data containers (`ContinuousData`, `EpochData`, `ErpData`, `TimeFreqData`, `TimeFreqEpochData`, `SpectrumData`, `EpochRejectionInfo`, `PermutationResult`, `DecodedData`, `RsaData`, etc.).
+- Complete `Base` array and `Tables.jl` interfaces, canonical accessors (`time_vector`, `frequency_vector`, etc.), and `show` methods across data and statistics types.
+- `format_version = EEGFUN_FORMAT_VERSION` (version `1`) metadata in `.jld2` outputs with load-time compatibility checks in `read_data`, plus `JLD2.rconvert` shims for legacy `Neighbours` and 5-field `Layout` archives and `"neighbour_criterion"` `.toml` configs.
+- `list_bids_runs` and BIDS `electrodes.tsv` / `coordsystem.json` layout import in `read_bids`.
+- `DimensionalData.DimArray` support for `SpectrumData` and non-contiguous/subsetted `TimeFreqData` and `TimeFreqEpochData` (`EegFunDimensionalDataExt`).
+- `tf_baseline` / `baseline!` support for `TimeFreqEpochData`.
+- Smulders (2010) jackknife pseudovalue support via `pseudovalues::Bool` in `jackknife_average` and `jackknife_average(::ErpMeasurementsResult)`.
+- `area_boundary` (`:rectified`, `:positive`, `:negative`, `:signed`) and `peak_polarity` (`:abs`, `:positive`, `:negative`) options in `erp_measurements`.
+- `RideComponent` `time_window` support and reaction-time median centering (`RideResult.latency_offsets`) in `compute_ride`.
+- Separate `alpha` (cluster-level FWER) and `cluster_alpha` (point-wise cluster-forming threshold) keywords in `permutation_test`, and explicit `rng` keywords across `permutation_test`, `decode_libsvm`, `test_against_chance_cluster`, `rsa_crossvalidated`, and `compare_models!`.
+- Non-mutating `add_noise_ceiling`, `calculate_eog_channels`, and `detect_eog_onsets`, mutating `compare_models!`, and `create_rdm`.
 
 ### Changed
 
-- Bumped minimum supported Julia version to 1.13 across `Project.toml`, GitHub Actions CI, documentation, and badges.
-- Modularized repository source structure (`ica/`, `utils/data/`, `artifact_detection/`).
-- Exported and documented missing functions in `public_api.jl`, standardizing on `@minimal_error`.
-- Updated to `AnovaFun` 0.5 with explicit Makie backend loading.
-- Optimized allocations across time-frequency, CSD, permutations, decoding, and GPU ICA.
-- Accelerated topography rendering with batched interpolation and observable binding.
-- `using EegFun` no longer overrides the global Makie theme. `theme_eegfun()` is applied per figure to figures created by EegFun; user customisations (`set_theme!`, `with_theme`, `update_theme!`) take precedence over the EegFun defaults.
-- Added `rng` keyword to `permutation_test` (ERP and TF) and `test_against_chance_cluster` for reproducible results (defaults to `Random.default_rng()`).
-- Seeded synthetic-data helpers and the ICA demos no longer reseed the user's global RNG.
-- Adopted EEGLAB `pop_eegfiltnew` default transition width heuristics for FIR filters (`min(max(0.25*fc, 2 Hz), fc)` for highpass, `min(max(0.25*fc, 2 Hz), fs/2 - fc)` for lowpass).
-- Unified selector helpers (`components`, `channels_not`, `components_not`, `epochs_not`, `participants_not`, `conditions_not`) to be consistently position-based with support for ranges and arbitrary predicate functions via `_negate_selector`.
-- Unified duplicated ERP and Time-Frequency statistical routines (parametric/non-parametric thresholding, p-matrix calculation, critical t-value calculation, significance masking, and label shuffling) into generic N-dimensional array methods.
-- Cleaned up `Project.toml` `[compat]` bounds: added standard library compats, bumped CUDA to 5 and 6, Tables to 1, and removed redundant test-only DataFrames entry.
+- Standardized British `neighbour*` identifiers, types/fields (`Neighbors`, `Layout.neighbors`), keyword arguments (`neighbors`, `neighbor_criterion`), and `.toml` keys to US English `neighbor*` repo-wide.
+- Enforced a strict zero-export API (`0` `export` declarations; 400 curated `public` declarations in `src/public_api.jl`), updating `generate_pipeline_template()`, docstrings, and tutorials to qualify calls with `EegFun.`.
+- Standardized `plot_*` return values to `NamedTuple`s starting with `(; fig, axes, ...)`, and renamed the TF significance mask keyword in `plot_tf_stats` from `significance` to `mask_style`.
+- Aligned `tf_morlet`, `tf_stft`, and `tf_multitaper` with MNE discrete L2 wavelet normalization (`||W||_2 = sqrt(2)`, `power = |c|^2 / fs`) and zero-padded linear FFT convolution.
+- Defaulted `analytic_test` multiple-comparison `correction_method` to `:none` (accepting `:no` as an alias).
+- Bumped minimum supported Julia version to `1.13` across `Project.toml`, CI workflows, and documentation, updated `AnovaFun` to `0.5`, and tightened `Project.toml` `[compat]` bounds (`EuropeanDataFormat` `0.1.1`, `CUDA` `5, 6`, `Tables` `1`, `FFTA` `0.3.0 - 0.3.1, 0.3.3 - 0.3` excluding broken upstream `0.3.2`).
+- Modularized repository source structure (`ica/`, `utils/data/`, `artifact_detection/`) and unified N-dimensional ERP/TF statistical routines and position-based selector negation (`_negate_selector`).
+- `using EegFun` no longer overrides the global Makie theme; `theme_eegfun()` is applied per figure so user `set_theme!` / `with_theme` settings take precedence.
+- Seeded synthetic-data helpers, interactive demos, and `src/precompile.jl` use local RNGs instead of mutating `Random.default_rng()`.
+- Adopted EEGLAB `pop_eegfiltnew` default FIR transition-width heuristics (`min(max(0.25*fc, 2 Hz), fc)` for highpass; `min(max(0.25*fc, 2 Hz), fs/2 - fc)` for lowpass).
+
+### Fixed
+
+- **MVPA Decoding (`decode_libsvm`)**: Added strictly within-fold training-set feature z-scoring (eliminating test-set leakage); enabled linear SVM bias/intercept (`bias = 1.0`); scored imbalanced folds (`equalize_trials = false`) with macro-averaged balanced accuracy so true chance equals `1 / n_classes`; moved `equalize_trials = true` subsampling inside each Monte Carlo iteration; removed erroneous `1 / sqrt(n_iterations)` scaling of iteration SD; and freed C-heap `LIBLINEAR` models via `free_and_destroy_model` under `GC.@preserve`.
+- **RSA (`rsa_crossvalidated`, `compute_noise_ceiling`, `rsa`)**: Replaced biased within-half RDM averaging with unbiased cross-fold inner products (Crossnobis / cross-validated squared Euclidean; Walther et al., 2016) and demeaned Ledoit–Wolf covariance shrinkage; added Nili et al. (2014) rank/z-normalization to group noise ceilings; implemented tie-aware Spearman `tiedrank`; and switched model comparison permutation tests to Mantel condition-label permutations with `(extreme_count + 1) / (n_permutations + 1)` p-values.
+- **Time-Frequency & Spectrum**: Eliminated circular FFT wrap-around bleed across epoch boundaries in `tf_morlet`, `tf_stft`, and `tf_multitaper`; extracted primary-taper (`k = 1`) phase in `tf_multitaper` (avoiding cancellation across antisymmetric odd DPSS tapers); replaced arithmetic phase averaging with circular means (`atan(mean(sin), mean(cos))`) in `condition_average` and `channel_average`; and changed `freq_spectrum(::EpochData)` from concatenated-epoch Welch to per-epoch Welch PSD averaging.
+- **Statistics (`permutation_test`, `analytic_test`, `test_against_chance_cluster`)**: Replaced single-pass `sum(x^2) - sum(x)^2 / n` variance with centered two-pass variance on CPU and GPU; doubled stored `cluster.p_value` (`min(1.0, 2 * p_one_sided)`) when `tail == :both` to match two-sided `alpha`; stopped flagging `NaN` p-values with `t > 0` as significant in `_apply_bonferroni_correction`; evaluated one-tailed non-parametric thresholds across the full permutation `t`-distribution; made permutation RNG pre-drawing and chunk-owned scratch buffers thread-count-independent and safe under `:dynamic` task migration; and avoided mutating input `Layout.neighbors`.
+- **ICA (`infomax.jl`, `picard.jl`, `amica.jl`, `artifact_id.jl`, `components.jl`)**: Aligned Extended Infomax natural gradient with Lee et al. (1999) / EEGLAB `runica.m` for sub-Gaussian sources; fixed Extended Picard line-search loss and block Hessian conditioning; added parameter rollback and kurtosis sub-Gaussian updates to AMICA; preserved variance orthogonal to rank-deficient ICA subspaces in `add_ica_components!`; added `AbstractVector{<:EpochData}` support to `subtract_ica_components!` / `subtract_ica_components`; and added MAD-scaled z-scoring, polarity-invariant ECG IBI detection, and Welch line-noise estimation in artifact identification.
+- **Signal Processing, Artifact Repair, ERPs & RIDE**: Fixed Thomson F-test harmonic phase reconstruction in `cleanline!`; stabilized Perrin spherical-spline matrix conditioning and metadata-column isolation in `repair_channels!`, `repair_artifacts!`, and `compute_csd!`, with warnings on operator failure in `autoreject!`; fixed `jackknife_average` stamping `first_erp.file` onto all excluded participants and misaligning batch outputs when conditions were missing; added `MultiDataFrameEeg` overloads for `subset_bad_data` and out-of-place `channel_repairable`; and updated `AnalysisInfo.sample_rate` to `Float64` with synchronization during `resample!`.
+- **Data Containers & I/O**: Eliminated shallow-copy aliasing of `DataFrame`, `Layout`, and `AnalysisInfo` fields in non-mutating functions; fixed `isequal`/`hash` (`NaN`-safe equality and value-based `Neighbors` hashing) and sample-rate checks in `isapprox`; and fixed non-integer `srate` rounding, missing epoch triggers, `:sample`/`:epoch` columns, and empty layout coordinate initialization in `read_eeglab`, `read_fieldtrip`, and `read_bids`.
+- **Plotting (`plot_databrowser`, `plot_tf`, GUIs)**: Fixed `plot_databrowser` ICA activation caching, multi-channel `Ctrl`-click selection, legend channel linking, and "Data - ICA" trace toggling/coloring; respected `display_plot = false` across plotting routines; and guarded GUI observer lifecycles and error logging.
 
 ### Removed
 
 - Deprecated mutating batch string aliases (`realign!`, `calculate_trigger_interval!`).
-- Legacy compatibility overloads (old `Layout` JLD2 conversion, obsolete decoding layouts).
-- Inconsistent `Base` methods on EEG data types: `IndexStyle`, scalar `eltype` (`Float64`), linear `firstindex(dat)`/`lastindex(dat)`, and implicit `convert(Matrix/Array/DataFrame, dat)`. Use `Matrix(dat)`, `Array(dat)` or `DataFrame(dat)` explicitly. `eltype` of epoch-type data is now `DataFrame` (matching iteration).
-- Removed dead internal functions (`_empty_spatial_kurtosis_metrics`, `_rereference!`, `_get_time_bounds`, `_notify_data_update`, `_reset_to_original!`, `_add_to_collection!`).
+- Internal helper symbols and `StatsAPI` re-declarations from `src/public_api.jl` (`Component`, `coef`, `confint`, `nobs`, `stderror`, `signal_to_data`, `from_dict`, `allcomb`, `consecutive`, `repair_channels_neighbor!`, `repair_artifacts_neighbor!`, `repair_artifacts_spherical_spline!`).
+- Inconsistent `Base` methods on EEG data types: `IndexStyle`, scalar `eltype` (`Float64`), linear `firstindex(dat)`/`lastindex(dat)`, and implicit `convert(Matrix/Array/DataFrame, dat)` (use explicit `Matrix(dat)`, `Array(dat)`, or `DataFrame(dat)`; epoch `eltype` is now `DataFrame`).
+- Unused internal helpers (`_empty_spatial_kurtosis_metrics`, `_rereference!`, `_get_time_bounds`, `_notify_data_update`, `_reset_to_original!`, `_add_to_collection!`).
 
 ## [0.8.0] - 2026-08-13
 

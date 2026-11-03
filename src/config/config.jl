@@ -8,14 +8,14 @@ A struct to define configuration parameters with type and validation constraints
 # Fields
 - `description::String`: Human-readable description of the parameter
 - `default::Union{Nothing,T}`: Default value (or nothing if required)
-- `allowed::Union{Nothing,Vector{String}}`: List of allowed values (or nothing if any value is allowed)
+- `allowed::Union{Nothing,Vector{Any}}`: List of allowed values (or nothing if any value is allowed)
 - `min::Union{Nothing,T}`: Minimum value for numeric parameters (or nothing)
 - `max::Union{Nothing,T}`: Maximum value for numeric parameters (or nothing)
 """
 @kwdef struct ConfigParameter{T}
     description::String
     default::Union{Nothing,T} = nothing
-    allowed::Union{Nothing,Vector} = nothing
+    allowed::Union{Nothing,Vector{Any}} = nothing
     min::Union{Nothing,T} = nothing
     max::Union{Nothing,T} = nothing
 end
@@ -85,9 +85,8 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "preprocess.interactive_epochs" => bool_param("Pause execution to interactively review epoch rejection", false),
     "preprocess.epoch_start" => number_param("Epoch start (seconds).", -1),
     "preprocess.epoch_end" => number_param("Epoch end (seconds).", 1),
-    "preprocess.reference_channel" => simple_string_param("Channels(s) to use as reference", "avg"),
-    "preprocess.layout.neighbour_criterion" =>
-        number_param("Distance criterion (normalized) for channel neighbour definition.", 0.25, 0),
+    "preprocess.reference_channel" => string_param("Channel(s) to use as reference", "avg"),
+    "preprocess.layout.neighbor_criterion" => number_param("Distance criterion (normalized) for channel neighbor definition.", 0.35, 0),
     "preprocess.eog.vEOG_channels" => channel_groups_param(
         "Channels used in the calculation of vertical eye movements (vEOG).",
         [["Fp1", "Fp2"], ["IO1", "IO2"], ["vEOG"]],
@@ -96,14 +95,15 @@ const PARAMETERS = Dict{String,ConfigParameter}(
         channel_groups_param("Channels used in the calculation of horizontal eye movements (hEOG).", [["F9"], ["F10"], ["hEOG"]]),
     "preprocess.eog.vEOG_criterion" => number_param("Distance criterion for vertical EOG channel definition.", 50, 0),
     "preprocess.eog.hEOG_criterion" => number_param("Distance criterion for horizontal EOG channel definition.", 30, 0),
-    "preprocess.eeg.extreme_value_abs_criterion" => number_param("Value (mV) for defining data section as an extreme value.", 500),
+    "preprocess.eeg.extreme_value_abs_criterion" => number_param("Value (μV) for defining data section as an extreme value.", 500),
     "preprocess.eeg.artifact_value_abs_criterion" =>
-        number_param("Value (mV) for defining data section (or epoch) as an artifact value.", 100),
+        number_param("Value (μV) for defining data section (or epoch) as an artifact value.", 100),
     "preprocess.eeg.artifact_value_z_criterion" => number_param(
         "Value (z) for defining data section (or epoch) as an artifact value (NB. various statistics with 0 being off!).",
         0,
     ),
     "preprocess.eeg.artifact_interval_start" => number_param("Start time (s) for artifact rejection (optional).", nothing),
+    "preprocess.eeg.artifact_interval_end" => number_param("End time (s) for artifact rejection (optional).", nothing),
     "preprocess.channel_repair.method" =>
         simple_string_param("Method for bad channel interpolation (:spherical_spline or :neighbor_interpolation)", "spherical_spline"),
 
@@ -124,6 +124,8 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     # ICA settings
     "preprocess.ica.apply" => bool_param("Independent Component Analysis (ICA) true/false.", true),
     "preprocess.ica.percentage_of_data" => number_param("Percentage of data to use for ICA (0-100).", 100.0, 0.0, 100.0),
+    "preprocess.ica.component_method" =>
+        symbol_param("Method for identifying artifact components (:correlation).", :correlation, allowed = [:correlation]),
 
     # CleanLine settings
     "preprocess.cleanline.apply" => bool_param("Apply CleanLine algorithm to remove line noise?", false),
@@ -170,15 +172,9 @@ end
 # === MAIN CONFIGURATION FUNCTIONS ===
 
 """
-    read_config(config_file::String)
+    _generate_default_config() -> Dict{String,Any}
 
-Load and merge configuration from a TOML file with defaults.
-
-# Arguments
-- `config_file::String`: Path to the configuration file
-
-# Returns
-- `Union{Dict,Nothing}`: The loaded configuration or nothing if loading failed
+Generate a nested configuration dictionary populated with default values from `PARAMETERS`.
 """
 function _generate_default_config()
     config = Dict{String,Any}()
@@ -199,10 +195,44 @@ function _generate_default_config()
     return config
 end
 
+# Normalize legacy parameter spellings in-place before merging/validation.
+function _normalize_legacy_config!(user_config::AbstractDict)
+    if haskey(user_config, "preprocess") && user_config["preprocess"] isa AbstractDict
+        prep = user_config["preprocess"]
+        if haskey(prep, "neighbour_criterion")
+            @minimal_warning "'preprocess.neighbour_criterion' is deprecated; use 'preprocess.layout.neighbor_criterion' instead."
+            val = pop!(prep, "neighbour_criterion")
+            if !haskey(prep, "layout") || !(prep["layout"] isa AbstractDict)
+                prep["layout"] = Dict{String,Any}()
+            end
+            if !haskey(prep["layout"], "neighbor_criterion")
+                prep["layout"]["neighbor_criterion"] = val
+            end
+        end
+        if haskey(prep, "layout") && prep["layout"] isa AbstractDict
+            layout_cfg = prep["layout"]
+            if haskey(layout_cfg, "neighbour_criterion")
+                @minimal_warning "'preprocess.layout.neighbour_criterion' is deprecated; use 'preprocess.layout.neighbor_criterion' instead."
+                val = pop!(layout_cfg, "neighbour_criterion")
+                if !haskey(layout_cfg, "neighbor_criterion")
+                    layout_cfg["neighbor_criterion"] = val
+                end
+            end
+        end
+    end
+    return user_config
+end
+
 """
     read_config(config_file::String)
 
-Read a TOML configuration file into a dictionary.
+Load, validate, and merge configuration from a TOML file with default parameters.
+
+# Arguments
+- `config_file::String`: Path to the configuration file
+
+# Returns
+- `Dict{String,Any}`: The loaded and validated configuration dictionary
 """
 function read_config(config_file::String)
     default_config = _generate_default_config()
@@ -218,6 +248,8 @@ function read_config(config_file::String)
     catch e
         @minimal_error "Error parsing TOML file: $(sprint(showerror, e))"
     end
+
+    _normalize_legacy_config!(user_config)
 
     # Merge, convert types, and validate
     config = _merge_configs(default_config, user_config)

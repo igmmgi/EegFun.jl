@@ -11,23 +11,23 @@ This means a function can have the same name but do different things depending o
 In Julia function signatures, the `::` notation means *"this argument must be of this type"*:
 
 ```julia
-plot_erp(erp::ErpData)         # plots a single ERP
-plot_erp(erp::Vector{ErpData}) # plots multiple ERPs overlaid
+EegFun.plot_erp(erp::EegFun.ErpData)         # plots a single ERP
+EegFun.plot_erp(erp::Vector{EegFun.ErpData}) # plots multiple ERPs overlaid
 ```
 
-Here `erp::ErpData` means "an argument called `erp` of type `ErpData`". Julia automatically selects the right function version based on what you pass in — you never need to call a different function name.
+Here `erp::EegFun.ErpData` means "an argument called `erp` of type `EegFun.ErpData`". Julia automatically selects the right function version based on what you pass in — you never need to call a different function name.
 
 More examples from EegFun.jl:
 
 ```julia
 # Same function, different input types → different behaviour
-plot_topography(erp::ErpData, ...)          # plots ERP topography
-plot_topography(tf::TimeFreqData, ...)      # plots time-frequency topography
+EegFun.plot_topography(erp::EegFun.ErpData, ...)          # plots ERP topography
+EegFun.plot_topography(tf::EegFun.TimeFreqData, ...)      # plots time-frequency topography
 
-average_epochs(dat::EpochData)              # averages a single condition
-average_epochs(dat::Vector{EpochData})      # averages multiple conditions
+EegFun.average_epochs(dat::EegFun.EpochData)              # averages a single condition
+EegFun.average_epochs(dat::Vector{EegFun.EpochData})      # averages multiple conditions
 
-extract_epochs(dat::ContinuousData, ...)    # extracts from continuous recording
+EegFun.extract_epochs(dat::EegFun.ContinuousData, ...)    # extracts from continuous recording
 ```
 
 Both are called `plot_erp` — Julia picks the right function version automatically based on what you pass in. You never need to call a different function name.
@@ -149,7 +149,7 @@ Electrode spatial information and neighbor relationships.
 | Field | Type | Description |
 |-------|------|-------------|
 | `data` | `DataFrame` | Positions with columns: `label`, `x`, `y`, `z` |
-| `neighbours` | `Union{Nothing, OrderedDict{Symbol,Neighbours}}` | Neighbor info per electrode |
+| `neighbors` | `Union{Nothing, OrderedDict{Symbol,Neighbors}}` | Neighbor info per electrode |
 | `criterion` | `Union{Nothing, Float64}` | Distance criterion used to compute neighbors (mm) |
 | `criterion_type` | `Union{Nothing, Symbol}` | Type of criterion (e.g. `:xy`, `:xyz`) |
 

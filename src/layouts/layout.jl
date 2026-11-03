@@ -147,15 +147,15 @@ end
 
 # === LAYOUT I/O FUNCTIONS ===
 """
-    read_layout(file::String)
+    read_layout(file::String) -> Layout
 
-Reads a layout file in CSV format and returns a DataFrame containing the layout information.
+Reads a layout file in CSV format and returns a `Layout` object containing the layout information.
 
 # Arguments
 - `file::String`: The path to the CSV file containing the layout data.
 
 # Returns
-- `DataFrame`: A DataFrame containing the layout data, with columns for electrode labels, incidence angles, azimuth angles, and calculated Cartesian coordinates (if applicable).
+- `Layout`: A Layout object containing the electrode labels, incidence angles, azimuth angles, and any Cartesian coordinates present in the file.
 
 # Throws
 - `EegFunError`: If the file does not exist or cannot be accessed.
@@ -236,7 +236,7 @@ Converts polar coordinates (incidence and azimuth angles) from a layout into Car
 
 # Modifies
 - The input `layout` is modified in place to include new columns `x2` and `y2`, which represent the Cartesian coordinates calculated from the polar coordinates.
-- Clears any existing neighbour information since coordinates have changed.
+- Clears any existing neighbor information since coordinates have changed.
 
 # Returns
 - `Layout`: The modified layout object with `x2` and `y2` columns added.
@@ -256,9 +256,9 @@ function polar_to_cartesian_xy!(layout::Layout; normalization_radius::Real = 1.0
     end
 
     # Vectorized conversion (degrees to radians + polar to cartesian)
-    rad_factor = pi / 180
-    inc = df.inc .* rad_factor
-    azi = df.azi .* rad_factor
+    rad_factor = Float64(pi / 180)
+    inc = Float64.(df.inc) .* rad_factor
+    azi = Float64.(df.azi) .* rad_factor
 
     x2 = inc .* cos.(azi)
     y2 = inc .* sin.(azi)
@@ -289,7 +289,7 @@ function polar_to_cartesian_xy!(layout::Layout; normalization_radius::Real = 1.0
         df[!, :y2] = y2 .* scale_factor
     end
 
-    clear_neighbours!(layout)
+    clear_neighbors!(layout)
     return layout
 end
 
@@ -308,7 +308,7 @@ Converts polar coordinates (incidence and azimuth angles) from a layout into Car
 
 # Modifies
 - The input `layout` is modified in place to include new columns `x3`, `y3`, and `z3`, which represent the Cartesian coordinates calculated from the polar coordinates.
-- Clears any existing neighbour information since coordinates have changed.
+- Clears any existing neighbor information since coordinates have changed.
 
 # Returns
 - `Layout`: The modified layout object with `x3`, `y3`, and `z3` columns added.
@@ -323,13 +323,21 @@ function polar_to_cartesian_xyz!(layout::Layout)
         @minimal_error ":inc and :azi columns must contain numeric values"
     end
 
-    rad_factor = pi / 180
-    inc = df.inc .* rad_factor
-    azi = df.azi .* rad_factor
+    rad_factor = Float64(pi / 180)
+    inc = Float64.(df.inc) .* rad_factor
+    azi = Float64.(df.azi) .* rad_factor
 
     x3 = sin.(inc) .* cos.(azi)
     y3 = sin.(inc) .* sin.(azi)
     z3 = cos.(inc)
+
+    if isempty(x3)
+        df[!, :x3] = Float64[]
+        df[!, :y3] = Float64[]
+        df[!, :z3] = Float64[]
+        clear_neighbors!(layout)
+        return layout
+    end
 
     # Optimize range and centering
     min_x, max_x = extrema(x3)
@@ -349,7 +357,7 @@ function polar_to_cartesian_xyz!(layout::Layout)
         df[!, :z3] = z3
     end
 
-    clear_neighbours!(layout)
+    clear_neighbors!(layout)
     return layout
 end
 
@@ -419,16 +427,16 @@ end
 # === NEIGHBOR CALCULATIONS ===
 
 """
-    _find_neighbours(labels, coords, distance_criterion) -> Dict
+    _find_neighbors(labels, coords, distance_criterion) -> Dict
 
-Internal helper to identify neighbours utilizing distance symmetry.
+Internal helper to identify neighbors utilizing distance symmetry.
 """
-function _find_neighbours(labels, coords, distance_criterion)
+function _find_neighbors(labels, coords, distance_criterion)
     n = length(labels)
     crit_sq = distance_criterion^2
 
     # Initialize adjacency-like structure
-    # electrode_index => (neighbour_indices, distances)
+    # electrode_index => (neighbor_indices, distances)
     adj = [(Int[], Float64[]) for _ = 1:n]
 
     # Nested loop exploiting symmetry
@@ -454,14 +462,14 @@ function _find_neighbours(labels, coords, distance_criterion)
     end
 
     # Transform to Dict with weights
-    neighbour_dict = Dict{Symbol,Neighbours}()
+    neighbor_dict = Dict{Symbol,Neighbors}()
 
     for i = 1:n
         label = Symbol(labels[i])
         nb_indices, dists = adj[i]
 
         if isempty(nb_indices)
-            neighbour_dict[label] = Neighbours(Symbol[], Float64[], Float64[])
+            neighbor_dict[label] = Neighbors(Symbol[], Float64[], Float64[])
             continue
         end
 
@@ -473,39 +481,39 @@ function _find_neighbours(labels, coords, distance_criterion)
         total_inv = sum(inv_d)
         weights = inv_d ./ total_inv
 
-        neighbour_dict[label] = Neighbours(nb_labels, dists, weights)
+        neighbor_dict[label] = Neighbors(nb_labels, dists, weights)
     end
 
-    return neighbour_dict
+    return neighbor_dict
 end
 
 # === NEIGHBOR UTILITIES ===
 """
-    _format_neighbours_toml(neighbours_dict::Dict{Symbol, Neighbours}, nneighbours::Real)
+    _format_neighbors_toml(neighbors_dict::Dict{Symbol, Neighbors}, nneighbors::Real)
 
-Helper function to format the neighbours dictionary as TOML structure.
+Helper function to format the neighbors dictionary as TOML structure.
 """
-function _format_neighbours_toml(neighbours_dict::Dict{Symbol,Neighbours}, nneighbours::Real)
+function _format_neighbors_toml(neighbors_dict::Dict{Symbol,Neighbors}, nneighbors::Real)
     toml_dict = OrderedDict{String,Any}()
 
     # Add metadata first
     toml_dict["metadata"] = OrderedDict(
-        "average_neighbours_per_electrode" => round(nneighbours, digits = 2),
-        "total_electrodes" => length(neighbours_dict),
+        "average_neighbors_per_electrode" => round(nneighbors, digits = 2),
+        "total_electrodes" => length(neighbors_dict),
         "generated_at" => string(now()),
     )
 
     # Add electrode data in alphabetical order
     toml_dict["electrodes"] = OrderedDict{String,Any}()
 
-    for electrode in sort(collect(keys(neighbours_dict)))
-        neighbours = neighbours_dict[electrode]
+    for electrode in sort(collect(keys(neighbors_dict)))
+        neighbors = neighbors_dict[electrode]
         electrode_str = string(electrode)
         toml_dict["electrodes"][electrode_str] = OrderedDict(
-            "neighbours" => [string(n) for n in neighbours.channels],
-            "distances" => [round(d, digits = 4) for d in neighbours.distances],
-            "weights" => [round(w, digits = 6) for w in neighbours.weights],
-            "neighbour_count" => length(neighbours.channels),
+            "neighbors" => [string(n) for n in neighbors.channels],
+            "distances" => [round(d, digits = 4) for d in neighbors.distances],
+            "weights" => [round(w, digits = 6) for w in neighbors.weights],
+            "neighbor_count" => length(neighbors.channels),
         )
     end
 
@@ -513,7 +521,7 @@ function _format_neighbours_toml(neighbours_dict::Dict{Symbol,Neighbours}, nneig
 end
 
 """
-    print_layout_neighbours(neighbours_dict::Dict{Symbol, Neighbours}, filename::String)
+    print_layout_neighbors(neighbors_dict::Dict{Symbol, Neighbors}, filename::String)
 
 Write the neighbors dictionary to a TOML file in a structured format, showing for each electrode:
 - Its neighbors
@@ -524,72 +532,72 @@ Write the neighbors dictionary to a TOML file in a structured format, showing fo
 The electrodes are printed in alphabetical order.
 
 # Arguments
-- `neighbours_dict::Dict{Symbol, Neighbours}`: Dictionary returned by get_electrode_neighbours_xy/xyz
+- `neighbors_dict::Dict{Symbol, Neighbors}`: Dictionary returned by get_electrode_neighbors_xy/xyz
 - `filename::String`: Path to the output TOML file
 
 # Example
 ```julia
 layout = read_layout("./layouts/biosemi64.csv")
-get_neighbours_xy!(layout, 0.4)
+get_neighbors_xy!(layout, 0.4)
 
 # Write to TOML file
-print_layout_neighbours(layout.neighbours, "neighbours.toml")
+print_layout_neighbors(layout.neighbors, "neighbors.toml")
 ```
 """
-function print_layout_neighbours(neighbours_dict::Dict{Symbol,Neighbours}, filename::String)
-    nneighbours = average_number_of_neighbours(neighbours_dict)
-    toml_data = _format_neighbours_toml(neighbours_dict, nneighbours)
-    @info "Printing neighbours to $filename"
+function print_layout_neighbors(neighbors_dict::Dict{Symbol,Neighbors}, filename::String)
+    nneighbors = average_number_of_neighbors(neighbors_dict)
+    toml_data = _format_neighbors_toml(neighbors_dict, nneighbors)
+    @info "Printing neighbors to $filename"
     open(filename, "w") do io
         TOML.print(io, toml_data)
     end
 end
 
-function print_layout_neighbours(layout::Layout, filename::String)
-    if isnothing(layout.neighbours)
-        @minimal_error "No neighbours to print"
+function print_layout_neighbors(layout::Layout, filename::String)
+    if isnothing(layout.neighbors)
+        @minimal_error "No neighbors to print"
     end
-    print_layout_neighbours(layout.neighbours, filename)
+    print_layout_neighbors(layout.neighbors, filename)
 end
 
-function print_layout_neighbours(layout::Layout)
-    if isnothing(layout.neighbours)
-        @minimal_error "No neighbours to print"
+function print_layout_neighbors(layout::Layout)
+    if isnothing(layout.neighbors)
+        @minimal_error "No neighbors to print"
     end
-    nneighbours = average_number_of_neighbours(layout.neighbours)
-    toml_data = _format_neighbours_toml(layout.neighbours, nneighbours)
+    nneighbors = average_number_of_neighbors(layout.neighbors)
+    toml_data = _format_neighbors_toml(layout.neighbors, nneighbors)
     TOML.print(x -> x isa Symbol ? string(x) : x, stdout, toml_data, sorted = true)
 end
 
 """
-    average_number_of_neighbours(neighbours_dict::Dict{Symbol, Neighbours})
+    average_number_of_neighbors(neighbors_dict::Dict{Symbol, Neighbors})
 
-Calculate the average number of neighbours per electrode from a neighbours dictionary.
+Calculate the average number of neighbors per electrode from a neighbors dictionary.
 
 # Arguments
-- `neighbours_dict::Dict{Symbol, Neighbours}`: Dictionary containing neighbour information for each electrode
+- `neighbors_dict::Dict{Symbol, Neighbors}`: Dictionary containing neighbor information for each electrode
 
 # Returns
-- `Float64`: The average number of neighbours per electrode
+- `Float64`: The average number of neighbors per electrode
 
 # Example
 ```julia
 layout = read_layout("./layouts/biosemi64.csv")
-get_neighbours_xy!(layout, 0.4)
-avg_neighbours = average_number_of_neighbours(layout.neighbours)
+get_neighbors_xy!(layout, 0.4)
+avg_neighbors = average_number_of_neighbors(layout.neighbors)
 ```
 """
-function average_number_of_neighbours(neighbours_dict::Dict{Symbol,Neighbours})
-    if isempty(neighbours_dict)
+function average_number_of_neighbors(neighbors_dict::Dict{Symbol,Neighbors})
+    if isempty(neighbors_dict)
         return 0.0
     end
-    total_neighbours = sum(length(neighbours.channels) for neighbours in values(neighbours_dict))
-    return total_neighbours / length(neighbours_dict)
+    total_neighbors = sum(length(neighbors.channels) for neighbors in values(neighbors_dict))
+    return total_neighbors / length(neighbors_dict)
 end
 
-# Helper methods for neighbour management
+# Helper methods for neighbor management
 """
-    has_neighbours(layout::Layout) -> Bool
+    has_neighbors(layout::Layout) -> Bool
 
 Check if the layout has calculated neighbor information.
 
@@ -601,15 +609,15 @@ Check if the layout has calculated neighbor information.
 
 # Examples
 ```julia
-if has_neighbours(layout)
+if has_neighbors(layout)
     # Use neighbor information
 end
 ```
 """
-has_neighbours(layout::Layout) = !isnothing(layout.neighbours)
+has_neighbors(layout::Layout) = !isnothing(layout.neighbors)
 
 """
-    neighbour_criterion(layout::Layout) -> Union{Nothing, Float64}
+    neighbor_criterion(layout::Layout) -> Union{Nothing, Float64}
 
 Get the distance criterion used for neighbor calculations.
 
@@ -621,13 +629,13 @@ Get the distance criterion used for neighbor calculations.
 
 # Examples
 ```julia
-criterion = neighbour_criterion(layout)
+criterion = neighbor_criterion(layout)
 ```
 """
-neighbour_criterion(layout::Layout) = layout.criterion
+neighbor_criterion(layout::Layout) = layout.criterion
 
 """
-    neighbours(layout::Layout) -> Union{Nothing, Dict{Symbol, Neighbours}}
+    neighbors(layout::Layout) -> Union{Nothing, Dict{Symbol, Neighbors}}
 
 Get the neighbor information for all electrodes.
 
@@ -635,17 +643,17 @@ Get the neighbor information for all electrodes.
 - `layout::Layout`: The layout object
 
 # Returns
-- `Union{Nothing, Dict{Symbol, Neighbours}}`: Dictionary of neighbors for each electrode, or nothing if not calculated
+- `Union{Nothing, Dict{Symbol, Neighbors}}`: Dictionary of neighbors for each electrode, or nothing if not calculated
 
 # Examples
 ```julia
-neighbor_dict = neighbours(layout)
+neighbor_dict = neighbors(layout)
 ```
 """
-neighbours(layout::Layout) = layout.neighbours
+neighbors(layout::Layout) = layout.neighbors
 
 """
-    clear_neighbours!(layout::Layout)
+    clear_neighbors!(layout::Layout)
 
 Clear all neighbor information from the layout.
 
@@ -661,27 +669,27 @@ calculations need to be redone.
 
 # Examples
 ```julia
-clear_neighbours!(layout)
+clear_neighbors!(layout)
 ```
 """
-function clear_neighbours!(layout::Layout)
-    layout.neighbours = nothing
+function clear_neighbors!(layout::Layout)
+    layout.neighbors = nothing
     layout.criterion = nothing
     layout.criterion_type = nothing
     return layout
 end
 
-"""Filter a Neighbours struct to only include channels in `keep_set`, recomputing IDW weights."""
-function _subset_neighbours(nb::Neighbours, keep_set::Set{Symbol})
+"""Filter a Neighbors struct to only include channels in `keep_set`, recomputing IDW weights."""
+function _subset_neighbors(nb::Neighbors, keep_set::Set{Symbol})
     keep = [i for i in eachindex(nb.channels) if nb.channels[i] in keep_set]
-    isempty(keep) && return Neighbours(Symbol[], Float64[], Float64[])
+    isempty(keep) && return Neighbors(Symbol[], Float64[], Float64[])
     d = nb.distances[keep]
     inv_d = 1.0 ./ max.(d, 1e-6)
-    return Neighbours(nb.channels[keep], d, inv_d ./ sum(inv_d))
+    return Neighbors(nb.channels[keep], d, inv_d ./ sum(inv_d))
 end
 
 """
-    _format_electrode(io, electrode, neighbours)
+    _format_electrode(io, electrode, neighbors)
 
 Helper function to format a single electrode entry for display.
 
@@ -692,35 +700,36 @@ average distance, and detailed neighbor information.
 # Arguments
 - `io`: Output stream for writing
 - `electrode`: Electrode symbol
-- `neighbours`: Neighbours struct containing neighbor information
+- `neighbors`: Neighbors struct containing neighbor information
 
 # Examples
 ```julia
-_format_electrode(io, :Fp1, neighbours_struct)
+_format_electrode(io, :Fp1, neighbors_struct)
 ```
 """
-function _format_electrode(io, electrode, neighbours)
-    n_neighbours = length(neighbours.channels)
-    avg_distance = round(mean(neighbours.distances), digits = 2)
-
-    println(io, "$(rpad(string(electrode), 6)): $(n_neighbours) neighbours (avg dist: $(avg_distance))")
-    if n_neighbours > 0
-        neighbour_details = []
-        for j = 1:n_neighbours
-            neighbour = string(neighbours.channels[j])
-            distance = round(neighbours.distances[j], digits = 2)
-            weight = round(neighbours.weights[j], digits = 3)
-            push!(neighbour_details, "$(neighbour) ($(distance),$(weight))")
+function _format_electrode(io, electrode, neighbors)
+    n_neighbors = length(neighbors.channels)
+    if n_neighbors == 0
+        println(io, "$(rpad(string(electrode), 6)): 0 neighbors")
+    else
+        avg_distance = round(mean(neighbors.distances), digits = 2)
+        println(io, "$(rpad(string(electrode), 6)): $(n_neighbors) neighbors (avg dist: $(avg_distance))")
+        neighbor_details = String[]
+        for j = 1:n_neighbors
+            neighbor = string(neighbors.channels[j])
+            distance = round(neighbors.distances[j], digits = 2)
+            weight = round(neighbors.weights[j], digits = 3)
+            push!(neighbor_details, "$(neighbor) ($(distance),$(weight))")
         end
-        neighbour_list = join(neighbour_details, ", ")
-        println(io, "    Neighbours: $neighbour_list")
+        neighbor_list = join(neighbor_details, ", ")
+        println(io, "    Neighbors: $neighbor_list")
     end
     println(io)
 end
 
-# Get neighbours with automatic computation if needed (mutating)
+# Get neighbors with automatic computation if needed (mutating)
 """
-    get_neighbours_xy!(layout::Layout, distance_criterion::Real)
+    get_neighbors_xy!(layout::Layout, distance_criterion::Real)
 
 Get neighbors with automatic computation if needed (mutating version).
 
@@ -729,38 +738,38 @@ if the distance criterion has changed. It caches the results for efficiency.
 
 # Arguments
 - `layout::Layout`: The layout object
-- `distance_criterion::Real`: The distance criterion for neighbors in normalized coordinate units (e.g., 0.3–0.5; where 1.0 = the scalp equator at 90° incidence). Think of this as a fraction of the head radius: a value of 0.4 means “neighbours within 40% of the head radius.”
+- `distance_criterion::Real`: The distance criterion for neighbors in normalized coordinate units (e.g., 0.3–0.5; where 1.0 = the scalp equator at 90° incidence). Think of this as a fraction of the head radius: a value of 0.4 means “neighbors within 40% of the head radius.”
 
 # Modifies
 - `layout`: Updates neighbor information and criterion
 
 # Examples
 ```julia
-get_neighbours_xy!(layout, 0.4)
+get_neighbors_xy!(layout, 0.4)
 ```
 """
-function get_neighbours_xy!(layout::Layout, distance_criterion::Real)
-    if !has_neighbours(layout) || layout.criterion != distance_criterion || layout.criterion_type != :xy
+function get_neighbors_xy!(layout::Layout, distance_criterion::Real)
+    if !has_neighbors(layout) || layout.criterion != distance_criterion || layout.criterion_type != :xy
         if distance_criterion <= 0
             @minimal_error "Distance criterion must be positive"
         end
         _ensure_coordinates_2d!(layout)
 
-        @info "Calculating 2D neighbours with distance criterion $distance_criterion"
+        @info "Calculating 2D neighbors with distance criterion $distance_criterion"
 
         # Precompute coordinates as Point2f for efficiency
         coords = [Point2f(x, y) for (x, y) in zip(layout.data.x2, layout.data.y2)]
 
-        layout.neighbours = _find_neighbours(layout.data.label, coords, distance_criterion)
+        layout.neighbors = _find_neighbors(layout.data.label, coords, distance_criterion)
         layout.criterion = Float64(distance_criterion)
         layout.criterion_type = :xy
     end
     return layout
 end
-get_neighbours_xy!(dat::EegFunData, distance_criterion::Real) = (get_neighbours_xy!(dat.layout, distance_criterion); dat)
+get_neighbors_xy!(dat::EegFunData, distance_criterion::Real) = (get_neighbors_xy!(dat.layout, distance_criterion); dat)
 
 """
-    get_neighbours_xyz!(layout::Layout, distance_criterion::Real)
+    get_neighbors_xyz!(layout::Layout, distance_criterion::Real)
 
 Get neighbors with automatic computation if needed (mutating version).
 
@@ -769,27 +778,27 @@ if the distance criterion has changed. It caches the results for efficiency.
 
 # Arguments
 - `layout::Layout`: The layout object
-- `distance_criterion::Real`: The distance criterion for neighbors in normalized coordinate units (e.g., 0.3–0.5; where 1.0 = the scalp equator at 90° incidence). Think of this as a fraction of the head radius: a value of 0.4 means “neighbours within 40% of the head radius.”
+- `distance_criterion::Real`: The distance criterion for neighbors in normalized coordinate units (e.g., 0.3–0.5; where 1.0 = the scalp equator at 90° incidence). Think of this as a fraction of the head radius: a value of 0.4 means “neighbors within 40% of the head radius.”
 """
-function get_neighbours_xyz!(layout::Layout, distance_criterion::Real)
-    if !has_neighbours(layout) || layout.criterion != distance_criterion || layout.criterion_type != :xyz
+function get_neighbors_xyz!(layout::Layout, distance_criterion::Real)
+    if !has_neighbors(layout) || layout.criterion != distance_criterion || layout.criterion_type != :xyz
         if distance_criterion <= 0
             @minimal_error "Distance criterion must be positive"
         end
         _ensure_coordinates_3d!(layout)
 
-        @info "Calculating 3D neighbours with distance criterion $distance_criterion"
+        @info "Calculating 3D neighbors with distance criterion $distance_criterion"
 
         # Precompute coordinates as Point3f for efficiency
         coords = [Point3f(x, y, z) for (x, y, z) in zip(layout.data.x3, layout.data.y3, layout.data.z3)]
 
-        layout.neighbours = _find_neighbours(layout.data.label, coords, distance_criterion)
+        layout.neighbors = _find_neighbors(layout.data.label, coords, distance_criterion)
         layout.criterion = Float64(distance_criterion)
         layout.criterion_type = :xyz
     end
     return layout
 end
-get_neighbours_xyz!(dat::EegFunData, distance_criterion::Real) = (get_neighbours_xyz!(dat.layout, distance_criterion); dat)
+get_neighbors_xyz!(dat::EegFunData, distance_criterion::Real) = (get_neighbors_xyz!(dat.layout, distance_criterion); dat)
 
 # === LAYOUT VALIDATION AND MANIPULATION ===
 """
@@ -803,7 +812,7 @@ Modifies the layout in place.
 - `rename_dict::Dict{Symbol, Symbol}`: Dictionary mapping old channel names to new names
 
 # Returns
-- `nothing` (modifies the layout in place)
+- `Layout`: The modified layout object (modified in place)
 
 # Examples
 ```julia
@@ -820,7 +829,7 @@ rename_channel!(layout, Dict(:Cz => :Cz_new))
 
 # Notes
 - Only channels that exist in the layout will be renamed
-- Clears any cached neighbour information since channel names have changed
+- Clears any cached neighbor information since channel names have changed
 """
 function rename_channel!(layout::Layout, rename_dict::Dict{Symbol,Symbol})
     # Check if any channels in the rename_dict exist in the layout
@@ -866,10 +875,10 @@ function rename_channel!(layout::Layout, rename_dict::Dict{Symbol,Symbol})
         layout.data[row_idx, :label] = final_name
     end
 
-    # Clear any cached neighbour information since channel names have changed
-    if has_neighbours(layout)
-        @info "rename!: Clearing neighbours since channel names have changed"
-        clear_neighbours!(layout)
+    # Clear any cached neighbor information since channel names have changed
+    if has_neighbors(layout)
+        @info "rename!: Clearing neighbors since channel names have changed"
+        clear_neighbors!(layout)
     end
 
     @info "rename!: Renamed $(length(channels_found)) channels"
@@ -960,11 +969,11 @@ function subset_layout!(layout::Layout; channel_selection = channels())
 
     n_channels_after = length(selected_channels)
 
-    # Subset neighbour information to remaining channels (no-op when all kept)
-    if has_neighbours(layout) && n_channels_after < n_channels_before
+    # Subset neighbor information to remaining channels (no-op when all kept)
+    if has_neighbors(layout) && n_channels_after < n_channels_before
         remaining = Set(selected_channels)
-        layout.neighbours = Dict{Symbol,Neighbours}(
-            ch => _subset_neighbours(get(layout.neighbours, ch, Neighbours(Symbol[], Float64[], Float64[])), remaining) for
+        layout.neighbors = Dict{Symbol,Neighbors}(
+            ch => _subset_neighbors(get(layout.neighbors, ch, Neighbors(Symbol[], Float64[], Float64[])), remaining) for
             ch in selected_channels
         )
     end

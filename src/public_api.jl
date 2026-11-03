@@ -6,10 +6,8 @@
 # but remain accessible via EegFun.TypeName if needed.
 # Alphabetically sorted within each category.
 
-# TODO: seems far too many in here!
-# We need to trim this!
-
 # === Types — User-facing data, result, and config types ===
+public AnalysisInfo
 public AnalysisSettings
 public AnalyticResult
 public ArtifactComponents
@@ -18,8 +16,8 @@ public AutoRejectConfig
 public AutoRejectResult
 public BaselineInfo
 public BatchResult
+public ChannelRepairInfo
 public CleanLineConfig
-public Component
 public ContinuousData
 public ContinuousRepairInfo
 public DecodedData
@@ -30,8 +28,10 @@ public EegData
 public EegFunData
 public EegFunError
 public EogConfig
+public EpochCondition
 public EpochData
 public EpochRejectionInfo
+public EpochRejectionState
 public EpochRepairInfo
 public ErpData
 public ErpMeasurementsResult
@@ -40,21 +40,23 @@ public FilterConfig
 public FilterInfo
 public FilterSection
 public IcaConfig
-public InputFilesConfig
 public IcaPrms
 public InfoIca
+public InputFilesConfig
 public Interval
 public Layout
 public MultiDataFrameEeg
-public Neighbours
+public Neighbors
 public NoiseCeiling
 public OutputFilesConfig
 public PermutationResult
 public PipelineConfig
 public PipelineTemplateOptions
+public PlotLayout
 public PreprocessConfig
 public Rejection
 public ResampleConfig
+public RideComponent
 public RideResult
 public RsaData
 public SingleDataFrameEeg
@@ -69,6 +71,7 @@ public TimeFreqData
 public TimeFreqEpochData
 public TriggerInfo
 public ValidationResult
+public ZScoreRejectionInfo
 
 # === Data access and utilities ===
 public all_data
@@ -77,7 +80,6 @@ public channel_data
 public channel_labels
 public channels
 public channels_not
-public coef
 public common_channels
 public components
 public components_not
@@ -85,11 +87,9 @@ public condition_name
 public condition_number
 public conditions
 public conditions_not
-public confint
 public create_eegfun_data
 public duration
 public epoch_to_continuous
-public nobs
 public epochs
 public epochs_not
 public extra_data
@@ -116,7 +116,6 @@ public samples_not
 public samples_or
 public samples_or_not
 public section
-public stderror
 public subset
 public subset_bad_data
 public tail
@@ -127,39 +126,42 @@ public viewer
 
 # === I/O ===
 public download_eegfun_datasets
+public export_bids
 public find_file
 public get_files
+public list_bids_runs
 public read_all_data
+public read_bids
 public read_config
-public read_fieldtrip_csv
 public read_data
 public read_eeglab
 public read_fieldtrip
+public read_fieldtrip_csv
 public read_layout
 public read_raw_data
 public read_xdf
 
 # === Layout ===
-public average_number_of_neighbours
+public average_number_of_neighbors
 public check_channel_neighbors
-public clear_neighbours!
+public clear_neighbors!
 public create_custom_layout
 public create_layout
-public get_neighbours_xy!
-public get_neighbours_xyz!
+public get_neighbors_xy!
+public get_neighbors_xyz!
 public has_2d_coords
 public has_3d_coords
-public has_neighbours
+public has_neighbors
 public has_valid_coordinates
 public n_layout
-public neighbour_criterion
-public neighbours
+public neighbor_criterion
+public neighbors
 public polar_to_cartesian_xy!
 public polar_to_cartesian_xyz!
 public positions_2D
 public positions_3D
 public positions_polar
-public print_layout_neighbours
+public print_layout_neighbors
 public subset_layout
 public subset_layout!
 public validate_layout
@@ -218,8 +220,10 @@ public rename_channel
 public rename_channel!
 
 # === RSA (Representational Similarity Analysis) ===
+public add_noise_ceiling
 public add_noise_ceiling!
 public compare_models
+public compare_models!
 public compute_noise_ceiling
 public create_model_rdms
 public create_rdm
@@ -234,7 +238,6 @@ public autoreject!
 public compare_rejections
 public compute_csd
 public compute_csd!
-public consecutive
 public create_continuous_repair_info
 public create_epoch_repair_info
 public detect_bad_epochs_automatic
@@ -256,11 +259,8 @@ public n_peak_to_peak
 public n_step_value
 public repair_artifacts
 public repair_artifacts!
-public repair_artifacts_neighbor!
-public repair_artifacts_spherical_spline!
 public repair_channels
 public repair_channels!
-public repair_channels_neighbor!
 public summarize_electrode_repairs
 public unique_rejections
 
@@ -268,8 +268,10 @@ public unique_rejections
 public add_ica_components
 public add_ica_components!
 public amica_ica
+public calculate_eog_channels
 public calculate_eog_channels!
 public combine_artifact_components
+public detect_eog_onsets
 public detect_eog_onsets!
 public get_all_components
 public get_all_ica_components
@@ -334,7 +336,6 @@ public test_against_chance
 public test_against_chance_cluster
 
 # === Triggers ===
-public allcomb
 public search_sequence
 public trigger_count
 public trigger_info
@@ -344,13 +345,10 @@ public apply_analysis_settings
 public apply_analysis_settings!
 public batch_process
 public check_raw_data
-public export_bids
-public from_dict
 public generate_config_template
 public generate_pipeline_template
 public preprocess
 public print_config
-public read_bids
 public show_parameter_info
 public validate_config
 
@@ -425,7 +423,6 @@ public setup_logging
 
 # === Synthetic signal generation ===
 public generate_signal
-public signal_to_data
 
 # === Demos ===
 public signal_example_composition
@@ -435,6 +432,7 @@ public signal_example_dotproduct
 public signal_example_ecg_einthoven
 public signal_example_ecg_hrv
 public signal_example_emg
+public signal_example_eog
 public signal_example_heog
 public signal_example_ica_clt
 public signal_example_ica_geometry

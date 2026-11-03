@@ -62,8 +62,19 @@ function create_lowpass_filter(
     filter_method::Symbol = :iir,
     order::Integer = 2,
     transition_width::Union{Nothing,Real} = nothing,
+    transition_band_hz::Union{Nothing,Real} = nothing,
+    min_taps::Int = 101,
 )
-    return _create_filter(:lp, cutoff_freq, sample_rate, filter_method = filter_method, order = order, transition_width = transition_width)
+    return _create_filter(
+        :lp,
+        cutoff_freq,
+        sample_rate;
+        filter_method = filter_method,
+        order = order,
+        transition_width = transition_width,
+        transition_band_hz = transition_band_hz,
+        min_taps = min_taps,
+    )
 end
 
 
@@ -102,8 +113,41 @@ function create_highpass_filter(
     filter_method::Symbol = :iir,
     order::Integer = 2,
     transition_width::Union{Nothing,Real} = nothing,
+    transition_band_hz::Union{Nothing,Real} = nothing,
+    min_taps::Int = 101,
 )
-    return _create_filter(:hp, cutoff_freq, sample_rate, filter_method = filter_method, order = order, transition_width = transition_width)
+    return _create_filter(
+        :hp,
+        cutoff_freq,
+        sample_rate;
+        filter_method = filter_method,
+        order = order,
+        transition_width = transition_width,
+        transition_band_hz = transition_band_hz,
+        min_taps = min_taps,
+    )
+end
+
+
+function _resolve_transition_band_hz(
+    cutoff_freq::Real,
+    sample_rate::Real,
+    filter_type::Symbol,
+    transition_width::Union{Nothing,Real},
+)::Float64
+    if isnothing(transition_width)
+        if filter_type == :hp
+            return min(max(0.25 * cutoff_freq, 2.0), Float64(cutoff_freq))
+        else
+            return min(max(0.25 * cutoff_freq, 2.0), sample_rate / 2.0 - cutoff_freq)
+        end
+    elseif transition_width <= 0
+        @minimal_error "transition_width must be positive: $transition_width"
+    elseif transition_width <= 1.0
+        return Float64(cutoff_freq * transition_width)
+    else
+        return Float64(transition_width)
+    end
 end
 
 
@@ -115,6 +159,8 @@ function _create_filter(
     filter_method::Symbol = :iir,
     order::Integer = 2,
     transition_width::Union{Nothing,Real} = nothing,
+    transition_band_hz::Union{Nothing,Real} = nothing,
+    min_taps::Int = 101,
 )
 
     # Input validation
@@ -143,17 +189,12 @@ function _create_filter(
     # Create filter prototype/object based on type
     filter_prototype = filter_type == :hp ? Highpass(cutoff_freq) : Lowpass(cutoff_freq)
 
-    # Determine transition band width in Hz (EEGLAB pop_eegfiltnew heuristic by default)
-    transition_band = if isnothing(transition_width)
-        if filter_type == :hp
-            min(max(0.25 * cutoff_freq, 2.0), Float64(cutoff_freq))
-        else
-            min(max(0.25 * cutoff_freq, 2.0), sample_rate / 2.0 - cutoff_freq)
-        end
-    elseif transition_width <= 1.0
-        cutoff_freq * transition_width
+    # Determine transition band width in Hz (explicit Hz override or EEGLAB pop_eegfiltnew heuristic)
+    transition_band = if !isnothing(transition_band_hz)
+        transition_band_hz <= 0 && @minimal_error("transition_band_hz must be positive: $transition_band_hz")
+        Float64(transition_band_hz)
     else
-        Float64(transition_width)
+        _resolve_transition_band_hz(cutoff_freq, sample_rate, filter_type, transition_width)
     end
     n_taps = nothing
 
@@ -162,9 +203,8 @@ function _create_filter(
         filter_object = digitalfilter(filter_prototype, Butterworth(order); fs = sample_rate)
     elseif filter_method == :fir
         n_taps = Int(ceil(4.0 * sample_rate / transition_band))
-        n_taps = max(n_taps, 101)
-        n_taps = nextpow(2, n_taps)
-        n_taps += 1  # Always add 1 to make odd as nextpow2 is even
+        n_taps = max(n_taps, max(3, min_taps))
+        iseven(n_taps) && (n_taps += 1)  # Ensure odd tap count for symmetric linear-phase Type I FIR
         filter_object = digitalfilter(filter_prototype, FIRWindow(hamming(n_taps)); fs = sample_rate)
     end
 
@@ -178,32 +218,32 @@ end
 # === FILTER APPLICATION ===
 
 """
-    _ensure_fir_transition_width(dat::EegData, transition_width::Union{Nothing,Real}, cutoff_freq::Real, filter_type::Symbol = :hp) -> Real
+    _ensure_fir_transition_width(dat::EegData, transition_width::Union{Nothing,Real}, cutoff_freq::Real, filter_type::Symbol = :hp) -> Float64
 
-Ensures that the FIR filter transition width is wide enough to avoid crashing based on data length.
-Returns the required transition width.
+Ensures that the FIR filter transition width (in Hz) is wide enough so `n_taps <= (min_length - 1) ÷ 3`
+for zero-phase `filtfilt`. Always returns the resolved transition width in Hz.
 """
-function _ensure_fir_transition_width(dat::EegData, transition_width::Union{Nothing,Real}, cutoff_freq::Real, filter_type::Symbol = :hp)
+function _ensure_fir_transition_width(
+    dat::EegData,
+    transition_width::Union{Nothing,Real},
+    cutoff_freq::Real,
+    filter_type::Symbol = :hp,
+)::Float64
     min_length = dat.data isa Vector ? minimum(nrow.(dat.data)) : n_samples(dat)
-    min_required_transition_band = 12.0 * dat.sample_rate / min_length
-
-    actual_tb = if isnothing(transition_width)
-        if filter_type == :hp
-            min(max(0.25 * cutoff_freq, 2.0), Float64(cutoff_freq))
-        else
-            min(max(0.25 * cutoff_freq, 2.0), dat.sample_rate / 2.0 - cutoff_freq)
-        end
-    elseif transition_width <= 1.0
-        cutoff_freq * transition_width
-    else
-        Float64(transition_width)
+    if min_length < 10
+        @minimal_error("Data length ($min_length) is too short for zero-phase FIR filtering (minimum 10 samples required)")
     end
+    max_taps_raw = (min_length - 1) ÷ 3
+    max_odd_taps = max(3, iseven(max_taps_raw) ? max_taps_raw - 1 : max_taps_raw)
+    min_required_transition_band = (4.0 * dat.sample_rate / max_odd_taps) * (1.0 + 1e-12)
+
+    actual_tb = _resolve_transition_band_hz(cutoff_freq, dat.sample_rate, filter_type, transition_width)
 
     if actual_tb < min_required_transition_band
         @minimal_warning "FIR transition band $(round(actual_tb, digits=3)) Hz too narrow for data length $(min_length). Widening to $(round(min_required_transition_band, digits=3)) Hz to prevent crash."
         return min_required_transition_band
     end
-    return transition_width
+    return actual_tb
 end
 
 """
@@ -293,8 +333,12 @@ function lowpass_filter!(
     end
     @debug "lowpass_filter! applying lp filter at $cutoff_freq Hz to $(length(selected_channels)) channels"
 
+    transition_band_hz = nothing
+    min_taps = 101
     if filter_method == :fir && filter_func == :filtfilt
-        transition_width = _ensure_fir_transition_width(dat, transition_width, cutoff_freq, :lp)
+        transition_band_hz = _ensure_fir_transition_width(dat, transition_width, cutoff_freq, :lp)
+        min_length = dat.data isa Vector ? minimum(nrow.(dat.data)) : n_samples(dat)
+        min_taps = min_length >= 304 ? 101 : 3
     end
 
     filter_info = create_lowpass_filter(
@@ -303,6 +347,8 @@ function lowpass_filter!(
         filter_method = filter_method,
         order = order,
         transition_width = transition_width,
+        transition_band_hz = transition_band_hz,
+        min_taps = min_taps,
     )
     _update_filter_info!(dat, filter_info)
     _apply_filter!(dat.data, selected_channels, filter_info, filter_func = filter_func)
@@ -341,8 +387,12 @@ function highpass_filter!(
     end
     @debug "highpass_filter! applying hp filter at $cutoff_freq Hz to $(length(selected_channels)) channels"
 
+    transition_band_hz = nothing
+    min_taps = 101
     if filter_method == :fir && filter_func == :filtfilt
-        transition_width = _ensure_fir_transition_width(dat, transition_width, cutoff_freq, :hp)
+        transition_band_hz = _ensure_fir_transition_width(dat, transition_width, cutoff_freq, :hp)
+        min_length = dat.data isa Vector ? minimum(nrow.(dat.data)) : n_samples(dat)
+        min_taps = min_length >= 304 ? 101 : 3
     end
 
     filter_info = create_highpass_filter(
@@ -351,6 +401,8 @@ function highpass_filter!(
         filter_method = filter_method,
         order = order,
         transition_width = transition_width,
+        transition_band_hz = transition_band_hz,
+        min_taps = min_taps,
     )
     _update_filter_info!(dat, filter_info)
     _apply_filter!(dat.data, selected_channels, filter_info, filter_func = filter_func)
@@ -443,28 +495,13 @@ highpass_filter(dat::AbstractVector{<:EegData}, filter_cfg::FilterConfig; sectio
 # === FILTER ANALYSIS AND CHARACTERIZATION ===
 
 """
-    get_filter_characteristics(filter, sample_rate::Real, transition_width::Real; npoints::Int=1000)
+    get_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000, filter_func = :filtfilt)
 
 Calculate and return key characteristics of a digital filter.
-
-# Arguments
-- `filter`: A digital filter object (FIR coefficients or DSP.jl filter)
-- `sample_rate::Real`: Sampling rate in Hz
-- `transition_width::Real`: Width of transition band in Hz
-- `npoints::Int`: Number of frequency points for analysis (default: 1000)
-
-# Returns
-A NamedTuple containing:
-- `cutoff_freq_3db`: Frequency at -3dB point(s) in Hz
-- `cutoff_freq_6db`: Frequency at -6dB point(s) in Hz
-- `passband_ripple`: Maximum ripple in passband in dB
-- `stopband_atten`: Mean attenuation in stopband in dB
-- `phase_delay`: Mean phase delay in passband (samples)
-- `group_delay`: Mean group delay in passband (samples)
-- `transition_band`: Width of transition band in Hz
-- `filter_type`: Detected filter type (:hp or :lp)
+By default (`filter_func = :filtfilt`), magnitude attenuation in dB is doubled to reflect
+zero-phase forward-backward filtering. Pass `filter_func = :filt` for single-pass magnitude.
 """
-function get_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000)
+function get_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000, filter_func::Union{Symbol,Function} = :filtfilt)
     # Calculate frequency response
     freqs = exp10.(range(log10(0.01), log10(filter_info.sample_rate / 2), length = npoints))  # log spacing
     w = 2π * freqs / filter_info.sample_rate
@@ -477,7 +514,9 @@ function get_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000
         resp = freqresp(filter_info.filter_object, w)
     end
 
-    mag_db = 20 * log10.(abs.(resp))
+    is_zero_phase = (filter_func == :filtfilt || filter_func === filtfilt)
+    db_scale = is_zero_phase ? 40.0 : 20.0
+    mag_db = db_scale .* log10.(abs.(resp))
     phase = angle.(resp)
 
     # Find -3dB and -6dB points using closest points method
@@ -523,38 +562,43 @@ function get_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000
         stopband_mask = freqs .<= (cutoff_freq[1] - filter_info.transition_band)
     end
 
-    # Calculate passband ripple and stopband attenuation
-    passband_ripple = maximum(abs.(mag_db[passband_mask])) # dB
-    # Calculate mean stopband attenuation, replacing -Inf with -100 dB
-    stopband_db = mag_db[stopband_mask]
-    stopband_db = replace(stopband_db, -Inf => -100.0)
-    stopband_atten = mean(stopband_db)
+    # Calculate passband ripple and stopband attenuation (guarding empty masks)
+    passband_ripple = any(passband_mask) ? maximum(abs.(mag_db[passband_mask])) : NaN
+    stopband_atten = if any(stopband_mask)
+        stopband_db = replace(mag_db[stopband_mask], -Inf => (is_zero_phase ? -200.0 : -100.0))
+        mean(stopband_db)
+    else
+        NaN
+    end
 
-    # Calculate delays
+    # Calculate single-pass delays
     group_delay = -diff(DSP.unwrap(phase)) ./ diff(w)
     phase_delay = -phase ./ w
-    phase_delay[1] = phase_delay[2] # Handle division by zero at DC
+    if length(phase_delay) >= 2
+        phase_delay[1] = phase_delay[2] # Handle division by zero near DC
+    end
+    gd_mask = passband_mask[1:(end-1)]
 
     return (
         cutoff_freq_3db = cutoff_freq_3db,
         cutoff_freq_6db = cutoff_freq_6db,
         passband_ripple = passband_ripple,
         stopband_atten = stopband_atten,
-        phase_delay = mean(phase_delay[passband_mask]),
-        group_delay = mean(group_delay[passband_mask[1:(end-1)]]),
+        phase_delay = any(passband_mask) ? mean(phase_delay[passband_mask]) : NaN,
+        group_delay = any(gd_mask) ? mean(group_delay[gd_mask]) : NaN,
         transition_band = filter_info.transition_band,
         filter_type = filter_info.filter_type,
     )
 end
 
 """
-    print_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000)
+    print_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000, filter_func = :filtfilt)
 
 Print a formatted summary of filter characteristics.
 """
-function print_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000)
+function print_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000, filter_func::Union{Symbol,Function} = :filtfilt)
 
-    chars = get_filter_characteristics(filter_info; npoints = npoints)
+    chars = get_filter_characteristics(filter_info; npoints = npoints, filter_func = filter_func)
 
     @info "--------------------------------------------------------------------------------"
     @info "Filter Characteristics: $(uppercase(string(chars.filter_type))) $(filter_info.cutoff_freq) Hz"
@@ -599,7 +643,7 @@ function _process_filter_file(filepath::String, output_path::String, filter_type
     end
 
     # Save
-    jldsave(output_path; data = data)
+    jldsave(output_path; data = data, format_version = EEGFUN_FORMAT_VERSION)
 
     return BatchResult(true, filename, "Filtered successfully")
 end

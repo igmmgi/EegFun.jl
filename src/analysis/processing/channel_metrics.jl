@@ -286,25 +286,25 @@ function _channel_joint_probability(
     data = select(dat[selected_samples, :], selected_channels)
 
     # Convert to matrix and compute joint probability
-    jp, indelec = _joint_probability(Matrix(data)', threshold, normval)
+    jp, indelec = _joint_probability(Matrix{Float64}(Matrix(data)'), threshold, normval, discret)
     return DataFrame(channel = selected_channels, jp = jp, rejection = indelec)
 end
 
 """
-    _joint_probability(signal::AbstractMatrix{Float64}, threshold::Float64, normalize::Int, discret::Int = 1000)
+    _joint_probability(signal::AbstractMatrix{<:Real}, threshold::Real, normalize::Int, discret::Int = 1000)
 
 Calculate joint probability of extreme values in a signal matrix.
 
 # Arguments
-- `signal::AbstractMatrix{Float64}`: Signal data matrix (channels × samples)
-- `threshold::Float64`: Threshold for extreme value detection
+- `signal::AbstractMatrix{<:Real}`: Signal data matrix (channels × samples)
+- `threshold::Real`: Threshold for extreme value detection
 - `normalize::Int`: Normalization method
 - `discret::Int`: Number of discretization bins
 
 # Returns
-- `Tuple{Vector{Float64}, Vector{Bool}}`: Joint probability values for each channel and rejection flags
+- `Tuple{Vector{Float64}, BitVector}`: Joint probability values for each channel and rejection flags
 """
-function _joint_probability(signal::AbstractMatrix{Float64}, threshold::Float64, normalize::Int, discret::Int = 1000)
+function _joint_probability(signal::AbstractMatrix{<:Real}, threshold::Real, normalize::Int, discret::Int = 1000)
     nbchan = size(signal, 1)
     jp = zeros(nbchan)
     dataProba = Vector{Float64}(undef, size(signal, 2)) # Pre-allocate
@@ -317,27 +317,33 @@ function _joint_probability(signal::AbstractMatrix{Float64}, threshold::Float64,
     # Normalize the joint probability
     if normalize != 0
         tmpjp = normalize == 2 ? _trim_extremes(jp) : jp
-        jp .= (jp .- mean(tmpjp)) ./ std(tmpjp)
+        s = isempty(tmpjp) ? 0.0 : std(tmpjp)
+        if !isfinite(s) || s == 0
+            fill!(jp, 0.0)
+        else
+            μ = mean(tmpjp)
+            jp .= (jp .- μ) ./ s
+        end
     end
 
-    rej = threshold != 0 ? jp .> threshold : falses(nbchan)
+    rej = threshold != 0 ? (jp .> threshold) : falses(nbchan)
     return jp, rej
 end
 
 """
-    compute_probability!(probaMap::Vector{Float64}, data::AbstractVector{Float64}, bins::Int)::Vector{Float64}
+    compute_probability!(probaMap::Vector{Float64}, data::AbstractVector{<:Real}, bins::Int)::Vector{Float64}
 
 Compute probability distribution for a data vector.
 
 # Arguments
 - `probaMap::Vector{Float64}`: Pre-allocated vector to store probability values
-- `data::AbstractVector{Float64}`: Input data vector
+- `data::AbstractVector{<:Real}`: Input data vector
 - `bins::Int`: Number of bins for discretization
 
 # Returns
 - `Vector{Float64}`: Probability distribution (same as probaMap)
 """
-function compute_probability!(probaMap::Vector{Float64}, data::AbstractVector{Float64}, bins::Int)::Vector{Float64}
+function compute_probability!(probaMap::Vector{Float64}, data::AbstractVector{<:Real}, bins::Int)::Vector{Float64}
     isempty(data) && @minimal_error "Cannot compute probability for empty data vector"
 
     if bins > 0
@@ -405,7 +411,9 @@ function _trim_extremes(x::Vector{Float64})
     n = length(x)
     trim = round(Int, n * 0.1)
     sorted = sort(x)
-    return view(sorted, (trim+1):(n-trim))
+    lo = trim + 1
+    hi = n - trim
+    return lo <= hi ? view(sorted, lo:hi) : view(sorted, 1:n)
 end
 
 # === CORRELATION MATRIX UTILITIES ===
@@ -697,8 +705,8 @@ function check_channel_neighbors(bad_channels::Vector{Symbol}, layout::Layout)::
 
     for bad_ch in bad_channels
         # Check if this channel has neighbors defined in the layout
-        if !isnothing(layout.neighbours) && haskey(layout.neighbours, bad_ch)
-            neighbors = layout.neighbours[bad_ch]
+        if !isnothing(layout.neighbors) && haskey(layout.neighbors, bad_ch)
+            neighbors = layout.neighbors[bad_ch]
             # Only repair if ALL neighbors are good (not in bad_channels list)
             # AND there are at least 2 good neighbors (need at least 2 for meaningful interpolation)
             good_neighbors = setdiff(neighbors.channels, bad_channels)

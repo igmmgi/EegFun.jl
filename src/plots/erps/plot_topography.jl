@@ -52,6 +52,7 @@ function _render_topo_surface!(
     method::Symbol = :thin_plate,
     gridscale::Int = 75,
     colormap = nothing,
+    colorrange = nothing,
     ylim = nothing,
     num_levels::Int = 20,
     kwargs...,
@@ -61,15 +62,18 @@ function _render_topo_surface!(
         data_interp, x_bounds, y_bounds = _topo_interpolate(Float64.(channel_data), layout, gridscale; method = method)
     end
 
-    # Compute symmetric ylim if not provided
-    if isnothing(ylim)
+    cr = !isnothing(colorrange) ? colorrange : ylim
+
+    # Compute symmetric colorrange if not provided
+    if isnothing(cr)
         valid_data = Iterators.filter(!isnan, data_interp)
         if !isempty(valid_data)
             data_min, data_max = extrema(valid_data)
             max_abs = max(abs(data_min), abs(data_max))
-            ylim = (-max_abs, max_abs)
+            max_abs = max_abs ≈ 0.0 ? 1.0 : max_abs
+            cr = (-max_abs, max_abs)
         else
-            ylim = (-1.0, 1.0)
+            cr = (-1.0, 1.0)
         end
     end
 
@@ -78,13 +82,13 @@ function _render_topo_surface!(
         range(x_bounds[1], x_bounds[2], length = gridscale),
         range(y_bounds[1], y_bounds[2], length = gridscale),
         data_interp,
-        levels = range(ylim[1], ylim[2], length = num_levels);
+        levels = range(cr[1], cr[2], length = num_levels);
         colormap = _resolve_theme_colormap(ax, colormap),
         extendlow = :auto,
         extendhigh = :auto,
         nan_color = :transparent,
     )
-    co.colorrange = ylim
+    co.colorrange = cr
 
     # Draw smooth circle to hide jagged interpolation edge
     _draw_smooth_circle_mask!(ax, x_bounds, y_bounds)
@@ -117,19 +121,22 @@ function _plot_topography!(
     _ensure_coordinates_2d!(layout)
 
     # Merge user kwargs with defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES))
 
     # Extract rendering parameters
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
     colorbar_position = pop!(plot_kwargs, :colorbar_position)
     cb_pos = _get_colorbar_position(colorbar_position, 1:1, 1:1)
-    ylim = pop!(plot_kwargs, :ylim)
+    colorrange = pop!(plot_kwargs, :colorrange)
     colormap = pop!(plot_kwargs, :colormap)
     num_levels = pop!(plot_kwargs, :num_levels)
+    show_title = pop!(plot_kwargs, :show_title, true)
 
     # Set title based on user preferences and data
-    if !isnothing(plot_kwargs[:plot_title]) && !isempty(plot_kwargs[:plot_title])
+    if !show_title
+        ax.title = ""
+    elseif !isnothing(plot_kwargs[:plot_title]) && !isempty(plot_kwargs[:plot_title])
         if plot_kwargs[:plot_title] != ""
             ax.title = plot_kwargs[:plot_title] # Use user-provided title
         else # get time from data 
@@ -162,7 +169,7 @@ function _plot_topography!(
         method = method,
         gridscale = gridscale,
         colormap = colormap,
-        ylim = ylim,
+        colorrange = colorrange,
         num_levels = num_levels,
         plot_kwargs...,
     )
@@ -257,7 +264,7 @@ function plot_topography(filepath::String; input_dir::String = pwd(), participan
         files = _find_batch_files(filepath, input_dir, participant_selection)
         isempty(files) && @minimal_error "No files matching pattern '$filepath' in $input_dir"
 
-        results = Any[]
+        results = NamedTuple[]
         for file in sort(files, by = _natural_sort_key)
             file_path = joinpath(input_dir, file)
             @info "Plotting: $file"
@@ -283,6 +290,11 @@ function plot_topography(
     interactive = true,
     kwargs...,
 )
+    kwargs_norm = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
+    if isnothing(n_topo) && haskey(kwargs_norm, :n_topo)
+        n_topo = pop!(kwargs_norm, :n_topo)
+    end
+
     # Apply baseline correction if requested
     if !isnothing(baseline_interval)
         dat = baseline(dat, baseline_interval)
@@ -292,7 +304,7 @@ function plot_topography(
         dat_subset =
             subset(dat, channel_selection = channel_selection, sample_selection = sample_selection, interval_selection = interval_selection)
         if nrow(dat_subset.data) > 1
-            return _plot_topography_scrubber(dat_subset; display_plot = display_plot, interactive = interactive, kwargs...)
+            return _plot_topography_scrubber(dat_subset; display_plot = display_plot, interactive = interactive, kwargs_norm...)
         end
     end
     # If n_topo is requested, split time range into bins and use the Vector method
@@ -320,7 +332,7 @@ function plot_topography(
             )
             # Set title to time range label for subplot titles
             if hasproperty(bin_dat, :condition_name)
-                time_unit_val = get(Dict(kwargs), :time_unit, :s)
+                time_unit_val = get(kwargs_norm, :time_unit, :s)
                 if time_unit_val == :ms
                     bin_dat.condition_name = @sprintf("%.0f – %.0f ms", bin_start * 1000, bin_stop * 1000)
                 else
@@ -337,13 +349,13 @@ function plot_topography(
             interval_selection = times(),    # already applied per bin
             display_plot = display_plot,
             interactive = interactive,
-            kwargs...,
+            kwargs_norm...,
         )
     end
 
     _set_window_title(_generate_window_title(dat))
 
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs_norm)
     fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
     fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
     ax = Axis(fig[1, 1], aspect = DataAspect())
@@ -355,7 +367,7 @@ function plot_topography(
         channel_selection = channel_selection,
         sample_selection = sample_selection,
         interval_selection = interval_selection,
-        kwargs...,
+        kwargs_norm...,
     )
 
     # Keyboard interactivity (scaling, help) works for all data types
@@ -389,7 +401,7 @@ function plot_topography!(
     kwargs...,
 )
     # Merge user kwargs with defaults to get all parameters
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES))
 
     dat_subset =
         subset(dat, channel_selection = channel_selection, sample_selection = sample_selection, interval_selection = interval_selection)
@@ -426,7 +438,7 @@ function plot_topography(
     n_datasets == 0 && @minimal_error "Cannot plot empty vector of datasets"
 
     # Check if colorbars are enabled and get colorbar position
-    kwargs_dict = Dict{Symbol,Any}(kwargs)
+    kwargs_dict = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
     colorbar_enabled = get(kwargs_dict, :colorbar_plot, true)
     user_colorbar_position = get(kwargs_dict, :colorbar_position, nothing)
     colorbar_plot_numbers = get(kwargs_dict, :colorbar_plot_numbers, [])
@@ -540,7 +552,7 @@ function plot_topography(
 
     # Create single figure with subplots
     _set_window_title(_generate_window_title(dat))
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs_dict)
     fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
     fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
     axes = Axis[]
@@ -695,7 +707,7 @@ end
 """Plot a single epoch from each `EpochData` in the vector."""
 function plot_topography(dat::AbstractVector{<:EpochData}, epoch::Int; kwargs...)
     @info "Plotting epoch $(epoch) for each dataset in the vector"
-    plot_topography.(dat, Ref(epoch))
+    return [plot_topography(d, epoch; kwargs...) for d in dat]
 end
 
 
@@ -733,6 +745,7 @@ function plot_topography(
     display_plot = true,
     kwargs...,
 )
+    kwargs_norm = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
     if scrubber
         return plot_topography(
             epoch_to_continuous(dat, epoch);
@@ -741,12 +754,12 @@ function plot_topography(
             interval_selection = interval_selection,
             scrubber = true,
             display_plot = display_plot,
-            kwargs...,
+            kwargs_norm...,
         )
     end
 
     _set_window_title(_generate_window_title(dat) * " - Epoch $epoch")
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs_norm)
     fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
     fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...)
     ax = Axis(fig[1, 1], aspect = DataAspect())
@@ -758,7 +771,7 @@ function plot_topography(
         channel_selection = channel_selection,
         sample_selection = sample_selection,
         interval_selection = interval_selection,
-        kwargs...,
+        kwargs_norm...,
     )
 
     display_plot && _display_figure(fig)
@@ -843,8 +856,24 @@ function _draw_smooth_circle_mask!(ax::Axis, x_bounds::Tuple, y_bounds::Tuple)
         annulus[2*n_points-i+1] = Point2f(inner_x * ca, inner_y * sa)
     end
 
-    # Draw filled white annulus
-    poly!(ax, annulus, color = :white, strokecolor = :white, strokewidth = 0)
+    # If axis still has default white background while root scene has a custom/dark background,
+    # make axis background transparent so the topography sits seamlessly on the figure background.
+    if Makie.to_color(ax.backgroundcolor[]) == RGBAf(1, 1, 1, 1) &&
+       Makie.to_color(Makie.root(ax.scene).backgroundcolor[]) != RGBAf(1, 1, 1, 1)
+        ax.backgroundcolor[] = RGBAf(0, 0, 0, 0)
+    end
+
+    # Draw filled annulus matching axis/scene background color (respects dark themes & transparent saves)
+    mask_color = lift(ax.backgroundcolor, Makie.root(ax.scene).backgroundcolor) do ax_bg_raw, root_bg_raw
+        ax_bg = Makie.to_color(ax_bg_raw)
+        root_bg = Makie.to_color(root_bg_raw)
+        if ax_bg.alpha > 0 && !(ax_bg == RGBAf(1, 1, 1, 1) && root_bg != RGBAf(1, 1, 1, 1))
+            return ax_bg
+        else
+            return root_bg
+        end
+    end
+    poly!(ax, annulus, color = mask_color, strokecolor = mask_color, strokewidth = 0)
 
     return nothing
 end
@@ -1192,21 +1221,24 @@ Scale the topographic plot levels by the given factor.
 function _scale_topo_levels!(ax::Axis, scale_factor::Float64)
     # Find the Contourf plot in the axis
     for plot in ax.scene.plots
-        current_levels = plot.levels[]
-        if !isnothing(current_levels)
-            # Calculate new range while keeping it centered
-            level_min, level_max = extrema(current_levels)
-            center = (level_min + level_max) / 2
-            range_size = level_max - level_min
+        if plot isa Makie.Contourf
+            current_levels = plot.levels[]
+            if !isnothing(current_levels)
+                # Calculate new range while keeping it centered
+                level_min, level_max = extrema(current_levels)
+                center = (level_min + level_max) / 2
+                range_size = level_max - level_min
 
-            # Scale the range by the factor but keep it centered
-            new_range = range_size * scale_factor
-            new_min = center - new_range / 2
-            new_max = center + new_range / 2
+                # Scale the range by the factor but keep it centered
+                new_range = range_size * scale_factor
+                new_min = center - new_range / 2
+                new_max = center + new_range / 2
 
-            # Create new levels with the same density but scaled range
-            plot.levels[] = range(new_min, new_max, length = length(current_levels))
-            break
+                # Create new levels with the same density but scaled range, and sync colorrange for Colorbar
+                plot.levels[] = range(new_min, new_max, length = length(current_levels))
+                plot.colorrange[] = (new_min, new_max)
+                break
+            end
         end
     end
 end
@@ -1295,12 +1327,8 @@ function _setup_shared_topo_selection!(fig::Figure, datasets::Vector, shared_sel
 
     # Handle keyboard events to track Shift key
     on(events(fig).keyboardbutton) do event
-        if event.key == Keyboard.left_shift
-            if event.action == Keyboard.press
-                shift_pressed[] = true
-            elseif event.action == Keyboard.release
-                shift_pressed[] = false
-            end
+        if event.key in (Keyboard.left_shift, Keyboard.right_shift)
+            shift_pressed[] = event.action != Keyboard.release
         end
     end
 
@@ -1682,7 +1710,7 @@ function _plot_topography_scrubber(dat::SingleDataFrameEeg; display_plot = true,
     n_samples = length(time_vec)
     t_min, t_max = extrema(time_vec)
 
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES))
     fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
     gridscale = get(plot_kwargs, :gridscale, 65)
     method = get(plot_kwargs, :method, :thin_plate)
@@ -1690,6 +1718,7 @@ function _plot_topography_scrubber(dat::SingleDataFrameEeg; display_plot = true,
     num_levels = get(plot_kwargs, :num_levels, 21)
     colorbar_plot = get(plot_kwargs, :colorbar_plot, true)
     colorbar_kwargs = pop!(plot_kwargs, :colorbar_kwargs, (;))
+    user_colorrange = get(plot_kwargs, :colorrange, nothing)
 
     # Pre-extract data matrix once (channels × samples) for fast column views
     X = Matrix{Float64}(undef, length(available_channels), n_samples)
@@ -1699,9 +1728,13 @@ function _plot_topography_scrubber(dat::SingleDataFrameEeg; display_plot = true,
     layout_idx = [findfirst(==(ch), Symbol.(layout.data.label)) for ch in available_channels]
 
     # Pre-calculate global symmetric amplitude scale across the whole selected segment
-    q99 = Statistics.quantile!(abs.(vec(copy(X))), 0.99)
-    clim = max(round(q99, digits = 1), 1.0)
-    ylim_obs = Observable{Tuple{Float64,Float64}}((-clim, clim))
+    if !isnothing(user_colorrange)
+        ylim_obs = Observable{Tuple{Float64,Float64}}((Float64(user_colorrange[1]), Float64(user_colorrange[2])))
+    else
+        q99 = Statistics.quantile!(abs.(vec(copy(X))), 0.99)
+        clim = max(round(q99, digits = 1), 1.0)
+        ylim_obs = Observable{Tuple{Float64,Float64}}((-clim, clim))
+    end
     levels_obs = lift(lim -> range(lim[1], lim[2], length = num_levels), ylim_obs)
 
     init_vals = @view X[:, 1]

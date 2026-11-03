@@ -152,6 +152,7 @@ import Logging
             EegFun.signal_example_ica_geometry,
             EegFun.signal_example_ica_mixture,
             EegFun.signal_example_heog,
+            EegFun.signal_example_eog,
             EegFun.signal_example_convolution,
             EegFun.signal_example_ecg_hrv,
             EegFun.signal_example_sampling,
@@ -166,6 +167,33 @@ import Logging
                 @test demo_fn() === nothing
             end
         end
+    end
+
+    @testset "_find_continuous_regions 1-sample cluster width" begin
+        t = [0.0, 0.01, 0.02, 0.03, 0.04]
+        mask_single = Bool[false, false, true, false, false]
+        regs_single = EegFun._find_continuous_regions(mask_single, t)
+        @test length(regs_single) == 1
+        @test regs_single[1][1] ≈ 0.015
+        @test regs_single[1][2] ≈ 0.025
+        @test (regs_single[1][2] - regs_single[1][1]) ≈ 0.01
+
+        mask_two = Bool[false, true, true, false, false]
+        regs_two = EegFun._find_continuous_regions(mask_two, t)
+        @test length(regs_two) == 1
+        @test regs_two[1][1] ≈ 0.005
+        @test regs_two[1][2] ≈ 0.025
+    end
+
+    @testset "simulate_erp _SimulatedErpComponent and ms-to-samples scaling" begin
+        @test isdefined(EegFun, :_SimulatedErpComponent)
+        @test !isdefined(EegFun, :Component)
+
+        # 1 component at 300 ms latency, 10 μV amplitude, zero noise
+        comps = [5.0 10.0 300.0 0.0 0.0 0.0]
+        avg_500, _ = EegFun._run_erp_simulation(1, comps; samp_freq = 500, sig_length = 1.0, base_length = 0.2)
+        # Expected peak sample at 500 Hz: base_length (0.2s * 500 = 100) + 300ms * 0.5 = 250
+        @test argmax(avg_500) == 250
     end
 
 end

@@ -5,6 +5,7 @@
 Find the index in a strictly sorted time vector that is closest to `target`.
 """
 function find_closest_time_index(times::AbstractVector{<:Real}, target::Real)
+    isempty(times) && @minimal_error("Cannot find closest time index in an empty time vector")
     idx = searchsortedfirst(times, target)
     if idx == 1
         return 1
@@ -105,6 +106,20 @@ function _data_limits_x(dat::DataFrame; col::Symbol = :time)
     return extrema(dat[!, col])
 end
 
+function _nan_safe_extrema(v::AbstractVector)
+    mn, mx = Inf, -Inf
+    found = false
+    @inbounds for x in v
+        if !ismissing(x) && !(x isa AbstractFloat && isnan(x))
+            val = Float64(x)
+            mn = min(mn, val)
+            mx = max(mx, val)
+            found = true
+        end
+    end
+    return found ? (mn, mx) : nothing
+end
+
 """
     _data_limits_y(dat::DataFrame, col) -> Union{Vector{Float64}, Nothing}
 
@@ -116,12 +131,12 @@ Get the value range for specified columns.
 
 # Returns
 - `Vector{Float64}`: [minimum, maximum] across specified column
-- `Nothing`: If the DataFrame is empty
+- `Nothing`: If the DataFrame is empty or contains only NaN values
 """
 function _data_limits_y(dat::DataFrame, col::Symbol)
     isempty(dat) && return nothing
-    mn, mx = extrema(dat[!, col])
-    return [mn, mx]
+    ext = _nan_safe_extrema(dat[!, col])
+    return isnothing(ext) ? nothing : [ext[1], ext[2]]
 end
 
 """
@@ -135,23 +150,42 @@ Get the value range across multiple specified columns.
 
 # Returns
 - `Vector{Float64}`: [minimum, maximum] across all specified columns
-- `Nothing`: If the DataFrame is empty
+- `Nothing`: If the DataFrame is empty or contains only NaN values
 """
 function _data_limits_y(dat::DataFrame, cols::Vector{Symbol})
     (isempty(dat) || isempty(cols)) && return nothing
     global_min, global_max = Inf, -Inf
+    found = false
     @inbounds for col in cols
-        mn, mx = extrema(dat[!, col])
-        global_min = min(global_min, mn)
-        global_max = max(global_max, mx)
+        ext = _nan_safe_extrema(dat[!, col])
+        if !isnothing(ext)
+            global_min = min(global_min, ext[1])
+            global_max = max(global_max, ext[2])
+            found = true
+        end
     end
-    return [global_min, global_max]
+    return found ? [global_min, global_max] : nothing
 end
 
 
 
 
 # === DEFAULT Y-RANGE HELPERS ===
+function _ylimit_value_cols(dat_sub::SingleDataFrameEeg, include_extra::Bool)::Vector{Symbol}
+    chs = channel_labels(dat_sub)
+    !include_extra && return chs
+    extra = [c for c in extra_labels(dat_sub) if eltype(dat_sub.data[!, c]) <: Real && !(eltype(dat_sub.data[!, c]) <: Bool)]
+    return vcat(chs, extra)
+end
+
+function _ylimit_value_cols(dat_sub::MultiDataFrameEeg, include_extra::Bool)::Vector{Symbol}
+    chs = channel_labels(dat_sub)
+    (!include_extra || isempty(dat_sub.data)) && return chs
+    df1 = dat_sub.data[1]
+    extra = [c for c in extra_labels(dat_sub) if eltype(df1[!, c]) <: Real && !(eltype(df1[!, c]) <: Bool)]
+    return vcat(chs, extra)
+end
+
 """
     _ylimits(dat::Union{ErpData, ContinuousData}; channel_selection::Function = channels(), sample_selection::Function = samples(), interval_selection::Interval = times(), include_extra::Bool = false)
 
@@ -171,7 +205,7 @@ function _ylimits(
         interval_selection = interval_selection,
         include_extra = include_extra,
     )
-    chs = channel_labels(dat_sub)
+    chs = _ylimit_value_cols(dat_sub, include_extra)
     lims = _data_limits_y(dat_sub.data, chs)
     isnothing(lims) && return (0.0, 1.0)
     return (lims[1], lims[2])
@@ -184,8 +218,8 @@ Compute y-limits (min, max) for epoch data using channel and time selection pred
 """
 function _ylimits(
     dat::EpochData;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
+    channel_selection = channels(),
+    sample_selection = samples(),
     interval_selection::Interval = times(),
     include_extra::Bool = false,
 )::Tuple{Float64,Float64}
@@ -199,7 +233,7 @@ function _ylimits(
         include_extra = include_extra,
     )
     # Determine which value columns to use
-    chs = channel_labels(dat_sub)
+    chs = _ylimit_value_cols(dat_sub, include_extra)
     # Compute limits per epoch and combine
     limits = map(df -> _data_limits_y(df, chs), dat_sub.data)
     limits = filter(!isnothing, limits)

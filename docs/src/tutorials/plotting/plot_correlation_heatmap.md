@@ -77,8 +77,8 @@ Displays channel-to-channel correlations directly on the 2D sensor layout:
 **1. Post-Acquisition Quality Check**:
 
 ```julia
-cm = correlation_matrix(dat)
-plot_correlation_heatmap(cm)
+cm = EegFun.correlation_matrix(dat)
+EegFun.plot_correlation_heatmap(cm)
 ```
 
 Quick overview to identify problematic channels
@@ -86,7 +86,7 @@ Quick overview to identify problematic channels
 **2. Targeted Channel Inspection**:
 
 ```julia
-cm = correlation_matrix(dat, channel_selection = channels([:Fp1, :Fp2, :C3, :C4]))
+cm = EegFun.correlation_matrix(dat, channel_selection = EegFun.channels([:Fp1, :Fp2, :C3, :C4]))
 ```
 
 Focus on specific regions or suspected bad channels
@@ -94,10 +94,10 @@ Focus on specific regions or suspected bad channels
 **3. EOG Artifact Assessment**:
 
 ```julia
-cm = correlation_matrix_dual_selection(
+cm = EegFun.correlation_matrix_dual_selection(
     dat,
-    channel_selection1 = channels(),  # All EEG
-    channel_selection2 = channels([:vEOG, :hEOG])  # EOG
+    channel_selection1 = EegFun.channels(),  # All EEG
+    channel_selection2 = EegFun.channels([:vEOG, :hEOG])  # EOG
 )
 ```
 

@@ -8,6 +8,7 @@ const PLOT_CORRELATION_HEATMAP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Title and labels
     :plot_title => (nothing, "Plot title"),
+    :show_title => (true, "Whether to show the plot title"),
     :plot_title_position => (
         nothing,
         "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis.",
@@ -89,7 +90,7 @@ fig, ax = plot_correlation_heatmap(corr_df;
 """
 function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kwargs...)
     # Merge user kwargs with defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_CORRELATION_HEATMAP_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_CORRELATION_HEATMAP_KWARGS, _normalize_plot_kwargs(kwargs))
 
     # Extract the correlation matrix (excluding the row names column)
     # Convert to Float64 to handle potential NaNs from masking
@@ -128,7 +129,7 @@ function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kw
     ax.yticklabelsize = plot_kwargs[:tick_fontsize]
 
     # Set title
-    if !isnothing(plot_kwargs[:plot_title]) && !isempty(plot_kwargs[:plot_title])
+    if plot_kwargs[:show_title] && !isnothing(plot_kwargs[:plot_title]) && !isempty(plot_kwargs[:plot_title])
         ax.title = plot_kwargs[:plot_title]
         ax.titlesize = plot_kwargs[:plot_title_fontsize]
     end
@@ -173,14 +174,15 @@ See `plot_correlation_heatmap!` for full documentation of arguments and keyword 
 """
 function plot_correlation_heatmap(corr_df::DataFrame; kwargs...)
     # Merge user kwargs with defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_CORRELATION_HEATMAP_KWARGS, kwargs)
+    norm_kw = _normalize_plot_kwargs(kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_CORRELATION_HEATMAP_KWARGS, norm_kw)
 
     # Create the figure and axis
     fig = _eegfun_figure()
     ax = Axis(fig[1, 1])
 
     # Use the mutating version to plot
-    plot_correlation_heatmap!(fig, ax, corr_df; kwargs...)
+    plot_correlation_heatmap!(fig, ax, corr_df; norm_kw...)
 
     if plot_kwargs[:display_plot]
         _set_window_title("Correlation Heatmap")

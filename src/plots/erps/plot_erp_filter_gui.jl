@@ -405,5 +405,5 @@ function plot_erp_filter_gui(
         screen = _display_figure(fig)
     end
     _set_window_title("ERP Filter Tool")
-    return (fig = fig, screen = screen)
+    return (fig = fig, axes = axes, screen = screen)
 end

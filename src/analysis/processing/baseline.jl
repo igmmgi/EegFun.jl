@@ -275,7 +275,7 @@ function _process_baseline_file(filepath::String, output_path::String, baseline_
     baseline!.(data, Ref(baseline_interval))
 
     # Save (always use "data" as variable name since read_data finds by type)
-    jldsave(output_path; data = data)
+    jldsave(output_path; data = data, format_version = EEGFUN_FORMAT_VERSION)
 
     return BatchResult(true, filename, "Baseline corrected successfully")
 end

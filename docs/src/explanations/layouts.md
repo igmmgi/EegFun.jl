@@ -33,13 +33,13 @@ layout = EegFun.read_layout("./resources/layouts/biosemi/biosemi72.csv")
 EegFun.polar_to_cartesian_xy!(layout)
 
 # Calculate neighbors 
-EegFun.get_neighbours_xy!(layout, 0.3)
+EegFun.get_neighbors_xy!(layout, 0.3)
 
-# Plot the layout with neighbours; hover over electrodes to see neighbours
-EegFun.plot_layout_2d(layout; neighbours=true)
+# Plot the layout with neighbors; hover over electrodes to see neighbors
+EegFun.plot_layout_2d(layout; neighbors=true)
 
-EegFun.get_neighbours_xyz!(layout, 0.5)
-EegFun.plot_layout_3d(layout; neighbours=true)
+EegFun.get_neighbors_xyz!(layout, 0.5)
+EegFun.plot_layout_3d(layout; neighbors=true)
 ```
 
 ## Available Layouts
@@ -716,8 +716,8 @@ EegFun.read_layout
 EegFun.validate_layout
 EegFun.polar_to_cartesian_xy!
 EegFun.polar_to_cartesian_xyz!
-EegFun.get_neighbours_xy!
-EegFun.get_neighbours_xyz!
+EegFun.get_neighbors_xy!
+EegFun.get_neighbors_xyz!
 EegFun.rename_channel!
 ```
 

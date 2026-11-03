@@ -96,8 +96,15 @@ function plot_erp_stats(
     end
 
     # Prepare kwargs (reuse PLOT_ERP_KWARGS, override stats-specific defaults)
-    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs)
-    plot_kwargs[:window_title] = get(kwargs, :window_title, "ERP Stats")
+    kwargs_norm = _normalize_plot_kwargs(kwargs)
+    if haskey(kwargs_norm, :show_significance)
+        plot_significance = Bool(pop!(kwargs_norm, :show_significance))
+    end
+    if haskey(kwargs_norm, :significance_position)
+        significance_position = pop!(kwargs_norm, :significance_position)
+    end
+    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs_norm)
+    plot_kwargs[:window_title] = get(kwargs_norm, :window_title, "ERP Stats")
 
     # Compute colors for stats plot elements: [cond1, cond2, difference, t-values]
     default_stats_colors = [:blue, :red, :black, :purple]
@@ -105,7 +112,7 @@ function plot_erp_stats(
     stats_colors = if user_color isa Vector
         # Pad with defaults if user provides fewer than 4
         [i <= length(user_color) ? user_color[i] : default_stats_colors[i] for i = 1:4]
-    elseif haskey(kwargs, :color)
+    elseif haskey(kwargs_norm, :color) && !isnothing(user_color)
         # User provided a single color — use it for both conditions
         [user_color, user_color, :black, :purple]
     else
@@ -194,6 +201,7 @@ function plot_erp_stats(
                 plot_se = plot_se,
                 colors = stats_colors,
                 difference_offset = difference_offset,
+                significance_position = significance_position,
                 significance_color = significance_color,
                 linewidth = plot_kwargs[:linewidth],
                 legend_labels = plot_kwargs[:legend_labels],
@@ -207,7 +215,7 @@ function plot_erp_stats(
     _apply_layout_axis_properties!(axes, plot_layout; plot_kwargs...)
 
     # Override grid/topo titles to include stats info
-    if plot_layout.type in (:grid, :topo)
+    if plot_layout.type in (:grid, :topo) && plot_kwargs[:show_title]
         for (ax_idx, (ax, channel)) in enumerate(zip(axes, layout_channels))
             ax.title = string(channel)
         end
@@ -224,7 +232,7 @@ function plot_erp_stats(
     end
 
     # Add a single legend (on the first axis)
-    if !isempty(axes)
+    if !isempty(axes) && plot_kwargs[:legend]
         axislegend(axes[1], position = plot_kwargs[:legend_position], framevisible = plot_kwargs[:legend_framevisible])
     end
 
@@ -285,11 +293,21 @@ function _plot_erp_stats_channel!(
     critical_t_pos = nothing
     critical_t_neg = nothing
     if (plot_significance || plot_critical_t) && plot_tvalues
-        if isa(result, AnalyticResult)
-            critical_t_pos = fill(result.critical_t, length(time_points))
-            critical_t_neg = fill(-result.critical_t, length(time_points))
-        else
-            critical_t_channel = result.critical_t[channel_idx, :]
+        crit = result.critical_t
+        if crit isa Real
+            critical_t_pos = fill(Float64(crit), length(time_points))
+            critical_t_neg = fill(-Float64(crit), length(time_points))
+        elseif crit isa Tuple{<:Real,<:Real}
+            # :nonparametric_common stores (thresh_pos, thresh_neg) where thresh_neg is already signed
+            critical_t_pos = fill(Float64(crit[1]), length(time_points))
+            critical_t_neg = fill(Float64(crit[2]), length(time_points))
+        elseif crit isa Tuple{<:AbstractMatrix,<:AbstractMatrix}
+            # :nonparametric_individual stores (thresh_pos_mat, thresh_neg_mat) where thresh_neg_mat is already signed
+            critical_t_pos = Float64.(crit[1][channel_idx, :])
+            critical_t_neg = Float64.(crit[2][channel_idx, :])
+        elseif crit isa AbstractMatrix
+            # :parametric stores unsigned positive critical t-matrix
+            critical_t_channel = Float64.(crit[channel_idx, :])
             critical_t_pos = critical_t_channel
             critical_t_neg = -critical_t_channel
         end
@@ -396,8 +414,12 @@ function _plot_erp_stats_channel!(
 
     # Show critical t-values if requested
     if plot_critical_t && plot_tvalues && !isnothing(critical_t_pos)
-        lines!(ax, time_points, critical_t_pos, color = :grey, linewidth = linewidth, linestyle = :dashdot, label = "Critical t+")
-        lines!(ax, time_points, critical_t_neg, color = :grey, linewidth = linewidth, linestyle = :dashdot, label = "Critical t-")
+        if any(!isnan, critical_t_pos)
+            lines!(ax, time_points, critical_t_pos, color = :grey, linewidth = linewidth, linestyle = :dashdot, label = "Critical t+")
+        end
+        if !isnothing(critical_t_neg) && any(!isnan, critical_t_neg)
+            lines!(ax, time_points, critical_t_neg, color = :grey, linewidth = linewidth, linestyle = :dashdot, label = "Critical t-")
+        end
     end
 
     return nothing
@@ -503,19 +525,20 @@ function _plot_stat_heatmap_core!(
     mask::AbstractMatrix{Bool};
     kwargs...,
 )
-    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs; validate = false)
+    kwargs_norm = _normalize_plot_kwargs(kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs_norm; validate = false)
 
-    time_unit = get(kwargs, :time_unit, :s)
+    time_unit = get(kwargs_norm, :time_unit, :s)
     t_scale = time_unit == :ms ? 1000.0 : 1.0
     x_times = time_points .* t_scale
 
     n_chans = length(electrodes)
-    plot_kwargs[:ylabel] = get(kwargs, :ylabel, "Electrode (1 to $(n_chans))")
-    plot_kwargs[:xlabel] = get(kwargs, :xlabel, time_unit == :ms ? "Time (ms)" : "Time (s)")
+    plot_kwargs[:ylabel] = get(kwargs_norm, :ylabel, "Electrode (1 to $(n_chans))")
+    plot_kwargs[:xlabel] = get(kwargs_norm, :xlabel, time_unit == :ms ? "Time (ms)" : "Time (s)")
     pop!(plot_kwargs, :time_unit, nothing)
 
     # Smart electrode ticks if not explicitly provided
-    if isnothing(get(kwargs, :yticks, nothing))
+    if isnothing(get(kwargs_norm, :yticks, nothing))
         if n_chans > 40
             step = max(1, div(n_chans, 14)) # e.g. every 5 channels for 70
             y_indices = [1, step:step:n_chans...]
@@ -529,7 +552,7 @@ function _plot_stat_heatmap_core!(
     end
 
     # Baseline window shading
-    baseline_window = get(kwargs, :baseline_window, nothing)
+    baseline_window = get(kwargs_norm, :baseline_window, nothing)
     if !isnothing(baseline_window)
         bw_start = baseline_window[1] * t_scale
         bw_end = baseline_window[2] * t_scale
@@ -542,11 +565,14 @@ function _plot_stat_heatmap_core!(
     if max_t ≈ 0.0
         max_t = 1.0
     end
-    cmap = _resolve_theme_colormap(ax, get(kwargs, :colormap, :coolwarm))
-    clims = get(kwargs, :colorrange, (-max_t, max_t))
-    alpha_subdued = get(kwargs, :alpha_subdued, 0.20)
+    cmap = _resolve_theme_colormap(ax, get(kwargs_norm, :colormap, :coolwarm))
+    clims = get(kwargs_norm, :colorrange, (-max_t, max_t))
+    if isnothing(clims)
+        clims = (-max_t, max_t)
+    end
+    alpha_subdued = get(kwargs_norm, :alpha_subdued, 0.20)
 
-    mask_style = get(kwargs, :mask_style, :alpha)
+    mask_style = get(kwargs_norm, :mask_style, :alpha)
     local hm
     if mask_style == :alpha
         # Base transparent layer
@@ -573,9 +599,9 @@ function _plot_stat_heatmap_core!(
     ylims!(ax, 0.5, n_chans + 0.5)
 
     # Colorbar
-    show_colorbar = get(kwargs, :colorbar, true)
+    show_colorbar = get(kwargs_norm, :colorbar_plot, true)
     if show_colorbar && !isnothing(fig)
-        cb_label = get(kwargs, :colorbar_label, "t-value")
+        cb_label = get(kwargs_norm, :colorbar_label, "t-value")
         Colorbar(fig[1, 2], hm, label = cb_label)
     end
 

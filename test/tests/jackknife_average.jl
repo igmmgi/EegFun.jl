@@ -404,6 +404,64 @@ using DataFrames
             expected_dir = joinpath(test_dir, "jackknife_lrp")
             @test isdir(expected_dir)
         end
+
+        @testset "Phase 2 regressions: excluded_erp.file stamp, missing-condition participant alignment, Smulders (2010) pseudovalues" begin
+            # 1. excluded_erp.file stamped onto each leave-one-out ErpData & pseudovalues = true in-memory
+            e1 = EegFun.create_test_erp_data(participant = 1, condition = 1, n_channels = 2)
+            e2 = EegFun.create_test_erp_data(participant = 2, condition = 1, n_channels = 2)
+            e3 = EegFun.create_test_erp_data(participant = 3, condition = 1, n_channels = 2)
+            e1.file = "sub01_custom"
+            e2.file = "sub02_custom"
+            e3.file = "sub03_custom"
+            e1.data.Ch1 .= 10.0
+            e2.data.Ch1 .= 20.0
+            e3.data.Ch1 .= 60.0
+
+            jk_sub = EegFun.jackknife_average([e1, e2, e3]; pseudovalues = false)
+            @test [d.file for d in jk_sub] == ["sub01_custom", "sub02_custom", "sub03_custom"]
+            @test jk_sub[1].data.Ch1[1] ≈ 40.0 # (20 + 60) / 2
+
+            # Smulders (2010): J_i = N * X_bar - (N - 1) * X_{-i} -> for linear mean, J_i recovers X_i exactly and mean(J) == X_bar!
+            jk_pv = EegFun.jackknife_average([e1, e2, e3]; pseudovalues = true)
+            @test [d.file for d in jk_pv] == ["sub01_custom", "sub02_custom", "sub03_custom"]
+            @test jk_pv[1].data.Ch1[1] ≈ 10.0 atol = 1e-10
+            @test jk_pv[2].data.Ch1[1] ≈ 20.0 atol = 1e-10
+            @test jk_pv[3].data.Ch1[1] ≈ 60.0 atol = 1e-10
+            @test mean([d.data.Ch1[1] for d in jk_pv]) ≈ 30.0 atol = 1e-10
+
+            # 2. Batch alignment when participant 2 misses condition 1 (only p1 and p3 have cond 1; all 3 have cond 2)
+            align_dir = mktempdir()
+            out_align = joinpath(align_dir, "out")
+            out_align_pv = joinpath(align_dir, "out_pv")
+            p1_c1 = EegFun.create_test_erp_data(participant = 1, condition = 1, n_channels = 2)
+            p1_c2 = EegFun.create_test_erp_data(participant = 1, condition = 2, n_channels = 2)
+            p2_c2 = EegFun.create_test_erp_data(participant = 2, condition = 2, n_channels = 2) # missing cond 1!
+            p3_c1 = EegFun.create_test_erp_data(participant = 3, condition = 1, n_channels = 2)
+            p3_c2 = EegFun.create_test_erp_data(participant = 3, condition = 2, n_channels = 2)
+            p1_c1.data.Ch1 .= 100.0
+            p3_c1.data.Ch1 .= 200.0
+
+            jldsave(joinpath(align_dir, "1_align.jld2"); data = [p1_c1, p1_c2])
+            jldsave(joinpath(align_dir, "2_align.jld2"); data = [p2_c2])
+            jldsave(joinpath(align_dir, "3_align.jld2"); data = [p3_c1, p3_c2])
+
+            EegFun.jackknife_average("align"; input_dir = align_dir, output_dir = out_align)
+            EegFun.jackknife_average("align"; input_dir = align_dir, output_dir = out_align_pv, pseudovalues = true)
+            out1_pv = load(joinpath(out_align_pv, "1_align.jld2"), "data")
+            @test out1_pv[1].data.Ch1[1] ≈ 100.0 atol = 1e-10
+            out1 = load(joinpath(out_align, "1_align.jld2"), "data")
+            out2 = load(joinpath(out_align, "2_align.jld2"), "data")
+            out3 = load(joinpath(out_align, "3_align.jld2"), "data")
+
+            # Participant 2 only had condition 2 -> must NOT receive a mis-indexed condition 1 leave-one-out!
+            @test out2 isa EegFun.ErpData && out2.condition == 2
+            # Participant 3's condition 1 leave-one-out must exclude p3 (leaving p1 = 100.0)
+            @test out1 isa Vector{EegFun.ErpData} && length(out1) == 2
+            @test out3 isa Vector{EegFun.ErpData} && length(out3) == 2
+            c1_out3 = only(filter(x -> x.condition == 1, out3))
+            @test c1_out3.data.Ch1[1] ≈ 100.0 atol = 1e-10
+            rm(align_dir, recursive = true, force = true)
+        end
     end
 
     # Cleanup

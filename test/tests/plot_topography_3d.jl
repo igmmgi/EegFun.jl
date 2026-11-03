@@ -16,6 +16,13 @@ using EegFun
 
         @test result.fig isa Figure
         @test first(result.axes) isa LScene
+        @test result.axes == [result.ax]
+
+        # Test colorrange and ylim alias
+        res_cr = EegFun.plot_topography_3d(dat; colorrange = (-3.0, 3.0), display_plot = false)
+        @test res_cr.fig isa Figure
+        res_yl = EegFun.plot_topography_3d(dat; ylim = (-3.0, 3.0), display_plot = false)
+        @test res_yl.fig isa Figure
     end
 
     @testset "plot_topography_3d with kwargs" begin

@@ -630,6 +630,7 @@ epochs = extract_epochs(dat, 1, condition, (-0.2, 1.0))
 function extract_epochs(dat::ContinuousData, condition::Integer, epoch_condition::EpochCondition, epoch_interval)
     # Extract start and end times from interval
     start_time, end_time = _interval_endpoints(epoch_interval)
+    start_time <= end_time || @minimal_error("Epoch interval start ($start_time) must be less than or equal to end ($end_time)")
 
     # Apply mask
     filtered_triggers, valid_indices = _apply_trigger_mask(dat.data.trigger, epoch_condition)
@@ -653,16 +654,19 @@ function extract_epochs(dat::ContinuousData, condition::Integer, epoch_condition
     end
     zero_idx = [m[epoch_condition.reference_index] for m in matches]
 
-    # find number of samples pre/post epoch t = 0 position
-    n_pre, n_post = _find_idx_start_end(dat.data.time, abs(start_time), abs(end_time))
-    pre_idx = zero_idx .- n_pre .+ 1
-    post_idx = zero_idx .+ n_post .- 1
+    # Compute signed sample offsets directly relative to t = 0
+    start_offset = round(Int, start_time * dat.sample_rate)
+    end_offset = round(Int, end_time * dat.sample_rate)
+    pre_idx = zero_idx .+ start_offset
+    post_idx = zero_idx .+ end_offset
 
     # Extract and create array of dataframes with bounds checking
     epochs = DataFrame[]
 
-    # Pre-calculate columns to keep
+    # Pre-calculate columns to keep and metadata insertion position
     cols_to_keep = setdiff(propertynames(dat.data), [:condition, :condition_name, :file])
+    meta_cols_kept = setdiff(meta_labels(dat), [:condition, :condition_name, :file])
+    epoch_col_pos = clamp(length(meta_cols_kept) + 1, 1, length(cols_to_keep) + 1)
 
     for (epoch, (pre, zero, post)) in enumerate(zip(pre_idx, zero_idx, post_idx))
         # Bounds checking to prevent out-of-bounds errors
@@ -676,8 +680,8 @@ function extract_epochs(dat::ContinuousData, condition::Integer, epoch_condition
         # In-place subtraction to avoid allocating a new time vector
         epoch_df.time .-= dat.data.time[zero]
 
-        # Add epoch number (original numbering from extraction)
-        insertcols!(epoch_df, 4, :epoch => epoch)
+        # Add epoch number (original numbering from extraction) right after metadata columns
+        insertcols!(epoch_df, epoch_col_pos, :epoch => epoch)
         push!(epochs, epoch_df)
     end
 
@@ -798,17 +802,21 @@ average_epochs(dat::AbstractVector{<:EpochData}) = average_epochs.(dat)
 
 """
     reject_epochs!(dat::EpochData, info::EpochRejectionInfo) -> EpochData
+    reject_epochs!(dat::AbstractVector{<:EpochData}, info::AbstractVector{<:EpochRejectionInfo})
+    reject_epochs!(dat::EpochData, bad_column::Symbol) -> EpochData
+    reject_epochs!(dat::EpochData, bad_columns::AbstractVector{Symbol}) -> EpochData
+    reject_epochs!(dat::AbstractVector{<:EpochData}, bad_column::Symbol)
+    reject_epochs!(dat::AbstractVector{<:EpochData}, bad_columns::AbstractVector{Symbol})
 
-Remove epochs identified in `info` from `dat` in-place.
-
-# Arguments
-- `dat::EpochData`: Epoched EEG data to modify
-- `info::EpochRejectionInfo`: Rejection information from `detect_bad_epochs_automatic` etc.
+Remove bad epochs from `dat` in-place using `EpochRejectionInfo` or one or more boolean flag columns.
 
 # Examples
 ```julia
 info = detect_bad_epochs_automatic(epochs, z_criterion = 2.0)
 reject_epochs!(epochs, info)
+
+reject_epochs!(epochs, :is_vEOG)
+reject_epochs!(epochs, [:is_vEOG, :is_extreme_value_100])
 ```
 """
 function reject_epochs!(dat::EpochData, info::EpochRejectionInfo)::EpochData
@@ -825,6 +833,78 @@ function reject_epochs!(dat::EpochData, info::EpochRejectionInfo)::EpochData
 
     @info "Condition $(dat.condition) ($(dat.condition_name)) - Rejected $(length(rejected_indices)) of $(info.info.n) epochs."
 
+    return dat
+end
+
+function reject_epochs!(dat::AbstractVector{<:EpochData}, info::AbstractVector{<:EpochRejectionInfo})
+    length(dat) == length(info) ||
+        @minimal_error("Length of EpochData vector ($(length(dat))) must match EpochRejectionInfo vector ($(length(info)))")
+    for (d, inf) in zip(dat, info)
+        reject_epochs!(d, inf)
+    end
+    return dat
+end
+
+function reject_epochs!(dat::EpochData, bad_columns::AbstractVector{Symbol})::EpochData
+    isempty(dat.data) && @minimal_error("Cannot remove bad epochs from empty EpochData")
+    isempty(bad_columns) && return dat
+
+    first_epoch = first(dat.data)
+    for col in bad_columns
+        if !hasproperty(first_epoch, col)
+            @minimal_error("Column '$col' not found in epoch data")
+        end
+
+        col_type = eltype(first_epoch[!, col])
+        if col_type != Bool
+            @minimal_warning "Column '$col' is not Boolean type ($(col_type)). Non-zero values will be treated as 'true'"
+        end
+    end
+
+    n_eps = n_epochs(dat)
+    good_epochs = DataFrame[]
+    sizehint!(good_epochs, n_eps)
+
+    n_removed = 0
+    for epoch_df in dat.data
+        has_bad_samples = false
+        for col in bad_columns
+            col_vals = epoch_df[!, col]
+            is_bad = eltype(col_vals) == Bool ? any(col_vals) : any(!iszero, col_vals)
+            if is_bad
+                has_bad_samples = true
+                break
+            end
+        end
+
+        if !has_bad_samples
+            push!(good_epochs, epoch_df)
+        else
+            n_removed += 1
+        end
+    end
+
+    if n_removed > 0
+        @info "Condition $(dat.condition) ($(dat.condition_name)) removed $n_removed of $n_eps epochs ($(round(100*n_removed/n_eps, digits=1))%)"
+    end
+
+    dat.data = good_epochs
+    return dat
+end
+
+reject_epochs!(dat::EpochData, bad_column::Symbol)::EpochData = reject_epochs!(dat, [bad_column])
+
+function reject_epochs!(dat::AbstractVector{<:EpochData}, bad_column::Symbol)
+    for d in dat
+        reject_epochs!(d, bad_column)
+    end
+    return dat
+end
+
+function reject_epochs!(dat::AbstractVector{<:EpochData}, bad_columns::AbstractVector{Symbol})
+    for d in dat
+        reject_epochs!(d, bad_columns)
+    end
     return dat
 end
 
@@ -859,66 +939,19 @@ function reject_epochs(dat::EpochData, info::EpochRejectionInfo)::EpochData
     return dat_copy
 end
 
-reject_epochs(dat::AbstractVector{<:EpochData}, info::AbstractVector{<:EpochRejectionInfo}) = reject_epochs.(dat, info)
+function reject_epochs(dat::AbstractVector{<:EpochData}, info::AbstractVector{<:EpochRejectionInfo})
+    length(dat) == length(info) ||
+        @minimal_error("Length of EpochData vector ($(length(dat))) must match EpochRejectionInfo vector ($(length(info)))")
+    return reject_epochs.(dat, info)
+end
 
-
-function reject_epochs(dat::EpochData, bad_columns::AbstractVector{Symbol})
-    # Input validation
-    isempty(dat.data) && @minimal_error("Cannot remove bad epochs from empty EpochData")
-    isempty(bad_columns) && return dat  # No columns to check
-
-    # Validate that all bad_columns exist in the data
-    first_epoch = first(dat.data)
-    for col in bad_columns
-        if !hasproperty(first_epoch, col)
-            @minimal_error("Column '$col' not found in epoch data")
-        end
-
-        # Check if column is boolean
-        col_type = eltype(first_epoch[!, col])
-        if col_type != Bool
-            @minimal_warning "Column '$col' is not Boolean type ($(col_type)). Non-zero values will be treated as 'true'"
-        end
-    end
-
-    # Pre-allocate for better performance
-    n_eps = n_epochs(dat)
-    good_epochs = DataFrame[]
-    sizehint!(good_epochs, n_eps)  # Performance hint
-
-    n_removed = 0
-
-    for epoch_df in dat
-        # Check if any sample in this epoch has any true value in any bad column
-        has_bad_samples = false
-
-        for col in bad_columns
-            if any(epoch_df[!, col])
-                has_bad_samples = true
-                break
-            end
-        end
-
-        # If no bad samples found, keep this epoch
-        if !has_bad_samples
-            push!(good_epochs, epoch_df)
-        else
-            n_removed += 1
-        end
-    end
-
-    # Log removal statistics
-    if n_removed > 0
-        @info "Condition $(dat.condition) ($(dat.condition_name)) removed $n_removed of $n_eps epochs ($(round(100*n_removed/n_eps, digits=1))%)"
-    end
-
-    # Return new EpochData with only good epochs (preserve struct fields)
-    return EpochData(dat.file, dat.condition, dat.condition_name, good_epochs, copy(dat.layout), dat.sample_rate, copy(dat.analysis_info))
+function reject_epochs(dat::EpochData, bad_columns::AbstractVector{Symbol})::EpochData
+    return reject_epochs!(copy(dat), bad_columns)
 end
 
 reject_epochs(dat::EpochData, bad_column::Symbol) = reject_epochs(dat, [bad_column])
 
-reject_epochs(dat::AbstractVector{<:EpochData}, bad_column::Symbol) = reject_epochs.(dat, bad_column)
+reject_epochs(dat::AbstractVector{<:EpochData}, bad_column::Symbol) = [reject_epochs(d, bad_column) for d in dat]
 reject_epochs(dat::AbstractVector{<:EpochData}, bad_columns::AbstractVector{Symbol}) = [reject_epochs(d, bad_columns) for d in dat]
 
 
@@ -1089,7 +1122,7 @@ function _process_average_file(filepath::String, output_path::String, condition_
     erps_data = average_epochs.(epochs_data)
 
     # Save (always use "data" as variable name since read_data finds by type)
-    jldsave(output_path; data = erps_data)
+    jldsave(output_path; data = erps_data, format_version = EEGFUN_FORMAT_VERSION)
 
     return BatchResult(true, filename, "Averaged $(length(erps_data)) condition(s)")
 end

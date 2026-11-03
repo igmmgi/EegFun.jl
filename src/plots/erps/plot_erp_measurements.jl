@@ -110,7 +110,7 @@ function plot_erp_measurements(
         analysis_interval = _normalize_interval(analysis_interval)
     end
 
-    kwargs_dict = Dict{Symbol,Any}(kwargs)
+    kwargs_dict = _normalize_plot_kwargs(kwargs)
 
     # Extract measurement kwargs and remove them from Plot kwargs to prevent Makie keyword errors
     measurement_kwargs = Dict{Symbol,Any}()
@@ -158,7 +158,7 @@ function plot_erp_measurements(
     # Pre-compute baseline-corrected data per dataset (avoid redundant copies per channel)
     baseline_cache = Dict{Int,Tuple{ErpData,Vector{Float64}}}()
     for (idx, dataset) in enumerate(erp_datasets)
-        erp_data = baseline(dataset, baseline_interval)
+        erp_data = isnothing(baseline_interval) ? (average_channels ? copy(dataset) : dataset) : baseline(dataset, baseline_interval)
         if average_channels
             channel_average!(erp_data; channel_selections = [channels(selected_channels)], output_labels = [:avg], reduce = false)
         end
@@ -205,7 +205,7 @@ function plot_erp_measurements(
         end
     end
 
-    return (fig = fig)
+    return (fig = fig, axes = axes)
 end
 
 

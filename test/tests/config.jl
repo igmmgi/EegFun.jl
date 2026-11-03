@@ -93,7 +93,7 @@ using Dates
 
         # Test that all preprocess parameters exist
         @test haskey(EegFun.PARAMETERS, "preprocess.reference_channel")
-        @test haskey(EegFun.PARAMETERS, "preprocess.layout.neighbour_criterion")
+        @test haskey(EegFun.PARAMETERS, "preprocess.layout.neighbor_criterion")
         @test haskey(EegFun.PARAMETERS, "preprocess.channel_repair.method")
         @test EegFun.PARAMETERS["preprocess.channel_repair.method"].default == "spherical_spline"
         @test haskey(EegFun.PARAMETERS, "preprocess.eog.vEOG_channels")
@@ -1028,7 +1028,7 @@ using Dates
             "reference_channel" => "avg",
             "epoch_start" => -1.0,
             "epoch_end" => 1.0,
-            "layout" => Dict("neighbour_criterion" => 0.25),
+            "layout" => Dict("neighbor_criterion" => 0.25),
             "filter" => Dict(
                 "highpass" => Dict("apply" => true, "type" => :hp, "freq" => 0.1, "func" => :filtfilt, "method" => :iir, "order" => 2),
                 "lowpass" => Dict("apply" => true, "type" => :lp, "freq" => 30.0, "func" => :filtfilt, "method" => :iir, "order" => 2),
@@ -1098,6 +1098,77 @@ using Dates
         p_cfg = EegFun.PipelineConfig(full_dict)
         @test p_cfg.files.input.directory == "./raw_dir"
         @test p_cfg.preprocess.channel_repair_method == :spherical_spline
+    end
+
+    @testset "Phase 2 regressions: ConfigParameter.allowed typing, rereference, nullable from_dict, neighbour alias, defaults" begin
+        # 1. ConfigParameter.allowed field type is Union{Nothing,Vector{Any}} (not untyped Any)
+        @test fieldtype(EegFun.ConfigParameter{String}, :allowed) == Union{Nothing,Vector{Any}}
+
+        # 2. Newly registered PARAMETERS keys & μV unit descriptions
+        @test haskey(EegFun.PARAMETERS, "preprocess.eeg.artifact_interval_end")
+        @test haskey(EegFun.PARAMETERS, "preprocess.ica.component_method")
+        @test EegFun.PARAMETERS["preprocess.layout.neighbor_criterion"].default == 0.35
+        @test contains(EegFun.PARAMETERS["preprocess.eeg.extreme_value_abs_criterion"].description, "μV")
+        @test !contains(EegFun.PARAMETERS["preprocess.eeg.extreme_value_abs_criterion"].description, "(mV)")
+        @test contains(EegFun.PARAMETERS["preprocess.eeg.artifact_value_abs_criterion"].description, "μV")
+        @test !contains(EegFun.PARAMETERS["preprocess.eeg.artifact_value_abs_criterion"].description, "(mV)")
+
+        # 3. EegConfig.rereference & linked-mastoid Vector{String} reference_channel in read_config / PreprocessConfig
+        eeg_default = EegFun.EegConfig()
+        @test eeg_default.rereference == :avg
+        eeg_vec_ref = EegFun.EegConfig(Dict("rereference" => ["M1", "M2"]))
+        @test eeg_vec_ref.rereference == [:M1, :M2]
+
+        ref_toml = joinpath(test_dir, "linked_ref.toml")
+        write(
+            ref_toml,
+            """
+[preprocess]
+reference_channel = ["M1", "M2"]
+
+[preprocess.ica]
+component_method = "correlation"
+""",
+        )
+        ref_cfg_dict = EegFun.read_config(ref_toml)
+        ref_pcfg = EegFun.PipelineConfig(ref_cfg_dict)
+        @test ref_pcfg.preprocess.reference_channel == [:M1, :M2]
+        @test ref_pcfg.preprocess.ica.component_method == :correlation
+
+        # 4. from_dict honors explicit `nothing` on nullable fields with non-nothing defaults
+        ar_none = EegFun.AutoRejectConfig(Dict("seed" => nothing))
+        @test ar_none.seed === nothing
+        eeg_none = EegFun.EegConfig(Dict("artifact_interval_start" => nothing, "artifact_interval_end" => nothing))
+        @test eeg_none.artifact_interval_start === nothing
+        @test eeg_none.artifact_interval_end === nothing
+
+        # 5. Legacy "neighbour_criterion" accepted with @warn in both from_dict and read_config
+        legacy_pre = @test_logs (:warn, r"neighbour_criterion") match_mode = :any EegFun.PreprocessConfig(
+            Dict("layout" => Dict("neighbour_criterion" => 0.42)),
+        )
+        @test legacy_pre.neighbor_criterion == 0.42
+
+        legacy_toml = joinpath(test_dir, "legacy_uk.toml")
+        write(
+            legacy_toml,
+            """
+[preprocess.layout]
+neighbour_criterion = 0.44
+""",
+        )
+        legacy_dict = @test_logs (:warn, r"neighbour_criterion") match_mode = :any EegFun.read_config(legacy_toml)
+        @test legacy_dict["preprocess"]["layout"]["neighbor_criterion"] == 0.44
+        @test EegFun.PipelineConfig(legacy_dict).preprocess.neighbor_criterion == 0.44
+
+        # 6. Struct defaults align with _generate_default_config()
+        empty_toml = joinpath(test_dir, "defaults_align.toml")
+        write(empty_toml, "# empty\n")
+        def_from_toml = EegFun.PipelineConfig(EegFun.read_config(empty_toml))
+        def_struct = EegFun.PipelineConfig()
+        @test def_from_toml.preprocess.neighbor_criterion == def_struct.preprocess.neighbor_criterion
+        @test def_from_toml.preprocess.filter.highpass.order == def_struct.preprocess.filter.highpass.order
+        @test def_from_toml.preprocess.filter.lowpass.freq == def_struct.preprocess.filter.lowpass.freq
+        @test def_from_toml.files.output.save_ica_data == def_struct.files.output.save_ica_data
     end
 
     # Cleanup

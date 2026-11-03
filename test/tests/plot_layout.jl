@@ -12,15 +12,15 @@ using Makie
         # Test basic functionality
         @test EegFun.plot_layout_2d!(fig, ax, layout, display_plot = false) === ax
 
-        # Test with neighbours
-        @test EegFun.plot_layout_2d!(fig, ax, layout, neighbours = true, display_plot = false) === ax
+        # Test with neighbors
+        @test EegFun.plot_layout_2d!(fig, ax, layout, neighbors = true, display_plot = false) === ax
     end
 
     @testset "plot_layout! basic functionality" begin
         fig = Figure()
         ax = Axis(fig[1, 1])
         @test EegFun.plot_layout!(fig, ax, layout, display_plot = false) === ax
-        @test EegFun.plot_layout!(fig, ax, layout, neighbours = true, display_plot = false) === ax
+        @test EegFun.plot_layout!(fig, ax, layout, neighbors = true, display_plot = false) === ax
     end
 
     @testset "plot_layout_2d basic functionality" begin
@@ -29,8 +29,10 @@ using Makie
         @test result.fig isa Figure
         @test first(result.axes) isa Axis
 
-        # Test with neighbours
-        result = EegFun.plot_layout_2d(layout, neighbours = true, display_plot = false)
+        # Test with populated neighbors Dict{Symbol,Neighbors}
+        layout_with_nb = copy(layout)
+        EegFun.get_neighbors_xy!(layout_with_nb, 1.5)
+        result = EegFun.plot_layout_2d(layout_with_nb, neighbors = true, display_plot = false)
         @test result.fig isa Figure
         @test first(result.axes) isa Axis
     end
@@ -70,8 +72,8 @@ using Makie
         # Test basic functionality
         @test EegFun.plot_layout_3d!(fig, ax, layout, display_plot = false) === ax
 
-        # Test with neighbours
-        @test EegFun.plot_layout_3d!(fig, ax, layout, neighbours = true, display_plot = false) === ax
+        # Test with neighbors
+        @test EegFun.plot_layout_3d!(fig, ax, layout, neighbors = true, display_plot = false) === ax
     end
 
     @testset "plot_layout_3d basic functionality" begin
@@ -79,11 +81,28 @@ using Makie
         result = EegFun.plot_layout_3d(layout, display_plot = false)
         @test result.fig isa Figure
         @test first(result.axes) isa Axis3
+        @test result.axes == [result.ax]
 
-        # Test with neighbours
-        result = EegFun.plot_layout_3d(layout, neighbours = true, display_plot = false)
+        # Test with neighbors
+        result = EegFun.plot_layout_3d(layout, neighbors = true, display_plot = false)
         @test result.fig isa Figure
         @test first(result.axes) isa Axis3
+    end
+
+    @testset "_add_interactive_correlation_points! reuses Observable text plot" begin
+        chs = layout.data.label
+        n_ch = length(chs)
+        corr_df = DataFrame(row = chs)
+        for (j, ch) in enumerate(chs)
+            corr_df[!, ch] = [i == j ? 1.0 : 0.75 for i = 1:n_ch]
+        end
+        res_corr = EegFun.plot_layout_2d(layout; correlation_matrix = corr_df, label_color = nothing, display_plot = false)
+        ax_corr = first(res_corr.axes)
+        n_plots_before = length(ax_corr.scene.plots)
+        for pos in ((0.0, 0.0), (50.0, 50.0), (200.0, 200.0), (10.0, 10.0))
+            res_corr.fig.scene.events.mouseposition[] = pos
+        end
+        @test length(ax_corr.scene.plots) == n_plots_before
     end
 
     @testset "plot_layout_3d with prefixed kwargs" begin

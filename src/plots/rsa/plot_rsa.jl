@@ -18,6 +18,7 @@ const PLOT_RSA_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Title
     :plot_title => (nothing, "Plot title"),
+    :show_title => (true, "Show plot title (true/false)"),
     :plot_title_fontsize => (16, "Font size for plot titles"),
     :plot_title_position => (
         nothing,
@@ -28,7 +29,9 @@ const PLOT_RSA_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Line styling
     :linewidth => (2, "Line width"),
     :color => (nothing, "Color"),
+    :colors => (nothing, "Custom colors for condition pairs or models"),
     :linestyle => (nothing, "Line style"),
+    :legend => (true, "Show legend (true/false)"),
 
     # Grid
     :xgrid => (true, "Show x-axis grid (true/false)"),
@@ -36,7 +39,9 @@ const PLOT_RSA_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # RDM heatmap
     :colormap => (nothing, "Colormap for RDM heatmap"),
-    :show_colorbar => (true, "Show colorbar for RDM (true/false)"),
+    :colorrange => (nothing, "Color scale limits as (min, max) tuple for RDM heatmap"),
+    :colorbar_plot => (true, "Show colorbar for RDM (true/false)"),
+    :plot_type => (nothing, "Plot type for plot_rsa (:rdm or :correlations)"),
 )
 
 """
@@ -65,14 +70,11 @@ plot_rdm_heatmap(rsa_result, time_point=50)
 ```
 """
 function plot_rdm_heatmap(rsa_data::RsaData; time_point::Union{Float64,Int,Nothing} = nothing, kwargs...)
-    # Merge defaults with user kwargs
-    plot_kwargs = merge(PLOT_RSA_KWARGS, Dict(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_RSA_KWARGS, _normalize_plot_kwargs(kwargs))
 
-    # Extract parameters (unwrap tuples if needed)
-    _get_val(k) = isa(plot_kwargs[k], Tuple) ? plot_kwargs[k][1] : plot_kwargs[k]
-    display_plot = _get_val(:display_plot)
-    title_text = _get_val(:plot_title)
-    show_title = !isnothing(title_text)
+    display_plot = plot_kwargs[:display_plot]
+    title_text = plot_kwargs[:plot_title]
+    show_title = plot_kwargs[:show_title]
 
     # Determine which RDM to plot
     n_conditions = length(rsa_data.condition_names)
@@ -99,12 +101,12 @@ function plot_rdm_heatmap(rsa_data::RsaData; time_point::Union{Float64,Int,Nothi
     # Create figure
     fig = _eegfun_figure()
 
-    if show_title && !isempty(title_text)
-        title_str = title_text
-    elseif show_title
-        title_str = "RDM at $time_label"
+    title_str = if !show_title
+        ""
+    elseif isnothing(title_text)
+        "RDM at $time_label"
     else
-        title_str = ""
+        title_text
     end
 
     ax = Axis(
@@ -112,8 +114,8 @@ function plot_rdm_heatmap(rsa_data::RsaData; time_point::Union{Float64,Int,Nothi
         title = title_str,
         xlabel = "Condition",
         ylabel = "Condition",
-        xgridvisible = _get_val(:xgrid),
-        ygridvisible = _get_val(:ygrid),
+        xgridvisible = plot_kwargs[:xgrid],
+        ygridvisible = plot_kwargs[:ygrid],
         aspect = DataAspect(),
     )
 
@@ -121,27 +123,32 @@ function plot_rdm_heatmap(rsa_data::RsaData; time_point::Union{Float64,Int,Nothi
     ax.xticks = (1:n_conditions, rsa_data.condition_names)
     ax.yticks = (1:n_conditions, rsa_data.condition_names)
 
-    # Plot heatmap
-    colormap_val = _resolve_theme_colormap(ax, _get_val(:colormap))
-    hm = heatmap!(ax, 1:n_conditions, 1:n_conditions, rdm_to_plot, colormap = colormap_val)
+    # Plot heatmap (RDM is symmetric, pass permutedims for standard row/col consistency)
+    colormap_val = _resolve_theme_colormap(ax, plot_kwargs[:colormap])
+    cr_val = plot_kwargs[:colorrange]
+    hm = if isnothing(cr_val)
+        heatmap!(ax, 1:n_conditions, 1:n_conditions, permutedims(rdm_to_plot), colormap = colormap_val)
+    else
+        heatmap!(ax, 1:n_conditions, 1:n_conditions, permutedims(rdm_to_plot), colormap = colormap_val, colorrange = cr_val)
+    end
 
     # Add colorbar if requested
-    if _get_val(:show_colorbar)
+    if plot_kwargs[:colorbar_plot]
         Colorbar(fig[1, 2], hm, label = "Dissimilarity")
     end
 
     # Draw supertitle if user explicitly provided a figure_title
-    figure_title = _get_val(:figure_title)
+    figure_title = plot_kwargs[:figure_title]
     if !isempty(figure_title)
-        Label(fig[0, :], figure_title, fontsize = _get_val(:figure_title_fontsize), font = :bold, tellwidth = false)
+        Label(fig[0, :], figure_title, fontsize = plot_kwargs[:figure_title_fontsize], font = :bold, tellwidth = false)
     end
 
     # Display if requested
     if display_plot
-        display(fig)
+        _display_figure(fig)
     end
 
-    return fig
+    return (fig = fig, axes = [ax])
 end
 
 """
@@ -173,18 +180,15 @@ plot_rdm_timecourse(rsa_result)
 plot_rdm_timecourse(rsa_result, condition_pairs=[(1,2), (1,3)])
 
 # Custom styling
-plot_rdm_timecourse(rsa_result, title="Dissimilarity Over Time")
+plot_rdm_timecourse(rsa_result, plot_title="Dissimilarity Over Time")
 ```
 """
 function plot_rdm_timecourse(rsa_data::RsaData; condition_pairs::Union{Vector{Tuple{Int,Int}},Symbol,Nothing} = :all, kwargs...)
-    # Merge defaults with user kwargs
-    plot_kwargs = merge(PLOT_RSA_KWARGS, Dict(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_RSA_KWARGS, _normalize_plot_kwargs(kwargs))
 
-    # Extract parameters (unwrap tuples if needed)
-    _get_val(k) = isa(plot_kwargs[k], Tuple) ? plot_kwargs[k][1] : plot_kwargs[k]
-    display_plot = _get_val(:display_plot)
-    title_text = _get_val(:plot_title)
-    show_title = !isnothing(title_text)
+    display_plot = plot_kwargs[:display_plot]
+    title_text = plot_kwargs[:plot_title]
+    show_title = plot_kwargs[:show_title]
 
     n_conditions = length(rsa_data.condition_names)
     times = rsa_data.times
@@ -203,11 +207,11 @@ function plot_rdm_timecourse(rsa_data::RsaData; condition_pairs::Union{Vector{Tu
     end
 
     # Auto-generate colors for pairs
-    colors = get(kwargs, :colors, nothing)
+    colors = plot_kwargs[:colors]
     n_pairs = length(pairs)
     if isnothing(colors)
-        colors = [:blue, :red, :green, :orange, :purple, :brown, :pink, :gray, :cyan, :magenta]
-        colors = [colors[mod1(i, length(colors))] for i = 1:n_pairs]
+        palette = [:blue, :red, :green, :orange, :purple, :brown, :pink, :gray, :cyan, :magenta]
+        colors = [palette[mod1(i, length(palette))] for i = 1:n_pairs]
     elseif colors isa Symbol
         colors = fill(colors, n_pairs)
     end
@@ -215,54 +219,53 @@ function plot_rdm_timecourse(rsa_data::RsaData; condition_pairs::Union{Vector{Tu
     # Create figure
     fig = _eegfun_figure()
 
-    if show_title && !isempty(title_text)
-        title_str = title_text
-    elseif show_title
-        title_str = "RDM Timecourse"
+    title_str = if !show_title
+        ""
+    elseif isnothing(title_text)
+        "RDM Timecourse"
     else
-        title_str = ""
+        title_text
     end
 
     ax = Axis(
         fig[1, 1],
         title = title_str,
-        xlabel = _get_val(:xlabel),
+        xlabel = plot_kwargs[:xlabel],
         ylabel = "Dissimilarity",
-        xgridvisible = _get_val(:xgrid),
-        ygridvisible = _get_val(:ygrid),
+        xgridvisible = plot_kwargs[:xgrid],
+        ygridvisible = plot_kwargs[:ygrid],
     )
 
     # Set axis limits
-    xlim_val = _get_val(:xlim)
+    xlim_val = plot_kwargs[:xlim]
     if !isnothing(xlim_val)
         xlims!(ax, xlim_val)
     else
         xlims!(ax, (times[1], times[end]))
     end
 
-    ylim_val = _get_val(:ylim)
+    ylim_val = plot_kwargs[:ylim]
     if !isnothing(ylim_val)
         ylims!(ax, ylim_val)
     end
 
+    line_style = isnothing(plot_kwargs[:linestyle]) ? :solid : plot_kwargs[:linestyle]
+
     # Plot each condition pair
     for (pair_idx, (i, j)) in enumerate(pairs)
-        # Extract dissimilarity timecourse for this pair
         dissim_time = [rsa_data.rdm[t, i, j] for t = 1:length(times)]
 
-        # Create label
         cond1_name = rsa_data.condition_names[i]
         cond2_name = rsa_data.condition_names[j]
         label = "$cond1_name vs $cond2_name"
 
-        # Plot line
         lines!(
             ax,
             times,
             dissim_time,
-            color = colors[pair_idx],
-            linewidth = _get_val(:linewidth),
-            linestyle = _get_val(:linestyle),
+            color = colors[mod1(pair_idx, length(colors))],
+            linewidth = plot_kwargs[:linewidth],
+            linestyle = line_style,
             label = label,
         )
     end
@@ -271,20 +274,22 @@ function plot_rdm_timecourse(rsa_data::RsaData; condition_pairs::Union{Vector{Tu
     hlines!(ax, 0, color = :black, linewidth = 1, linestyle = :dash)
 
     # Add legend
-    axislegend(ax, position = :rt)
+    if plot_kwargs[:legend] && n_pairs > 0
+        axislegend(ax, position = :rt)
+    end
 
     # Draw supertitle if user explicitly provided a figure_title
-    figure_title = _get_val(:figure_title)
+    figure_title = plot_kwargs[:figure_title]
     if !isempty(figure_title)
-        Label(fig[0, :], figure_title, fontsize = _get_val(:figure_title_fontsize), font = :bold, tellwidth = false)
+        Label(fig[0, :], figure_title, fontsize = plot_kwargs[:figure_title_fontsize], font = :bold, tellwidth = false)
     end
 
     # Display if requested
     if display_plot
-        display(fig)
+        _display_figure(fig)
     end
 
-    return fig
+    return (fig = fig, axes = [ax])
 end
 
 """
@@ -302,7 +307,7 @@ Plot model correlations over time.
 plot_model_correlations(rsa_result)
 
 # Custom styling
-plot_model_correlations(rsa_result, colors=[:red, :blue], title="Model Comparison")
+plot_model_correlations(rsa_result, colors=[:red, :blue], plot_title="Model Comparison")
 ```
 """
 function plot_model_correlations(rsa_data::RsaData; kwargs...)
@@ -310,14 +315,11 @@ function plot_model_correlations(rsa_data::RsaData; kwargs...)
         @minimal_error("RSA data does not contain model correlations. Run compare_models() first.")
     end
 
-    # Merge defaults with user kwargs
-    plot_kwargs = merge(PLOT_RSA_KWARGS, Dict(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_RSA_KWARGS, _normalize_plot_kwargs(kwargs))
 
-    # Extract parameters (unwrap tuples if needed)
-    _get_val(k) = isa(plot_kwargs[k], Tuple) ? plot_kwargs[k][1] : plot_kwargs[k]
-    display_plot = _get_val(:display_plot)
-    title_text = _get_val(:plot_title)
-    show_title = !isnothing(title_text)
+    display_plot = plot_kwargs[:display_plot]
+    title_text = plot_kwargs[:plot_title]
+    show_title = plot_kwargs[:show_title]
 
     times = rsa_data.times
     correlations = rsa_data.model_correlations
@@ -325,10 +327,10 @@ function plot_model_correlations(rsa_data::RsaData; kwargs...)
     n_models = length(model_names)
 
     # Auto-generate colors if not provided
-    colors = get(kwargs, :colors, nothing)
+    colors = plot_kwargs[:colors]
     if isnothing(colors)
-        colors = [:blue, :red, :green, :orange, :purple, :brown, :pink, :gray]
-        colors = [colors[mod1(i, length(colors))] for i = 1:n_models]
+        palette = [:blue, :red, :green, :orange, :purple, :brown, :pink, :gray]
+        colors = [palette[mod1(i, length(palette))] for i = 1:n_models]
     elseif colors isa Symbol
         colors = fill(colors, n_models)
     end
@@ -336,32 +338,32 @@ function plot_model_correlations(rsa_data::RsaData; kwargs...)
     # Create figure
     fig = _eegfun_figure()
 
-    if show_title && !isempty(title_text)
-        title_str = title_text
-    elseif show_title
-        title_str = "Model Correlations"
+    title_str = if !show_title
+        ""
+    elseif isnothing(title_text)
+        "Model Correlations"
     else
-        title_str = ""
+        title_text
     end
 
     ax = Axis(
         fig[1, 1],
         title = title_str,
-        xlabel = _get_val(:xlabel),
-        ylabel = _get_val(:ylabel),
-        xgridvisible = _get_val(:xgrid),
-        ygridvisible = _get_val(:ygrid),
+        xlabel = plot_kwargs[:xlabel],
+        ylabel = plot_kwargs[:ylabel],
+        xgridvisible = plot_kwargs[:xgrid],
+        ygridvisible = plot_kwargs[:ygrid],
     )
 
     # Set axis limits
-    xlim_val = _get_val(:xlim)
+    xlim_val = plot_kwargs[:xlim]
     if !isnothing(xlim_val)
         xlims!(ax, xlim_val)
     else
         xlims!(ax, (times[1], times[end]))
     end
 
-    ylim_val = _get_val(:ylim)
+    ylim_val = plot_kwargs[:ylim]
     if !isnothing(ylim_val)
         ylims!(ax, ylim_val)
     else
@@ -380,15 +382,18 @@ function plot_model_correlations(rsa_data::RsaData; kwargs...)
         end
     end
 
+    line_style = isnothing(plot_kwargs[:linestyle]) ? :solid : plot_kwargs[:linestyle]
+
     # Plot correlations for each model
     for (model_idx, model_name) in enumerate(model_names)
+        model_color = colors[mod1(model_idx, length(colors))]
         lines!(
             ax,
             times,
             correlations[:, model_idx],
-            color = colors[model_idx],
-            linewidth = _get_val(:linewidth),
-            linestyle = _get_val(:linestyle),
+            color = model_color,
+            linewidth = plot_kwargs[:linewidth],
+            linestyle = line_style,
             label = model_name,
         )
 
@@ -401,8 +406,8 @@ function plot_model_correlations(rsa_data::RsaData; kwargs...)
                     ax,
                     times[sig_indices],
                     correlations[sig_indices, model_idx],
-                    color = colors[model_idx],
-                    marker = :star,
+                    color = model_color,
+                    marker = :star5,
                     markersize = 10,
                 )
             end
@@ -413,20 +418,22 @@ function plot_model_correlations(rsa_data::RsaData; kwargs...)
     hlines!(ax, 0, color = :black, linewidth = 1, linestyle = :dash)
 
     # Add legend
-    axislegend(ax, position = :rt)
+    if plot_kwargs[:legend] && n_models > 0
+        axislegend(ax, position = :rt)
+    end
 
     # Draw supertitle if user explicitly provided a figure_title
-    figure_title = _get_val(:figure_title)
+    figure_title = plot_kwargs[:figure_title]
     if !isempty(figure_title)
-        Label(fig[0, :], figure_title, fontsize = _get_val(:figure_title_fontsize), font = :bold, tellwidth = false)
+        Label(fig[0, :], figure_title, fontsize = plot_kwargs[:figure_title_fontsize], font = :bold, tellwidth = false)
     end
 
     # Display if requested
     if display_plot
-        display(fig)
+        _display_figure(fig)
     end
 
-    return fig
+    return (fig = fig, axes = [ax])
 end
 
 """
@@ -469,7 +476,7 @@ function plot_rsa(filepath::String; input_dir::String = pwd(), participant_selec
         files = _find_batch_files(filepath, input_dir, participant_selection)
         isempty(files) && @minimal_error "No files matching pattern '$filepath' in $input_dir"
 
-        results = []
+        results = NamedTuple[]
         for file in sort(files, by = _natural_sort_key)
             file_path = joinpath(input_dir, file)
             @info "Plotting: $file"

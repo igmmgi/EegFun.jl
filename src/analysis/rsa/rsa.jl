@@ -68,45 +68,126 @@ end
 """
     _compute_pooled_covariance(data_arrays::Vector{Array{Float64, 3}}, time_idx::Int)
 
-Compute pooled covariance matrix across all conditions at a specific time point.
-
-The pooled covariance is the weighted average of within-condition covariances,
-which provides a robust estimate of the noise covariance structure.
-
-# Arguments
-- `data_arrays::Vector{Array{Float64, 3}}`: Vector of [channels × time × trials] arrays, one per condition
-- `time_idx::Int`: Time point index to compute covariance for
-
-# Returns
-- `pooled_cov::Matrix{Float64}`: Pooled covariance matrix [features × features]
-
-# Notes
-- Uses unbiased estimator (dividing by n-1)
-- Regularization is applied if matrix is near-singular
+Compute within-condition demeaned pooled noise covariance matrix across all conditions
+at a specific time point using analytical Ledoit–Wolf shrinkage toward `(tr(S) / P) * I`.
 """
 function _compute_pooled_covariance(data_arrays::Vector{Array{Float64,3}}, time_idx::Int)
-    n_features = size(data_arrays[1], 1)  # Number of channels
-    total_trials = sum(size(c, 3) for c in data_arrays)
+    return _compute_pooled_covariance_subset(data_arrays, nothing, time_idx)
+end
 
-    # Pre-allocate [features × total_trials] and write in-place
-    all_data = Matrix{Float64}(undef, n_features, total_trials)
-    col_offset = 0
-    for cond_data in data_arrays
-        n_tr = size(cond_data, 3)
-        @views all_data[:, (col_offset+1):(col_offset+n_tr)] .= cond_data[:, time_idx, :]
-        col_offset += n_tr
+function _compute_pooled_covariance_subset(
+    data_arrays::Vector{Array{Float64,3}},
+    trial_indices::Union{Nothing,Vector{Vector{Int}}},
+    time_idx::Int,
+)
+    n_features = size(data_arrays[1], 1)
+    total_trials = 0
+    n_dof = 0
+    for (c, cond_data) in enumerate(data_arrays)
+        n_tr = isnothing(trial_indices) ? size(cond_data, 3) : length(trial_indices[c])
+        if n_tr >= 2
+            total_trials += n_tr
+            n_dof += n_tr - 1
+        end
     end
 
-    # Compute covariance directly across trials (dimension 2) without transposing
-    pooled_cov = cov(all_data; dims = 2)
+    if n_dof < 1 || total_trials == 0
+        return Matrix{Float64}(LinearAlgebra.I, n_features, n_features)
+    end
 
-    # Add small regularization for numerical stability directly to diagonal
-    λ = 1e-6 * tr(pooled_cov) / n_features
+    # Demean within each condition so between-condition signal does not contaminate noise covariance
+    residuals = Matrix{Float64}(undef, n_features, total_trials)
+    cond_mean = Vector{Float64}(undef, n_features)
+    col_offset = 0
+
+    for (c, cond_data) in enumerate(data_arrays)
+        if isnothing(trial_indices)
+            n_tr = size(cond_data, 3)
+            n_tr < 2 && continue
+            fill!(cond_mean, 0.0)
+            @inbounds for tr_idx = 1:n_tr
+                @simd for f = 1:n_features
+                    cond_mean[f] += cond_data[f, time_idx, tr_idx]
+                end
+            end
+            inv_n = 1.0 / n_tr
+            @inbounds @simd for f = 1:n_features
+                cond_mean[f] *= inv_n
+            end
+            @inbounds for tr_idx = 1:n_tr
+                col_offset += 1
+                @simd for f = 1:n_features
+                    residuals[f, col_offset] = cond_data[f, time_idx, tr_idx] - cond_mean[f]
+                end
+            end
+        else
+            idxs = trial_indices[c]
+            n_tr = length(idxs)
+            n_tr < 2 && continue
+            fill!(cond_mean, 0.0)
+            @inbounds for tr_idx in idxs
+                @simd for f = 1:n_features
+                    cond_mean[f] += cond_data[f, time_idx, tr_idx]
+                end
+            end
+            inv_n = 1.0 / n_tr
+            @inbounds @simd for f = 1:n_features
+                cond_mean[f] *= inv_n
+            end
+            @inbounds for tr_idx in idxs
+                col_offset += 1
+                @simd for f = 1:n_features
+                    residuals[f, col_offset] = cond_data[f, time_idx, tr_idx] - cond_mean[f]
+                end
+            end
+        end
+    end
+
+    # Analytical Ledoit & Wolf (2004) shrinkage toward F = mu * I
+    S = (residuals * residuals') ./ total_trials
+    mu = tr(S) / n_features
+
+    normS_sq = 0.0
+    d2 = 0.0
+    @inbounds for j = 1:n_features
+        for i = 1:n_features
+            s_ij = S[i, j]
+            normS_sq += s_ij * s_ij
+            diff = s_ij - (i == j ? mu : 0.0)
+            d2 += diff * diff
+        end
+    end
+    d2 /= n_features
+
+    delta = if d2 <= 1e-30
+        1.0
+    else
+        sum_norm4 = 0.0
+        @inbounds for col = 1:total_trials
+            n2 = 0.0
+            @simd for f = 1:n_features
+                v = residuals[f, col]
+                n2 += v * v
+            end
+            sum_norm4 += n2 * n2
+        end
+        b2 = min(d2, max(0.0, sum_norm4 - total_trials * normS_sq) / (Float64(total_trials)^2 * n_features))
+        clamp(b2 / d2, 0.0, 1.0)
+    end
+
+    scale = total_trials / n_dof
+    pooled_cov = (scale * (1.0 - delta)) .* S
+    diag_add = scale * delta * mu + (mu <= 1e-15 ? 1e-12 : 0.0)
     @inbounds for i = 1:n_features
-        pooled_cov[i, i] += λ
+        pooled_cov[i, i] += diag_add
     end
 
     return pooled_cov
+end
+
+function _invert_spd_covariance(cov_mat::Matrix{Float64})
+    chol = cholesky(Symmetric(cov_mat); check = false)
+    return issuccess(chol) ? Matrix{Float64}(inv(chol)) : pinv(cov_mat)
 end
 
 # === DISSIMILARITY MEASURES ===
@@ -239,13 +320,13 @@ Choose based on your analysis goals and the properties of your dissimilarity mea
 # Examples
 ```julia
 # Z-score normalization (useful for comparing RDMs with different scales)
-rdm_z = normalize_rdm(rdm, method=:zscore)
+rdm_z = EegFun.normalize_rdm(rdm, method=:zscore)
 
 # Rank normalization (robust to outliers, used for Spearman-like comparisons)
-rdm_rank = normalize_rdm(rdm, method=:rank)
+rdm_rank = EegFun.normalize_rdm(rdm, method=:rank)
 
 # Min-max normalization (scales to [0, 1])
-rdm_minmax = normalize_rdm(rdm, method=:minmax)
+rdm_minmax = EegFun.normalize_rdm(rdm, method=:minmax)
 ```
 
 # Notes
@@ -275,8 +356,8 @@ function normalize_rdm(rdm::AbstractMatrix{Float64}; method::Symbol = :none)
             normalized_values = zeros(Float64, length(upper_values))
         end
     elseif method == :rank
-        # Rank transformation (ordinal ranks)
-        normalized_values = StatsBase.ordinalrank(upper_values)
+        # Rank transformation using tied average ranks
+        normalized_values = StatsBase.tiedrank(upper_values)
     elseif method == :minmax
         # Min-max normalization: (x - min) / (max - min)
         min_val = minimum(upper_values)
@@ -355,22 +436,22 @@ showing how dissimilar neural patterns are between different conditions.
 ```julia
 # Basic RSA with correlation-based dissimilarity
 epochs = [epoch_condition1, epoch_condition2, epoch_condition3]
-rsa_result = rsa(epochs, channel_selection=channels([:Fz, :Cz, :Pz]), sample_selection=samples((-0.2, 0.8)))
+rsa_result = EegFun.rsa(epochs, channel_selection=EegFun.channels([:Fz, :Cz, :Pz]), sample_selection=EegFun.samples((-0.2, 0.8)))
 
 # Using Euclidean distance
-rsa_result = rsa(epochs, dissimilarity_measure=:euclidean)
+rsa_result = EegFun.rsa(epochs, dissimilarity_measure=:euclidean)
 
 # Using Mahalanobis distance (accounts for covariance structure)
-rsa_result = rsa(epochs, dissimilarity_measure=:mahalanobis)
+rsa_result = EegFun.rsa(epochs, dissimilarity_measure=:mahalanobis)
 
 # Without averaging trials (computes RDM for each trial, then averages RDMs)
-rsa_result = rsa(epochs, average_trials=false)
+rsa_result = EegFun.rsa(epochs, average_trials=false)
 
 # With z-score normalization
-rsa_result = rsa(epochs, normalize_method=:zscore)
+rsa_result = EegFun.rsa(epochs, normalize_method=:zscore)
 
 # Use all channels and all time points (default)
-rsa_result = rsa(epochs)
+rsa_result = EegFun.rsa(epochs)
 ```
 """
 function rsa(
@@ -421,7 +502,7 @@ function rsa(
             inv_pooled_cov = nothing
             if dissimilarity_measure == :mahalanobis
                 pooled_cov = _compute_pooled_covariance(data_arrays, t)
-                inv_pooled_cov = pinv(pooled_cov)
+                inv_pooled_cov = _invert_spd_covariance(pooled_cov)
             end
 
             # Compute RDM for each trial
@@ -482,136 +563,118 @@ end
 # === MODEL COMPARISON ===
 
 """
-    compare_models(
+    compare_models!(
         rsa_data::RsaData,
-        model_rdms::Union{Vector{Matrix{Float64}}, Vector{Array{Float64, 3}}, Vector{Union{Matrix{Float64}, Array{Float64, 3}}}};
+        model_rdms::AbstractVector;
         model_names::Union{Vector{String}, Nothing} = nothing,
         correlation_type::Symbol = :spearman,
         n_permutations::Int = 1000,
-        
+        tail::Symbol = :right,
+        rng::AbstractRNG = Random.default_rng(),
     )
 
-Compare neural RDMs to model RDMs (static or temporal).
-
-Computes correlations between neural RDMs and model RDMs at each time point,
-with optional permutation-based significance testing.
-
-# Input Format
-
-**Model RDMs must be in one of these formats:**
-
-1. **Static RDM**: `Matrix{Float64}` [n_conditions × n_conditions]
-   - Single RDM used at all time points
-   - Example: Reaction time RDM, similarity ratings RDM
-
-2. **Temporal RDM**: `Array{Float64, 3}` [n_timepoints × n_conditions × n_conditions]
-   - RDM at each time point
-   - Must have same number of timepoints as `rsa_data.times`
-   - Example: Eye tracking RDM, EDA RDM
-
-**Note**: Convert your raw data to RDMs first using [`create_rdm`](@ref):
-- Static: `create_rdm(rts)`, `create_rdm(vectors)`, `create_rdm(matrix)`
-- Temporal: `create_rdm(data, times; align_to=neural_rsa)` (handles temporal alignment automatically)
-
-# Arguments
-- `rsa_data::RsaData`: RSA results from neural data (temporal)
-- `model_rdms`: Vector of model RDMs
-  - Static: `Matrix{Float64}` [condition × condition]
-  - Temporal: `Array{Float64, 3}` [time × condition × condition]
-  - Mixed: Can contain both static and temporal models
-- `model_names::Union{Vector{String}, Nothing}`: Names for models (default: Model1, Model2, ...)
-- `correlation_type::Symbol`: Type of correlation (:spearman, :pearson)
-- `n_permutations::Int`: Number of permutations for significance testing (0 = no testing)
-
-# Returns
-- `RsaData`: Updated RsaData with model correlations and p-values
-
-# Examples
-
-## Static Model (Reaction Times)
-
-```julia
-# Step 1: Convert your data to RDM
-rts = [0.3, 0.5, 0.4]  # Your reaction time data
-rt_rdm = create_rdm(rts)
-
-# Step 2: Compare
-neural_rsa = rsa(epochs)
-rsa_with_model = compare_models(neural_rsa, [rt_rdm], model_names=["RTs"])
-```
-
-## Temporal Model (Eye Tracking)
-
-```julia
-# Step 1: Convert your data to temporal RDM (with automatic alignment)
-eye_data = randn(3, 2, 50)     # [conditions × features × time]
-eye_times = collect(0.0:0.01:0.49) # Time vector
-eye_rdms = create_rdm(eye_data, eye_times; align_to=neural_rsa)
-
-# Step 2: Compare
-neural_rsa = rsa(epochs)
-rsa_with_model = compare_models(neural_rsa, [eye_rdms], model_names=["Eye Tracking"])
-```
-
-## Multiple Models (Mixed Static and Temporal)
-
-```julia
-# Convert all your model data to RDMs
-rt_rdm = create_rdm(rts)
-eye_rdms = create_rdm(eye_data, eye_times; align_to=neural_rsa)
-eda_rdms = create_rdm(eda_data, eda_times; align_to=neural_rsa)
-
-# Compare all at once
-rsa_with_models = compare_models(
-    neural_rsa,
-    [rt_rdm, eye_rdms, eda_rdms],
-    model_names=["RTs", "Eye Tracking", "EDA"]
-)
-```
-
-## Pre-computed RDMs
-
-If you already have RDMs computed (from other analyses):
-
-```julia
-# Your pre-computed RDM
-my_rdm = Matrix{Float64}  # [conditions × conditions]
-
-# Use directly - no conversion needed
-rsa_with_model = compare_models(neural_rsa, [my_rdm], model_names=["My Model"])
-```
+Compare neural RDMs to model RDMs in-place on `rsa_data` (without mutating `model_rdms`).
+See [`compare_models`](@ref) for full parameter documentation.
 """
-function compare_models(
+function compare_models!(
     rsa_data::RsaData,
-    model_rdms::Union{Vector{Matrix{Float64}},Vector{Array{Float64,3}},Vector{Union{Matrix{Float64},Array{Float64,3}}}};
+    model_rdms::AbstractVector;
     model_names::Union{Vector{String},Nothing} = nothing,
     correlation_type::Symbol = :spearman,
     n_permutations::Int = 1000,
+    tail::Symbol = :right,
     rng::AbstractRNG = Random.default_rng(),
 )
+    if !(correlation_type in (:spearman, :pearson))
+        @minimal_error("Unknown correlation type: $correlation_type. Use :spearman or :pearson")
+    end
+    if !(tail in (:right, :left, :both))
+        @minimal_error("Unknown tail: $tail. Use :right, :left, or :both")
+    end
+    if n_permutations < 0
+        @minimal_error("n_permutations must be >= 0, got $n_permutations")
+    end
+
     n_models = length(model_rdms)
     n_conditions = length(rsa_data.condition_names)
     n_times = length(rsa_data.times)
 
-    # Validate model RDMs and determine which are temporal
+    # Validate model RDMs without mutating caller's vector
     is_temporal = _validate_model_rdms(model_rdms, n_conditions, n_times)
 
     # Generate model names if not provided
-    if isnothing(model_names)
-        model_names = ["Model$(i)" for i = 1:n_models]
+    resolved_names = if isnothing(model_names)
+        ["Model$(i)" for i = 1:n_models]
     elseif length(model_names) != n_models
         @minimal_error("Number of model names ($(length(model_names))) doesn't match number of models ($n_models)")
+    else
+        copy(model_names)
     end
 
     # Compute correlations at each time point
-    correlations, p_values = _compute_model_correlations(rsa_data, model_rdms, is_temporal, correlation_type, n_permutations; rng = rng)
+    correlations, p_values =
+        _compute_model_correlations(rsa_data, model_rdms, is_temporal, correlation_type, n_permutations; tail = tail, rng = rng)
 
-    # Update RsaData
+    # Update RsaData in-place
     rsa_data.model_correlations = correlations
-    rsa_data.model_names = model_names
+    rsa_data.model_names = resolved_names
     rsa_data.p_values = p_values
 
     return rsa_data
+end
+
+"""
+    compare_models(
+        rsa_data::RsaData,
+        model_rdms::AbstractVector;
+        model_names::Union{Vector{String}, Nothing} = nothing,
+        correlation_type::Symbol = :spearman,
+        n_permutations::Int = 1000,
+        tail::Symbol = :right,
+        rng::AbstractRNG = Random.default_rng(),
+    )
+
+Compare neural RDMs to model RDMs (static or temporal), returning a new `RsaData` copy.
+
+Computes correlations between neural RDMs and model RDMs at each time point,
+with optional Mantel condition-permutation significance testing (exact `N!` enumeration
+when `N <= 4`, Monte Carlo permutation testing when `N >= 5`).
+
+# Arguments
+- `rsa_data::RsaData`: RSA results from neural data (not modified; use [`compare_models!`](@ref) for in-place)
+- `model_rdms`: Vector of model RDMs (`Matrix{Float64}` static or `Array{Float64, 3}` temporal)
+- `model_names::Union{Vector{String}, Nothing}`: Names for models (default: `Model1`, `Model2`, ...)
+- `correlation_type::Symbol`: `:spearman` (default) or `:pearson`
+- `n_permutations::Int`: Number of permutations for significance testing (`0` = no testing)
+- `tail::Symbol`: `:right` (default, directional positive model fit), `:left`, or `:both`
+- `rng::AbstractRNG`: Random number generator for permutations
+
+# Examples
+```julia
+rts = [0.3, 0.5, 0.4]
+rt_rdm = EegFun.create_rdm(rts)
+neural_rsa = EegFun.rsa(epochs)
+rsa_with_model = EegFun.compare_models(neural_rsa, [rt_rdm]; model_names = ["RTs"])
+```
+"""
+function compare_models(
+    rsa_data::RsaData,
+    model_rdms::AbstractVector;
+    model_names::Union{Vector{String},Nothing} = nothing,
+    correlation_type::Symbol = :spearman,
+    n_permutations::Int = 1000,
+    tail::Symbol = :right,
+    rng::AbstractRNG = Random.default_rng(),
+)
+    return compare_models!(
+        copy(rsa_data),
+        model_rdms;
+        model_names = model_names,
+        correlation_type = correlation_type,
+        n_permutations = n_permutations,
+        tail = tail,
+        rng = rng,
+    )
 end
 
 # === GRAND AVERAGE ===
@@ -622,7 +685,7 @@ function grand_average(rsa_data_list::AbstractVector{<:RsaData}; compute_noise_c
     end
 
     if length(rsa_data_list) == 1
-        return rsa_data_list[1]
+        return copy(rsa_data_list[1])
     end
 
     # Validate all have same structure
@@ -658,11 +721,11 @@ function grand_average(rsa_data_list::AbstractVector{<:RsaData}; compute_noise_c
     # Create grand-averaged RsaData
     grand_rsa = RsaData(
         "Grand Average",
-        first_rsa.condition_names,
-        first_rsa.times,
+        copy(first_rsa.condition_names),
+        copy(first_rsa.times),
         grand_rdm,
         first_rsa.dissimilarity_measure,
-        first_rsa.channels,
+        copy(first_rsa.channels),
         first_rsa.layout,
         first_rsa.sample_rate;
         noise_ceiling = noise_ceiling,
@@ -677,14 +740,13 @@ end
 """
     _validate_model_rdms(model_rdms, n_conditions, n_times)
 
-Validate dimensions and types of model RDMs. Returns a vector of booleans
-indicating whether each model is temporal.
+Validate dimensions and types of model RDMs without mutating `model_rdms`.
+Returns a vector of booleans indicating whether each model is temporal.
 """
 function _validate_model_rdms(model_rdms, n_conditions, n_times)
     is_temporal = Bool[]
     for (idx, model_rdm) in enumerate(model_rdms)
-        if isa(model_rdm, Array{Float64,3})
-            # Temporal model: [time × condition × condition]
+        if isa(model_rdm, AbstractArray{<:Real,3})
             if size(model_rdm, 1) != n_times
                 @minimal_error("Temporal model RDM $idx has $(size(model_rdm, 1)) timepoints, " * "expected $n_times to match neural data")
             end
@@ -695,14 +757,12 @@ function _validate_model_rdms(model_rdms, n_conditions, n_times)
                 )
             end
             push!(is_temporal, true)
-        elseif isa(model_rdm, Matrix{Float64})
-            # Static model: [condition × condition]
+        elseif isa(model_rdm, AbstractMatrix{<:Real})
             if size(model_rdm) != (n_conditions, n_conditions)
                 @minimal_error("Static model RDM $idx has size $(size(model_rdm)), " * "expected ($n_conditions, $n_conditions)")
             end
             if !issymmetric(model_rdm)
-                @minimal_warning "Static model RDM $idx is not symmetric, symmetrizing"
-                model_rdms[idx] = (model_rdm + model_rdm') / 2
+                @minimal_warning "Static model RDM $idx is not symmetric, symmetrizing copy"
             end
             push!(is_temporal, false)
         else
@@ -715,8 +775,42 @@ function _validate_model_rdms(model_rdms, n_conditions, n_times)
     return is_temporal
 end
 
+function _symmetrized_upper_triangular(rdm::AbstractMatrix{<:Real})
+    n = size(rdm, 1)
+    n_upper = (n * (n - 1)) ÷ 2
+    vec = Vector{Float64}(undef, n_upper)
+    k = 1
+    @inbounds for i = 1:n
+        for j = (i+1):n
+            vec[k] = 0.5 * (Float64(rdm[i, j]) + Float64(rdm[j, i]))
+            k += 1
+        end
+    end
+    return vec
+end
+
+function _all_permutations(n::Int)
+    perms = Vector{Vector{Int}}()
+    sizehint!(perms, factorial(n))
+    cur = collect(1:n)
+    function _gen!(k::Int)
+        if k == 1
+            push!(perms, copy(cur))
+            return
+        end
+        _gen!(k - 1)
+        for i = 1:(k-1)
+            swap_idx = iseven(k) ? i : 1
+            cur[swap_idx], cur[k] = cur[k], cur[swap_idx]
+            _gen!(k - 1)
+        end
+    end
+    _gen!(n)
+    return perms
+end
+
 """
-    _compute_model_correlations(rsa_data, model_rdms, is_temporal, correlation_type, n_permutations)
+    _compute_model_correlations(rsa_data, model_rdms, is_temporal, correlation_type, n_permutations; tail, rng)
 
 Compute correlations between neural RDMs and model RDMs across time.
 """
@@ -726,47 +820,63 @@ function _compute_model_correlations(
     is_temporal::Vector{Bool},
     correlation_type::Symbol,
     n_permutations::Int;
+    tail::Symbol = :right,
     rng::AbstractRNG = Random.default_rng(),
 )
     n_times = length(rsa_data.times)
     n_models = length(model_rdms)
+    n_conditions = length(rsa_data.condition_names)
 
     correlations = zeros(Float64, n_times, n_models)
     p_values = n_permutations > 0 ? zeros(Float64, n_times, n_models) : nothing
 
-    # Pre-extract upper triangular vectors for static models
+    # Pre-extract upper triangular vectors for both static and temporal models outside the time loop
     static_model_vecs = Vector{Union{Nothing,Vector{Float64}}}(undef, n_models)
+    temporal_model_vecs = Vector{Union{Nothing,Matrix{Float64}}}(undef, n_models)
+    n_upper = (n_conditions * (n_conditions - 1)) ÷ 2
+
     for model_idx = 1:n_models
-        if !is_temporal[model_idx]
-            static_model_vecs[model_idx] = _extract_upper_triangular(model_rdms[model_idx])
-        else
+        model_rdm = model_rdms[model_idx]
+        if is_temporal[model_idx]
+            t_vecs = Matrix{Float64}(undef, n_upper, n_times)
+            for t = 1:n_times
+                t_vecs[:, t] = _symmetrized_upper_triangular(@view model_rdm[t, :, :])
+            end
             static_model_vecs[model_idx] = nothing
+            temporal_model_vecs[model_idx] = t_vecs
+        else
+            static_model_vecs[model_idx] = _symmetrized_upper_triangular(model_rdm)
+            temporal_model_vecs[model_idx] = nothing
         end
     end
+
+    exact_perms = (n_permutations > 0 && 3 <= n_conditions <= 4) ? _all_permutations(n_conditions) : nothing
 
     for t = 1:n_times
         neural_rdm = @view rsa_data.rdm[t, :, :]
         neural_vec = _extract_upper_triangular(neural_rdm)
 
-        for (model_idx, model_rdm) in enumerate(model_rdms)
-            # Get model RDM vector for this time point
-            if is_temporal[model_idx]
-                model_rdm_t = @view model_rdm[t, :, :]
-                if !issymmetric(model_rdm_t)
-                    model_rdm_t = (model_rdm_t + model_rdm_t') / 2
-                end
-                model_vec = _extract_upper_triangular(model_rdm_t)
+        for model_idx = 1:n_models
+            model_vec = if is_temporal[model_idx]
+                @view (temporal_model_vecs[model_idx]::Matrix{Float64})[:, t]
             else
-                model_vec = static_model_vecs[model_idx]::Vector{Float64}
+                static_model_vecs[model_idx]::Vector{Float64}
             end
 
-            # Compute correlation
             corr = _correlate_vectors(neural_vec, model_vec, correlation_type)
             correlations[t, model_idx] = corr
 
-            # Permutation test if requested (Mantel-style condition label permutation)
             if n_permutations > 0
-                p_values[t, model_idx] = _run_model_permutations(neural_vec, model_vec, corr, correlation_type, n_permutations; rng = rng)
+                p_values[t, model_idx] = _run_model_permutations(
+                    neural_vec,
+                    model_vec,
+                    corr,
+                    correlation_type,
+                    n_permutations;
+                    tail = tail,
+                    exact_perms = exact_perms,
+                    rng = rng,
+                )
             end
         end
     end
@@ -775,33 +885,36 @@ function _compute_model_correlations(
 end
 
 """
-    _run_model_permutations(neural_vec, model_vec, observed_corr, correlation_type, n_permutations; rng)
+    _run_model_permutations(neural_vec, model_vec, observed_corr, correlation_type, n_permutations; tail, exact_perms, rng)
 
 Perform Mantel-style permutation testing for model correlations by permuting condition labels.
+Uses exact `N!` enumeration when `3 <= N <= 4` and Monte Carlo sampling when `N >= 5`.
 """
 function _run_model_permutations(
-    neural_vec,
-    model_vec,
-    observed_corr,
-    correlation_type,
-    n_permutations;
+    neural_vec::AbstractVector{Float64},
+    model_vec::AbstractVector{Float64},
+    observed_corr::Float64,
+    correlation_type::Symbol,
+    n_permutations::Int;
+    tail::Symbol = :right,
+    exact_perms::Union{Nothing,Vector{Vector{Int}}} = nothing,
     rng::AbstractRNG = Random.default_rng(),
 )
-    abs_observed = abs(observed_corr)
+    isnan(observed_corr) && return 1.0
+
     L = length(neural_vec)
     disc = 1 + 8 * L
     r = isqrt(disc)
     N = (r * r == disc && (1 + r) % 2 == 0) ? (1 + r) ÷ 2 : 0
 
     if N < 3
-        # Too few conditions to meaningfully permute
         return 1.0
     end
 
     # Reconstruct symmetric model matrix from upper triangular vector
     M = zeros(Float64, N, N)
     idx = 1
-    for i = 1:N
+    @inbounds for i = 1:N
         for j = (i+1):N
             val = model_vec[idx]
             M[i, j] = val
@@ -810,19 +923,54 @@ function _run_model_permutations(
         end
     end
 
-    extreme_count = 0
-    shuffled_model = similar(model_vec)
+    shuffled_model = Vector{Float64}(undef, L)
     neural_ranks = correlation_type == :spearman ? StatsBase.tiedrank(neural_vec) : nothing
-    perm = Vector{Int}(undef, N)
+    tol = 1e-12
+    abs_observed = abs(observed_corr)
 
+    if !isnothing(exact_perms) || N <= 4
+        perms = isnothing(exact_perms) ? _all_permutations(N) : exact_perms
+        extreme_count = 0
+        for perm in perms
+            idx = 1
+            @inbounds for i = 1:N
+                pi = perm[i]
+                for j = (i+1):N
+                    shuffled_model[idx] = M[pi, perm[j]]
+                    idx += 1
+                end
+            end
+
+            perm_corr = if correlation_type == :spearman
+                cor(neural_ranks, StatsBase.tiedrank(shuffled_model))
+            elseif correlation_type == :pearson
+                cor(neural_vec, shuffled_model)
+            else
+                @minimal_error("Unknown correlation type: $correlation_type. Use :spearman or :pearson")
+            end
+
+            isnan(perm_corr) && continue
+            is_ext = if tail == :right
+                perm_corr >= observed_corr - tol
+            elseif tail == :left
+                perm_corr <= observed_corr + tol
+            else
+                abs(perm_corr) >= abs_observed - tol
+            end
+            extreme_count += is_ext
+        end
+        return max(extreme_count, 1) / length(perms)
+    end
+
+    extreme_count = 0
+    perm = Vector{Int}(undef, N)
     for _ = 1:n_permutations
         Random.randperm!(rng, perm)
         idx = 1
-        for i = 1:N
+        @inbounds for i = 1:N
             pi = perm[i]
             for j = (i+1):N
-                pj = perm[j]
-                shuffled_model[idx] = M[pi, pj]
+                shuffled_model[idx] = M[pi, perm[j]]
                 idx += 1
             end
         end
@@ -835,12 +983,17 @@ function _run_model_permutations(
             @minimal_error("Unknown correlation type: $correlation_type. Use :spearman or :pearson")
         end
 
-        if abs(perm_corr) >= abs_observed
-            extreme_count += 1
+        isnan(perm_corr) && continue
+        is_ext = if tail == :right
+            perm_corr >= observed_corr - tol
+        elseif tail == :left
+            perm_corr <= observed_corr + tol
+        else
+            abs(perm_corr) >= abs_observed - tol
         end
+        extreme_count += is_ext
     end
 
-    # Two-tailed p-value with standard +1 correction
     return (extreme_count + 1) / (n_permutations + 1)
 end
 
@@ -976,7 +1129,7 @@ function _compute_rdms_from_data(
         inv_pooled_cov = nothing
         if dissimilarity_measure == :mahalanobis
             pooled_cov = _compute_pooled_covariance(data_arrays, t)
-            inv_pooled_cov = pinv(pooled_cov)
+            inv_pooled_cov = _invert_spd_covariance(pooled_cov)
         end
 
         for i = 1:n_conditions

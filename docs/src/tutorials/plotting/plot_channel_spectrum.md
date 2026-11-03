@@ -13,12 +13,12 @@ This demo shows how to plot power spectra from `SpectrumData` objects.
 
 | Parameter | Default | Description |
 | --- | --- | --- |
-| `channel_selection` | `channels()` | Which channels to plot |
-| `x_scale` | `:linear` | `:linear` or `:log10` |
-| `y_scale` | `:linear` | `:linear` or `:log10` |
+| `channel_selection` | `EegFun.channels()` | Which channels to plot |
+| `xscale` | `:linear` | `:linear` or `:log10` |
+| `yscale` | `:linear` | `:linear` or `:log10` |
 | `unit` | `:linear` | `:linear` (μV²/Hz) or `:dB` |
 | `max_freq` | `nothing` | Maximum frequency to display |
-| `show_legend` | `true` | Show channel name legend |
+| `legend` | `true` | Show channel name legend |
 
 ## What You'll Learn
 

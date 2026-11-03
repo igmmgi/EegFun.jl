@@ -87,20 +87,20 @@ function signal_example_dotproduct()
     FS    = 1000.0  # sample rate (Hz) — high enough for smooth rendering up to 40 Hz
     EPOCH = 2.0     # epoch length (s)
 
-    fig = _eegfun_figure(size = (1300, 850), figure_padding = (8, 8, 8, 8), title = "Dot Product Demo")
+    fig = _eegfun_figure(size = (1350, 850), figure_padding = (8, 8, 8, 8), title = "Dot Product Demo")
 
     # ── Font sizing ──────────────────────────────────────────────────────────
-    lbl_sz   = Observable(17)
-    tick_sz  = Observable(14)
-    title_sz = Observable(19)
-    ctrl_sz  = Observable(17)
+    lbl_sz   = Observable(15)
+    tick_sz  = Observable(12)
+    title_sz = Observable(18)
+    ctrl_sz  = Observable(15)
 
     on(fig.scene.viewport) do area
-        sf         = area.widths[1] / 3000
-        lbl_sz[]   = max(12, round(Int, 17 * sf))
-        tick_sz[]  = max(10, round(Int, 14 * sf))
-        title_sz[] = max(14, round(Int, 19 * sf))
-        ctrl_sz[]  = max(12, round(Int, 17 * sf))
+        sf         = area.widths[1] / 1350
+        lbl_sz[]   = max(11, round(Int, 15 * sf))
+        tick_sz[]  = max(10, round(Int, 12 * sf))
+        title_sz[] = max(13, round(Int, 18 * sf))
+        ctrl_sz[]  = max(11, round(Int, 15 * sf))
     end
 
     # ── Axes ─────────────────────────────────────────────────────────────────
@@ -197,9 +197,10 @@ function signal_example_dotproduct()
         end
     end
 
+    is_applying_preset = Ref(false)
     for obs in (sig_freq, sig_amp, sig_phase, noise_lvl, test_freq)
         on(obs) do _
-            update()
+            is_applying_preset[] || update()
         end
     end
     update()
@@ -309,7 +310,7 @@ function signal_example_dotproduct()
     # Toggle cosine test line visibility
     on(use_complex) do is_complex
         cos_line.visible = is_complex
-        update()  # recompute to trigger annotation refresh
+        is_applying_preset[] || update()  # recompute to trigger annotation refresh
     end
 
     # ── Controls ──────────────────────────────────────────────────────────────
@@ -372,26 +373,44 @@ function signal_example_dotproduct()
 
     # Wire pedagogical presets
     on(btn_perfect.clicks) do _
-        set_close_to!(sl_sf, 10.0)
-        set_close_to!(sl_tf, 10.0)
-        set_close_to!(sl_sp, 0.0)
-        set_close_to!(sl_nl, 0.0)
-        tog_complex.active[] = false
+        is_applying_preset[] = true
+        try
+            set_close_to!(sl_sf, 10.0)
+            set_close_to!(sl_tf, 10.0)
+            set_close_to!(sl_sp, 0.0)
+            set_close_to!(sl_nl, 0.0)
+            tog_complex.active[] = false
+        finally
+            is_applying_preset[] = false
+        end
+        update()
     end
 
     on(btn_leakage.clicks) do _
-        set_close_to!(sl_sf, 10.0)
-        set_close_to!(sl_tf, 10.25)
-        set_close_to!(sl_sp, 0.0)
-        set_close_to!(sl_nl, 0.0)
-        tog_complex.active[] = false
+        is_applying_preset[] = true
+        try
+            set_close_to!(sl_sf, 10.0)
+            set_close_to!(sl_tf, 10.25)
+            set_close_to!(sl_sp, 0.0)
+            set_close_to!(sl_nl, 0.0)
+            tog_complex.active[] = false
+        finally
+            is_applying_preset[] = false
+        end
+        update()
     end
 
     on(btn_ortho.clicks) do _
-        set_close_to!(sl_sf, 10.0)
-        set_close_to!(sl_tf, 10.0)
-        set_close_to!(sl_sp, 90.0)
-        set_close_to!(sl_nl, 0.0)
+        is_applying_preset[] = true
+        try
+            set_close_to!(sl_sf, 10.0)
+            set_close_to!(sl_tf, 10.0)
+            set_close_to!(sl_sp, 90.0)
+            set_close_to!(sl_nl, 0.0)
+        finally
+            is_applying_preset[] = false
+        end
+        update()
     end
 
     # ── Row sizing — initial (sine-only, cosine hidden) ───────────────────────

@@ -79,10 +79,10 @@ Used in functions like `subset`, `rereference!`, `repair_channels!`, and `detect
 
 ```julia
 # Rereference only scalp channels (exclude EOG)
-EegFun.rereference!(dat, :average, channel_selection = channels_not([:vEOG, :hEOG]))
+EegFun.rereference!(dat, :avg, channel_selection = EegFun.channels_not([:vEOG, :hEOG]))
 
 # Run artifact detection on a subset of channels
-EegFun.detect_bad_epochs_automatic(epochs, channel_selection = channels([:Cz, :Pz, :Fz]))
+EegFun.detect_bad_epochs_automatic(epochs, channel_selection = EegFun.channels([:Cz, :Pz, :Fz]))
 ```
 
 ### Custom Channel Selection
@@ -91,7 +91,7 @@ Pass a function that receives a `Vector{Symbol}` of all available channel labels
 
 ```julia
 # Select all frontal channels (labels containing "F")
-frontal = channels(x -> contains.(string.(x), "F"))
+frontal = EegFun.channels(x -> contains.(string.(x), "F"))
 EegFun.subset(dat, channel_selection = frontal)
 ```
 
@@ -111,10 +111,10 @@ Used for filtering rows of continuous data by metadata columns (e.g. artifact fl
 
 ```julia
 # Run ICA only on clean, non-extreme data
-ica = EegFun.run_ica(dat, sample_selection = samples_not(:is_extreme))
+ica = EegFun.run_ica(dat, sample_selection = EegFun.samples_not(:is_extreme))
 
 # Compute channel summary for the epoch interval only
-EegFun.channel_summary(dat, sample_selection = samples(:epoch_interval))
+EegFun.channel_summary(dat, sample_selection = EegFun.samples(:epoch_interval))
 ```
 
 ### Custom Sample Selection
@@ -123,7 +123,7 @@ You can also pass a custom function where `x` refers to the data:
 
 ```julia
 # Select samples between 100 and 1000
-EegFun.subset(dat, sample_selection = samples(x -> 100 .<= x.sample .<= 1000))
+EegFun.subset(dat, sample_selection = EegFun.samples(x -> 100 .<= x.sample .<= 1000))
 ```
 
 ## Time Selection
@@ -132,16 +132,16 @@ Used to define an interval in seconds for functions like `subset`, `erp_measurem
 
 | Predicate | Selects |
 | --- | --- |
-| `times()` | All time points |
-| `times(0.3, 0.5)` | 300–500 ms |
-| `times(-0.2, 0.0)` | Baseline period |
+| `EegFun.times()` | All time points |
+| `EegFun.times(0.3, 0.5)` | 300–500 ms |
+| `EegFun.times(-0.2, 0.0)` | Baseline period |
 
 ```julia
 # Measure mean amplitude in the N400 interval
-EegFun.erp_measurements(erps, interval_selection = times(0.3, 0.5))
+EegFun.erp_measurements(erps, "mean_amplitude", analysis_interval = (0.3, 0.5))
 
 # Subset data to the baseline period
-EegFun.subset(dat, interval_selection = times(-0.2, 0.0))
+EegFun.subset(dat, interval_selection = EegFun.times(-0.2, 0.0))
 ```
 
 ## Epoch Selection
@@ -150,14 +150,14 @@ Used in `subset` and `reject_epochs` to filter by epoch index or by epoch conten
 
 | Predicate | Selects |
 | --- | --- |
-| `epochs()` | All epochs |
-| `epochs(1:20)` | Epochs 1–20 |
-| `epochs(5)` | A single epoch |
-| `epochs_not(1:5)` | All epochs except 1–5 |
+| `EegFun.epochs()` | All epochs |
+| `EegFun.epochs(1:20)` | Epochs 1–20 |
+| `EegFun.epochs(5)` | A single epoch |
+| `EegFun.epochs_not(1:5)` | All epochs except 1–5 |
 
 ```julia
 # Keep only the first 50 epochs
-EegFun.subset(epochs_data, epoch_selection = epochs(1:50))
+EegFun.subset(epochs_data, epoch_selection = EegFun.epochs(1:50))
 ```
 
 ### Custom Epoch Selection
@@ -166,10 +166,10 @@ Pass a function that receives a `DataFrame` (the epoch's data) and returns a `Bo
 
 ```julia
 # Keep only epochs that have more than 100 samples
-EegFun.subset(epochs_data, epoch_selection = epochs(df -> nrow(df) > 100))
+EegFun.subset(epochs_data, epoch_selection = EegFun.epochs(df -> nrow(df) > 100))
 
 # Drop RT outlier trials (requires calculate_trigger_interval! to have added an :interval column)
-EegFun.subset(epochs_data, epoch_selection = epochs(df -> 0.2 < df.interval[1] < 1.0))
+EegFun.subset(epochs_data, epoch_selection = EegFun.epochs(df -> 0.2 < df.interval[1] < 1.0))
 ```
 
 ## Component Selection
@@ -178,14 +178,14 @@ Used with ICA functions to select or exclude specific independent components.
 
 | Predicate | Selects |
 | --- | --- |
-| `components()` | All components |
-| `components(1:3)` | Components 1–3 |
-| `components(5)` | A single component |
-| `components_not(1:3)` | All components except 1–3 |
+| `EegFun.components()` | All components |
+| `EegFun.components(1:3)` | Components 1–3 |
+| `EegFun.components(5)` | A single component |
+| `EegFun.components_not(1:3)` | All components except 1–3 |
 
 ```julia
 # Remove identified artifact components
-EegFun.remove_ica_components!(dat, ica, component_selection = components([1, 3, 7]))
+EegFun.subtract_ica_components!(dat, ica, component_selection = EegFun.components([1, 3, 7]))
 ```
 
 ## Summary

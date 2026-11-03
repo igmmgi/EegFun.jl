@@ -129,12 +129,15 @@ function create_rdm(data_matrix::AbstractMatrix{<:Real}; dissimilarity_measure::
             rdm[i, i] = 0.0
         end
         return rdm
-    elseif size(data_matrix, 1) == size(data_matrix, 2) && issymmetric(data_matrix)
-        if all(diag(data_matrix) .== 0.0) && all(data_matrix .>= 0.0)
-            return Matrix{Float64}(data_matrix)
-        else
-            return create_rdm(data_matrix; is_similarity = true)
+    elseif size(data_matrix, 1) == size(data_matrix, 2) &&
+           issymmetric(data_matrix) &&
+           all(i -> abs(data_matrix[i, i]) <= 1e-12, axes(data_matrix, 1))
+        # Pre-computed symmetric RDM with zero diagonal (including Crossnobis RDMs with negative entries)
+        rdm = Matrix{Float64}(data_matrix)
+        @inbounds for i in axes(rdm, 1)
+            rdm[i, i] = 0.0
         end
+        return rdm
     else
         n_conditions = size(data_matrix, 1)
         rdm = zeros(Float64, n_conditions, n_conditions)
@@ -230,9 +233,9 @@ end
 # === TEMPORAL ALIGNMENT AND RESAMPLING ===
 """
     resample_temporal_data(
-        temporal_data::Array{Float64, 3},
-        original_times::Vector{Float64},
-        target_times::Vector{Float64};
+        temporal_data::AbstractArray{<:Real, 3},
+        original_times::AbstractVector{<:Real},
+        target_times::AbstractVector{<:Real};
         method::Symbol = :linear,
     )
 
@@ -242,126 +245,151 @@ Handles different sampling rates and time ranges by interpolating model data
 to match the neural data's temporal structure.
 
 # Arguments
-- `temporal_data::Array{Float64, 3}`: Temporal data [conditions × features × time]
-- `original_times::Vector{Float64}`: Original time points in seconds
-- `target_times::Vector{Float64}`: Target time points (e.g., from neural data)
-- `method::Symbol`: Interpolation method (:linear, :cubic, :nearest)
+- `temporal_data::AbstractArray{<:Real, 3}`: Temporal data [conditions × features × time]
+- `original_times::AbstractVector{<:Real}`: Original time points in seconds (sorted ascending)
+- `target_times::AbstractVector{<:Real}`: Target time points (e.g., from neural data)
+- `method::Symbol`: Interpolation method (`:linear` or `:nearest`)
 
 # Returns
 - `resampled_data::Array{Float64, 3}`: Resampled data [conditions × features × target_time]
-- `target_times::Vector{Float64}`: Target time points (same as input)
+- `target_times::Vector{Float64}`: Target time points
 
 # Examples
 ```julia
 # Model data at 100 Hz
-model_data = randn(3, 2, 50)  # [conditions × features × time]
-model_times = collect(-0.2:(1/100):0.3)  # 50 timepoints at 100 Hz
+model_data = randn(3, 2, 51)  # [conditions × features × time]
+model_times = collect(-0.2:(1/100):0.3)
 
 # Neural data at 500 Hz
-neural_times = collect(-0.2:(1/500):0.8)  # 500 timepoints at 500 Hz
+neural_times = collect(-0.2:(1/500):0.8)
 
 # Resample model data to match neural times
-resampled_data, _ = resample_temporal_data(model_data, model_times, neural_times)
-# Now resampled_data has shape [3 × 2 × 500]
+resampled_data, _ = EegFun.resample_temporal_data(model_data, model_times, neural_times)
 ```
 """
 function resample_temporal_data(
-    temporal_data::Array{Float64,3},
-    original_times::Vector{Float64},
-    target_times::Vector{Float64};
+    temporal_data::AbstractArray{<:Real,3},
+    original_times::AbstractVector{<:Real},
+    target_times::AbstractVector{<:Real};
     method::Symbol = :linear,
 )
     n_conditions, n_features, n_original_times = size(temporal_data)
     n_target_times = length(target_times)
+    target_times_f64 = Vector{Float64}(target_times)
 
     if length(original_times) != n_original_times
         @minimal_error(
             "Original times length ($(length(original_times))) doesn't match " * "temporal data time dimension ($n_original_times)"
         )
     end
+    if n_original_times == 0
+        @minimal_error("Cannot resample temporal data with zero original time points")
+    end
+    if !(method in (:linear, :nearest))
+        @minimal_error("Unknown interpolation method: $method. Use :linear or :nearest")
+    end
 
     # Preallocate resampled data
     resampled_data = zeros(Float64, n_conditions, n_features, n_target_times)
-
-    # Determine valid time range (intersection of original and target)
-    valid_start = max(original_times[1], target_times[1])
-    valid_end = min(original_times[end], target_times[end])
-
-    # Find indices for valid range in target times
-    target_valid_start_idx = findfirst(t -> t >= valid_start, target_times)
-    target_valid_end_idx = findlast(t -> t <= valid_end, target_times)
-
-    if isnothing(target_valid_start_idx) || isnothing(target_valid_end_idx)
-        @minimal_warning(
-            "No temporal overlap between model data ($(original_times[1]) to $(original_times[end]) s) " *
-            "and target times ($(target_times[1]) to $(target_times[end]) s). " *
-            "Returning zeros."
-        )
-        return resampled_data, target_times
+    if n_target_times == 0
+        return resampled_data, target_times_f64
     end
 
-    # Interpolate each condition and feature
-    for cond_idx = 1:n_conditions
-        for feat_idx = 1:n_features
-            # Extract time series for this condition/feature
-            original_series = temporal_data[cond_idx, feat_idx, :]
+    # Determine valid time range (intersection of original and target)
+    t_orig_first = Float64(first(original_times))
+    t_orig_last = Float64(last(original_times))
+    valid_start = max(t_orig_first, minimum(target_times_f64))
+    valid_end = min(t_orig_last, maximum(target_times_f64))
 
-            # Interpolate to target times
-            if method == :linear
-                # Linear interpolation
-                resampled_series = zeros(Float64, n_target_times)
-                for (t_idx, t_target) in enumerate(target_times)
-                    if t_target < original_times[1]
-                        # Extrapolate backward (use first value)
-                        resampled_series[t_idx] = original_series[1]
-                    elseif t_target > original_times[end]
-                        # Extrapolate forward (use last value)
-                        resampled_series[t_idx] = original_series[end]
-                    else
-                        # Interpolate
-                        # Find surrounding indices
-                        lower_idx = findlast(t -> t <= t_target, original_times)
-                        upper_idx = findfirst(t -> t >= t_target, original_times)
+    if valid_start > valid_end || !any(t -> valid_start <= t <= valid_end, target_times_f64)
+        @minimal_warning(
+            "No temporal overlap between model data ($t_orig_first to $t_orig_last s) " *
+            "and target times ($(first(target_times_f64)) to $(last(target_times_f64)) s). " *
+            "Returning zeros."
+        )
+        return resampled_data, target_times_f64
+    end
 
-                        if isnothing(lower_idx) || isnothing(upper_idx)
-                            resampled_series[t_idx] = original_series[1]
-                        elseif lower_idx == upper_idx
-                            # Exact match
-                            resampled_series[t_idx] = original_series[lower_idx]
-                        else
-                            # Linear interpolation
-                            t_lower = original_times[lower_idx]
-                            t_upper = original_times[upper_idx]
-                            weight = (t_target - t_lower) / (t_upper - t_lower)
-                            resampled_series[t_idx] = (1 - weight) * original_series[lower_idx] + weight * original_series[upper_idx]
-                        end
-                    end
-                end
-                resampled_data[cond_idx, feat_idx, :] = resampled_series
-            elseif method == :nearest
-                # Nearest neighbor interpolation
-                for (t_idx, t_target) in enumerate(target_times)
-                    if t_target < original_times[1]
-                        resampled_data[cond_idx, feat_idx, t_idx] = original_series[1]
-                    elseif t_target > original_times[end]
-                        resampled_data[cond_idx, feat_idx, t_idx] = original_series[end]
-                    else
-                        # Find nearest timepoint
-                        nearest_idx = find_closest_time_index(original_times, t_target)
-                        resampled_data[cond_idx, feat_idx, t_idx] = original_series[nearest_idx]
-                    end
-                end
-            elseif method == :cubic
-                # Cubic interpolation (simplified - uses linear for now)
-                @minimal_warning "Cubic interpolation not fully implemented, using linear"
-                return resample_temporal_data(temporal_data, original_times, target_times; method = :linear)
+    # Precompute interpolation indices and weights once outside the condition × feature loops
+    if method == :linear
+        lower_idxs = Vector{Int}(undef, n_target_times)
+        upper_idxs = Vector{Int}(undef, n_target_times)
+        weights = Vector{Float64}(undef, n_target_times)
+
+        @inbounds for t_idx = 1:n_target_times
+            t_target = target_times_f64[t_idx]
+            if t_target <= t_orig_first
+                lower_idxs[t_idx] = 1
+                upper_idxs[t_idx] = 1
+                weights[t_idx] = 0.0
+            elseif t_target >= t_orig_last
+                lower_idxs[t_idx] = n_original_times
+                upper_idxs[t_idx] = n_original_times
+                weights[t_idx] = 0.0
             else
-                @minimal_error("Unknown interpolation method: $method. Use :linear, :nearest, or :cubic")
+                idx = searchsortedlast(original_times, t_target)
+                idx = clamp(idx, 1, n_original_times)
+                t_lower = Float64(original_times[idx])
+                if idx == n_original_times || t_lower == t_target
+                    lower_idxs[t_idx] = idx
+                    upper_idxs[t_idx] = idx
+                    weights[t_idx] = 0.0
+                else
+                    u_idx = idx + 1
+                    t_upper = Float64(original_times[u_idx])
+                    denom = t_upper - t_lower
+                    lower_idxs[t_idx] = idx
+                    upper_idxs[t_idx] = u_idx
+                    weights[t_idx] = denom > 0.0 ? (t_target - t_lower) / denom : 0.0
+                end
+            end
+        end
+
+        @inbounds for t_idx = 1:n_target_times
+            l_idx = lower_idxs[t_idx]
+            u_idx = upper_idxs[t_idx]
+            w = weights[t_idx]
+            one_minus_w = 1.0 - w
+            for feat_idx = 1:n_features
+                for cond_idx = 1:n_conditions
+                    val =
+                        one_minus_w * Float64(temporal_data[cond_idx, feat_idx, l_idx]) +
+                        w * Float64(temporal_data[cond_idx, feat_idx, u_idx])
+                    resampled_data[cond_idx, feat_idx, t_idx] = val
+                end
+            end
+        end
+    else # method == :nearest
+        nearest_idxs = Vector{Int}(undef, n_target_times)
+        @inbounds for t_idx = 1:n_target_times
+            t_target = target_times_f64[t_idx]
+            if t_target <= t_orig_first
+                nearest_idxs[t_idx] = 1
+            elseif t_target >= t_orig_last
+                nearest_idxs[t_idx] = n_original_times
+            else
+                idx = clamp(searchsortedlast(original_times, t_target), 1, n_original_times)
+                if idx == n_original_times
+                    nearest_idxs[t_idx] = n_original_times
+                else
+                    d_low = abs(t_target - Float64(original_times[idx]))
+                    d_high = abs(Float64(original_times[idx+1]) - t_target)
+                    nearest_idxs[t_idx] = d_low <= d_high ? idx : (idx + 1)
+                end
+            end
+        end
+
+        @inbounds for t_idx = 1:n_target_times
+            n_idx = nearest_idxs[t_idx]
+            for feat_idx = 1:n_features
+                for cond_idx = 1:n_conditions
+                    resampled_data[cond_idx, feat_idx, t_idx] = Float64(temporal_data[cond_idx, feat_idx, n_idx])
+                end
             end
         end
     end
 
-    return resampled_data, target_times
+    return resampled_data, target_times_f64
 end
 """
     create_rdm(
@@ -386,7 +414,7 @@ use `align_to` to automatically resample to match neural timepoints.
 - `times`: Time points in seconds for temporal_data
 - `dissimilarity_measure::Symbol`: Measure to use (:correlation, :spearman, :euclidean, :mahalanobis)
 - `align_to`: Target timepoints to align to (`Vector{Float64}` or `RsaData`, or `nothing`)
-- `interpolation_method::Symbol`: Interpolation method for resampling (:linear, :nearest, :cubic)
+- `interpolation_method::Symbol`: Interpolation method for resampling (`:linear` or `:nearest`)
 
 # Returns
 - `rdms::Array{Float64, 3}`: Temporal RDMs [time × condition × condition]
@@ -472,7 +500,7 @@ end
 
 """
     create_temporal_model_rdms(
-        temporal_model_data::AbstractDict{<:AbstractString, Any},
+        temporal_model_data::AbstractDict{<:AbstractString, <:Any},
         times::AbstractVector{<:Real};
         dissimilarity_measure::Symbol = :correlation,
         align_to::Union{AbstractVector{<:Real}, RsaData, Nothing} = nothing,
@@ -492,14 +520,14 @@ model data will be resampled to match those timepoints (handles different sampli
 - `times`: Time points in seconds (used if model data doesn't provide its own)
 - `dissimilarity_measure::Symbol`: Measure to use
 - `align_to`: Target timepoints to align to (`Vector{Float64}` or `RsaData`, or `nothing`)
-- `interpolation_method::Symbol`: Interpolation method for resampling (:linear, :nearest, :cubic)
+- `interpolation_method::Symbol`: Interpolation method for resampling (`:linear` or `:nearest`)
 
 # Returns
 - `model_rdms::Vector{Array{Float64, 3}}`: Vector of temporal RDMs [time × condition × condition]
 - `model_names::Vector{String}`: Vector of model names
 """
 function create_temporal_model_rdms(
-    temporal_model_data::AbstractDict{<:AbstractString,Any},
+    temporal_model_data::AbstractDict{<:AbstractString,<:Any},
     times::AbstractVector{<:Real};
     dissimilarity_measure::Symbol = :correlation,
     align_to::Union{AbstractVector{<:Real},RsaData,Nothing} = nothing,
@@ -508,7 +536,8 @@ function create_temporal_model_rdms(
     model_rdms = Array{Float64,3}[]
     model_names = String[]
 
-    for (name, data) in temporal_model_data
+    entries = temporal_model_data isa Dict ? sort!(collect(pairs(temporal_model_data)); by = first) : collect(pairs(temporal_model_data))
+    for (name, data) in entries
         rdm = nothing
         model_times = times  # Default to provided times
 
@@ -554,16 +583,16 @@ end
 # === CONVENIENCE FUNCTION FOR MULTIPLE MODEL TYPES ===
 
 """
-    create_model_rdms(model_data::AbstractDict{<:AbstractString, Any})
+    create_model_rdms(model_data::AbstractDict{<:AbstractString, <:Any})
 
 Create multiple model RDMs from a dictionary of different model types.
 
-This function automatically detects the type of each model and converts it to an RDM using `create_rdm`.
+This function automatically detects the type of each model and converts it to an RDM using `EegFun.create_rdm`.
 
 # Arguments
 - `model_data`: Dictionary mapping model names to their data
   - `Vector{<:AbstractVector}`: Feature vectors → RDM
-  - `Matrix{<:Real}`: Data matrix [conditions × features] or similarity matrix
+  - `Matrix{<:Real}`: Data matrix [conditions × features] or pre-computed RDM
   - `Vector{<:Real}`: 1D values (reaction times, ratings, or category labels)
   - `Vector{<:Union{Symbol, AbstractString}}`: Categorical labels
 
@@ -571,16 +600,18 @@ This function automatically detects the type of each model and converts it to an
 - `model_rdms::Vector{Matrix{Float64}}`: Vector of model RDMs
 - `model_names::Vector{String}`: Vector of model names
 """
-function create_model_rdms(model_data::AbstractDict{<:AbstractString,Any})
+function create_model_rdms(model_data::AbstractDict{<:AbstractString,<:Any})
     model_rdms = Matrix{Float64}[]
     model_names = String[]
 
-    for (name, data) in model_data
+    entries = model_data isa Dict ? sort!(collect(pairs(model_data)); by = first) : collect(pairs(model_data))
+    for (name, data) in entries
         try
             rdm = create_rdm(data)
             push!(model_rdms, rdm)
             push!(model_names, String(name))
         catch e
+            e isa EegFunError && rethrow(e)
             @minimal_error(
                 "Failed to create RDM for model '$name' with data type $(typeof(data)): $(sprint(showerror, e)). " *
                 "Supported types: Vector{<:AbstractVector}, Matrix, Vector{Float}, Vector{Int/Symbol/String}"

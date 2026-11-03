@@ -4,12 +4,13 @@
 Get files from a directory matching a pattern.
 """
 function get_files(directory::String, files::String; recursive::Bool = false)
+    rx = Regex(files)
     if recursive
         # Walk subdirectories (e.g., BIDS sub-XX/eeg/ structure)
         matching_files = String[]
         for (root, _, filenames) in walkdir(directory)
             for f in filenames
-                if occursin(Regex(files), f)
+                if occursin(rx, f)
                     push!(matching_files, joinpath(root, f))
                 end
             end
@@ -17,19 +18,23 @@ function get_files(directory::String, files::String; recursive::Bool = false)
         return sort(matching_files, by = x -> (_natural_sort_key(basename(x)), x))
     else
         # Original flat directory search
-        matching_files = filter(f -> occursin(Regex(files), f), readdir(directory))
+        matching_files = filter(f -> occursin(rx, f), readdir(directory))
         sorted_files = sort(matching_files, by = x -> (_natural_sort_key(x), x))
         return [joinpath(directory, file) for file in sorted_files]
     end
 end
 
 """
-    get_files(directory::String, files::Vector{String})
+    get_files(directory::String, files::Vector{String}; recursive::Bool = false)
 
 Get files from a directory matching a list of filenames.
 """
-function get_files(directory::String, files::Vector{String})
-    return [joinpath(directory, file) for file in files]
+function get_files(directory::String, files::Vector{String}; recursive::Bool = false)
+    if recursive
+        return [something(find_file(file, directory; recursive = true), joinpath(directory, file)) for file in files]
+    else
+        return [joinpath(directory, file) for file in files]
+    end
 end
 
 """
@@ -108,6 +113,10 @@ end
 """
     get_file_extension(filename::String) -> String
 
-Get the lowercase file extension including the dot (e.g., ".bdf", ".vhdr").
+Get the lowercase file extension including the dot (e.g., ".bdf", ".vhdr", ".xdf.gz").
 """
-get_file_extension(filename::String) = lowercase(splitext(filename)[2])
+function get_file_extension(filename::String)
+    lower = lowercase(filename)
+    endswith(lower, ".xdf.gz") && return ".xdf.gz"
+    return lowercase(splitext(filename)[2])
+end

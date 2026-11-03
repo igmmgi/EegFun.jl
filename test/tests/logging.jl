@@ -176,6 +176,48 @@ using Dates
         @test occursin("Error: logged to file", read(log_file, String))
     end
 
+    @testset "include_kwargs, do-block setup_logging, and track_progress_async" begin
+        # include_kwargs = true vs false
+        kw_true_log = joinpath(test_dir, "kw_true.log")
+        EegFun.setup_logging(kw_true_log; include_kwargs = true) do
+            @info "With kwargs" foo_kw = 42
+        end
+        @test !EegFun._file_logging_active()
+        @test occursin("foo_kw = 42", read(kw_true_log, String))
+
+        kw_false_log = joinpath(test_dir, "kw_false.log")
+        EegFun.setup_logging(kw_false_log; include_kwargs = false) do
+            @info "Without kwargs" bar_kw = 99
+        end
+        @test !EegFun._file_logging_active()
+        kw_false_content = read(kw_false_log, String)
+        @test occursin("Without kwargs", kw_false_content)
+        @test !occursin("bar_kw", kw_false_content)
+
+        # setup_logging do-block closes logger even on error
+        err_log = joinpath(test_dir, "err_block.log")
+        @test_throws ErrorException EegFun.setup_logging(err_log) do
+            @test EegFun._file_logging_active()
+            error("boom inside setup_logging")
+        end
+        @test !EegFun._file_logging_active()
+
+        # track_progress_async with stop_flag and do-block cleanup on error
+        prog = EegFun.ProgressMeter.Progress(100; enabled = false)
+        counter = Threads.Atomic{Int}(0)
+        stop_flag = Threads.Atomic{Bool}(false)
+        task = EegFun.track_progress_async(prog, counter, 100; stop_flag = stop_flag)
+        stop_flag[] = true
+        wait(task)
+        @test istaskdone(task)
+
+        counter2 = Threads.Atomic{Int}(0)
+        @test_throws ErrorException EegFun.track_progress_async(prog, counter2, 100) do
+            Threads.atomic_add!(counter2, 1)
+            error("worker failed")
+        end
+    end
+
     # Clean up
     rm(test_dir, recursive = true, force = true)
 end

@@ -7,6 +7,11 @@ Topographic visualizations for Time-Frequency data.
 
 
 # === TOPOGRAPHY FOR TIME-FREQUENCY DATA ===
+function _sorted_interval_bounds(iv)
+    raw = _normalize_interval(iv)
+    return (min(Float64(raw[1]), Float64(raw[2])), max(Float64(raw[1]), Float64(raw[2])))
+end
+
 """
     plot_topography(tf::TimeFreqData;
                      freq_range::Tuple{Real, Real},
@@ -57,10 +62,14 @@ function plot_topography(
         tf_plot = tf
     end
 
-    layout = tf_plot.layout
+    eff_baseline_method =
+        !isnothing(tf_plot.baseline) ? tf_plot.baseline.method : (!isnothing(baseline_interval) ? baseline_method : nothing)
+    has_signed_baseline = eff_baseline_method in _SIGNED_TF_BASELINE_METHODS
+
+    orig_layout = tf_plot.layout
 
     # Validate layout
-    if !has_valid_coordinates(layout)
+    if !has_valid_coordinates(orig_layout)
         @minimal_error("Cannot create topographic plot: layout has no spatial coordinates.")
     end
 
@@ -69,7 +78,7 @@ function plot_topography(
     all_freqs = Float64.(sort(unique(tf_plot.data_power.freq)))
 
     # Apply frequency range filter
-    fr = _normalize_interval(freq_range)
+    fr = _sorted_interval_bounds(freq_range)
     freq_mask = fr[1] .<= all_freqs .<= fr[2]
     isempty(findall(freq_mask)) &&
         @minimal_error("No frequencies found in range $(freq_range). Data range: $(first(all_freqs)) to $(last(all_freqs)) Hz")
@@ -91,41 +100,31 @@ function plot_topography(
     # Fast row-filtered power average across the selected time-freq window
     row_indices = _tf_filter_row_indices(tf_plot.data_power, selected_freqs, selected_times)
 
-    # Get channel labels
+    # Subset layout to analyzed channels (never fill missing electrodes with 0.0!)
     channels_list = channel_labels(tf_plot)
+    common_channels = intersect(orig_layout.data.label, channels_list)
+    isempty(common_channels) && @minimal_error("None of the TF channels $(channels_list) were found in the layout.")
+    layout = subset_layout(orig_layout; channel_selection = channels(common_channels))
 
-    # Compute average power per channel across the selected time-freq window
-    channel_data = _tf_extract_channel_means(tf_plot.data_power, channels_list, row_indices)
-
-    # Map channel data onto layout order
+    # Compute average power per channel directly in subsetted layout order
     layout_labels = layout.data.label
-    layout_values = Float64[
-        let ch_idx = findfirst(==(lbl), channels_list)
-            !isnothing(ch_idx) ? channel_data[ch_idx] : 0.0
-        end for lbl in layout_labels
-    ]
+    layout_values = _tf_extract_channel_means(tf_plot.data_power, layout_labels, row_indices)
 
     # Merge user kwargs with shared topography defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+    kwargs_norm = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs_norm)
 
     # Extract topography-specific parameters
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
     colormap = pop!(plot_kwargs, :colormap)
-    ylim = pop!(plot_kwargs, :ylim)
-    # For TF power, use actual data range (not symmetric around 0)
-    # since baselined power can be uniformly negative/positive
-    if isnothing(ylim)
-        data_min, data_max = extrema(layout_values)
-        if data_min ≈ data_max
-            ylim = (data_min - 1.0, data_max + 1.0)
-        else
-            ylim = (data_min, data_max)
-        end
-    end
+    colorrange = pop!(plot_kwargs, :colorrange)
     display_plot = pop!(plot_kwargs, :display_plot)
     figure_title = pop!(plot_kwargs, :figure_title)
+    plot_title = pop!(plot_kwargs, :plot_title, "")
+    show_title = pop!(plot_kwargs, :show_title, true)
     num_levels = pop!(plot_kwargs, :num_levels)
+    highlight_channels = pop!(plot_kwargs, :highlight_channels, nothing)
 
     # Pop unused keys
     pop!(plot_kwargs, :interactive, nothing)
@@ -133,14 +132,30 @@ function plot_topography(
     pop!(plot_kwargs, :component_selection, nothing)
     pop!(plot_kwargs, :dims, nothing)
 
-    # Build title
-    freq_str = "$(round(Int, freq_range[1]))-$(round(Int, freq_range[2])) Hz"
-    time_str = isnothing(interval_selection) ? "all times" : @sprintf("%.0f–%.0f ms", selected_times[1] * 1000, selected_times[end] * 1000)
+    # Build title (using normalized `fr`)
+    freq_str = "$(round(Int, fr[1]))-$(round(Int, fr[2])) Hz"
+    time_str =
+        (isnothing(interval_selection) || interval_selection isa AllSelection) ? "all times" :
+        @sprintf("%.0f–%.0f ms", selected_times[1] * 1000, selected_times[end] * 1000)
     default_title = "$(tf_plot.condition_name) — $freq_str, $time_str"
-    title = isempty(figure_title) ? default_title : figure_title
+    user_title = !isnothing(plot_title) && !isempty(plot_title) ? plot_title : figure_title
+    title = show_title ? (isempty(user_title) ? default_title : user_title) : ""
 
     # Create figure
     fig = _eegfun_figure(size = (400, 400))
+    actual_colormap = _resolve_theme_colormap(fig, colormap)
+
+    if isnothing(colorrange)
+        data_min, data_max = extrema(layout_values)
+        if _is_diverging_colormap(actual_colormap) && (data_min < 0 || has_signed_baseline)
+            colorrange = _symmetric_colorrange(data_min, data_max)
+        elseif data_min ≈ data_max
+            colorrange = (data_min - 1.0, data_max + 1.0)
+        else
+            colorrange = (data_min, data_max)
+        end
+    end
+
     ax = Axis(fig[1, 1], aspect = DataAspect(), title = title, titlesize = plot_kwargs[:plot_title_fontsize])
 
     # Ensure coordinates
@@ -161,11 +176,15 @@ function plot_topography(
         layout;
         method = method,
         gridscale = gridscale,
-        colormap = colormap,
-        ylim = ylim,
+        colormap = actual_colormap,
+        colorrange = colorrange,
         num_levels = num_levels,
         plot_kwargs...,
     )
+
+    if !isnothing(highlight_channels)
+        _draw_highlight_channels!(ax, highlight_channels, layout)
+    end
 
     if colorbar_plot
         cb_label = _tf_colorbar_label(tf_plot, baseline_interval, baseline_method)
@@ -178,7 +197,7 @@ function plot_topography(
         _display_figure(fig)
     end
 
-    return (fig = fig, ax = ax)
+    return (fig = fig, axes = [ax], ax = ax)
 end
 function plot_topography(
     tfs::AbstractVector{<:TimeFreqData};
@@ -209,35 +228,41 @@ function plot_topography(
         return plot_topography(tf_plots[1]; freq_range = freq_range, interval_selection = interval_selection, kwargs...)
     end
 
-    layout = tf_plots[1].layout
-    if !has_valid_coordinates(layout)
+    orig_layout = tf_plots[1].layout
+    if !has_valid_coordinates(orig_layout)
         @minimal_error("Cannot create topographic plot: layout has no spatial coordinates.")
     end
 
     # Merge kwargs
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+    kwargs_norm = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs_norm)
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
     colormap = pop!(plot_kwargs, :colormap)
-    ylim = pop!(plot_kwargs, :ylim)
+    colorrange = pop!(plot_kwargs, :colorrange)
     display_plot = pop!(plot_kwargs, :display_plot)
     figure_title = pop!(plot_kwargs, :figure_title)
+    plot_title = pop!(plot_kwargs, :plot_title, "")
+    show_title = pop!(plot_kwargs, :show_title, true)
     num_levels = pop!(plot_kwargs, :num_levels)
     dims = pop!(plot_kwargs, :dims, nothing)
+    highlight_channels = pop!(plot_kwargs, :highlight_channels, nothing)
 
     pop!(plot_kwargs, :interactive, nothing)
     pop!(plot_kwargs, :use_global_scale, nothing)
     pop!(plot_kwargs, :component_selection, nothing)
 
     # Labels off in grid by default
-    plot_kwargs[:label_plot] = get(kwargs, :label_plot, false)
-    plot_kwargs[:point_plot] = get(kwargs, :point_plot, false)
+    plot_kwargs[:label_plot] = get(kwargs_norm, :label_plot, false)
+    plot_kwargs[:point_plot] = get(kwargs_norm, :point_plot, false)
 
     # Extract common TF data
     all_freqs = Float64.(sort(unique(tf_plots[1].data_power.freq)))
     all_times = Float64.(sort(unique(tf_plots[1].data_power.time)))
-    fr = _normalize_interval(freq_range)
+    fr = _sorted_interval_bounds(freq_range)
     freq_mask = fr[1] .<= all_freqs .<= fr[2]
+    isempty(findall(freq_mask)) &&
+        @minimal_error("No frequencies found in range $(freq_range). Data range: $(first(all_freqs)) to $(last(all_freqs)) Hz")
 
     if isnothing(interval_selection) || interval_selection isa AllSelection
         time_mask = fill(true, length(all_times))
@@ -246,36 +271,30 @@ function plot_topography(
         t_stop = interval_selection isa TimeSelection ? interval_selection.stop : interval_selection[2]
         time_mask = t_start .<= all_times .<= t_stop
     end
+    isempty(findall(time_mask)) &&
+        @minimal_error("No time points found in interval. Data range: $(first(all_times)) to $(last(all_times)) s")
 
     selected_freqs = all_freqs[freq_mask]
     selected_times = all_times[time_mask]
 
-    # Compute per-condition channel averages
-    channels_list = channel_labels(tf_plots[1])
+    # Subset layout to channels shared across conditions (never fill missing electrodes with 0.0!)
+    common_channels = copy(orig_layout.data.label)
+    for tf in tf_plots
+        common_channels = intersect(common_channels, channel_labels(tf))
+    end
+    isempty(common_channels) && @minimal_error("None of the TF channels were found in the layout.")
+    layout = subset_layout(orig_layout; channel_selection = channels(common_channels))
+
     layout_labels = layout.data.label
     all_layout_values = Vector{Vector{Float64}}(undef, n)
 
     global_min, global_max = Inf, -Inf
     for (idx, tf) in enumerate(tf_plots)
         row_indices = _tf_filter_row_indices(tf.data_power, selected_freqs, selected_times)
-        channel_data = _tf_extract_channel_means(tf.data_power, channels_list, row_indices)
-        layout_values = Float64[
-            let ch_idx = findfirst(==(lbl), channels_list)
-                !isnothing(ch_idx) ? channel_data[ch_idx] : 0.0
-            end for lbl in layout_labels
-        ]
+        layout_values = _tf_extract_channel_means(tf.data_power, layout_labels, row_indices)
         all_layout_values[idx] = layout_values
         global_min = min(global_min, minimum(layout_values))
         global_max = max(global_max, maximum(layout_values))
-    end
-
-    # Shared color range (non-symmetric for TF power)
-    if isnothing(ylim)
-        if global_min ≈ global_max
-            ylim = (global_min - 1.0, global_max + 1.0)
-        else
-            ylim = (global_min, global_max)
-        end
     end
 
     # Grid layout
@@ -304,11 +323,31 @@ function plot_topography(
 
     freq_str = "$(round(Int, fr[1]))-$(round(Int, fr[2])) Hz"
     fig = _eegfun_figure(size = (250 * n_cols + 100, 250 * n_rows + 50))
+    actual_colormap = _resolve_theme_colormap(fig, colormap)
+
+    has_signed_baseline =
+        any(tf -> (!isnothing(tf.baseline) && tf.baseline.method in _SIGNED_TF_BASELINE_METHODS), tf_plots) ||
+        (!isnothing(baseline_interval) && baseline_method in _SIGNED_TF_BASELINE_METHODS)
+
+    if isnothing(colorrange)
+        if _is_diverging_colormap(actual_colormap) && (global_min < 0 || has_signed_baseline)
+            colorrange = _symmetric_colorrange(global_min, global_max)
+        elseif global_min ≈ global_max
+            colorrange = (global_min - 1.0, global_max + 1.0)
+        else
+            colorrange = (global_min, global_max)
+        end
+    end
+
+    header_title = !isnothing(plot_title) && !isempty(plot_title) ? plot_title : figure_title
+    if show_title && !isempty(header_title)
+        Label(fig[0, 1:n_cols], header_title, fontsize = 18, font = :bold)
+    end
 
     colorbar_kwargs = Dict{Symbol,Any}(pairs(pop!(plot_kwargs, :colorbar_kwargs, (;))))
     pop!(colorbar_kwargs, :colorrange, nothing)
     pop!(colorbar_kwargs, :label, nothing)
-    pop!(plot_kwargs, :colorbar_plot, nothing)
+    colorbar_plot = pop!(plot_kwargs, :colorbar_plot, true)
     pop!(plot_kwargs, :colorbar_position, nothing)
     pop!(plot_kwargs, :colorbar_plot_numbers, nothing)
 
@@ -316,7 +355,7 @@ function plot_topography(
     for (idx, tf) in enumerate(tf_plots)
         row = div(idx - 1, n_cols) + 1
         col = mod1(idx, n_cols)
-        title = "$(tf.condition_name) — $freq_str"
+        title = show_title ? "$(tf.condition_name) — $freq_str" : ""
         ax = Axis(fig[row, col], aspect = DataAspect(), title = title, titlesize = plot_kwargs[:plot_title_fontsize])
         push!(axes, ax)
 
@@ -330,17 +369,23 @@ function plot_topography(
             y_bounds = can_batch ? yb_shared : nothing,
             method = method,
             gridscale = gridscale,
-            colormap = colormap,
-            ylim = ylim,
+            colormap = actual_colormap,
+            colorrange = colorrange,
             num_levels = num_levels,
             plot_kwargs...,
         )
+        if !isnothing(highlight_channels)
+            _draw_highlight_channels!(ax, highlight_channels, layout)
+        end
         hidedecorations!(ax)
     end
 
-    cb_label = _tf_colorbar_label(tf_plots[1], baseline_interval, baseline_method)
-    actual_colormap = _resolve_theme_colormap(fig, colormap)
-    cb = Colorbar(fig[1:n_rows, n_cols+1]; colorbar_kwargs..., colormap = actual_colormap, colorrange = ylim, label = cb_label)
+    cb = if colorbar_plot
+        cb_label = _tf_colorbar_label(tf_plots[1], baseline_interval, baseline_method)
+        Colorbar(fig[1:n_rows, n_cols+1]; colorbar_kwargs..., colormap = actual_colormap, colorrange = colorrange, label = cb_label)
+    else
+        nothing
+    end
 
     if display_plot
         _display_figure(fig)
@@ -417,25 +462,32 @@ function plot_topography_stats(
     # Validate
     topo_data in (:tvalues, :difference) || @minimal_error("topo_data must be :tvalues or :difference, got :$topo_data")
 
-    # Merge user kwargs with shared topography defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+    # Normalize and merge user kwargs with shared topography defaults
+    kwargs_norm = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
+    if haskey(kwargs_norm, :n_topo)
+        n_topos = Int(pop!(kwargs_norm, :n_topo))
+    end
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs_norm)
 
     # Extract topography-specific parameters
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
     colormap = pop!(plot_kwargs, :colormap)
-    ylim = pop!(plot_kwargs, :ylim)
+    colorrange = pop!(plot_kwargs, :colorrange)
     display_plot = pop!(plot_kwargs, :display_plot)
     figure_title = pop!(plot_kwargs, :figure_title)
+    plot_title = pop!(plot_kwargs, :plot_title, "")
+    show_title = pop!(plot_kwargs, :show_title, true)
     num_levels = pop!(plot_kwargs, :num_levels)
+    highlight_channels = pop!(plot_kwargs, :highlight_channels, nothing)
 
     pop!(plot_kwargs, :interactive, nothing)
     pop!(plot_kwargs, :use_global_scale, nothing)
     pop!(plot_kwargs, :component_selection, nothing)
 
     # Labels and points off by default for grid layout
-    plot_kwargs[:label_plot] = get(kwargs, :label_plot, false)
-    plot_kwargs[:point_plot] = get(kwargs, :point_plot, false)
+    plot_kwargs[:label_plot] = get(kwargs_norm, :label_plot, false)
+    plot_kwargs[:point_plot] = get(kwargs_norm, :point_plot, false)
 
     # Get data dimensions
     electrodes = result.electrodes
@@ -443,7 +495,7 @@ function plot_topography_stats(
     all_frequencies = result.frequencies
 
     # Find frequency indices in the selected range
-    fr = _normalize_interval(freq_range)
+    fr = _sorted_interval_bounds(freq_range)
     freq_mask = fr[1] .<= all_frequencies .<= fr[2]
     freq_indices = findall(freq_mask)
     isempty(freq_indices) &&
@@ -466,8 +518,12 @@ function plot_topography_stats(
     n_topos = min(n_topos, length(time_indices))
     bins = _partition_indices(time_indices, n_topos)
 
-    # Get layout and validate
-    layout = result.data[1].layout
+    # Subset layout to analyzed electrodes (never fill unanalyzed electrodes with 0.0!)
+    orig_layout = result.data[1].layout
+    common_channels = intersect(orig_layout.data.label, electrodes)
+    isempty(common_channels) && @minimal_error("None of the analyzed electrodes $(electrodes) were found in the layout.")
+    layout = subset_layout(orig_layout; channel_selection = channels(common_channels))
+
     if !has_valid_coordinates(layout)
         @minimal_error("Cannot create topographic plot: layout has no spatial coordinates.")
     end
@@ -475,8 +531,9 @@ function plot_topography_stats(
     _ensure_coordinates_3d!(layout)
 
     layout_labels = layout.data.label
+    layout_to_elec_idx = Int[findfirst(==(lbl), electrodes)::Int for lbl in layout_labels]
 
-    # Compute per-bin topo values and significance masks
+    # Compute per-bin topo values (directly in subsetted layout order) and significance masks
     topo_values = Vector{Vector{Float64}}(undef, n_topos)
     sig_masks = Vector{BitVector}(undef, n_topos)
     bin_time_labels = Vector{String}(undef, n_topos)
@@ -488,20 +545,21 @@ function plot_topography_stats(
 
         if topo_data == :tvalues
             # Average t-values across selected freqs and time bin: stat_matrix.t is [electrodes × freqs × time]
-            raw = vec(mean(result.stat_matrix.t[:, freq_indices, bin_indices], dims = (2, 3)))
+            raw = vec(mean(result.stat_matrix.t[layout_to_elec_idx, freq_indices, bin_indices], dims = (2, 3)))
             topo_values[i] = replace(raw, NaN => 0.0, Inf => 0.0, -Inf => 0.0)
         else  # :difference
-            # Compute power difference from grand average TF data per electrode
+            # Compute power difference from grand average TF data per analyzed layout electrode
             bin_freqs = all_frequencies[freq_indices]
             bin_times = all_time_points[bin_indices]
             row_indices = _tf_filter_row_indices(result.data[1].data_power, bin_freqs, bin_times)
             topo_values[i] =
-                _tf_extract_channel_difference_means(result.data[1].data_power, result.data[2].data_power, electrodes, row_indices)
+                _tf_extract_channel_difference_means(result.data[1].data_power, result.data[2].data_power, layout_labels, row_indices)
         end
 
         # Significance: proportion of significant freq×time bins per channel in this window
-        # masks are [electrodes × freqs × time]
-        sig_combined = result.masks.positive[:, freq_indices, bin_indices] .| result.masks.negative[:, freq_indices, bin_indices]
+        sig_combined =
+            result.masks.positive[layout_to_elec_idx, freq_indices, bin_indices] .|
+            result.masks.negative[layout_to_elec_idx, freq_indices, bin_indices]
         n_bins = length(freq_indices) * length(bin_indices)
         sig_proportion = vec(sum(sig_combined, dims = (2, 3))) ./ n_bins
         sig_masks[i] = sig_proportion .>= highlight_threshold
@@ -511,8 +569,8 @@ function plot_topography_stats(
     all_vals = vcat(topo_values...)
     max_abs = maximum(abs, all_vals)
     max_abs ≈ 0.0 && (max_abs = 1.0)
-    if isnothing(ylim)
-        ylim = (-max_abs, max_abs)
+    if isnothing(colorrange)
+        colorrange = (-max_abs, max_abs)
     end
 
     # Grid layout
@@ -525,24 +583,28 @@ function plot_topography_stats(
             @minimal_error("Grid dimensions ($n_rows × $n_cols) provide $(n_rows * n_cols) cells but need $n_topos")
     end
 
-    # Create figure
+    # Create figure (using normalized `fr`)
     test_type = isa(result, TFAnalyticResult) ? "Analytic" : "Permutation"
     data_label = topo_data == :tvalues ? "t-statistic" : "Power Difference"
-    freq_str = "$(round(Int, freq_range[1]))–$(round(Int, freq_range[2])) Hz"
-    fig_title = isempty(figure_title) ? "$test_type Test — $data_label ($freq_str)" : figure_title
+    freq_str = "$(round(Int, fr[1]))–$(round(Int, fr[2])) Hz"
+    user_title = !isnothing(plot_title) && !isempty(plot_title) ? plot_title : figure_title
+    fig_title = isempty(user_title) ? "$test_type Test — $data_label ($freq_str)" : user_title
 
     fig = _eegfun_figure(size = (200 * n_cols + 100, 200 * n_rows + 50))
-    Label(fig[0, 1:n_cols], fig_title, fontsize = 18, font = :bold)
+    if show_title && !isempty(fig_title)
+        Label(fig[0, 1:n_cols], fig_title, fontsize = 18, font = :bold)
+    end
 
     # Extract colorbar kwargs
     colorbar_kwargs = Dict{Symbol,Any}(pairs(pop!(plot_kwargs, :colorbar_kwargs, (;))))
     pop!(colorbar_kwargs, :colorrange, nothing)
     pop!(colorbar_kwargs, :label, nothing)
-    pop!(plot_kwargs, :colorbar_plot, nothing)
+    colorbar_plot = pop!(plot_kwargs, :colorbar_plot, true)
     pop!(plot_kwargs, :colorbar_position, nothing)
     pop!(plot_kwargs, :colorbar_plot_numbers, nothing)
 
     axes = Axis[]
+    actual_colormap = _resolve_theme_colormap(fig, colormap)
 
     # Pre-interpolate all panels when possible
     can_batch = n_topos > 1 && _topo_method_supported(method)
@@ -554,9 +616,8 @@ function plot_topography_stats(
         all_layout_mat = Matrix{Float64}(undef, length(layout_labels), n_topos)
         for i = 1:n_topos
             channel_data = topo_values[i]
-            for (k, lbl) in enumerate(layout_labels)
-                ch_idx = findfirst(==(lbl), electrodes)
-                v = !isnothing(ch_idx) ? channel_data[ch_idx] : 0.0
+            for k in eachindex(layout_labels)
+                v = channel_data[k]
                 all_layout_mat[k, i] = isfinite(v) ? v : 0.0
             end
         end
@@ -567,17 +628,15 @@ function plot_topography_stats(
         row = div(i - 1, n_cols) + 1
         col = mod1(i, n_cols)
 
-        ax = Axis(fig[row, col], aspect = DataAspect(), title = bin_time_labels[i], titlesize = plot_kwargs[:plot_title_fontsize])
+        ax = Axis(
+            fig[row, col],
+            aspect = DataAspect(),
+            title = show_title ? bin_time_labels[i] : "",
+            titlesize = plot_kwargs[:plot_title_fontsize],
+        )
         push!(axes, ax)
 
-        # Map electrode values to layout order
-        channel_data = topo_values[i]
-        layout_values = Float64[
-            let ch_idx = findfirst(==(lbl), electrodes)
-                v = !isnothing(ch_idx) ? channel_data[ch_idx] : 0.0
-                isfinite(v) ? v : 0.0
-            end for lbl in layout_labels
-        ]
+        layout_values = Float64[isfinite(v) ? v : 0.0 for v in topo_values[i]]
 
         _render_topo_surface!(
             fig,
@@ -589,25 +648,21 @@ function plot_topography_stats(
             y_bounds = can_batch ? yb_shared : nothing,
             method = method,
             gridscale = gridscale,
-            colormap = colormap,
-            ylim = ylim,
+            colormap = actual_colormap,
+            colorrange = colorrange,
             num_levels = num_levels,
             plot_kwargs...,
         )
 
+        if !isnothing(highlight_channels)
+            _draw_highlight_channels!(ax, highlight_channels, layout)
+        end
+
         # Highlight significant channels
         if highlight_significant && any(sig_masks[i])
-            sig_channel_indices = findall(sig_masks[i])
-            sig_x = Float64[]
-            sig_y = Float64[]
-            for ch_idx in sig_channel_indices
-                ch_sym = electrodes[ch_idx]
-                layout_idx = findfirst(==(ch_sym), layout_labels)
-                if !isnothing(layout_idx)
-                    push!(sig_x, layout.data.x2[layout_idx])
-                    push!(sig_y, layout.data.y2[layout_idx])
-                end
-            end
+            sig_layout_indices = findall(sig_masks[i])
+            sig_x = layout.data.x2[sig_layout_indices]
+            sig_y = layout.data.y2[sig_layout_indices]
             if !isempty(sig_x)
                 scatter!(
                     ax,
@@ -626,9 +681,12 @@ function plot_topography_stats(
     end
 
     # Shared colorbar
-    cb_label = topo_data == :tvalues ? "t-statistic" : "Power Difference"
-    actual_colormap = _resolve_theme_colormap(fig, colormap)
-    cb = Colorbar(fig[1:n_rows, n_cols+1]; colorbar_kwargs..., colormap = actual_colormap, colorrange = ylim, label = cb_label)
+    cb = if colorbar_plot
+        cb_label = topo_data == :tvalues ? "t-statistic" : "Power Difference"
+        Colorbar(fig[1:n_rows, n_cols+1]; colorbar_kwargs..., colormap = actual_colormap, colorrange = colorrange, label = cb_label)
+    else
+        nothing
+    end
 
     if display_plot
         _display_figure(fig)

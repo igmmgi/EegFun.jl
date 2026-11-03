@@ -10,6 +10,7 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Axis limits, labels, and direction
     :plot_title => (nothing, "Plot title. If nothing, automatically determined"),
+    :show_title => (true, "Whether to show the plot title"),
     :plot_title_fontsize => (16, "Font size for plot titles"),
     :plot_title_position => (
         nothing,
@@ -173,8 +174,9 @@ function plot_epochs(
     kwargs...,
 )::NamedTuple{(:fig, :axes),Tuple{Figure,Vector{Axis}}}
 
-    user_provided_color = haskey(kwargs, :color)
-    plot_kwargs = _merge_plot_kwargs(PLOT_EPOCHS_KWARGS, kwargs)
+    kwargs_norm = _normalize_plot_kwargs(kwargs)
+    user_provided_color = haskey(kwargs_norm, :color)
+    plot_kwargs = _merge_plot_kwargs(PLOT_EPOCHS_KWARGS, kwargs_norm)
 
     # Use subset to filter by condition, sample, and epoch - NOT by channel
     # Channel selection is applied later at plot time to keep all channels available for topoplots
@@ -436,6 +438,11 @@ end
 
 """Finalize standard axis properties, grids, origin lines, and scale indicator."""
 function _finalize_epochs_axis!(ax::Axis, kw::Dict)
+    if !get(kw, :show_title, true)
+        ax.title = ""
+    elseif !isnothing(kw[:plot_title]) && isempty(ax.title[])
+        ax.title = string(kw[:plot_title])
+    end
     _set_axis_properties!(
         ax;
         xlim = kw[:xlim],

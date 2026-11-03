@@ -16,7 +16,7 @@ STFT applies the Fast Fourier Transform (FFT) to windowed segments of the signal
 Controls time-frequency resolution:
 
 ```julia
-tf_stft(epochs, window_length = 0.5)  # 500 ms windows
+EegFun.tf_stft(epochs, window_length = 0.5)  # 500 ms windows
 ```
 
 - **Longer windows** (e.g., 500 ms): Better frequency resolution, worse time resolution
@@ -27,7 +27,7 @@ tf_stft(epochs, window_length = 0.5)  # 500 ms windows
 Instead of specifying window length, specify cycles at each frequency:
 
 ```julia
-tf_stft(epochs, cycles = 7)
+EegFun.tf_stft(epochs, cycles = 7)
 ```
 
 Creates frequency-adaptive windows similar to Morlet wavelets.
@@ -37,7 +37,7 @@ Creates frequency-adaptive windows similar to Morlet wavelets.
 Controls temporal resolution of output:
 
 ```julia
-tf_stft(epochs, time_steps = 0.005)  # 5 ms steps
+EegFun.tf_stft(epochs, time_steps = 0.005)  # 5 ms steps
 ```
 
 Smaller = smoother time course, larger = faster computation.
@@ -53,12 +53,12 @@ Smaller = smoother time course, larger = faster computation.
 
 - Proportional spacing
 - Better for wide ranges
-- Use `ylogscale = true` in plots
+- Use `yscale = :log10` in plots
 
 ### Baseline Correction
 
 ```julia
-plot_tf(
+EegFun.plot_tf(
     tf_data,
     baseline_interval = (-0.5, -0.2),
     baseline_method = :db,

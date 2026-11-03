@@ -75,18 +75,33 @@ function plot_tf_stats(
     mask_style::Symbol = :alpha,
     colormap = nothing,
     colorrange::Union{Nothing,Tuple{Real,Real}} = nothing,
-    ylogscale::Bool = false,
-    colorbar::Bool = true,
+    xscale::Symbol = :linear,
+    yscale::Symbol = :linear,
+    ylogscale::Union{Nothing,Bool} = nothing,
+    colorbar_plot::Bool = true,
+    colorbar::Union{Nothing,Bool} = nothing,
+    plot_title::Union{Nothing,AbstractString} = nothing,
+    show_title::Bool = true,
     significance_color = :black,
     significance_linewidth::Real = 2.0,
     figure_size::Union{Nothing,Tuple{Int,Int}} = nothing,
     display_plot::Bool = true,
+    kwargs...,
 )
     # Validate arguments
     content in (:tvalues, :difference, :power_a, :power_b) ||
         @minimal_error("content must be :tvalues, :difference, :power_a, or :power_b, got :$content")
     mask_style in (:alpha, :contour, :hide, :none) ||
         @minimal_error("mask_style must be :alpha, :contour, :hide, or :none, got :$mask_style")
+
+    kwargs_norm = _normalize_plot_kwargs(kwargs)
+    eff_xscale = get(kwargs_norm, :xscale, xscale)
+    eff_yscale = get(kwargs_norm, :yscale, yscale)
+    use_xlog = eff_xscale in (:log10, :log, log10)
+    use_ylog = !isnothing(ylogscale) ? ylogscale : (eff_yscale in (:log10, :log, log10))
+    show_cb = !isnothing(colorbar) ? colorbar : Bool(get(kwargs_norm, :colorbar_plot, colorbar_plot))
+    eff_plot_title = get(kwargs_norm, :plot_title, plot_title)
+    eff_show_title = Bool(get(kwargs_norm, :show_title, show_title))
 
     # Select channels
     all_electrodes = result.electrodes
@@ -103,7 +118,16 @@ function plot_tf_stats(
         end
     end
 
-    n_channels = length(selected_channels)
+    # Pre-extract 2D data matrices [frequencies × time] across all selected channels
+    channel_entries = Tuple{Symbol,Int,Matrix{Float64}}[]
+    for ch_sym in selected_channels
+        ch_idx = findfirst(==(ch_sym), all_electrodes)
+        isnothing(ch_idx) && continue
+        push!(channel_entries, (ch_sym, ch_idx, _extract_tf_stats_matrix(result, ch_idx, content)))
+    end
+    isempty(channel_entries) && @minimal_error("No channels matched. Available: $(all_electrodes)")
+
+    n_channels = length(channel_entries)
     frequencies = result.frequencies
     time_points = result.time_points
 
@@ -113,28 +137,53 @@ function plot_tf_stats(
 
     # Figure size: auto-scale based on grid
     if isnothing(figure_size)
-        panel_w = colorbar ? 500 : 400
+        panel_w = show_cb ? 500 : 400
         panel_h = 350
         figure_size = (n_cols * panel_w, n_rows * panel_h)
     end
 
     fig = _eegfun_figure(size = figure_size)
+    cmap = _resolve_theme_colormap(fig, colormap)
+
+    # Precompute a single shared colorrange across all channels_to_plot before the subplot loop
+    cr = colorrange
+    if isnothing(cr)
+        global_min = Inf
+        global_max = -Inf
+        for (_, _, data_mat) in channel_entries
+            for v in data_mat
+                if isfinite(v)
+                    global_min = min(global_min, v)
+                    global_max = max(global_max, v)
+                end
+            end
+        end
+        if isinf(global_min)
+            cr = (-1.0, 1.0)
+        elseif content in (:tvalues, :difference) || (_is_diverging_colormap(cmap) && global_min < 0)
+            cr = _symmetric_colorrange(global_min, global_max)
+        elseif global_min ≈ global_max
+            cr = (global_min - 1.0, global_max + 1.0)
+        else
+            cr = (global_min, global_max)
+        end
+    end
 
     # Build title
-    test_type = isa(result, TFAnalyticResult) ? "Analytic" : "Permutation"
-    content_label =
-        content == :tvalues ? "t-values" :
-        content == :difference ? "Power Difference" : content == :power_a ? result.data[1].condition_name : result.data[2].condition_name
-
-    Label(fig[0, 1:n_cols], "$test_type Test — $content_label", fontsize = 16, font = :bold)
+    if eff_show_title
+        test_type = isa(result, TFAnalyticResult) ? "Analytic" : "Permutation"
+        content_label =
+            content == :tvalues ? "t-values" :
+            content == :difference ? "Power Difference" :
+            content == :power_a ? result.data[1].condition_name : result.data[2].condition_name
+        header_text = isnothing(eff_plot_title) ? "$test_type Test — $content_label" : String(eff_plot_title)
+        !isempty(header_text) && Label(fig[0, 1:n_cols], header_text, fontsize = 16, font = :bold)
+    end
 
     axes = Axis[]
     local last_hm  # for colorbar
 
-    for (ch_i, ch_sym) in enumerate(selected_channels)
-        ch_idx = findfirst(==(ch_sym), all_electrodes)
-        isnothing(ch_idx) && continue
-
+    for (ch_i, (ch_sym, ch_idx, data_mat)) in enumerate(channel_entries)
         row = (ch_i - 1) ÷ n_cols + 1
         col = (ch_i - 1) % n_cols + 1
 
@@ -142,31 +191,14 @@ function plot_tf_stats(
             fig[row, col],
             xlabel = "Time (s)",
             ylabel = "Frequency (Hz)",
-            title = string(ch_sym),
-            yscale = ylogscale ? log10 : identity,
+            title = eff_show_title ? string(ch_sym) : "",
+            xscale = use_xlog ? log10 : identity,
+            yscale = use_ylog ? log10 : identity,
         )
         push!(axes, ax)
 
-        if ylogscale
+        if use_ylog
             ax.ytickformat = values -> [string(round(Int, v)) for v in values]
-        end
-
-        # Extract 2D data matrix [frequencies × time] for this channel
-        data_mat = _extract_tf_stats_matrix(result, ch_idx, content)
-
-        # Determine color range
-        cr = colorrange
-        if isnothing(cr)
-            valid = filter(!isnan, vec(data_mat))
-            if isempty(valid)
-                cr = (-1.0, 1.0)
-            elseif content == :tvalues
-                # Symmetric range for t-values
-                max_abs = maximum(abs, valid)
-                cr = (-max_abs, max_abs)
-            else
-                cr = (minimum(valid), maximum(valid))
-            end
         end
 
         # Plot heatmap based on mask_style
@@ -176,8 +208,6 @@ function plot_tf_stats(
             sig_mask = _extract_tf_significance_mask(result, ch_idx)
             has_mask = !isnothing(sig_mask) && any(sig_mask)
         end
-
-        cmap = _resolve_theme_colormap(ax, colormap)
 
         if !has_mask || mask_style == :none
             hm = heatmap!(ax, time_points, frequencies, data_mat', colormap = cmap, colorrange = cr, nan_color = :transparent)
@@ -212,13 +242,13 @@ function plot_tf_stats(
     length(axes) > 1 && linkaxes!(axes...)
 
     # Colorbar (on the right of the last column)
-    if colorbar && @isdefined(last_hm)
+    if show_cb && @isdefined(last_hm)
         cb_label = content == :tvalues ? "t-statistic" : content == :difference ? "Power Difference" : "Power"
         Colorbar(fig[1:n_rows, n_cols+1], last_hm, label = cb_label)
     end
 
     if display_plot
-        display(fig)
+        _display_figure(fig)
     end
 
     return (fig = fig, axes = axes)

@@ -138,6 +138,12 @@ using Statistics
         power3d_only = ones(n_trials, n_f, n_t)
         EegFun._filter_edges!(power3d_only, nothing, n_f, time_indices, windows, n_samples)
         @test isequal(power3d_only, power3d)
+
+        # Exact left-right symmetry of edge mask
+        for fi = 1:n_f
+            row_nan = isnan.(power2d[fi, :])
+            @test row_nan == reverse(row_nan)
+        end
     end
 
     @testset "return_trials with filter_edges (default) for all TF methods" begin

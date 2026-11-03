@@ -50,11 +50,15 @@ const ERP_MEASUREMENTS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Fractional area latency
     :fractional_area_fraction =>
         (0.5, "Fraction for fractional area latency (0.0-1.0). Finds latency where this fraction of area is to the left."),
+    :area_boundary =>
+        (:rectified, "Area boundary mode for fractional area latency: :rectified (default), :positive, :negative, or :signed"),
 
     # Fractional peak latency
     :fractional_peak_fraction =>
         (0.5, "Fraction for fractional peak latency (0.0-1.0). Finds latency where amplitude is this fraction of peak."),
     :fractional_peak_direction => (:onset, "Direction for fractional peak latency: :onset (before peak) or :offset (after peak)"),
+    :peak_polarity =>
+        (:abs, "Peak polarity for fractional peak latency: :abs (default, largest absolute peak), :positive, or :negative"),
 )
 
 # === ERP-MEASUREMENTS-SPECIFIC VALIDATION ===
@@ -65,6 +69,55 @@ function _validate_analysis_type(analysis_type::Union{AbstractString,Symbol})
     if t_str ∉ VALID_MEASUREMENT_TYPES
         return "Analysis type must be one of: $(join(VALID_MEASUREMENT_TYPES, ", ")). Got: $t_str"
     end
+    return nothing
+end
+
+"""Validate analysis_type, analysis_interval, and measurement_kwargs, throwing on invalid inputs."""
+function _validate_measurement_params(
+    analysis_type::Union{AbstractString,Symbol},
+    analysis_interval::Interval,
+    measurement_kwargs::Dict{Symbol,Any},
+)
+    error_msg = _validate_analysis_type(analysis_type)
+    !isnothing(error_msg) && @minimal_error error_msg
+
+    if !isnothing(analysis_interval) && !(analysis_interval isa AllSelection) && !(analysis_interval isa Function)
+        interval = _normalize_interval(analysis_interval)
+        if interval[1] > interval[2]
+            @minimal_error "Analysis interval start must be <= stop. Got: ($(interval[1]), $(interval[2]))"
+        end
+    end
+
+    local_interval = measurement_kwargs[:local_interval]
+    if !(local_interval isa Integer) || local_interval < 1
+        @minimal_error "local_interval must be >= 1, got: $local_interval"
+    end
+
+    fractional_area_fraction = measurement_kwargs[:fractional_area_fraction]
+    if !(fractional_area_fraction isa Real) || fractional_area_fraction < 0.0 || fractional_area_fraction > 1.0
+        @minimal_error "fractional_area_fraction must be in [0.0, 1.0], got: $fractional_area_fraction"
+    end
+
+    area_boundary = measurement_kwargs[:area_boundary]
+    if area_boundary ∉ (:rectified, :positive, :negative, :signed)
+        @minimal_error "area_boundary must be :rectified, :positive, :negative, or :signed, got: $area_boundary"
+    end
+
+    fractional_peak_fraction = measurement_kwargs[:fractional_peak_fraction]
+    if !(fractional_peak_fraction isa Real) || fractional_peak_fraction < 0.0 || fractional_peak_fraction > 1.0
+        @minimal_error "fractional_peak_fraction must be in [0.0, 1.0], got: $fractional_peak_fraction"
+    end
+
+    fractional_peak_direction = measurement_kwargs[:fractional_peak_direction]
+    if fractional_peak_direction !== :onset && fractional_peak_direction !== :offset
+        @minimal_error "fractional_peak_direction must be :onset or :offset, got: $fractional_peak_direction"
+    end
+
+    peak_polarity = measurement_kwargs[:peak_polarity]
+    if peak_polarity ∉ (:abs, :positive, :negative)
+        @minimal_error "peak_polarity must be :abs, :positive, or :negative, got: $peak_polarity"
+    end
+
     return nothing
 end
 
@@ -147,54 +200,83 @@ function _find_robust_peak(
 end
 
 """
-Compute fractional area latency - finds the point that divides area into specified fraction.
-Returns latency at which fraction of area is to the left.
+Cumulative trapezoidal integration starting at `0.0` at `time_col[1]`.
 """
-function _fractional_area_latency(data::AbstractVector, time_col::AbstractVector, fraction::Float64)
+function _cumulative_trapezoid(data::AbstractVector, time_col::AbstractVector)::Vector{Float64}
+    n = length(data)
+    cum = zeros(Float64, n)
+    @inbounds for i = 2:n
+        dt = Float64(time_col[i] - time_col[i-1])
+        cum[i] = cum[i-1] + 0.5 * (Float64(data[i-1]) + Float64(data[i])) * dt
+    end
+    return cum
+end
+
+"""Transform signal amplitudes according to `area_boundary` mode."""
+function _transform_for_area_boundary(data::AbstractVector, area_boundary::Symbol)::Vector{Float64}
+    if area_boundary === :rectified
+        return [abs(Float64(x)) for x in data]
+    elseif area_boundary === :positive
+        return [max(Float64(x), 0.0) for x in data]
+    elseif area_boundary === :negative
+        return [abs(min(Float64(x), 0.0)) for x in data]
+    elseif area_boundary === :signed
+        return [Float64(x) for x in data]
+    else
+        @minimal_error "area_boundary must be :rectified, :positive, :negative, or :signed, got: $area_boundary"
+    end
+end
+
+"""
+Compute fractional area latency - finds the point that divides area into specified fraction.
+Uses cumulative trapezoidal integration starting at `0.0` at `time_col[1]`.
+Returns latency at which `fraction` of total area is to the left.
+"""
+function _fractional_area_latency(data::AbstractVector, time_col::AbstractVector, fraction::Real; area_boundary::Symbol = :rectified)
 
     # Edge cases
     (isempty(data) || isempty(time_col)) && return NaN
-    length(data) == 1 && return time_col[1]
+    length(data) == 1 && return Float64(time_col[1])
+    Float64(time_col[end] - time_col[1]) <= 0.0 && return Float64(time_col[1])
 
-    # Compute total area using cumulative sum for O(N) efficiency
-    # Rectangular integration: area = sum(data) * dt
-    dt = mean(diff(time_col))
-    cum_area = cumsum(data) .* dt
+    frac = Float64(fraction)
+    transformed = _transform_for_area_boundary(data, area_boundary)
+    cum_area = _cumulative_trapezoid(transformed, time_col)
     total_area = cum_area[end]
 
     # Handle zero or very small area
     if abs(total_area) < 1e-12
-        return time_col[1]  # Return start if no area
+        return Float64(time_col[1])  # Return start if no area
     end
-
-    target_area = total_area * fraction
 
     # Handle fraction boundaries
-    if fraction <= 0.0
-        return time_col[1]
-    elseif fraction >= 1.0
-        return time_col[end]
+    if frac <= 0.0
+        return Float64(time_col[1])
+    elseif frac >= 1.0
+        return Float64(time_col[end])
     end
 
-    # Find crossing point (handle both positive and negative total area)
-    if total_area > 0
-        idx = findfirst(a -> a >= target_area, cum_area)
+    target_area = total_area * frac
+
+    # Find crossing point (handle both positive and negative total area for :signed)
+    idx = if total_area > 0
+        findfirst(a -> a >= target_area, cum_area)
     else
-        idx = findfirst(a -> a <= target_area, cum_area)
+        findfirst(a -> a <= target_area, cum_area)
     end
 
     if isnothing(idx)
-        return time_col[end]
+        return Float64(time_col[end])
     elseif idx == 1
-        return time_col[1]
+        return Float64(time_col[1])
     end
 
     # Linear interpolation for sub-sample precision
     # Latency (x) such that area(x) = target_area
     y0 = cum_area[idx-1]
     y1 = cum_area[idx]
-    x0 = time_col[idx-1]
-    x1 = time_col[idx]
+    x0 = Float64(time_col[idx-1])
+    x1 = Float64(time_col[idx])
 
     if abs(y1 - y0) < 1e-14
         return x0
@@ -333,7 +415,7 @@ function _compute_measurement(
             return abs(max_time - min_time)
         end
 
-        # Area/Integral measurements (in µVs) - compute dt only when needed
+        # Area/Integral measurements (in µVs) via trapezoidal integration
     elseif analysis_type in ["rectified_area", "integral", "positive_area", "negative_area"]
         # Edge case: single sample or empty
         if length(selected_times) <= 1 || length(chan_data) <= 1
@@ -348,31 +430,41 @@ function _compute_measurement(
             return 0.0
         end
 
-        # Use rectangular integration (sum * dt) - perfectly fine for uniformly sampled data
-        # For uniform sampling (which EEG/ERP data always is), this is equivalent to trapezoidal
-        if analysis_type == "rectified_area"
-            return sum(abs, chan_data) * dt
+        boundary_mode = if analysis_type == "rectified_area"
+            :rectified
         elseif analysis_type == "integral"
-            return sum(chan_data) * dt
+            :signed
         elseif analysis_type == "positive_area"
-            return sum(x -> max(x, 0.0), chan_data) * dt
+            :positive
         else  # negative_area
-            return sum(x -> abs(min(x, 0.0)), chan_data) * dt
+            :negative
         end
+
+        transformed = _transform_for_area_boundary(chan_data, boundary_mode)
+        return _cumulative_trapezoid(transformed, selected_times)[end]
 
         # Fractional latency measurements
     elseif analysis_type == "fractional_area_latency"
-        fraction = measurement_kwargs[:fractional_area_fraction]
-        return _fractional_area_latency(chan_data, selected_times, fraction)
+        fraction = Float64(measurement_kwargs[:fractional_area_fraction])
+        area_boundary = measurement_kwargs[:area_boundary]
+        return _fractional_area_latency(chan_data, selected_times, fraction; area_boundary = area_boundary)
     elseif analysis_type == "fractional_peak_latency"
-        # Find the peak with maximum absolute value using robust detection
         local_interval = measurement_kwargs[:local_interval]
-        max_val, max_idx = _compute_peak_measurement(chan_data, :max, local_interval, channel_name)
-        min_val, min_idx = _compute_peak_measurement(chan_data, :min, local_interval, channel_name)
+        peak_polarity = measurement_kwargs[:peak_polarity]
 
-        # Use the peak with larger absolute value
-        peak_idx = abs(max_val) >= abs(min_val) ? max_idx : min_idx
-        fraction = measurement_kwargs[:fractional_peak_fraction]
+        peak_idx = if peak_polarity === :positive
+            _, max_idx = _compute_peak_measurement(chan_data, :max, local_interval, channel_name)
+            max_idx
+        elseif peak_polarity === :negative
+            _, min_idx = _compute_peak_measurement(chan_data, :min, local_interval, channel_name)
+            min_idx
+        else  # :abs
+            max_val, max_idx = _compute_peak_measurement(chan_data, :max, local_interval, channel_name)
+            min_val, min_idx = _compute_peak_measurement(chan_data, :min, local_interval, channel_name)
+            abs(max_val) >= abs(min_val) ? max_idx : min_idx
+        end
+
+        fraction = Float64(measurement_kwargs[:fractional_peak_fraction])
         direction = measurement_kwargs[:fractional_peak_direction]
         return _fractional_peak_latency(chan_data, selected_times, peak_idx, fraction, direction)
     end
@@ -516,7 +608,8 @@ function _process_measurements_file(
     average_channels::Bool,
     condition_selection,
     channel_selection,
-    measurement_kwargs::Dict{Symbol,Any},
+    measurement_kwargs::Dict{Symbol,Any};
+    include_extra::Bool = false,
 )
     filename = basename(filepath)
 
@@ -530,8 +623,10 @@ function _process_measurements_file(
         return nothing
     end
 
-    # Validate that data is Vector of ErpData or EpochData
-    if !(data_var isa AbstractVector{<:Union{ErpData,EpochData}})
+    # Support both single ErpData/EpochData and Vector of ErpData/EpochData
+    if data_var isa Union{ErpData,EpochData}
+        data_var = [data_var]
+    elseif !(data_var isa AbstractVector{<:Union{ErpData,EpochData}})
         @minimal_warning "Invalid data type in $filename: expected Vector{ErpData} or Vector{EpochData}, got $(typeof(data_var))"
         return nothing
     end
@@ -549,6 +644,7 @@ function _process_measurements_file(
         baseline_interval = baseline_interval,
         channel_selection = channel_selection,
         average_channels = average_channels,
+        include_extra = include_extra,
         participant = participant,
         measurement_kwargs...,
     )
@@ -563,12 +659,13 @@ Returns the DataFrames vector (modified in place if baseline applied).
 """
 function _apply_baseline_correction!(dfs::AbstractVector{DataFrame}, baseline_interval::Interval, all_channels::AbstractVector{Symbol})
     # Skip if no baseline specified
-    if isnothing(baseline_interval)
+    if isnothing(baseline_interval) || isempty(dfs)
         return dfs
     end
 
-    # Get EEG channels for baseline
-    eeg_channels = all_channels[channels()(all_channels)]
+    # Keep all layout EEG channels (including labels containing "_") that exist in the DataFrame
+    first_df = first(dfs)
+    eeg_channels = [ch for ch in all_channels if hasproperty(first_df, ch)]
 
     if !isempty(eeg_channels)
         # Normalize to tuple
@@ -576,7 +673,7 @@ function _apply_baseline_correction!(dfs::AbstractVector{DataFrame}, baseline_in
 
         # Convert time tuple to index tuple using first dataframe's time column
         # (assume all dataframes have the same time points for epochs/ERPs)
-        time_col = dfs isa Vector ? dfs[1].time : dfs.time
+        time_col = first_df.time
         start_idx, stop_idx = _find_idx_start_end(time_col, baseline_int[1], baseline_int[2])
         baseline_idx = (start_idx, stop_idx)
 
@@ -590,7 +687,7 @@ function _apply_baseline_correction!(dfs::AbstractVector{DataFrame}, baseline_in
 end
 
 """
-Average channel measurement columns into a single `:mean_channels` column.
+Average channel measurement columns into a single `:dv_channels` column.
 Preserves all metadata columns and replaces individual channel columns with their mean.
 """
 function _average_channel_columns(row::NamedTuple, selected_channels::AbstractVector{Symbol})
@@ -604,16 +701,38 @@ function _average_channel_columns(row::NamedTuple, selected_channels::AbstractVe
     return merge(metadata, (; dv_channels = avg_value))
 end
 
+"""Resolve default participant ID for in-memory ERP/Epoch measurements without mutating data."""
+function _resolve_in_memory_participant(dat::ErpData, participant::Union{Int,Nothing})::Int
+    !isnothing(participant) && return participant
+    if hasproperty(dat.data, :participant) && !isempty(dat.data)
+        return Int(dat.data[1, :participant])
+    end
+    stem, _ = splitext(basename(dat.file))
+    return any(isdigit, stem) ? _extract_participant_id(basename(dat.file)) : 0
+end
+
+function _resolve_in_memory_participant(dat::EpochData, participant::Union{Int,Nothing})::Int
+    !isnothing(participant) && return participant
+    if !isempty(dat.data) && hasproperty(dat.data[1], :participant) && !isempty(dat.data[1])
+        return Int(dat.data[1][1, :participant])
+    end
+    stem, _ = splitext(basename(dat.file))
+    return any(isdigit, stem) ? _extract_participant_id(basename(dat.file)) : 0
+end
+
 """
     erp_measurements!(dat::ErpData, analysis_type::String; analysis_interval = times(), baseline_interval = nothing, channel_selection = channels(), participant = 0, kwargs...)
     erp_measurements!(dat::EpochData, analysis_type::String; kwargs...)
     erp_measurements!(data::Vector{<:Union{ErpData,EpochData}}, analysis_type::String; kwargs...)
+    erp_measurements(data::Union{ErpData,EpochData,Vector{<:Union{ErpData,EpochData}}}, analysis_type::String; kwargs...) -> Union{ErpMeasurementsResult,Nothing}
     erp_measurements(file_pattern::String, analysis_type::String; analysis_interval = times(), baseline_interval = nothing,
     participant_selection = participants(), condition_selection = conditions(), channel_selection = channels(),
     input_dir = pwd(), output_dir = nothing, output_file = "erp_measurements", kwargs...)
 
-Extract ERP measurements from EEG data. The mutating (`!`) forms accumulate results in Julia;
-the `file_pattern` form batch-processes JLD2 files and saves a CSV.
+Extract ERP measurements from EEG data.
+- `erp_measurements` on in-memory `ErpData`, `EpochData`, or `Vector` returns an `ErpMeasurementsResult` without mutating the input data.
+- `erp_measurements!` mutates the input data when applying `baseline_interval` / condition columns and returns raw `NamedTuple` row(s).
+- `erp_measurements(file_pattern, ...)` batch-processes JLD2 files and saves a CSV.
 
 # `analysis_type` Options
 **Essential:**
@@ -623,15 +742,15 @@ the `file_pattern` form batch-processes JLD2 files and saves a CSV.
 
 **Specialized:**
 - `"peak_to_peak_amplitude"` / `"peak_to_peak_latency"`
-- `"integral"` / `"rectified_area"` / `"positive_area"` / `"negative_area"` — area in µV·s
+- `"integral"` / `"rectified_area"` / `"positive_area"` / `"negative_area"` — trapezoidal area in µV·s
 - `"fractional_area_latency"` / `"fractional_peak_latency"` — onset/offset-style latencies
 
 $(_generate_kwargs_doc(ERP_MEASUREMENTS_KWARGS))
 
 # Examples
 ```julia
-# In-memory, single ERP
-erp_measurements!(dat, "mean_amplitude", analysis_interval = (0.1, 0.2), baseline_interval = (-0.2, 0.0))
+# Non-mutating in-memory measurement
+res = erp_measurements(dat, "mean_amplitude", analysis_interval = (0.1, 0.2), baseline_interval = (-0.2, 0.0))
 
 # Batch across participants
 erp_measurements("erps", "max_peak_amplitude",
@@ -649,15 +768,17 @@ function erp_measurements!(
     channel_selection = channels(),
     participant::Int = 0,
     average_channels::Bool = false,
+    include_extra::Bool = false,
     kwargs...,
 )
     analysis_type_str = string(analysis_type)
-    # Merge measurement kwargs with defaults
+    # Merge and validate measurement kwargs
     measurement_kwargs = _merge_plot_kwargs(ERP_MEASUREMENTS_KWARGS, kwargs)
+    _validate_measurement_params(analysis_type_str, analysis_interval, measurement_kwargs)
 
-    # Get selected channels
-    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
-    all_channels = channel_labels(dat)
+    # Get selected channels via channel_labels(dat) (retaining EEG channels containing "_")
+    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = include_extra)
+    all_channels = include_extra ? union(channel_labels(dat), selected_channels) : channel_labels(dat)
 
     if isempty(selected_channels)
         @minimal_warning "No channels selected"
@@ -706,15 +827,17 @@ function erp_measurements!(
     channel_selection = channels(),
     participant::Int = 0,
     average_channels::Bool = false,
+    include_extra::Bool = false,
     kwargs...,
 )
     analysis_type_str = string(analysis_type)
-    # Merge measurement kwargs with defaults
+    # Merge and validate measurement kwargs
     measurement_kwargs = _merge_plot_kwargs(ERP_MEASUREMENTS_KWARGS, kwargs)
+    _validate_measurement_params(analysis_type_str, analysis_interval, measurement_kwargs)
 
-    # Get selected channels
-    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
-    all_channels = channel_labels(dat)
+    # Get selected channels via channel_labels(dat) (retaining EEG channels containing "_")
+    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = include_extra)
+    all_channels = include_extra ? union(channel_labels(dat), selected_channels) : channel_labels(dat)
 
     if isempty(selected_channels)
         @minimal_warning "No channels selected"
@@ -766,6 +889,13 @@ function erp_measurements!(
     average_channels::Bool = false,
     kwargs...,
 )
+    if isempty(data)
+        measurement_kwargs = _merge_plot_kwargs(ERP_MEASUREMENTS_KWARGS, kwargs)
+        analysis_interval = get(kwargs, :analysis_interval, times())
+        _validate_measurement_params(analysis_type, analysis_interval, measurement_kwargs)
+        return nothing
+    end
+
     all_results = Vector{Any}()
 
     for dat in data
@@ -788,11 +918,92 @@ end
 
 
 """
-    erp_measurements(data::Vector{<:Union{ErpData,EpochData}}, analysis_type; kwargs...)
-    erp_measurements(data::Union{ErpData,EpochData}, analysis_type; kwargs...)
+    erp_measurements(data::Union{ErpData,EpochData}, analysis_type; kwargs...) -> Union{ErpMeasurementsResult,Nothing}
+    erp_measurements(data::AbstractVector{<:Union{ErpData,EpochData}}, analysis_type; condition_selection = conditions(), kwargs...) -> Union{ErpMeasurementsResult,Nothing}
 
-Non-mutating version of `erp_measurements!`.
+Non-mutating in-memory version of `erp_measurements!`. Copies input data before applying any
+baseline correction or metadata columns and returns an `ErpMeasurementsResult`.
 """
+function erp_measurements(
+    dat::Union{ErpData,EpochData},
+    analysis_type::Union{AbstractString,Symbol};
+    analysis_interval::Interval = times(),
+    baseline_interval::Interval = nothing,
+    channel_selection = channels(),
+    participant::Union{Int,Nothing} = nothing,
+    average_channels::Bool = false,
+    include_extra::Bool = false,
+    kwargs...,
+)::Union{ErpMeasurementsResult,Nothing}
+    dat_copy = copy(dat)
+    part_id = _resolve_in_memory_participant(dat_copy, participant)
+    raw = erp_measurements!(
+        dat_copy,
+        analysis_type;
+        analysis_interval = analysis_interval,
+        baseline_interval = baseline_interval,
+        channel_selection = channel_selection,
+        participant = part_id,
+        average_channels = average_channels,
+        include_extra = include_extra,
+        kwargs...,
+    )
+    isnothing(raw) && return nothing
+    rows = raw isa Vector ? raw : [raw]
+    isempty(rows) && return nothing
+    return ErpMeasurementsResult(DataFrame(rows), string(analysis_type), analysis_interval, baseline_interval)
+end
+
+function erp_measurements(
+    data::AbstractVector{<:Union{ErpData,EpochData}},
+    analysis_type::Union{AbstractString,Symbol};
+    analysis_interval::Interval = times(),
+    baseline_interval::Interval = nothing,
+    condition_selection = conditions(),
+    channel_selection = channels(),
+    participant::Union{Int,Nothing} = nothing,
+    average_channels::Bool = false,
+    include_extra::Bool = false,
+    kwargs...,
+)::Union{ErpMeasurementsResult,Nothing}
+    measurement_kwargs = _merge_plot_kwargs(ERP_MEASUREMENTS_KWARGS, kwargs)
+    _validate_measurement_params(analysis_type, analysis_interval, measurement_kwargs)
+
+    isempty(data) && return nothing
+    selected_indices = get_selected_conditions(data, condition_selection)
+    if isempty(selected_indices)
+        @minimal_warning "No conditions selected for ERP measurements"
+        return nothing
+    end
+
+    all_rows = Vector{Any}()
+    for idx in selected_indices
+        dat_copy = copy(data[idx])
+        part_id = _resolve_in_memory_participant(dat_copy, participant)
+        raw = erp_measurements!(
+            dat_copy,
+            analysis_type;
+            analysis_interval = analysis_interval,
+            baseline_interval = baseline_interval,
+            channel_selection = channel_selection,
+            participant = part_id,
+            average_channels = average_channels,
+            include_extra = include_extra,
+            kwargs...,
+        )
+        if !isnothing(raw)
+            if raw isa Vector
+                append!(all_rows, raw)
+            else
+                push!(all_rows, raw)
+            end
+        end
+    end
+
+    isempty(all_rows) && return nothing
+    return ErpMeasurementsResult(DataFrame(all_rows), string(analysis_type), analysis_interval, baseline_interval)
+end
+
 function erp_measurements(
     file_pattern::String,
     analysis_type::Union{AbstractString,Symbol};
@@ -802,6 +1013,7 @@ function erp_measurements(
     condition_selection = conditions(),
     channel_selection = channels(),
     average_channels::Bool = false,
+    include_extra::Bool = false,
     input_dir::String = pwd(),
     output_dir::Union{String,Nothing} = nothing,
     output_file::String = "erp_measurements",
@@ -811,43 +1023,9 @@ function erp_measurements(
     _with_batch_logging("ERP measurement analysis", "$(output_file).log", input_dir, output_dir) do ctx
         @log_call "erp_measurements"
 
-        # Validation 
-        error_msg = _validate_analysis_type(analysis_type)
-        if !isnothing(error_msg)
-            @minimal_error error_msg
-        end
-
-        # Validate analysis_interval
-        if !isnothing(analysis_interval)
-            interval = _normalize_interval(analysis_interval)
-            if interval[1] > interval[2]
-                @minimal_error "Analysis interval start must be <= stop. Got: ($(interval[1]), $(interval[2]))"
-            end
-        end
-
-        # Merge measurement kwargs with defaults
+        # Merge and validate measurement kwargs
         measurement_kwargs = _merge_plot_kwargs(ERP_MEASUREMENTS_KWARGS, kwargs)
-
-        # Validate measurement kwargs
-        local_interval = measurement_kwargs[:local_interval]
-        if local_interval < 1
-            @minimal_error "local_interval must be >= 1, got: $local_interval"
-        end
-
-        fractional_area_fraction = measurement_kwargs[:fractional_area_fraction]
-        if fractional_area_fraction < 0.0 || fractional_area_fraction > 1.0
-            @minimal_error "fractional_area_fraction must be in [0.0, 1.0], got: $fractional_area_fraction"
-        end
-
-        fractional_peak_fraction = measurement_kwargs[:fractional_peak_fraction]
-        if fractional_peak_fraction < 0.0 || fractional_peak_fraction > 1.0
-            @minimal_error "fractional_peak_fraction must be in [0.0, 1.0], got: $fractional_peak_fraction"
-        end
-
-        fractional_peak_direction = measurement_kwargs[:fractional_peak_direction]
-        if fractional_peak_direction !== :onset && fractional_peak_direction !== :offset
-            @minimal_error "fractional_peak_direction must be :onset or :offset, got: $fractional_peak_direction"
-        end
+        _validate_measurement_params(analysis_type, analysis_interval, measurement_kwargs)
 
         # Setup directories
         output_dir = _prepare_output_dir!(ctx, _default_measurements_output_dir(input_dir, analysis_type))
@@ -882,7 +1060,8 @@ function erp_measurements(
                     average_channels,
                     condition_selection,
                     channel_selection,
-                    measurement_kwargs,
+                    measurement_kwargs;
+                    include_extra = include_extra,
                 )
 
                 if !isnothing(file_results) && !isempty(file_results)

@@ -54,8 +54,9 @@ jobs:
 
       - name: Move PDF to Public Assets
         run: |
+          test -f docs/build_pdf/EegFun.pdf
           mkdir -p docs/src/public
-          cp docs/build_pdf/EegFun.pdf docs/src/public/EegFun.pdf || echo "PDF not found"
+          cp docs/build_pdf/EegFun.pdf docs/src/public/EegFun.pdf
 
       - name: Build and deploy docs
         env:

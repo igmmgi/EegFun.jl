@@ -18,11 +18,12 @@ using Statistics
     noise_50hz = 10.0 .* sin.(2π .* 50.0 .* t)
     dat.data[!, ch1] .+= noise_50hz
 
-    # 1. CleanLineParams struct
-    params = EegFun.CleanLineParams(line_frequencies = [50.0], bandwidth = 2.0)
-    @test params isa EegFun.CleanLineParams
-    @test params.line_frequencies == [50.0]
-    @test params.bandwidth == 2.0
+    # 1. Dead CleanLineParams removed; CleanLineConfig is the active config struct
+    @test !isdefined(EegFun, :CleanLineParams)
+    cfg = EegFun.CleanLineConfig(line_frequencies = [50.0], bandwidth = 2.0)
+    @test cfg isa EegFun.CleanLineConfig
+    @test cfg.line_frequencies == [50.0]
+    @test cfg.bandwidth == 2.0
 
     # 2. Out-of-place cleanline
     orig_dat = copy(dat)
@@ -98,4 +99,38 @@ using Statistics
     )
     @test isapprox(vec_mut[1].data[!, ch1], cl_dat.data[!, ch1], atol = 1e-10)
     @test isapprox(vec_mut[2].data[!, ch1], cl_dat.data[!, ch1], atol = 1e-10)
+
+    # 7. Phase 2 regressions: tail samples cleaned, Nyquist harmonics skipped, k_tapers <= 1 guard, Float32/view inputs
+    @testset "Tail window cleaning, Nyquist skip, k_tapers guard, and Real views" begin
+        # Non-multiple length: 5.5s with win_length=2.0, win_step=1.0 leaves 0.5s tail after last regular step
+        n_tail = Int(round(5.5 * fs))
+        t_tail = (0:(n_tail-1)) ./ fs
+        tail_dat = EegFun.create_test_continuous_data(n = n_tail, fs = fs, n_channels = 1, seed = 7)
+        tail_ch = EegFun.channel_labels(tail_dat)[1]
+        tail_dat.data[!, tail_ch] .= 15.0 .* sin.(2π .* 50.0 .* t_tail)
+
+        cleaned_tail = EegFun.cleanline(
+            tail_dat;
+            line_frequencies = [50.0, 150.0], # 150 Hz >= fs/2 (128 Hz) must be skipped cleanly!
+            sliding_win_length = 2.0,
+            sliding_win_step = 1.0,
+            p_value = 0.2,
+        )
+        # Verify tail samples (last 100 samples) had 50 Hz substantially attenuated
+        @test std(cleaned_tail.data[!, tail_ch][(end-100):end]) < 0.5 * std(tail_dat.data[!, tail_ch][(end-100):end])
+
+        # k_tapers <= 1 guard throws EegFunError instead of ZeroDivisionError in F-test DOF (2K - 2)
+        @test_throws EegFun.EegFunError EegFun.cleanline(tail_dat; k_tapers = 1)
+        @test_throws EegFun.EegFunError EegFun.cleanline(tail_dat; k_tapers = 0)
+
+        # Relaxed _cleanline_channel! accepts Float32 SubArray view, Int sample_rate, and Vector{Int} line_frequencies
+        buf32 = Float32.(15.0 .* sin.(2π .* 50.0 .* t_tail) .+ 0.2 .* randn(n_tail))
+        v32 = @view buf32[1:end]
+        df32 = DataFrame(time = collect(t_tail), sample = collect(1:n_tail), copycols = false)
+        df32[!, tail_ch] = v32
+        lay32 = EegFun.Layout(DataFrame(label = [tail_ch], inc = [0.0], azi = [0.0]), nothing, nothing, nothing)
+        dat32 = EegFun.ContinuousData("f32_view", df32, lay32, Int(fs), EegFun.AnalysisInfo())
+        EegFun.cleanline!(dat32; line_frequencies = [50], sliding_win_length = 2.0, sliding_win_step = 1.0, p_value = 0.2)
+        @test std(v32) < Float32(5.0)
+    end
 end

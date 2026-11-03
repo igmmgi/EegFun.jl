@@ -1,6 +1,6 @@
-# Layouts & Neighbours
+# Layouts & Neighbors
 
-This demo demonstrates how to load, inspect, modify, and manage electrode layouts and their spatial neighbour relationships.
+This demo demonstrates how to load, inspect, modify, and manage electrode layouts and their spatial neighbor relationships.
 
 ## What are Layouts?
 
@@ -9,7 +9,7 @@ Layouts define the spatial positions of EEG electrodes on the scalp. They are es
 - Topographic plotting (scalp maps)
 - Spherical spline interpolation (channel repair)
 - Cluster-based permutation tests (spatial adjacency)
-- Neighbour-based artifact repair
+- Neighbor-based artifact repair
 
 ## Coordinate Systems
 
@@ -17,25 +17,25 @@ EegFun supports multiple coordinate representations:
 
 **Polar coordinates**: The raw format stored in layout CSV files (theta/radius pairs)
 
-**2D Cartesian (x, y)**: Used for topographic plots and 2D neighbour calculations (`polar_to_cartesian_xy!`)
+**2D Cartesian (x, y)**: Used for topographic plots and 2D neighbor calculations (`polar_to_cartesian_xy!`)
 
-**3D Cartesian (x, y, z)**: Used for spherical spline interpolation and 3D neighbour calculations (`polar_to_cartesian_xyz!`)
+**3D Cartesian (x, y, z)**: Used for spherical spline interpolation and 3D neighbor calculations (`polar_to_cartesian_xyz!`)
 
-## Neighbours
+## Neighbors
 
-Spatial neighbours define which electrodes are "close" to each other. This adjacency information is used by:
+Spatial neighbors define which electrodes are "close" to each other. This adjacency information is used by:
 
 - Cluster-based permutation tests (defining spatial clusters)
-- Neighbour-based artifact repair (interpolating bad channels from nearby good channels)
+- Neighbor-based artifact repair (interpolating bad channels from nearby good channels)
 
-Neighbours can be calculated in 2D (`get_neighbours_xy!`) or 3D (`get_neighbours_xyz!`) space with a configurable distance threshold.
+Neighbors can be calculated in 2D (`get_neighbors_xy!`) or 3D (`get_neighbors_xyz!`) space with a configurable distance threshold.
 
 ## Workflow Summary
 
 This demo covers:
 
 - Loading layout files and converting coordinates
-- Calculating and inspecting neighbour relationships
+- Calculating and inspecting neighbor relationships
 - Subsetting layouts to specific channels
 - Renaming channels in a layout
 - Creating custom layouts from scratch
@@ -47,9 +47,9 @@ This demo covers:
 ::: details Show Code
 
 ```julia
-# Demo: Layout and Neighbour Management
+# Demo: Layout and Neighbor Management
 # Shows how to load, inspect, modify, and manage electrode layouts
-# and their spatial neighbour relationships.
+# and their spatial neighbor relationships.
 
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
@@ -77,28 +77,28 @@ EegFun.has_valid_coordinates(layout)
 
 
 #######################################################################
-# NEIGHBOUR CALCULATION
+# NEIGHBOR CALCULATION
 #######################################################################
 
-# Calculate 2D neighbours using a distance criterion (in arbitrary units)
-EegFun.get_neighbours_xy!(layout, 0.5)
-layout  # now shows neighbours
+# Calculate 2D neighbors using a distance criterion (in arbitrary units)
+EegFun.get_neighbors_xy!(layout, 0.5)
+layout  # now shows neighbors
 
-# Check how many neighbours each channel has
-EegFun.average_number_of_neighbours(layout.neighbours)
+# Check how many neighbors each channel has
+EegFun.average_number_of_neighbors(layout.neighbors)
 
-# Print neighbours to screen
-EegFun.print_layout_neighbours(layout)
+# Print neighbors to screen
+EegFun.print_layout_neighbors(layout)
 
-# Save neighbours to a TOML file
-# EegFun.print_layout_neighbours(layout, "my_neighbours.toml")
+# Save neighbors to a TOML file
+# EegFun.print_layout_neighbors(layout, "my_neighbors.toml")
 
-# Check if a specific channel has enough neighbours
+# Check if a specific channel has enough neighbors
 EegFun.check_channel_neighbors([:Cz], layout)
 
 # Clear and recalculate with a different criterion
-EegFun.clear_neighbours!(layout)
-EegFun.get_neighbours_xyz!(layout, 0.5)  # 3D neighbours
+EegFun.clear_neighbors!(layout)
+EegFun.get_neighbors_xyz!(layout, 0.5)  # 3D neighbors
 
 
 #######################################################################

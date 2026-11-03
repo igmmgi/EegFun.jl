@@ -57,7 +57,7 @@ with_theme(my_custom_colors) do
     EegFun.plot_erp(erps, layout = :single, channel_selection = EegFun.channels([:Fp1]))
 
     # This topoplot will automatically use the :inferno colormap from the theme
-    EegFun.plot_topography(dat, interval_selection = EegFun.times(6), ylim = (-200, 200))
+    EegFun.plot_topography(dat, interval_selection = EegFun.times(6), colorrange = (-200, 200))
 end
 
 # ==============================================================================
@@ -77,7 +77,7 @@ with_theme(theme_dark()) do
     )
 
     # Even though we are in a theme, we can force a different colormap directly via kwargs
-    EegFun.plot_topography(dat, interval_selection = EegFun.times(6), colormap = :inferno, ylim = (-200, 200))
+    EegFun.plot_topography(dat, interval_selection = EegFun.times(6), colormap = :inferno, colorrange = (-200, 200))
 end
 
 # ==============================================================================

@@ -74,7 +74,7 @@ function signal_example_ica_separation()
     t_arr = collect(range(0.0, T - 1.0 / FS, step = 1.0 / FS))
     n     = length(t_arr)
 
-    fig = _eegfun_figure(size = (1800, 900), figure_padding = (10, 10, 10, 10))
+    fig = _eegfun_figure(size = (1400, 850), figure_padding = (10, 10, 10, 10))
 
     # ── 2. Observables (State & UI) ───────────────────────────────────────────
     lbl_sz_obs   = Observable(14)
@@ -84,7 +84,7 @@ function signal_example_ica_separation()
     mat_sz_obs   = Observable(18)
 
     on(fig.scene.viewport) do area
-        sf             = area.widths[1] / 1800
+        sf             = area.widths[1] / 1400
         lbl_sz_obs[]   = max(10, round(Int, 14 * sf))
         tick_sz_obs[]  = max(8, round(Int, 12 * sf))
         title_sz_obs[] = max(11, round(Int, 15 * sf))

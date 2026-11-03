@@ -10,10 +10,10 @@ Configuration for a single filter (highpass, lowpass, etc.).
 
 # Fields
 - `apply::Bool`: Whether to apply this filter
-- `type::String`: Filter type ("hp"=highpass, "lp"=lowpass)
+- `type::Symbol`: Filter type (`:hp` = highpass, `:lp` = lowpass)
 - `freq::Float64`: Cutoff frequency in Hz
-- `func::String`: Filter function ("filt" or "filtfilt")
-- `method::String`: Filter method ("iir" or "fir")
+- `func::Symbol`: Filter function (`:filt` or `:filtfilt`)
+- `method::Symbol`: Filter method (`:iir` or `:fir`)
 - `order::Int`: Filter order
 """
 @kwdef struct FilterSection
@@ -37,10 +37,10 @@ Configuration for all filters used in preprocessing.
 - `ica_lowpass::FilterSection`: Lowpass filter for ICA data
 """
 @kwdef struct FilterConfig
-    highpass::FilterSection = FilterSection(apply = true, type = :hp, freq = 0.1)
-    lowpass::FilterSection = FilterSection(apply = true, type = :lp, freq = 30.0)
-    ica_highpass::FilterSection = FilterSection(apply = true, type = :hp, freq = 1.0)
-    ica_lowpass::FilterSection = FilterSection(apply = true, type = :lp, freq = 30.0)
+    highpass::FilterSection = FilterSection(apply = true, type = :hp, freq = 0.1, order = 1)
+    lowpass::FilterSection = FilterSection(apply = false, type = :lp, freq = 30.0, order = 3)
+    ica_highpass::FilterSection = FilterSection(apply = true, type = :hp, freq = 1.0, order = 1)
+    ica_lowpass::FilterSection = FilterSection(apply = false, type = :lp, freq = 30.0, order = 3)
 end
 
 """
@@ -67,13 +67,15 @@ end
 Configuration for EEG-specific preprocessing settings.
 
 # Fields
-- `artifact_value_abs_criterion::Int`: Threshold for artifact detection (μV)
-- `extreme_value_abs_criterion::Int`: Threshold for extreme value detection (μV)
+- `rereference::Union{Symbol,Vector{Symbol}}`: Reference channel(s) or `:avg` / `:none` (default: `:avg`)
+- `artifact_value_abs_criterion::Float64`: Threshold for artifact detection (μV)
+- `artifact_value_z_criterion::Float64`: Z-score threshold for artifact detection (optional)
+- `extreme_value_abs_criterion::Float64`: Threshold for extreme value detection (μV)
 - `artifact_interval_start::Union{Nothing,Float64}`: Start time for artifact rejection interval (optional)
 - `artifact_interval_end::Union{Nothing,Float64}`: End time for artifact rejection interval (optional)
-- `artifact_value_z_criterion::Float64`: Z-score threshold for artifact detection (optional)
 """
 @kwdef struct EegConfig
+    rereference::Union{Symbol,Vector{Symbol}} = :avg
     artifact_value_abs_criterion::Float64 = 100.0
     artifact_value_z_criterion::Float64 = 0.0
     extreme_value_abs_criterion::Float64 = 500.0
@@ -171,7 +173,7 @@ end
 Comprehensive configuration for EEG data preprocessing.
 
 # Fields
-- `reference_channel::Symbol`: Channel to use for rereferencing
+- `reference_channel::Union{Symbol,Vector{Symbol}}`: Channel(s) to use for rereferencing
 - `epoch_start::Float64`: Start time of the epoch in seconds
 - `epoch_end::Float64`: End time of the epoch in seconds
 - `filter::FilterConfig`: Filter configuration
@@ -181,7 +183,7 @@ Comprehensive configuration for EEG data preprocessing.
 - `eeg::EegConfig`: EEG configuration
 - `ica::IcaConfig`: ICA configuration
 - `autoreject::AutoRejectConfig`: Autoreject adaptive artifact rejection configuration
-- `neighbour_criterion::Float64`: Criterion for layout neighbours
+- `neighbor_criterion::Float64`: Criterion for layout neighbors
 - `channel_repair_method::Symbol`: Method for repairing bad channels
 - `interactive_continuous::Bool`: Show interactive continuous plot
 - `interactive_ica::Bool`: Show interactive ICA plot
@@ -198,7 +200,7 @@ Comprehensive configuration for EEG data preprocessing.
     eeg::EegConfig = EegConfig()
     ica::IcaConfig = IcaConfig()
     autoreject::AutoRejectConfig = AutoRejectConfig()
-    neighbour_criterion::Float64 = 0.35
+    neighbor_criterion::Float64 = 0.35
     channel_repair_method::Symbol = :spherical_spline
     interactive_continuous::Bool = false
     interactive_ica::Bool = false
@@ -244,14 +246,14 @@ Configuration for pipeline output files and saving options.
 """
 @kwdef struct OutputFilesConfig
     directory::String = "./preprocessed_files"
-    save_continuous_data_raw::Bool = true
-    save_continuous_data_corrected::Bool = true
+    save_continuous_data_raw::Bool = false
+    save_continuous_data_corrected::Bool = false
     save_ica_data::Bool = true
-    save_epoch_data_raw::Bool = true
-    save_epoch_data_corrected::Bool = true
+    save_epoch_data_raw::Bool = false
+    save_epoch_data_corrected::Bool = false
     save_epoch_data::Bool = true
-    save_erp_data_raw::Bool = true
-    save_erp_data_corrected::Bool = true
+    save_erp_data_raw::Bool = false
+    save_erp_data_corrected::Bool = false
     save_erp_data::Bool = true
 end
 
@@ -284,19 +286,41 @@ function from_dict(::Type{T}, dict::Dict) where {T}
         field_type = fieldtype(T, field)
         key_str = string(field)
 
-        val = if haskey(dict, key_str)
-            dict[key_str]
-        elseif field == :neighbour_criterion && haskey(dict, "layout") && haskey(dict["layout"], "neighbour_criterion")
-            dict["layout"]["neighbour_criterion"]
-        elseif field == :channel_repair_method && haskey(dict, "channel_repair") && haskey(dict["channel_repair"], "method")
-            dict["channel_repair"]["method"]
+        found = false
+        val = nothing
+        if haskey(dict, key_str)
+            found = true
+            val = dict[key_str]
+        elseif field == :neighbor_criterion
+            if haskey(dict, "neighbour_criterion")
+                @warn "'neighbour_criterion' is deprecated; use 'neighbor_criterion' instead." _module = nothing _file = nothing _line =
+                    nothing
+                found = true
+                val = dict["neighbour_criterion"]
+            elseif haskey(dict, "layout") && dict["layout"] isa AbstractDict
+                if haskey(dict["layout"], "neighbor_criterion")
+                    found = true
+                    val = dict["layout"]["neighbor_criterion"]
+                elseif haskey(dict["layout"], "neighbour_criterion")
+                    @warn "'neighbour_criterion' is deprecated; use 'neighbor_criterion' instead." _module = nothing _file = nothing _line =
+                        nothing
+                    found = true
+                    val = dict["layout"]["neighbour_criterion"]
+                end
+            end
+        elseif field == :channel_repair_method &&
+               haskey(dict, "channel_repair") &&
+               dict["channel_repair"] isa AbstractDict &&
+               haskey(dict["channel_repair"], "method")
+            found = true
+            val = dict["channel_repair"]["method"]
         elseif field == :channel_repair_method && haskey(dict, "repair_method")
-            dict["repair_method"]
-        else
-            nothing
+            found = true
+            val = dict["repair_method"]
         end
 
-        isnothing(val) && continue
+        !found && continue
+        isnothing(val) && !(Nothing <: field_type) && continue
 
         kwargs[field] = _coerce_value(field_type, val)
     end

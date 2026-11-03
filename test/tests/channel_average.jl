@@ -970,4 +970,39 @@ end
         @test :vec_avg ∈ propertynames(dats[1].data)
         @test :vec_avg ∈ propertynames(dats[2].data)
     end
+
+    @testset "Phase 2 regressions: default excludes extra channels, keeps '_' EEG channels, circular TF phase mean" begin
+        # 1. Default selection uses channel_labels(dat) (include_extra = false):
+        #    keeps layout channel :Fp1_bip containing "_" while excluding extra :vEOG and :interval
+        df_ext = DataFrame(
+            time = [0.0, 0.01, 0.02],
+            sample = [1, 2, 3],
+            Ch1 = [2.0, 2.0, 2.0],
+            Fp1_bip = [4.0, 4.0, 4.0],
+            vEOG = [1000.0, 1000.0, 1000.0],
+            interval = [true, false, true],
+        )
+        lay_ext = EegFun.Layout(DataFrame(label = [:Ch1, :Fp1_bip], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing, nothing)
+        cont_ext = EegFun.ContinuousData("ext_test", df_ext, lay_ext, 100, EegFun.AnalysisInfo())
+        avg_ext = EegFun.channel_average(cont_ext)
+        @test avg_ext.data.avg ≈ [3.0, 3.0, 3.0] # mean of Ch1 (2) and Fp1_bip (4), NOT contaminated by vEOG (1000)!
+
+        # 2. Circular mean on TimeFreqData.data_phase and TimeFreqEpochData.data_phase across ±π branch cut
+        tf_circ = EegFun.create_test_tf_data(n_channels = 2, power_offset = 4.0, noise = 0.0)
+        tf_circ.data_phase[!, :Ch1] .= 3.1
+        tf_circ.data_phase[!, :Ch2] .= -3.1
+        EegFun.channel_average!(tf_circ)
+        # Arithmetic mean would give 0.0 (opposite direction!), whereas circular mean gives ±π
+        @test all(abs.(abs.(tf_circ.data_phase[!, :avg]) .- π) .< 1e-6)
+
+        tfe_circ = EegFun.create_test_tf_epoch_data(n_channels = 2, n_epochs = 2, power_offset = 4.0, noise = 0.0)
+        for df_p in tfe_circ.data_phase
+            df_p[!, :Ch1] .= 3.1
+            df_p[!, :Ch2] .= -3.1
+        end
+        EegFun.channel_average!(tfe_circ)
+        for df_p in tfe_circ.data_phase
+            @test all(abs.(abs.(df_p[!, :avg]) .- π) .< 1e-6)
+        end
+    end
 end

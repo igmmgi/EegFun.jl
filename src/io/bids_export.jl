@@ -346,6 +346,7 @@ function _bids_write_events_tsv(dir::String, prefix::String, dat::ContinuousData
 
     triggers = df.trigger
     time_col = df.time
+    has_info = hasproperty(df, :trigger_info)
 
     path = joinpath(dir, "$(prefix)_events.tsv")
     open(path, "w") do io
@@ -354,7 +355,13 @@ function _bids_write_events_tsv(dir::String, prefix::String, dat::ContinuousData
             trig = triggers[i]
             trig == 0 && continue  # skip non-events
             onset = round(time_col[i], digits = 6)
-            println(io, "$(onset)\t0\tn/a\t$(Int(trig))")
+            tt = if has_info && !ismissing(df.trigger_info[i])
+                s = strip(string(df.trigger_info[i]))
+                isempty(s) ? "n/a" : replace(s, '\t' => ' ', '\n' => ' ', '\r' => ' ')
+            else
+                "n/a"
+            end
+            println(io, "$(onset)\t0\t$(tt)\t$(Int(trig))")
         end
     end
 end
@@ -397,17 +404,17 @@ end
 
 # === DERIVATIVES ===
 
-# Mapping from pipeline file suffixes to BIDS desc- labels
+# Mapping from pipeline file suffixes to distinct camelCase BIDS desc- labels
 const _BIDS_DERIVATIVE_SUFFIXES = OrderedDict(
-    "_continuous_raw" => "raw",
-    "_continuous_corrected" => "corrected",
-    "_continuous" => "",
-    "_epochs_raw" => "raw",
-    "_epochs_corrected" => "corrected",
-    "_epochs" => "",
-    "_erps_raw" => "raw",
-    "_erps_corrected" => "corrected",
-    "_erps" => "",
+    "_continuous_raw" => "continuousRaw",
+    "_continuous_corrected" => "continuousCorrected",
+    "_continuous" => "continuous",
+    "_epochs_raw" => "epochsRaw",
+    "_epochs_corrected" => "epochsCorrected",
+    "_epochs" => "epochs",
+    "_erps_raw" => "erpsRaw",
+    "_erps_corrected" => "erpsCorrected",
+    "_erps" => "erps",
     "_ica" => "ica",
     "_artifact_info" => "artifactInfo",
 )
@@ -439,35 +446,31 @@ function _bids_copy_derivatives(
 
     n_copied = 0
     for raw_file in raw_files
-        base = splitext(raw_file)[1]
-        sub_id = pmap[base]
+        base = basename_without_ext(raw_file)
+        sub_id = pmap[splitext(raw_file)[1]]
         sub_dir = joinpath(deriv_out, sub_id, "eeg")
         mkpath(sub_dir)
 
         bids_prefix = "$(sub_id)_task-$(task)"
 
-        # Match JLD2 files belonging to this participant
-        participant_files = filter(f -> startswith(f, base), jld2_files)
+        # Match JLD2 files belonging strictly to this participant stem (`base_` boundary prevents `sub1` matching `sub10`)
+        participant_files = filter(f -> startswith(f, "$(base)_"), jld2_files)
 
         for jld2_file in participant_files
-            # Try to match a known suffix
+            # Try to match an exact known suffix first
             bids_name = nothing
             for (suffix, desc_label) in _BIDS_DERIVATIVE_SUFFIXES
-                if startswith(jld2_file, "$(base)$(suffix)")
-                    if isempty(desc_label)
-                        bids_name = "$(bids_prefix)_eeg.jld2"
-                    else
-                        bids_name = "$(bids_prefix)_desc-$(desc_label)_eeg.jld2"
-                    end
+                if jld2_file == "$(base)$(suffix).jld2"
+                    bids_name = "$(bids_prefix)_desc-$(desc_label)_eeg.jld2"
                     break
                 end
             end
 
-            # Fallback: keep original suffix
+            # Fallback: keep custom suffix after `$(base)_`
             if isnothing(bids_name)
-                remaining = replace(jld2_file, base => "")
-                remaining = replace(remaining, r"^_" => "")
-                bids_name = "$(bids_prefix)_desc-$(splitext(remaining)[1])_eeg.jld2"
+                remaining = jld2_file[(ncodeunits(base)+2):end]
+                custom_desc = splitext(remaining)[1]
+                bids_name = "$(bids_prefix)_desc-$(custom_desc)_eeg.jld2"
             end
 
             src = joinpath(deriv_dir, jld2_file)

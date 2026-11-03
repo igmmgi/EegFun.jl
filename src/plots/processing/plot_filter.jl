@@ -9,6 +9,7 @@ const PLOT_FILTER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Plot styling
     :plot_title => ("Filter Frequency Response", "Plot title"),
+    :show_title => (true, "Whether to show the plot title"),
     :plot_title_position => (
         nothing,
         "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis.",
@@ -65,7 +66,7 @@ function plot_filter_response(
     kwargs...,
 )
     # Merge user kwargs with defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_FILTER_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_FILTER_KWARGS, _normalize_plot_kwargs(kwargs))
 
     # Determine x-axis limits based on filter type and cutoff
     xlim = plot_kwargs[:xlim]
@@ -79,11 +80,12 @@ function plot_filter_response(
 
     _set_window_title("Filter Response")
     fig = _eegfun_figure(size = (1200, 600))
+    show_title = plot_kwargs[:show_title]
 
     # Base axis properties
     base_props = (
         xlabel = plot_kwargs[:xlabel],
-        title = plot_kwargs[:plot_title],
+        title = show_title && !isnothing(plot_kwargs[:plot_title]) ? plot_kwargs[:plot_title] : "",
         titlesize = plot_kwargs[:plot_title_fontsize],
         xlabelsize = plot_kwargs[:label_fontsize],
         ylabelsize = plot_kwargs[:label_fontsize],
@@ -95,7 +97,7 @@ function plot_filter_response(
     xscale = plot_kwargs[:xscale]
     if xscale == :linear
         xscale = identity
-    elseif xscale == :log
+    elseif xscale in (:log, :log10)
         xscale = log10
         # Adjust x-limits for log scale (can't include 0)
         if xlim[1] == 0
@@ -112,7 +114,7 @@ function plot_filter_response(
         fig[1, 2];
         xlabel = "Time (samples)",
         ylabel = "Amplitude",
-        title = "Impulse Response",
+        title = show_title ? "Impulse Response" : "",
         titlesize = plot_kwargs[:plot_title_fontsize],
         xlabelsize = plot_kwargs[:label_fontsize],
         ylabelsize = plot_kwargs[:label_fontsize],
@@ -157,7 +159,8 @@ function plot_filter_response(
     mag_db = 20 * log10.(mag_linear)
 
     # Plot dB magnitude response
-    lines!(ax_db, freqs, mag_db, color = plot_kwargs[:color], linewidth = plot_kwargs[:linewidth])
+    line_col_db = _resolve_theme_linecolor(ax_db, plot_kwargs[:color])
+    lines!(ax_db, freqs, mag_db, color = line_col_db, linewidth = plot_kwargs[:linewidth])
 
     # Add vertical line at cutoff frequency
     vlines!(ax_db, [filter_info.cutoff_freq], color = :red, linestyle = :dash, linewidth = 2)
@@ -204,7 +207,8 @@ function plot_filter_response(
     end
 
     # Plot impulse response
-    lines!(ax_imp, time_samples, impulse_response, color = plot_kwargs[:color], linewidth = plot_kwargs[:linewidth])
+    line_col_imp = _resolve_theme_linecolor(ax_imp, plot_kwargs[:color])
+    lines!(ax_imp, time_samples, impulse_response, color = line_col_imp, linewidth = plot_kwargs[:linewidth])
 
     # Add zero line for reference
     hlines!(ax_imp, [0], color = plot_kwargs[:reference_color], linestyle = plot_kwargs[:reference_linestyle], alpha = 0.5)

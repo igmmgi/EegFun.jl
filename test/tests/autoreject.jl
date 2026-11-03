@@ -248,7 +248,7 @@ using EegFun:
     end
 
     @testset "autoreject failed repair moves to rejected" begin
-        # Create epoch data with an empty layout (no coordinates, no neighbours)
+        # Create epoch data with an empty layout (no coordinates, no neighbors)
         channels = [:Ch1, :Ch2, :Ch3, :Ch4]
         layout = EegFun.Layout(DataFrame(label = channels), nothing, nothing, nothing)
         ep_data = create_test_epoch_data(n_epochs = 10, n_channels = 4, fs = 250, n = 50, seed = 42)
@@ -259,7 +259,7 @@ using EegFun:
 
         cleaned, res = autoreject(ep_data; n_folds = 3, consensus_perc = 0.5, max_repair_perc = 0.3, seed = 42, verbose = false)
 
-        # Because layout has no coordinates and no neighbours, repair fails
+        # Because layout has no coordinates and no neighbors, repair fails
         # Epoch 2 must be moved to rejected, NOT kept as clean/repaired!
         @test 2 in res.epochs_rejected
         @test 2 ∉ res.epochs_repaired
@@ -357,24 +357,24 @@ using EegFun:
         data_dir = joinpath(dirname(dirname(@__DIR__)), "resources", "data")
         test_bdf = joinpath(data_dir, "bdf", "example1.bdf")
 
-        if isfile(test_bdf)
-            mktempdir() do temp_dir
-                epoch_file = joinpath(temp_dir, "epochs.toml")
-                write(
-                    epoch_file,
-                    """
+        @test isfile(test_bdf)
+        mktempdir() do temp_dir
+            epoch_file = joinpath(temp_dir, "epochs.toml")
+            write(
+                epoch_file,
+                """
 [epochs]
 [[epochs.conditions]]
 name = "Test Condition"
 trigger_sequences = [1]
 """,
-                )
+            )
 
-                pipeline_file = joinpath(temp_dir, "pipeline.toml")
-                bdf_dir = replace(joinpath(data_dir, "bdf"), '\\' => '/')
-                write(
-                    pipeline_file,
-                    """
+            pipeline_file = joinpath(temp_dir, "pipeline.toml")
+            bdf_dir = replace(joinpath(data_dir, "bdf"), '\\' => '/')
+            write(
+                pipeline_file,
+                """
 [files.input]
 directory = "$bdf_dir"
 raw_data_files = "example1\\\\.bdf"
@@ -398,18 +398,70 @@ n_candidates = 15
 consensus_perc = 0.3
 max_repair_perc = 0.1
 """,
-                )
+            )
 
-                redirect_stdio(stdout = devnull, stderr = devnull) do
-                    EegFun.preprocess(pipeline_file; base_dir = temp_dir)
-                end
-
-                out_dir = joinpath(temp_dir, "output")
-                @test isdir(out_dir)
-                @test isfile(joinpath(out_dir, "example1_epochs.jld2"))
-                @test isfile(joinpath(out_dir, "example1_erps.jld2"))
-                @test isfile(joinpath(out_dir, "example1_artifact_info.jld2"))
+            redirect_stdio(stdout = devnull, stderr = devnull) do
+                EegFun.preprocess(pipeline_file; base_dir = temp_dir)
             end
+
+            out_dir = joinpath(temp_dir, "output")
+            @test isdir(out_dir)
+            @test isfile(joinpath(out_dir, "example1_epochs.jld2"))
+            @test isfile(joinpath(out_dir, "example1_erps.jld2"))
+            @test isfile(joinpath(out_dir, "example1_artifact_info.jld2"))
+        end
+    end
+
+    @testset "Phase 2 regressions: sub-window interval_selection without DimensionMismatch & neighbor fallback" begin
+        # 1. Sub-window interval_selection on epochs with repairable bad channel
+        ep_sub = EegFun.create_test_epoch_data(n = 100, fs = 100, n_epochs = 10, n_channels = 4, seed = 99)
+        ep_sub.layout.data.x3 = [0.0, 0.1, 0.0, -0.1]
+        ep_sub.layout.data.y3 = [0.1, 0.0, -0.1, 0.0]
+        ep_sub.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
+        EegFun.get_neighbors_xyz!(ep_sub.layout, 0.5)
+
+        t_min, t_max = extrema(ep_sub.data[1].time)
+        t_mid = 0.5 * (t_min + t_max)
+        # Inject strong artifact on Ch1 across the whole epoch 2 so repair is triggered
+        ep_sub.data[2][!, :Ch1] .= 500.0
+
+        cleaned_sub, res_sub = EegFun.autoreject(
+            ep_sub;
+            mode = :local,
+            n_folds = 3,
+            consensus_perc = 0.2,
+            max_repair_perc = 0.5,
+            interval_selection = EegFun.times(t_min, t_mid),
+            seed = 42,
+            verbose = false,
+        )
+        @test cleaned_sub isa EegFun.EpochData
+        @test nrow(cleaned_sub.data[1]) == 100
+        # If epoch 2 was repaired, ALL 100 samples of Ch1 must be interpolated (not just the sub-window!)
+        if 2 in res_sub.epochs_repaired
+            @test all(abs.(cleaned_sub.data[2].Ch1) .< 100.0)
+        end
+
+        # 2. Neighbor fallback (no x3/y3/z3 spherical coords) excludes co-bad channels in pattern
+        nb_only = EegFun.OrderedDict(
+            :Ch1 => EegFun.Neighbors([:Ch2, :Ch3, :Ch4], [1.0, 1.0, 1.0], [1 / 3, 1 / 3, 1 / 3]),
+            :Ch2 => EegFun.Neighbors([:Ch1, :Ch3, :Ch4], [1.0, 1.0, 1.0], [1 / 3, 1 / 3, 1 / 3]),
+            :Ch3 => EegFun.Neighbors([:Ch1, :Ch2, :Ch4], [1.0, 1.0, 1.0], [1 / 3, 1 / 3, 1 / 3]),
+            :Ch4 => EegFun.Neighbors([:Ch1, :Ch2, :Ch3], [1.0, 1.0, 1.0], [1 / 3, 1 / 3, 1 / 3]),
+        )
+        lay_no3d = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2, :Ch3, :Ch4], inc = zeros(4), azi = zeros(4)), nb_only, 0.5, :xy)
+        ep_nb = EegFun.create_test_epoch_data(n = 60, fs = 100, n_epochs = 8, n_channels = 4, seed = 11)
+        ep_nb.layout = lay_no3d
+        ep_nb.data[2][!, :Ch1] .= 600.0
+        ep_nb.data[2][!, :Ch2] .= -600.0
+
+        cleaned_nb, res_nb =
+            EegFun.autoreject(ep_nb; mode = :local, n_folds = 2, consensus_perc = 0.5, max_repair_perc = 0.6, seed = 7, verbose = false)
+        @test cleaned_nb isa EegFun.EpochData
+        if 2 in res_nb.epochs_repaired
+            # Repaired Ch1 and Ch2 must come from clean Ch3/Ch4, NOT from ±600 co-bad neighbor
+            @test maximum(abs.(cleaned_nb.data[2].Ch1)) < 100.0
+            @test maximum(abs.(cleaned_nb.data[2].Ch2)) < 100.0
         end
     end
 

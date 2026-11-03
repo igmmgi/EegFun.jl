@@ -215,21 +215,23 @@ Validate inputs for cluster permutation test.
 function _validate_permutation_inputs(
     prepared::StatisticalData,
     n_permutations::Int,
-    threshold::Float64,
+    alpha::Float64,
     cluster_type::Symbol,
-    tail::Symbol,
+    tail::Symbol;
+    cluster_alpha::Float64 = alpha,
 )
     # Some basic validations 
     n_permutations < 1 && @minimal_error "n_permutations must be >= 1, got $n_permutations"
-    (threshold <= 0.0 || threshold >= 1.0) && @minimal_error "threshold must be between 0 and 1, got $threshold"
+    (alpha <= 0.0 || alpha >= 1.0) && @minimal_error "alpha must be between 0 and 1, got $alpha"
+    (cluster_alpha <= 0.0 || cluster_alpha >= 1.0) && @minimal_error "cluster_alpha must be between 0 and 1, got $cluster_alpha"
     cluster_type ∉ (:spatial, :temporal, :spatiotemporal) &&
         @minimal_error "cluster_type must be :spatial, :temporal, or :spatiotemporal, got :$cluster_type"
     tail ∉ (:both, :left, :right) && @minimal_error "tail must be :both, :left, or :right, got :$tail"
 
-    # Check neighbours if needed for spatial clustering
+    # Check neighbors if needed for spatial clustering
     if cluster_type ∈ (:spatial, :spatiotemporal)
-        if isnothing(prepared.data[1].layout.neighbours)
-            @minimal_warning "Layout.neighbours is not set. Computing with default distance criterion (0.35)."
+        if isnothing(prepared.data[1].layout.neighbors)
+            @minimal_warning "Layout.neighbors is not set. Computing with default distance criterion (0.35)."
         end
     end
 
@@ -309,24 +311,27 @@ function _compute_t_matrix(
                 sum1 = 0.0
                 sum2 = 0.0
                 sum_diff = 0.0
-                sum_diff_sq = 0.0
-                for p_idx = 1:n_participants
+                @simd for p_idx = 1:n_participants
                     val1 = data1[p_idx, e_idx, t_idx]
                     val2 = data2[p_idx, e_idx, t_idx]
                     diff_val = val1 - val2
                     sum1 += val1
                     sum2 += val2
                     sum_diff += diff_val
-                    sum_diff_sq += diff_val * diff_val
                 end
                 mean1_val = sum1 / n_participants
                 mean2_val = sum2 / n_participants
                 mean_diff_val = sum_diff / n_participants
                 mean_diff[e_idx, t_idx] = mean_diff_val
 
-                # Compute variance: var = mean(x^2) - mean(x)^2, then std = sqrt(var * n/(n-1))
-                variance = (sum_diff_sq / n_participants) - (mean_diff_val * mean_diff_val)
-                std_diff_val = sqrt(variance * n_participants / (n_participants - 1))
+                # Two-pass centered sum of squares for numerical stability
+                ss_diff = 0.0
+                @simd for p_idx = 1:n_participants
+                    diff_val = (data1[p_idx, e_idx, t_idx] - data2[p_idx, e_idx, t_idx]) - mean_diff_val
+                    ss_diff += diff_val * diff_val
+                end
+                variance = max(ss_diff / (n_participants - 1), 0.0)
+                std_diff_val = sqrt(variance)
                 std_diff[e_idx, t_idx] = std_diff_val
 
                 # Only store mean1/mean2 if buffers were provided
@@ -336,10 +341,11 @@ function _compute_t_matrix(
                 end
 
                 # Compute SE and t-statistic directly in loop (avoids multiple allocations)
-                if std_diff_val == 0.0
-                    t_matrix[e_idx, t_idx] = mean_diff_val == 0.0 ? NaN : Inf
+                se = std_diff_val / sqrt(n_participants)
+                if se == 0.0
+                    t_matrix[e_idx, t_idx] = mean_diff_val == 0.0 ? NaN : copysign(Inf, mean_diff_val)
                 else
-                    t_matrix[e_idx, t_idx] = mean_diff_val / (std_diff_val / sqrt(n_participants))
+                    t_matrix[e_idx, t_idx] = mean_diff_val / se
                 end
             end
         end
@@ -357,7 +363,7 @@ function _compute_t_matrix(
         end
 
     else
-        # Independent design: need to loop (but df is constant across all points)
+        # Independent design: centered two-pass sum of squares (df constant across all points)
         se_matrix = compute_se ? Array{Float64,2}(undef, n_electrodes, n_time) : Array{Float64,2}(undef, 0, 0)
         n_A = size(data1, 1)
         n_B = size(data2, 1)
@@ -367,31 +373,40 @@ function _compute_t_matrix(
             @inbounds for e_idx = 1:n_electrodes
                 sum1 = 0.0
                 sum2 = 0.0
-                sum1_sq = 0.0
-                sum2_sq = 0.0
 
                 @simd for p_idx = 1:n_A
-                    val = data1[p_idx, e_idx, t_idx]
-                    sum1 += val
-                    sum1_sq += val * val
+                    sum1 += data1[p_idx, e_idx, t_idx]
                 end
 
                 @simd for p_idx = 1:n_B
-                    val = data2[p_idx, e_idx, t_idx]
-                    sum2 += val
-                    sum2_sq += val * val
+                    sum2 += data2[p_idx, e_idx, t_idx]
                 end
 
                 mean1 = sum1 / n_A
                 mean2 = sum2 / n_B
-                var1 = (sum1_sq / n_A - mean1 * mean1) * n_A / (n_A - 1)
-                var2 = (sum2_sq / n_B - mean2 * mean2) * n_B / (n_B - 1)
 
-                # Pooled standard error (assuming equal variances as documented)
-                pooled_var = ((n_A - 1) * var1 + (n_B - 1) * var2) / df
+                ss1 = 0.0
+                @simd for p_idx = 1:n_A
+                    d1 = data1[p_idx, e_idx, t_idx] - mean1
+                    ss1 += d1 * d1
+                end
+
+                ss2 = 0.0
+                @simd for p_idx = 1:n_B
+                    d2 = data2[p_idx, e_idx, t_idx] - mean2
+                    ss2 += d2 * d2
+                end
+
+                # Pooled variance & standard error (assuming equal variances as documented)
+                pooled_var = max((ss1 + ss2) / df, 0.0)
                 se = sqrt(pooled_var * (1.0 / n_A + 1.0 / n_B))
+                diff_mean = mean1 - mean2
 
-                t_matrix[e_idx, t_idx] = (mean1 - mean2) / se
+                if se == 0.0
+                    t_matrix[e_idx, t_idx] = diff_mean == 0.0 ? NaN : copysign(Inf, diff_mean)
+                else
+                    t_matrix[e_idx, t_idx] = diff_mean / se
+                end
                 if compute_se
                     se_matrix[e_idx, t_idx] = se
                 end
@@ -489,17 +504,17 @@ function _compute_p_matrix(
     if tail == :both
         @inbounds @simd for i in eachindex(t_matrix)
             t_val = t_matrix[i]
-            p_matrix[i] = (isnan(t_val) || isinf(t_val)) ? NaN : 2.0 * ccdf(dist, abs(t_val))
+            p_matrix[i] = isnan(t_val) ? NaN : 2.0 * ccdf(dist, abs(t_val))
         end
     elseif tail == :left
         @inbounds @simd for i in eachindex(t_matrix)
             t_val = t_matrix[i]
-            p_matrix[i] = (isnan(t_val) || isinf(t_val)) ? NaN : cdf(dist, t_val)
+            p_matrix[i] = isnan(t_val) ? NaN : cdf(dist, t_val)
         end
     else  # :right
         @inbounds @simd for i in eachindex(t_matrix)
             t_val = t_matrix[i]
-            p_matrix[i] = (isnan(t_val) || isinf(t_val)) ? NaN : ccdf(dist, t_val)
+            p_matrix[i] = isnan(t_val) ? NaN : ccdf(dist, t_val)
         end
     end
     return p_matrix

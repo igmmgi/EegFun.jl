@@ -46,20 +46,39 @@ using LinearAlgebra
         dat = create_synthetic_continuous()
         ica_res = EegFun.run_ica(dat)
         @test ica_res isa EegFun.InfoIca
-        @test size(ica_res.unmixing, 1) == EegFun.n_channels(dat) - 1
+        @test size(ica_res.unmixing, 1) == EegFun.n_channels(dat)
         @test length(ica_res.ica_label) == size(ica_res.unmixing, 1)
         @test isapprox(sum(ica_res.variance), 1.0; atol = 1e-6)
 
         # Custom number of components
         ica_res2 = EegFun.run_ica(dat; n_components = 3)
         @test size(ica_res2.unmixing, 1) == 3
-        # n_components larger than channels -> adjusted to channels-1
+        # n_components larger than rank -> clamped to effective rank (5 for full-rank data)
         ica_res2b = EegFun.run_ica(dat; n_components = 999)
-        @test size(ica_res2b.unmixing, 1) == EegFun.n_channels(dat) - 1
+        @test size(ica_res2b.unmixing, 1) == EegFun.n_channels(dat)
 
-        # Channel selection subset
+        # Rank-deficient data via average reference (rank = n_channels - 1 = 4)
+        dat_avg = EegFun.rereference(dat, :avg)
+        ica_avg_default = EegFun.run_ica(dat_avg)
+        @test size(ica_avg_default.unmixing, 1) == EegFun.n_channels(dat_avg) - 1
+        ica_avg_clamped = @test_logs (:warn,) match_mode = :any EegFun.run_ica(dat_avg; n_components = EegFun.n_channels(dat_avg))
+        @test size(ica_avg_clamped.unmixing, 1) == EegFun.n_channels(dat_avg) - 1
+
+        # Further rank deficiency from interpolated channel + average reference (rank = n_channels - 2 = 3)
+        dat_interp = copy(dat)
+        dat_interp.data[!, :ch1] .= 0.5 .* (dat_interp.data[!, :ch2] .+ dat_interp.data[!, :ch3])
+        dat_interp = EegFun.rereference(dat_interp, :avg)
+        ica_interp = EegFun.run_ica(dat_interp)
+        @test size(ica_interp.unmixing, 1) == EegFun.n_channels(dat_interp) - 2
+
+        # Caller's IcaPrms is not mutated by run_ica
+        caller_prms = EegFun.IcaPrms(l_rate = 0.0025)
+        EegFun.run_ica(dat; n_components = 3, params = caller_prms)
+        @test caller_prms.l_rate == 0.0025
+
+        # Channel selection subset (3 independent channels -> rank 3)
         ica_res3 = EegFun.run_ica(dat; channel_selection = EegFun.channels([:ch1, :ch2, :ch3]))
-        @test size(ica_res3.unmixing, 1) == 2
+        @test size(ica_res3.unmixing, 1) == 3
 
         # Sample selection subset
         ica_res4 = EegFun.run_ica(dat; sample_selection = EegFun.samples(:keepmask))
@@ -67,11 +86,11 @@ using LinearAlgebra
 
         # Preprocessing should be external; run_ica has no filter flags
 
-        # Include extra channels (vEOG, hEOG) in ICA
+        # Include extra channels (vEOG, hEOG) in ICA (7 independent channels -> rank 7)
         nch = EegFun.n_channels(dat)
         sel = vcat(dat.layout.data.label, [:vEOG, :hEOG])
         ica_extra = EegFun.run_ica(dat; include_extra = true, channel_selection = EegFun.channels(sel))
-        @test size(ica_extra.unmixing, 1) == (nch + 2 - 1)
+        @test size(ica_extra.unmixing, 1) == (nch + 2)
 
         # Error when no channels selected
         @test_throws Any EegFun.run_ica(dat; channel_selection = EegFun.channels(Symbol[]))
@@ -524,6 +543,124 @@ using LinearAlgebra
         )
         ln_comps, ln_df = EegFun.identify_line_noise_components(cont_128, ica_128; line_freq = 50.0, z_threshold = 0.5)
         @test 1 in ln_comps # Found even though 2nd harmonic (100 Hz) is above Nyquist (64 Hz)
+
+        # 6. Phase 2 regressions: Vector{EpochData} ICA subtract/add, AMICA step-halving & warning, ECG refractory distance, 0-comp guard
+        ep1 = EegFun.EpochData(
+            "ep_c1",
+            1,
+            "c1",
+            [DataFrame(:ch1 => randn(40), :ch2 => randn(40)), DataFrame(:ch1 => randn(40), :ch2 => randn(40))],
+            EegFun.Layout(DataFrame(:label => [:ch1, :ch2], :x => [0.0, 1.0], :y => [0.0, 0.0]), nothing, nothing, nothing),
+            100,
+            EegFun.AnalysisInfo(),
+        )
+        ep2 = EegFun.EpochData("ep_c2", 2, "c2", [DataFrame(:ch1 => randn(40), :ch2 => randn(40))], ep1.layout, 100, EegFun.AnalysisInfo())
+        ica_multi = EegFun.InfoIca(
+            "multi_ep",
+            [1.0 0.0; 0.0 1.0],
+            [1.0 0.0; 0.0 1.0],
+            [1.0 0.0; 0.0 1.0],
+            [0.5, 0.5],
+            1.0,
+            [0.0, 0.0],
+            [:comp1, :comp2],
+            Dict{Int,Matrix{Float64}}(),
+            ep1.layout,
+            [false, false],
+        )
+        orig_ep1_ch1 = copy(ep1.data[1].ch1)
+        orig_ep2_ch1 = copy(ep2.data[1].ch1)
+
+        # Non-mutating Vector{EpochData}
+        cleaned_eps, ica_after_sub = EegFun.subtract_ica_components([ep1, ep2], ica_multi; component_selection = EegFun.components([1]))
+        @test cleaned_eps[1].data[1].ch1 ≈ zeros(40) atol = 1e-10
+        @test cleaned_eps[2].data[1].ch1 ≈ zeros(40) atol = 1e-10
+        @test ep1.data[1].ch1 == orig_ep1_ch1 # non-mutating!
+        restored_eps, _ = EegFun.add_ica_components(cleaned_eps, ica_after_sub; component_selection = EegFun.components([1]))
+        @test restored_eps[1].data[1].ch1 ≈ orig_ep1_ch1 atol = 1e-10
+        @test restored_eps[2].data[1].ch1 ≈ orig_ep2_ch1 atol = 1e-10
+
+        # Mutating Vector{EpochData}
+        vec_mut_ep = [copy(ep1), copy(ep2)]
+        EegFun.subtract_ica_components!(vec_mut_ep, ica_multi; component_selection = EegFun.components([1]))
+        @test all(d.analysis_info.n_ica_components_removed == 1 for d in vec_mut_ep)
+        @test maximum(abs.(vec_mut_ep[1].data[1].ch1)) < 1e-10
+        @test maximum(abs.(vec_mut_ep[2].data[1].ch1)) < 1e-10
+        EegFun.add_ica_components!(vec_mut_ep, ica_multi; component_selection = EegFun.components([1]))
+        @test vec_mut_ep[1].data[1].ch1 ≈ orig_ep1_ch1 atol = 1e-10
+        @test vec_mut_ep[2].data[1].ch1 ≈ orig_ep2_ch1 atol = 1e-10
+
+        # AMICA step-halving persistence & non-convergence warning
+        lrate_halved = EegFun.AmicaLearningRate(Float64; lrate0 = 0.1)
+        @test !EegFun.calculate_amica_lrate!([0.0, -1.0], 2, 10, false, lrate_halved)
+        @test lrate_halved.lrate ≈ 0.05
+        @test lrate_halved.step_halved == true
+        A_dummy = Matrix{Float64}(I, 2, 2)
+        dA_dummy = zeros(2, 2)
+        EegFun.update_amica_mixing!(A_dummy, dA_dummy, zeros(2), ones(2), ones(2), 2, false, false, 10, lrate_halved)
+        # Because step_halved was true, lrate must NOT be immediately ramped back up toward lrate0 = 0.1!
+        @test lrate_halved.lrate ≈ 0.05
+        @test lrate_halved.step_halved == false
+
+        X_warn = randn(MersenneTwister(9), 2, 300)
+        lay_warn = EegFun.Layout(DataFrame(label = [:C1, :C2], inc = zeros(2), azi = zeros(2)), nothing, nothing, nothing)
+        @test_logs (:warn, r"did not converge") match_mode = :any EegFun.amica_ica(
+            X_warn,
+            lay_warn,
+            "warn_test";
+            n_components = 2,
+            params = EegFun.IcaPrms(amica_max_iter = 1, default_stop = 1e-15),
+            rng = MersenneTwister(9),
+        )
+
+        # ECG physiological refractory distance (~0.2 * fs): double-notched R-wave peaks 5 samples apart at 250 Hz
+        fs_ecg = 250.0
+        n_ecg = 2500 # 10s
+        ecg_sig = zeros(n_ecg)
+        for beat_idx = 200:250:2300 # 1 Hz heart rate (60 bpm)
+            ecg_sig[beat_idx] = 10.0
+            ecg_sig[beat_idx+4] = 9.5 # notched secondary peak 16ms later (within 200ms refractory window!)
+        end
+        df_ecg = DataFrame(:C1 => ecg_sig, :C2 => 0.01 .* randn(MersenneTwister(5), n_ecg))
+        lay_ecg = EegFun.Layout(DataFrame(label = [:C1, :C2], inc = zeros(2), azi = zeros(2)), nothing, nothing, nothing)
+        cont_ecg = EegFun.ContinuousData("ecg_test", df_ecg, lay_ecg, Int(fs_ecg), EegFun.AnalysisInfo())
+        ica_ecg = EegFun.InfoIca(
+            "ecg",
+            [1.0 0.0; 0.0 1.0],
+            [1.0 0.0; 0.0 1.0],
+            [1.0 0.0; 0.0 1.0],
+            [0.9, 0.1],
+            1.0,
+            [0.0, 0.0],
+            [:IC1, :IC2],
+            Dict{Int,Matrix{Float64}}(),
+            lay_ecg,
+            falses(2),
+        )
+        ecg_detected, ecg_metrics = EegFun.identify_ecg_components(cont_ecg, ica_ecg)
+        @test 1 in ecg_detected
+        @test isapprox(ecg_metrics.heart_rate_bpm[1], 60.0; atol = 2.0)
+
+        # identify_line_noise_components n_components == 0 guard
+        ica_empty = EegFun.InfoIca(
+            "empty",
+            zeros(0, 2),
+            zeros(2, 0),
+            zeros(0, 2),
+            Float64[],
+            1.0,
+            zeros(2),
+            Symbol[],
+            Dict{Int,Matrix{Float64}}(),
+            lay_ecg,
+            Bool[],
+        )
+        ln_empty, ln_empty_df = EegFun.identify_line_noise_components(cont_ecg, ica_empty)
+        @test isempty(ln_empty) && nrow(ln_empty_df) == 0
+
+        # ArtifactComponents manual field included in get_all_ica_components
+        art_with_manual = EegFun.ArtifactComponents(Dict(:vEOG => [1], :hEOG => Int[]), Int[], [2], Int[], [5])
+        @test sort(EegFun.get_all_ica_components(art_with_manual)) == [1, 2, 5]
     end
 
 end

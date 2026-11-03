@@ -1,6 +1,6 @@
-# Demo: Layout and Neighbour Management
+# Demo: Layout and Neighbor Management
 # Shows how to load, inspect, modify, and manage electrode layouts
-# and their spatial neighbour relationships.
+# and their spatial neighbor relationships.
 
 # Note: EegFun.example_path() resolves bundled example data paths.
 # When using your own data, simply pass the file path directly, e.g.:
@@ -28,28 +28,28 @@ EegFun.has_valid_coordinates(layout)
 
 
 #######################################################################
-# NEIGHBOUR CALCULATION
+# NEIGHBOR CALCULATION
 #######################################################################
 
-# Calculate 2D neighbours using a distance criterion (in arbitrary units)
-EegFun.get_neighbours_xy!(layout, 0.5)
-layout  # now shows neighbours
+# Calculate 2D neighbors using a distance criterion (in arbitrary units)
+EegFun.get_neighbors_xy!(layout, 0.5)
+layout  # now shows neighbors
 
-# Check how many neighbours each channel has
-EegFun.average_number_of_neighbours(layout.neighbours)
+# Check how many neighbors each channel has
+EegFun.average_number_of_neighbors(layout.neighbors)
 
-# Print neighbours to screen
-EegFun.print_layout_neighbours(layout)
+# Print neighbors to screen
+EegFun.print_layout_neighbors(layout)
 
-# Save neighbours to a TOML file
-# EegFun.print_layout_neighbours(layout, "my_neighbours.toml")
+# Save neighbors to a TOML file
+# EegFun.print_layout_neighbors(layout, "my_neighbors.toml")
 
-# Check if a specific channel has enough neighbours
+# Check if a specific channel has enough neighbors
 EegFun.check_channel_neighbors([:Cz], layout)
 
 # Clear and recalculate with a different criterion
-EegFun.clear_neighbours!(layout)
-EegFun.get_neighbours_xyz!(layout, 0.5)  # 3D neighbours
+EegFun.clear_neighbors!(layout)
+EegFun.get_neighbors_xyz!(layout, 0.5)  # 3D neighbors
 
 
 #######################################################################

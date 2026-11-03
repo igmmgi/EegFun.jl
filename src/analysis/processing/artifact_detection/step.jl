@@ -133,6 +133,27 @@ function is_step_value!(
     # Use provided channel_out or generate default name
     channel_out = something(channel_out, Symbol("is_step_value_$(threshold)"))
 
+    # Ensure unselected epochs also have uniform false-initialized flag columns
+    selected_set = Set(selected_epochs)
+    if mode == :combined
+        for (idx, epoch_df) in enumerate(dat.data)
+            if idx ∉ selected_set && !hasproperty(epoch_df, channel_out)
+                epoch_df[!, channel_out] = falses(nrow(epoch_df))
+            end
+        end
+    else
+        sep_cols = [Symbol("is_step_value_$(ch)_$(threshold)") for ch in selected_channels]
+        for (idx, epoch_df) in enumerate(dat.data)
+            if idx ∉ selected_set
+                for col in sep_cols
+                    if !hasproperty(epoch_df, col)
+                        epoch_df[!, col] = falses(nrow(epoch_df))
+                    end
+                end
+            end
+        end
+    end
+
     # Combine interval and sample selection once (constant across all epochs)
     combined_sel = _combine_interval_sample(interval_selection, sample_selection)
 
@@ -141,14 +162,12 @@ function is_step_value!(
         epoch_df = dat.data[epoch_idx]
         selected_samples = get_selected_samples(epoch_df, combined_sel)
 
-        # Initialize artifact flag column for this epoch
-        epoch_df[!, channel_out] = falses(nrow(epoch_df))
-
         # Create sample mask once (same for all channels)
         sample_mask = falses(nrow(epoch_df))
         sample_mask[selected_samples] .= true
 
         if mode == :combined
+            epoch_df[!, channel_out] = falses(nrow(epoch_df))
             for ch in selected_channels
                 step_mask = _is_step_value(epoch_df[!, ch], threshold) .& sample_mask
                 epoch_df[!, channel_out] .|= step_mask
@@ -245,6 +264,33 @@ function is_step_value(
     end
 end
 
+function is_step_value(
+    dat::MultiDataFrameEeg,
+    threshold::Real;
+    channel_selection = channels(),
+    sample_selection = samples(),
+    interval_selection::Interval = times(),
+    epoch_selection = epochs(),
+    mode::Symbol = :combined,
+)
+    mode ∉ [:separate, :combined] && @minimal_error("mode must be :separate or :combined")
+    threshold <= 0 && @minimal_error("threshold must be greater than 0")
+
+    temp_dat = copy(dat)
+    is_step_value!(temp_dat, threshold; channel_selection, sample_selection, interval_selection, epoch_selection, mode)
+
+    if mode == :combined
+        col = Symbol("is_step_value_$(threshold)")
+        return [Vector{Bool}(ep_df[!, col]) for ep_df in temp_dat.data]
+    else
+        selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
+        cols = [Symbol("is_step_value_$(ch)_$(threshold)") for ch in selected_channels]
+        return [ep_df[!, cols] for ep_df in temp_dat.data]
+    end
+end
+
+is_step_value(dat::AbstractVector{<:EpochData}, threshold::Real; kwargs...) = [is_step_value(d, threshold; kwargs...) for d in dat]
+
 
 """
     n_step_value(dat::SingleDataFrameEeg, threshold::Real; 
@@ -310,3 +356,54 @@ function n_step_value(
         return DataFrame(channel = selected_channels, n_step = counts)
     end
 end
+
+function n_step_value(
+    dat::MultiDataFrameEeg,
+    threshold::Real;
+    channel_selection = channels(),
+    sample_selection = samples(),
+    interval_selection::Interval = times(),
+    epoch_selection = epochs(),
+    mode::Symbol = :combined,
+)
+    mode ∉ [:separate, :combined] && @minimal_error("mode must be :separate or :combined")
+    threshold <= 0 && @minimal_error("threshold must be greater than 0")
+
+    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
+    isempty(selected_channels) && @minimal_error("No channels selected")
+
+    selected_epochs = get_selected_epochs(dat, epoch_selection)
+    isempty(selected_epochs) && @minimal_error("No epochs selected")
+
+    combined_sel = _combine_interval_sample(interval_selection, sample_selection)
+
+    if mode == :combined
+        total = 0
+        for epoch_idx in selected_epochs
+            epoch_df = dat.data[epoch_idx]
+            selected_samples = get_selected_samples(epoch_df, combined_sel)
+            sample_mask = falses(nrow(epoch_df))
+            sample_mask[selected_samples] .= true
+            combined_mask = falses(nrow(epoch_df))
+            for ch in selected_channels
+                combined_mask .|= (_is_step_value(epoch_df[!, ch], threshold) .& sample_mask)
+            end
+            total += sum(combined_mask)
+        end
+        return total
+    else
+        counts = zeros(Int, length(selected_channels))
+        for epoch_idx in selected_epochs
+            epoch_df = dat.data[epoch_idx]
+            selected_samples = get_selected_samples(epoch_df, combined_sel)
+            sample_mask = falses(nrow(epoch_df))
+            sample_mask[selected_samples] .= true
+            for (ci, ch) in enumerate(selected_channels)
+                counts[ci] += sum(_is_step_value(epoch_df[!, ch], threshold) .& sample_mask)
+            end
+        end
+        return DataFrame(channel = selected_channels, n_step = counts)
+    end
+end
+
+n_step_value(dat::AbstractVector{<:EpochData}, threshold::Real; kwargs...) = [n_step_value(d, threshold; kwargs...) for d in dat]

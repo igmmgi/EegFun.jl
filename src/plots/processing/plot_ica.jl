@@ -18,11 +18,12 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :colormap => (nothing, "Colormap for the topography"),
     :gridscale => (75, "Grid resolution for interpolation"),
     :dims => (nothing, "Grid dimensions (rows, cols). If nothing, calculates best square-ish grid"),
-    :ylim => (nothing, "Y-axis limits (nothing for auto). For ICA plots, use num_levels instead."),
-    :num_levels => (20, "Number of contour levels (for ICA plots). For standard plots, use ylim instead."),
+    :colorrange => (nothing, "Color scale limits as (min, max) tuple (nothing for auto)"),
+    :num_levels => (20, "Number of contour levels (for ICA plots)."),
 
     # Title parameters
     :plot_title => (nothing, "Plot title"),
+    :show_title => (true, "Whether to show the plot title"),
     :plot_title_position => (
         nothing,
         "Relative (x, y) coordinates for the plot title (e.g., (0.5, 0.95)). If provided, the title is drawn inside the axis.",
@@ -91,12 +92,16 @@ $(_generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
 # Returns
 - `co`: The contour plot object returned by `contourf!`.
 """
+const _TOPO_KWARG_ALIASES = Dict{Symbol,Symbol}(:ylim => :colorrange)
+
 function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; precomputed_topo = nothing, kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES))
 
     # Extract commonly used kwargs
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
+    colorrange = pop!(plot_kwargs, :colorrange)
+    pop!(plot_kwargs, :show_title, nothing)
 
     # Ensure coordinates are 2d and 3d
     _ensure_coordinates_2d!(ica.layout)
@@ -110,7 +115,12 @@ function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; 
     end
 
     # Calculate levels
-    levels = _calculate_topo_levels(data; num_levels = pop!(plot_kwargs, :num_levels))
+    num_levels = pop!(plot_kwargs, :num_levels)
+    levels = if !isnothing(colorrange)
+        _calculate_topo_levels(data; use_global_scale = true, global_min = colorrange[1], global_max = colorrange[2], num_levels = num_levels)
+    else
+        _calculate_topo_levels(data; num_levels = num_levels)
+    end
 
     actual_cmap = _resolve_theme_colormap(ax, pop!(plot_kwargs, :colormap))
 
@@ -192,11 +202,13 @@ fig = plot_topography(ica,
 function plot_topography(ica::InfoIca; component_selection = components(), kwargs...)
 
     # ICA weights are dimensionless — override the default "μV" label
-    merged_kwargs = Dict{Symbol,Any}(:colorbar_label => "a.u.", pairs(kwargs)...)
+    norm_kw = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
+    merged_kwargs = Dict{Symbol,Any}(:colorbar_label => "a.u.", pairs(norm_kw)...)
 
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, merged_kwargs)
     dims = pop!(plot_kwargs, :dims)
     display_plot = pop!(plot_kwargs, :display_plot)
+    show_title = plot_kwargs[:show_title]
 
     # ensure coordinates are 2d and 3d
     _ensure_coordinates_2d!(ica.layout)
@@ -206,7 +218,7 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
     comps = get_selected_components(ica, component_selection)
     if isempty(comps)
         fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
-        return (fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...),)
+        return (fig = _eegfun_figure(; figure_padding = plot_kwargs[:figure_padding], fontsize_kw...), axes = Axis[])
     end
 
     # Get colorbar settings to adjust grid if needed
@@ -233,17 +245,27 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
     all_data, x_bounds, y_bounds = _prepare_ica_topo_data(ica, comps, plot_kwargs[:method], plot_kwargs[:gridscale])
 
     # Create axes and plot each component
+    axes = Axis[]
     for i in eachindex(comps)
         # Calculate base row/col indices
         base_row, base_col = divrem(i - 1, dims[2]) .+ (1, 1)
+        default_title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100)
+        ax_title = if !show_title
+            ""
+        elseif !isnothing(plot_kwargs[:plot_title]) && length(comps) == 1
+            String(plot_kwargs[:plot_title])
+        else
+            default_title
+        end
 
         if colorbar_plot
             # Create a subgrid for this cell
             sg = GridLayout(fig[base_row, base_col])
-            ax = Axis(sg[1, 1], title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100))
+            ax = Axis(sg[1, 1], title = ax_title)
         else
-            ax = Axis(fig[base_row, base_col], title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100))
+            ax = Axis(fig[base_row, base_col], title = ax_title)
         end
+        push!(axes, ax)
 
         # Use the internal plotting function with pre-interpolated data
         _plot_topography!(
@@ -260,11 +282,11 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
     # Add keyboard event handling for scaling
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press && event.key in (Keyboard.up, Keyboard.down)
-            axes = filter(ax -> ax isa Axis, fig.content)
+            fig_axes = filter(ax -> ax isa Axis, fig.content)
             if event.key == Keyboard.up
-                _topo_scale_up!.(axes, plot_kwargs[:zoom_step])
+                _topo_scale_up!.(fig_axes, plot_kwargs[:zoom_step])
             else
-                _topo_scale_down!.(axes, plot_kwargs[:zoom_step])
+                _topo_scale_down!.(fig_axes, plot_kwargs[:zoom_step])
             end
         end
     end
@@ -274,7 +296,7 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
     end
 
     _set_window_title("Makie")
-    return (fig = fig,)
+    return (fig = fig, axes = axes)
 
 end
 
@@ -450,7 +472,8 @@ function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; artifa
     _set_window_title(title_str)
 
     # ICA weights are dimensionless — override the default "μV" label
-    merged_kwargs = Dict{Symbol,Any}(:colorbar_label => "a.u.", pairs(kwargs)...)
+    norm_kw = _normalize_plot_kwargs(kwargs, _TOPO_KWARG_ALIASES)
+    merged_kwargs = Dict{Symbol,Any}(:colorbar_label => "a.u.", pairs(norm_kw)...)
 
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, merged_kwargs)
@@ -510,11 +533,9 @@ function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; artifa
     rowgap!(fig.layout, 5)  # Tight spacing between component rows
     rowgap!(fig.layout, state.n_visible_components, 80)  # Larger gap before controls
 
-    if display_plot
-        _display_figure(fig)
-    end
+    screen = display_plot ? _display_figure(fig) : nothing
     _set_window_title("Makie")
-    return (fig = fig,)
+    return (fig = fig, axes = state.axs, screen = screen)
 end
 
 
@@ -533,7 +554,7 @@ Selects, centers, scales, and transposes data for ICA unmixing.
 """
 function _prepare_ica_plot_matrix(dat::ContinuousData, ica::InfoIca)
     dat_matrix = permutedims(Matrix(dat.data[!, ica.layout.data.label]))
-    dat_matrix .-= mean(dat_matrix, dims = 2)
+    dat_matrix .-= ica.mean
     dat_matrix ./= ica.scale
     return dat_matrix
 end
@@ -828,7 +849,7 @@ function _create_component_activation_plots!(fig, state)
         push!(state.channel_axs, ax_channel)
         push!(state.overlay.plots, Any[])  # empty overlay list for this axis
 
-        linkaxes!(ax, ax_channel)
+        linkxaxes!(ax, ax_channel)
 
         # Set initial x-axis limits (overlay lines are added dynamically via _update_channel_overlays!)
         xlims!(ax_channel, (state.dat.data.time[first(state.xrange[])], state.dat.data.time[last(state.xrange[])]))
@@ -1102,27 +1123,27 @@ function _update_channel_overlays!(state, selected_channels::Vector{Symbol})
 end
 
 
-"""
-    _add_artifact_category_checkboxes!(fig, state, artifacts)
-
-Add checkboxes to filter components by artifact category.
-Sets up artifact state and creates UI checkboxes in the navigation panel.
 function _get_artifact_categories(artifacts::ArtifactComponents)
-    categories = []
+    categories = Tuple{Symbol,String,Vector{Int}}[]
     for prop in propertynames(artifacts)
         val = getproperty(artifacts, prop)
-        if val isa Dict
+        if val isa AbstractDict
             for (k, v) in val
-                push!(categories, (k, string(k), v))
+                push!(categories, (Symbol(k), string(k), collect(Int, v)))
             end
-        else
+        elseif val isa AbstractVector
             lbl = join(titlecase.(split(string(prop), "_")), " ")
-            push!(categories, (prop, lbl, val))
+            push!(categories, (prop, lbl, collect(Int, val)))
         end
     end
     return categories
 end
 
+"""
+    _add_artifact_category_checkboxes!(fig, state, artifacts)
+
+Add checkboxes to filter components by artifact category.
+Sets up artifact state and creates UI checkboxes in the navigation panel.
 """
 function _add_artifact_category_checkboxes!(fig, state, artifacts)
     # Store artifacts in state
@@ -1318,6 +1339,7 @@ function _update_components!(state)
                 level_to_use = levels_result[k]  # Use local levels for this specific component
             end
 
+            empty!(topo_ax)
             _plot_ica_topo_in_viewer!(
                 topo_ax.parent, # Pass the figure associated with the axis
                 topo_ax,
@@ -1424,6 +1446,9 @@ end
 const PLOT_ICA_QUALITY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
     :display_plot => (true, "Whether to display the plot"),
+    :plot_title => (nothing, "Custom plot title override"),
+    :show_title => (true, "Whether to show the plot title"),
+    :legend => (true, "Whether to display the legend"),
 
     # Statistical thresholds
     :z_threshold => (3.0, "Z-score threshold for identifying components"),
@@ -1440,6 +1465,9 @@ const PLOT_ICA_QUALITY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Line styling
     :linewidth => (2, "Line width for plot lines"),
     :line_alpha => (0.8, "Transparency for plot lines"),
+    :threshold_style => (:dash, "Line style for threshold lines"),
+    :zscore_threshold_color => (:red, "Color for z-score threshold lines"),
+    :zscore_threshold_style => (:dash, "Line style for z-score threshold lines"),
 
     # Marker styling
     :marker_size => (8, "Size of markers"),
@@ -1450,6 +1478,4 @@ const PLOT_ICA_QUALITY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :threshold_color => (:red, "Color for threshold lines"),
     :identified_color => (:green, "Color for identified components"),
     :rejected_color => (:red, "Color for rejected components"),
-
-    # Layout parameters
 )

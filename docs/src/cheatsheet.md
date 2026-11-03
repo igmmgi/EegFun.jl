@@ -8,8 +8,12 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 | --- | --- |
 | Load a BioSemi .bdf file | `EegFun.read_raw_data("file.bdf")` |
 | Load a BrainVision file | `EegFun.read_raw_data("file.vhdr")` |
+| Load an EDF/EDF+ file | `EegFun.read_raw_data("file.edf")` |
+| Load a Neuromag/MNE .fif file | `EegFun.read_raw_data("file.fif")` |
+| Load an XDF file | `EegFun.read_xdf("file.xdf")` |
 | Load an EEGLAB file | `EegFun.read_eeglab("file.set")` |
 | Load a FieldTrip .mat file | `EegFun.read_fieldtrip("file.mat")` |
+| Load a BIDS run | `EegFun.read_bids("bids_root", subject="01", task="posner")` |
 | Load a channel layout | `EegFun.read_layout("layout.csv")` |
 | Create EegFun data structure | `EegFun.create_eegfun_data(raw, layout)` |
 
@@ -31,12 +35,12 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 | Rereference to specific channels | `EegFun.rereference!(dat, [:M1, :M2])` |
 | High-pass filter | `EegFun.highpass_filter!(dat, 0.1)` |
 | Low-pass filter | `EegFun.lowpass_filter!(dat, 30.0)` |
-| Bandpass filter | `EegFun.bandpass_filter!(dat, 0.1, 30.0)` |
+| Bandpass filter (sequential) | `EegFun.highpass_filter!(dat, 0.1); EegFun.lowpass_filter!(dat, 30.0)` |
 | Resample data | `EegFun.resample!(dat, 256)` |
 | Apply baseline correction | `EegFun.baseline!(dat, (-0.2, 0.0))` |
-| Create channel difference | `EegFun.channel_difference!(dat, channel_selection1=channels([:C3]), channel_selection2=channels([:C4]), channel_out=:laterality)` |
-| Average channels into ROI | `EegFun.channel_average!(dat, channel_selections=[channels([:Fz, :Cz, :Pz])], output_labels=[:midline])` |
-| Delete channels | `EegFun.channel_delete!(dat, channels([:M1, :M2]))` |
+| Create channel difference | `EegFun.channel_difference!(dat, channel_selection1=EegFun.channels([:C3]), channel_selection2=EegFun.channels([:C4]), channel_out=:laterality)` |
+| Average channels into ROI | `EegFun.channel_average!(dat, channel_selections=[EegFun.channels([:Fz, :Cz, :Pz])], output_labels=[:midline])` |
+| Delete channels | `EegFun.channel_delete!(dat, EegFun.channels([:M1, :M2]))` |
 | Mark extreme values | `EegFun.is_extreme_value!(dat, 100)` |
 | View trigger counts | `EegFun.trigger_count(dat)` |
 | Search trigger sequences | `EegFun.search_sequence(dat.data.trigger, [1, 2])` |
@@ -49,8 +53,8 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 | Identify EOG components | `EegFun.identify_eog_components(dat, ica)` |
 | Identify ECG components | `EegFun.identify_ecg_components(dat, ica)` |
 | Identify line noise components | `EegFun.identify_line_noise_components(dat, ica)` |
-| Remove components | `EegFun.remove_ica_components!(dat, ica, component_selection=components([1, 3]))` |
-| Restore components | `EegFun.restore_ica_components!(dat, ica, component_selection=components([1]))` |
+| Remove components | `EegFun.subtract_ica_components!(dat, ica, component_selection=EegFun.components([1, 3]))` |
+| Restore components | `EegFun.add_ica_components!(dat, ica, component_selection=EegFun.components([1]))` |
 
 ## Epoching
 
@@ -79,27 +83,28 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 | Jackknife average | `EegFun.jackknife_average(all_erps)` |
 | Compute GFP | `EegFun.gfp(erps)` |
 | Realign epochs to response trigger | `EegFun.realign!(epochs, [201])` |
-| Compute LRP | `EegFun.lrp(erps, channel_selection1=channels([:C3]), channel_selection2=channels([:C4]))` |
+| Compute LRP | `EegFun.lrp(erps, channel_selection1=EegFun.channels([:C3]), channel_selection2=EegFun.channels([:C4]))` |
 
 ## ERP Measurements & Export
 
 | I want to... | Function |
 | --- | --- |
-| Extract mean amplitude | `EegFun.erp_measurements("erps", "mean_amplitude", analysis_interval=(0.3, 0.5))` |
-| Extract peak amplitude | `EegFun.erp_measurements("erps", "max_peak_amplitude", analysis_interval=(0.3, 0.5))` |
-| Extract peak latency | `EegFun.erp_measurements("erps", "max_peak_latency", analysis_interval=(0.3, 0.5))` |
+| Extract mean amplitude (in-memory) | `EegFun.erp_measurements(erps, "mean_amplitude", analysis_interval=(0.3, 0.5))` |
+| Extract mean amplitude (from dir) | `EegFun.erp_measurements("erps", "mean_amplitude", analysis_interval=(0.3, 0.5))` |
+| Extract peak amplitude | `EegFun.erp_measurements(erps, "max_peak_amplitude", analysis_interval=(0.3, 0.5))` |
+| Extract peak latency | `EegFun.erp_measurements(erps, "max_peak_latency", analysis_interval=(0.3, 0.5))` |
 | Explore measurements in GUI | `EegFun.plot_erp_measurement_gui(erps)` |
 
 ## Time-Frequency Analysis
 
 | I want to... | Function |
 | --- | --- |
-| Morlet wavelet decomposition | `EegFun.tf_morlet(epochs, frequencies=4:1:30, n_cycles=3)` |
+| Morlet wavelet decomposition | `EegFun.tf_morlet(epochs, frequencies=4:1:30, cycles=3)` |
 | Multitaper decomposition | `EegFun.tf_multitaper(epochs, frequencies=4:1:30)` |
 | STFT decomposition | `EegFun.tf_stft(epochs, frequencies=4:1:30)` |
 | Baseline correct TF data | `EegFun.tf_baseline!(tf, (-0.2, 0.0); method=:db)` |
-| TF channel average | `EegFun.channel_average!(tf, channel_selections=[channels([:Fz, :Cz])], output_labels=[:frontal])` |
-| TF channel difference | `EegFun.channel_difference!(tf, channel_selection1=channels([:C3]), channel_selection2=channels([:C4]))` |
+| TF channel average | `EegFun.channel_average!(tf, channel_selections=[EegFun.channels([:Fz, :Cz])], output_labels=[:frontal])` |
+| TF channel difference | `EegFun.channel_difference!(tf, channel_selection1=EegFun.channels([:C3]), channel_selection2=EegFun.channels([:C4]))` |
 | TF condition difference | `EegFun.condition_difference(tf_data, [(1, 2)])` |
 | TF condition average | `EegFun.condition_average(tf_data, [[1, 2]])` |
 | TF grand average | `EegFun.grand_average(all_tf)` |
@@ -108,9 +113,9 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 
 | I want to... | Function |
 | --- | --- |
-| Prepare group data for stats | `EegFun.prepare_stats("erps", :paired, condition_selection=conditions([1, 2]))` |
+| Prepare group data for stats | `EegFun.prepare_stats("erps", :paired, condition_selection=EegFun.conditions([1, 2]))` |
 | Run analytic t-test | `EegFun.analytic_test(stat_data)` |
-| Run permutation test | `EegFun.permutation_test(stat_data, n_permutations=1000)` |
+| Run permutation test | `EegFun.permutation_test(stat_data, n_permutations=1000, alpha=0.05, cluster_alpha=0.05)` |
 | Test decoding against chance | `EegFun.test_against_chance(decoded_list)` |
 | Cluster permutation (decoding) | `EegFun.test_against_chance_cluster(decoded_list)` |
 
@@ -120,22 +125,22 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 | --- | --- |
 | Browse continuous data | `EegFun.plot_databrowser(dat)` |
 | Browse with ICA | `EegFun.plot_databrowser(dat, ica)` |
-| Plot ERPs | `EegFun.plot_erp(erps, channel_selection=channels(:Pz))` |
-| Plot topography | `EegFun.plot_topography(erps, interval_selection=times(0.3, 0.5))` |
-| Plot ERP statistics | `EegFun.plot_erp_stats(result, channel_selection=channels(:Pz))` |
-| Plot TF power | `EegFun.plot_tf(tf, channel_selection=channels(:Cz))` |
-| Plot TF statistics | `EegFun.plot_tf_stats(result, channel_selection=channels(:Cz))` |
+| Plot ERPs | `EegFun.plot_erp(erps, channel_selection=EegFun.channels(:Pz))` |
+| Plot topography | `EegFun.plot_topography(erps, interval_selection=EegFun.times(0.3, 0.5))` |
+| Plot ERP statistics | `EegFun.plot_erp_stats(result, channel_selection=EegFun.channels(:Pz))` |
+| Plot TF power | `EegFun.plot_tf(tf, channel_selection=EegFun.channels(:Cz))` |
+| Plot TF statistics | `EegFun.plot_tf_stats(result, channel_selection=EegFun.channels(:Cz))` |
 | Plot TF topography stats | `EegFun.plot_topography_stats(result, freq_range=(8.0, 12.0))` |
 | Plot ICA components | `EegFun.plot_topography(ica)` |
 | Plot epochs grid | `EegFun.plot_epochs(epochs)` |
-| Plot ERP image | `EegFun.plot_erp_image(epochs, channel_selection=channels(:Pz))` |
+| Plot ERP image | `EegFun.plot_erp_image(epochs, channel_selection=EegFun.channels(:Pz))` |
 | Plot GFP | `EegFun.plot_gfp(erps)` |
 | Plot channel layout | `EegFun.plot_layout_2d(layout)` |
 | Plot artifact detection | `EegFun.plot_artifact_detection(epochs)` |
 | Plot frequency spectrum | `EegFun.plot_channel_spectrum(dat)` |
 | Plot filter response | `EegFun.plot_filter_response(dat)` |
 | Plot decoding results | `EegFun.plot_decoding(decoded)` |
-| Plot RSA results | `EegFun.plot_rsa(rsa_result)` |
+| Plot RSA results | `EegFun.plot_rdm_heatmap(rsa_result)` |
 
 ## Selection Helpers
 
@@ -146,7 +151,7 @@ Quick reference for common EEG processing tasks in EegFun.jl.
 | Channel range | `EegFun.channels(1:32)` |
 | Specific conditions | `EegFun.conditions([1, 2])` |
 | All conditions except | `EegFun.conditions_not([3])` |
-| Time interval | `EegFun.times((0.3, 0.5))` |
+| Time interval | `EegFun.times(0.3, 0.5)` |
 | Specific participants | `EegFun.participants([1, 2, 3])` |
 | All participants except | `EegFun.participants_not([10])` |
 | Specific samples | `EegFun.samples(:is_extreme_value_100)` |

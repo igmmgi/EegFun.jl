@@ -214,6 +214,13 @@ using CSV
             result_half = EegFun.channel_summary(dat, sample_selection = x -> 1:nrow(x) .<= div(nrow(x), 2))
             @test result_half isa DataFrame
             @test nrow(result_half) == 4  # Same number of channels
+
+            # Phase 2 regression: MultiDataFrameEeg preserves actual :epoch column IDs (e.g. after rejection: [2, 5])
+            ep_nonseq = EegFun.create_test_epoch_data(n = 30, n_epochs = 2, n_channels = 2)
+            ep_nonseq.data[1].epoch .= 2
+            ep_nonseq.data[2].epoch .= 5
+            res_nonseq = EegFun.channel_summary(ep_nonseq)
+            @test sort(unique(res_nonseq.epoch)) == [2, 5]
         end
 
     end # channel_summary testset
@@ -697,6 +704,17 @@ end # EegFun testset
                     end
                 end
             end
+
+            # Phase 2 regression: batch channel_summary preserves actual data.condition IDs (e.g. [2, 5] instead of 1:2)
+            cond_dir = joinpath(test_dir, "nonseq_cond")
+            mkpath(cond_dir)
+            e_c2 = EegFun.create_test_erp_data(participant = 1, condition = 2, n_channels = 2)
+            e_c5 = EegFun.create_test_erp_data(participant = 1, condition = 5, n_channels = 2)
+            jldsave(joinpath(cond_dir, "1_erps_nonseq.jld2"); data = [e_c2, e_c5])
+            out_nonseq = joinpath(test_dir, "summary_nonseq")
+            EegFun.channel_summary("erps_nonseq"; input_dir = cond_dir, output_dir = out_nonseq)
+            df_nonseq = CSV.read(joinpath(out_nonseq, "channel_summary.csv"), DataFrame)
+            @test sort(unique(df_nonseq.condition)) == [2, 5]
         end
 
     finally

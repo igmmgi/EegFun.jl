@@ -92,7 +92,7 @@ function signal_example_ica_geometry()
     FS = 512.0
     T  = 3.0
 
-    fig = _eegfun_figure(size = (2100, 900), figure_padding = (8, 8, 8, 8))
+    fig = _eegfun_figure(size = (1400, 850), figure_padding = (8, 8, 8, 8))
 
     # ── Responsive font sizing ─────────────────────────────────────────────────
     lbl_sz   = Observable(13)
@@ -101,7 +101,7 @@ function signal_example_ica_geometry()
     ctrl_sz  = Observable(13)
 
     on(fig.scene.viewport) do area
-        sf         = area.widths[1] / 2100
+        sf         = area.widths[1] / 1400
         lbl_sz[]   = max(10, round(Int, 13 * sf))
         tick_sz[]  = max(8, round(Int, 11 * sf))
         title_sz[] = max(11, round(Int, 14 * sf))

@@ -3,7 +3,7 @@ using DelimitedFiles
 
 function plot_comparison()
     if length(ARGS) < 1
-        error("data directory requiored as a command line argument (e.g., julia plot_benchmark_comparison.jl /path/to/data)")
+        error("data directory required as a command line argument (e.g., julia plot_benchmark_comparison.jl /path/to/data)")
     end
     data_dir = ARGS[1]
 

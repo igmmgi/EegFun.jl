@@ -326,17 +326,21 @@ function _decode_core(
     progress_desc::String,
     rng::AbstractRNG = Random.default_rng(),
 )
+    n_iterations < 1 && @minimal_error("n_iterations must be >= 1, got $n_iterations")
+    n_folds < 2 && @minimal_error("Need at least 2 folds for cross-validation, got $n_folds")
+    cost <= 0 && @minimal_error("SVM cost parameter must be positive, got $cost")
+    any(arr -> any(!isfinite, arr), data_arrays) &&
+        @minimal_error("Input features contain NaN or Inf values; remove invalid samples (e.g., edge-masked TF regions) before decoding.")
+
     LIBSVM.LIBLINEAR.set_print(false)
     n_classes = length(data_arrays)
     n_timepoints = length(time_points)
 
-    # Equalize trials if requested
-    if equalize_trials
-        data_arrays, n_trials_per_condition = _equalize_trials(data_arrays, n_trials_per_condition, rng)
-    end
+    # Effective per-condition trial counts (equalization subsamples freshly inside each iteration)
+    eff_trials_per_condition = equalize_trials ? fill(minimum(n_trials_per_condition), n_classes) : copy(n_trials_per_condition)
 
     # Validate that we have enough trials for cross-validation
-    min_trials_after_equalize = minimum(n_trials_per_condition)
+    min_trials_after_equalize = minimum(eff_trials_per_condition)
     if min_trials_after_equalize < n_folds
         @minimal_error(
             "Not enough trials for $n_folds-fold cross-validation. " *
@@ -349,15 +353,15 @@ function _decode_core(
     all_accuracies = zeros(Float64, n_iterations, n_folds, n_timepoints)
 
     # Determine max test set size for preallocation
-    n_trials_per_fold = [div(n_trials, n_folds) for n_trials in n_trials_per_condition]
+    n_trials_per_fold = [div(n_trials, n_folds) for n_trials in eff_trials_per_condition]
     max_test_size = sum(n_trials_per_fold)
     all_predictions = save_raw_predictions ? Array{Float64}(undef, n_iterations, n_folds, n_timepoints, max_test_size) : nothing
     iter_confusions = [zeros(Float64, n_timepoints, n_classes, n_classes) for _ = 1:n_iterations]
 
     # Pre-compute all CV splits once (reused for all iterations/timepoints)
-    cv_splits = _precompute_cv_splits(n_trials_per_condition, n_folds)
+    cv_splits = _precompute_cv_splits(eff_trials_per_condition, n_folds)
 
-    total_trials = sum(n_trials_per_condition)
+    total_trials = sum(eff_trials_per_condition)
     n_features = size(data_arrays[1], 1)
 
     # Initialize progress bar
@@ -396,11 +400,18 @@ function _decode_core(
             X_test_buf = Matrix{Float64}(undef, n_features, local_max_test)
             y_train_buf = Vector{Int}(undef, local_max_train)
             y_test_buf = Vector{Int}(undef, local_max_test)
+            class_correct = Vector{Int}(undef, n_classes)
+            class_total = Vector{Int}(undef, n_classes)
 
             ws = LiblinearWorkspace(n_features, local_max_train, cost, n_classes)
             tc = iter_confusions[iter]
 
-            shuffled_indices = _shuffle_trials(data_arrays, local_rng)
+            # Shuffle (and freshly subsample to min_trials when equalize_trials == true) per iteration
+            shuffled_indices = Vector{Vector{Int}}(undef, n_classes)
+            for c = 1:n_classes
+                perm = Random.randperm(local_rng, size(data_arrays[c], 3))
+                shuffled_indices[c] = equalize_trials ? perm[1:eff_trials_per_condition[c]] : perm
+            end
 
             for t = 1:n_timepoints
                 if should_stop[]
@@ -428,20 +439,52 @@ function _decode_core(
                         y_test_buf[i] = labels[idx]
                     end
 
+                    # Within-fold z-score standardization using strictly training-fold statistics
+                    @inbounds for f = 1:n_features
+                        sum_f = 0.0
+                        @simd for i = 1:n_train
+                            sum_f += X_train_buf[f, i]
+                        end
+                        μ_f = sum_f / n_train
+                        ss_f = 0.0
+                        @simd for i = 1:n_train
+                            d = X_train_buf[f, i] - μ_f
+                            ss_f += d * d
+                        end
+                        σ_f = n_train > 1 ? sqrt(max(ss_f / (n_train - 1), 0.0)) : 0.0
+                        inv_σ = (σ_f == 0.0 || !isfinite(σ_f)) ? 1.0 : (1.0 / σ_f)
+                        @simd for i = 1:n_train
+                            X_train_buf[f, i] = (X_train_buf[f, i] - μ_f) * inv_σ
+                        end
+                        @simd for i = 1:n_test
+                            X_test_buf[f, i] = (X_test_buf[f, i] - μ_f) * inv_σ
+                        end
+                    end
+
                     w, labels_buf, nr_c = _train_prealloc_zero!(ws, @view(X_train_buf[:, 1:n_train]), @view(y_train_buf[1:n_train]))
                     n_correct = 0
+                    if !equalize_trials
+                        fill!(class_correct, 0)
+                        fill!(class_total, 0)
+                    end
 
                     if nr_c == 2
                         l1 = labels_buf[1]
                         l2 = labels_buf[2]
+                        b = w[n_features+1]
                         @inbounds for i = 1:n_test
-                            val = 0.0
+                            val = b
                             for f = 1:n_features
                                 val += w[f] * X_test_buf[f, i]
                             end
                             pred = val > 0.0 ? l1 : l2
                             y_true = y_test_buf[i]
-                            n_correct += (y_true == pred)
+                            is_hit = (y_true == pred)
+                            n_correct += is_hit
+                            if !equalize_trials
+                                class_total[y_true] += 1
+                                class_correct[y_true] += is_hit
+                            end
                             tc[t, y_true, pred] += 1.0
                             if save_raw_predictions
                                 all_predictions[iter, fold, t, i] = Float64(pred)
@@ -452,7 +495,7 @@ function _decode_core(
                             best_c = 1
                             max_val = -Inf
                             for c = 1:nr_c
-                                val = 0.0
+                                val = w[n_features*nr_c+c]
                                 for f = 1:n_features
                                     val += w[(f-1)*nr_c+c] * X_test_buf[f, i]
                                 end
@@ -463,14 +506,33 @@ function _decode_core(
                             end
                             pred = labels_buf[best_c]
                             y_true = y_test_buf[i]
-                            n_correct += (y_true == pred)
+                            is_hit = (y_true == pred)
+                            n_correct += is_hit
+                            if !equalize_trials
+                                class_total[y_true] += 1
+                                class_correct[y_true] += is_hit
+                            end
                             tc[t, y_true, pred] += 1.0
                             if save_raw_predictions
                                 all_predictions[iter, fold, t, i] = Float64(pred)
                             end
                         end
                     end
-                    all_accuracies[iter, fold, t] = n_correct / n_test
+
+                    if equalize_trials
+                        all_accuracies[iter, fold, t] = n_correct / n_test
+                    else
+                        # Balanced accuracy (mean per-class recall) so chance_level == 1 / n_classes
+                        recall_sum = 0.0
+                        n_present = 0
+                        @inbounds for c = 1:n_classes
+                            if class_total[c] > 0
+                                recall_sum += class_correct[c] / class_total[c]
+                                n_present += 1
+                            end
+                        end
+                        all_accuracies[iter, fold, t] = n_present > 0 ? (recall_sum / n_present) : 0.0
+                    end
                 end
 
                 if show_progress && !should_stop[]
@@ -494,9 +556,14 @@ function _decode_core(
         Threads.atomic_xchg!(should_stop, true)
     end
 
-    # Average across iterations and folds
-    average_score = vec(mean(mean(all_accuracies, dims = 2), dims = 1))
-    stderror = vec(std(mean(all_accuracies, dims = 2), dims = 1) / sqrt(n_iterations))
+    # Average across iterations and folds; do not divide iteration SD by sqrt(n_iterations)
+    iter_scores = mean(all_accuracies, dims = 2)
+    average_score = vec(mean(iter_scores, dims = 1))
+    stderror = if n_iterations > 1
+        vec(std(iter_scores, dims = 1))
+    else
+        vec(std(all_accuracies, dims = 2) ./ sqrt(n_folds))
+    end
 
     # Compute confusion matrices
     confusion_matrices = zeros(Float64, n_timepoints, n_classes, n_classes)
@@ -607,7 +674,9 @@ function decode_libsvm(
     # Input validations
     isempty(epochs) && @minimal_error("Cannot decode with empty epochs vector")
     length(epochs) < 2 && @minimal_error("Need at least 2 conditions for decoding, got $(length(epochs))")
+    n_iterations < 1 && @minimal_error("n_iterations must be >= 1, got $n_iterations")
     n_folds < 2 && @minimal_error("Need at least 2 folds for cross-validation, got $n_folds")
+    cost <= 0 && @minimal_error("SVM cost parameter must be positive, got $cost")
 
     # Subset epochs by channel and interval selection
     sub_epochs = if T <: EpochData

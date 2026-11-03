@@ -19,6 +19,7 @@ References:
 
 """Normalize values to 0-100% range. Returns original values if range is zero."""
 function _normalize_to_percent(values::Vector{Float64})
+    isempty(values) && return values
     v_min = minimum(values)
     v_max = maximum(values)
     if v_max - v_min > eps()
@@ -26,6 +27,41 @@ function _normalize_to_percent(values::Vector{Float64})
     else
         return values
     end
+end
+
+"""
+Compute reference-independent Global Dissimilarity (Lehmann & Skrandies, 1980).
+Subtracts the spatial channel mean at each time point before normalizing by GFP,
+and guards zero-GFP (`<= eps(Float64)`) and single-sample (`n_timepoints <= 1`) inputs.
+"""
+function _compute_global_dissimilarity(channel_matrix::AbstractMatrix{<:Real}, gfp_values::AbstractVector{<:Real})::Vector{Float64}
+    n_timepoints, n_channels = size(channel_matrix)
+    gd_values = zeros(Float64, n_timepoints)
+    n_timepoints <= 1 && return gd_values
+
+    spatial_means = vec(mean(channel_matrix, dims = 2))
+
+    for t = 2:n_timepoints
+        gfp_t = Float64(gfp_values[t])
+        gfp_prev = Float64(gfp_values[t-1])
+        if gfp_t <= eps(Float64) || gfp_prev <= eps(Float64)
+            gd_values[t] = 0.0
+            continue
+        end
+        mean_t = Float64(spatial_means[t])
+        mean_prev = Float64(spatial_means[t-1])
+        sum_sq = 0.0
+        @inbounds @simd for c = 1:n_channels
+            v1 = (Float64(channel_matrix[t, c]) - mean_t) / gfp_t
+            v0 = (Float64(channel_matrix[t-1, c]) - mean_prev) / gfp_prev
+            sum_sq += (v1 - v0)^2
+        end
+        gd_values[t] = sqrt(sum_sq / n_channels)
+    end
+
+    # Replicate first value to maintain same length as time vector
+    gd_values[1] = gd_values[2]
+    return gd_values
 end
 
 """Build a result DataFrame with metadata columns from the source data, plus named result columns."""
@@ -199,25 +235,9 @@ function global_dissimilarity(dat::ErpData; channel_selection = channels(), norm
 
     channel_matrix = _get_channel_matrix(dat, channel_selection, "dissimilarity calculation")
 
-    # Normalize channel data by GFP at each time point
+    # Normalize channel data by GFP at each time point (Lehmann & Skrandies, 1980)
     gfp_values = vec(std(channel_matrix, dims = 2, corrected = false))
-
-    # GD(t) = sqrt(mean((u_i(t) - u_i(t-1))^2)) where u_i(t) is normalized by GFP
-    n_timepoints, n_channels = size(channel_matrix)
-    gd_values = zeros(Float64, n_timepoints)
-
-    for t = 2:n_timepoints
-        sum_sq = 0.0
-        @inbounds @simd for c = 1:n_channels
-            v1 = channel_matrix[t, c] / gfp_values[t]
-            v0 = channel_matrix[t-1, c] / gfp_values[t-1]
-            sum_sq += (v1 - v0)^2
-        end
-        gd_values[t] = sqrt(sum_sq / n_channels)
-    end
-
-    # Replicate first value to maintain same length as time vector
-    gd_values[1] = gd_values[2]
+    gd_values = _compute_global_dissimilarity(channel_matrix, gfp_values)
 
     if normalize
         gd_values = _normalize_to_percent(gd_values)
@@ -284,23 +304,9 @@ function gfp_and_dissimilarity(dat::ErpData; channel_selection = channels(), nor
 
     channel_matrix = _get_channel_matrix(dat, channel_selection, "GFP/dissimilarity calculation")
 
-    # Calculate GFP (population std)
+    # Calculate GFP (population std) and reference-independent Global Dissimilarity
     gfp_values = vec(std(channel_matrix, dims = 2, corrected = false))
-
-    # Calculate Global Dissimilarity using GFP for normalization
-    n_timepoints, n_channels = size(channel_matrix)
-    gd_values = zeros(Float64, n_timepoints)
-
-    for t = 2:n_timepoints
-        sum_sq = 0.0
-        @inbounds @simd for c = 1:n_channels
-            v1 = channel_matrix[t, c] / gfp_values[t]
-            v0 = channel_matrix[t-1, c] / gfp_values[t-1]
-            sum_sq += (v1 - v0)^2
-        end
-        gd_values[t] = sqrt(sum_sq / n_channels)
-    end
-    gd_values[1] = gd_values[2]
+    gd_values = _compute_global_dissimilarity(channel_matrix, gfp_values)
 
     if normalize
         gfp_values = _normalize_to_percent(gfp_values)

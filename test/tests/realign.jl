@@ -317,6 +317,29 @@ const RESP_TRIGGERS = [201]
         result = EegFun.calculate_trigger_interval(ep_data2, 101, 201; column_name = :rt_sym)
         @test :rt_sym ∉ propertynames(ep_data2.data[1])
         @test :rt_sym ∈ propertynames(result.data[1])
+
+        # Phase 2 regressions:
+        # 1. calculate_trigger_interval! searches end_triggers ONLY at indices >= start_idx
+        epoch_early_end =
+            _make_epoch_with_response(rt_seconds = 0.4, response_trigger = 201, epoch_start = -0.5, epoch_end = 1.0, sample_rate = 250)
+        # Put an earlier spurious end_trigger (201) BEFORE start_trigger (101 at t = 0.0)
+        epoch_early_end.trigger[5] = 201 # early pre-stimulus trigger at t < 0
+        t0_i = argmin(abs.(epoch_early_end.time))
+        epoch_early_end.trigger[t0_i] = 101 # stimulus at t = 0.0
+        ep_early = _make_epoch_data([epoch_early_end], sample_rate = 250)
+        EegFun.calculate_trigger_interval!(ep_early, 101, 201; column_name = :rt_post)
+        @test ep_early.data[1].rt_post[1] > 0.0
+        @test isapprox(ep_early.data[1].rt_post[1], 0.4; atol = 1 / 250 + 1e-9)
+
+        # 2. _crop_epochs_to_window! preserves exact dt = 1 / sample_rate spacing around t = 0.0
+        rts_dt = [0.3, 0.45, 0.6]
+        ep_dt = _make_epoch_data([_make_epoch_with_response(rt_seconds = rt, sample_rate = 250) for rt in rts_dt], sample_rate = 250)
+        realigned_dt = EegFun.realign(ep_dt, RESP_TRIGGERS)
+        for df_e in realigned_dt.data
+            diffs = diff(df_e.time)
+            @test all(isapprox.(diffs, 1 / 250; atol = 1e-12))
+            @test any(t -> abs(t) < 1e-12, df_e.time)
+        end
     end
 end
 

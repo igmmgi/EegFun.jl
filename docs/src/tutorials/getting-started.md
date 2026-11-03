@@ -48,7 +48,7 @@ Pkg.add("EegFun")
 *   `add GLMakie` (Recommended for interactive GUIs and the Data Browser)
 *   `add CairoMakie` (Recommended for static, publication-quality plots or headless servers)
 
-### Development Version (vía GitHub)
+### Development Version (via GitHub)
 
 To install the latest development version directly from GitHub:
 
@@ -72,14 +72,14 @@ using EegFun
 using GLMakie # Required for interactive plotting
 
 # 1. Automatically download the tutorial datasets
-data_dir = download_eegfun_datasets()
-file_path = joinpath(data_dir, "participant1.bdf")
+data_dir = EegFun.download_eegfun_datasets()
+file_path = joinpath(data_dir, "example1.bdf")
 
 # 2. Load the raw recording
 dat = EegFun.read_raw_data(file_path)
 
 # 3. Attach an electrode layout
-layout = EegFun.read_layout("biosemi72.csv")
+layout = EegFun.read_layout(EegFun.example_path("layouts/biosemi/biosemi72.csv"))
 EegFun.polar_to_cartesian_xy!(layout)
 dat = EegFun.create_eegfun_data(dat, layout)
 
@@ -105,8 +105,12 @@ The package offers a mix of high-level and lower-level functions, including comp
 | --- | --- | --- |
 | BioSemi | `.bdf` | via [BiosemiDataFormat.jl](https://github.com/igmmgi/BiosemiDataFormat.jl) |
 | BrainVision | `.vhdr` / `.eeg` / `.vmrk` | via [BrainVisionDataFormat.jl](https://github.com/igmmgi/BrainVisionDataFormat.jl) |
-| EEGLAB | `.set` / `.fdt` | basic support |
-| FieldTrip | `.mat` | basic support |
+| European Data Format | `.edf` | EDF / EDF+ via `EuropeanDataFormat.jl` |
+| Neuromag / MNE | `.fif` | Raw, Epochs, and Evoked via `FunctionalImageFormat.jl` |
+| Lab Streaming Layer | `.xdf` / `.xdf.gz` | via `ExtensibleDataFormat.jl` |
+| EEGLAB | `.set` / `.fdt` | Continuous, epoched, and ICA metadata |
+| FieldTrip | `.mat` | Continuous, epoched, and timelocked ERPs |
+| BIDS | directory | `EegFun.read_bids` and `EegFun.export_bids` |
 
 > [!NOTE]
 > Additional file format support is planned for future releases. The format-specific packages are automatically installed as dependencies of EegFun.jl.

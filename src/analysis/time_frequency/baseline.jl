@@ -1,89 +1,93 @@
-"""
-    tf_baseline!(tf_data::TimeFreqData, baseline_interval; method=:db)
+const _VALID_TF_BASELINE_METHODS = (:absolute, :relative, :relchange, :normchange, :vssum, :db, :zscore, :percent)
 
-Apply baseline correction to TimeFreqData in-place.
-
-# Arguments
-- `tf_data::TimeFreqData`: Time-frequency data to baseline correct
-- `baseline_interval::Tuple{Real,Real}`: Time window for baseline (start, stop) in seconds
-
-# Keyword Arguments
-- `method::Symbol=:db`: Baseline method 
-  - `:absolute`: Absolute change (power - baseline_mean) - simple subtraction, no normalization
-  - `:relative`: Relative power (power / baseline_mean) - ratio, 
-  - `:relchange`: Relative change ((power - baseline_mean) / baseline_mean) - fractional change 
-  - `:normchange`: Normalized change ((power - baseline) / (power + baseline)) - symmetric normalization
-  - `:db`: Decibel change (10 * log10(power/baseline_mean)) 
-  - `:vssum`: Alias for `:normchange`
-  - `:zscore`: Z-score normalization ((power - baseline_mean) / baseline_std) 
-  - `:percent`: Percent change (100 * (power - baseline) / baseline) - convenience alias for relchange × 100
-
-# Example
-```julia
-tf_baseline!(tf_data, (-0.3, 0.1); method=:db)
-```
-"""
-function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
-    # Check if baseline has already been applied
-    if !isnothing(tf_data.baseline)
-        @minimal_error(
-            "Baseline correction has already been applied to this data (method: $(tf_data.baseline.method), window: $(tf_data.baseline.window)). " *
-            "Baseline corrections are non-linear and cannot be chained. Use the original data to apply a different baseline.",
-        )
-    end
-
-    # The DataFrame is structured as: all frequencies for time 1, then all frequencies for time 2, etc.
-    # unique() returns frequencies in the order they first appear, which matches freqs_out from tf_analysis
-    # So we can use direct indexing: row_idx = (ti - 1) * n_freqs + fi
-    times = unique(tf_data.data_power.time)
-    freqs_unique = unique(tf_data.data_power.freq)  # Already in correct order (matches freqs_out)
-    n_freqs = length(freqs_unique)
-    n_times = length(times)
-
-    # Find baseline time indices (MATLAB: dsearchn finds nearest time points)
-    # Find the nearest time points to the baseline interval boundaries
-    baseline_start_idx = find_closest_time_index(times, baseline_interval[1])
-    baseline_end_idx = find_closest_time_index(times, baseline_interval[2])
-
-    # Create mask for baseline time points
-    base_mask = falses(n_times)
-    base_mask[baseline_start_idx:baseline_end_idx] .= true
-    if !any(base_mask)
-        @minimal_error("Baseline window $(baseline_interval) does not overlap with data times")
-    end
-
-    # Get channel columns
-    ch_labels = channel_labels(tf_data)
-    n_channels = length(ch_labels)
-
-    @info "Applying $(method) baseline correction ($(baseline_interval[1])s to $(baseline_interval[2])s)"
-
-    valid_methods = (:absolute, :relative, :relchange, :normchange, :vssum, :db, :zscore, :percent)
-    if method ∉ valid_methods
+function _validate_tf_baseline_method(method::Symbol)
+    if method ∉ _VALID_TF_BASELINE_METHODS
         @minimal_error(
             "Unknown baseline method: $method. Use :absolute, :relative, :relchange, :normchange, :db, :vssum (alias for :normchange), :zscore, or :percent",
         )
     end
+    return nothing
+end
 
-    # Check if the data follows the standard regular grid (time outer, freq inner)
-    is_regular_grid =
-        (nrow(tf_data.data_power) == n_freqs * n_times) &&
-        (n_freqs > 0 && n_times > 0) &&
-        (tf_data.data_power.time[1] == tf_data.data_power.time[min(n_freqs, end)])
+function _check_tf_not_baselined(baseline_info::Union{BaselineInfo,Nothing})
+    if !isnothing(baseline_info)
+        @minimal_error(
+            "Baseline correction has already been applied to this data (method: $(baseline_info.method), window: $(baseline_info.window)). " *
+            "Baseline corrections are non-linear and cannot be chained. Use the original data to apply a different baseline.",
+        )
+    end
+    return nothing
+end
+
+function _validate_and_resolve_tf_baseline_times(times::Vector{Float64}, baseline_interval::Tuple{Real,Real})
+    b_start = Float64(baseline_interval[1])
+    b_stop = Float64(baseline_interval[2])
+    if isnan(b_start) || isnan(b_stop) || b_start > b_stop
+        @minimal_error("Invalid baseline interval $(baseline_interval): start must be <= stop")
+    end
+    if isempty(times)
+        @minimal_error("Time-frequency data contains no time points")
+    end
+    t_min, t_max = extrema(times)
+    if b_stop < t_min || b_start > t_max
+        @minimal_error("Baseline window $(baseline_interval) does not overlap with data times ($(t_min) to $(t_max) s)")
+    end
+
+    baseline_start_idx = find_closest_time_index(times, b_start)
+    baseline_end_idx = find_closest_time_index(times, b_stop)
+    if baseline_start_idx > baseline_end_idx
+        baseline_start_idx, baseline_end_idx = baseline_end_idx, baseline_start_idx
+    end
+    return baseline_start_idx, baseline_end_idx
+end
+
+function _tf_baseline_df!(
+    df::DataFrame,
+    ch_labels::Vector{Symbol},
+    baseline_interval::Tuple{Real,Real},
+    method::Symbol;
+    parallel_channels::Bool = true,
+)
+    times = unique(df.time)
+    freqs_unique = unique(df.freq)
+    n_freqs = length(freqs_unique)
+    n_times = length(times)
+    n_channels = length(ch_labels)
+
+    baseline_start_idx, baseline_end_idx = _validate_and_resolve_tf_baseline_times(times, baseline_interval)
+    base_range = baseline_start_idx:baseline_end_idx
+
+    is_regular_grid = (nrow(df) == n_freqs * n_times) && (n_freqs > 0 && n_times > 0) && (df.time[1] == df.time[min(n_freqs, end)])
 
     if is_regular_grid
-        base_range = baseline_start_idx:baseline_end_idx
-        Threads.@threads for ch in ch_labels
-            col = tf_data.data_power[!, ch]
-            if col isa Vector{Float64}
-                _tf_baseline_grid!(reshape(col, n_freqs, n_times), base_range, method)
+        if parallel_channels && n_channels > 1
+            Threads.@threads for ch in ch_labels
+                col = df[!, ch]
+                if col isa Vector{Float64}
+                    _tf_baseline_grid!(reshape(col, n_freqs, n_times), base_range, method)
+                else
+                    col_f64 = Float64.(col)
+                    _tf_baseline_grid!(reshape(col_f64, n_freqs, n_times), base_range, method)
+                    df[!, ch] = col_f64
+                end
+            end
+        else
+            for ch in ch_labels
+                col = df[!, ch]
+                if col isa Vector{Float64}
+                    _tf_baseline_grid!(reshape(col, n_freqs, n_times), base_range, method)
+                else
+                    col_f64 = Float64.(col)
+                    _tf_baseline_grid!(reshape(col_f64, n_freqs, n_times), base_range, method)
+                    df[!, ch] = col_f64
+                end
             end
         end
     else
-        # Fallback for irregular grids using dictionary row indexing
-        row_index = _tf_build_row_index(tf_data.data_power)
+        base_mask = falses(n_times)
+        base_mask[base_range] .= true
 
-        # Extract ALL channels into a 3D array [n_channels × n_freqs × n_times] in one pass
+        row_index = _tf_build_row_index(df)
         power_3d = Array{Float64,3}(undef, n_channels, n_freqs, n_times)
         for (fi, f) in enumerate(freqs_unique)
             rf = round(f, digits = 6)
@@ -91,7 +95,7 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}
                 row = get(row_index, (rf, round(t, digits = 6)), nothing)
                 if !isnothing(row)
                     for (ci, ch) in enumerate(ch_labels)
-                        power_3d[ci, fi, ti] = tf_data.data_power[row, ch]
+                        power_3d[ci, fi, ti] = Float64(df[row, ch])
                     end
                 else
                     power_3d[:, fi, ti] .= NaN
@@ -99,70 +103,78 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}
             end
         end
 
-        # Compute baseline statistics per channel × frequency
-        baseline_mean = zeros(n_channels, n_freqs)
-        baseline_std_mat = nothing  # only computed for :zscore
-
         for ci = 1:n_channels
-            for fi = 1:n_freqs
-                vals = @view power_3d[ci, fi, base_mask]
-                valid = vals[.!isnan.(vals)]
-                baseline_mean[ci, fi] = isempty(valid) ? NaN : mean(valid)
-            end
+            _tf_baseline_grid!(@view(power_3d[ci, :, :]), base_range, method)
         end
 
-        if method == :zscore
-            baseline_std_mat = zeros(n_channels, n_freqs)
-            for ci = 1:n_channels
-                for fi = 1:n_freqs
-                    vals = @view power_3d[ci, fi, base_mask]
-                    valid = vals[.!isnan.(vals)]
-                    baseline_std_mat[ci, fi] = (isempty(valid) || length(valid) < 2) ? NaN : std(valid, corrected = false)
-                end
-            end
-        end
-
-        # Apply baseline correction to entire 3D array at once
-        bm = reshape(baseline_mean, n_channels, n_freqs, 1)
-
-        if method == :absolute
-            power_3d .-= bm
-        elseif method == :relative
-            safe_bm = max.(bm, 1e-30)
-            power_3d ./= safe_bm
-        elseif method == :relchange
-            safe_bm = max.(bm, 1e-30)
-            power_3d .= (power_3d .- bm) ./ safe_bm
-        elseif method == :normchange || method == :vssum
-            power_3d .= (power_3d .- bm) ./ (power_3d .+ bm)
-        elseif method == :db
-            safe_bm = max.(bm, 1e-30)
-            power_3d .= 10 .* log10.(max.(power_3d, 1e-30) ./ safe_bm)
-        elseif method == :zscore
-            safe_std = reshape(max.(baseline_std_mat, 1e-30), n_channels, n_freqs, 1)
-            power_3d .= (power_3d .- bm) ./ safe_std
-        elseif method == :percent
-            safe_bm = max.(bm, 1e-30)
-            power_3d .= 100 .* (power_3d .- bm) ./ safe_bm
-        end
-
-        # Write all channels back to DataFrame in one pass
         for (fi, f) in enumerate(freqs_unique)
             rf = round(f, digits = 6)
             for (ti, t) in enumerate(times)
                 row = get(row_index, (rf, round(t, digits = 6)), nothing)
                 if !isnothing(row)
                     for (ci, ch) in enumerate(ch_labels)
-                        tf_data.data_power[row, ch] = power_3d[ci, fi, ti]
+                        df[row, ch] = power_3d[ci, fi, ti]
                     end
                 end
             end
         end
     end
+    return nothing
+end
 
-    # Store baseline information
+"""
+    tf_baseline!(tf_data::TimeFreqData, baseline_interval; method=:db)
+    tf_baseline!(tf_data::TimeFreqEpochData, baseline_interval; method=:db)
+
+Apply baseline correction to `TimeFreqData` or single-trial `TimeFreqEpochData` in-place.
+
+# Arguments
+- `tf_data`: Time-frequency data (`TimeFreqData` or `TimeFreqEpochData`) to baseline correct
+- `baseline_interval::Tuple{Real,Real}`: Time window for baseline `(start, stop)` in seconds
+
+# Keyword Arguments
+- `method::Symbol=:db`: Baseline method
+  - `:absolute`: Absolute change (`power - baseline_mean`) - simple subtraction, no normalization
+  - `:relative`: Relative power (`power / baseline_mean`) - ratio
+  - `:relchange`: Relative change (`(power - baseline_mean) / baseline_mean`) - fractional change
+  - `:normchange`: Normalized change (`(power - baseline) / (power + baseline)`) - symmetric normalization
+  - `:db`: Decibel change (`10 * log10(power / baseline_mean)`)
+  - `:vssum`: Alias for `:normchange`
+  - `:zscore`: Z-score normalization (`(power - baseline_mean) / baseline_std`, sample SD)
+  - `:percent`: Percent change (`100 * (power - baseline) / baseline`)
+
+# Example
+```julia
+tf_baseline!(tf_data, (-0.3, 0.0); method=:db)
+```
+"""
+function tf_baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
+    _check_tf_not_baselined(tf_data.baseline)
+    _validate_tf_baseline_method(method)
+
+    ch_labels = channel_labels(tf_data)
+    @info "Applying $(method) baseline correction ($(baseline_interval[1])s to $(baseline_interval[2])s)"
+
+    _tf_baseline_df!(tf_data.data_power, ch_labels, baseline_interval, method; parallel_channels = true)
     tf_data.baseline = BaselineInfo(method = method, window = (Float64(baseline_interval[1]), Float64(baseline_interval[2])))
+    return tf_data
+end
 
+function tf_baseline!(tf_data::TimeFreqEpochData, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
+    _check_tf_not_baselined(tf_data.baseline)
+    _validate_tf_baseline_method(method)
+    isempty(tf_data.data_power) && @minimal_error("Cannot baseline-correct empty TimeFreqEpochData")
+
+    # Validate interval on the first epoch up-front before spawning threads
+    _validate_and_resolve_tf_baseline_times(unique(tf_data.data_power[1].time), baseline_interval)
+
+    ch_labels = channel_labels(tf_data)
+    @info "Applying $(method) baseline correction to $(length(tf_data.data_power)) TF epochs ($(baseline_interval[1])s to $(baseline_interval[2])s)"
+
+    Threads.@threads for ep_idx in eachindex(tf_data.data_power)
+        _tf_baseline_df!(tf_data.data_power[ep_idx], ch_labels, baseline_interval, method; parallel_channels = false)
+    end
+    tf_data.baseline = BaselineInfo(method = method, window = (Float64(baseline_interval[1]), Float64(baseline_interval[2])))
     return tf_data
 end
 
@@ -174,12 +186,17 @@ Kept as a separate function so that each thread gets its own local variables.
 """
 function _tf_baseline_grid!(mat::AbstractMatrix{Float64}, base_range::UnitRange{Int}, method::Symbol)
     n_freqs, n_times = size(mat)
-    inv_n_base = 1.0 / length(base_range)
+    n_base = length(base_range)
+    inv_n_base = n_base > 0 ? 1.0 / n_base : NaN
+
     for fi = 1:n_freqs
         base_vals = @view mat[fi, base_range]
-        bm = if any(isnan, base_vals)
+        has_nan = any(isnan, base_vals)
+        bm = if has_nan
             valid = filter(!isnan, base_vals)
             isempty(valid) ? NaN : mean(valid)
+        elseif n_base == 0
+            NaN
         else
             s = 0.0
             @inbounds @simd for ti in base_range
@@ -195,66 +212,101 @@ function _tf_baseline_grid!(mat::AbstractMatrix{Float64}, base_range::UnitRange{
             continue
         end
 
-        safe_bm = max(bm, 1e-30)
-
         if method == :absolute
             @inbounds @simd for ti = 1:n_times
                 mat[fi, ti] -= bm
             end
         elseif method == :relative
-            inv_bm = 1.0 / safe_bm
-            @inbounds @simd for ti = 1:n_times
-                mat[fi, ti] *= inv_bm
-            end
-        elseif method == :relchange
-            inv_bm = 1.0 / safe_bm
-            @inbounds @simd for ti = 1:n_times
-                mat[fi, ti] = (mat[fi, ti] - bm) * inv_bm
-            end
-        elseif method == :normchange || method == :vssum
-            @inbounds for ti = 1:n_times
-                p = mat[fi, ti]
-                mat[fi, ti] = (p - bm) / (p + bm)
-            end
-        elseif method == :db
-            inv_bm = 1.0 / safe_bm
-            @inbounds for ti = 1:n_times
-                mat[fi, ti] = 10.0 * log10(max(mat[fi, ti], 1e-30) * inv_bm)
-            end
-        elseif method == :zscore
-            bstd = if any(isnan, base_vals)
-                valid = filter(!isnan, base_vals)
-                (isempty(valid) || length(valid) < 2) ? NaN : std(valid, corrected = false)
-            else
-                std(base_vals, corrected = false)
-            end
-            if isnan(bstd)
+            if bm == 0.0
                 @inbounds for ti = 1:n_times
                     mat[fi, ti] = NaN
                 end
             else
-                inv_std = 1.0 / max(bstd, 1e-30)
+                inv_bm = 1.0 / bm
                 @inbounds @simd for ti = 1:n_times
-                    mat[fi, ti] = (mat[fi, ti] - bm) * inv_std
+                    mat[fi, ti] *= inv_bm
+                end
+            end
+        elseif method == :relchange
+            if bm == 0.0
+                @inbounds for ti = 1:n_times
+                    mat[fi, ti] = NaN
+                end
+            else
+                inv_bm = 1.0 / bm
+                @inbounds @simd for ti = 1:n_times
+                    mat[fi, ti] = (mat[fi, ti] - bm) * inv_bm
                 end
             end
         elseif method == :percent
-            inv_bm = 100.0 / safe_bm
-            @inbounds @simd for ti = 1:n_times
-                mat[fi, ti] = (mat[fi, ti] - bm) * inv_bm
+            if bm == 0.0
+                @inbounds for ti = 1:n_times
+                    mat[fi, ti] = NaN
+                end
+            else
+                inv_bm = 100.0 / bm
+                @inbounds @simd for ti = 1:n_times
+                    mat[fi, ti] = (mat[fi, ti] - bm) * inv_bm
+                end
+            end
+        elseif method == :normchange || method == :vssum
+            @inbounds for ti = 1:n_times
+                p = mat[fi, ti]
+                denom = p + bm
+                mat[fi, ti] = denom == 0.0 ? NaN : (p - bm) / denom
+            end
+        elseif method == :db
+            if bm <= 0.0
+                @inbounds for ti = 1:n_times
+                    mat[fi, ti] = NaN
+                end
+            else
+                inv_bm = 1.0 / bm
+                @inbounds for ti = 1:n_times
+                    p = mat[fi, ti]
+                    mat[fi, ti] = (isnan(p) || p <= 0.0) ? NaN : 10.0 * log10(p * inv_bm)
+                end
+            end
+        elseif method == :zscore
+            bstd = if has_nan
+                valid = filter(!isnan, base_vals)
+                length(valid) < 2 ? NaN : std(valid, corrected = true)
+            else
+                n_base < 2 ? NaN : std(base_vals, corrected = true)
+            end
+            if isnan(bstd) || bstd == 0.0
+                @inbounds for ti = 1:n_times
+                    mat[fi, ti] = NaN
+                end
+            else
+                inv_std = 1.0 / bstd
+                @inbounds @simd for ti = 1:n_times
+                    mat[fi, ti] = (mat[fi, ti] - bm) * inv_std
+                end
             end
         end
     end
     return mat
 end
 
-# Non-mutating version
+# Non-mutating versions
 function tf_baseline(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
     return tf_baseline!(copy(tf_data), baseline_interval; method = method)
 end
 
-# Vector version
+function tf_baseline(tf_data::TimeFreqEpochData, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
+    return tf_baseline!(copy(tf_data), baseline_interval; method = method)
+end
+
+# Vector versions
 function tf_baseline!(tf_data::AbstractVector{<:TimeFreqData}, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
+    for tf in tf_data
+        tf_baseline!(tf, baseline_interval; method = method)
+    end
+    return tf_data
+end
+
+function tf_baseline!(tf_data::AbstractVector{<:TimeFreqEpochData}, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
     for tf in tf_data
         tf_baseline!(tf, baseline_interval; method = method)
     end
@@ -265,8 +317,16 @@ function tf_baseline(tf_data::AbstractVector{<:TimeFreqData}, baseline_interval:
     return [tf_baseline(tf, baseline_interval; method = method) for tf in tf_data]
 end
 
-# Overloads for baseline! and baseline for TimeFreqData (unifying with EegData baseline interface)
+function tf_baseline(tf_data::AbstractVector{<:TimeFreqEpochData}, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
+    return [tf_baseline(tf, baseline_interval; method = method) for tf in tf_data]
+end
+
+# Overloads for baseline! and baseline for TimeFreqData & TimeFreqEpochData
 function baseline!(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
+    return tf_baseline!(tf_data, baseline_interval; method = method)
+end
+
+function baseline!(tf_data::TimeFreqEpochData, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
     return tf_baseline!(tf_data, baseline_interval; method = method)
 end
 
@@ -274,7 +334,15 @@ function baseline!(tf_data::AbstractVector{<:TimeFreqData}, baseline_interval::T
     return tf_baseline!(tf_data, baseline_interval; method = method)
 end
 
+function baseline!(tf_data::AbstractVector{<:TimeFreqEpochData}, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
+    return tf_baseline!(tf_data, baseline_interval; method = method)
+end
+
 function baseline(tf_data::TimeFreqData, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
+    return tf_baseline(tf_data, baseline_interval; method = method)
+end
+
+function baseline(tf_data::TimeFreqEpochData, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
     return tf_baseline(tf_data, baseline_interval; method = method)
 end
 
@@ -282,7 +350,11 @@ function baseline(tf_data::AbstractVector{<:TimeFreqData}, baseline_interval::Tu
     return tf_baseline(tf_data, baseline_interval; method = method)
 end
 
-# Interval normalization helpers for TimeFreqData baseline
+function baseline(tf_data::AbstractVector{<:TimeFreqEpochData}, baseline_interval::Tuple{Real,Real}; method::Symbol = :db)
+    return tf_baseline(tf_data, baseline_interval; method = method)
+end
+
+# Interval normalization helpers for TF baseline
 _to_tf_interval(interval::Tuple{Real,Real}) = (Float64(interval[1]), Float64(interval[2]))
 _to_tf_interval(interval::TimeSelection) = (interval.start, interval.stop)
 function _to_tf_interval(interval::AbstractVector{<:Real})
@@ -290,39 +362,90 @@ function _to_tf_interval(interval::AbstractVector{<:Real})
     return (Float64(interval[1]), Float64(interval[2]))
 end
 
-tf_baseline!(tf_data::TimeFreqData, baseline_interval::Union{AbstractVector{<:Real},TimeSelection}; method::Symbol = :db) =
+function _full_tf_interval(tf_data::TimeFreqData)
+    isempty(tf_data.data_power.time) && @minimal_error("Time-frequency data contains no time points")
+    return extrema(tf_data.data_power.time)
+end
+
+function _full_tf_interval(tf_data::TimeFreqEpochData)
+    (isempty(tf_data.data_power) || isempty(tf_data.data_power[1].time)) && @minimal_error("TimeFreqEpochData contains no time points")
+    return extrema(tf_data.data_power[1].time)
+end
+
+const _TFDataObject = Union{TimeFreqData,TimeFreqEpochData}
+const _TFDataOrVec = Union{TimeFreqData,TimeFreqEpochData,AbstractVector{<:TimeFreqData},AbstractVector{<:TimeFreqEpochData}}
+const _TFAltInterval = Union{AbstractVector{<:Real},TimeSelection}
+
+tf_baseline!(tf_data::_TFDataObject, baseline_interval::_TFAltInterval; method::Symbol = :db) =
     tf_baseline!(tf_data, _to_tf_interval(baseline_interval); method = method)
 
-tf_baseline!(
-    tf_data::AbstractVector{<:TimeFreqData},
-    baseline_interval::Union{AbstractVector{<:Real},TimeSelection};
-    method::Symbol = :db,
-) = tf_baseline!(tf_data, _to_tf_interval(baseline_interval); method = method)
+tf_baseline!(tf_data::AbstractVector{<:TimeFreqData}, baseline_interval::_TFAltInterval; method::Symbol = :db) =
+    tf_baseline!(tf_data, _to_tf_interval(baseline_interval); method = method)
 
-tf_baseline(
-    tf_data::Union{TimeFreqData,AbstractVector{<:TimeFreqData}},
-    baseline_interval::Union{AbstractVector{<:Real},TimeSelection};
-    method::Symbol = :db,
-) = tf_baseline(tf_data, _to_tf_interval(baseline_interval); method = method)
+tf_baseline!(tf_data::AbstractVector{<:TimeFreqEpochData}, baseline_interval::_TFAltInterval; method::Symbol = :db) =
+    tf_baseline!(tf_data, _to_tf_interval(baseline_interval); method = method)
 
-baseline!(
-    tf_data::Union{TimeFreqData,AbstractVector{<:TimeFreqData}},
-    baseline_interval::Union{AbstractVector{<:Real},TimeSelection};
-    method::Symbol = :db,
-) = tf_baseline!(tf_data, _to_tf_interval(baseline_interval); method = method)
+tf_baseline(tf_data::_TFDataOrVec, baseline_interval::_TFAltInterval; method::Symbol = :db) =
+    tf_baseline(tf_data, _to_tf_interval(baseline_interval); method = method)
 
-baseline(
-    tf_data::Union{TimeFreqData,AbstractVector{<:TimeFreqData}},
-    baseline_interval::Union{AbstractVector{<:Real},TimeSelection};
-    method::Symbol = :db,
-) = tf_baseline(tf_data, _to_tf_interval(baseline_interval); method = method)
+baseline!(tf_data::_TFDataOrVec, baseline_interval::_TFAltInterval; method::Symbol = :db) =
+    tf_baseline!(tf_data, _to_tf_interval(baseline_interval); method = method)
+
+baseline(tf_data::_TFDataOrVec, baseline_interval::_TFAltInterval; method::Symbol = :db) =
+    tf_baseline(tf_data, _to_tf_interval(baseline_interval); method = method)
+
+# Full-epoch / default interval overloads so 1-arg `baseline!(tf_epoch)` or `baseline!(tf_epoch, times())`
+# never silently dispatches to ERP `baseline!(::EegData, ::Interval = times())`
+tf_baseline!(tf_data::_TFDataObject, ::AllSelection = times(); method::Symbol = :db) =
+    tf_baseline!(tf_data, _full_tf_interval(tf_data); method = method)
+
+function tf_baseline!(tf_data::AbstractVector{<:TimeFreqData}, ::AllSelection = times(); method::Symbol = :db)
+    for tf in tf_data
+        tf_baseline!(tf, _full_tf_interval(tf); method = method)
+    end
+    return tf_data
+end
+
+function tf_baseline!(tf_data::AbstractVector{<:TimeFreqEpochData}, ::AllSelection = times(); method::Symbol = :db)
+    for tf in tf_data
+        tf_baseline!(tf, _full_tf_interval(tf); method = method)
+    end
+    return tf_data
+end
+
+tf_baseline(tf_data::_TFDataObject, ::AllSelection = times(); method::Symbol = :db) =
+    tf_baseline(tf_data, _full_tf_interval(tf_data); method = method)
+
+tf_baseline(tf_data::AbstractVector{<:TimeFreqData}, ::AllSelection = times(); method::Symbol = :db) =
+    [tf_baseline(tf, _full_tf_interval(tf); method = method) for tf in tf_data]
+
+tf_baseline(tf_data::AbstractVector{<:TimeFreqEpochData}, ::AllSelection = times(); method::Symbol = :db) =
+    [tf_baseline(tf, _full_tf_interval(tf); method = method) for tf in tf_data]
+
+baseline!(tf_data::_TFDataObject, ::AllSelection = times(); method::Symbol = :db) =
+    tf_baseline!(tf_data, _full_tf_interval(tf_data); method = method)
+
+baseline!(tf_data::AbstractVector{<:TimeFreqData}, ::AllSelection = times(); method::Symbol = :db) =
+    tf_baseline!(tf_data, times(); method = method)
+
+baseline!(tf_data::AbstractVector{<:TimeFreqEpochData}, ::AllSelection = times(); method::Symbol = :db) =
+    tf_baseline!(tf_data, times(); method = method)
+
+baseline(tf_data::_TFDataObject, ::AllSelection = times(); method::Symbol = :db) =
+    tf_baseline(tf_data, _full_tf_interval(tf_data); method = method)
+
+baseline(tf_data::AbstractVector{<:TimeFreqData}, ::AllSelection = times(); method::Symbol = :db) =
+    tf_baseline(tf_data, times(); method = method)
+
+baseline(tf_data::AbstractVector{<:TimeFreqEpochData}, ::AllSelection = times(); method::Symbol = :db) =
+    tf_baseline(tf_data, times(); method = method)
 
 """
     tf_baseline(file_pattern::String, baseline_interval;
                 method=:db, input_dir=pwd(), output_dir=nothing,
                 participant_selection=participants(), condition_selection=conditions())
 
-Apply baseline correction to TimeFreqData files.
+Apply baseline correction to TimeFreqData or TimeFreqEpochData files.
 
 # Example
 ```julia
@@ -348,7 +471,7 @@ function tf_baseline(
         process_fn = (input_path, output_path) -> begin
             filename = basename(input_path)
             data = read_data(input_path)
-            if isnothing(data) || !(data isa Vector{TimeFreqData})
+            if isnothing(data) || !(data isa Vector{<:Union{TimeFreqData,TimeFreqEpochData}})
                 return BatchResult(false, filename, "Invalid data type")
             end
             data = _condition_select(data, condition_selection)

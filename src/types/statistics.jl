@@ -126,12 +126,17 @@ Stores cluster-specific parameters for cluster permutation tests.
 - `threshold_method::Symbol`: `:parametric`, `:nonparametric_individual`, or `:nonparametric_common`
 - `cluster_type::Symbol`: `:spatial`, `:temporal`, or `:spatiotemporal`
 - `n_permutations::Int`: Number of permutations performed
+- `cluster_alpha::Float64`: Point-wise significance threshold for cluster formation (default: 0.05)
 """
 struct ClusterInfo
     threshold_method::Symbol
     cluster_type::Symbol
     n_permutations::Int
+    cluster_alpha::Float64
 end
+
+ClusterInfo(threshold_method::Symbol, cluster_type::Symbol, n_permutations::Int) =
+    ClusterInfo(threshold_method, cluster_type, n_permutations, 0.05)
 
 # === TEST CONFIGURATION TYPES ===
 
@@ -288,7 +293,7 @@ function Base.show(io::IO, result::PermutationResult)
     println(io, "├─ Design: $(test_info.type)")
     println(io, "├─ Degrees of freedom: $(round(Int, test_info.df))")
     println(io, "├─ Permutations: $(cluster_info.n_permutations)")
-    println(io, "├─ Threshold: $(test_info.alpha) ($(cluster_info.threshold_method))")
+    println(io, "├─ Alpha: $(test_info.alpha), Cluster alpha: $(cluster_info.cluster_alpha) ($(cluster_info.threshold_method))")
     println(io, "├─ Cluster type: $(cluster_info.cluster_type)")
     println(io, "├─ Data dimensions: $n_electrodes electrodes × $n_time_points time points ($time_range)")
     println(io, "├─ Significant points: $n_sig_pos_points positive, $n_sig_neg_points negative")

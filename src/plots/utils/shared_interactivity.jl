@@ -479,10 +479,10 @@ function _setup_keyboard_tracking(fig::Figure)
     ctrl_pressed = Ref(false)
 
     on(events(fig).keyboardbutton) do key_event
-        if key_event.key == Keyboard.left_shift
-            shift_pressed[] = key_event.action == Keyboard.press
-        elseif key_event.key == Keyboard.left_control
-            ctrl_pressed[] = key_event.action == Keyboard.press
+        if key_event.key in (Keyboard.left_shift, Keyboard.right_shift)
+            shift_pressed[] = key_event.action in (Keyboard.press, Keyboard.repeat)
+        elseif key_event.key in (Keyboard.left_control, Keyboard.right_control)
+            ctrl_pressed[] = key_event.action in (Keyboard.press, Keyboard.repeat)
         end
     end
 
@@ -586,12 +586,12 @@ function _setup_channel_selection_events!(
 
     # Keyboard event tracking
     on(events(fig).keyboardbutton) do key_event
-        if key_event.key == Keyboard.left_shift
-            shift_pressed[] = key_event.action == Keyboard.press
-        elseif key_event.key == Keyboard.left_control
-            ctrl_pressed[] = key_event.action == Keyboard.press
+        if key_event.key in (Keyboard.left_shift, Keyboard.right_shift)
+            shift_pressed[] = key_event.action in (Keyboard.press, Keyboard.repeat)
+        elseif key_event.key in (Keyboard.left_control, Keyboard.right_control)
+            ctrl_pressed[] = key_event.action in (Keyboard.press, Keyboard.repeat)
         end
-        if key_event.action == Keyboard.release
+        if key_event.action == Keyboard.release && key_event.key in (Keyboard.left_control, Keyboard.right_control)
             channel_selection_active[] = false
         end
     end

@@ -113,11 +113,11 @@ function _extract_time_vector(time_data)
 end
 
 """
-Create metadata (condition name and analysis info) from filepath.
+Create metadata (condition name and analysis info) from filepath and sample rate.
 """
-function _create_metadata(filepath::String)
+function _create_metadata(filepath::String, sample_rate::Int)
     condition_name = basename(filepath)
-    analysis_info = AnalysisInfo()
+    analysis_info = AnalysisInfo(sample_rate = Float64(sample_rate))
     return condition_name, analysis_info
 end
 
@@ -148,9 +148,8 @@ function _fieldtrip_to_continuousdata(ft::Dict, filepath::String, layout::Layout
 
     @info "Data: $n_channels channels × $n_timepoints timepoints"
 
-    # Create DataFrame with time column
+    # Create DataFrame
     df = DataFrame(data_matrix', ch_names)
-    insertcols!(df, 1, :time => time_vec)
 
     # Extract events from cfg.event if available (BDF files use struct-of-arrays format)
     trigger_vec, trigger_info_vec = _create_trigger_columns(n_timepoints)
@@ -200,12 +199,11 @@ function _fieldtrip_to_continuousdata(ft::Dict, filepath::String, layout::Layout
         end
     end
 
-    insertcols!(df, 2, :trigger => trigger_vec)
-    insertcols!(df, 3, :trigger_info => trigger_info_vec)
+    insertcols!(df, 1, :time => time_vec, :sample => collect(1:n_timepoints), :trigger => trigger_vec, :trigger_info => trigger_info_vec)
 
     # Create ContinuousData
-    _, analysis_info = _create_metadata(filepath)
-    continuous_data = ContinuousData(filepath, df, layout, sample_rate, analysis_info)
+    _, analysis_info = _create_metadata(filepath, sample_rate)
+    continuous_data = ContinuousData(filepath, df, copy(layout), sample_rate, analysis_info)
 
     @info "Successfully converted to ContinuousData"
     return continuous_data
@@ -237,16 +235,15 @@ function _fieldtrip_to_epochdata(ft::Dict, filepath::String, layout::Layout, sam
 
     # Convert trials to Vector{DataFrame}
     epoch_dataframes = Vector{DataFrame}(undef, n_trials)
+    time_zero_idx = find_closest_time_index(times, 0.0)
+    sample_col = collect(1:n_timepoints)
 
     for trial_idx = 1:n_trials
-        # Create DataFrame with transposed data and time column
+        # Create DataFrame with transposed data
         df = DataFrame(ft["trial"][trial_idx]', ch_names)
-        insertcols!(df, 1, :time => times)
 
         # Create trigger vectors with trigger at time=0 (stimulus onset)
         trigger_vec, trigger_info_vec = _create_trigger_columns(n_timepoints)
-
-        time_zero_idx = find_closest_time_index(times, 0.0)
 
         # Set trigger at time=0
         if trial_idx <= length(trial_triggers)
@@ -257,20 +254,27 @@ function _fieldtrip_to_epochdata(ft::Dict, filepath::String, layout::Layout, sam
             end
         end
 
-        insertcols!(df, 2, :trigger => trigger_vec)
-        insertcols!(df, 3, :trigger_info => trigger_info_vec)
+        insertcols!(
+            df,
+            1,
+            :time => times,
+            :sample => copy(sample_col),
+            :epoch => fill(trial_idx, n_timepoints),
+            :trigger => trigger_vec,
+            :trigger_info => trigger_info_vec,
+        )
 
         epoch_dataframes[trial_idx] = df
     end
 
     # Create EpochData
-    condition_name, analysis_info = _create_metadata(filepath)
+    condition_name, analysis_info = _create_metadata(filepath, sample_rate)
     epoch_data = EpochData(
         filepath,
         1,  # condition number (here, this is essentially a placeholder)
         condition_name,
         epoch_dataframes,
-        layout,
+        copy(layout),
         sample_rate,
         analysis_info,
     )
@@ -298,20 +302,17 @@ function _fieldtrip_to_erpdata(ft::Dict, filepath::String, layout::Layout, sampl
 
     # Create DataFrame with time and trigger columns
     df = DataFrame(data_matrix', ch_names)
-    insertcols!(df, 1, :time => time_vec)
-
     trigger_vec, trigger_info_vec = _create_trigger_columns(n_timepoints)
-    insertcols!(df, 2, :trigger => trigger_vec)
-    insertcols!(df, 3, :trigger_info => trigger_info_vec)
+    insertcols!(df, 1, :time => time_vec, :sample => collect(1:n_timepoints), :trigger => trigger_vec, :trigger_info => trigger_info_vec)
 
     # Create ErpData
-    condition_name, analysis_info = _create_metadata(filepath)
+    condition_name, analysis_info = _create_metadata(filepath, sample_rate)
     erp_data = ErpData(
         filepath,
         1,  # condition number
         condition_name,
         df,
-        layout,
+        copy(layout),
         sample_rate,
         analysis_info,
         1,  # n_epochs (unknown for FieldTrip ERP, default to 1)

@@ -8,10 +8,12 @@ Perform cluster-based permutation test on prepared ERP data.
 # Arguments
 - `prepared::StatisticalData`: Prepared data from `prepare_stats`
 - `n_permutations::Int`: Number of permutations (default: 1000)
-- `threshold::Float64`: P-value threshold (default: 0.05)
+- `alpha::Float64`: Cluster-level family-wise error rate significance threshold (default: 0.05)
+- `cluster_alpha::Float64`: Point-wise cluster-forming p-value threshold (default: 0.05)
+- `threshold::Union{Nothing,Real}`: Deprecated alias setting both `alpha` and `cluster_alpha` (default: `nothing`)
 - `threshold_method::Symbol`: Threshold method - `:parametric` (default), `:nonparametric_individual`, or `:nonparametric_common`
 - `cluster_type::Symbol`: Type of clustering - `:spatial`, `:temporal`, or `:spatiotemporal` (default)
-- `min_num_neighbors::Int`: Minimum number of *neighbouring* significant channels required to keep a point (default: 2). 
+- `min_num_neighbors::Int`: Minimum number of *neighboring* significant channels required to keep a point (default: 2). 
 - `tail::Symbol`: Test tail - `:both` (default), `:left`, or `:right`
 - `show_progress::Bool`: Whether to show progress bar (default: true)
 - `use_gpu::Bool`: Compute permutation t-matrices on the GPU if a GPU backend is loaded (default: false)
@@ -28,7 +30,9 @@ Perform cluster-based permutation test on prepared ERP data.
 function permutation_test(
     prepared::StatisticalData;
     n_permutations::Int = 1000,
-    threshold::Real = 0.05,
+    alpha::Real = 0.05,
+    cluster_alpha::Real = 0.05,
+    threshold::Union{Nothing,Real} = nothing,
     threshold_method::Symbol = :parametric,
     cluster_type::Symbol = :spatiotemporal,
     min_num_neighbors::Int = 2,
@@ -37,8 +41,15 @@ function permutation_test(
     use_gpu::Bool = false,
     rng::AbstractRNG = Random.default_rng(),
 )
+    if !isnothing(threshold)
+        alpha = threshold
+        cluster_alpha = threshold
+    end
+    alpha_f = Float64(alpha)
+    cluster_alpha_f = Float64(cluster_alpha)
+
     # Validate inputs
-    _validate_permutation_inputs(prepared, n_permutations, threshold, cluster_type, tail)
+    _validate_permutation_inputs(prepared, n_permutations, alpha_f, cluster_type, tail; cluster_alpha = cluster_alpha_f)
 
     # Validate threshold method
     if !(threshold_method in [:parametric, :nonparametric_common, :nonparametric_individual])
@@ -72,11 +83,11 @@ function permutation_test(
     @info "Computing t-statistics..."
     t_matrix, df, _, se_matrix = _compute_t_matrix(prepared; compute_p_values = false)
 
-    # Handle different thresholding methods
+    # Handle different thresholding methods (point-wise cluster-forming threshold uses cluster_alpha_f)
     if threshold_method == :parametric
         # Parametric thresholding: compute critical t-values from t-distribution
         @info "Computing parametric critical t-values..."
-        critical_t_values = _compute_critical_t_values(df, size(t_matrix), threshold, tail)
+        critical_t_values = _compute_critical_t_values(df, size(t_matrix), cluster_alpha_f, tail)
 
         # Threshold observed data
         @info "Thresholding observed data (parametric)..."
@@ -94,15 +105,16 @@ function permutation_test(
 
         # Compute common threshold from permutation distribution
         @info "Computing non-parametric common threshold..."
-        thresh_pos, thresh_neg = _compute_nonparametric_threshold_common(permutation_t_matrices, threshold, tail)
-        critical_t_values = (thresh_pos, thresh_neg)
+        thresh_pos, thresh_neg = _compute_nonparametric_threshold_common(permutation_t_matrices, cluster_alpha_f, tail)
+        # Store signed negative critical_t in result (for plotting), positive magnitude for _threshold_t_matrix_nonparametric!
+        critical_t_values = (thresh_pos, -thresh_neg)
 
         # Threshold observed data
         @info "Thresholding observed data (non-parametric common)..."
         mask_positive, mask_negative = _threshold_t_matrix_nonparametric(t_matrix, thresh_pos, thresh_neg, tail)
 
         # Store for later use in permutations
-        threshold_for_permutations = critical_t_values
+        threshold_for_permutations = (thresh_pos, thresh_neg)
 
     elseif threshold_method == :nonparametric_individual
         # Non-parametric individual: run all permutations first to get thresholds
@@ -113,24 +125,25 @@ function permutation_test(
 
         # Compute individual thresholds from permutation distribution
         @info "Computing non-parametric individual thresholds..."
-        thresh_pos_mat, thresh_neg_mat = _compute_nonparametric_threshold_individual(permutation_t_matrices, threshold, tail)
-        critical_t_values = (thresh_pos_mat, thresh_neg_mat)
+        thresh_pos_mat, thresh_neg_mat = _compute_nonparametric_threshold_individual(permutation_t_matrices, cluster_alpha_f, tail)
+        # Store signed negative critical_t matrix in result (for plotting), positive magnitudes for _threshold_t_matrix_nonparametric!
+        critical_t_values = (thresh_pos_mat, -thresh_neg_mat)
 
         # Threshold observed data
         @info "Thresholding observed data (non-parametric individual)..."
         mask_positive, mask_negative = _threshold_t_matrix_nonparametric(t_matrix, thresh_pos_mat, thresh_neg_mat, tail)
 
         # Store for later use in permutations
-        threshold_for_permutations = critical_t_values
+        threshold_for_permutations = (thresh_pos_mat, thresh_neg_mat)
     end
 
     # Extract commonly used fields from grand_average ErpData
     electrodes = channel_labels(prepared.data[1])
     time_points = prepared.analysis.time_points
     layout = prepared.data[1].layout
-    if cluster_type ∈ (:spatial, :spatiotemporal) && isnothing(layout.neighbours)
+    if cluster_type ∈ (:spatial, :spatiotemporal) && isnothing(layout.neighbors)
         layout = copy(layout)
-        get_neighbours_xy!(layout, 0.35)
+        get_neighbors_xy!(layout, 0.35)
     end
 
     # Build connectivity matrix
@@ -180,18 +193,17 @@ function permutation_test(
         permutation_t_matrices = permutation_t_matrices,
     )
 
-    # Compute p-values
+    # Compute p-values (when tail == :both, _compute_cluster_pvalues stores two-sided 2*p_one_sided and checks <= alpha_f)
     @info "Computing p-values..."
-    cluster_alpha = tail == :both ? threshold / 2.0 : threshold
     if !isempty(positive_clusters)
         positive_clusters =
-            _compute_cluster_pvalues(positive_clusters, cluster_stats_positive, permutation_max_positive, n_permutations, cluster_alpha)
+            _compute_cluster_pvalues(positive_clusters, cluster_stats_positive, permutation_max_positive, n_permutations, alpha_f, tail)
         sort!(positive_clusters, by = c -> (!c.is_significant, -abs(c.cluster_stat)))
     end
 
     if !isempty(negative_clusters)
         negative_clusters =
-            _compute_cluster_pvalues(negative_clusters, cluster_stats_negative, permutation_max_negative, n_permutations, cluster_alpha)
+            _compute_cluster_pvalues(negative_clusters, cluster_stats_negative, permutation_max_negative, n_permutations, alpha_f, tail)
         sort!(negative_clusters, by = c -> (!c.is_significant, -abs(c.cluster_stat)))
     end
 
@@ -220,9 +232,9 @@ function permutation_test(
     end
 
     # Assemble nested structs
-    cluster_info = ClusterInfo(threshold_method, cluster_type, n_permutations)
+    cluster_info = ClusterInfo(threshold_method, cluster_type, n_permutations, cluster_alpha_f)
 
-    test_info = TestInfo(prepared.analysis.design, df, threshold, tail, :cluster_permutation, cluster_info)
+    test_info = TestInfo(prepared.analysis.design, df, alpha_f, tail, :cluster_permutation, cluster_info)
 
     stat_matrix = StatMatrix(t_matrix, nothing)
     masks = Masks(significant_mask_positive, significant_mask_negative)
@@ -255,7 +267,7 @@ end
     analytic_test(prepared::StatisticalData;
                   alpha::Float64 = 0.05,
                   tail::Symbol = :both,
-                  correction_method::Symbol = :no)
+                  correction_method::Symbol = :none)
 
 Perform analytic (parametric) t-test without permutation 
 
@@ -263,32 +275,34 @@ Perform analytic (parametric) t-test without permutation
 - `prepared::StatisticalData`: Prepared data from `prepare_stats`
 - `alpha::Float64`: Significance threshold (default: 0.05)
 - `tail::Symbol`: Test tail - `:both` (default), `:left`, or `:right`
-- `correction_method::Symbol`: Multiple comparison correction - `:no` (default) or `:bonferroni`
+- `correction_method::Symbol`: Multiple comparison correction - `:none` (default, `:no` accepted as synonym) or `:bonferroni`
 
 # Returns
 - `AnalyticResult`: Results structure with t-statistics, p-values, and significant masks
 
 # Examples
 ```julia
-result = analytic_test(prepared, alpha=0.05, correction_method=:no)
+result = analytic_test(prepared, alpha=0.05, correction_method=:none)
 result = analytic_test(prepared, alpha=0.05, correction_method=:bonferroni)
 ```
 """
-function analytic_test(prepared::StatisticalData; alpha::Real = 0.05, tail::Symbol = :both, correction_method::Symbol = :no)
-
-    correction_method ∉ (:no, :bonferroni) && @minimal_error "correction_method must be :no or :bonferroni. Got :$correction_method"
+function analytic_test(prepared::StatisticalData; alpha::Real = 0.05, tail::Symbol = :both, correction_method::Symbol = :none)
+    correction_method == :no && (correction_method = :none)
+    correction_method ∉ (:none, :bonferroni) && @minimal_error "correction_method must be :none or :bonferroni. Got :$correction_method"
     tail ∉ (:both, :left, :right) && @minimal_error "tail must be :both, :left, or :right. Got :$tail"
+    alpha_f = Float64(alpha)
+    (alpha_f <= 0.0 || alpha_f >= 1.0) && @minimal_error "alpha must be between 0 and 1, got $alpha_f"
 
     # Compute t-statistics, degrees of freedom, and p-values in one pass
     t_matrix, df, p_matrix, se_matrix = _compute_t_matrix(prepared, tail = tail)
 
     # Create significance mask (with optional correction)
-    corrected_mask = _create_significance_mask(p_matrix, alpha, correction_method)
+    corrected_mask = _create_significance_mask(p_matrix, alpha_f, correction_method)
 
     if correction_method == :bonferroni
         n_comparisons = count(!isnan, p_matrix)
-        bonferroni_alpha = n_comparisons > 0 ? alpha / n_comparisons : 0.0
-        n_sig_raw = count(p -> !isnan(p) && p <= alpha, p_matrix)
+        bonferroni_alpha = n_comparisons > 0 ? alpha_f / n_comparisons : 0.0
+        n_sig_raw = count(p -> !isnan(p) && p <= alpha_f, p_matrix)
         n_sig_bonferroni = count(corrected_mask)
         @info "Bonferroni correction: n_comparisons=$n_comparisons, bonferroni_alpha=$bonferroni_alpha, raw_sig=$n_sig_raw, bonferroni_sig=$n_sig_bonferroni"
     end
@@ -308,7 +322,7 @@ function analytic_test(prepared::StatisticalData; alpha::Real = 0.05, tail::Symb
     test_info = TestInfo(
         prepared.analysis.design,
         df,
-        alpha,
+        alpha_f,
         tail,
         correction_method,
         nothing,  # cluster_info is nothing for analytic tests
@@ -325,11 +339,11 @@ function analytic_test(prepared::StatisticalData; alpha::Real = 0.05, tail::Symb
     # Compute critical t-value
     dist = TDist(df)
     if tail == :both
-        critical_t = quantile(dist, 1.0 - alpha / 2.0)
+        critical_t = quantile(dist, 1.0 - alpha_f / 2.0)
     elseif tail == :right
-        critical_t = quantile(dist, 1.0 - alpha)
+        critical_t = quantile(dist, 1.0 - alpha_f)
     else  # :left
-        critical_t = quantile(dist, alpha)
+        critical_t = quantile(dist, alpha_f)
     end
 
     result = AnalyticResult(
@@ -356,7 +370,9 @@ end
 function permutation_test(
     prepared::TFStatisticalData;
     n_permutations::Int = 1000,
-    threshold::Real = 0.05,
+    alpha::Real = 0.05,
+    cluster_alpha::Real = 0.05,
+    threshold::Union{Nothing,Real} = nothing,
     threshold_method::Symbol = :parametric,
     cluster_type::Symbol = :full,
     min_num_neighbors::Int = 2,
@@ -364,78 +380,105 @@ function permutation_test(
     show_progress::Bool = true,
     rng::AbstractRNG = Random.default_rng(),
 )
+    if !isnothing(threshold)
+        alpha = threshold
+        cluster_alpha = threshold
+    end
+    alpha_f = Float64(alpha)
+    cluster_alpha_f = Float64(cluster_alpha)
+
     # Validate inputs
     n_permutations < 1 && @minimal_error "n_permutations must be >= 1, got $n_permutations"
-    (threshold <= 0.0 || threshold >= 1.0) && @minimal_error "threshold must be between 0 and 1, got $threshold"
+    (alpha_f <= 0.0 || alpha_f >= 1.0) && @minimal_error "alpha must be between 0 and 1, got $alpha_f"
+    (cluster_alpha_f <= 0.0 || cluster_alpha_f >= 1.0) && @minimal_error "cluster_alpha must be between 0 and 1, got $cluster_alpha_f"
     cluster_type ∉ (:temporal, :spatial, :spectral, :spatiotemporal, :spectrotemporal, :full) &&
         @minimal_error "cluster_type must be :temporal, :spatial, :spectral, :spatiotemporal, :spectrotemporal, or :full, got :$cluster_type"
     tail ∉ (:both, :left, :right) && @minimal_error "tail must be :both, :left, or :right, got :$tail"
-    threshold_method ∉ (:parametric, :nonparametric_common) &&
-        @minimal_error "threshold_method must be :parametric or :nonparametric_common, got :$threshold_method"
+    threshold_method ∉ (:parametric, :nonparametric_common, :nonparametric_individual) &&
+        @minimal_error "threshold_method must be :parametric, :nonparametric_common, or :nonparametric_individual, got :$threshold_method"
 
     # Draw all permutations once; reused for non-parametric thresholds and cluster inference
     plan = _draw_permutation_plan(rng, prepared, n_permutations)
 
-    # Compute observed t-matrix
+    # Compute observed t-matrix (skip p-values since cluster test uses permutation inference)
     @info "Computing TF t-statistics..."
-    t_matrix, df, _ = _compute_t_matrix_tf(prepared, tail = tail)
+    t_matrix, df, _ = _compute_t_matrix_tf(prepared; tail = tail, compute_p_values = false)
 
     electrodes = channel_labels(prepared.data[1])
     frequencies = prepared.analysis.frequencies
     time_points = prepared.analysis.time_points
+    n_electrodes = length(electrodes)
+    n_freqs = length(frequencies)
+    n_time = length(time_points)
+    permutation_t_matrices = nothing
 
-    # Determine thresholds
+    # Determine thresholds (point-wise cluster-forming threshold uses cluster_alpha_f)
     if threshold_method == :parametric
         @info "Computing parametric critical t-values..."
-        critical_t_values = _compute_critical_t_values_tf(df, size(t_matrix), threshold, tail)
+        critical_t_values = _compute_critical_t_values_tf(df, size(t_matrix), cluster_alpha_f, tail)
 
         @info "Thresholding observed data (parametric)..."
         mask_positive, mask_negative = _threshold_t_matrix_parametric_tf(t_matrix, critical_t_values, tail)
         threshold_for_permutations = critical_t_values
 
     elseif threshold_method == :nonparametric_common
-        @info "Running preliminary permutations for non-parametric thresholding..."
-        n_electrodes = length(electrodes)
-        n_freqs = length(frequencies)
-        n_time = length(time_points)
-        permutation_t_matrices = Array{Float64,4}(undef, n_electrodes, n_freqs, n_time, n_permutations)
-
-        shuffled_A = similar(prepared.analysis.data[1])
-        shuffled_B = similar(prepared.analysis.data[2])
-        progress = show_progress ? Progress(n_permutations, desc = "Collecting t-matrices: ", showspeed = true) : nothing
-
-        for perm_idx = 1:n_permutations
-            _shuffle_labels_tf!(
-                shuffled_A,
-                shuffled_B,
+        total_floats = n_electrodes * n_freqs * n_time * n_permutations
+        if total_floats <= _TF_PERM_CACHE_MAX_FLOATS
+            @info "Collecting TF permutation t-matrices in parallel..."
+            permutation_t_matrices = _collect_permutation_t_matrices_tf(
                 prepared.analysis.data[1],
                 prepared.analysis.data[2],
                 prepared.analysis.design,
-                view(plan, :, perm_idx),
+                plan,
+                show_progress,
             )
-            t_perm, _, _ = _compute_t_matrix_tf(shuffled_A, shuffled_B, prepared.analysis.design, tail = tail)
-            permutation_t_matrices[:, :, :, perm_idx] = t_perm
-            !isnothing(progress) && next!(progress)
+            @info "Computing non-parametric common threshold..."
+            thresh_pos, thresh_neg = _compute_nonparametric_threshold_common_tf(permutation_t_matrices, cluster_alpha_f, tail)
+        else
+            @info "Streaming non-parametric common threshold across chunks (avoiding large 4D allocation)..."
+            thresh_pos, thresh_neg = _stream_nonparametric_threshold_common_tf(prepared, plan, cluster_alpha_f, tail, show_progress)
         end
-
-        @info "Computing non-parametric common threshold..."
-        thresh_pos, thresh_neg = _compute_nonparametric_threshold_common_tf(permutation_t_matrices, threshold, tail)
-        critical_t_values = (thresh_pos, thresh_neg)
 
         @info "Thresholding observed data (non-parametric common)..."
         mask_positive = falses(size(t_matrix))
         mask_negative = falses(size(t_matrix))
         _threshold_t_matrix_nonparametric_tf!(mask_positive, mask_negative, t_matrix, thresh_pos, thresh_neg, tail)
 
-        threshold_for_permutations = critical_t_values
+        threshold_for_permutations = (thresh_pos, thresh_neg)
+
+    elseif threshold_method == :nonparametric_individual
+        total_floats = n_electrodes * n_freqs * n_time * n_permutations
+        if total_floats <= _TF_PERM_CACHE_MAX_FLOATS
+            @info "Collecting TF permutation t-matrices in parallel..."
+            permutation_t_matrices = _collect_permutation_t_matrices_tf(
+                prepared.analysis.data[1],
+                prepared.analysis.data[2],
+                prepared.analysis.design,
+                plan,
+                show_progress,
+            )
+            @info "Computing non-parametric individual thresholds..."
+            thresh_pos_mat, thresh_neg_mat = _compute_nonparametric_threshold_individual_tf(permutation_t_matrices, cluster_alpha_f, tail)
+        else
+            @info "Streaming non-parametric individual thresholds per electrode (avoiding large 4D allocation)..."
+            thresh_pos_mat, thresh_neg_mat =
+                _stream_nonparametric_threshold_individual_tf(prepared, plan, cluster_alpha_f, tail, show_progress)
+        end
+
+        @info "Thresholding observed data (non-parametric individual)..."
+        mask_positive = falses(size(t_matrix))
+        mask_negative = falses(size(t_matrix))
+        _threshold_t_matrix_nonparametric_tf!(mask_positive, mask_negative, t_matrix, thresh_pos_mat, thresh_neg_mat, tail)
+
+        threshold_for_permutations = (thresh_pos_mat, thresh_neg_mat)
     end
 
-    # Auto-compute neighbours if needed
+    # Auto-compute neighbors if needed
     layout = prepared.data[1].layout
-    if cluster_type ∈ (:spatial, :spatiotemporal, :full) && isnothing(layout.neighbours)
-        @minimal_warning "Layout.neighbours is not set. Computing with default distance criterion (0.35)."
+    if cluster_type ∈ (:spatial, :spatiotemporal, :full) && isnothing(layout.neighbors)
+        @minimal_warning "Layout.neighbors is not set. Computing with default distance criterion (0.35)."
         layout = copy(layout)
-        get_neighbours_xy!(layout, 0.35)
+        get_neighbors_xy!(layout, 0.35)
     end
 
     # Build spatial connectivity
@@ -468,7 +511,7 @@ function permutation_test(
         negative_clusters, cluster_stats_negative = _compute_cluster_statistics_tf(negative_clusters, t_matrix, electrodes)
     end
 
-    # Run permutations for cluster-level inference
+    # Run permutations for cluster-level inference (reuses cached permutation_t_matrices when available)
     @info "Running $n_permutations permutations for cluster-level inference..."
     permutation_max_positive, permutation_max_negative = _run_permutations_tf(
         prepared,
@@ -481,21 +524,21 @@ function permutation_test(
         electrodes,
         frequencies,
         time_points,
-        show_progress,
+        show_progress;
+        permutation_t_matrices = permutation_t_matrices,
     )
 
     # Compute p-values for observed clusters
     @info "Computing p-values..."
-    cluster_alpha = tail == :both ? threshold / 2.0 : threshold
     if !isempty(positive_clusters)
         positive_clusters =
-            _compute_tf_cluster_pvalues(positive_clusters, cluster_stats_positive, permutation_max_positive, n_permutations, cluster_alpha)
+            _compute_tf_cluster_pvalues(positive_clusters, cluster_stats_positive, permutation_max_positive, n_permutations, alpha_f, tail)
         sort!(positive_clusters, by = c -> (!c.is_significant, -abs(c.cluster_stat)))
     end
 
     if !isempty(negative_clusters)
         negative_clusters =
-            _compute_tf_cluster_pvalues(negative_clusters, cluster_stats_negative, permutation_max_negative, n_permutations, cluster_alpha)
+            _compute_tf_cluster_pvalues(negative_clusters, cluster_stats_negative, permutation_max_negative, n_permutations, alpha_f, tail)
         sort!(negative_clusters, by = c -> (!c.is_significant, -abs(c.cluster_stat)))
     end
 
@@ -520,8 +563,8 @@ function permutation_test(
     end
 
     # Assemble result
-    cluster_info = ClusterInfo(threshold_method, cluster_type, n_permutations)
-    test_info = TestInfo(prepared.analysis.design, df, threshold, tail, :cluster_permutation, cluster_info)
+    cluster_info = ClusterInfo(threshold_method, cluster_type, n_permutations, cluster_alpha_f)
+    test_info = TestInfo(prepared.analysis.design, df, alpha_f, tail, :cluster_permutation, cluster_info)
     stat_matrix = TFStatMatrix(t_matrix, nothing)
     masks = TFMasks(significant_mask_positive, significant_mask_negative)
     clusters = TFClusters(positive_clusters, negative_clusters)
@@ -546,20 +589,23 @@ end
 
 
 # === TF ANALYTIC TEST ===
-function analytic_test(prepared::TFStatisticalData; alpha::Real = 0.05, tail::Symbol = :both, correction_method::Symbol = :no)
-    correction_method ∉ (:no, :bonferroni) && @minimal_error "correction_method must be :no or :bonferroni. Got :$correction_method"
+function analytic_test(prepared::TFStatisticalData; alpha::Real = 0.05, tail::Symbol = :both, correction_method::Symbol = :none)
+    correction_method == :no && (correction_method = :none)
+    correction_method ∉ (:none, :bonferroni) && @minimal_error "correction_method must be :none or :bonferroni. Got :$correction_method"
     tail ∉ (:both, :left, :right) && @minimal_error "tail must be :both, :left, or :right. Got :$tail"
+    alpha_f = Float64(alpha)
+    (alpha_f <= 0.0 || alpha_f >= 1.0) && @minimal_error "alpha must be between 0 and 1, got $alpha_f"
 
     # Compute t-statistics, df, p-values
     t_matrix, df, p_matrix = _compute_t_matrix_tf(prepared, tail = tail)
 
     # Create significance mask (with optional correction)
-    corrected_mask = _create_significance_mask_tf(p_matrix, alpha, correction_method)
+    corrected_mask = _create_significance_mask_tf(p_matrix, alpha_f, correction_method)
 
     if correction_method == :bonferroni
         n_comparisons = count(!isnan, p_matrix)
-        bonferroni_alpha = n_comparisons > 0 ? alpha / n_comparisons : 0.0
-        n_sig_raw = count(p -> !isnan(p) && p <= alpha, p_matrix)
+        bonferroni_alpha = n_comparisons > 0 ? alpha_f / n_comparisons : 0.0
+        n_sig_raw = count(p -> !isnan(p) && p <= alpha_f, p_matrix)
         n_sig_bonferroni = count(corrected_mask)
         @info "Bonferroni correction: n_comparisons=$n_comparisons, bonferroni_alpha=$bonferroni_alpha, raw_sig=$n_sig_raw, bonferroni_sig=$n_sig_bonferroni"
     end
@@ -576,7 +622,7 @@ function analytic_test(prepared::TFStatisticalData; alpha::Real = 0.05, tail::Sy
         mask_negative = corrected_mask .& .!isnan.(t_matrix)
     end
 
-    test_info = TestInfo(prepared.analysis.design, df, alpha, tail, correction_method, nothing)
+    test_info = TestInfo(prepared.analysis.design, df, alpha_f, tail, correction_method, nothing)
 
     stat_matrix = TFStatMatrix(t_matrix, p_matrix)
     masks = TFMasks(mask_positive, mask_negative)
@@ -588,11 +634,11 @@ function analytic_test(prepared::TFStatisticalData; alpha::Real = 0.05, tail::Sy
 
     dist = TDist(df)
     critical_t = if tail == :both
-        quantile(dist, 1.0 - alpha / 2.0)
+        quantile(dist, 1.0 - alpha_f / 2.0)
     elseif tail == :right
-        quantile(dist, 1.0 - alpha)
+        quantile(dist, 1.0 - alpha_f)
     else  # :left
-        quantile(dist, alpha)
+        quantile(dist, alpha_f)
     end
 
     result = TFAnalyticResult(

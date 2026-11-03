@@ -234,6 +234,47 @@ using Statistics
         # Single participant should return itself
         single_ga = EegFun.grand_average([all_decoded[1]])
         @test single_ga === all_decoded[1]
+
+        # Base.copy isolation and empty DecodedData show guard
+        cp = copy(ga)
+        @test cp !== ga
+        @test cp.average_score == ga.average_score
+        cp.average_score[1] = -99.0
+        @test ga.average_score[1] != -99.0
+
+        empty_dd = EegFun.DecodedData("empty", ["A", "B"], Float64[], Float64[], Symbol[], ga.parameters)
+        io = IOBuffer()
+        show(io, empty_dd)
+        @test contains(String(take!(io)), "DecodedData")
+    end
+
+    @testset "decode_libsvm - balanced accuracy, n_iterations=1 SE, and NaN guard" begin
+        rng_imb = Random.Xoshiro(340)
+        # Imbalanced classes (80% majority) with pure i.i.d. noise: balanced accuracy stays centered around 0.5 (not majority-class 0.8!)
+        c_maj = EegFun.create_test_epoch_data(condition = 1, n_epochs = 64, n_channels = 3, n = 20, fs = 1000, seed = 10)
+        c_min = EegFun.create_test_epoch_data(condition = 2, n_epochs = 16, n_channels = 3, n = 20, fs = 1000, seed = 20)
+        for ep_dat in (c_maj, c_min), df in ep_dat.data, ch in (:Ch1, :Ch2, :Ch3)
+            df[!, ch] .= randn(rng_imb, 20)
+        end
+        res_imb = EegFun.decode_libsvm(
+            [c_maj, c_min];
+            equalize_trials = false,
+            n_iterations = 3,
+            n_folds = 4,
+            show_progress = false,
+            rng = Random.Xoshiro(341),
+        )
+        @test 0.35 <= mean(res_imb.average_score) <= 0.65
+
+        # n_iterations = 1 produces finite fold-based stderror
+        res_it1 = EegFun.decode_libsvm([c_maj, c_min]; n_iterations = 1, n_folds = 4, show_progress = false)
+        @test !isnothing(res_it1.stderror)
+        @test all(isfinite, res_it1.stderror)
+
+        # NaN input features throw EegFunError
+        c_nan = copy(c_min)
+        c_nan.data[1].Ch1[1] = NaN
+        @test_throws EegFun.EegFunError EegFun.decode_libsvm([c_maj, c_nan]; n_iterations = 1, n_folds = 2, show_progress = false)
     end
 
 end # @testset "ERP Decoding"

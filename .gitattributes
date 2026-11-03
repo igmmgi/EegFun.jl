@@ -12,3 +12,7 @@
 *.fdt binary
 *.edf binary
 *.mat binary
+*.fif binary
+*.xdf binary
+*.eeg binary
+*.vmrk binary

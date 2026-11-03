@@ -33,7 +33,7 @@ Preprocess EEG data according to the specified configuration file.
 - `dry_run::Bool`: If `true`, validate the configuration, resolve all paths, check that all
   input files exist, and report what *would* happen — without actually processing any data.
   This also serves as a standalone config validator. A dry run does not write any files
-  (no output directory, `config.toml` or `neighbours.toml` is created) (default: `false`).
+  (no output directory, `config.toml` or `neighbors.toml` is created) (default: `false`).
 
 # Notes
 - Relative paths in the TOML config file are resolved relative to `base_dir`
@@ -170,7 +170,7 @@ end
 
 Load and validate the pipeline configuration, resolve all paths, and read the layout,
 epoch conditions and raw data file list. When `dry_run` is `false`, also creates the
-output directory and writes `config.toml` and `neighbours.toml` into it; a dry run never
+output directory and writes `config.toml` and `neighbors.toml` into it; a dry run never
 touches the disk.
 
 `output_directory_ref` is set as soon as the output directory is resolved, so that the
@@ -233,11 +233,11 @@ function _pipeline_setup(config::String, base_dir::String, dry_run::Bool, output
     # print config to output directory
     !dry_run && print_config(cfg, joinpath(output_directory, "config.toml"))
 
-    # Layout coordinates and calculation of channel neighbours (2D/3D)
+    # Layout coordinates and calculation of channel neighbors (2D/3D)
     polar_to_cartesian_xy!(layout)
     polar_to_cartesian_xyz!(layout)
-    get_neighbours_xy!(layout, preprocess_cfg.neighbour_criterion)
-    !dry_run && print_layout_neighbours(layout, joinpath(output_directory, "neighbours.toml"))
+    get_neighbors_xy!(layout, preprocess_cfg.neighbor_criterion)
+    !dry_run && print_layout_neighbors(layout, joinpath(output_directory, "neighbors.toml"))
 
     return (;
         cfg,
@@ -555,6 +555,20 @@ function _pipeline_eog!(dat::ContinuousData, preprocess_cfg::PreprocessConfig)
 end
 
 
+function _wait_interactive_figure(fig::Figure, screen = nothing)
+    if !isnothing(screen) && applicable(wait, screen)
+        wait(screen)
+        return nothing
+    end
+    for scr in fig.scene.current_screens
+        if applicable(wait, scr)
+            wait(scr)
+        end
+    end
+    return nothing
+end
+
+
 function _pipeline_continuous_artifacts!(dat::ContinuousData, preprocess_cfg::PreprocessConfig, hEOG_vEOG_cm_epoch::DataFrame)
     ############################### INITIAL ARTIFACT DETECTION ###############################
     # This is the initial artifact detection on the continuous data and just looks for sections of 
@@ -615,42 +629,58 @@ function _pipeline_continuous_artifacts!(dat::ContinuousData, preprocess_cfg::Pr
     @info "Bad channels (non-EOG related): $(length(bad_channels_non_eog_related)) channels - $(bad_channels_non_eog_related)"
     @info "Bad channels (EOG related): $(length(bad_channels_eog_related)) channels - $(bad_channels_eog_related)"
 
-    # Analyze which channels can be repaired (needed for ICA and repair steps)
-    continuous_repair_info = nothing
-    if !isempty(bad_channels_non_eog_related)
-        continuous_repair_info = create_continuous_repair_info(preprocess_cfg.channel_repair_method; name = "continuous_repair")
-        channel_repairable!(continuous_repair_info, bad_channels_non_eog_related, dat.layout)
-    end
+    repair_method = preprocess_cfg.channel_repair_method
+    channels_to_repair = copy(bad_channels_non_eog_related)
+    repair_info_name = "continuous_repair"
 
     if preprocess_cfg.interactive_continuous
         @info section("Interactive Continuous Data Review")
         @info "Reviewing continuous data before ICA. Close the window to continue."
         res = plot_databrowser(dat)
-        wait(res.fig.scene)
+        _wait_interactive_figure(res.fig, res.screen)
 
-        # Apply any manual settings configured in the databrowser
-        apply_analysis_settings!(dat, res.analysis_settings)
+        settings = res.analysis_settings[]
 
-        # Track manually repaired channels for the summary logs
-        manual_repaired = res.analysis_settings[].repaired_channels
+        # Apply manual filter, reference, and selected-region settings without repairing yet,
+        # so automatic + manual bad channels are repaired together in a single pass below.
+        settings_no_repair = AnalysisSettings(
+            hp_filter = settings.hp_filter,
+            lp_filter = settings.lp_filter,
+            reference = settings.reference,
+            repaired_channels = Symbol[],
+            repair_method = :none,
+            selected_regions = settings.selected_regions,
+            removed_ica_components = settings.removed_ica_components,
+        )
+        apply_analysis_settings!(dat, settings_no_repair)
+
+        manual_repaired = settings.repaired_channels
         if !isempty(manual_repaired)
-            @info "Manually repaired channels: $manual_repaired"
-            if isnothing(continuous_repair_info)
-                continuous_repair_info =
-                    create_continuous_repair_info(preprocess_cfg.channel_repair_method; name = "continuous_repair_manual")
+            @info "Manually marked channels for repair: $manual_repaired"
+            if isempty(channels_to_repair)
+                repair_info_name = "continuous_repair_manual"
             end
-            # Append to the info object without re-repairing, since apply_analysis_settings! did it
-            append!(continuous_repair_info.repaired, manual_repaired)
-            unique!(continuous_repair_info.repaired)
+            if settings.repair_method != :none
+                repair_method = settings.repair_method
+            end
+            append!(channels_to_repair, manual_repaired)
+            unique!(channels_to_repair)
         end
 
         @info "Continuous data review complete."
     end
 
+    # Analyze which channels can be repaired and perform a single unified repair pass
+    continuous_repair_info = nothing
+    if !isempty(channels_to_repair)
+        continuous_repair_info = create_continuous_repair_info(repair_method; name = repair_info_name)
+        channel_repairable!(continuous_repair_info, channels_to_repair, dat.layout)
+    end
+
     #################### REPAIR BAD CHANNELS ###################
     if !isnothing(continuous_repair_info)
         @info section("Channel Repair")
-        repair_channels!(dat, continuous_repair_info; method = preprocess_cfg.channel_repair_method)
+        repair_channels!(dat, continuous_repair_info; method = repair_method)
         @info continuous_repair_info
     end
     return continuous_repair_info
@@ -680,14 +710,14 @@ function _pipeline_ica!(
         extreme_flag = _flag_symbol("is_extreme_value", preprocess_cfg.eeg.extreme_value_abs_criterion)
         # Exclude both automatic extreme values and any manually marked bad regions from the GUI
         artifact_flags = [extreme_flag]
-        hasproperty(dat_ica, :selected_region) && push!(artifact_flags, :selected_region)
+        hasproperty(dat_ica.data, :selected_region) && push!(artifact_flags, :selected_region)
 
         @info subsection("Running ICA")
 
-        # Calculate rank to prevent ICA crash from rank-deficient data
+        # Calculate rank bound to prevent ICA crash from rank-deficient data (run_ica also SVD-clamps)
         n_repaired = isnothing(continuous_repair_info) ? 0 : length(continuous_repair_info.repaired)
         n_ref = preprocess_cfg.reference_channel == :avg ? 1 : 0
-        n_comps = n_channels(dat_ica) - n_repaired - n_ref
+        n_comps = max(1, n_channels(dat_ica) - n_repaired - n_ref)
 
         ica = run_ica(
             dat_ica;
@@ -698,7 +728,8 @@ function _pipeline_ica!(
 
         # Identify all artifact components 
         @info subsection("Component Identification")
-        component_artifacts, component_metrics = identify_components(dat, ica, sample_selection = samples_or_not(artifact_flags))
+        component_artifacts, component_metrics =
+            identify_components(dat, ica; method = preprocess_cfg.ica.component_method, sample_selection = samples_or_not(artifact_flags))
 
         # Print component metrics to log files
         log_pretty_table(component_metrics[:eog_metrics]; title = "EOG Component Metrics")
@@ -710,24 +741,23 @@ function _pipeline_ica!(
             @info section("Interactive ICA Component Review")
             @info "Use the databrowser ICA menu to review and manually select components to remove. Close the window to continue."
             res = plot_databrowser(dat, ica)
-            wait(res.fig.scene)
+            _wait_interactive_figure(res.fig, res.screen)
 
-            # Add user's manually removed components to the "manual" category in component_artifacts
+            # Add user's manually removed components to component_artifacts.manual
             manual_removals = res.analysis_settings[].removed_ica_components
             if !isempty(manual_removals)
                 @info "Manually removed components: $manual_removals"
-                if !haskey(component_artifacts.artifacts, :manual)
-                    component_artifacts.artifacts[:manual] = Int[]
-                end
-                append!(component_artifacts.artifacts[:manual], manual_removals)
-                unique!(component_artifacts.artifacts[:manual])
+                append!(component_artifacts.manual, manual_removals)
+                unique!(component_artifacts.manual)
             end
         end
 
         @info subsection("Removing ICA components")
         all_removed_components = get_all_ica_components(component_artifacts)
         @info "Removed $(length(all_removed_components)) ICA components" component_artifacts
-        subtract_ica_components!(dat, ica, component_selection = components(all_removed_components))
+        if !isempty(all_removed_components)
+            subtract_ica_components!(dat, ica, component_selection = components(all_removed_components))
+        end
 
         # save ica results
         if files_cfg.output.save_ica_data
@@ -876,16 +906,13 @@ function _pipeline_epoch_and_reject!(
     if preprocess_cfg.interactive_epochs
         @info section("Interactive Epoch Rejection Review")
         @info "Review epoch artifacts. Checked epochs will be rejected. Close the window to continue."
-        state = detect_bad_epochs_interactive(epochs; artifact_info = rejection_info_step2)
-        wait(state.fig.scene)
+        states = detect_bad_epochs_interactive(epochs; artifact_info = rejection_info_step2)
+        for st in (states isa AbstractVector ? states : (states,))
+            _wait_interactive_figure(st.fig)
+        end
 
-        # Merge manual rejection state into the automatic rejection info
-        interactive_info = EegFun._to_rejection_info(state)
-        # We can just use the interactive_info directly as it contains all manual rejections!
-        # Wait, the interactive GUI starts with checkboxes active for automatically rejected epochs!
-        # So state.rejected contains BOTH automatic AND manual rejections.
-        # We can just override rejection_info_step2 with this combined info
-        rejection_info_step2 = interactive_info
+        # Convert interactive rejection state(s) (which seed from rejection_info_step2 and include manual edits)
+        rejection_info_step2 = states isa AbstractVector ? _to_rejection_info(states) : [_to_rejection_info(states)]
     end
 
     #################### SAVE ERP DATA ###################

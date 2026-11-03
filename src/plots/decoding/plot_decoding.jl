@@ -18,6 +18,7 @@ const PLOT_DECODING_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Title
     :plot_title => (nothing, "Plot title"),
+    :show_title => (true, "Show plot title (true/false)"),
     :plot_title_fontsize => (16, "Font size for plot titles"),
     :plot_title_position => (
         nothing,
@@ -41,8 +42,16 @@ const PLOT_DECODING_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :error_alpha => (0.3, "Transparency for error shading"),
 
     # Significance markers
+    :show_significance => (true, "Show significance markers when statistics are provided (true/false)"),
+    :significance_position => (:bottom, "Vertical position of significance bars (:bottom, :top, or numeric y value)"),
     :sig_color => (:black, "Color for significance markers"),
     :sig_alpha => (0.5, "Transparency for significance markers"),
+
+    # Legend & Colorbar / Heatmap
+    :legend => (false, "Show legend (true/false)"),
+    :colormap => (nothing, "Colormap for confusion matrix"),
+    :colorrange => (nothing, "Color scale limits for confusion matrix (default: (0, 1))"),
+    :colorbar_plot => (true, "Show colorbar on confusion matrix (true/false)"),
 
     # Grid
     :xgrid => (true, "Show x-axis grid (true/false)"),
@@ -100,15 +109,9 @@ end
 Plot main accuracy curve on axis.
 """
 function _plot_accuracy_curve!(ax::Axis, times::Vector{Float64}, accuracy::Vector{Float64}, plot_kwargs::Dict; label::String = "Accuracy")
-    lines!(
-        ax,
-        times,
-        accuracy,
-        color = plot_kwargs[:color],
-        linewidth = plot_kwargs[:linewidth],
-        linestyle = plot_kwargs[:linestyle],
-        label = label,
-    )
+    line_color = _resolve_theme_linecolor(ax, plot_kwargs[:color])
+    line_style = isnothing(plot_kwargs[:linestyle]) ? :solid : plot_kwargs[:linestyle]
+    lines!(ax, times, accuracy, color = line_color, linewidth = plot_kwargs[:linewidth], linestyle = line_style, label = label)
 end
 
 """
@@ -179,9 +182,11 @@ function _plot_decoding_to_axis!(
     stderror::Union{Vector{Float64},Nothing},
     chance_level::Float64,
     plot_kwargs::Dict;
+    set_limits::Bool = true,
 )
-
-    _setup_axis_limits!(ax, times, accuracy, stderror, plot_kwargs)
+    if set_limits
+        _setup_axis_limits!(ax, times, accuracy, stderror, plot_kwargs)
+    end
 
     # Add origin lines (x=0 and y=chance_level)
     if plot_kwargs[:add_xy_origin]
@@ -196,6 +201,9 @@ function _plot_decoding_to_axis!(
     # Plot main accuracy curve
     _plot_accuracy_curve!(ax, times, accuracy, plot_kwargs)
 
+    if get(plot_kwargs, :legend, false)
+        axislegend(ax, position = :rt)
+    end
 end
 
 # === MAIN PLOTTING FUNCTIONS ===
@@ -260,8 +268,8 @@ function plot_decoding(filepath::String; input_dir::String = pwd(), participant_
 end
 
 function plot_decoding(decoded::DecodedData; kwargs...)
-    # Merge defaults with user kwargs
-    plot_kwargs = _merge_plot_kwargs(PLOT_DECODING_KWARGS, kwargs)
+    # Merge defaults with user kwargs (with legacy alias normalization)
+    plot_kwargs = _merge_plot_kwargs(PLOT_DECODING_KWARGS, _normalize_plot_kwargs(kwargs))
 
     # Extract parameters
     display_plot = plot_kwargs[:display_plot]
@@ -270,7 +278,7 @@ function plot_decoding(decoded::DecodedData; kwargs...)
     stderror = decoded.stderror
     chance_level = decoded.parameters.chance_level
     title_text = plot_kwargs[:plot_title]
-    show_title = !isnothing(title_text)
+    show_title = plot_kwargs[:show_title]
 
     # Create figure
     fig = _eegfun_figure(size = (800, 600))
@@ -282,11 +290,13 @@ function plot_decoding(decoded::DecodedData; kwargs...)
         ygridvisible = plot_kwargs[:ygrid],
     )
 
-    # Set title: nothing means default, "" means no title, otherwise custom string
-    if isnothing(title_text)
-        ax.title = "Decoding: $(join(decoded.condition_names, " vs "))"
-    elseif !isempty(title_text)
-        ax.title = title_text
+    # Set title when show_title is true
+    if show_title
+        if isnothing(title_text)
+            ax.title = "Decoding: $(join(decoded.condition_names, " vs "))"
+        elseif !isempty(title_text)
+            ax.title = title_text
+        end
     end
 
     # Plot decoding data to axis
@@ -299,24 +309,25 @@ function plot_decoding(decoded::DecodedData; kwargs...)
 
     _set_window_title("Decoding")
     if display_plot
-        display(fig)
+        _display_figure(fig)
     end
     _set_window_title("Makie")
 
     return (fig = fig, axes = [ax])
 end
-function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
+
+function plot_decoding(decoded_list::AbstractVector{<:DecodedData}; kwargs...)
     if isempty(decoded_list)
         @minimal_error("Cannot plot empty decoded data list")
     end
 
-    # Merge defaults with user kwargs
-    plot_kwargs = _merge_plot_kwargs(PLOT_DECODING_KWARGS, kwargs)
+    # Merge defaults with user kwargs (with legacy alias normalization)
+    plot_kwargs = _merge_plot_kwargs(PLOT_DECODING_KWARGS, _normalize_plot_kwargs(kwargs))
 
     # Extract parameters
     display_plot = plot_kwargs[:display_plot]
     title_text = plot_kwargs[:plot_title]
-    show_title = !isnothing(title_text)
+    show_title = plot_kwargs[:show_title]
 
     # Determine optimal subplot layout using best_rect
     n_subjects = length(decoded_list)
@@ -335,20 +346,25 @@ function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
     y_max = maximum([maximum(acc) for acc in all_accuracies])
 
     # Account for error bars
-    for d in decoded_list
-        if !isnothing(d.stderror)
-            y_min = min(y_min, minimum(d.average_score .- d.stderror))
-            y_max = max(y_max, maximum(d.average_score .+ d.stderror))
+    if plot_kwargs[:show_error]
+        for d in decoded_list
+            if !isnothing(d.stderror)
+                y_min = min(y_min, minimum(d.average_score .- d.stderror))
+                y_max = max(y_max, maximum(d.average_score .+ d.stderror))
+            end
         end
     end
 
     y_range = y_max - y_min
-    y_lims = (y_min - 0.05 * y_range, y_max + 0.05 * y_range)
+    pad = y_range == 0 ? 0.05 : 0.05 * y_range
+    shared_xlim = isnothing(plot_kwargs[:xlim]) ? (time_min, time_max) : plot_kwargs[:xlim]
+    shared_ylim = isnothing(plot_kwargs[:ylim]) ? (y_min - pad, y_max + pad) : plot_kwargs[:ylim]
 
-    # Get chance level (use first decoded's chance level)
-    chance_level = decoded_list[1].parameters.chance_level
+    # Pre- prepare subplot kwargs without legend unless explicitly requested
+    subplot_kwargs = copy(plot_kwargs)
 
     # Create subplot for each subject
+    axes = Axis[]
     for (idx, decoded) in enumerate(decoded_list)
         # Calculate row and column for this subplot
         row = fld(idx - 1, cols) + 1
@@ -364,25 +380,28 @@ function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
         )
 
         # Set title for this subplot
-        if isnothing(title_text)
-            # Use subject identifier from file name or index
-            subject_id = isnothing(decoded.file) ? "Subject $idx" : basename(decoded.file)
-            ax.title = subject_id
-        elseif !isempty(title_text)
-            ax.title = title_text
+        if show_title
+            if isnothing(title_text)
+                subject_id = isnothing(decoded.file) ? "Subject $idx" : basename(decoded.file)
+                ax.title = subject_id
+            elseif !isempty(title_text)
+                ax.title = title_text
+            end
         end
 
-        # Set axis limits
-        xlims!(ax, (time_min, time_max))
-        ylims!(ax, y_lims)
+        # Set shared axis limits (preserved by set_limits = false below)
+        xlims!(ax, shared_xlim)
+        ylims!(ax, shared_ylim)
 
         # Get data for this subject
         times = decoded.times
         accuracy = decoded.average_score
         stderror = decoded.stderror
+        chance_level = decoded.parameters.chance_level
 
-        # Plot decoding data to axis (no legend for individual subplots)
-        _plot_decoding_to_axis!(ax, times, accuracy, stderror, chance_level, plot_kwargs)
+        # Plot decoding data to axis without overwriting shared limits
+        _plot_decoding_to_axis!(ax, times, accuracy, stderror, chance_level, subplot_kwargs; set_limits = false)
+        push!(axes, ax)
     end
 
     # Draw supertitle if user explicitly provided a figure_title
@@ -392,21 +411,23 @@ function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
 
     _set_window_title("Decoding")
     if display_plot
-        display(fig)
+        _display_figure(fig)
     end
     _set_window_title("Makie")
 
-    return fig
+    return (fig = fig, axes = axes)
 end
+
 function plot_decoding(decoded::DecodedData, stats::DecodingStatisticsResult; kwargs...)
-    # Merge defaults with user kwargs
-    plot_kwargs = _merge_plot_kwargs(PLOT_DECODING_KWARGS, kwargs)
+    # Merge defaults with user kwargs (with legacy alias normalization)
+    norm_kwargs = _normalize_plot_kwargs(kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_DECODING_KWARGS, norm_kwargs)
 
     # Extract parameters
-    show_significance = get(kwargs, :show_significance, true)
+    show_significance = plot_kwargs[:show_significance]
     sig_color = plot_kwargs[:sig_color]
     sig_alpha = plot_kwargs[:sig_alpha]
-    sig_bar_position = get(kwargs, :sig_bar_position, :bottom)
+    sig_bar_position = plot_kwargs[:significance_position]
 
     # Validate that times match
     if decoded.times != stats.times
@@ -415,35 +436,42 @@ function plot_decoding(decoded::DecodedData, stats::DecodingStatisticsResult; kw
 
     # Create base plot (without displaying yet)
     display_plot_orig = plot_kwargs[:display_plot]
-    result = plot_decoding(decoded; kwargs..., display_plot = false)
+    result = plot_decoding(decoded; norm_kwargs..., display_plot = false)
     fig = result.fig
     ax = result.axes[1]
 
-    # Compute y-limits from data for significance bar positioning
-    accuracy = decoded.average_score
-    stderror = decoded.stderror
-    y_min = minimum(accuracy)
-    y_max = maximum(accuracy)
-    if !isnothing(stderror)
-        y_min = min(y_min, minimum(accuracy .- stderror))
-        y_max = max(y_max, maximum(accuracy .+ stderror))
+    # Compute y-limits from data (or user ylim) for significance bar positioning
+    if !isnothing(plot_kwargs[:ylim])
+        y_min, y_max = Float64.(plot_kwargs[:ylim])
+    else
+        accuracy = decoded.average_score
+        stderror = decoded.stderror
+        y_min = minimum(accuracy)
+        y_max = maximum(accuracy)
+        if plot_kwargs[:show_error] && !isnothing(stderror)
+            y_min = min(y_min, minimum(accuracy .- stderror))
+            y_max = max(y_max, maximum(accuracy .+ stderror))
+        end
+        y_span = y_max - y_min
+        y_min -= 0.05 * y_span
+        y_max += 0.05 * y_span
     end
     y_range = y_max - y_min
-    y_min -= 0.05 * y_range
-    y_max += 0.05 * y_range
-    y_range = y_max - y_min
+    y_range == 0 && (y_range = 0.1)
 
     # Add significance markers if requested
     if show_significance && any(stats.significant_mask)
 
-        # Find continuous significant regions
+        # Find continuous significant regions (with ±dt/2 expansion)
         sig_regions = _find_continuous_regions(stats.significant_mask, stats.times)
 
         # Determine bar position
         if sig_bar_position == :bottom
             bar_y = y_min + 0.02 * y_range
         elseif sig_bar_position == :top
-            bar_y = y_max - 0.02 * y_range
+            bar_y = y_max - 0.04 * y_range
+        elseif sig_bar_position == :zero
+            bar_y = decoded.parameters.chance_level
         elseif isa(sig_bar_position, Number)
             bar_y = Float64(sig_bar_position)
         else
@@ -455,7 +483,6 @@ function plot_decoding(decoded::DecodedData, stats::DecodingStatisticsResult; kw
         # Plot significance bars for each continuous region
         for region in sig_regions
             t_start, t_end = region
-            # Use poly! to create a horizontal bar (rectangle)
             poly!(ax, Rect(t_start, bar_y, t_end - t_start, bar_height), color = (sig_color, sig_alpha), strokewidth = 0)
         end
 
@@ -463,7 +490,6 @@ function plot_decoding(decoded::DecodedData, stats::DecodingStatisticsResult; kw
         if !isnothing(stats.clusters) && !isempty(stats.clusters)
             for cluster in stats.clusters
                 if cluster.is_significant
-                    # Add text label at cluster center
                     t_center = (cluster.time_range[1] + cluster.time_range[2]) / 2
                     text!(
                         ax,
@@ -481,18 +507,19 @@ function plot_decoding(decoded::DecodedData, stats::DecodingStatisticsResult; kw
 
     _set_window_title("Decoding")
     if display_plot_orig
-        display(fig)
+        _display_figure(fig)
     end
     _set_window_title("Makie")
 
-    return fig
+    return (fig = fig, axes = [ax])
 end
 
 
 """
     plot_confusion_matrix(decoded::DecodedData; time_point::Union{Float64, Int, Nothing} = nothing, kwargs...)
 
-Plot confusion matrix for decoding results.
+Plot confusion matrix for decoding results, where rows (`i`) correspond to True class
+and columns (`j`) correspond to Predicted class.
 
 # Arguments
 - `decoded::DecodedData`: DecodedData object containing confusion matrices
@@ -508,36 +535,55 @@ plot_confusion_matrix(decoded, time_point=0.3)
 plot_confusion_matrix(decoded)
 ```
 """
-function plot_confusion_matrix(decoded::DecodedData; time_point::Union{Float64,Int,Nothing} = nothing, display_plot::Bool = true, kwargs...)
+function plot_confusion_matrix(decoded::DecodedData; time_point::Union{Float64,Int,Nothing} = nothing, kwargs...)
     if isnothing(decoded.confusion_matrix)
         @minimal_error("No confusion matrix data available in DecodedData")
     end
 
+    plot_kwargs = _merge_plot_kwargs(PLOT_DECODING_KWARGS, _normalize_plot_kwargs(kwargs))
+    display_plot = plot_kwargs[:display_plot]
+
     # Determine which time point to plot
     if isnothing(time_point)
-        # Average across all time points
         confusion = mean(decoded.confusion_matrix, dims = 1)[1, :, :]
-        title_text = "Average Confusion Matrix"
+        default_title = "Average Confusion Matrix"
     elseif time_point isa Float64
-        # Find closest time point
         time_idx = find_closest_time_index(decoded.times, time_point)
         confusion = decoded.confusion_matrix[time_idx, :, :]
-        title_text = "Confusion Matrix at $(round(time_point, digits=3)) s"
+        default_title = "Confusion Matrix at $(round(time_point, digits=3)) s"
     else
-        # Use as index
         confusion = decoded.confusion_matrix[time_point, :, :]
-        title_text = "Confusion Matrix at $(round(decoded.times[time_point], digits=3)) s"
+        default_title = "Confusion Matrix at $(round(decoded.times[time_point], digits=3)) s"
     end
 
-    # Create figure
-    fig = _eegfun_figure(size = (600, 600))
-    ax = Axis(fig[1, 1], title = title_text, xlabel = "Predicted", ylabel = "True")
+    title_text = plot_kwargs[:plot_title]
+    title_str = if !plot_kwargs[:show_title]
+        ""
+    elseif isnothing(title_text)
+        default_title
+    else
+        title_text
+    end
 
-    # Create heatmap
-    heatmap!(ax, confusion, colormap = _resolve_theme_colormap(ax, nothing), colorrange = (0, 1))
-
-    # Add text labels
     n_classes = size(confusion, 1)
+
+    # Create figure; yreversed = true puts row 1 (True class 1) at top so diagonal runs top-left to bottom-right
+    fig = _eegfun_figure(size = (650, 600))
+    ax = Axis(fig[1, 1], title = title_str, xlabel = "Predicted", ylabel = "True", yreversed = true, aspect = DataAspect())
+
+    # Makie heatmap!(ax, xs, ys, Z) maps Z[x, y] to coordinate (x = xs[x], y = ys[y]).
+    # Since confusion[i, j] has i = True (y) and j = Predicted (x), pass permutedims(confusion)
+    # so Z[j, i] == confusion[i, j] is drawn at (x = j, y = i), matching text!(ax, j, i, ...).
+    cmap_val = isnothing(plot_kwargs[:colormap]) ? :Blues : plot_kwargs[:colormap]
+    cr_val = isnothing(plot_kwargs[:colorrange]) ? (0.0, 1.0) : plot_kwargs[:colorrange]
+    hm = heatmap!(ax, 1:n_classes, 1:n_classes, permutedims(confusion), colormap = cmap_val, colorrange = cr_val)
+
+    if plot_kwargs[:colorbar_plot]
+        Colorbar(fig[1, 2], hm, label = "Proportion")
+    end
+
+    # Add text labels at (x = j [Predicted], y = i [True])
+    cr_mid = (cr_val[1] + cr_val[2]) / 2
     for i = 1:n_classes
         for j = 1:n_classes
             text!(
@@ -545,7 +591,7 @@ function plot_confusion_matrix(decoded::DecodedData; time_point::Union{Float64,I
                 j,
                 i,
                 text = string(round(confusion[i, j], digits = 2)),
-                color = confusion[i, j] > 0.5 ? :white : :black,
+                color = confusion[i, j] > cr_mid ? :white : :black,
                 align = (:center, :center),
             )
         end
@@ -555,10 +601,14 @@ function plot_confusion_matrix(decoded::DecodedData; time_point::Union{Float64,I
     ax.xticks = (1:n_classes, decoded.condition_names)
     ax.yticks = (1:n_classes, decoded.condition_names)
 
+    if !isempty(plot_kwargs[:figure_title])
+        Label(fig[0, :], plot_kwargs[:figure_title], fontsize = plot_kwargs[:figure_title_fontsize], font = :bold, tellwidth = false)
+    end
+
     _set_window_title("Confusion Matrix")
     if display_plot
-        display(fig)
+        _display_figure(fig)
     end
     _set_window_title("Makie")
-    return fig
+    return (fig = fig, axes = [ax])
 end

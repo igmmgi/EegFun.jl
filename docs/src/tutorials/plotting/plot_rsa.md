@@ -22,8 +22,8 @@ This demo shows how to visualise Representational Similarity Analysis (RSA) resu
 | --- | --- | --- |
 | `time_point` | `plot_rdm_heatmap` | Specific time (seconds or index); `nothing` = average |
 | `condition_pairs` | `plot_rdm_timecourse` | Which pairs to plot; `:all` = all |
-| `show_colorbar` | All | Show/hide colour bar |
-| `colormap` | All | Colour map for the heatmap |
+| `colorbar_plot` | All | Show/hide color bar |
+| `colormap` | All | Colormap for the heatmap |
 
 ## What You'll Learn
 

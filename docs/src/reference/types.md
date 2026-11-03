@@ -4,21 +4,27 @@ CollapsedDocStrings = true
 
 # Core Types
 
-Data structures and type definitions in EegFun.jl.
+Data structures and type definitions in `EegFun.jl`.
 
-## Abstract Types
+## Abstract & Utility Types
 
 ```@docs
 EegFun.EegFunData
 EegFun.EegData
 EegFun.SingleDataFrameEeg
 EegFun.MultiDataFrameEeg
+EegFun.EegFunError
+EegFun.Interval
 ```
 
-## Data Container Types
+## Data Container & Metadata Types
 
 ```@docs
 EegFun.AnalysisInfo
+EegFun.BaselineInfo
+EegFun.FilterInfo
+EegFun.FilterSection
+EegFun.TriggerInfo
 EegFun.ContinuousData
 EegFun.ErpData
 EegFun.EpochData
@@ -27,17 +33,20 @@ EegFun.TimeFreqEpochData
 EegFun.SpectrumData
 ```
 
-## Layout Types
+## Layout & Plotting Types
 
 ```@docs
 EegFun.Layout
-EegFun.Neighbours
+EegFun.Neighbors
+EegFun.PlotLayout
 ```
 
-## Epoch Configuration
+## Epoch & RIDE Types
 
 ```@docs
 EegFun.EpochCondition
+EegFun.RideComponent
+EegFun.RideResult
 ```
 
 ## ICA Types
@@ -45,26 +54,28 @@ EegFun.EpochCondition
 ```@docs
 EegFun.IcaPrms
 EegFun.InfoIca
+EegFun.ArtifactComponents
 ```
 
 ## Statistics Types
 
 ```@docs
+EegFun.StatisticalData
 EegFun.StatsResult
 EegFun.PermutationResult
 EegFun.AnalyticResult
+EegFun.TFStatisticalData
+EegFun.TFStatsResult
+EegFun.TFClusterPermutationResult
+EegFun.TFAnalyticResult
 ```
 
-## Decoding Types
+## Decoding & RSA Types
 
 ```@docs
 EegFun.DecodingParameters
 EegFun.DecodedData
-```
-
-## RSA Types
-
-```@docs
+EegFun.DecodingStatisticsResult
 EegFun.NoiseCeiling
 EegFun.RsaData
 ```
@@ -76,28 +87,38 @@ EegFun.ErpMeasurementsResult
 EegFun.ValidationResult
 ```
 
-## Artifact & Rejection Types
+## Artifact, Rejection & Repair Types
 
 ```@docs
 EegFun.ArtifactInfo
+EegFun.Rejection
 EegFun.EpochRejectionInfo
-EegFun.ContinuousRepairInfo
+EegFun.EpochRejectionState
 EegFun.ZScoreRejectionInfo
+EegFun.ContinuousRepairInfo
 EegFun.EpochRepairInfo
 EegFun.ChannelRepairInfo
+EegFun.AutoRejectConfig
+EegFun.AutoRejectResult
 ```
 
-## Batch & Pipeline Types
+## Batch, Configuration & Pipeline Types
 
 ```@docs
 EegFun.AnalysisSettings
+EegFun.BatchResult
+EegFun.CleanLineConfig
+EegFun.EegConfig
+EegFun.EogConfig
+EegFun.FilesConfig
+EegFun.FilterConfig
+EegFun.IcaConfig
+EegFun.InputFilesConfig
+EegFun.OutputFilesConfig
+EegFun.PipelineConfig
 EegFun.PipelineTemplateOptions
-```
-
-## Decoding & Statistics Result Types
-
-```@docs
-EegFun.DecodingStatisticsResult
+EegFun.PreprocessConfig
+EegFun.ResampleConfig
 ```
 
 ## Constants

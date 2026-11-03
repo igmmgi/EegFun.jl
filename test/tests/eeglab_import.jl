@@ -9,12 +9,7 @@ using DataFrames
 @testset "EEGLAB Import" begin
     # Test file path
     test_file = joinpath(dirname(dirname(@__DIR__)), "resources", "data", "eeglab", "epochs.set")
-
-    if !isfile(test_file)
-        EegFun.@minimal_warning "Test file not found: $test_file"
-        EegFun.@minimal_warning "Skipping EEGLAB import tests"
-        return
-    end
+    @test isfile(test_file)
 
     # read_eeglab returns (EpochData, InfoIca) when ICA is present
     result = EegFun.read_eeglab(test_file)
@@ -33,8 +28,12 @@ using DataFrames
         # Each epoch should be a DataFrame
         @test epochs.data[1] isa DataFrame
 
-        # Should have time column
+        # Should have time, sample, and epoch columns
         @test :time in propertynames(epochs.data[1])
+        @test :sample in propertynames(epochs.data[1])
+        @test :epoch in propertynames(epochs.data[1])
+        @test epochs.data[1].epoch[1] == 1
+        @test epochs.data[2].epoch[1] == 2
 
         # Test sample rate
         @test epochs.sample_rate == 125
@@ -153,6 +152,51 @@ end
     @test erp.n_epochs == 1
     @test erp.sample_rate == sample_rate
     @test nrow(erp.data) == n_timepoints
+    @test :sample in propertynames(erp.data)
     @test length(EegFun.channel_labels(erp)) == n_channels
     @test erp.condition_name == "test_erp"
+end
+
+@testset "EEGLAB Continuous Triggers, Epoch Latency=0 Trigger, and ICA Sphering" begin
+    # 1. Continuous triggers read event.type (with struct-of-arrays and array-of-dicts)
+    mock_cont = Dict{String,Any}(
+        "nbchan" => 3,
+        "pnts" => 20,
+        "srate" => 100,
+        "trials" => 1,
+        "xmin" => 0.0,
+        "setname" => "cont_test",
+        "data" => ones(Float32, 3, 20),
+        "chanlocs" => Dict{String,Any}("labels" => ["Fz", "Cz", "Pz"], "theta" => [0.0, 0.0, 0.0], "radius" => [0.5, 0.3, 0.1]),
+        "event" => [
+            Dict{String,Any}("latency" => 3, "type" => "S 12", "position" => 99),
+            Dict{String,Any}("latency" => 10, "type" => 25, "position" => 88),
+        ],
+    )
+    cont = EegFun._eeglab_to_continuousdata(mock_cont, "cont.set", true)
+    @test cont isa EegFun.ContinuousData
+    @test :sample in propertynames(cont.data)
+    @test cont.data.trigger[3] == 12
+    @test cont.data.trigger[10] == 25
+
+    # 2. Epoch _extract_triggers picks event closest to eventlatency == 0
+    mock_ep_events = [
+        Dict{String,Any}("eventlatency" => [-250.0, 0.0, 350.0], "eventtype" => ["cue", "S 42", "response"], "eventposition" => [1, 2, 3]),
+        Dict{String,Any}("eventlatency" => [-100.0, 2.0], "eventtype" => [99, 77], "eventposition" => [1, 2]),
+    ]
+    trigs, trig_info = EegFun._extract_triggers(mock_ep_events, 2)
+    @test trigs == [42, 77]
+    @test trig_info == ["S 42", "77"]
+
+    # 3. _extract_ica_info computes unmixing = W * sphere, mean length = size(unmixing, 2), and subsets layout to icachansind
+    W = [1.0 2.0; 3.0 4.0]
+    sph = [2.0 0.0; 0.0 0.5]
+    mock_ica_eeg = Dict{String,Any}("icaweights" => W, "icasphere" => sph, "icawinv" => inv(W * sph), "icachansind" => [1, 3])
+    lay3 = EegFun.Layout(DataFrame(label = [:Fz, :Cz, :Pz], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]), nothing, nothing, nothing)
+    ica = EegFun._extract_ica_info(mock_ica_eeg, "ica_test.set", lay3)
+    @test ica.unmixing ≈ W * sph
+    @test length(ica.mean) == 2
+    @test EegFun.channel_labels(ica.layout) == [:Fz, :Pz]
+    ica.layout.data[1, :label] = :Mutated
+    @test lay3.data[1, :label] == :Fz
 end

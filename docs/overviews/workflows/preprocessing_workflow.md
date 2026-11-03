@@ -12,7 +12,7 @@ The workflow follows three phases:
 
 ### Phase 1: Setup and Initial Preprocessing
 
-- Load raw data and configure electrode layout with coordinates and neighbours
+- Load raw data and configure electrode layout with coordinates and neighbors
 - Mark epoch intervals for targeted analysis
 - Rereference to average
 - Apply initial filters (0.1 Hz high-pass for ERPs)
@@ -25,7 +25,7 @@ The workflow follows three phases:
 - Detect extreme values at two thresholds (250 μV for ICA exclusion, 75 μV for artifact rejection)
 - Identify and partition bad channels (EOG-related vs. non-EOG-related)
 - Run ICA on a separate 1 Hz high-pass filtered copy, identify and remove artifact components
-- Repair bad channels via neighbour interpolation
+- Repair bad channels via neighbor interpolation
 - Recalculate EOG channels after ICA and repair
 
 ### Phase 3: Epoch Extraction and Epoch-Level Processing

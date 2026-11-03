@@ -23,7 +23,7 @@ This is a comprehensive documentation management tool that provides:
 - Interactive menu system
 
 Usage:
-    julia --project=. docs/build_docs.jl [command] [options]
+    julia --project=docs docs/doc_manager.jl [command] [options]
 
 Commands:
     build                    - Build documentation
@@ -80,11 +80,10 @@ function build_documentation(project_root::String; build_pdf::Bool = false)
             ENV["BUILD_PDF"] = "false"
         end
 
-        # Suppress warnings during build
+        # Show warnings and errors during build
         old_logger = global_logger()
         try
-            # Use a logger that only shows errors
-            logger = ConsoleLogger(stderr, Logging.Error)
+            logger = ConsoleLogger(stderr, Logging.Warn)
             global_logger(logger)
             include(build_jl_path)
         finally
@@ -522,9 +521,10 @@ function show_interactive_menu(project_root::String)
 
         if choice == "1"
             build_documentation(project_root, build_pdf = false)
-            if isfile(joinpath(project_root, "docs", "build", "index.html"))
+            if isfile(joinpath(project_root, "docs", "build", "1", "index.html")) ||
+               isfile(joinpath(project_root, "docs", "build", "index.html"))
                 print_colored(GREEN, " Documentation built successfully!")
-                print_colored(CYAN, "Open docs/build/index.html in your browser to view the documentation")
+                print_colored(CYAN, "Use option 7 (LiveServer) or open docs/build/1/index.html to view the documentation")
             end
         elseif choice == "2"
             build_documentation(project_root, build_pdf = true)
@@ -585,12 +585,10 @@ function main()
         show_interactive_menu(project_root)
     else
         print_header()
-        println("Usage: julia --project=. docs/build_docs.jl [command]")
+        println("Usage: julia --project=docs docs/doc_manager.jl [command]")
         println()
         println("Commands:")
         println("  build                    - Build documentation")
-        println("")
-        println("")
         println("  coverage                 - Check documentation coverage")
         println("  format                   - Format Julia source files")
         println("  format-check             - Format files and run syntax check")
@@ -600,11 +598,11 @@ function main()
         println("  all                      - Run complete documentation workflow")
         println()
         println("Examples:")
-        println("  julia --project=. docs/build_docs.jl build")
-        println("  julia --project=. docs/build_docs.jl format")
-        println("  julia --project=. docs/build_docs.jl clean")
-        println("  julia --project=. docs/build_docs.jl screenshots")
-        println("  julia --project=. docs/build_docs.jl interactive")
+        println("  julia --project=docs docs/doc_manager.jl build")
+        println("  julia --project=docs docs/doc_manager.jl format")
+        println("  julia --project=docs docs/doc_manager.jl clean")
+        println("  julia --project=docs docs/doc_manager.jl screenshots")
+        println("  julia --project=docs docs/doc_manager.jl interactive")
     end
 end
 

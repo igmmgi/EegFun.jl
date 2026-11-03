@@ -2,6 +2,7 @@ using Test
 using EegFun
 using Statistics
 using DataFrames
+using Random
 
 @testset "RIDE (Residue Iteration DEcomposition)" begin
 
@@ -132,5 +133,94 @@ using DataFrames
         empty_epochs = copy(epochs)
         empty_epochs.data = DataFrame[]
         @test_throws EegFun.EegFunError EegFun.extract_ride(empty_epochs, comps)
+    end
+
+    # 5. Phase 2 regressions: time_window, C-component Woody init, R-component median centering, rng, n_trials == 1, copy metadata
+    @testset "Phase 2 RIDE regressions" begin
+        n_samples = 100
+        n_channels = 2
+        n_trials = 12
+        fs = 100
+
+        # Synthetic trials with a stimulus-locked S wave (samples 10:25),
+        # a latency-jittered C wave (centered near sample 50), and a response-locked R wave (at sample 70 + rt_jitter)
+        data = zeros(Float64, n_samples, n_channels, n_trials)
+        s_wave = 2.0 .* sin.(range(0, π, length = 16))
+        c_wave = 5.0 .* sin.(range(0, π, length = 16))
+        r_wave = 3.0 .* sin.(range(0, π, length = 12))
+        c_shifts = [-4, -3, -2, -1, 0, 1, 2, 3, 4, -2, 2, 0]
+        rt_raw = [68 + (t % 5) for t = 1:n_trials] # non-zero-centered RT sample indices!
+
+        for t = 1:n_trials
+            data[10:25, 1, t] .+= s_wave
+            c_start = 42 + c_shifts[t]
+            data[c_start:(c_start+15), 1, t] .+= c_wave
+            r_start = rt_raw[t]
+            data[r_start:(r_start+11), 2, t] .+= r_wave
+        end
+
+        comp_s = EegFun.RideComponent(:S, zeros(Int, n_trials))
+        comp_c = EegFun.RideComponent(:C, 8; time_window = (0.35, 0.65))
+        comp_r = EegFun.RideComponent(:R, rt_raw)
+        @test comp_c.time_window == (0.35, 0.65)
+
+        # Deterministic reproducibility with explicit rng + C-component latency recovery + R latency centering
+        ride_times = collect((0:(n_samples-1)) ./ fs)
+        res1 = EegFun.ride_decompose(
+            data,
+            [comp_s, comp_c, comp_r];
+            times = ride_times,
+            sample_rate = Float64(fs),
+            outer_iters = 3,
+            inner_iters = 10,
+            rng = MersenneTwister(42),
+        )
+        res2 = EegFun.ride_decompose(
+            data,
+            [comp_s, comp_c, comp_r];
+            times = ride_times,
+            sample_rate = Float64(fs),
+            outer_iters = 3,
+            inner_iters = 10,
+            rng = MersenneTwister(42),
+        )
+        @test res1.templates == res2.templates
+        @test res1.latencies == res2.latencies
+
+        # R-component latencies were centered around round(Int, median(rt_raw)) and offset stored in latency_offsets
+        expected_r_offset = round(Int, median(rt_raw))
+        @test res1.latency_offsets[3] == expected_r_offset
+        @test res1.latencies[:, 3] == rt_raw .- expected_r_offset
+        # C-component latencies initialized via woody_filter track the true jitter (not stuck at all zeros!)
+        @test any(!=(0), res1.latencies[:, 2])
+        @test cor(Float64.(res1.latencies[:, 2]), Float64.(c_shifts)) > 0.7
+
+        # Single-trial guard (n_trials == 1): woody_filter and ride_decompose must not crash with NaN std
+        data_1trial = data[:, :, 1:1]
+        lats_1 = EegFun.woody_filter(data_1trial, 5; rng = MersenneTwister(1))
+        @test lats_1 == [0]
+        res_1 = EegFun.ride_decompose(
+            data_1trial,
+            [EegFun.RideComponent(:S, [0]), EegFun.RideComponent(:C, 5)];
+            outer_iters = 1,
+            inner_iters = 3,
+            rng = MersenneTwister(1),
+        )
+        @test all(isfinite, res_1.templates)
+
+        # extract_ride copies layout & analysis_info (mutating output ErpData does not mutate source EpochData!)
+        epochs_meta = EegFun.create_test_epoch_data(n = 40, fs = 100, n_epochs = 4, n_channels = 2, seed = 3)
+        epochs_meta.analysis_info.reference = :avg
+        ride_erps = EegFun.extract_ride(
+            epochs_meta,
+            [EegFun.RideComponent(:S, zeros(Int, 4)), EegFun.RideComponent(:C, 4; time_window = (-0.1, 0.2))];
+            outer_iters = 1,
+            inner_iters = 3,
+            rng = MersenneTwister(7),
+        )
+        ride_erps[:S].analysis_info.reference = :csd
+        ride_erps[:S].layout.data.label[1] = :ModifiedLabel
+        @test epochs_meta.analysis_info.reference == :avg
+        @test epochs_meta.layout.data.label[1] != :ModifiedLabel
     end
 end

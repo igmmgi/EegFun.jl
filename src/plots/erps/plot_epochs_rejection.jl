@@ -56,13 +56,24 @@ mutable struct EpochRejectionState
     n_total_epochs::Int
     n_pages::Int
     checkboxes::Vector{Toggle}
-    epoch_axes::Vector{Axis}
+    axes::Vector{Axis}
     fig::Figure
     show_bad_channels_only::Observable{Bool}  # Filter to show only bad channels
     artifact_info::Union{Nothing,EpochRejectionInfo}  # Store artifact info for per-epoch filtering
     colors::Vector{Any}  # Cached color array
     global_ylim::Union{Nothing,Tuple{Float64,Float64}}  # Global Y-axis limits for all epochs
+    is_updating_toggles::Base.RefValue{Bool}  # Re-entrancy guard when syncing page checkboxes
 end
+
+function Base.getproperty(state::EpochRejectionState, sym::Symbol)
+    if sym === :epoch_axes
+        return getfield(state, :axes)
+    end
+    return getfield(state, sym)
+end
+
+Base.broadcastable(state::EpochRejectionState) = Ref(state)
+Base.iterate(state::EpochRejectionState, idx::Int = 1) = idx == 1 ? (state.fig, 2) : idx == 2 ? (state.axes, 3) : nothing
 
 
 # === MAIN PLOTTING FUNCTION ===
@@ -161,7 +172,7 @@ function detect_bad_epochs_interactive(
     _set_window_title(title_str)
 
     # Merge user kwargs with defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_EPOCHS_REJECTION_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_EPOCHS_REJECTION_KWARGS, _normalize_plot_kwargs(kwargs))
 
     # Validate inputs
     _validate_rejection_gui_inputs(dat, plot_kwargs[:dims])
@@ -180,8 +191,24 @@ function detect_bad_epochs_interactive(
     @info "Displaying $(length(selected_channels)) channels"
     @info "Total epochs: $n_total_epochs across $n_pages pages"
 
-    # Initialize rejection state (all epochs start as not rejected)
+    # Initialize rejection state from artifact_info (so unvisited pages retain auto-flagged epochs
+    # while manual user unchecks are preserved across page navigation)
     rejected = fill(false, n_total_epochs)
+    if !isnothing(artifact_info)
+        if hasproperty(artifact_info, :rejected) && !isnothing(artifact_info.rejected)
+            for r in artifact_info.rejected
+                if 1 <= r.epoch <= n_total_epochs
+                    rejected[r.epoch] = true
+                end
+            end
+        elseif hasproperty(artifact_info, :rejected_epochs) && !isnothing(artifact_info.rejected_epochs)
+            for ep in artifact_info.rejected_epochs
+                if 1 <= ep <= n_total_epochs
+                    rejected[ep] = true
+                end
+            end
+        end
+    end
 
     # Create figure sized to fit typical screens
     fontsize_kw = isnothing(plot_kwargs[:theme_fontsize]) ? (;) : (; fontsize = plot_kwargs[:theme_fontsize])
@@ -189,7 +216,8 @@ function detect_bad_epochs_interactive(
 
     # Performance optimizations
     selected_channels_set = Set(selected_channels)
-    colors = Makie.to_colormap(plot_kwargs[:colormap])
+    resolved_cmap = _resolve_theme_colormap(fig, plot_kwargs[:colormap])
+    colors = collect(Any, Makie.to_colormap(resolved_cmap))
     global_ylim = plot_kwargs[:global_ylim] ? _calculate_global_ylim(dat, selected_channels) : nothing
 
     # Create state object
@@ -211,6 +239,7 @@ function detect_bad_epochs_interactive(
         artifact_info,
         colors,
         global_ylim,
+        Ref(false),
     )
 
     # Create UI layout
@@ -259,7 +288,7 @@ function _create_rejection_interface!(
     @info "Creating $rows x $cols grid of epoch plots"
 
     # Clear any existing UI handles
-    empty!(state.epoch_axes)
+    empty!(state.axes)
     empty!(state.checkboxes)
 
     # Root layout with two rows: axes grid (1) and nav bar (2)
@@ -273,7 +302,7 @@ function _create_rejection_interface!(
             idx = (row - 1) * cols + col
             cell_gl = GridLayout(axes_gl[row, col])
             ax = Axis(cell_gl[1, 1])
-            push!(state.epoch_axes, ax)
+            push!(state.axes, ax)
             # Place a small toggle inside the plot area, top-left
             t = Toggle(cell_gl[1, 1]; halign = :left, valign = :top, tellwidth = false, tellheight = false, length = 60, markersize = 30)
 
@@ -285,9 +314,6 @@ function _create_rejection_interface!(
             ax.xminorgridvisible = plot_kwargs[:xminorgrid]
             ax.yminorgridvisible = plot_kwargs[:yminorgrid]
 
-            # Set font sizes (only need to do this once)
-
-
             on(t.active) do active
                 color = active ? plot_kwargs[:bad_epoch_color] : plot_kwargs[:good_epoch_color]
                 for spline in (:leftspinecolor, :rightspinecolor, :bottomspinecolor, :topspinecolor)
@@ -297,9 +323,10 @@ function _create_rejection_interface!(
 
             colsize!(cell_gl, 1, Relative(1))
             on(t.active) do is_checked
+                state.is_updating_toggles[] && return
                 page = state.current_page[]
                 epoch_idx = (page - 1) * state.epochs_per_page + idx
-                if epoch_idx <= state.n_total_epochs
+                if 1 <= epoch_idx <= state.n_total_epochs
                     state.rejected[epoch_idx] = is_checked
                 end
             end
@@ -366,49 +393,59 @@ function _update_epoch_display!(state::EpochRejectionState, artifact_info::Union
     page = state.current_page[]
     start_idx = (page - 1) * state.epochs_per_page + 1
 
-    for (i, ax) in enumerate(state.epoch_axes)
-        epoch_idx = start_idx + i - 1
-        empty!(ax)
-        if epoch_idx <= state.n_total_epochs
-            _plot_single_epoch!(ax, state, epoch_idx, plot_kwargs)
+    state.is_updating_toggles[] = true
+    try
+        for (i, ax) in enumerate(state.axes)
+            epoch_idx = start_idx + i - 1
+            empty!(ax)
+            if epoch_idx <= state.n_total_epochs
+                _plot_single_epoch!(ax, state, epoch_idx, plot_kwargs)
 
-            # Update title to show filtered channels
-            channels_to_show = if state.show_bad_channels_only[]
-                bad_channels_for_epoch = _get_bad_channels_for_epoch(state.artifact_info, epoch_idx)
-                collect(intersect(state.selected_channels_set, bad_channels_for_epoch))
-            else
-                state.selected_channels
-            end
-
-            ax.title = "Epoch $epoch_idx: $(_print_vector(channels_to_show, n_ends = 3))"
-
-            # Apply Y limits: explicit ylim takes precedence, then global_ylim, then automatic
-            if !isnothing(plot_kwargs[:ylim])
-                ylims!(ax, plot_kwargs[:ylim])
-            elseif plot_kwargs[:global_ylim] && !isnothing(state.global_ylim)
-                ylims!(ax, state.global_ylim)
-            else
-                # Reset to automatic scaling by clearing the limits
-                ax.limits = (ax.limits[][1], nothing)
-            end
-
-            # Apply X limits if provided
-            if !isnothing(plot_kwargs[:xlim])
-                xlims!(ax, plot_kwargs[:xlim])
-            end
-            if i <= length(state.checkboxes)
-                # Check if epoch is already rejected by user or by automatic detection
-                auto_rejected = if isnothing(artifact_info)
-                    false
+                # Update title to show filtered channels
+                channels_to_show = if state.show_bad_channels_only[]
+                    bad_channels_for_epoch = _get_bad_channels_for_epoch(state.artifact_info, epoch_idx)
+                    collect(intersect(state.selected_channels_set, bad_channels_for_epoch))
                 else
-                    epoch_idx ∈ unique_epochs(artifact_info.rejected)
+                    state.selected_channels
                 end
-                state.checkboxes[i].active[] = state.rejected[epoch_idx] || auto_rejected
+
+                ax.title = "Epoch $epoch_idx: $(_print_vector(channels_to_show, n_ends = 3))"
+
+                # Apply Y limits: explicit ylim takes precedence, then global_ylim, then automatic
+                if !isnothing(plot_kwargs[:ylim])
+                    ylims!(ax, plot_kwargs[:ylim])
+                elseif plot_kwargs[:global_ylim] && !isnothing(state.global_ylim)
+                    ylims!(ax, state.global_ylim)
+                else
+                    # Reset to automatic scaling by clearing the limits
+                    ax.limits = (ax.limits[][1], nothing)
+                end
+
+                # Apply X limits if provided
+                if !isnothing(plot_kwargs[:xlim])
+                    xlims!(ax, plot_kwargs[:xlim])
+                end
+
+                is_rej = state.rejected[epoch_idx]
+                if i <= length(state.checkboxes)
+                    state.checkboxes[i].active[] = is_rej
+                end
+                spine_color = is_rej ? plot_kwargs[:bad_epoch_color] : plot_kwargs[:good_epoch_color]
+                for spline in (:leftspinecolor, :rightspinecolor, :bottomspinecolor, :topspinecolor)
+                    setproperty!(ax, spline, spine_color)
+                end
+            else
+                ax.title = ""
+                if i <= length(state.checkboxes)
+                    state.checkboxes[i].active[] = false
+                end
+                for spline in (:leftspinecolor, :rightspinecolor, :bottomspinecolor, :topspinecolor)
+                    setproperty!(ax, spline, :transparent)
+                end
             end
-        else
-            ax.title = ""
-            state.checkboxes[i].active[] = false
         end
+    finally
+        state.is_updating_toggles[] = false
     end
     return nothing
 end

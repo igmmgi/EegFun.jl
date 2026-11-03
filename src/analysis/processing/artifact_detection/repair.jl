@@ -9,7 +9,7 @@ Repair detected artifacts using the specified method.
 - `method::Symbol`: Repair method to use
 
 # Available Methods
-- `:neighbor_interpolation` - Weighted neighbor interpolation (default). Uses `dat.layout.neighbours` for neighbor information.
+- `:neighbor_interpolation` - Weighted neighbor interpolation (default). Uses `dat.layout.neighbors` for neighbor information.
 - `:spherical_spline` - Spherical spline interpolation
 
 # Keyword Arguments (for :spherical_spline method)
@@ -17,7 +17,7 @@ Repair detected artifacts using the specified method.
 - `lambda::Float64`: Regularization parameter (default: 1e-5)
 
 # Returns
-Nothing (mutates dat in-place)
+- `EpochData`: The repaired epoch data (mutates `dat` and `artifacts` in-place)
 """
 function repair_artifacts!(dat::EpochData, artifacts::EpochRejectionInfo; method::Symbol = :neighbor_interpolation, kwargs...)
 
@@ -43,11 +43,11 @@ end
 """
     repair_artifacts(dat::EpochData, artifacts::EpochRejectionInfo; method::Symbol=:neighbor_interpolation, kwargs...)
 
-Non-mutating version of repair_artifacts!. Creates a copy of the data and repairs artifacts without modifying the original.
+Non-mutating version of repair_artifacts!. Creates a copy of the data and artifacts and repairs artifacts without modifying the originals.
 
 # Arguments
 - `dat::EpochData`: The epoch data to repair (NOT modified)
-- `artifacts::EpochRejectionInfo`: Artifact information from detect_artifacts
+- `artifacts::EpochRejectionInfo`: Artifact information from detect_artifacts (NOT modified)
 - `method::Symbol`: Repair method to use (default: :neighbor_interpolation)
 
 # Keyword Arguments
@@ -62,14 +62,14 @@ Same as repair_artifacts! for the respective methods.
 repaired_epochs = repair_artifacts(epochs, artifacts)
 
 # Using spherical spline method
-repaired_epochs = repair_artifacts(epochs, artifacts, :spherical_spline)
+repaired_epochs = repair_artifacts(epochs, artifacts; method = :spherical_spline)
 
 # Rejecting bad epochs entirely (use reject_epochs instead)
 clean_epochs = reject_epochs(epochs, artifacts)
 ```
 """
 function repair_artifacts(dat::EpochData, artifacts::EpochRejectionInfo; method::Symbol = :neighbor_interpolation, kwargs...)
-    return repair_artifacts!(copy(dat), artifacts; method = method, kwargs...)
+    return repair_artifacts!(copy(dat), copy(artifacts); method = method, kwargs...)
 end
 
 function repair_artifacts(dat::AbstractVector{<:EpochData}, artifacts::AbstractVector{<:EpochRejectionInfo}; kwargs...)
@@ -145,7 +145,7 @@ channel_repairable!(artifacts::Vector{EpochRejectionInfo}, layout::Layout) = cha
 
 Repair artifacts using weighted neighbor interpolation.
 Uses `artifacts.repaired` to determine which channels to repair (should be populated by `channel_repairable!`).
-Uses `dat.layout.neighbours` for neighbor information.
+Uses `dat.layout.neighbors` for neighbor information.
 
 # Arguments
 - `dat::EpochData`: The epoch data to repair (modified in-place)
@@ -178,7 +178,7 @@ function repair_artifacts_neighbor!(dat::EpochData, artifacts::EpochRejectionInf
             repairable_channels;
             method = :neighbor_interpolation,
             epoch_selection = epochs([epoch_idx]),
-            neighbours_dict = dat.layout.neighbours,
+            neighbors_dict = dat.layout.neighbors,
         )
         @info "" # formatting
     end
@@ -204,18 +204,38 @@ function repair_artifacts_spherical_spline!(dat::EpochData, artifacts::EpochReje
 
     _ensure_coordinates_3d!(dat.layout)
 
-    # Get all rejected epochs with their bad channels
-    rejected = unique([r.epoch for r in artifacts.rejected])
+    # Initialize tracking dictionaries in artifacts struct (OrderedDict to maintain sorted order)
+    artifacts.repaired = OrderedDict{Int,Vector{Symbol}}()
+    artifacts.skipped = OrderedDict{Int,Vector{Symbol}}()
+
+    all_channels = channel_labels(dat)
+
+    # Get all rejected epochs in sorted order
+    rejected = sort(unique([r.epoch for r in artifacts.rejected]))
 
     for epoch_idx in rejected
-        # Get bad channels for this epoch
-        bad_channels = [artifact.channel for artifact in artifacts.rejected if artifact.epoch == epoch_idx]
+        bad_channels = unique([artifact.channel for artifact in artifacts.rejected if artifact.epoch == epoch_idx])
         isempty(bad_channels) && continue
 
-        @info "Repairing epoch $epoch_idx channels $(bad_channels) using spherical spline interpolation"
+        present_bad = [ch for ch in bad_channels if ch in all_channels]
+        missing_bad = [ch for ch in bad_channels if ch ∉ all_channels]
+        good_channels = setdiff(all_channels, present_bad)
 
-        # Use unified channel repair function with epoch selection
-        repair_channels!(dat, bad_channels; method = :spherical_spline, epoch_selection = epochs([epoch_idx]), m = m, lambda = lambda)
+        if isempty(good_channels)
+            @minimal_warning "Epoch $epoch_idx: Cannot repair channels $(bad_channels) using spherical spline interpolation (all channels are bad)"
+            artifacts.skipped[epoch_idx] = bad_channels
+            continue
+        end
+
+        if !isempty(present_bad)
+            @info "Repairing epoch $epoch_idx channels $(present_bad) using spherical spline interpolation"
+            repair_channels!(dat, present_bad; method = :spherical_spline, epoch_selection = epochs([epoch_idx]), m = m, lambda = lambda)
+            artifacts.repaired[epoch_idx] = present_bad
+        end
+
+        if !isempty(missing_bad)
+            artifacts.skipped[epoch_idx] = missing_bad
+        end
     end
 
     return dat
