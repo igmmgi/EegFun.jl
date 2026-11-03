@@ -1,72 +1,35 @@
-# This file contains clustering functions for finding connected components
-"""
-    _build_connectivity_matrix(electrodes, layout, cluster_type)
+# Connected-component clustering, neighbor pre-filtering, cluster statistics, and TFCE.
 
-Build connectivity matrix for clustering.
+_symmetrize_connectivity(conn::SparseMatrixCSC{Bool}) = issymmetric(conn) ? conn : (conn .| copy(transpose(conn)))
 
-# Arguments
-- `electrodes::Vector{Symbol}`: Electrode labels
-- `layout::Layout`: Layout with neighbors information
-- `cluster_type::Symbol`: `:spatial`, `:temporal`, or `:spatiotemporal`
-
-# Returns
-- `connectivity::SparseMatrixCSC{Bool}`: Spatial connectivity matrix [electrodes × electrodes]
-
-# Notes
-For all cluster types, returns the spatial connectivity matrix.
-Temporal connectivity is handled directly in the clustering algorithm.
-
-# Examples
-```julia
-conn = _build_connectivity_matrix(electrodes, layout, :spatiotemporal)
-```
-"""
 function _build_connectivity_matrix(electrodes::Vector{Symbol}, layout::Layout, cluster_type::Symbol)
     n_electrodes = length(electrodes)
 
-    # Types that use spatial connectivity
-    uses_spatial = cluster_type in (:spatial, :spatiotemporal, :full)
-
-    # Types that don't use spatial connectivity (temporal/spectral connections handled in BFS)
-    no_spatial = cluster_type in (:temporal, :spectral, :spectrotemporal)
-
-    if uses_spatial
+    if cluster_type in (:spatial, :spatiotemporal, :full)
         if isnothing(layout.neighbors)
             @minimal_warning "Layout.neighbors is not set. Computing with default distance criterion (0.35)."
             layout = copy(layout)
             get_neighbors_xy!(layout, 0.35)
         end
 
-        # Build adjacency matrix
         I = Int[]
         J = Int[]
         elec_to_idx = Dict{Symbol,Int}(e => i for (i, e) in enumerate(electrodes))
 
         for (e_idx, electrode) in enumerate(electrodes)
-            # Get neighbors from layout
             if haskey(layout.neighbors, electrode)
-                neighbors = layout.neighbors[electrode]
-                for neighbor in neighbors.channels
-                    # Find index of neighbor in electrodes list
+                for neighbor in layout.neighbors[electrode].channels
                     n_idx = get(elec_to_idx, neighbor, 0)
                     if n_idx > 0
-                        push!(I, e_idx)
-                        push!(J, n_idx)
-                        # Also add reverse
-                        push!(I, n_idx)
-                        push!(J, e_idx)
+                        push!(I, e_idx, n_idx)
+                        push!(J, n_idx, e_idx)
                     end
                 end
             end
         end
-
-        # Create sparse matrix and return
         return sparse(I, J, true, n_electrodes, n_electrodes)
-
-    elseif no_spatial
-        # No spatial connectivity needed - return empty sparse matrix
+    elseif cluster_type in (:temporal, :spectral, :spectrotemporal)
         return sparse(Int[], Int[], Bool[], n_electrodes, n_electrodes)
-
     else
         @minimal_error(
             "cluster_type must be :spatial, :temporal, :spectral, :spatiotemporal, :spectrotemporal, or :full, got :$cluster_type"
@@ -74,106 +37,51 @@ function _build_connectivity_matrix(electrodes::Vector{Symbol}, layout::Layout, 
     end
 end
 
-# === PRE-FILTERING ===
+# === SPATIAL NEIGHBOR PRE-FILTERING (2D & 3D) ===
 
-"""
-    _prefilter_mask_by_neighbors!(mask, spatial_connectivity, min_num_neighbors)
+function _prefilter_mask_by_neighbors!(mask::BitArray{N}, spatial_connectivity::SparseMatrixCSC{Bool}, min_num_neighbors::Int) where {N}
+    min_num_neighbors <= 0 && return nothing
 
-In-place version: Pre-filter mask to remove isolated points 
-
-For each significant point, count how many *neighboring* significant channels it has
-(not counting itself). If a point has fewer than `min_num_neighbors` significant
-neighbors, remove it. This is a single-pass filter
-
-# Arguments
-- `mask::BitArray{2}`: Significant points mask [electrodes × time]
-- `spatial_connectivity::SparseMatrixCSC{Bool}`: Spatial connectivity matrix [electrodes × electrodes]
-- `min_num_neighbors::Int`: Minimum number of neighboring significant channels required
-"""
-function _prefilter_mask_by_neighbors!(mask::BitArray{2}, spatial_connectivity::SparseMatrixCSC{Bool}, min_num_neighbors::Int)
-    if min_num_neighbors <= 0
-        return  # No filtering if min_num_neighbors is 0 or negative
-    end
-
-    n_electrodes, n_time = size(mask)
-
-    # Ensure spatial connectivity is symmetric (zero allocation if already symmetric)
-    spatial_conn_sym =
-        issymmetric(spatial_connectivity) ? spatial_connectivity : (spatial_connectivity .| copy(transpose(spatial_connectivity)))
+    n_electrodes = size(mask, 1)
+    n_cols = div(length(mask), n_electrodes)
+    spatial_conn_sym = _symmetrize_connectivity(spatial_connectivity)
     rv = rowvals(spatial_conn_sym)
 
-    # removing a channel may cause its neighbors to now have too few neighbors
-    nremoved = 1
-    while nremoved > 0
-        nremoved = 0
-        for t_idx = 1:n_time
+    @inbounds for col = 0:(n_cols-1)
+        offset = col * n_electrodes
+        changed = true
+        while changed
+            changed = false
             for e_idx = 1:n_electrodes
-                if !mask[e_idx, t_idx]
-                    continue
-                end
-
-                # Count significant spatial neighbors (NOT counting self)
+                mask[offset+e_idx] || continue
                 neighbor_count = 0
                 for ptr in nzrange(spatial_conn_sym, e_idx)
                     n_e_idx = rv[ptr]
-                    if e_idx != n_e_idx && mask[n_e_idx, t_idx]
+                    if e_idx != n_e_idx && mask[offset+n_e_idx]
                         neighbor_count += 1
                     end
                 end
-
                 if neighbor_count < min_num_neighbors
-                    mask[e_idx, t_idx] = false
-                    nremoved += 1
+                    mask[offset+e_idx] = false
+                    changed = true
                 end
             end
         end
     end
+    return nothing
 end
 
-"""
-    _prefilter_mask_by_neighbors(mask, spatial_connectivity, min_num_neighbors)
+const _prefilter_mask_by_neighbors_tf! = _prefilter_mask_by_neighbors!
 
-Pre-filter mask to remove isolated points 
-
-Creates a copy of the mask and calls the in-place version.
-
-# Arguments
-- `mask::BitArray{2}`: Significant points mask [electrodes × time]
-- `spatial_connectivity::SparseMatrixCSC{Bool}`: Spatial connectivity matrix [electrodes × electrodes]
-- `min_num_neighbors::Int`: Minimum number of neighboring significant channels required
-
-# Returns
-- `filtered_mask::BitArray{2}`: Filtered mask with isolated points removed
-
-# Examples
-```julia
-filtered_mask = _prefilter_mask_by_neighbors(mask, spatial_connectivity, 3)
-```
-"""
-function _prefilter_mask_by_neighbors(mask::BitArray{2}, spatial_connectivity::SparseMatrixCSC{Bool}, min_num_neighbors::Int)
-    if min_num_neighbors <= 0
-        return mask  # No filtering if min_num_neighbors is 0 or negative
-    end
-
+function _prefilter_mask_by_neighbors(mask::BitArray{N}, spatial_connectivity::SparseMatrixCSC{Bool}, min_num_neighbors::Int) where {N}
+    min_num_neighbors <= 0 && return mask
     filtered_mask = copy(mask)
     _prefilter_mask_by_neighbors!(filtered_mask, spatial_connectivity, min_num_neighbors)
     return filtered_mask
 end
 
-# === CLUSTER FINDING (BFS) ===
+# === OBSERVED CLUSTER FINDING (2D & 3D BFS) ===
 
-"""
-    _set_cluster_polarity(clusters, polarity)
-
-Create new Cluster objects with the specified polarity, copying all other fields.
-
-# Arguments
-- `clusters::Vector{Cluster}`: Clusters to update
-- `polarity::Symbol`: `:positive` or `:negative`
-
-# Returns
-- `Vector{Cluster}`: New clusters with updated polarity
-"""
 function _set_cluster_polarity(clusters::Vector{Cluster}, polarity::Symbol)
     polarity in (:positive, :negative) || @minimal_error "polarity must be :positive or :negative"
     return [
@@ -182,683 +90,6 @@ function _set_cluster_polarity(clusters::Vector{Cluster}, polarity::Symbol)
     ]
 end
 
-"""
-    _find_clusters_connected_components(mask, electrodes, time_points, spatial_connectivity, cluster_type)
-
-Find connected clusters in thresholded data using BFS.
-
-# Arguments
-- `mask::BitArray{2}`: Significant points mask [electrodes × time]
-- `electrodes::Vector{Symbol}`: Electrode labels
-- `time_points::Vector{Float64}`: Time points in seconds
-- `spatial_connectivity::SparseMatrixCSC{Bool}`: Spatial connectivity matrix
-- `cluster_type::Symbol`: `:spatial`, `:temporal`, or `:spatiotemporal`
-
-# Returns
-- `clusters::Vector{Cluster}`: Found clusters (without statistics)
-
-# Examples
-```julia
-clusters = _find_clusters_connected_components(mask, electrodes, time_points, conn, :spatiotemporal)
-```
-"""
-function _find_clusters_connected_components(
-    mask::BitArray{2},
-    electrodes::Vector{Symbol},
-    time_points::Vector{Float64},
-    spatial_connectivity::SparseMatrixCSC{Bool},
-    cluster_type::Symbol,
-)
-    n_electrodes, n_time = size(mask)
-    clusters = Cluster[]
-
-    if !any(mask)
-        # No significant points
-        return clusters
-    end
-
-    # Label matrix to track which cluster each point belongs to
-    cluster_labels = zeros(Int, n_electrodes, n_time)
-    current_cluster_id = 0
-
-
-    # BFS to find connected components
-    for e_idx = 1:n_electrodes
-        for t_idx = 1:n_time
-            # Skip if not significant or already labeled
-            if !mask[e_idx, t_idx] || cluster_labels[e_idx, t_idx] > 0
-                continue
-            end
-
-            # Start new cluster
-            current_cluster_id += 1
-            cluster_electrodes = Set{Symbol}()
-            cluster_time_indices = Set{Int}()
-            cluster_members = Tuple{Int,Int}[]  # exact (electrode_idx, time_idx) pairs
-
-            # BFS queue
-            queue = [(e_idx, t_idx)]
-            queue_head = 1
-            cluster_labels[e_idx, t_idx] = current_cluster_id
-            push!(cluster_electrodes, electrodes[e_idx])
-            push!(cluster_time_indices, t_idx)
-            push!(cluster_members, (e_idx, t_idx))
-
-            # BFS traversal
-            while queue_head <= length(queue)
-                current_e, current_t = queue[queue_head]
-                queue_head += 1
-
-                # Spatial connectivity
-                if cluster_type in (:spatial, :spatiotemporal)
-                    # EegFun's spatial connectivity is symmetric, so we can iterate rows
-                    rv = rowvals(spatial_connectivity)
-                    for ptr in nzrange(spatial_connectivity, current_e)
-                        n_e = rv[ptr]
-                        if mask[n_e, current_t] && cluster_labels[n_e, current_t] == 0
-                            cluster_labels[n_e, current_t] = current_cluster_id
-                            push!(queue, (n_e, current_t))
-                            push!(cluster_electrodes, electrodes[n_e])
-                            push!(cluster_time_indices, current_t)
-                            push!(cluster_members, (n_e, current_t))
-                        end
-                    end
-                end
-
-                # Temporal connectivity
-                if cluster_type in (:temporal, :spatiotemporal)
-                    if current_t > 1 && mask[current_e, current_t-1] && cluster_labels[current_e, current_t-1] == 0
-                        cluster_labels[current_e, current_t-1] = current_cluster_id
-                        push!(queue, (current_e, current_t-1))
-                        push!(cluster_electrodes, electrodes[current_e])
-                        push!(cluster_time_indices, current_t-1)
-                        push!(cluster_members, (current_e, current_t-1))
-                    end
-                    if current_t < n_time && mask[current_e, current_t+1] && cluster_labels[current_e, current_t+1] == 0
-                        cluster_labels[current_e, current_t+1] = current_cluster_id
-                        push!(queue, (current_e, current_t+1))
-                        push!(cluster_electrodes, electrodes[current_e])
-                        push!(cluster_time_indices, current_t+1)
-                        push!(cluster_members, (current_e, current_t+1))
-                    end
-                end
-            end
-
-            # Convert Set to sorted Vector efficiently
-            time_indices_vec = sort([t for t in cluster_time_indices])
-            time_range = (time_points[time_indices_vec[1]], time_points[time_indices_vec[end]])
-
-            # Convert Set to Vector efficiently
-            electrodes_vec = [e for e in cluster_electrodes]
-
-            cluster = Cluster(
-                current_cluster_id,
-                electrodes_vec,
-                time_indices_vec,
-                time_range,
-                0.0,  # cluster_stat - will be computed later
-                1.0,  # p_value - will be computed later
-                false,  # is_significant - will be set by caller (temporary)
-                :positive,  # polarity - will be set by caller (temporary)
-                cluster_members,
-            )
-            push!(clusters, cluster)
-        end
-    end
-
-    return clusters
-end
-
-"""
-    find_clusters(mask_positive, mask_negative, electrodes, time_points, spatial_connectivity, cluster_type)
-
-Find positive and negative clusters.
-
-# Arguments
-- `mask_positive::BitArray{2}`: Positive significant points [electrodes × time]
-- `mask_negative::BitArray{2}`: Negative significant points [electrodes × time]
-- `electrodes::Vector{Symbol}`: Electrode labels
-- `time_points::Vector{Float64}`: Time points in seconds
-- `spatial_connectivity::SparseMatrixCSC{Bool}`: Spatial connectivity matrix
-- `cluster_type::Symbol`: `:spatial`, `:temporal`, or `:spatiotemporal`
-
-# Returns
-- `positive_clusters::Vector{Cluster}`: Positive clusters
-- `negative_clusters::Vector{Cluster}`: Negative clusters
-
-# Examples
-```julia
-pos_clusters, neg_clusters = _find_clusters(mask_pos, mask_neg, electrodes, time_points, conn, :spatiotemporal)
-```
-"""
-function _find_clusters(
-    mask_positive::BitArray{2},
-    mask_negative::BitArray{2},
-    electrodes::Vector{Symbol},
-    time_points::Vector{Float64},
-    spatial_connectivity::SparseMatrixCSC{Bool},
-    cluster_type::Symbol,
-)
-    positive_clusters = Cluster[]
-    negative_clusters = Cluster[]
-
-    if !isempty(mask_positive)
-        positive_clusters_raw =
-            _find_clusters_connected_components(mask_positive, electrodes, time_points, spatial_connectivity, cluster_type)
-        positive_clusters = _set_cluster_polarity(positive_clusters_raw, :positive)
-    end
-
-    if !isempty(mask_negative)
-        negative_clusters_raw =
-            _find_clusters_connected_components(mask_negative, electrodes, time_points, spatial_connectivity, cluster_type)
-        negative_clusters = _set_cluster_polarity(negative_clusters_raw, :negative)
-    end
-    return positive_clusters, negative_clusters
-end
-
-# === CLUSTER STATISTICS ===
-
-"""
-    _compute_cluster_statistics(clusters, t_matrix; return_clusters)
-
-Compute cluster-level statistics (maxsum).
-
-Consolidated version that can either return full Cluster objects or just statistics.
-
-# Arguments
-- `clusters::Vector{Cluster}`: Clusters to compute statistics for
-- `t_matrix::Array{Float64, 2}`: T-statistics [electrodes × time]
-- `return_clusters::Bool`: If true, return (clusters, stats); if false, return just stats
-
-# Returns
-- If `return_clusters=true`: `(updated_clusters::Vector{Cluster}, cluster_stats::Vector{Float64})`
-- If `return_clusters=false`: `cluster_stats::Vector{Float64}`
-"""
-function _compute_cluster_statistics(clusters::Vector{Cluster}, t_matrix::AbstractMatrix{<:AbstractFloat}; return_clusters::Bool = true)
-    if isempty(clusters)
-        return return_clusters ? (Cluster[], Float64[]) : Float64[]
-    end
-
-    cluster_stats = Float64[]
-    sizehint!(cluster_stats, length(clusters))
-
-    updated_clusters = return_clusters ? Cluster[] : nothing
-
-    for cluster in clusters
-        cluster_stat = 0.0
-
-        # Sum of t-values only at exact member points 
-        for (e_idx, t_idx) in cluster.members
-            t_val = t_matrix[e_idx, t_idx]
-            if !isnan(t_val) && !isinf(t_val)
-                cluster_stat += t_val
-            end
-        end
-
-        push!(cluster_stats, cluster_stat)
-
-        if return_clusters
-            # Update cluster with statistic
-            updated_cluster = Cluster(
-                cluster.id,
-                cluster.electrodes,
-                cluster.time_indices,
-                cluster.time_range,
-                cluster_stat,
-                cluster.p_value,
-                cluster.is_significant,
-                cluster.polarity,
-                cluster.members,
-            )
-            push!(updated_clusters, updated_cluster)
-        end
-    end
-
-    return return_clusters ? (updated_clusters, cluster_stats) : cluster_stats
-end
-
-"""
-    _max_cluster_stat(mask::BitArray{2}, t_matrix::AbstractMatrix{Float64}, spatial_connectivity::SparseMatrixCSC{Bool}, cluster_type::Symbol, labels_buf::Matrix{Int}, queue_buf::Vector{Tuple{Int,Int}}; is_negative::Bool=false) -> Float64
-
-Fast, zero-allocation cluster extreme statistic computation for permutation testing.
-Traverses connected components in `mask` using preallocated BFS queue and labels buffers,
-directly accumulating cluster t-value sums without allocating `Cluster` objects, Sets, or arrays.
-"""
-function _max_cluster_stat(
-    mask::BitArray{2},
-    t_matrix::AbstractMatrix{<:AbstractFloat},
-    spatial_connectivity::SparseMatrixCSC{Bool},
-    cluster_type::Symbol,
-    labels_buf::Matrix{Int},
-    queue_buf::Vector{Tuple{Int,Int}};
-    is_negative::Bool = false,
-)::Float64
-    n_electrodes, n_time = size(mask)
-    if !any(mask)
-        return 0.0
-    end
-
-    fill!(labels_buf, 0)
-    current_cluster_id = 0
-    extreme_stat = 0.0
-
-    rv = rowvals(spatial_connectivity)
-    has_spatial = cluster_type in (:spatial, :spatiotemporal, :full)
-    has_temporal = cluster_type in (:temporal, :spatiotemporal, :full)
-
-    @inbounds for t_idx = 1:n_time
-        for e_idx = 1:n_electrodes
-            if !mask[e_idx, t_idx] || labels_buf[e_idx, t_idx] > 0
-                continue
-            end
-
-            current_cluster_id += 1
-            labels_buf[e_idx, t_idx] = current_cluster_id
-            t0 = t_matrix[e_idx, t_idx]
-            cluster_stat = (isnan(t0) || isinf(t0)) ? 0.0 : t0
-
-            q_head = 1
-            q_tail = 1
-            queue_buf[1] = (e_idx, t_idx)
-
-            while q_head <= q_tail
-                curr_e, curr_t = queue_buf[q_head]
-                q_head += 1
-
-                if has_spatial
-                    for ptr in nzrange(spatial_connectivity, curr_e)
-                        ne = rv[ptr]
-                        if mask[ne, curr_t] && labels_buf[ne, curr_t] == 0
-                            labels_buf[ne, curr_t] = current_cluster_id
-                            val = t_matrix[ne, curr_t]
-                            if !isnan(val) && !isinf(val)
-                                cluster_stat += val
-                            end
-                            q_tail += 1
-                            queue_buf[q_tail] = (ne, curr_t)
-                        end
-                    end
-                end
-
-                if has_temporal
-                    if curr_t > 1 && mask[curr_e, curr_t-1] && labels_buf[curr_e, curr_t-1] == 0
-                        labels_buf[curr_e, curr_t-1] = current_cluster_id
-                        val = t_matrix[curr_e, curr_t-1]
-                        if !isnan(val) && !isinf(val)
-                            cluster_stat += val
-                        end
-                        q_tail += 1
-                        queue_buf[q_tail] = (curr_e, curr_t-1)
-                    end
-                    if curr_t < n_time && mask[curr_e, curr_t+1] && labels_buf[curr_e, curr_t+1] == 0
-                        labels_buf[curr_e, curr_t+1] = current_cluster_id
-                        val = t_matrix[curr_e, curr_t+1]
-                        if !isnan(val) && !isinf(val)
-                            cluster_stat += val
-                        end
-                        q_tail += 1
-                        queue_buf[q_tail] = (curr_e, curr_t+1)
-                    end
-                end
-            end
-
-            if is_negative
-                if cluster_stat < extreme_stat
-                    extreme_stat = cluster_stat
-                end
-            else
-                if cluster_stat > extreme_stat
-                    extreme_stat = cluster_stat
-                end
-            end
-        end
-    end
-
-    return extreme_stat
-end
-
-"""
-    _max_cluster_stat_tf(mask::BitArray{3}, t_matrix::Array{Float64,3}, spatial_connectivity::SparseMatrixCSC{Bool}, cluster_type::Symbol, labels_buf::Array{Int,3}, queue_buf::Vector{Tuple{Int,Int,Int}}; is_negative::Bool=false) -> Float64
-
-Fast, zero-allocation 3D (channel × frequency × time) cluster extreme statistic computation for permutation testing.
-"""
-function _max_cluster_stat_tf(
-    mask::BitArray{3},
-    t_matrix::AbstractArray{<:AbstractFloat,3},
-    spatial_connectivity::SparseMatrixCSC{Bool},
-    cluster_type::Symbol,
-    labels_buf::Array{Int,3},
-    queue_buf::Vector{Tuple{Int,Int,Int}};
-    is_negative::Bool = false,
-)::Float64
-    n_electrodes, n_freqs, n_time = size(mask)
-    if !any(mask)
-        return 0.0
-    end
-
-    fill!(labels_buf, 0)
-    current_cluster_id = 0
-    extreme_stat = 0.0
-
-    rv = rowvals(spatial_connectivity)
-    use_spatial = cluster_type in (:spatial, :spatiotemporal, :full)
-    use_spectral = cluster_type in (:spectral, :spectrotemporal, :full)
-    use_temporal = cluster_type in (:temporal, :spatiotemporal, :spectrotemporal, :full)
-
-    @inbounds for t_idx = 1:n_time
-        for f_idx = 1:n_freqs
-            for e_idx = 1:n_electrodes
-                if !mask[e_idx, f_idx, t_idx] || labels_buf[e_idx, f_idx, t_idx] > 0
-                    continue
-                end
-
-                current_cluster_id += 1
-                labels_buf[e_idx, f_idx, t_idx] = current_cluster_id
-                t0 = t_matrix[e_idx, f_idx, t_idx]
-                cluster_stat = (isnan(t0) || isinf(t0)) ? 0.0 : t0
-
-                q_head = 1
-                q_tail = 1
-                queue_buf[1] = (e_idx, f_idx, t_idx)
-
-                while q_head <= q_tail
-                    curr_e, curr_f, curr_t = queue_buf[q_head]
-                    q_head += 1
-
-                    if use_spatial
-                        for ptr in nzrange(spatial_connectivity, curr_e)
-                            ne = rv[ptr]
-                            if mask[ne, curr_f, curr_t] && labels_buf[ne, curr_f, curr_t] == 0
-                                labels_buf[ne, curr_f, curr_t] = current_cluster_id
-                                val = t_matrix[ne, curr_f, curr_t]
-                                if !isnan(val) && !isinf(val)
-                                    cluster_stat += val
-                                end
-                                q_tail += 1
-                                queue_buf[q_tail] = (ne, curr_f, curr_t)
-                            end
-                        end
-                    end
-
-                    if use_spectral
-                        if curr_f > 1 && mask[curr_e, curr_f-1, curr_t] && labels_buf[curr_e, curr_f-1, curr_t] == 0
-                            labels_buf[curr_e, curr_f-1, curr_t] = current_cluster_id
-                            val = t_matrix[curr_e, curr_f-1, curr_t]
-                            if !isnan(val) && !isinf(val)
-                                cluster_stat += val
-                            end
-                            q_tail += 1
-                            queue_buf[q_tail] = (curr_e, curr_f-1, curr_t)
-                        end
-                        if curr_f < n_freqs && mask[curr_e, curr_f+1, curr_t] && labels_buf[curr_e, curr_f+1, curr_t] == 0
-                            labels_buf[curr_e, curr_f+1, curr_t] = current_cluster_id
-                            val = t_matrix[curr_e, curr_f+1, curr_t]
-                            if !isnan(val) && !isinf(val)
-                                cluster_stat += val
-                            end
-                            q_tail += 1
-                            queue_buf[q_tail] = (curr_e, curr_f+1, curr_t)
-                        end
-                    end
-
-                    if use_temporal
-                        if curr_t > 1 && mask[curr_e, curr_f, curr_t-1] && labels_buf[curr_e, curr_f, curr_t-1] == 0
-                            labels_buf[curr_e, curr_f, curr_t-1] = current_cluster_id
-                            val = t_matrix[curr_e, curr_f, curr_t-1]
-                            if !isnan(val) && !isinf(val)
-                                cluster_stat += val
-                            end
-                            q_tail += 1
-                            queue_buf[q_tail] = (curr_e, curr_f, curr_t-1)
-                        end
-                        if curr_t < n_time && mask[curr_e, curr_f, curr_t+1] && labels_buf[curr_e, curr_f, curr_t+1] == 0
-                            labels_buf[curr_e, curr_f, curr_t+1] = current_cluster_id
-                            val = t_matrix[curr_e, curr_f, curr_t+1]
-                            if !isnan(val) && !isinf(val)
-                                cluster_stat += val
-                            end
-                            q_tail += 1
-                            queue_buf[q_tail] = (curr_e, curr_f, curr_t+1)
-                        end
-                    end
-                end
-
-                if is_negative
-                    if cluster_stat < extreme_stat
-                        extreme_stat = cluster_stat
-                    end
-                else
-                    if cluster_stat > extreme_stat
-                        extreme_stat = cluster_stat
-                    end
-                end
-            end
-        end
-    end
-
-    return extreme_stat
-end
-
-
-# === TF PRE-FILTERING (3D) ===
-
-"""
-    _prefilter_mask_by_neighbors_tf!(mask, spatial_connectivity, min_num_neighbors)
-
-In-place pre-filtering of 3D mask to remove spatially isolated points.
-"""
-function _prefilter_mask_by_neighbors_tf!(mask::BitArray{3}, spatial_connectivity::SparseMatrixCSC{Bool}, min_num_neighbors::Int)
-    if min_num_neighbors <= 0
-        return
-    end
-
-    n_electrodes, n_freqs, n_time = size(mask)
-    spatial_conn_sym =
-        issymmetric(spatial_connectivity) ? spatial_connectivity : (spatial_connectivity .| copy(transpose(spatial_connectivity)))
-    rv = rowvals(spatial_conn_sym)
-
-    nremoved = 1
-    while nremoved > 0
-        nremoved = 0
-        for t_idx = 1:n_time
-            for f_idx = 1:n_freqs
-                for e_idx = 1:n_electrodes
-                    if !mask[e_idx, f_idx, t_idx]
-                        continue
-                    end
-                    # Count significant spatial neighbors (NOT counting self)
-                    neighbor_count = 0
-                    for ptr in nzrange(spatial_conn_sym, e_idx)
-                        n_e_idx = rv[ptr]
-                        if e_idx != n_e_idx && mask[n_e_idx, f_idx, t_idx]
-                            neighbor_count += 1
-                        end
-                    end
-                    if neighbor_count < min_num_neighbors
-                        mask[e_idx, f_idx, t_idx] = false
-                        nremoved += 1
-                    end
-                end
-            end
-        end
-    end
-end
-
-
-# === TF CLUSTER FINDING (3D BFS) ===
-
-"""
-    _find_clusters_connected_components_tf(mask, electrodes, frequencies, time_points, spatial_connectivity, cluster_type)
-
-Find connected clusters in 3D thresholded TF data using BFS.
-
-Connectivity is determined by `cluster_type`:
-- `:temporal`: adjacent time points only
-- `:spatial`: spatially adjacent electrodes only (same freq and time)
-- `:spectral`: adjacent frequency bins only (same electrode and time)
-- `:spatiotemporal`: spatial + temporal neighbors
-- `:spectrotemporal`: spectral + temporal neighbors
-- `:full`: spatial + spectral + temporal neighbors (all 3 dimensions)
-"""
-function _find_clusters_connected_components_tf(
-    mask::BitArray{3},
-    electrodes::Vector{Symbol},
-    frequencies::Vector{Float64},
-    time_points::Vector{Float64},
-    spatial_connectivity::SparseMatrixCSC{Bool},
-    cluster_type::Symbol,
-)
-    n_electrodes, n_freqs, n_time = size(mask)
-    clusters = TFCluster[]
-
-    if !any(mask)
-        return clusters
-    end
-
-    cluster_labels = zeros(Int, n_electrodes, n_freqs, n_time)
-    current_cluster_id = 0
-
-    # Determine which connectivity dimensions are active
-    use_spatial = cluster_type in (:spatial, :spatiotemporal, :full)
-    use_spectral = cluster_type in (:spectral, :spectrotemporal, :full)
-    use_temporal = cluster_type in (:temporal, :spatiotemporal, :spectrotemporal, :full)
-
-
-
-    # BFS to find connected components
-    for e_idx = 1:n_electrodes
-        for f_idx = 1:n_freqs
-            for t_idx = 1:n_time
-                if !mask[e_idx, f_idx, t_idx] || cluster_labels[e_idx, f_idx, t_idx] > 0
-                    continue
-                end
-
-                # Start new cluster
-                current_cluster_id += 1
-                cluster_electrodes = Set{Symbol}()
-                cluster_freq_indices = Set{Int}()
-                cluster_time_indices = Set{Int}()
-                cluster_pixels = CartesianIndex{3}[]
-                cluster_members = Tuple{Int,Int,Int}[]
-
-                # BFS queue
-                queue = [(e_idx, f_idx, t_idx)]
-                queue_head = 1
-                cluster_labels[e_idx, f_idx, t_idx] = current_cluster_id
-                push!(cluster_electrodes, electrodes[e_idx])
-                push!(cluster_freq_indices, f_idx)
-                push!(cluster_time_indices, t_idx)
-                push!(cluster_pixels, CartesianIndex(e_idx, f_idx, t_idx))
-                push!(cluster_members, (e_idx, f_idx, t_idx))
-
-                # BFS traversal
-                while queue_head <= length(queue)
-                    current_e, current_f, current_t = queue[queue_head]
-                    queue_head += 1
-
-                    # Spatial connectivity (same freq, same time)
-                    if use_spatial
-                        rv = rowvals(spatial_connectivity)
-                        for ptr in nzrange(spatial_connectivity, current_e)
-                            n_e = rv[ptr]
-                            if mask[n_e, current_f, current_t] && cluster_labels[n_e, current_f, current_t] == 0
-                                cluster_labels[n_e, current_f, current_t] = current_cluster_id
-                                push!(queue, (n_e, current_f, current_t))
-                                push!(cluster_electrodes, electrodes[n_e])
-                                push!(cluster_freq_indices, current_f)
-                                push!(cluster_time_indices, current_t)
-                                push!(cluster_pixels, CartesianIndex(n_e, current_f, current_t))
-                                push!(cluster_members, (n_e, current_f, current_t))
-                            end
-                        end
-                    end
-
-                    # Spectral connectivity (same electrode, same time, adjacent freq)
-                    if use_spectral
-                        if current_f > 1 &&
-                           mask[current_e, current_f-1, current_t] &&
-                           cluster_labels[current_e, current_f-1, current_t] == 0
-                            cluster_labels[current_e, current_f-1, current_t] = current_cluster_id
-                            push!(queue, (current_e, current_f-1, current_t))
-                            push!(cluster_electrodes, electrodes[current_e])
-                            push!(cluster_freq_indices, current_f-1)
-                            push!(cluster_time_indices, current_t)
-                            push!(cluster_pixels, CartesianIndex(current_e, current_f-1, current_t))
-                            push!(cluster_members, (current_e, current_f-1, current_t))
-                        end
-                        if current_f < n_freqs &&
-                           mask[current_e, current_f+1, current_t] &&
-                           cluster_labels[current_e, current_f+1, current_t] == 0
-                            cluster_labels[current_e, current_f+1, current_t] = current_cluster_id
-                            push!(queue, (current_e, current_f+1, current_t))
-                            push!(cluster_electrodes, electrodes[current_e])
-                            push!(cluster_freq_indices, current_f+1)
-                            push!(cluster_time_indices, current_t)
-                            push!(cluster_pixels, CartesianIndex(current_e, current_f+1, current_t))
-                            push!(cluster_members, (current_e, current_f+1, current_t))
-                        end
-                    end
-
-                    # Temporal connectivity (same electrode, same freq, adjacent time)
-                    if use_temporal
-                        if current_t > 1 &&
-                           mask[current_e, current_f, current_t-1] &&
-                           cluster_labels[current_e, current_f, current_t-1] == 0
-                            cluster_labels[current_e, current_f, current_t-1] = current_cluster_id
-                            push!(queue, (current_e, current_f, current_t-1))
-                            push!(cluster_electrodes, electrodes[current_e])
-                            push!(cluster_freq_indices, current_f)
-                            push!(cluster_time_indices, current_t-1)
-                            push!(cluster_pixels, CartesianIndex(current_e, current_f, current_t-1))
-                            push!(cluster_members, (current_e, current_f, current_t-1))
-                        end
-                        if current_t < n_time &&
-                           mask[current_e, current_f, current_t+1] &&
-                           cluster_labels[current_e, current_f, current_t+1] == 0
-                            cluster_labels[current_e, current_f, current_t+1] = current_cluster_id
-                            push!(queue, (current_e, current_f, current_t+1))
-                            push!(cluster_electrodes, electrodes[current_e])
-                            push!(cluster_freq_indices, current_f)
-                            push!(cluster_time_indices, current_t+1)
-                            push!(cluster_pixels, CartesianIndex(current_e, current_f, current_t+1))
-                            push!(cluster_members, (current_e, current_f, current_t+1))
-                        end
-                    end
-                end
-
-                freq_indices_vec = sort(collect(cluster_freq_indices))
-                time_indices_vec = sort(collect(cluster_time_indices))
-                freq_range = (frequencies[freq_indices_vec[1]], frequencies[freq_indices_vec[end]])
-                time_range = (time_points[time_indices_vec[1]], time_points[time_indices_vec[end]])
-                electrodes_vec = collect(cluster_electrodes)
-
-                cluster = TFCluster(
-                    current_cluster_id,
-                    electrodes_vec,
-                    freq_indices_vec,
-                    time_indices_vec,
-                    freq_range,
-                    time_range,
-                    0.0,  # cluster_stat - computed later
-                    1.0,  # p_value - computed later
-                    false,  # is_significant
-                    :positive,  # polarity - set by caller
-                    cluster_pixels,
-                )
-                push!(clusters, cluster)
-            end
-        end
-    end
-
-    return clusters
-end
-
-
-"""
-    _set_cluster_polarity_tf(clusters, polarity)
-
-Create new TFCluster objects with the specified polarity.
-"""
 function _set_cluster_polarity_tf(clusters::Vector{TFCluster}, polarity::Symbol)
     polarity in (:positive, :negative) || @minimal_error "polarity must be :positive or :negative"
     return [
@@ -878,12 +109,217 @@ function _set_cluster_polarity_tf(clusters::Vector{TFCluster}, polarity::Symbol)
     ]
 end
 
+function _find_clusters_connected_components(
+    mask::BitArray{2},
+    electrodes::Vector{Symbol},
+    time_points::Vector{Float64},
+    spatial_connectivity::SparseMatrixCSC{Bool},
+    cluster_type::Symbol;
+    polarity::Symbol = :positive,
+)
+    n_electrodes, n_time = size(mask)
+    clusters = Cluster[]
+    any(mask) || return clusters
 
-"""
-    _find_clusters_tf(mask_positive, mask_negative, electrodes, frequencies, time_points, spatial_connectivity, cluster_type)
+    cluster_labels = zeros(Int, n_electrodes, n_time)
+    elec_seen = falses(n_electrodes)
+    time_seen = falses(n_time)
+    rv = rowvals(spatial_connectivity)
+    use_spatial = cluster_type in (:spatial, :spatiotemporal)
+    use_temporal = cluster_type in (:temporal, :spatiotemporal)
+    current_cluster_id = 0
 
-Find positive and negative TF clusters.
-"""
+    @inbounds for e_idx = 1:n_electrodes, t_idx = 1:n_time
+        (!mask[e_idx, t_idx] || cluster_labels[e_idx, t_idx] > 0) && continue
+
+        current_cluster_id += 1
+        fill!(elec_seen, false)
+        fill!(time_seen, false)
+
+        members = Tuple{Int,Int}[(e_idx, t_idx)]
+        cluster_labels[e_idx, t_idx] = current_cluster_id
+        elec_seen[e_idx] = true
+        time_seen[t_idx] = true
+        q_head = 1
+
+        while q_head <= length(members)
+            ce, ct = members[q_head]
+            q_head += 1
+
+            if use_spatial
+                for ptr in nzrange(spatial_connectivity, ce)
+                    ne = rv[ptr]
+                    if mask[ne, ct] && cluster_labels[ne, ct] == 0
+                        cluster_labels[ne, ct] = current_cluster_id
+                        elec_seen[ne] = true
+                        push!(members, (ne, ct))
+                    end
+                end
+            end
+
+            if use_temporal
+                if ct > 1 && mask[ce, ct-1] && cluster_labels[ce, ct-1] == 0
+                    cluster_labels[ce, ct-1] = current_cluster_id
+                    time_seen[ct-1] = true
+                    push!(members, (ce, ct-1))
+                end
+                if ct < n_time && mask[ce, ct+1] && cluster_labels[ce, ct+1] == 0
+                    cluster_labels[ce, ct+1] = current_cluster_id
+                    time_seen[ct+1] = true
+                    push!(members, (ce, ct+1))
+                end
+            end
+        end
+
+        time_indices_vec = findall(time_seen)
+        time_range = (time_points[first(time_indices_vec)], time_points[last(time_indices_vec)])
+        electrodes_vec = electrodes[findall(elec_seen)]
+
+        push!(clusters, Cluster(current_cluster_id, electrodes_vec, time_indices_vec, time_range, 0.0, 1.0, false, polarity, members))
+    end
+
+    return clusters
+end
+
+function _find_clusters(
+    mask_positive::BitArray{2},
+    mask_negative::BitArray{2},
+    electrodes::Vector{Symbol},
+    time_points::Vector{Float64},
+    spatial_connectivity::SparseMatrixCSC{Bool},
+    cluster_type::Symbol,
+)
+    pos =
+        isempty(mask_positive) ? Cluster[] :
+        _find_clusters_connected_components(
+            mask_positive,
+            electrodes,
+            time_points,
+            spatial_connectivity,
+            cluster_type;
+            polarity = :positive,
+        )
+    neg =
+        isempty(mask_negative) ? Cluster[] :
+        _find_clusters_connected_components(
+            mask_negative,
+            electrodes,
+            time_points,
+            spatial_connectivity,
+            cluster_type;
+            polarity = :negative,
+        )
+    return pos, neg
+end
+
+function _find_clusters_connected_components_tf(
+    mask::BitArray{3},
+    electrodes::Vector{Symbol},
+    frequencies::Vector{Float64},
+    time_points::Vector{Float64},
+    spatial_connectivity::SparseMatrixCSC{Bool},
+    cluster_type::Symbol;
+    polarity::Symbol = :positive,
+)
+    n_electrodes, n_freqs, n_time = size(mask)
+    clusters = TFCluster[]
+    any(mask) || return clusters
+
+    cluster_labels = zeros(Int, n_electrodes, n_freqs, n_time)
+    elec_seen = falses(n_electrodes)
+    freq_seen = falses(n_freqs)
+    time_seen = falses(n_time)
+    rv = rowvals(spatial_connectivity)
+    use_spatial = cluster_type in (:spatial, :spatiotemporal, :full)
+    use_spectral = cluster_type in (:spectral, :spectrotemporal, :full)
+    use_temporal = cluster_type in (:temporal, :spatiotemporal, :spectrotemporal, :full)
+    current_cluster_id = 0
+
+    @inbounds for e_idx = 1:n_electrodes, f_idx = 1:n_freqs, t_idx = 1:n_time
+        (!mask[e_idx, f_idx, t_idx] || cluster_labels[e_idx, f_idx, t_idx] > 0) && continue
+
+        current_cluster_id += 1
+        fill!(elec_seen, false)
+        fill!(freq_seen, false)
+        fill!(time_seen, false)
+
+        pixels = CartesianIndex{3}[CartesianIndex(e_idx, f_idx, t_idx)]
+        cluster_labels[e_idx, f_idx, t_idx] = current_cluster_id
+        elec_seen[e_idx] = true
+        freq_seen[f_idx] = true
+        time_seen[t_idx] = true
+        q_head = 1
+
+        while q_head <= length(pixels)
+            ci = pixels[q_head]
+            ce, cf, ct = ci[1], ci[2], ci[3]
+            q_head += 1
+
+            if use_spatial
+                for ptr in nzrange(spatial_connectivity, ce)
+                    ne = rv[ptr]
+                    if mask[ne, cf, ct] && cluster_labels[ne, cf, ct] == 0
+                        cluster_labels[ne, cf, ct] = current_cluster_id
+                        elec_seen[ne] = true
+                        push!(pixels, CartesianIndex(ne, cf, ct))
+                    end
+                end
+            end
+
+            if use_spectral
+                if cf > 1 && mask[ce, cf-1, ct] && cluster_labels[ce, cf-1, ct] == 0
+                    cluster_labels[ce, cf-1, ct] = current_cluster_id
+                    freq_seen[cf-1] = true
+                    push!(pixels, CartesianIndex(ce, cf-1, ct))
+                end
+                if cf < n_freqs && mask[ce, cf+1, ct] && cluster_labels[ce, cf+1, ct] == 0
+                    cluster_labels[ce, cf+1, ct] = current_cluster_id
+                    freq_seen[cf+1] = true
+                    push!(pixels, CartesianIndex(ce, cf+1, ct))
+                end
+            end
+
+            if use_temporal
+                if ct > 1 && mask[ce, cf, ct-1] && cluster_labels[ce, cf, ct-1] == 0
+                    cluster_labels[ce, cf, ct-1] = current_cluster_id
+                    time_seen[ct-1] = true
+                    push!(pixels, CartesianIndex(ce, cf, ct-1))
+                end
+                if ct < n_time && mask[ce, cf, ct+1] && cluster_labels[ce, cf, ct+1] == 0
+                    cluster_labels[ce, cf, ct+1] = current_cluster_id
+                    time_seen[ct+1] = true
+                    push!(pixels, CartesianIndex(ce, cf, ct+1))
+                end
+            end
+        end
+
+        freq_indices_vec = findall(freq_seen)
+        time_indices_vec = findall(time_seen)
+        freq_range = (frequencies[first(freq_indices_vec)], frequencies[last(freq_indices_vec)])
+        time_range = (time_points[first(time_indices_vec)], time_points[last(time_indices_vec)])
+        electrodes_vec = electrodes[findall(elec_seen)]
+
+        push!(
+            clusters,
+            TFCluster(
+                current_cluster_id,
+                electrodes_vec,
+                freq_indices_vec,
+                time_indices_vec,
+                freq_range,
+                time_range,
+                0.0,
+                1.0,
+                false,
+                polarity,
+                pixels,
+            ),
+        )
+    end
+
+    return clusters
+end
+
 function _find_clusters_tf(
     mask_positive::BitArray{3},
     mask_negative::BitArray{3},
@@ -893,85 +329,304 @@ function _find_clusters_tf(
     spatial_connectivity::SparseMatrixCSC{Bool},
     cluster_type::Symbol,
 )
-    positive_clusters = TFCluster[]
-    negative_clusters = TFCluster[]
-
-    if !isempty(mask_positive)
-        raw =
-            _find_clusters_connected_components_tf(mask_positive, electrodes, frequencies, time_points, spatial_connectivity, cluster_type)
-        positive_clusters = _set_cluster_polarity_tf(raw, :positive)
-    end
-
-    if !isempty(mask_negative)
-        raw =
-            _find_clusters_connected_components_tf(mask_negative, electrodes, frequencies, time_points, spatial_connectivity, cluster_type)
-        negative_clusters = _set_cluster_polarity_tf(raw, :negative)
-    end
-
-    return positive_clusters, negative_clusters
+    pos =
+        isempty(mask_positive) ? TFCluster[] :
+        _find_clusters_connected_components_tf(
+            mask_positive,
+            electrodes,
+            frequencies,
+            time_points,
+            spatial_connectivity,
+            cluster_type;
+            polarity = :positive,
+        )
+    neg =
+        isempty(mask_negative) ? TFCluster[] :
+        _find_clusters_connected_components_tf(
+            mask_negative,
+            electrodes,
+            frequencies,
+            time_points,
+            spatial_connectivity,
+            cluster_type;
+            polarity = :negative,
+        )
+    return pos, neg
 end
 
+# === CLUSTER STATISTICS (MAXSUM) ===
 
-# === TF CLUSTER STATISTICS (3D) ===
+function _compute_cluster_statistics(clusters::Vector{Cluster}, t_matrix::AbstractMatrix{<:AbstractFloat}; return_clusters::Bool = true)
+    isempty(clusters) && return (return_clusters ? (Cluster[], Float64[]) : Float64[])
 
-"""
-    _compute_cluster_statistics_tf(clusters, t_matrix, electrode_to_idx; return_clusters)
+    n = length(clusters)
+    cluster_stats = Vector{Float64}(undef, n)
+    updated_clusters = return_clusters ? Vector{Cluster}(undef, n) : nothing
 
-Compute cluster-level statistics (maxsum) for TF clusters.
-Sums t-values at each cluster's exact pixel locations.
-"""
-function _compute_cluster_statistics_tf(clusters::Vector{TFCluster}, t_matrix::Array{Float64,3}, return_clusters::Bool = true)
-    if isempty(clusters)
-        return return_clusters ? (TFCluster[], Float64[]) : Float64[]
-    end
-
-    cluster_stats = Float64[]
-    sizehint!(cluster_stats, length(clusters))
-    updated_clusters = return_clusters ? TFCluster[] : nothing
-
-    for cluster in clusters
-        cluster_stat = 0.0
-        for pixel in cluster.pixels
-            t_val = t_matrix[pixel]
-            if !isnan(t_val) && !isinf(t_val)
-                cluster_stat += t_val
-            end
+    @inbounds for (i, c) in enumerate(clusters)
+        stat = 0.0
+        for (e_idx, t_idx) in c.members
+            t_val = t_matrix[e_idx, t_idx]
+            isfinite(t_val) && (stat += t_val)
         end
-
-        push!(cluster_stats, cluster_stat)
-
+        cluster_stats[i] = stat
         if return_clusters
-            updated_cluster = TFCluster(
-                cluster.id,
-                cluster.electrodes,
-                cluster.freq_indices,
-                cluster.time_indices,
-                cluster.freq_range,
-                cluster.time_range,
-                cluster_stat,
-                cluster.p_value,
-                cluster.is_significant,
-                cluster.polarity,
-                cluster.pixels,
-            )
-            push!(updated_clusters, updated_cluster)
+            updated_clusters[i] =
+                Cluster(c.id, c.electrodes, c.time_indices, c.time_range, stat, c.p_value, c.is_significant, c.polarity, c.members)
         end
     end
 
     return return_clusters ? (updated_clusters, cluster_stats) : cluster_stats
 end
 
-function _compute_cluster_statistics_tf(clusters::Vector{TFCluster}, t_matrix::Array{Float64,3}, electrodes::Vector{Symbol})
-    return _compute_cluster_statistics_tf(clusters, t_matrix, true)
+function _compute_cluster_statistics_tf(
+    clusters::Vector{TFCluster},
+    t_matrix::AbstractArray{<:AbstractFloat,3},
+    return_clusters::Bool = true,
+)
+    isempty(clusters) && return (return_clusters ? (TFCluster[], Float64[]) : Float64[])
+
+    n = length(clusters)
+    cluster_stats = Vector{Float64}(undef, n)
+    updated_clusters = return_clusters ? Vector{TFCluster}(undef, n) : nothing
+
+    @inbounds for (i, c) in enumerate(clusters)
+        stat = 0.0
+        for pixel in c.pixels
+            t_val = t_matrix[pixel]
+            isfinite(t_val) && (stat += t_val)
+        end
+        cluster_stats[i] = stat
+        if return_clusters
+            updated_clusters[i] = TFCluster(
+                c.id,
+                c.electrodes,
+                c.freq_indices,
+                c.time_indices,
+                c.freq_range,
+                c.time_range,
+                stat,
+                c.p_value,
+                c.is_significant,
+                c.polarity,
+                c.pixels,
+            )
+        end
+    end
+
+    return return_clusters ? (updated_clusters, cluster_stats) : cluster_stats
+end
+
+_compute_cluster_statistics_tf(clusters::Vector{TFCluster}, t_matrix::AbstractArray{<:AbstractFloat,3}, ::Vector{Symbol}) =
+    _compute_cluster_statistics_tf(clusters, t_matrix, true)
+
+# === ZERO-ALLOCATION PERMUTATION EXTREME CLUSTER STATISTIC ===
+
+@inline function _enqueue_2d!(
+    ne::Int,
+    nt::Int,
+    cid::Int,
+    t_matrix::AbstractMatrix{<:AbstractFloat},
+    labels_buf::Matrix{Int},
+    queue_buf::Vector{Tuple{Int,Int}},
+    q_tail::Int,
+    cluster_stat::Float64,
+)
+    @inbounds begin
+        labels_buf[ne, nt] = cid
+        val = Float64(t_matrix[ne, nt])
+        if isfinite(val)
+            cluster_stat += val
+        end
+        q_tail += 1
+        queue_buf[q_tail] = (ne, nt)
+    end
+    return q_tail, cluster_stat
+end
+
+function _max_cluster_stat(
+    mask::BitArray{2},
+    t_matrix::AbstractMatrix{<:AbstractFloat},
+    spatial_connectivity::SparseMatrixCSC{Bool},
+    cluster_type::Symbol,
+    labels_buf::Matrix{Int},
+    queue_buf::Vector{Tuple{Int,Int}};
+    is_negative::Bool = false,
+    labels_clean::Bool = false,
+)::Float64
+    any(mask) || return 0.0
+    labels_clean || fill!(labels_buf, 0)
+
+    n_electrodes, n_time = size(mask)
+    current_cluster_id = 0
+    extreme_stat = 0.0
+    total_visited = 0
+
+    rv = rowvals(spatial_connectivity)
+    has_spatial = cluster_type in (:spatial, :spatiotemporal, :full)
+    has_temporal = cluster_type in (:temporal, :spatiotemporal, :full)
+
+    @inbounds for t_idx = 1:n_time, e_idx = 1:n_electrodes
+        (!mask[e_idx, t_idx] || labels_buf[e_idx, t_idx] > 0) && continue
+
+        current_cluster_id += 1
+        q_head = total_visited + 1
+        q_tail, cluster_stat = _enqueue_2d!(e_idx, t_idx, current_cluster_id, t_matrix, labels_buf, queue_buf, total_visited, 0.0)
+
+        while q_head <= q_tail
+            curr_e, curr_t = queue_buf[q_head]
+            q_head += 1
+
+            if has_spatial
+                for ptr in nzrange(spatial_connectivity, curr_e)
+                    ne = rv[ptr]
+                    if mask[ne, curr_t] && labels_buf[ne, curr_t] == 0
+                        q_tail, cluster_stat =
+                            _enqueue_2d!(ne, curr_t, current_cluster_id, t_matrix, labels_buf, queue_buf, q_tail, cluster_stat)
+                    end
+                end
+            end
+
+            if has_temporal
+                if curr_t > 1 && mask[curr_e, curr_t-1] && labels_buf[curr_e, curr_t-1] == 0
+                    q_tail, cluster_stat =
+                        _enqueue_2d!(curr_e, curr_t - 1, current_cluster_id, t_matrix, labels_buf, queue_buf, q_tail, cluster_stat)
+                end
+                if curr_t < n_time && mask[curr_e, curr_t+1] && labels_buf[curr_e, curr_t+1] == 0
+                    q_tail, cluster_stat =
+                        _enqueue_2d!(curr_e, curr_t + 1, current_cluster_id, t_matrix, labels_buf, queue_buf, q_tail, cluster_stat)
+                end
+            end
+        end
+
+        total_visited = q_tail
+        if is_negative
+            cluster_stat < extreme_stat && (extreme_stat = cluster_stat)
+        else
+            cluster_stat > extreme_stat && (extreme_stat = cluster_stat)
+        end
+    end
+
+    if labels_clean
+        @inbounds for k = 1:total_visited
+            e, t = queue_buf[k]
+            labels_buf[e, t] = 0
+        end
+    end
+
+    return extreme_stat
+end
+
+@inline function _enqueue_3d!(
+    ne::Int,
+    nf::Int,
+    nt::Int,
+    cid::Int,
+    t_matrix::AbstractArray{<:AbstractFloat,3},
+    labels_buf::Array{Int,3},
+    queue_buf::Vector{Tuple{Int,Int,Int}},
+    q_tail::Int,
+    cluster_stat::Float64,
+)
+    @inbounds begin
+        labels_buf[ne, nf, nt] = cid
+        val = Float64(t_matrix[ne, nf, nt])
+        if isfinite(val)
+            cluster_stat += val
+        end
+        q_tail += 1
+        queue_buf[q_tail] = (ne, nf, nt)
+    end
+    return q_tail, cluster_stat
+end
+
+function _max_cluster_stat_tf(
+    mask::BitArray{3},
+    t_matrix::AbstractArray{<:AbstractFloat,3},
+    spatial_connectivity::SparseMatrixCSC{Bool},
+    cluster_type::Symbol,
+    labels_buf::Array{Int,3},
+    queue_buf::Vector{Tuple{Int,Int,Int}};
+    is_negative::Bool = false,
+    labels_clean::Bool = false,
+)::Float64
+    any(mask) || return 0.0
+    labels_clean || fill!(labels_buf, 0)
+
+    n_electrodes, n_freqs, n_time = size(mask)
+    current_cluster_id = 0
+    extreme_stat = 0.0
+    total_visited = 0
+
+    rv = rowvals(spatial_connectivity)
+    use_spatial = cluster_type in (:spatial, :spatiotemporal, :full)
+    use_spectral = cluster_type in (:spectral, :spectrotemporal, :full)
+    use_temporal = cluster_type in (:temporal, :spatiotemporal, :spectrotemporal, :full)
+
+    @inbounds for t_idx = 1:n_time, f_idx = 1:n_freqs, e_idx = 1:n_electrodes
+        (!mask[e_idx, f_idx, t_idx] || labels_buf[e_idx, f_idx, t_idx] > 0) && continue
+
+        current_cluster_id += 1
+        q_head = total_visited + 1
+        q_tail, cluster_stat = _enqueue_3d!(e_idx, f_idx, t_idx, current_cluster_id, t_matrix, labels_buf, queue_buf, total_visited, 0.0)
+
+        while q_head <= q_tail
+            curr_e, curr_f, curr_t = queue_buf[q_head]
+            q_head += 1
+
+            if use_spatial
+                for ptr in nzrange(spatial_connectivity, curr_e)
+                    ne = rv[ptr]
+                    if mask[ne, curr_f, curr_t] && labels_buf[ne, curr_f, curr_t] == 0
+                        q_tail, cluster_stat =
+                            _enqueue_3d!(ne, curr_f, curr_t, current_cluster_id, t_matrix, labels_buf, queue_buf, q_tail, cluster_stat)
+                    end
+                end
+            end
+
+            if use_spectral
+                if curr_f > 1 && mask[curr_e, curr_f-1, curr_t] && labels_buf[curr_e, curr_f-1, curr_t] == 0
+                    q_tail, cluster_stat =
+                        _enqueue_3d!(curr_e, curr_f - 1, curr_t, current_cluster_id, t_matrix, labels_buf, queue_buf, q_tail, cluster_stat)
+                end
+                if curr_f < n_freqs && mask[curr_e, curr_f+1, curr_t] && labels_buf[curr_e, curr_f+1, curr_t] == 0
+                    q_tail, cluster_stat =
+                        _enqueue_3d!(curr_e, curr_f + 1, curr_t, current_cluster_id, t_matrix, labels_buf, queue_buf, q_tail, cluster_stat)
+                end
+            end
+
+            if use_temporal
+                if curr_t > 1 && mask[curr_e, curr_f, curr_t-1] && labels_buf[curr_e, curr_f, curr_t-1] == 0
+                    q_tail, cluster_stat =
+                        _enqueue_3d!(curr_e, curr_f, curr_t - 1, current_cluster_id, t_matrix, labels_buf, queue_buf, q_tail, cluster_stat)
+                end
+                if curr_t < n_time && mask[curr_e, curr_f, curr_t+1] && labels_buf[curr_e, curr_f, curr_t+1] == 0
+                    q_tail, cluster_stat =
+                        _enqueue_3d!(curr_e, curr_f, curr_t + 1, current_cluster_id, t_matrix, labels_buf, queue_buf, q_tail, cluster_stat)
+                end
+            end
+        end
+
+        total_visited = q_tail
+        if is_negative
+            cluster_stat < extreme_stat && (extreme_stat = cluster_stat)
+        else
+            cluster_stat > extreme_stat && (extreme_stat = cluster_stat)
+        end
+    end
+
+    if labels_clean
+        @inbounds for k = 1:total_visited
+            e, f, t = queue_buf[k]
+            labels_buf[e, f, t] = 0
+        end
+    end
+
+    return extreme_stat
 end
 
 # === THRESHOLD-FREE CLUSTER ENHANCEMENT (TFCE) ===
 
-"""
-    _compute_tfce(t_map, electrodes, time_points, spatial_connectivity, cluster_type; E, H, dh)
-
-Compute the Threshold-Free Cluster Enhancement (TFCE) map for a 2D t-statistic matrix.
-"""
 function _compute_tfce(
     t_map::AbstractMatrix{<:AbstractFloat},
     electrodes::Vector{Symbol},
@@ -985,43 +640,44 @@ function _compute_tfce(
     n_electrodes, n_time = size(t_map)
     tfce_map = zeros(Float64, n_electrodes, n_time)
 
-    # Guard against NaN/Inf entries
     has_finite = false
     max_val = -Inf
     min_val = Inf
     @inbounds for x in t_map
         if isfinite(x)
             has_finite = true
-            x > max_val && (max_val = Float64(x))
-            x < min_val && (min_val = Float64(x))
+            xf = Float64(x)
+            xf > max_val && (max_val = xf)
+            xf < min_val && (min_val = xf)
         end
     end
     has_finite || return tfce_map
 
-    # Process positive values
+    mask = BitMatrix(undef, n_electrodes, n_time)
     if max_val > 0.0
         for h = dh:dh:max_val
-            mask = isfinite.(t_map) .& (t_map .>= h)
-            clusters = _find_clusters_connected_components(mask, electrodes, time_points, spatial_connectivity, cluster_type)
-            for c in clusters
-                extent = length(c.members)
-                tfce_val = (extent^E) * (h^H) * dh
-                for (e_idx, t_idx) in c.members
+            @inbounds for i in eachindex(t_map)
+                x = t_map[i]
+                mask[i] = isfinite(x) && x >= h
+            end
+            for c in _find_clusters_connected_components(mask, electrodes, time_points, spatial_connectivity, cluster_type)
+                tfce_val = (length(c.members)^E) * (h^H) * dh
+                @inbounds for (e_idx, t_idx) in c.members
                     tfce_map[e_idx, t_idx] += tfce_val
                 end
             end
         end
     end
 
-    # Process negative values
     if min_val < 0.0
         for h = (-dh):(-dh):min_val
-            mask = isfinite.(t_map) .& (t_map .<= h)
-            clusters = _find_clusters_connected_components(mask, electrodes, time_points, spatial_connectivity, cluster_type)
-            for c in clusters
-                extent = length(c.members)
-                tfce_val = (extent^E) * (abs(h)^H) * dh
-                for (e_idx, t_idx) in c.members
+            @inbounds for i in eachindex(t_map)
+                x = t_map[i]
+                mask[i] = isfinite(x) && x <= h
+            end
+            for c in _find_clusters_connected_components(mask, electrodes, time_points, spatial_connectivity, cluster_type)
+                tfce_val = (length(c.members)^E) * (abs(h)^H) * dh
+                @inbounds for (e_idx, t_idx) in c.members
                     tfce_map[e_idx, t_idx] -= tfce_val
                 end
             end

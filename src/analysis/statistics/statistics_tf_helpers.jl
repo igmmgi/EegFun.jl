@@ -1,37 +1,36 @@
-# === TF DATA PREPARATION (4D: participants × electrodes × frequencies × time) ===
+# Time-frequency (4D: participants × electrodes × frequencies × time) statistical preparation and helpers.
+
+function _filter_axis_interval(values::Vector{Float64}, sel::Interval, empty_msg::String)
+    (isnothing(sel) || sel isa AllSelection) && return values, nothing
+    lo, hi = sel isa TimeSelection ? (sel.start, sel.stop) : (sel[1], sel[2])
+    mask = (values .>= lo) .& (values .<= hi)
+    filtered = values[mask]
+    isempty(filtered) && @minimal_error(empty_msg)
+    return filtered, mask
+end
+
+function _baseline_tf_4d!(data::Array{Float64,4}, base_range::UnitRange{Int}, method::Symbol)
+    n_p, n_e, _, _ = size(data)
+    _foreach_chunk(n_p * n_e) do idx_range
+        for idx in idx_range
+            p = mod1(idx, n_p)
+            e = cld(idx, n_p)
+            _tf_baseline_grid!(@view(data[p, e, :, :]), base_range, method)
+        end
+    end
+    return data
+end
 
 """
-    prepare_stats(tfs::Vector{TimeFreqData}; design, condition_selection, channel_selection, frequency_selection, interval_selection, baseline_interval, baseline_method, analysis_interval)
+    prepare_stats(tfs::AbstractVector{<:TimeFreqData}; design = :paired, condition_selection = conditions(), channel_selection = channels(), frequency_selection = nothing, interval_selection = nothing, baseline_interval = nothing, baseline_method = :db, analysis_interval = nothing)
 
-Prepare TimeFreqData for comparing two conditions in statistical tests.
+Prepare `TimeFreqData` for comparing two conditions in statistical tests.
 
-Organizes TimeFreqData power values into participant × electrode × frequency × time arrays
-for statistical analysis. Validates the design and ensures data consistency across conditions.
-
-# Arguments
-- `tfs::Vector{TimeFreqData}`: TF data containing data for multiple conditions/participants
-- `design::Symbol`: Design type - `:paired` or `:independent`
-- `condition_selection::Function`: Predicate to select exactly 2 conditions (default: `conditions()` - all conditions)
-- `channel_selection::Function`: Predicate to filter channels (default: `channels()` - all channels)
-- `frequency_selection::Interval`: Frequency range as tuple (e.g., `(4.0, 30.0)`) or `nothing` for all frequencies
-- `interval_selection::Interval`: Time interval as tuple (e.g., `(0.0, 1.0)`) or `nothing` for all time points
-- `baseline_interval::Union{Nothing,Tuple{Real,Real}}`: Baseline window in seconds (e.g., `(-0.5, -0.1)`). Default: `nothing` (no baseline)
-- `baseline_method::Symbol`: Baseline method (default: `:db`). Options: `:db`, `:absolute`, `:relative`, `:relchange`, `:percent`, `:zscore`
-- `analysis_interval::Interval`: Analysis time interval as tuple (e.g., `(0.2, 0.5)`) or interval object for statistical testing (default: `nothing` - use `interval_selection`)
+Organizes `TimeFreqData` power values into `participant × electrode × frequency × time` arrays,
+computes grand averages over the display interval, and optionally applies baseline normalization and an `analysis_interval`.
 
 # Returns
 - `TFStatisticalData`: Prepared data structure ready for statistical testing
-
-# Examples
-```julia
-# Prepare with baseline correction
-prepared = prepare_stats(tfs; design=:paired,
-    baseline_interval=(-0.5, -0.1), baseline_method=:db,
-    frequency_selection=(4.0, 30.0))
-
-# Run permutation test
-result = permutation_test(prepared; n_permutations=1000)
-```
 """
 function prepare_stats(
     tfs::AbstractVector{<:TimeFreqData};
@@ -44,112 +43,70 @@ function prepare_stats(
     baseline_method::Symbol = :db,
     analysis_interval::Interval = nothing,
 )
-    # Group all TF data by condition
-    tfs_by_condition = group_by_condition(tfs)
+    condition1, condition2, selected_cond_nums = _select_two_conditions(tfs, design, condition_selection, "TF data")
 
-    # Apply condition selection to the sorted condition numbers
-    all_cond_nums = collect(keys(tfs_by_condition))
-    cond_func = _to_condition_func(condition_selection)
-    selected_mask = cond_func(1:length(all_cond_nums))
-    selected_cond_nums = all_cond_nums[selected_mask]
-
-    # Validate exactly 2 conditions
-    length(selected_cond_nums) == 2 ||
-        @minimal_error "Statistical tests require exactly 2 conditions, got $(length(selected_cond_nums)): $selected_cond_nums. Use condition_selection to select exactly 2 conditions."
-
-    condition1 = tfs_by_condition[selected_cond_nums[1]]
-    condition2 = tfs_by_condition[selected_cond_nums[2]]
-
-    # Apply baseline correction if requested (copy first to avoid mutating original data)
-    if !isnothing(baseline_interval)
-        condition1 = [copy(tf) for tf in condition1]
-        condition2 = [copy(tf) for tf in condition2]
-        for tf in condition1
-            tf_baseline!(tf, baseline_interval; method = baseline_method)
-        end
-        for tf in condition2
-            tf_baseline!(tf, baseline_interval; method = baseline_method)
-        end
-    end
-
-    # Validate design
-    design ∉ (:paired, :independent) && @minimal_error "design must be :paired or :independent, got :$design"
-
-    # Extract participant IDs from filenames
-    vps1 = [_extract_participant_id(basename(data.file)) for data in condition1]
-    vps2 = [_extract_participant_id(basename(data.file)) for data in condition2]
-
-    if design == :paired
-        vps1 != vps2 && @minimal_error "Paired design requires same participants in both conditions"
-    elseif design == :independent
-        (length(vps1) < 2 || length(vps2) < 2) && @minimal_error "Independent design requires at least 2 participants per group"
-    end
-
-    # Validate all TF data have same structure (same channels, same frequencies, same time points)
-    _have_same_structure(condition1) || @minimal_error("Condition 1: TF data have inconsistent structure")
-    _have_same_structure(condition2) || @minimal_error("Condition 2: TF data have inconsistent structure")
-    _have_same_structure(condition1[1], condition2[1]) ||
-        @minimal_error("Conditions have inconsistent structure (different channels, frequencies, or time points)")
-
-    # Get metadata from first TF dataset 
     ref_tf = condition1[1]
     all_electrodes = channel_labels(ref_tf)
     all_freqs = Float64.(sort(unique(ref_tf.data_power.freq)))
     all_times = Float64.(sort(unique(ref_tf.data_power.time)))
 
-    # Apply channel selection
-    chan_func = _to_channel_func(channel_selection)
-    selected_ch_mask = chan_func(all_electrodes)
-    electrodes = all_electrodes[selected_ch_mask]
+    electrodes = all_electrodes[_to_channel_func(channel_selection)(all_electrodes)]
     isempty(electrodes) && @minimal_error "No channels matched the channel selection."
 
-    # Apply frequency selection
-    if !isnothing(frequency_selection) && !(frequency_selection isa AllSelection)
-        f_start = frequency_selection isa TimeSelection ? frequency_selection.start : frequency_selection[1]
-        f_stop = frequency_selection isa TimeSelection ? frequency_selection.stop : frequency_selection[2]
-        freq_mask = (all_freqs .>= f_start) .& (all_freqs .<= f_stop)
-        frequencies = all_freqs[freq_mask]
-    else
-        frequencies = all_freqs
-    end
-    isempty(frequencies) && @minimal_error "No frequencies matched the frequency selection."
+    frequencies, _ = _filter_axis_interval(all_freqs, frequency_selection, "No frequencies matched the frequency selection.")
+    display_times, time_mask = _filter_axis_interval(all_times, interval_selection, "No time points matched the interval selection.")
+    time_points, analysis_mask =
+        _filter_axis_interval(display_times, analysis_interval, "No time points matched the analysis interval criteria!")
 
-    # Apply time (interval) selection for display / grand average
-    if !isnothing(interval_selection) && !(interval_selection isa AllSelection)
-        t_start = interval_selection isa TimeSelection ? interval_selection.start : interval_selection[1]
-        t_stop = interval_selection isa TimeSelection ? interval_selection.stop : interval_selection[2]
-        time_mask = (all_times .>= t_start) .& (all_times .<= t_stop)
-        display_times = all_times[time_mask]
-    else
-        display_times = all_times
-    end
-    isempty(display_times) && @minimal_error "No time points matched the interval selection."
+    if !isnothing(baseline_interval)
+        for tf in condition1
+            _check_tf_not_baselined(tf.baseline)
+        end
+        for tf in condition2
+            _check_tf_not_baselined(tf.baseline)
+        end
+        _validate_tf_baseline_method(baseline_method)
+        bl_tuple = baseline_interval isa AllSelection ? _full_tf_interval(ref_tf) : _to_tf_interval(baseline_interval)
+        b_start, b_end = _validate_and_resolve_tf_baseline_times(all_times, bl_tuple)
+        base_range = b_start:b_end
 
-    # Apply optional analysis_interval to narrow statistical test window (matching ERP prepare_stats)
-    if !isnothing(analysis_interval) && !(analysis_interval isa AllSelection)
-        a_start = analysis_interval isa TimeSelection ? analysis_interval.start : analysis_interval[1]
-        a_stop = analysis_interval isa TimeSelection ? analysis_interval.stop : analysis_interval[2]
-        analysis_mask = (display_times .>= a_start) .& (display_times .<= a_stop)
-        time_points = display_times[analysis_mask]
-        isempty(time_points) && @minimal_error "No time points matched the analysis interval criteria!"
+        full_data1 = _baseline_tf_4d!(_extract_tf_array(condition1, electrodes, frequencies, all_times), base_range, baseline_method)
+        full_data2 = _baseline_tf_4d!(_extract_tf_array(condition2, electrodes, frequencies, all_times), base_range, baseline_method)
+
+        display_data1 = isnothing(time_mask) ? full_data1 : full_data1[:, :, :, time_mask]
+        display_data2 = isnothing(time_mask) ? full_data2 : full_data2[:, :, :, time_mask]
+        bl_info = BaselineInfo(method = baseline_method, window = bl_tuple)
     else
-        analysis_mask = nothing
-        time_points = display_times
+        display_data1 = _extract_tf_array(condition1, electrodes, frequencies, display_times)
+        display_data2 = _extract_tf_array(condition2, electrodes, frequencies, display_times)
+        bl_info = ref_tf.baseline
     end
 
-    # Extract 4D display arrays: [participants × electrodes × frequencies × display_times]
-    display_data1 = _extract_tf_array(condition1, electrodes, frequencies, display_times)
-    display_data2 = _extract_tf_array(condition2, electrodes, frequencies, display_times)
-
-    # Create grand averages from display arrays (avoids re-extracting)
-    condition1_avg = _create_tf_grand_average(condition1[1], display_data1, electrodes, frequencies, display_times, selected_cond_nums[1])
-    condition2_avg = _create_tf_grand_average(condition2[1], display_data2, electrodes, frequencies, display_times, selected_cond_nums[2])
+    condition1_avg = _create_tf_grand_average(
+        condition1[1],
+        display_data1,
+        electrodes,
+        frequencies,
+        display_times,
+        selected_cond_nums[1];
+        baseline = bl_info,
+    )
+    condition2_avg = _create_tf_grand_average(
+        condition2[1],
+        display_data2,
+        electrodes,
+        frequencies,
+        display_times,
+        selected_cond_nums[2];
+        baseline = bl_info,
+    )
 
     data1 = isnothing(analysis_mask) ? display_data1 : display_data1[:, :, :, analysis_mask]
     data2 = isnothing(analysis_mask) ? display_data2 : display_data2[:, :, :, analysis_mask]
 
     return TFStatisticalData([condition1_avg, condition2_avg], TFAnalysisData(design, [data1, data2], frequencies, time_points))
 end
+
 function prepare_stats(
     ::Type{TimeFreqData},
     file_pattern::String,
@@ -160,23 +117,11 @@ function prepare_stats(
 )
     all_tfs = read_all_data(TimeFreqData, joinpath(input_dir, file_pattern), participant_selection)
     isempty(all_tfs) && @minimal_error "No valid TF data found matching pattern '$file_pattern' in $input_dir"
-
     return prepare_stats(all_tfs; design = design, kwargs...)
 end
 
-
-# === TF HELPER FUNCTIONS ===
-
-"""
-    _extract_tf_array(tfs, electrodes, frequencies, time_points)
-
-Extract power values from TimeFreqData into a 4D array.
-
-# Returns
-- `Array{Float64, 4}`: [participants × electrodes × frequencies × time]
-"""
 function _extract_tf_array(
-    tfs::Vector{TimeFreqData},
+    tfs::AbstractVector{<:TimeFreqData},
     electrodes::Vector{Symbol},
     frequencies::Vector{Float64},
     time_points::Vector{Float64},
@@ -186,96 +131,107 @@ function _extract_tf_array(
     n_freqs = length(frequencies)
     n_time = length(time_points)
 
-    data = fill(NaN, n_participants, n_electrodes, n_freqs, n_time)
-    rounded_freqs = round.(frequencies, digits = 6)
-    rounded_times = round.(time_points, digits = 6)
-
-    # Fast path: if all TFs follow standard regular grid (time outer, freq inner) matching requested axes
     first_df = tfs[1].data_power
-    is_standard_grid =
-        (nrow(first_df) == n_freqs * n_time) &&
-        (length(first_df.time) > 1 && first_df.time[1] == first_df.time[min(n_freqs, end)]) &&
-        (round(first_df.time[1], digits = 6) == rounded_times[1]) &&
-        (round(first_df.freq[1], digits = 6) == rounded_freqs[1]) &&
-        all(nrow(tf.data_power) == n_freqs * n_time for tf in tfs)
-
-    if is_standard_grid
-        for (p_idx, tf) in enumerate(tfs)
-            for (e_idx, elec) in enumerate(electrodes)
-                col_data = tf.data_power[!, elec]::Vector{Float64}
-                copyto!(@view(data[p_idx, e_idx, :, :]), col_data)
-            end
+    if n_freqs > 0 &&
+       n_time > 0 &&
+       nrow(first_df) == n_freqs * n_time &&
+       first_df.time[1] == first_df.time[min(n_freqs, end)] &&
+       isapprox(first_df.time[1], time_points[1]; atol = 1e-6) &&
+       isapprox(first_df.time[end], time_points[end]; atol = 1e-6) &&
+       isapprox(first_df.freq[1], frequencies[1]; atol = 1e-6) &&
+       isapprox(first_df.freq[end], frequencies[end]; atol = 1e-6) &&
+       all(tf -> nrow(tf.data_power) == n_freqs * n_time, tfs)
+        data = Array{Float64,4}(undef, n_participants, n_electrodes, n_freqs, n_time)
+        for (p_idx, tf) in enumerate(tfs), (e_idx, elec) in enumerate(electrodes)
+            copyto!(@view(data[p_idx, e_idx, :, :]), tf.data_power[!, elec]::Vector{Float64})
         end
         return data
     end
 
-    for (p_idx, tf) in enumerate(tfs)
-        # Build row index once per participant, reuse for all channels
-        row_index = _tf_build_row_index(tf.data_power)
+    all_freqs = unique(first_df.freq)
+    all_times = unique(first_df.time)
+    n_all_f = length(all_freqs)
+    n_all_t = length(all_times)
 
+    is_regular =
+        n_all_f > 0 &&
+        n_all_t > 0 &&
+        nrow(first_df) == n_all_f * n_all_t &&
+        first_df.time[1] == first_df.time[min(n_all_f, end)] &&
+        all(
+            tf -> nrow(tf.data_power) == n_all_f * n_all_t && tf.data_power.time == first_df.time && tf.data_power.freq == first_df.freq,
+            tfs,
+        )
+
+    if is_regular
+        rf_map = Dict{Float64,Int}(round(f, digits = 6) => i for (i, f) in enumerate(all_freqs))
+        rt_map = Dict{Float64,Int}(round(t, digits = 6) => i for (i, t) in enumerate(all_times))
+        f_idxs = Int[get(rf_map, round(f, digits = 6), 0) for f in frequencies]
+        t_idxs = Int[get(rt_map, round(t, digits = 6), 0) for t in time_points]
+
+        if all(>(0), f_idxs) && all(>(0), t_idxs)
+            data = Array{Float64,4}(undef, n_participants, n_electrodes, n_freqs, n_time)
+            for (p_idx, tf) in enumerate(tfs), (e_idx, elec) in enumerate(electrodes)
+                src = reshape(tf.data_power[!, elec]::Vector{Float64}, n_all_f, n_all_t)
+                @inbounds for (ti, st) in enumerate(t_idxs), (fi, sf) in enumerate(f_idxs)
+                    data[p_idx, e_idx, fi, ti] = src[sf, st]
+                end
+            end
+            return data
+        end
+    end
+
+    data = fill(NaN, n_participants, n_electrodes, n_freqs, n_time)
+    rounded_freqs = round.(frequencies, digits = 6)
+    rounded_times = round.(time_points, digits = 6)
+
+    for (p_idx, tf) in enumerate(tfs)
+        row_index = _tf_build_row_index(tf.data_power)
         for (e_idx, elec) in enumerate(electrodes)
             col_data = tf.data_power[!, elec]::Vector{Float64}
-            @inbounds for (ti, rt) in enumerate(rounded_times)
-                for (fi, rf) in enumerate(rounded_freqs)
-                    row = get(row_index, (rf, rt), nothing)
-                    if !isnothing(row)
-                        data[p_idx, e_idx, fi, ti] = col_data[row]
-                    end
+            @inbounds for (ti, rt) in enumerate(rounded_times), (fi, rf) in enumerate(rounded_freqs)
+                row = get(row_index, (rf, rt), 0)
+                if row > 0
+                    data[p_idx, e_idx, fi, ti] = col_data[row]
                 end
             end
         end
     end
-
     return data
 end
 
-
-"""
-    _create_tf_grand_average(ref_tf, data_4d, electrodes, frequencies, time_points, cond_num)
-
-Create a grand average TimeFreqData by averaging a pre-extracted 4D array over participants.
-
-# Arguments
-- `ref_tf::TimeFreqData`: Reference TF data for metadata (condition_name, layout, etc.)
-- `data_4d::Array{Float64,4}`: Pre-extracted [participants × electrodes × freqs × time] array
-- `electrodes`, `frequencies`, `time_points`: Axis labels
-- `cond_num::Int`: Condition number for the grand average
-"""
 function _create_tf_grand_average(
     ref_tf::TimeFreqData,
     data_4d::Array{Float64,4},
     electrodes::Vector{Symbol},
     frequencies::Vector{Float64},
     time_points::Vector{Float64},
-    cond_num::Int,
+    cond_num::Int;
+    baseline::Union{BaselineInfo,Nothing} = ref_tf.baseline,
 )
-    # Average over participants (dim 1)
-    avg_power = dropdims(mean(data_4d, dims = 1), dims = 1)  # [electrodes × freqs × time]
+    n_p, _, n_freqs, n_time = size(data_4d)
+    n_rows = n_freqs * n_time
+    inv_n = 1.0 / n_p
 
-    # Build grand average DataFrame with same structure as input
-    n_freqs = length(frequencies)
-    n_time = length(time_points)
-
-    # Create time and freq columns (all frequencies for time 1, all frequencies for time 2, etc.)
     time_col = repeat(time_points, inner = n_freqs)
     freq_col = repeat(frequencies, outer = n_time)
 
-    # Build DataFrame with zero-initialized channel columns
     power_df = DataFrame(time = time_col, freq = freq_col, copycols = false)
-    for elec in electrodes
-        power_df[!, elec] = zeros(n_freqs * n_time)
-    end
+    phase_df = DataFrame(time = copy(time_col), freq = copy(freq_col), copycols = false)
 
-    # Fill using shared helper (avoids fragile transpose+vec pattern)
-    row_index = _tf_build_row_index(power_df)
     for (e_idx, elec) in enumerate(electrodes)
-        _tf_matrix_to_df!(power_df, elec, avg_power[e_idx, :, :], frequencies, time_points, row_index)
-    end
-
-    # Create a matching phase DataFrame (NaN placeholder since grand-average phase is not computed)
-    phase_df = copy(power_df)
-    for elec in electrodes
-        phase_df[!, elec] .= NaN
+        col = Vector{Float64}(undef, n_rows)
+        idx = 0
+        @inbounds for t = 1:n_time, f = 1:n_freqs
+            s = 0.0
+            @simd for p = 1:n_p
+                s += data_4d[p, e_idx, f, t]
+            end
+            idx += 1
+            col[idx] = s * inv_n
+        end
+        power_df[!, elec] = col
+        phase_df[!, elec] = fill(NaN, n_rows)
     end
 
     return TimeFreqData(
@@ -287,30 +243,11 @@ function _create_tf_grand_average(
         copy(ref_tf.layout),
         ref_tf.sample_rate,
         ref_tf.method,
-        ref_tf.baseline,
+        baseline,
         copy(ref_tf.analysis_info),
     )
 end
 
-
-# === TF T-TEST COMPUTATION (4D) ===
-
-"""
-    _compute_t_matrix_tf(data1, data2, design; tail)
-
-Compute t-statistics and p-values for all electrode × frequency × time points.
-
-# Arguments
-- `data1::Array{Float64, 4}`: Condition 1 data [participants × electrodes × freqs × time]
-- `data2::Array{Float64, 4}`: Condition 2 data [participants × electrodes × freqs × time]
-- `design::Symbol`: `:paired` or `:independent`
-- `tail::Symbol`: `:both`, `:left`, or `:right`
-
-# Returns
-- `t_matrix::Array{Float64, 3}`: T-statistics [electrodes × freqs × time]
-- `df::Float64`: Degrees of freedom
-- `p_matrix::Array{Float64, 3}`: P-values [electrodes × freqs × time]
-"""
 function _compute_t_matrix_tf(
     data1::Array{Float64,4},
     data2::Array{Float64,4},
@@ -319,100 +256,13 @@ function _compute_t_matrix_tf(
     compute_p_values::Bool = true,
     t_matrix_buffer::Union{Nothing,Array{Float64,3}} = nothing,
 )
-    n_participants, n_electrodes, n_freqs, n_time = size(data1)
+    _, n_electrodes, n_freqs, n_time = size(data1)
+    n_voxels = n_electrodes * n_freqs * n_time
 
-    if !isnothing(t_matrix_buffer)
-        t_matrix = t_matrix_buffer
-    else
-        t_matrix = Array{Float64,3}(undef, n_electrodes, n_freqs, n_time)
-    end
+    t_matrix = isnothing(t_matrix_buffer) ? Array{Float64,3}(undef, n_electrodes, n_freqs, n_time) : t_matrix_buffer
+    df = _t_stat_kernel!(vec(t_matrix), nothing, reshape(data1, size(data1, 1), n_voxels), reshape(data2, size(data2, 1), n_voxels), design)
 
-    p_matrix = compute_p_values ? Array{Float64,3}(undef, n_electrodes, n_freqs, n_time) : Array{Float64,3}(undef, 0, 0, 0)
-
-    if design == :paired
-        @inbounds for t_idx = 1:n_time
-            for f_idx = 1:n_freqs
-                for e_idx = 1:n_electrodes
-                    sum_diff = 0.0
-                    @simd for p_idx = 1:n_participants
-                        sum_diff += data1[p_idx, e_idx, f_idx, t_idx] - data2[p_idx, e_idx, f_idx, t_idx]
-                    end
-                    mean_diff_val = sum_diff / n_participants
-
-                    ss_diff = 0.0
-                    @simd for p_idx = 1:n_participants
-                        d = (data1[p_idx, e_idx, f_idx, t_idx] - data2[p_idx, e_idx, f_idx, t_idx]) - mean_diff_val
-                        ss_diff += d * d
-                    end
-                    variance = max(ss_diff / (n_participants - 1), 0.0)
-                    se = sqrt(variance / n_participants)
-
-                    if se == 0.0
-                        t_matrix[e_idx, f_idx, t_idx] = mean_diff_val == 0.0 ? NaN : copysign(Inf, mean_diff_val)
-                    else
-                        t_matrix[e_idx, f_idx, t_idx] = mean_diff_val / se
-                    end
-                end
-            end
-        end
-
-        df = Float64(n_participants - 1)
-        if compute_p_values
-            _compute_p_matrix_tf!(p_matrix, t_matrix, df, tail)
-        end
-
-    else
-        # Independent design (centered two-pass sum of squares)
-        n_A = size(data1, 1)
-        n_B = size(data2, 1)
-        df = Float64(n_A + n_B - 2)
-        @inbounds for t_idx = 1:n_time
-            for f_idx = 1:n_freqs
-                for e_idx = 1:n_electrodes
-                    sum1 = 0.0
-                    sum2 = 0.0
-
-                    @simd for p_idx = 1:n_A
-                        sum1 += data1[p_idx, e_idx, f_idx, t_idx]
-                    end
-
-                    @simd for p_idx = 1:n_B
-                        sum2 += data2[p_idx, e_idx, f_idx, t_idx]
-                    end
-
-                    mean1 = sum1 / n_A
-                    mean2 = sum2 / n_B
-
-                    ss1 = 0.0
-                    @simd for p_idx = 1:n_A
-                        d1 = data1[p_idx, e_idx, f_idx, t_idx] - mean1
-                        ss1 += d1 * d1
-                    end
-
-                    ss2 = 0.0
-                    @simd for p_idx = 1:n_B
-                        d2 = data2[p_idx, e_idx, f_idx, t_idx] - mean2
-                        ss2 += d2 * d2
-                    end
-
-                    pooled_var = max((ss1 + ss2) / df, 0.0)
-                    se = sqrt(pooled_var * (1.0 / n_A + 1.0 / n_B))
-                    diff_mean = mean1 - mean2
-
-                    if se == 0.0
-                        t_matrix[e_idx, f_idx, t_idx] = diff_mean == 0.0 ? NaN : copysign(Inf, diff_mean)
-                    else
-                        t_matrix[e_idx, f_idx, t_idx] = diff_mean / se
-                    end
-                end
-            end
-        end
-
-        if compute_p_values
-            _compute_p_matrix_tf!(p_matrix, t_matrix, df, tail)
-        end
-    end
-
+    p_matrix = compute_p_values ? _compute_p_matrix(t_matrix, df, tail) : Array{Float64,3}(undef, 0, 0, 0)
     return t_matrix, df, p_matrix
 end
 
@@ -426,10 +276,7 @@ function _compute_t_matrix_tf(prepared::TFStatisticalData; tail::Symbol = :both,
     )
 end
 
-
-# In-place computation of p-values from 3D t-statistics matrix (forwards to N-D `_compute_p_matrix`)
 _compute_p_matrix_tf!(p_matrix::Array{Float64,3}, t_matrix::Array{Float64,3}, df::Float64, tail::Symbol) =
     _compute_p_matrix(t_matrix, df, tail, p_matrix)
 
-# Compute critical t-values for parametric thresholding (forwards to N-D `_compute_critical_t_values`)
 const _compute_critical_t_values_tf = _compute_critical_t_values
