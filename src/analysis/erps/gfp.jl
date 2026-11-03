@@ -1,109 +1,92 @@
-"""
-Global Field Power (GFP) and Global Dissimilarity calculation.
-
-Global Field Power is a reference-independent measure of response strength computed
-as the standard deviation across all channels at each time point. Global Dissimilarity
-measures the rate of topographic change across time.
-
-References:
-- Lehmann, D. & Skrandies, W. (1980). Reference-free identification of components
-  of checkerboard-evoked multichannel potential fields. Electroencephalography and
-  Clinical Neurophysiology, 48, 609-621.
-- Lehmann, D. & Skrandies, W. (1984). Spatial analysis of evoked potentials in
-  man--a review. Progress in Neurobiology, 23, 227-250.
-- Skrandies, W. (1990). Global Field Power and Topographic Similarity.
-  Brain Topography, 3(1), 137-141.
-"""
-
-# === INTERNAL HELPERS ===
-
-"""Normalize values to 0-100% range. Returns original values if range is zero."""
-function _normalize_to_percent(values::Vector{Float64})
-    isempty(values) && return values
-    v_min = minimum(values)
-    v_max = maximum(values)
-    if v_max - v_min > eps()
-        return ((values .- v_min) ./ (v_max - v_min)) .* 100
-    else
-        return values
+function _normalize_to_percent!(vals::Vector{Float64})
+    isempty(vals) && return vals
+    v_min, v_max = extrema(vals)
+    span = v_max - v_min
+    if span > eps()
+        scale = 100.0 / span
+        @inbounds @simd for i in eachindex(vals)
+            vals[i] = (vals[i] - v_min) * scale
+        end
     end
+    return vals
 end
 
-"""
-Compute reference-independent Global Dissimilarity (Lehmann & Skrandies, 1980).
-Subtracts the spatial channel mean at each time point before normalizing by GFP,
-and guards zero-GFP (`<= eps(Float64)`) and single-sample (`n_timepoints <= 1`) inputs.
-"""
-function _compute_global_dissimilarity(channel_matrix::AbstractMatrix{<:Real}, gfp_values::AbstractVector{<:Real})::Vector{Float64}
-    n_timepoints, n_channels = size(channel_matrix)
-    gd_values = zeros(Float64, n_timepoints)
-    n_timepoints <= 1 && return gd_values
+function _gfp_and_gd_cols(cols::Vector{Vector{Float64}}, n_tp::Int, need_gd::Bool)
+    n_ch = length(cols)
+    inv_ch = 1.0 / n_ch
 
-    spatial_means = vec(mean(channel_matrix, dims = 2))
-
-    for t = 2:n_timepoints
-        gfp_t = Float64(gfp_values[t])
-        gfp_prev = Float64(gfp_values[t-1])
-        if gfp_t <= eps(Float64) || gfp_prev <= eps(Float64)
-            gd_values[t] = 0.0
-            continue
+    means = zeros(Float64, n_tp)
+    for col in cols
+        @inbounds @simd for t = 1:n_tp
+            means[t] += col[t]
         end
-        mean_t = Float64(spatial_means[t])
-        mean_prev = Float64(spatial_means[t-1])
-        sum_sq = 0.0
-        @inbounds @simd for c = 1:n_channels
-            v1 = (Float64(channel_matrix[t, c]) - mean_t) / gfp_t
-            v0 = (Float64(channel_matrix[t-1, c]) - mean_prev) / gfp_prev
-            sum_sq += (v1 - v0)^2
-        end
-        gd_values[t] = sqrt(sum_sq / n_channels)
+    end
+    @inbounds @simd for t = 1:n_tp
+        means[t] *= inv_ch
     end
 
-    # Replicate first value to maintain same length as time vector
-    gd_values[1] = gd_values[2]
-    return gd_values
+    gfp_vals = zeros(Float64, n_tp)
+    for col in cols
+        @inbounds @simd for t = 1:n_tp
+            d = col[t] - means[t]
+            gfp_vals[t] += d * d
+        end
+    end
+    @inbounds @simd for t = 1:n_tp
+        gfp_vals[t] = sqrt(gfp_vals[t] * inv_ch)
+    end
+
+    !need_gd && return gfp_vals, Float64[]
+
+    gd_vals = zeros(Float64, n_tp)
+    n_tp <= 1 && return gfp_vals, gd_vals
+
+    inv_gfp = Vector{Float64}(undef, n_tp)
+    @inbounds for t = 1:n_tp
+        g = gfp_vals[t]
+        inv_gfp[t] = g > eps(Float64) ? 1.0 / g : 0.0
+    end
+
+    for col in cols
+        @inbounds @simd for t = 2:n_tp
+            d = (col[t] - means[t]) * inv_gfp[t] - (col[t-1] - means[t-1]) * inv_gfp[t-1]
+            gd_vals[t] += d * d
+        end
+    end
+    @inbounds for t = 2:n_tp
+        gd_vals[t] = (inv_gfp[t] == 0.0 || inv_gfp[t-1] == 0.0) ? 0.0 : sqrt(gd_vals[t] * inv_ch)
+    end
+    gd_vals[1] = gd_vals[2]
+    return gfp_vals, gd_vals
 end
 
-"""Build a result DataFrame with metadata columns from the source data, plus named result columns."""
+function _compute_gfp_metrics(dat::ErpData, channel_selection, operation::String; need_gd::Bool)
+    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
+    isempty(selected_channels) && @minimal_error("No channels selected for $operation")
+    @info "Using $(length(selected_channels)) channels for $operation"
+
+    cols = Vector{Float64}[
+        let c = dat.data[!, ch]
+            c isa Vector{Float64} ? c : Float64.(c)
+        end for ch in selected_channels
+    ]
+    return _gfp_and_gd_cols(cols, nrow(dat.data), need_gd)
+end
+
 function _build_gfp_result_df(dat::ErpData, result_pairs::Pair{Symbol,Vector{Float64}}...)
-    result_df = DataFrame()
-
-    # Copy metadata columns
+    result_df = DataFrame(; copycols = false)
     for col in meta_labels(dat)
         result_df[!, col] = copy(dat.data[!, col])
     end
-
     n = nrow(dat.data)
-    if !hasproperty(result_df, :condition)
-        result_df[!, :condition] = fill(dat.condition, n)
-    end
-    if !hasproperty(result_df, :condition_name)
-        result_df[!, :condition_name] = fill(dat.condition_name, n)
-    end
-
-    # Add result columns
+    hasproperty(result_df, :condition) || (result_df[!, :condition] = fill(dat.condition, n))
+    hasproperty(result_df, :condition_name) || (result_df[!, :condition_name] = fill(dat.condition_name, n))
     for (name, values) in result_pairs
         result_df[!, name] = values
     end
-
     return result_df
 end
 
-"""Get channel matrix and selected channels, with validation."""
-function _get_channel_matrix(dat::ErpData, channel_selection, operation::String)
-    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
-
-    if isempty(selected_channels)
-        @minimal_error("No channels selected for $operation")
-    end
-
-    @info "Using $(length(selected_channels)) channels for $operation"
-    channel_matrix = Matrix(dat.data[!, selected_channels])
-
-    return channel_matrix
-end
-
-"""Apply a single-ErpData function across a vector of ErpData, with condition filtering."""
 function _apply_to_conditions(
     fn::Function,
     dat::AbstractVector{<:ErpData};
@@ -112,75 +95,31 @@ function _apply_to_conditions(
     kwargs...,
 )::Vector{DataFrame}
     dat_filtered = dat[get_selected_conditions(dat, condition_selection)]
-
     @info "$operation for $(length(dat_filtered)) dataset(s)"
-
     return [fn(erp_data; kwargs...) for erp_data in dat_filtered]
 end
 
-# === GFP ===
-
 """
-    gfp(dat::ErpData; 
-        channel_selection = channels(),
-        normalize::Bool = false)::DataFrame
+    gfp(dat::ErpData; channel_selection = channels(), normalize::Bool = false) -> DataFrame
+    gfp(dat::AbstractVector{<:ErpData}; condition_selection = conditions(), channel_selection = channels(), normalize::Bool = false) -> Vector{DataFrame}
 
-Calculate Global Field Power (GFP) for ERP data.
-
-Global Field Power is computed as the standard deviation across channels at each
-time point, providing a reference-independent measure of global response strength.
+Calculate Global Field Power (GFP) as the population standard deviation across selected channels
+at each time point (Lehmann & Skrandies, 1980).
 
 # Arguments
-- `dat::ErpData`: ERP data structure
-- `channel_selection`: Channel predicate or symbols (default: all channels)
-- `normalize::Bool`: If true, normalize GFP to 0-100% range (default: false)
+- `dat`: `ErpData` or `Vector{ErpData}`
+- `channel_selection`: Channel predicate or symbols (default: `channels()`)
+- `normalize::Bool`: Normalize GFP to `0–100%` range (default: `false`)
 
 # Returns
-- `DataFrame`: Contains columns `:time`, `:gfp`, and metadata columns (`:condition`, `:condition_name`, etc.)
-
-# Examples
-```julia
-using EegFun
-
-# Load ERP data
-erp_data = EegFun.read_data("participant_1_erps.jld2")
-
-# Calculate GFP using all channels
-gfp_result = gfp(erp_data)
-
-# Calculate GFP using specific channels
-gfp_result = gfp(erp_data, channel_selection = channels([:C3, :C4, :Cz, :CP3, :CP4, :CPz]))
-
-# Calculate normalized GFP (0-100%)
-gfp_result = gfp(erp_data, normalize = true)
-
-# Access the values
-time_vector = gfp_result.time
-gfp_values = gfp_result.gfp
-```
-
-# Notes
-- GFP is reference-independent and reflects the overall strength of the electric field
-- High GFP values indicate strong, synchronized activity across channels
-- Low GFP values indicate weak or desynchronized activity
-- Normalization to 0-100% is useful for comparing across different datasets or conditions
+- `DataFrame` (or `Vector{DataFrame}`) with `:time`, metadata columns, and `:gfp`.
 """
 function gfp(dat::ErpData; channel_selection = channels(), normalize::Bool = false)::DataFrame
-
     @info "Calculating Global Field Power (GFP)"
-
-    channel_matrix = _get_channel_matrix(dat, channel_selection, "GFP calculation")
-
-    # GFP(t) = std(channels at time t) - population std (corrected=false)
-    gfp_values = vec(std(channel_matrix, dims = 2, corrected = false))
-
-    if normalize
-        gfp_values = _normalize_to_percent(gfp_values)
-        @info "GFP normalized to 0-100% range"
-    end
-
+    gfp_vals, _ = _compute_gfp_metrics(dat, channel_selection, "GFP calculation"; need_gd = false)
+    normalize && _normalize_to_percent!(gfp_vals)
     @info "GFP calculation complete"
-    return _build_gfp_result_df(dat, :gfp => gfp_values)
+    return _build_gfp_result_df(dat, :gfp => gfp_vals)
 end
 
 function gfp(
@@ -192,60 +131,27 @@ function gfp(
     return _apply_to_conditions(gfp, dat; condition_selection, operation = "Calculating GFP", channel_selection, normalize)
 end
 
-
-# === GLOBAL DISSIMILARITY ===
-
 """
-    global_dissimilarity(dat::ErpData;
-                         channel_selection::Function = channels(),
-                         normalize::Bool = false)::DataFrame
+    global_dissimilarity(dat::ErpData; channel_selection = channels(), normalize::Bool = false) -> DataFrame
+    global_dissimilarity(dat::AbstractVector{<:ErpData}; condition_selection = conditions(), channel_selection = channels(), normalize::Bool = false) -> Vector{DataFrame}
 
-Calculate Global Dissimilarity (GD) for ERP data.
-
-Global Dissimilarity measures the rate of topographic change by quantifying how much
-the normalized potential distribution changes from one time point to the next.
+Calculate reference-independent Global Dissimilarity (GD) across adjacent time points
+after subtracting the spatial channel mean and normalizing by GFP (Lehmann & Skrandies, 1980).
 
 # Arguments
-- `dat::ErpData`: ERP data structure
-- `channel_selection::Function`: Channel predicate for selecting channels (default: all channels)
-- `normalize::Bool`: If true, normalize GD to 0-100% range (default: false)
+- `dat`: `ErpData` or `Vector{ErpData}`
+- `channel_selection`: Channel predicate or symbols (default: `channels()`)
+- `normalize::Bool`: Normalize GD to `0–100%` range (default: `false`)
 
 # Returns
-- `DataFrame`: Contains columns `:time`, `:dissimilarity`, and metadata columns
-
-# Examples
-```julia
-# Calculate global dissimilarity
-gd_result = global_dissimilarity(erp_data)
-
-# With specific channels and normalization
-gd_result = global_dissimilarity(erp_data, 
-                                 channel_selection = channels([:C3, :C4, :Cz]),
-                                 normalize = true)
-```
-
-# Notes
-- Global dissimilarity peaks indicate moments of rapid topographic change
-- These peaks may indicate transitions between different brain states or ERP components
-- Normalization to 0-100% facilitates comparison across datasets
+- `DataFrame` (or `Vector{DataFrame}`) with `:time`, metadata columns, and `:dissimilarity`.
 """
 function global_dissimilarity(dat::ErpData; channel_selection = channels(), normalize::Bool = false)::DataFrame
-
     @info "Calculating Global Dissimilarity (GD)"
-
-    channel_matrix = _get_channel_matrix(dat, channel_selection, "dissimilarity calculation")
-
-    # Normalize channel data by GFP at each time point (Lehmann & Skrandies, 1980)
-    gfp_values = vec(std(channel_matrix, dims = 2, corrected = false))
-    gd_values = _compute_global_dissimilarity(channel_matrix, gfp_values)
-
-    if normalize
-        gd_values = _normalize_to_percent(gd_values)
-        @info "Global Dissimilarity normalized to 0-100% range"
-    end
-
+    _, gd_vals = _compute_gfp_metrics(dat, channel_selection, "dissimilarity calculation"; need_gd = true)
+    normalize && _normalize_to_percent!(gd_vals)
     @info "Global Dissimilarity calculation complete"
-    return _build_gfp_result_df(dat, :dissimilarity => gd_values)
+    return _build_gfp_result_df(dat, :dissimilarity => gd_vals)
 end
 
 function global_dissimilarity(
@@ -264,57 +170,21 @@ function global_dissimilarity(
     )
 end
 
-
-# === GFP AND DISSIMILARITY (combined) ===
-
 """
-    gfp_and_dissimilarity(dat::ErpData;
-                          channel_selection = channels(),
-                          normalize::Bool = false)::DataFrame
+    gfp_and_dissimilarity(dat::ErpData; channel_selection = channels(), normalize::Bool = false) -> DataFrame
+    gfp_and_dissimilarity(dat::AbstractVector{<:ErpData}; condition_selection = conditions(), channel_selection = channels(), normalize::Bool = false) -> Vector{DataFrame}
 
-Calculate both Global Field Power and Global Dissimilarity in one call.
-
-This is a convenience function that computes both metrics efficiently.
-
-# Arguments
-- `dat::ErpData`: ERP data structure
-- `channel_selection`: Channel predicate or symbols (default: all channels)
-- `normalize::Bool`: If true, normalize both metrics to 0-100% range (default: false)
-
-# Returns
-- `DataFrame`: Contains columns `:time`, `:gfp`, `:dissimilarity`, and metadata columns
-
-# Examples
-```julia
-# Calculate both metrics
-result = gfp_and_dissimilarity(erp_data)
-
-# Access the values
-time_vector = result.time
-gfp_values = result.gfp
-dissimilarity_values = result.dissimilarity
-
-# With normalization
-result = gfp_and_dissimilarity(erp_data, normalize = true)
-```
+Calculate both Global Field Power (`:gfp`) and Global Dissimilarity (`:dissimilarity`) in a single pass.
 """
 function gfp_and_dissimilarity(dat::ErpData; channel_selection = channels(), normalize::Bool = false)::DataFrame
-
     @info "Calculating Global Field Power and Global Dissimilarity"
-
-    channel_matrix = _get_channel_matrix(dat, channel_selection, "GFP/dissimilarity calculation")
-
-    # Calculate GFP (population std) and reference-independent Global Dissimilarity
-    gfp_values = vec(std(channel_matrix, dims = 2, corrected = false))
-    gd_values = _compute_global_dissimilarity(channel_matrix, gfp_values)
-
+    gfp_vals, gd_vals = _compute_gfp_metrics(dat, channel_selection, "GFP/dissimilarity calculation"; need_gd = true)
     if normalize
-        gfp_values = _normalize_to_percent(gfp_values)
-        gd_values = _normalize_to_percent(gd_values)
+        _normalize_to_percent!(gfp_vals)
+        _normalize_to_percent!(gd_vals)
     end
-
     @info "GFP and Global Dissimilarity calculation complete"
-    return _build_gfp_result_df(dat, :gfp => gfp_values, :dissimilarity => gd_values)
+    return _build_gfp_result_df(dat, :gfp => gfp_vals, :dissimilarity => gd_vals)
 end
 
 function gfp_and_dissimilarity(
