@@ -43,6 +43,7 @@ Manifest.toml
 
 # Tutorial output files
 tutorials/output/
+resources/data/**/measurements_*/
 
 # Preprocess log files generated during testing
 preprocess_log_*.txt
