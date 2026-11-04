@@ -68,7 +68,11 @@ EegFun.plot_channel_spectrum(dat)
 EegFun.plot_channel_spectrum(dat, channel_selection = EegFun.channels([:Fp1]), plot_title = "Fp1 Power Spectrum")
 
 # Plot multiple frontal channels
-EegFun.plot_channel_spectrum(dat, channel_selection = EegFun.channels([:Fp1, :Fp2, :F3, :F4]), plot_title = "Frontal Channels Power Spectrum")
+EegFun.plot_channel_spectrum(
+    dat,
+    channel_selection = EegFun.channels([:Fp1, :Fp2, :F3, :F4]),
+    plot_title = "Frontal Channels Power Spectrum",
+)
 
 
 #######################################################################
