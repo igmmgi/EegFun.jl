@@ -34,7 +34,7 @@ and this project adheres to (well, attempts to :-)) [Semantic Versioning](https:
 
 ### Removed
 
-- Legacy and duplicate public bindings (`read_fieldtrip_csv`, `get_all_components`, `signal_example_eog`, `plot_layout`, `plot_layout!`, `realign!`, `calculate_trigger_interval!`).
+- Legacy and duplicate public bindings (`read_fieldtrip_csv`, `get_all_components`, `signal_example_eog`, `plot_layout`, `plot_layout!`, and batch file-pattern overloads of `realign!` and `calculate_trigger_interval!`).
 - Deprecated keyword aliases (`threshold` in `permutation_test`, 3-arg `ClusterInfo`, `:vssum` baseline alias, `ylogscale`/`colorbar` in `plot_tf_stats`, and `xlims`/`ylims`/`xlabel`/`ylabel` plot aliases) and legacy UK-spelling `.toml`/`.jld2` shims.
 - Implicit `convert(Matrix/Array/DataFrame, dat)` and scalar/linear indexing methods on EEG containers (use `Matrix(dat)`, `Array(dat)`, or `DataFrame(dat)`).
 

@@ -25,7 +25,7 @@ EegFun.signal_example_ica_mixture()
 ```
 
 ## See Also
-- [Part 1: Matrix Math Basics](signal_example_ica_math.md) — What is an Unmixing Matrix?
+- [Part 1: Central Limit Theorem](signal_example_ica_clt.md) — Why mixing creates Gaussian distributions
 - [Part 3: Mixing & Unmixing](signal_example_ica_separation.md) — Two electrodes, mixing matrices, and the ICA algorithm
 - [Part 4: 3 Sources & Scatter Geometry](signal_example_ica_geometry.md) — Advanced: rotation geometry, scatter plots, kurtosis
 - [Part 5: Sphering (Whitening)](signal_example_ica_sphering.md) — Why ICA optimization is just finding an angle

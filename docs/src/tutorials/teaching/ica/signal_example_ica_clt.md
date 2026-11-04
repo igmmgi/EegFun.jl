@@ -1,4 +1,4 @@
-# Signal Example — Central Limit Theorem (CLT)
+# Signal Example — ICA 1: Central Limit Theorem (CLT)
 
 Before jumping into the heavy geometry and optimization algorithms of ICA, we need to answer a fundamental question: **How does an algorithm mathematically know when it has successfully unmixed a signal?**
 

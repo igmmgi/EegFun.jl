@@ -350,7 +350,7 @@ Each `EpochCondition` specifies:
 - **`reference_index`** — which trigger in the sequence is t = 0 (2 = the target onset)
 
 > [!TIP]
-> For batch processing, you can define these same conditions in a TOML file and load them with `EegFun.read_epoch_conditions("epochs.toml")` — we'll cover this in Part 2.
+> For batch processing, you can define these same conditions in a TOML file and load them with `EegFun.condition_parse_epoch("epochs.toml")` — we'll cover this in Part 2.
 
 ### 1.11 Extract Epochs
 

@@ -72,10 +72,9 @@ The Infomax algorithm (Bell & Sejnowski, 1995) used in EegFun maximises the tota
 
 ## See Also
 
-- [Part 1: Matrix Math Basics](signal_example_ica_math.md) — What is an Unmixing Matrix?
+- [Part 1: Central Limit Theorem](signal_example_ica_clt.md) — Deep Dive: Why mixing creates Gaussian blobs
 - [Part 2: What Is a Mixture?](signal_example_ica_mixture.md) — Simplest introduction to the problem
 - [Part 3: Mixing & Unmixing](signal_example_ica_separation.md) — 2-source introduction to ICA
-- [ICA: Central Limit Theorem](signal_example_ica_clt.md) — Deep Dive: Why mixing creates Gaussian blobs
 - [Part 5: Sphering (Whitening)](signal_example_ica_sphering.md) — Why ICA optimization is just finding an angle
 - [Part 6: Inside the Black Box](signal_example_ica_optimization.md) — The optimization landscape and gradient ascent
 - [ICA Demo](../../preprocessing/ica.md) — Full ICA workflow on real EEG data

@@ -73,7 +73,7 @@ The Central Limit Theorem says that mixing independent, non-Gaussian sources alw
 
 ## See Also
 
-- [Part 1: Matrix Math Basics](signal_example_ica_math.md) — Fundamental math prerequisites
+- [Part 1: Central Limit Theorem](signal_example_ica_clt.md) — Why mixing creates Gaussian distributions
 - [Part 2: What Is a Mixture?](signal_example_ica_mixture.md) — Start here if you've never seen ICA
 - [Part 4: 3 Sources & Scatter Geometry](signal_example_ica_geometry.md) — Advanced: rotation geometry, scatter plots, kurtosis
 - [Part 5: Sphering (Whitening)](signal_example_ica_sphering.md) — Why ICA optimization is just finding an angle
