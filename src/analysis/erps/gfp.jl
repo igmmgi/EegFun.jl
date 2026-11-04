@@ -5,7 +5,7 @@ function _normalize_to_percent!(vals::Vector{Float64})
     if span > eps()
         scale = 100.0 / span
         @inbounds @simd for i in eachindex(vals)
-            vals[i] = (vals[i] - v_min) * scale
+            vals[i] = clamp((vals[i] - v_min) * scale, 0.0, 100.0)
         end
     end
     return vals
